@@ -1,0 +1,154 @@
+import { prisma } from "@/lib/prisma";
+import type { Pick, PickStatus } from "@prisma/client";
+
+export type OverallStats = {
+  wins: number;
+  losses: number;
+  pushes: number;
+  winPct: number;
+  unitsWon: number;
+  unitsLost: number;
+  netUnits: number;
+  roi: number;
+  currentStreak: { type: "WIN" | "LOSS" | "NONE"; count: number };
+  longestWinStreak: number;
+  longestLossStreak: number;
+};
+
+/**
+ * Converts American odds + units risked into units returned on a win.
+ * Positive odds (+150): profit = units * (odds / 100)
+ * Negative odds (-110): profit = units * (100 / abs(odds))
+ */
+export function unitsWonOnBet(units: number, odds: number): number {
+  if (odds > 0) return units * (odds / 100);
+  return units * (100 / Math.abs(odds));
+}
+
+/**
+ * Computes overall record, ROI, units, and streaks for a set of picks.
+ * This is called with all of a user's picks (dashboard) or a single
+ * capper's picks (capper page) — same math, different scope.
+ */
+export function computeStats(picks: Pick[]): OverallStats {
+  // Streaks depend on chronological order, so sort oldest -> newest first.
+  const sorted = [...picks].sort(
+    (a, b) => a.gameTime.getTime() - b.gameTime.getTime()
+  );
+
+  let wins = 0;
+  let losses = 0;
+  let pushes = 0;
+  let unitsWon = 0;
+  let unitsLost = 0;
+  let unitsRisked = 0;
+
+  let longestWinStreak = 0;
+  let longestLossStreak = 0;
+  let runningWin = 0;
+  let runningLoss = 0;
+
+  for (const pick of sorted) {
+    if (pick.status === "PENDING" || pick.status === "CANCELLED") continue;
+
+    unitsRisked += pick.units;
+
+    if (pick.status === "WIN") {
+      wins++;
+      unitsWon += unitsWonOnBet(pick.units, pick.odds);
+      runningWin++;
+      runningLoss = 0;
+      longestWinStreak = Math.max(longestWinStreak, runningWin);
+    } else if (pick.status === "LOSS") {
+      losses++;
+      unitsLost += pick.units;
+      runningLoss++;
+      runningWin = 0;
+      longestLossStreak = Math.max(longestLossStreak, runningLoss);
+    } else if (pick.status === "PUSH") {
+      pushes++;
+      runningWin = 0;
+      runningLoss = 0;
+    }
+  }
+
+  const decided = wins + losses;
+  const netUnits = unitsWon - unitsLost;
+
+  return {
+    wins,
+    losses,
+    pushes,
+    winPct: decided > 0 ? (wins / decided) * 100 : 0,
+    unitsWon: round2(unitsWon),
+    unitsLost: round2(unitsLost),
+    netUnits: round2(netUnits),
+    roi: unitsRisked > 0 ? round2((netUnits / unitsRisked) * 100) : 0,
+    currentStreak: currentStreak(sorted),
+    longestWinStreak,
+    longestLossStreak,
+  };
+}
+
+function currentStreak(
+  sortedOldestFirst: Pick[]
+): { type: "WIN" | "LOSS" | "NONE"; count: number } {
+  const decided = sortedOldestFirst.filter(
+    (p) => p.status === "WIN" || p.status === "LOSS"
+  );
+  if (decided.length === 0) return { type: "NONE", count: 0 };
+
+  const last = decided[decided.length - 1];
+  const type = last.status as "WIN" | "LOSS";
+  let count = 0;
+
+  for (let i = decided.length - 1; i >= 0; i--) {
+    if (decided[i].status === type) count++;
+    else break;
+  }
+
+  return { type, count };
+}
+
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+/** All picks for a user, scoped by userId — never call prisma.pick directly. */
+export async function getUserPicks(userId: string) {
+  return prisma.pick.findMany({
+    where: { userId },
+    include: { capper: true, sport: true, league: true },
+    orderBy: { gameTime: "desc" },
+  });
+}
+
+/** Dashboard summary: overall stats + top/worst performing capper. */
+export async function getDashboardSummary(userId: string) {
+  const picks = await getUserPicks(userId);
+  const overall = computeStats(picks);
+
+  const byCapperMap = new Map<string, Pick[]>();
+  for (const pick of picks) {
+    const list = byCapperMap.get(pick.capperId) ?? [];
+    list.push(pick);
+    byCapperMap.set(pick.capperId, list);
+  }
+
+  const capperStats = Array.from(byCapperMap.entries()).map(
+    ([capperId, capperPicks]) => ({
+      capperId,
+      stats: computeStats(capperPicks),
+    })
+  );
+
+  const bySortedRoi = [...capperStats].sort((a, b) => b.stats.roi - a.stats.roi);
+
+  return {
+    overall,
+    pendingCount: picks.filter((p) => p.status === "PENDING").length,
+    topCapper: bySortedRoi[0] ?? null,
+    worstCapper: bySortedRoi[bySortedRoi.length - 1] ?? null,
+    recentPicks: picks.slice(0, 10),
+  };
+}

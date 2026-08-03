@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+
+enum Theme {
+  LIGHT
+  DARK
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum Source {
+  TWITTER
+  DISCORD
+  TELEGRAM
+  DUBCLUB
+  INSTAGRAM
+  FRIEND
+  OTHER
+}
+
+enum BetType {
+  SPREAD
+  MONEYLINE
+  TOTAL
+  PLAYER_PROP
+}
+
+enum PickStatus {
+  PENDING
+  WIN
+  LOSS
+  PUSH
+  CANCELLED
+}
+
+// ---------- Models ----------
+
+model User {
+  id                String   @id @default(cuid())
+  clerkId           String   @unique
+  email             String   @unique
+  name              String?
+  profilePictureUrl String?
+  themePreference   Theme    @default(LIGHT)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  cappers      Capper[]
+  picks        Pick[]
+  subscription Subscription?
+
+  @@map("users")
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                 Plan      @default(FREE)
+  status               String    @default("active")
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  currentPeriodEnd     DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@map("subscriptions")
+}
+
+model Sport {
+  id      String   @id @default(cuid())
+  name    String   @unique // NFL, NBA, MLB, NCAAF, NHL...
+  leagues League[]
+  picks   Pick[]
+
+  @@map("sports")
+}
+
+model League {
+  id      String @id @default(cuid())
+  name    String
+  sportId String
+  sport   Sport  @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  picks   Pick[]
+
+  @@unique([sportId, name])
+  @@map("leagues")
+}
+
+model Capper {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  photoUrl            String?
+  source              Source
+  customSource        String?
+  notes               String?
+  isFavorite          Boolean  @default(false)
+  sportSpecialization String?
+  colorTag            String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  picks Pick[]
+
+  @@index([userId])
+  @@map("cappers")
+}
+
+model Pick {
+  id         String     @id @default(cuid())
+  userId     String // denormalized for fast per-user aggregation
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  capperId   String
+  capper     Capper     @relation(fields: [capperId], references: [id], onDelete: Cascade)
+  sportId    String
+  sport      Sport      @relation(fields: [sportId], references: [id])
+  leagueId   String?
+  league     League?    @relation(fields: [leagueId], references: [id])
+
+  homeTeam   String
+  awayTeam   String
+  betType    BetType
+  betDetail  String? // e.g. "Lakers -4.5" or free-text player prop
+  odds       Int // American odds, e.g. -110, +150
+  sportsbook String?
+  units      Float
+  datePosted DateTime   @default(now())
+  gameTime   DateTime
+  notes      String?
+  status     PickStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, capperId])
+  @@index([userId, status])
+  @@index([userId, sportId])
+  @@index([userId, gameTime])
+  @@map("picks")
+}
