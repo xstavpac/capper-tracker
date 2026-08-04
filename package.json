@@ -16,11 +16,12 @@
   "dependencies": {
     "@clerk/nextjs": "^6.5.0",
     "@prisma/client": "^5.20.0",
+    "clsx": "^2.1.1",
     "next": "14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7",
-    "clsx": "^2.1.1"
+    "svix": "^1.99.1"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
