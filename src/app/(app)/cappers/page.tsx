@@ -1,4 +1,4 @@
-﻿import { requireUser } from "@/server/auth";
+import { requireUser } from "@/server/auth";
 import { getCappersForUser, getPlanStatus } from "@/server/data/cappers";
 import { CapperForm } from "@/components/dashboard/capper-form";
 
@@ -36,13 +36,18 @@ export default async function CappersPage() {
       {cappers.length === 0 ? (
         <div className="rounded-card bg-white p-10 text-center shadow-soft">
           <p className="text-sm text-gray-400">
-            No cappers yet — add the first person or channel you follow for picks.
+            No cappers yet - add the first person or channel you follow for picks.
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-4">
           {cappers.map((capper) => (
-            <div key={capper.id} className="rounded-card bg-white p-4 shadow-soft">
+            <a
+            
+              key={capper.id}
+              href={"/cappers/" + capper.id}
+              className="rounded-card bg-white p-4 shadow-soft transition hover:shadow-md"
+            >
               <div className="flex items-center gap-3">
                 <div
                   className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-medium text-white"
@@ -67,7 +72,7 @@ export default async function CappersPage() {
               {capper.notes && (
                 <p className="mt-2 line-clamp-2 text-xs text-gray-400">{capper.notes}</p>
               )}
-            </div>
+            </a>
           ))}
         </div>
       )}

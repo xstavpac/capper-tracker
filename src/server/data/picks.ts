@@ -49,6 +49,14 @@ export async function updatePickStatus(userId: string, pickId: string, status: P
   });
 }
 
+export async function getPicksForCapper(userId: string, capperId: string) {
+  return prisma.pick.findMany({
+    where: { userId, capperId },
+    include: { capper: true, sport: true, league: true },
+    orderBy: { gameTime: "asc" },
+  });
+}
+
 export async function getPicksForUser(userId: string) {
   return prisma.pick.findMany({
     where: { userId },
