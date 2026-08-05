@@ -1,4 +1,4 @@
-﻿import { requireUser } from "@/server/auth";
+import { requireUser } from "@/server/auth";
 import { getFilteredPicksForUser, getSportsWithLeagues } from "@/server/data/picks";
 import { getCappersForUser } from "@/server/data/cappers";
 import { PickForm } from "@/components/dashboard/pick-form";
@@ -40,7 +40,17 @@ export default async function PicksPage({
             {hasActiveFilters ? " (filtered)" : " logged"}
           </p>
         </div>
-        <PickForm cappers={cappers} sports={sports} />
+        <div className="flex items-center gap-2">
+          
+            
+            <a
+            href="/picks/import"
+            className="rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:border-gray-300"
+          >
+            Betting Catalog Import
+          </a>
+          <PickForm cappers={cappers} sports={sports} />
+        </div>
       </div>
 
       <form method="get" className="mb-4 flex flex-wrap items-center gap-2 rounded-card bg-white p-3 shadow-soft">
