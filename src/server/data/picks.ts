@@ -64,3 +64,24 @@ export async function getPicksForUser(userId: string) {
     orderBy: { gameTime: "desc" },
   });
 }
+
+export type PickFilters = {
+  capperId?: string;
+  sportId?: string;
+  status?: PickStatus;
+  betType?: BetType;
+};
+
+export async function getFilteredPicksForUser(userId: string, filters: PickFilters) {
+  return prisma.pick.findMany({
+    where: {
+      userId,
+      ...(filters.capperId ? { capperId: filters.capperId } : {}),
+      ...(filters.sportId ? { sportId: filters.sportId } : {}),
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.betType ? { betType: filters.betType } : {}),
+    },
+    include: { capper: true, sport: true, league: true },
+    orderBy: { gameTime: "desc" },
+  });
+}

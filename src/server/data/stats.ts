@@ -218,3 +218,24 @@ async function getUserPicksWithRelations(userId: string) {
     include: { capper: true, sport: true, league: true },
   });
 }
+
+export type UnitsChartPoint = { date: string; cumulativeUnits: number };
+
+export function computeUnitsChartData(picks: Pick[]): UnitsChartPoint[] {
+  const settled = [...picks]
+    .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
+    .sort((a, b) => a.gameTime.getTime() - b.gameTime.getTime());
+
+  let running = 0;
+  return settled.map((pick) => {
+    if (pick.status === "WIN") {
+      running += unitsWonOnBet(pick.units, pick.odds);
+    } else if (pick.status === "LOSS") {
+      running -= pick.units;
+    }
+    return {
+      date: pick.gameTime.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      cumulativeUnits: Math.round(running * 100) / 100,
+    };
+  });
+}

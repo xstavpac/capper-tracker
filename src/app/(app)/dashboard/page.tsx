@@ -1,6 +1,7 @@
-import { requireUser } from "@/server/auth";
-import { getDashboardSummary } from "@/server/data/stats";
+﻿import { requireUser } from "@/server/auth";
+import { getDashboardSummary, getUserPicks, computeUnitsChartData } from "@/server/data/stats";
 import { getCapperById } from "@/server/data/cappers";
+import { UnitsChart } from "@/components/dashboard/units-chart";
 
 function StatCard({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
   const toneClass =
@@ -8,7 +9,7 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
   return (
     <div className="rounded-card bg-white p-4 shadow-soft">
       <div className="text-sm text-gray-500">{label}</div>
-      <div className={`mt-1 text-2xl font-semibold ${toneClass}`}>{value}</div>
+      <div className={"mt-1 text-2xl font-semibold " + toneClass}>{value}</div>
     </div>
   );
 }
@@ -22,23 +23,31 @@ export default async function DashboardPage() {
     ? await getCapperById(user.id, summary.topCapper.capperId)
     : null;
 
+  const allPicks = await getUserPicks(user.id);
+  const chartData = computeUnitsChartData(allPicks);
+
   return (
     <div className="mx-auto max-w-5xl">
       <h1 className="mb-6 text-xl font-semibold">Dashboard</h1>
 
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="Overall record" value={`${overall.wins}-${overall.losses}-${overall.pushes}`} />
+        <StatCard label="Overall record" value={overall.wins + "-" + overall.losses + "-" + overall.pushes} />
         <StatCard
           label="ROI"
-          value={`${overall.roi >= 0 ? "+" : ""}${overall.roi}%`}
+          value={(overall.roi >= 0 ? "+" : "") + overall.roi + "%"}
           tone={overall.roi >= 0 ? "up" : "down"}
         />
         <StatCard
           label="Net units"
-          value={`${overall.netUnits >= 0 ? "+" : ""}${overall.netUnits}u`}
+          value={(overall.netUnits >= 0 ? "+" : "") + overall.netUnits + "u"}
           tone={overall.netUnits >= 0 ? "up" : "down"}
         />
         <StatCard label="Pending picks" value={String(summary.pendingCount)} />
+      </div>
+
+      <div className="mt-4 rounded-card bg-white p-5 shadow-soft">
+        <div className="mb-2 text-sm font-medium text-gray-700">Performance</div>
+        <UnitsChart data={chartData} />
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-4">
@@ -47,13 +56,13 @@ export default async function DashboardPage() {
           <div className="mt-3 divide-y divide-gray-100">
             {summary.recentPicks.length === 0 && (
               <p className="py-6 text-center text-sm text-gray-400">
-                No picks yet — add your first capper to get started.
+                No picks yet - add your first capper to get started.
               </p>
             )}
             {summary.recentPicks.map((pick) => (
               <div key={pick.id} className="flex items-center justify-between py-2 text-sm">
                 <span>
-                  {pick.awayTeam} @ {pick.homeTeam} · {pick.betDetail ?? pick.betType}
+                  {pick.awayTeam} @ {pick.homeTeam} - {pick.betDetail ?? pick.betType}
                 </span>
                 <span
                   className={
@@ -64,7 +73,7 @@ export default async function DashboardPage() {
                         : "text-gray-400"
                   }
                 >
-                  {pick.status === "PENDING" ? "Pending" : `${pick.status} · ${pick.units}u`}
+                  {pick.status === "PENDING" ? "Pending" : pick.status + " - " + pick.units + "u"}
                 </span>
               </div>
             ))}
@@ -78,7 +87,7 @@ export default async function DashboardPage() {
               <div className="font-medium">{topCapper.name}</div>
               <div className="mt-1 text-sm text-emerald-600">
                 {summary.topCapper!.stats.netUnits >= 0 ? "+" : ""}
-                {summary.topCapper!.stats.netUnits}u · {summary.topCapper!.stats.roi}% ROI
+                {summary.topCapper!.stats.netUnits}u - {summary.topCapper!.stats.roi}% ROI
               </div>
             </div>
           ) : (

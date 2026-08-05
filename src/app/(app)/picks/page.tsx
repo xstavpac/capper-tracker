@@ -1,16 +1,34 @@
 ﻿import { requireUser } from "@/server/auth";
-import { getPicksForUser, getSportsWithLeagues } from "@/server/data/picks";
+import { getFilteredPicksForUser, getSportsWithLeagues } from "@/server/data/picks";
 import { getCappersForUser } from "@/server/data/cappers";
 import { PickForm } from "@/components/dashboard/pick-form";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
+import type { BetType, PickStatus } from "@prisma/client";
 
-export default async function PicksPage() {
+const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
+const BET_TYPE_OPTIONS = ["SPREAD", "MONEYLINE", "TOTAL", "PLAYER_PROP"];
+
+export default async function PicksPage({
+  searchParams,
+}: {
+  searchParams: { capperId?: string; sportId?: string; status?: string; betType?: string };
+}) {
   const user = await requireUser();
+
+  const filters = {
+    capperId: searchParams.capperId || undefined,
+    sportId: searchParams.sportId || undefined,
+    status: (searchParams.status as PickStatus) || undefined,
+    betType: (searchParams.betType as BetType) || undefined,
+  };
+
   const [picks, cappers, sports] = await Promise.all([
-    getPicksForUser(user.id),
+    getFilteredPicksForUser(user.id, filters),
     getCappersForUser(user.id),
     getSportsWithLeagues(),
   ]);
+
+  const hasActiveFilters = Object.values(filters).some(Boolean);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -18,16 +36,86 @@ export default async function PicksPage() {
         <div>
           <h1 className="text-xl font-semibold">Picks</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {picks.length} pick{picks.length === 1 ? "" : "s"} logged
+            {picks.length} pick{picks.length === 1 ? "" : "s"}
+            {hasActiveFilters ? " (filtered)" : " logged"}
           </p>
         </div>
         <PickForm cappers={cappers} sports={sports} />
       </div>
 
+      <form method="get" className="mb-4 flex flex-wrap items-center gap-2 rounded-card bg-white p-3 shadow-soft">
+        <select
+          name="capperId"
+          defaultValue={filters.capperId ?? ""}
+          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+        >
+          <option value="">All cappers</option>
+          {cappers.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          name="sportId"
+          defaultValue={filters.sportId ?? ""}
+          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+        >
+          <option value="">All sports</option>
+          {sports.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          name="betType"
+          defaultValue={filters.betType ?? ""}
+          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+        >
+          <option value="">All bet types</option>
+          {BET_TYPE_OPTIONS.map((b) => (
+            <option key={b} value={b}>
+              {b}
+            </option>
+          ))}
+        </select>
+
+        <select
+          name="status"
+          defaultValue={filters.status ?? ""}
+          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+        >
+          <option value="">All results</option>
+          {STATUS_OPTIONS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="submit"
+          className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+        >
+          Filter
+        </button>
+
+        {hasActiveFilters && (
+          <a href="/picks" className="text-sm text-gray-500 hover:text-gray-700">
+            Clear
+          </a>
+        )}
+      </form>
+
       {picks.length === 0 ? (
         <div className="rounded-card bg-white p-10 text-center shadow-soft">
           <p className="text-sm text-gray-400">
-            No picks logged yet - log your first pick above.
+            {hasActiveFilters
+              ? "No picks match these filters."
+              : "No picks logged yet - log your first pick above."}
           </p>
         </div>
       ) : (
