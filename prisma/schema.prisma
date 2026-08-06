@@ -152,3 +152,14 @@ model Pick {
   @@index([userId, gameTime])
   @@map("picks")
 }
+
+model OddsSnapshot {
+  id        String   @id @default(cuid())
+  sportKey  String
+  fetchDate String
+  data      Json
+  createdAt DateTime @default(now())
+
+  @@unique([sportKey, fetchDate])
+  @@map("odds_snapshots")
+}

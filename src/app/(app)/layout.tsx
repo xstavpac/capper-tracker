@@ -23,6 +23,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {item.label}
           </Link>
         ))}
+        <Link
+          href="/live"
+          className="rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
+        >
+          Live
+        </Link>
         <div className="mt-auto flex items-center gap-2 px-2 pt-4">
           <UserButton afterSignOutUrl="/" />
           <span className="text-sm text-gray-500">Account</span>
