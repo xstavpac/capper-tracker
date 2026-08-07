@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/server/auth";
 import { createPick, updatePickStatus } from "@/server/data/picks";
-import type { BetType, PickStatus } from "@prisma/client";
+import type { BetType, PickStatus, Period } from "@prisma/client";
 
 export type ActionResult = { success: true } | { success: false; error: string };
 
@@ -18,6 +18,8 @@ export async function createPickAction(formData: FormData): Promise<ActionResult
   const betType = formData.get("betType") as BetType;
   const betDetail = (formData.get("betDetail") as string)?.trim() || undefined;
   const oddsRaw = formData.get("odds") as string;
+  const lineRaw = (formData.get("line") as string) || "";
+  const period = ((formData.get("period") as string) || "FULL_GAME") as Period;
   const unitsRaw = formData.get("units") as string;
   const sportsbook = (formData.get("sportsbook") as string)?.trim() || undefined;
   const gameTimeRaw = formData.get("gameTime") as string;
@@ -29,12 +31,16 @@ export async function createPickAction(formData: FormData): Promise<ActionResult
 
   const odds = parseInt(oddsRaw, 10);
   const units = parseFloat(unitsRaw);
+  const line = lineRaw.trim() ? parseFloat(lineRaw) : null;
 
   if (isNaN(odds) || odds === 0) {
     return { success: false, error: "Odds must be a valid number, e.g. -110 or +150." };
   }
   if (isNaN(units) || units <= 0) {
     return { success: false, error: "Units must be a positive number." };
+  }
+  if (lineRaw.trim() && isNaN(line as number)) {
+    return { success: false, error: "Line must be a valid number, e.g. -4.5 or 224.5." };
   }
   if (!gameTimeRaw) {
     return { success: false, error: "Game time is required." };
@@ -50,6 +56,8 @@ export async function createPickAction(formData: FormData): Promise<ActionResult
       betType,
       betDetail,
       odds,
+      line,
+      period,
       units,
       sportsbook,
       gameTime: new Date(gameTimeRaw),
@@ -82,5 +90,7 @@ export async function updatePickStatusAction(
   revalidatePath("/picks");
   revalidatePath("/dashboard");
   revalidatePath("/cappers");
+  revalidatePath("/cappers/[capperId]", "page");
+  revalidatePath("/live/[gameId]", "page");
   return { success: true };
 }

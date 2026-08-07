@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Pick, PickStatus } from "@prisma/client";
+import { favoriteOrUnderdog } from "@/lib/bet-line";
 
 export type OverallStats = {
   wins: number;
@@ -114,6 +115,69 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+// A capper's record broken down by bet category, so "good overall" and "good
+// at the specific bet they just gave you" can be told apart at a glance.
+export type ScorecardBucketKey = "MONEYLINE" | "SPREAD" | "TOTAL" | "PLAYER_PROP" | "F5";
+export type ScorecardBucket = {
+  key: ScorecardBucketKey;
+  label: string;
+  wins: number;
+  losses: number;
+  pushes: number;
+  winPct: number;
+  count: number; // decided picks: wins + losses + pushes
+  tone: "positive" | "negative" | "neutral";
+};
+
+export const SCORECARD_MIN_SAMPLE = 5;
+export const SCORECARD_WIN_THRESHOLD = 52.4; // -110 breakeven: 110 / 210
+
+const SCORECARD_BUCKET_ORDER: ScorecardBucketKey[] = ["MONEYLINE", "SPREAD", "TOTAL", "PLAYER_PROP", "F5"];
+const SCORECARD_BUCKET_LABELS: Record<ScorecardBucketKey, string> = {
+  MONEYLINE: "Moneyline",
+  SPREAD: "Spread",
+  TOTAL: "Total",
+  PLAYER_PROP: "Player Prop",
+  F5: "F5",
+};
+
+// F5 (first half) picks form their own bucket regardless of bet type - a
+// first-half spread pick is grouped with other F5 picks, not the full-game
+// spread record, since it's graded against a different score entirely.
+function bucketKeyForPick(pick: Pick): ScorecardBucketKey {
+  return pick.period === "FIRST_HALF" ? "F5" : (pick.betType as ScorecardBucketKey);
+}
+
+function scorecardTone(winPct: number, count: number): ScorecardBucket["tone"] {
+  if (count < SCORECARD_MIN_SAMPLE) return "neutral";
+  return winPct >= SCORECARD_WIN_THRESHOLD ? "positive" : "negative";
+}
+
+export function computeScorecard(picks: Pick[]): ScorecardBucket[] {
+  const byBucket = new Map<ScorecardBucketKey, Pick[]>();
+  for (const pick of picks) {
+    const key = bucketKeyForPick(pick);
+    const existing = byBucket.get(key);
+    if (existing) existing.push(pick);
+    else byBucket.set(key, [pick]);
+  }
+
+  return SCORECARD_BUCKET_ORDER.filter((key) => byBucket.has(key)).map((key) => {
+    const stats = computeStats(byBucket.get(key)!);
+    const count = stats.wins + stats.losses + stats.pushes;
+    return {
+      key,
+      label: SCORECARD_BUCKET_LABELS[key],
+      wins: stats.wins,
+      losses: stats.losses,
+      pushes: stats.pushes,
+      winPct: stats.winPct,
+      count,
+      tone: scorecardTone(stats.winPct, count),
+    };
+  });
+}
+
 /** All picks for a user, scoped by userId — never call prisma.pick directly. */
 export async function getUserPicks(userId: string) {
   return prisma.pick.findMany({
@@ -182,6 +246,14 @@ export async function getReportsData(userId: string) {
   const bySport = groupBy((p) => ({ id: p.sportId, name: p.sport.name }));
   const byLeague = groupBy((p) => (p.league ? { id: p.league.id, name: p.league.name } : null));
   const byBetType = groupBy((p) => ({ id: p.betType, name: betTypeLabel(p.betType) }));
+  const byPeriod = groupBy((p) => ({
+    id: p.period,
+    name: p.period === "FIRST_HALF" ? "First half / F5" : "Full game",
+  }));
+  const byFavoriteDog = groupBy((p) => {
+    const side = favoriteOrUnderdog(p);
+    return side ? { id: side, name: side === "FAVORITE" ? "Favorite" : "Underdog" } : null;
+  });
 
   return {
     overall,
@@ -189,6 +261,8 @@ export async function getReportsData(userId: string) {
     bySport,
     byLeague,
     byBetType,
+    byPeriod,
+    byFavoriteDog,
     bestCapper: byCapper[0] ?? null,
     worstCapper: byCapper[byCapper.length - 1] ?? null,
     bestSport: bySport[0] ?? null,

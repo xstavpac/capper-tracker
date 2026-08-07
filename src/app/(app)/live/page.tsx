@@ -56,12 +56,7 @@ export default async function LivePage({
       )}
 
       <div className="space-y-3">
-        {odds
-          .filter((game) => {
-            const s = matchScoreToGame(scores, game);
-            return s?.status !== "final";
-          })
-          .map((game) => {
+        {odds.map((game) => {
           const score = matchScoreToGame(scores, game);
           const book = game.bookmakers[0];
           function findMarketAcrossBooks(key: string) {

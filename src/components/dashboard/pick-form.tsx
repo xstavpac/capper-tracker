@@ -214,6 +214,33 @@ export function PickForm({ cappers, sports, atLimit }: { cappers: Capper[]; spor
           />
         </div>
 
+        {(betType === "SPREAD" || betType === "TOTAL") && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-600">
+              {betType === "SPREAD" ? "Spread line (e.g. -4.5)" : "Total line (e.g. 224.5)"}
+            </label>
+            <input
+              name="line"
+              type="number"
+              step="0.5"
+              placeholder={betType === "SPREAD" ? "-4.5" : "224.5"}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+            />
+          </div>
+        )}
+
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-600">Period</label>
+          <select
+            name="period"
+            defaultValue="FULL_GAME"
+            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+          >
+            <option value="FULL_GAME">Full game</option>
+            <option value="FIRST_HALF">First half / F5</option>
+          </select>
+        </div>
+
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">Units</label>
           <input

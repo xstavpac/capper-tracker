@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { parseCatalog, type ParsedPick } from "@/lib/parse-catalog";
 import { bulkImportPicksAction } from "@/server/actions/bulk-picks";
+import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
 
 export function BulkImportForm({ existingCapperNames }: { existingCapperNames: string[] }) {
   const [text, setText] = useState("");
@@ -34,6 +35,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         odds: p.odds,
         hasExplicitOdds: p.hasExplicitOdds,
         totalSide: p.totalSide,
+        teamNicknames: p.teamNicknames,
         units: p.units,
         isFirstFive: p.isFirstFive,
       }))
@@ -63,16 +65,15 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={10}
-        placeholder={"ExampleCapper123\nDetroit Tigers ML (-117) (2u)"}
+        placeholder={
+          "Vegas John\nCubs moneyline\nWhite Sox -1.5\n\nHigh Roller Hank\nYankees ML\nDodgers under 8.5"
+        }
         className="w-full rounded-lg border border-gray-200 px-3 py-2 font-mono text-xs focus:border-brand-400 focus:outline-none"
       />
 
-      <button
-        onClick={handleParse}
-        disabled={!text.trim()}
-        className="mt-3 rounded-full bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
-      >
-        Preview
+      <button onClick={handleParse} disabled={!text.trim()} className={"mt-3 " + dropCatalogButtonClass}>
+        <LightningIcon />
+        Drop Catalog
       </button>
 
       {parsed && (

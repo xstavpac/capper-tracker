@@ -25,6 +25,15 @@ const config: Config = {
       boxShadow: {
         soft: "0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 6px -1px rgb(0 0 0 / 0.04)",
       },
+      keyframes: {
+        "glow-pulse": {
+          "0%, 100%": { boxShadow: "0 0 18px 2px rgba(168,85,247,0.55)" },
+          "50%": { boxShadow: "0 0 34px 6px rgba(168,85,247,0.9)" },
+        },
+      },
+      animation: {
+        "glow-pulse": "glow-pulse 2.2s ease-in-out infinite",
+      },
     },
   },
   plugins: [],

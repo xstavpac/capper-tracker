@@ -1,7 +1,7 @@
 ﻿import { prisma } from "@/lib/prisma";
-import type { BetType, PickStatus } from "@prisma/client";
+import type { BetType, PickStatus, Period } from "@prisma/client";
 import { findTeamNickname } from "@/lib/parse-catalog";
-import { computeStats } from "@/server/data/stats";
+import { computeStats, computeScorecard, type ScorecardBucket, type ScorecardBucketKey } from "@/server/data/stats";
 
 const FREE_PLAN_PICK_LIMIT = 1000;
 
@@ -36,6 +36,8 @@ export async function createPick(
     betType: BetType;
     betDetail?: string;
     odds: number;
+    line?: number | null;
+    period?: Period;
     sportsbook?: string;
     units: number;
     gameTime: Date;
@@ -71,9 +73,11 @@ export async function updatePickStatus(userId: string, pickId: string, status: P
     throw new Error("Pick not found.");
   }
 
+  const wasPending = pick.status === "PENDING";
+
   return prisma.pick.update({
     where: { id: pickId },
-    data: { status },
+    data: { status, ...(wasPending && status !== "PENDING" ? { gradedAt: new Date() } : {}) },
   });
 }
 
@@ -90,6 +94,7 @@ export type PickFilters = {
   sportId?: string;
   status?: PickStatus;
   betType?: BetType;
+  period?: Period;
 };
 
 export async function getFilteredPicksForUser(userId: string, filters: PickFilters) {
@@ -100,6 +105,7 @@ export async function getFilteredPicksForUser(userId: string, filters: PickFilte
       ...(filters.sportId ? { sportId: filters.sportId } : {}),
       ...(filters.status ? { status: filters.status } : {}),
       ...(filters.betType ? { betType: filters.betType } : {}),
+      ...(filters.period ? { period: filters.period } : {}),
     },
     include: { capper: true, sport: true, league: true },
     orderBy: { gameTime: "desc" },
@@ -150,10 +156,19 @@ export async function getPicksForGame(
   });
 }
 
-// A capper's all-time record narrowed to one bet type, e.g. "8-3 on
-// Moneyline picks" - context for how much weight to give their pick on a
-// specific game, independent of their overall record across every bet type.
-export async function getCapperRecordByBetType(userId: string, capperId: string, betType: BetType) {
-  const picks = await prisma.pick.findMany({ where: { userId, capperId, betType } });
-  return computeStats(picks);
+// A capper's record broken down by bet category (see computeScorecard), or
+// narrowed to a single category when `filter` is given - e.g. "8-3 on
+// Moneyline picks" for context on how much weight to give their pick on a
+// specific game, independent of their overall record across every category.
+export async function getCapperScorecard(
+  userId: string,
+  capperId: string,
+  filter?: { betType: BetType; period: Period }
+): Promise<ScorecardBucket[]> {
+  const picks = await prisma.pick.findMany({ where: { userId, capperId } });
+  const buckets = computeScorecard(picks);
+  if (!filter) return buckets;
+
+  const key: ScorecardBucketKey = filter.period === "FIRST_HALF" ? "F5" : (filter.betType as ScorecardBucketKey);
+  return buckets.filter((b) => b.key === key);
 }

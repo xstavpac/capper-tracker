@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { requireUser } from "@/server/auth";
 import { getOddsForSport, getMlbLiveScores, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
-import { getPicksForGame, getCapperRecordByBetType } from "@/server/data/picks";
+import { getPicksForGame, getCapperScorecard } from "@/server/data/picks";
 import { betTypeLabel } from "@/server/data/stats";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
-import type { BetType } from "@prisma/client";
+import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
+import type { BetType, Period } from "@prisma/client";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -68,18 +69,26 @@ export default async function GameDetailPage({
     commenceTime: new Date(game.commenceTime),
   });
 
-  const recordKeys = new Map<string, { capperId: string; capperName: string; betType: BetType }>();
+  const recordKeys = new Map<
+    string,
+    { capperId: string; capperName: string; betType: BetType; period: Period }
+  >();
   for (const pick of matchedPicks) {
-    const key = pick.capperId + "|" + pick.betType;
+    const key = pick.capperId + "|" + pick.betType + "|" + pick.period;
     if (!recordKeys.has(key)) {
-      recordKeys.set(key, { capperId: pick.capperId, capperName: pick.capper.name, betType: pick.betType });
+      recordKeys.set(key, {
+        capperId: pick.capperId,
+        capperName: pick.capper.name,
+        betType: pick.betType,
+        period: pick.period,
+      });
     }
   }
 
   const capperRecords = await Promise.all(
     Array.from(recordKeys.values()).map(async (entry) => ({
       ...entry,
-      stats: await getCapperRecordByBetType(user.id, entry.capperId, entry.betType),
+      buckets: await getCapperScorecard(user.id, entry.capperId, { betType: entry.betType, period: entry.period }),
     }))
   );
 
@@ -187,14 +196,12 @@ export default async function GameDetailPage({
           </div>
           <div className="divide-y divide-gray-100">
             {capperRecords.map((r) => (
-              <div key={r.capperId + r.betType} className="flex items-center justify-between px-5 py-3">
-                <div className="text-sm font-medium">
-                  {r.capperName} <span className="text-gray-400">- {betTypeLabel(r.betType)}</span>
-                </div>
-                <div className="text-sm text-gray-600">
-                  {r.stats.wins}-{r.stats.losses}-{r.stats.pushes}{" "}
-                  <span className="text-gray-400">({Math.round(r.stats.winPct)}%)</span>
-                </div>
+              <div
+                key={r.capperId + r.betType + r.period}
+                className="flex items-center justify-between px-5 py-3"
+              >
+                <div className="text-sm font-medium">{r.capperName}</div>
+                <CapperScorecard buckets={r.buckets} variant="inline" />
               </div>
             ))}
           </div>

@@ -1,6 +1,7 @@
 import { requireUser } from "@/server/auth";
-import { getCappersForUser, getPlanStatus } from "@/server/data/cappers";
+import { getCappersForUser, getPlanStatus, getWeeklyCapperLeaderboard } from "@/server/data/cappers";
 import { CapperForm } from "@/components/dashboard/capper-form";
+import { WeeklyLeaderboard } from "@/components/dashboard/weekly-leaderboard";
 
 const SOURCE_LABELS: Record<string, string> = {
   TWITTER: "Twitter / X",
@@ -14,9 +15,10 @@ const SOURCE_LABELS: Record<string, string> = {
 
 export default async function CappersPage() {
   const user = await requireUser();
-  const [cappers, planStatus] = await Promise.all([
+  const [cappers, planStatus, leaderboard] = await Promise.all([
     getCappersForUser(user.id),
     getPlanStatus(user.id),
+    getWeeklyCapperLeaderboard(user.id),
   ]);
 
   return (
@@ -30,6 +32,8 @@ export default async function CappersPage() {
         </div>
         <CapperForm atLimit={false} />
       </div>
+
+      <WeeklyLeaderboard entries={leaderboard} />
 
       {cappers.length === 0 ? (
         <div className="rounded-card bg-white p-10 text-center shadow-soft">

@@ -117,6 +117,32 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
   });
 }
 
+// Sums runs across innings 1-5 for a finished game, for grading F5/first-half
+// picks. Only call this once a game is Final - mid-game, a still-in-progress
+// 5th inning would report an incomplete (and misleading) score for whichever
+// team hasn't batted yet. The schedule endpoint used by getMlbLiveScores()
+// doesn't include inning-by-inning data, so this hits the heavier live-feed
+// endpoint - only worth it for the one-time first-five capture per game.
+export async function getMlbFirstFiveScore(gamePk: string): Promise<{ home: number; away: number } | null> {
+  const res = await fetch("https://statsapi.mlb.com/api/v1.1/game/" + gamePk + "/feed/live", {
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  const innings = data.liveData?.linescore?.innings ?? [];
+  const firstFive = innings.filter((i: any) => i.num <= 5);
+  if (firstFive.length < 5) return null;
+
+  let home = 0;
+  let away = 0;
+  for (const inning of firstFive) {
+    home += inning.home?.runs ?? 0;
+    away += inning.away?.runs ?? 0;
+  }
+  return { home, away };
+}
+
 // Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw
 // pick text) to the real MLB game it refers to, using the yesterday/today/
 // tomorrow schedule window. Same-team matchups repeat every few days in MLB
@@ -132,6 +158,35 @@ export async function resolveMlbGameForNickname(
   const candidates = games.filter(
     (g) => g.homeTeam.toLowerCase().endsWith(nickname) || g.awayTeam.toLowerCase().endsWith(nickname)
   );
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  const sameDay = candidates.filter((g) => sameLocalDay(new Date(g.commenceTime), referenceTime));
+  const pool = sameDay.length > 0 ? sameDay : candidates;
+  const notFinal = pool.filter((g) => g.status !== "final");
+  const finalPool = notFinal.length > 0 ? notFinal : pool;
+
+  return closestByTime(finalPool, (g) => new Date(g.commenceTime).getTime(), referenceTime.getTime());
+}
+
+// Same idea as resolveMlbGameForNickname, but for picks that name both teams
+// (e.g. "Dodgers Cubs under 8.5") - requiring both nicknames to match pins the
+// exact matchup directly instead of leaning on time-proximity guessing, and
+// naturally disambiguates cases a single nickname alone couldn't.
+export async function resolveMlbGameForTeams(
+  nicknameA: string,
+  nicknameB: string,
+  referenceTime: Date = new Date()
+): Promise<ScoreGame | null> {
+  const games = await getMlbLiveScores();
+  const candidates = games.filter((g) => {
+    const home = g.homeTeam.toLowerCase();
+    const away = g.awayTeam.toLowerCase();
+    return (
+      (home.endsWith(nicknameA) && away.endsWith(nicknameB)) ||
+      (home.endsWith(nicknameB) && away.endsWith(nicknameA))
+    );
+  });
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
 

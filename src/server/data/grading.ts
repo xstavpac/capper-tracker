@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { getMlbLiveScores } from "@/server/data/odds";
+import { getMlbLiveScores, getMlbFirstFiveScore } from "@/server/data/odds";
 import { closestByTime } from "@/lib/dates";
+import { extractLine } from "@/lib/bet-line";
 
 export async function persistMlbFinalScores(): Promise<number> {
   const games = await getMlbLiveScores();
@@ -12,9 +13,22 @@ export async function persistMlbFinalScores(): Promise<number> {
     const awayScore = g.scores!.find((s) => s.name === g.awayTeam)?.score;
     if (homeScore === undefined || awayScore === undefined) continue;
 
+    const existing = await prisma.gameResult.findUnique({
+      where: { sportKey_externalId: { sportKey: "baseball_mlb", externalId: g.id } },
+    });
+
+    // First-five is immutable once captured, and fetching it hits the heavier
+    // live-feed endpoint - only fetch it the first time this game is persisted.
+    const needsFirstFive = !existing || existing.firstFiveHomeScore === null;
+    const firstFive = needsFirstFive ? await getMlbFirstFiveScore(g.id) : null;
+
     await prisma.gameResult.upsert({
       where: { sportKey_externalId: { sportKey: "baseball_mlb", externalId: g.id } },
-      update: { homeScore: parseInt(homeScore, 10), awayScore: parseInt(awayScore, 10) },
+      update: {
+        homeScore: parseInt(homeScore, 10),
+        awayScore: parseInt(awayScore, 10),
+        ...(firstFive ? { firstFiveHomeScore: firstFive.home, firstFiveAwayScore: firstFive.away } : {}),
+      },
       create: {
         sportKey: "baseball_mlb",
         externalId: g.id,
@@ -22,6 +36,8 @@ export async function persistMlbFinalScores(): Promise<number> {
         awayTeam: g.awayTeam,
         homeScore: parseInt(homeScore, 10),
         awayScore: parseInt(awayScore, 10),
+        firstFiveHomeScore: firstFive?.home ?? null,
+        firstFiveAwayScore: firstFive?.away ?? null,
         gameDate: new Date(g.commenceTime),
       },
     });
@@ -41,6 +57,7 @@ type GradeOutcome = "WIN" | "LOSS" | "PUSH" | null;
 function gradePick(
   betType: string,
   betDetail: string,
+  line: number | null,
   homeTeam: string,
   awayTeam: string,
   homeScore: number,
@@ -63,9 +80,10 @@ function gradePick(
   }
 
   if (betType === "SPREAD") {
-    const spreadMatch = detail.match(/([+-]\d+(\.\d+)?)/);
-    if (!spreadMatch) return null;
-    const spread = parseFloat(spreadMatch[1]);
+    // Prefer the line stored at pick-creation time; older picks fall back to
+    // regex-parsing it out of the free-text betDetail.
+    const spread = line ?? extractLine("SPREAD", detail);
+    if (spread === null) return null;
 
     if (pickedHome) {
       const adjusted = homeScore + spread;
@@ -83,21 +101,20 @@ function gradePick(
   }
 
   if (betType === "TOTAL") {
-    const numberMatch = detail.match(/(\d+(\.\d+)?)/);
-    if (!numberMatch) return null;
-    const line = parseFloat(numberMatch[1]);
+    const totalLine = line ?? extractLine("TOTAL", detail);
+    if (totalLine === null) return null;
     const actual = homeScore + awayScore;
     const isOver = detail.includes("over");
     const isUnder = detail.includes("under");
 
     if (isOver) {
-      if (actual > line) return "WIN";
-      if (actual < line) return "LOSS";
+      if (actual > totalLine) return "WIN";
+      if (actual < totalLine) return "LOSS";
       return "PUSH";
     }
     if (isUnder) {
-      if (actual < line) return "WIN";
-      if (actual > line) return "LOSS";
+      if (actual < totalLine) return "WIN";
+      if (actual > totalLine) return "LOSS";
       return "PUSH";
     }
     return null;
@@ -158,13 +175,22 @@ export async function gradePendingPicks(userId: string): Promise<{
       continue;
     }
 
+    const homeScore = pick.period === "FIRST_HALF" ? match.firstFiveHomeScore : match.homeScore;
+    const awayScore = pick.period === "FIRST_HALF" ? match.firstFiveAwayScore : match.awayScore;
+
+    if (homeScore === null || awayScore === null) {
+      notMatched++;
+      continue;
+    }
+
     const outcome = gradePick(
       pick.betType,
       pick.betDetail ?? pick.homeTeam,
+      pick.line,
       match.homeTeam,
       match.awayTeam,
-      match.homeScore,
-      match.awayScore
+      homeScore,
+      awayScore
     );
 
     if (!outcome) {
@@ -172,7 +198,7 @@ export async function gradePendingPicks(userId: string): Promise<{
       continue;
     }
 
-    await prisma.pick.update({ where: { id: pick.id }, data: { status: outcome } });
+    await prisma.pick.update({ where: { id: pick.id }, data: { status: outcome, gradedAt: new Date() } });
     graded++;
   }
 

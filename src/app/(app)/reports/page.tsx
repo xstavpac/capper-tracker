@@ -79,6 +79,11 @@ export default async function ReportsPage() {
         <BreakdownList title="Profit by league" items={data.byLeague} />
         <BreakdownList title="Profit by bet type" items={data.byBetType} />
       </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-4">
+        <BreakdownList title="Profit by period" items={data.byPeriod} />
+        <BreakdownList title="Profit by favorite / underdog" items={data.byFavoriteDog} />
+      </div>
     </div>
   );
 }

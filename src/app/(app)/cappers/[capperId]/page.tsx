@@ -2,9 +2,10 @@
 import { requireUser } from "@/server/auth";
 import { getCapperById } from "@/server/data/cappers";
 import { getPicksForCapper } from "@/server/data/picks";
-import { computeStats, unitsWonOnBet } from "@/server/data/stats";
+import { computeStats, computeScorecard, unitsWonOnBet } from "@/server/data/stats";
 import { UnitsChart, type UnitsChartPoint } from "@/components/dashboard/units-chart";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
+import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
 
 const SOURCE_LABELS: Record<string, string> = {
   TWITTER: "Twitter / X",
@@ -37,6 +38,7 @@ export default async function CapperDetailPage({ params }: { params: { capperId:
 
   const picks = await getPicksForCapper(user.id, params.capperId);
   const stats = computeStats(picks);
+  const scorecard = computeScorecard(picks);
 
   const settled = picks.filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH");
   let running = 0;
@@ -96,6 +98,13 @@ export default async function CapperDetailPage({ params }: { params: { capperId:
           tone={stats.currentStreak.type === "WIN" ? "up" : stats.currentStreak.type === "LOSS" ? "down" : undefined}
         />
       </div>
+
+      {scorecard.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-2 text-sm font-medium text-gray-700">Record by bet type</div>
+          <CapperScorecard buckets={scorecard} variant="grid" />
+        </div>
+      )}
 
       <div className="mt-4 rounded-card bg-white p-5 shadow-soft">
         <div className="mb-2 text-sm font-medium text-gray-700">Units over time</div>

@@ -5,8 +5,8 @@ import { requireUser } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
 import { createCapper } from "@/server/data/cappers";
 import { createPick } from "@/server/data/picks";
-import { resolveMlbGameForNickname, findMlbMarketPrice } from "@/server/data/odds";
-import { findTeamNickname } from "@/lib/parse-catalog";
+import { resolveMlbGameForNickname, resolveMlbGameForTeams, findMlbMarketPrice } from "@/server/data/odds";
+import { extractLine } from "@/lib/bet-line";
 import type { BetType } from "@prisma/client";
 
 export type BulkImportItem = {
@@ -17,6 +17,7 @@ export type BulkImportItem = {
   odds: number;
   hasExplicitOdds: boolean;
   totalSide?: "over" | "under";
+  teamNicknames: string[];
   units: number;
   isFirstFive: boolean;
 };
@@ -80,8 +81,13 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
       let odds = item.odds;
 
       if (item.sportName.toUpperCase() === "MLB") {
-        const nickname = findTeamNickname(item.description, "MLB");
-        const game = nickname ? await resolveMlbGameForNickname(nickname) : null;
+        const nicknames = item.teamNicknames;
+        const game =
+          nicknames.length >= 2
+            ? await resolveMlbGameForTeams(nicknames[0], nicknames[1])
+            : nicknames.length === 1
+              ? await resolveMlbGameForNickname(nicknames[0])
+              : null;
         if (game) {
           homeTeam = game.homeTeam;
           awayTeam = game.awayTeam;
@@ -91,7 +97,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
             const side =
               item.betType === "TOTAL"
                 ? item.totalSide
-                : game.homeTeam.toLowerCase().endsWith(nickname!)
+                : game.homeTeam.toLowerCase().endsWith(nicknames[0])
                 ? "home"
                 : "away";
 
@@ -113,9 +119,10 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         betType: item.betType,
         betDetail: item.description,
         odds,
+        line: extractLine(item.betType, item.description),
+        period: item.isFirstFive ? "FIRST_HALF" : "FULL_GAME",
         units: item.units,
         gameTime,
-        notes: item.isFirstFive ? "First 5 / first half" : undefined,
       });
       imported++;
     } catch (err) {

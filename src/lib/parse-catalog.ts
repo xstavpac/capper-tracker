@@ -10,6 +10,11 @@ export type ParsedPick = {
   isFirstFive: boolean;
   raw: string;
   ambiguous?: string[];
+  // Team nicknames found in the raw text, e.g. from "Over 9.5 (Angels/Orioles)"
+  // or "Cardinals vs Panthers". Captured before parens/odds get stripped out of
+  // `description`, so game resolution still has both teams even for bets (like
+  // Totals) whose team info lives only inside that annotation.
+  teamNicknames: string[];
 };
 
 type TeamEntry = [string, string];
@@ -20,11 +25,14 @@ const KNOWN_SPORTS = [
   "CHAMPIONS LEAGUE",
 ];
 
+// "cardinals" is deliberately excluded here - it's ambiguous with NFL (see
+// AMBIGUOUS_NICKNAMES) and must fall through to that check instead of always
+// resolving to MLB. "St Louis Cardinals" is still reachable via DISAMBIGUATED_TEAMS.
 const MLB_TEAMS = [
   "diamondbacks", "braves", "orioles", "red sox", "cubs", "white sox", "reds",
   "guardians", "rockies", "tigers", "astros", "royals", "angels", "dodgers",
   "marlins", "brewers", "twins", "mets", "yankees", "athletics", "phillies",
-  "pirates", "padres", "mariners", "cardinals", "rays", "blue jays", "nationals",
+  "pirates", "padres", "mariners", "rays", "blue jays", "nationals",
 ];
 
 const NBA_TEAMS = [
@@ -35,8 +43,11 @@ const NBA_TEAMS = [
   "raptors", "jazz", "wizards",
 ];
 
+// "panthers" is deliberately excluded here - it's ambiguous with NHL (see
+// AMBIGUOUS_NICKNAMES) and must fall through to that check instead of always
+// resolving to NFL. "Carolina Panthers" is still reachable via DISAMBIGUATED_TEAMS.
 const NFL_TEAMS = [
-  "falcons", "ravens", "bills", "panthers", "bears", "bengals", "browns",
+  "falcons", "ravens", "bills", "bears", "bengals", "browns",
   "cowboys", "broncos", "lions", "packers", "texans", "colts", "jaguars",
   "chiefs", "raiders", "chargers", "rams", "dolphins", "vikings", "patriots",
   "saints", "jets", "eagles", "steelers", "49ers", "niners", "seahawks",
@@ -163,8 +174,55 @@ function findAmbiguousNickname(text: string): string[] | undefined {
   return undefined;
 }
 
+function findAllAmbiguousNicknames(text: string): string[] {
+  const lower = text.toLowerCase();
+  const found: string[] = [];
+  for (const nickname of Object.keys(AMBIGUOUS_NICKNAMES)) {
+    const re = new RegExp("\\b" + nickname + "\\b", "i");
+    if (re.test(lower)) found.push(nickname);
+  }
+  return found;
+}
+
+function ambiguousSports(nickname: string): string[] {
+  const options = AMBIGUOUS_NICKNAMES[nickname] ?? [];
+  return options
+    .map((o) => o.match(/\(([A-Z]+)\)$/)?.[1])
+    .filter((s): s is string => Boolean(s));
+}
+
+// When a pick names two ambiguous-nickname teams (e.g. "Cardinals vs Panthers"),
+// their possible sports usually intersect at exactly one - "Panthers" isn't an
+// MLB team, so it narrows "Cardinals" down to NFL. Resolves cleanly instead of
+// blocking on ambiguity whenever that intersection is unambiguous.
+function resolveAmbiguousPair(text: string): { sportName: string; teamNicknames: string[] } | undefined {
+  const nicknames = findAllAmbiguousNicknames(text);
+  if (nicknames.length !== 2) return undefined;
+
+  const [a, b] = nicknames;
+  const sportsA = new Set(ambiguousSports(a));
+  const common = ambiguousSports(b).filter((s) => sportsA.has(s));
+  if (common.length !== 1) return undefined;
+
+  return { sportName: common[0], teamNicknames: nicknames };
+}
+
 function normalizeName(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Returns every distinct team nickname found in the text, longest-match-first
+// (matches the order TEAM_SPORT_ENTRIES is sorted in). Lets a caller pin an
+// exact matchup when a pick names both teams, e.g. "Dodgers Cubs under 8.5".
+export function findTeamNicknames(text: string, sportName: string): string[] {
+  const lower = text.toLowerCase();
+  const found: string[] = [];
+  for (const [phrase, sport] of TEAM_SPORT_ENTRIES) {
+    if (sport !== sportName) continue;
+    const re = new RegExp("\\b" + phrase.replace(/ /g, "\\s+") + "\\b", "i");
+    if (re.test(lower) && !found.includes(phrase)) found.push(phrase);
+  }
+  return found;
 }
 
 export function findTeamNickname(text: string, sportName: string): string | undefined {
@@ -205,6 +263,25 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
       }
       const detected = detectSport(remainder);
       if (!detected.sportName) {
+        const pairResolved = resolveAmbiguousPair(remainder);
+        if (pairResolved) {
+          const parsed = parsePickText(remainder);
+          results.push({
+            capperName: inlineMatch,
+            sportName: pairResolved.sportName,
+            description: parsed.cleanDescription,
+            betType: parsed.betType,
+            odds: parsed.odds ?? -110,
+            hasExplicitOdds: parsed.odds !== null,
+            totalSide: parsed.totalSide,
+            units: parsed.units,
+            isFirstFive: parsed.isFirstFive,
+            raw: line,
+            teamNicknames: pairResolved.teamNicknames,
+          });
+          continue;
+        }
+
         const ambiguous = findAmbiguousNickname(remainder);
         if (ambiguous) {
           results.push({
@@ -218,6 +295,7 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
             isFirstFive: false,
             raw: line,
             ambiguous,
+            teamNicknames: [],
           });
         }
         continue;
@@ -234,6 +312,7 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
         units: parsed.units,
         isFirstFive: parsed.isFirstFive,
         raw: line,
+        teamNicknames: findTeamNicknames(detected.rest, detected.sportName),
       });
       continue;
     }
@@ -254,6 +333,26 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
         units: parsed.units,
         isFirstFive: parsed.isFirstFive,
         raw: strippedText,
+        teamNicknames: findTeamNicknames(detected.rest, detected.sportName),
+      });
+      continue;
+    }
+
+    const pairResolved = resolveAmbiguousPair(strippedText);
+    if (pairResolved) {
+      const parsed = parsePickText(strippedText);
+      results.push({
+        capperName: currentCapper || "Unknown",
+        sportName: pairResolved.sportName,
+        description: parsed.cleanDescription,
+        betType: parsed.betType,
+        odds: parsed.odds ?? -110,
+        hasExplicitOdds: parsed.odds !== null,
+        totalSide: parsed.totalSide,
+        units: parsed.units,
+        isFirstFive: parsed.isFirstFive,
+        raw: strippedText,
+        teamNicknames: pairResolved.teamNicknames,
       });
       continue;
     }
@@ -271,6 +370,7 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
         isFirstFive: false,
         raw: strippedText,
         ambiguous,
+        teamNicknames: [],
       });
       continue;
     }

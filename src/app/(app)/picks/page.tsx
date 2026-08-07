@@ -4,15 +4,28 @@ import { getCappersForUser } from "@/server/data/cappers";
 import { persistMlbFinalScores, gradePendingPicks } from "@/server/data/grading";
 import { PickForm } from "@/components/dashboard/pick-form";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
-import type { BetType, PickStatus } from "@prisma/client";
+import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
+import { favoriteOrUnderdog } from "@/lib/bet-line";
+import type { BetType, PickStatus, Period } from "@prisma/client";
 
 const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
 const BET_TYPE_OPTIONS = ["SPREAD", "MONEYLINE", "TOTAL", "PLAYER_PROP"];
+const PERIOD_OPTIONS: { value: Period; label: string }[] = [
+  { value: "FULL_GAME", label: "Full game" },
+  { value: "FIRST_HALF", label: "First half / F5" },
+];
 
 export default async function PicksPage({
   searchParams,
 }: {
-  searchParams: { capperId?: string; sportId?: string; status?: string; betType?: string };
+  searchParams: {
+    capperId?: string;
+    sportId?: string;
+    status?: string;
+    betType?: string;
+    period?: string;
+    favoriteDog?: string;
+  };
 }) {
   const user = await requireUser();
 
@@ -23,21 +36,28 @@ export default async function PicksPage({
     // Live score sources are best-effort - don't block the page on a fetch failure.
   }
 
+  const favoriteDog = (searchParams.favoriteDog as "FAVORITE" | "UNDERDOG") || undefined;
+
   const filters = {
     capperId: searchParams.capperId || undefined,
     sportId: searchParams.sportId || undefined,
     status: (searchParams.status as PickStatus) || undefined,
     betType: (searchParams.betType as BetType) || undefined,
+    period: (searchParams.period as Period) || undefined,
   };
 
-  const [picks, cappers, sports, planStatus] = await Promise.all([
+  const [allPicks, cappers, sports, planStatus] = await Promise.all([
     getFilteredPicksForUser(user.id, filters),
     getCappersForUser(user.id),
     getSportsWithLeagues(),
     getPickPlanStatus(user.id),
   ]);
 
-  const hasActiveFilters = Object.values(filters).some(Boolean);
+  // Favorite/underdog is derived (odds sign for Moneyline, line sign for Spread),
+  // not a stored column, so it's filtered here rather than in the DB query.
+  const picks = favoriteDog ? allPicks.filter((p) => favoriteOrUnderdog(p) === favoriteDog) : allPicks;
+
+  const hasActiveFilters = Object.values(filters).some(Boolean) || Boolean(favoriteDog);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -52,12 +72,7 @@ export default async function PicksPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <a
-            href="/picks/import"
-            className="rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:border-gray-300"
-          >
-            Bulk import
-          </a>
+          <DropCatalogLink href="/picks/import" />
           <PickForm cappers={cappers} sports={sports} atLimit={planStatus.atLimit} />
         </div>
       </div>
@@ -115,6 +130,29 @@ export default async function PicksPage({
           ))}
         </select>
 
+        <select
+          name="period"
+          defaultValue={filters.period ?? ""}
+          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+        >
+          <option value="">Full game + first half</option>
+          {PERIOD_OPTIONS.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+
+        <select
+          name="favoriteDog"
+          defaultValue={favoriteDog ?? ""}
+          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+        >
+          <option value="">Favorite + underdog</option>
+          <option value="FAVORITE">Favorite</option>
+          <option value="UNDERDOG">Underdog</option>
+        </select>
+
         <button
           type="submit"
           className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
@@ -145,6 +183,11 @@ export default async function PicksPage({
                 <div>
                   <div className="text-sm font-medium">
                     {pick.awayTeam} @ {pick.homeTeam}
+                    {pick.period === "FIRST_HALF" && (
+                      <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600">
+                        F5
+                      </span>
+                    )}
                   </div>
                   <div className="mt-0.5 text-xs text-gray-500">
                     {pick.capper.name} - {pick.betDetail || pick.betType} - {pick.odds > 0 ? "+" : ""}
