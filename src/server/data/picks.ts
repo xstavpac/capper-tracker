@@ -121,10 +121,10 @@ export async function getPicksForUser(userId: string) {
 }
 
 // Finds this user's logged picks for one specific game. Tries an exact
-// home/away team-name match first (reliable for MLB picks resolved to a
-// real schedule game - see resolveMlbGameForNickname), then falls back to
-// a nickname text search against betDetail/homeTeam/awayTeam for picks
-// with free-text team data (manual entries, non-MLB sports).
+// home/away team-name match first (reliable for picks resolved to a real
+// schedule game - see resolveGameForNickname), then falls back to a
+// nickname text search against betDetail/homeTeam/awayTeam for picks with
+// free-text team data (manual entries, sports without game resolution yet).
 export async function getPicksForGame(
   userId: string,
   params: { sportName: string; homeTeam: string; awayTeam: string; commenceTime: Date }

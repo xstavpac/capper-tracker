@@ -1,7 +1,8 @@
 import { requireUser } from "@/server/auth";
 import { getFilteredPicksForUser, getSportsWithLeagues, getPickPlanStatus } from "@/server/data/picks";
 import { getCappersForUser } from "@/server/data/cappers";
-import { persistMlbFinalScores, gradePendingPicks } from "@/server/data/grading";
+import { persistFinalScores, gradePendingPicks } from "@/server/data/grading";
+import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { PickForm } from "@/components/dashboard/pick-form";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
@@ -29,11 +30,15 @@ export default async function PicksPage({
 }) {
   const user = await requireUser();
 
-  try {
-    await persistMlbFinalScores();
-    await gradePendingPicks(user.id);
-  } catch {
-    // Live score sources are best-effort - don't block the page on a fetch failure.
+  for (const sportKey of RESOLVABLE_SPORT_KEYS) {
+    const sportName = LIVE_SPORTS.find((s) => s.key === sportKey)?.label;
+    if (!sportName) continue;
+    try {
+      await persistFinalScores(sportKey);
+      await gradePendingPicks(user.id, sportName, sportKey);
+    } catch {
+      // Live score sources are best-effort - don't block the page on a fetch failure.
+    }
   }
 
   const favoriteDog = (searchParams.favoriteDog as "FAVORITE" | "UNDERDOG") || undefined;

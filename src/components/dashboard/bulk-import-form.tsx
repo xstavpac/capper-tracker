@@ -148,7 +148,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
           {result.unmatchedGames.length > 0 && (
             <div className="mt-2 text-xs text-amber-700">
               Couldn&apos;t match {result.unmatchedGames.length} pick
-              {result.unmatchedGames.length === 1 ? "" : "s"} to today&apos;s MLB schedule - they
+              {result.unmatchedGames.length === 1 ? "" : "s"} to today&apos;s schedule - they
               were still imported, but won&apos;t auto-grade:
               <ul className="mt-1 list-disc pl-4">
                 {result.unmatchedGames.map((g, i) => (

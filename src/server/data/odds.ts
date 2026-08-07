@@ -117,6 +117,62 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
   });
 }
 
+// NBA equivalent of getMlbLiveScores(), backed by ESPN's free public
+// scoreboard endpoint (no key required, same "free/unauthenticated" pattern
+// as MLB Stats API). NBA first-half grading isn't wired up yet - this only
+// covers full-game status/scores, which is enough for live display and
+// full-game Moneyline/Spread/Total grading.
+export async function getNbaLiveScores(): Promise<ScoreGame[]> {
+  const fmt = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, "");
+  const yesterday = fmt(new Date(Date.now() - 86400000));
+  const tomorrow = fmt(new Date(Date.now() + 86400000));
+  const url =
+    "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=" + yesterday + "-" + tomorrow;
+
+  const res = await fetch(url, { next: { revalidate: 60 } });
+  if (!res.ok) return [];
+
+  const data = await res.json();
+  const events = data.events ?? [];
+
+  return events.map((e: any) => {
+    const competitors = e.competitions?.[0]?.competitors ?? [];
+    const home = competitors.find((c: any) => c.homeAway === "home");
+    const away = competitors.find((c: any) => c.homeAway === "away");
+    const state = e.status?.type?.state;
+    const status: "preview" | "live" | "final" = state === "post" ? "final" : state === "in" ? "live" : "preview";
+
+    return {
+      id: String(e.id),
+      homeTeam: home?.team?.displayName ?? "",
+      awayTeam: away?.team?.displayName ?? "",
+      status,
+      scores:
+        status === "preview"
+          ? null
+          : [
+              { name: home?.team?.displayName ?? "", score: String(home?.score ?? 0) },
+              { name: away?.team?.displayName ?? "", score: String(away?.score ?? 0) },
+            ],
+      commenceTime: e.date,
+    };
+  });
+}
+
+// Sports with a real score source wired up (see getLiveScoresForSport below).
+// The rest of LIVE_SPORTS still get odds display, just no live score/badge,
+// game resolution, or auto-grading yet - add a key here (and a case below)
+// once a free score source is wired up for it.
+export const RESOLVABLE_SPORT_KEYS = ["baseball_mlb", "basketball_nba"];
+
+// Dispatches to the right free score source for a sport. Add a case here
+// (and a getXLiveScores() above) when wiring up a new sport.
+export async function getLiveScoresForSport(sportKey: string): Promise<ScoreGame[]> {
+  if (sportKey === "baseball_mlb") return getMlbLiveScores();
+  if (sportKey === "basketball_nba") return getNbaLiveScores();
+  return [];
+}
+
 // Sums runs across innings 1-5 for a finished game, for grading F5/first-half
 // picks. Only call this once a game is Final - mid-game, a still-in-progress
 // 5th inning would report an incomplete (and misleading) score for whichever
@@ -144,17 +200,18 @@ export async function getMlbFirstFiveScore(gamePk: string): Promise<{ home: numb
 }
 
 // Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw
-// pick text) to the real MLB game it refers to, using the yesterday/today/
-// tomorrow schedule window. Same-team matchups repeat every few days in MLB
-// (series play), so when a nickname matches more than one game we prefer a
-// game on the same local calendar day as `referenceTime`, and within that,
-// prefer one that hasn't finished yet - falling back to whichever candidate
-// started closest to `referenceTime`.
-export async function resolveMlbGameForNickname(
+// pick text) to the real game it refers to, using the yesterday/today/
+// tomorrow schedule window for the given sport. Same-team matchups repeat
+// every few days in a season (series/back-to-backs), so when a nickname
+// matches more than one game we prefer a game on the same local calendar day
+// as `referenceTime`, and within that, prefer one that hasn't finished yet -
+// falling back to whichever candidate started closest to `referenceTime`.
+export async function resolveGameForNickname(
+  sportKey: string,
   nickname: string,
   referenceTime: Date = new Date()
 ): Promise<ScoreGame | null> {
-  const games = await getMlbLiveScores();
+  const games = await getLiveScoresForSport(sportKey);
   const candidates = games.filter(
     (g) => g.homeTeam.toLowerCase().endsWith(nickname) || g.awayTeam.toLowerCase().endsWith(nickname)
   );
@@ -169,16 +226,17 @@ export async function resolveMlbGameForNickname(
   return closestByTime(finalPool, (g) => new Date(g.commenceTime).getTime(), referenceTime.getTime());
 }
 
-// Same idea as resolveMlbGameForNickname, but for picks that name both teams
+// Same idea as resolveGameForNickname, but for picks that name both teams
 // (e.g. "Dodgers Cubs under 8.5") - requiring both nicknames to match pins the
 // exact matchup directly instead of leaning on time-proximity guessing, and
 // naturally disambiguates cases a single nickname alone couldn't.
-export async function resolveMlbGameForTeams(
+export async function resolveGameForTeams(
+  sportKey: string,
   nicknameA: string,
   nicknameB: string,
   referenceTime: Date = new Date()
 ): Promise<ScoreGame | null> {
-  const games = await getMlbLiveScores();
+  const games = await getLiveScoresForSport(sportKey);
   const candidates = games.filter((g) => {
     const home = g.homeTeam.toLowerCase();
     const away = g.awayTeam.toLowerCase();
@@ -200,7 +258,7 @@ export async function resolveMlbGameForTeams(
 
 // Matches a single odds-listed game to its live/final score by team pair,
 // preferring whichever score candidate started closest to the odds game's
-// commenceTime - same repeat-matchup problem resolveMlbGameForNickname solves.
+// commenceTime - same repeat-matchup problem resolveGameForNickname solves.
 export function matchScoreToGame(
   scores: ScoreGame[],
   game: { homeTeam: string; awayTeam: string; commenceTime: string }
@@ -213,10 +271,11 @@ export function matchScoreToGame(
   return closestByTime(candidates, (s) => new Date(s.commenceTime).getTime(), gameStart);
 }
 
-// Looks up the real market price for a resolved MLB game (see
-// resolveMlbGameForNickname), so bulk-imported picks that didn't state an
+// Looks up the real market price for a resolved game (see
+// resolveGameForNickname), so bulk-imported picks that didn't state an
 // explicit price can use the actual line instead of a hardcoded -110.
-export async function findMlbMarketPrice(
+export async function findMarketPrice(
+  sportKey: string,
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
   betType: "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP",
   side: "home" | "away" | "over" | "under"
@@ -225,7 +284,7 @@ export async function findMlbMarketPrice(
     betType === "MONEYLINE" ? "h2h" : betType === "SPREAD" ? "spreads" : betType === "TOTAL" ? "totals" : null;
   if (!marketKey) return null;
 
-  const oddsGames = await getOddsForSport("baseball_mlb");
+  const oddsGames = await getOddsForSport(sportKey);
   const candidates = oddsGames.filter((g) => g.homeTeam === game.homeTeam && g.awayTeam === game.awayTeam);
   if (candidates.length === 0) return null;
 

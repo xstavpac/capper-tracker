@@ -5,7 +5,13 @@ import { requireUser } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
 import { createCapper } from "@/server/data/cappers";
 import { createPick } from "@/server/data/picks";
-import { resolveMlbGameForNickname, resolveMlbGameForTeams, findMlbMarketPrice } from "@/server/data/odds";
+import {
+  resolveGameForNickname,
+  resolveGameForTeams,
+  findMarketPrice,
+  LIVE_SPORTS,
+  RESOLVABLE_SPORT_KEYS,
+} from "@/server/data/odds";
 import { extractLine } from "@/lib/bet-line";
 import type { BetType } from "@prisma/client";
 
@@ -80,13 +86,18 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
       let gameTime = new Date();
       let odds = item.odds;
 
-      if (item.sportName.toUpperCase() === "MLB") {
+      // Only attempt resolution for sports with a real score source wired up
+      // (see RESOLVABLE_SPORT_KEYS) - otherwise every pick in an unsupported
+      // sport would spuriously get flagged as "unmatched" when resolution was
+      // never actually possible for it in the first place.
+      const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
+      if (liveSportKey && RESOLVABLE_SPORT_KEYS.includes(liveSportKey)) {
         const nicknames = item.teamNicknames;
         const game =
           nicknames.length >= 2
-            ? await resolveMlbGameForTeams(nicknames[0], nicknames[1])
+            ? await resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1])
             : nicknames.length === 1
-              ? await resolveMlbGameForNickname(nicknames[0])
+              ? await resolveGameForNickname(liveSportKey, nicknames[0])
               : null;
         if (game) {
           homeTeam = game.homeTeam;
@@ -101,7 +112,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
                 ? "home"
                 : "away";
 
-            const marketPrice = side ? await findMlbMarketPrice(game, item.betType, side) : null;
+            const marketPrice = side ? await findMarketPrice(liveSportKey, game, item.betType, side) : null;
             if (marketPrice !== null) {
               odds = marketPrice;
             }

@@ -1,11 +1,17 @@
 import { prisma } from "@/lib/prisma";
-import { getMlbLiveScores, getMlbFirstFiveScore } from "@/server/data/odds";
+import { getLiveScoresForSport, getMlbFirstFiveScore } from "@/server/data/odds";
 import { closestByTime } from "@/lib/dates";
 import { extractLine } from "@/lib/bet-line";
 
-export async function persistMlbFinalScores(): Promise<number> {
-  const games = await getMlbLiveScores();
+// Persists final scores for a sport's finished games into GameResult, so
+// gradePendingPicks has something to grade against. First-five (F5) scores
+// are MLB-only for now - no free box-score-by-half source is wired up for
+// other sports yet, so period=FIRST_HALF picks in those sports just won't
+// match (see gradePendingPicks) until that's built.
+export async function persistFinalScores(sportKey: string): Promise<number> {
+  const games = await getLiveScoresForSport(sportKey);
   const finals = games.filter((g) => g.status === "final" && g.scores);
+  const supportsFirstFive = sportKey === "baseball_mlb";
 
   let saved = 0;
   for (const g of finals) {
@@ -14,23 +20,23 @@ export async function persistMlbFinalScores(): Promise<number> {
     if (homeScore === undefined || awayScore === undefined) continue;
 
     const existing = await prisma.gameResult.findUnique({
-      where: { sportKey_externalId: { sportKey: "baseball_mlb", externalId: g.id } },
+      where: { sportKey_externalId: { sportKey, externalId: g.id } },
     });
 
     // First-five is immutable once captured, and fetching it hits the heavier
     // live-feed endpoint - only fetch it the first time this game is persisted.
-    const needsFirstFive = !existing || existing.firstFiveHomeScore === null;
+    const needsFirstFive = supportsFirstFive && (!existing || existing.firstFiveHomeScore === null);
     const firstFive = needsFirstFive ? await getMlbFirstFiveScore(g.id) : null;
 
     await prisma.gameResult.upsert({
-      where: { sportKey_externalId: { sportKey: "baseball_mlb", externalId: g.id } },
+      where: { sportKey_externalId: { sportKey, externalId: g.id } },
       update: {
         homeScore: parseInt(homeScore, 10),
         awayScore: parseInt(awayScore, 10),
         ...(firstFive ? { firstFiveHomeScore: firstFive.home, firstFiveAwayScore: firstFive.away } : {}),
       },
       create: {
-        sportKey: "baseball_mlb",
+        sportKey,
         externalId: g.id,
         homeTeam: g.homeTeam,
         awayTeam: g.awayTeam,
@@ -127,21 +133,24 @@ function closestByDate<T extends { gameDate: Date }>(items: T[], reference: Date
   return closestByTime(items, (item) => item.gameDate.getTime(), reference.getTime());
 }
 
-async function findMatchingGameResult(pick: {
-  gameTime: Date;
-  homeTeam: string;
-  awayTeam: string;
-  betDetail: string | null;
-}) {
+async function findMatchingGameResult(
+  sportKey: string,
+  pick: {
+    gameTime: Date;
+    homeTeam: string;
+    awayTeam: string;
+    betDetail: string | null;
+  }
+) {
   const windowStart = new Date(pick.gameTime.getTime() - 2 * 86400000);
   const windowEnd = new Date(pick.gameTime.getTime() + 2 * 86400000);
 
   const candidates = await prisma.gameResult.findMany({
-    where: { sportKey: "baseball_mlb", gameDate: { gte: windowStart, lt: windowEnd } },
+    where: { sportKey, gameDate: { gte: windowStart, lt: windowEnd } },
   });
   if (candidates.length === 0) return null;
 
-  // Picks resolved to a real game on import (see resolveMlbGameForNickname) carry the
+  // Picks resolved to a real game on import (see resolveGameForNickname) carry the
   // exact team names, so prefer an exact match over the fuzzy text search below.
   const exact = candidates.filter((c) => c.homeTeam === pick.homeTeam && c.awayTeam === pick.awayTeam);
   if (exact.length > 0) return closestByDate(exact, pick.gameTime);
@@ -156,19 +165,23 @@ async function findMatchingGameResult(pick: {
   return closestByDate(fuzzy, pick.gameTime);
 }
 
-export async function gradePendingPicks(userId: string): Promise<{
+export async function gradePendingPicks(
+  userId: string,
+  sportName: string,
+  sportKey: string
+): Promise<{
   graded: number;
   notMatched: number;
 }> {
   const pendingPicks = await prisma.pick.findMany({
-    where: { userId, status: "PENDING", sport: { name: "MLB" } },
+    where: { userId, status: "PENDING", sport: { name: sportName } },
   });
 
   let graded = 0;
   let notMatched = 0;
 
   for (const pick of pendingPicks) {
-    const match = await findMatchingGameResult(pick);
+    const match = await findMatchingGameResult(sportKey, pick);
 
     if (!match) {
       notMatched++;

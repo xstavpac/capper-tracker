@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getOddsForSport, getMlbLiveScores, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
+import { getOddsForSport, getLiveScoresForSport, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -23,10 +23,7 @@ export default async function LivePage({
 }) {
   const activeSport = searchParams.sport || LIVE_SPORTS[0].key;
 
-  const [odds, scores] = await Promise.all([
-    getOddsForSport(activeSport),
-    activeSport === "baseball_mlb" ? getMlbLiveScores() : Promise.resolve([]),
-  ]);
+  const [odds, scores] = await Promise.all([getOddsForSport(activeSport), getLiveScoresForSport(activeSport)]);
 
   const hasApiKey = process.env.ODDS_API_KEY ? true : false;
 

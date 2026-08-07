@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/server/auth";
-import { getOddsForSport, getMlbLiveScores, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
+import { getOddsForSport, getLiveScoresForSport, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
 import { getPicksForGame, getCapperScorecard } from "@/server/data/picks";
 import { betTypeLabel } from "@/server/data/stats";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
@@ -57,7 +57,7 @@ export default async function GameDetailPage({
     );
   }
 
-  const scores = sportMeta.key === "baseball_mlb" ? await getMlbLiveScores() : [];
+  const scores = await getLiveScoresForSport(sportMeta.key);
   const score = matchScoreToGame(scores, game);
   const isLive = score?.status === "live";
   const isFinal = score?.status === "final";
