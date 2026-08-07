@@ -1,10 +1,12 @@
 import { requireUser } from "@/server/auth";
 import { getCappersRanked, getPlanStatus, getWeeklyCapperLeaderboard } from "@/server/data/cappers";
+import { getCapperPanels } from "@/server/data/capper-panels";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { chipSetForLeague, PICK_CATEGORY_LABELS, type PickCategoryKey } from "@/server/data/stats";
 import { CapperForm } from "@/components/dashboard/capper-form";
 import { WeeklyLeaderboard } from "@/components/dashboard/weekly-leaderboard";
 import { CapperRankedList } from "@/components/dashboard/capper-ranked-list";
+import { CapperPanelsGrid } from "@/components/dashboard/capper-panels";
 
 const LEAGUES = LIVE_SPORTS.map((s) => s.label);
 
@@ -43,10 +45,11 @@ export default async function CappersPage({
     ? (searchParams.category as PickCategoryKey)
     : undefined;
 
-  const [rankedCappers, planStatus, leaderboard] = await Promise.all([
+  const [rankedCappers, planStatus, leaderboard, panels] = await Promise.all([
     getCappersRanked(user.id, { sportName: league, category }),
     getPlanStatus(user.id),
     getWeeklyCapperLeaderboard(user.id, { sportName: league, category }),
+    getCapperPanels(user.id, { sportName: league, category }),
   ]);
 
   return (
@@ -84,6 +87,8 @@ export default async function CappersPage({
       </div>
 
       <WeeklyLeaderboard entries={leaderboard} />
+
+      <CapperPanelsGrid panels={panels} />
 
       {rankedCappers.length === 0 ? (
         <div className="rounded-card bg-white p-10 text-center shadow-soft">
