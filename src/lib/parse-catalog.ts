@@ -102,7 +102,11 @@ const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...WNBA_TEAMS.map((t): TeamEntry => [t, "WNBA"]),
 ].sort((a, b) => b[0].length - a[0].length);
 
-function detectSport(text: string): { sportName: string; rest: string } {
+// allowNicknameFallback gates the second (fuzzy, team-nickname-only) branch -
+// callers pass false right after a blank line, where a bare nickname match
+// ("Tigers Kitchen") is far more likely to be a capper's name than a pick
+// with no explicit sport code. The explicit-code branch always stays on.
+function detectSport(text: string, allowNicknameFallback = true): { sportName: string; rest: string } {
   for (const code of KNOWN_SPORTS) {
     const re = new RegExp("\\b" + code.replace(/ /g, "\\s+") + "\\b", "i");
     const match = text.match(re);
@@ -111,6 +115,8 @@ function detectSport(text: string): { sportName: string; rest: string } {
       return { sportName: code, rest };
     }
   }
+
+  if (!allowNicknameFallback) return { sportName: "", rest: text };
 
   const lower = text.toLowerCase();
   for (const entry of TEAM_SPORT_ENTRIES) {
@@ -239,15 +245,38 @@ export function findTeamNickname(text: string, sportName: string): string | unde
 
 export function parseCatalog(text: string, knownCapperNames: string[] = []): ParsedPick[] {
   const sortedNames = [...knownCapperNames].sort((a, b) => b.length - a.length);
-  const lines = text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean);
+  const rawLines = text.split("\n").map((l) => l.trim());
 
   const results: ParsedPick[] = [];
   let currentCapper = "";
+  // Treated like "start of catalog" - a blank line before a name is the
+  // strongest signal that what follows is a new capper's header, not a pick.
+  // Gates the fuzzy nickname-only branches below (see detectSport's
+  // allowNicknameFallback) so a header like "Tigers Kitchen" can't be
+  // misread as a Tigers pick just because it contains a team nickname.
+  let precededByBlank = true;
 
-  for (const line of lines) {
+  for (const line of rawLines) {
+    if (!line) {
+      precededByBlank = true;
+      continue;
+    }
+    const afterBlank = precededByBlank;
+    precededByBlank = false;
+
+    // "*Name" always forces this line to be read as a capper name, no matter
+    // what words it contains - the explicit escape hatch for names that
+    // happen to contain a real team nickname (e.g. "*Tigers Kitchen").
+    if (line.startsWith("*")) {
+      const forcedName = line.slice(1).replace(/^[\s:.-]+/, "").trim();
+      if (forcedName) {
+        const normalized = normalizeName(forcedName);
+        const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
+        currentCapper = existingMatch ?? forcedName;
+      }
+      continue;
+    }
+
     const lower = line.toLowerCase();
     const inlineMatch = sortedNames.find((name) => {
       const nameLower = name.toLowerCase();
@@ -319,8 +348,8 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
       continue;
     }
 
-    const strippedText = line.replace(/^[*-]\s*/, "").trim();
-    const detected = detectSport(strippedText);
+    const strippedText = line.replace(/^-\s*/, "").trim();
+    const detected = detectSport(strippedText, !afterBlank);
 
     if (detected.sportName) {
       const parsed = parsePickText(detected.rest);
@@ -340,41 +369,46 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
       continue;
     }
 
-    const pairResolved = resolveAmbiguousPair(strippedText);
-    if (pairResolved) {
-      const parsed = parsePickText(strippedText);
-      results.push({
-        capperName: currentCapper || "Unknown",
-        sportName: pairResolved.sportName,
-        description: parsed.cleanDescription,
-        betType: parsed.betType,
-        odds: parsed.odds ?? -110,
-        hasExplicitOdds: parsed.odds !== null,
-        totalSide: parsed.totalSide,
-        units: parsed.units,
-        isFirstFive: parsed.isFirstFive,
-        raw: strippedText,
-        teamNicknames: pairResolved.teamNicknames,
-      });
-      continue;
-    }
+    // Same reasoning as detectSport's gate above - these are both
+    // nickname-driven too, so a header right after a blank line skips them
+    // entirely rather than risk misreading it as a pick.
+    if (!afterBlank) {
+      const pairResolved = resolveAmbiguousPair(strippedText);
+      if (pairResolved) {
+        const parsed = parsePickText(strippedText);
+        results.push({
+          capperName: currentCapper || "Unknown",
+          sportName: pairResolved.sportName,
+          description: parsed.cleanDescription,
+          betType: parsed.betType,
+          odds: parsed.odds ?? -110,
+          hasExplicitOdds: parsed.odds !== null,
+          totalSide: parsed.totalSide,
+          units: parsed.units,
+          isFirstFive: parsed.isFirstFive,
+          raw: strippedText,
+          teamNicknames: pairResolved.teamNicknames,
+        });
+        continue;
+      }
 
-    const ambiguous = findAmbiguousNickname(strippedText);
-    if (ambiguous) {
-      results.push({
-        capperName: currentCapper || "Unknown",
-        sportName: "",
-        description: strippedText,
-        betType: "SPREAD",
-        odds: -110,
-        hasExplicitOdds: false,
-        units: 1,
-        isFirstFive: false,
-        raw: strippedText,
-        ambiguous,
-        teamNicknames: [],
-      });
-      continue;
+      const ambiguous = findAmbiguousNickname(strippedText);
+      if (ambiguous) {
+        results.push({
+          capperName: currentCapper || "Unknown",
+          sportName: "",
+          description: strippedText,
+          betType: "SPREAD",
+          odds: -110,
+          hasExplicitOdds: false,
+          units: 1,
+          isFirstFive: false,
+          raw: strippedText,
+          ambiguous,
+          teamNicknames: [],
+        });
+        continue;
+      }
     }
 
     const name = line.replace(/^[^\w]+/, "").trim();
