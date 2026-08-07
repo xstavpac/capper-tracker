@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sameLocalDay } from "@/lib/dates";
+import { sameLocalDay, closestByTime } from "@/lib/dates";
 
 export type OddsGame = {
   id: string;
@@ -140,11 +140,22 @@ export async function resolveMlbGameForNickname(
   const notFinal = pool.filter((g) => g.status !== "final");
   const finalPool = notFinal.length > 0 ? notFinal : pool;
 
-  return finalPool.reduce((closest, candidate) => {
-    const closestDiff = Math.abs(new Date(closest.commenceTime).getTime() - referenceTime.getTime());
-    const candidateDiff = Math.abs(new Date(candidate.commenceTime).getTime() - referenceTime.getTime());
-    return candidateDiff < closestDiff ? candidate : closest;
-  });
+  return closestByTime(finalPool, (g) => new Date(g.commenceTime).getTime(), referenceTime.getTime());
+}
+
+// Matches a single odds-listed game to its live/final score by team pair,
+// preferring whichever score candidate started closest to the odds game's
+// commenceTime - same repeat-matchup problem resolveMlbGameForNickname solves.
+export function matchScoreToGame(
+  scores: ScoreGame[],
+  game: { homeTeam: string; awayTeam: string; commenceTime: string }
+): ScoreGame | undefined {
+  const candidates = scores.filter((s) => s.homeTeam === game.homeTeam && s.awayTeam === game.awayTeam);
+  if (candidates.length === 0) return undefined;
+  if (candidates.length === 1) return candidates[0];
+
+  const gameStart = new Date(game.commenceTime).getTime();
+  return closestByTime(candidates, (s) => new Date(s.commenceTime).getTime(), gameStart);
 }
 
 // Looks up the real market price for a resolved MLB game (see
@@ -164,11 +175,7 @@ export async function findMlbMarketPrice(
   if (candidates.length === 0) return null;
 
   const gameStart = new Date(game.commenceTime).getTime();
-  const oddsGame = candidates.reduce((closest, candidate) => {
-    const closestDiff = Math.abs(new Date(closest.commenceTime).getTime() - gameStart);
-    const candidateDiff = Math.abs(new Date(candidate.commenceTime).getTime() - gameStart);
-    return candidateDiff < closestDiff ? candidate : closest;
-  });
+  const oddsGame = closestByTime(candidates, (g) => new Date(g.commenceTime).getTime(), gameStart);
 
   const outcomeName =
     side === "home" ? oddsGame.homeTeam : side === "away" ? oddsGame.awayTeam : side === "over" ? "Over" : "Under";

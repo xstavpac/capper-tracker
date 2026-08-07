@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getMlbLiveScores } from "@/server/data/odds";
+import { closestByTime } from "@/lib/dates";
 
 export async function persistMlbFinalScores(): Promise<number> {
   const games = await getMlbLiveScores();
@@ -106,12 +107,7 @@ function gradePick(
 }
 
 function closestByDate<T extends { gameDate: Date }>(items: T[], reference: Date): T {
-  return items.reduce((closest, item) =>
-    Math.abs(item.gameDate.getTime() - reference.getTime()) <
-    Math.abs(closest.gameDate.getTime() - reference.getTime())
-      ? item
-      : closest
-  );
+  return closestByTime(items, (item) => item.gameDate.getTime(), reference.getTime());
 }
 
 async function findMatchingGameResult(pick: {

@@ -1,5 +1,7 @@
 ﻿import { prisma } from "@/lib/prisma";
 import type { BetType, PickStatus } from "@prisma/client";
+import { findTeamNickname } from "@/lib/parse-catalog";
+import { computeStats } from "@/server/data/stats";
 
 const FREE_PLAN_PICK_LIMIT = 1000;
 
@@ -110,4 +112,48 @@ export async function getPicksForUser(userId: string) {
     include: { capper: true, sport: true, league: true },
     orderBy: { gameTime: "desc" },
   });
+}
+
+// Finds this user's logged picks for one specific game. Tries an exact
+// home/away team-name match first (reliable for MLB picks resolved to a
+// real schedule game - see resolveMlbGameForNickname), then falls back to
+// a nickname text search against betDetail/homeTeam/awayTeam for picks
+// with free-text team data (manual entries, non-MLB sports).
+export async function getPicksForGame(
+  userId: string,
+  params: { sportName: string; homeTeam: string; awayTeam: string; commenceTime: Date }
+) {
+  const sport = await prisma.sport.findFirst({
+    where: { name: { equals: params.sportName, mode: "insensitive" } },
+  });
+  if (!sport) return [];
+
+  const windowStart = new Date(params.commenceTime.getTime() - 2 * 86400000);
+  const windowEnd = new Date(params.commenceTime.getTime() + 2 * 86400000);
+
+  const candidates = await prisma.pick.findMany({
+    where: { userId, sportId: sport.id, gameTime: { gte: windowStart, lt: windowEnd } },
+    include: { capper: true },
+  });
+  if (candidates.length === 0) return [];
+
+  const exact = candidates.filter((p) => p.homeTeam === params.homeTeam && p.awayTeam === params.awayTeam);
+  if (exact.length > 0) return exact;
+
+  const homeNickname = findTeamNickname(params.homeTeam, params.sportName);
+  const awayNickname = findTeamNickname(params.awayTeam, params.sportName);
+  if (!homeNickname && !awayNickname) return [];
+
+  return candidates.filter((p) => {
+    const text = ((p.betDetail ?? "") + " " + p.homeTeam + " " + p.awayTeam).toLowerCase();
+    return (homeNickname && text.includes(homeNickname)) || (awayNickname && text.includes(awayNickname));
+  });
+}
+
+// A capper's all-time record narrowed to one bet type, e.g. "8-3 on
+// Moneyline picks" - context for how much weight to give their pick on a
+// specific game, independent of their overall record across every bet type.
+export async function getCapperRecordByBetType(userId: string, capperId: string, betType: BetType) {
+  const picks = await prisma.pick.findMany({ where: { userId, capperId, betType } });
+  return computeStats(picks);
 }

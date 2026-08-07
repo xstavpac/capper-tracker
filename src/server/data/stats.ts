@@ -197,7 +197,7 @@ export async function getReportsData(userId: string) {
   };
 }
 
-function betTypeLabel(betType: string) {
+export function betTypeLabel(betType: string) {
   switch (betType) {
     case "SPREAD":
       return "Spread";

@@ -1,4 +1,5 @@
-import { getOddsForSport, getMlbLiveScores, LIVE_SPORTS } from "@/server/data/odds";
+import Link from "next/link";
+import { getOddsForSport, getMlbLiveScores, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -26,27 +27,6 @@ export default async function LivePage({
     getOddsForSport(activeSport),
     activeSport === "baseball_mlb" ? getMlbLiveScores() : Promise.resolve([]),
   ]);
-
-  const scoresByTeamPair = new Map<string, typeof scores>();
-  for (const s of scores) {
-    const key = s.homeTeam + "|" + s.awayTeam;
-    const existing = scoresByTeamPair.get(key);
-    if (existing) existing.push(s);
-    else scoresByTeamPair.set(key, [s]);
-  }
-
-  function findScoreForGame(game: { homeTeam: string; awayTeam: string; commenceTime: string }) {
-    const candidates = scoresByTeamPair.get(game.homeTeam + "|" + game.awayTeam);
-    if (!candidates || candidates.length === 0) return undefined;
-    if (candidates.length === 1) return candidates[0];
-
-    const gameStart = new Date(game.commenceTime).getTime();
-    return candidates.reduce((closest, candidate) => {
-      const closestDiff = Math.abs(new Date(closest.commenceTime).getTime() - gameStart);
-      const candidateDiff = Math.abs(new Date(candidate.commenceTime).getTime() - gameStart);
-      return candidateDiff < closestDiff ? candidate : closest;
-    });
-  }
 
   const hasApiKey = process.env.ODDS_API_KEY ? true : false;
 
@@ -78,11 +58,11 @@ export default async function LivePage({
       <div className="space-y-3">
         {odds
           .filter((game) => {
-            const s = findScoreForGame(game);
+            const s = matchScoreToGame(scores, game);
             return s?.status !== "final";
           })
           .map((game) => {
-          const score = findScoreForGame(game);
+          const score = matchScoreToGame(scores, game);
           const book = game.bookmakers[0];
           function findMarketAcrossBooks(key: string) {
             for (const b of game.bookmakers) {
@@ -105,7 +85,11 @@ export default async function LivePage({
           const isFinal = score?.status === "final";
 
           return (
-            <div key={game.id} className="rounded-card bg-white p-4 shadow-soft">
+            <Link
+              key={game.id}
+              href={"/live/" + game.id + "?sport=" + activeSport}
+              className="block rounded-card bg-white p-4 shadow-soft transition-shadow hover:shadow-md"
+            >
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-xs text-gray-400">
                   {new Date(game.commenceTime).toLocaleString("en-US", {
@@ -157,7 +141,7 @@ export default async function LivePage({
                   Total: O/U {over.point} ({formatOdds(over.price)})
                 </div>
               )}
-            </div>
+            </Link>
           );
         })}
       </div>
