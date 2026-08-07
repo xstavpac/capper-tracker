@@ -115,6 +115,34 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+// Minimum decided (win+loss+push) picks before a capper gets a numbered rank
+// on the main Cappers leaderboard - confirmed with the user alongside the
+// weighted-ranking approach below. Below this, a capper's raw ROI is too
+// noisy to rank on (a 1-0 capper "looks" better than a 40-10 one by ROI
+// alone) - they're deliberately left off the main ranking and surfaced
+// instead by the "Rising" panel, which is built for exactly this case.
+export const RANKING_MIN_SAMPLE = 5;
+
+// Shrinkage strength in "pseudo-picks", pulling a capper's weighted score
+// toward a 0% (breakeven) prior until real volume outweighs it - a capper
+// with only RANKING_MIN_SAMPLE picks has just 5/(5+10) = 1/3 of their raw
+// ROI reflected in the score, while one with 50 picks has 50/60 = 5/6.
+// Chosen (not derived) as a "modest" prior per the user's confirmed
+// ROI-based Bayesian shrinkage approach - tune here if rankings feel too
+// flat (raise) or too swingy on small samples (lower... within reason,
+// samples below RANKING_MIN_SAMPLE never reach this function at all).
+const RANKING_SHRINKAGE_K = 10;
+
+// Confidence-weighted ranking score - the main leaderboard's default sort,
+// so a small hot streak can't outrank a large real sample. The raw record/
+// ROI is still shown alongside this for transparency; this only changes
+// sort order, never displayed numbers.
+export function weightedRoiScore(stats: OverallStats): number {
+  const n = stats.wins + stats.losses + stats.pushes;
+  if (n === 0) return 0;
+  return round2((stats.roi * n) / (n + RANKING_SHRINKAGE_K));
+}
+
 // A capper's record broken down by bet category, so "good overall" and "good
 // at the specific bet they just gave you" can be told apart at a glance.
 export type ScorecardBucketKey = "MONEYLINE" | "SPREAD" | "TOTAL" | "PLAYER_PROP" | "F5" | "NRFI";

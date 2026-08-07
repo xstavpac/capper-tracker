@@ -1,6 +1,13 @@
 ﻿import { prisma } from "@/lib/prisma";
 import type { Source } from "@prisma/client";
-import { computeStats, pickCategory, type OverallStats, type PickCategoryKey } from "@/server/data/stats";
+import {
+  computeStats,
+  pickCategory,
+  weightedRoiScore,
+  RANKING_MIN_SAMPLE,
+  type OverallStats,
+  type PickCategoryKey,
+} from "@/server/data/stats";
 
 export type CapperLeagueFilter = { sportName?: string; category?: PickCategoryKey };
 
@@ -87,6 +94,72 @@ export async function getWeeklyCapperLeaderboard(
     .filter((e) => e.stats.wins + e.stats.losses + e.stats.pushes >= minGradedPicks)
     .sort((a, b) => b.stats.roi - a.stats.roi)
     .slice(0, limit);
+}
+
+export type RankedCapperEntry = {
+  capperId: string;
+  name: string;
+  colorTag: string | null;
+  totalPicks: number;
+  stats: OverallStats;
+  weightedScore: number;
+  rank: number | null; // null when below RANKING_MIN_SAMPLE - not part of the numbered ranking
+};
+
+// The main Cappers-page leaderboard: every capper the current league/bet-type
+// filter surfaces (same roster as getCappersForUser), sorted by weighted ROI
+// score with a real rank number - except cappers below RANKING_MIN_SAMPLE
+// decided picks, who sort to the bottom, unranked, so a hot small sample
+// can't outrank someone with a large real one. Raw record/ROI is still
+// computed and returned for every entry (ranked or not) for transparency.
+export async function getCappersRanked(userId: string, filter?: CapperLeagueFilter): Promise<RankedCapperEntry[]> {
+  const cappers = await getCappersForUser(userId, filter);
+  if (cappers.length === 0) return [];
+
+  const picks = await prisma.pick.findMany({
+    where: {
+      userId,
+      capperId: { in: cappers.map((c) => c.id) },
+      ...(filter?.sportName ? { sport: { name: filter.sportName } } : {}),
+    },
+  });
+  const scoped = filter?.category ? picks.filter((p) => pickCategory(p) === filter.category) : picks;
+
+  const byCapper = new Map<string, typeof scoped>();
+  for (const pick of scoped) {
+    const list = byCapper.get(pick.capperId);
+    if (list) list.push(pick);
+    else byCapper.set(pick.capperId, [pick]);
+  }
+
+  const entries: RankedCapperEntry[] = cappers.map((capper) => {
+    const capperPicks = byCapper.get(capper.id) ?? [];
+    const stats = computeStats(capperPicks);
+    return {
+      capperId: capper.id,
+      name: capper.name,
+      colorTag: capper.colorTag,
+      totalPicks: capperPicks.length,
+      stats,
+      weightedScore: weightedRoiScore(stats),
+      rank: null,
+    };
+  });
+
+  const decidedCount = (e: RankedCapperEntry) => e.stats.wins + e.stats.losses + e.stats.pushes;
+
+  const ranked = entries
+    .filter((e) => decidedCount(e) >= RANKING_MIN_SAMPLE)
+    .sort((a, b) => b.weightedScore - a.weightedScore);
+  ranked.forEach((e, i) => {
+    e.rank = i + 1;
+  });
+
+  const unranked = entries
+    .filter((e) => decidedCount(e) < RANKING_MIN_SAMPLE)
+    .sort((a, b) => b.totalPicks - a.totalPicks || a.name.localeCompare(b.name));
+
+  return [...ranked, ...unranked];
 }
 
 export async function createCapper(
