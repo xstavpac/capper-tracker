@@ -2,12 +2,25 @@
 
 import { useState } from "react";
 import { parseCatalog, type ParsedPick } from "@/lib/parse-catalog";
-import { bulkImportPicksAction } from "@/server/actions/bulk-picks";
+import { bulkImportPicksAction, previewBulkImportOdds } from "@/server/actions/bulk-picks";
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
+
+const CAPPER_ACCENTS = [
+  "border-l-sky-400",
+  "border-l-emerald-400",
+  "border-l-amber-400",
+  "border-l-fuchsia-400",
+  "border-l-rose-400",
+  "border-l-indigo-400",
+  "border-l-teal-400",
+  "border-l-orange-400",
+];
 
 export function BulkImportForm({ existingCapperNames }: { existingCapperNames: string[] }) {
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<ParsedPick[] | null>(null);
+  const [enrichedOdds, setEnrichedOdds] = useState<Record<number, number>>({});
+  const [loadingOdds, setLoadingOdds] = useState(false);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<
     { imported: number; skipped: number; errors: string[]; unmatchedGames: string[] } | null
@@ -17,11 +30,42 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
 
   function handleParse() {
     setResult(null);
-    setParsed(parseCatalog(text, existingCapperNames));
+    setEnrichedOdds({});
+    const items = parseCatalog(text, existingCapperNames);
+    setParsed(items);
+
+    // The parser is client-side only and can't see live odds, so every pick
+    // without an explicit price shows the -110 default at first - fetch the
+    // same real-price lookup the actual import uses and merge it in once it
+    // resolves, so the preview matches what importing will actually save.
+    const validForOdds = items.filter((p) => !p.ambiguous);
+    if (validForOdds.length > 0) {
+      setLoadingOdds(true);
+      previewBulkImportOdds(
+        validForOdds.map((p) => ({
+          sportName: p.sportName,
+          betType: p.betType,
+          hasExplicitOdds: p.hasExplicitOdds,
+          odds: p.odds,
+          totalSide: p.totalSide,
+          teamNicknames: p.teamNicknames,
+          description: p.description,
+        }))
+      )
+        .then(setEnrichedOdds)
+        .finally(() => setLoadingOdds(false));
+    }
   }
 
   const validPicks = (parsed ?? []).filter((p) => !p.ambiguous);
   const ambiguousPicks = (parsed ?? []).filter((p) => p.ambiguous);
+
+  const capperAccent = new Map<string, string>();
+  for (const p of validPicks) {
+    if (!capperAccent.has(p.capperName)) {
+      capperAccent.set(p.capperName, CAPPER_ACCENTS[capperAccent.size % CAPPER_ACCENTS.length]);
+    }
+  }
 
   async function handleImport() {
     if (validPicks.length === 0) return;
@@ -56,9 +100,14 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   return (
     <div className="rounded-card bg-white p-5 shadow-soft">
       <h3 className="mb-1 text-sm font-medium text-gray-900">Betting Catalog Import</h3>
-      <p className="mb-3 text-xs text-gray-500">
+      <p className="mb-1 text-xs text-gray-500">
         Paste a full catalog dump below - capper name lines followed by picks. We will
         auto-detect sport, bet type, odds, and units for each pick.
+      </p>
+      <p className="mb-3 text-xs text-gray-400">
+        Leave a blank line between different cappers&apos; picks. If a capper&apos;s name happens
+        to contain a real team name (e.g. &quot;Tigers Kitchen&quot;), prefix it with * to force it
+        to always be read as a name, e.g. &quot;*Tigers Kitchen&quot;.
       </p>
 
       <textarea
@@ -82,6 +131,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
             {validPicks.length} pick{validPicks.length === 1 ? "" : "s"} found
             {ambiguousPicks.length > 0 &&
               " - " + ambiguousPicks.length + " need clarification"}
+            {loadingOdds && <span className="ml-2 font-normal text-gray-400">Looking up real odds...</span>}
           </div>
 
           {ambiguousPicks.length > 0 && (
@@ -101,26 +151,41 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
           )}
 
           <div className="max-h-80 overflow-y-auto rounded-lg border border-gray-100">
-            <div className="divide-y divide-gray-100">
-              {validPicks.map((p, i) => (
-                <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
-                  <div>
-                    <span className="font-medium">{p.capperName}</span>
-                    {!existingLower.includes(p.capperName.toLowerCase()) && (
-                      <span className="ml-1 rounded-full bg-brand-50 px-1.5 py-0.5 text-brand-600">
-                        new
+            <div>
+              {validPicks.map((p, i) => {
+                const realOdds = enrichedOdds[i];
+                const displayOdds = realOdds ?? p.odds;
+                return (
+                  <div
+                    key={i}
+                    className={
+                      // Explicit per-row bottom border instead of the parent's divide-y utility -
+                      // divide-y sets the border-color shorthand (all 4 sides) on every row but the
+                      // first, which was silently stomping this per-capper border-l accent color.
+                      "flex items-center justify-between border-b border-l-4 border-b-gray-100 px-3 py-2 text-xs last:border-b-0 " +
+                      capperAccent.get(p.capperName)
+                    }
+                  >
+                    <div>
+                      <span className="font-medium">{p.capperName}</span>
+                      {!existingLower.includes(p.capperName.toLowerCase()) && (
+                        <span className="ml-1 rounded-full bg-brand-50 px-1.5 py-0.5 text-brand-600">
+                          new
+                        </span>
+                      )}
+                      <span className="ml-2 text-gray-500">
+                        {p.sportName} - {p.description}
                       </span>
-                    )}
-                    <span className="ml-2 text-gray-500">
-                      {p.sportName} - {p.description}
-                    </span>
+                    </div>
+                    <div className="text-gray-400">
+                      {p.betType} - {displayOdds > 0 ? "+" : ""}
+                      {displayOdds}
+                      {realOdds !== undefined && <span className="ml-1 text-emerald-600">(real)</span>}
+                      {" - " + p.units + "u"}
+                    </div>
                   </div>
-                  <div className="text-gray-400">
-                    {p.betType} - {p.odds > 0 ? "+" : ""}
-                    {p.odds} - {p.units}u
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

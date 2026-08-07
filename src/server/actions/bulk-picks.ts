@@ -36,6 +36,91 @@ function normalizeName(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+type ResolvableItem = {
+  sportName: string;
+  betType: BetType;
+  hasExplicitOdds: boolean;
+  odds: number;
+  totalSide?: "over" | "under";
+  teamNicknames: string[];
+  description: string;
+};
+
+// Shared by the real import (bulkImportPicksAction) and the read-only preview
+// enrichment (previewBulkImportOdds) below - only attempts resolution for
+// sports with a real score source wired up (see RESOLVABLE_SPORT_KEYS),
+// otherwise every pick in an unsupported sport would spuriously get flagged
+// as unmatched when resolution was never actually possible for it.
+async function resolveGameAndOdds(item: ResolvableItem): Promise<{
+  homeTeam: string;
+  awayTeam: string;
+  gameTime: Date;
+  odds: number;
+  resolvable: boolean; // sport has a real score source wired up at all
+  matched: boolean; // and a specific game was actually found in it
+}> {
+  let homeTeam = item.description;
+  let awayTeam = "-";
+  let gameTime = new Date();
+  let odds = item.odds;
+  let matched = false;
+
+  const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
+  const resolvable = Boolean(liveSportKey && RESOLVABLE_SPORT_KEYS.includes(liveSportKey));
+  if (liveSportKey && resolvable) {
+    const nicknames = item.teamNicknames;
+    const game =
+      nicknames.length >= 2
+        ? await resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1])
+        : nicknames.length === 1
+          ? await resolveGameForNickname(liveSportKey, nicknames[0])
+          : null;
+    if (game) {
+      matched = true;
+      homeTeam = game.homeTeam;
+      awayTeam = game.awayTeam;
+      gameTime = new Date(game.commenceTime);
+
+      if (!item.hasExplicitOdds) {
+        const side =
+          item.betType === "TOTAL"
+            ? item.totalSide
+            : game.homeTeam.toLowerCase().endsWith(nicknames[0])
+            ? "home"
+            : "away";
+
+        const marketPrice = side ? await findMarketPrice(liveSportKey, game, item.betType, side) : null;
+        if (marketPrice !== null) {
+          odds = marketPrice;
+        }
+      }
+    }
+  }
+
+  return { homeTeam, awayTeam, gameTime, odds, resolvable, matched };
+}
+
+// Read-only preview enrichment: the client-side catalog parser has no access
+// to live odds (it only runs parseCatalog in the browser), so the "Drop
+// Catalog" preview always showed the -110 default even when a real price was
+// about to be looked up at actual import time - confusing, since the two
+// numbers could silently differ. This runs the same resolution+lookup logic
+// bulkImportPicksAction uses, without persisting anything, so the preview
+// matches what actually gets saved.
+export async function previewBulkImportOdds(items: ResolvableItem[]): Promise<Record<number, number>> {
+  await requireUser();
+
+  const enriched: Record<number, number> = {};
+  await Promise.all(
+    items.map(async (item, i) => {
+      if (item.hasExplicitOdds) return;
+      const { odds, matched } = await resolveGameAndOdds(item);
+      if (matched && odds !== item.odds) enriched[i] = odds;
+    })
+  );
+  return enriched;
+}
+
 export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<BulkImportResult> {
   const user = await requireUser();
 
@@ -81,45 +166,9 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         sportCache.set(sportKey, sportId);
       }
 
-      let homeTeam = item.description;
-      let awayTeam = "-";
-      let gameTime = new Date();
-      let odds = item.odds;
-
-      // Only attempt resolution for sports with a real score source wired up
-      // (see RESOLVABLE_SPORT_KEYS) - otherwise every pick in an unsupported
-      // sport would spuriously get flagged as "unmatched" when resolution was
-      // never actually possible for it in the first place.
-      const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
-      if (liveSportKey && RESOLVABLE_SPORT_KEYS.includes(liveSportKey)) {
-        const nicknames = item.teamNicknames;
-        const game =
-          nicknames.length >= 2
-            ? await resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1])
-            : nicknames.length === 1
-              ? await resolveGameForNickname(liveSportKey, nicknames[0])
-              : null;
-        if (game) {
-          homeTeam = game.homeTeam;
-          awayTeam = game.awayTeam;
-          gameTime = new Date(game.commenceTime);
-
-          if (!item.hasExplicitOdds) {
-            const side =
-              item.betType === "TOTAL"
-                ? item.totalSide
-                : game.homeTeam.toLowerCase().endsWith(nicknames[0])
-                ? "home"
-                : "away";
-
-            const marketPrice = side ? await findMarketPrice(liveSportKey, game, item.betType, side) : null;
-            if (marketPrice !== null) {
-              odds = marketPrice;
-            }
-          }
-        } else {
-          unmatchedGames.push(item.capperName + " - " + item.description);
-        }
+      const { homeTeam, awayTeam, gameTime, odds, resolvable, matched } = await resolveGameAndOdds(item);
+      if (resolvable && !matched) {
+        unmatchedGames.push(item.capperName + " - " + item.description);
       }
 
       await createPick(user.id, {
