@@ -117,7 +117,7 @@ function round2(n: number) {
 
 // A capper's record broken down by bet category, so "good overall" and "good
 // at the specific bet they just gave you" can be told apart at a glance.
-export type ScorecardBucketKey = "MONEYLINE" | "SPREAD" | "TOTAL" | "PLAYER_PROP" | "F5";
+export type ScorecardBucketKey = "MONEYLINE" | "SPREAD" | "TOTAL" | "PLAYER_PROP" | "F5" | "NRFI";
 export type ScorecardBucket = {
   key: ScorecardBucketKey;
   label: string;
@@ -132,13 +132,21 @@ export type ScorecardBucket = {
 export const SCORECARD_MIN_SAMPLE = 5;
 export const SCORECARD_WIN_THRESHOLD = 52.4; // -110 breakeven: 110 / 210
 
-const SCORECARD_BUCKET_ORDER: ScorecardBucketKey[] = ["MONEYLINE", "SPREAD", "TOTAL", "PLAYER_PROP", "F5"];
+const SCORECARD_BUCKET_ORDER: ScorecardBucketKey[] = [
+  "MONEYLINE",
+  "SPREAD",
+  "TOTAL",
+  "PLAYER_PROP",
+  "F5",
+  "NRFI",
+];
 const SCORECARD_BUCKET_LABELS: Record<ScorecardBucketKey, string> = {
   MONEYLINE: "Moneyline",
   SPREAD: "Spread",
   TOTAL: "Total",
   PLAYER_PROP: "Player Prop",
   F5: "F5",
+  NRFI: "NRFI",
 };
 
 // F5 (first half) picks form their own bucket regardless of bet type - a

@@ -35,6 +35,7 @@ enum BetType {
   MONEYLINE
   TOTAL
   PLAYER_PROP
+  NRFI // "No Run First Inning" - MLB-only, graded on combined 1st-inning runs
 }
 
 enum PickStatus {
@@ -183,6 +184,8 @@ model GameResult {
   awayScore          Int
   firstFiveHomeScore Int? // sum of innings 1-5 - null until 5 full innings have been played
   firstFiveAwayScore Int?
+  firstInningHomeScore Int? // runs in inning 1 only - null until inning 1 is complete, for grading NRFI
+  firstInningAwayScore Int?
   gameDate           DateTime
   createdAt          DateTime @default(now())
 

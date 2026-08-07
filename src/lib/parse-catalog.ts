@@ -2,7 +2,7 @@ export type ParsedPick = {
   capperName: string;
   sportName: string;
   description: string;
-  betType: "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP";
+  betType: "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP" | "NRFI";
   odds: number;
   hasExplicitOdds: boolean;
   totalSide?: "over" | "under";
@@ -150,7 +150,9 @@ function parsePickText(description: string): {
 
   let betType: ParsedPick["betType"] = "SPREAD";
   let totalSide: "over" | "under" | undefined;
-  if (/\bML\b/i.test(cleanDescription) || /moneyline/i.test(cleanDescription)) {
+  if (/\b[NY]RFI\b/i.test(cleanDescription) || /\b(no|yes)\s+run\s+first\s+inning\b/i.test(cleanDescription)) {
+    betType = "NRFI";
+  } else if (/\bML\b/i.test(cleanDescription) || /moneyline/i.test(cleanDescription)) {
     betType = "MONEYLINE";
   } else if (/\bover\b/i.test(cleanDescription)) {
     betType = "TOTAL";

@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { requireUser } from "@/server/auth";
-import { getOddsForSport, getLiveScoresForSport, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
+import {
+  getOddsForSport,
+  getLiveScoresForSport,
+  matchScoreToGame,
+  LIVE_SPORTS,
+  RESOLVABLE_SPORT_KEYS,
+} from "@/server/data/odds";
+import { persistFinalScores, gradePendingPicks } from "@/server/data/grading";
 import { getPicksForGame, getCapperScorecard } from "@/server/data/picks";
 import { betTypeLabel } from "@/server/data/stats";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
@@ -36,6 +43,20 @@ export default async function GameDetailPage({
         </div>
       </div>
     );
+  }
+
+  // A game can go final without the user ever visiting /picks (which is the
+  // only other place grading normally runs) - grade this one sport here too,
+  // so a finished game's picks don't sit stuck on PENDING while its card
+  // already shows FINAL. Scoped to just this game's sport (not the full
+  // RESOLVABLE_SPORT_KEYS loop /picks does) since only one sport is in view.
+  if (RESOLVABLE_SPORT_KEYS.includes(sportMeta.key)) {
+    try {
+      await persistFinalScores(sportMeta.key);
+      await gradePendingPicks(user.id, sportMeta.label, sportMeta.key);
+    } catch {
+      // Best-effort, same as /picks - don't block the page on a fetch failure.
+    }
   }
 
   const odds = await getOddsForSport(sportMeta.key);

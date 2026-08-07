@@ -12,6 +12,7 @@ const BET_TYPES = [
   { value: "MONEYLINE", label: "Moneyline" },
   { value: "TOTAL", label: "Total" },
   { value: "PLAYER_PROP", label: "Player Prop" },
+  { value: "NRFI", label: "NRFI / YRFI" },
 ];
 
 export function PickForm({ cappers, sports, atLimit }: { cappers: Capper[]; sports: Sport[]; atLimit?: boolean }) {

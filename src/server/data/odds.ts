@@ -184,30 +184,44 @@ export async function getLiveScoresForSport(sportKey: string): Promise<ScoreGame
   return [];
 }
 
-// Sums runs across innings 1-5 for a finished game, for grading F5/first-half
-// picks. Only call this once a game is Final - mid-game, a still-in-progress
-// 5th inning would report an incomplete (and misleading) score for whichever
-// team hasn't batted yet. The schedule endpoint used by getMlbLiveScores()
-// doesn't include inning-by-inning data, so this hits the heavier live-feed
-// endpoint - only worth it for the one-time first-five capture per game.
-export async function getMlbFirstFiveScore(gamePk: string): Promise<{ home: number; away: number } | null> {
+export type MlbEarlyInningScores = {
+  firstInning: { home: number; away: number } | null;
+  firstFive: { home: number; away: number } | null;
+};
+
+// Reads innings 1 and 1-5 from a finished game's linescore in a single
+// fetch, for grading NRFI and F5/first-half picks respectively. Only call
+// this once a game is Final - mid-game, a still-in-progress inning would
+// report an incomplete (and misleading) score for whichever team hasn't
+// batted yet. The schedule endpoint used by getMlbLiveScores() doesn't
+// include inning-by-inning data, so this hits the heavier live-feed
+// endpoint - only worth it for the one-time capture per game (both values
+// share this one fetch rather than each needing their own).
+export async function getMlbEarlyInningScores(gamePk: string): Promise<MlbEarlyInningScores> {
   const res = await fetch("https://statsapi.mlb.com/api/v1.1/game/" + gamePk + "/feed/live", {
     next: { revalidate: 3600 },
   });
-  if (!res.ok) return null;
+  if (!res.ok) return { firstInning: null, firstFive: null };
 
   const data = await res.json();
   const innings = data.liveData?.linescore?.innings ?? [];
-  const firstFive = innings.filter((i: any) => i.num <= 5);
-  if (firstFive.length < 5) return null;
 
-  let home = 0;
-  let away = 0;
-  for (const inning of firstFive) {
-    home += inning.home?.runs ?? 0;
-    away += inning.away?.runs ?? 0;
+  const inning1 = innings.find((i: any) => i.num === 1);
+  const firstInning = inning1 ? { home: inning1.home?.runs ?? 0, away: inning1.away?.runs ?? 0 } : null;
+
+  const firstFiveInnings = innings.filter((i: any) => i.num <= 5);
+  let firstFive: { home: number; away: number } | null = null;
+  if (firstFiveInnings.length >= 5) {
+    let home = 0;
+    let away = 0;
+    for (const inning of firstFiveInnings) {
+      home += inning.home?.runs ?? 0;
+      away += inning.away?.runs ?? 0;
+    }
+    firstFive = { home, away };
   }
-  return { home, away };
+
+  return { firstInning, firstFive };
 }
 
 // Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw
@@ -288,9 +302,11 @@ export function matchScoreToGame(
 export async function findMarketPrice(
   sportKey: string,
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
-  betType: "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP",
+  betType: "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP" | "NRFI",
   side: "home" | "away" | "over" | "under"
 ): Promise<number | null> {
+  // No odds-API market exists for NRFI, so it falls through to null (default -110)
+  // same as PLAYER_PROP - only h2h/spreads/totals have a real market to look up.
   const marketKey =
     betType === "MONEYLINE" ? "h2h" : betType === "SPREAD" ? "spreads" : betType === "TOTAL" ? "totals" : null;
   if (!marketKey) return null;

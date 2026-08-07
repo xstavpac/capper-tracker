@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getLiveScoresForSport, getMlbFirstFiveScore } from "@/server/data/odds";
+import { getLiveScoresForSport, getMlbEarlyInningScores } from "@/server/data/odds";
 import { closestByTime } from "@/lib/dates";
 import { extractLine } from "@/lib/bet-line";
 
@@ -27,10 +27,16 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
         where: { sportKey_externalId: { sportKey, externalId: g.id } },
       });
 
-      // First-five is immutable once captured, and fetching it hits the heavier
-      // live-feed endpoint - only fetch it the first time this game is persisted.
-      const needsFirstFive = supportsFirstFive && (!existing || existing.firstFiveHomeScore === null);
-      const firstFive = needsFirstFive ? await getMlbFirstFiveScore(g.id) : null;
+      // Early-inning scores are immutable once captured, and fetching them hits the
+      // heavier live-feed endpoint - only fetch what's still missing. Checking both
+      // fields (not just firstFive) matters for GameResult rows persisted before
+      // first-inning capture existed - those already have firstFive set, so a
+      // firstFive-only check would skip them and leave firstInning null forever.
+      const needsEarlyInnings =
+        supportsFirstFive && (!existing || existing.firstFiveHomeScore === null || existing.firstInningHomeScore === null);
+      const early = needsEarlyInnings ? await getMlbEarlyInningScores(g.id) : null;
+      const firstFive = early?.firstFive ?? null;
+      const firstInning = early?.firstInning ?? null;
 
       await prisma.gameResult.upsert({
         where: { sportKey_externalId: { sportKey, externalId: g.id } },
@@ -38,6 +44,9 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
           homeScore: parseInt(homeScore, 10),
           awayScore: parseInt(awayScore, 10),
           ...(firstFive ? { firstFiveHomeScore: firstFive.home, firstFiveAwayScore: firstFive.away } : {}),
+          ...(firstInning
+            ? { firstInningHomeScore: firstInning.home, firstInningAwayScore: firstInning.away }
+            : {}),
         },
         create: {
           sportKey,
@@ -48,6 +57,8 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
           awayScore: parseInt(awayScore, 10),
           firstFiveHomeScore: firstFive?.home ?? null,
           firstFiveAwayScore: firstFive?.away ?? null,
+          firstInningHomeScore: firstInning?.home ?? null,
+          firstInningAwayScore: firstInning?.away ?? null,
           gameDate: new Date(g.commenceTime),
         },
       });
@@ -131,6 +142,19 @@ function gradePick(
     return null;
   }
 
+  if (betType === "NRFI") {
+    // Binary market on combined (both teams') first-inning runs - no push.
+    // homeScore/awayScore here are the game's first-inning scores, not final
+    // (see gradePendingPicks, which selects the score source by betType).
+    const runsScored = homeScore + awayScore;
+    const pickedNoRun = detail.includes("nrfi") || detail.includes("no run");
+    const pickedYesRun = detail.includes("yrfi") || detail.includes("yes run") || detail.includes("run 1st");
+
+    if (pickedNoRun) return runsScored === 0 ? "WIN" : "LOSS";
+    if (pickedYesRun) return runsScored > 0 ? "WIN" : "LOSS";
+    return null;
+  }
+
   return null;
 }
 
@@ -193,8 +217,18 @@ export async function gradePendingPicks(
       continue;
     }
 
-    const homeScore = pick.period === "FIRST_HALF" ? match.firstFiveHomeScore : match.homeScore;
-    const awayScore = pick.period === "FIRST_HALF" ? match.firstFiveAwayScore : match.awayScore;
+    const homeScore =
+      pick.betType === "NRFI"
+        ? match.firstInningHomeScore
+        : pick.period === "FIRST_HALF"
+          ? match.firstFiveHomeScore
+          : match.homeScore;
+    const awayScore =
+      pick.betType === "NRFI"
+        ? match.firstInningAwayScore
+        : pick.period === "FIRST_HALF"
+          ? match.firstFiveAwayScore
+          : match.awayScore;
 
     if (homeScore === null || awayScore === null) {
       notMatched++;

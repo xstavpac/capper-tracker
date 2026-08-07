@@ -10,7 +10,7 @@ import { favoriteOrUnderdog } from "@/lib/bet-line";
 import type { BetType, PickStatus, Period } from "@prisma/client";
 
 const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
-const BET_TYPE_OPTIONS = ["SPREAD", "MONEYLINE", "TOTAL", "PLAYER_PROP"];
+const BET_TYPE_OPTIONS = ["SPREAD", "MONEYLINE", "TOTAL", "PLAYER_PROP", "NRFI"];
 const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: "FULL_GAME", label: "Full game" },
   { value: "FIRST_HALF", label: "First half / F5" },

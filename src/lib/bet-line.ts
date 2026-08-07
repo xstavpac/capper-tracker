@@ -1,4 +1,4 @@
-type BetTypeLike = "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP";
+type BetTypeLike = "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP" | "NRFI";
 
 // Pulls the spread/total number out of free text, e.g. "Diamondbacks -1.5" -> -1.5,
 // "Over 8.5" -> 8.5. Shared by the catalog parser (to store a real `line` at import
