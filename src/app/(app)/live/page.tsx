@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getOddsForSport, getLiveScoresForSport, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
+import { sameLocalDay } from "@/lib/dates";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -23,7 +24,19 @@ export default async function LivePage({
 }) {
   const activeSport = searchParams.sport || LIVE_SPORTS[0].key;
 
-  const [odds, scores] = await Promise.all([getOddsForSport(activeSport), getLiveScoresForSport(activeSport)]);
+  const [allOdds, scores] = await Promise.all([getOddsForSport(activeSport), getLiveScoresForSport(activeSport)]);
+
+  // The once-daily odds cache is keyed by UTC calendar day, but MLB's evening
+  // games straddle that boundary - the day's first fetch can land after some
+  // of the previous day's late games already started, permanently pulling
+  // them into "today's" snapshot. Drop anything from a strictly earlier local
+  // calendar day here rather than changing what gets cached (bulk-import's
+  // odds lookup still needs to find those games by team name regardless).
+  const now = new Date();
+  const odds = allOdds.filter((game) => {
+    const gameDate = new Date(game.commenceTime);
+    return sameLocalDay(gameDate, now) || gameDate > now;
+  });
 
   const hasApiKey = process.env.ODDS_API_KEY ? true : false;
 
