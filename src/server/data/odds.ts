@@ -117,17 +117,19 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
   });
 }
 
-// NBA equivalent of getMlbLiveScores(), backed by ESPN's free public
-// scoreboard endpoint (no key required, same "free/unauthenticated" pattern
-// as MLB Stats API). NBA first-half grading isn't wired up yet - this only
-// covers full-game status/scores, which is enough for live display and
-// full-game Moneyline/Spread/Total grading.
-export async function getNbaLiveScores(): Promise<ScoreGame[]> {
+// Shared by every ESPN-backed score source (NBA, WNBA, ...) - ESPN's free
+// public scoreboard endpoint (no key required, same "free/unauthenticated"
+// pattern as MLB Stats API) has an identical response shape across sports,
+// just a different URL path segment. First-half grading isn't wired up for
+// any ESPN-backed sport yet - this only covers full-game status/scores,
+// which is enough for live display and full-game Moneyline/Spread/Total
+// grading.
+async function getEspnScores(sportPath: string): Promise<ScoreGame[]> {
   const fmt = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, "");
   const yesterday = fmt(new Date(Date.now() - 86400000));
   const tomorrow = fmt(new Date(Date.now() + 86400000));
   const url =
-    "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=" + yesterday + "-" + tomorrow;
+    "https://site.api.espn.com/apis/site/v2/sports/" + sportPath + "/scoreboard?dates=" + yesterday + "-" + tomorrow;
 
   const res = await fetch(url, { next: { revalidate: 60 } });
   if (!res.ok) return [];
@@ -159,17 +161,26 @@ export async function getNbaLiveScores(): Promise<ScoreGame[]> {
   });
 }
 
+export function getNbaLiveScores(): Promise<ScoreGame[]> {
+  return getEspnScores("basketball/nba");
+}
+
+export function getWnbaLiveScores(): Promise<ScoreGame[]> {
+  return getEspnScores("basketball/wnba");
+}
+
 // Sports with a real score source wired up (see getLiveScoresForSport below).
 // The rest of LIVE_SPORTS still get odds display, just no live score/badge,
 // game resolution, or auto-grading yet - add a key here (and a case below)
 // once a free score source is wired up for it.
-export const RESOLVABLE_SPORT_KEYS = ["baseball_mlb", "basketball_nba"];
+export const RESOLVABLE_SPORT_KEYS = ["baseball_mlb", "basketball_nba", "basketball_wnba"];
 
 // Dispatches to the right free score source for a sport. Add a case here
 // (and a getXLiveScores() above) when wiring up a new sport.
 export async function getLiveScoresForSport(sportKey: string): Promise<ScoreGame[]> {
   if (sportKey === "baseball_mlb") return getMlbLiveScores();
   if (sportKey === "basketball_nba") return getNbaLiveScores();
+  if (sportKey === "basketball_wnba") return getWnbaLiveScores();
   return [];
 }
 

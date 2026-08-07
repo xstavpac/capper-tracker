@@ -13,44 +13,49 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
   const finals = games.filter((g) => g.status === "final" && g.scores);
   const supportsFirstFive = sportKey === "baseball_mlb";
 
-  let saved = 0;
-  for (const g of finals) {
-    const homeScore = g.scores!.find((s) => s.name === g.homeTeam)?.score;
-    const awayScore = g.scores!.find((s) => s.name === g.awayTeam)?.score;
-    if (homeScore === undefined || awayScore === undefined) continue;
+  // Each game's persist is independent - was previously a sequential for-loop,
+  // which meant a day with many newly-final games (each potentially needing a
+  // first-five fetch against MLB's heavier live-feed endpoint) made every
+  // Picks page load wait on the sum of all of them instead of the slowest one.
+  const results = await Promise.all(
+    finals.map(async (g) => {
+      const homeScore = g.scores!.find((s) => s.name === g.homeTeam)?.score;
+      const awayScore = g.scores!.find((s) => s.name === g.awayTeam)?.score;
+      if (homeScore === undefined || awayScore === undefined) return false;
 
-    const existing = await prisma.gameResult.findUnique({
-      where: { sportKey_externalId: { sportKey, externalId: g.id } },
-    });
+      const existing = await prisma.gameResult.findUnique({
+        where: { sportKey_externalId: { sportKey, externalId: g.id } },
+      });
 
-    // First-five is immutable once captured, and fetching it hits the heavier
-    // live-feed endpoint - only fetch it the first time this game is persisted.
-    const needsFirstFive = supportsFirstFive && (!existing || existing.firstFiveHomeScore === null);
-    const firstFive = needsFirstFive ? await getMlbFirstFiveScore(g.id) : null;
+      // First-five is immutable once captured, and fetching it hits the heavier
+      // live-feed endpoint - only fetch it the first time this game is persisted.
+      const needsFirstFive = supportsFirstFive && (!existing || existing.firstFiveHomeScore === null);
+      const firstFive = needsFirstFive ? await getMlbFirstFiveScore(g.id) : null;
 
-    await prisma.gameResult.upsert({
-      where: { sportKey_externalId: { sportKey, externalId: g.id } },
-      update: {
-        homeScore: parseInt(homeScore, 10),
-        awayScore: parseInt(awayScore, 10),
-        ...(firstFive ? { firstFiveHomeScore: firstFive.home, firstFiveAwayScore: firstFive.away } : {}),
-      },
-      create: {
-        sportKey,
-        externalId: g.id,
-        homeTeam: g.homeTeam,
-        awayTeam: g.awayTeam,
-        homeScore: parseInt(homeScore, 10),
-        awayScore: parseInt(awayScore, 10),
-        firstFiveHomeScore: firstFive?.home ?? null,
-        firstFiveAwayScore: firstFive?.away ?? null,
-        gameDate: new Date(g.commenceTime),
-      },
-    });
-    saved++;
-  }
+      await prisma.gameResult.upsert({
+        where: { sportKey_externalId: { sportKey, externalId: g.id } },
+        update: {
+          homeScore: parseInt(homeScore, 10),
+          awayScore: parseInt(awayScore, 10),
+          ...(firstFive ? { firstFiveHomeScore: firstFive.home, firstFiveAwayScore: firstFive.away } : {}),
+        },
+        create: {
+          sportKey,
+          externalId: g.id,
+          homeTeam: g.homeTeam,
+          awayTeam: g.awayTeam,
+          homeScore: parseInt(homeScore, 10),
+          awayScore: parseInt(awayScore, 10),
+          firstFiveHomeScore: firstFive?.home ?? null,
+          firstFiveAwayScore: firstFive?.away ?? null,
+          gameDate: new Date(g.commenceTime),
+        },
+      });
+      return true;
+    })
+  );
 
-  return saved;
+  return results.filter(Boolean).length;
 }
 
 function teamNickname(fullName: string): string {

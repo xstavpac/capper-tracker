@@ -30,16 +30,22 @@ export default async function PicksPage({
 }) {
   const user = await requireUser();
 
-  for (const sportKey of RESOLVABLE_SPORT_KEYS) {
-    const sportName = LIVE_SPORTS.find((s) => s.key === sportKey)?.label;
-    if (!sportName) continue;
-    try {
-      await persistFinalScores(sportKey);
-      await gradePendingPicks(user.id, sportName, sportKey);
-    } catch {
-      // Live score sources are best-effort - don't block the page on a fetch failure.
-    }
-  }
+  // Each sport's own persist-then-grade sequence is independent of the
+  // others, so run them in parallel - with 3+ sports now (was just MLB),
+  // doing this sequentially made every Picks page load wait on the sum of
+  // every sport's fetch time instead of just the slowest one.
+  await Promise.all(
+    RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
+      const sportName = LIVE_SPORTS.find((s) => s.key === sportKey)?.label;
+      if (!sportName) return;
+      try {
+        await persistFinalScores(sportKey);
+        await gradePendingPicks(user.id, sportName, sportKey);
+      } catch {
+        // Live score sources are best-effort - don't block the page on a fetch failure.
+      }
+    })
+  );
 
   const favoriteDog = (searchParams.favoriteDog as "FAVORITE" | "UNDERDOG") || undefined;
 
