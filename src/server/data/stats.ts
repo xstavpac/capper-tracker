@@ -186,6 +186,61 @@ export function computeScorecard(picks: Pick[]): ScorecardBucket[] {
   });
 }
 
+// A finer split than ScorecardBucketKey, built for the Cappers-page
+// league/bet-type filter chips - e.g. "Fav ML" and "Dog ML" are both
+// MONEYLINE picks but represent opposite sides, so they can't share a
+// bucket the way the scorecard (which only cares about bet type + F5) does.
+export type PickCategoryKey = "FAV_ML" | "DOG_ML" | "SPREAD" | "OVER" | "UNDER" | "F5_ML" | "NRFI";
+
+export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
+  FAV_ML: "Fav ML",
+  DOG_ML: "Dog ML",
+  SPREAD: "Spread",
+  OVER: "Over",
+  UNDER: "Under",
+  F5_ML: "F5 ML",
+  NRFI: "NRFI",
+};
+
+// F5 and NRFI are MLB-only chips for now, even though Period/BetType could
+// technically represent a first-half bet in another sport - other leagues
+// intentionally don't surface those two categories yet.
+const MLB_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD", "OVER", "UNDER", "F5_ML", "NRFI"];
+const DEFAULT_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD", "OVER", "UNDER"];
+
+export function chipSetForLeague(sportName: string): PickCategoryKey[] {
+  return sportName.toUpperCase() === "MLB" ? MLB_CHIP_SET : DEFAULT_CHIP_SET;
+}
+
+type PickCategoryInput = {
+  betType: Pick["betType"];
+  period: Pick["period"];
+  betDetail: string | null;
+  odds: number;
+  line: number | null;
+};
+
+export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
+  if (pick.betType === "NRFI") return "NRFI";
+
+  if (pick.betType === "MONEYLINE") {
+    if (pick.period === "FIRST_HALF") return "F5_ML";
+    const side = favoriteOrUnderdog(pick);
+    return side === "FAVORITE" ? "FAV_ML" : side === "UNDERDOG" ? "DOG_ML" : null;
+  }
+
+  if (pick.betType === "SPREAD" && pick.period === "FULL_GAME") return "SPREAD";
+
+  if (pick.betType === "TOTAL" && pick.period === "FULL_GAME") {
+    const detail = (pick.betDetail ?? "").toLowerCase();
+    if (detail.includes("over")) return "OVER";
+    if (detail.includes("under")) return "UNDER";
+    return null;
+  }
+
+  return null;
+}
+
 /** All picks for a user, scoped by userId — never call prisma.pick directly. */
 export async function getUserPicks(userId: string) {
   return prisma.pick.findMany({
