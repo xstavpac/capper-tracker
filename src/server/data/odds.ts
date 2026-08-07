@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { sameLocalDay } from "@/lib/dates";
 
 export type OddsGame = {
   id: string;
@@ -114,6 +115,71 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
       commenceTime: g.gameDate,
     };
   });
+}
+
+// Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw
+// pick text) to the real MLB game it refers to, using the yesterday/today/
+// tomorrow schedule window. Same-team matchups repeat every few days in MLB
+// (series play), so when a nickname matches more than one game we prefer a
+// game on the same local calendar day as `referenceTime`, and within that,
+// prefer one that hasn't finished yet - falling back to whichever candidate
+// started closest to `referenceTime`.
+export async function resolveMlbGameForNickname(
+  nickname: string,
+  referenceTime: Date = new Date()
+): Promise<ScoreGame | null> {
+  const games = await getMlbLiveScores();
+  const candidates = games.filter(
+    (g) => g.homeTeam.toLowerCase().endsWith(nickname) || g.awayTeam.toLowerCase().endsWith(nickname)
+  );
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  const sameDay = candidates.filter((g) => sameLocalDay(new Date(g.commenceTime), referenceTime));
+  const pool = sameDay.length > 0 ? sameDay : candidates;
+  const notFinal = pool.filter((g) => g.status !== "final");
+  const finalPool = notFinal.length > 0 ? notFinal : pool;
+
+  return finalPool.reduce((closest, candidate) => {
+    const closestDiff = Math.abs(new Date(closest.commenceTime).getTime() - referenceTime.getTime());
+    const candidateDiff = Math.abs(new Date(candidate.commenceTime).getTime() - referenceTime.getTime());
+    return candidateDiff < closestDiff ? candidate : closest;
+  });
+}
+
+// Looks up the real market price for a resolved MLB game (see
+// resolveMlbGameForNickname), so bulk-imported picks that didn't state an
+// explicit price can use the actual line instead of a hardcoded -110.
+export async function findMlbMarketPrice(
+  game: { homeTeam: string; awayTeam: string; commenceTime: string },
+  betType: "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP",
+  side: "home" | "away" | "over" | "under"
+): Promise<number | null> {
+  const marketKey =
+    betType === "MONEYLINE" ? "h2h" : betType === "SPREAD" ? "spreads" : betType === "TOTAL" ? "totals" : null;
+  if (!marketKey) return null;
+
+  const oddsGames = await getOddsForSport("baseball_mlb");
+  const candidates = oddsGames.filter((g) => g.homeTeam === game.homeTeam && g.awayTeam === game.awayTeam);
+  if (candidates.length === 0) return null;
+
+  const gameStart = new Date(game.commenceTime).getTime();
+  const oddsGame = candidates.reduce((closest, candidate) => {
+    const closestDiff = Math.abs(new Date(closest.commenceTime).getTime() - gameStart);
+    const candidateDiff = Math.abs(new Date(candidate.commenceTime).getTime() - gameStart);
+    return candidateDiff < closestDiff ? candidate : closest;
+  });
+
+  const outcomeName =
+    side === "home" ? oddsGame.homeTeam : side === "away" ? oddsGame.awayTeam : side === "over" ? "Over" : "Under";
+
+  for (const bookmaker of oddsGame.bookmakers) {
+    const market = bookmaker.markets.find((m) => m.key === marketKey);
+    const outcome = market?.outcomes.find((o) => o.name === outcomeName);
+    if (outcome) return outcome.price;
+  }
+
+  return null;
 }
 
 

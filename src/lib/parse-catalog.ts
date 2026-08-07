@@ -1,12 +1,15 @@
-﻿export type ParsedPick = {
+export type ParsedPick = {
   capperName: string;
   sportName: string;
   description: string;
   betType: "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP";
   odds: number;
+  hasExplicitOdds: boolean;
+  totalSide?: "over" | "under";
   units: number;
   isFirstFive: boolean;
   raw: string;
+  ambiguous?: string[];
 };
 
 type TeamEntry = [string, string];
@@ -52,6 +55,14 @@ const WNBA_TEAMS = [
   "dream", "sky", "sun", "fever", "aces", "mercury", "lynx", "liberty",
   "valkyries", "wings", "mystics", "storm",
 ];
+
+const AMBIGUOUS_NICKNAMES: Record<string, string[]> = {
+  cardinals: ["St. Louis Cardinals (MLB)", "Arizona Cardinals (NFL)"],
+  rangers: ["Texas Rangers (MLB)", "New York Rangers (NHL)"],
+  kings: ["Sacramento Kings (NBA)", "Los Angeles Kings (NHL)"],
+  panthers: ["Carolina Panthers (NFL)", "Florida Panthers (NHL)"],
+  giants: ["San Francisco Giants (MLB)", "New York Giants (NFL)"],
+};
 
 const DISAMBIGUATED_TEAMS: TeamEntry[] = [
   ["texas rangers", "MLB"],
@@ -105,10 +116,11 @@ function detectSport(text: string): { sportName: string; rest: string } {
 
 function parsePickText(description: string): {
   betType: ParsedPick["betType"];
-  odds: number;
+  odds: number | null;
   units: number;
   isFirstFive: boolean;
   cleanDescription: string;
+  totalSide?: "over" | "under";
 } {
   let odds: number | null = null;
   let units: number | null = null;
@@ -126,13 +138,43 @@ function parsePickText(description: string): {
   const isFirstFive = /\bF5\b/i.test(cleanDescription) || /1st\s*5/i.test(cleanDescription);
 
   let betType: ParsedPick["betType"] = "SPREAD";
+  let totalSide: "over" | "under" | undefined;
   if (/\bML\b/i.test(cleanDescription) || /moneyline/i.test(cleanDescription)) {
     betType = "MONEYLINE";
-  } else if (/\b(under|over)\b/i.test(cleanDescription) || /\btotal\b/i.test(cleanDescription)) {
+  } else if (/\bover\b/i.test(cleanDescription)) {
+    betType = "TOTAL";
+    totalSide = "over";
+  } else if (/\bunder\b/i.test(cleanDescription)) {
+    betType = "TOTAL";
+    totalSide = "under";
+  } else if (/\btotal\b/i.test(cleanDescription)) {
     betType = "TOTAL";
   }
 
-  return { betType, odds: odds ?? -110, units: units ?? 1, isFirstFive, cleanDescription };
+  return { betType, odds, units: units ?? 1, isFirstFive, cleanDescription, totalSide };
+}
+
+function findAmbiguousNickname(text: string): string[] | undefined {
+  const lower = text.toLowerCase();
+  for (const [nickname, options] of Object.entries(AMBIGUOUS_NICKNAMES)) {
+    const re = new RegExp("\\b" + nickname + "\\b", "i");
+    if (re.test(lower)) return options;
+  }
+  return undefined;
+}
+
+function normalizeName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+export function findTeamNickname(text: string, sportName: string): string | undefined {
+  const lower = text.toLowerCase();
+  for (const [phrase, sport] of TEAM_SPORT_ENTRIES) {
+    if (sport !== sportName) continue;
+    const re = new RegExp("\\b" + phrase.replace(/ /g, "\\s+") + "\\b", "i");
+    if (re.test(lower)) return phrase;
+  }
+  return undefined;
 }
 
 export function parseCatalog(text: string, knownCapperNames: string[] = []): ParsedPick[] {
@@ -157,16 +199,38 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
 
     if (inlineMatch) {
       const remainder = line.slice(inlineMatch.length).replace(/^[\s:.-]+/, "").trim();
-      if (!remainder) continue;
+      if (!remainder) {
+        currentCapper = inlineMatch;
+        continue;
+      }
       const detected = detectSport(remainder);
-      if (!detected.sportName) continue;
+      if (!detected.sportName) {
+        const ambiguous = findAmbiguousNickname(remainder);
+        if (ambiguous) {
+          results.push({
+            capperName: inlineMatch,
+            sportName: "",
+            description: remainder,
+            betType: "SPREAD",
+            odds: -110,
+            hasExplicitOdds: false,
+            units: 1,
+            isFirstFive: false,
+            raw: line,
+            ambiguous,
+          });
+        }
+        continue;
+      }
       const parsed = parsePickText(detected.rest);
       results.push({
         capperName: inlineMatch,
         sportName: detected.sportName,
         description: parsed.cleanDescription,
         betType: parsed.betType,
-        odds: parsed.odds,
+        odds: parsed.odds ?? -110,
+        hasExplicitOdds: parsed.odds !== null,
+        totalSide: parsed.totalSide,
         units: parsed.units,
         isFirstFive: parsed.isFirstFive,
         raw: line,
@@ -174,28 +238,49 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
       continue;
     }
 
-    const isBullet = line.startsWith("*") || line.startsWith("-");
-    if (!isBullet) {
-      const name = line.replace(/^[^\w]+/, "").trim();
-      if (name) currentCapper = name;
+    const strippedText = line.replace(/^[*-]\s*/, "").trim();
+    const detected = detectSport(strippedText);
+
+    if (detected.sportName) {
+      const parsed = parsePickText(detected.rest);
+      results.push({
+        capperName: currentCapper || "Unknown",
+        sportName: detected.sportName,
+        description: parsed.cleanDescription,
+        betType: parsed.betType,
+        odds: parsed.odds ?? -110,
+        hasExplicitOdds: parsed.odds !== null,
+        totalSide: parsed.totalSide,
+        units: parsed.units,
+        isFirstFive: parsed.isFirstFive,
+        raw: strippedText,
+      });
       continue;
     }
 
-    const bulletText = line.replace(/^[*-]\s*/, "").trim();
-    const detected = detectSport(bulletText);
-    if (!detected.sportName) continue;
+    const ambiguous = findAmbiguousNickname(strippedText);
+    if (ambiguous) {
+      results.push({
+        capperName: currentCapper || "Unknown",
+        sportName: "",
+        description: strippedText,
+        betType: "SPREAD",
+        odds: -110,
+        hasExplicitOdds: false,
+        units: 1,
+        isFirstFive: false,
+        raw: strippedText,
+        ambiguous,
+      });
+      continue;
+    }
 
-    const parsed = parsePickText(detected.rest);
-    results.push({
-      capperName: currentCapper || "Unknown",
-      sportName: detected.sportName,
-      description: parsed.cleanDescription,
-      betType: parsed.betType,
-      odds: parsed.odds,
-      units: parsed.units,
-      isFirstFive: parsed.isFirstFive,
-      raw: bulletText,
-    });
+    const name = line.replace(/^[^\w]+/, "").trim();
+    if (name) {
+      const normalized = normalizeName(name);
+      const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
+      currentCapper = existingMatch ?? name;
+    }
   }
 
   return results;

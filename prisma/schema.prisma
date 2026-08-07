@@ -163,3 +163,18 @@ model OddsSnapshot {
   @@unique([sportKey, fetchDate])
   @@map("odds_snapshots")
 }
+
+model GameResult {
+  id         String   @id @default(cuid())
+  sportKey   String
+  externalId String
+  homeTeam   String
+  awayTeam   String
+  homeScore  Int
+  awayScore  Int
+  gameDate   DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([sportKey, externalId])
+  @@map("game_results")
+}

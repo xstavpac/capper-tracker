@@ -5,6 +5,8 @@ import { requireUser } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
 import { createCapper } from "@/server/data/cappers";
 import { createPick } from "@/server/data/picks";
+import { resolveMlbGameForNickname, findMlbMarketPrice } from "@/server/data/odds";
+import { findTeamNickname } from "@/lib/parse-catalog";
 import type { BetType } from "@prisma/client";
 
 export type BulkImportItem = {
@@ -13,39 +15,50 @@ export type BulkImportItem = {
   description: string;
   betType: BetType;
   odds: number;
+  hasExplicitOdds: boolean;
+  totalSide?: "over" | "under";
   units: number;
   isFirstFive: boolean;
 };
 
 export type BulkImportResult =
-  | { success: true; imported: number; skipped: number; errors: string[] }
+  | { success: true; imported: number; skipped: number; errors: string[]; unmatchedGames: string[] }
   | { success: false; error: string };
+
+function normalizeName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
 
 export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<BulkImportResult> {
   const user = await requireUser();
 
+  const existingCappers = await prisma.capper.findMany({ where: { userId: user.id } });
+
   const capperCache = new Map<string, string>();
   const sportCache = new Map<string, string>();
   const errors: string[] = [];
+  const unmatchedGames: string[] = [];
   let imported = 0;
 
   for (const item of items) {
     try {
-      const capperKey = item.capperName.toLowerCase();
-      let capperId = capperCache.get(capperKey);
+      const normalizedName = normalizeName(item.capperName);
+      let capperId = capperCache.get(normalizedName);
+
       if (!capperId) {
-        let capper = await prisma.capper.findFirst({
-          where: { userId: user.id, name: { equals: item.capperName, mode: "insensitive" } },
-        });
-        if (!capper) {
-          capper = await createCapper(user.id, {
+        const existing = existingCappers.find((c) => normalizeName(c.name) === normalizedName);
+        if (existing) {
+          capperId = existing.id;
+        } else {
+          const created = await createCapper(user.id, {
             name: item.capperName,
             source: "OTHER",
             customSource: "Bulk import",
           });
+          capperId = created.id;
+          existingCappers.push(created);
         }
-        capperId = capper.id;
-        capperCache.set(capperKey, capperId);
+        capperCache.set(normalizedName, capperId);
       }
 
       const sportKey = item.sportName.toLowerCase();
@@ -61,16 +74,47 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         sportCache.set(sportKey, sportId);
       }
 
+      let homeTeam = item.description;
+      let awayTeam = "-";
+      let gameTime = new Date();
+      let odds = item.odds;
+
+      if (item.sportName.toUpperCase() === "MLB") {
+        const nickname = findTeamNickname(item.description, "MLB");
+        const game = nickname ? await resolveMlbGameForNickname(nickname) : null;
+        if (game) {
+          homeTeam = game.homeTeam;
+          awayTeam = game.awayTeam;
+          gameTime = new Date(game.commenceTime);
+
+          if (!item.hasExplicitOdds) {
+            const side =
+              item.betType === "TOTAL"
+                ? item.totalSide
+                : game.homeTeam.toLowerCase().endsWith(nickname!)
+                ? "home"
+                : "away";
+
+            const marketPrice = side ? await findMlbMarketPrice(game, item.betType, side) : null;
+            if (marketPrice !== null) {
+              odds = marketPrice;
+            }
+          }
+        } else {
+          unmatchedGames.push(item.capperName + " - " + item.description);
+        }
+      }
+
       await createPick(user.id, {
         capperId,
         sportId,
-        homeTeam: item.description,
-        awayTeam: "-",
+        homeTeam,
+        awayTeam,
         betType: item.betType,
         betDetail: item.description,
-        odds: item.odds,
+        odds,
         units: item.units,
-        gameTime: new Date(),
+        gameTime,
         notes: item.isFirstFive ? "First 5 / first half" : undefined,
       });
       imported++;
@@ -85,5 +129,5 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
   revalidatePath("/cappers");
   revalidatePath("/reports");
 
-  return { success: true, imported, skipped: items.length - imported, errors };
+  return { success: true, imported, skipped: items.length - imported, errors, unmatchedGames };
 }

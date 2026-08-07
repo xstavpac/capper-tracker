@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useRef } from "react";
 import { createPickAction } from "@/server/actions/picks";
@@ -14,7 +14,7 @@ const BET_TYPES = [
   { value: "PLAYER_PROP", label: "Player Prop" },
 ];
 
-export function PickForm({ cappers, sports }: { cappers: Capper[]; sports: Sport[] }) {
+export function PickForm({ cappers, sports, atLimit }: { cappers: Capper[]; sports: Sport[]; atLimit?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const [sportId, setSportId] = useState(sports[0]?.id ?? "");
   const [betType, setBetType] = useState("SPREAD");
@@ -23,6 +23,17 @@ export function PickForm({ cappers, sports }: { cappers: Capper[]; sports: Sport
   const formRef = useRef<HTMLFormElement>(null);
 
   const selectedSport = sports.find((s) => s.id === sportId);
+
+  if (atLimit && !isOpen) {
+    return (
+      <div className="rounded-card bg-white p-4 shadow-soft">
+        <p className="text-sm text-gray-600">
+          You have reached the free plan limit of 1000 picks.{" "}
+          <span className="font-medium text-brand-600">Upgrade to Pro</span> for unlimited picks.
+        </p>
+      </div>
+    );
+  }
 
   if (cappers.length === 0) {
     return (

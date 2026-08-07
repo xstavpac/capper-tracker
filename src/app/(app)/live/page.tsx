@@ -27,9 +27,26 @@ export default async function LivePage({
     activeSport === "baseball_mlb" ? getMlbLiveScores() : Promise.resolve([]),
   ]);
 
-  const scoreByTeams = new Map(
-    scores.map((s) => [s.homeTeam + "|" + s.awayTeam, s])
-  );
+  const scoresByTeamPair = new Map<string, typeof scores>();
+  for (const s of scores) {
+    const key = s.homeTeam + "|" + s.awayTeam;
+    const existing = scoresByTeamPair.get(key);
+    if (existing) existing.push(s);
+    else scoresByTeamPair.set(key, [s]);
+  }
+
+  function findScoreForGame(game: { homeTeam: string; awayTeam: string; commenceTime: string }) {
+    const candidates = scoresByTeamPair.get(game.homeTeam + "|" + game.awayTeam);
+    if (!candidates || candidates.length === 0) return undefined;
+    if (candidates.length === 1) return candidates[0];
+
+    const gameStart = new Date(game.commenceTime).getTime();
+    return candidates.reduce((closest, candidate) => {
+      const closestDiff = Math.abs(new Date(closest.commenceTime).getTime() - gameStart);
+      const candidateDiff = Math.abs(new Date(candidate.commenceTime).getTime() - gameStart);
+      return candidateDiff < closestDiff ? candidate : closest;
+    });
+  }
 
   const hasApiKey = process.env.ODDS_API_KEY ? true : false;
 
@@ -61,11 +78,11 @@ export default async function LivePage({
       <div className="space-y-3">
         {odds
           .filter((game) => {
-            const s = scoreByTeams.get(game.homeTeam + "|" + game.awayTeam);
+            const s = findScoreForGame(game);
             return s?.status !== "final";
           })
           .map((game) => {
-          const score = scoreByTeams.get(game.homeTeam + "|" + game.awayTeam);
+          const score = findScoreForGame(game);
           const book = game.bookmakers[0];
           function findMarketAcrossBooks(key: string) {
             for (const b of game.bookmakers) {

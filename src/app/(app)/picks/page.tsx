@@ -1,6 +1,7 @@
 import { requireUser } from "@/server/auth";
-import { getFilteredPicksForUser, getSportsWithLeagues } from "@/server/data/picks";
+import { getFilteredPicksForUser, getSportsWithLeagues, getPickPlanStatus } from "@/server/data/picks";
 import { getCappersForUser } from "@/server/data/cappers";
+import { persistMlbFinalScores, gradePendingPicks } from "@/server/data/grading";
 import { PickForm } from "@/components/dashboard/pick-form";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import type { BetType, PickStatus } from "@prisma/client";
@@ -15,6 +16,13 @@ export default async function PicksPage({
 }) {
   const user = await requireUser();
 
+  try {
+    await persistMlbFinalScores();
+    await gradePendingPicks(user.id);
+  } catch {
+    // Live score sources are best-effort - don't block the page on a fetch failure.
+  }
+
   const filters = {
     capperId: searchParams.capperId || undefined,
     sportId: searchParams.sportId || undefined,
@@ -22,10 +30,11 @@ export default async function PicksPage({
     betType: (searchParams.betType as BetType) || undefined,
   };
 
-  const [picks, cappers, sports] = await Promise.all([
+  const [picks, cappers, sports, planStatus] = await Promise.all([
     getFilteredPicksForUser(user.id, filters),
     getCappersForUser(user.id),
     getSportsWithLeagues(),
+    getPickPlanStatus(user.id),
   ]);
 
   const hasActiveFilters = Object.values(filters).some(Boolean);
@@ -36,20 +45,20 @@ export default async function PicksPage({
         <div>
           <h1 className="text-xl font-semibold">Picks</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {picks.length} pick{picks.length === 1 ? "" : "s"}
-            {hasActiveFilters ? " (filtered)" : " logged"}
+            {planStatus.isPro
+              ? planStatus.pickCount + " pick" + (planStatus.pickCount === 1 ? "" : "s")
+              : planStatus.pickCount + " of " + planStatus.pickLimit + " picks (Free plan)"}
+            {hasActiveFilters ? " - " + picks.length + " match filters" : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          
-            
-            <a
+          <a
             href="/picks/import"
             className="rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:border-gray-300"
           >
-            Betting Catalog Import
+            Bulk import
           </a>
-          <PickForm cappers={cappers} sports={sports} />
+          <PickForm cappers={cappers} sports={sports} atLimit={planStatus.atLimit} />
         </div>
       </div>
 

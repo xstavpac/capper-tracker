@@ -1,6 +1,21 @@
 ﻿import { prisma } from "@/lib/prisma";
 import type { BetType, PickStatus } from "@prisma/client";
 
+const FREE_PLAN_PICK_LIMIT = 1000;
+
+export async function getPickPlanStatus(userId: string) {
+  const subscription = await prisma.subscription.findUnique({ where: { userId } });
+  const isPro = subscription?.plan === "PRO";
+  const pickCount = await prisma.pick.count({ where: { userId } });
+
+  return {
+    isPro,
+    pickCount,
+    pickLimit: isPro ? null : FREE_PLAN_PICK_LIMIT,
+    atLimit: !isPro && pickCount >= FREE_PLAN_PICK_LIMIT,
+  };
+}
+
 export async function getSportsWithLeagues() {
   return prisma.sport.findMany({
     include: { leagues: true },
@@ -32,6 +47,17 @@ export async function createPick(
     throw new Error("Capper not found.");
   }
 
+  const subscription = await prisma.subscription.findUnique({ where: { userId } });
+  const isPro = subscription?.plan === "PRO";
+  if (!isPro) {
+    const pickCount = await prisma.pick.count({ where: { userId } });
+    if (pickCount >= FREE_PLAN_PICK_LIMIT) {
+      throw new Error(
+        "Free plan is limited to " + FREE_PLAN_PICK_LIMIT + " picks. Upgrade to Pro for unlimited picks."
+      );
+    }
+  }
+
   return prisma.pick.create({
     data: { ...data, userId, status: "PENDING" },
   });
@@ -57,14 +83,6 @@ export async function getPicksForCapper(userId: string, capperId: string) {
   });
 }
 
-export async function getPicksForUser(userId: string) {
-  return prisma.pick.findMany({
-    where: { userId },
-    include: { capper: true, sport: true, league: true },
-    orderBy: { gameTime: "desc" },
-  });
-}
-
 export type PickFilters = {
   capperId?: string;
   sportId?: string;
@@ -81,6 +99,14 @@ export async function getFilteredPicksForUser(userId: string, filters: PickFilte
       ...(filters.status ? { status: filters.status } : {}),
       ...(filters.betType ? { betType: filters.betType } : {}),
     },
+    include: { capper: true, sport: true, league: true },
+    orderBy: { gameTime: "desc" },
+  });
+}
+
+export async function getPicksForUser(userId: string) {
+  return prisma.pick.findMany({
+    where: { userId },
     include: { capper: true, sport: true, league: true },
     orderBy: { gameTime: "desc" },
   });

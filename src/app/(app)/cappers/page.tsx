@@ -25,12 +25,10 @@ export default async function CappersPage() {
         <div>
           <h1 className="text-xl font-semibold">Cappers</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {planStatus.isPro
-              ? planStatus.capperCount + " capper" + (planStatus.capperCount === 1 ? "" : "s")
-              : planStatus.capperCount + " of " + planStatus.capperLimit + " cappers (Free plan)"}
+            {planStatus.capperCount + " capper" + (planStatus.capperCount === 1 ? "" : "s")}
           </p>
         </div>
-        <CapperForm atLimit={planStatus.atLimit} />
+        <CapperForm atLimit={false} />
       </div>
 
       {cappers.length === 0 ? (

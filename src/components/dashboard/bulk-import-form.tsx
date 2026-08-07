@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { parseCatalog, type ParsedPick } from "@/lib/parse-catalog";
@@ -8,9 +8,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<ParsedPick[] | null>(null);
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{ imported: number; skipped: number; errors: string[] } | null>(
-    null
-  );
+  const [result, setResult] = useState<
+    { imported: number; skipped: number; errors: string[]; unmatchedGames: string[] } | null
+  >(null);
 
   const existingLower = existingCapperNames.map((n) => n.toLowerCase());
 
@@ -19,23 +19,33 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setParsed(parseCatalog(text, existingCapperNames));
   }
 
+  const validPicks = (parsed ?? []).filter((p) => !p.ambiguous);
+  const ambiguousPicks = (parsed ?? []).filter((p) => p.ambiguous);
+
   async function handleImport() {
-    if (!parsed) return;
+    if (validPicks.length === 0) return;
     setImporting(true);
     const res = await bulkImportPicksAction(
-      parsed.map((p) => ({
+      validPicks.map((p) => ({
         capperName: p.capperName,
         sportName: p.sportName,
         description: p.description,
         betType: p.betType,
         odds: p.odds,
+        hasExplicitOdds: p.hasExplicitOdds,
+        totalSide: p.totalSide,
         units: p.units,
         isFirstFive: p.isFirstFive,
       }))
     );
     setImporting(false);
     if (res.success) {
-      setResult({ imported: res.imported, skipped: res.skipped, errors: res.errors });
+      setResult({
+        imported: res.imported,
+        skipped: res.skipped,
+        errors: res.errors,
+        unmatchedGames: res.unmatchedGames,
+      });
       setParsed(null);
       setText("");
     }
@@ -45,7 +55,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     <div className="rounded-card bg-white p-5 shadow-soft">
       <h3 className="mb-1 text-sm font-medium text-gray-900">Betting Catalog Import</h3>
       <p className="mb-3 text-xs text-gray-500">
-        Paste a full catalog dump below - capper name lines followed by bullet picks. We will
+        Paste a full catalog dump below - capper name lines followed by picks. We will
         auto-detect sport, bet type, odds, and units for each pick.
       </p>
 
@@ -53,7 +63,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={10}
-        placeholder={"ExampleCapper123\n* MLB: Detroit Tigers ML (-117) (2u)"}
+        placeholder={"ExampleCapper123\nDetroit Tigers ML (-117) (2u)"}
         className="w-full rounded-lg border border-gray-200 px-3 py-2 font-mono text-xs focus:border-brand-400 focus:outline-none"
       />
 
@@ -68,11 +78,30 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       {parsed && (
         <div className="mt-4">
           <div className="mb-2 text-sm font-medium text-gray-700">
-            {parsed.length} pick{parsed.length === 1 ? "" : "s"} found
+            {validPicks.length} pick{validPicks.length === 1 ? "" : "s"} found
+            {ambiguousPicks.length > 0 &&
+              " - " + ambiguousPicks.length + " need clarification"}
           </div>
+
+          {ambiguousPicks.length > 0 && (
+            <div className="mb-3 space-y-2">
+              {ambiguousPicks.map((p, i) => (
+                <div key={"amb-" + i} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <div className="font-medium">
+                    {p.capperName}: "{p.description}"
+                  </div>
+                  <div className="mt-0.5">
+                    Ambiguous team - could mean {p.ambiguous!.join(" or ")}. Edit the text
+                    above to specify the city, then preview again.
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="max-h-80 overflow-y-auto rounded-lg border border-gray-100">
             <div className="divide-y divide-gray-100">
-              {parsed.map((p, i) => (
+              {validPicks.map((p, i) => (
                 <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
                   <div>
                     <span className="font-medium">{p.capperName}</span>
@@ -96,10 +125,10 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
 
           <button
             onClick={handleImport}
-            disabled={importing}
+            disabled={importing || validPicks.length === 0}
             className="mt-3 rounded-full bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700 disabled:opacity-50"
           >
-            {importing ? "Importing..." : "Import " + parsed.length + " picks"}
+            {importing ? "Importing..." : "Import " + validPicks.length + " picks"}
           </button>
         </div>
       )}
@@ -114,6 +143,18 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                 <li key={i}>{e}</li>
               ))}
             </ul>
+          )}
+          {result.unmatchedGames.length > 0 && (
+            <div className="mt-2 text-xs text-amber-700">
+              Couldn&apos;t match {result.unmatchedGames.length} pick
+              {result.unmatchedGames.length === 1 ? "" : "s"} to today&apos;s MLB schedule - they
+              were still imported, but won&apos;t auto-grade:
+              <ul className="mt-1 list-disc pl-4">
+                {result.unmatchedGames.map((g, i) => (
+                  <li key={i}>{g}</li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}
