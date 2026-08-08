@@ -65,14 +65,29 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
   if (!res.ok) return [];
 
   const raw = await res.json();
-  const games: OddsGame[] = raw.map((g: any) => ({
-    id: g.id,
-    sportKey: g.sport_key,
-    homeTeam: g.home_team,
-    awayTeam: g.away_team,
-    commenceTime: g.commence_time,
-    bookmakers: g.bookmakers ?? [],
-  }));
+  const fetchedAt = new Date();
+  const games: OddsGame[] = raw
+    .map((g: any) => ({
+      id: g.id,
+      sportKey: g.sport_key,
+      homeTeam: g.home_team,
+      awayTeam: g.away_team,
+      commenceTime: g.commence_time,
+      bookmakers: g.bookmakers ?? [],
+    }))
+    // The whole point of caching once/day is to lock in pregame lines - but
+    // that only holds if this is the day's first fetch AND it happens before
+    // any of that day's games start. Neither is guaranteed: the scheduled
+    // cron (see /api/cron/refresh-odds) is meant to win that race, but if
+    // anything else (a dev session, a stray request) hits this first, mid-
+    // game, the API returns *current* (in-play) prices for already-started
+    // games - e.g. a -2400 moneyline on a team already up big late - which
+    // would otherwise get cached as if it were the pregame line, permanently,
+    // for the rest of the day. Excluding already-started games here means
+    // worst case we cache nothing for them (fixable by the cron catching up
+    // sportsbook-side next time), never a wrong number silently treated as
+    // real - since this feeds real ROI/profit tracking, missing beats wrong.
+    .filter((g: OddsGame) => new Date(g.commenceTime) > fetchedAt);
 
   await prisma.oddsSnapshot.upsert({
     where: { sportKey_fetchDate: { sportKey, fetchDate } },
