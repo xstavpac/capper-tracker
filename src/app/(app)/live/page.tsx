@@ -4,7 +4,9 @@ import { getOddsForSport, getLiveScoresForSport, matchScoreToGame, LIVE_SPORTS }
 import { getPicksForGames } from "@/server/data/picks";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { sameLocalDay } from "@/lib/dates";
+import { getTeamLogoUrl } from "@/lib/team-logos";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
+import { TeamLogo } from "@/components/live/team-logo";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -97,6 +99,7 @@ export default async function LivePage({
             pickId: p.id,
             capperId: p.capperId,
             capperName: p.capper.name,
+            capperColorTag: p.capper.colorTag,
             category: pickCategory(p),
             betDetail: p.betDetail || betTypeLabel(p.betType),
             odds: p.odds,
@@ -152,8 +155,11 @@ export default async function LivePage({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{game.awayTeam}</span>
-                  <span className="text-xs text-gray-500">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <TeamLogo src={getTeamLogoUrl(activeSport, game.awayTeam)} teamName={game.awayTeam} />
+                    <span className="truncate text-sm font-medium">{game.awayTeam}</span>
+                  </span>
+                  <span className="shrink-0 text-xs text-gray-500">
                     {score?.scores?.find((s) => s.name === game.awayTeam)?.score ?? ""}
                   </span>
                 </div>
@@ -163,8 +169,11 @@ export default async function LivePage({
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{game.homeTeam}</span>
-                  <span className="text-xs text-gray-500">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <TeamLogo src={getTeamLogoUrl(activeSport, game.homeTeam)} teamName={game.homeTeam} />
+                    <span className="truncate text-sm font-medium">{game.homeTeam}</span>
+                  </span>
+                  <span className="shrink-0 text-xs text-gray-500">
                     {score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? ""}
                   </span>
                 </div>

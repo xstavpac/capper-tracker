@@ -30,6 +30,10 @@ const config: Config = {
           "0%, 100%": { boxShadow: "0 0 18px 2px rgba(168,85,247,0.55)" },
           "50%": { boxShadow: "0 0 34px 6px rgba(168,85,247,0.9)" },
         },
+        "glow-pulse-compact": {
+          "0%, 100%": { boxShadow: "0 0 8px 1px rgba(168,85,247,0.55)" },
+          "50%": { boxShadow: "0 0 16px 2px rgba(168,85,247,0.9)" },
+        },
         "fill-bar": {
           from: { transform: "scaleX(0)" },
           to: { transform: "scaleX(var(--fill, 1))" },
@@ -72,9 +76,37 @@ const config: Config = {
           "85%": { opacity: "1" },
           "100%": { transform: "translate(-3px, 12px)", opacity: "0" },
         },
+        "energy-ring": {
+          "0%": { transform: "scale(0.55)", opacity: "0.9" },
+          "100%": { transform: "scale(2.1)", opacity: "0" },
+        },
+        // Sharp, uneven opacity swings (not a smooth fade) so it reads as an
+        // electrical crackle rather than a twinkle - stops end at 0 so the
+        // bolt is gone by the time the one-shot animation completes.
+        "energy-bolt-crackle": {
+          "0%": { opacity: "1" },
+          "12%": { opacity: "0.15" },
+          "24%": { opacity: "1" },
+          "38%": { opacity: "0" },
+          "50%": { opacity: "1" },
+          "66%": { opacity: "0.25" },
+          "80%": { opacity: "1" },
+          "100%": { opacity: "0" },
+        },
+        "energy-flash": {
+          "0%": { transform: "translate(0, 0)", color: "var(--surge-color)" },
+          "10%": { transform: "translate(-2px, 1px)", color: "#22d3ee" },
+          "20%": { transform: "translate(2px, -1px)", color: "var(--surge-color)" },
+          "30%": { transform: "translate(-1px, -2px)", color: "#22d3ee" },
+          "40%": { transform: "translate(1px, 2px)", color: "var(--surge-color)" },
+          "50%": { transform: "translate(-2px, 0)", color: "#22d3ee" },
+          "62%": { transform: "translate(0, 0)", color: "var(--surge-color)" },
+          "100%": { transform: "translate(0, 0)", color: "var(--surge-color)" },
+        },
       },
       animation: {
         "glow-pulse": "glow-pulse 2.2s ease-in-out infinite",
+        "glow-pulse-compact": "glow-pulse-compact 2.2s ease-in-out infinite",
         "fill-bar": "fill-bar 0.8s ease-out",
         "trend-surge-up": "trend-surge-up 1.6s ease-in-out infinite",
         "trend-surge-down": "trend-surge-down 1.6s ease-in-out infinite",
@@ -84,6 +116,11 @@ const config: Config = {
         "ember-rise": "ember-rise 1.8s ease-out infinite",
         "snow-fall-a": "snow-fall-a 2.4s linear infinite",
         "snow-fall-b": "snow-fall-b 2.8s linear infinite",
+        // One-shot (iteration-count 1, no infinite) - these play once when a
+        // count-up finishes, not an ambient/looping effect.
+        "energy-ring": "energy-ring 0.9s ease-out 1 both",
+        "energy-bolt-crackle": "energy-bolt-crackle 0.6s ease-in-out 1 both",
+        "energy-flash": "energy-flash 0.65s ease-in-out 1 both",
       },
     },
   },

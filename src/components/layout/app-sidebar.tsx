@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
+import { dropCatalogButtonBaseClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
 
 function iconProps(className?: string) {
   return {
@@ -193,6 +194,21 @@ function LogoMark() {
   );
 }
 
+// Same look as the compact pill instances (Dashboard/Picks header, catalog
+// page) via dropCatalogButtonBaseClass, just stretched full-width for the
+// sidebar rail instead of hugging its own content.
+function SidebarDropCatalog({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <>
+      <div className="my-3 border-t border-gray-100" />
+      <a href="/picks/import" onClick={onNavigate} className={dropCatalogButtonBaseClass + " w-full"}>
+        <LightningIcon />
+        Drop Catalog
+      </a>
+    </>
+  );
+}
+
 function AccountRow() {
   return (
     <div className="mt-auto flex items-center gap-2 px-2 pt-4">
@@ -232,6 +248,7 @@ export function AppSidebar() {
           <span className="text-[17px] font-semibold">Capper Tracker</span>
         </div>
         <NavLinks />
+        <SidebarDropCatalog />
         <AccountRow />
       </aside>
 
@@ -253,6 +270,7 @@ export function AppSidebar() {
               </button>
             </div>
             <NavLinks onNavigate={() => setOpen(false)} />
+            <SidebarDropCatalog onNavigate={() => setOpen(false)} />
             <AccountRow />
           </aside>
         </div>

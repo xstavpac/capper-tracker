@@ -9,7 +9,7 @@ export type ParsedPick = {
   units: number;
   isFirstFive: boolean;
   raw: string;
-  ambiguous?: string[];
+  ambiguous?: AmbiguousOption[];
   // Team nicknames found in the raw text, e.g. from "Over 9.5 (Angels/Orioles)"
   // or "Cardinals vs Panthers". Captured before parens/odds get stripped out of
   // `description`, so game resolution still has both teams even for bets (like
@@ -18,6 +18,12 @@ export type ParsedPick = {
 };
 
 type TeamEntry = [string, string];
+
+// One resolvable possibility for an ambiguous nickname - `nickname` is the
+// canonical disambiguated phrase (matches a DISAMBIGUATED_TEAMS entry) so
+// resolving a pick can plug it straight into teamNicknames without having to
+// re-derive it from `label` by parsing text back out of a display string.
+export type AmbiguousOption = { label: string; sport: string; nickname: string };
 
 const KNOWN_SPORTS = [
   "WNBA", "NCAAF", "NCAAB", "MLB", "NBA", "NHL", "NFL", "MLS", "UFC", "MMA",
@@ -67,12 +73,27 @@ const WNBA_TEAMS = [
   "valkyries", "wings", "mystics", "storm",
 ];
 
-const AMBIGUOUS_NICKNAMES: Record<string, string[]> = {
-  cardinals: ["St. Louis Cardinals (MLB)", "Arizona Cardinals (NFL)"],
-  rangers: ["Texas Rangers (MLB)", "New York Rangers (NHL)"],
-  kings: ["Sacramento Kings (NBA)", "Los Angeles Kings (NHL)"],
-  panthers: ["Carolina Panthers (NFL)", "Florida Panthers (NHL)"],
-  giants: ["San Francisco Giants (MLB)", "New York Giants (NFL)"],
+const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
+  cardinals: [
+    { label: "St. Louis Cardinals (MLB)", sport: "MLB", nickname: "st louis cardinals" },
+    { label: "Arizona Cardinals (NFL)", sport: "NFL", nickname: "arizona cardinals" },
+  ],
+  rangers: [
+    { label: "Texas Rangers (MLB)", sport: "MLB", nickname: "texas rangers" },
+    { label: "New York Rangers (NHL)", sport: "NHL", nickname: "new york rangers" },
+  ],
+  kings: [
+    { label: "Sacramento Kings (NBA)", sport: "NBA", nickname: "sacramento kings" },
+    { label: "Los Angeles Kings (NHL)", sport: "NHL", nickname: "los angeles kings" },
+  ],
+  panthers: [
+    { label: "Carolina Panthers (NFL)", sport: "NFL", nickname: "carolina panthers" },
+    { label: "Florida Panthers (NHL)", sport: "NHL", nickname: "florida panthers" },
+  ],
+  giants: [
+    { label: "San Francisco Giants (MLB)", sport: "MLB", nickname: "san francisco giants" },
+    { label: "New York Giants (NFL)", sport: "NFL", nickname: "new york giants" },
+  ],
 };
 
 const DISAMBIGUATED_TEAMS: TeamEntry[] = [
@@ -173,7 +194,31 @@ function parsePickText(description: string): {
   return { betType, odds, units: units ?? 1, isFirstFive, cleanDescription, totalSide };
 }
 
-function findAmbiguousNickname(text: string): string[] | undefined {
+// Re-parses an ambiguous pick's original text now that the user has picked a
+// specific team off the button row - reruns the same bet-type/odds/units
+// extraction the unambiguous path already does (the ambiguous branch skips
+// that work entirely, since sport-less text can't be resolved against a
+// schedule yet), then plugs the chosen team in directly as teamNicknames
+// rather than re-deriving it via regex, since the user just told us exactly
+// which team they meant.
+export function resolveAmbiguousPick(pick: ParsedPick, choice: AmbiguousOption): ParsedPick {
+  const parsed = parsePickText(pick.description);
+  return {
+    ...pick,
+    sportName: choice.sport,
+    description: parsed.cleanDescription,
+    betType: parsed.betType,
+    odds: parsed.odds ?? -110,
+    hasExplicitOdds: parsed.odds !== null,
+    totalSide: parsed.totalSide,
+    units: parsed.units,
+    isFirstFive: parsed.isFirstFive,
+    teamNicknames: [choice.nickname],
+    ambiguous: undefined,
+  };
+}
+
+function findAmbiguousNickname(text: string): AmbiguousOption[] | undefined {
   const lower = text.toLowerCase();
   for (const [nickname, options] of Object.entries(AMBIGUOUS_NICKNAMES)) {
     const re = new RegExp("\\b" + nickname + "\\b", "i");
@@ -194,9 +239,7 @@ function findAllAmbiguousNicknames(text: string): string[] {
 
 function ambiguousSports(nickname: string): string[] {
   const options = AMBIGUOUS_NICKNAMES[nickname] ?? [];
-  return options
-    .map((o) => o.match(/\(([A-Z]+)\)$/)?.[1])
-    .filter((s): s is string => Boolean(s));
+  return options.map((o) => o.sport);
 }
 
 // When a pick names two ambiguous-nickname teams (e.g. "Cardinals vs Panthers"),

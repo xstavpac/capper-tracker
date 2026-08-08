@@ -6,25 +6,17 @@ import { getCapperPanels } from "@/server/data/capper-panels";
 import { UnitsChart } from "@/components/dashboard/units-chart";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { TrendingCappers } from "@/components/dashboard/trending-cappers";
-import { CountUp } from "@/components/dashboard/count-up";
+import { EnergySurge, EnergyCountUp } from "@/components/dashboard/energy-surge";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 
-function HeroStat({
-  label,
-  value,
-  tone,
-  href,
-}: {
-  label: string;
-  value: ReactNode;
-  tone?: "up" | "down";
-  href?: string;
-}) {
-  const toneClass = tone === "up" ? "text-emerald-600" : tone === "down" ? "text-red-600" : "text-gray-900";
+// Color is now owned by EnergySurge/EnergyCountUp (each value sets its own
+// final tone color directly, since the completion effect animates that same
+// color property) - this wrapper is layout/label only.
+function HeroStat({ label, value, href }: { label: string; value: ReactNode; href?: string }) {
   const content = (
     <>
       <div className="text-xs text-gray-500">{label}</div>
-      <div className={"mt-0.5 text-lg font-semibold " + toneClass}>{value}</div>
+      <div className="mt-0.5 text-lg font-semibold">{value}</div>
     </>
   );
   if (href) {
@@ -68,30 +60,47 @@ export default async function DashboardPage() {
           <div className="flex flex-wrap gap-x-10 gap-y-4">
             <div>
               <div className="text-xs font-medium uppercase tracking-wide text-brand-600">Total picks tracked</div>
-              <div className="mt-1 text-4xl font-bold text-gray-900">
-                <CountUp value={summary.totalPicks} commas />
+              <div className="mt-1 text-4xl font-bold">
+                <EnergyCountUp value={summary.totalPicks} commas />
               </div>
             </div>
             <div>
               <div className="text-xs font-medium uppercase tracking-wide text-brand-600">Cappers tracked</div>
-              <div className="mt-1 text-4xl font-bold text-gray-900">
-                <CountUp value={planStatus.capperCount} commas />
+              <div className="mt-1 text-4xl font-bold">
+                <EnergyCountUp value={planStatus.capperCount} commas />
               </div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
-            <HeroStat label="Record" value={overall.wins + "-" + overall.losses + "-" + overall.pushes} />
+            <HeroStat
+              label="Record"
+              value={<EnergySurge>{overall.wins + "-" + overall.losses + "-" + overall.pushes}</EnergySurge>}
+            />
             <HeroStat
               label="ROI"
-              value={<CountUp value={overall.roi} decimals={2} signed suffix="%" />}
-              tone={overall.roi >= 0 ? "up" : "down"}
+              value={
+                <EnergyCountUp
+                  value={overall.roi}
+                  decimals={2}
+                  signed
+                  suffix="%"
+                  tone={overall.roi >= 0 ? "up" : "down"}
+                />
+              }
             />
             <HeroStat
               label="Net units"
-              value={<CountUp value={overall.netUnits} decimals={2} signed suffix="u" />}
-              tone={overall.netUnits >= 0 ? "up" : "down"}
+              value={
+                <EnergyCountUp
+                  value={overall.netUnits}
+                  decimals={2}
+                  signed
+                  suffix="u"
+                  tone={overall.netUnits >= 0 ? "up" : "down"}
+                />
+              }
             />
-            <HeroStat label="Pending" value={<CountUp value={summary.pendingCount} />} href="/picks/pending" />
+            <HeroStat label="Pending" value={<EnergyCountUp value={summary.pendingCount} />} href="/picks/pending" />
           </div>
         </div>
       </div>
