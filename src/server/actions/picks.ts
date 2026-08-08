@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/server/auth";
-import { createPick, updatePickStatus } from "@/server/data/picks";
+import { createPick, updatePickStatus, getCapperCategoryRecord } from "@/server/data/picks";
+import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { BetType, PickStatus, Period } from "@prisma/client";
 
 export type ActionResult = { success: true } | { success: false; error: string };
@@ -88,9 +89,30 @@ export async function updatePickStatusAction(
   }
 
   revalidatePath("/picks");
+  revalidatePath("/picks/pending");
   revalidatePath("/dashboard");
   revalidatePath("/cappers");
   revalidatePath("/cappers/[capperId]", "page");
   revalidatePath("/live/[gameId]", "page");
   return { success: true };
+}
+
+// Lazy-loaded on demand (a game card expanding on /live), not on page load -
+// each entry requires pulling a capper's full pick history and recomputing
+// their category breakdown, which isn't cheap to do for every capper on
+// every game up front. Deduped so the same capper+category pair (e.g. two
+// picks on the same underdog moneyline) is only computed once per call.
+export async function getCategoryRecordsAction(
+  pairs: { capperId: string; category: PickCategoryKey }[]
+): Promise<Record<string, CategoryBreakdownItem | null>> {
+  const user = await requireUser();
+
+  const unique = Array.from(new Map(pairs.map((p) => [p.capperId + "|" + p.category, p])).values());
+  const entries = await Promise.all(
+    unique.map(async (p) => {
+      const record = await getCapperCategoryRecord(user.id, p.capperId, p.category);
+      return [p.capperId + "|" + p.category, record] as const;
+    })
+  );
+  return Object.fromEntries(entries);
 }

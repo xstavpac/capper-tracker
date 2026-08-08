@@ -1,9 +1,8 @@
-import type { ScorecardBucket } from "@/server/data/stats";
+import { getRecordColor, type ScorecardBucket } from "@/server/data/stats";
 
-const TONE_CLASSES: Record<ScorecardBucket["tone"], string> = {
-  positive: "bg-emerald-50 text-emerald-600",
-  negative: "bg-red-50 text-red-600",
-  neutral: "bg-gray-100 text-gray-400",
+const COLOR_CLASSES: Record<ReturnType<typeof getRecordColor>, string> = {
+  green: "bg-emerald-50 text-emerald-600",
+  red: "bg-red-50 text-red-600",
 };
 
 export function CapperScorecard({
@@ -21,7 +20,7 @@ export function CapperScorecard({
         {buckets.map((b) => (
           <span
             key={b.key}
-            className={"rounded-full px-2 py-0.5 text-xs font-medium " + TONE_CLASSES[b.tone]}
+            className={"rounded-full px-2 py-0.5 text-xs font-medium " + COLOR_CLASSES[getRecordColor(b.winPct)]}
           >
             {b.label}: {b.wins}-{b.losses}-{b.pushes} ({Math.round(b.winPct)}%)
           </span>
@@ -38,7 +37,12 @@ export function CapperScorecard({
           <div className="mt-1 text-sm font-medium text-gray-900">
             {b.wins}-{b.losses}-{b.pushes}
           </div>
-          <span className={"mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium " + TONE_CLASSES[b.tone]}>
+          <span
+            className={
+              "mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium " +
+              COLOR_CLASSES[getRecordColor(b.winPct)]
+            }
+          >
             {Math.round(b.winPct)}%
           </span>
         </div>

@@ -162,11 +162,22 @@ export type ScorecardBucket = {
   pushes: number;
   winPct: number;
   count: number; // decided picks: wins + losses + pushes
-  tone: "positive" | "negative" | "neutral";
 };
 
-export const SCORECARD_MIN_SAMPLE = 5;
-export const SCORECARD_WIN_THRESHOLD = 52.4; // -110 breakeven: 110 / 210
+// -110 breakeven (110/210) - NOT the color threshold (see getRecordColor
+// below, which every color-coded record/win% in the app now goes through).
+// Still used as a shrinkage prior for ranking small-sample panels (Best/
+// Worst Last-20) toward a realistic baseline instead of raw win%.
+export const SCORECARD_WIN_THRESHOLD = 52.4;
+
+// The single color threshold for every win%-coded record in the app - flat
+// 50/50 split, no neutral/gray zone and no sample-size gating. Previously
+// different components used their own thresholds (52.4% breakeven in the
+// scorecard, a 60%/50% split with a gray middle band on the Live page's
+// picks section) - this replaces all of them.
+export function getRecordColor(winPct: number): "green" | "red" {
+  return winPct >= 50 ? "green" : "red";
+}
 
 const SCORECARD_BUCKET_ORDER: ScorecardBucketKey[] = [
   "MONEYLINE",
@@ -224,11 +235,6 @@ function bucketKeyForPick(pick: Pick): ScorecardBucketKey {
   return pick.betType as ScorecardBucketKey;
 }
 
-function scorecardTone(winPct: number, count: number): ScorecardBucket["tone"] {
-  if (count < SCORECARD_MIN_SAMPLE) return "neutral";
-  return winPct >= SCORECARD_WIN_THRESHOLD ? "positive" : "negative";
-}
-
 export function computeScorecard(picks: Pick[]): ScorecardBucket[] {
   const byBucket = new Map<ScorecardBucketKey, Pick[]>();
   for (const pick of picks) {
@@ -249,7 +255,6 @@ export function computeScorecard(picks: Pick[]): ScorecardBucket[] {
       pushes: stats.pushes,
       winPct: stats.winPct,
       count,
-      tone: scorecardTone(stats.winPct, count),
     };
   });
 }
@@ -381,7 +386,6 @@ export type CategoryBreakdownItem = {
   pushes: number;
   winPct: number;
   count: number; // decided picks: wins + losses + pushes
-  tone: "positive" | "negative" | "neutral";
 };
 
 // NRFI excluded here (unlike chipSetForLeague's MLB set) - this order feeds
@@ -401,7 +405,7 @@ const CATEGORY_BREAKDOWN_ORDER: PickCategoryKey[] = [
 // All-time record split by pickCategory (the same favorite/underdog,
 // over/under classifier the Cappers-page filter chips use) - answers "am I
 // better off following favorites or dogs, overs or unders" at a glance.
-// Same shape and tone rules as computeScorecard, just a different grouping key.
+// Same shape as computeScorecard, just a different grouping key.
 export function computeCategoryBreakdown(picks: Pick[]): CategoryBreakdownItem[] {
   const byCategory = new Map<PickCategoryKey, Pick[]>();
   for (const pick of picks) {
@@ -423,7 +427,6 @@ export function computeCategoryBreakdown(picks: Pick[]): CategoryBreakdownItem[]
       pushes: stats.pushes,
       winPct: stats.winPct,
       count,
-      tone: scorecardTone(stats.winPct, count),
     };
   });
 }

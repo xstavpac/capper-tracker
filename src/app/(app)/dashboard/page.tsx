@@ -9,15 +9,35 @@ import { TrendingCappers } from "@/components/dashboard/trending-cappers";
 import { CountUp } from "@/components/dashboard/count-up";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 
-function HeroStat({ label, value, tone }: { label: string; value: ReactNode; tone?: "up" | "down" }) {
+function HeroStat({
+  label,
+  value,
+  tone,
+  href,
+}: {
+  label: string;
+  value: ReactNode;
+  tone?: "up" | "down";
+  href?: string;
+}) {
   const toneClass = tone === "up" ? "text-emerald-600" : tone === "down" ? "text-red-600" : "text-gray-900";
-  return (
-    <div>
+  const content = (
+    <>
       <div className="text-xs text-gray-500">{label}</div>
       <div className={"mt-0.5 text-lg font-semibold " + toneClass}>{value}</div>
-    </div>
+    </>
   );
+  if (href) {
+    return (
+      <a href={href} className="block rounded-md transition hover:opacity-70">
+        {content}
+      </a>
+    );
+  }
+  return <div>{content}</div>;
 }
+
+const STALE_PENDING_HOURS = 24;
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -30,6 +50,11 @@ export default async function DashboardPage() {
 
   const allPicks = await getUserPicks(user.id);
   const chartData = computeUnitsChartData(allPicks);
+
+  const staleCutoff = Date.now() - STALE_PENDING_HOURS * 3600000;
+  const stalePendingCount = allPicks.filter(
+    (p) => p.status === "PENDING" && p.gameTime.getTime() < staleCutoff
+  ).length;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -66,10 +91,23 @@ export default async function DashboardPage() {
               value={<CountUp value={overall.netUnits} decimals={2} signed suffix="u" />}
               tone={overall.netUnits >= 0 ? "up" : "down"}
             />
-            <HeroStat label="Pending" value={<CountUp value={summary.pendingCount} />} />
+            <HeroStat label="Pending" value={<CountUp value={summary.pendingCount} />} href="/picks/pending" />
           </div>
         </div>
       </div>
+
+      {stalePendingCount > 0 && (
+        <a
+          href="/picks/pending"
+          className="mb-6 flex items-center justify-between gap-3 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 transition hover:bg-amber-100"
+        >
+          <span>
+            {stalePendingCount} pick{stalePendingCount === 1 ? " has" : "s have"} been pending over{" "}
+            {STALE_PENDING_HOURS} hours - review them
+          </span>
+          <span className="font-medium">&rarr;</span>
+        </a>
+      )}
 
       {summary.categoryBreakdown.length > 0 && (
         <div className="mb-6">

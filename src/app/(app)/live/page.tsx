@@ -1,6 +1,10 @@
 import Link from "next/link";
+import { requireUser } from "@/server/auth";
 import { getOddsForSport, getLiveScoresForSport, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
+import { getPicksForGames } from "@/server/data/picks";
+import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { sameLocalDay } from "@/lib/dates";
+import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -23,7 +27,9 @@ export default async function LivePage({
   searchParams: { sport?: string };
 }) {
   const activeSport = searchParams.sport || LIVE_SPORTS[0].key;
+  const sportLabel = LIVE_SPORTS.find((s) => s.key === activeSport)?.label ?? activeSport;
 
+  const user = await requireUser();
   const [allOdds, scores] = await Promise.all([getOddsForSport(activeSport), getLiveScoresForSport(activeSport)]);
 
   // The once-daily odds cache is keyed by UTC calendar day, but MLB's evening
@@ -39,6 +45,23 @@ export default async function LivePage({
   });
 
   const hasApiKey = process.env.ODDS_API_KEY ? true : false;
+
+  // The matched-picks list itself is cheap (one indexed query per game,
+  // already used on the game-detail page) - fetch it eagerly for every game
+  // so the "N picks on this game" badge and its count are accurate on load.
+  // The expensive part - each capper's historical record for their specific
+  // pick's category - is NOT computed here; that's deferred to expand-time
+  // (see GamePicksExpander), since it requires pulling a capper's full pick
+  // history and would be wasteful to do for every capper on every game.
+  const matchedPicksByGame = await getPicksForGames(
+    user.id,
+    sportLabel,
+    odds.map((game) => ({
+      homeTeam: game.homeTeam,
+      awayTeam: game.awayTeam,
+      commenceTime: new Date(game.commenceTime),
+    }))
+  );
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -66,9 +89,19 @@ export default async function LivePage({
       )}
 
       <div className="space-y-3">
-        {odds.map((game) => {
+        {odds.map((game, gameIndex) => {
           const score = matchScoreToGame(scores, game);
           const book = game.bookmakers[0];
+          const matchedPicks = matchedPicksByGame[gameIndex];
+          const expanderPicks: ExpanderPick[] = matchedPicks.map((p) => ({
+            pickId: p.id,
+            capperId: p.capperId,
+            capperName: p.capper.name,
+            category: pickCategory(p),
+            betDetail: p.betDetail || betTypeLabel(p.betType),
+            odds: p.odds,
+            units: p.units,
+          }));
           function findMarketAcrossBooks(key: string) {
             for (const b of game.bookmakers) {
               const m = findMarket(b, key);
@@ -90,11 +123,11 @@ export default async function LivePage({
           const isFinal = score?.status === "final";
 
           return (
-            <Link
+            <div
               key={game.id}
-              href={"/live/" + game.id + "?sport=" + activeSport}
-              className="block rounded-card bg-white p-4 shadow-soft transition-shadow hover:shadow-md"
+              className="rounded-card bg-white p-4 shadow-soft transition-shadow hover:shadow-md"
             >
+              <Link href={"/live/" + game.id + "?sport=" + activeSport} className="block">
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-xs text-gray-400">
                   {new Date(game.commenceTime).toLocaleString("en-US", {
@@ -146,7 +179,10 @@ export default async function LivePage({
                   Total: O/U {over.point} ({formatOdds(over.price)})
                 </div>
               )}
-            </Link>
+              </Link>
+
+              <GamePicksExpander picks={expanderPicks} />
+            </div>
           );
         })}
       </div>

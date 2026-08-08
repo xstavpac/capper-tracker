@@ -4,12 +4,81 @@ import { TrendIcon } from "@/components/dashboard/trend-icon";
 
 const CONDENSED_ROWS = 3;
 
+const FLAME_PATH = "M12 2c1 3-2 4-2 7a3 3 0 1 0 6 0c1 1 2 2.5 2 4.5A6.5 6.5 0 0 1 5 13.5C5 8 12 6 12 2Z";
+
+// Two layered flame shapes (same silhouette, different color/scale) flicker
+// on independent keyframes/durations so they don't move as one rigid unit -
+// plus a few embers that rise and fade above the flame on a staggered loop.
+function HotStreaksIcon() {
+  return (
+    <span className="relative inline-block h-5 w-5 shrink-0" aria-hidden="true">
+      <span
+        className="absolute left-[7px] top-0 h-[3px] w-[3px] rounded-full bg-amber-300 animate-ember-rise"
+        style={{ animationDelay: "0s" }}
+      />
+      <span
+        className="absolute left-[11px] top-0.5 h-[3px] w-[3px] rounded-full bg-orange-300 animate-ember-rise"
+        style={{ animationDelay: "0.6s" }}
+      />
+      <span
+        className="absolute left-[9px] top-0 h-[3px] w-[3px] rounded-full bg-amber-300 animate-ember-rise"
+        style={{ animationDelay: "1.2s" }}
+      />
+      <svg viewBox="0 0 24 24" fill="currentColor" className="absolute inset-0 h-5 w-5 origin-bottom text-orange-500 animate-flame-outer">
+        <path d={FLAME_PATH} />
+      </svg>
+      <svg viewBox="0 0 24 24" fill="currentColor" className="absolute inset-0 h-5 w-5 origin-bottom text-amber-300 animate-flame-inner">
+        <path d={FLAME_PATH} />
+      </svg>
+    </span>
+  );
+}
+
+// A static snowflake (unmoving, unlike the flame) with small falling
+// particle dots drifting past it - 2 smaller/dimmer, 2 larger/more opaque -
+// each on its own fall+drift keyframe and stagger, for a layered "snow
+// passing by" effect rather than the icon itself animating.
+function CoolingOffIcon() {
+  return (
+    <span className="relative inline-block h-5 w-5 shrink-0" aria-hidden="true">
+      <span
+        className="absolute left-0 top-0 h-1 w-1 rounded-full bg-sky-300 opacity-60 animate-snow-fall-a"
+        style={{ animationDelay: "0s" }}
+      />
+      <span
+        className="absolute right-0 top-0 h-1 w-1 rounded-full bg-sky-300 opacity-60 animate-snow-fall-b"
+        style={{ animationDelay: "0.8s" }}
+      />
+      <span
+        className="absolute left-0.5 top-1 h-1.5 w-1.5 rounded-full bg-sky-500 opacity-90 animate-snow-fall-b"
+        style={{ animationDelay: "1.4s" }}
+      />
+      <span
+        className="absolute right-0.5 top-1 h-1.5 w-1.5 rounded-full bg-sky-500 opacity-90 animate-snow-fall-a"
+        style={{ animationDelay: "2s" }}
+      />
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        className="absolute inset-0 h-5 w-5 text-sky-600"
+      >
+        <path d="M12 2v20M4 7l16 10M20 7 4 17M2 12h20" />
+      </svg>
+    </span>
+  );
+}
+
 // Condensed cheat-sheet version of the Cappers-page panels, right on the
 // Dashboard so "who's hot right now" doesn't require a navigation - same
 // data, same row components, just fewer rows each. Six panels in a 2x3
-// grid: Hot Streaks / Cooling Off / Trending on top, Best Last-20 / Worst
-// Last-20 / Falling Off underneath - grid-cols-3 wraps them into that
-// layout automatically from DOM order, no manual row assignment needed.
+// grid, column-major: Hot Streaks stacked above Cooling Off, Best Last-20
+// above Worst Last-20, Trending above Falling Off - grid-flow-col fills
+// column by column from DOM order, so the panels are listed in that same
+// column-major sequence below (not the row-major Hot/Cooling/Trending order
+// a plain grid-cols-3 would produce).
 export function TrendingCappers({ panels }: { panels: CapperPanels }) {
   const hasAny =
     panels.hotStreaks.length > 0 ||
@@ -28,9 +97,9 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
           See all &rarr;
         </a>
       </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-none sm:grid-flow-col sm:auto-cols-fr sm:grid-rows-2">
         {panels.hotStreaks.length > 0 && (
-          <Panel title="Hot streaks" subtitle="Active win streaks, longest first">
+          <Panel title="Hot streaks" subtitle="Active win streaks, longest first" icon={<HotStreaksIcon />}>
             {panels.hotStreaks.slice(0, CONDENSED_ROWS).map((e) => (
               <PanelRow
                 key={e.capperId}
@@ -44,7 +113,7 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
         )}
 
         {panels.coolingOff.length > 0 && (
-          <Panel title="Cooling off" subtitle="Active loss streaks, longest first">
+          <Panel title="Cooling off" subtitle="Active loss streaks, longest first" icon={<CoolingOffIcon />}>
             {panels.coolingOff.slice(0, CONDENSED_ROWS).map((e) => (
               <PanelRow
                 key={e.capperId}
@@ -52,6 +121,38 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
                 name={e.name}
                 colorTag={e.colorTag}
                 right={<span className="text-sky-600">{e.streakCount}L</span>}
+              />
+            ))}
+          </Panel>
+        )}
+
+        {panels.bestLast20.length > 0 && (
+          <Panel title="Best last 20 picks">
+            {panels.bestLast20.slice(0, CONDENSED_ROWS).map((e) => (
+              <BarRow
+                key={e.capperId}
+                capperId={e.capperId}
+                name={e.name}
+                colorTag={e.colorTag}
+                record={record(e.wins, e.losses, e.pushes)}
+                winPct={e.recentWinPct}
+                showWinPct
+              />
+            ))}
+          </Panel>
+        )}
+
+        {panels.worstLast20.length > 0 && (
+          <Panel title="Worst last 20 picks">
+            {panels.worstLast20.slice(0, CONDENSED_ROWS).map((e) => (
+              <BarRow
+                key={e.capperId}
+                capperId={e.capperId}
+                name={e.name}
+                colorTag={e.colorTag}
+                record={record(e.wins, e.losses, e.pushes)}
+                winPct={e.recentWinPct}
+                showWinPct
               />
             ))}
           </Panel>
@@ -68,36 +169,6 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
                 record={record(e.wins, e.losses, e.pushes)}
                 winPct={winPctExcludingPushes(e.wins, e.losses)}
                 trending
-              />
-            ))}
-          </Panel>
-        )}
-
-        {panels.bestLast20.length > 0 && (
-          <Panel title="Best last 20" subtitle="Record over their last 20 graded picks">
-            {panels.bestLast20.slice(0, CONDENSED_ROWS).map((e) => (
-              <BarRow
-                key={e.capperId}
-                capperId={e.capperId}
-                name={e.name}
-                colorTag={e.colorTag}
-                record={record(e.wins, e.losses, e.pushes)}
-                winPct={e.recentWinPct}
-              />
-            ))}
-          </Panel>
-        )}
-
-        {panels.worstLast20.length > 0 && (
-          <Panel title="Worst last 20" subtitle="Worst record over their last 20 graded picks">
-            {panels.worstLast20.slice(0, CONDENSED_ROWS).map((e) => (
-              <BarRow
-                key={e.capperId}
-                capperId={e.capperId}
-                name={e.name}
-                colorTag={e.colorTag}
-                record={record(e.wins, e.losses, e.pushes)}
-                winPct={e.recentWinPct}
               />
             ))}
           </Panel>

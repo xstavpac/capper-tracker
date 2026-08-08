@@ -2,15 +2,120 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/cappers", label: "Cappers" },
-  { href: "/picks", label: "Picks" },
-  { href: "/reports", label: "Reports" },
-  { href: "/settings", label: "Settings" },
+function iconProps(className?: string) {
+  return {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    className: className ?? "h-[18px] w-[18px]",
+    "aria-hidden": true,
+  };
+}
+
+function DashboardIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <rect x="4" y="4" width="7" height="9" rx="1.5" />
+      <rect x="13" y="4" width="7" height="5" rx="1.5" />
+      <rect x="13" y="11" width="7" height="9" rx="1.5" />
+      <rect x="4" y="15" width="7" height="5" rx="1.5" />
+    </svg>
+  );
+}
+
+function CappersIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <circle cx="9" cy="7" r="3" />
+      <path d="M3 20v-1a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v1" />
+      <path d="M16 4.2a3 3 0 0 1 0 5.6" />
+      <path d="M21 20v-1a4 4 0 0 0 -3 -3.85" />
+    </svg>
+  );
+}
+
+function PicksIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <path d="M3.5 5.5l1.3 1.3l2.2 -2.3" />
+      <path d="M3.5 12.5l1.3 1.3l2.2 -2.3" />
+      <path d="M3.5 19.5l1.3 1.3l2.2 -2.3" />
+      <path d="M11 6h9.5" />
+      <path d="M11 13h9.5" />
+      <path d="M11 20h9.5" />
+    </svg>
+  );
+}
+
+function ReportsIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <path d="M4 20V4" />
+      <path d="M4 20h16" />
+      <rect x="7.5" y="12" width="3" height="6" rx="0.5" />
+      <rect x="12.5" y="8" width="3" height="10" rx="0.5" />
+      <rect x="17.5" y="5" width="3" height="13" rx="0.5" />
+    </svg>
+  );
+}
+
+function SettingsIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function LiveIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M9.2 9.2a4 4 0 0 0 0 5.6" />
+      <path d="M14.8 9.2a4 4 0 0 1 0 5.6" />
+      <path d="M6.5 6.5a8 8 0 0 0 0 11" />
+      <path d="M17.5 6.5a8 8 0 0 1 0 11" />
+    </svg>
+  );
+}
+
+function TargetArrowIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <circle cx="10" cy="14" r="6.5" />
+      <circle cx="10" cy="14" r="2.5" />
+      <path d="M14.5 9.5L21 3" />
+      <path d="M21 7.5V3h-4.5" />
+    </svg>
+  );
+}
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: (props: { className?: string }) => JSX.Element;
+  accent?: "red";
+};
+
+const NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
+  { href: "/cappers", label: "Cappers", icon: CappersIcon },
+  { href: "/picks", label: "Picks", icon: PicksIcon },
+  { href: "/reports", label: "Reports", icon: ReportsIcon },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
+  { href: "/live", label: "Live", icon: LiveIcon, accent: "red" },
 ];
+
+function isActiveHref(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(href + "/");
+}
 
 function MenuIcon() {
   return (
@@ -46,27 +151,45 @@ function CloseIcon() {
   );
 }
 
+// Active item gets the accent (brand, or red for Live) as both background and
+// text/icon color - everything else stays neutral gray until hovered.
+function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
+  const Icon = item.icon;
+  const isRed = item.accent === "red";
+  const activeClass = isRed ? "bg-red-50 text-red-600" : "bg-brand-50 text-brand-700";
+  const inactiveClass = isRed ? "text-red-600 hover:bg-red-50" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900";
+
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      className={
+        "flex items-center gap-2.5 rounded-[9px] px-3 py-[9px] text-[15px] font-medium transition " +
+        (active ? activeClass : inactiveClass)
+      }
+    >
+      <Icon className="h-5 w-5 shrink-0" />
+      {item.label}
+    </Link>
+  );
+}
+
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
   return (
     <>
       {NAV_ITEMS.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          onClick={onNavigate}
-          className="rounded-lg px-3 py-2 text-sm text-gray-600 transition hover:bg-gray-50 hover:text-gray-900"
-        >
-          {item.label}
-        </Link>
+        <NavLink key={item.href} item={item} active={isActiveHref(pathname, item.href)} onNavigate={onNavigate} />
       ))}
-      <Link
-        href="/live"
-        onClick={onNavigate}
-        className="rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50"
-      >
-        Live
-      </Link>
     </>
+  );
+}
+
+function LogoMark() {
+  return (
+    <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg bg-[#7F77DD]">
+      <TargetArrowIcon className="h-4 w-4 text-white" />
+    </div>
   );
 }
 
@@ -79,17 +202,21 @@ function AccountRow() {
   );
 }
 
-// Desktop keeps the always-visible left sidebar. Below md:, that same
-// content becomes a slide-in drawer opened from a compact top bar - the
-// sidebar was previously a fixed 224px column with no mobile handling at
-// all, which on a ~390px phone left almost no room for page content.
+// Desktop keeps the always-visible left sidebar, now a floating rounded card
+// inset from the page edge (see (app)/layout.tsx for the matching gap/padding
+// on the main content card next to it). Below md:, that same content becomes
+// a slide-in drawer opened from a compact top bar - full-bleed on mobile
+// rather than another floating card, since there's no room to spare there.
 export function AppSidebar() {
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <div className="flex items-center justify-between border-b border-gray-100 bg-white p-3 md:hidden">
-        <span className="text-base font-semibold">Capper Tracker</span>
+        <div className="flex items-center gap-2">
+          <LogoMark />
+          <span className="text-[17px] font-semibold">Capper Tracker</span>
+        </div>
         <button
           onClick={() => setOpen(true)}
           aria-label="Open menu"
@@ -99,8 +226,11 @@ export function AppSidebar() {
         </button>
       </div>
 
-      <aside className="hidden w-56 flex-col gap-1 border-r border-gray-100 bg-white p-4 md:flex">
-        <div className="mb-4 px-2 text-base font-semibold">Capper Tracker</div>
+      <aside className="hidden w-60 flex-col gap-1 rounded-xl border border-gray-200 bg-white px-4 py-5 shadow-soft md:flex">
+        <div className="mb-6 flex items-center gap-2 px-1">
+          <LogoMark />
+          <span className="text-[17px] font-semibold">Capper Tracker</span>
+        </div>
         <NavLinks />
         <AccountRow />
       </aside>
@@ -108,9 +238,12 @@ export function AppSidebar() {
       {open && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col gap-1 bg-white p-4 shadow-lg">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-base font-semibold">Capper Tracker</span>
+          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col gap-1 bg-white px-4 py-5 shadow-lg">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <LogoMark />
+                <span className="text-[17px] font-semibold">Capper Tracker</span>
+              </div>
               <button
                 onClick={() => setOpen(false)}
                 aria-label="Close menu"

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { CapperPanels } from "@/server/data/capper-panels";
-import { SCORECARD_WIN_THRESHOLD } from "@/server/data/stats";
+import { getRecordColor } from "@/server/data/stats";
 import { TrendIcon } from "@/components/dashboard/trend-icon";
 
 const MAX_ROWS = 5;
@@ -60,6 +60,7 @@ export function BarRow({
   record,
   winPct,
   trending = false,
+  showWinPct = false,
 }: {
   capperId: string;
   name: string;
@@ -67,8 +68,9 @@ export function BarRow({
   record: string;
   winPct: number;
   trending?: boolean;
+  showWinPct?: boolean;
 }) {
-  const positive = winPct >= SCORECARD_WIN_THRESHOLD;
+  const positive = getRecordColor(winPct) === "green";
   const fill = Math.min(100, Math.max(0, winPct)) / 100;
 
   return (
@@ -81,6 +83,9 @@ export function BarRow({
         </div>
         <span className={"shrink-0 text-sm font-semibold " + (positive ? "text-emerald-600" : "text-red-600")}>
           {record}
+          {showWinPct && (
+            <span className="ml-1 font-normal text-gray-400">{Math.round(winPct)}%</span>
+          )}
         </span>
       </div>
       <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
@@ -107,16 +112,26 @@ export function winPctExcludingPushes(wins: number, losses: number) {
 export function Panel({
   title,
   subtitle,
+  icon,
   children,
 }: {
   title: string;
-  subtitle: string;
+  subtitle?: string;
+  icon?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="rounded-card bg-white p-4 shadow-soft">
-      <div className="text-sm font-semibold text-gray-900">{title}</div>
-      <p className="mb-2 text-xs text-gray-500">{subtitle}</p>
+      <div
+        className={
+          "flex items-center gap-1.5 " +
+          (subtitle ? "text-sm font-semibold text-gray-900" : "mb-2 text-sm font-semibold text-gray-900")
+        }
+      >
+        {icon}
+        {title}
+      </div>
+      {subtitle && <p className="mb-2 text-xs text-gray-500">{subtitle}</p>}
       <div className="space-y-0.5">{children}</div>
     </div>
   );
@@ -198,7 +213,7 @@ export function CapperPanelsGrid({ panels }: { panels: CapperPanels }) {
       )}
 
       {panels.bestLast20.length > 0 && (
-        <Panel title="Best last 20" subtitle="Record over their last 20 graded picks">
+        <Panel title="Best last 20 picks">
           {panels.bestLast20.slice(0, MAX_ROWS).map((e) => (
             <BarRow
               key={e.capperId}
@@ -207,6 +222,7 @@ export function CapperPanelsGrid({ panels }: { panels: CapperPanels }) {
               colorTag={e.colorTag}
               record={record(e.wins, e.losses, e.pushes)}
               winPct={e.recentWinPct}
+              showWinPct
             />
           ))}
         </Panel>
