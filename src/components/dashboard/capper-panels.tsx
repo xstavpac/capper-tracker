@@ -5,11 +5,19 @@ import { TrendIcon } from "@/components/dashboard/trend-icon";
 
 const MAX_ROWS = 5;
 
-export function Avatar({ name, colorTag }: { name: string; colorTag: string | null }) {
+export function Avatar({
+  name,
+  colorTag,
+  size = 24,
+}: {
+  name: string;
+  colorTag: string | null;
+  size?: number;
+}) {
   return (
     <div
-      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-medium text-white"
-      style={{ backgroundColor: colorTag ?? "#3B82F6" }}
+      className="flex shrink-0 items-center justify-center rounded-full font-medium text-white"
+      style={{ backgroundColor: colorTag ?? "#3B82F6", width: size, height: size, fontSize: size * 0.4167 }}
     >
       {name.slice(0, 2).toUpperCase()}
     </div>

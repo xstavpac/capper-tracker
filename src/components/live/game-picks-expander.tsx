@@ -35,11 +35,6 @@ const CATEGORY_DESCRIPTIONS: Record<PickCategoryKey, string> = {
   NRFI: "NRFI",
 };
 
-const RECORD_BADGE_CLASSES: Record<ReturnType<typeof getRecordColor>, string> = {
-  green: "bg-emerald-100 text-emerald-700",
-  red: "bg-red-100 text-red-700",
-};
-
 function ListIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0" aria-hidden="true">
@@ -112,7 +107,7 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
       </button>
 
       {open && (
-        <div className="mt-2 space-y-2">
+        <div className="mt-2 space-y-1.5">
           {picks.map((p) => {
             const record = p.category ? records?.[p.capperId + "|" + p.category] : null;
             const isTopPerformer = Boolean(record && record.count > 0 && record.winPct >= TOP_PERFORMER_THRESHOLD);
@@ -120,49 +115,44 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
               <div
                 key={p.pickId}
                 className={
-                  "rounded-lg border px-3 py-2.5 " +
+                  "rounded-[7px] border px-2.5 py-2 " +
                   (isTopPerformer ? "border-emerald-300 bg-emerald-50/60 ring-1 ring-emerald-200" : "border-gray-100")
                 }
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-1.5">
-                    <Avatar name={p.capperName} colorTag={p.capperColorTag} />
-                    <span className="truncate text-sm font-medium text-gray-900">{p.capperName}</span>
+                    <Avatar name={p.capperName} colorTag={p.capperColorTag} size={17} />
+                    <span className="truncate text-[12px] font-medium text-gray-900">{p.capperName}</span>
                     {isTopPerformer && record && (
-                      <span className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                      <span className="shrink-0 rounded-full bg-emerald-100 px-1 py-0 text-[9px] font-semibold text-emerald-700">
                         {Math.round(record.winPct)}%
                       </span>
                     )}
                   </div>
-                  <div className="shrink-0 text-right">
-                    <div className="text-sm font-bold text-gray-900">
-                      {p.odds > 0 ? "+" : ""}
-                      {p.odds}
-                    </div>
-                    <div className="text-[11px] text-gray-400">{p.units}u</div>
+                  <div className="shrink-0 text-[12px] font-semibold text-gray-900">
+                    {p.odds > 0 ? "+" : ""}
+                    {p.odds} <span className="font-normal text-gray-400">&middot; {p.units}u</span>
                   </div>
                 </div>
-                <div className="mt-1.5">
-                  <span className="inline-block rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
-                    {p.betDetail}
-                  </span>
-                </div>
-                <div className="mt-1.5">
+                <div className="mt-0.5 truncate pl-[23px] text-[11px] text-gray-500">
+                  {p.betDetail}
                   {loading ? (
-                    <span className="text-xs text-gray-400">Loading record...</span>
+                    <span className="text-[10px] text-gray-400"> &middot; Loading record...</span>
                   ) : record && record.count > 0 && p.category ? (
-                    <span className="flex items-center gap-1.5 text-xs">
+                    <span className="text-[10px]">
+                      {" "}
+                      &middot;{" "}
                       <span
                         className={
-                          "rounded-full px-2 py-0.5 font-medium " + RECORD_BADGE_CLASSES[getRecordColor(record.winPct)]
+                          "font-medium " + (getRecordColor(record.winPct) === "green" ? "text-emerald-600" : "text-red-600")
                         }
                       >
-                        {recordLabel(record)} &middot; {Math.round(record.winPct)}%
-                      </span>
+                        {recordLabel(record)} ({Math.round(record.winPct)}%)
+                      </span>{" "}
                       <span className="text-gray-400">on {CATEGORY_DESCRIPTIONS[p.category]} picks</span>
                     </span>
                   ) : (
-                    <span className="text-xs text-gray-400">No history in this category yet</span>
+                    <span className="text-[10px] text-gray-400"> &middot; No history in this category yet</span>
                   )}
                 </div>
               </div>
