@@ -30,7 +30,7 @@ export default async function DashboardPage() {
     <div className="mx-auto max-w-5xl">
       <h1 className="mb-6 text-xl font-semibold">Dashboard</h1>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Overall record" value={overall.wins + "-" + overall.losses + "-" + overall.pushes} />
         <StatCard
           label="ROI"
@@ -50,8 +50,8 @@ export default async function DashboardPage() {
         <UnitsChart data={chartData} />
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-4">
-        <div className="col-span-2 rounded-card bg-white p-4 shadow-soft">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="rounded-card bg-white p-4 shadow-soft lg:col-span-2">
           <div className="text-sm text-gray-500">Recent picks</div>
           <div className="mt-3 divide-y divide-gray-100">
             {summary.recentPicks.length === 0 && (

@@ -72,7 +72,7 @@ export default async function PicksPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold">Picks</h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -88,11 +88,14 @@ export default async function PicksPage({
         </div>
       </div>
 
-      <form method="get" className="mb-4 flex flex-wrap items-center gap-2 rounded-card bg-white p-3 shadow-soft">
+      <form
+        method="get"
+        className="mb-4 grid grid-cols-2 gap-2 rounded-card bg-white p-3 shadow-soft sm:flex sm:flex-wrap sm:items-center"
+      >
         <select
           name="capperId"
           defaultValue={filters.capperId ?? ""}
-          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm sm:w-auto"
         >
           <option value="">All cappers</option>
           {cappers.map((c) => (
@@ -105,7 +108,7 @@ export default async function PicksPage({
         <select
           name="sportId"
           defaultValue={filters.sportId ?? ""}
-          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm sm:w-auto"
         >
           <option value="">All sports</option>
           {sports.map((s) => (
@@ -118,7 +121,7 @@ export default async function PicksPage({
         <select
           name="betType"
           defaultValue={filters.betType ?? ""}
-          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm sm:w-auto"
         >
           <option value="">All bet types</option>
           {BET_TYPE_OPTIONS.map((b) => (
@@ -131,7 +134,7 @@ export default async function PicksPage({
         <select
           name="status"
           defaultValue={filters.status ?? ""}
-          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm sm:w-auto"
         >
           <option value="">All results</option>
           {STATUS_OPTIONS.map((s) => (
@@ -144,7 +147,7 @@ export default async function PicksPage({
         <select
           name="period"
           defaultValue={filters.period ?? ""}
-          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm sm:w-auto"
         >
           <option value="">Full game + first half</option>
           {PERIOD_OPTIONS.map((p) => (
@@ -157,25 +160,27 @@ export default async function PicksPage({
         <select
           name="favoriteDog"
           defaultValue={favoriteDog ?? ""}
-          className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm sm:w-auto"
         >
           <option value="">Favorite + underdog</option>
           <option value="FAVORITE">Favorite</option>
           <option value="UNDERDOG">Underdog</option>
         </select>
 
-        <button
-          type="submit"
-          className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-        >
-          Filter
-        </button>
+        <div className="col-span-2 flex items-center gap-3 sm:col-span-1 sm:contents">
+          <button
+            type="submit"
+            className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            Filter
+          </button>
 
-        {hasActiveFilters && (
-          <a href="/picks" className="text-sm text-gray-500 hover:text-gray-700">
-            Clear
-          </a>
-        )}
+          {hasActiveFilters && (
+            <a href="/picks" className="text-sm text-gray-500 hover:text-gray-700">
+              Clear
+            </a>
+          )}
+        </div>
       </form>
 
       {picks.length === 0 ? (

@@ -57,30 +57,30 @@ export default async function ReportsPage() {
     <div className="mx-auto max-w-5xl">
       <h1 className="mb-6 text-xl font-semibold">Reports</h1>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <HighlightCard label="Best capper" item={data.bestCapper} />
         <HighlightCard label="Worst capper" item={data.worstCapper} />
         <HighlightCard label="Most profitable sport" item={data.bestSport} />
         <HighlightCard label="Most profitable bet type" item={data.bestBetType} />
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-4">
-        <div className="col-span-1 rounded-card bg-white p-5 shadow-soft">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="rounded-card bg-white p-5 shadow-soft lg:col-span-1">
           <div className="mb-2 text-sm font-medium text-gray-700">Win / Loss / Push</div>
           <WinLossPieChart wins={data.overall.wins} losses={data.overall.losses} pushes={data.overall.pushes} />
         </div>
-        <div className="col-span-2">
+        <div className="lg:col-span-2">
           <BreakdownList title="Profit by capper" items={data.byCapper} />
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <BreakdownList title="Profit by sport" items={data.bySport} />
         <BreakdownList title="Profit by league" items={data.byLeague} />
         <BreakdownList title="Profit by bet type" items={data.byBetType} />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <BreakdownList title="Profit by period" items={data.byPeriod} />
         <BreakdownList title="Profit by favorite / underdog" items={data.byFavoriteDog} />
       </div>

@@ -86,8 +86,8 @@ export function CapperForm({ atLimit }: { atLimit: boolean }) {
         <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
           <label className="mb-1 block text-xs font-medium text-gray-600">Name</label>
           <input
             name="name"
@@ -154,7 +154,7 @@ export function CapperForm({ atLimit }: { atLimit: boolean }) {
           </div>
         </div>
 
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <label className="mb-1 block text-xs font-medium text-gray-600">Notes (optional)</label>
           <textarea
             name="notes"
