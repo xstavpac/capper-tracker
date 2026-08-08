@@ -19,11 +19,22 @@ const ACTIVITY_WINDOW_DAYS = 14;
 // snowflake badge - a single win/loss isn't a "streak" worth surfacing here.
 const STREAK_PANEL_MIN = 2;
 
-// Window size shared by Falling Off and Best Last-20, per the user's request
-// (both look at "recent form").
+// Best/Worst Last-20's window - "last 20 graded picks" is the panel's own name.
 const RECENT_FORM_WINDOW = 20;
 // Need at least half the window decided before recent form means anything.
 const RECENT_FORM_MIN_SAMPLE = 10;
+
+// Falling Off gets its own, narrower window (originally spec'd as "last 10-15
+// picks", separate from Best/Worst-20's 20). This isn't just a smaller number for
+// its own sake: with a 20-pick window, no capper can ever show a drop until they
+// have MORE than 20 decided picks - below that, "recent 20" and "lifetime" are
+// the same picks by construction, so dropPts is always exactly 0 no matter how
+// bad someone's last few picks are. A real user's cappers rarely rack up more
+// than 20 decided picks, so at window=20 this panel is effectively unreachable in
+// practice - confirmed against real data, where every capper showed a 0.0pt drop.
+// A 10-pick window lets it fire for anyone with as few as ~11-13 decided picks.
+const FALLING_OFF_WINDOW = 10;
+const FALLING_OFF_MIN_SAMPLE = 5;
 // "Meaningfully worse" for Falling Off - a flat 10-percentage-point drop.
 const FALLING_OFF_THRESHOLD_PTS = 10;
 // Same shrinkage strength as weightedRoiScore, applied to win% instead of
@@ -63,9 +74,17 @@ export type CapperPanels = {
   rising: RisingPanelEntry[];
   fallingOff: FallingOffPanelEntry[];
   bestLast20: BestLast20Entry[];
+  worstLast20: BestLast20Entry[];
 };
 
-const EMPTY_PANELS: CapperPanels = { hotStreaks: [], coolingOff: [], rising: [], fallingOff: [], bestLast20: [] };
+const EMPTY_PANELS: CapperPanels = {
+  hotStreaks: [],
+  coolingOff: [],
+  rising: [],
+  fallingOff: [],
+  bestLast20: [],
+  worstLast20: [],
+};
 
 export async function getCapperPanels(userId: string, filter?: CapperLeagueFilter): Promise<CapperPanels> {
   const cappers = await getCappersForUser(userId, filter);
@@ -133,21 +152,30 @@ export async function getCapperPanels(userId: string, filter?: CapperLeagueFilte
       rising.push({ ...base, wins: stats.wins, losses: stats.losses, pushes: stats.pushes });
     }
 
+    // Falling Off needs a real lifetime baseline (RANKING_MIN_SAMPLE) and enough
+    // of its own, narrower window decided to mean anything.
+    if (decidedCount >= RANKING_MIN_SAMPLE) {
+      const recentForDrop = decidedPicks.slice(0, FALLING_OFF_WINDOW);
+      const recentForDropDecided = recentForDrop.length;
+      if (recentForDropDecided >= FALLING_OFF_MIN_SAMPLE) {
+        const recentWins = recentForDrop.filter((p) => p.status === "WIN").length;
+        const recentWinPct = round2((recentWins / recentForDropDecided) * 100);
+        const dropPts = round2(stats.winPct - recentWinPct);
+
+        if (dropPts >= FALLING_OFF_THRESHOLD_PTS) {
+          fallingOff.push({ ...base, lifetimeWinPct: round2(stats.winPct), recentWinPct, dropPts });
+        }
+      }
+    }
+
     const recent = decidedPicks.slice(0, RECENT_FORM_WINDOW);
     const recentDecided = recent.length;
 
-    // Both recent-form panels need a real lifetime baseline (RANKING_MIN_SAMPLE)
-    // and enough of the recent window decided to mean anything.
     if (decidedCount >= RANKING_MIN_SAMPLE && recentDecided >= RECENT_FORM_MIN_SAMPLE) {
       const recentWins = recent.filter((p) => p.status === "WIN").length;
       const recentLosses = recent.filter((p) => p.status === "LOSS").length;
       const recentPushes = recentDecided - recentWins - recentLosses;
       const recentWinPct = round2((recentWins / recentDecided) * 100);
-      const dropPts = round2(stats.winPct - recentWinPct);
-
-      if (dropPts >= FALLING_OFF_THRESHOLD_PTS) {
-        fallingOff.push({ ...base, lifetimeWinPct: stats.winPct, recentWinPct, dropPts });
-      }
 
       // Same shrinkage idea as weightedRoiScore, but pulling toward the
       // -110 breakeven win% (52.4) instead of a 0% ROI prior - ranks Best
@@ -177,6 +205,10 @@ export async function getCapperPanels(userId: string, filter?: CapperLeagueFilte
   );
   fallingOff.sort((a, b) => b.dropPts - a.dropPts);
   bestLast20.sort((a, b) => b.weightedScore - a.weightedScore);
+  // Same recent-form pool as Best Last-20, just sorted the other way -
+  // small pools can genuinely overlap (e.g. only 2 eligible cappers means
+  // the "worst" is also someone's "best"), same as any top-N/bottom-N pair.
+  const worstLast20 = [...bestLast20].sort((a, b) => a.weightedScore - b.weightedScore);
 
-  return { hotStreaks, coolingOff, rising, fallingOff, bestLast20 };
+  return { hotStreaks, coolingOff, rising, fallingOff, bestLast20, worstLast20 };
 }

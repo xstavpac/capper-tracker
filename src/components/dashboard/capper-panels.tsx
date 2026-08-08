@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { CapperPanels } from "@/server/data/capper-panels";
 import { SCORECARD_WIN_THRESHOLD } from "@/server/data/stats";
-import { LightningIcon } from "@/components/dashboard/drop-catalog-button";
+import { TrendIcon } from "@/components/dashboard/trend-icon";
 
 const MAX_ROWS = 5;
 
@@ -21,19 +21,22 @@ export function PanelRow({
   name,
   colorTag,
   right,
+  icon,
 }: {
   capperId: string;
   name: string;
   colorTag: string | null;
   right: ReactNode;
+  icon?: ReactNode;
 }) {
   return (
     <a
       href={"/cappers/" + capperId}
       className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-gray-50"
     >
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 items-center gap-1.5">
         <Avatar name={name} colorTag={colorTag} />
+        {icon}
         <span className="truncate">{name}</span>
       </div>
       <span className="shrink-0 text-xs font-medium">{right}</span>
@@ -74,14 +77,7 @@ export function BarRow({
         <div className="flex min-w-0 items-center gap-1.5">
           <Avatar name={name} colorTag={colorTag} />
           <span className="truncate text-sm">{name}</span>
-          {trending && (
-            <span
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-400 text-white"
-              aria-label="Trending up"
-            >
-              <LightningIcon />
-            </span>
-          )}
+          {trending && <TrendIcon direction="up" />}
         </div>
         <span className={"shrink-0 text-sm font-semibold " + (positive ? "text-emerald-600" : "text-red-600")}>
           {record}
@@ -167,7 +163,7 @@ export function CapperPanelsGrid({ panels }: { panels: CapperPanels }) {
       )}
 
       {panels.rising.length > 0 && (
-        <Panel title="Rising" subtitle="Strong starts, too early for a full rank">
+        <Panel title="Trending" subtitle="Strong starts, too early for a full rank">
           {panels.rising.slice(0, MAX_ROWS).map((e) => (
             <BarRow
               key={e.capperId}
@@ -190,9 +186,10 @@ export function CapperPanelsGrid({ panels }: { panels: CapperPanels }) {
               capperId={e.capperId}
               name={e.name}
               colorTag={e.colorTag}
+              icon={<TrendIcon direction="down" />}
               right={
                 <span className="text-red-600">
-                  {e.lifetimeWinPct}% &rarr; {e.recentWinPct}%
+                  {Math.round(e.lifetimeWinPct)}% &rarr; {Math.round(e.recentWinPct)}%
                 </span>
               }
             />

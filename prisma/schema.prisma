@@ -151,6 +151,9 @@ model Pick {
   notes      String?
   status     PickStatus @default(PENDING)
   gradedAt   DateTime? // set once, on first transition out of PENDING - not touched again
+  gradedViaFuzzyMatch Boolean? // true if auto-graded against a fuzzy (non-exact-team-name) GameResult match -
+    // lets regradeFuzzyMatchedPicks find and re-check these later once a better/exact match may be available.
+    // null for manually-graded picks and picks predating this field, which are never auto-re-checked.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -1,7 +1,7 @@
 import { requireUser } from "@/server/auth";
 import { getFilteredPicksForUser, getSportsWithLeagues, getPickPlanStatus } from "@/server/data/picks";
 import { getCappersForUser } from "@/server/data/cappers";
-import { persistFinalScores, gradePendingPicks } from "@/server/data/grading";
+import { persistFinalScores, gradePendingPicks, regradeFuzzyMatchedPicks } from "@/server/data/grading";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { PickForm } from "@/components/dashboard/pick-form";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
@@ -41,6 +41,7 @@ export default async function PicksPage({
       try {
         await persistFinalScores(sportKey);
         await gradePendingPicks(user.id, sportName, sportKey);
+        await regradeFuzzyMatchedPicks(user.id, sportName, sportKey);
       } catch {
         // Live score sources are best-effort - don't block the page on a fetch failure.
       }

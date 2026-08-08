@@ -7,7 +7,7 @@ import {
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
-import { persistFinalScores, gradePendingPicks } from "@/server/data/grading";
+import { persistFinalScores, gradePendingPicks, regradeFuzzyMatchedPicks } from "@/server/data/grading";
 import { getPicksForGame, getCapperScorecard } from "@/server/data/picks";
 import { betTypeLabel } from "@/server/data/stats";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
@@ -54,6 +54,7 @@ export default async function GameDetailPage({
     try {
       await persistFinalScores(sportMeta.key);
       await gradePendingPicks(user.id, sportMeta.label, sportMeta.key);
+      await regradeFuzzyMatchedPicks(user.id, sportMeta.label, sportMeta.key);
     } catch {
       // Best-effort, same as /picks - don't block the page on a fetch failure.
     }

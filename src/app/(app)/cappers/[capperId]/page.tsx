@@ -2,7 +2,15 @@
 import { requireUser } from "@/server/auth";
 import { getCapperById } from "@/server/data/cappers";
 import { getPicksForCapper } from "@/server/data/picks";
-import { computeStats, computeScorecard, unitsWonOnBet } from "@/server/data/stats";
+import {
+  computeStats,
+  computeScorecard,
+  unitsWonOnBet,
+  filterPicksByGradedWindow,
+  SCORECARD_WINDOWS,
+  SCORECARD_WINDOW_LABELS,
+  type ScorecardWindow,
+} from "@/server/data/stats";
 import { UnitsChart, type UnitsChartPoint } from "@/components/dashboard/units-chart";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
@@ -28,7 +36,22 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
   );
 }
 
-export default async function CapperDetailPage({ params }: { params: { capperId: string } }) {
+// Same pill styling as the Cappers-page bet-type chips, for a consistent look
+// across the app's secondary filter rows.
+function chipClass(isActive: boolean) {
+  return (
+    "rounded-full px-3 py-1 text-xs font-medium " +
+    (isActive ? "bg-gray-900 text-white" : "bg-white text-gray-500 shadow-soft hover:bg-gray-50")
+  );
+}
+
+export default async function CapperDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { capperId: string };
+  searchParams: { window?: string };
+}) {
   const user = await requireUser();
   const capper = await getCapperById(user.id, params.capperId);
 
@@ -36,9 +59,14 @@ export default async function CapperDetailPage({ params }: { params: { capperId:
     notFound();
   }
 
+  const window = SCORECARD_WINDOWS.includes(searchParams.window as ScorecardWindow)
+    ? (searchParams.window as ScorecardWindow)
+    : "ALL";
+
   const picks = await getPicksForCapper(user.id, params.capperId);
   const stats = computeStats(picks);
-  const scorecard = computeScorecard(picks);
+  const allTimeScorecard = computeScorecard(picks);
+  const scorecard = computeScorecard(filterPicksByGradedWindow(picks, window));
 
   const settled = picks.filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH");
   let running = 0;
@@ -99,10 +127,25 @@ export default async function CapperDetailPage({ params }: { params: { capperId:
         />
       </div>
 
-      {scorecard.length > 0 && (
+      {allTimeScorecard.length > 0 && (
         <div className="mt-4">
-          <div className="mb-2 text-sm font-medium text-gray-700">Record by bet type</div>
-          <CapperScorecard buckets={scorecard} variant="grid" />
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-medium text-gray-700">Record by bet type</div>
+            <div className="flex flex-wrap gap-2">
+              {SCORECARD_WINDOWS.map((w) => (
+                <a key={w} href={"?window=" + w} className={chipClass(window === w)}>
+                  {SCORECARD_WINDOW_LABELS[w]}
+                </a>
+              ))}
+            </div>
+          </div>
+          {scorecard.length > 0 ? (
+            <CapperScorecard buckets={scorecard} variant="grid" />
+          ) : (
+            <p className="rounded-card bg-white p-6 text-center text-sm text-gray-400 shadow-soft">
+              No graded picks in this window.
+            </p>
+          )}
         </div>
       )}
 

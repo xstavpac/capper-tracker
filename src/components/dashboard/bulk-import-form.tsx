@@ -157,6 +157,10 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
               {validPicks.map((p, i) => {
                 const realOdds = enrichedOdds[i];
                 const displayOdds = realOdds ?? p.odds;
+                // A heavier divider below the last pick in each capper's group (not
+                // between every pick) - the color accent alone was easy to miss at a
+                // glance in a large catalog, this makes the group boundary itself clear.
+                const isGroupEnd = validPicks[i + 1] && validPicks[i + 1].capperName !== p.capperName;
                 return (
                   <div
                     key={i}
@@ -164,7 +168,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                       // Explicit per-row bottom border instead of the parent's divide-y utility -
                       // divide-y sets the border-color shorthand (all 4 sides) on every row but the
                       // first, which was silently stomping this per-capper border-l accent color.
-                      "flex flex-col gap-0.5 border-b border-l-4 border-b-gray-100 px-3 py-2 text-xs last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:gap-0 " +
+                      "flex flex-col gap-0.5 border-l-4 px-3 py-2 text-xs last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:gap-0 " +
+                      (isGroupEnd ? "border-b-2 border-b-gray-300" : "border-b border-b-gray-100") +
+                      " " +
                       capperAccent.get(p.capperName)
                     }
                   >

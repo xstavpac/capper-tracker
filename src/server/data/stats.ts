@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Pick, PickStatus } from "@prisma/client";
-import { favoriteOrUnderdog } from "@/lib/bet-line";
+import { favoriteOrUnderdog, extractLine } from "@/lib/bet-line";
 
 export type OverallStats = {
   wins: number;
@@ -145,7 +145,15 @@ export function weightedRoiScore(stats: OverallStats): number {
 
 // A capper's record broken down by bet category, so "good overall" and "good
 // at the specific bet they just gave you" can be told apart at a glance.
-export type ScorecardBucketKey = "MONEYLINE" | "SPREAD" | "TOTAL" | "PLAYER_PROP" | "F5" | "NRFI";
+export type ScorecardBucketKey =
+  | "MONEYLINE"
+  | "SPREAD_MINUS"
+  | "SPREAD_PLUS"
+  | "SPREAD"
+  | "TOTAL"
+  | "PLAYER_PROP"
+  | "F5"
+  | "NRFI";
 export type ScorecardBucket = {
   key: ScorecardBucketKey;
   label: string;
@@ -162,6 +170,8 @@ export const SCORECARD_WIN_THRESHOLD = 52.4; // -110 breakeven: 110 / 210
 
 const SCORECARD_BUCKET_ORDER: ScorecardBucketKey[] = [
   "MONEYLINE",
+  "SPREAD_MINUS",
+  "SPREAD_PLUS",
   "SPREAD",
   "TOTAL",
   "PLAYER_PROP",
@@ -170,6 +180,8 @@ const SCORECARD_BUCKET_ORDER: ScorecardBucketKey[] = [
 ];
 const SCORECARD_BUCKET_LABELS: Record<ScorecardBucketKey, string> = {
   MONEYLINE: "Moneyline",
+  SPREAD_MINUS: "Spread -",
+  SPREAD_PLUS: "Spread +",
   SPREAD: "Spread",
   TOTAL: "Total",
   PLAYER_PROP: "Player Prop",
@@ -177,11 +189,39 @@ const SCORECARD_BUCKET_LABELS: Record<ScorecardBucketKey, string> = {
   NRFI: "NRFI",
 };
 
+// Favorite/underdog for a spread pick, falling back to parsing the line out
+// of betDetail when the structured `line` column is empty - same fallback
+// grading.ts already uses for older picks that predate that column. Without
+// this, picks with no stored line (common for anything logged before the
+// bulk-import parser started capturing it) can't be classified at all and
+// would silently disappear from both the scorecard and category breakdown.
+function spreadSide(pick: {
+  odds: number;
+  line: number | null;
+  betDetail: string | null;
+}): "FAVORITE" | "UNDERDOG" | null {
+  const line = pick.line ?? extractLine("SPREAD", pick.betDetail ?? "");
+  return favoriteOrUnderdog({ betType: "SPREAD", odds: pick.odds, line });
+}
+
 // F5 (first half) picks form their own bucket regardless of bet type - a
 // first-half spread pick is grouped with other F5 picks, not the full-game
 // spread record, since it's graded against a different score entirely.
+//
+// Full-game spread picks split by which side of the line they're on, same
+// favorite/underdog signal pickCategory() uses for Fav ML/Dog ML below - a
+// capper's spread record on favorites and dogs isn't the same bet. The plain
+// "SPREAD" bucket stays as a fallback for the rare pick with no usable line
+// (missing or pick-em/0), so those still get one, rather than being dropped.
 function bucketKeyForPick(pick: Pick): ScorecardBucketKey {
-  return pick.period === "FIRST_HALF" ? "F5" : (pick.betType as ScorecardBucketKey);
+  if (pick.period === "FIRST_HALF") return "F5";
+  if (pick.betType === "SPREAD") {
+    const side = spreadSide(pick);
+    if (side === "FAVORITE") return "SPREAD_MINUS";
+    if (side === "UNDERDOG") return "SPREAD_PLUS";
+    return "SPREAD";
+  }
+  return pick.betType as ScorecardBucketKey;
 }
 
 function scorecardTone(winPct: number, count: number): ScorecardBucket["tone"] {
@@ -214,16 +254,68 @@ export function computeScorecard(picks: Pick[]): ScorecardBucket[] {
   });
 }
 
+export type ScorecardWindow = "TODAY" | "YESTERDAY" | "LAST_7" | "LAST_30" | "ALL";
+
+export const SCORECARD_WINDOW_LABELS: Record<ScorecardWindow, string> = {
+  TODAY: "Today",
+  YESTERDAY: "Yesterday",
+  LAST_7: "Last 7 days",
+  LAST_30: "Last 30 days",
+  ALL: "All time",
+};
+
+export const SCORECARD_WINDOWS: ScorecardWindow[] = ["TODAY", "YESTERDAY", "LAST_7", "LAST_30", "ALL"];
+
+// Scopes the scorecard to picks graded within a window, so "am I good at
+// spread bets" can be answered for "lately" as well as all-time. Filters on
+// gradedAt (when the real result came in), not gameTime/datePosted - a pick
+// posted today for a game next week isn't graded yet and has no place in any
+// window but ALL (where it's excluded anyway, same as everywhere else that
+// derives records from decided picks only).
+export function filterPicksByGradedWindow<T extends { gradedAt: Date | null }>(
+  picks: T[],
+  window: ScorecardWindow
+): T[] {
+  if (window === "ALL") return picks;
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  let start: Date;
+  let end: Date = now;
+  if (window === "TODAY") {
+    start = startOfToday;
+  } else if (window === "YESTERDAY") {
+    start = new Date(startOfToday.getTime() - 86400000);
+    end = startOfToday;
+  } else if (window === "LAST_7") {
+    start = new Date(now.getTime() - 7 * 86400000);
+  } else {
+    start = new Date(now.getTime() - 30 * 86400000);
+  }
+
+  return picks.filter((p) => p.gradedAt && p.gradedAt >= start && p.gradedAt < end);
+}
+
 // A finer split than ScorecardBucketKey, built for the Cappers-page
 // league/bet-type filter chips - e.g. "Fav ML" and "Dog ML" are both
 // MONEYLINE picks but represent opposite sides, so they can't share a
 // bucket the way the scorecard (which only cares about bet type + F5) does.
-export type PickCategoryKey = "FAV_ML" | "DOG_ML" | "SPREAD" | "OVER" | "UNDER" | "F5_ML" | "NRFI";
+export type PickCategoryKey =
+  | "FAV_ML"
+  | "DOG_ML"
+  | "SPREAD_MINUS"
+  | "SPREAD_PLUS"
+  | "OVER"
+  | "UNDER"
+  | "F5_ML"
+  | "NRFI";
 
 export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   FAV_ML: "Fav ML",
   DOG_ML: "Dog ML",
-  SPREAD: "Spread",
+  SPREAD_MINUS: "Spread -",
+  SPREAD_PLUS: "Spread +",
   OVER: "Over",
   UNDER: "Under",
   F5_ML: "F5 ML",
@@ -233,8 +325,17 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
 // F5 and NRFI are MLB-only chips for now, even though Period/BetType could
 // technically represent a first-half bet in another sport - other leagues
 // intentionally don't surface those two categories yet.
-const MLB_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD", "OVER", "UNDER", "F5_ML", "NRFI"];
-const DEFAULT_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD", "OVER", "UNDER"];
+const MLB_CHIP_SET: PickCategoryKey[] = [
+  "FAV_ML",
+  "DOG_ML",
+  "SPREAD_MINUS",
+  "SPREAD_PLUS",
+  "OVER",
+  "UNDER",
+  "F5_ML",
+  "NRFI",
+];
+const DEFAULT_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD_MINUS", "SPREAD_PLUS", "OVER", "UNDER"];
 
 export function chipSetForLeague(sportName: string): PickCategoryKey[] {
   return sportName.toUpperCase() === "MLB" ? MLB_CHIP_SET : DEFAULT_CHIP_SET;
@@ -257,7 +358,10 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
     return side === "FAVORITE" ? "FAV_ML" : side === "UNDERDOG" ? "DOG_ML" : null;
   }
 
-  if (pick.betType === "SPREAD" && pick.period === "FULL_GAME") return "SPREAD";
+  if (pick.betType === "SPREAD" && pick.period === "FULL_GAME") {
+    const side = spreadSide(pick);
+    return side === "FAVORITE" ? "SPREAD_MINUS" : side === "UNDERDOG" ? "SPREAD_PLUS" : null;
+  }
 
   if (pick.betType === "TOTAL" && pick.period === "FULL_GAME") {
     const detail = (pick.betDetail ?? "").toLowerCase();
@@ -280,14 +384,18 @@ export type CategoryBreakdownItem = {
   tone: "positive" | "negative" | "neutral";
 };
 
+// NRFI excluded here (unlike chipSetForLeague's MLB set) - this order feeds
+// the Dashboard's all-sports "Record by category" section, and NRFI is
+// MLB-only. It stays fully available everywhere else that uses pickCategory
+// directly (Cappers-page league chips, panel filtering).
 const CATEGORY_BREAKDOWN_ORDER: PickCategoryKey[] = [
   "FAV_ML",
   "DOG_ML",
-  "SPREAD",
+  "SPREAD_MINUS",
+  "SPREAD_PLUS",
   "OVER",
   "UNDER",
   "F5_ML",
-  "NRFI",
 ];
 
 // All-time record split by pickCategory (the same favorite/underdog,

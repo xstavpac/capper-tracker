@@ -34,10 +34,25 @@ const config: Config = {
           from: { transform: "scaleX(0)" },
           to: { transform: "scaleX(var(--fill, 1))" },
         },
+        "trend-surge-up": {
+          "0%, 100%": { transform: "translate(0, 0)" },
+          "50%": { transform: "translate(2px, -2px)" },
+        },
+        "trend-surge-down": {
+          "0%, 100%": { transform: "translate(0, 0)" },
+          "50%": { transform: "translate(2px, 2px)" },
+        },
+        "trend-glow": {
+          "0%, 100%": { filter: "drop-shadow(0 0 0px currentColor)" },
+          "50%": { filter: "drop-shadow(0 0 3px currentColor)" },
+        },
       },
       animation: {
         "glow-pulse": "glow-pulse 2.2s ease-in-out infinite",
         "fill-bar": "fill-bar 0.8s ease-out",
+        "trend-surge-up": "trend-surge-up 1.6s ease-in-out infinite",
+        "trend-surge-down": "trend-surge-down 1.6s ease-in-out infinite",
+        "trend-glow": "trend-glow 1.6s ease-in-out infinite",
       },
     },
   },

@@ -21,7 +21,7 @@ export function CategoryBreakdown({ items }: { items: CategoryBreakdownItem[] })
   if (items.length === 0) return null;
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-none sm:grid-flow-col sm:auto-cols-fr sm:grid-rows-2">
       {items.map((item) => (
         <div
           key={item.key}

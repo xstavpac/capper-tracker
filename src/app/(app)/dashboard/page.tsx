@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { requireUser } from "@/server/auth";
 import { getDashboardSummary, getUserPicks, computeUnitsChartData } from "@/server/data/stats";
 import { getPlanStatus } from "@/server/data/cappers";
@@ -5,8 +6,10 @@ import { getCapperPanels } from "@/server/data/capper-panels";
 import { UnitsChart } from "@/components/dashboard/units-chart";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { TrendingCappers } from "@/components/dashboard/trending-cappers";
+import { CountUp } from "@/components/dashboard/count-up";
+import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 
-function HeroStat({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
+function HeroStat({ label, value, tone }: { label: string; value: ReactNode; tone?: "up" | "down" }) {
   const toneClass = tone === "up" ? "text-emerald-600" : tone === "down" ? "text-red-600" : "text-gray-900";
   return (
     <div>
@@ -30,33 +33,40 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <h1 className="mb-6 text-xl font-semibold">Dashboard</h1>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <DropCatalogLink href="/picks/import" />
+      </div>
 
       <div className="mb-6 rounded-card border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-6">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex flex-wrap gap-x-10 gap-y-4">
             <div>
               <div className="text-xs font-medium uppercase tracking-wide text-brand-600">Total picks tracked</div>
-              <div className="mt-1 text-4xl font-bold text-gray-900">{summary.totalPicks.toLocaleString()}</div>
+              <div className="mt-1 text-4xl font-bold text-gray-900">
+                <CountUp value={summary.totalPicks} commas />
+              </div>
             </div>
             <div>
               <div className="text-xs font-medium uppercase tracking-wide text-brand-600">Cappers tracked</div>
-              <div className="mt-1 text-4xl font-bold text-gray-900">{planStatus.capperCount.toLocaleString()}</div>
+              <div className="mt-1 text-4xl font-bold text-gray-900">
+                <CountUp value={planStatus.capperCount} commas />
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
             <HeroStat label="Record" value={overall.wins + "-" + overall.losses + "-" + overall.pushes} />
             <HeroStat
               label="ROI"
-              value={(overall.roi >= 0 ? "+" : "") + overall.roi + "%"}
+              value={<CountUp value={overall.roi} decimals={2} signed suffix="%" />}
               tone={overall.roi >= 0 ? "up" : "down"}
             />
             <HeroStat
               label="Net units"
-              value={(overall.netUnits >= 0 ? "+" : "") + overall.netUnits + "u"}
+              value={<CountUp value={overall.netUnits} decimals={2} signed suffix="u" />}
               tone={overall.netUnits >= 0 ? "up" : "down"}
             />
-            <HeroStat label="Pending" value={String(summary.pendingCount)} />
+            <HeroStat label="Pending" value={<CountUp value={summary.pendingCount} />} />
           </div>
         </div>
       </div>
@@ -87,6 +97,7 @@ export default async function DashboardPage() {
             <div key={pick.id} className="flex items-center justify-between py-2 text-sm">
               <span>
                 {pick.awayTeam} @ {pick.homeTeam} - {pick.betDetail ?? pick.betType}
+                <span className="text-gray-400"> ({pick.capper.name})</span>
               </span>
               <span
                 className={

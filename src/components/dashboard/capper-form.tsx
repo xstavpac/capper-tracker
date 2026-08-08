@@ -7,7 +7,6 @@ const SOURCES = [
   { value: "TWITTER", label: "Twitter / X" },
   { value: "DISCORD", label: "Discord" },
   { value: "TELEGRAM", label: "Telegram" },
-  { value: "DUBCLUB", label: "DubClub" },
   { value: "INSTAGRAM", label: "Instagram" },
   { value: "FRIEND", label: "Friend" },
   { value: "OTHER", label: "Other" },
