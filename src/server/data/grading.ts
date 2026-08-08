@@ -165,6 +165,23 @@ function closestByDate<T extends { gameDate: Date }>(items: T[], reference: Date
 
 type GameMatch = { game: GameResult; matchType: "exact" | "fuzzy" };
 
+// How close a GameResult's actual gameDate must be to a pick's own gameTime
+// to be treated as the SAME game, not just the same two teams. The same
+// matchup can appear multiple times within the ±2-day candidate window below
+// (an MLB series is 2-4 consecutive-day games against the same opponent, all
+// sharing identical home/away team names) - team names alone can't tell them
+// apart. 6 hours is tight enough to reject "a different day's game in this
+// series" (typically ~24h apart) while still tolerating the normal slop
+// between a pick's recorded gameTime and the game's real start (rain delays,
+// odds-API-vs-schedule discrepancies). A postponed-and-replayed-next-day game
+// will correctly fail to match here and stay Pending rather than risk
+// grading against the wrong day.
+const MAX_GAME_TIME_DRIFT_MS = 6 * 3600000;
+
+function withinDrift<T extends { gameDate: Date }>(candidates: T[], reference: Date): T[] {
+  return candidates.filter((c) => Math.abs(c.gameDate.getTime() - reference.getTime()) <= MAX_GAME_TIME_DRIFT_MS);
+}
+
 export async function findMatchingGameResult(
   sportKey: string,
   pick: {
@@ -184,7 +201,12 @@ export async function findMatchingGameResult(
 
   // Picks resolved to a real game on import (see resolveGameForNickname) carry the
   // exact team names, so prefer an exact match over the fuzzy text search below.
-  const exact = candidates.filter((c) => c.homeTeam === pick.homeTeam && c.awayTeam === pick.awayTeam);
+  // Also requires the matched game to actually be THIS game, not just the same
+  // two teams on some other day within the window - see MAX_GAME_TIME_DRIFT_MS.
+  const exact = withinDrift(
+    candidates.filter((c) => c.homeTeam === pick.homeTeam && c.awayTeam === pick.awayTeam),
+    pick.gameTime
+  );
   if (exact.length > 0) return { game: closestByDate(exact, pick.gameTime), matchType: "exact" };
 
   // Legacy/manual picks may only have raw text in homeTeam/betDetail - fall back to
@@ -196,8 +218,11 @@ export async function findMatchingGameResult(
   // silently graded against that instead). Requiring both sides keeps the fallback
   // scoped to "this exact matchup, just spelled differently" the way it was intended.
   const searchText = ((pick.betDetail ?? "") + " " + pick.homeTeam + " " + pick.awayTeam).toLowerCase();
-  const fuzzy = candidates.filter(
-    (c) => searchText.includes(teamNickname(c.homeTeam)) && searchText.includes(teamNickname(c.awayTeam))
+  const fuzzy = withinDrift(
+    candidates.filter(
+      (c) => searchText.includes(teamNickname(c.homeTeam)) && searchText.includes(teamNickname(c.awayTeam))
+    ),
+    pick.gameTime
   );
   if (fuzzy.length === 0) return null;
   return { game: closestByDate(fuzzy, pick.gameTime), matchType: "fuzzy" };

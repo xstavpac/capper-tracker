@@ -24,6 +24,11 @@ export type ScoreGame = {
   status: "preview" | "live" | "final";
   scores: { name: string; score: string }[] | null;
   commenceTime: string;
+  // MLB-only (from the schedule endpoint's `hydrate=linescore`) - "Top"/
+  // "Bottom"/"Middle"/"End" + an ordinal like "9th". Null for preview/final
+  // games and for every ESPN-backed sport (innings are baseball-specific).
+  inningHalf: string | null;
+  inningOrdinal: string | null;
 };
 
 export const LIVE_SPORTS = [
@@ -102,9 +107,19 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
   const today = todayKey();
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  const url = "https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=" + yesterday + "&endDate=" + tomorrow;
+  const url =
+    "https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=" +
+    yesterday +
+    "&endDate=" +
+    tomorrow +
+    "&hydrate=linescore";
 
-  const res = await fetch(url, { next: { revalidate: 60 } });
+  // Live scores need to be current on every load, not cached for up to a
+  // minute - Next's fetch Data Cache serves the stale entry to whichever
+  // request lands right after the revalidate window closes (and keeps doing
+  // so until some later request happens to trigger the background refresh),
+  // which is exactly what was showing an old score until a manual reload.
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) return [];
 
   const data = await res.json();
@@ -128,6 +143,8 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
               { name: g.teams.away.team.name, score: String(g.teams.away.score ?? 0) },
             ],
       commenceTime: g.gameDate,
+      inningHalf: status === "live" ? (g.linescore?.inningState ?? null) : null,
+      inningOrdinal: status === "live" ? (g.linescore?.currentInningOrdinal ?? null) : null,
     };
   });
 }
@@ -146,7 +163,10 @@ async function getEspnScores(sportPath: string): Promise<ScoreGame[]> {
   const url =
     "https://site.api.espn.com/apis/site/v2/sports/" + sportPath + "/scoreboard?dates=" + yesterday + "-" + tomorrow;
 
-  const res = await fetch(url, { next: { revalidate: 60 } });
+  // Same reasoning as getMlbLiveScores - live scores can't sit on a revalidate
+  // window, since that serves the stale value to the request right after it
+  // expires instead of refreshing until some later request happens to hit it.
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) return [];
 
   const data = await res.json();
@@ -172,6 +192,8 @@ async function getEspnScores(sportPath: string): Promise<ScoreGame[]> {
               { name: away?.team?.displayName ?? "", score: String(away?.score ?? 0) },
             ],
       commenceTime: e.date,
+      inningHalf: null,
+      inningOrdinal: null,
     };
   });
 }

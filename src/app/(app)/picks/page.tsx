@@ -205,6 +205,14 @@ export default async function PicksPage({
                         F5
                       </span>
                     )}
+                    <span className="ml-2 font-normal text-gray-400">
+                      {pick.gameTime.toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </span>
                   </div>
                   <div className="mt-0.5 text-xs text-gray-500">
                     {pick.capper.name} - {pick.betDetail || pick.betType} - {pick.odds > 0 ? "+" : ""}

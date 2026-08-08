@@ -173,13 +173,38 @@ function parsePickText(description: string): {
   }
 
   const cleanDescription = description.replace(/\([^)]*\)/g, "").trim();
-  const isFirstFive = /\bF5\b/i.test(cleanDescription) || /1st\s*5/i.test(cleanDescription);
+  // Catches both abbreviated ("F5", "1st 5"/"1st5") and fully spelled-out
+  // ("first 5", "first five", "1st five") phrasing - the abbreviated-only
+  // version silently left every spelled-out F5 pick stored as period=
+  // FULL_GAME (graded/priced against the wrong, full-game score).
+  const isFirstFive =
+    /\bf5\b/i.test(cleanDescription) ||
+    /\b1st\s*5\b/i.test(cleanDescription) ||
+    /\bfirst\s*5\b/i.test(cleanDescription) ||
+    /\b1st\s+five\b/i.test(cleanDescription) ||
+    /\bfirst\s+five\b/i.test(cleanDescription);
 
-  let betType: ParsedPick["betType"] = "SPREAD";
+  // Bare team name with no qualifier (e.g. "Tampa Bay Rays") defaults to
+  // MONEYLINE, not SPREAD - a straight team-name pick is the standard
+  // shorthand for "to win", and SPREAD requires an actual line number to
+  // mean anything at all. Previously defaulted to SPREAD unconditionally,
+  // which - combined with the automatic real-odds lookup at import time -
+  // silently attached a real spreads-market price to what was really a
+  // moneyline pick, with no `line` value stored to make the SPREAD read
+  // coherent (see the "-220 doesn't match the market" investigation).
+  let betType: ParsedPick["betType"] = "MONEYLINE";
   let totalSide: "over" | "under" | undefined;
-  if (/\b[NY]RFI\b/i.test(cleanDescription) || /\b(no|yes)\s+run\s+first\s+inning\b/i.test(cleanDescription)) {
+  const hasExplicitSpreadNumber = /[+-]\d+(\.\d+)?/.test(cleanDescription);
+  const hasSpreadKeyword = /\b(spread|run\s*line|puck\s*line|point\s*spread)\b/i.test(cleanDescription);
+  // "inning" is optional - "no run 1st" / "yes run first" are common
+  // shorthand that the old inning-required pattern missed entirely, falling
+  // through to the MONEYLINE default instead.
+  if (
+    /\b[NY]RFI\b/i.test(cleanDescription) ||
+    /\b(no|yes)\s+run\s+(?:first|1st)(?:\s+inning)?\b/i.test(cleanDescription)
+  ) {
     betType = "NRFI";
-  } else if (/\bML\b/i.test(cleanDescription) || /moneyline/i.test(cleanDescription)) {
+  } else if (/\bML\b/i.test(cleanDescription) || /money\s*line/i.test(cleanDescription)) {
     betType = "MONEYLINE";
   } else if (/\bover\b/i.test(cleanDescription)) {
     betType = "TOTAL";
@@ -189,6 +214,8 @@ function parsePickText(description: string): {
     totalSide = "under";
   } else if (/\btotal\b/i.test(cleanDescription)) {
     betType = "TOTAL";
+  } else if (hasExplicitSpreadNumber || hasSpreadKeyword) {
+    betType = "SPREAD";
   }
 
   return { betType, odds, units: units ?? 1, isFirstFive, cleanDescription, totalSide };

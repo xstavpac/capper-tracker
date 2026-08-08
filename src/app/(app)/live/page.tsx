@@ -142,8 +142,15 @@ export default async function LivePage({
                   {book && " - " + book.title}
                 </div>
                 {isLive && (
-                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600">
-                    LIVE
+                  <span className="flex items-center gap-1.5">
+                    {score?.inningHalf && score?.inningOrdinal && (
+                      <span className="text-xs text-gray-500">
+                        {score.inningHalf} {score.inningOrdinal}
+                      </span>
+                    )}
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600">
+                      LIVE
+                    </span>
                   </span>
                 )}
                 {isFinal && (
