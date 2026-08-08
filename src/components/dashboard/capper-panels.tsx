@@ -3,7 +3,7 @@ import type { CapperPanels } from "@/server/data/capper-panels";
 
 const MAX_ROWS = 5;
 
-function Avatar({ name, colorTag }: { name: string; colorTag: string | null }) {
+export function Avatar({ name, colorTag }: { name: string; colorTag: string | null }) {
   return (
     <div
       className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-medium text-white"
@@ -14,7 +14,7 @@ function Avatar({ name, colorTag }: { name: string; colorTag: string | null }) {
   );
 }
 
-function PanelRow({
+export function PanelRow({
   capperId,
   name,
   colorTag,
@@ -39,7 +39,7 @@ function PanelRow({
   );
 }
 
-function Panel({
+export function Panel({
   title,
   subtitle,
   children,

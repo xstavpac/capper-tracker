@@ -269,6 +269,57 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
   return null;
 }
 
+export type CategoryBreakdownItem = {
+  key: PickCategoryKey;
+  label: string;
+  wins: number;
+  losses: number;
+  pushes: number;
+  winPct: number;
+  count: number; // decided picks: wins + losses + pushes
+  tone: "positive" | "negative" | "neutral";
+};
+
+const CATEGORY_BREAKDOWN_ORDER: PickCategoryKey[] = [
+  "FAV_ML",
+  "DOG_ML",
+  "SPREAD",
+  "OVER",
+  "UNDER",
+  "F5_ML",
+  "NRFI",
+];
+
+// All-time record split by pickCategory (the same favorite/underdog,
+// over/under classifier the Cappers-page filter chips use) - answers "am I
+// better off following favorites or dogs, overs or unders" at a glance.
+// Same shape and tone rules as computeScorecard, just a different grouping key.
+export function computeCategoryBreakdown(picks: Pick[]): CategoryBreakdownItem[] {
+  const byCategory = new Map<PickCategoryKey, Pick[]>();
+  for (const pick of picks) {
+    const key = pickCategory(pick);
+    if (!key) continue;
+    const existing = byCategory.get(key);
+    if (existing) existing.push(pick);
+    else byCategory.set(key, [pick]);
+  }
+
+  return CATEGORY_BREAKDOWN_ORDER.filter((key) => byCategory.has(key)).map((key) => {
+    const stats = computeStats(byCategory.get(key)!);
+    const count = stats.wins + stats.losses + stats.pushes;
+    return {
+      key,
+      label: PICK_CATEGORY_LABELS[key],
+      wins: stats.wins,
+      losses: stats.losses,
+      pushes: stats.pushes,
+      winPct: stats.winPct,
+      count,
+      tone: scorecardTone(stats.winPct, count),
+    };
+  });
+}
+
 /** All picks for a user, scoped by userId — never call prisma.pick directly. */
 export async function getUserPicks(userId: string) {
   return prisma.pick.findMany({
@@ -301,6 +352,8 @@ export async function getDashboardSummary(userId: string) {
 
   return {
     overall,
+    totalPicks: picks.length,
+    categoryBreakdown: computeCategoryBreakdown(picks),
     pendingCount: picks.filter((p) => p.status === "PENDING").length,
     topCapper: bySortedRoi[0] ?? null,
     worstCapper: bySortedRoi[bySortedRoi.length - 1] ?? null,
