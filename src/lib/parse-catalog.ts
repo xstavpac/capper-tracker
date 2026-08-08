@@ -277,6 +277,20 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
       continue;
     }
 
+    // A standalone line that matches a SAVED capper's name (case/punctuation-
+    // insensitive, same normalizeName leniency used everywhere else a known
+    // name is matched) is always read as that capper's header, checked before
+    // any team/sport detection - once a capper is saved, the app already
+    // knows their name and doesn't need to guess from words in the text. The
+    // "*" prefix above is only needed for a brand-new, not-yet-saved capper
+    // whose name happens to collide with a team nickname the first time.
+    const normalizedLine = normalizeName(line);
+    const savedNameMatch = knownCapperNames.find((n) => normalizeName(n) === normalizedLine);
+    if (savedNameMatch) {
+      currentCapper = savedNameMatch;
+      continue;
+    }
+
     const lower = line.toLowerCase();
     const inlineMatch = sortedNames.find((name) => {
       const nameLower = name.toLowerCase();

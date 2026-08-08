@@ -105,9 +105,11 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         auto-detect sport, bet type, odds, and units for each pick.
       </p>
       <p className="mb-3 text-xs text-gray-400">
-        Leave a blank line between different cappers&apos; picks. If a capper&apos;s name happens
-        to contain a real team name (e.g. &quot;Tigers Kitchen&quot;), prefix it with * to force it
-        to always be read as a name, e.g. &quot;*Tigers Kitchen&quot;.
+        Leave a blank line between different cappers&apos; picks. Cappers already in your saved
+        list are recognized automatically, even if their name contains a team name. For a
+        brand-new capper whose name happens to collide with a team name (e.g. &quot;Tigers Fan
+        Picks&quot;), prefix it with * the first time, e.g. &quot;*Tigers Fan Picks&quot;, so
+        it&apos;s read as a name instead of a pick.
       </p>
 
       <textarea
