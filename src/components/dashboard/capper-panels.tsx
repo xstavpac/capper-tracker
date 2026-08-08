@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { CapperPanels } from "@/server/data/capper-panels";
 import { SCORECARD_WIN_THRESHOLD } from "@/server/data/stats";
+import { LightningIcon } from "@/components/dashboard/drop-catalog-button";
 
 const MAX_ROWS = 5;
 
@@ -44,18 +45,25 @@ export function PanelRow({
 // length is the win%, animating in from empty on load. Used by Rising and
 // Best Last-20 specifically - the two "catch something happening right now"
 // panels - kept deliberately plainer everywhere else in this file.
+//
+// trending marks the one thing that distinguishes Rising from Best Last-20:
+// a small lightning-bolt badge next to the name. Rising is about momentum
+// ("catching fire" right now), Best Last-20 is about current standing - the
+// icon is the only visual difference, so it only ever applies to Rising rows.
 export function BarRow({
   capperId,
   name,
   colorTag,
   record,
   winPct,
+  trending = false,
 }: {
   capperId: string;
   name: string;
   colorTag: string | null;
   record: string;
   winPct: number;
+  trending?: boolean;
 }) {
   const positive = winPct >= SCORECARD_WIN_THRESHOLD;
   const fill = Math.min(100, Math.max(0, winPct)) / 100;
@@ -63,9 +71,17 @@ export function BarRow({
   return (
     <a href={"/cappers/" + capperId} className="block rounded-lg px-2 py-1.5 hover:bg-gray-50">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
           <Avatar name={name} colorTag={colorTag} />
           <span className="truncate text-sm">{name}</span>
+          {trending && (
+            <span
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-400 text-white"
+              aria-label="Trending up"
+            >
+              <LightningIcon />
+            </span>
+          )}
         </div>
         <span className={"shrink-0 text-sm font-semibold " + (positive ? "text-emerald-600" : "text-red-600")}>
           {record}
@@ -160,6 +176,7 @@ export function CapperPanelsGrid({ panels }: { panels: CapperPanels }) {
               colorTag={e.colorTag}
               record={record(e.wins, e.losses, e.pushes)}
               winPct={winPctExcludingPushes(e.wins, e.losses)}
+              trending
             />
           ))}
         </Panel>

@@ -329,34 +329,16 @@ export async function getUserPicks(userId: string) {
   });
 }
 
-/** Dashboard summary: overall stats + top/worst performing capper. */
+/** Dashboard summary: overall stats, category breakdown, recent picks. */
 export async function getDashboardSummary(userId: string) {
   const picks = await getUserPicks(userId);
   const overall = computeStats(picks);
-
-  const byCapperMap = new Map<string, Pick[]>();
-  for (const pick of picks) {
-    const list = byCapperMap.get(pick.capperId) ?? [];
-    list.push(pick);
-    byCapperMap.set(pick.capperId, list);
-  }
-
-  const capperStats = Array.from(byCapperMap.entries()).map(
-    ([capperId, capperPicks]) => ({
-      capperId,
-      stats: computeStats(capperPicks),
-    })
-  );
-
-  const bySortedRoi = [...capperStats].sort((a, b) => b.stats.roi - a.stats.roi);
 
   return {
     overall,
     totalPicks: picks.length,
     categoryBreakdown: computeCategoryBreakdown(picks),
     pendingCount: picks.filter((p) => p.status === "PENDING").length,
-    topCapper: bySortedRoi[0] ?? null,
-    worstCapper: bySortedRoi[bySortedRoi.length - 1] ?? null,
     recentPicks: picks.slice(0, 10),
   };
 }

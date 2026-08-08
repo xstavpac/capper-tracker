@@ -43,6 +43,7 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
                 colorTag={e.colorTag}
                 record={record(e.wins, e.losses, e.pushes)}
                 winPct={winPctExcludingPushes(e.wins, e.losses)}
+                trending
               />
             ))}
           </Panel>
