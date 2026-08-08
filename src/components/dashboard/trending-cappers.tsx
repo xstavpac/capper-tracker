@@ -1,5 +1,5 @@
 import type { CapperPanels } from "@/server/data/capper-panels";
-import { Panel, PanelRow } from "@/components/dashboard/capper-panels";
+import { Panel, PanelRow, BarRow, record, winPctExcludingPushes } from "@/components/dashboard/capper-panels";
 
 const CONDENSED_ROWS = 3;
 
@@ -7,7 +7,7 @@ const CONDENSED_ROWS = 3;
 // Dashboard so "who's hot right now" doesn't require a navigation - same
 // data, same row components, just three panels and fewer rows each.
 export function TrendingCappers({ panels }: { panels: CapperPanels }) {
-  const hasAny = panels.hotStreaks.length > 0 || panels.rising.length > 0 || panels.bestLast10.length > 0;
+  const hasAny = panels.hotStreaks.length > 0 || panels.rising.length > 0 || panels.bestLast20.length > 0;
   if (!hasAny) return null;
 
   return (
@@ -36,33 +36,28 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
         {panels.rising.length > 0 && (
           <Panel title="Rising" subtitle="Strong starts, too early for a full rank">
             {panels.rising.slice(0, CONDENSED_ROWS).map((e) => (
-              <PanelRow
+              <BarRow
                 key={e.capperId}
                 capperId={e.capperId}
                 name={e.name}
                 colorTag={e.colorTag}
-                right={
-                  <span className="text-emerald-600">
-                    {e.wins}-{e.losses}
-                    {e.pushes > 0 ? "-" + e.pushes : ""}
-                  </span>
-                }
+                record={record(e.wins, e.losses, e.pushes)}
+                winPct={winPctExcludingPushes(e.wins, e.losses)}
               />
             ))}
           </Panel>
         )}
 
-        {panels.bestLast10.length > 0 && (
-          <Panel title="Best last 10" subtitle="Recent form vs. lifetime rate">
-            {panels.bestLast10.slice(0, CONDENSED_ROWS).map((e) => (
-              <PanelRow
+        {panels.bestLast20.length > 0 && (
+          <Panel title="Best last 20" subtitle="Record over their last 20 graded picks">
+            {panels.bestLast20.slice(0, CONDENSED_ROWS).map((e) => (
+              <BarRow
                 key={e.capperId}
                 capperId={e.capperId}
                 name={e.name}
                 colorTag={e.colorTag}
-                right={
-                  <span className={e.deltaPts >= 0 ? "text-emerald-600" : "text-red-600"}>{e.recentWinPct}%</span>
-                }
+                record={record(e.wins, e.losses, e.pushes)}
+                winPct={e.recentWinPct}
               />
             ))}
           </Panel>

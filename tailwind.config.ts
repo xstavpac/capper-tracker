@@ -30,9 +30,14 @@ const config: Config = {
           "0%, 100%": { boxShadow: "0 0 18px 2px rgba(168,85,247,0.55)" },
           "50%": { boxShadow: "0 0 34px 6px rgba(168,85,247,0.9)" },
         },
+        "fill-bar": {
+          from: { transform: "scaleX(0)" },
+          to: { transform: "scaleX(var(--fill, 1))" },
+        },
       },
       animation: {
         "glow-pulse": "glow-pulse 2.2s ease-in-out infinite",
+        "fill-bar": "fill-bar 0.8s ease-out",
       },
     },
   },

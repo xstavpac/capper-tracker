@@ -19,16 +19,17 @@ const ACTIVITY_WINDOW_DAYS = 14;
 // snowflake badge - a single win/loss isn't a "streak" worth surfacing here.
 const STREAK_PANEL_MIN = 2;
 
-// Window size shared by Falling Off and Best Last-10, per the user's request
+// Window size shared by Falling Off and Best Last-20, per the user's request
 // (both look at "recent form").
-const RECENT_FORM_WINDOW = 10;
+const RECENT_FORM_WINDOW = 20;
 // Need at least half the window decided before recent form means anything.
-const RECENT_FORM_MIN_SAMPLE = 5;
+const RECENT_FORM_MIN_SAMPLE = 10;
 // "Meaningfully worse" for Falling Off - a flat 10-percentage-point drop.
 const FALLING_OFF_THRESHOLD_PTS = 10;
 // Same shrinkage strength as weightedRoiScore, applied to win% instead of
-// ROI for Best Last-10 - kept identical for consistency across the page's
-// two weighted-ranking mechanisms.
+// ROI for Best Last-20 - kept identical for consistency across the page's
+// two weighted-ranking mechanisms. Ranks the panel only - the displayed
+// record/win% is always the raw recent rate, never the shrunk score.
 const RECENT_FORM_SHRINKAGE_K = 10;
 
 type PanelCapperBase = { capperId: string; name: string; colorTag: string | null };
@@ -38,17 +39,22 @@ export type StreakPanelEntry = PanelCapperBase & {
   weightedScore: number;
   stats: OverallStats;
 };
+// Deliberately minimal - just the record. winPct (for the progress-bar fill)
+// is derived from wins/losses/pushes by the UI, same as everywhere else.
 export type RisingPanelEntry = PanelCapperBase & { wins: number; losses: number; pushes: number };
 export type FallingOffPanelEntry = PanelCapperBase & {
   lifetimeWinPct: number;
   recentWinPct: number;
   dropPts: number;
 };
-export type BestLast10Entry = PanelCapperBase & {
+// Deliberately simple - just the raw record and win% over the last 20 graded
+// picks. No lifetime comparison here (that's what Falling Off is for).
+export type BestLast20Entry = PanelCapperBase & {
+  wins: number;
+  losses: number;
+  pushes: number;
   recentWinPct: number;
-  lifetimeWinPct: number;
-  deltaPts: number;
-  weightedScore: number;
+  weightedScore: number; // ranks the panel only, never displayed
 };
 
 export type CapperPanels = {
@@ -56,10 +62,10 @@ export type CapperPanels = {
   coolingOff: StreakPanelEntry[];
   rising: RisingPanelEntry[];
   fallingOff: FallingOffPanelEntry[];
-  bestLast10: BestLast10Entry[];
+  bestLast20: BestLast20Entry[];
 };
 
-const EMPTY_PANELS: CapperPanels = { hotStreaks: [], coolingOff: [], rising: [], fallingOff: [], bestLast10: [] };
+const EMPTY_PANELS: CapperPanels = { hotStreaks: [], coolingOff: [], rising: [], fallingOff: [], bestLast20: [] };
 
 export async function getCapperPanels(userId: string, filter?: CapperLeagueFilter): Promise<CapperPanels> {
   const cappers = await getCappersForUser(userId, filter);
@@ -87,7 +93,7 @@ export async function getCapperPanels(userId: string, filter?: CapperLeagueFilte
   const coolingOff: StreakPanelEntry[] = [];
   const rising: RisingPanelEntry[] = [];
   const fallingOff: FallingOffPanelEntry[] = [];
-  const bestLast10: BestLast10Entry[] = [];
+  const bestLast20: BestLast20Entry[] = [];
 
   for (const capper of cappers) {
     const capperPicks = byCapper.get(capper.id) ?? [];
@@ -106,17 +112,27 @@ export async function getCapperPanels(userId: string, filter?: CapperLeagueFilte
       else if (stats.currentStreak.type === "LOSS") coolingOff.push(entry);
     }
 
-    // Rising: below the main ranking's sample cutoff, but net positive so far -
-    // the spot the weighted ranking deliberately keeps these cappers off of.
-    if (decidedCount > 0 && decidedCount < RANKING_MIN_SAMPLE && stats.wins > stats.losses) {
-      rising.push({ ...base, wins: stats.wins, losses: stats.losses, pushes: stats.pushes });
-    }
-
-    // Recent-10 window: most recently graded picks first. gradedAt is always
-    // set for decided (WIN/LOSS/PUSH) picks, so this sort is safe.
+    // Most-recently-graded-first, for the recent-form panels below.
+    // gradedAt is always set for decided (WIN/LOSS/PUSH) picks.
     const decidedPicks = capperPicks
       .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
       .sort((a, b) => (b.gradedAt?.getTime() ?? 0) - (a.gradedAt?.getTime() ?? 0));
+
+    // Rising: below the main ranking's sample cutoff, AND actively on a win
+    // streak right now - not just a net-positive record that happens to
+    // include a loss. A capper sitting on a loss as their most recent result
+    // isn't "catching fire," even if their overall small-sample record is
+    // still positive - currentStreak already captures "most recent result
+    // streak," the same definition Hot Streaks uses.
+    if (
+      decidedCount > 0 &&
+      decidedCount < RANKING_MIN_SAMPLE &&
+      stats.currentStreak.type === "WIN" &&
+      stats.currentStreak.count >= STREAK_PANEL_MIN
+    ) {
+      rising.push({ ...base, wins: stats.wins, losses: stats.losses, pushes: stats.pushes });
+    }
+
     const recent = decidedPicks.slice(0, RECENT_FORM_WINDOW);
     const recentDecided = recent.length;
 
@@ -124,6 +140,8 @@ export async function getCapperPanels(userId: string, filter?: CapperLeagueFilte
     // and enough of the recent window decided to mean anything.
     if (decidedCount >= RANKING_MIN_SAMPLE && recentDecided >= RECENT_FORM_MIN_SAMPLE) {
       const recentWins = recent.filter((p) => p.status === "WIN").length;
+      const recentLosses = recent.filter((p) => p.status === "LOSS").length;
+      const recentPushes = recentDecided - recentWins - recentLosses;
       const recentWinPct = round2((recentWins / recentDecided) * 100);
       const dropPts = round2(stats.winPct - recentWinPct);
 
@@ -132,18 +150,19 @@ export async function getCapperPanels(userId: string, filter?: CapperLeagueFilte
       }
 
       // Same shrinkage idea as weightedRoiScore, but pulling toward the
-      // -110 breakeven win% (52.4) instead of a 0% ROI prior - this ranks
-      // Best Last-10, while the displayed 77%-style number stays the raw
-      // recent rate for transparency, same pattern as the main leaderboard.
+      // -110 breakeven win% (52.4) instead of a 0% ROI prior - ranks Best
+      // Last-20 only; the displayed record/win% is always the raw recent
+      // rate, same "sort weighted, show raw" pattern as the main leaderboard.
       const weightedScore = round2(
         (recentDecided * recentWinPct + RECENT_FORM_SHRINKAGE_K * SCORECARD_WIN_THRESHOLD) /
           (recentDecided + RECENT_FORM_SHRINKAGE_K)
       );
-      bestLast10.push({
+      bestLast20.push({
         ...base,
+        wins: recentWins,
+        losses: recentLosses,
+        pushes: recentPushes,
         recentWinPct,
-        lifetimeWinPct: stats.winPct,
-        deltaPts: round2(recentWinPct - stats.winPct),
         weightedScore,
       });
     }
@@ -157,7 +176,7 @@ export async function getCapperPanels(userId: string, filter?: CapperLeagueFilte
       (b.wins + b.losses + b.pushes - (a.wins + a.losses + a.pushes))
   );
   fallingOff.sort((a, b) => b.dropPts - a.dropPts);
-  bestLast10.sort((a, b) => b.weightedScore - a.weightedScore);
+  bestLast20.sort((a, b) => b.weightedScore - a.weightedScore);
 
-  return { hotStreaks, coolingOff, rising, fallingOff, bestLast10 };
+  return { hotStreaks, coolingOff, rising, fallingOff, bestLast20 };
 }
