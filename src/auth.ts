@@ -15,6 +15,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   session: { strategy: "jwt" },
   pages: { signIn: "/sign-in" },
+  // Vercel (and most PaaS) proxy requests, so the Host header Auth.js sees
+  // is legitimate even without an exact AUTH_URL match - without this,
+  // every request fails an UntrustedHost check and auth() never resolves a
+  // session, silently breaking sign-in even with valid credentials.
+  trustHost: true,
   callbacks: {
     // Carries the Google subject id (`sub`) through the JWT so `auth()`
     // callers can look up/create the app's own User row without a second
