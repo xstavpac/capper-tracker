@@ -6,6 +6,8 @@ import {
   computeStats,
   computeScorecard,
   computeCategoryBreakdown,
+  computeBestOddsRange,
+  computeConsistency,
   unitsWonOnBet,
   filterPicksByGradedWindow,
   chipSetForLeague,
@@ -17,7 +19,8 @@ import { UnitsChart, type UnitsChartPoint } from "@/components/dashboard/units-c
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
-import { formatEastern } from "@/lib/dates";
+import { StreakBadge } from "@/components/dashboard/capper-panels";
+import { formatEastern, formatRelativeTime } from "@/lib/dates";
 
 const SOURCE_LABELS: Record<string, string> = {
   TWITTER: "Twitter / X",
@@ -95,6 +98,11 @@ export default async function CapperDetailPage({
 
   const recentPicks = [...picks].reverse().slice(0, 10);
 
+  const trackedSinceMs = picks.length > 0 ? Math.min(...picks.map((p) => p.datePosted.getTime())) : null;
+  const lastPickMs = picks.length > 0 ? Math.max(...picks.map((p) => p.datePosted.getTime())) : null;
+  const bestOddsRange = computeBestOddsRange(picks);
+  const consistency = computeConsistency(picks);
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6 flex items-center gap-3">
@@ -114,6 +122,42 @@ export default async function CapperDetailPage({
           </p>
         </div>
       </div>
+
+      {trackedSinceMs !== null && lastPickMs !== null && (
+        <div className="mb-4 rounded-card bg-white p-5 shadow-soft">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-gray-500">
+              Tracked since {formatEastern(new Date(trackedSinceMs), { month: "short", day: "numeric" })}
+              {" · "}
+              Last pick {formatRelativeTime(new Date(lastPickMs), Date.now())}
+            </p>
+            <StreakBadge streak={stats.currentStreak} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-8">
+            <div>
+              <div className="text-xs text-gray-500">Best odds range</div>
+              <div className="mt-0.5 text-sm font-medium text-gray-900">
+                {bestOddsRange ? bestOddsRange.label : "Not enough data"}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500">Consistency</div>
+              <div
+                className={
+                  "mt-0.5 text-sm font-medium " +
+                  (consistency?.label === "Steady"
+                    ? "text-emerald-600"
+                    : consistency?.label === "Volatile"
+                      ? "text-red-600"
+                      : "text-gray-400")
+                }
+              >
+                {consistency ? consistency.label : "Not enough data"}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Record" value={stats.wins + "-" + stats.losses + "-" + stats.pushes} />

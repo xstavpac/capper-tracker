@@ -1,14 +1,18 @@
 import { requireUser } from "@/server/auth";
-import { getCappersRanked, getPlanStatus, getWeeklyCapperLeaderboard } from "@/server/data/cappers";
-import { getCapperPanels } from "@/server/data/capper-panels";
+import { getPlanStatus, getCapperLeaderboardTable, getMostActiveThisWeek, getSportCategoryPanelData } from "@/server/data/cappers";
 import { LIVE_SPORTS } from "@/server/data/odds";
-import { chipSetForLeague, PICK_CATEGORY_LABELS, type PickCategoryKey } from "@/server/data/stats";
+import { PICK_CATEGORY_LABELS } from "@/server/data/stats";
 import { CapperForm } from "@/components/dashboard/capper-form";
-import { WeeklyLeaderboard } from "@/components/dashboard/weekly-leaderboard";
-import { CapperRankedList } from "@/components/dashboard/capper-ranked-list";
-import { CapperPanelsGrid } from "@/components/dashboard/capper-panels";
+import { CappersLeaderboardTable } from "@/components/dashboard/cappers-leaderboard-table";
+import { BestAtPanel, type BestAtEntry } from "@/components/dashboard/best-at-panel";
+import { MostActivePanel } from "@/components/dashboard/most-active-panel";
 
 const LEAGUES = LIVE_SPORTS.map((s) => s.label);
+
+// "Best at..." needs one concrete sport to compute a category set for
+// (chipSetForLeague) - MLB by default (richest category set: F5 ML/NRFI
+// alongside the universal ones), or whichever league pill is active.
+const DEFAULT_BEST_AT_SPORT = "MLB";
 
 function pillClass(isActive: boolean) {
   return (
@@ -17,89 +21,84 @@ function pillClass(isActive: boolean) {
   );
 }
 
-function chipClass(isActive: boolean) {
-  return (
-    "rounded-full px-3 py-1 text-xs font-medium " +
-    (isActive ? "bg-gray-900 text-white" : "bg-white text-gray-500 shadow-soft hover:bg-gray-50")
-  );
-}
-
-function buildHref(league: string | undefined, category: string | undefined) {
-  const params = new URLSearchParams();
-  if (league) params.set("league", league);
-  if (category) params.set("category", category);
-  const qs = params.toString();
-  return "/cappers" + (qs ? "?" + qs : "");
+function buildHref(league: string | undefined) {
+  return league ? "/cappers?league=" + encodeURIComponent(league) : "/cappers";
 }
 
 export default async function CappersPage({
   searchParams,
 }: {
-  searchParams: { league?: string; category?: string };
+  searchParams: { league?: string };
 }) {
   const user = await requireUser();
 
   const league = LEAGUES.includes(searchParams.league ?? "") ? searchParams.league : undefined;
-  const chipSet = chipSetForLeague(league ?? "");
-  const category = chipSet.includes(searchParams.category as PickCategoryKey)
-    ? (searchParams.category as PickCategoryKey)
-    : undefined;
+  const bestAtSport = league ?? DEFAULT_BEST_AT_SPORT;
 
-  const [rankedCappers, planStatus, leaderboard, panels] = await Promise.all([
-    getCappersRanked(user.id, { sportName: league, category }),
+  const [planStatus, weekEntries, allTimeEntries, mostActive, categoryPanel] = await Promise.all([
     getPlanStatus(user.id),
-    getWeeklyCapperLeaderboard(user.id, { sportName: league, category }),
-    getCapperPanels(user.id, { sportName: league, category }),
+    getCapperLeaderboardTable(user.id, "LAST_7", { sportName: league }),
+    getCapperLeaderboardTable(user.id, "ALL", { sportName: league }),
+    getMostActiveThisWeek(user.id, { sportName: league }),
+    getSportCategoryPanelData(user.id, bestAtSport),
   ]);
+
+  const bestAtEntries: BestAtEntry[] = categoryPanel.breakdown
+    .map((item) => {
+      const top = categoryPanel.leaderboards[item.key]?.[0];
+      if (!top) return null;
+      return { category: item.key, label: PICK_CATEGORY_LABELS[item.key], capperId: top.capperId, capperName: top.name, winPct: top.winPct };
+    })
+    .filter((e): e is BestAtEntry => e !== null);
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Cappers</h1>
           <p className="mt-1 text-sm text-gray-500">
             {planStatus.capperCount + " capper" + (planStatus.capperCount === 1 ? "" : "s")}
           </p>
         </div>
-        <CapperForm atLimit={false} />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled
+            title="Coming soon"
+            className="cursor-not-allowed rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-400"
+          >
+            Compare two
+          </button>
+          <CapperForm atLimit={false} />
+        </div>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-2">
-        <a href={buildHref(undefined, undefined)} className={pillClass(!league)}>
+      <div className="mb-6 flex flex-wrap gap-2">
+        <a href={buildHref(undefined)} className={pillClass(!league)}>
           All leagues
         </a>
         {LEAGUES.map((l) => (
-          <a key={l} href={buildHref(l, undefined)} className={pillClass(league === l)}>
+          <a key={l} href={buildHref(l)} className={pillClass(league === l)}>
             {l}
           </a>
         ))}
       </div>
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        <a href={buildHref(league, undefined)} className={chipClass(!category)}>
-          All bet types
-        </a>
-        {chipSet.map((c) => (
-          <a key={c} href={buildHref(league, c)} className={chipClass(category === c)}>
-            {PICK_CATEGORY_LABELS[c]}
-          </a>
-        ))}
-      </div>
-
-      <WeeklyLeaderboard entries={leaderboard} />
-
-      <CapperPanelsGrid panels={panels} />
-
-      {rankedCappers.length === 0 ? (
+      {planStatus.capperCount === 0 ? (
         <div className="rounded-card bg-white p-10 text-center shadow-soft">
-          <p className="text-sm text-gray-400">
-            {league || category
-              ? "No cappers have picks matching this filter."
-              : "No cappers yet - add the first person or channel you follow for picks."}
-          </p>
+          <p className="text-sm text-gray-400">No cappers yet - add the first person or channel you follow for picks.</p>
         </div>
       ) : (
-        <CapperRankedList entries={rankedCappers} />
+        <>
+          <div className="mb-6">
+            <CappersLeaderboardTable weekEntries={weekEntries} allTimeEntries={allTimeEntries} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <BestAtPanel entries={bestAtEntries} />
+            <MostActivePanel entries={mostActive} />
+          </div>
+        </>
       )}
     </div>
   );

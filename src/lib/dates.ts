@@ -71,3 +71,17 @@ export function closestByTime<T>(items: T[], getTime: (item: T) => number, refer
     Math.abs(getTime(item) - referenceTime) < Math.abs(getTime(closest) - referenceTime) ? item : closest
   );
 }
+
+// "2h ago" / "3d ago" style relative time - `nowMs` is a required param
+// (not a default parameter evaluated at call time) so a Server Component
+// can pass one `Date.now()` snapshot for a whole render instead of each call
+// site computing its own, and so this stays trivially testable.
+export function formatRelativeTime(date: Date, nowMs: number): string {
+  const diffMin = Math.round((nowMs - date.getTime()) / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return diffMin + "m ago";
+  const diffHours = Math.round(diffMin / 60);
+  if (diffHours < 24) return diffHours + "h ago";
+  const diffDays = Math.round(diffHours / 24);
+  return diffDays + "d ago";
+}

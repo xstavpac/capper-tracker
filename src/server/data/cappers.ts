@@ -3,13 +3,17 @@ import type { Source } from "@prisma/client";
 import {
   computeStats,
   computeCategoryBreakdown,
+  computeSpecialistTag,
   pickCategory,
   chipSetForLeague,
   weightedRoiScore,
+  filterPicksByGradedWindow,
   RANKING_MIN_SAMPLE,
   type OverallStats,
   type PickCategoryKey,
   type CategoryBreakdownItem,
+  type SpecialistTag,
+  type ScorecardWindow,
 } from "@/server/data/stats";
 
 export type CapperLeagueFilter = { sportName?: string; category?: PickCategoryKey };
@@ -53,116 +57,110 @@ export async function getPlanStatus(userId: string) {
   return { isPro, capperCount };
 }
 
-export type WeeklyLeaderboardEntry = {
+export type LeaderboardEntry = {
   capperId: string;
   name: string;
   colorTag: string | null;
-  stats: OverallStats;
-};
-
-// Top performers over a trailing window, ranked by ROI - "who's hot right
-// now" alongside the all-time record on the capper's own page. Requires a
-// minimum number of graded picks in the window so one lucky bet can't rank
-// someone who's barely been tracked that week.
-export async function getWeeklyCapperLeaderboard(
-  userId: string,
-  options?: { days?: number; minGradedPicks?: number; limit?: number } & CapperLeagueFilter
-): Promise<WeeklyLeaderboardEntry[]> {
-  const days = options?.days ?? 7;
-  const minGradedPicks = options?.minGradedPicks ?? 3;
-  const limit = options?.limit ?? 5;
-  const windowStart = new Date(Date.now() - days * 86400000);
-
-  const picks = await prisma.pick.findMany({
-    where: {
-      userId,
-      status: { in: ["WIN", "LOSS", "PUSH"] },
-      gradedAt: { gte: windowStart },
-      ...(options?.sportName ? { sport: { name: options.sportName } } : {}),
-    },
-    include: { capper: true },
-  });
-
-  const scoped = options?.category ? picks.filter((p) => pickCategory(p) === options.category) : picks;
-
-  const byCapper = new Map<string, { name: string; colorTag: string | null; picks: typeof picks }>();
-  for (const pick of scoped) {
-    const existing = byCapper.get(pick.capperId);
-    if (existing) existing.picks.push(pick);
-    else byCapper.set(pick.capperId, { name: pick.capper.name, colorTag: pick.capper.colorTag, picks: [pick] });
-  }
-
-  return Array.from(byCapper.entries())
-    .map(([capperId, g]) => ({ capperId, name: g.name, colorTag: g.colorTag, stats: computeStats(g.picks) }))
-    .filter((e) => e.stats.wins + e.stats.losses + e.stats.pushes >= minGradedPicks)
-    .sort((a, b) => b.stats.roi - a.stats.roi)
-    .slice(0, limit);
-}
-
-export type RankedCapperEntry = {
-  capperId: string;
-  name: string;
-  colorTag: string | null;
-  totalPicks: number;
   stats: OverallStats;
   weightedScore: number;
-  rank: number | null; // null when below RANKING_MIN_SAMPLE - not part of the numbered ranking
+  specialist: SpecialistTag | null;
 };
 
-// The main Cappers-page leaderboard: every capper the current league/bet-type
-// filter surfaces (same roster as getCappersForUser), sorted by weighted ROI
-// score with a real rank number - except cappers below RANKING_MIN_SAMPLE
-// decided picks, who sort to the bottom, unranked, so a hot small sample
-// can't outrank someone with a large real one. Raw record/ROI is still
-// computed and returned for every entry (ranked or not) for transparency.
-export async function getCappersRanked(userId: string, filter?: CapperLeagueFilter): Promise<RankedCapperEntry[]> {
+// Backs the redesigned Cappers page's sortable leaderboard table - returns
+// EVERY capper with their raw stats (no pre-filtering, no rank-vs-unranked
+// split) so the table can sort by any column the user clicks; "small
+// sample" and rank-worthiness become display concerns (a tag, not an
+// exclusion) rather than being decided here. `window` reuses
+// ScorecardWindow/filterPicksByGradedWindow (the same This-week/All-time
+// toggle already used on the capper detail page) rather than inventing a
+// separate windowing concept.
+export async function getCapperLeaderboardTable(
+  userId: string,
+  window: ScorecardWindow,
+  filter?: CapperLeagueFilter
+): Promise<LeaderboardEntry[]> {
   const cappers = await getCappersForUser(userId, filter);
   if (cappers.length === 0) return [];
 
-  const picks = await prisma.pick.findMany({
+  const allPicks = await prisma.pick.findMany({
     where: {
       userId,
       capperId: { in: cappers.map((c) => c.id) },
       ...(filter?.sportName ? { sport: { name: filter.sportName } } : {}),
     },
   });
-  const scoped = filter?.category ? picks.filter((p) => pickCategory(p) === filter.category) : picks;
+  const scoped = filter?.category ? allPicks.filter((p) => pickCategory(p) === filter.category) : allPicks;
+  const windowed = filterPicksByGradedWindow(scoped, window);
 
-  const byCapper = new Map<string, typeof scoped>();
-  for (const pick of scoped) {
+  const byCapper = new Map<string, typeof windowed>();
+  for (const pick of windowed) {
     const list = byCapper.get(pick.capperId);
     if (list) list.push(pick);
     else byCapper.set(pick.capperId, [pick]);
   }
+  // Specialist tag always looks at this capper's full all-time history, not
+  // just the active window - a real specialization is a lasting pattern, not
+  // something that should flicker in and out depending on which 7 days
+  // happen to be graded right now.
+  const allByCapper = new Map<string, typeof allPicks>();
+  for (const pick of allPicks) {
+    const list = allByCapper.get(pick.capperId);
+    if (list) list.push(pick);
+    else allByCapper.set(pick.capperId, [pick]);
+  }
 
-  const entries: RankedCapperEntry[] = cappers.map((capper) => {
-    const capperPicks = byCapper.get(capper.id) ?? [];
-    const stats = computeStats(capperPicks);
+  return cappers.map((capper) => {
+    const stats = computeStats(byCapper.get(capper.id) ?? []);
     return {
       capperId: capper.id,
       name: capper.name,
       colorTag: capper.colorTag,
-      totalPicks: capperPicks.length,
       stats,
       weightedScore: weightedRoiScore(stats),
-      rank: null,
+      specialist: computeSpecialistTag(allByCapper.get(capper.id) ?? []),
     };
   });
+}
 
-  const decidedCount = (e: RankedCapperEntry) => e.stats.wins + e.stats.losses + e.stats.pushes;
+export type ActivityEntry = { capperId: string; name: string; colorTag: string | null; pickCount: number };
 
-  const ranked = entries
-    .filter((e) => decidedCount(e) >= RANKING_MIN_SAMPLE)
-    .sort((a, b) => b.weightedScore - a.weightedScore);
-  ranked.forEach((e, i) => {
-    e.rank = i + 1;
+const ACTIVE_WEEK_DAYS = 7;
+
+// Ranks by pick VOLUME (picks given, via datePosted) rather than win rate -
+// a distinct question from every other leaderboard here ("who's been
+// talking" vs "who's been right"). Deliberately counts every pick posted
+// this week regardless of status, including still-PENDING ones - activity
+// is about how much a capper has been giving picks, not how many have
+// settled yet.
+export async function getMostActiveThisWeek(
+  userId: string,
+  filter?: CapperLeagueFilter,
+  limit = 5
+): Promise<ActivityEntry[]> {
+  const cappers = await getCappersForUser(userId, filter);
+  if (cappers.length === 0) return [];
+
+  const weekStart = new Date(Date.now() - ACTIVE_WEEK_DAYS * 86400000);
+  const picks = await prisma.pick.findMany({
+    where: {
+      userId,
+      capperId: { in: cappers.map((c) => c.id) },
+      datePosted: { gte: weekStart },
+      ...(filter?.sportName ? { sport: { name: filter.sportName } } : {}),
+    },
   });
+  const scoped = filter?.category ? picks.filter((p) => pickCategory(p) === filter.category) : picks;
 
-  const unranked = entries
-    .filter((e) => decidedCount(e) < RANKING_MIN_SAMPLE)
-    .sort((a, b) => b.totalPicks - a.totalPicks || a.name.localeCompare(b.name));
+  const counts = new Map<string, number>();
+  for (const pick of scoped) {
+    counts.set(pick.capperId, (counts.get(pick.capperId) ?? 0) + 1);
+  }
 
-  return [...ranked, ...unranked];
+  return cappers
+    .map((capper) => ({ capperId: capper.id, name: capper.name, colorTag: capper.colorTag, pickCount: counts.get(capper.id) ?? 0 }))
+    .filter((e) => e.pickCount > 0)
+    .sort((a, b) => b.pickCount - a.pickCount)
+    .slice(0, limit);
 }
 
 export type CategoryLeaderboardEntry = {

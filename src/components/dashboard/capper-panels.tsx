@@ -1,9 +1,6 @@
 import type { ReactNode } from "react";
-import type { CapperPanels } from "@/server/data/capper-panels";
 import { getRecordColor } from "@/server/data/stats";
 import { TrendIcon } from "@/components/dashboard/trend-icon";
-
-const MAX_ROWS = 5;
 
 export function Avatar({
   name,
@@ -110,6 +107,60 @@ export function record(wins: number, losses: number, pushes: number) {
   return wins + "-" + losses + (pushes > 0 ? "-" + pushes : "");
 }
 
+function FlameIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
+      <path d="M12 2c1 3-2 4-2 7a3 3 0 1 0 6 0c1 1 2 2.5 2 4.5A6.5 6.5 0 0 1 5 13.5C5 8 12 6 12 2Z" />
+    </svg>
+  );
+}
+
+function SnowflakeIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+    >
+      <path d="M12 2v20M4 7l16 10M20 7 4 17M2 12h20" />
+    </svg>
+  );
+}
+
+// A capper's current streak as a small flame (win)/snowflake (loss) pill -
+// shared by the Cappers-page ranked list, the new leaderboard table, and a
+// capper's own detail page, so "what does a streak look like" stays one
+// answer across the app. Renders nothing below 2 - a lone win/loss isn't a
+// streak worth calling out. `compact` (list rows, tight on space) shows just
+// the count; the default verbose form ("5W streak") reads better as a
+// standalone badge, e.g. on the detail page's context strip.
+export function StreakBadge({
+  streak,
+  compact = false,
+}: {
+  streak: { type: "WIN" | "LOSS" | "NONE"; count: number };
+  compact?: boolean;
+}) {
+  if (streak.count < 2) return null;
+  const isWin = streak.type === "WIN";
+  return (
+    <span
+      className={
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium " +
+        (isWin ? "bg-orange-50 text-orange-600" : "bg-sky-50 text-sky-600")
+      }
+    >
+      {isWin ? <FlameIcon /> : <SnowflakeIcon />}
+      {compact ? streak.count : `${streak.count}${isWin ? "W" : "L"} streak`}
+    </span>
+  );
+}
+
 // Excludes pushes from the denominator, matching computeStats' winPct
 // convention (a push is neither a win nor a loss).
 export function winPctExcludingPushes(wins: number, losses: number) {
@@ -145,96 +196,3 @@ export function Panel({
   );
 }
 
-export function CapperPanelsGrid({ panels }: { panels: CapperPanels }) {
-  const hasAny =
-    panels.hotStreaks.length > 0 ||
-    panels.coolingOff.length > 0 ||
-    panels.rising.length > 0 ||
-    panels.fallingOff.length > 0 ||
-    panels.bestLast20.length > 0;
-
-  if (!hasAny) return null;
-
-  return (
-    <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {panels.hotStreaks.length > 0 && (
-        <Panel title="Hot streaks" subtitle="Active win streaks, longest first">
-          {panels.hotStreaks.slice(0, MAX_ROWS).map((e) => (
-            <PanelRow
-              key={e.capperId}
-              capperId={e.capperId}
-              name={e.name}
-              colorTag={e.colorTag}
-              right={<span className="text-orange-600">{e.streakCount}W</span>}
-            />
-          ))}
-        </Panel>
-      )}
-
-      {panels.coolingOff.length > 0 && (
-        <Panel title="Cooling off" subtitle="Active loss streaks, longest first">
-          {panels.coolingOff.slice(0, MAX_ROWS).map((e) => (
-            <PanelRow
-              key={e.capperId}
-              capperId={e.capperId}
-              name={e.name}
-              colorTag={e.colorTag}
-              right={<span className="text-sky-600">{e.streakCount}L</span>}
-            />
-          ))}
-        </Panel>
-      )}
-
-      {panels.rising.length > 0 && (
-        <Panel title="Trending" subtitle="Strong starts, too early for a full rank">
-          {panels.rising.slice(0, MAX_ROWS).map((e) => (
-            <BarRow
-              key={e.capperId}
-              capperId={e.capperId}
-              name={e.name}
-              colorTag={e.colorTag}
-              record={record(e.wins, e.losses, e.pushes)}
-              winPct={winPctExcludingPushes(e.wins, e.losses)}
-              trending
-            />
-          ))}
-        </Panel>
-      )}
-
-      {panels.fallingOff.length > 0 && (
-        <Panel title="Falling off" subtitle="Recent form well below their lifetime rate">
-          {panels.fallingOff.slice(0, MAX_ROWS).map((e) => (
-            <PanelRow
-              key={e.capperId}
-              capperId={e.capperId}
-              name={e.name}
-              colorTag={e.colorTag}
-              icon={<TrendIcon direction="down" />}
-              right={
-                <span className="text-red-600">
-                  {Math.round(e.lifetimeWinPct)}% &rarr; {Math.round(e.recentWinPct)}%
-                </span>
-              }
-            />
-          ))}
-        </Panel>
-      )}
-
-      {panels.bestLast20.length > 0 && (
-        <Panel title="Best last 20 picks">
-          {panels.bestLast20.slice(0, MAX_ROWS).map((e) => (
-            <BarRow
-              key={e.capperId}
-              capperId={e.capperId}
-              name={e.name}
-              colorTag={e.colorTag}
-              record={record(e.wins, e.losses, e.pushes)}
-              winPct={e.recentWinPct}
-              showWinPct
-            />
-          ))}
-        </Panel>
-      )}
-    </div>
-  );
-}
