@@ -21,6 +21,13 @@ export async function getCurrentUser() {
   let user = await prisma.user.findUnique({ where: { supabaseId: authUser.id } });
 
   if (!user) {
+    // TEMPORARY - diagnosing the dashboard P2002 create-vs-update race, remove
+    // once the real cause is confirmed and fixed.
+    console.error("[auth] no user by supabaseId, calling upsert:", {
+      supabaseId: authUser.id,
+      authUserEmail: authUser.email,
+      callStack: new Error().stack?.split("\n").slice(1, 4).join(" | "),
+    });
     user = await upsertUserFromSupabase(authUser.id, {
       email: authUser.email ?? "",
       name: (authUser.user_metadata?.full_name as string | undefined) ?? (authUser.user_metadata?.name as string | undefined),
@@ -54,6 +61,16 @@ export async function upsertUserFromSupabase(
   const existingByEmail = profile.email
     ? await prisma.user.findUnique({ where: { email: profile.email } })
     : null;
+
+  // TEMPORARY - diagnosing the dashboard P2002 create-vs-update race, remove
+  // once the real cause is confirmed and fixed.
+  console.error("[auth] upsertUserFromSupabase lookup result:", {
+    supabaseId,
+    profileEmail: profile.email,
+    profileEmailType: typeof profile.email,
+    foundExistingByEmail: !!existingByEmail,
+    existingId: existingByEmail?.id,
+  });
 
   if (existingByEmail) {
     return prisma.user.update({
