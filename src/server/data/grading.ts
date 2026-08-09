@@ -229,8 +229,12 @@ export async function findMatchingGameResult(
 }
 
 // Shared by gradePendingPicks and regradeFuzzyMatchedPicks - picks the right score
-// pair for the bet (final / first-five / first-inning) and runs gradePick.
-function resolveOutcome(
+// pair for the bet (final / first-five / first-inning) and runs gradePick. Also
+// exported for getPendingPicksForUser (picks.ts), which uses a null result here
+// (game matched, but nothing gradable came out) to tell "waiting on a game to
+// finish" apart from "matched fine, but the bet text itself can't be graded" -
+// e.g. a TOTAL pick with no parseable number anywhere in it.
+export function resolveOutcome(
   pick: { betType: string; period: string; betDetail: string | null; homeTeam: string; line: number | null },
   game: GameResult
 ): GradeOutcome {

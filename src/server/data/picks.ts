@@ -12,7 +12,7 @@ import {
   type PickCategoryKey,
 } from "@/server/data/stats";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
-import { findMatchingGameResult } from "@/server/data/grading";
+import { findMatchingGameResult, resolveOutcome } from "@/server/data/grading";
 
 const FREE_PLAN_PICK_LIMIT = 1000;
 
@@ -134,7 +134,17 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
         unmatchedReason = "sport not tracked";
       } else if (ageHours > UNMATCHED_CHECK_DELAY_HOURS) {
         const match = await findMatchingGameResult(sportKey!, p);
-        if (!match) unmatchedReason = "no matching game found";
+        if (!match) {
+          unmatchedReason = "no matching game found";
+        } else if (!resolveOutcome(p, match.game)) {
+          // Game matched fine - the score data is there, but gradePick still
+          // couldn't produce WIN/LOSS/PUSH from this pick's own fields (most
+          // often a TOTAL/SPREAD pick with no parseable number anywhere in its
+          // betDetail). Without this, a pick like this stays PENDING forever
+          // with no visible reason at all, since findMatchingGameResult alone
+          // has nothing to complain about.
+          unmatchedReason = "matched game, but couldn't parse a gradable number from the bet text";
+        }
       }
 
       return {
