@@ -3,7 +3,7 @@ import { requireUser } from "@/server/auth";
 import { getOddsForSport, getLiveScoresForSport, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
 import { getPicksForGames } from "@/server/data/picks";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
-import { sameLocalDay } from "@/lib/dates";
+import { sameEasternDay, formatEastern } from "@/lib/dates";
 import { getTeamLogoUrl } from "@/lib/team-logos";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 import { TeamLogo } from "@/components/live/team-logo";
@@ -34,16 +34,17 @@ export default async function LivePage({
   const user = await requireUser();
   const [allOdds, scores] = await Promise.all([getOddsForSport(activeSport), getLiveScoresForSport(activeSport)]);
 
-  // The once-daily odds cache is keyed by UTC calendar day, but MLB's evening
-  // games straddle that boundary - the day's first fetch can land after some
-  // of the previous day's late games already started, permanently pulling
-  // them into "today's" snapshot. Drop anything from a strictly earlier local
-  // calendar day here rather than changing what gets cached (bulk-import's
-  // odds lookup still needs to find those games by team name regardless).
+  // The once-daily odds cache is keyed by Eastern calendar day (see
+  // easternDateKey), which lines up with how MLB's schedule is actually run -
+  // but a cache write can still land mid-evening after some of that day's
+  // late games already started. Drop anything from a strictly earlier
+  // Eastern calendar day here rather than changing what gets cached (bulk-
+  // import's odds lookup still needs to find those games by team name
+  // regardless).
   const now = new Date();
   const odds = allOdds.filter((game) => {
     const gameDate = new Date(game.commenceTime);
-    return sameLocalDay(gameDate, now) || gameDate > now;
+    return sameEasternDay(gameDate, now) || gameDate > now;
   });
 
   const hasApiKey = process.env.ODDS_API_KEY ? true : false;
@@ -133,7 +134,7 @@ export default async function LivePage({
               <Link href={"/live/" + game.id + "?sport=" + activeSport} className="block">
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-xs text-gray-400">
-                  {new Date(game.commenceTime).toLocaleString("en-US", {
+                  {formatEastern(new Date(game.commenceTime), {
                     month: "short",
                     day: "numeric",
                     hour: "numeric",

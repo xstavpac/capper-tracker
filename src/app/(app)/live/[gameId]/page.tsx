@@ -9,6 +9,7 @@ import {
 } from "@/server/data/odds";
 import { persistFinalScores, gradePendingPicks, regradeFuzzyMatchedPicks } from "@/server/data/grading";
 import { getPicksForGame, getCapperScorecard } from "@/server/data/picks";
+import { formatEastern } from "@/lib/dates";
 import { betTypeLabel } from "@/server/data/stats";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
@@ -140,7 +141,7 @@ export default async function GameDetailPage({
       <div className="mt-3 rounded-card bg-white p-5 shadow-soft">
         <div className="mb-3 flex items-center justify-between">
           <div className="text-xs text-gray-400">
-            {new Date(game.commenceTime).toLocaleString("en-US", {
+            {formatEastern(new Date(game.commenceTime), {
               month: "short",
               day: "numeric",
               hour: "numeric",

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { Pick, PickStatus } from "@prisma/client";
 import { favoriteOrUnderdog, extractLine } from "@/lib/bet-line";
+import { formatEastern, startOfEasternDay } from "@/lib/dates";
 
 export type OverallStats = {
   wins: number;
@@ -284,7 +285,7 @@ export function filterPicksByGradedWindow<T extends { gradedAt: Date | null }>(
   if (window === "ALL") return picks;
 
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfToday = startOfEasternDay(now);
 
   let start: Date;
   let end: Date = now;
@@ -545,7 +546,7 @@ export function computeUnitsChartData(picks: Pick[]): UnitsChartPoint[] {
       running -= pick.units;
     }
     return {
-      date: pick.gameTime.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      date: formatEastern(pick.gameTime, { month: "short", day: "numeric" }),
       cumulativeUnits: Math.round(running * 100) / 100,
     };
   });

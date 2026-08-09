@@ -14,6 +14,7 @@ import {
 import { UnitsChart, type UnitsChartPoint } from "@/components/dashboard/units-chart";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
+import { formatEastern } from "@/lib/dates";
 
 const SOURCE_LABELS: Record<string, string> = {
   TWITTER: "Twitter / X",
@@ -77,7 +78,7 @@ export default async function CapperDetailPage({
       running -= pick.units;
     }
     return {
-      date: pick.gameTime.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      date: formatEastern(pick.gameTime, { month: "short", day: "numeric" }),
       cumulativeUnits: Math.round(running * 100) / 100,
     };
   });

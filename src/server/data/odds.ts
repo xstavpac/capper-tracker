@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sameLocalDay, closestByTime } from "@/lib/dates";
+import { sameEasternDay, easternDateKey, closestByTime } from "@/lib/dates";
 
 export type OddsGame = {
   id: string;
@@ -41,12 +41,8 @@ export const LIVE_SPORTS = [
 
 const BASE_URL = "https://api.the-odds-api.com/v4";
 
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
-  const fetchDate = todayKey();
+  const fetchDate = easternDateKey(new Date());
 
   const existing = await prisma.oddsSnapshot.findUnique({
     where: { sportKey_fetchDate: { sportKey, fetchDate } },
@@ -104,9 +100,8 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
 }
 
 export async function getMlbLiveScores(): Promise<ScoreGame[]> {
-  const today = todayKey();
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const yesterday = easternDateKey(new Date(Date.now() - 86400000));
+  const tomorrow = easternDateKey(new Date(Date.now() + 86400000));
   const url =
     "https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=" +
     yesterday +
@@ -157,7 +152,7 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
 // which is enough for live display and full-game Moneyline/Spread/Total
 // grading.
 async function getEspnScores(sportPath: string): Promise<ScoreGame[]> {
-  const fmt = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, "");
+  const fmt = (d: Date) => easternDateKey(d).replace(/-/g, "");
   const yesterday = fmt(new Date(Date.now() - 86400000));
   const tomorrow = fmt(new Date(Date.now() + 86400000));
   const url =
@@ -280,7 +275,7 @@ export async function resolveGameForNickname(
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
 
-  const sameDay = candidates.filter((g) => sameLocalDay(new Date(g.commenceTime), referenceTime));
+  const sameDay = candidates.filter((g) => sameEasternDay(new Date(g.commenceTime), referenceTime));
   const pool = sameDay.length > 0 ? sameDay : candidates;
   const notFinal = pool.filter((g) => g.status !== "final");
   const finalPool = notFinal.length > 0 ? notFinal : pool;
@@ -310,7 +305,7 @@ export async function resolveGameForTeams(
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
 
-  const sameDay = candidates.filter((g) => sameLocalDay(new Date(g.commenceTime), referenceTime));
+  const sameDay = candidates.filter((g) => sameEasternDay(new Date(g.commenceTime), referenceTime));
   const pool = sameDay.length > 0 ? sameDay : candidates;
   const notFinal = pool.filter((g) => g.status !== "final");
   const finalPool = notFinal.length > 0 ? notFinal : pool;

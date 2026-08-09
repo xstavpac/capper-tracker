@@ -7,6 +7,7 @@ import { PickForm } from "@/components/dashboard/pick-form";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 import { favoriteOrUnderdog } from "@/lib/bet-line";
+import { formatEastern } from "@/lib/dates";
 import type { BetType, PickStatus, Period } from "@prisma/client";
 
 const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
@@ -206,7 +207,7 @@ export default async function PicksPage({
                       </span>
                     )}
                     <span className="ml-2 font-normal text-gray-400">
-                      {pick.gameTime.toLocaleString("en-US", {
+                      {formatEastern(pick.gameTime, {
                         month: "short",
                         day: "numeric",
                         hour: "numeric",

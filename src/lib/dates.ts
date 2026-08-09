@@ -1,9 +1,66 @@
-export function sameLocalDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
+// Every date/time in this app is pinned to US Eastern - sports schedules and
+// broadcasts are all Eastern-native, and the app must behave identically no
+// matter what timezone the server process happens to run in (Vercel
+// functions default to UTC, local dev uses the machine's own TZ) or where a
+// user is physically logged in from (VPN, travel, etc.). Nothing here should
+// ever read Date's local getFullYear()/getMonth()/getDate()/toLocaleString()
+// without an explicit timeZone - those silently follow the server process's
+// own zone, not a fixed one.
+export const APP_TIME_ZONE = "America/New_York";
+
+function easternDateParts(date: Date): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  return { year: get("year"), month: get("month"), day: get("day") };
+}
+
+// UTC-minus-Eastern offset in minutes at this instant (240 for EDT, 300 for
+// EST) - re-formatting the same instant's wall-clock string in both zones
+// and re-parsing each as if it were server-local cancels out whatever the
+// server's own local zone actually is, leaving just the real UTC/ET gap.
+function easternOffsetMinutes(date: Date): number {
+  const utcAsLocal = new Date(date.toLocaleString("en-US", { timeZone: "UTC" }));
+  const etAsLocal = new Date(date.toLocaleString("en-US", { timeZone: APP_TIME_ZONE }));
+  return (utcAsLocal.getTime() - etAsLocal.getTime()) / 60000;
+}
+
+// The real UTC instant corresponding to 00:00:00 Eastern on the Eastern
+// calendar day that `reference` falls on - used for "today"/"yesterday"
+// window boundaries (see filterPicksByGradedWindow in server/data/stats.ts).
+export function startOfEasternDay(reference: Date): Date {
+  const { year, month, day } = easternDateParts(reference);
+  const utcMidnightGuess = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+  const offsetMin = easternOffsetMinutes(utcMidnightGuess);
+  return new Date(utcMidnightGuess.getTime() + offsetMin * 60000);
+}
+
+// "YYYY-MM-DD" for the Eastern calendar day `date` falls on - replaces the
+// old todayKey()'s raw toISOString().slice(0,10), which keyed by UTC day and
+// let evening ET games straddle the cache/window boundary a few hours early.
+export function easternDateKey(date: Date): string {
+  const { year, month, day } = easternDateParts(date);
+  return year + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+}
+
+// Do `a` and `b` fall on the same Eastern calendar day? Timezone-fixed
+// replacement for the old sameLocalDay, which compared using the server
+// process's own local zone instead of a consistent one.
+export function sameEasternDay(a: Date, b: Date): boolean {
+  const pa = easternDateParts(a);
+  const pb = easternDateParts(b);
+  return pa.year === pb.year && pa.month === pb.month && pa.day === pb.day;
+}
+
+// Formats `date` for display, always in Eastern - a thin wrapper so display
+// call sites can't accidentally omit the timeZone and fall back to whatever
+// zone the rendering server happens to be in.
+export function formatEastern(date: Date, options: Intl.DateTimeFormatOptions): string {
+  return date.toLocaleString("en-US", { ...options, timeZone: APP_TIME_ZONE });
 }
 
 // Picks the item in `items` whose getTime() is nearest to `referenceTime` (ms).
