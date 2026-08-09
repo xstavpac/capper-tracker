@@ -444,21 +444,12 @@ export async function getDashboardSummary(userId: string) {
     totalPicks: picks.length,
     // DEFAULT_CHIP_SET, not chipSetForLeague - this mixes every sport
     // together, and F5 ML/NRFI only mean anything within MLB (see
-    // getCategoryBreakdownForSport for the per-sport equivalent).
+    // getSportCategoryPanelData in server/data/cappers.ts for the per-sport
+    // equivalent, which also powers that panel's per-category leaderboards).
     categoryBreakdown: computeCategoryBreakdown(picks, DEFAULT_CHIP_SET),
     pendingCount: picks.filter((p) => p.status === "PENDING").length,
     recentPicks: picks.slice(0, 10),
   };
-}
-
-// Same breakdown as getDashboardSummary's, but scoped to one sport and using
-// that sport's full chip set (chipSetForLeague) instead of the universal
-// DEFAULT_CHIP_SET - this is how F5 ML/NRFI surface on the Live page's MLB
-// tab and a capper's MLB-specific record, instead of leaking into the
-// all-sports Dashboard panel where they don't belong.
-export async function getCategoryBreakdownForSport(userId: string, sportName: string) {
-  const picks = await prisma.pick.findMany({ where: { userId, sport: { name: sportName } } });
-  return computeCategoryBreakdown(picks, chipSetForLeague(sportName));
 }
 
 export type ReportBreakdownItem = { name: string; stats: OverallStats; count: number };

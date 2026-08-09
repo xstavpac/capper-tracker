@@ -2,7 +2,8 @@ import Link from "next/link";
 import { requireUser } from "@/server/auth";
 import { getOddsForSport, getLiveScoresForSport, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
 import { getPicksForGames } from "@/server/data/picks";
-import { pickCategory, betTypeLabel, chipSetForLeague, DEFAULT_CHIP_SET, getCategoryBreakdownForSport } from "@/server/data/stats";
+import { pickCategory, betTypeLabel, chipSetForLeague, DEFAULT_CHIP_SET } from "@/server/data/stats";
+import { getSportCategoryPanelData } from "@/server/data/cappers";
 import { sameEasternDay, formatEastern } from "@/lib/dates";
 import { getTeamLogoUrl } from "@/lib/team-logos";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
@@ -40,11 +41,13 @@ export default async function LivePage({
   // to show, so skip the extra query entirely.
   const hasSportSpecificCategories = chipSetForLeague(sportLabel).length > DEFAULT_CHIP_SET.length;
 
-  const [allOdds, scores, sportCategoryBreakdown] = await Promise.all([
+  const [allOdds, scores, sportCategoryPanel] = await Promise.all([
     getOddsForSport(activeSport),
     getLiveScoresForSport(activeSport),
-    hasSportSpecificCategories ? getCategoryBreakdownForSport(user.id, sportLabel) : Promise.resolve([]),
+    hasSportSpecificCategories ? getSportCategoryPanelData(user.id, sportLabel) : Promise.resolve(null),
   ]);
+  const sportCategoryBreakdown = sportCategoryPanel?.breakdown ?? [];
+  const sportCategoryLeaderboards = sportCategoryPanel?.leaderboards ?? {};
 
   // The once-daily odds cache is keyed by Eastern calendar day (see
   // easternDateKey), which lines up with how MLB's schedule is actually run -
@@ -99,7 +102,7 @@ export default async function LivePage({
       {sportCategoryBreakdown.length > 0 && (
         <div className="mb-6">
           <h2 className="mb-2 text-sm font-semibold text-gray-900">{sportLabel} record by category</h2>
-          <CategoryBreakdown items={sportCategoryBreakdown} />
+          <CategoryBreakdown items={sportCategoryBreakdown} leaderboards={sportCategoryLeaderboards} />
         </div>
       )}
 

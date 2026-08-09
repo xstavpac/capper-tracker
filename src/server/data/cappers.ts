@@ -2,11 +2,14 @@
 import type { Source } from "@prisma/client";
 import {
   computeStats,
+  computeCategoryBreakdown,
   pickCategory,
+  chipSetForLeague,
   weightedRoiScore,
   RANKING_MIN_SAMPLE,
   type OverallStats,
   type PickCategoryKey,
+  type CategoryBreakdownItem,
 } from "@/server/data/stats";
 
 export type CapperLeagueFilter = { sportName?: string; category?: PickCategoryKey };
@@ -160,6 +163,65 @@ export async function getCappersRanked(userId: string, filter?: CapperLeagueFilt
     .sort((a, b) => b.totalPicks - a.totalPicks || a.name.localeCompare(b.name));
 
   return [...ranked, ...unranked];
+}
+
+export type CategoryLeaderboardEntry = {
+  capperId: string;
+  name: string;
+  wins: number;
+  losses: number;
+  pushes: number;
+  winPct: number;
+};
+
+export type SportCategoryPanelData = {
+  breakdown: CategoryBreakdownItem[];
+  // Keyed by PickCategoryKey, but sparse (a category with zero cappers past
+  // CATEGORY_LEADERBOARD_MIN_PICKS just won't have an entry) - Partial is the
+  // honest type for that rather than claiming every key is always present.
+  leaderboards: Partial<Record<PickCategoryKey, CategoryLeaderboardEntry[]>>;
+};
+
+const CATEGORY_LEADERBOARD_MIN_PICKS = 3;
+const CATEGORY_LEADERBOARD_LIMIT = 5;
+
+// Powers the Live page's category breakdown tiles AND their expandable "top
+// cappers in this category" leaderboards, both off one picks query - a tile
+// grid with N categories would otherwise mean either N separate queries or
+// (worse) a fresh one per click. Scoped by sportName via chipSetForLeague
+// rather than hardcoded to MLB, so the same tile+leaderboard pattern is
+// ready for another sport's own category set later without any changes
+// here - only chipSetForLeague itself would need a new case.
+export async function getSportCategoryPanelData(userId: string, sportName: string): Promise<SportCategoryPanelData> {
+  const picks = await prisma.pick.findMany({
+    where: { userId, sport: { name: sportName } },
+    include: { capper: true },
+  });
+
+  const breakdown = computeCategoryBreakdown(picks, chipSetForLeague(sportName));
+
+  const leaderboards: Partial<Record<PickCategoryKey, CategoryLeaderboardEntry[]>> = {};
+  for (const item of breakdown) {
+    const scoped = picks.filter((p) => pickCategory(p) === item.key);
+
+    const byCapper = new Map<string, { name: string; picks: typeof scoped }>();
+    for (const pick of scoped) {
+      const existing = byCapper.get(pick.capperId);
+      if (existing) existing.picks.push(pick);
+      else byCapper.set(pick.capperId, { name: pick.capper.name, picks: [pick] });
+    }
+
+    leaderboards[item.key] = Array.from(byCapper.entries())
+      .map(([capperId, g]) => {
+        const stats = computeStats(g.picks);
+        return { capperId, name: g.name, wins: stats.wins, losses: stats.losses, pushes: stats.pushes, winPct: stats.winPct };
+      })
+      .filter((e) => e.wins + e.losses + e.pushes >= CATEGORY_LEADERBOARD_MIN_PICKS)
+      .sort((a, b) => b.winPct - a.winPct)
+      .slice(0, CATEGORY_LEADERBOARD_LIMIT);
+  }
+
+  return { breakdown, leaderboards };
 }
 
 export async function createCapper(
