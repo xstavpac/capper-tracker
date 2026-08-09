@@ -75,7 +75,13 @@ const WNBA_TEAMS = [
 
 const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
   cardinals: [
-    { label: "St. Louis Cardinals (MLB)", sport: "MLB", nickname: "st louis cardinals" },
+    // The period matters here: this nickname feeds straight into
+    // resolveGameForNickname's `g.homeTeam.toLowerCase().endsWith(nickname)`
+    // check against the live schedule, where the real team name is always
+    // "St. Louis Cardinals" (with the period) - a period-less nickname
+    // silently never matches, unlike every other AMBIGUOUS_NICKNAMES entry
+    // (none of which have punctuation in their real team name).
+    { label: "St. Louis Cardinals (MLB)", sport: "MLB", nickname: "st. louis cardinals" },
     { label: "Arizona Cardinals (NFL)", sport: "NFL", nickname: "arizona cardinals" },
   ],
   rangers: [
