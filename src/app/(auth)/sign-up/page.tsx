@@ -1,21 +1,20 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { AuthCard, AUTH_PRIMARY_BUTTON_CLASS, AUTH_INPUT_CLASS } from "@/components/auth/auth-card";
 import { GoogleIcon } from "@/components/auth/google-icon";
 
-function SignInForm() {
+export default function SignUpPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<"google" | "password" | null>(null);
+  const [checkEmail, setCheckEmail] = useState(false);
 
   async function handleGoogle() {
     setError(null);
@@ -23,7 +22,7 @@ function SignInForm() {
     const supabase = createSupabaseBrowserClient();
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(callbackUrl)}` },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (oauthError) {
       setError(oauthError.message);
@@ -31,23 +30,50 @@ function SignInForm() {
     }
   }
 
-  async function handlePasswordSignIn(e: React.FormEvent) {
+  async function handlePasswordSignUp(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading("password");
     const supabase = createSupabaseBrowserClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    });
     setLoading(null);
-    if (signInError) {
-      setError(signInError.message === "Invalid login credentials" ? "Incorrect email or password." : signInError.message);
+    if (signUpError) {
+      setError(signUpError.message);
       return;
     }
-    router.push(callbackUrl);
-    router.refresh();
+    // A session comes back immediately only if email confirmation is off in
+    // the Supabase dashboard - otherwise there's a pending user and nothing
+    // to do here until they click the confirmation link.
+    if (data.session) {
+      router.push("/dashboard");
+      router.refresh();
+    } else {
+      setCheckEmail(true);
+    }
+  }
+
+  if (checkEmail) {
+    return (
+      <AuthCard heading="Check your email" subtitle={`We sent a confirmation link to ${email}.`}>
+        <p className="text-sm text-gray-500">
+          Click the link in that email to finish creating your account, then come back and sign in.
+        </p>
+        <Link
+          href="/sign-in"
+          className="mt-6 block text-center text-sm font-medium text-[#7F2FD4] hover:text-[#6b26b3]"
+        >
+          Back to sign in
+        </Link>
+      </AuthCard>
+    );
   }
 
   return (
-    <AuthCard heading="Welcome back" subtitle="Sign in to your account">
+    <AuthCard heading="Create an account" subtitle="Start tracking your cappers for free">
       <button
         type="button"
         onClick={handleGoogle}
@@ -64,7 +90,7 @@ function SignInForm() {
         <div className="h-px flex-1 bg-gray-200" />
       </div>
 
-      <form onSubmit={handlePasswordSignIn} className="space-y-3">
+      <form onSubmit={handlePasswordSignUp} className="space-y-3">
         <input
           type="email"
           required
@@ -73,43 +99,29 @@ function SignInForm() {
           onChange={(e) => setEmail(e.target.value)}
           className={AUTH_INPUT_CLASS}
         />
-        <div>
-          <input
-            type="password"
-            required
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={AUTH_INPUT_CLASS}
-          />
-          <div className="mt-1.5 text-right">
-            <Link href="/forgot-password" className="text-xs font-medium text-[#7F2FD4] hover:text-[#6b26b3]">
-              Forgot password?
-            </Link>
-          </div>
-        </div>
+        <input
+          type="password"
+          required
+          minLength={6}
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className={AUTH_INPUT_CLASS}
+        />
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         <button type="submit" disabled={loading !== null} className={AUTH_PRIMARY_BUTTON_CLASS}>
-          {loading === "password" ? "Signing in..." : "Sign in"}
+          {loading === "password" ? "Creating account..." : "Sign up"}
         </button>
       </form>
 
       <p className="mt-6 text-center text-sm text-gray-500">
-        Don&apos;t have an account?{" "}
-        <Link href="/sign-up" className="font-medium text-[#7F2FD4] hover:text-[#6b26b3]">
-          Sign up
+        Already have an account?{" "}
+        <Link href="/sign-in" className="font-medium text-[#7F2FD4] hover:text-[#6b26b3]">
+          Sign in
         </Link>
       </p>
     </AuthCard>
-  );
-}
-
-export default function SignInPage() {
-  return (
-    <Suspense>
-      <SignInForm />
-    </Suspense>
   );
 }

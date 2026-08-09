@@ -8,9 +8,10 @@ Private analytics platform for tracking the sports betting cappers you follow.
   Leagues, Cappers, Picks — normalized, indexed for per-user queries.
 - Seed script for reference data (sports/leagues only — user data is never
   seeded, since it's private).
-- Google-only sign-in via NextAuth/Auth.js: middleware route protection, a
-  sign-in page, JWT sessions - no separate auth-provider webhook, the app's
-  own `users` table is populated directly on first sign-in.
+- Sign-in via Supabase Auth (Google + email/password): middleware route
+  protection, custom sign-in/sign-up/forgot-password pages, session cookies
+  managed by `@supabase/ssr` - the app's own `users` table is populated
+  directly on first sign-in, matched by email if the row already exists.
 - A `server/auth.ts` + `server/data/*` layer — every database query goes
   through here, always scoped by `userId`, so no view can accidentally leak
   another user's data.
@@ -26,20 +27,23 @@ Private analytics platform for tracking the sports betting cappers you follow.
    npm install
    ```
 
-2. **Set up Postgres**
+2. **Set up Supabase**
 
-   Create a free Postgres database at [neon.tech](https://neon.tech) or
-   [Vercel Postgres](https://vercel.com/storage/postgres), and copy the
-   connection string.
+   Create a free project at [supabase.com](https://supabase.com) (or reuse
+   an existing one) - copy its Postgres connection string for
+   `DATABASE_URL`/`DIRECT_URL`, and its Project URL + anon key from
+   Settings > API.
 
-3. **Set up Google sign-in**
+3. **Set up sign-in providers in the Supabase dashboard**
 
-   Create an OAuth Client ID (Web application) at
-   [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
-   Add authorized redirect URIs for both dev and prod:
-   `http://localhost:3000/api/auth/callback/google` and
-   `https://<your-domain>/api/auth/callback/google`. Copy the client ID and
-   secret.
+   Under Authentication > Providers: enable **Google** (paste your Client
+   ID/Secret from
+   [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
+   and add Supabase's callback URL -
+   `https://<project-ref>.supabase.co/auth/v1/callback` - as an authorized
+   redirect URI there), and confirm **Email** is enabled. Under
+   Authentication > URL Configuration, add `http://localhost:3000/**` and
+   your production domain to the allowed redirect URLs.
 
 4. **Configure environment variables**
 
@@ -47,9 +51,7 @@ Private analytics platform for tracking the sports betting cappers you follow.
    cp .env.example .env
    ```
 
-   Fill in `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and
-   `AUTH_SECRET` (generate one with
-   `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`).
+   Fill in `DATABASE_URL` and the two `NEXT_PUBLIC_SUPABASE_*` values.
 
 5. **Run migrations and seed reference data**
 
@@ -64,16 +66,15 @@ Private analytics platform for tracking the sports betting cappers you follow.
    npm run dev
    ```
 
-   Visit `http://localhost:3000`, sign in with Google, and you'll land on an
-   empty dashboard — ready for Milestone 3 (the actual Capper + Pick creation
-   UI).
+   Visit `http://localhost:3000`, sign in, and you'll land on an empty
+   dashboard — ready for Milestone 3 (the actual Capper + Pick creation UI).
 
 ## Deploying
 
 Push to a GitHub repo and import it in Vercel — it will build automatically.
-Add the same environment variables in the Vercel project settings (using
-your production domain in the Google OAuth redirect URI and
-`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`AUTH_SECRET`).
+Add the same `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`
+environment variables in the Vercel project settings, and add your
+production domain to Supabase's allowed redirect URLs.
 
 ## Next milestone (3)
 

@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { usePathname, useRouter } from "next/navigation";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { dropCatalogButtonBaseClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
 
 type SidebarUser = { name: string | null; email: string; profilePictureUrl: string | null };
@@ -231,8 +231,16 @@ function SignOutIcon() {
 }
 
 function AccountRow({ user }: { user: SidebarUser }) {
+  const router = useRouter();
   const label = user.name ?? user.email;
   const initials = label.slice(0, 2).toUpperCase();
+
+  async function handleSignOut() {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/");
+    router.refresh();
+  }
 
   return (
     <div className="mt-auto flex items-center gap-2 px-2 pt-4">
@@ -246,7 +254,7 @@ function AccountRow({ user }: { user: SidebarUser }) {
       )}
       <span className="min-w-0 flex-1 truncate text-sm text-gray-700">{label}</span>
       <button
-        onClick={() => signOut({ callbackUrl: "/" })}
+        onClick={handleSignOut}
         aria-label="Sign out"
         className="shrink-0 rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-50 hover:text-gray-600"
       >

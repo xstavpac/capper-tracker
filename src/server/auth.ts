@@ -1,18 +1,20 @@
-import { auth } from "@/auth";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 
 export async function getCurrentUser() {
-  const session = await auth();
-  const googleId = (session as any)?.googleId as string | undefined;
-  if (!googleId || !session?.user) return null;
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  if (!authUser) return null;
 
-  let user = await prisma.user.findUnique({ where: { googleId } });
+  let user = await prisma.user.findUnique({ where: { supabaseId: authUser.id } });
 
   if (!user) {
-    user = await upsertUserFromGoogleProfile(googleId, {
-      email: session.user.email ?? "",
-      name: session.user.name ?? undefined,
-      picture: session.user.image ?? undefined,
+    user = await upsertUserFromSupabase(authUser.id, {
+      email: authUser.email ?? "",
+      name: (authUser.user_metadata?.full_name as string | undefined) ?? (authUser.user_metadata?.name as string | undefined),
+      picture: authUser.user_metadata?.avatar_url as string | undefined,
     });
   }
 
@@ -27,14 +29,16 @@ export async function requireUser() {
   return user;
 }
 
-// Called once per Google account on its first sign-in after this migration
-// (or ever, for a brand-new user). Matches an existing row by email first -
-// this app had real dev/test data under Clerk-issued ids before this
-// migration, and linking by email carries that account (and everything tied
-// to its userId - picks, cappers, etc.) forward instead of silently starting
-// a second, empty account for the same person.
-export async function upsertUserFromGoogleProfile(
-  googleId: string,
+// Called once per Supabase auth user on their first sign-in after this
+// migration (or ever, for a brand-new user) - regardless of whether they
+// signed in with Google or email/password, Supabase gives every person one
+// stable `auth.users.id`. Matches an existing row by email first - this app
+// had real dev/test data under Google-issued ids before this migration, and
+// linking by email carries that account (and everything tied to its userId -
+// picks, cappers, etc.) forward instead of silently starting a second, empty
+// account for the same person.
+export async function upsertUserFromSupabase(
+  supabaseId: string,
   profile: { email: string; name?: string; picture?: string }
 ) {
   const existingByEmail = profile.email
@@ -45,7 +49,7 @@ export async function upsertUserFromGoogleProfile(
     return prisma.user.update({
       where: { id: existingByEmail.id },
       data: {
-        googleId,
+        supabaseId,
         name: profile.name ?? existingByEmail.name,
         profilePictureUrl: profile.picture ?? existingByEmail.profilePictureUrl,
       },
@@ -54,7 +58,7 @@ export async function upsertUserFromGoogleProfile(
 
   return prisma.user.create({
     data: {
-      googleId,
+      supabaseId,
       email: profile.email,
       name: profile.name,
       profilePictureUrl: profile.picture,

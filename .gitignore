@@ -19,3 +19,6 @@ npm-debug.log*
 tsconfig.tsbuildinfo
 
 .vercel
+
+# Supabase CLI local state (project link cache, etc.) - not app code
+supabase/.temp/
