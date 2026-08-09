@@ -2,10 +2,20 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 
 export async function getCurrentUser() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
+  // Middleware already gates every protected route on a resolved session,
+  // but guard here too (defense in depth) - Supabase's client throws
+  // synchronously if its URL/key aren't configured, and that would 500 the
+  // whole page's Server Component render instead of just failing auth.
+  let authUser;
+  try {
+    const supabase = await createSupabaseServerClient();
+    ({
+      data: { user: authUser },
+    } = await supabase.auth.getUser());
+  } catch (err) {
+    console.error("[auth] Supabase session check failed:", err);
+    return null;
+  }
   if (!authUser) return null;
 
   let user = await prisma.user.findUnique({ where: { supabaseId: authUser.id } });
