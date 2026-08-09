@@ -3,8 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
+import { signOut } from "next-auth/react";
 import { dropCatalogButtonBaseClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
+
+type SidebarUser = { name: string | null; email: string; profilePictureUrl: string | null };
 
 function iconProps(className?: string) {
   return {
@@ -209,11 +211,47 @@ function SidebarDropCatalog({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function AccountRow() {
+function SignOutIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" />
+      <path d="M15 16l4-4-4-4" />
+      <path d="M19 12H9" />
+    </svg>
+  );
+}
+
+function AccountRow({ user }: { user: SidebarUser }) {
+  const label = user.name ?? user.email;
+  const initials = label.slice(0, 2).toUpperCase();
+
   return (
     <div className="mt-auto flex items-center gap-2 px-2 pt-4">
-      <UserButton afterSignOutUrl="/" />
-      <span className="text-sm text-gray-500">Account</span>
+      {user.profilePictureUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- external (Google) avatar, no next/image remote-pattern config in this project
+        <img src={user.profilePictureUrl} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
+      ) : (
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[10px] font-medium text-white">
+          {initials}
+        </div>
+      )}
+      <span className="min-w-0 flex-1 truncate text-sm text-gray-700">{label}</span>
+      <button
+        onClick={() => signOut({ callbackUrl: "/" })}
+        aria-label="Sign out"
+        className="shrink-0 rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-50 hover:text-gray-600"
+      >
+        <SignOutIcon />
+      </button>
     </div>
   );
 }
@@ -223,7 +261,7 @@ function AccountRow() {
 // on the main content card next to it). Below md:, that same content becomes
 // a slide-in drawer opened from a compact top bar - full-bleed on mobile
 // rather than another floating card, since there's no room to spare there.
-export function AppSidebar() {
+export function AppSidebar({ user }: { user: SidebarUser }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -249,7 +287,7 @@ export function AppSidebar() {
         </div>
         <NavLinks />
         <SidebarDropCatalog />
-        <AccountRow />
+        <AccountRow user={user} />
       </aside>
 
       {open && (
@@ -271,7 +309,7 @@ export function AppSidebar() {
             </div>
             <NavLinks onNavigate={() => setOpen(false)} />
             <SidebarDropCatalog onNavigate={() => setOpen(false)} />
-            <AccountRow />
+            <AccountRow user={user} />
           </aside>
         </div>
       )}

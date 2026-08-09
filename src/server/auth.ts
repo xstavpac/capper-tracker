@@ -1,14 +1,19 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function getCurrentUser() {
-  const { userId: clerkId } = await auth();
-  if (!clerkId) return null;
+  const session = await auth();
+  const googleId = (session as any)?.googleId as string | undefined;
+  if (!googleId || !session?.user) return null;
 
-  let user = await prisma.user.findUnique({ where: { clerkId } });
+  let user = await prisma.user.findUnique({ where: { googleId } });
 
   if (!user) {
-    user = await upsertUserFromClerk(clerkId);
+    user = await upsertUserFromGoogleProfile(googleId, {
+      email: session.user.email ?? "",
+      name: session.user.name ?? undefined,
+      picture: session.user.image ?? undefined,
+    });
   }
 
   return user;
@@ -22,24 +27,37 @@ export async function requireUser() {
   return user;
 }
 
-export async function upsertUserFromClerk(clerkId: string) {
-  const clerkUser = await currentUser();
-  if (!clerkUser) return null;
+// Called once per Google account on its first sign-in after this migration
+// (or ever, for a brand-new user). Matches an existing row by email first -
+// this app had real dev/test data under Clerk-issued ids before this
+// migration, and linking by email carries that account (and everything tied
+// to its userId - picks, cappers, etc.) forward instead of silently starting
+// a second, empty account for the same person.
+export async function upsertUserFromGoogleProfile(
+  googleId: string,
+  profile: { email: string; name?: string; picture?: string }
+) {
+  const existingByEmail = profile.email
+    ? await prisma.user.findUnique({ where: { email: profile.email } })
+    : null;
 
-  const email = clerkUser.emailAddresses[0]?.emailAddress ?? "";
+  if (existingByEmail) {
+    return prisma.user.update({
+      where: { id: existingByEmail.id },
+      data: {
+        googleId,
+        name: profile.name ?? existingByEmail.name,
+        profilePictureUrl: profile.picture ?? existingByEmail.profilePictureUrl,
+      },
+    });
+  }
 
-  return prisma.user.upsert({
-    where: { clerkId },
-    update: {
-      email,
-      name: clerkUser.fullName ?? undefined,
-      profilePictureUrl: clerkUser.imageUrl ?? undefined,
-    },
-    create: {
-      clerkId,
-      email,
-      name: clerkUser.fullName ?? undefined,
-      profilePictureUrl: clerkUser.imageUrl ?? undefined,
+  return prisma.user.create({
+    data: {
+      googleId,
+      email: profile.email,
+      name: profile.name,
+      profilePictureUrl: profile.picture,
       subscription: {
         create: { plan: "FREE", status: "active" },
       },

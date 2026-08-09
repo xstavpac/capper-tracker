@@ -8,8 +8,9 @@ Private analytics platform for tracking the sports betting cappers you follow.
   Leagues, Cappers, Picks — normalized, indexed for per-user queries.
 - Seed script for reference data (sports/leagues only — user data is never
   seeded, since it's private).
-- Clerk auth wiring: middleware route protection, sign-in/sign-up pages,
-  a webhook that syncs Clerk users into Postgres.
+- Google-only sign-in via NextAuth/Auth.js: middleware route protection, a
+  sign-in page, JWT sessions - no separate auth-provider webhook, the app's
+  own `users` table is populated directly on first sign-in.
 - A `server/auth.ts` + `server/data/*` layer — every database query goes
   through here, always scoped by `userId`, so no view can accidentally leak
   another user's data.
@@ -23,7 +24,6 @@ Private analytics platform for tracking the sports betting cappers you follow.
 
    ```bash
    npm install
-   npm install svix   # required by the Clerk webhook route
    ```
 
 2. **Set up Postgres**
@@ -32,12 +32,13 @@ Private analytics platform for tracking the sports betting cappers you follow.
    [Vercel Postgres](https://vercel.com/storage/postgres), and copy the
    connection string.
 
-3. **Set up Clerk**
+3. **Set up Google sign-in**
 
-   Create a free app at [clerk.com](https://clerk.com). Copy the
-   publishable key and secret key. Under Webhooks, add an endpoint pointing
-   at `https://<your-domain>/api/webhooks/clerk` subscribed to
-   `user.created`, `user.updated`, `user.deleted`, and copy the signing
+   Create an OAuth Client ID (Web application) at
+   [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
+   Add authorized redirect URIs for both dev and prod:
+   `http://localhost:3000/api/auth/callback/google` and
+   `https://<your-domain>/api/auth/callback/google`. Copy the client ID and
    secret.
 
 4. **Configure environment variables**
@@ -46,7 +47,9 @@ Private analytics platform for tracking the sports betting cappers you follow.
    cp .env.example .env
    ```
 
-   Fill in `DATABASE_URL`, the Clerk keys, and `CLERK_WEBHOOK_SECRET`.
+   Fill in `DATABASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and
+   `AUTH_SECRET` (generate one with
+   `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`).
 
 5. **Run migrations and seed reference data**
 
@@ -61,15 +64,16 @@ Private analytics platform for tracking the sports betting cappers you follow.
    npm run dev
    ```
 
-   Visit `http://localhost:3000`, sign up, and you'll land on an empty
-   dashboard — ready for Milestone 3 (the actual Capper + Pick creation UI).
+   Visit `http://localhost:3000`, sign in with Google, and you'll land on an
+   empty dashboard — ready for Milestone 3 (the actual Capper + Pick creation
+   UI).
 
 ## Deploying
 
 Push to a GitHub repo and import it in Vercel — it will build automatically.
-Add the same environment variables in the Vercel project settings, and
-update your Clerk webhook URL to point at your Vercel deployment (or your
-custom domain, once you add one — no code changes required either way).
+Add the same environment variables in the Vercel project settings (using
+your production domain in the Google OAuth redirect URI and
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`AUTH_SECRET`).
 
 ## Next milestone (3)
 

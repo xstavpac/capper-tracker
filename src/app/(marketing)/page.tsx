@@ -13,16 +13,10 @@ export default function MarketingPage() {
       </p>
       <div className="flex gap-3">
         <Link
-          href="/sign-up"
+          href="/sign-in"
           className="rounded-full bg-brand-600 px-6 py-3 font-medium text-white shadow-soft transition hover:bg-brand-700"
         >
           Get started free
-        </Link>
-        <Link
-          href="/sign-in"
-          className="rounded-full border border-gray-200 px-6 py-3 font-medium text-gray-700 transition hover:border-gray-300"
-        >
-          Sign in
         </Link>
       </div>
     </main>

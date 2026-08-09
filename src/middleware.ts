@@ -1,19 +1,17 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 
 // Everything under (app) requires a signed-in user.
-// Marketing pages, sign-in/sign-up, webhooks, and cron routes stay public
-// (cron routes have no Clerk session - they authenticate via CRON_SECRET instead).
-const isPublicRoute = createRouteMatcher([
-  "/",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/api/webhooks(.*)",
-  "/api/cron(.*)",
-]);
+// Marketing pages, sign-in, webhooks, and cron routes stay public
+// (cron routes have no session - they authenticate via CRON_SECRET instead).
+const PUBLIC_ROUTES = [/^\/$/, /^\/sign-in/, /^\/api\/auth/, /^\/api\/webhooks/, /^\/api\/cron/];
 
-export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
-    await auth.protect();
+export default auth((req) => {
+  const isPublic = PUBLIC_ROUTES.some((re) => re.test(req.nextUrl.pathname));
+  if (!isPublic && !req.auth) {
+    const signInUrl = new URL("/sign-in", req.nextUrl.origin);
+    signInUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
+    return NextResponse.redirect(signInUrl);
   }
 });
 
