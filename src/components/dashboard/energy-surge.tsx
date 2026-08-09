@@ -32,9 +32,9 @@ const BOLTS: { style: CSSProperties; delayMs: number; durationMs: number }[] = [
 // corners, and the number itself jittering/flashing electric blue before
 // settling into its final tone color. Timed off CountUp's own DURATION_MS so
 // it fires right as the count-up finishes, not a fixed guess at how long
-// that takes. Works for any children (a live CountUp, or plain text like the
-// Record stat's "W-L-P" string) so every hero stat can share one effect even
-// though not all of them animate their own digits.
+// that takes. Works for any children, so every hero stat can share one
+// effect - including composite ones like EnergyRecordCountUp below, as long
+// as whatever's inside also finishes changing by DURATION_MS.
 export function EnergySurge({
   tone = "neutral",
   className = "",
@@ -112,6 +112,32 @@ export function EnergyCountUp({
   return (
     <EnergySurge tone={tone} className={className}>
       <CountUp value={value} decimals={decimals} signed={signed} suffix={suffix} commas={commas} />
+    </EnergySurge>
+  );
+}
+
+// Record ("90-57-2") has no single number to count up - it's three. Each
+// CountUp below mounts at the same time with the same DURATION_MS/easing, so
+// wins/losses/pushes count up in lockstep ("0-0-0" -> "90-57-2") rather than
+// sitting there static while every other hero stat animates in, and the
+// shared EnergySurge completion effect still lands exactly when they finish
+// - same as it does for a plain EnergyCountUp.
+export function EnergyRecordCountUp({
+  wins,
+  losses,
+  pushes,
+  tone = "neutral",
+  className = "",
+}: {
+  wins: number;
+  losses: number;
+  pushes: number;
+  tone?: "up" | "down" | "neutral";
+  className?: string;
+}) {
+  return (
+    <EnergySurge tone={tone} className={className}>
+      <CountUp value={wins} />-<CountUp value={losses} />-<CountUp value={pushes} />
     </EnergySurge>
   );
 }

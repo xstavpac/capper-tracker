@@ -6,7 +6,7 @@ import { getCapperPanels } from "@/server/data/capper-panels";
 import { UnitsChart } from "@/components/dashboard/units-chart";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { TrendingCappers } from "@/components/dashboard/trending-cappers";
-import { EnergySurge, EnergyCountUp } from "@/components/dashboard/energy-surge";
+import { EnergyCountUp, EnergyRecordCountUp } from "@/components/dashboard/energy-surge";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 
 // Color is now owned by EnergySurge/EnergyCountUp (each value sets its own
@@ -74,7 +74,7 @@ export default async function DashboardPage() {
           <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
             <HeroStat
               label="Record"
-              value={<EnergySurge>{overall.wins + "-" + overall.losses + "-" + overall.pushes}</EnergySurge>}
+              value={<EnergyRecordCountUp wins={overall.wins} losses={overall.losses} pushes={overall.pushes} />}
             />
             <HeroStat
               label="ROI"
