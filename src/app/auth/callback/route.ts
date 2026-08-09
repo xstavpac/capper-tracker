@@ -13,19 +13,28 @@ export async function GET(request: Request) {
   const next = searchParams.get("next") ?? "/dashboard";
 
   if (code) {
-    const supabase = await createSupabaseServerClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+    // Supabase's client throws synchronously if its URL/key aren't
+    // configured (same failure mode guarded against in middleware.ts and
+    // server/auth.ts) - without this, a misconfigured env var turns into an
+    // unhandled 500 crash page here instead of the graceful redirect every
+    // other auth failure gets.
+    try {
+      const supabase = await createSupabaseServerClient();
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (!error) {
+        return NextResponse.redirect(`${origin}${next}`);
+      }
+      // TEMPORARY - diagnosing the "flickers back to sign-in" report, remove
+      // once the real cause is confirmed and fixed.
+      console.error("[auth/callback] exchangeCodeForSession failed:", {
+        name: error.name,
+        status: error.status,
+        code: (error as { code?: string }).code,
+        message: error.message,
+      });
+    } catch (err) {
+      console.error("[auth/callback] Supabase client/session exchange threw:", err);
     }
-    // TEMPORARY - diagnosing the "flickers back to sign-in" report, remove
-    // once the real cause is confirmed and fixed.
-    console.error("[auth/callback] exchangeCodeForSession failed:", {
-      name: error.name,
-      status: error.status,
-      code: (error as { code?: string }).code,
-      message: error.message,
-    });
   } else {
     console.error("[auth/callback] no ?code param on callback request. Full URL:", request.url);
   }
