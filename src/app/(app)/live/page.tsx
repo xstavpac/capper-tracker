@@ -59,6 +59,11 @@ export default async function LivePage({
     return sameEasternDay(gameDate, now) || gameDate > now;
   });
 
+  // Only ever used to pick which empty-state message to show, never on its
+  // own - getOddsForSport can return real cached odds for today even when
+  // this is false (a prior successful fetch already populated OddsSnapshot,
+  // and cache hits never touch the key at all), so gating the "not
+  // configured" banner on this alone showed it right alongside real games.
   const hasApiKey = process.env.ODDS_API_KEY ? true : false;
 
   // The matched-picks list itself is cheap (one indexed query per game,
@@ -98,13 +103,13 @@ export default async function LivePage({
         </div>
       )}
 
-      {!hasApiKey && (
+      {odds.length === 0 && !hasApiKey && (
         <div className="rounded-card bg-white p-6 text-center text-sm text-gray-500 shadow-soft">
           No ODDS_API_KEY configured yet.
         </div>
       )}
 
-      {hasApiKey && odds.length === 0 && (
+      {odds.length === 0 && hasApiKey && (
         <div className="rounded-card bg-white p-10 text-center shadow-soft">
           <p className="text-sm text-gray-400">No games found for this sport right now.</p>
         </div>
