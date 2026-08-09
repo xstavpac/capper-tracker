@@ -1,22 +1,12 @@
-import Link from "next/link";
 import { requireUser } from "@/server/auth";
-import { getOddsForSport, getLiveScoresForSport, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
+import { getOddsForSport, getLiveScoresForSport, LIVE_SPORTS } from "@/server/data/odds";
 import { getPicksForGames } from "@/server/data/picks";
 import { pickCategory, betTypeLabel, chipSetForLeague, DEFAULT_CHIP_SET } from "@/server/data/stats";
 import { getSportCategoryPanelData } from "@/server/data/cappers";
-import { sameEasternDay, formatEastern } from "@/lib/dates";
-import { getTeamLogoUrl } from "@/lib/team-logos";
-import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
-import { TeamLogo } from "@/components/live/team-logo";
+import { sameEasternDay } from "@/lib/dates";
+import { type ExpanderPick } from "@/components/live/game-picks-expander";
+import { LiveScoreboard } from "@/components/live/live-scoreboard";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
-
-function formatOdds(price: number) {
-  return price > 0 ? "+" + price : String(price);
-}
-
-function findMarket(bookmaker: any, key: string) {
-  return bookmaker?.markets?.find((m: any) => m.key === key);
-}
 
 function tabClass(isActive: boolean) {
   return (
@@ -86,6 +76,30 @@ export default async function LivePage({
     }))
   );
 
+  // pickCategory/betTypeLabel touch server/data/stats.ts, which has a
+  // module-level prisma import - mapped here (Server Component) rather than
+  // inside LiveScoreboard (client) so that import never has to cross into
+  // the client bundle at all.
+  const expanderPicksByGame: ExpanderPick[][] = matchedPicksByGame.map((matchedPicks) =>
+    matchedPicks.map((p) => ({
+      pickId: p.id,
+      capperId: p.capperId,
+      capperName: p.capper.name,
+      capperColorTag: p.capper.colorTag,
+      category: pickCategory(p),
+      betDetail: p.betDetail || betTypeLabel(p.betType),
+      odds: p.odds,
+      units: p.units,
+      status: p.status,
+    }))
+  );
+
+  // MLB is currently the only sport with pregame odds detailed enough
+  // (moneyline favorite + a totals line on every game) for Board Pulse to
+  // mean anything - same "MLB-only for now" scoping as F5 ML/NRFI elsewhere
+  // on this page.
+  const showBoardPulse = activeSport === "baseball_mlb";
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6">
@@ -118,119 +132,16 @@ export default async function LivePage({
         </div>
       )}
 
-      <div className="space-y-3">
-        {odds.map((game, gameIndex) => {
-          const score = matchScoreToGame(scores, game);
-          const book = game.bookmakers[0];
-          const matchedPicks = matchedPicksByGame[gameIndex];
-          const expanderPicks: ExpanderPick[] = matchedPicks.map((p) => ({
-            pickId: p.id,
-            capperId: p.capperId,
-            capperName: p.capper.name,
-            capperColorTag: p.capper.colorTag,
-            category: pickCategory(p),
-            betDetail: p.betDetail || betTypeLabel(p.betType),
-            odds: p.odds,
-            units: p.units,
-            status: p.status,
-          }));
-          function findMarketAcrossBooks(key: string) {
-            for (const b of game.bookmakers) {
-              const m = findMarket(b, key);
-              if (m) return m;
-            }
-            return undefined;
-          }
-          const h2h = findMarketAcrossBooks("h2h");
-          const spreads = findMarketAcrossBooks("spreads");
-          const totals = findMarketAcrossBooks("totals");
-
-          const homeH2h = h2h?.outcomes.find((o: any) => o.name === game.homeTeam);
-          const awayH2h = h2h?.outcomes.find((o: any) => o.name === game.awayTeam);
-          const homeSpread = spreads?.outcomes.find((o: any) => o.name === game.homeTeam);
-          const awaySpread = spreads?.outcomes.find((o: any) => o.name === game.awayTeam);
-          const over = totals?.outcomes.find((o: any) => o.name === "Over");
-
-          const isLive = score?.status === "live";
-          const isFinal = score?.status === "final";
-
-          return (
-            <div
-              key={game.id}
-              className="rounded-card bg-white p-4 shadow-soft transition-shadow hover:shadow-md"
-            >
-              <Link href={"/live/" + game.id + "?sport=" + activeSport} className="block">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="text-xs text-gray-400">
-                  {formatEastern(new Date(game.commenceTime), {
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                  {book && " - " + book.title}
-                </div>
-                {isLive && (
-                  <span className="flex items-center gap-1.5">
-                    {score?.inningHalf && score?.inningOrdinal && (
-                      <span className="text-xs text-gray-500">
-                        {score.inningHalf} {score.inningOrdinal}
-                      </span>
-                    )}
-                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600">
-                      LIVE
-                    </span>
-                  </span>
-                )}
-                {isFinal && (
-                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
-                    FINAL
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center justify-between">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <TeamLogo src={getTeamLogoUrl(activeSport, game.awayTeam)} teamName={game.awayTeam} />
-                    <span className="truncate text-sm font-medium">{game.awayTeam}</span>
-                  </span>
-                  <span className="shrink-0 text-xs text-gray-500">
-                    {score?.scores?.find((s) => s.name === game.awayTeam)?.score ?? ""}
-                  </span>
-                </div>
-                <div className="text-right text-xs text-gray-500">
-                  {awayH2h && "ML " + formatOdds(awayH2h.price)}
-                  {awaySpread && " - " + (awaySpread.point! > 0 ? "+" : "") + awaySpread.point}
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <TeamLogo src={getTeamLogoUrl(activeSport, game.homeTeam)} teamName={game.homeTeam} />
-                    <span className="truncate text-sm font-medium">{game.homeTeam}</span>
-                  </span>
-                  <span className="shrink-0 text-xs text-gray-500">
-                    {score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? ""}
-                  </span>
-                </div>
-                <div className="text-right text-xs text-gray-500">
-                  {homeH2h && "ML " + formatOdds(homeH2h.price)}
-                  {homeSpread && " - " + (homeSpread.point! > 0 ? "+" : "") + homeSpread.point}
-                </div>
-              </div>
-
-              {over && (
-                <div className="mt-2 text-xs text-gray-400">
-                  Total: O/U {over.point} ({formatOdds(over.price)})
-                </div>
-              )}
-              </Link>
-
-              <GamePicksExpander picks={expanderPicks} />
-            </div>
-          );
-        })}
-      </div>
+      {odds.length > 0 && (
+        <LiveScoreboard
+          key={activeSport}
+          activeSport={activeSport}
+          odds={odds}
+          initialScores={scores}
+          matchedPicksByGame={expanderPicksByGame}
+          showBoardPulse={showBoardPulse}
+        />
+      )}
     </div>
   );
 }
