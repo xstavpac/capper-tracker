@@ -331,7 +331,10 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
 // F5 and NRFI are MLB-only chips for now, even though Period/BetType could
 // technically represent a first-half bet in another sport - other leagues
 // intentionally don't surface those two categories yet.
-const MLB_CHIP_SET: PickCategoryKey[] = [
+// Also the full universe of PickCategoryKey values, in display order -
+// getCapperCategoryRecord (picks.ts) relies on that to look up an arbitrary
+// single category (which might be F5 ML/NRFI) without filtering it out.
+export const MLB_CHIP_SET: PickCategoryKey[] = [
   "FAV_ML",
   "DOG_ML",
   "SPREAD_MINUS",
@@ -341,7 +344,7 @@ const MLB_CHIP_SET: PickCategoryKey[] = [
   "F5_ML",
   "NRFI",
 ];
-const DEFAULT_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD_MINUS", "SPREAD_PLUS", "OVER", "UNDER"];
+export const DEFAULT_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD_MINUS", "SPREAD_PLUS", "OVER", "UNDER"];
 
 export function chipSetForLeague(sportName: string): PickCategoryKey[] {
   return sportName.toUpperCase() === "MLB" ? MLB_CHIP_SET : DEFAULT_CHIP_SET;
@@ -389,25 +392,15 @@ export type CategoryBreakdownItem = {
   count: number; // decided picks: wins + losses + pushes
 };
 
-// NRFI excluded here (unlike chipSetForLeague's MLB set) - this order feeds
-// the Dashboard's all-sports "Record by category" section, and NRFI is
-// MLB-only. It stays fully available everywhere else that uses pickCategory
-// directly (Cappers-page league chips, panel filtering).
-const CATEGORY_BREAKDOWN_ORDER: PickCategoryKey[] = [
-  "FAV_ML",
-  "DOG_ML",
-  "SPREAD_MINUS",
-  "SPREAD_PLUS",
-  "OVER",
-  "UNDER",
-  "F5_ML",
-];
-
 // All-time record split by pickCategory (the same favorite/underdog,
 // over/under classifier the Cappers-page filter chips use) - answers "am I
 // better off following favorites or dogs, overs or unders" at a glance.
-// Same shape as computeScorecard, just a different grouping key.
-export function computeCategoryBreakdown(picks: Pick[]): CategoryBreakdownItem[] {
+// Same shape as computeScorecard, just a different grouping key. `order`
+// controls which categories appear and in what sequence - callers covering
+// multiple sports at once (the Dashboard) must pass DEFAULT_CHIP_SET, since
+// F5 ML and NRFI only mean anything for MLB; a single-sport view can pass
+// chipSetForLeague(sportName) to get those back.
+export function computeCategoryBreakdown(picks: Pick[], order: PickCategoryKey[]): CategoryBreakdownItem[] {
   const byCategory = new Map<PickCategoryKey, Pick[]>();
   for (const pick of picks) {
     const key = pickCategory(pick);
@@ -417,7 +410,7 @@ export function computeCategoryBreakdown(picks: Pick[]): CategoryBreakdownItem[]
     else byCategory.set(key, [pick]);
   }
 
-  return CATEGORY_BREAKDOWN_ORDER.filter((key) => byCategory.has(key)).map((key) => {
+  return order.filter((key) => byCategory.has(key)).map((key) => {
     const stats = computeStats(byCategory.get(key)!);
     const count = stats.wins + stats.losses + stats.pushes;
     return {
@@ -449,10 +442,23 @@ export async function getDashboardSummary(userId: string) {
   return {
     overall,
     totalPicks: picks.length,
-    categoryBreakdown: computeCategoryBreakdown(picks),
+    // DEFAULT_CHIP_SET, not chipSetForLeague - this mixes every sport
+    // together, and F5 ML/NRFI only mean anything within MLB (see
+    // getCategoryBreakdownForSport for the per-sport equivalent).
+    categoryBreakdown: computeCategoryBreakdown(picks, DEFAULT_CHIP_SET),
     pendingCount: picks.filter((p) => p.status === "PENDING").length,
     recentPicks: picks.slice(0, 10),
   };
+}
+
+// Same breakdown as getDashboardSummary's, but scoped to one sport and using
+// that sport's full chip set (chipSetForLeague) instead of the universal
+// DEFAULT_CHIP_SET - this is how F5 ML/NRFI surface on the Live page's MLB
+// tab and a capper's MLB-specific record, instead of leaking into the
+// all-sports Dashboard panel where they don't belong.
+export async function getCategoryBreakdownForSport(userId: string, sportName: string) {
+  const picks = await prisma.pick.findMany({ where: { userId, sport: { name: sportName } } });
+  return computeCategoryBreakdown(picks, chipSetForLeague(sportName));
 }
 
 export type ReportBreakdownItem = { name: string; stats: OverallStats; count: number };

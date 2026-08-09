@@ -5,6 +5,7 @@ import {
   computeStats,
   computeScorecard,
   computeCategoryBreakdown,
+  MLB_CHIP_SET,
   type ScorecardBucket,
   type ScorecardBucketKey,
   type CategoryBreakdownItem,
@@ -303,6 +304,9 @@ export async function getCapperCategoryRecord(
   category: PickCategoryKey
 ): Promise<CategoryBreakdownItem | null> {
   const picks = await prisma.pick.findMany({ where: { userId, capperId } });
-  const breakdown = computeCategoryBreakdown(picks);
+  // MLB_CHIP_SET, not a sport-scoped set - `category` here is whatever this
+  // one pick's own category is (see pickCategory), which might be F5 ML or
+  // NRFI regardless of what sport the caller happens to be looking at.
+  const breakdown = computeCategoryBreakdown(picks, MLB_CHIP_SET);
   return breakdown.find((b) => b.key === category) ?? null;
 }

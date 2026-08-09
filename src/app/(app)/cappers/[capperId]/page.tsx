@@ -5,8 +5,10 @@ import { getPicksForCapper } from "@/server/data/picks";
 import {
   computeStats,
   computeScorecard,
+  computeCategoryBreakdown,
   unitsWonOnBet,
   filterPicksByGradedWindow,
+  chipSetForLeague,
   SCORECARD_WINDOWS,
   SCORECARD_WINDOW_LABELS,
   type ScorecardWindow,
@@ -14,6 +16,7 @@ import {
 import { UnitsChart, type UnitsChartPoint } from "@/components/dashboard/units-chart";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
+import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { formatEastern } from "@/lib/dates";
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -68,6 +71,13 @@ export default async function CapperDetailPage({
   const stats = computeStats(picks);
   const allTimeScorecard = computeScorecard(picks);
   const scorecard = computeScorecard(filterPicksByGradedWindow(picks, window));
+
+  // F5 ML/NRFI only mean anything within MLB (see stats.ts's
+  // getCategoryBreakdownForSport) - scope this capper's category breakdown
+  // to their MLB picks specifically, alongside the bet-type scorecard above,
+  // rather than mixing it into an all-sports view that has no home for them.
+  const mlbPicks = picks.filter((p) => p.sport.name === "MLB");
+  const mlbCategoryBreakdown = computeCategoryBreakdown(mlbPicks, chipSetForLeague("MLB"));
 
   const settled = picks.filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH");
   let running = 0;
@@ -147,6 +157,13 @@ export default async function CapperDetailPage({
               No graded picks in this window.
             </p>
           )}
+        </div>
+      )}
+
+      {mlbCategoryBreakdown.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-2 text-sm font-medium text-gray-700">MLB record by category</div>
+          <CategoryBreakdown items={mlbCategoryBreakdown} />
         </div>
       )}
 

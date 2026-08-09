@@ -2,11 +2,12 @@ import Link from "next/link";
 import { requireUser } from "@/server/auth";
 import { getOddsForSport, getLiveScoresForSport, matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
 import { getPicksForGames } from "@/server/data/picks";
-import { pickCategory, betTypeLabel } from "@/server/data/stats";
+import { pickCategory, betTypeLabel, chipSetForLeague, DEFAULT_CHIP_SET, getCategoryBreakdownForSport } from "@/server/data/stats";
 import { sameEasternDay, formatEastern } from "@/lib/dates";
 import { getTeamLogoUrl } from "@/lib/team-logos";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 import { TeamLogo } from "@/components/live/team-logo";
+import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -32,7 +33,18 @@ export default async function LivePage({
   const sportLabel = LIVE_SPORTS.find((s) => s.key === activeSport)?.label ?? activeSport;
 
   const user = await requireUser();
-  const [allOdds, scores] = await Promise.all([getOddsForSport(activeSport), getLiveScoresForSport(activeSport)]);
+
+  // Only sports with categories beyond the universal set (currently just
+  // MLB, via F5 ML/NRFI) get their own breakdown panel here - for everything
+  // else it'd just duplicate the Dashboard's all-sports one with nothing new
+  // to show, so skip the extra query entirely.
+  const hasSportSpecificCategories = chipSetForLeague(sportLabel).length > DEFAULT_CHIP_SET.length;
+
+  const [allOdds, scores, sportCategoryBreakdown] = await Promise.all([
+    getOddsForSport(activeSport),
+    getLiveScoresForSport(activeSport),
+    hasSportSpecificCategories ? getCategoryBreakdownForSport(user.id, sportLabel) : Promise.resolve([]),
+  ]);
 
   // The once-daily odds cache is keyed by Eastern calendar day (see
   // easternDateKey), which lines up with how MLB's schedule is actually run -
@@ -78,6 +90,13 @@ export default async function LivePage({
           <a key={s.key} href={"/live?sport=" + s.key} className={tabClass(activeSport === s.key)}>{s.label}</a>
         ))}
       </div>
+
+      {sportCategoryBreakdown.length > 0 && (
+        <div className="mb-6">
+          <h2 className="mb-2 text-sm font-semibold text-gray-900">{sportLabel} record by category</h2>
+          <CategoryBreakdown items={sportCategoryBreakdown} />
+        </div>
+      )}
 
       {!hasApiKey && (
         <div className="rounded-card bg-white p-6 text-center text-sm text-gray-500 shadow-soft">
