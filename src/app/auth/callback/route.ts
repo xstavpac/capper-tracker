@@ -24,14 +24,7 @@ export async function GET(request: Request) {
       if (!error) {
         return NextResponse.redirect(`${origin}${next}`);
       }
-      // TEMPORARY - diagnosing the "flickers back to sign-in" report, remove
-      // once the real cause is confirmed and fixed.
-      console.error("[auth/callback] exchangeCodeForSession failed:", {
-        name: error.name,
-        status: error.status,
-        code: (error as { code?: string }).code,
-        message: error.message,
-      });
+      console.error("[auth/callback] exchangeCodeForSession failed:", error.message);
     } catch (err) {
       console.error("[auth/callback] Supabase client/session exchange threw:", err);
     }

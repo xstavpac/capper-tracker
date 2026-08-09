@@ -14,7 +14,9 @@ function SignInForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() =>
+    searchParams.get("error") === "auth_callback_failed" ? "Something went wrong signing you in. Please try again." : null
+  );
   const [loading, setLoading] = useState<"google" | "password" | null>(null);
 
   async function handleGoogle() {

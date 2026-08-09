@@ -1,7 +1,15 @@
+import { cache } from "react";
+import { Prisma } from "@prisma/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 
-export async function getCurrentUser() {
+// Wrapped in React's cache() so every caller within the same request (the
+// (app) layout AND whichever page is rendering both call this independently)
+// shares one resolved result instead of racing separate upserts - on a
+// user's very first sign-in, two concurrent calls with no existing row would
+// otherwise both attempt prisma.user.create() for the same email and one
+// loses to a P2002 unique-constraint crash.
+export const getCurrentUser = cache(async () => {
   // Middleware already gates every protected route on a resolved session,
   // but guard here too (defense in depth) - Supabase's client throws
   // synchronously if its URL/key aren't configured, and that would 500 the
@@ -21,13 +29,6 @@ export async function getCurrentUser() {
   let user = await prisma.user.findUnique({ where: { supabaseId: authUser.id } });
 
   if (!user) {
-    // TEMPORARY - diagnosing the dashboard P2002 create-vs-update race, remove
-    // once the real cause is confirmed and fixed.
-    console.error("[auth] no user by supabaseId, calling upsert:", {
-      supabaseId: authUser.id,
-      authUserEmail: authUser.email,
-      callStack: new Error().stack?.split("\n").slice(1, 4).join(" | "),
-    });
     user = await upsertUserFromSupabase(authUser.id, {
       email: authUser.email ?? "",
       name: (authUser.user_metadata?.full_name as string | undefined) ?? (authUser.user_metadata?.name as string | undefined),
@@ -36,7 +37,7 @@ export async function getCurrentUser() {
   }
 
   return user;
-}
+});
 
 export async function requireUser() {
   const user = await getCurrentUser();
@@ -62,16 +63,6 @@ export async function upsertUserFromSupabase(
     ? await prisma.user.findUnique({ where: { email: profile.email } })
     : null;
 
-  // TEMPORARY - diagnosing the dashboard P2002 create-vs-update race, remove
-  // once the real cause is confirmed and fixed.
-  console.error("[auth] upsertUserFromSupabase lookup result:", {
-    supabaseId,
-    profileEmail: profile.email,
-    profileEmailType: typeof profile.email,
-    foundExistingByEmail: !!existingByEmail,
-    existingId: existingByEmail?.id,
-  });
-
   if (existingByEmail) {
     return prisma.user.update({
       where: { id: existingByEmail.id },
@@ -83,15 +74,28 @@ export async function upsertUserFromSupabase(
     });
   }
 
-  return prisma.user.create({
-    data: {
-      supabaseId,
-      email: profile.email,
-      name: profile.name,
-      profilePictureUrl: profile.picture,
-      subscription: {
-        create: { plan: "FREE", status: "active" },
+  try {
+    return await prisma.user.create({
+      data: {
+        supabaseId,
+        email: profile.email,
+        name: profile.name,
+        profilePictureUrl: profile.picture,
+        subscription: {
+          create: { plan: "FREE", status: "active" },
+        },
       },
-    },
-  });
+    });
+  } catch (err) {
+    // Two truly concurrent requests (e.g. separate tabs) can both pass the
+    // check above before either commits - cache() above closes that gap
+    // within a single request, but not across requests. If we lost that
+    // race, the row now exists; fetch what the other request created
+    // instead of crashing.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002" && profile.email) {
+      const winner = await prisma.user.findUnique({ where: { email: profile.email } });
+      if (winner) return winner;
+    }
+    throw err;
+  }
 }
