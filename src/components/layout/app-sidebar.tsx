@@ -89,17 +89,6 @@ function LiveIcon({ className }: { className?: string }) {
   );
 }
 
-function TargetArrowIcon({ className }: { className?: string }) {
-  return (
-    <svg {...iconProps(className)}>
-      <circle cx="10" cy="14" r="6.5" />
-      <circle cx="10" cy="14" r="2.5" />
-      <path d="M14.5 9.5L21 3" />
-      <path d="M21 7.5V3h-4.5" />
-    </svg>
-  );
-}
-
 type NavItem = {
   href: string;
   label: string;
@@ -190,9 +179,13 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 function LogoMark() {
   return (
-    <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg bg-[#7F77DD]">
-      <TargetArrowIcon className="h-4 w-4 text-white" />
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element -- fixed local asset, not worth next/image's overhead at this size
+    <img
+      src="/logo-mark.png"
+      alt=""
+      className="h-[26px] w-[26px] shrink-0 rounded-lg object-cover"
+      aria-hidden="true"
+    />
   );
 }
 
@@ -277,7 +270,7 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
       <div className="flex items-center justify-between border-b border-gray-100 bg-white p-3 md:hidden">
         <div className="flex items-center gap-2">
           <LogoMark />
-          <span className="text-[17px] font-semibold">Capper Tracker</span>
+          <span className="text-[17px] font-semibold">Bettingview</span>
         </div>
         <button
           onClick={() => setOpen(true)}
@@ -291,7 +284,7 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
       <aside className="hidden w-60 flex-col gap-1 rounded-xl border border-gray-200 bg-white px-4 py-5 shadow-soft md:flex">
         <div className="mb-6 flex items-center gap-2 px-1">
           <LogoMark />
-          <span className="text-[17px] font-semibold">Capper Tracker</span>
+          <span className="text-[17px] font-semibold">Bettingview</span>
         </div>
         <NavLinks />
         <SidebarDropCatalog />
@@ -305,7 +298,7 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <LogoMark />
-                <span className="text-[17px] font-semibold">Capper Tracker</span>
+                <span className="text-[17px] font-semibold">Bettingview</span>
               </div>
               <button
                 onClick={() => setOpen(false)}

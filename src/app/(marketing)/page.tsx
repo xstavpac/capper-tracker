@@ -7,7 +7,7 @@ export default function MarketingPage() {
         Know who actually makes you money.
       </h1>
       <p className="max-w-xl text-lg text-gray-600">
-        Capper Tracker is a private analytics platform for tracking the
+        Bettingview is a private analytics platform for tracking the
         sports betting cappers you follow — from Twitter, Discord, Telegram,
         DubClub, or a friend. Log every pick, and we calculate the rest.
       </p>

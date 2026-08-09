@@ -1,28 +1,13 @@
 import Link from "next/link";
 
-// Same purple + target-arrow mark as the sidebar's LogoMark (app-sidebar.tsx)
-// - kept in sync visually with the rest of the app, unlike the new brand-
-// purple (#7F2FD4) used for this page's primary buttons, which is a
-// separate, explicitly-requested color.
+// Same logo-mark.png asset as the sidebar's LogoMark (app-sidebar.tsx) - kept
+// in sync visually with the rest of the app, unlike the new brand-purple
+// (#7F2FD4) used for this page's primary buttons, which is a separate,
+// explicitly-requested color.
 function LogoMark() {
   return (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#7F77DD]">
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="white"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className="h-5 w-5"
-        aria-hidden="true"
-      >
-        <circle cx="10" cy="14" r="6.5" />
-        <circle cx="10" cy="14" r="2.5" />
-        <path d="M14.5 9.5L21 3" />
-        <path d="M21 7.5V3h-4.5" />
-      </svg>
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element -- fixed local asset, not worth next/image's overhead at this size
+    <img src="/logo-mark.png" alt="" className="h-10 w-10 shrink-0 rounded-xl object-cover" aria-hidden="true" />
   );
 }
 
@@ -46,7 +31,7 @@ export function AuthCard({
       <div className="w-full max-w-[340px] rounded-2xl bg-white p-8 shadow-soft">
         <Link href="/" className="mb-6 flex items-center gap-2.5">
           <LogoMark />
-          <span className="text-lg font-semibold text-gray-900">Capper Tracker</span>
+          <span className="text-lg font-semibold text-gray-900">Bettingview</span>
         </Link>
         <h1 className="text-2xl font-semibold text-gray-900">{heading}</h1>
         <p className="mt-1 text-sm text-gray-500">{subtitle}</p>

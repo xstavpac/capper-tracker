@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Capper Tracker",
+  title: "Bettingview",
   description: "Track the performance of every sports betting capper you follow.",
 };
 
