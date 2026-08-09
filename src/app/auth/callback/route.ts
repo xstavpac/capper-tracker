@@ -18,6 +18,16 @@ export async function GET(request: Request) {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`);
     }
+    // TEMPORARY - diagnosing the "flickers back to sign-in" report, remove
+    // once the real cause is confirmed and fixed.
+    console.error("[auth/callback] exchangeCodeForSession failed:", {
+      name: error.name,
+      status: error.status,
+      code: (error as { code?: string }).code,
+      message: error.message,
+    });
+  } else {
+    console.error("[auth/callback] no ?code param on callback request. Full URL:", request.url);
   }
 
   return NextResponse.redirect(`${origin}/sign-in?error=auth_callback_failed`);
