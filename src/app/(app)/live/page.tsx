@@ -132,6 +132,7 @@ export default async function LivePage({
             betDetail: p.betDetail || betTypeLabel(p.betType),
             odds: p.odds,
             units: p.units,
+            status: p.status,
           }));
           function findMarketAcrossBooks(key: string) {
             for (const b of game.bookmakers) {

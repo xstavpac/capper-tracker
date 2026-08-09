@@ -175,8 +175,10 @@ type GameMatch = { game: GameResult; matchType: "exact" | "fuzzy" };
 // between a pick's recorded gameTime and the game's real start (rain delays,
 // odds-API-vs-schedule discrepancies). A postponed-and-replayed-next-day game
 // will correctly fail to match here and stay Pending rather than risk
-// grading against the wrong day.
-const MAX_GAME_TIME_DRIFT_MS = 6 * 3600000;
+// grading against the wrong day. Also exported for matchPicksToGame
+// (picks.ts), which has this exact same "same matchup, which day's game"
+// ambiguity when attaching picks to a game card on the Live page.
+export const MAX_GAME_TIME_DRIFT_MS = 6 * 3600000;
 
 function withinDrift<T extends { gameDate: Date }>(candidates: T[], reference: Date): T[] {
   return candidates.filter((c) => Math.abs(c.gameDate.getTime() - reference.getTime()) <= MAX_GAME_TIME_DRIFT_MS);

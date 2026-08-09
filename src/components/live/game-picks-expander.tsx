@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { PickStatus } from "@prisma/client";
 import { getCategoryRecordsAction } from "@/server/actions/picks";
 import { getRecordColor, type CategoryBreakdownItem, type PickCategoryKey } from "@/server/data/stats";
 import { Avatar } from "@/components/dashboard/capper-panels";
@@ -14,6 +15,26 @@ export type ExpanderPick = {
   betDetail: string;
   odds: number;
   units: number;
+  status: PickStatus;
+};
+
+// This pick's own outcome, distinct from the capper's rolling category
+// record shown below it - without this badge the two were easy to conflate,
+// since a settled LOSS and a still-live PENDING pick otherwise rendered
+// identically here.
+const STATUS_LABELS: Record<PickStatus, string> = {
+  PENDING: "Pending",
+  WIN: "Win",
+  LOSS: "Loss",
+  PUSH: "Push",
+  CANCELLED: "Cancelled",
+};
+const STATUS_CLASSES: Record<PickStatus, string> = {
+  PENDING: "bg-gray-100 text-gray-500",
+  WIN: "bg-emerald-100 text-emerald-700",
+  LOSS: "bg-red-100 text-red-700",
+  PUSH: "bg-gray-100 text-gray-600",
+  CANCELLED: "bg-gray-100 text-gray-400",
 };
 
 // Stricter than getRecordColor's plain 50% green/red split - this flags a
@@ -129,9 +150,18 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
                       </span>
                     )}
                   </div>
-                  <div className="shrink-0 text-[12px] font-semibold text-gray-900">
-                    {p.odds > 0 ? "+" : ""}
-                    {p.odds} <span className="font-normal text-gray-400">&middot; {p.units}u</span>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span
+                      className={
+                        "rounded-full px-1.5 py-0 text-[9px] font-semibold " + STATUS_CLASSES[p.status]
+                      }
+                    >
+                      {STATUS_LABELS[p.status]}
+                    </span>
+                    <span className="text-[12px] font-semibold text-gray-900">
+                      {p.odds > 0 ? "+" : ""}
+                      {p.odds} <span className="font-normal text-gray-400">&middot; {p.units}u</span>
+                    </span>
                   </div>
                 </div>
                 <div className="mt-0.5 truncate pl-[23px] text-[11px] text-gray-500">

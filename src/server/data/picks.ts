@@ -12,7 +12,7 @@ import {
   type PickCategoryKey,
 } from "@/server/data/stats";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
-import { findMatchingGameResult, resolveOutcome } from "@/server/data/grading";
+import { findMatchingGameResult, resolveOutcome, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 
 const FREE_PLAN_PICK_LIMIT = 1000;
 
@@ -207,23 +207,34 @@ export async function getPicksForUser(userId: string) {
 // team-name match first (reliable for picks resolved to a real schedule game
 // - see resolveGameForNickname), then falls back to a nickname text search
 // against betDetail/homeTeam/awayTeam for picks with free-text team data
-// (manual entries, sports without game resolution yet).
-function matchPicksToGame<T extends { homeTeam: string; awayTeam: string; betDetail: string | null }>(
+// (manual entries, sports without game resolution yet). Both branches are
+// narrowed to MAX_GAME_TIME_DRIFT_MS of the game's own commenceTime - the
+// same matchup can recur within the ±2-day candidate window a caller queries
+// (an MLB series plays the same two teams several days running), so team
+// name alone isn't enough to tell "this specific game" from "the same
+// matchup two days ago." Same reasoning as findMatchingGameResult's
+// withinDrift, just picks-to-a-game instead of a-pick-to-its-game-result.
+function matchPicksToGame<T extends { homeTeam: string; awayTeam: string; betDetail: string | null; gameTime: Date }>(
   candidates: T[],
-  game: { homeTeam: string; awayTeam: string },
+  game: { homeTeam: string; awayTeam: string; commenceTime: Date },
   sportName: string
 ): T[] {
-  const exact = candidates.filter((p) => p.homeTeam === game.homeTeam && p.awayTeam === game.awayTeam);
+  const withinDrift = (picks: T[]) =>
+    picks.filter((p) => Math.abs(p.gameTime.getTime() - game.commenceTime.getTime()) <= MAX_GAME_TIME_DRIFT_MS);
+
+  const exact = withinDrift(candidates.filter((p) => p.homeTeam === game.homeTeam && p.awayTeam === game.awayTeam));
   if (exact.length > 0) return exact;
 
   const homeNickname = findTeamNickname(game.homeTeam, sportName);
   const awayNickname = findTeamNickname(game.awayTeam, sportName);
   if (!homeNickname && !awayNickname) return [];
 
-  return candidates.filter((p) => {
-    const text = ((p.betDetail ?? "") + " " + p.homeTeam + " " + p.awayTeam).toLowerCase();
-    return (homeNickname && text.includes(homeNickname)) || (awayNickname && text.includes(awayNickname));
-  });
+  return withinDrift(
+    candidates.filter((p) => {
+      const text = ((p.betDetail ?? "") + " " + p.homeTeam + " " + p.awayTeam).toLowerCase();
+      return (homeNickname && text.includes(homeNickname)) || (awayNickname && text.includes(awayNickname));
+    })
+  );
 }
 
 // Finds this user's logged picks for one specific game.
