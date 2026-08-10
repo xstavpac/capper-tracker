@@ -4,18 +4,24 @@ import { isModelBuilderEnabled } from "@/lib/feature-flags";
 import { getUserModels } from "@/server/data/models";
 import { getOddsForSport } from "@/server/data/odds";
 import { sameEasternDay } from "@/lib/dates";
+import { parseModelBuilderPrefill } from "@/lib/model-builder-links";
 import { ModelBuilderClient } from "@/components/model-builder/model-builder-client";
 
 // MLB-only for v1 - every variable in the catalog (team tendencies, team/
 // pitcher stats, odds/market) is sourced from MLB-specific APIs.
 const MODEL_BUILDER_SPORT_KEY = "baseball_mlb";
 
-export default async function ModelBuilderPage() {
+export default async function ModelBuilderPage({
+  searchParams,
+}: {
+  searchParams: { variableId?: string; side?: string };
+}) {
   // Flag off -> the route itself 404s, not just a hidden nav item - hitting
   // /model-builder directly while disabled must behave as if the route
   // doesn't exist.
   if (!isModelBuilderEnabled()) notFound();
 
+  const prefill = parseModelBuilderPrefill(searchParams);
   const user = await requireUser();
 
   const [savedModels, allOdds] = await Promise.all([
@@ -42,7 +48,7 @@ export default async function ModelBuilderPage() {
         </p>
       </div>
 
-      <ModelBuilderClient sportKey={MODEL_BUILDER_SPORT_KEY} savedModels={savedModels} games={games} />
+      <ModelBuilderClient sportKey={MODEL_BUILDER_SPORT_KEY} savedModels={savedModels} games={games} prefillCondition={prefill} />
     </div>
   );
 }

@@ -42,6 +42,22 @@ export function mlbTeamId(teamName: string): number | null {
   return MLB_TEAM_IDS[teamName] ?? null;
 }
 
+const MLB_TEAM_NAMES_BY_ID: Record<number, string> = Object.fromEntries(
+  Object.entries(MLB_TEAM_IDS).map(([name, id]) => [id, name])
+);
+
+// The canonical full team name this app uses everywhere else (GameResult,
+// OddsSnapshot, TeamTendency - all sourced from The Odds API/ESPN, e.g.
+// "Toronto Blue Jays"), keyed by MLB's own numeric team id. Needed because
+// MLB Stats API's own endpoints (standings, team stats) return a shorter
+// "club name" for the same team (e.g. "Blue Jays", "D-backs") - stat-
+// snapshots.ts uses this to normalize captured rows to the one naming
+// convention the rest of the app joins on, instead of silently storing a
+// second, incompatible spelling per team.
+export function mlbTeamNameById(id: number): string | null {
+  return MLB_TEAM_NAMES_BY_ID[id] ?? null;
+}
+
 export function currentMlbSeason(): number {
   return new Date().getFullYear();
 }

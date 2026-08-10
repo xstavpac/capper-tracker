@@ -197,7 +197,11 @@ enum DataScope {
 // persisting that day's final scores. Deliberately raw counts, not a stored
 // percentage - MIN_TENDENCY_SAMPLE-gating and the actual win%/rate math live
 // entirely in application code, so the threshold can be tuned without a
-// migration.
+// migration. This row is overwritten in place every day (current cumulative
+// totals only) - TeamTendencySnapshot below is the dated history of the same
+// counts, and is what both backtesting and Charts actually read for any
+// point-in-time value; this table remains the always-current source that
+// gets snapshotted into it daily.
 model TeamTendency {
   id             String    @id @default(cuid())
   sportKey       String
@@ -223,6 +227,38 @@ model TeamTendency {
 
   @@unique([sportKey, teamName])
   @@map("team_tendencies")
+}
+
+// The dated history TeamTendency itself doesn't keep - one row per team per
+// calendar day, capturing that day's cumulative counts (same shape as
+// TeamTendency) right after recomputeTeamTendencies runs. Written purely
+// from data already computed that same cron pass - no additional external
+// API requests. This is what makes tendency variables (Win% as favorite/
+// underdog, over/under rate) actually chartable over time, and what
+// tendencyProvider.resolveHistorical joins against for backtesting, instead
+// of the previous "always use today's cumulative value" simplification -
+// one calculation path for both consumers, per the no-parallel-path rule
+// this schema follows for TeamStatSnapshot/PitcherStatSnapshot too.
+model TeamTendencySnapshot {
+  id             String    @id @default(cuid())
+  sportKey       String
+  teamName       String
+  snapshotDate   String // "YYYY-MM-DD", Eastern - same convention as the other snapshot tables
+  favWins        Int
+  favLosses      Int
+  favPushes      Int
+  dogWins        Int
+  dogLosses      Int
+  dogPushes      Int
+  overCount      Int
+  underCount     Int
+  totalPushCount Int
+  sourceId       String    @default("internal_tendencies")
+  scope          DataScope @default(GLOBAL)
+  createdAt      DateTime  @default(now())
+
+  @@unique([sportKey, teamName, snapshotDate])
+  @@map("team_tendency_snapshots")
 }
 
 // One team's season-to-date stat line on one calendar day - captured daily

@@ -13,7 +13,7 @@
 // pitcher snapshots, so it adds zero additional requests.
 import { prisma } from "@/lib/prisma";
 import { easternDateKey } from "@/lib/dates";
-import { currentMlbSeason } from "@/server/data/mlb-stats";
+import { currentMlbSeason, mlbTeamNameById } from "@/server/data/mlb-stats";
 
 const MLB_SPORT_KEY = "baseball_mlb";
 
@@ -72,7 +72,13 @@ export async function captureTeamStatSnapshots(date: string = easternDateKey(new
   for (const record of standingsData.records ?? []) {
     for (const teamRecord of record.teamRecords ?? []) {
       const teamId = teamRecord.team?.id;
-      const teamName = teamRecord.team?.name;
+      // The standings response's own team.name is MLB's short "club name"
+      // ("Blue Jays", "D-backs") - normalized here to the full name
+      // ("Toronto Blue Jays", "Arizona Diamondbacks") every other team-keyed
+      // table in this app uses (GameResult/OddsSnapshot/TeamTendency, all
+      // sourced from The Odds API), otherwise this table's rows silently
+      // never join against a real game's favorite/underdog team name.
+      const teamName = teamId ? mlbTeamNameById(teamId) : null;
       const hitting = hittingByTeamId.get(teamId);
       const pitching = pitchingByTeamId.get(teamId);
       // A team missing from either league-wide stats response (shouldn't

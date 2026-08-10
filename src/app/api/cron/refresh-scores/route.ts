@@ -1,6 +1,6 @@
 import { persistFinalScores } from "@/server/data/grading";
 import { RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
-import { recomputeTeamTendencies } from "@/server/data/team-tendencies";
+import { recomputeTeamTendencies, snapshotTeamTendencies } from "@/server/data/team-tendencies";
 import { captureTeamStatSnapshots, capturePitcherStatSnapshots } from "@/server/data/stat-snapshots";
 
 const MLB_SPORT_KEY = "baseball_mlb";
@@ -32,7 +32,12 @@ export async function GET(req: Request) {
       // freshly-final game is reflected in tendencies the same run it
       // lands in GameResult, not a day later on the next cron pass.
       const tendencies = await recomputeTeamTendencies(sportKey);
-      return { sport: sportKey, persisted, tendencies };
+      // Preserves today's cumulative counts as a dated row - pure DB
+      // read-then-write of what recomputeTeamTendencies just computed, no
+      // extra API calls. Without this, TeamTendency's history is lost the
+      // moment tomorrow's recompute overwrites it in place.
+      const tendencySnapshots = await snapshotTeamTendencies(sportKey);
+      return { sport: sportKey, persisted, tendencies, tendencySnapshots };
     })
   );
 

@@ -1,13 +1,19 @@
 // Wraps team-tendencies.ts (our own derived favorite/underdog win% and
 // over/under rate, computed from GameResult+OddsSnapshot). resolveHistorical
-// uses each team's CURRENT cumulative tendency rates - there's no per-game-
-// date snapshot of tendencies yet, so this is a known simplification (not a
-// true point-in-time backtest), unlike odds-market-provider's resolveHistorical
-// which reads that game's own real OddsSnapshot.
-import type { TeamTendencyRates } from "@/server/data/team-tendencies";
+// joins a historical game's date against TeamTendencySnapshot the same way
+// mlbStatsProvider joins team/pitcher stat snapshots - the previous version
+// of this file used each team's CURRENT cumulative rate for every historical
+// game, which wasn't a real point-in-time backtest; TeamTendencySnapshot
+// (added alongside Charts) closed that gap.
+import { computeTendencyRates, type TeamTendencyRates } from "@/server/data/team-tendencies";
+import type { TeamTendencySnapshot } from "@prisma/client";
 import type { VariableProvider } from "./types";
+import { findLatestAtOrBefore } from "./snapshot-utils";
 
-function readRate(tendency: TeamTendencyRates | null | undefined, variableId: string): number | null {
+// Exported so historical-variables.ts (the Charts data adapter) can reuse
+// this exact rate-selection logic for a standalone entity time series -
+// same one-calculation-per-variable rule as mlbStatsProvider's exports.
+export function readRate(tendency: TeamTendencyRates | null | undefined, variableId: string): number | null {
   if (!tendency) return null;
   switch (variableId) {
     case "tendency_fav_win_pct":
@@ -34,7 +40,9 @@ export const tendencyProvider: VariableProvider = {
 
   resolveHistorical(ref, variableId, side) {
     const teamName = side === "favorite" ? ref.favoriteTeam : side === "underdog" ? ref.underdogTeam : null;
-    const tendency = teamName ? ref.tendencyByTeam.get(teamName) : undefined;
-    return readRate(tendency, variableId);
+    const snapshots: TeamTendencySnapshot[] | undefined = teamName ? ref.tendencySnapshotsByTeam.get(teamName) : undefined;
+    if (!snapshots || snapshots.length === 0) return null;
+    const snapshot = findLatestAtOrBefore(snapshots, ref.gameDate);
+    return snapshot ? readRate(computeTendencyRates(snapshot), variableId) : null;
   },
 };

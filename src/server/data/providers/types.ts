@@ -16,7 +16,7 @@ import type { OddsGame } from "@/server/data/odds";
 import type { VariableSide } from "@/lib/model-builder";
 import type { TeamSeasonStats, PitcherSeasonStats } from "@/server/data/mlb-stats";
 import type { TeamTendencyRates } from "@/server/data/team-tendencies";
-import type { TeamStatSnapshot, PitcherStatSnapshot } from "@prisma/client";
+import type { TeamStatSnapshot, PitcherStatSnapshot, TeamTendencySnapshot } from "@prisma/client";
 
 // One resolved game's live data, built once (see model-evaluation.ts's
 // buildGameContext) and read by every provider - kept as a single eagerly-
@@ -45,15 +45,16 @@ export type GameContext = {
 };
 
 // Everything a provider needs to resolve one variable for one HISTORICAL
-// game during a backtest. tendencyByTeam, teamSnapshotsByTeam, and
+// game during a backtest. tendencySnapshotsByTeam, teamSnapshotsByTeam, and
 // pitcherSnapshotsByPitcherId are all preloaded once per backtest run (not
 // per game/condition) to avoid an N+1 query across every historical game
 // being scored - the snapshot arrays are pre-sorted ascending by
 // snapshotDate so a provider can do an in-memory "latest snapshot at or
-// before gameDate" scan instead of a DB query per lookup. favoritePitcherId/
-// underdogPitcherId come from a GameStarters row for this game, if one was
-// captured (null otherwise - a game outside the window GameStarters has been
-// running, or a day with no announced probable starter).
+// before gameDate" scan instead of a DB query per lookup (see
+// providers/snapshot-utils.ts). favoritePitcherId/underdogPitcherId come
+// from a GameStarters row for this game, if one was captured (null
+// otherwise - a game outside the window GameStarters has been running, or a
+// day with no announced probable starter).
 export type HistoricalGameRef = {
   oddsGame: OddsGame;
   favoriteTeam: string;
@@ -63,7 +64,7 @@ export type HistoricalGameRef = {
   favoritePitcherId: number | null;
   underdogPitcherId: number | null;
   gameDate: Date;
-  tendencyByTeam: Map<string, TeamTendencyRates>;
+  tendencySnapshotsByTeam: Map<string, TeamTendencySnapshot[]>;
   teamSnapshotsByTeam: Map<string, TeamStatSnapshot[]>;
   pitcherSnapshotsByPitcherId: Map<number, PitcherStatSnapshot[]>;
 };

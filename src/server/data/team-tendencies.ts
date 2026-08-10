@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { OddsGame } from "@/server/data/odds";
-import { closestByTime } from "@/lib/dates";
+import { closestByTime, easternDateKey } from "@/lib/dates";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 
 // Below this many decided (non-push) games in a split, a team's tendency is
@@ -198,6 +198,51 @@ export async function recomputeTeamTendencies(sportKey: string): Promise<{ games
   );
 
   return { gamesProcessed, teamsUpdated: acc.size };
+}
+
+// Copies today's cumulative TeamTendency rows into a dated
+// TeamTendencySnapshot row each - purely a DB read-then-write, no external
+// API calls, since recomputeTeamTendencies (called immediately before this
+// in refresh-scores/route.ts) already did the actual work of computing these
+// counts. Upserts, so a same-day cron retry overwrites rather than
+// duplicating, same convention as the other snapshot capture functions.
+export async function snapshotTeamTendencies(sportKey: string, date: string = easternDateKey(new Date())): Promise<number> {
+  const rows = await prisma.teamTendency.findMany({ where: { sportKey } });
+
+  await Promise.all(
+    rows.map((row) =>
+      prisma.teamTendencySnapshot.upsert({
+        where: { sportKey_teamName_snapshotDate: { sportKey, teamName: row.teamName, snapshotDate: date } },
+        update: {
+          favWins: row.favWins,
+          favLosses: row.favLosses,
+          favPushes: row.favPushes,
+          dogWins: row.dogWins,
+          dogLosses: row.dogLosses,
+          dogPushes: row.dogPushes,
+          overCount: row.overCount,
+          underCount: row.underCount,
+          totalPushCount: row.totalPushCount,
+        },
+        create: {
+          sportKey,
+          teamName: row.teamName,
+          snapshotDate: date,
+          favWins: row.favWins,
+          favLosses: row.favLosses,
+          favPushes: row.favPushes,
+          dogWins: row.dogWins,
+          dogLosses: row.dogLosses,
+          dogPushes: row.dogPushes,
+          overCount: row.overCount,
+          underCount: row.underCount,
+          totalPushCount: row.totalPushCount,
+        },
+      })
+    )
+  );
+
+  return rows.length;
 }
 
 export type TeamTendencyRates = {

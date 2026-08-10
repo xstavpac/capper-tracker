@@ -7,9 +7,9 @@
 // predating GameStarters capture, for the pitcher side) still correctly
 // finds nothing, same as any other "not enough history yet" case.
 import { getModelVariable } from "@/lib/model-builder";
-import { easternDateKey } from "@/lib/dates";
 import type { TeamStatSnapshot, PitcherStatSnapshot } from "@prisma/client";
 import type { VariableProvider, GameContext, HistoricalGameRef } from "./types";
+import { findLatestAtOrBefore } from "./snapshot-utils";
 
 function winPctOf(record: { wins: number; losses: number }): number | null {
   const total = record.wins + record.losses;
@@ -49,8 +49,12 @@ function resolveTeamStat(stats: GameContext["favoriteStats"], variableId: string
 }
 
 // Same variables as resolveTeamStat, read off a dated snapshot row's flat
-// fields instead of GameContext's nested live-fetch shape.
-function resolveTeamStatFromSnapshot(snapshot: TeamStatSnapshot, variableId: string): number | null {
+// fields instead of GameContext's nested live-fetch shape. Exported so
+// historical-variables.ts (the Charts data adapter) can reuse this exact
+// calculation for a standalone entity time series instead of re-deriving it -
+// same rule as everywhere else in this file: one calculation per variable,
+// never a second parallel version for a different caller.
+export function resolveTeamStatFromSnapshot(snapshot: TeamStatSnapshot, variableId: string): number | null {
   switch (variableId) {
     case "team_win_pct":
       return snapshot.winPct;
@@ -106,8 +110,9 @@ function resolvePitcherStat(pitcher: GameContext["favoritePitcher"], variableId:
 // Same variables as resolvePitcherStat, read off a dated snapshot row -
 // pitcher_kbb isn't stored directly (the snapshot keeps raw strikeouts/
 // walks, matching what stat-snapshots.ts actually captures), so it's derived
-// here the same way mlb-stats.ts derives it for the live case.
-function resolvePitcherStatFromSnapshot(snapshot: PitcherStatSnapshot, variableId: string): number | null {
+// here the same way mlb-stats.ts derives it for the live case. Exported for
+// the same reason as resolveTeamStatFromSnapshot above.
+export function resolvePitcherStatFromSnapshot(snapshot: PitcherStatSnapshot, variableId: string): number | null {
   switch (variableId) {
     case "pitcher_era":
       return snapshot.era;
@@ -126,19 +131,6 @@ function resolvePitcherStatFromSnapshot(snapshot: PitcherStatSnapshot, variableI
     default:
       return null;
   }
-}
-
-// The most recent snapshot at or before gameDate - `snapshots` must already
-// be sorted ascending by snapshotDate (backtestModel preloads them that
-// way), for both team and pitcher snapshot rows alike.
-function findLatestAtOrBefore<T extends { snapshotDate: string }>(snapshots: T[], gameDate: Date): T | undefined {
-  const key = easternDateKey(gameDate);
-  let result: T | undefined;
-  for (const snapshot of snapshots) {
-    if (snapshot.snapshotDate > key) break;
-    result = snapshot;
-  }
-  return result;
 }
 
 export const mlbStatsProvider: VariableProvider = {

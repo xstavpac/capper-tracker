@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { SavedModel } from "@/server/data/models";
 import type { ModelPreview, ModelTarget } from "@/server/data/model-evaluation";
-import { getModelVariable, totalConditionWeight, flattenToLeaves, type ConditionLeaf } from "@/lib/model-builder";
+import { getModelVariable, totalConditionWeight, flattenToLeaves, type ConditionLeaf, type VariableSide } from "@/lib/model-builder";
+import type { ModelBuilderPrefill } from "@/lib/model-builder-links";
 import { saveModelAction, deleteModelAction, previewModelAction } from "@/server/actions/models";
 import { VariableLibrary } from "./variable-library";
 import { ConditionBuilder } from "./condition-builder";
@@ -28,10 +29,12 @@ export function ModelBuilderClient({
   sportKey,
   savedModels,
   games,
+  prefillCondition,
 }: {
   sportKey: string;
   savedModels: SavedModel[];
   games: GameOption[];
+  prefillCondition?: ModelBuilderPrefill | null;
 }) {
   const [models, setModels] = useState(savedModels);
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
@@ -52,15 +55,32 @@ export function ModelBuilderClient({
 
   const weightTotal = totalConditionWeight(conditions);
 
-  function handleAddVariable(variableId: string) {
+  function handleAddVariable(variableId: string, side?: VariableSide) {
     const variable = getModelVariable(variableId);
     const needsSide = variable?.scope === "team" || variable?.scope === "pitcher";
     setConditions((prev) => [
       ...prev,
-      { type: "condition", id: newConditionId(), variableId, side: needsSide ? "favorite" : undefined, operator: "GT", threshold: 0, weight: 0 },
+      { type: "condition", id: newConditionId(), variableId, side: needsSide ? (side ?? "favorite") : undefined, operator: "GT", threshold: 0, weight: 0 },
     ]);
     setPreviewResult(null);
   }
+
+  // Seeds one condition from a Charts/Slate deep link ("Add as condition" /
+  // "Build a model for this game") - same handleAddVariable path a manual
+  // click in the variable library uses, not a separate condition-creation
+  // route. The ref (not just an empty dependency array) guards against
+  // React StrictMode's deliberate double-invoke of effects in dev, which
+  // otherwise adds the prefilled condition twice - confirmed live before
+  // this guard was added.
+  const prefillApplied = useRef(false);
+  useEffect(() => {
+    if (prefillApplied.current) return;
+    prefillApplied.current = true;
+    if (!prefillCondition) return;
+    if (!getModelVariable(prefillCondition.variableId)) return;
+    handleAddVariable(prefillCondition.variableId, prefillCondition.side);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleUpdateCondition(id: string, patch: Partial<ConditionLeaf>) {
     setConditions((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));

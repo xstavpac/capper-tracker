@@ -178,20 +178,26 @@ export async function backtestModel(sportKey: string, target: ModelTarget, tree:
   const unsupportedReason = unsupportedBacktestReason(leaves);
   if (unsupportedReason) return { status: "unsupported", reason: unsupportedReason };
 
-  const [gameResults, snapshots, tendencyRows, teamStatSnapshotRows, pitcherStatSnapshotRows, gameStarterRows] = await Promise.all([
+  const [gameResults, snapshots, tendencySnapshotRows, teamStatSnapshotRows, pitcherStatSnapshotRows, gameStarterRows] = await Promise.all([
     prisma.gameResult.findMany({ where: { sportKey } }),
     prisma.oddsSnapshot.findMany({ where: { sportKey } }),
-    prisma.teamTendency.findMany({ where: { sportKey } }),
+    prisma.teamTendencySnapshot.findMany({ where: { sportKey }, orderBy: { snapshotDate: "asc" } }),
     prisma.teamStatSnapshot.findMany({ where: { sportKey }, orderBy: { snapshotDate: "asc" } }),
     prisma.pitcherStatSnapshot.findMany({ where: { sportKey }, orderBy: { snapshotDate: "asc" } }),
     prisma.gameStarters.findMany({ where: { sportKey } }),
   ]);
   const oddsGames = snapshots.flatMap((s) => s.data as unknown as OddsGame[]);
-  const tendencyByTeam = new Map(tendencyRows.map((t) => [t.teamName, computeTendencyRates(t)]));
 
   // Grouped once up front (not queried per game) - findLatestAtOrBefore
-  // (mlbStatsProvider) does an in-memory scan per lookup instead of a DB
-  // query, since a backtest can touch this per condition per historical game.
+  // (providers/snapshot-utils.ts) does an in-memory scan per lookup instead
+  // of a DB query, since a backtest can touch this per condition per
+  // historical game.
+  const tendencySnapshotsByTeam = new Map<string, typeof tendencySnapshotRows>();
+  for (const row of tendencySnapshotRows) {
+    const list = tendencySnapshotsByTeam.get(row.teamName);
+    if (list) list.push(row);
+    else tendencySnapshotsByTeam.set(row.teamName, [row]);
+  }
   const teamSnapshotsByTeam = new Map<string, typeof teamStatSnapshotRows>();
   for (const row of teamStatSnapshotRows) {
     const list = teamSnapshotsByTeam.get(row.teamName);
@@ -235,7 +241,7 @@ export async function backtestModel(sportKey: string, target: ModelTarget, tree:
       favoritePitcherId,
       underdogPitcherId,
       gameDate: game.gameDate,
-      tendencyByTeam,
+      tendencySnapshotsByTeam,
       teamSnapshotsByTeam,
       pitcherSnapshotsByPitcherId,
     };
