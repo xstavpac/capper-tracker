@@ -20,7 +20,11 @@ export default async function LivePage({
 }: {
   searchParams: { sport?: string };
 }) {
-  const activeSport = searchParams.sport || LIVE_SPORTS[0].key;
+  // MLB is currently the only league fully wired up with real data - default
+  // there instead of LIVE_SPORTS[0] (NFL), which is otherwise empty most of
+  // the year. Tab order/visibility is untouched, this only changes which one
+  // is selected when no ?sport= is in the URL.
+  const activeSport = searchParams.sport || "baseball_mlb";
   const sportLabel = LIVE_SPORTS.find((s) => s.key === activeSport)?.label ?? activeSport;
 
   const user = await requireUser();
@@ -117,12 +121,6 @@ export default async function LivePage({
         <div className="mb-6">
           <h2 className="mb-2 text-sm font-semibold text-gray-900">{sportLabel} record by category</h2>
           <CategoryBreakdown items={sportCategoryBreakdown} leaderboards={sportCategoryLeaderboards} />
-        </div>
-      )}
-
-      {odds.length === 0 && !hasApiKey && (
-        <div className="rounded-card bg-white p-6 text-center text-sm text-gray-500 shadow-soft">
-          No ODDS_API_KEY configured yet.
         </div>
       )}
 
