@@ -142,7 +142,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
           const created = await createCapper(user.id, {
             name: item.capperName,
             source: "OTHER",
-            customSource: "Bulk import",
+            customSource: "Catalog import",
           });
           capperId = created.id;
           existingCappers.push(created);
