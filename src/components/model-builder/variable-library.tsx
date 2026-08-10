@@ -5,7 +5,18 @@ import { MODEL_VARIABLES, VARIABLE_CATEGORY_LABELS, type VariableCategory } from
 
 const CATEGORY_ORDER: VariableCategory[] = ["team_tendencies", "team_stats", "pitcher_stats", "odds_market"];
 
-export function VariableLibrary({ onAdd }: { onAdd: (variableId: string) => void }) {
+// `categories` narrows which catalog categories are offered - e.g. Charts'
+// entity-first flow only has a team selector today, so it passes just
+// ["team_tendencies", "team_stats"] (no pitcher entity picker yet, and
+// odds_market isn't chartable - see historical-variables.ts). Defaults to
+// every category, matching the model builder's own unfiltered use.
+export function VariableLibrary({
+  onAdd,
+  categories = CATEGORY_ORDER,
+}: {
+  onAdd: (variableId: string) => void;
+  categories?: VariableCategory[];
+}) {
   const [query, setQuery] = useState("");
 
   const grouped = useMemo(() => {
@@ -14,11 +25,13 @@ export function VariableLibrary({ onAdd }: { onAdd: (variableId: string) => void
       ? MODEL_VARIABLES.filter((v) => v.label.toLowerCase().includes(q) || v.description.toLowerCase().includes(q))
       : MODEL_VARIABLES;
 
-    return CATEGORY_ORDER.map((category) => ({
-      category,
-      variables: filtered.filter((v) => v.category === category),
-    })).filter((group) => group.variables.length > 0);
-  }, [query]);
+    return categories
+      .map((category) => ({
+        category,
+        variables: filtered.filter((v) => v.category === category),
+      }))
+      .filter((group) => group.variables.length > 0);
+  }, [query, categories]);
 
   return (
     <div className="rounded-card bg-white p-4 shadow-soft">

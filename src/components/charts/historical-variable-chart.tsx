@@ -10,6 +10,7 @@ import {
   Tooltip,
   Legend,
   CartesianGrid,
+  Brush,
 } from "recharts";
 import type { VariableUnit } from "@/lib/model-builder";
 
@@ -167,6 +168,12 @@ export function HistoricalVariableChart({ series, height = 320 }: { series: Char
             isAnimationActive={false}
           />
         ))}
+        {/* Pan/zoom within the loaded range - only worth showing once there's
+            enough points for a drag-to-zoom gesture to mean anything; with a
+            couple of points it would just be dead chrome under the chart. */}
+        {data.length > 5 && (
+          <Brush dataKey="date" height={20} stroke="#94a3b8" tickFormatter={formatDateTick} travellerWidth={8} />
+        )}
       </LineChart>
     </ResponsiveContainer>
   );

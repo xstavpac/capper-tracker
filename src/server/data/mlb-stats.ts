@@ -58,6 +58,13 @@ export function mlbTeamNameById(id: number): string | null {
   return MLB_TEAM_NAMES_BY_ID[id] ?? null;
 }
 
+// Every active MLB team's canonical full name, alphabetical - backs the
+// Charts workspace's entity selector (a fixed, known list, unlike pitchers
+// which have no equivalent static catalog).
+export function getAllMlbTeamNames(): string[] {
+  return Object.keys(MLB_TEAM_IDS).sort();
+}
+
 export function currentMlbSeason(): number {
   return new Date().getFullYear();
 }

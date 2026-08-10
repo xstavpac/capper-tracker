@@ -89,6 +89,15 @@ function LiveIcon({ className }: { className?: string }) {
   );
 }
 
+function ChartsIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <path d="M4 4v16h16" />
+      <path d="M7 15l3.5 -4.5l3 3l4.5 -6" />
+    </svg>
+  );
+}
+
 function ModelBuilderIcon({ className }: { className?: string }) {
   return (
     <svg {...iconProps(className)}>
@@ -113,6 +122,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/cappers", label: "Cappers", icon: CappersIcon },
   { href: "/picks", label: "Picks", icon: PicksIcon },
   { href: "/reports", label: "Reports", icon: ReportsIcon },
+  { href: "/charts", label: "Charts", icon: ChartsIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
   { href: "/live", label: "Live", icon: LiveIcon, accent: "red" },
 ];

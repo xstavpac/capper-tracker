@@ -40,6 +40,12 @@ export type VariableTimeSeriesResult = {
   // days available" should display. Grows automatically as the daily
   // snapshot cron adds rows; never a fixed/precomputed number.
   daysAvailable: number;
+  // Count of snapshot rows found in range, regardless of whether their
+  // computed value came out null (e.g. MIN_TENDENCY_SAMPLE not met yet).
+  // Lets a caller tell "we have no snapshots at all in this range yet" apart
+  // from "we have snapshots, but not enough decided games to compute this
+  // specific rate" - two different honest messages, not the same gap.
+  totalSnapshotDays: number;
 };
 
 export type DateRange = { start: string; end: string }; // "YYYY-MM-DD", Eastern, inclusive
@@ -61,6 +67,7 @@ function unsupportedResult(
     unsupportedReason: reason,
     points: [],
     daysAvailable: 0,
+    totalSnapshotDays: 0,
   };
 }
 
@@ -92,6 +99,7 @@ export async function getHistoricalVariableSeries(
       supported: true,
       points,
       daysAvailable: points.filter((p) => p.value !== null).length,
+      totalSnapshotDays: rows.length,
     };
   }
 
@@ -112,14 +120,20 @@ export async function getHistoricalVariableSeries(
       supported: true,
       points,
       daysAvailable: points.filter((p) => p.value !== null).length,
+      totalSnapshotDays: rows.length,
     };
   }
 
   if (variable.category === "team_tendencies") {
-    // Unlike team_stats, a role genuinely matters here - favWinPct/dogWinPct
-    // are two distinct stored metrics of the same team, not a matchup-
-    // relative selector, so a side is required to know which one to read.
-    if (!side) return unsupportedResult(variableId, entityId, side, "This variable needs a Favorite/Underdog side.");
+    // No side requirement here, unlike the model builder's game-relative
+    // condition rows: readRate switches on variableId alone
+    // ("tendency_fav_win_pct" vs "tendency_dog_win_pct" are already two
+    // distinct catalog entries/two distinct stored rates of the SAME team),
+    // and over/under rate are role-independent entirely (accumulated across
+    // every game regardless of favorite/dog role - see computeTendencyRates).
+    // `side` is still accepted/carried through for callers that want it in
+    // the result (e.g. building a model-builder deep link), just never
+    // required to compute a value.
     const rows = await prisma.teamTendencySnapshot.findMany({
       where: { sportKey, teamName: entityId, snapshotDate: { gte: range.start, lte: range.end } },
       orderBy: { snapshotDate: "asc" },
@@ -134,6 +148,7 @@ export async function getHistoricalVariableSeries(
       supported: true,
       points,
       daysAvailable: points.filter((p) => p.value !== null).length,
+      totalSnapshotDays: rows.length,
     };
   }
 
@@ -145,10 +160,5 @@ export async function getHistoricalVariableSeries(
   // game, a genuinely different query shape than the per-entity snapshot
   // tables the other three categories share. Flagged as a known gap rather
   // than guessed at.
-  return unsupportedResult(
-    variableId,
-    entityId,
-    side,
-    "Charting isn't available yet for odds/market variables."
-  );
+  return unsupportedResult(variableId, entityId, side, "Charting isn't available yet for odds/market variables.");
 }
