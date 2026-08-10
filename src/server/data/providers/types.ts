@@ -16,6 +16,7 @@ import type { OddsGame } from "@/server/data/odds";
 import type { VariableSide } from "@/lib/model-builder";
 import type { TeamSeasonStats, PitcherSeasonStats } from "@/server/data/mlb-stats";
 import type { TeamTendencyRates } from "@/server/data/team-tendencies";
+import type { TeamStatSnapshot } from "@prisma/client";
 
 // One resolved game's live data, built once (see model-evaluation.ts's
 // buildGameContext) and read by every provider - kept as a single eagerly-
@@ -44,29 +45,36 @@ export type GameContext = {
 };
 
 // Everything a provider needs to resolve one variable for one HISTORICAL
-// game during a backtest. Lighter than GameContext - no team/pitcher
-// season-stat fetch, since those have no point-in-time history yet (see
-// mlbStatsProvider.supportsHistorical). tendencyByTeam is preloaded once per
-// backtest run (not per game) to avoid an N+1 query across every historical
-// game being scored.
+// game during a backtest. tendencyByTeam and teamSnapshotsByTeam are both
+// preloaded once per backtest run (not per game/condition) to avoid an N+1
+// query across every historical game being scored - teamSnapshotsByTeam's
+// arrays are pre-sorted ascending by snapshotDate so a provider can do an
+// in-memory "latest snapshot at or before gameDate" scan instead of a DB
+// query per lookup.
 export type HistoricalGameRef = {
   oddsGame: OddsGame;
   favoriteTeam: string;
   underdogTeam: string;
   favoriteMoneyline: number;
   underdogMoneyline: number;
+  gameDate: Date;
   tendencyByTeam: Map<string, TeamTendencyRates>;
+  teamSnapshotsByTeam: Map<string, TeamStatSnapshot[]>;
 };
 
 export interface VariableProvider {
   sourceId: string;
-  // Declares whether resolveHistorical can ever return real data for
-  // variables from this source - a static capability, not something callers
-  // infer from a null result (null legitimately also means "no data for
-  // THIS one game"). backtestModel uses this to report an honest
-  // "unsupported" reason instead of silently comparing today's numbers
-  // against past games (see mlbStatsProvider).
-  supportsHistorical: boolean;
+  // Declares whether resolveHistorical can ever return real data for a
+  // specific variable from this source - a static capability, not something
+  // callers infer from a null result (null legitimately also means "no data
+  // for THIS one game/date"). Per-variable rather than a flat per-provider
+  // boolean because mlbStatsProvider is asymmetric: team_stats variables can
+  // be backtested once enough daily snapshots accumulate, but pitcher_stats
+  // variables can't yet (no record of which pitcher started which historical
+  // game to join a pitcher snapshot against) - see mlbStatsProvider's own
+  // comment. backtestModel uses this to report an honest "unsupported"
+  // reason instead of silently comparing today's numbers against past games.
+  supportsHistorical(variableId: string): boolean;
   resolveLive(ctx: GameContext, variableId: string, side?: VariableSide): number | null;
   resolveHistorical(ref: HistoricalGameRef, variableId: string, side?: VariableSide): number | null;
 }

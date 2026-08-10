@@ -147,24 +147,28 @@ export type ModelHealth =
   | { status: "insufficient_sample"; sampleSize: number }
   | { status: "unsupported"; reason: string };
 
-// Only providers that declare supportsHistorical can be honestly backtested
-// today (team-tendencies and odds/market; see mlbStatsProvider) - a model
-// mixing in e.g. "ERA < 4.0" can't get a Model Health estimate at all yet.
-// Reporting that explicitly keeps this honest rather than fabricating a
-// number by silently comparing today's season stats against past games.
+// Only variables whose provider declares supportsHistorical(variableId) can
+// be honestly backtested today. team_stats variables (ERA, batting average,
+// etc.) unlock progressively as daily snapshots accumulate (see
+// stat-snapshots.ts) - a historical game predating the first captured
+// snapshot still won't match, same as any other "not enough history yet"
+// case. pitcher_stats variables stay blocked regardless of snapshot count -
+// there's no record of which pitcher started which historical game to join
+// a snapshot against. Reporting this explicitly keeps it honest rather than
+// fabricating a number by silently comparing today's stats against past games.
 function unsupportedBacktestReason(leaves: ConditionLeaf[]): string | null {
   const blocker = leaves.find((leaf) => {
     const variable = getModelVariable(leaf.variableId);
     const provider = variable ? getVariableProvider(variable.sourceId) : undefined;
-    return !provider || !provider.supportsHistorical;
+    return !provider || !provider.supportsHistorical(leaf.variableId);
   });
   if (!blocker) return null;
   const variable = getModelVariable(blocker.variableId);
-  return (
-    `Backtesting isn't available yet for "${variable?.label ?? blocker.variableId}" - the app only stores ` +
-    "each team/pitcher's current season totals, not a snapshot of what those stats were on each historical " +
-    "game's date. Team-tendency and odds/market conditions can be backtested."
-  );
+  const reason =
+    variable?.category === "pitcher_stats"
+      ? "there's no record yet of which pitcher started which historical game to check this against"
+      : "the app only stores each team's current season totals, not a snapshot of what those stats were on each historical game's date";
+  return `Backtesting isn't available yet for "${variable?.label ?? blocker.variableId}" - ${reason}. Team-tendency and odds/market conditions can be backtested.`;
 }
 
 // Backtests a model's conditions against every finished game this app has
@@ -179,13 +183,24 @@ export async function backtestModel(sportKey: string, target: ModelTarget, tree:
   const unsupportedReason = unsupportedBacktestReason(leaves);
   if (unsupportedReason) return { status: "unsupported", reason: unsupportedReason };
 
-  const [gameResults, snapshots, tendencyRows] = await Promise.all([
+  const [gameResults, snapshots, tendencyRows, teamStatSnapshotRows] = await Promise.all([
     prisma.gameResult.findMany({ where: { sportKey } }),
     prisma.oddsSnapshot.findMany({ where: { sportKey } }),
     prisma.teamTendency.findMany({ where: { sportKey } }),
+    prisma.teamStatSnapshot.findMany({ where: { sportKey }, orderBy: { snapshotDate: "asc" } }),
   ]);
   const oddsGames = snapshots.flatMap((s) => s.data as unknown as OddsGame[]);
   const tendencyByTeam = new Map(tendencyRows.map((t) => [t.teamName, computeTendencyRates(t)]));
+
+  // Grouped once up front (not queried per game) - findLatestSnapshotAtOrBefore
+  // (mlbStatsProvider) does an in-memory scan per lookup instead of a DB
+  // query, since a backtest can touch this per condition per historical game.
+  const teamSnapshotsByTeam = new Map<string, typeof teamStatSnapshotRows>();
+  for (const row of teamStatSnapshotRows) {
+    const list = teamSnapshotsByTeam.get(row.teamName);
+    if (list) list.push(row);
+    else teamSnapshotsByTeam.set(row.teamName, [row]);
+  }
 
   let matches = 0;
   let targetHits = 0;
@@ -204,7 +219,9 @@ export async function backtestModel(sportKey: string, target: ModelTarget, tree:
       underdogTeam: favDog.underdogTeam,
       favoriteMoneyline: favDog.favoriteMoneyline,
       underdogMoneyline: favDog.underdogMoneyline,
+      gameDate: game.gameDate,
       tendencyByTeam,
+      teamSnapshotsByTeam,
     };
 
     const conditionsPass = evaluateConditionTree(tree, (leaf) => {

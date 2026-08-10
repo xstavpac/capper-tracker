@@ -25,7 +25,7 @@ function readRate(tendency: TeamTendencyRates | null | undefined, variableId: st
 
 export const tendencyProvider: VariableProvider = {
   sourceId: "internal_tendencies",
-  supportsHistorical: true,
+  supportsHistorical: () => true,
 
   resolveLive(ctx, variableId, side) {
     const tendency = side === "favorite" ? ctx.favoriteTendency : side === "underdog" ? ctx.underdogTendency : null;

@@ -8,7 +8,7 @@ import type { VariableProvider } from "./types";
 
 export const oddsMarketProvider: VariableProvider = {
   sourceId: "odds_api",
-  supportsHistorical: true,
+  supportsHistorical: () => true,
 
   resolveLive(ctx, variableId) {
     switch (variableId) {

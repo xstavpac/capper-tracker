@@ -225,6 +225,76 @@ model TeamTendency {
   @@map("team_tendencies")
 }
 
+// One team's season-to-date stat line on one calendar day - captured daily
+// by captureTeamStatSnapshots (server/data/stat-snapshots.ts), piggybacked
+// on the existing refresh-scores cron. Building this dated history is what
+// eventually lets team_stats condition backtesting move off the "unsupported"
+// path in model-evaluation.ts: a historical game's date can be joined
+// against the closest snapshot at-or-before it, the same way OddsSnapshot
+// already gives odds/market conditions real point-in-time correctness.
+model TeamStatSnapshot {
+  id              String    @id @default(cuid())
+  sportKey        String
+  teamName        String
+  snapshotDate    String // "YYYY-MM-DD", Eastern - same convention as OddsSnapshot.fetchDate
+  wins            Int
+  losses          Int
+  winPct          Float
+  runDifferential Int
+  battingAvg      Float
+  obp             Float
+  slg             Float
+  ops             Float
+  era             Float
+  whip            Float
+  homeWins        Int
+  homeLosses      Int
+  awayWins        Int
+  awayLosses      Int
+  last10Wins      Int
+  last10Losses    Int
+  streakType      String? // "W" | "L" | null
+  streakCount     Int
+  sourceId        String    @default("mlb_stats_api")
+  scope           DataScope @default(GLOBAL)
+  createdAt       DateTime  @default(now())
+
+  @@unique([sportKey, teamName, snapshotDate])
+  @@map("team_stat_snapshots")
+}
+
+// One pitcher's season-to-date stat line on one calendar day - captured for
+// that day's probable starters only (not every pitcher in the league), by
+// capturePitcherStatSnapshots. Ready to power pitcher_stats backtesting once
+// a separate gap is closed: today's data model has no record of which
+// pitcher started which historical GameResult, so there's nothing yet to
+// join a pitcher snapshot against for a past game - these rows accumulate
+// now so that future work doesn't also have to wait out a data-collection
+// lag once that link exists.
+model PitcherStatSnapshot {
+  id             String    @id @default(cuid())
+  sportKey       String
+  pitcherId      Int // MLB Stats API's numeric person id
+  pitcherName    String
+  snapshotDate   String // "YYYY-MM-DD", Eastern
+  era            Float
+  whip           Float
+  wins           Int
+  losses         Int
+  strikeouts     Int
+  walks          Int
+  inningsPitched Float
+  homeEra        Float?
+  roadEra        Float?
+  daysRest       Int?
+  sourceId       String    @default("mlb_stats_api")
+  scope          DataScope @default(GLOBAL)
+  createdAt      DateTime  @default(now())
+
+  @@unique([sportKey, pitcherId, snapshotDate])
+  @@map("pitcher_stat_snapshots")
+}
+
 // What a Build Your Own Model model is actually predicting - required so an
 // AND-chain of conditions from different markets (a moneyline signal like
 // "Fav win% >= 60" alongside a totals signal like "Team over rate >= 55")

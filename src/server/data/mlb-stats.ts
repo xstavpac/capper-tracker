@@ -42,7 +42,7 @@ export function mlbTeamId(teamName: string): number | null {
   return MLB_TEAM_IDS[teamName] ?? null;
 }
 
-function currentMlbSeason(): number {
+export function currentMlbSeason(): number {
   return new Date().getFullYear();
 }
 

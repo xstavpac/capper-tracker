@@ -292,6 +292,26 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     sourceId: MLB_STATS_API,
     dataScope: "global",
   },
+  {
+    id: "pitcher_home_era",
+    label: "Home ERA",
+    category: "pitcher_stats",
+    scope: "pitcher",
+    unit: "decimal",
+    description: "Probable starter's season ERA in home games.",
+    sourceId: MLB_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "pitcher_road_era",
+    label: "Road ERA",
+    category: "pitcher_stats",
+    scope: "pitcher",
+    unit: "decimal",
+    description: "Probable starter's season ERA in road games.",
+    sourceId: MLB_STATS_API,
+    dataScope: "global",
+  },
 
   // ---- Odds/market (already unambiguous - no side needed) ----
   {

@@ -1,6 +1,9 @@
 import { persistFinalScores } from "@/server/data/grading";
 import { RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { recomputeTeamTendencies } from "@/server/data/team-tendencies";
+import { captureTeamStatSnapshots, capturePitcherStatSnapshots } from "@/server/data/stat-snapshots";
+
+const MLB_SPORT_KEY = "baseball_mlb";
 
 export const dynamic = "force-dynamic";
 
@@ -33,5 +36,19 @@ export async function GET(req: Request) {
     })
   );
 
-  return Response.json({ ok: true, results });
+  // MLB-only, same as first-five/NRFI grading elsewhere in this app - the
+  // snapshot fields (team hitting/pitching aggregates, probable-starter
+  // lookup) are all sourced from MLB Stats API endpoints with no equivalent
+  // wired up for the ESPN-backed sports yet. Piggybacked on this same cron
+  // run (not a new schedule entry) per the model builder's provider-registry
+  // design - these snapshots are what eventually lets team_stats/
+  // pitcher_stats condition backtesting move off "unsupported."
+  const teamSnapshots = await captureTeamStatSnapshots();
+  const pitcherSnapshots = await capturePitcherStatSnapshots();
+
+  return Response.json({
+    ok: true,
+    results,
+    statSnapshots: { sport: MLB_SPORT_KEY, teamSnapshots, pitcherSnapshots },
+  });
 }
