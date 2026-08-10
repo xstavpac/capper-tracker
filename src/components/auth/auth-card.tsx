@@ -3,11 +3,14 @@ import Link from "next/link";
 // Same logo-mark.png asset as the sidebar's LogoMark (app-sidebar.tsx) - kept
 // in sync visually with the rest of the app, unlike the new brand-purple
 // (#7F2FD4) used for this page's primary buttons, which is a separate,
-// explicitly-requested color.
+// explicitly-requested color. The asset is a full lockup (icon + divider +
+// "Bettingview" wordmark) now, not just an icon - sized by height with
+// w-auto to preserve its real aspect ratio instead of squashing it into the
+// old square badge.
 function LogoMark() {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- fixed local asset, not worth next/image's overhead at this size
-    <img src="/logo-mark.png" alt="" className="h-10 w-10 shrink-0 rounded-xl object-cover" aria-hidden="true" />
+    <img src="/logo-mark.png" alt="Bettingview" className="h-9 w-auto shrink-0" />
   );
 }
 
@@ -29,9 +32,8 @@ export function AuthCard({
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-10">
       <div className="w-full max-w-[340px] rounded-2xl bg-white p-8 shadow-soft">
-        <Link href="/" className="mb-6 flex items-center gap-2.5">
+        <Link href="/" className="mb-6 block">
           <LogoMark />
-          <span className="text-lg font-semibold text-gray-900">Bettingview</span>
         </Link>
         <h1 className="text-2xl font-semibold text-gray-900">{heading}</h1>
         <p className="mt-1 text-sm text-gray-500">{subtitle}</p>

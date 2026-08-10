@@ -24,6 +24,7 @@ const CAPPER_ACCENTS = [
 ];
 
 export function BulkImportForm({ existingCapperNames }: { existingCapperNames: string[] }) {
+  const [showTips, setShowTips] = useState(false);
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<ParsedPick[] | null>(null);
   const [enrichedOdds, setEnrichedOdds] = useState<Record<number, number>>({});
@@ -163,17 +164,26 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   return (
     <div className="rounded-card bg-white p-5 shadow-soft">
       <h3 className="mb-1 text-sm font-medium text-gray-900">Betting Catalog Import</h3>
-      <p className="mb-1 text-xs text-gray-500">
-        Paste a full catalog dump below - capper name lines followed by picks. We will
-        auto-detect sport, bet type, odds, and units for each pick.
-      </p>
-      <p className="mb-3 text-xs text-gray-400">
-        Leave a blank line between different cappers&apos; picks. Cappers already in your saved
-        list are recognized automatically, even if their name contains a team name. For a
-        brand-new capper whose name happens to collide with a team name (e.g. &quot;Tigers Fan
-        Picks&quot;), prefix it with * the first time, e.g. &quot;*Tigers Fan Picks&quot;, so
-        it&apos;s read as a name instead of a pick.
-      </p>
+      <p className="mb-2 text-xs text-gray-500">Paste capper names and picks below - we&apos;ll detect the rest.</p>
+
+      <button
+        type="button"
+        onClick={() => setShowTips((v) => !v)}
+        className="mb-3 flex items-center gap-1 text-xs font-medium text-gray-400 transition hover:text-gray-600"
+      >
+        <span className={"inline-block transition-transform " + (showTips ? "rotate-90" : "")}>&rsaquo;</span>
+        Formatting tips
+      </button>
+      {showTips && (
+        <p className="mb-3 text-xs text-gray-400">
+          Capper name lines followed by their picks - we auto-detect sport, bet type, odds, and
+          units for each pick. Leave a blank line between different cappers&apos; picks. Cappers
+          already in your saved list are recognized automatically, even if their name contains a
+          team name. For a brand-new capper whose name happens to collide with a team name (e.g.
+          &quot;Tigers Fan Picks&quot;), prefix it with * the first time, e.g. &quot;*Tigers Fan
+          Picks&quot;, so it&apos;s read as a name instead of a pick.
+        </p>
+      )}
 
       <textarea
         value={text}

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sameEasternDay, easternDateKey, closestByTime } from "@/lib/dates";
+import { isSportInSeason } from "@/lib/sport-seasons";
 
 export type OddsGame = {
   id: string;
@@ -42,6 +43,14 @@ export const LIVE_SPORTS = [
 const BASE_URL = "https://api.the-odds-api.com/v4";
 
 export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
+  // Every sport in LIVE_SPORTS used to hit the Odds API bulk endpoint every
+  // day year-round, including months of pure off-season - the API charges
+  // per markets x regions requested regardless of how many (or how few)
+  // games come back, so this was pure waste. Checked first, before any DB
+  // read/write, so an out-of-season sport never touches the cache table or
+  // the network at all.
+  if (!isSportInSeason(sportKey)) return [];
+
   const fetchDate = easternDateKey(new Date());
 
   const existing = await prisma.oddsSnapshot.findUnique({
@@ -201,11 +210,15 @@ export function getWnbaLiveScores(): Promise<ScoreGame[]> {
   return getEspnScores("basketball/wnba");
 }
 
+export function getNflLiveScores(): Promise<ScoreGame[]> {
+  return getEspnScores("football/nfl");
+}
+
 // Sports with a real score source wired up (see getLiveScoresForSport below).
 // The rest of LIVE_SPORTS still get odds display, just no live score/badge,
 // game resolution, or auto-grading yet - add a key here (and a case below)
 // once a free score source is wired up for it.
-export const RESOLVABLE_SPORT_KEYS = ["baseball_mlb", "basketball_nba", "basketball_wnba"];
+export const RESOLVABLE_SPORT_KEYS = ["baseball_mlb", "basketball_nba", "basketball_wnba", "americanfootball_nfl"];
 
 // Dispatches to the right free score source for a sport. Add a case here
 // (and a getXLiveScores() above) when wiring up a new sport.
@@ -213,6 +226,14 @@ export async function getLiveScoresForSport(sportKey: string): Promise<ScoreGame
   if (sportKey === "baseball_mlb") return getMlbLiveScores();
   if (sportKey === "basketball_nba") return getNbaLiveScores();
   if (sportKey === "basketball_wnba") return getWnbaLiveScores();
+  if (sportKey === "americanfootball_nfl") {
+    // ESPN's scoreboard is free either way, but off-season it's just
+    // preseason noise - gating it keeps preseason games out of live
+    // display, catalog-import game resolution, and auto-grading alike,
+    // not only the credit-costing Odds API side.
+    if (!isSportInSeason(sportKey)) return [];
+    return getNflLiveScores();
+  }
   return [];
 }
 

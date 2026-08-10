@@ -2,11 +2,13 @@ import Link from "next/link";
 
 // Same logo-mark.png asset as the sidebar's LogoMark (app-sidebar.tsx) and
 // the auth card's LogoMark (auth-card.tsx) - kept in sync visually rather
-// than introducing a fourth copy of the same badge.
+// than introducing a fourth copy of the same badge. Full lockup (icon +
+// divider + "Bettingview" wordmark) now, so this is the hero's only
+// "Bettingview" text - the headline itself never repeated the brand name.
 function LogoMark() {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- fixed local asset, not worth next/image's overhead at this size
-    <img src="/logo-mark.png" alt="" className="h-12 w-12 shrink-0 rounded-2xl object-cover" aria-hidden="true" />
+    <img src="/logo-mark.png" alt="Bettingview" className="h-14 w-auto shrink-0" />
   );
 }
 
@@ -29,7 +31,7 @@ export default function MarketingPage() {
         >
           Get started free
         </Link>
-        <span className="text-xs text-gray-400">Free · No credit card required</span>
+        <span className="text-xs text-gray-400">1,000 free picks · No credit card required</span>
       </div>
     </main>
   );

@@ -173,14 +173,31 @@ function parsePickText(description: string): {
   const parens = [...description.matchAll(/\(([^)]+)\)/g)];
   for (const p of parens) {
     const val = p[1].trim();
-    if (/u$/i.test(val)) {
+    if (/u(nits?)?$/i.test(val)) {
       units = parseFloat(val);
     } else if (/^[+-]?\d+$/.test(val)) {
       odds = parseInt(val, 10);
     }
   }
 
-  const cleanDescription = description.replace(/\([^)]*\)/g, "").trim();
+  // Units aren't always wrapped in parens, and can be spelled out ("2 units",
+  // "1 unit") rather than the "2u" shorthand - e.g. "Cubs moneyline 2 units"
+  // with no parenthetical wrapper at all. Only checked when the paren scan
+  // above found nothing, so an explicit "(1u)" still wins if present.
+  let bareUnitPhrase: string | null = null;
+  if (units === null) {
+    const spelledOut = description.match(/\b(\d+(?:\.\d+)?)\s*units?\b/i);
+    const shorthand = description.match(/\b(\d+(?:\.\d+)?)\s*u\b/i);
+    const unitMatch = spelledOut ?? shorthand;
+    if (unitMatch) {
+      units = parseFloat(unitMatch[1]);
+      bareUnitPhrase = unitMatch[0];
+    }
+  }
+
+  let cleanDescription = description.replace(/\([^)]*\)/g, "");
+  if (bareUnitPhrase) cleanDescription = cleanDescription.replace(bareUnitPhrase, "");
+  cleanDescription = cleanDescription.replace(/\s{2,}/g, " ").trim();
   // Catches both abbreviated ("F5", "1st 5"/"1st5") and fully spelled-out
   // ("first 5", "first five", "1st five") phrasing - the abbreviated-only
   // version silently left every spelled-out F5 pick stored as period=

@@ -201,15 +201,16 @@ function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => 
   );
 }
 
+// Full lockup (icon + divider + "Bettingview" wordmark) baked into the
+// asset itself now, not just an icon paired with a separate text span - see
+// the other two LogoMark copies (auth-card.tsx, marketing (marketing)/page.tsx)
+// for the same change. Sized by height with w-auto so the asset's real
+// (non-square) aspect ratio is preserved instead of being squashed into the
+// old icon-only badge's fixed square box.
 function LogoMark() {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- fixed local asset, not worth next/image's overhead at this size
-    <img
-      src="/logo-mark.png"
-      alt=""
-      className="h-[26px] w-[26px] shrink-0 rounded-lg object-cover"
-      aria-hidden="true"
-    />
+    <img src="/logo-mark.png" alt="Bettingview" className="h-7 w-auto shrink-0" />
   );
 }
 
@@ -293,10 +294,7 @@ export function AppSidebar({ user, modelBuilderEnabled }: { user: SidebarUser; m
   return (
     <>
       <div className="flex items-center justify-between border-b border-gray-100 bg-white p-3 md:hidden">
-        <div className="flex items-center gap-2">
-          <LogoMark />
-          <span className="text-[17px] font-semibold">Bettingview</span>
-        </div>
+        <LogoMark />
         <button
           onClick={() => setOpen(true)}
           aria-label="Open menu"
@@ -307,9 +305,8 @@ export function AppSidebar({ user, modelBuilderEnabled }: { user: SidebarUser; m
       </div>
 
       <aside className="hidden w-60 flex-col gap-1 rounded-xl border border-gray-200 bg-white px-4 py-5 shadow-soft md:flex">
-        <div className="mb-6 flex items-center gap-2 px-1">
+        <div className="mb-6 px-1">
           <LogoMark />
-          <span className="text-[17px] font-semibold">Bettingview</span>
         </div>
         <NavLinks items={navItems} />
         <SidebarDropCatalog />
@@ -321,10 +318,7 @@ export function AppSidebar({ user, modelBuilderEnabled }: { user: SidebarUser; m
           <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-64 flex-col gap-1 bg-white px-4 py-5 shadow-lg">
             <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <LogoMark />
-                <span className="text-[17px] font-semibold">Bettingview</span>
-              </div>
+              <LogoMark />
               <button
                 onClick={() => setOpen(false)}
                 aria-label="Close menu"
