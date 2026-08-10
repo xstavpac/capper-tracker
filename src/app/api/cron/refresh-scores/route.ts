@@ -44,11 +44,11 @@ export async function GET(req: Request) {
   // design - these snapshots are what eventually lets team_stats/
   // pitcher_stats condition backtesting move off "unsupported."
   const teamSnapshots = await captureTeamStatSnapshots();
-  const pitcherSnapshots = await capturePitcherStatSnapshots();
+  const { starters, pitcherSnapshots } = await capturePitcherStatSnapshots();
 
   return Response.json({
     ok: true,
     results,
-    statSnapshots: { sport: MLB_SPORT_KEY, teamSnapshots, pitcherSnapshots },
+    statSnapshots: { sport: MLB_SPORT_KEY, teamSnapshots, pitcherSnapshots, gameStarters: starters },
   });
 }

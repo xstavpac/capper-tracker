@@ -1,12 +1,16 @@
-// Daily point-in-time captures of team/pitcher season stats - the historical
-// dataset team_stats/pitcher_stats condition backtesting needs (see
-// model-evaluation.ts's unsupportedBacktestReason: mlb-stats.ts only ever
-// exposed CURRENT totals, with no way to know what a team's ERA was on a
-// past date). Piggybacked on the existing refresh-scores cron rather than a
-// new scheduled job - confirmed against the live API before building this:
-// 4-5 requests/day total (1 schedule call, 1 standings call, 2 league-wide
-// team-stats calls, 1 batched multi-pitcher call), via endpoints that return
-// every team/every probable starter in one response instead of one call each.
+// Daily point-in-time captures of team/pitcher season stats, plus which
+// pitcher started each game - the historical dataset team_stats/
+// pitcher_stats condition backtesting needs (see model-evaluation.ts's
+// unsupportedBacktestReason: mlb-stats.ts only ever exposed CURRENT totals,
+// with no way to know what a team/pitcher's stats were on a past date, or
+// which pitcher even started a given historical game). Piggybacked on the
+// existing refresh-scores cron rather than a new scheduled job - confirmed
+// against the live API before building this: 4-5 requests/day total (1
+// schedule call, 1 standings call, 2 league-wide team-stats calls, 1 batched
+// multi-pitcher call), via endpoints that return every team/every probable
+// starter in one response instead of one call each. Recording each game's
+// starters (GameStarters) rides the same schedule call already fetched for
+// pitcher snapshots, so it adds zero additional requests.
 import { prisma } from "@/lib/prisma";
 import { easternDateKey } from "@/lib/dates";
 import { currentMlbSeason } from "@/server/data/mlb-stats";
@@ -125,13 +129,25 @@ export async function captureTeamStatSnapshots(date: string = easternDateKey(new
 
 type ProbableStarter = { id: number; name: string };
 
-// Every probable starter (home and away) across today's MLB schedule, one
-// request - hydrate=probablePitcher returns them inline on the schedule
-// response instead of needing a per-game live-feed fetch (getProbablePitcher
-// in mlb-stats.ts does that heavier per-game lookup for the live preview's
-// single-game case; this batch capture needs all of today's starters at
-// once, so it uses the cheaper schedule-level hydration instead).
-async function getTodaysProbableStarters(date: string): Promise<ProbableStarter[]> {
+type ScheduledGame = {
+  gamePk: string;
+  homeTeam: string;
+  awayTeam: string;
+  gameDate: Date;
+  homePitcher: ProbableStarter | null;
+  awayPitcher: ProbableStarter | null;
+};
+
+// Today's MLB schedule with each game's probable starters, one request -
+// hydrate=probablePitcher returns them inline on the schedule response
+// instead of needing a per-game live-feed fetch (getProbablePitcher in
+// mlb-stats.ts does that heavier per-game lookup for the live preview's
+// single-game case; this batch capture needs all of today's games at once,
+// so it uses the cheaper schedule-level hydration instead). gamePk/team
+// names/gameDate come along on the same response - capturing them here for
+// GameStarters is not an additional request, just reading more fields off a
+// call already being made for the pitcher snapshots.
+async function getTodaysSchedule(date: string): Promise<ScheduledGame[]> {
   const res = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=probablePitcher`, {
     cache: "no-store",
   });
@@ -139,14 +155,53 @@ async function getTodaysProbableStarters(date: string): Promise<ProbableStarter[
 
   const data = await res.json();
   const games = data.dates?.[0]?.games ?? [];
-  const byId = new Map<number, string>();
-  for (const game of games) {
-    for (const side of ["home", "away"] as const) {
-      const pitcher = game.teams?.[side]?.probablePitcher;
-      if (pitcher?.id && pitcher?.fullName) byId.set(pitcher.id, pitcher.fullName);
-    }
-  }
-  return Array.from(byId.entries()).map(([id, name]) => ({ id, name }));
+  return games.map((g: any) => {
+    const parsePitcher = (side: "home" | "away"): ProbableStarter | null => {
+      const p = g.teams?.[side]?.probablePitcher;
+      return p?.id && p?.fullName ? { id: p.id, name: p.fullName } : null;
+    };
+    return {
+      gamePk: String(g.gamePk),
+      homeTeam: g.teams?.home?.team?.name ?? "",
+      awayTeam: g.teams?.away?.team?.name ?? "",
+      gameDate: new Date(g.gameDate),
+      homePitcher: parsePitcher("home"),
+      awayPitcher: parsePitcher("away"),
+    };
+  });
+}
+
+// Records each game's probable starters against GameResult's own key
+// (sportKey + externalId/gamePk) so backtestModel can later join
+// GameResult -> GameStarters -> PitcherStatSnapshot, once that GameResult
+// exists (persistFinalScores creates it only once the game is final, a day
+// or more after this capture runs pre-game) - this table is written
+// independently of GameResult and read by externalId at backtest time, not
+// coupled to when/whether a result has landed yet.
+async function writeGameStarters(games: ScheduledGame[]): Promise<number> {
+  const rows = games
+    .filter((g) => g.homePitcher || g.awayPitcher)
+    .map((g) => ({
+      sportKey: MLB_SPORT_KEY,
+      externalId: g.gamePk,
+      homeTeam: g.homeTeam,
+      awayTeam: g.awayTeam,
+      homePitcherId: g.homePitcher?.id ?? null,
+      awayPitcherId: g.awayPitcher?.id ?? null,
+      gameDate: g.gameDate,
+    }));
+
+  await Promise.all(
+    rows.map((row) =>
+      prisma.gameStarters.upsert({
+        where: { sportKey_externalId: { sportKey: row.sportKey, externalId: row.externalId } },
+        update: row,
+        create: row,
+      })
+    )
+  );
+
+  return rows.length;
 }
 
 // The season-total split (not one of the per-team splits a mid-season trade
@@ -168,23 +223,43 @@ function findSplitByCode(splits: any[] | undefined, code: string): any | undefin
   return splits.find((s) => !s.team && s.split?.code === code) ?? splits.find((s) => s.split?.code === code);
 }
 
-// Captures today's probable starters' season-to-date lines - 2 requests
-// total (the schedule call above, plus one batched call for every starter's
-// season/home-away-split/game-log stats together, via the personIds hydrate
-// endpoint verified live to support multiple ids and multiple stat types in
-// a single response). Returns 0 without error on a scheduleless day (e.g.
+// Every distinct probable starter across today's games - a pitcher starting
+// for two different games on the same date isn't possible, but the same
+// dedup guards against any data oddity producing a duplicate id.
+function dedupePitchers(games: ScheduledGame[]): ProbableStarter[] {
+  const byId = new Map<number, string>();
+  for (const game of games) {
+    if (game.homePitcher) byId.set(game.homePitcher.id, game.homePitcher.name);
+    if (game.awayPitcher) byId.set(game.awayPitcher.id, game.awayPitcher.name);
+  }
+  return Array.from(byId.entries()).map(([id, name]) => ({ id, name }));
+}
+
+// Captures today's probable starters' season-to-date lines AND which pitcher
+// started for which team in which game - 2 requests total (the schedule
+// call above, plus one batched call for every starter's season/home-away-
+// split/game-log stats together, via the personIds hydrate endpoint
+// verified live to support multiple ids and multiple stat types in a single
+// response). Returns zero counts without error on a scheduleless day (e.g.
 // all-star break) - not every cron run will have starters to capture.
-export async function capturePitcherStatSnapshots(date: string = easternDateKey(new Date())): Promise<number> {
+export async function capturePitcherStatSnapshots(
+  date: string = easternDateKey(new Date())
+): Promise<{ starters: number; pitcherSnapshots: number }> {
   const season = currentMlbSeason();
-  const starters = await getTodaysProbableStarters(date);
-  if (starters.length === 0) return 0;
+  const games = await getTodaysSchedule(date);
+  if (games.length === 0) return { starters: 0, pitcherSnapshots: 0 };
+
+  const starterCount = await writeGameStarters(games);
+
+  const starters = dedupePitchers(games);
+  if (starters.length === 0) return { starters: starterCount, pitcherSnapshots: 0 };
 
   const ids = starters.map((s) => s.id).join(",");
   const res = await fetch(
     `https://statsapi.mlb.com/api/v1/people?personIds=${ids}&hydrate=stats(group=[pitching],type=[season,statSplits,gameLog],sitCodes=[h,a],season=${season})`,
     { cache: "no-store" }
   );
-  if (!res.ok) return 0;
+  if (!res.ok) return { starters: starterCount, pitcherSnapshots: 0 };
 
   const data = await res.json();
   const people = data.people ?? [];
@@ -253,5 +328,5 @@ export async function capturePitcherStatSnapshots(date: string = easternDateKey(
     )
   );
 
-  return rows.length;
+  return { starters: starterCount, pitcherSnapshots: rows.length };
 }

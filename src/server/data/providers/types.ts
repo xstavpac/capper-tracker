@@ -16,7 +16,7 @@ import type { OddsGame } from "@/server/data/odds";
 import type { VariableSide } from "@/lib/model-builder";
 import type { TeamSeasonStats, PitcherSeasonStats } from "@/server/data/mlb-stats";
 import type { TeamTendencyRates } from "@/server/data/team-tendencies";
-import type { TeamStatSnapshot } from "@prisma/client";
+import type { TeamStatSnapshot, PitcherStatSnapshot } from "@prisma/client";
 
 // One resolved game's live data, built once (see model-evaluation.ts's
 // buildGameContext) and read by every provider - kept as a single eagerly-
@@ -45,21 +45,27 @@ export type GameContext = {
 };
 
 // Everything a provider needs to resolve one variable for one HISTORICAL
-// game during a backtest. tendencyByTeam and teamSnapshotsByTeam are both
-// preloaded once per backtest run (not per game/condition) to avoid an N+1
-// query across every historical game being scored - teamSnapshotsByTeam's
-// arrays are pre-sorted ascending by snapshotDate so a provider can do an
-// in-memory "latest snapshot at or before gameDate" scan instead of a DB
-// query per lookup.
+// game during a backtest. tendencyByTeam, teamSnapshotsByTeam, and
+// pitcherSnapshotsByPitcherId are all preloaded once per backtest run (not
+// per game/condition) to avoid an N+1 query across every historical game
+// being scored - the snapshot arrays are pre-sorted ascending by
+// snapshotDate so a provider can do an in-memory "latest snapshot at or
+// before gameDate" scan instead of a DB query per lookup. favoritePitcherId/
+// underdogPitcherId come from a GameStarters row for this game, if one was
+// captured (null otherwise - a game outside the window GameStarters has been
+// running, or a day with no announced probable starter).
 export type HistoricalGameRef = {
   oddsGame: OddsGame;
   favoriteTeam: string;
   underdogTeam: string;
   favoriteMoneyline: number;
   underdogMoneyline: number;
+  favoritePitcherId: number | null;
+  underdogPitcherId: number | null;
   gameDate: Date;
   tendencyByTeam: Map<string, TeamTendencyRates>;
   teamSnapshotsByTeam: Map<string, TeamStatSnapshot[]>;
+  pitcherSnapshotsByPitcherId: Map<number, PitcherStatSnapshot[]>;
 };
 
 export interface VariableProvider {
@@ -67,13 +73,11 @@ export interface VariableProvider {
   // Declares whether resolveHistorical can ever return real data for a
   // specific variable from this source - a static capability, not something
   // callers infer from a null result (null legitimately also means "no data
-  // for THIS one game/date"). Per-variable rather than a flat per-provider
-  // boolean because mlbStatsProvider is asymmetric: team_stats variables can
-  // be backtested once enough daily snapshots accumulate, but pitcher_stats
-  // variables can't yet (no record of which pitcher started which historical
-  // game to join a pitcher snapshot against) - see mlbStatsProvider's own
-  // comment. backtestModel uses this to report an honest "unsupported"
-  // reason instead of silently comparing today's numbers against past games.
+  // for THIS one game/date/pitcher"). Per-variable rather than a flat
+  // per-provider boolean since different variable categories from the same
+  // source can have different data-readiness stories over time.
+  // backtestModel uses this to report an honest "unsupported" reason instead
+  // of silently comparing today's numbers against past games.
   supportsHistorical(variableId: string): boolean;
   resolveLive(ctx: GameContext, variableId: string, side?: VariableSide): number | null;
   resolveHistorical(ref: HistoricalGameRef, variableId: string, side?: VariableSide): number | null;

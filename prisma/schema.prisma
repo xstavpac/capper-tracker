@@ -265,12 +265,8 @@ model TeamStatSnapshot {
 
 // One pitcher's season-to-date stat line on one calendar day - captured for
 // that day's probable starters only (not every pitcher in the league), by
-// capturePitcherStatSnapshots. Ready to power pitcher_stats backtesting once
-// a separate gap is closed: today's data model has no record of which
-// pitcher started which historical GameResult, so there's nothing yet to
-// join a pitcher snapshot against for a past game - these rows accumulate
-// now so that future work doesn't also have to wait out a data-collection
-// lag once that link exists.
+// capturePitcherStatSnapshots. Joined against GameStarters (below) at
+// backtest time to resolve pitcher_stats conditions for a historical game.
 model PitcherStatSnapshot {
   id             String    @id @default(cuid())
   sportKey       String
@@ -293,6 +289,32 @@ model PitcherStatSnapshot {
 
   @@unique([sportKey, pitcherId, snapshotDate])
   @@map("pitcher_stat_snapshots")
+}
+
+// Which pitcher was the probable starter for each side of a game - captured
+// from the same daily schedule fetch that already powers probable-starter
+// pitcher-snapshot capture (hydrate=probablePitcher returns gamePk/team
+// names/pitcher ids together, so this adds zero extra API requests). Keyed
+// like GameResult (sportKey + externalId - MLB's gamePk) so backtestModel
+// can join GameResult -> GameStarters -> PitcherStatSnapshot the same way it
+// already joins GameResult -> OddsSnapshot for market conditions. "Probable"
+// starter, not confirmed actual starter - the best available without a
+// heavier per-game boxscore lookup after the fact.
+model GameStarters {
+  id            String    @id @default(cuid())
+  sportKey      String
+  externalId    String // matches GameResult.externalId
+  homeTeam      String
+  awayTeam      String
+  homePitcherId Int?
+  awayPitcherId Int?
+  gameDate      DateTime
+  sourceId      String    @default("mlb_stats_api")
+  scope         DataScope @default(GLOBAL)
+  createdAt     DateTime  @default(now())
+
+  @@unique([sportKey, externalId])
+  @@map("game_starters")
 }
 
 // What a Build Your Own Model model is actually predicting - required so an

@@ -148,14 +148,13 @@ export type ModelHealth =
   | { status: "unsupported"; reason: string };
 
 // Only variables whose provider declares supportsHistorical(variableId) can
-// be honestly backtested today. team_stats variables (ERA, batting average,
-// etc.) unlock progressively as daily snapshots accumulate (see
-// stat-snapshots.ts) - a historical game predating the first captured
-// snapshot still won't match, same as any other "not enough history yet"
-// case. pitcher_stats variables stay blocked regardless of snapshot count -
-// there's no record of which pitcher started which historical game to join
-// a snapshot against. Reporting this explicitly keeps it honest rather than
-// fabricating a number by silently comparing today's stats against past games.
+// be honestly backtested today - practically, only an unknown/misregistered
+// sourceId hits this now that team_stats and pitcher_stats are both backed
+// by daily snapshots. Both unlock progressively as those snapshots (and, for
+// pitchers, GameStarters linkage) accumulate day by day - a historical game
+// predating the relevant capture still won't match, same as any other "not
+// enough history yet" case, surfaced via a real 0-or-low sampleSize rather
+// than this "unsupported" path.
 function unsupportedBacktestReason(leaves: ConditionLeaf[]): string | null {
   const blocker = leaves.find((leaf) => {
     const variable = getModelVariable(leaf.variableId);
@@ -164,11 +163,7 @@ function unsupportedBacktestReason(leaves: ConditionLeaf[]): string | null {
   });
   if (!blocker) return null;
   const variable = getModelVariable(blocker.variableId);
-  const reason =
-    variable?.category === "pitcher_stats"
-      ? "there's no record yet of which pitcher started which historical game to check this against"
-      : "the app only stores each team's current season totals, not a snapshot of what those stats were on each historical game's date";
-  return `Backtesting isn't available yet for "${variable?.label ?? blocker.variableId}" - ${reason}. Team-tendency and odds/market conditions can be backtested.`;
+  return `Backtesting isn't available yet for "${variable?.label ?? blocker.variableId}".`;
 }
 
 // Backtests a model's conditions against every finished game this app has
@@ -183,16 +178,18 @@ export async function backtestModel(sportKey: string, target: ModelTarget, tree:
   const unsupportedReason = unsupportedBacktestReason(leaves);
   if (unsupportedReason) return { status: "unsupported", reason: unsupportedReason };
 
-  const [gameResults, snapshots, tendencyRows, teamStatSnapshotRows] = await Promise.all([
+  const [gameResults, snapshots, tendencyRows, teamStatSnapshotRows, pitcherStatSnapshotRows, gameStarterRows] = await Promise.all([
     prisma.gameResult.findMany({ where: { sportKey } }),
     prisma.oddsSnapshot.findMany({ where: { sportKey } }),
     prisma.teamTendency.findMany({ where: { sportKey } }),
     prisma.teamStatSnapshot.findMany({ where: { sportKey }, orderBy: { snapshotDate: "asc" } }),
+    prisma.pitcherStatSnapshot.findMany({ where: { sportKey }, orderBy: { snapshotDate: "asc" } }),
+    prisma.gameStarters.findMany({ where: { sportKey } }),
   ]);
   const oddsGames = snapshots.flatMap((s) => s.data as unknown as OddsGame[]);
   const tendencyByTeam = new Map(tendencyRows.map((t) => [t.teamName, computeTendencyRates(t)]));
 
-  // Grouped once up front (not queried per game) - findLatestSnapshotAtOrBefore
+  // Grouped once up front (not queried per game) - findLatestAtOrBefore
   // (mlbStatsProvider) does an in-memory scan per lookup instead of a DB
   // query, since a backtest can touch this per condition per historical game.
   const teamSnapshotsByTeam = new Map<string, typeof teamStatSnapshotRows>();
@@ -201,6 +198,17 @@ export async function backtestModel(sportKey: string, target: ModelTarget, tree:
     if (list) list.push(row);
     else teamSnapshotsByTeam.set(row.teamName, [row]);
   }
+  const pitcherSnapshotsByPitcherId = new Map<number, typeof pitcherStatSnapshotRows>();
+  for (const row of pitcherStatSnapshotRows) {
+    const list = pitcherSnapshotsByPitcherId.get(row.pitcherId);
+    if (list) list.push(row);
+    else pitcherSnapshotsByPitcherId.set(row.pitcherId, [row]);
+  }
+  // Keyed like GameResult (sportKey scoped here, externalId is the map key) -
+  // GameStarters is written independently of GameResult (see stat-snapshots.ts),
+  // so a game with no captured starters (predates GameStarters, or no
+  // probable pitcher was ever announced) simply has no entry here.
+  const gameStartersByExternalId = new Map(gameStarterRows.map((g) => [g.externalId, g]));
 
   let matches = 0;
   let targetHits = 0;
@@ -213,15 +221,23 @@ export async function backtestModel(sportKey: string, target: ModelTarget, tree:
     if (!favDog) continue;
     const line = totalLine(oddsGame);
 
+    const starters = gameStartersByExternalId.get(game.externalId);
+    const favoriteIsHome = favDog.favoriteTeam === game.homeTeam;
+    const favoritePitcherId = starters ? (favoriteIsHome ? starters.homePitcherId : starters.awayPitcherId) : null;
+    const underdogPitcherId = starters ? (favoriteIsHome ? starters.awayPitcherId : starters.homePitcherId) : null;
+
     const historicalRef: HistoricalGameRef = {
       oddsGame,
       favoriteTeam: favDog.favoriteTeam,
       underdogTeam: favDog.underdogTeam,
       favoriteMoneyline: favDog.favoriteMoneyline,
       underdogMoneyline: favDog.underdogMoneyline,
+      favoritePitcherId,
+      underdogPitcherId,
       gameDate: game.gameDate,
       tendencyByTeam,
       teamSnapshotsByTeam,
+      pitcherSnapshotsByPitcherId,
     };
 
     const conditionsPass = evaluateConditionTree(tree, (leaf) => {
