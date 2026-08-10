@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { parseCatalog, resolveAmbiguousPick, type AmbiguousOption, type ParsedPick } from "@/lib/parse-catalog";
+import { autoResolveAmbiguousPicks } from "@/lib/resolve-ambiguous-catalog";
 import { bulkImportPicksAction, previewBulkImportOdds } from "@/server/actions/bulk-picks";
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
 import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
@@ -38,6 +39,14 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // CONFIRMED_NEW (user confirmed "no, genuinely new"). Absent = not yet
   // decided, which is what keeps the "Did you mean X?" prompt showing.
   const [capperFuzzyChoices, setCapperFuzzyChoices] = useState<Record<string, string>>({});
+  // Same-import memory for ambiguous team names (STEP 4 of the disambiguation
+  // hierarchy) - keyed by AMBIGUOUS_NICKNAMES key (e.g. "cardinals"), set by
+  // either an automatic decision (season/schedule/pick context) or a manual
+  // answer. Persists across re-parses within this session (not reset in
+  // handleParse) so editing the text and re-pasting still honors an answer
+  // already established earlier in the same import.
+  const [ambiguousChoices, setAmbiguousChoices] = useState<Record<string, AmbiguousOption>>({});
+  const [resolving, setResolving] = useState(false);
 
   const existingLower = existingCapperNames.map((n) => n.toLowerCase());
 
@@ -54,12 +63,27 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     return choice && choice !== CONFIRMED_NEW ? choice : rawCapperName;
   }
 
-  function handleParse() {
+  // parseCatalog itself stays a pure sync function (unchanged) - everything
+  // it can't resolve on its own (an ambiguous team name like "Cardinals")
+  // then runs through the auto-resolution hierarchy: season -> schedule ->
+  // pick-text context -> this same-import's remembered answers, in that
+  // order, before anything is shown to the user as a question. See
+  // lib/resolve-ambiguous-catalog.ts for the actual hierarchy.
+  async function handleParse() {
     setResult(null);
     setEnrichedOdds({});
+    setResolving(true);
     const items = parseCatalog(text, existingCapperNames);
-    setParsed(items);
-    fetchOddsFor(items.map((p, idx) => ({ p, idx })).filter((e) => !e.p.ambiguous));
+    const outcome = await autoResolveAmbiguousPicks(items, ambiguousChoices);
+    setResolving(false);
+    setParsed(outcome.picks);
+    // Merges both automatic decisions from this pass AND anything carried in
+    // from priorChoices - so a decision made just now also survives a later
+    // re-parse of edited text within the same import.
+    if (Object.keys(outcome.decisions).length > 0) {
+      setAmbiguousChoices((prev) => ({ ...prev, ...outcome.decisions }));
+    }
+    fetchOddsFor(outcome.picks.map((p, idx) => ({ p, idx })).filter((e) => !e.p.ambiguous));
   }
 
   // The parser is client-side only and can't see live odds, so every pick
@@ -98,16 +122,24 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       .finally(() => setLoadingOdds(false));
   }
 
-  function resolveAmbiguous(idx: number, choice: AmbiguousOption) {
+  // Answering once resolves every pick sharing this ambiguous team in the
+  // current paste, not just the one the prompt happened to be shown for -
+  // this is what stops "Cardinals?" from being asked once per pick. The
+  // choice also lands in ambiguousChoices (STEP 4 memory), so it's honored
+  // automatically if the user edits the text and re-parses.
+  function resolveAmbiguousGroup(key: string, choice: AmbiguousOption) {
     if (!parsed) return;
-    const resolved = resolveAmbiguousPick(parsed[idx], choice);
-    setParsed((prev) => {
-      if (!prev) return prev;
-      const next = [...prev];
-      next[idx] = resolved;
-      return next;
+    setAmbiguousChoices((prev) => ({ ...prev, [key]: choice }));
+    const newlyResolved: { p: ParsedPick; idx: number }[] = [];
+    const next = parsed.map((p, idx) => {
+      if (p.ambiguousKey !== key || !p.ambiguous) return p;
+      const resolved = resolveAmbiguousPick(p, choice);
+      newlyResolved.push({ p: resolved, idx });
+      return resolved;
     });
-    if (!resolved.hasExplicitOdds) fetchOddsFor([{ p: resolved, idx }]);
+    setParsed(next);
+    const needsOdds = newlyResolved.filter((e) => !e.p.hasExplicitOdds);
+    if (needsOdds.length > 0) fetchOddsFor(needsOdds);
   }
 
   const allEntries = (parsed ?? []).map((p, idx) => ({ p, idx }));
@@ -115,6 +147,21 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const ambiguousEntries = allEntries.filter((e) => e.p.ambiguous);
   const validPicks = validEntries.map((e) => e.p);
   const ambiguousPicks = ambiguousEntries.map((e) => e.p);
+
+  // One prompt per unique ambiguous team name in this paste, not per pick -
+  // groups every entry sharing an ambiguousKey (e.g. every "Cardinals" pick)
+  // behind a single question with a count, instead of asking 12 times.
+  const ambiguousGroups: { key: string; options: AmbiguousOption[]; sampleRaw: string; count: number }[] = [];
+  {
+    const byKey = new Map<string, { options: AmbiguousOption[]; sampleRaw: string; count: number }>();
+    for (const { p } of ambiguousEntries) {
+      const key = p.ambiguousKey!;
+      const existing = byKey.get(key);
+      if (existing) existing.count += 1;
+      else byKey.set(key, { options: p.ambiguous!, sampleRaw: p.raw, count: 1 });
+    }
+    for (const [key, v] of byKey.entries()) ambiguousGroups.push({ key, ...v });
+  }
 
   // One prompt per distinct raw capper name in this paste, not per pick row -
   // asking "did you mean X?" once per capper, even if they posted 10 picks.
@@ -195,9 +242,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         className="w-full rounded-lg border border-gray-200 px-3 py-2 font-mono text-xs focus:border-brand-400 focus:outline-none"
       />
 
-      <button onClick={handleParse} disabled={!text.trim()} className={"mt-3 " + dropCatalogButtonClass}>
+      <button onClick={handleParse} disabled={!text.trim() || resolving} className={"mt-3 " + dropCatalogButtonClass}>
         <LightningIcon />
-        Drop Catalog
+        {resolving ? "Resolving..." : "Drop Catalog"}
       </button>
 
       <div className="mt-3 flex items-start gap-2 rounded-lg bg-brand-50 px-3 py-2.5 text-[13px] text-brand-700">
@@ -227,22 +274,20 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
             {loadingOdds && <span className="ml-2 font-normal text-gray-400">Looking up real odds...</span>}
           </div>
 
-          {ambiguousEntries.length > 0 && (
+          {ambiguousGroups.length > 0 && (
             <div className="mb-3 space-y-2">
-              {ambiguousEntries.map(({ p, idx }) => (
-                <div key={"amb-" + idx} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {ambiguousGroups.map(({ key, options, sampleRaw, count }) => (
+                <div key={"amb-" + key} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                   <div className="font-medium">
-                    {p.capperName}: "{p.description}"
+                    "{sampleRaw}"{count > 1 && " (+" + (count - 1) + " more " + key + " pick" + (count - 1 === 1 ? "" : "s") + " in this paste)"}
                   </div>
-                  <div className="mt-0.5">
-                    Ambiguous team - could mean {p.ambiguous!.map((o) => o.label).join(" or ")}.
-                  </div>
+                  <div className="mt-0.5">Ambiguous team - could mean {options.map((o) => o.label).join(" or ")}.</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {p.ambiguous!.map((opt) => (
+                    {options.map((opt) => (
                       <button
                         key={opt.label}
                         type="button"
-                        onClick={() => resolveAmbiguous(idx, opt)}
+                        onClick={() => resolveAmbiguousGroup(key, opt)}
                         className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100"
                       >
                         {opt.label}
@@ -250,7 +295,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                     ))}
                   </div>
                   <div className="mt-1 text-amber-600">
-                    Or edit the text above to specify the city, then preview again.
+                    {count > 1
+                      ? "Answering once resolves every " + key + " pick in this paste."
+                      : "Or edit the text above to specify the city, then preview again."}
                   </div>
                 </div>
               ))}

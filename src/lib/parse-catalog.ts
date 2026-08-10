@@ -12,6 +12,11 @@ export type ParsedPick = {
   isFirstFive: boolean;
   raw: string;
   ambiguous?: AmbiguousOption[];
+  // The AMBIGUOUS_NICKNAMES key (e.g. "cardinals") that produced `ambiguous`,
+  // set alongside it - lets a caller group every pick sharing the same
+  // ambiguous team across one catalog paste, so resolving one resolves all
+  // of them instead of asking about the same name repeatedly.
+  ambiguousKey?: string;
   // Team nicknames found in the raw text, e.g. from "Over 9.5 (Angels/Orioles)"
   // or "Cardinals vs Panthers". Captured before parens/odds get stripped out of
   // `description`, so game resolution still has both teams even for bets (like
@@ -267,16 +272,76 @@ export function resolveAmbiguousPick(pick: ParsedPick, choice: AmbiguousOption):
     isFirstFive: parsed.isFirstFive,
     teamNicknames: [choice.nickname],
     ambiguous: undefined,
+    ambiguousKey: undefined,
   };
 }
 
-function findAmbiguousNickname(text: string): AmbiguousOption[] | undefined {
+function findAmbiguousNickname(text: string): { key: string; options: AmbiguousOption[] } | undefined {
   const lower = text.toLowerCase();
   for (const [nickname, options] of Object.entries(AMBIGUOUS_NICKNAMES)) {
     const re = new RegExp("\\b" + nickname + "\\b", "i");
-    if (re.test(lower)) return options;
+    if (re.test(lower)) return { key: nickname, options };
   }
   return undefined;
+}
+
+// Every candidate sport for a given AMBIGUOUS_NICKNAMES key - exported so the
+// auto-resolution pipeline (resolve-ambiguous-catalog.ts) can enumerate
+// candidates without duplicating this table.
+export function ambiguousOptionsFor(key: string): AmbiguousOption[] {
+  return AMBIGUOUS_NICKNAMES[key] ?? [];
+}
+
+// Sport-specific betting terminology, used as one signal (not the sole
+// determining factor - see inferSportFromPickContext) when a team name is
+// ambiguous between two sports that are both in season with both teams
+// scheduled. Deliberately narrow, high-signal phrases only - generic words
+// that could plausibly appear in any sport's pick text are left out.
+const SPORT_CONTEXT_SIGNALS: Record<string, RegExp[]> = {
+  MLB: [
+    /\bmoney\s*line\b/i,
+    /\bML\b/,
+    /\brun\s*line\b/i,
+    /\b[NY]RFI\b/i,
+    /\b(no|yes)\s+run\s+(?:first|1st)\b/i,
+    /\bf5\b/i,
+    /\bfirst\s*five\b/i,
+    /\b1st\s*5\b/i,
+  ],
+  NFL: [
+    /\bspread\b/i,
+    /\btouchdown\b/i,
+    /\bTDs?\b/,
+    /\bpassing\s+yards?\b/i,
+    /\brushing\s+yards?\b/i,
+    /\breceiving\s+yards?\b/i,
+    /\bfirst[\s-]half\s+spread\b/i,
+  ],
+  NHL: [/\bpuck\s*line\b/i, /\bpower\s*play\b/i, /\bperiod\b/i, /\bgoalie\b/i, /\bshots?\s+on\s+goal\b/i],
+  NBA: [/\brebounds?\b/i, /\bassists?\b/i, /\bquarter\b/i, /\b3-?pointers?\b/i],
+};
+
+// A baseball total ("over/under 6.5-11.5") is a real signal specifically
+// against NFL (whose totals run much higher, ~38-55) - only applied when
+// NFL is one of the candidates, so it doesn't get invoked for e.g. an
+// NHL-vs-NBA conflict where it wouldn't mean anything.
+function hasMlbTotalRangeSignal(text: string): boolean {
+  return /\b(over|under)\s*(6|7|8|9|10|11)\.5\b/i.test(text);
+}
+
+// STEP 3 of the disambiguation hierarchy (see resolve-ambiguous-catalog.ts) -
+// supporting evidence only. Returns a single sport only when exactly one
+// candidate's terminology matches and none of the others also match -
+// conflicting or absent signals return null so the caller falls through to
+// asking the user instead of guessing.
+export function inferSportFromPickContext(text: string, candidateSports: string[]): string | null {
+  const matches = candidateSports.filter((sport) => {
+    const patterns = SPORT_CONTEXT_SIGNALS[sport] ?? [];
+    if (patterns.some((re) => re.test(text))) return true;
+    if (sport === "MLB" && candidateSports.includes("NFL") && hasMlbTotalRangeSignal(text)) return true;
+    return false;
+  });
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function findAllAmbiguousNicknames(text: string): string[] {
@@ -418,8 +483,8 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
           continue;
         }
 
-        const ambiguous = findAmbiguousNickname(remainder);
-        if (ambiguous) {
+        const found = findAmbiguousNickname(remainder);
+        if (found) {
           results.push({
             capperName: inlineMatch,
             sportName: "",
@@ -430,7 +495,8 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
             units: 1,
             isFirstFive: false,
             raw: line,
-            ambiguous,
+            ambiguous: found.options,
+            ambiguousKey: found.key,
             teamNicknames: [],
           });
         }
@@ -497,8 +563,8 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
         continue;
       }
 
-      const ambiguous = findAmbiguousNickname(strippedText);
-      if (ambiguous) {
+      const found = findAmbiguousNickname(strippedText);
+      if (found) {
         results.push({
           capperName: currentCapper || "Unknown",
           sportName: "",
@@ -509,7 +575,8 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
           units: 1,
           isFirstFive: false,
           raw: strippedText,
-          ambiguous,
+          ambiguous: found.options,
+          ambiguousKey: found.key,
           teamNicknames: [],
         });
         continue;

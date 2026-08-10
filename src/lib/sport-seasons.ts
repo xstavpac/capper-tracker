@@ -41,3 +41,30 @@ export function isSportInSeason(sportKey: string, referenceDate: Date = new Date
   const today = easternDateKey(referenceDate);
   return today >= window.seasonStart && today <= window.seasonEnd;
 }
+
+// Maps the short display labels used by parse-catalog.ts's AMBIGUOUS_NICKNAMES
+// (and LIVE_SPORTS' own labels) to the sportKey strings SPORT_SEASON_CONFIG is
+// keyed by - kept here rather than importing LIVE_SPORTS from
+// server/data/odds.ts, which pulls in prisma/fetch and can't be imported from
+// a "use client" component.
+export const SPORT_LABEL_TO_KEY: Record<string, string> = {
+  NFL: "americanfootball_nfl",
+  NBA: "basketball_nba",
+  MLB: "baseball_mlb",
+  NHL: "icehockey_nhl",
+  WNBA: "basketball_wnba",
+};
+
+// Same idea as isSportInSeason, but for the AMBIGUOUS_NICKNAMES-style display
+// label rather than a sportKey - used by the catalog-import disambiguation
+// pipeline to narrow an ambiguous team name (e.g. "Cardinals") down to
+// whichever of its candidate sports is actually in season. Fails open (an
+// unmapped label doesn't get eliminated) rather than isSportInSeason's fail-
+// closed default - here the risk of wrongly ruling out a real candidate
+// outweighs the risk of not narrowing, unlike the credit-cost gate that
+// function exists for.
+export function isSportLabelInSeason(label: string, referenceDate: Date = new Date()): boolean {
+  const key = SPORT_LABEL_TO_KEY[label];
+  if (!key) return true;
+  return isSportInSeason(key, referenceDate);
+}
