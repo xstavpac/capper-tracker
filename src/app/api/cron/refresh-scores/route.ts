@@ -1,5 +1,6 @@
 import { persistFinalScores } from "@/server/data/grading";
 import { RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
+import { recomputeTeamTendencies } from "@/server/data/team-tendencies";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,11 @@ export async function GET(req: Request) {
   const results = await Promise.all(
     RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
       const persisted = await persistFinalScores(sportKey);
-      return { sport: sportKey, persisted };
+      // Recompute right after this sport's scores are persisted, so a
+      // freshly-final game is reflected in tendencies the same run it
+      // lands in GameResult, not a day later on the next cron pass.
+      const tendencies = await recomputeTeamTendencies(sportKey);
+      return { sport: sportKey, persisted, tendencies };
     })
   );
 

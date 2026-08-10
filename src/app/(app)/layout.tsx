@@ -1,5 +1,6 @@
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { requireUser } from "@/server/auth";
+import { isModelBuilderEnabled } from "@/lib/feature-flags";
 
 // Every route under here needs a live, per-request session - never
 // statically prerender them. Without this, Next's build-time trial-render
@@ -15,6 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen flex-col md:flex-row md:gap-3 md:p-3">
       <AppSidebar
         user={{ name: user.name, email: user.email, profilePictureUrl: user.profilePictureUrl }}
+        modelBuilderEnabled={isModelBuilderEnabled()}
       />
       <main className="flex-1 bg-gray-50 p-4 md:rounded-xl md:border md:border-gray-200 md:bg-white md:p-8 md:shadow-soft">
         {children}

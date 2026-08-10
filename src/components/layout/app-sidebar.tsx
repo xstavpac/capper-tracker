@@ -89,6 +89,18 @@ function LiveIcon({ className }: { className?: string }) {
   );
 }
 
+function ModelBuilderIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <circle cx="6" cy="6" r="2.5" />
+      <circle cx="6" cy="18" r="2.5" />
+      <circle cx="18" cy="12" r="2.5" />
+      <path d="M8.2 7.2l7.8 3.7" />
+      <path d="M8.2 16.8l7.8 -3.7" />
+    </svg>
+  );
+}
+
 type NavItem = {
   href: string;
   label: string;
@@ -96,7 +108,7 @@ type NavItem = {
   accent?: "red";
 };
 
-const NAV_ITEMS: NavItem[] = [
+const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/cappers", label: "Cappers", icon: CappersIcon },
   { href: "/picks", label: "Picks", icon: PicksIcon },
@@ -104,6 +116,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/settings", label: "Settings", icon: SettingsIcon },
   { href: "/live", label: "Live", icon: LiveIcon, accent: "red" },
 ];
+
+const MODEL_BUILDER_NAV_ITEM: NavItem = { href: "/model-builder", label: "Build Your Own Model", icon: ModelBuilderIcon };
 
 function isActiveHref(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
@@ -166,11 +180,11 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
   );
 }
 
-function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
     <>
-      {NAV_ITEMS.map((item) => (
+      {items.map((item) => (
         <NavLink key={item.href} item={item} active={isActiveHref(pathname, item.href)} onNavigate={onNavigate} />
       ))}
     </>
@@ -262,8 +276,9 @@ function AccountRow({ user }: { user: SidebarUser }) {
 // on the main content card next to it). Below md:, that same content becomes
 // a slide-in drawer opened from a compact top bar - full-bleed on mobile
 // rather than another floating card, since there's no room to spare there.
-export function AppSidebar({ user }: { user: SidebarUser }) {
+export function AppSidebar({ user, modelBuilderEnabled }: { user: SidebarUser; modelBuilderEnabled?: boolean }) {
   const [open, setOpen] = useState(false);
+  const navItems = modelBuilderEnabled ? [...BASE_NAV_ITEMS, MODEL_BUILDER_NAV_ITEM] : BASE_NAV_ITEMS;
 
   return (
     <>
@@ -286,7 +301,7 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
           <LogoMark />
           <span className="text-[17px] font-semibold">Bettingview</span>
         </div>
-        <NavLinks />
+        <NavLinks items={navItems} />
         <SidebarDropCatalog />
         <AccountRow user={user} />
       </aside>
@@ -308,7 +323,7 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
                 <CloseIcon />
               </button>
             </div>
-            <NavLinks onNavigate={() => setOpen(false)} />
+            <NavLinks items={navItems} onNavigate={() => setOpen(false)} />
             <SidebarDropCatalog onNavigate={() => setOpen(false)} />
             <AccountRow user={user} />
           </aside>

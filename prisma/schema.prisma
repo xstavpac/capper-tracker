@@ -66,6 +66,7 @@ model User {
   cappers      Capper[]
   picks        Pick[]
   subscription Subscription?
+  models       UserModel[]
 
   @@map("users")
 }
@@ -175,6 +176,84 @@ model OddsSnapshot {
 
   @@unique([sportKey, fetchDate])
   @@map("odds_snapshots")
+}
+
+// A variable/metric's provenance - global (computed once, shared by every
+// user, like every source in this app today) vs per-user (a hypothetical
+// future user-supplied or user-scoped data source). Added now, before any
+// PER_USER source exists, specifically so introducing one later is a matter
+// of using the value, not a migration on tables that may by then hold real
+// user data.
+enum DataScope {
+  GLOBAL
+  PER_USER
+}
+
+// Precomputed, stored per-team betting tendencies (favorite/underdog win%,
+// over/under rate) - built from a join of GameResult (actual outcomes)
+// against the OddsSnapshot for that same day (pregame favorite/dog + total
+// line), recomputed by recomputeTeamTendencies (see server/data/team-
+// tendencies.ts), which the refresh-scores cron calls once daily right after
+// persisting that day's final scores. Deliberately raw counts, not a stored
+// percentage - MIN_TENDENCY_SAMPLE-gating and the actual win%/rate math live
+// entirely in application code, so the threshold can be tuned without a
+// migration.
+model TeamTendency {
+  id             String    @id @default(cuid())
+  sportKey       String
+  teamName       String
+  favWins        Int       @default(0)
+  favLosses      Int       @default(0)
+  favPushes      Int       @default(0)
+  dogWins        Int       @default(0)
+  dogLosses      Int       @default(0)
+  dogPushes      Int       @default(0)
+  overCount      Int       @default(0)
+  underCount     Int       @default(0)
+  totalPushCount Int       @default(0)
+  // Which variable-registry provider computed this (see
+  // server/data/providers/ - "internal_tendencies" today) and whether it's
+  // shared globally or scoped to one user. A free-form string rather than an
+  // enum, matching sourceId on the variable catalog (lib/model-builder.ts) -
+  // new sources get added by registering a provider, not by editing this
+  // schema.
+  sourceId       String    @default("internal_tendencies")
+  scope          DataScope @default(GLOBAL)
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([sportKey, teamName])
+  @@map("team_tendencies")
+}
+
+// What a Build Your Own Model model is actually predicting - required so an
+// AND-chain of conditions from different markets (a moneyline signal like
+// "Fav win% >= 60" alongside a totals signal like "Team over rate >= 55")
+// still produces one well-defined backtested probability to compare against
+// one market price, instead of an ambiguous blend of unrelated markets.
+enum ModelTarget {
+  FAVORITE_ML
+  UNDERDOG_ML
+  OVER
+  UNDER
+}
+
+model UserModel {
+  id         String      @id @default(cuid())
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  target     ModelTarget
+  // ConditionTree (a root AND/OR group, possibly nested) - see
+  // lib/model-builder.ts. Simple mode's UI only ever writes a flat AND-group
+  // of leaf conditions, but the stored shape supports real nesting so a
+  // future Advanced mode is a new UI layer over this same column and
+  // evaluation engine, not a migration.
+  conditions Json
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([userId])
+  @@map("user_models")
 }
 
 model GameResult {
