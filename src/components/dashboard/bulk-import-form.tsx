@@ -200,6 +200,24 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         Drop Catalog
       </button>
 
+      <div className="mt-3 flex items-start gap-2 rounded-lg bg-brand-50 px-3 py-2.5 text-[13px] text-brand-700">
+        <svg
+          viewBox="0 0 24 24"
+          className="mt-0.5 h-4 w-4 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 11v5" />
+          <path d="M12 8h.01" />
+        </svg>
+        <span>Once your catalog is loaded, you&apos;ll find the picks on the Live tab, grouped under their respective games.</span>
+      </div>
+
       {parsed && (
         <div className="mt-4">
           <div className="mb-2 text-sm font-medium text-gray-700">
