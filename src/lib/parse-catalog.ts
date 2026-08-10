@@ -1,3 +1,5 @@
+import { normalizeName } from "@/lib/fuzzy-match";
+
 export type ParsedPick = {
   capperName: string;
   sportName: string;
@@ -289,10 +291,6 @@ function resolveAmbiguousPair(text: string): { sportName: string; teamNicknames:
   if (common.length !== 1) return undefined;
 
   return { sportName: common[0], teamNicknames: nicknames };
-}
-
-function normalizeName(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 // Returns every distinct team nickname found in the text, longest-match-first

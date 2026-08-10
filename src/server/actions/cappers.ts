@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/server/auth";
-import { createCapper } from "@/server/data/cappers";
+import { createCapper, mergeCappers } from "@/server/data/cappers";
 import type { Source } from "@prisma/client";
 
 export type CreateCapperResult =
@@ -43,4 +43,30 @@ export async function createCapperAction(formData: FormData): Promise<CreateCapp
   revalidatePath("/cappers");
   revalidatePath("/dashboard");
   return { success: true };
+}
+
+export type MergeCappersActionResult =
+  | { success: true; mergedPickCount: number; primaryName: string; duplicateName: string }
+  | { success: false; error: string };
+
+// Reassigns every pick from the duplicate capper to the primary one, then
+// removes the duplicate - see mergeCappers (server/data/cappers.ts) for the
+// reassign-before-delete ordering and why it matters. Never called
+// automatically; the settings UI always shows a preview and requires an
+// explicit confirm click first.
+export async function mergeCappersAction(primaryId: string, duplicateId: string): Promise<MergeCappersActionResult> {
+  const user = await requireUser();
+
+  try {
+    const result = await mergeCappers(user.id, primaryId, duplicateId);
+    revalidatePath("/cappers");
+    revalidatePath("/cappers/[capperId]", "page");
+    revalidatePath("/dashboard");
+    revalidatePath("/reports");
+    revalidatePath("/settings");
+    return { success: true, ...result };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Something went wrong.";
+    return { success: false, error: message };
+  }
 }

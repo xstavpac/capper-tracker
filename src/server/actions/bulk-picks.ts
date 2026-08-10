@@ -13,6 +13,7 @@ import {
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
 import { extractLine } from "@/lib/bet-line";
+import { normalizeName } from "@/lib/fuzzy-match";
 import type { BetType } from "@prisma/client";
 
 export type BulkImportItem = {
@@ -31,10 +32,6 @@ export type BulkImportItem = {
 export type BulkImportResult =
   | { success: true; imported: number; skipped: number; errors: string[]; unmatchedGames: string[] }
   | { success: false; error: string };
-
-function normalizeName(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
 
 type ResolvableItem = {
   sportName: string;

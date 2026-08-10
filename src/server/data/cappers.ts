@@ -1,5 +1,6 @@
 ﻿import { prisma } from "@/lib/prisma";
 import type { Source } from "@prisma/client";
+import { normalizeName, duplicateNameDistance } from "@/lib/fuzzy-match";
 import {
   computeStats,
   computeCategoryBreakdown,
@@ -222,6 +223,15 @@ export async function getSportCategoryPanelData(userId: string, sportName: strin
   return { breakdown, leaderboards };
 }
 
+// Blocks an exact-name duplicate (case/punctuation-insensitive) for this
+// user before it ever reaches the DB - the bulk-import path already checks
+// this itself (so this rarely fires there), but the manual "Add Capper"
+// form had no such check at all, which is how a real production account
+// ended up with two identical "Nicky Cashin" rows. Near-duplicate (fuzzy,
+// non-exact) names are intentionally NOT blocked here - those are surfaced
+// as a non-blocking suggestion in the bulk-import UI instead, since a hard
+// block on a fuzzy match risks refusing a genuinely different capper who
+// just happens to have a similar name.
 export async function createCapper(
   userId: string,
   data: {
@@ -234,7 +244,82 @@ export async function createCapper(
     colorTag?: string;
   }
 ) {
+  const normalized = normalizeName(data.name);
+  const existing = await prisma.capper.findMany({ where: { userId }, select: { name: true } });
+  if (existing.some((c) => normalizeName(c.name) === normalized)) {
+    throw new Error(`You already have a capper named "${data.name}".`);
+  }
+
   return prisma.capper.create({
     data: { ...data, userId },
   });
+}
+
+export type CapperSummary = { id: string; name: string; pickCount: number };
+
+// Every one of a user's cappers with their pick count, alphabetical - backs
+// the merge tool's manual "pick any two cappers" selector.
+export async function getCappersWithPickCounts(userId: string): Promise<CapperSummary[]> {
+  const cappers = await prisma.capper.findMany({
+    where: { userId },
+    include: { _count: { select: { picks: true } } },
+    orderBy: { name: "asc" },
+  });
+  return cappers.map((c) => ({ id: c.id, name: c.name, pickCount: c._count.picks }));
+}
+
+export type SuspectedDuplicatePair = { capperA: CapperSummary; capperB: CapperSummary; distance: number };
+
+// Scans a user's own cappers for likely-duplicate name pairs (exact-but-
+// somehow-distinct rows, or a fuzzy typo/plural match) - surfaced as review
+// suggestions in the merge tool, never auto-merged. Sorted by distance (0 =
+// exact duplicates first, since those are the least ambiguous) then by the
+// larger pair's combined pick count descending, so the highest-impact
+// suggestions surface first.
+export async function findSuspectedDuplicateCappers(userId: string): Promise<SuspectedDuplicatePair[]> {
+  const cappers = await getCappersWithPickCounts(userId);
+
+  const pairs: SuspectedDuplicatePair[] = [];
+  for (let i = 0; i < cappers.length; i++) {
+    for (let j = i + 1; j < cappers.length; j++) {
+      const distance = duplicateNameDistance(cappers[i].name, cappers[j].name);
+      if (distance === null) continue;
+      pairs.push({ capperA: cappers[i], capperB: cappers[j], distance });
+    }
+  }
+
+  return pairs.sort(
+    (a, b) => a.distance - b.distance || b.capperA.pickCount + b.capperB.pickCount - (a.capperA.pickCount + a.capperB.pickCount)
+  );
+}
+
+export type MergeCappersResult = { mergedPickCount: number; primaryName: string; duplicateName: string };
+
+// Reassigns every pick from `duplicateId` to `primaryId`, then deletes the
+// now-empty duplicate capper - both userId-scoped so one user can't merge or
+// touch another's cappers via a crafted id. Order matters: Pick.capperId has
+// onDelete: Cascade (prisma/schema.prisma), so deleting the duplicate BEFORE
+// reassigning its picks would silently wipe that pick history instead of
+// preserving it. Wrapped in a transaction so a failure partway through never
+// leaves picks reassigned but the duplicate row still sitting there (or vice
+// versa).
+export async function mergeCappers(userId: string, primaryId: string, duplicateId: string): Promise<MergeCappersResult> {
+  if (primaryId === duplicateId) {
+    throw new Error("Can't merge a capper into itself.");
+  }
+
+  const [primary, duplicate] = await Promise.all([
+    prisma.capper.findFirst({ where: { id: primaryId, userId } }),
+    prisma.capper.findFirst({ where: { id: duplicateId, userId } }),
+  ]);
+  if (!primary || !duplicate) {
+    throw new Error("One or both cappers weren't found.");
+  }
+
+  const [{ count }] = await prisma.$transaction([
+    prisma.pick.updateMany({ where: { userId, capperId: duplicateId }, data: { capperId: primaryId } }),
+    prisma.capper.delete({ where: { id: duplicateId } }),
+  ]);
+
+  return { mergedPickCount: count, primaryName: primary.name, duplicateName: duplicate.name };
 }

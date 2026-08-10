@@ -4,6 +4,13 @@ import { useState } from "react";
 import { parseCatalog, resolveAmbiguousPick, type AmbiguousOption, type ParsedPick } from "@/lib/parse-catalog";
 import { bulkImportPicksAction, previewBulkImportOdds } from "@/server/actions/bulk-picks";
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
+import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
+
+// Sentinel stored in capperFuzzyChoices when the user explicitly confirms a
+// name really is a new capper, not a typo of an existing one - distinct from
+// "not yet decided" (absent from the map), which is what keeps the
+// suggestion prompt showing.
+const CONFIRMED_NEW = "__new__";
 
 const CAPPER_ACCENTS = [
   "border-l-sky-400",
@@ -25,8 +32,26 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const [result, setResult] = useState<
     { imported: number; skipped: number; errors: string[]; unmatchedGames: string[] } | null
   >(null);
+  // Keyed by the raw capper name as it appears in the pasted text - value is
+  // either an existing capper's name (user confirmed "yes, same as") or
+  // CONFIRMED_NEW (user confirmed "no, genuinely new"). Absent = not yet
+  // decided, which is what keeps the "Did you mean X?" prompt showing.
+  const [capperFuzzyChoices, setCapperFuzzyChoices] = useState<Record<string, string>>({});
 
   const existingLower = existingCapperNames.map((n) => n.toLowerCase());
+
+  function fuzzySuggestionFor(rawCapperName: string): string | null {
+    if (existingLower.includes(rawCapperName.toLowerCase())) return null; // exact match already, no suggestion needed
+    const match = findClosestFuzzyMatch(rawCapperName, existingCapperNames, (n) => n);
+    return match ? match.item : null;
+  }
+
+  // The name actually used at import/preview time - the fuzzy match's target
+  // once confirmed, otherwise the raw parsed name unchanged.
+  function resolvedCapperName(rawCapperName: string): string {
+    const choice = capperFuzzyChoices[rawCapperName];
+    return choice && choice !== CONFIRMED_NEW ? choice : rawCapperName;
+  }
 
   function handleParse() {
     setResult(null);
@@ -90,10 +115,18 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const validPicks = validEntries.map((e) => e.p);
   const ambiguousPicks = ambiguousEntries.map((e) => e.p);
 
+  // One prompt per distinct raw capper name in this paste, not per pick row -
+  // asking "did you mean X?" once per capper, even if they posted 10 picks.
+  const pendingFuzzySuggestions = Array.from(new Set(validPicks.map((p) => p.capperName)))
+    .filter((name) => !(name in capperFuzzyChoices))
+    .map((name) => ({ name, suggestion: fuzzySuggestionFor(name) }))
+    .filter((e): e is { name: string; suggestion: string } => e.suggestion !== null);
+
   const capperAccent = new Map<string, string>();
   for (const p of validPicks) {
-    if (!capperAccent.has(p.capperName)) {
-      capperAccent.set(p.capperName, CAPPER_ACCENTS[capperAccent.size % CAPPER_ACCENTS.length]);
+    const resolved = resolvedCapperName(p.capperName);
+    if (!capperAccent.has(resolved)) {
+      capperAccent.set(resolved, CAPPER_ACCENTS[capperAccent.size % CAPPER_ACCENTS.length]);
     }
   }
 
@@ -102,7 +135,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setImporting(true);
     const res = await bulkImportPicksAction(
       validPicks.map((p) => ({
-        capperName: p.capperName,
+        capperName: resolvedCapperName(p.capperName),
         sportName: p.sportName,
         description: p.description,
         betType: p.betType,
@@ -196,15 +229,47 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
             </div>
           )}
 
+          {pendingFuzzySuggestions.length > 0 && (
+            <div className="mb-3 space-y-2">
+              {pendingFuzzySuggestions.map(({ name, suggestion }) => (
+                <div key={"fuzzy-" + name} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <div className="font-medium">"{name}" isn&apos;t an exact match for any saved capper.</div>
+                  <div className="mt-0.5">
+                    Did you mean <span className="font-medium">{suggestion}</span>?
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCapperFuzzyChoices((prev) => ({ ...prev, [name]: suggestion }))}
+                      className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100"
+                    >
+                      Yes, same as {suggestion}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCapperFuzzyChoices((prev) => ({ ...prev, [name]: CONFIRMED_NEW }))}
+                      className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100"
+                    >
+                      No, "{name}" is a different capper
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="max-h-80 overflow-y-auto rounded-lg border border-gray-100">
             <div>
               {validEntries.map(({ p, idx }, i) => {
                 const realOdds = enrichedOdds[idx];
                 const displayOdds = realOdds ?? p.odds;
+                const resolvedName = resolvedCapperName(p.capperName);
+                const wasFuzzyMatched = resolvedName !== p.capperName;
                 // A heavier divider below the last pick in each capper's group (not
                 // between every pick) - the color accent alone was easy to miss at a
                 // glance in a large catalog, this makes the group boundary itself clear.
-                const isGroupEnd = validEntries[i + 1] && validEntries[i + 1].p.capperName !== p.capperName;
+                const isGroupEnd =
+                  validEntries[i + 1] && resolvedCapperName(validEntries[i + 1].p.capperName) !== resolvedName;
                 return (
                   <div
                     key={idx}
@@ -215,12 +280,17 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                       "flex flex-col gap-0.5 border-l-4 px-3 py-2 text-xs last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:gap-0 " +
                       (isGroupEnd ? "border-b-2 border-b-gray-300" : "border-b border-b-gray-100") +
                       " " +
-                      capperAccent.get(p.capperName)
+                      capperAccent.get(resolvedName)
                     }
                   >
                     <div className="min-w-0">
-                      <span className="font-medium">{p.capperName}</span>
-                      {!existingLower.includes(p.capperName.toLowerCase()) && (
+                      <span className="font-medium">{resolvedName}</span>
+                      {wasFuzzyMatched && (
+                        <span className="ml-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-emerald-600">
+                          matched from "{p.capperName}"
+                        </span>
+                      )}
+                      {!wasFuzzyMatched && !existingLower.includes(p.capperName.toLowerCase()) && (
                         <span className="ml-1 rounded-full bg-brand-50 px-1.5 py-0.5 text-brand-600">
                           new
                         </span>
