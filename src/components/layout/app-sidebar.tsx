@@ -210,7 +210,7 @@ function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => 
 function LogoMark() {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- fixed local asset, not worth next/image's overhead at this size
-    <img src="/logo-mark.png" alt="Bettingview" className="h-14 w-auto shrink-0" />
+    <img src="/logo-mark.png" alt="Bettingview" className="h-16 w-auto shrink-0" />
   );
 }
 
@@ -304,7 +304,7 @@ export function AppSidebar({ user, modelBuilderEnabled }: { user: SidebarUser; m
         </button>
       </div>
 
-      <aside className="hidden w-60 flex-col gap-1 rounded-xl border border-gray-200 bg-white px-4 py-5 shadow-soft md:flex">
+      <aside className="hidden w-72 flex-col gap-1 rounded-xl border border-gray-200 bg-white px-4 py-5 shadow-soft md:flex">
         <div className="mb-6 px-1">
           <LogoMark />
         </div>
@@ -316,7 +316,7 @@ export function AppSidebar({ user, modelBuilderEnabled }: { user: SidebarUser; m
       {open && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-64 flex-col gap-1 bg-white px-4 py-5 shadow-lg">
+          <aside className="absolute inset-y-0 left-0 flex w-72 flex-col gap-1 bg-white px-4 py-5 shadow-lg">
             <div className="mb-4 flex items-center justify-between">
               <LogoMark />
               <button
