@@ -5,8 +5,7 @@ import { useEffect, useRef, useState } from "react";
 // Matches the 0.8s fill-bar animation duration used elsewhere on the
 // Dashboard (Rising/Best Last-20 progress bars), so the page's load-in
 // animations feel like one consistent effect rather than several different
-// speeds. Exported so EnergySurge (energy-surge.tsx) can time its
-// completion effect to fire exactly when this count-up finishes.
+// speeds.
 export const DURATION_MS = 800;
 
 function easeOutCubic(t: number) {

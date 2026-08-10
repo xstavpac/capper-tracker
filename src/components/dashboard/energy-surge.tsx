@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { CountUp, DURATION_MS } from "@/components/dashboard/count-up";
+import { CountUp } from "@/components/dashboard/count-up";
 
 // Same bolt silhouette as LightningIcon (drop-catalog-button.tsx) - reused
 // here at a smaller size so the two "energy" motifs in the app read as the
@@ -27,14 +27,14 @@ const BOLTS: { style: CSSProperties; delayMs: number; durationMs: number }[] = [
   { style: { bottom: -9, right: -11, transform: "rotate(24deg)" }, delayMs: 40, durationMs: 490 },
 ];
 
-// Wraps a stat's rendered value with a one-shot "energy surge" completion
+// Wraps a stat's rendered value with a one-shot "energy surge" kickoff
 // effect - 3 expanding ring pulses, 4 crackling lightning bolts at the
 // corners, and the number itself jittering/flashing electric blue before
-// settling into its final tone color. Timed off CountUp's own DURATION_MS so
-// it fires right as the count-up finishes, not a fixed guess at how long
-// that takes. Works for any children, so every hero stat can share one
-// effect - including composite ones like EnergyRecordCountUp below, as long
-// as whatever's inside also finishes changing by DURATION_MS.
+// settling into its final tone color. Fires immediately on mount, right as
+// CountUp's own count-up starts (also a per-mount effect), so the surge
+// reads as the thing that *launches* the number upward rather than a
+// celebration once it lands. Works for any children, so every hero stat can
+// share one effect - including composite ones like EnergyRecordCountUp below.
 export function EnergySurge({
   tone = "neutral",
   className = "",
@@ -46,12 +46,13 @@ export function EnergySurge({
 }) {
   const [surge, setSurge] = useState(false);
 
-  // Runs once per mount, matching CountUp's own per-mount count-up - this
-  // page is server-rendered fresh on each load/navigation, so "once per
-  // mount" and "once per count-up completion" are the same event here.
+  // Starts false so the server-rendered markup and the pre-hydration client
+  // render match (no surge overlay in either), then flips true as soon as
+  // this effect runs post-mount - the earliest point a Client Component can
+  // change its own state, which lands in the same commit as CountUp's own
+  // mount effect kicking off its count-up.
   useEffect(() => {
-    const timer = setTimeout(() => setSurge(true), DURATION_MS);
-    return () => clearTimeout(timer);
+    setSurge(true);
   }, []);
 
   return (

@@ -117,7 +117,7 @@ const config: Config = {
         "snow-fall-a": "snow-fall-a 2.4s linear infinite",
         "snow-fall-b": "snow-fall-b 2.8s linear infinite",
         // One-shot (iteration-count 1, no infinite) - these play once when a
-        // count-up finishes, not an ambient/looping effect.
+        // count-up starts, not an ambient/looping effect.
         "energy-ring": "energy-ring 0.9s ease-out 1 both",
         "energy-bolt-crackle": "energy-bolt-crackle 0.6s ease-in-out 1 both",
         "energy-flash": "energy-flash 0.65s ease-in-out 1 both",
