@@ -54,24 +54,24 @@ function SignInForm() {
 
   return (
     <AuthCard heading="Welcome back" subtitle="Sign in to your account">
-      <div className="flex gap-3">
+      <div className="flex flex-col gap-3">
         <button
           type="button"
           onClick={() => handleOAuth("google")}
           disabled={loading !== null}
-          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <GoogleIcon />
-          Google
+          Continue with Google
         </button>
         <button
           type="button"
           onClick={() => handleOAuth("x")}
           disabled={loading !== null}
-          className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-black px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <XIcon />
-          X
+          Continue with X
         </button>
       </div>
 
