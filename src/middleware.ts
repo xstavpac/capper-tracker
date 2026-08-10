@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSupabaseSession } from "@/lib/supabase/middleware";
+import { isDevAuthBypassEnabled, DEV_BYPASS_SUPABASE_ID } from "@/lib/dev-auth-bypass";
 
 // Everything under (app) requires a signed-in user.
 // Marketing pages, sign-in/sign-up, the Supabase auth callback, webhooks,
@@ -27,10 +28,17 @@ export default async function middleware(req: NextRequest) {
   // until the env vars are set) rather than every route going down.
   let response = NextResponse.next({ request: req });
   let user = null;
-  try {
-    ({ response, user } = await updateSupabaseSession(req));
-  } catch (err) {
-    console.error("[middleware] Supabase session check failed:", err);
+  if (isDevAuthBypassEnabled()) {
+    // Local-dev-only - see lib/dev-auth-bypass.ts. Skips the real Supabase
+    // session check; getCurrentUser() (server/auth.ts) does the matching
+    // skip for the actual user lookup below.
+    user = { id: DEV_BYPASS_SUPABASE_ID };
+  } else {
+    try {
+      ({ response, user } = await updateSupabaseSession(req));
+    } catch (err) {
+      console.error("[middleware] Supabase session check failed:", err);
+    }
   }
 
   if (!isPublic && !user) {

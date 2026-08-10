@@ -69,6 +69,39 @@ Private analytics platform for tracking the sports betting cappers you follow.
    Visit `http://localhost:3000`, sign in, and you'll land on an empty
    dashboard — ready for Milestone 3 (the actual Capper + Pick creation UI).
 
+## Local dev auth bypass
+
+Verifying a UI change shouldn't require a real Supabase sign-in every time,
+so `next dev` supports an opt-in bypass:
+
+```bash
+echo "DEV_AUTH_BYPASS=true" >> .env.local
+npm run dev
+```
+
+Visiting any page now logs you in automatically as a dedicated local-only
+account (`dev-local@bettingview.test`, an address on the `.test` TLD, which
+[RFC 2606](https://www.rfc-editor.org/rfc/rfc2606) reserves so it can never
+be a real, reachable address) - a completely ordinary FREE-plan `User` row,
+created the first time it's needed via the same `upsertUserFromSupabase()`
+path a real first sign-in uses, so every page behaves exactly as it would
+for a genuine account (starts with zero cappers/picks, same as any new
+sign-up). It's entirely separate from your real account and from
+production data - nothing here ever touches Supabase Auth or writes to a
+deployed database.
+
+If you reset your local database (`npx prisma migrate reset` or similar),
+nothing extra is needed - the bypass account is just a normal row and gets
+recreated automatically the next time you load a page.
+
+**Why this is inert everywhere except your own local dev server:** it
+requires `NODE_ENV=development`, which only `next dev` sets - any built and
+deployed app (`next build` + `next start`, what Vercel always runs for both
+preview and production) has `NODE_ENV=production` regardless of what env
+vars are set, so there's no configuration that turns this on outside
+`next dev`. `.env.local` is also gitignored, so the flag itself never leaves
+your machine.
+
 ## Deploying
 
 Push to a GitHub repo and import it in Vercel — it will build automatically.

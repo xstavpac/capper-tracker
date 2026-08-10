@@ -2,6 +2,7 @@ import { cache } from "react";
 import { Prisma } from "@prisma/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { isDevAuthBypassEnabled, DEV_BYPASS_SUPABASE_ID, DEV_BYPASS_EMAIL, DEV_BYPASS_NAME } from "@/lib/dev-auth-bypass";
 
 // Wrapped in React's cache() so every caller within the same request (the
 // (app) layout AND whichever page is rendering both call this independently)
@@ -10,19 +11,26 @@ import { prisma } from "@/lib/prisma";
 // otherwise both attempt prisma.user.create() for the same email and one
 // loses to a P2002 unique-constraint crash.
 export const getCurrentUser = cache(async () => {
-  // Middleware already gates every protected route on a resolved session,
-  // but guard here too (defense in depth) - Supabase's client throws
-  // synchronously if its URL/key aren't configured, and that would 500 the
-  // whole page's Server Component render instead of just failing auth.
-  let authUser;
-  try {
-    const supabase = await createSupabaseServerClient();
-    ({
-      data: { user: authUser },
-    } = await supabase.auth.getUser());
-  } catch (err) {
-    console.error("[auth] Supabase session check failed:", err);
-    return null;
+  // Local-dev-only - see lib/dev-auth-bypass.ts. Skips Supabase entirely
+  // rather than special-casing it, so every other code path below (find-or-
+  // create the Prisma User row) runs exactly as it would for a real sign-in.
+  let authUser: { id: string; email?: string; user_metadata?: Record<string, unknown> } | null = null;
+  if (isDevAuthBypassEnabled()) {
+    authUser = { id: DEV_BYPASS_SUPABASE_ID, email: DEV_BYPASS_EMAIL, user_metadata: { full_name: DEV_BYPASS_NAME } };
+  } else {
+    // Middleware already gates every protected route on a resolved session,
+    // but guard here too (defense in depth) - Supabase's client throws
+    // synchronously if its URL/key aren't configured, and that would 500 the
+    // whole page's Server Component render instead of just failing auth.
+    try {
+      const supabase = await createSupabaseServerClient();
+      ({
+        data: { user: authUser },
+      } = await supabase.auth.getUser());
+    } catch (err) {
+      console.error("[auth] Supabase session check failed:", err);
+      return null;
+    }
   }
   if (!authUser) return null;
 

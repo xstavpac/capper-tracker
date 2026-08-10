@@ -210,7 +210,7 @@ function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => 
 function LogoMark() {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- fixed local asset, not worth next/image's overhead at this size
-    <img src="/logo-mark.png" alt="Bettingview" className="h-7 w-auto shrink-0" />
+    <img src="/logo-mark.png" alt="Bettingview" className="h-14 w-auto shrink-0" />
   );
 }
 

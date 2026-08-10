@@ -8,7 +8,7 @@ import Link from "next/link";
 function LogoMark() {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- fixed local asset, not worth next/image's overhead at this size
-    <img src="/logo-mark.png" alt="Bettingview" className="h-14 w-auto shrink-0" />
+    <img src="/logo-mark.png" alt="Bettingview" className="h-32 w-auto shrink-0" />
   );
 }
 
