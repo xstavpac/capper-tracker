@@ -116,9 +116,11 @@ const config: Config = {
         "ember-rise": "ember-rise 1.8s ease-out infinite",
         "snow-fall-a": "snow-fall-a 2.4s linear infinite",
         "snow-fall-b": "snow-fall-b 2.8s linear infinite",
-        // One-shot (iteration-count 1, no infinite) - these play once when a
-        // count-up starts, not an ambient/looping effect.
-        "energy-ring": "energy-ring 0.9s ease-out 1 both",
+        // One-shot (iteration-count 1, no infinite) - these play once, before
+        // the count-up starts (see energy-surge.tsx's SURGE_DURATION_MS,
+        // which must stay in sync with this ring duration + the component's
+        // RINGS stagger array - it's what the count-up waits for).
+        "energy-ring": "energy-ring 0.7s ease-out 1 both",
         "energy-bolt-crackle": "energy-bolt-crackle 0.6s ease-in-out 1 both",
         "energy-flash": "energy-flash 0.65s ease-in-out 1 both",
       },

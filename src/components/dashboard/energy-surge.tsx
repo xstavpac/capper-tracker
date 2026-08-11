@@ -16,7 +16,14 @@ const TONE_HEX: Record<"up" | "down" | "neutral", string> = {
 
 // One ring per entry, staggered via delayMs. Border only, no fill - a plain
 // absolutely-positioned circle outline that scales up and fades out.
-const RINGS = [0, 150, 300];
+const RINGS = [0, 100, 200];
+
+// Mirrors tailwind.config.ts's "energy-ring"/"energy-flash" animation
+// durations - kept as plain numbers here (rather than parsed out of the
+// Tailwind config) since that's the only place duration math for sequencing
+// the count-up actually needs to happen. Update both together.
+const RING_DURATION_MS = 700;
+const FLASH_DURATION_MS = 650;
 
 // 4 bolts at the corners of the number's own box, each with a different
 // rotation/delay/duration so they don't read as four copies of one thing.
@@ -27,14 +34,26 @@ const BOLTS: { style: CSSProperties; delayMs: number; durationMs: number }[] = [
   { style: { bottom: -9, right: -11, transform: "rotate(24deg)" }, delayMs: 40, durationMs: 490 },
 ];
 
+// When the last surge visual (whichever of the rings/bolts/flash finishes
+// latest) actually completes - the count-up's startDelayMs, so the number
+// only starts climbing once the flash/bolts/rings have fully played out
+// instead of racing them. Rings are the long pole today (last ring's own
+// delay + its duration), but this is computed rather than hardcoded so it
+// stays correct if that ever changes.
+export const SURGE_DURATION_MS = Math.max(
+  Math.max(...RINGS) + RING_DURATION_MS,
+  Math.max(...BOLTS.map((b) => b.delayMs + b.durationMs)),
+  FLASH_DURATION_MS
+);
+
 // Wraps a stat's rendered value with a one-shot "energy surge" kickoff
 // effect - 3 expanding ring pulses, 4 crackling lightning bolts at the
 // corners, and the number itself jittering/flashing electric blue before
-// settling into its final tone color. Fires immediately on mount, right as
-// CountUp's own count-up starts (also a per-mount effect), so the surge
-// reads as the thing that *launches* the number upward rather than a
-// celebration once it lands. Works for any children, so every hero stat can
-// share one effect - including composite ones like EnergyRecordCountUp below.
+// settling into its final tone color. Fires immediately on mount; the
+// count-up inside (EnergyCountUp/EnergyRecordCountUp below) waits out
+// SURGE_DURATION_MS before it starts climbing, so the two read as one
+// sequenced beat - surge first, then the number - rather than both firing
+// at once. Works for any children, so every hero stat can share one effect.
 export function EnergySurge({
   tone = "neutral",
   className = "",
@@ -112,17 +131,16 @@ export function EnergyCountUp({
 }) {
   return (
     <EnergySurge tone={tone} className={className}>
-      <CountUp value={value} decimals={decimals} signed={signed} suffix={suffix} commas={commas} />
+      <CountUp value={value} decimals={decimals} signed={signed} suffix={suffix} commas={commas} startDelayMs={SURGE_DURATION_MS} />
     </EnergySurge>
   );
 }
 
 // Record ("90-57-2") has no single number to count up - it's three. Each
-// CountUp below mounts at the same time with the same DURATION_MS/easing, so
-// wins/losses/pushes count up in lockstep ("0-0-0" -> "90-57-2") rather than
-// sitting there static while every other hero stat animates in, and the
-// shared EnergySurge completion effect still lands exactly when they finish
-// - same as it does for a plain EnergyCountUp.
+// CountUp below mounts at the same time with the same DURATION_MS/easing/
+// startDelayMs, so wins/losses/pushes count up in lockstep ("0-0-0" ->
+// "90-57-2") once the shared surge finishes, rather than sitting there
+// static while every other hero stat animates in.
 export function EnergyRecordCountUp({
   wins,
   losses,
@@ -138,7 +156,7 @@ export function EnergyRecordCountUp({
 }) {
   return (
     <EnergySurge tone={tone} className={className}>
-      <CountUp value={wins} />-<CountUp value={losses} />-<CountUp value={pushes} />
+      <CountUp value={wins} startDelayMs={SURGE_DURATION_MS} />-<CountUp value={losses} startDelayMs={SURGE_DURATION_MS} />-<CountUp value={pushes} startDelayMs={SURGE_DURATION_MS} />
     </EnergySurge>
   );
 }
