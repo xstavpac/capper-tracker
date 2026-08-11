@@ -31,9 +31,13 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const [enrichedOdds, setEnrichedOdds] = useState<Record<number, number>>({});
   const [loadingOdds, setLoadingOdds] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<
-    { imported: number; skipped: number; errors: string[]; unmatchedGames: string[] } | null
-  >(null);
+  const [result, setResult] = useState<{
+    imported: number;
+    skipped: number;
+    errors: string[];
+    unmatchedGames: string[];
+    pickLimitBlocked?: { message: string; remaining: number };
+  } | null>(null);
   // Keyed by the raw capper name as it appears in the pasted text - value is
   // either an existing capper's name (user confirmed "yes, same as") or
   // CONFIRMED_NEW (user confirmed "no, genuinely new"). Absent = not yet
@@ -202,9 +206,15 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         skipped: res.skipped,
         errors: res.errors,
         unmatchedGames: res.unmatchedGames,
+        pickLimitBlocked: res.pickLimitBlocked,
       });
-      setParsed(null);
-      setText("");
+      // Blocked by the pick limit means nothing was imported - keep the
+      // pasted text and preview in place so upgrading and retrying doesn't
+      // require re-pasting the whole catalog.
+      if (!res.pickLimitBlocked) {
+        setParsed(null);
+        setText("");
+      }
     }
   }
 
@@ -396,7 +406,20 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         </div>
       )}
 
-      {result && (
+      {result?.pickLimitBlocked && (
+        <div className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="font-medium">Import paused - Free plan limit reached</div>
+          <p className="mt-1">{result.pickLimitBlocked.message}</p>
+          <a
+            href="/pricing"
+            className="mt-2 inline-block rounded-full bg-amber-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-amber-700"
+          >
+            Upgrade to Basic for unlimited picks
+          </a>
+        </div>
+      )}
+
+      {result && !result.pickLimitBlocked && (
         <div className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           Imported {result.imported} pick{result.imported === 1 ? "" : "s"}.
           {result.skipped > 0 && " " + result.skipped + " skipped."}

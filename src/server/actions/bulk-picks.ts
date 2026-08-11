@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
 import { createCapper } from "@/server/data/cappers";
-import { createPick } from "@/server/data/picks";
+import { createPicksWithEntitlementCheck, type PickInsertData } from "@/server/data/subscriptions";
 import {
   resolveGameForNickname,
   resolveGameForTeams,
@@ -30,7 +30,18 @@ export type BulkImportItem = {
 };
 
 export type BulkImportResult =
-  | { success: true; imported: number; skipped: number; errors: string[]; unmatchedGames: string[] }
+  | {
+      success: true;
+      imported: number;
+      skipped: number;
+      errors: string[];
+      unmatchedGames: string[];
+      // Set only when the ENTIRE batch was rejected by the Free-plan pick
+      // limit (never a partial import) - distinct from `errors`, which is
+      // per-item failures unrelated to billing (bad data, unresolved game,
+      // etc). See createPicksWithEntitlementCheck.
+      pickLimitBlocked?: { message: string; remaining: number };
+    }
   | { success: false; error: string };
 
 type ResolvableItem = {
@@ -127,7 +138,15 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
   const sportCache = new Map<string, string>();
   const errors: string[] = [];
   const unmatchedGames: string[] = [];
-  let imported = 0;
+  // Every item that resolves cleanly gets queued here, not inserted yet -
+  // the pick-limit check has to see the FULL batch size before any row is
+  // written, or a Free user at 995 picks importing 20 could see the first 5
+  // silently succeed before the 6th trips the limit. Items that fail for
+  // unrelated reasons (bad data, no matching game) still go to `errors`
+  // individually and are simply never queued - that's a different kind of
+  // per-item failure than the billing gate below, which is all-or-nothing
+  // across whatever DID resolve.
+  const toInsert: PickInsertData[] = [];
 
   for (const item of items) {
     try {
@@ -168,7 +187,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         unmatchedGames.push(item.capperName + " - " + item.description);
       }
 
-      await createPick(user.id, {
+      toInsert.push({
         capperId,
         sportId,
         homeTeam,
@@ -181,17 +200,38 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         units: item.units,
         gameTime,
       });
-      imported++;
     } catch (err) {
       const message = err instanceof Error ? err.message : "failed";
       errors.push(item.capperName + " - " + item.description + ": " + message);
     }
   }
 
+  // The single all-or-nothing billing gate for this whole batch - see
+  // createPicksWithEntitlementCheck. Nothing above this point has written a
+  // Pick row yet.
+  const result = await createPicksWithEntitlementCheck(user.id, toInsert);
+
   revalidatePath("/picks");
   revalidatePath("/dashboard");
   revalidatePath("/cappers");
   revalidatePath("/reports");
 
-  return { success: true, imported, skipped: items.length - imported, errors, unmatchedGames };
+  if (!result.allowed) {
+    return {
+      success: true,
+      imported: 0,
+      skipped: items.length,
+      errors,
+      unmatchedGames,
+      pickLimitBlocked: { message: result.message, remaining: result.remaining },
+    };
+  }
+
+  return {
+    success: true,
+    imported: result.created.length,
+    skipped: items.length - result.created.length,
+    errors,
+    unmatchedGames,
+  };
 }

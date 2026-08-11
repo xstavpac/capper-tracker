@@ -17,6 +17,7 @@ enum Theme {
 
 enum Plan {
   FREE
+  BASIC
   PRO
 }
 
@@ -77,14 +78,44 @@ model Subscription {
   userId               String    @unique
   user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan                 Plan      @default(FREE)
+  // Stripe's own subscription status string, stored verbatim (active,
+  // trialing, past_due, canceled, unpaid, incomplete, incomplete_expired) -
+  // not an enum, so a new Stripe status doesn't need a migration to store.
+  // Whether a given status/plan combination actually grants paid-tier access
+  // right now is computed by lib/entitlements.ts, never read off this field
+  // directly - see isEntitledToPaidTier there for why (e.g. "canceled"
+  // doesn't necessarily mean "downgrade immediately", "past_due" doesn't
+  // mean "downgrade at all" while Stripe is still retrying).
   status               String    @default("active")
   stripeCustomerId     String?
   stripeSubscriptionId String?
+  // The Stripe Price actually subscribed to - lets webhook handlers derive
+  // `plan` (BASIC vs PRO) from the price id without hardcoding a lookup
+  // table more than once.
+  stripePriceId        String?
   currentPeriodEnd     DateTime?
+  // True while a cancellation is scheduled for period-end but hasn't taken
+  // effect yet (Stripe keeps status "active" through this whole window) -
+  // distinct from status ever becoming "canceled", which only happens once
+  // the subscription has actually ended.
+  cancelAtPeriodEnd    Boolean   @default(false)
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
   @@map("subscriptions")
+}
+
+// One row per processed Stripe webhook event id - checked (and inserted,
+// atomically, via a unique-constraint-violation-as-dedupe-signal) before any
+// event is actually handled, so redelivery of the same event (Stripe retries
+// on anything but a 2xx response, and can also just send the same event more
+// than once per their own docs) never re-applies its effects twice.
+model StripeWebhookEvent {
+  id          String   @id // Stripe's own event id (evt_...) - the dedupe key itself, not a synthetic one
+  type        String
+  processedAt DateTime @default(now())
+
+  @@map("stripe_webhook_events")
 }
 
 model Sport {

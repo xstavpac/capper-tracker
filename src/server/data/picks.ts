@@ -13,19 +13,23 @@ import {
 } from "@/server/data/stats";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { findMatchingGameResult, resolveOutcome, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
+import { FREE_PICK_LIMIT } from "@/lib/entitlements";
+import { getEntitlementsForUser, createPicksWithEntitlementCheck } from "@/server/data/subscriptions";
 
-const FREE_PLAN_PICK_LIMIT = 1000;
-
+// Kept for compatibility with the one existing call site's naming
+// (picks/page.tsx expects pickCount/pickLimit/atLimit) - `unlimited` covers
+// both BASIC and PRO, not just PRO, now that BASIC exists.
 export async function getPickPlanStatus(userId: string) {
-  const subscription = await prisma.subscription.findUnique({ where: { userId } });
-  const isPro = subscription?.plan === "PRO";
+  const entitlements = await getEntitlementsForUser(userId);
+  const unlimited = entitlements.tier !== "FREE";
   const pickCount = await prisma.pick.count({ where: { userId } });
 
   return {
-    isPro,
+    tier: entitlements.tier,
+    unlimited,
     pickCount,
-    pickLimit: isPro ? null : FREE_PLAN_PICK_LIMIT,
-    atLimit: !isPro && pickCount >= FREE_PLAN_PICK_LIMIT,
+    pickLimit: unlimited ? null : FREE_PICK_LIMIT,
+    atLimit: !unlimited && pickCount >= FREE_PICK_LIMIT,
   };
 }
 
@@ -62,20 +66,17 @@ export async function createPick(
     throw new Error("Capper not found.");
   }
 
-  const subscription = await prisma.subscription.findUnique({ where: { userId } });
-  const isPro = subscription?.plan === "PRO";
-  if (!isPro) {
-    const pickCount = await prisma.pick.count({ where: { userId } });
-    if (pickCount >= FREE_PLAN_PICK_LIMIT) {
-      throw new Error(
-        "Free plan is limited to " + FREE_PLAN_PICK_LIMIT + " picks. Upgrade to Pro for unlimited picks."
-      );
-    }
+  // The actual authorization gate - locks this user's Subscription row and
+  // checks the Free-plan limit atomically with the insert itself, so two
+  // concurrent creates for the same user can't both slip past the check
+  // (see createPicksWithEntitlementCheck for why a plain count-then-create
+  // isn't safe here). Single-pick creation is just the N=1 case of the same
+  // batch path bulk import uses.
+  const result = await createPicksWithEntitlementCheck(userId, [data]);
+  if (!result.allowed) {
+    throw new Error(result.message);
   }
-
-  return prisma.pick.create({
-    data: { ...data, userId, status: "PENDING" },
-  });
+  return result.created[0];
 }
 
 export async function updatePickStatus(userId: string, pickId: string, status: PickStatus) {

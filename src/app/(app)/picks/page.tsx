@@ -8,6 +8,7 @@ import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 import { favoriteOrUnderdog } from "@/lib/bet-line";
 import { formatEastern } from "@/lib/dates";
+import { TIER_LABELS } from "@/lib/entitlements";
 import type { BetType, PickStatus, Period } from "@prisma/client";
 
 const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
@@ -78,8 +79,8 @@ export default async function PicksPage({
         <div>
           <h1 className="text-xl font-semibold">Picks</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {planStatus.isPro
-              ? planStatus.pickCount + " pick" + (planStatus.pickCount === 1 ? "" : "s")
+            {planStatus.unlimited
+              ? planStatus.pickCount + " pick" + (planStatus.pickCount === 1 ? "" : "s") + " (" + TIER_LABELS[planStatus.tier] + " plan)"
               : planStatus.pickCount + " of " + planStatus.pickLimit + " picks (Free plan)"}
             {hasActiveFilters ? " - " + picks.length + " match filters" : ""}
           </p>

@@ -98,6 +98,15 @@ function ChartsIcon({ className }: { className?: string }) {
   );
 }
 
+function PricingIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <path d="M12 3v18" />
+      <path d="M17 7c0-1.7-2.2-3-5-3s-5 1.3-5 3 2.2 3 5 3 5 1.3 5 3-2.2 3-5 3-5-1.3-5-3" />
+    </svg>
+  );
+}
+
 function ModelBuilderIcon({ className }: { className?: string }) {
   return (
     <svg {...iconProps(className)}>
@@ -123,6 +132,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/picks", label: "Picks", icon: PicksIcon },
   { href: "/reports", label: "Reports", icon: ReportsIcon },
   { href: "/charts", label: "Charts", icon: ChartsIcon },
+  { href: "/pricing", label: "Plans & Billing", icon: PricingIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
   { href: "/live", label: "Live", icon: LiveIcon, accent: "red" },
 ];

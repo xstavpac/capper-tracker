@@ -6,6 +6,8 @@ import { getOddsForSport } from "@/server/data/odds";
 import { sameEasternDay } from "@/lib/dates";
 import { parseModelBuilderPrefill } from "@/lib/model-builder-links";
 import { ModelBuilderClient } from "@/components/model-builder/model-builder-client";
+import { getEntitlementsForUser } from "@/server/data/subscriptions";
+import { UpgradeGate } from "@/components/billing/upgrade-gate";
 
 // MLB-only for v1 - every variable in the catalog (team tendencies, team/
 // pitcher stats, odds/market) is sourced from MLB-specific APIs.
@@ -23,6 +25,22 @@ export default async function ModelBuilderPage({
 
   const prefill = parseModelBuilderPrefill(searchParams);
   const user = await requireUser();
+
+  // Pro-only feature - checked server-side against the user's real
+  // entitlements (never trust a client-side tier), independent of the
+  // MODEL_BUILDER_ENABLED flag above (that flag gates the feature for
+  // everyone; this gates it per-user by plan once the feature itself is on).
+  const entitlements = await getEntitlementsForUser(user.id);
+  if (!entitlements.hasFeature("model_builder")) {
+    return (
+      <div className="mx-auto max-w-[1400px]">
+        <UpgradeGate
+          title="Build Your Own Model is a Pro feature"
+          description="Combine stats and market data into a rule-based model, then preview it against real games."
+        />
+      </div>
+    );
+  }
 
   const [savedModels, allOdds] = await Promise.all([
     getUserModels(user.id),

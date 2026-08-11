@@ -27,11 +27,16 @@ export function PickForm({ cappers, sports, atLimit }: { cappers: Capper[]; spor
 
   if (atLimit && !isOpen) {
     return (
-      <div className="rounded-card bg-white p-4 shadow-soft">
-        <p className="text-sm text-gray-600">
-          You have reached the free plan limit of 1000 picks.{" "}
-          <span className="font-medium text-brand-600">Upgrade to Pro</span> for unlimited picks.
+      <div className="rounded-card bg-amber-50 p-4 shadow-soft">
+        <p className="text-sm text-amber-800">
+          You&apos;ve reached the Free plan&apos;s 1,000-pick limit - tracking is paused until you upgrade.
         </p>
+        <a
+          href="/pricing"
+          className="mt-2 inline-block rounded-full bg-amber-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-amber-700"
+        >
+          Upgrade to Basic for unlimited picks
+        </a>
       </div>
     );
   }
