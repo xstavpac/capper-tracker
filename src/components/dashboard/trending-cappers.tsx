@@ -107,7 +107,8 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
                   capperId={e.capperId}
                   name={e.name}
                   colorTag={e.colorTag}
-                  right={<span className="text-orange-600">{e.streakCount}W</span>}
+                  icon={<TrendIcon direction="up" />}
+                  right={<span className="text-emerald-600">{e.streakCount}W</span>}
                 />
               ))}
             </ExpandableRows>
@@ -123,7 +124,8 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
                   capperId={e.capperId}
                   name={e.name}
                   colorTag={e.colorTag}
-                  right={<span className="text-sky-600">{e.streakCount}L</span>}
+                  icon={<TrendIcon direction="down" />}
+                  right={<span className="text-red-600">{e.streakCount}L</span>}
                 />
               ))}
             </ExpandableRows>
