@@ -275,6 +275,14 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         <span>Once your catalog is loaded, you&apos;ll find the picks on the Live tab, grouped under their respective games.</span>
       </div>
 
+      <div className="mt-4 max-w-[260px]">
+        <img
+          src="/example-picks.png"
+          alt="Example of picks grouped by game on the Live tab"
+          className="h-auto w-full rounded-lg border border-gray-200"
+        />
+      </div>
+
       {parsed && (
         <div className="mt-4">
           <div className="mb-2 text-sm font-medium text-gray-700">
