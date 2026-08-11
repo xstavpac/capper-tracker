@@ -270,20 +270,36 @@ export async function getCappersWithPickCounts(userId: string): Promise<CapperSu
 
 export type SuspectedDuplicatePair = { capperA: CapperSummary; capperB: CapperSummary; distance: number };
 
+// Canonical (order-independent) key for a capper pair - always the
+// lexicographically smaller id first, so "A~B" and "B~A" resolve to the same
+// identity regardless of which capper happened to be cappers[i] vs
+// cappers[j] in a given scan, or which side the user clicked in the UI.
+function orderedPairIds(idA: string, idB: string): [string, string] {
+  return idA < idB ? [idA, idB] : [idB, idA];
+}
+
 // Scans a user's own cappers for likely-duplicate name pairs (exact-but-
 // somehow-distinct rows, or a fuzzy typo/plural match) - surfaced as review
 // suggestions in the merge tool, never auto-merged. Sorted by distance (0 =
 // exact duplicates first, since those are the least ambiguous) then by the
 // larger pair's combined pick count descending, so the highest-impact
-// suggestions surface first.
+// suggestions surface first. Excludes any pair previously dismissed via
+// dismissDuplicatePair - keyed by capper id, not name, so a rename can't
+// resurface (or wrongly suppress) a dismissal.
 export async function findSuspectedDuplicateCappers(userId: string): Promise<SuspectedDuplicatePair[]> {
-  const cappers = await getCappersWithPickCounts(userId);
+  const [cappers, dismissed] = await Promise.all([
+    getCappersWithPickCounts(userId),
+    prisma.dismissedDuplicatePair.findMany({ where: { userId }, select: { capperAId: true, capperBId: true } }),
+  ]);
+  const dismissedKeys = new Set(dismissed.map((d) => d.capperAId + "|" + d.capperBId));
 
   const pairs: SuspectedDuplicatePair[] = [];
   for (let i = 0; i < cappers.length; i++) {
     for (let j = i + 1; j < cappers.length; j++) {
       const distance = duplicateNameDistance(cappers[i].name, cappers[j].name);
       if (distance === null) continue;
+      const [a, b] = orderedPairIds(cappers[i].id, cappers[j].id);
+      if (dismissedKeys.has(a + "|" + b)) continue;
       pairs.push({ capperA: cappers[i], capperB: cappers[j], distance });
     }
   }
@@ -291,6 +307,35 @@ export async function findSuspectedDuplicateCappers(userId: string): Promise<Sus
   return pairs.sort(
     (a, b) => a.distance - b.distance || b.capperA.pickCount + b.capperB.pickCount - (a.capperA.pickCount + a.capperB.pickCount)
   );
+}
+
+// Persists a "not a duplicate" dismissal so it survives refreshes and future
+// scans (see findSuspectedDuplicateCappers above) - previously this was
+// client-only React state (merge-cappers-panel.tsx's `dismissed` Set), which
+// reset on every reload/revisit. Both cappers must belong to `userId` (same
+// ownership check pattern as mergeCappers) so a crafted id can't dismiss a
+// pair for another user's data. Idempotent: dismissing an already-dismissed
+// pair again just no-ops (unique constraint on the canonical id pair) rather
+// than erroring - upsert avoids a race between a concurrent duplicate click
+// and a genuine check-then-insert.
+export async function dismissDuplicatePair(userId: string, capperIdA: string, capperIdB: string): Promise<void> {
+  if (capperIdA === capperIdB) {
+    throw new Error("Can't dismiss a capper against itself.");
+  }
+  const [capperA, capperB] = await Promise.all([
+    prisma.capper.findFirst({ where: { id: capperIdA, userId } }),
+    prisma.capper.findFirst({ where: { id: capperIdB, userId } }),
+  ]);
+  if (!capperA || !capperB) {
+    throw new Error("One or both cappers weren't found.");
+  }
+
+  const [a, b] = orderedPairIds(capperIdA, capperIdB);
+  await prisma.dismissedDuplicatePair.upsert({
+    where: { capperAId_capperBId: { capperAId: a, capperBId: b } },
+    create: { userId, capperAId: a, capperBId: b },
+    update: {},
+  });
 }
 
 export type MergeCappersResult = { mergedPickCount: number; primaryName: string; duplicateName: string };

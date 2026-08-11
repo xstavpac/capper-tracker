@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { mergeCappersAction } from "@/server/actions/cappers";
+import { mergeCappersAction, dismissDuplicatePairAction } from "@/server/actions/cappers";
 
 type CapperSummary = { id: string; name: string; pickCount: number };
 type SuspectedDuplicatePair = { capperA: CapperSummary; capperB: CapperSummary; distance: number };
@@ -25,14 +25,12 @@ export function MergeCappersPanel({
   suspected: SuspectedDuplicatePair[];
 }) {
   const router = useRouter();
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<PendingMerge | null>(null);
   const [manualPrimaryId, setManualPrimaryId] = useState("");
   const [manualDuplicateId, setManualDuplicateId] = useState("");
   const [message, setMessage] = useState<{ text: string; tone: "success" | "error" } | null>(null);
   const [isMerging, startTransition] = useTransition();
-
-  const visibleSuspected = suspected.filter((p) => !dismissed.has(pairKey(p.capperA.id, p.capperB.id)));
+  const [dismissingKey, setDismissingKey] = useState<string | null>(null);
 
   // For a suggested pair (order is arbitrary, alphabetical): default to
   // keeping whichever name has more picks (the more-established record) -
@@ -72,6 +70,23 @@ export function MergeCappersPanel({
         setMessage({ text: result.error, tone: "error" });
       }
     });
+  }
+
+  // Persists the dismissal server-side (dismissDuplicatePairAction) keyed by
+  // capper id, order-independent - then re-fetches so the pair is excluded
+  // by findSuspectedDuplicateCappers itself on the next render, rather than
+  // relying on client-only state that used to reset on every reload.
+  async function dismissPair(a: CapperSummary, b: CapperSummary) {
+    const key = pairKey(a.id, b.id);
+    setMessage(null);
+    setDismissingKey(key);
+    const result = await dismissDuplicatePairAction(a.id, b.id);
+    if (result.success) {
+      router.refresh();
+    } else {
+      setMessage({ text: result.error, tone: "error" });
+    }
+    setDismissingKey(null);
   }
 
   const manualReady = manualPrimaryId && manualDuplicateId && manualPrimaryId !== manualDuplicateId;
@@ -139,12 +154,13 @@ export function MergeCappersPanel({
         <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
           Suspected duplicates
         </div>
-        {visibleSuspected.length === 0 ? (
+        {suspected.length === 0 ? (
           <p className="text-sm text-gray-400">No likely duplicates found.</p>
         ) : (
           <div className="space-y-1.5">
-            {visibleSuspected.map((p) => {
+            {suspected.map((p) => {
               const key = pairKey(p.capperA.id, p.capperB.id);
+              const isDismissing = dismissingKey === key;
               return (
                 <div key={key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
                   <div>
@@ -158,15 +174,17 @@ export function MergeCappersPanel({
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => reviewSuggestedPair(p.capperA, p.capperB)}
-                      className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-100"
+                      disabled={isDismissing}
+                      className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
                     >
                       Review merge
                     </button>
                     <button
-                      onClick={() => setDismissed((prev) => new Set(prev).add(key))}
-                      className="rounded-full px-3 py-1 text-xs font-medium text-gray-400 transition hover:bg-gray-100"
+                      onClick={() => dismissPair(p.capperA, p.capperB)}
+                      disabled={isDismissing}
+                      className="rounded-full px-3 py-1 text-xs font-medium text-gray-400 transition hover:bg-gray-100 disabled:opacity-50"
                     >
-                      Not a duplicate
+                      {isDismissing ? "Saving..." : "Not a duplicate"}
                     </button>
                   </div>
                 </div>

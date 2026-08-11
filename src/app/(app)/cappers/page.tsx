@@ -1,11 +1,19 @@
 import { requireUser } from "@/server/auth";
-import { getPlanStatus, getCapperLeaderboardTable, getMostActiveThisWeek, getSportCategoryPanelData } from "@/server/data/cappers";
+import {
+  getPlanStatus,
+  getCapperLeaderboardTable,
+  getMostActiveThisWeek,
+  getSportCategoryPanelData,
+  getCappersWithPickCounts,
+  findSuspectedDuplicateCappers,
+} from "@/server/data/cappers";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { PICK_CATEGORY_LABELS } from "@/server/data/stats";
 import { CapperForm } from "@/components/dashboard/capper-form";
 import { CappersLeaderboardTable } from "@/components/dashboard/cappers-leaderboard-table";
 import { BestAtPanel, type BestAtEntry } from "@/components/dashboard/best-at-panel";
 import { MostActivePanel } from "@/components/dashboard/most-active-panel";
+import { MergeCappersPanel } from "@/components/dashboard/merge-cappers-panel";
 
 const LEAGUES = LIVE_SPORTS.map((s) => s.label);
 
@@ -35,12 +43,14 @@ export default async function CappersPage({
   const league = LEAGUES.includes(searchParams.league ?? "") ? searchParams.league : undefined;
   const bestAtSport = league ?? DEFAULT_BEST_AT_SPORT;
 
-  const [planStatus, weekEntries, allTimeEntries, mostActive, categoryPanel] = await Promise.all([
+  const [planStatus, weekEntries, allTimeEntries, mostActive, categoryPanel, cappersWithCounts, suspectedDuplicates] = await Promise.all([
     getPlanStatus(user.id),
     getCapperLeaderboardTable(user.id, "LAST_7", { sportName: league }),
     getCapperLeaderboardTable(user.id, "ALL", { sportName: league }),
     getMostActiveThisWeek(user.id, { sportName: league }),
     getSportCategoryPanelData(user.id, bestAtSport),
+    getCappersWithPickCounts(user.id),
+    findSuspectedDuplicateCappers(user.id),
   ]);
 
   const bestAtEntries: BestAtEntry[] = categoryPanel.breakdown
@@ -72,6 +82,12 @@ export default async function CappersPage({
           <CapperForm atLimit={false} />
         </div>
       </div>
+
+      {suspectedDuplicates.length > 0 && (
+        <div className="mb-6">
+          <MergeCappersPanel cappers={cappersWithCounts} suspected={suspectedDuplicates} />
+        </div>
+      )}
 
       <div className="mb-6 flex flex-wrap gap-2">
         <a href={buildHref(undefined)} className={pillClass(!league)}>

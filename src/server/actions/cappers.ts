@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/server/auth";
-import { createCapper, mergeCappers } from "@/server/data/cappers";
+import { createCapper, mergeCappers, dismissDuplicatePair } from "@/server/data/cappers";
 import type { Source } from "@prisma/client";
 
 export type CreateCapperResult =
@@ -52,7 +52,7 @@ export type MergeCappersActionResult =
 // Reassigns every pick from the duplicate capper to the primary one, then
 // removes the duplicate - see mergeCappers (server/data/cappers.ts) for the
 // reassign-before-delete ordering and why it matters. Never called
-// automatically; the settings UI always shows a preview and requires an
+// automatically; the Cappers page UI always shows a preview and requires an
 // explicit confirm click first.
 export async function mergeCappersAction(primaryId: string, duplicateId: string): Promise<MergeCappersActionResult> {
   const user = await requireUser();
@@ -63,10 +63,28 @@ export async function mergeCappersAction(primaryId: string, duplicateId: string)
     revalidatePath("/cappers/[capperId]", "page");
     revalidatePath("/dashboard");
     revalidatePath("/reports");
-    revalidatePath("/settings");
     return { success: true, ...result };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Something went wrong.";
     return { success: false, error: message };
   }
+}
+
+export type DismissDuplicatePairResult = { success: true } | { success: false; error: string };
+
+// Persists "not a duplicate" (see dismissDuplicatePair, server/data/cappers.ts)
+// so the pair no longer resurfaces on refresh/revisit/re-scan. Never deletes
+// or modifies either capper - purely an exclusion record for future scans.
+export async function dismissDuplicatePairAction(capperIdA: string, capperIdB: string): Promise<DismissDuplicatePairResult> {
+  const user = await requireUser();
+
+  try {
+    await dismissDuplicatePair(user.id, capperIdA, capperIdB);
+    revalidatePath("/cappers");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Something went wrong.";
+    return { success: false, error: message };
+  }
+
+  return { success: true };
 }

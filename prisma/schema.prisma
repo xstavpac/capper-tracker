@@ -63,10 +63,11 @@ model User {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  cappers      Capper[]
-  picks        Pick[]
-  subscription Subscription?
-  models       UserModel[]
+  cappers                 Capper[]
+  picks                   Pick[]
+  subscription            Subscription?
+  models                  UserModel[]
+  dismissedDuplicatePairs DismissedDuplicatePair[]
 
   @@map("users")
 }
@@ -122,9 +123,37 @@ model Capper {
   updatedAt           DateTime @updatedAt
 
   picks Pick[]
+  dismissedPairsAsA DismissedDuplicatePair[] @relation("DismissedDuplicatePairCapperA")
+  dismissedPairsAsB DismissedDuplicatePair[] @relation("DismissedDuplicatePairCapperB")
 
   @@index([userId])
   @@map("cappers")
+}
+
+// A capper pair the user has explicitly reviewed and confirmed are NOT the
+// same person/channel (see cappers.ts's findSuspectedDuplicateCappers) -
+// keeps that pair out of future duplicate scans permanently, tied to the
+// underlying capper ids (not display names, which can change) so a rename
+// doesn't resurface a pair someone already dismissed, and a genuinely
+// different pair that happens to reuse an old name isn't accidentally
+// suppressed. capperAId/capperBId are always stored with the
+// lexicographically smaller id first (see dismissDuplicatePair) so "A~B" and
+// "B~A" are the same row - order-independent by construction, not by a
+// runtime OR query. Cascades on either capper being deleted (e.g. via
+// mergeCappers) since a dismissal about an id that no longer exists is moot.
+model DismissedDuplicatePair {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  capperAId String
+  capperA   Capper   @relation("DismissedDuplicatePairCapperA", fields: [capperAId], references: [id], onDelete: Cascade)
+  capperBId String
+  capperB   Capper   @relation("DismissedDuplicatePairCapperB", fields: [capperBId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([capperAId, capperBId])
+  @@index([userId])
+  @@map("dismissed_duplicate_pairs")
 }
 
 model Pick {
