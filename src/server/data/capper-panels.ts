@@ -19,6 +19,21 @@ const ACTIVITY_WINDOW_DAYS = 14;
 // snowflake badge - a single win/loss isn't a "streak" worth surfacing here.
 const STREAK_PANEL_MIN = 2;
 
+// Trending: recent-5-vs-previous-5 momentum, confirmed by an independent
+// recent-8-vs-previous-8 check both clearing the same bar. A single 5-pick
+// window can swing 20pts on one result (5 picks = 20pt granularity), so a
+// lone window-5 hit is as likely to be noise as a real trend - requiring an
+// 8-pick window to independently agree filters that out while still staying
+// responsive enough to catch someone who's turned a corner recently, not
+// just someone who's always been good (which is what a lifetime-vs-recent
+// comparison conflates). Confirmed against real account data: of several
+// window sizes and single/hybrid rules tested, 5-and-8-together was the only
+// one that (a) survived cross-window consistency and (b) wasn't left with
+// zero measurable population.
+const TRENDING_WINDOW = 5;
+const TRENDING_CONFIRM_WINDOW = 8;
+const TRENDING_THRESHOLD_PTS = 10;
+
 // Best/Worst Last-20's window - "last 20 graded picks" is the panel's own name.
 const RECENT_FORM_WINDOW = 20;
 // Need at least half the window decided before recent form means anything.
@@ -50,9 +65,14 @@ export type StreakPanelEntry = PanelCapperBase & {
   weightedScore: number;
   stats: OverallStats;
 };
-// Deliberately minimal - just the record. winPct (for the progress-bar fill)
-// is derived from wins/losses/pushes by the UI, same as everywhere else.
-export type RisingPanelEntry = PanelCapperBase & { wins: number; losses: number; pushes: number };
+// Momentum, not standing: recent-5 win% vs the previous-5 win% right before
+// it - same shape as FallingOffPanelEntry (a before/after pair plus the
+// delta), just comparing two recent windows instead of recent-vs-lifetime.
+export type RisingPanelEntry = PanelCapperBase & {
+  previousWinPct: number;
+  recentWinPct: number;
+  risePts: number;
+};
 export type FallingOffPanelEntry = PanelCapperBase & {
   lifetimeWinPct: number;
   recentWinPct: number;
@@ -76,6 +96,16 @@ export type CapperPanels = {
   bestLast20: BestLast20Entry[];
   worstLast20: BestLast20Entry[];
 };
+
+// Win% over a slice of decided picks, pushes excluded from the denominator -
+// same convention computeStats' winPct uses. Null (not 0) when the slice has
+// no decided W/L picks at all, so callers can distinguish "0% window" from
+// "nothing to measure" rather than accidentally comparing against a 0.
+function windowWinPct(picks: { status: string }[]): number | null {
+  const wins = picks.filter((p) => p.status === "WIN").length;
+  const losses = picks.filter((p) => p.status === "LOSS").length;
+  return wins + losses > 0 ? round2((wins / (wins + losses)) * 100) : null;
+}
 
 const EMPTY_PANELS: CapperPanels = {
   hotStreaks: [],
@@ -137,19 +167,25 @@ export async function getCapperPanels(userId: string, filter?: CapperLeagueFilte
       .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
       .sort((a, b) => (b.gradedAt?.getTime() ?? 0) - (a.gradedAt?.getTime() ?? 0));
 
-    // Rising: below the main ranking's sample cutoff, AND actively on a win
-    // streak right now - not just a net-positive record that happens to
-    // include a loss. A capper sitting on a loss as their most recent result
-    // isn't "catching fire," even if their overall small-sample record is
-    // still positive - currentStreak already captures "most recent result
-    // streak," the same definition Hot Streaks uses.
-    if (
-      decidedCount > 0 &&
-      decidedCount < RANKING_MIN_SAMPLE &&
-      stats.currentStreak.type === "WIN" &&
-      stats.currentStreak.count >= STREAK_PANEL_MIN
-    ) {
-      rising.push({ ...base, wins: stats.wins, losses: stats.losses, pushes: stats.pushes });
+    // Trending: needs both windows fully populated (8*2=16 decided also
+    // covers window-5's smaller 5*2=10 requirement), and both the 5-window
+    // and 8-window rise must independently clear the threshold. No sample
+    // ceiling and no "new capper only" gate - an established capper with
+    // hundreds of decided picks qualifies exactly the same as one with 16.
+    if (decidedPicks.length >= TRENDING_CONFIRM_WINDOW * 2) {
+      const recent5Pct = windowWinPct(decidedPicks.slice(0, TRENDING_WINDOW));
+      const previous5Pct = windowWinPct(decidedPicks.slice(TRENDING_WINDOW, TRENDING_WINDOW * 2));
+      const recent8Pct = windowWinPct(decidedPicks.slice(0, TRENDING_CONFIRM_WINDOW));
+      const previous8Pct = windowWinPct(decidedPicks.slice(TRENDING_CONFIRM_WINDOW, TRENDING_CONFIRM_WINDOW * 2));
+
+      if (recent5Pct !== null && previous5Pct !== null && recent8Pct !== null && previous8Pct !== null) {
+        const rise5 = round2(recent5Pct - previous5Pct);
+        const rise8 = round2(recent8Pct - previous8Pct);
+
+        if (rise5 >= TRENDING_THRESHOLD_PTS && rise8 >= TRENDING_THRESHOLD_PTS) {
+          rising.push({ ...base, previousWinPct: previous5Pct, recentWinPct: recent5Pct, risePts: rise5 });
+        }
+      }
     }
 
     // Falling Off needs a real lifetime baseline (RANKING_MIN_SAMPLE) and enough
@@ -198,11 +234,7 @@ export async function getCapperPanels(userId: string, filter?: CapperLeagueFilte
 
   hotStreaks.sort((a, b) => b.streakCount - a.streakCount || b.weightedScore - a.weightedScore);
   coolingOff.sort((a, b) => b.streakCount - a.streakCount);
-  rising.sort(
-    (a, b) =>
-      (b.wins - b.losses - (a.wins - a.losses)) ||
-      (b.wins + b.losses + b.pushes - (a.wins + a.losses + a.pushes))
-  );
+  rising.sort((a, b) => b.risePts - a.risePts);
   fallingOff.sort((a, b) => b.dropPts - a.dropPts);
   bestLast20.sort((a, b) => b.weightedScore - a.weightedScore);
   // Same recent-form pool as Best Last-20, just sorted the other way -

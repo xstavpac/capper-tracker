@@ -1,5 +1,5 @@
 import type { CapperPanels } from "@/server/data/capper-panels";
-import { Panel, PanelRow, BarRow, record, winPctExcludingPushes } from "@/components/dashboard/capper-panels";
+import { Panel, PanelRow, BarRow, record } from "@/components/dashboard/capper-panels";
 import { ExpandableRows } from "@/components/dashboard/expandable-rows";
 import { EXPANDABLE_ROWS_MAX } from "@/components/dashboard/expandable-rows-constants";
 import { TrendIcon } from "@/components/dashboard/trend-icon";
@@ -169,17 +169,20 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
         )}
 
         {panels.rising.length > 0 && (
-          <Panel title="Trending" subtitle="Strong starts, too early for a full rank">
+          <Panel title="Trending" subtitle="Recent form meaningfully better than their stretch before it">
             <ExpandableRows>
               {panels.rising.slice(0, EXPANDABLE_ROWS_MAX).map((e) => (
-                <BarRow
+                <PanelRow
                   key={e.capperId}
                   capperId={e.capperId}
                   name={e.name}
                   colorTag={e.colorTag}
-                  record={record(e.wins, e.losses, e.pushes)}
-                  winPct={winPctExcludingPushes(e.wins, e.losses)}
-                  trending
+                  icon={<TrendIcon direction="up" />}
+                  right={
+                    <span className="text-emerald-600">
+                      {Math.round(e.previousWinPct)}% &rarr; {Math.round(e.recentWinPct)}%
+                    </span>
+                  }
                 />
               ))}
             </ExpandableRows>
