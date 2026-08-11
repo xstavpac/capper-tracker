@@ -4,6 +4,7 @@ import { getPicksForGames } from "@/server/data/picks";
 import { pickCategory, betTypeLabel, chipSetForLeague, DEFAULT_CHIP_SET } from "@/server/data/stats";
 import { getSportCategoryPanelData } from "@/server/data/cappers";
 import { sameEasternDay } from "@/lib/dates";
+import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
 import { type ExpanderPick } from "@/components/live/game-picks-expander";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
@@ -83,20 +84,35 @@ export default async function LivePage({
   // pickCategory/betTypeLabel touch server/data/stats.ts, which has a
   // module-level prisma import - mapped here (Server Component) rather than
   // inside LiveScoreboard (client) so that import never has to cross into
-  // the client bundle at all.
-  const expanderPicksByGame: ExpanderPick[][] = matchedPicksByGame.map((matchedPicks) =>
-    matchedPicks.map((p) => ({
-      pickId: p.id,
-      capperId: p.capperId,
-      capperName: p.capper.name,
-      capperColorTag: p.capper.colorTag,
-      category: pickCategory(p),
-      betDetail: p.betDetail || betTypeLabel(p.betType),
-      odds: p.odds,
-      units: p.units,
-      status: p.status,
-    }))
-  );
+  // the client bundle at all. teamGroup/teamLabel are computed here for the
+  // same reason - classifyPickTeamGroup/shortTeamName are pure and client-
+  // safe on their own, but doing the mapping here keeps every game's
+  // homeTeam/awayTeam (needed to classify each pick) in one place instead of
+  // threading it down through LiveScoreboard as well.
+  const expanderPicksByGame: ExpanderPick[][] = matchedPicksByGame.map((matchedPicks, gameIndex) => {
+    const game = odds[gameIndex];
+    return matchedPicks.map((p) => {
+      const teamGroup = classifyPickTeamGroup(p, game, sportLabel);
+      return {
+        pickId: p.id,
+        capperId: p.capperId,
+        capperName: p.capper.name,
+        capperColorTag: p.capper.colorTag,
+        category: pickCategory(p),
+        betDetail: p.betDetail || betTypeLabel(p.betType),
+        odds: p.odds,
+        units: p.units,
+        status: p.status,
+        teamGroup,
+        teamLabel:
+          teamGroup === "AWAY"
+            ? shortTeamName(game.awayTeam, sportLabel)
+            : teamGroup === "HOME"
+              ? shortTeamName(game.homeTeam, sportLabel)
+              : "",
+      };
+    });
+  });
 
   // MLB is currently the only sport with pregame odds detailed enough
   // (moneyline favorite + a totals line on every game) for Board Pulse to

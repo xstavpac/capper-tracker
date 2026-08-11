@@ -16,7 +16,20 @@ export type ExpanderPick = {
   odds: number;
   units: number;
   status: PickStatus;
+  // Which side of the matchup this pick is tied to, precomputed server-side
+  // (see live/page.tsx) since classifying it needs the game's homeTeam/
+  // awayTeam alongside betDetail. teamLabel is the short display name for
+  // AWAY/HOME ("Pirates") - empty for OTHER, which always uses a fixed
+  // "Totals & other markets" header instead.
+  teamGroup: "AWAY" | "HOME" | "OTHER";
+  teamLabel: string;
 };
+
+// Fixed AWAY -> HOME -> OTHER ordering (matches how the game card itself
+// always lists away over home) - "OTHER" reuses the same three-group shape
+// with a static label instead of a per-game team name.
+const TEAM_GROUP_ORDER: ExpanderPick["teamGroup"][] = ["AWAY", "HOME", "OTHER"];
+const OTHER_GROUP_LABEL = "Totals & other markets";
 
 // This pick's own outcome, distinct from the capper's rolling category
 // record shown below it - without this badge the two were easy to conflate,
@@ -114,6 +127,72 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
     }
   }
 
+  function renderPickCard(p: ExpanderPick) {
+    const record = p.category ? records?.[p.capperId + "|" + p.category] : null;
+    const isTopPerformer = Boolean(record && record.count > 0 && record.winPct >= TOP_PERFORMER_THRESHOLD);
+    return (
+      <div
+        key={p.pickId}
+        className={
+          "rounded-[7px] border px-2.5 py-2 " +
+          (isTopPerformer ? "border-emerald-300 bg-emerald-50/60 ring-1 ring-emerald-200" : "border-gray-100")
+        }
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Avatar name={p.capperName} colorTag={p.capperColorTag} size={17} />
+            <span className="truncate text-[12px] font-medium text-gray-900">{p.capperName}</span>
+            {isTopPerformer && record && (
+              <span className="shrink-0 rounded-full bg-emerald-100 px-1 py-0 text-[9px] font-semibold text-emerald-700">
+                {Math.round(record.winPct)}%
+              </span>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <span
+              className={
+                "rounded-full px-1.5 py-0 text-[9px] font-semibold " + STATUS_CLASSES[p.status]
+              }
+            >
+              {STATUS_LABELS[p.status]}
+            </span>
+            <span className="text-[12px] font-semibold text-gray-900">
+              {p.odds > 0 ? "+" : ""}
+              {p.odds} <span className="font-normal text-gray-400">&middot; {p.units}u</span>
+            </span>
+          </div>
+        </div>
+        <div className="mt-0.5 truncate pl-[23px] text-[11px] text-gray-500">
+          {p.betDetail}
+          {loading ? (
+            <span className="text-[10px] text-gray-400"> &middot; Loading record...</span>
+          ) : record && record.count > 0 && p.category ? (
+            <span className="text-[10px]">
+              {" "}
+              &middot;{" "}
+              <span
+                className={
+                  "font-medium " + (getRecordColor(record.winPct) === "green" ? "text-emerald-600" : "text-red-600")
+                }
+              >
+                {recordLabel(record)} ({Math.round(record.winPct)}%)
+              </span>{" "}
+              <span className="text-gray-400">on {CATEGORY_DESCRIPTIONS[p.category]} picks</span>
+            </span>
+          ) : (
+            <span className="text-[10px] text-gray-400"> &middot; No history in this category yet</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const groups = TEAM_GROUP_ORDER.map((teamGroup) => {
+    const groupPicks = picks.filter((p) => p.teamGroup === teamGroup);
+    const label = teamGroup === "OTHER" ? OTHER_GROUP_LABEL : groupPicks[0]?.teamLabel;
+    return { teamGroup, label, picks: groupPicks };
+  }).filter((g) => g.picks.length > 0);
+
   return (
     <div onClick={(e) => e.preventDefault()}>
       <button
@@ -128,66 +207,17 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
       </button>
 
       {open && (
-        <div className="mt-2 space-y-1.5">
-          {picks.map((p) => {
-            const record = p.category ? records?.[p.capperId + "|" + p.category] : null;
-            const isTopPerformer = Boolean(record && record.count > 0 && record.winPct >= TOP_PERFORMER_THRESHOLD);
-            return (
-              <div
-                key={p.pickId}
-                className={
-                  "rounded-[7px] border px-2.5 py-2 " +
-                  (isTopPerformer ? "border-emerald-300 bg-emerald-50/60 ring-1 ring-emerald-200" : "border-gray-100")
-                }
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <Avatar name={p.capperName} colorTag={p.capperColorTag} size={17} />
-                    <span className="truncate text-[12px] font-medium text-gray-900">{p.capperName}</span>
-                    {isTopPerformer && record && (
-                      <span className="shrink-0 rounded-full bg-emerald-100 px-1 py-0 text-[9px] font-semibold text-emerald-700">
-                        {Math.round(record.winPct)}%
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <span
-                      className={
-                        "rounded-full px-1.5 py-0 text-[9px] font-semibold " + STATUS_CLASSES[p.status]
-                      }
-                    >
-                      {STATUS_LABELS[p.status]}
-                    </span>
-                    <span className="text-[12px] font-semibold text-gray-900">
-                      {p.odds > 0 ? "+" : ""}
-                      {p.odds} <span className="font-normal text-gray-400">&middot; {p.units}u</span>
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-0.5 truncate pl-[23px] text-[11px] text-gray-500">
-                  {p.betDetail}
-                  {loading ? (
-                    <span className="text-[10px] text-gray-400"> &middot; Loading record...</span>
-                  ) : record && record.count > 0 && p.category ? (
-                    <span className="text-[10px]">
-                      {" "}
-                      &middot;{" "}
-                      <span
-                        className={
-                          "font-medium " + (getRecordColor(record.winPct) === "green" ? "text-emerald-600" : "text-red-600")
-                        }
-                      >
-                        {recordLabel(record)} ({Math.round(record.winPct)}%)
-                      </span>{" "}
-                      <span className="text-gray-400">on {CATEGORY_DESCRIPTIONS[p.category]} picks</span>
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-gray-400"> &middot; No history in this category yet</span>
-                  )}
-                </div>
+        <div className="mt-3 space-y-3">
+          {groups.map((group) => (
+            <div key={group.teamGroup}>
+              <div className="mb-1.5 flex items-center gap-2 border-l-2 border-brand-300 pl-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  {group.label} &mdash; {group.picks.length} pick{group.picks.length === 1 ? "" : "s"}
+                </span>
               </div>
-            );
-          })}
+              <div className="space-y-1.5">{group.picks.map((p) => renderPickCard(p))}</div>
+            </div>
+          ))}
         </div>
       )}
     </div>

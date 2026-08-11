@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { parseCatalog, resolveAmbiguousPick, type AmbiguousOption, type ParsedPick } from "@/lib/parse-catalog";
 import { autoResolveAmbiguousPicks } from "@/lib/resolve-ambiguous-catalog";
-import { bulkImportPicksAction, previewBulkImportOdds } from "@/server/actions/bulk-picks";
+import { bulkImportPicksAction, previewBulkImportOdds, checkDuplicatePicksAction } from "@/server/actions/bulk-picks";
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
 import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
 
@@ -51,6 +51,13 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // already established earlier in the same import.
   const [ambiguousChoices, setAmbiguousChoices] = useState<Record<string, AmbiguousOption>>({});
   const [resolving, setResolving] = useState(false);
+  // Keyed by index in `parsed`, same indirection as enrichedOdds. Presence
+  // means this pick matches an existing logged pick (same capper + game +
+  // bet type/side) - absent from duplicateChoices means "not yet decided",
+  // which excludes it from the import by default until the user picks
+  // "Skip" (confirms exclusion) or "Import anyway".
+  const [duplicateFlags, setDuplicateFlags] = useState<Record<number, { message: string }>>({});
+  const [duplicateChoices, setDuplicateChoices] = useState<Record<number, "import" | "skip">>({});
 
   const existingLower = existingCapperNames.map((n) => n.toLowerCase());
 
@@ -76,6 +83,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   async function handleParse() {
     setResult(null);
     setEnrichedOdds({});
+    setDuplicateFlags({});
+    setDuplicateChoices({});
     setResolving(true);
     const items = parseCatalog(text, existingCapperNames);
     const outcome = await autoResolveAmbiguousPicks(items, ambiguousChoices);
@@ -87,7 +96,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     if (Object.keys(outcome.decisions).length > 0) {
       setAmbiguousChoices((prev) => ({ ...prev, ...outcome.decisions }));
     }
-    fetchOddsFor(outcome.picks.map((p, idx) => ({ p, idx })).filter((e) => !e.p.ambiguous));
+    const resolvedEntries = outcome.picks.map((p, idx) => ({ p, idx })).filter((e) => !e.p.ambiguous);
+    fetchOddsFor(resolvedEntries);
+    checkDuplicatesFor(resolvedEntries);
   }
 
   // The parser is client-side only and can't see live odds, so every pick
@@ -126,6 +137,40 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       .finally(() => setLoadingOdds(false));
   }
 
+  // Checks each entry against this user's already-logged picks for the same
+  // capper + game + bet type/side (see checkDuplicatePicksAction for the
+  // exact definition). Needs the resolved capper name, so this is re-run
+  // whenever a fuzzy-match choice is confirmed, not just once at parse time -
+  // duplicate detection can only match an existing capper once we know which
+  // saved capper this pick's name actually refers to. Same index-remapping
+  // as fetchOddsFor: results come back keyed by position within `entries`,
+  // remapped here to each pick's real position in `parsed`.
+  function checkDuplicatesFor(entries: { p: ParsedPick; idx: number }[]) {
+    if (entries.length === 0) return;
+    checkDuplicatePicksAction(
+      entries.map((e) => ({
+        capperName: resolvedCapperName(e.p.capperName),
+        sportName: e.p.sportName,
+        betType: e.p.betType,
+        odds: e.p.odds,
+        hasExplicitOdds: e.p.hasExplicitOdds,
+        totalSide: e.p.totalSide,
+        teamNicknames: e.p.teamNicknames,
+        description: e.p.description,
+        isFirstFive: e.p.isFirstFive,
+      }))
+    ).then((flags) => {
+      setDuplicateFlags((prev) => {
+        const next = { ...prev };
+        for (const [posKey, flag] of Object.entries(flags)) {
+          const globalIdx = entries[Number(posKey)]?.idx;
+          if (globalIdx !== undefined) next[globalIdx] = flag;
+        }
+        return next;
+      });
+    });
+  }
+
   // Answering once resolves every pick sharing this ambiguous team in the
   // current paste, not just the one the prompt happened to be shown for -
   // this is what stops "Cardinals?" from being asked once per pick. The
@@ -144,6 +189,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setParsed(next);
     const needsOdds = newlyResolved.filter((e) => !e.p.hasExplicitOdds);
     if (needsOdds.length > 0) fetchOddsFor(needsOdds);
+    if (newlyResolved.length > 0) checkDuplicatesFor(newlyResolved);
   }
 
   const allEntries = (parsed ?? []).map((p, idx) => ({ p, idx }));
@@ -151,6 +197,19 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const ambiguousEntries = allEntries.filter((e) => e.p.ambiguous);
   const validPicks = validEntries.map((e) => e.p);
   const ambiguousPicks = ambiguousEntries.map((e) => e.p);
+
+  // A flagged duplicate is excluded from the import by default - "Skip" just
+  // confirms that exclusion explicitly, "Import anyway" is the only way back
+  // in. Every other valid pick imports normally, same as before this feature
+  // existed - only the flagged ones ever need a decision.
+  function isPendingOrSkippedDuplicate(idx: number): boolean {
+    return Boolean(duplicateFlags[idx]) && duplicateChoices[idx] !== "import";
+  }
+  const includedEntries = validEntries.filter((e) => !isPendingOrSkippedDuplicate(e.idx));
+  const includedPicks = includedEntries.map((e) => e.p);
+  const unresolvedDuplicateCount = validEntries.filter(
+    (e) => duplicateFlags[e.idx] && duplicateChoices[e.idx] === undefined
+  ).length;
 
   // One prompt per unique ambiguous team name in this paste, not per pick -
   // groups every entry sharing an ambiguousKey (e.g. every "Cardinals" pick)
@@ -183,10 +242,10 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   }
 
   async function handleImport() {
-    if (validPicks.length === 0) return;
+    if (includedPicks.length === 0) return;
     setImporting(true);
     const res = await bulkImportPicksAction(
-      validPicks.map((p) => ({
+      includedPicks.map((p) => ({
         capperName: resolvedCapperName(p.capperName),
         sportName: p.sportName,
         description: p.description,
@@ -289,6 +348,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
             {validPicks.length} pick{validPicks.length === 1 ? "" : "s"} found
             {ambiguousPicks.length > 0 &&
               " - " + ambiguousPicks.length + " need clarification"}
+            {unresolvedDuplicateCount > 0 &&
+              " - " + unresolvedDuplicateCount + " flagged as possible duplicate" + (unresolvedDuplicateCount === 1 ? "" : "s")}
             {loadingOdds && <span className="ml-2 font-normal text-gray-400">Looking up real odds...</span>}
           </div>
 
@@ -333,14 +394,20 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     <button
                       type="button"
-                      onClick={() => setCapperFuzzyChoices((prev) => ({ ...prev, [name]: suggestion }))}
+                      onClick={() => {
+                        setCapperFuzzyChoices((prev) => ({ ...prev, [name]: suggestion }));
+                        checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name));
+                      }}
                       className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100"
                     >
                       Yes, same as {suggestion}
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCapperFuzzyChoices((prev) => ({ ...prev, [name]: CONFIRMED_NEW }))}
+                      onClick={() => {
+                        setCapperFuzzyChoices((prev) => ({ ...prev, [name]: CONFIRMED_NEW }));
+                        checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name));
+                      }}
                       className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100"
                     >
                       No, "{name}" is a different capper
@@ -363,6 +430,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                 // glance in a large catalog, this makes the group boundary itself clear.
                 const isGroupEnd =
                   validEntries[i + 1] && resolvedCapperName(validEntries[i + 1].p.capperName) !== resolvedName;
+                const dupFlag = duplicateFlags[idx];
+                const dupChoice = duplicateChoices[idx];
+                const excluded = isPendingOrSkippedDuplicate(idx);
                 return (
                   <div
                     key={idx}
@@ -370,34 +440,84 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                       // Explicit per-row bottom border instead of the parent's divide-y utility -
                       // divide-y sets the border-color shorthand (all 4 sides) on every row but the
                       // first, which was silently stomping this per-capper border-l accent color.
-                      "flex flex-col gap-0.5 border-l-4 px-3 py-2 text-xs last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:gap-0 " +
+                      "border-l-4 px-3 py-2 text-xs last:border-b-0 " +
                       (isGroupEnd ? "border-b-2 border-b-gray-300" : "border-b border-b-gray-100") +
                       " " +
-                      capperAccent.get(resolvedName)
+                      capperAccent.get(resolvedName) +
+                      (excluded ? " opacity-50" : "")
                     }
                   >
-                    <div className="min-w-0">
-                      <span className="font-medium">{resolvedName}</span>
-                      {wasFuzzyMatched && (
-                        <span className="ml-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-emerald-600">
-                          matched from "{p.capperName}"
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
+                      <div className="min-w-0">
+                        <span className="font-medium">{resolvedName}</span>
+                        {wasFuzzyMatched && (
+                          <span className="ml-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-emerald-600">
+                            matched from "{p.capperName}"
+                          </span>
+                        )}
+                        {!wasFuzzyMatched && !existingLower.includes(p.capperName.toLowerCase()) && (
+                          <span className="ml-1 rounded-full bg-brand-50 px-1.5 py-0.5 text-brand-600">
+                            new
+                          </span>
+                        )}
+                        <span className="ml-2 text-gray-500">
+                          {p.sportName} - {p.description}
                         </span>
-                      )}
-                      {!wasFuzzyMatched && !existingLower.includes(p.capperName.toLowerCase()) && (
-                        <span className="ml-1 rounded-full bg-brand-50 px-1.5 py-0.5 text-brand-600">
-                          new
-                        </span>
-                      )}
-                      <span className="ml-2 text-gray-500">
-                        {p.sportName} - {p.description}
-                      </span>
+                      </div>
+                      <div className="text-gray-400 sm:shrink-0">
+                        {p.betType} - {displayOdds > 0 ? "+" : ""}
+                        {displayOdds}
+                        {realOdds !== undefined && <span className="ml-1 text-emerald-600">(real)</span>}
+                        {" - " + p.units + "u"}
+                      </div>
                     </div>
-                    <div className="text-gray-400 sm:shrink-0">
-                      {p.betType} - {displayOdds > 0 ? "+" : ""}
-                      {displayOdds}
-                      {realOdds !== undefined && <span className="ml-1 text-emerald-600">(real)</span>}
-                      {" - " + p.units + "u"}
-                    </div>
+                    {dupFlag && (
+                      <div className="mt-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-amber-800">
+                        <div>Possible duplicate: {dupFlag.message}</div>
+                        {dupChoice === undefined && (
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "skip" }))}
+                              className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-medium transition hover:bg-amber-100"
+                            >
+                              Skip this pick
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "import" }))}
+                              className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-medium transition hover:bg-amber-100"
+                            >
+                              Import anyway
+                            </button>
+                          </div>
+                        )}
+                        {dupChoice === "skip" && (
+                          <div className="mt-1 flex items-center gap-1.5 text-[11px]">
+                            <span className="font-medium">Skipped - won&apos;t be imported.</span>
+                            <button
+                              type="button"
+                              onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "import" }))}
+                              className="font-medium underline hover:text-amber-900"
+                            >
+                              Import anyway
+                            </button>
+                          </div>
+                        )}
+                        {dupChoice === "import" && (
+                          <div className="mt-1 flex items-center gap-1.5 text-[11px]">
+                            <span className="font-medium">Will import despite the duplicate.</span>
+                            <button
+                              type="button"
+                              onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "skip" }))}
+                              className="font-medium underline hover:text-amber-900"
+                            >
+                              Skip instead
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -406,10 +526,10 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
 
           <button
             onClick={handleImport}
-            disabled={importing || validPicks.length === 0}
+            disabled={importing || includedPicks.length === 0}
             className="mt-3 rounded-full bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700 disabled:opacity-50"
           >
-            {importing ? "Importing..." : "Import " + validPicks.length + " picks"}
+            {importing ? "Importing..." : "Import " + includedPicks.length + " picks"}
           </button>
         </div>
       )}

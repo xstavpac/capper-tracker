@@ -14,6 +14,8 @@ import {
 } from "@/server/data/odds";
 import { extractLine } from "@/lib/bet-line";
 import { normalizeName } from "@/lib/fuzzy-match";
+import { pickCategory, betTypeLabel } from "@/server/data/stats";
+import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import type { BetType } from "@prisma/client";
 
 export type BulkImportItem = {
@@ -127,6 +129,70 @@ export async function previewBulkImportOdds(items: ResolvableItem[]): Promise<Re
     })
   );
   return enriched;
+}
+
+export type DuplicateCheckItem = ResolvableItem & { capperName: string; isFirstFive: boolean };
+export type DuplicateFlag = { message: string };
+
+// A duplicate is specifically the SAME capper + SAME game + SAME bet type
+// AND side (e.g. two "Cubs Moneyline" picks) - NOT just the same team, and
+// NOT the same capper on the same game with a different bet (a capper can
+// legitimately have both "Cubs Moneyline" and "Cubs -1.5" on one game).
+// pickCategory already draws exactly that side-aware line (FAV_ML vs DOG_ML,
+// SPREAD_MINUS vs SPREAD_PLUS, OVER vs UNDER) for the app's existing
+// category panels, so it's reused here rather than re-deriving "same side"
+// from scratch. Odds/line/units are deliberately never compared - two picks
+// on the same side with different prices are still the same pick logged
+// twice, per how this was scoped with the user. Read-only, same pattern as
+// previewBulkImportOdds: keyed by each item's position in the input array so
+// the caller can remap into `parsed` indices itself.
+export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Promise<Record<number, DuplicateFlag>> {
+  const user = await requireUser();
+  const flags: Record<number, DuplicateFlag> = {};
+
+  const existingCappers = await prisma.capper.findMany({ where: { userId: user.id } });
+  const capperByNormalizedName = new Map(existingCappers.map((c) => [normalizeName(c.name), c]));
+
+  await Promise.all(
+    items.map(async (item, i) => {
+      // A brand-new capper (not yet in this user's list) can't already have
+      // a pick logged, by definition.
+      const capper = capperByNormalizedName.get(normalizeName(item.capperName));
+      if (!capper) return;
+
+      // Only checked once resolved to a real scheduled game - without that,
+      // "same game" has nothing reliable to compare against (see
+      // resolveGameAndOdds; unresolved items fall back to placeholder
+      // homeTeam/awayTeam values that aren't safe to match on).
+      const { homeTeam, awayTeam, gameTime, odds, matched } = await resolveGameAndOdds(item);
+      if (!matched) return;
+
+      // odds (not item.odds) - for a pick with no explicit price, item.odds
+      // is still the parser's un-resolved default and would misclassify a
+      // moneyline's favorite/underdog side (see favoriteOrUnderdog). odds is
+      // resolveGameAndOdds' resolved real market price for this exact pick.
+      const period = item.isFirstFive ? "FIRST_HALF" : "FULL_GAME";
+      const line = extractLine(item.betType, item.description);
+      const category = pickCategory({ betType: item.betType, period, betDetail: item.description, odds, line });
+      // Can't determine a comparable side for this bet (e.g. a player prop,
+      // or a first-half spread) - don't guess at a match either way.
+      if (!category) return;
+
+      const windowStart = new Date(gameTime.getTime() - MAX_GAME_TIME_DRIFT_MS);
+      const windowEnd = new Date(gameTime.getTime() + MAX_GAME_TIME_DRIFT_MS);
+      const existingPicks = await prisma.pick.findMany({
+        where: { userId: user.id, capperId: capper.id, homeTeam, awayTeam, gameTime: { gte: windowStart, lte: windowEnd } },
+      });
+
+      const duplicate = existingPicks.find((p) => pickCategory(p) === category);
+      if (duplicate) {
+        const label = duplicate.betDetail || betTypeLabel(duplicate.betType);
+        flags[i] = { message: capper.name + " already has a " + label + " pick logged for this game." };
+      }
+    })
+  );
+
+  return flags;
 }
 
 export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<BulkImportResult> {
