@@ -1,8 +1,8 @@
 import type { CapperPanels } from "@/server/data/capper-panels";
 import { Panel, PanelRow, BarRow, record, winPctExcludingPushes } from "@/components/dashboard/capper-panels";
+import { ExpandableRows } from "@/components/dashboard/expandable-rows";
+import { EXPANDABLE_ROWS_MAX } from "@/components/dashboard/expandable-rows-constants";
 import { TrendIcon } from "@/components/dashboard/trend-icon";
-
-const CONDENSED_ROWS = 3;
 
 const FLAME_PATH = "M12 2c1 3-2 4-2 7a3 3 0 1 0 6 0c1 1 2 2.5 2 4.5A6.5 6.5 0 0 1 5 13.5C5 8 12 6 12 2Z";
 
@@ -100,96 +100,108 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-none sm:grid-flow-col sm:auto-cols-fr sm:grid-rows-2">
         {panels.hotStreaks.length > 0 && (
           <Panel title="Hot streaks" subtitle="Active win streaks, longest first" icon={<HotStreaksIcon />}>
-            {panels.hotStreaks.slice(0, CONDENSED_ROWS).map((e) => (
-              <PanelRow
-                key={e.capperId}
-                capperId={e.capperId}
-                name={e.name}
-                colorTag={e.colorTag}
-                right={<span className="text-orange-600">{e.streakCount}W</span>}
-              />
-            ))}
+            <ExpandableRows>
+              {panels.hotStreaks.slice(0, EXPANDABLE_ROWS_MAX).map((e) => (
+                <PanelRow
+                  key={e.capperId}
+                  capperId={e.capperId}
+                  name={e.name}
+                  colorTag={e.colorTag}
+                  right={<span className="text-orange-600">{e.streakCount}W</span>}
+                />
+              ))}
+            </ExpandableRows>
           </Panel>
         )}
 
         {panels.coolingOff.length > 0 && (
           <Panel title="Cooling off" subtitle="Active loss streaks, longest first" icon={<CoolingOffIcon />}>
-            {panels.coolingOff.slice(0, CONDENSED_ROWS).map((e) => (
-              <PanelRow
-                key={e.capperId}
-                capperId={e.capperId}
-                name={e.name}
-                colorTag={e.colorTag}
-                right={<span className="text-sky-600">{e.streakCount}L</span>}
-              />
-            ))}
+            <ExpandableRows>
+              {panels.coolingOff.slice(0, EXPANDABLE_ROWS_MAX).map((e) => (
+                <PanelRow
+                  key={e.capperId}
+                  capperId={e.capperId}
+                  name={e.name}
+                  colorTag={e.colorTag}
+                  right={<span className="text-sky-600">{e.streakCount}L</span>}
+                />
+              ))}
+            </ExpandableRows>
           </Panel>
         )}
 
         {panels.bestLast20.length > 0 && (
           <Panel title="Best last 20 picks">
-            {panels.bestLast20.slice(0, CONDENSED_ROWS).map((e) => (
-              <BarRow
-                key={e.capperId}
-                capperId={e.capperId}
-                name={e.name}
-                colorTag={e.colorTag}
-                record={record(e.wins, e.losses, e.pushes)}
-                winPct={e.recentWinPct}
-                showWinPct
-              />
-            ))}
+            <ExpandableRows>
+              {panels.bestLast20.slice(0, EXPANDABLE_ROWS_MAX).map((e) => (
+                <BarRow
+                  key={e.capperId}
+                  capperId={e.capperId}
+                  name={e.name}
+                  colorTag={e.colorTag}
+                  record={record(e.wins, e.losses, e.pushes)}
+                  winPct={e.recentWinPct}
+                  showWinPct
+                />
+              ))}
+            </ExpandableRows>
           </Panel>
         )}
 
         {panels.worstLast20.length > 0 && (
           <Panel title="Worst last 20 picks">
-            {panels.worstLast20.slice(0, CONDENSED_ROWS).map((e) => (
-              <BarRow
-                key={e.capperId}
-                capperId={e.capperId}
-                name={e.name}
-                colorTag={e.colorTag}
-                record={record(e.wins, e.losses, e.pushes)}
-                winPct={e.recentWinPct}
-                showWinPct
-              />
-            ))}
+            <ExpandableRows>
+              {panels.worstLast20.slice(0, EXPANDABLE_ROWS_MAX).map((e) => (
+                <BarRow
+                  key={e.capperId}
+                  capperId={e.capperId}
+                  name={e.name}
+                  colorTag={e.colorTag}
+                  record={record(e.wins, e.losses, e.pushes)}
+                  winPct={e.recentWinPct}
+                  showWinPct
+                />
+              ))}
+            </ExpandableRows>
           </Panel>
         )}
 
         {panels.rising.length > 0 && (
           <Panel title="Trending" subtitle="Strong starts, too early for a full rank">
-            {panels.rising.slice(0, CONDENSED_ROWS).map((e) => (
-              <BarRow
-                key={e.capperId}
-                capperId={e.capperId}
-                name={e.name}
-                colorTag={e.colorTag}
-                record={record(e.wins, e.losses, e.pushes)}
-                winPct={winPctExcludingPushes(e.wins, e.losses)}
-                trending
-              />
-            ))}
+            <ExpandableRows>
+              {panels.rising.slice(0, EXPANDABLE_ROWS_MAX).map((e) => (
+                <BarRow
+                  key={e.capperId}
+                  capperId={e.capperId}
+                  name={e.name}
+                  colorTag={e.colorTag}
+                  record={record(e.wins, e.losses, e.pushes)}
+                  winPct={winPctExcludingPushes(e.wins, e.losses)}
+                  trending
+                />
+              ))}
+            </ExpandableRows>
           </Panel>
         )}
 
         {panels.fallingOff.length > 0 && (
           <Panel title="Falling off" subtitle="Recent form well below their lifetime rate">
-            {panels.fallingOff.slice(0, CONDENSED_ROWS).map((e) => (
-              <PanelRow
-                key={e.capperId}
-                capperId={e.capperId}
-                name={e.name}
-                colorTag={e.colorTag}
-                icon={<TrendIcon direction="down" />}
-                right={
-                  <span className="text-red-600">
-                    {Math.round(e.lifetimeWinPct)}% &rarr; {Math.round(e.recentWinPct)}%
-                  </span>
-                }
-              />
-            ))}
+            <ExpandableRows>
+              {panels.fallingOff.slice(0, EXPANDABLE_ROWS_MAX).map((e) => (
+                <PanelRow
+                  key={e.capperId}
+                  capperId={e.capperId}
+                  name={e.name}
+                  colorTag={e.colorTag}
+                  icon={<TrendIcon direction="down" />}
+                  right={
+                    <span className="text-red-600">
+                      {Math.round(e.lifetimeWinPct)}% &rarr; {Math.round(e.recentWinPct)}%
+                    </span>
+                  }
+                />
+              ))}
+            </ExpandableRows>
           </Panel>
         )}
       </div>
