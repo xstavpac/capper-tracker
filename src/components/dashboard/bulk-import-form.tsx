@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { parseCatalog, resolveAmbiguousPick, type AmbiguousOption, type ParsedPick } from "@/lib/parse-catalog";
 import { autoResolveAmbiguousPicks } from "@/lib/resolve-ambiguous-catalog";
 import { bulkImportPicksAction, previewBulkImportOdds, checkDuplicatePicksAction } from "@/server/actions/bulk-picks";
@@ -59,6 +59,23 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const [duplicateFlags, setDuplicateFlags] = useState<Record<number, { message: string }>>({});
   const [duplicateChoices, setDuplicateChoices] = useState<Record<number, "import" | "skip">>({});
 
+  // Scrolls the results section into view right after a fresh Drop Catalog
+  // parse - on mobile especially, the example image between the form and the
+  // results pushes them far enough below the fold that clicking "Drop
+  // Catalog" could look like nothing happened at all. Keyed on its own
+  // counter (bumped once per handleParse call) rather than on `parsed`
+  // itself, since `parsed` also updates later from unrelated interactions
+  // (resolving an ambiguous team, confirming a fuzzy capper match) that
+  // shouldn't yank the user's scroll position back down every time.
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const [scrollTrigger, setScrollTrigger] = useState(0);
+
+  useEffect(() => {
+    if (scrollTrigger > 0) {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [scrollTrigger]);
+
   const existingLower = existingCapperNames.map((n) => n.toLowerCase());
 
   function fuzzySuggestionFor(rawCapperName: string): string | null {
@@ -90,6 +107,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     const outcome = await autoResolveAmbiguousPicks(items, ambiguousChoices);
     setResolving(false);
     setParsed(outcome.picks);
+    setScrollTrigger((v) => v + 1);
     // Merges both automatic decisions from this pass AND anything carried in
     // from priorChoices - so a decision made just now also survives a later
     // re-parse of edited text within the same import.
@@ -343,7 +361,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       </div>
 
       {parsed && (
-        <div className="mt-4">
+        <div ref={resultsRef} className="mt-4">
           <div className="mb-2 text-sm font-medium text-gray-700">
             {validPicks.length} pick{validPicks.length === 1 ? "" : "s"} found
             {ambiguousPicks.length > 0 &&
