@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sameEasternDay, easternDateKey, closestByTime } from "@/lib/dates";
-import { isSportInSeason } from "@/lib/sport-seasons";
+import { isSportInSeason, oddsApiSportKey } from "@/lib/sport-seasons";
 
 export type OddsGame = {
   id: string;
@@ -63,10 +63,16 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
   const apiKey = process.env.ODDS_API_KEY;
   if (!apiKey) return [];
 
+  // Almost always sportKey itself - only differs during a sport's preseason
+  // window, and only for a sport with a preseason-specific Odds API key
+  // configured (NFL today, see SPORT_SEASON_CONFIG). The cache above and
+  // everything below stays keyed on the app's own sportKey regardless -
+  // this only changes which upstream listing gets fetched.
+  const requestSportKey = oddsApiSportKey(sportKey);
   const url =
     BASE_URL +
     "/sports/" +
-    sportKey +
+    requestSportKey +
     "/odds/?apiKey=" +
     apiKey +
     "&regions=us&markets=h2h,spreads,totals&oddsFormat=american";

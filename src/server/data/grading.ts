@@ -308,6 +308,13 @@ export async function resolveTouchdownProp(
   for (const team of [pick.homeTeam, pick.awayTeam]) {
     const nick = findTeamNickname(team, "NFL");
     if (nick) playerName = playerName.replace(new RegExp("\\b" + nick.replace(/ /g, "\\s+") + "\\b", "i"), "").trim();
+    // findTeamNickname can return a longer disambiguated phrase for a team
+    // shared with another sport (e.g. "carolina panthers", not just
+    // "panthers" - see DISAMBIGUATED_TEAMS) - a capper writing just
+    // "Panthers Haynes King TD" wouldn't match that full phrase, so also
+    // strip the team's own last word (its plain short nickname) directly.
+    const lastWord = team.trim().split(/\s+/).pop();
+    if (lastWord) playerName = playerName.replace(new RegExp("\\b" + lastWord + "\\b", "i"), "").trim();
   }
   playerName = playerName.replace(/\s{2,}/g, " ").trim();
   if (!playerName) {

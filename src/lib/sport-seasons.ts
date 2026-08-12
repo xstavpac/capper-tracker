@@ -9,12 +9,41 @@ import { easternDateKey } from "@/lib/dates";
 // derive this automatically, so a plain config is the deliberate choice
 // here (see the NFL Odds API investigation for the same tradeoff reasoned
 // through in more depth for NFL specifically).
-export type SportSeasonWindow = { seasonStart: string; seasonEnd: string };
+export type SportSeasonWindow = {
+  seasonStart: string;
+  seasonEnd: string;
+  // Only set for a sport whose Odds API listing splits its preseason into a
+  // wholly separate sport key from its regular-season one (confirmed live:
+  // NFL preseason odds live under "americanfootball_nfl_preseason", not
+  // "americanfootball_nfl", even though this app treats the two as one
+  // continuous NFL season everywhere else - one entry in LIVE_SPORTS, one
+  // seasonStart/seasonEnd window, one set of grading rules). Before
+  // regularSeasonStart, getOddsForSport (odds.ts) queries oddsApiPreseasonKey
+  // instead of the sport's own key; on/after it, the sport's own key is used
+  // exactly as it always has been. No other sport needs these two fields
+  // today - they're absent, so oddsApiSportKey below is a no-op for them.
+  regularSeasonStart?: string;
+  oddsApiPreseasonKey?: string;
+};
 
 export const SPORT_SEASON_CONFIG: Record<string, SportSeasonWindow> = {
-  // 2026 season opener: Seahawks @ Patriots, Wed 2026-09-09. seasonEnd
-  // covers through Super Bowl LXI (early-mid Feb 2027).
-  americanfootball_nfl: { seasonStart: "2026-09-09", seasonEnd: "2027-02-15" },
+  // seasonStart is ESPN's own preseason start for 2026 (confirmed live against
+  // their scoreboard: season.startDate = 2026-08-06T07:00Z, Hall of Fame
+  // Weekend), not the regular-season opener (Seahawks @ Patriots, 2026-09-09) -
+  // deliberately widened to cover preseason too, so real preseason games can
+  // exercise the same odds/scores/grading pipeline the regular season uses,
+  // no separate "preseason mode." seasonEnd covers through Super Bowl LXI
+  // (early-mid Feb 2027). regularSeasonStart/oddsApiPreseasonKey handle the
+  // one place preseason genuinely does need different sourcing - see the
+  // type comment above and oddsApiSportKey below; confirmed live that
+  // americanfootball_nfl_preseason actually has real odds data before wiring
+  // this in (16 games, full h2h/spreads/totals, 9 books).
+  americanfootball_nfl: {
+    seasonStart: "2026-08-06",
+    seasonEnd: "2027-02-15",
+    regularSeasonStart: "2026-09-09",
+    oddsApiPreseasonKey: "americanfootball_nfl_preseason",
+  },
   // 2026-27 tip-off ~mid/late Oct 2026; seasonEnd covers through the Finals
   // (mid-to-late June 2027).
   basketball_nba: { seasonStart: "2026-10-20", seasonEnd: "2027-06-25" },
@@ -40,6 +69,21 @@ export function isSportInSeason(sportKey: string, referenceDate: Date = new Date
   if (!window) return false;
   const today = easternDateKey(referenceDate);
   return today >= window.seasonStart && today <= window.seasonEnd;
+}
+
+// Which literal Odds API sport key to actually query for `sportKey` right
+// now - only ever differs from sportKey itself during a preseason window,
+// and only for a sport that has oddsApiPreseasonKey configured (NFL today).
+// Purely additive: every other sport, and NFL itself once its regular season
+// starts, gets sportKey back unchanged, so this doesn't touch the
+// already-working regular-season path at all. This app's own idea of the
+// sport (LIVE_SPORTS, RESOLVABLE_SPORT_KEYS, SPORT_SEASON_CONFIG, grading)
+// stays keyed on sportKey throughout - only the fetch URL changes.
+export function oddsApiSportKey(sportKey: string, referenceDate: Date = new Date()): string {
+  const window = SPORT_SEASON_CONFIG[sportKey];
+  if (!window?.oddsApiPreseasonKey || !window.regularSeasonStart) return sportKey;
+  const today = easternDateKey(referenceDate);
+  return today < window.regularSeasonStart ? window.oddsApiPreseasonKey : sportKey;
 }
 
 // Maps the short display labels used by parse-catalog.ts's AMBIGUOUS_NICKNAMES
