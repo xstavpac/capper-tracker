@@ -5,9 +5,9 @@ import Link from "next/link";
 import type { OddsGame, ScoreGame } from "@/server/data/odds";
 import { computeBoardPulse, type BoardPulseGame } from "@/lib/board-pulse";
 import { formatEastern, closestByTime } from "@/lib/dates";
-import { getTeamLogoUrl } from "@/lib/team-logos";
+import { getTeamColor } from "@/lib/team-colors";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
-import { TeamLogo } from "@/components/live/team-logo";
+import { TeamColorBar } from "@/components/live/team-color-bar";
 import { BoardPulsePanel } from "@/components/live/board-pulse-panel";
 
 // Duplicated from server/data/odds.ts rather than imported - that module has
@@ -165,7 +165,7 @@ export function LiveScoreboard({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-center justify-between">
                     <span className="flex min-w-0 items-center gap-2">
-                      <TeamLogo src={getTeamLogoUrl(activeSport, game.awayTeam)} teamName={game.awayTeam} />
+                      <TeamColorBar color={getTeamColor(activeSport, game.awayTeam)} />
                       <span className="truncate text-sm font-medium">{game.awayTeam}</span>
                     </span>
                     <span className="shrink-0 text-xs text-gray-500">
@@ -179,7 +179,7 @@ export function LiveScoreboard({
 
                   <div className="flex items-center justify-between">
                     <span className="flex min-w-0 items-center gap-2">
-                      <TeamLogo src={getTeamLogoUrl(activeSport, game.homeTeam)} teamName={game.homeTeam} />
+                      <TeamColorBar color={getTeamColor(activeSport, game.homeTeam)} />
                       <span className="truncate text-sm font-medium">{game.homeTeam}</span>
                     </span>
                     <span className="shrink-0 text-xs text-gray-500">
