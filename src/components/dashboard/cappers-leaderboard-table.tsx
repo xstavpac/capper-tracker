@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { LeaderboardEntry } from "@/server/data/cappers";
-import { getRecordColor, RANKING_MIN_SAMPLE } from "@/server/data/stats";
+import { getRecordColor, RANKING_MIN_SAMPLE, SCORECARD_WINDOWS, SCORECARD_WINDOW_LABELS, type ScorecardWindow } from "@/server/data/stats";
 import { Avatar, StreakBadge } from "@/components/dashboard/capper-panels";
 
 type SortKey = "weighted" | "name" | "record" | "winPct" | "roi" | "units";
@@ -23,18 +23,16 @@ function windowChipClass(isActive: boolean) {
 // header component would mean lifting search state into a wrapping client
 // component for no other reason than crossing a component boundary.
 export function CappersLeaderboardTable({
-  weekEntries,
-  allTimeEntries,
+  entriesByWindow,
 }: {
-  weekEntries: LeaderboardEntry[];
-  allTimeEntries: LeaderboardEntry[];
+  entriesByWindow: Record<ScorecardWindow, LeaderboardEntry[]>;
 }) {
-  const [window, setWindow] = useState<"WEEK" | "ALL">("ALL");
+  const [window, setWindow] = useState<ScorecardWindow>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("weighted");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [query, setQuery] = useState("");
 
-  const entries = window === "WEEK" ? weekEntries : allTimeEntries;
+  const entries = entriesByWindow[window];
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -94,13 +92,12 @@ export function CappersLeaderboardTable({
             placeholder="Search cappers..."
             className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 shadow-sm placeholder:text-gray-400 focus:border-brand-400 focus:outline-none"
           />
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setWindow("WEEK")} className={windowChipClass(window === "WEEK")}>
-              This week
-            </button>
-            <button type="button" onClick={() => setWindow("ALL")} className={windowChipClass(window === "ALL")}>
-              All time
-            </button>
+          <div className="flex flex-wrap gap-2">
+            {SCORECARD_WINDOWS.map((w) => (
+              <button key={w} type="button" onClick={() => setWindow(w)} className={windowChipClass(window === w)}>
+                {SCORECARD_WINDOW_LABELS[w]}
+              </button>
+            ))}
           </div>
         </div>
       </div>

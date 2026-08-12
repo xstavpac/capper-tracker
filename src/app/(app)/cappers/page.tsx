@@ -6,9 +6,10 @@ import {
   getSportCategoryPanelData,
   getCappersWithPickCounts,
   findSuspectedDuplicateCappers,
+  type LeaderboardEntry,
 } from "@/server/data/cappers";
 import { LIVE_SPORTS } from "@/server/data/odds";
-import { PICK_CATEGORY_LABELS } from "@/server/data/stats";
+import { PICK_CATEGORY_LABELS, SCORECARD_WINDOWS, type ScorecardWindow } from "@/server/data/stats";
 import { CapperForm } from "@/components/dashboard/capper-form";
 import { CappersLeaderboardTable } from "@/components/dashboard/cappers-leaderboard-table";
 import { BestAtPanel, type BestAtEntry } from "@/components/dashboard/best-at-panel";
@@ -43,15 +44,22 @@ export default async function CappersPage({
   const league = LEAGUES.includes(searchParams.league ?? "") ? searchParams.league : undefined;
   const bestAtSport = league ?? DEFAULT_BEST_AT_SPORT;
 
-  const [planStatus, weekEntries, allTimeEntries, mostActive, categoryPanel, cappersWithCounts, suspectedDuplicates] = await Promise.all([
+  const [planStatus, entriesByWindowList, mostActive, categoryPanel, cappersWithCounts, suspectedDuplicates] = await Promise.all([
     getPlanStatus(user.id),
-    getCapperLeaderboardTable(user.id, "LAST_7", { sportName: league }),
-    getCapperLeaderboardTable(user.id, "ALL", { sportName: league }),
+    // All 5 SCORECARD_WINDOWS fetched up front, same "toggle is instant, no
+    // reload" UX the leaderboard already had for its old 2-option This-week/
+    // All-time toggle - see CappersLeaderboardTable, which just picks which
+    // of these 5 already-fetched arrays to display.
+    Promise.all(SCORECARD_WINDOWS.map((w) => getCapperLeaderboardTable(user.id, w, { sportName: league }))),
     getMostActiveThisWeek(user.id, { sportName: league }),
     getSportCategoryPanelData(user.id, bestAtSport),
     getCappersWithPickCounts(user.id),
     findSuspectedDuplicateCappers(user.id),
   ]);
+
+  const entriesByWindow = Object.fromEntries(
+    SCORECARD_WINDOWS.map((w, i) => [w, entriesByWindowList[i]])
+  ) as Record<ScorecardWindow, LeaderboardEntry[]>;
 
   const bestAtEntries: BestAtEntry[] = categoryPanel.breakdown
     .map((item) => {
@@ -70,17 +78,7 @@ export default async function CappersPage({
             {planStatus.capperCount + " capper" + (planStatus.capperCount === 1 ? "" : "s")}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled
-            title="Coming soon"
-            className="cursor-not-allowed rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-400"
-          >
-            Compare two
-          </button>
-          <CapperForm atLimit={false} />
-        </div>
+        <CapperForm atLimit={false} />
       </div>
 
       {suspectedDuplicates.length > 0 && (
@@ -107,7 +105,7 @@ export default async function CappersPage({
       ) : (
         <>
           <div className="mb-6">
-            <CappersLeaderboardTable weekEntries={weekEntries} allTimeEntries={allTimeEntries} />
+            <CappersLeaderboardTable entriesByWindow={entriesByWindow} />
           </div>
 
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
