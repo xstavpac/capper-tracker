@@ -121,7 +121,7 @@ export default async function DashboardPage() {
       {summary.categoryBreakdown.length > 0 && (
         <div className="mb-6">
           <h2 className="mb-2 text-sm font-semibold text-gray-900">Record by category</h2>
-          <CategoryBreakdown items={summary.categoryBreakdown} />
+          <CategoryBreakdown items={summary.categoryBreakdown} animateIn />
         </div>
       )}
 

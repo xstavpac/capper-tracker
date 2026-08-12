@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { getRecordColor, type CategoryBreakdownItem, type PickCategoryKey } from "@/server/data/stats";
+import { CountUp } from "@/components/dashboard/count-up";
+import { SURGE_DURATION_MS } from "@/components/dashboard/energy-surge-constants";
 
 export type CategoryLeaderboardEntry = {
   capperId: string;
@@ -34,12 +36,21 @@ const TEXT_CLASSES: Record<ReturnType<typeof getRecordColor>, string> = {
 // reusable everywhere the breakdown shows up without forcing interactivity
 // where "top cappers" wouldn't make sense (e.g. on a single capper's own
 // page).
+//
+// `animateIn` is the same kind of opt-in, for the Dashboard specifically:
+// when true, each tile's record/win% counts up via the same CountUp/
+// SURGE_DURATION_MS the hero stats and Best/Worst-20 bars already key off,
+// so this panel joins their synchronized load-in beat instead of rendering
+// static. Omit it (Live page, capper detail page) and tiles render exactly
+// as they always have - plain numbers, no animation.
 export function CategoryBreakdown({
   items,
   leaderboards,
+  animateIn = false,
 }: {
   items: CategoryBreakdownItem[];
   leaderboards?: Partial<Record<PickCategoryKey, CategoryLeaderboardEntry[]>>;
+  animateIn?: boolean;
 }) {
   const [activeKey, setActiveKey] = useState<PickCategoryKey | null>(null);
 
@@ -83,13 +94,32 @@ export function CategoryBreakdown({
               }
             >
               <div className={"text-xs " + TEXT_CLASSES[color]}>{item.label}</div>
-              <div className="mt-1 text-sm font-medium text-gray-900">
-                {item.wins}-{item.losses}
-                {item.pushes > 0 ? "-" + item.pushes : ""}
-              </div>
-              <div className={"mt-0.5 text-sm font-semibold " + TEXT_CLASSES[color]}>
-                {Math.round(item.winPct)}%
-              </div>
+              {animateIn ? (
+                <>
+                  <div className="mt-1 text-sm font-medium text-gray-900">
+                    <CountUp value={item.wins} startDelayMs={SURGE_DURATION_MS} />-
+                    <CountUp value={item.losses} startDelayMs={SURGE_DURATION_MS} />
+                    {item.pushes > 0 && (
+                      <>
+                        -<CountUp value={item.pushes} startDelayMs={SURGE_DURATION_MS} />
+                      </>
+                    )}
+                  </div>
+                  <div className={"mt-0.5 text-sm font-semibold " + TEXT_CLASSES[color]}>
+                    <CountUp value={item.winPct} startDelayMs={SURGE_DURATION_MS} suffix="%" />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mt-1 text-sm font-medium text-gray-900">
+                    {item.wins}-{item.losses}
+                    {item.pushes > 0 ? "-" + item.pushes : ""}
+                  </div>
+                  <div className={"mt-0.5 text-sm font-semibold " + TEXT_CLASSES[color]}>
+                    {Math.round(item.winPct)}%
+                  </div>
+                </>
+              )}
             </div>
           );
         })}

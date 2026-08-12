@@ -66,6 +66,7 @@ export function BarRow({
   winPct,
   trending = false,
   showWinPct = false,
+  startDelayMs = 0,
 }: {
   capperId: string;
   name: string;
@@ -74,6 +75,16 @@ export function BarRow({
   winPct: number;
   trending?: boolean;
   showWinPct?: boolean;
+  // Holds the bar at empty until this many ms have passed, same prop name/
+  // meaning as CountUp's own startDelayMs - lets a caller (trending-cappers.tsx,
+  // passing SURGE_DURATION_MS) key the bar's growth off the exact same "hero
+  // stat surge just finished" signal the count-ups already wait for, instead
+  // of the bar animating independently the moment it mounts. animationFillMode
+  // "both" is what makes the delay actually hold the bar at its 0% starting
+  // keyframe throughout - without it, the browser shows the bar's underlying
+  // (non-animated) inline scaleX - its FINAL fill value - for the whole delay,
+  // then snaps back to 0 right as the animation starts, which looks broken.
+  startDelayMs?: number;
 }) {
   const positive = getRecordColor(winPct) === "green";
   const fill = Math.min(100, Math.max(0, winPct)) / 100;
@@ -96,7 +107,12 @@ export function BarRow({
       <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
         <div
           className={"h-full origin-left animate-fill-bar rounded-full " + (positive ? "bg-emerald-500" : "bg-red-500")}
-          style={{ transform: "scaleX(" + fill + ")", ["--fill" as string]: fill }}
+          style={{
+            transform: "scaleX(" + fill + ")",
+            ["--fill" as string]: fill,
+            animationDelay: startDelayMs + "ms",
+            animationFillMode: "both",
+          }}
         />
       </div>
     </a>

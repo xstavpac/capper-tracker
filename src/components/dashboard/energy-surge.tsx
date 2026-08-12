@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { CountUp } from "@/components/dashboard/count-up";
+import { RINGS, BOLTS, SURGE_DURATION_MS } from "@/components/dashboard/energy-surge-constants";
 
 // Same bolt silhouette as LightningIcon (drop-catalog-button.tsx) - reused
 // here at a smaller size so the two "energy" motifs in the app read as the
@@ -13,38 +14,6 @@ const TONE_HEX: Record<"up" | "down" | "neutral", string> = {
   down: "#dc2626", // red-600 - matches HeroStat's old text-red-600
   neutral: "#111827", // gray-900 - matches HeroStat's/the big stats' old default
 };
-
-// One ring per entry, staggered via delayMs. Border only, no fill - a plain
-// absolutely-positioned circle outline that scales up and fades out.
-const RINGS = [0, 100, 200];
-
-// Mirrors tailwind.config.ts's "energy-ring"/"energy-flash" animation
-// durations - kept as plain numbers here (rather than parsed out of the
-// Tailwind config) since that's the only place duration math for sequencing
-// the count-up actually needs to happen. Update both together.
-const RING_DURATION_MS = 700;
-const FLASH_DURATION_MS = 650;
-
-// 4 bolts at the corners of the number's own box, each with a different
-// rotation/delay/duration so they don't read as four copies of one thing.
-const BOLTS: { style: CSSProperties; delayMs: number; durationMs: number }[] = [
-  { style: { top: -9, left: -11, transform: "rotate(-18deg)" }, delayMs: 0, durationMs: 520 },
-  { style: { top: -9, right: -11, transform: "rotate(16deg)" }, delayMs: 70, durationMs: 460 },
-  { style: { bottom: -9, left: -11, transform: "rotate(-9deg)" }, delayMs: 140, durationMs: 560 },
-  { style: { bottom: -9, right: -11, transform: "rotate(24deg)" }, delayMs: 40, durationMs: 490 },
-];
-
-// When the last surge visual (whichever of the rings/bolts/flash finishes
-// latest) actually completes - the count-up's startDelayMs, so the number
-// only starts climbing once the flash/bolts/rings have fully played out
-// instead of racing them. Rings are the long pole today (last ring's own
-// delay + its duration), but this is computed rather than hardcoded so it
-// stays correct if that ever changes.
-export const SURGE_DURATION_MS = Math.max(
-  Math.max(...RINGS) + RING_DURATION_MS,
-  Math.max(...BOLTS.map((b) => b.delayMs + b.durationMs)),
-  FLASH_DURATION_MS
-);
 
 // Wraps a stat's rendered value with a one-shot "energy surge" kickoff
 // effect - 3 expanding ring pulses, 4 crackling lightning bolts at the

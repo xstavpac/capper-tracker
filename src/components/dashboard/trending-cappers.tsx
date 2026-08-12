@@ -1,5 +1,6 @@
 import type { CapperPanels } from "@/server/data/capper-panels";
 import { Panel, PanelRow, BarRow, record } from "@/components/dashboard/capper-panels";
+import { SURGE_DURATION_MS } from "@/components/dashboard/energy-surge-constants";
 import { ExpandableRows } from "@/components/dashboard/expandable-rows";
 import { EXPANDABLE_ROWS_MAX } from "@/components/dashboard/expandable-rows-constants";
 import { TrendIcon } from "@/components/dashboard/trend-icon";
@@ -144,6 +145,7 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
                   record={record(e.wins, e.losses, e.pushes)}
                   winPct={e.recentWinPct}
                   showWinPct
+                  startDelayMs={SURGE_DURATION_MS}
                 />
               ))}
             </ExpandableRows>
@@ -162,6 +164,7 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
                   record={record(e.wins, e.losses, e.pushes)}
                   winPct={e.recentWinPct}
                   showWinPct
+                  startDelayMs={SURGE_DURATION_MS}
                 />
               ))}
             </ExpandableRows>
