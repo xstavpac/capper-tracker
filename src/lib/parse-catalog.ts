@@ -137,10 +137,32 @@ const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...WNBA_TEAMS.map((t): TeamEntry => [t, "WNBA"]),
 ].sort((a, b) => b[0].length - a[0].length);
 
+// Strong "this is definitely a pick, not a capper's name" signals - a units
+// annotation, an explicit signed number, or betting shorthand a real name
+// essentially never contains. Used to override the "right after a blank
+// line, assume it's a header" caution below: some pasted catalogs (Twitter
+// copy/paste especially) put a blank line between a capper's name and their
+// first pick, not just between different cappers, and without this override
+// that first pick was indistinguishable from a header and got silently
+// swallowed as one - corrupting every pick after it for the rest of the paste.
+function looksLikePick(text: string): boolean {
+  return (
+    /\(\s*[\d.]+\s*u(nits?)?\b/i.test(text) ||
+    /\b\d+(\.\d+)?\s*u(nits?)?\b/i.test(text) ||
+    /[+-]\d+(\.\d+)?/.test(text) ||
+    /\bML\b/i.test(text) ||
+    /money\s*line/i.test(text) ||
+    /\b(over|under)\b/i.test(text) ||
+    /\b[NY]RFI\b/i.test(text)
+  );
+}
+
 // allowNicknameFallback gates the second (fuzzy, team-nickname-only) branch -
 // callers pass false right after a blank line, where a bare nickname match
 // ("Tigers Kitchen") is far more likely to be a capper's name than a pick
-// with no explicit sport code. The explicit-code branch always stays on.
+// with no explicit sport code - UNLESS the line also looks unmistakably like
+// a pick (see looksLikePick), in which case it's trusted even right after a
+// blank. The explicit-code branch always stays on.
 function detectSport(text: string, allowNicknameFallback = true): { sportName: string; rest: string } {
   for (const code of KNOWN_SPORTS) {
     const re = new RegExp("\\b" + code.replace(/ /g, "\\s+") + "\\b", "i");
@@ -179,8 +201,14 @@ function parsePickText(description: string): {
   const parens = [...description.matchAll(/\(([^)]+)\)/g)];
   for (const p of parens) {
     const val = p[1].trim();
-    if (/u(nits?)?$/i.test(val)) {
-      units = parseFloat(val);
+    // Matches the unit number anywhere in the parenthetical, not just when
+    // it's the ONLY thing there - cappers often tack on a same-parens tag
+    // like "(10u POTD)" ("pick of the day"), which the old end-anchored
+    // /u(nits?)?$/ pattern didn't tolerate (POTD isn't "u"), silently losing
+    // the real unit size and defaulting to 1u instead.
+    const unitMatch = val.match(/(\d+(?:\.\d+)?)\s*u(nits?)?\b/i);
+    if (unitMatch) {
+      units = parseFloat(unitMatch[1]);
     } else if (/^[+-]?\d+$/.test(val)) {
       odds = parseInt(val, 10);
     }
@@ -407,6 +435,39 @@ export function findTeamNicknames(text: string, sportName: string): string[] {
   return found;
 }
 
+// Player-based (not team-based) picks - e.g. tennis moneylines like "Tallon
+// Griekspoor ML". Checked only as a last resort, after every team-nickname
+// and explicit-sport-code check above has already failed. This app has no
+// live schedule/roster source for any individual-athlete sport (LIVE_SPORTS
+// only covers team sports), so there's no table of every ATP/WTA/PGA player
+// to match against the way TEAM_SPORT_ENTRIES matches teams - instead this
+// extracts whatever capitalized name precedes a recognized bet keyword and
+// treats it the same role a team nickname plays elsewhere (teamNicknames),
+// keyed on just the LAST word so "Tallon Griekspoor" and a later, terser
+// "Griekspoor" from a different capper both resolve to the same key and are
+// treated as the same player/match once real schedule data exists to check
+// against. Defaults sportName to ATP (tennis) - the only individual sport
+// with real examples in this app's catalogs today, and there's no text
+// signal here to distinguish it from WTA/PGA/etc when one isn't stated
+// explicitly (e.g. a "WTA" or "PGA" code earlier in the same line).
+function findPlayerPick(text: string): { playerName: string; playerKey: string } | null {
+  const withoutParens = text.replace(/\([^)]*\)/g, "").trim();
+  const mlMatch = withoutParens.match(/^(.+?)\s+(?:ML|money\s*line)\b/i);
+  const spreadMatch = withoutParens.match(/^(.+?)\s+[+-]\d+(?:\.\d+)?\b/);
+  const totalMatch = withoutParens.match(/^(.+?)\s+(?:over|under)\s+\d+(?:\.\d+)?\b/i);
+  const nameMatch = mlMatch ?? spreadMatch ?? totalMatch;
+  if (!nameMatch) return null;
+
+  const candidate = nameMatch[1].trim();
+  // Must actually look like a personal name - 1-4 capitalized words, no
+  // digits - guards against matching arbitrary unresolved text that just
+  // happens to be followed by "ML" or a number (e.g. a typo'd team name).
+  if (!/^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/.test(candidate)) return null;
+
+  const words = candidate.split(/\s+/);
+  return { playerName: candidate, playerKey: words[words.length - 1].toLowerCase() };
+}
+
 export function findTeamNickname(text: string, sportName: string): string | undefined {
   const lower = text.toLowerCase();
   for (const [phrase, sport] of TEAM_SPORT_ENTRIES) {
@@ -517,6 +578,25 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
             ambiguousKey: found.key,
             teamNicknames: [],
           });
+          continue;
+        }
+
+        const playerPick = findPlayerPick(remainder);
+        if (playerPick) {
+          const parsed = parsePickText(remainder);
+          results.push({
+            capperName: inlineMatch,
+            sportName: "ATP",
+            description: parsed.cleanDescription,
+            betType: parsed.betType,
+            odds: parsed.odds ?? -110,
+            hasExplicitOdds: parsed.odds !== null,
+            totalSide: parsed.totalSide,
+            units: parsed.units,
+            isFirstFive: parsed.isFirstFive,
+            raw: line,
+            teamNicknames: [playerPick.playerKey],
+          });
         }
         continue;
       }
@@ -538,7 +618,7 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
     }
 
     const strippedText = line.replace(/^-\s*/, "").trim();
-    const detected = detectSport(strippedText, !afterBlank);
+    const detected = detectSport(strippedText, !afterBlank || looksLikePick(strippedText));
 
     if (detected.sportName) {
       const parsed = parsePickText(detected.rest);
@@ -560,8 +640,9 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
 
     // Same reasoning as detectSport's gate above - these are both
     // nickname-driven too, so a header right after a blank line skips them
-    // entirely rather than risk misreading it as a pick.
-    if (!afterBlank) {
+    // entirely rather than risk misreading it as a pick, unless the line
+    // unmistakably looks like a pick anyway (looksLikePick).
+    if (!afterBlank || looksLikePick(strippedText)) {
       const pairResolved = resolveAmbiguousPair(strippedText);
       if (pairResolved) {
         const parsed = parsePickText(strippedText);
@@ -596,6 +677,25 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
           ambiguous: found.options,
           ambiguousKey: found.key,
           teamNicknames: [],
+        });
+        continue;
+      }
+
+      const playerPick = findPlayerPick(strippedText);
+      if (playerPick) {
+        const parsed = parsePickText(strippedText);
+        results.push({
+          capperName: currentCapper || "Unknown",
+          sportName: "ATP",
+          description: parsed.cleanDescription,
+          betType: parsed.betType,
+          odds: parsed.odds ?? -110,
+          hasExplicitOdds: parsed.odds !== null,
+          totalSide: parsed.totalSide,
+          units: parsed.units,
+          isFirstFive: parsed.isFirstFive,
+          raw: strippedText,
+          teamNicknames: [playerPick.playerKey],
         });
         continue;
       }
