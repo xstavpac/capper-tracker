@@ -1,4 +1,5 @@
 import { normalizeName } from "@/lib/fuzzy-match";
+import { parseTouchdownProp } from "@/lib/bet-line";
 
 export type ParsedPick = {
   capperName: string;
@@ -206,13 +207,20 @@ function parsePickText(description: string): {
   // Catches both abbreviated ("F5", "1st 5"/"1st5") and fully spelled-out
   // ("first 5", "first five", "1st five") phrasing - the abbreviated-only
   // version silently left every spelled-out F5 pick stored as period=
-  // FULL_GAME (graded/priced against the wrong, full-game score).
+  // FULL_GAME (graded/priced against the wrong, full-game score). Also
+  // catches NFL's "1st half"/"first half" phrasing under this same flag -
+  // the field is still named for baseball's F5 (its original use), but
+  // Period.FIRST_HALF and the GameResult columns it reads (see grading.ts's
+  // resolveOutcome) are already sport-generic, so NFL just reuses the same
+  // flag rather than needing its own.
   const isFirstFive =
     /\bf5\b/i.test(cleanDescription) ||
     /\b1st\s*5\b/i.test(cleanDescription) ||
     /\bfirst\s*5\b/i.test(cleanDescription) ||
     /\b1st\s+five\b/i.test(cleanDescription) ||
-    /\bfirst\s+five\b/i.test(cleanDescription);
+    /\bfirst\s+five\b/i.test(cleanDescription) ||
+    /\b1st\s*half\b/i.test(cleanDescription) ||
+    /\bfirst\s*half\b/i.test(cleanDescription);
 
   // Bare team name with no qualifier (e.g. "Tampa Bay Rays") defaults to
   // MONEYLINE, not SPREAD - a straight team-name pick is the standard
@@ -234,6 +242,16 @@ function parsePickText(description: string): {
     /\b(no|yes)\s+run\s+(?:first|1st)(?:\s+inning)?\b/i.test(cleanDescription)
   ) {
     betType = "NRFI";
+  } else if (parseTouchdownProp(cleanDescription)) {
+    // Checked before the ML/spread/total keyword branches below - a
+    // touchdown-prop pick ("Puka Nacua Anytime TD") has none of their
+    // keywords and would otherwise silently fall through to the MONEYLINE
+    // default. NFL touchdown props only (rushing/receiving/any) - not a
+    // general player-prop parser; anything parseTouchdownProp doesn't
+    // recognize as TD text still falls through unchanged (stays MONEYLINE
+    // default for a bare player name, same as before - this app doesn't
+    // support non-TD player props today).
+    betType = "PLAYER_PROP";
   } else if (/\bML\b/i.test(cleanDescription) || /money\s*line/i.test(cleanDescription)) {
     betType = "MONEYLINE";
   } else if (/\bover\b/i.test(cleanDescription)) {

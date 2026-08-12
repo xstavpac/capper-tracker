@@ -156,10 +156,11 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
 // Shared by every ESPN-backed score source (NBA, WNBA, ...) - ESPN's free
 // public scoreboard endpoint (no key required, same "free/unauthenticated"
 // pattern as MLB Stats API) has an identical response shape across sports,
-// just a different URL path segment. First-half grading isn't wired up for
-// any ESPN-backed sport yet - this only covers full-game status/scores,
-// which is enough for live display and full-game Moneyline/Spread/Total
-// grading.
+// just a different URL path segment. This only covers full-game status/
+// scores, enough for live display and full-game Moneyline/Spread/Total
+// grading - first-half and touchdown-prop grading need the heavier
+// per-event summary endpoint instead (see getNflFirstHalfScore and
+// getNflPlayerTdStats below, NFL-only for now).
 async function getEspnScores(sportPath: string): Promise<ScoreGame[]> {
   const fmt = (d: Date) => easternDateKey(d).replace(/-/g, "");
   const yesterday = fmt(new Date(Date.now() - 86400000));
@@ -275,6 +276,93 @@ export async function getMlbEarlyInningScores(gamePk: string): Promise<MlbEarlyI
   }
 
   return { firstInning, firstFive };
+}
+
+// Reads Q1+Q2 from a finished NFL game's linescores for grading 1st-half
+// Moneyline/Spread/Total picks - same per-event ESPN summary endpoint as
+// getNflPlayerTdStats below (one fetch, used by both persistFinalScores and
+// touchdown-prop grading independently). Each competitor's `linescores`
+// entries only carry a `displayValue` string (confirmed against a real
+// final game), no numeric `value` field, so this parses it. Only call this
+// once a game is Final - a still-in-progress Q2 would report an incomplete
+// score, same caution as getMlbEarlyInningScores.
+export async function getNflFirstHalfScore(eventId: string): Promise<{ home: number; away: number } | null> {
+  const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=" + eventId, {
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  const competitors = data.header?.competitions?.[0]?.competitors ?? [];
+  const home = competitors.find((c: any) => c.homeAway === "home");
+  const away = competitors.find((c: any) => c.homeAway === "away");
+  if (!home || !away) return null;
+
+  const sumFirstHalf = (linescores: any[] | undefined): number | null => {
+    if (!linescores || linescores.length < 2) return null;
+    const q1 = parseFloat(linescores[0]?.displayValue ?? "");
+    const q2 = parseFloat(linescores[1]?.displayValue ?? "");
+    if (Number.isNaN(q1) || Number.isNaN(q2)) return null;
+    return q1 + q2;
+  };
+
+  const homeFirstHalf = sumFirstHalf(home.linescores);
+  const awayFirstHalf = sumFirstHalf(away.linescores);
+  if (homeFirstHalf === null || awayFirstHalf === null) return null;
+
+  return { home: homeFirstHalf, away: awayFirstHalf };
+}
+
+export type NflPlayerTdStats = {
+  playerName: string;
+  rushTds: number;
+  recTds: number;
+};
+
+// Every player who appears anywhere in a finished NFL game's box score, with
+// their rushing and receiving TD counts (0 if they have a stat line in that
+// category but no TD there; genuinely absent from the map entirely if they
+// don't appear in the box score at all, e.g. a name that doesn't match
+// anyone who played). Scans every statistics category (not just rushing/
+// receiving) so a player is still present with rushTds/recTds both 0 if
+// they only show up elsewhere (e.g. a QB who only has a passing line) -
+// callers use "found in this map" vs "not found at all" to tell a confident
+// 0-TD grade apart from a name that couldn't be matched to anyone in the
+// game (see gradeTouchdownProp in grading.ts). Confirmed against a real
+// final game's response shape: each category has its own `labels` array and
+// a `TD` column isn't always at the same index across categories, so the
+// index is looked up per-category rather than hardcoded.
+export async function getNflPlayerTdStats(eventId: string): Promise<NflPlayerTdStats[] | null> {
+  const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=" + eventId, {
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  const teams = data.boxscore?.players ?? [];
+  if (teams.length === 0) return null;
+
+  const byPlayer = new Map<string, NflPlayerTdStats>();
+
+  for (const team of teams) {
+    for (const category of team.statistics ?? []) {
+      const tdIndex = (category.labels ?? []).indexOf("TD");
+      for (const athlete of category.athletes ?? []) {
+        const name = athlete.athlete?.displayName;
+        if (!name) continue;
+
+        const entry = byPlayer.get(name) ?? { playerName: name, rushTds: 0, recTds: 0 };
+        if (tdIndex !== -1) {
+          const tdCount = parseInt(athlete.stats?.[tdIndex] ?? "0", 10) || 0;
+          if (category.name === "rushing") entry.rushTds = tdCount;
+          else if (category.name === "receiving") entry.recTds = tdCount;
+        }
+        byPlayer.set(name, entry);
+      }
+    }
+  }
+
+  return Array.from(byPlayer.values());
 }
 
 // Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw

@@ -12,7 +12,7 @@ import {
   type PickCategoryKey,
 } from "@/server/data/stats";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
-import { findMatchingGameResult, resolveOutcome, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
+import { findMatchingGameResult, resolveOutcome, resolveTouchdownProp, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { FREE_PICK_LIMIT } from "@/lib/entitlements";
 import { getEntitlementsForUser, createPicksWithEntitlementCheck } from "@/server/data/subscriptions";
 
@@ -137,6 +137,15 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
         const match = await findMatchingGameResult(sportKey!, p);
         if (!match) {
           unmatchedReason = "no matching game found";
+        } else if (p.betType === "PLAYER_PROP") {
+          // Touchdown props resolve differently (player-level box-score data,
+          // not resolveOutcome/gradePick's team-score path) - reuses the same
+          // resolveTouchdownProp the real grader calls, so this reason always
+          // reflects the actual reason grading is stuck, not a generic guess.
+          const propResult = await resolveTouchdownProp(p, match.game.externalId);
+          if (propResult.outcome === null) {
+            unmatchedReason = "matched game, but " + propResult.reason;
+          }
         } else if (!resolveOutcome(p, match.game)) {
           // Game matched fine - the score data is there, but gradePick still
           // couldn't produce WIN/LOSS/PUSH from this pick's own fields (most

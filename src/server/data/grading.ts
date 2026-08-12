@@ -1,18 +1,25 @@
 import { prisma } from "@/lib/prisma";
 import type { GameResult } from "@prisma/client";
-import { getLiveScoresForSport, getMlbEarlyInningScores } from "@/server/data/odds";
+import { getLiveScoresForSport, getMlbEarlyInningScores, getNflFirstHalfScore, getNflPlayerTdStats } from "@/server/data/odds";
 import { closestByTime } from "@/lib/dates";
-import { extractLine } from "@/lib/bet-line";
+import { extractLine, parseTouchdownProp } from "@/lib/bet-line";
+import { findTeamNickname } from "@/lib/parse-catalog";
+import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
 
 // Persists final scores for a sport's finished games into GameResult, so
-// gradePendingPicks has something to grade against. First-five (F5) scores
-// are MLB-only for now - no free box-score-by-half source is wired up for
-// other sports yet, so period=FIRST_HALF picks in those sports just won't
-// match (see gradePendingPicks) until that's built.
+// gradePendingPicks has something to grade against. First-half scores are
+// only captured for sports with a free box-score-by-half source wired up
+// (MLB's innings-1-5, NFL's Q1+Q2) - period=FIRST_HALF picks in every other
+// sport just won't match (see gradePendingPicks) until one is built for
+// them too. Both write into the SAME firstFiveHomeScore/AwayScore columns -
+// the column names are MLB-flavored (this app's first use), but
+// resolveOutcome below already reads them generically for any sport's
+// period=FIRST_HALF pick, so NFL didn't need its own columns.
 export async function persistFinalScores(sportKey: string): Promise<number> {
   const games = await getLiveScoresForSport(sportKey);
   const finals = games.filter((g) => g.status === "final" && g.scores);
   const supportsFirstFive = sportKey === "baseball_mlb";
+  const supportsFirstHalf = sportKey === "americanfootball_nfl";
 
   // Each game's persist is independent - was previously a sequential for-loop,
   // which meant a day with many newly-final games (each potentially needing a
@@ -36,15 +43,22 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
       const needsEarlyInnings =
         supportsFirstFive && (!existing || existing.firstFiveHomeScore === null || existing.firstInningHomeScore === null);
       const early = needsEarlyInnings ? await getMlbEarlyInningScores(g.id) : null;
-      const firstFive = early?.firstFive ?? null;
       const firstInning = early?.firstInning ?? null;
+
+      // Same "only fetch what's still missing, values are immutable once a
+      // game is final" reasoning as MLB's early innings above.
+      const needsFirstHalf = supportsFirstHalf && (!existing || existing.firstFiveHomeScore === null);
+      const nflFirstHalf = needsFirstHalf ? await getNflFirstHalfScore(g.id) : null;
+
+      const firstHalfHome = early?.firstFive?.home ?? nflFirstHalf?.home ?? null;
+      const firstHalfAway = early?.firstFive?.away ?? nflFirstHalf?.away ?? null;
 
       await prisma.gameResult.upsert({
         where: { sportKey_externalId: { sportKey, externalId: g.id } },
         update: {
           homeScore: parseInt(homeScore, 10),
           awayScore: parseInt(awayScore, 10),
-          ...(firstFive ? { firstFiveHomeScore: firstFive.home, firstFiveAwayScore: firstFive.away } : {}),
+          ...(firstHalfHome !== null ? { firstFiveHomeScore: firstHalfHome, firstFiveAwayScore: firstHalfAway } : {}),
           ...(firstInning
             ? { firstInningHomeScore: firstInning.home, firstInningAwayScore: firstInning.away }
             : {}),
@@ -56,8 +70,8 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
           awayTeam: g.awayTeam,
           homeScore: parseInt(homeScore, 10),
           awayScore: parseInt(awayScore, 10),
-          firstFiveHomeScore: firstFive?.home ?? null,
-          firstFiveAwayScore: firstFive?.away ?? null,
+          firstFiveHomeScore: firstHalfHome,
+          firstFiveAwayScore: firstHalfAway,
           firstInningHomeScore: firstInning?.home ?? null,
           firstInningAwayScore: firstInning?.away ?? null,
           gameDate: new Date(g.commenceTime),
@@ -258,6 +272,77 @@ export function resolveOutcome(
   return gradePick(pick.betType, pick.betDetail ?? pick.homeTeam, pick.line, game.homeTeam, game.awayTeam, homeScore, awayScore);
 }
 
+export type TouchdownPropResolution =
+  | { outcome: "WIN" | "LOSS" }
+  // Mirrors resolveOutcome/gradePick's "matched the game fine, but couldn't
+  // confidently grade the bet itself" null - `reason` is the specific why,
+  // for getPendingPicksForUser's triage view (picks.ts), which otherwise has
+  // no way to tell "not a recognized TD prop" apart from "matched fine, box
+  // score just isn't posted yet" apart from "couldn't find this player."
+  | { outcome: null; reason: string };
+
+// NFL touchdown-prop grading - a different shape than resolveOutcome above
+// (async, no PUSH, and reads player-level box-score data instead of
+// GameResult's team scores), so it's a separate path rather than a new case
+// inside gradePick/resolveOutcome. A straight "did they score anytime" market
+// has no real-world push, so this only ever resolves to WIN, LOSS, or
+// unresolved (stays PENDING for manual review). The single source of truth
+// for both the actual grading (gradeTouchdownProp below) and the triage
+// page's reason text (getPendingPicksForUser, picks.ts) - both call this,
+// neither re-implements the parsing/matching steps.
+export async function resolveTouchdownProp(
+  pick: { betDetail: string | null; homeTeam: string; awayTeam: string },
+  eventId: string
+): Promise<TouchdownPropResolution> {
+  const parsed = pick.betDetail ? parseTouchdownProp(pick.betDetail) : null;
+  if (!parsed) {
+    return { outcome: null, reason: "this bet text isn't a recognized touchdown prop" };
+  }
+
+  // Strip a leading/trailing team nickname if the capper included one (it's
+  // usually needed for game resolution at import time, e.g. "Rams Puka
+  // Nacua Anytime TD") - only reliable to do here, not in parseTouchdownProp
+  // itself, since this is the first point the pick's real matched
+  // homeTeam/awayTeam (not just whatever text the capper typed) are known.
+  let playerName = parsed.playerName;
+  for (const team of [pick.homeTeam, pick.awayTeam]) {
+    const nick = findTeamNickname(team, "NFL");
+    if (nick) playerName = playerName.replace(new RegExp("\\b" + nick.replace(/ /g, "\\s+") + "\\b", "i"), "").trim();
+  }
+  playerName = playerName.replace(/\s{2,}/g, " ").trim();
+  if (!playerName) {
+    return { outcome: null, reason: "couldn't identify a player name in the bet text" };
+  }
+
+  const stats = await getNflPlayerTdStats(eventId);
+  if (!stats) {
+    return { outcome: null, reason: "the box score isn't available yet for this game" };
+  }
+
+  const match = stats.find((s) => isLikelyDuplicateName(s.playerName, playerName));
+  if (!match) {
+    // Not found anywhere in the box score - don't guess, leave it for manual
+    // grading (could be a name mismatch, or a player who didn't play at all).
+    return { outcome: null, reason: 'couldn\'t find "' + playerName + '" in the box score' };
+  }
+
+  const scored =
+    parsed.propType === "RUSHING"
+      ? match.rushTds > 0
+      : parsed.propType === "RECEIVING"
+        ? match.recTds > 0
+        : match.rushTds + match.recTds > 0;
+
+  return { outcome: scored ? "WIN" : "LOSS" };
+}
+
+export async function gradeTouchdownProp(
+  pick: { betDetail: string | null; homeTeam: string; awayTeam: string },
+  eventId: string
+): Promise<GradeOutcome> {
+  return (await resolveTouchdownProp(pick, eventId)).outcome;
+}
+
 export async function gradePendingPicks(
   userId: string,
   sportName: string,
@@ -280,7 +365,10 @@ export async function gradePendingPicks(
       continue;
     }
 
-    const outcome = resolveOutcome(pick, result.game);
+    const outcome =
+      pick.betType === "PLAYER_PROP"
+        ? await gradeTouchdownProp(pick, result.game.externalId)
+        : resolveOutcome(pick, result.game);
     if (!outcome) {
       notMatched++;
       continue;
@@ -319,7 +407,10 @@ export async function regradeFuzzyMatchedPicks(
     const result = await findMatchingGameResult(sportKey, pick);
     if (!result || result.matchType !== "exact") continue;
 
-    const outcome = resolveOutcome(pick, result.game);
+    const outcome =
+      pick.betType === "PLAYER_PROP"
+        ? await gradeTouchdownProp(pick, result.game.externalId)
+        : resolveOutcome(pick, result.game);
     if (!outcome) continue;
 
     const changed = outcome !== pick.status;

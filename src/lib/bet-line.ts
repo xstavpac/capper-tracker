@@ -70,3 +70,53 @@ export function favoriteOrUnderdog(pick: {
   }
   return null;
 }
+
+export type TdPropType = "RUSHING" | "RECEIVING" | "ANY";
+
+// Extracts the player and TD type from an NFL touchdown-prop pick's free
+// text, e.g. "Puka Nacua Anytime TD" -> { playerName: "Puka Nacua", propType:
+// "ANY" }. Deliberately not stored as structured Pick columns - same "derive
+// from betDetail text every time" pattern this file already uses for
+// SPREAD/TOTAL's line (see extractLine) and the same pattern grading.ts uses
+// for TOTAL's over/under side and NRFI's yes/no side (never stored, always
+// re-read from betDetail). Called once at catalog-import time (to classify
+// the pick's betType) and again at grading time (to know who to look up in
+// the box score) - both calls read the same stored betDetail, so they always
+// agree with no separate schema to keep in sync.
+//
+// Returns null if the text has no touchdown-prop signal at all. Player-name
+// extraction is a best-effort strip of TD-related words, not a full NLP
+// parse - it assumes the player's name is the part of the text that ISN'T
+// TD terminology (a reasonable assumption for how these are typically
+// written: name first, prop description after, same convention team-based
+// picks already use - "Cubs -1.5", not "-1.5 Cubs"). A capper who also
+// includes the player's team name (needed for game resolution, e.g. "Rams
+// Puka Nacua Anytime TD") will leave that team name in the extracted
+// "player name" here - callers that know the pick's real matched team names
+// (grading.ts does, via the resolved game) should strip those separately
+// before fuzzy-matching against a real roster; this function has no team
+// knowledge of its own; unresolved names beyond a Levenshtein tolerance
+// safely fail to match rather than grading incorrectly.
+export function parseTouchdownProp(text: string): { playerName: string; propType: TdPropType } | null {
+  if (!/\btouchdowns?\b/i.test(text) && !/\btds?\b/i.test(text)) return null;
+
+  const isRushing = /\brush(?:ing|er)?\b/i.test(text);
+  const isReceiving = /\b(receiving|reception|receptions|receiver|catches|catch|rec)\b/i.test(text);
+  const propType: TdPropType = isRushing ? "RUSHING" : isReceiving ? "RECEIVING" : "ANY";
+
+  const playerName = text
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\bany\s*time\b/gi, " ")
+    .replace(/\bor\s+more\b/gi, " ")
+    .replace(/\b\d+\+?/g, " ")
+    .replace(/\b(rushing|rusher|rush|receiving|reception|receptions|rec|receiver|catches|catch|scorer|anytime)\b/gi, " ")
+    .replace(/\btouchdowns?\b/gi, " ")
+    .replace(/\btds?\b/gi, " ")
+    .replace(/[+-]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (!playerName) return null;
+
+  return { playerName, propType };
+}
