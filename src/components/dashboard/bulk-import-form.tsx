@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { parseCatalog, resolveAmbiguousPick, type AmbiguousOption, type ParsedPick } from "@/lib/parse-catalog";
 import { autoResolveAmbiguousPicks } from "@/lib/resolve-ambiguous-catalog";
-import { bulkImportPicksAction, previewBulkImportOdds, checkDuplicatePicksAction } from "@/server/actions/bulk-picks";
+import {
+  bulkImportPicksAction,
+  previewBulkImportOdds,
+  checkDuplicatePicksAction,
+  previewMissingTotalLines,
+  type MissingTotalLineResult,
+} from "@/server/actions/bulk-picks";
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
 import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
 
@@ -58,6 +64,15 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // "Skip" (confirms exclusion) or "Import anyway".
   const [duplicateFlags, setDuplicateFlags] = useState<Record<number, { message: string }>>({});
   const [duplicateChoices, setDuplicateChoices] = useState<Record<number, "import" | "skip">>({});
+  // Same idx-keyed indirection as duplicateFlags/duplicateChoices - presence
+  // in totalLineFlags means this TOTAL pick's own text had no parseable
+  // number and a real market line was found to propose instead. Absent from
+  // totalLineChoices means "not yet decided", which excludes it from import
+  // by default until the user picks "Use X" or "Skip this pick" - same
+  // default-excluded-until-confirmed shape as duplicates, so nothing with an
+  // auto-filled number ever imports silently.
+  const [totalLineFlags, setTotalLineFlags] = useState<Record<number, MissingTotalLineResult>>({});
+  const [totalLineChoices, setTotalLineChoices] = useState<Record<number, "confirm" | "reject">>({});
 
   // Scrolls the results section into view right after a fresh Drop Catalog
   // parse - on mobile especially, the example image between the form and the
@@ -102,6 +117,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setEnrichedOdds({});
     setDuplicateFlags({});
     setDuplicateChoices({});
+    setTotalLineFlags({});
+    setTotalLineChoices({});
     setResolving(true);
     const items = parseCatalog(text, existingCapperNames);
     const outcome = await autoResolveAmbiguousPicks(items, ambiguousChoices);
@@ -117,6 +134,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     const resolvedEntries = outcome.picks.map((p, idx) => ({ p, idx })).filter((e) => !e.p.ambiguous);
     fetchOddsFor(resolvedEntries);
     checkDuplicatesFor(resolvedEntries);
+    checkTotalLinesFor(resolvedEntries);
   }
 
   // The parser is client-side only and can't see live odds, so every pick
@@ -189,6 +207,35 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     });
   }
 
+  // Flags TOTAL picks with no parseable number in their own text and shows
+  // the real market line found for that specific game - same index-remapping
+  // as fetchOddsFor/checkDuplicatesFor. Server-side (previewMissingTotalLines)
+  // already skips anything with a real number already present, so this never
+  // second-guesses a capper's own (possibly alternate) line.
+  function checkTotalLinesFor(entries: { p: ParsedPick; idx: number }[]) {
+    if (entries.length === 0) return;
+    previewMissingTotalLines(
+      entries.map((e) => ({
+        sportName: e.p.sportName,
+        betType: e.p.betType,
+        hasExplicitOdds: e.p.hasExplicitOdds,
+        odds: e.p.odds,
+        totalSide: e.p.totalSide,
+        teamNicknames: e.p.teamNicknames,
+        description: e.p.description,
+      }))
+    ).then((flags) => {
+      setTotalLineFlags((prev) => {
+        const next = { ...prev };
+        for (const [posKey, flag] of Object.entries(flags)) {
+          const globalIdx = entries[Number(posKey)]?.idx;
+          if (globalIdx !== undefined) next[globalIdx] = flag;
+        }
+        return next;
+      });
+    });
+  }
+
   // Answering once resolves every pick sharing this ambiguous team in the
   // current paste, not just the one the prompt happened to be shown for -
   // this is what stops "Cardinals?" from being asked once per pick. The
@@ -208,6 +255,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     const needsOdds = newlyResolved.filter((e) => !e.p.hasExplicitOdds);
     if (needsOdds.length > 0) fetchOddsFor(needsOdds);
     if (newlyResolved.length > 0) checkDuplicatesFor(newlyResolved);
+    if (newlyResolved.length > 0) checkTotalLinesFor(newlyResolved);
   }
 
   const allEntries = (parsed ?? []).map((p, idx) => ({ p, idx }));
@@ -223,10 +271,21 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   function isPendingOrSkippedDuplicate(idx: number): boolean {
     return Boolean(duplicateFlags[idx]) && duplicateChoices[idx] !== "import";
   }
-  const includedEntries = validEntries.filter((e) => !isPendingOrSkippedDuplicate(e.idx));
+  // Same default-excluded-until-confirmed shape as duplicates - a flagged
+  // auto-filled total line never imports until the user explicitly confirms
+  // it (or explicitly skips the pick instead).
+  function isPendingOrRejectedTotalLine(idx: number): boolean {
+    return Boolean(totalLineFlags[idx]) && totalLineChoices[idx] !== "confirm";
+  }
+  const includedEntries = validEntries.filter(
+    (e) => !isPendingOrSkippedDuplicate(e.idx) && !isPendingOrRejectedTotalLine(e.idx)
+  );
   const includedPicks = includedEntries.map((e) => e.p);
   const unresolvedDuplicateCount = validEntries.filter(
     (e) => duplicateFlags[e.idx] && duplicateChoices[e.idx] === undefined
+  ).length;
+  const unresolvedTotalLineCount = validEntries.filter(
+    (e) => totalLineFlags[e.idx] && totalLineChoices[e.idx] === undefined
   ).length;
 
   // One prompt per unique ambiguous team name in this paste, not per pick -
@@ -263,7 +322,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     if (includedPicks.length === 0) return;
     setImporting(true);
     const res = await bulkImportPicksAction(
-      includedPicks.map((p) => ({
+      includedEntries.map(({ p, idx }) => ({
         capperName: resolvedCapperName(p.capperName),
         sportName: p.sportName,
         description: p.description,
@@ -274,6 +333,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         teamNicknames: p.teamNicknames,
         units: p.units,
         isFirstFive: p.isFirstFive,
+        inferredLine: totalLineChoices[idx] === "confirm" ? totalLineFlags[idx]?.inferredLine : undefined,
       }))
     );
     setImporting(false);
@@ -368,6 +428,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
               " - " + ambiguousPicks.length + " need clarification"}
             {unresolvedDuplicateCount > 0 &&
               " - " + unresolvedDuplicateCount + " flagged as possible duplicate" + (unresolvedDuplicateCount === 1 ? "" : "s")}
+            {unresolvedTotalLineCount > 0 &&
+              " - " + unresolvedTotalLineCount + " missing a total number" + (unresolvedTotalLineCount === 1 ? "" : "s")}
             {loadingOdds && <span className="ml-2 font-normal text-gray-400">Looking up real odds...</span>}
           </div>
 
@@ -450,7 +512,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                   validEntries[i + 1] && resolvedCapperName(validEntries[i + 1].p.capperName) !== resolvedName;
                 const dupFlag = duplicateFlags[idx];
                 const dupChoice = duplicateChoices[idx];
-                const excluded = isPendingOrSkippedDuplicate(idx);
+                const totalFlag = totalLineFlags[idx];
+                const totalChoice = totalLineChoices[idx];
+                const excluded = isPendingOrSkippedDuplicate(idx) || isPendingOrRejectedTotalLine(idx);
                 return (
                   <div
                     key={idx}
@@ -536,6 +600,59 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                         )}
                       </div>
                     )}
+                    {totalFlag && (
+                      <div className="mt-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-amber-800">
+                        <div>
+                          {totalFlag.reason === "missing"
+                            ? "No number found in this pick's text."
+                            : "Couldn't read a valid number in this pick's text."}{" "}
+                          Today&apos;s market total for this game is{" "}
+                          <span className="font-medium">{totalFlag.inferredLine}</span>.
+                        </div>
+                        {totalChoice === undefined && (
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "confirm" }))}
+                              className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-medium transition hover:bg-amber-100"
+                            >
+                              Use {totalFlag.inferredLine}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "reject" }))}
+                              className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-medium transition hover:bg-amber-100"
+                            >
+                              Skip this pick
+                            </button>
+                          </div>
+                        )}
+                        {totalChoice === "confirm" && (
+                          <div className="mt-1 flex items-center gap-1.5 text-[11px]">
+                            <span className="font-medium">Will import with {totalFlag.inferredLine} filled in.</span>
+                            <button
+                              type="button"
+                              onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "reject" }))}
+                              className="font-medium underline hover:text-amber-900"
+                            >
+                              Skip instead
+                            </button>
+                          </div>
+                        )}
+                        {totalChoice === "reject" && (
+                          <div className="mt-1 flex items-center gap-1.5 text-[11px]">
+                            <span className="font-medium">Skipped - won&apos;t be imported.</span>
+                            <button
+                              type="button"
+                              onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "confirm" }))}
+                              className="font-medium underline hover:text-amber-900"
+                            >
+                              Use {totalFlag.inferredLine} instead
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -580,7 +697,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
             <div className="mt-2 text-xs text-amber-700">
               Couldn&apos;t match {result.unmatchedGames.length} pick
               {result.unmatchedGames.length === 1 ? "" : "s"} to today&apos;s schedule - they
-              were still imported, but won&apos;t auto-grade:
+              were NOT imported. Double-check the matchup and add them manually:
               <ul className="mt-1 list-disc pl-4">
                 {result.unmatchedGames.map((g, i) => (
                   <li key={i}>{g}</li>

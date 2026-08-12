@@ -9,6 +9,7 @@ import {
   resolveGameForNickname,
   resolveGameForTeams,
   findMarketPrice,
+  findMarketTotalLine,
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
@@ -29,6 +30,12 @@ export type BulkImportItem = {
   teamNicknames: string[];
   units: number;
   isFirstFive: boolean;
+  // Set only once the client has shown the user the auto-filled total line
+  // (see previewMissingTotalLines) and they've confirmed it - never set for
+  // a TOTAL pick that already has a real, valid number in its own text, and
+  // never trusted server-side unless the pick's own text genuinely has no
+  // parseable number (see bulkImportPicksAction).
+  inferredLine?: number;
 };
 
 export type BulkImportResult =
@@ -56,11 +63,25 @@ type ResolvableItem = {
   description: string;
 };
 
+function lookupGame(liveSportKey: string, nicknames: string[]) {
+  if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1]);
+  if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0]);
+  return Promise.resolve(null);
+}
+
 // Shared by the real import (bulkImportPicksAction) and the read-only preview
 // enrichment (previewBulkImportOdds) below - only attempts resolution for
 // sports with a real score source wired up (see RESOLVABLE_SPORT_KEYS),
 // otherwise every pick in an unsupported sport would spuriously get flagged
 // as unmatched when resolution was never actually possible for it.
+//
+// IMPORTANT: homeTeam/awayTeam/gameTime below are only ever meaningful when
+// `matched` is true. bulkImportPicksAction must not persist a Pick using
+// these fields when matched is false - they're return-shape placeholders,
+// not usable data (previously this fell back to dumping the raw bet text
+// into homeTeam and "-" into awayTeam, which silently created picks that
+// could never be graded or re-matched, since the real opponent was never
+// captured anywhere on the row - see the Porter PICKS/Cardinals incident).
 async function resolveGameAndOdds(item: ResolvableItem): Promise<{
   homeTeam: string;
   awayTeam: string;
@@ -79,12 +100,13 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
   const resolvable = Boolean(liveSportKey && RESOLVABLE_SPORT_KEYS.includes(liveSportKey));
   if (liveSportKey && resolvable) {
     const nicknames = item.teamNicknames;
-    const game =
-      nicknames.length >= 2
-        ? await resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1])
-        : nicknames.length === 1
-          ? await resolveGameForNickname(liveSportKey, nicknames[0])
-          : null;
+    let game = await lookupGame(liveSportKey, nicknames);
+    // One retry before giving up - covers a transient miss/blip against the
+    // live schedule source rather than treating it as a genuine non-match.
+    if (!game) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      game = await lookupGame(liveSportKey, nicknames);
+    }
     if (game) {
       matched = true;
       homeTeam = game.homeTeam;
@@ -129,6 +151,49 @@ export async function previewBulkImportOdds(items: ResolvableItem[]): Promise<Re
     })
   );
   return enriched;
+}
+
+export type MissingTotalLineResult = {
+  inferredLine: number;
+  reason: "missing" | "garbled"; // no digit anywhere in the text vs. some non-parseable number-ish token
+};
+
+// Read-only preview, same shape as previewBulkImportOdds: flags TOTAL picks
+// whose raw bet text had no parseable number at all (e.g. "Cubs under a")
+// and looks up today's real market total for that specific game, so the UI
+// can show it to the user for explicit confirm/reject before import - see
+// bulkImportPicksAction, which refuses to persist a TOTAL pick with no
+// number unless the client already confirmed an inferredLine for it.
+//
+// Deliberately never touches a TOTAL pick that already has a real, valid
+// number - extractLine returning non-null means the capper specified an
+// actual (possibly alternate) line, which must never be overridden.
+export async function previewMissingTotalLines(items: ResolvableItem[]): Promise<Record<number, MissingTotalLineResult>> {
+  await requireUser();
+
+  const results: Record<number, MissingTotalLineResult> = {};
+  await Promise.all(
+    items.map(async (item, i) => {
+      if (item.betType !== "TOTAL" || !item.totalSide) return;
+      if (extractLine("TOTAL", item.description) !== null) return;
+
+      const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
+      if (!liveSportKey || !RESOLVABLE_SPORT_KEYS.includes(liveSportKey)) return;
+
+      const { matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item);
+      if (!matched) return;
+
+      const point = await findMarketTotalLine(
+        liveSportKey,
+        { homeTeam, awayTeam, commenceTime: gameTime.toISOString() },
+        item.totalSide
+      );
+      if (point === null) return;
+
+      results[i] = { inferredLine: point, reason: /\d/.test(item.description) ? "garbled" : "missing" };
+    })
+  );
+  return results;
 }
 
 export type DuplicateCheckItem = ResolvableItem & { capperName: string; isFirstFive: boolean };
@@ -250,7 +315,25 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
 
       const { homeTeam, awayTeam, gameTime, odds, resolvable, matched } = await resolveGameAndOdds(item);
       if (resolvable && !matched) {
+        // Don't persist this item at all - homeTeam/awayTeam/gameTime from
+        // resolveGameAndOdds are just placeholders when matched is false,
+        // and a Pick written with them can never be graded or re-matched
+        // later (the real opponent/game time was never actually resolved).
+        // Surfacing it in unmatchedGames instead lets the user notice and
+        // re-paste/add it correctly rather than it silently going stuck.
         unmatchedGames.push(item.capperName + " - " + item.description);
+        continue;
+      }
+
+      const extractedLine = extractLine(item.betType, item.description);
+      if (item.betType === "TOTAL" && extractedLine === null && item.inferredLine === undefined) {
+        // No number anywhere in this pick's own text, and the client never
+        // confirmed an auto-filled market line for it (either it bypassed
+        // the confirmation step, or the lookup itself found nothing to
+        // propose) - refuse to persist an ungradeable TOTAL pick, same
+        // principle as the unmatched-game rejection above.
+        unmatchedGames.push(item.capperName + " - " + item.description);
+        continue;
       }
 
       toInsert.push({
@@ -261,7 +344,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         betType: item.betType,
         betDetail: item.description,
         odds,
-        line: extractLine(item.betType, item.description),
+        line: extractedLine ?? item.inferredLine ?? null,
         period: item.isFirstFive ? "FIRST_HALF" : "FULL_GAME",
         units: item.units,
         gameTime,

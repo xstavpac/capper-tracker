@@ -443,6 +443,21 @@ export function matchScoreToGame(
   return closestByTime(candidates, (s) => new Date(s.commenceTime).getTime(), gameStart);
 }
 
+// Shared by findMarketPrice and findMarketTotalLine - resolves which
+// odds-listed game (by team pair + closest commenceTime) a schedule-sourced
+// game corresponds to, same repeat-matchup handling as matchScoreToGame.
+async function resolveOddsGame(
+  sportKey: string,
+  game: { homeTeam: string; awayTeam: string; commenceTime: string }
+): Promise<OddsGame | null> {
+  const oddsGames = await getOddsForSport(sportKey);
+  const candidates = oddsGames.filter((g) => g.homeTeam === game.homeTeam && g.awayTeam === game.awayTeam);
+  if (candidates.length === 0) return null;
+
+  const gameStart = new Date(game.commenceTime).getTime();
+  return closestByTime(candidates, (g) => new Date(g.commenceTime).getTime(), gameStart);
+}
+
 // Looks up the real market price for a resolved game (see
 // resolveGameForNickname), so bulk-imported picks that didn't state an
 // explicit price can use the actual line instead of a hardcoded -110.
@@ -458,12 +473,8 @@ export async function findMarketPrice(
     betType === "MONEYLINE" ? "h2h" : betType === "SPREAD" ? "spreads" : betType === "TOTAL" ? "totals" : null;
   if (!marketKey) return null;
 
-  const oddsGames = await getOddsForSport(sportKey);
-  const candidates = oddsGames.filter((g) => g.homeTeam === game.homeTeam && g.awayTeam === game.awayTeam);
-  if (candidates.length === 0) return null;
-
-  const gameStart = new Date(game.commenceTime).getTime();
-  const oddsGame = closestByTime(candidates, (g) => new Date(g.commenceTime).getTime(), gameStart);
+  const oddsGame = await resolveOddsGame(sportKey, game);
+  if (!oddsGame) return null;
 
   const outcomeName =
     side === "home" ? oddsGame.homeTeam : side === "away" ? oddsGame.awayTeam : side === "over" ? "Over" : "Under";
@@ -472,6 +483,31 @@ export async function findMarketPrice(
     const market = bookmaker.markets.find((m) => m.key === marketKey);
     const outcome = market?.outcomes.find((o) => o.name === outcomeName);
     if (outcome) return outcome.price;
+  }
+
+  return null;
+}
+
+// Looks up the real market TOTAL LINE (the point number, e.g. 8.5 - not the
+// price) for a resolved game, so a TOTAL pick whose raw bet text had no
+// parseable number at all (missing or garbled, e.g. "Cubs under a") can have
+// today's real line proposed for the user's confirmation instead of staying
+// permanently ungradeable. Never used to override a number the capper
+// actually specified - see previewMissingTotalLines, the only caller.
+export async function findMarketTotalLine(
+  sportKey: string,
+  game: { homeTeam: string; awayTeam: string; commenceTime: string },
+  side: "over" | "under"
+): Promise<number | null> {
+  const oddsGame = await resolveOddsGame(sportKey, game);
+  if (!oddsGame) return null;
+
+  const outcomeName = side === "over" ? "Over" : "Under";
+
+  for (const bookmaker of oddsGame.bookmakers) {
+    const market = bookmaker.markets.find((m) => m.key === "totals");
+    const outcome = market?.outcomes.find((o) => o.name === outcomeName);
+    if (outcome?.point !== undefined) return outcome.point;
   }
 
   return null;
