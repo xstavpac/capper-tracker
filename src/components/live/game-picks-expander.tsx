@@ -66,6 +66,7 @@ const CATEGORY_DESCRIPTIONS: Record<PickCategoryKey, string> = {
   OVER: "over",
   UNDER: "under",
   F5_ML: "first-half moneyline",
+  FIRST_HALF_ML: "first-half moneyline",
   NRFI: "NRFI",
 };
 

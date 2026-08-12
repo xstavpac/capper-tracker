@@ -98,7 +98,7 @@ export default async function LivePage({
         capperId: p.capperId,
         capperName: p.capper.name,
         capperColorTag: p.capper.colorTag,
-        category: pickCategory(p),
+        category: pickCategory({ ...p, sportName: sportLabel }),
         betDetail: p.betDetail || betTypeLabel(p.betType),
         odds: p.odds,
         units: p.units,

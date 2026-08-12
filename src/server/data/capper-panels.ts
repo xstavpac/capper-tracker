@@ -126,8 +126,11 @@ export async function getCapperPanels(userId: string, filter?: CapperLeagueFilte
       capperId: { in: cappers.map((c) => c.id) },
       ...(filter?.sportName ? { sport: { name: filter.sportName } } : {}),
     },
+    include: { sport: true },
   });
-  const scoped = filter?.category ? picks.filter((p) => pickCategory(p) === filter.category) : picks;
+  const scoped = filter?.category
+    ? picks.filter((p) => pickCategory({ ...p, sportName: p.sport.name }) === filter.category)
+    : picks;
 
   const byCapper = new Map<string, typeof scoped>();
   for (const pick of scoped) {

@@ -32,10 +32,20 @@ export async function getCappersForUser(userId: string, filter?: CapperLeagueFil
   // per-filter stats yet; that's the Phase 3 ranked-list rebuild.
   const picks = await prisma.pick.findMany({
     where: { userId, ...(filter.sportName ? { sport: { name: filter.sportName } } : {}) },
-    select: { capperId: true, betType: true, period: true, betDetail: true, odds: true, line: true },
+    select: {
+      capperId: true,
+      betType: true,
+      period: true,
+      betDetail: true,
+      odds: true,
+      line: true,
+      sport: { select: { name: true } },
+    },
   });
   const matchingCapperIds = new Set(
-    picks.filter((p) => !filter.category || pickCategory(p) === filter.category).map((p) => p.capperId)
+    picks
+      .filter((p) => !filter.category || pickCategory({ ...p, sportName: p.sport.name }) === filter.category)
+      .map((p) => p.capperId)
   );
 
   return prisma.capper.findMany({
@@ -89,8 +99,11 @@ export async function getCapperLeaderboardTable(
       capperId: { in: cappers.map((c) => c.id) },
       ...(filter?.sportName ? { sport: { name: filter.sportName } } : {}),
     },
+    include: { sport: true },
   });
-  const scoped = filter?.category ? allPicks.filter((p) => pickCategory(p) === filter.category) : allPicks;
+  const scoped = filter?.category
+    ? allPicks.filter((p) => pickCategory({ ...p, sportName: p.sport.name }) === filter.category)
+    : allPicks;
   const windowed = filterPicksByGradedWindow(scoped, window);
 
   const byCapper = new Map<string, typeof windowed>();
@@ -149,8 +162,11 @@ export async function getMostActiveThisWeek(
       datePosted: { gte: weekStart },
       ...(filter?.sportName ? { sport: { name: filter.sportName } } : {}),
     },
+    include: { sport: true },
   });
-  const scoped = filter?.category ? picks.filter((p) => pickCategory(p) === filter.category) : picks;
+  const scoped = filter?.category
+    ? picks.filter((p) => pickCategory({ ...p, sportName: p.sport.name }) === filter.category)
+    : picks;
 
   const counts = new Map<string, number>();
   for (const pick of scoped) {
@@ -196,12 +212,16 @@ export async function getSportCategoryPanelData(userId: string, sportName: strin
     where: { userId, sport: { name: sportName } },
     include: { capper: true },
   });
+  // The query above already scopes every pick to this exact sportName, so
+  // it's safe to attach as a constant here rather than also including the
+  // sport relation just to read back what's already known.
+  const picksWithSport = picks.map((p) => ({ ...p, sport: { name: sportName } }));
 
-  const breakdown = computeCategoryBreakdown(picks, chipSetForLeague(sportName));
+  const breakdown = computeCategoryBreakdown(picksWithSport, chipSetForLeague(sportName));
 
   const leaderboards: Partial<Record<PickCategoryKey, CategoryLeaderboardEntry[]>> = {};
   for (const item of breakdown) {
-    const scoped = picks.filter((p) => pickCategory(p) === item.key);
+    const scoped = picksWithSport.filter((p) => pickCategory({ ...p, sportName }) === item.key);
 
     const byCapper = new Map<string, { name: string; picks: typeof scoped }>();
     for (const pick of scoped) {

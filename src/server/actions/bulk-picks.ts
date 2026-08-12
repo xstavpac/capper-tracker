@@ -238,7 +238,14 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
       // resolveGameAndOdds' resolved real market price for this exact pick.
       const period = item.isFirstFive ? "FIRST_HALF" : "FULL_GAME";
       const line = extractLine(item.betType, item.description);
-      const category = pickCategory({ betType: item.betType, period, betDetail: item.description, odds, line });
+      const category = pickCategory({
+        betType: item.betType,
+        period,
+        betDetail: item.description,
+        odds,
+        line,
+        sportName: item.sportName,
+      });
       // Can't determine a comparable side for this bet (e.g. a player prop,
       // or a first-half spread) - don't guess at a match either way.
       if (!category) return;
@@ -249,7 +256,9 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
         where: { userId: user.id, capperId: capper.id, homeTeam, awayTeam, gameTime: { gte: windowStart, lte: windowEnd } },
       });
 
-      const duplicate = existingPicks.find((p) => pickCategory(p) === category);
+      // existingPicks are matched to this exact game (same homeTeam/awayTeam
+      // window as item), so item.sportName is correct for all of them too.
+      const duplicate = existingPicks.find((p) => pickCategory({ ...p, sportName: item.sportName }) === category);
       if (duplicate) {
         const label = duplicate.betDetail || betTypeLabel(duplicate.betType);
         flags[i] = { message: capper.name + " already has a " + label + " pick logged for this game." };

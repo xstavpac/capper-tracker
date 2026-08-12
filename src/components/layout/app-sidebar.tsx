@@ -89,6 +89,16 @@ function LiveIcon({ className }: { className?: string }) {
   );
 }
 
+function SharpMoneyIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4.5" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function ChartsIcon({ className }: { className?: string }) {
   return (
     <svg {...iconProps(className)}>
@@ -135,6 +145,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/pricing", label: "Plans & Billing", icon: PricingIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
   { href: "/live", label: "Live", icon: LiveIcon, accent: "red" },
+  { href: "/sharp-money", label: "Sharp Money", icon: SharpMoneyIcon },
 ];
 
 const MODEL_BUILDER_NAV_ITEM: NavItem = { href: "/model-builder", label: "Build Your Own Model", icon: ModelBuilderIcon };

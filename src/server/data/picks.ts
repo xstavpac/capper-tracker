@@ -5,7 +5,7 @@ import {
   computeStats,
   computeScorecard,
   computeCategoryBreakdown,
-  MLB_CHIP_SET,
+  ALL_CATEGORY_KEYS,
   type ScorecardBucket,
   type ScorecardBucketKey,
   type CategoryBreakdownItem,
@@ -334,10 +334,13 @@ export async function getCapperCategoryRecord(
   capperId: string,
   category: PickCategoryKey
 ): Promise<CategoryBreakdownItem | null> {
-  const picks = await prisma.pick.findMany({ where: { userId, capperId } });
-  // MLB_CHIP_SET, not a sport-scoped set - `category` here is whatever this
-  // one pick's own category is (see pickCategory), which might be F5 ML or
-  // NRFI regardless of what sport the caller happens to be looking at.
-  const breakdown = computeCategoryBreakdown(picks, MLB_CHIP_SET);
+  const picks = await prisma.pick.findMany({ where: { userId, capperId }, include: { sport: true } });
+  // ALL_CATEGORY_KEYS, not a sport-scoped set - `category` here is whatever
+  // this one pick's own category is (see pickCategory), which might be F5
+  // ML, 1st Half ML, or NRFI regardless of what sport the caller happens to
+  // be looking at. Querying every sport's picks together is safe now that
+  // pickCategory itself splits F5_ML (MLB) from FIRST_HALF_ML (everything
+  // else) - a capper who bets both no longer gets those two blended.
+  const breakdown = computeCategoryBreakdown(picks, ALL_CATEGORY_KEYS);
   return breakdown.find((b) => b.key === category) ?? null;
 }

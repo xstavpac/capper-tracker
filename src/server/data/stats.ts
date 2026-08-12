@@ -432,6 +432,7 @@ export type PickCategoryKey =
   | "OVER"
   | "UNDER"
   | "F5_ML"
+  | "FIRST_HALF_ML"
   | "NRFI";
 
 export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
@@ -442,15 +443,17 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   OVER: "Over",
   UNDER: "Under",
   F5_ML: "F5 ML",
+  FIRST_HALF_ML: "1st Half ML",
   NRFI: "NRFI",
 };
 
 // F5 and NRFI are MLB-only chips for now, even though Period/BetType could
 // technically represent a first-half bet in another sport - other leagues
-// intentionally don't surface those two categories yet.
-// Also the full universe of PickCategoryKey values, in display order -
-// getCapperCategoryRecord (picks.ts) relies on that to look up an arbitrary
-// single category (which might be F5 ML/NRFI) without filtering it out.
+// intentionally don't surface those two categories yet. Non-MLB first-half
+// moneyline picks get their own FIRST_HALF_ML key instead (see pickCategory)
+// rather than sharing F5_ML - the two must never be summed together, since a
+// capper who bets both MLB and another sport would otherwise have their
+// first-half moneyline records silently blended into one misleading number.
 export const MLB_CHIP_SET: PickCategoryKey[] = [
   "FAV_ML",
   "DOG_ML",
@@ -463,6 +466,13 @@ export const MLB_CHIP_SET: PickCategoryKey[] = [
 ];
 export const DEFAULT_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD_MINUS", "SPREAD_PLUS", "OVER", "UNDER"];
 
+// The full universe of every PickCategoryKey value, independent of any one
+// sport's own display chip set - getCapperCategoryRecord (picks.ts) relies
+// on this to look up an arbitrary single category (which might be F5 ML,
+// 1st Half ML, or NRFI) without it being filtered out by a sport-specific
+// list like MLB_CHIP_SET, which deliberately does NOT include FIRST_HALF_ML.
+export const ALL_CATEGORY_KEYS: PickCategoryKey[] = [...MLB_CHIP_SET, "FIRST_HALF_ML"];
+
 export function chipSetForLeague(sportName: string): PickCategoryKey[] {
   return sportName.toUpperCase() === "MLB" ? MLB_CHIP_SET : DEFAULT_CHIP_SET;
 }
@@ -473,13 +483,24 @@ type PickCategoryInput = {
   betDetail: string | null;
   odds: number;
   line: number | null;
+  // Required (not optional) so every call site is forced to supply a real
+  // value - a first-half moneyline pick's category depends on it (F5_ML vs
+  // FIRST_HALF_ML below), and a forgotten/wrong value would silently blend
+  // two different sports' first-half records together again.
+  sportName: string;
 };
 
 export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
   if (pick.betType === "NRFI") return "NRFI";
 
   if (pick.betType === "MONEYLINE") {
-    if (pick.period === "FIRST_HALF") return "F5_ML";
+    if (pick.period === "FIRST_HALF") {
+      // F5 ("first 5 innings") is MLB-only terminology - every other sport's
+      // first-half moneyline pick gets its own FIRST_HALF_ML key instead of
+      // sharing F5_ML, so an NFL capper's 1st-half ML record is never summed
+      // together with an MLB capper's F5 ML record for someone who bets both.
+      return pick.sportName.toUpperCase() === "MLB" ? "F5_ML" : "FIRST_HALF_ML";
+    }
     const side = favoriteOrUnderdog(pick);
     return side === "FAVORITE" ? "FAV_ML" : side === "UNDERDOG" ? "DOG_ML" : null;
   }
@@ -510,6 +531,7 @@ const SPECIALIST_LABELS: Record<PickCategoryKey, string> = {
   OVER: "Overs specialist",
   UNDER: "Unders specialist",
   F5_ML: "First-half specialist",
+  FIRST_HALF_ML: "First-half specialist",
   NRFI: "NRFI specialist",
 };
 
@@ -526,7 +548,7 @@ export type SpecialistTag = { category: PickCategoryKey; label: string };
 // alone isn't enough (that's just what they mostly bet, not what they're
 // good at); this also requires it to actually be working. If more than one
 // category clears all three bars, the one with the larger share wins.
-export function computeSpecialistTag(picks: Pick[]): SpecialistTag | null {
+export function computeSpecialistTag(picks: (Pick & { sport: { name: string } })[]): SpecialistTag | null {
   const decided = picks.filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH");
   if (decided.length === 0) return null;
 
@@ -534,7 +556,7 @@ export function computeSpecialistTag(picks: Pick[]): SpecialistTag | null {
 
   const byCategory = new Map<PickCategoryKey, Pick[]>();
   for (const pick of decided) {
-    const category = pickCategory(pick);
+    const category = pickCategory({ ...pick, sportName: pick.sport.name });
     if (!category) continue;
     const list = byCategory.get(category);
     if (list) list.push(pick);
@@ -572,10 +594,13 @@ export type CategoryBreakdownItem = {
 // multiple sports at once (the Dashboard) must pass DEFAULT_CHIP_SET, since
 // F5 ML and NRFI only mean anything for MLB; a single-sport view can pass
 // chipSetForLeague(sportName) to get those back.
-export function computeCategoryBreakdown(picks: Pick[], order: PickCategoryKey[]): CategoryBreakdownItem[] {
+export function computeCategoryBreakdown(
+  picks: (Pick & { sport: { name: string } })[],
+  order: PickCategoryKey[]
+): CategoryBreakdownItem[] {
   const byCategory = new Map<PickCategoryKey, Pick[]>();
   for (const pick of picks) {
-    const key = pickCategory(pick);
+    const key = pickCategory({ ...pick, sportName: pick.sport.name });
     if (!key) continue;
     const existing = byCategory.get(key);
     if (existing) existing.push(pick);
