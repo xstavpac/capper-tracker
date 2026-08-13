@@ -177,39 +177,6 @@ async function getTodaysSchedule(date: string): Promise<ScheduledGame[]> {
   });
 }
 
-// Records each game's probable starters against GameResult's own key
-// (sportKey + externalId/gamePk) so backtestModel can later join
-// GameResult -> GameStarters -> PitcherStatSnapshot, once that GameResult
-// exists (persistFinalScores creates it only once the game is final, a day
-// or more after this capture runs pre-game) - this table is written
-// independently of GameResult and read by externalId at backtest time, not
-// coupled to when/whether a result has landed yet.
-async function writeGameStarters(games: ScheduledGame[]): Promise<number> {
-  const rows = games
-    .filter((g) => g.homePitcher || g.awayPitcher)
-    .map((g) => ({
-      sportKey: MLB_SPORT_KEY,
-      externalId: g.gamePk,
-      homeTeam: g.homeTeam,
-      awayTeam: g.awayTeam,
-      homePitcherId: g.homePitcher?.id ?? null,
-      awayPitcherId: g.awayPitcher?.id ?? null,
-      gameDate: g.gameDate,
-    }));
-
-  await Promise.all(
-    rows.map((row) =>
-      prisma.gameStarters.upsert({
-        where: { sportKey_externalId: { sportKey: row.sportKey, externalId: row.externalId } },
-        update: row,
-        create: row,
-      })
-    )
-  );
-
-  return rows.length;
-}
-
 // The season-total split (not one of the per-team splits a mid-season trade
 // produces) - the entry with no `team` field is MLB's own aggregate across
 // every team played for; falls back to the first split for a player with
@@ -255,7 +222,7 @@ export async function capturePitcherStatSnapshots(
   const games = await getTodaysSchedule(date);
   if (games.length === 0) return { starters: 0, pitcherSnapshots: 0 };
 
-  const starterCount = await writeGameStarters(games);
+  const starterCount = games.filter((g) => g.homePitcher || g.awayPitcher).length;
 
   const starters = dedupePitchers(games);
   if (starters.length === 0) return { starters: starterCount, pitcherSnapshots: 0 };
