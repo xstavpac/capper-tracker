@@ -49,7 +49,7 @@ export default async function SharpMoneyPage() {
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Sharp Money</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Today&apos;s picks where the capper has a historically strong record (55%+) in that exact bet category.
+          Strong historical picks in today&apos;s catalog - cappers with a 55%+ record in that exact bet category.
         </p>
       </div>
 
