@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { getModelVariable, type VariableCategory } from "@/lib/model-builder";
-import { buildModelBuilderPrefillUrl } from "@/lib/model-builder-links";
 import { getVariableSeriesAction } from "@/server/actions/charts";
 import type { VariableTimeSeriesResult, DateRange } from "@/server/data/historical-variables";
 import { easternDateKey } from "@/lib/dates";
@@ -189,12 +187,6 @@ export function ChartsWorkspace({ sportKey, teamNames }: { sportKey: string; tea
                       {s.result && !s.loading && <HistoryNote result={s.result} />}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <Link
-                        href={buildModelBuilderPrefillUrl(s.variableId, "favorite")}
-                        className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-100"
-                      >
-                        Add as condition
-                      </Link>
                       <button
                         onClick={() => removeSeries(s.id)}
                         aria-label="Remove"

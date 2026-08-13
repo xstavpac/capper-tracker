@@ -1,35 +1,22 @@
-// Build Your Own Model - shared types and the variable catalog. Deliberately
-// free of any prisma-touching import (matches the client/server boundary
-// established for live-scoreboard.tsx: anything under server/data/*.ts pulls
-// in `prisma` at module scope and can't be imported into a "use client"
-// component) - the left-panel variable library renders straight from
-// MODEL_VARIABLES in the browser. Actual data resolution/evaluation against
-// real games lives in server/data/model-evaluation.ts and
-// server/data/providers/ (one adapter per data source, keyed by sourceId
-// below - see server/data/providers/types.ts for why).
+// Variable catalog - shared by Charts (charting a historical variable per
+// team/pitcher entity) as well as, formerly, the now-removed Build Your Own
+// Model condition-tree engine. Deliberately free of any prisma-touching
+// import (matches the client/server boundary established for
+// live-scoreboard.tsx: anything under server/data/*.ts pulls in `prisma` at
+// module scope and can't be imported into a "use client" component) - the
+// Charts variable library renders straight from MODEL_VARIABLES in the
+// browser.
 
-export type ComparisonOperator = "LT" | "LTE" | "GT" | "GTE" | "EQ";
-
-export const COMPARISON_OPERATOR_LABELS: Record<ComparisonOperator, string> = {
-  LT: "Less than",
-  LTE: "Less than or equal to",
-  GT: "Greater than",
-  GTE: "Greater than or equal to",
-  EQ: "Is",
-};
-
-// Every game has a favorite and an underdog by moneyline price, regardless of
-// what the model's target market is - so "side" is how a condition picks
-// which team in the matchup a team/pitcher-scoped variable reads from, and it
-// works identically whether the model predicts FAVORITE_ML, UNDERDOG_ML,
-// OVER, or UNDER.
+// Every game has a favorite and an underdog by moneyline price - "side" is
+// how a caller picks which team in the matchup a team/pitcher-scoped
+// variable reads from.
 export type VariableSide = "favorite" | "underdog";
 
-// "team"/"pitcher" variables need a side chosen in the condition (which team's
-// number is this?). "market" variables are already unambiguous (there's only
-// one total line, one favorite moneyline, etc.) and never take a side. Not to
-// be confused with DataScope below (whose data this is), which is a
-// different axis entirely.
+// "team"/"pitcher" variables need a side chosen (which team's number is
+// this?). "market" variables are already unambiguous (there's only one total
+// line, one favorite moneyline, etc.) and never take a side. Not to be
+// confused with DataScope below (whose data this is), which is a different
+// axis entirely.
 export type VariableScope = "team" | "pitcher" | "market";
 
 export type VariableCategory = "team_tendencies" | "team_stats" | "pitcher_stats" | "odds_market";
@@ -46,9 +33,7 @@ export type VariableUnit = "percent" | "decimal" | "runs" | "innings" | "odds" |
 // Whether a variable's data is shared globally (every source in this app
 // today) or scoped to one user (no such source exists yet - a future
 // user-uploaded or user-licensed feed would be PER_USER). Mirrors the
-// DataScope enum on TeamTendency (prisma/schema.prisma) - added on both now,
-// before any PER_USER source exists, so introducing one later is a matter of
-// using the value rather than migrating tables that may by then hold real data.
+// DataScope enum on the snapshot tables (prisma/schema.prisma).
 export type DataScope = "global" | "per_user";
 
 export type ModelVariableDef = {
@@ -59,11 +44,8 @@ export type ModelVariableDef = {
   unit: VariableUnit;
   description: string;
   // Which provider (server/data/providers/) resolves this variable's actual
-  // value - the condition engine and backtester look this up and dispatch to
-  // that provider, never calling a specific API themselves. Every variable
-  // here is "global" today (see DataScope above); sourceId is a free-form
-  // string rather than an enum since adding a data source means registering
-  // a new provider, not editing this file's type.
+  // value. sourceId is a free-form string rather than an enum since adding a
+  // data source means registering a new provider, not editing this file's type.
   sourceId: string;
   dataScope: DataScope;
 };
@@ -358,90 +340,4 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
 
 export function getModelVariable(id: string): ModelVariableDef | undefined {
   return MODEL_VARIABLES.find((v) => v.id === id);
-}
-
-// A single variable/operator/threshold/weight rule - the atomic unit both
-// Simple and (eventually) Advanced mode build with.
-export type ConditionLeaf = {
-  type: "condition";
-  id: string;
-  variableId: string;
-  // Required when the variable's scope is "team" or "pitcher"; omitted for
-  // "market" variables, which are already unambiguous.
-  side?: VariableSide;
-  operator: ComparisonOperator;
-  threshold: number;
-  weight: number; // percent, 0-100; a saved model's leaves should sum to 100
-};
-
-export type ConditionCombinator = "AND" | "OR";
-
-// A group of leaves and/or nested groups, combined with AND or OR. Simple
-// mode's UI only ever builds a single root AND-group of leaves (no nesting,
-// no OR) - the recursive shape exists so a future Advanced mode can produce
-// real nested AND/OR trees against the exact same stored column and
-// evaluation engine (evaluateConditionTree, below) without a migration or a
-// parallel data model.
-export type ConditionGroup = {
-  type: "group";
-  id: string;
-  combinator: ConditionCombinator;
-  children: ConditionNode[];
-};
-
-export type ConditionNode = ConditionLeaf | ConditionGroup;
-
-// What UserModel.conditions actually stores: always a single root group.
-export type ConditionTree = ConditionGroup;
-
-export function wrapFlatConditions(leaves: ConditionLeaf[]): ConditionTree {
-  return { type: "group", id: "root", combinator: "AND", children: leaves };
-}
-
-// Simple mode's UI only ever edits a flat list of leaves directly under the
-// root AND-group - if a tree has real nesting or an OR group (only possible
-// from a future Advanced mode), this drops anything below the top level
-// rather than guessing how to flatten it, since Simple mode has no UI for OR
-// or nested groups at all. Advanced mode gets its own tree-aware editor later.
-export function flattenToLeaves(tree: ConditionTree): ConditionLeaf[] {
-  return tree.children.filter((c): c is ConditionLeaf => c.type === "condition");
-}
-
-// Every leaf anywhere in the tree, regardless of nesting - for summaries
-// ("N conditions") that should count the whole model, not just the top level.
-export function allLeaves(node: ConditionNode): ConditionLeaf[] {
-  return node.type === "condition" ? [node] : node.children.flatMap(allLeaves);
-}
-
-export function totalConditionWeight(leaves: ConditionLeaf[]): number {
-  return leaves.reduce((sum, c) => sum + c.weight, 0);
-}
-
-export function evaluateComparison(operator: ComparisonOperator, actual: number, threshold: number): boolean {
-  switch (operator) {
-    case "LT":
-      return actual < threshold;
-    case "LTE":
-      return actual <= threshold;
-    case "GT":
-      return actual > threshold;
-    case "GTE":
-      return actual >= threshold;
-    case "EQ":
-      return actual === threshold;
-  }
-}
-
-// Recursively evaluates a condition tree, combining each group's children by
-// its own AND/OR combinator. `resolve` is supplied by the caller (it needs a
-// GameContext or historical game data the engine has, not this file, which
-// stays free of any data-fetching). An empty group is vacuously true - it
-// imposes no constraint, matching how "no conditions yet" is treated
-// elsewhere (nothing to fail on).
-export function evaluateConditionTree(node: ConditionNode, resolve: (leaf: ConditionLeaf) => boolean): boolean {
-  if (node.type === "condition") return resolve(node);
-  if (node.children.length === 0) return true;
-  return node.combinator === "AND"
-    ? node.children.every((child) => evaluateConditionTree(child, resolve))
-    : node.children.some((child) => evaluateConditionTree(child, resolve));
 }

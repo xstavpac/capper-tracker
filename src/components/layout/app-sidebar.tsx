@@ -117,18 +117,6 @@ function PricingIcon({ className }: { className?: string }) {
   );
 }
 
-function ModelBuilderIcon({ className }: { className?: string }) {
-  return (
-    <svg {...iconProps(className)}>
-      <circle cx="6" cy="6" r="2.5" />
-      <circle cx="6" cy="18" r="2.5" />
-      <circle cx="18" cy="12" r="2.5" />
-      <path d="M8.2 7.2l7.8 3.7" />
-      <path d="M8.2 16.8l7.8 -3.7" />
-    </svg>
-  );
-}
-
 type NavItem = {
   href: string;
   label: string;
@@ -147,8 +135,6 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/live", label: "Live", icon: LiveIcon, accent: "red" },
   { href: "/sharp-money", label: "Sharp Money", icon: SharpMoneyIcon },
 ];
-
-const MODEL_BUILDER_NAV_ITEM: NavItem = { href: "/model-builder", label: "Build Your Own Model", icon: ModelBuilderIcon };
 
 function isActiveHref(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
@@ -308,9 +294,8 @@ function AccountRow({ user }: { user: SidebarUser }) {
 // on the main content card next to it). Below md:, that same content becomes
 // a slide-in drawer opened from a compact top bar - full-bleed on mobile
 // rather than another floating card, since there's no room to spare there.
-export function AppSidebar({ user, modelBuilderEnabled }: { user: SidebarUser; modelBuilderEnabled?: boolean }) {
+export function AppSidebar({ user }: { user: SidebarUser }) {
   const [open, setOpen] = useState(false);
-  const navItems = modelBuilderEnabled ? [...BASE_NAV_ITEMS, MODEL_BUILDER_NAV_ITEM] : BASE_NAV_ITEMS;
 
   return (
     <>
@@ -329,7 +314,7 @@ export function AppSidebar({ user, modelBuilderEnabled }: { user: SidebarUser; m
         <div className="mb-6 px-1">
           <LogoMark />
         </div>
-        <NavLinks items={navItems} />
+        <NavLinks items={BASE_NAV_ITEMS} />
         <SidebarDropCatalog />
         <AccountRow user={user} />
       </aside>
@@ -348,7 +333,7 @@ export function AppSidebar({ user, modelBuilderEnabled }: { user: SidebarUser; m
                 <CloseIcon />
               </button>
             </div>
-            <NavLinks items={navItems} onNavigate={() => setOpen(false)} />
+            <NavLinks items={BASE_NAV_ITEMS} onNavigate={() => setOpen(false)} />
             <SidebarDropCatalog onNavigate={() => setOpen(false)} />
             <AccountRow user={user} />
           </aside>

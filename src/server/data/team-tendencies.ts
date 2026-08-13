@@ -285,11 +285,3 @@ export function computeTendencyRates(tendency: {
     totalSampleSize,
   };
 }
-
-export async function getTeamTendency(sportKey: string, teamName: string): Promise<TeamTendencyRates | null> {
-  const tendency = await prisma.teamTendency.findUnique({
-    where: { sportKey_teamName: { sportKey, teamName } },
-  });
-  if (!tendency) return null;
-  return computeTendencyRates(tendency);
-}

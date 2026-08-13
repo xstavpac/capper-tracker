@@ -67,7 +67,6 @@ model User {
   cappers                 Capper[]
   picks                   Pick[]
   subscription            Subscription?
-  models                  UserModel[]
   dismissedDuplicatePairs DismissedDuplicatePair[]
 
   @@map("users")
@@ -385,63 +384,6 @@ model PitcherStatSnapshot {
 
   @@unique([sportKey, pitcherId, snapshotDate])
   @@map("pitcher_stat_snapshots")
-}
-
-// Which pitcher was the probable starter for each side of a game - captured
-// from the same daily schedule fetch that already powers probable-starter
-// pitcher-snapshot capture (hydrate=probablePitcher returns gamePk/team
-// names/pitcher ids together, so this adds zero extra API requests). Keyed
-// like GameResult (sportKey + externalId - MLB's gamePk) so backtestModel
-// can join GameResult -> GameStarters -> PitcherStatSnapshot the same way it
-// already joins GameResult -> OddsSnapshot for market conditions. "Probable"
-// starter, not confirmed actual starter - the best available without a
-// heavier per-game boxscore lookup after the fact.
-model GameStarters {
-  id            String    @id @default(cuid())
-  sportKey      String
-  externalId    String // matches GameResult.externalId
-  homeTeam      String
-  awayTeam      String
-  homePitcherId Int?
-  awayPitcherId Int?
-  gameDate      DateTime
-  sourceId      String    @default("mlb_stats_api")
-  scope         DataScope @default(GLOBAL)
-  createdAt     DateTime  @default(now())
-
-  @@unique([sportKey, externalId])
-  @@map("game_starters")
-}
-
-// What a Build Your Own Model model is actually predicting - required so an
-// AND-chain of conditions from different markets (a moneyline signal like
-// "Fav win% >= 60" alongside a totals signal like "Team over rate >= 55")
-// still produces one well-defined backtested probability to compare against
-// one market price, instead of an ambiguous blend of unrelated markets.
-enum ModelTarget {
-  FAVORITE_ML
-  UNDERDOG_ML
-  OVER
-  UNDER
-}
-
-model UserModel {
-  id         String      @id @default(cuid())
-  userId     String
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name       String
-  target     ModelTarget
-  // ConditionTree (a root AND/OR group, possibly nested) - see
-  // lib/model-builder.ts. Simple mode's UI only ever writes a flat AND-group
-  // of leaf conditions, but the stored shape supports real nesting so a
-  // future Advanced mode is a new UI layer over this same column and
-  // evaluation engine, not a migration.
-  conditions Json
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-
-  @@index([userId])
-  @@map("user_models")
 }
 
 model GameResult {
