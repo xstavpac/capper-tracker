@@ -459,6 +459,21 @@ model GameResult {
   gameDate           DateTime
   createdAt          DateTime @default(now())
 
+  // ---- Team-trend ledger fields (Fav/Dog + Over/Under signal source) ----
+  // Populated from the best odds data available around this game's date -
+  // NOT a rigorously-captured true closing line. This app only caches odds
+  // once per day (OddsSnapshot), at whatever time that day's fetch happened -
+  // it may be hours before the actual closing line. Both fields stay null
+  // when no odds data could be matched to this game at all (its date
+  // predates any odds history, or that day's fetch was missed/out of season).
+  // favWon/wentOver are deliberately NOT stored - both are fully derivable
+  // from favTeam + homeScore/awayScore/totalLine already on this row, so
+  // deriving them at read time avoids a stored value ever drifting out of
+  // sync with the raw scores.
+  favTeam    String? // whichever of homeTeam/awayTeam was the moneyline favorite per the matched snapshot
+  totalLine  Float?  // the total (over/under) line from that same matched snapshot
+  lineSource String? // "odds_snapshot" today (best-available daily cache) - reserved for a future "closing_capture" value if true near-gametime capture gets built later
+
   @@unique([sportKey, externalId])
   @@map("game_results")
 }

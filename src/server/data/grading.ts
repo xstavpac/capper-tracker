@@ -1,10 +1,52 @@
 import { prisma } from "@/lib/prisma";
 import type { GameResult } from "@prisma/client";
-import { getLiveScoresForSport, getMlbEarlyInningScores, getNflFirstHalfScore, getNflPlayerTdStats } from "@/server/data/odds";
+import {
+  getLiveScoresForSport,
+  getOddsForSport,
+  getMlbEarlyInningScores,
+  getNflFirstHalfScore,
+  getNflPlayerTdStats,
+  type OddsGame,
+} from "@/server/data/odds";
 import { closestByTime } from "@/lib/dates";
 import { extractLine, parseTouchdownProp } from "@/lib/bet-line";
 import { findTeamNickname } from "@/lib/parse-catalog";
 import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
+
+function findMarket(game: OddsGame, key: string) {
+  for (const b of game.bookmakers) {
+    const m = b.markets.find((m) => m.key === key);
+    if (m) return m;
+  }
+  return undefined;
+}
+
+// Derives the team-trend ledger fields (see schema.prisma's GameResult
+// comment) from whichever odds snapshot is already cached for this sport
+// today - the SAME cache getOddsForSport always uses, not a separate fetch.
+// Not a rigorous closing line (see the schema comment); still the best data
+// this app captures today. Returns nulls when the game isn't in that
+// snapshot at all (e.g. the day's fetch was missed) or neither market has
+// usable outcomes.
+function deriveLedgerFields(
+  oddsGames: OddsGame[],
+  homeTeam: string,
+  awayTeam: string
+): { favTeam: string | null; totalLine: number | null } {
+  const match = oddsGames.find((g) => g.homeTeam === homeTeam && g.awayTeam === awayTeam);
+  if (!match) return { favTeam: null, totalLine: null };
+
+  const h2h = findMarket(match, "h2h");
+  const homeOutcome = h2h?.outcomes.find((o) => o.name === match.homeTeam);
+  const awayOutcome = h2h?.outcomes.find((o) => o.name === match.awayTeam);
+  const favTeam =
+    homeOutcome && awayOutcome ? (homeOutcome.price < awayOutcome.price ? match.homeTeam : match.awayTeam) : null;
+
+  const totals = findMarket(match, "totals");
+  const totalLine = totals?.outcomes.find((o) => o.point !== undefined)?.point ?? null;
+
+  return { favTeam, totalLine };
+}
 
 // Persists final scores for a sport's finished games into GameResult, so
 // gradePendingPicks has something to grade against. First-half scores are
@@ -20,6 +62,12 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
   const finals = games.filter((g) => g.status === "final" && g.scores);
   const supportsFirstFive = sportKey === "baseball_mlb";
   const supportsFirstHalf = sportKey === "americanfootball_nfl";
+
+  // Same daily cache getOddsForSport always serves elsewhere - fetched once
+  // for this whole batch (not per-game) to derive the team-trend ledger
+  // fields below. A cache hit costs nothing extra; a miss just means no
+  // ledger fields for this batch, same as any other day the fetch failed.
+  const oddsGames = await getOddsForSport(sportKey);
 
   // Each game's persist is independent - was previously a sequential for-loop,
   // which meant a day with many newly-final games (each potentially needing a
@@ -53,6 +101,12 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
       const firstHalfHome = early?.firstFive?.home ?? nflFirstHalf?.home ?? null;
       const firstHalfAway = early?.firstFive?.away ?? nflFirstHalf?.away ?? null;
 
+      // Same immutable-once-set reasoning as the first-half fields above -
+      // only derive when this row doesn't already have a favTeam.
+      const needsLedgerFields = !existing || existing.favTeam === null;
+      const ledger = needsLedgerFields ? deriveLedgerFields(oddsGames, g.homeTeam, g.awayTeam) : null;
+      const ledgerHasData = ledger && (ledger.favTeam !== null || ledger.totalLine !== null);
+
       await prisma.gameResult.upsert({
         where: { sportKey_externalId: { sportKey, externalId: g.id } },
         update: {
@@ -61,6 +115,9 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
           ...(firstHalfHome !== null ? { firstFiveHomeScore: firstHalfHome, firstFiveAwayScore: firstHalfAway } : {}),
           ...(firstInning
             ? { firstInningHomeScore: firstInning.home, firstInningAwayScore: firstInning.away }
+            : {}),
+          ...(ledgerHasData
+            ? { favTeam: ledger!.favTeam, totalLine: ledger!.totalLine, lineSource: "odds_snapshot" }
             : {}),
         },
         create: {
@@ -75,6 +132,9 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
           firstInningHomeScore: firstInning?.home ?? null,
           firstInningAwayScore: firstInning?.away ?? null,
           gameDate: new Date(g.commenceTime),
+          favTeam: ledger?.favTeam ?? null,
+          totalLine: ledger?.totalLine ?? null,
+          lineSource: ledgerHasData ? "odds_snapshot" : null,
         },
       });
       return true;
