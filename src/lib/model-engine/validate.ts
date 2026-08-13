@@ -14,6 +14,12 @@ import {
   isArithmeticUnaryOp,
   isComparisonOp,
   isFunctionId,
+  AGGREGATION_SOURCES,
+  AGGREGATION_METHODS,
+  isAggregationSource,
+  isAggregationMethod,
+  isObservationFieldForSource,
+  type AggregationSourceId,
 } from "./registries";
 import type { BucketRule, Condition, Metadata, ModelDefinition, Outcome } from "./types";
 
@@ -261,6 +267,129 @@ export function validateModelDefinition(doc: unknown): ValidationResult {
     else validateExpression(node.right, `${path}.right`, sourceIndex);
   }
 
+  // ---- ObservationExpression - a second, deliberately smaller expression
+  // language scoped to an Aggregation's select/value. No document-order/ref
+  // concerns here (unlike Expression's `{ref}`) - entityRef only ever needs
+  // to match a key in the local entities map, checked directly, not against
+  // the document-wide id registry. ----
+  function validateObservationExpression(
+    node: unknown,
+    path: string,
+    entityNames: Set<string>,
+    source: AggregationSourceId
+  ): void {
+    if (!isPlainObject(node)) {
+      err(path, "ObservationExpression must be an object.");
+      return;
+    }
+    const shapes = {
+      literal: "literal" in node,
+      observationField: "observationField" in node,
+      entityRef: "entityRef" in node,
+      comparison: "op" in node && "left" in node && "right" in node,
+      all: "all" in node,
+      any: "any" in node,
+    };
+    const matched = Object.entries(shapes).filter(([, v]) => v);
+    if (matched.length === 0) {
+      err(path, "ObservationExpression does not match any known shape (literal/observationField/entityRef/op+left+right/all/any).");
+      return;
+    }
+    if (matched.length > 1) {
+      err(path, `ObservationExpression matches more than one shape (${matched.map(([k]) => k).join(", ")}) - ambiguous.`);
+      return;
+    }
+
+    if (shapes.literal) {
+      const v = (node as { literal: unknown }).literal;
+      if (typeof v !== "number" && typeof v !== "boolean" && typeof v !== "string") {
+        err(`${path}.literal`, "literal must be a number, boolean, or string.");
+      }
+      return;
+    }
+    if (shapes.observationField) {
+      const field = (node as { observationField: unknown }).observationField;
+      if (!isString(field) || !isObservationFieldForSource(source, field)) {
+        err(`${path}.observationField`, `"${String(field)}" is not a registered observationField for source "${source}".`);
+      }
+      return;
+    }
+    if (shapes.entityRef) {
+      const name = (node as { entityRef: unknown }).entityRef;
+      if (!isNonEmptyString(name)) {
+        err(`${path}.entityRef`, "entityRef must be a non-empty string.");
+      } else if (!entityNames.has(name)) {
+        err(`${path}.entityRef`, `"${name}" does not match any key in this Aggregation's entities map.`);
+      }
+      return;
+    }
+    if (shapes.comparison) {
+      const op = (node as { op: unknown }).op;
+      if (!isString(op) || !isComparisonOp(op)) {
+        err(`${path}.op`, `"${String(op)}" is not a registered comparison operator (${COMPARISON_OPS.join(", ")}).`);
+      }
+      validateObservationExpression((node as { left: unknown }).left, `${path}.left`, entityNames, source);
+      validateObservationExpression((node as { right: unknown }).right, `${path}.right`, entityNames, source);
+      return;
+    }
+    // shapes.all || shapes.any
+    const key = shapes.all ? "all" : "any";
+    const list = (node as Record<string, unknown>)[key];
+    if (!isArray(list)) {
+      err(`${path}.${key}`, `${key} must be an array of ObservationExpression.`);
+      return;
+    }
+    if (list.length === 0) err(`${path}.${key}`, `${key} must contain at least one ObservationExpression.`);
+    list.forEach((child, i) => validateObservationExpression(child, `${path}.${key}[${i}]`, entityNames, source));
+  }
+
+  // ---- Aggregation (AggregationCalculation) ----
+  function validateAggregation(node: unknown, path: string, sourceIndex: number): void {
+    if (!isPlainObject(node)) {
+      err(path, "aggregation must be an object.");
+      return;
+    }
+    const sourceVal = node.source;
+    if (!isString(sourceVal) || !isAggregationSource(sourceVal)) {
+      err(`${path}.source`, `"${String(sourceVal)}" is not a registered aggregation source (${AGGREGATION_SOURCES.join(", ")}).`);
+    }
+    // Falls back to the one real source for field-registry lookups when
+    // source itself is invalid (already errored above) - keeps select/value
+    // validation running instead of bailing, same "keep collecting errors"
+    // approach as the rest of this validator.
+    const resolvedSource: AggregationSourceId = isString(sourceVal) && isAggregationSource(sourceVal) ? sourceVal : "gameObservations";
+
+    const method = node.method;
+    if (!isString(method) || !isAggregationMethod(method)) {
+      err(`${path}.method`, `"${String(method)}" is not a registered aggregation method (${AGGREGATION_METHODS.join(", ")}).`);
+    }
+
+    if (!("weightingRef" in node)) err(`${path}.weightingRef`, "weightingRef is required.");
+    else checkWeightingRef(node.weightingRef, `${path}.weightingRef`);
+
+    const entityNames = new Set<string>();
+    if (!isPlainObject(node.entities)) {
+      err(`${path}.entities`, "entities must be an object mapping names to { ref }.");
+    } else {
+      const entries = Object.entries(node.entities);
+      if (entries.length === 0) err(`${path}.entities`, "entities must have at least one entry.");
+      for (const [name, value] of entries) {
+        entityNames.add(name);
+        if (!isPlainObject(value) || !("ref" in value)) {
+          err(`${path}.entities.${name}`, "must be an object of the form { ref: <dataInputId> }.");
+          continue;
+        }
+        checkRef((value as { ref: unknown }).ref, `${path}.entities.${name}.ref`, sourceIndex);
+      }
+    }
+
+    if (!("select" in node)) err(`${path}.select`, "select is required.");
+    else validateObservationExpression(node.select, `${path}.select`, entityNames, resolvedSource);
+
+    if (!("value" in node)) err(`${path}.value`, "value is required.");
+    else validateObservationExpression(node.value, `${path}.value`, entityNames, resolvedSource);
+  }
+
   // ---- DataInput ----
   dataInputs.forEach((item, i) => {
     const path = `$.dataInputs[${i}]`;
@@ -276,13 +405,27 @@ export function validateModelDefinition(doc: unknown): ValidationResult {
     if (item.sourceRef !== null && !isString(item.sourceRef)) err(`${path}.sourceRef`, "sourceRef must be a string or null.");
   });
 
-  // ---- Calculation ----
+  // ---- Calculation - discriminated by which key is present (expression vs.
+  // aggregation), same key-presence convention as Expression itself. ----
   calculations.forEach((item, i) => {
     const path = `$.calculations[${i}]`;
     if (!isPlainObject(item)) return err(path, "must be an object.");
     const sourceIndex = registry.orderIndex.get(item.id as string) ?? -1;
-    validateExpression(item.expression, `${path}.expression`, sourceIndex);
-    if (item.weightingRef !== undefined) checkWeightingRef(item.weightingRef, `${path}.weightingRef`);
+    const hasExpression = "expression" in item;
+    const hasAggregation = "aggregation" in item;
+    if (hasExpression && hasAggregation) {
+      err(path, "Calculation must have exactly one of expression/aggregation, not both.");
+      return;
+    }
+    if (!hasExpression && !hasAggregation) {
+      err(path, "Calculation must have exactly one of: expression (ExpressionCalculation), aggregation (AggregationCalculation).");
+      return;
+    }
+    if (hasExpression) {
+      validateExpression(item.expression, `${path}.expression`, sourceIndex);
+      return;
+    }
+    validateAggregation(item.aggregation, `${path}.aggregation`, sourceIndex);
   });
 
   // ---- WeightingSpec ----

@@ -55,3 +55,31 @@ export function isComparisonOp(op: string): op is ComparisonOpId {
 export function isFunctionId(id: string): id is FunctionId {
   return (FUNCTION_IDS as readonly string[]).includes(id);
 }
+
+// ===== Aggregation registries (Build Step 3c) =====
+// Closed exactly like every registry above - adding a value later is an
+// intentional, versioned schema/engine change, not something the validator
+// or a model author does implicitly.
+
+export const AGGREGATION_SOURCES = ["gameObservations"] as const;
+export type AggregationSourceId = (typeof AGGREGATION_SOURCES)[number];
+export function isAggregationSource(source: string): source is AggregationSourceId {
+  return (AGGREGATION_SOURCES as readonly string[]).includes(source);
+}
+
+export const AGGREGATION_METHODS = ["weightedAverage"] as const;
+export type AggregationMethodId = (typeof AGGREGATION_METHODS)[number];
+export function isAggregationMethod(method: string): method is AggregationMethodId {
+  return (AGGREGATION_METHODS as readonly string[]).includes(method);
+}
+
+// observationField is closed PER SOURCE, not one shared enum - a future
+// source registers its own closed field set independently. Keyed by
+// AggregationSourceId so adding a source without also adding its field set
+// here is a TypeScript error, not a silent gap.
+export const OBSERVATION_FIELDS_BY_SOURCE: Record<AggregationSourceId, readonly string[]> = {
+  gameObservations: ["favTeam", "dogTeam", "favWon", "wentOver", "isPush", "gameDate"],
+};
+export function isObservationFieldForSource(source: AggregationSourceId, field: string): boolean {
+  return OBSERVATION_FIELDS_BY_SOURCE[source].includes(field);
+}

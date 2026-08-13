@@ -48,11 +48,80 @@ export type DataInput = {
   sourceRef: string | null;
 };
 
-export type Calculation = {
-  id: string;
-  expression: Expression;
-  weightingRef?: string;
+// A pure expression calculation - evaluated via evaluateExpression (Build
+// Step 3a) against whatever's already in the ValueContext.
+export type ExpressionCalculation = { id: string; expression: Expression };
+
+// ===== ObservationExpression - a second, deliberately much smaller
+// expression language, scoped to per-observation selection/value extraction
+// inside an Aggregation. Permanently restricted: no BinaryOp/UnaryOp/
+// FunctionCall node exists here, and none may be added - it answers exactly
+// two questions (should this observation be included, what value does it
+// contribute), never general computation. Any future per-observation
+// transformation is a new, explicitly registered, closed capability with
+// its own schema/engine version bump, not an expansion of this language. =====
+export type ObservationLiteralExpr = { literal: number | boolean | string };
+// observationField is closed PER SOURCE, not one global list - see
+// OBSERVATION_FIELDS_BY_SOURCE in registries.ts. A future source registers
+// its own closed field set independently; these never merge into one
+// shared enum.
+export type ObservationFieldExpr = { observationField: string };
+// Must match a key in the enclosing Aggregation's own `entities` map -
+// checked by the validator, not by this type itself.
+export type ObservationEntityRefExpr = { entityRef: string };
+// Comparison ops reused verbatim from the already-closed registry
+// (registries.ts's ComparisonOpId) - the exact same six values Condition.when
+// uses, not a parallel list.
+export type ObservationComparisonExpr = { op: ComparisonOpId; left: ObservationExpression; right: ObservationExpression };
+export type ObservationAllExpr = { all: ObservationExpression[] };
+export type ObservationAnyExpr = { any: ObservationExpression[] };
+
+export type ObservationExpression =
+  | ObservationLiteralExpr
+  | ObservationFieldExpr
+  | ObservationEntityRefExpr
+  | ObservationComparisonExpr
+  | ObservationAllExpr
+  | ObservationAnyExpr;
+
+// source is a closed registry (registries.ts's AGGREGATION_SOURCES) - exactly
+// one value today ("gameObservations"). Adding a source is an intentional,
+// versioned schema/engine change, same rule as every other closed registry.
+export type AggregationSource = "gameObservations";
+// method is likewise closed (AGGREGATION_METHODS) - exactly "weightedAverage"
+// today. Subsumes what would otherwise have been a separate "weightedRate" -
+// a rate is an average of 0/1 values, same math, one primitive.
+export type AggregationMethod = "weightedAverage";
+
+export type Aggregation = {
+  source: AggregationSource;
+  // A named map, not a single field - each entry's ref points to an
+  // existing DataInput's id, which identifies an entity (e.g. a team) via
+  // the existing DATA layer. A future source needing two simultaneous
+  // bindings (e.g. a pitcher and their team) adds a second named entry, not
+  // a new top-level field.
+  entities: Record<string, { ref: string }>;
+  // Must evaluate to boolean - whether a given observation is included.
+  select: ObservationExpression;
+  // May evaluate to boolean or number - what value that observation
+  // contributes if included.
+  value: ObservationExpression;
+  // The only place weightingRef is still meaningful - relocated here from
+  // the old flat Calculation shape.
+  weightingRef: string;
+  method: AggregationMethod;
 };
+
+// An aggregation calculation - resolves a dated observation series (e.g.
+// Build Step 2.5's resolveGameObservations) and reduces it to one weighted
+// value via Build Step 3b's computeWeightedRate. This is the declarative
+// counterpart to 3b's filter/valueOf TypeScript closures, which can't live
+// in JSON.
+export type AggregationCalculation = { id: string; aggregation: Aggregation };
+
+// Discriminated by which key is present (expression vs. aggregation) -
+// matching Expression's existing key-presence convention. No `kind` field.
+export type Calculation = ExpressionCalculation | AggregationCalculation;
 
 // Only "exponential" is defined by the finalized contract this step
 // implements. Adding a method is the same kind of intentional, versioned
@@ -114,9 +183,10 @@ export type ModelDefinition = {
   sport: string;
   dataInputs: DataInput[];
   calculations: Calculation[];
-  // Top-level and named, not a pipeline stage - referenced by id via
-  // Calculation.weightingRef, not positioned in the document-order chain
-  // the other sections' references are checked against (see validate.ts).
+  // Top-level and named, not a pipeline stage - referenced by id via an
+  // AggregationCalculation's Aggregation.weightingRef, not positioned in
+  // the document-order chain the other sections' references are checked
+  // against (see validate.ts).
   weighting: WeightingSpec[];
   derivedValues: DerivedValue[];
   conditions: Condition[];

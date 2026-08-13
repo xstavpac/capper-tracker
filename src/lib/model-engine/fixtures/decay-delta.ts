@@ -1,8 +1,10 @@
 // Acceptance-test fixture #1: Decay Delta, expressed as a real Model
-// Definition document. Structural proof only - nothing here is executed.
-// The key thing this fixture has to demonstrate by construction: the delta
-// subtracts two ALREADY-ROUNDED calculation outputs, not the raw weighted
-// rates or raw data inputs - see dv_decay_delta's expression below.
+// Definition document. Originally structural-proof-only (Build Step 1); now
+// uses real AggregationCalculations (Build Step 3c) so it can actually be
+// executed through orchestration, not just validated. The key thing this
+// fixture demonstrates by construction: the delta subtracts two
+// ALREADY-ROUNDED calculation outputs, not the raw weighted rates or raw
+// data inputs - see dv_decay_delta's expression below.
 import type { ModelDefinition } from "../types";
 
 export const decayDeltaModel: ModelDefinition = {
@@ -29,45 +31,96 @@ export const decayDeltaModel: ModelDefinition = {
   ],
 
   calculations: [
-    // Weighted rate calculations - reference their raw data input and
-    // invoke the exponential weighting spec via weightingRef. How
-    // weighting actually combines with the expression is an execution-
-    // engine concern, out of scope for this step.
-    { id: "calc_fav_weighted", expression: { ref: "di_fav_rate" }, weightingRef: "w_recency" },
-    { id: "calc_dog_weighted", expression: { ref: "di_dog_rate" }, weightingRef: "w_recency" },
-    // Each weighted rate is rounded individually, BEFORE the subtraction
-    // below - this is what proves round-before-subtract by construction.
+    // AggregationCalculations (Build Step 3c) - the declarative form of
+    // Build Step 3b's favRoleRate/dogRoleRate. di_fav_rate/di_dog_rate are
+    // reused here purely for their entity.role identity (favorite/
+    // underdog), not their variableId's resolved stat value - nothing in
+    // this model references their resolved number.
     {
-      id: "calc_fav_rounded",
-      expression: { function: "round", args: [{ ref: "calc_fav_weighted" }, { literal: 2 }] },
+      id: "calc_fav_weighted",
+      aggregation: {
+        source: "gameObservations",
+        entities: { team: { ref: "di_fav_rate" } },
+        select: {
+          all: [
+            { op: "equal", left: { observationField: "isPush" }, right: { literal: false } },
+            { op: "equal", left: { observationField: "favTeam" }, right: { entityRef: "team" } },
+          ],
+        },
+        value: { observationField: "favWon" },
+        weightingRef: "w_recency",
+        method: "weightedAverage",
+      },
     },
     {
-      id: "calc_dog_rounded",
-      expression: { function: "round", args: [{ ref: "calc_dog_weighted" }, { literal: 2 }] },
+      id: "calc_dog_weighted",
+      aggregation: {
+        source: "gameObservations",
+        entities: { team: { ref: "di_dog_rate" } },
+        select: {
+          all: [
+            { op: "equal", left: { observationField: "isPush" }, right: { literal: false } },
+            { op: "equal", left: { observationField: "dogTeam" }, right: { entityRef: "team" } },
+          ],
+        },
+        // The underdog won exactly when the favorite did NOT - expressed as
+        // favWon equal false, since this language has no negation node (see
+        // types.ts's ObservationExpression comment - permanently restricted
+        // to literal/observationField/entityRef/comparison/all/any).
+        value: { op: "equal", left: { observationField: "favWon" }, right: { literal: false } },
+        weightingRef: "w_recency",
+        method: "weightedAverage",
+      },
+    },
+    // Each weighted rate is converted to a 0-100 percentage and rounded
+    // individually, BEFORE the subtraction below - round(rate * 100), the
+    // exact same convention Build Step 3b's computeDecayFavDogDelta uses
+    // (Math.round(rate * 100)), not round(rate, 2) on the raw 0-1 fraction -
+    // that would leave this fixture's numbers on a different scale than 3b's
+    // own proven output, making a real side-by-side comparison meaningless.
+    // This is what proves round-before-subtract by construction.
+    {
+      id: "calc_fav_pct",
+      expression: {
+        function: "round",
+        args: [{ op: "multiply", left: { ref: "calc_fav_weighted" }, right: { literal: 100 } }, { literal: 0 }],
+      },
+    },
+    {
+      id: "calc_dog_pct",
+      expression: {
+        function: "round",
+        args: [{ op: "multiply", left: { ref: "calc_dog_weighted" }, right: { literal: 100 } }, { literal: 0 }],
+      },
     },
   ],
 
   weighting: [{ id: "w_recency", method: "exponential", parameters: { halfLifeDays: 15 } }],
 
   derivedValues: [
-    // Subtracts the two already-rounded calculation outputs
-    // (calc_fav_rounded / calc_dog_rounded), not the raw weighted values.
+    // Subtracts the two already-rounded PERCENTAGE calculation outputs
+    // (calc_fav_pct / calc_dog_pct), not the raw weighted fractions -
+    // matches 3b's mlDecayDelta exactly (favPct - dogPct, both already
+    // integers 0-100).
     {
       id: "dv_decay_delta",
-      expression: { op: "subtract", left: { ref: "calc_fav_rounded" }, right: { ref: "calc_dog_rounded" } },
+      expression: { op: "subtract", left: { ref: "calc_fav_pct" }, right: { ref: "calc_dog_pct" } },
     },
   ],
 
   conditions: [],
 
   buckets: [
+    // Percentage-point buckets (the delta is now on a -100..100 scale, not
+    // a 0-1 fraction) - same signed, direction-split structure the
+    // fact-finding pass found in the original source's own DELTA_BUCKET_DEFS.
     {
       id: "bucket_decay_delta",
       input: { ref: "dv_decay_delta" },
       rules: [
-        { id: "rule_negative_edge", when: { lt: 0 } },
-        { id: "rule_neutral", when: { range: { min: 0, max: 0.05 } } },
-        { id: "rule_positive_edge", when: { gt: 0.05 } },
+        { id: "rule_underdog_edge", when: { lt: 0 } },
+        { id: "rule_neutral", when: { range: { min: 0, max: 10 } } },
+        { id: "rule_favorite_edge", when: { gt: 10 } },
       ],
     },
   ],

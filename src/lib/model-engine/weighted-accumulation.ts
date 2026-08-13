@@ -30,12 +30,22 @@ export type WeightedRateResult = {
 // valueOf carry all of that. Push exclusion is NOT baked in here; it's
 // each caller's own choice, expressed through filter (see the Decay Delta
 // reproduction below, where every filter folds in !obs.isPush itself).
+//
+// valueOf's return type is boolean | number (widened for Build Step 3c,
+// which needs a declarative weightedAverage that subsumes what would
+// otherwise have been a separate weightedRate method - a rate is an
+// average of 0/1 values, same math, one primitive). true/false map to 1/0;
+// a genuine number contributes itself. Every existing caller below
+// (favRoleRate/dogRoleRate/overRate/underRate) still passes a
+// boolean-only valueOf and is completely unaffected - boolean true/false
+// accumulating as weight*1/weight*0 is identical to the old
+// weight-if-true/nothing-if-false behavior.
 export function computeWeightedRate(
   observations: GameObservation[],
   asOf: Date,
   weighting: WeightingSpec,
   filter: (obs: GameObservation) => boolean,
-  valueOf: (obs: GameObservation) => boolean
+  valueOf: (obs: GameObservation) => boolean | number
 ): WeightedRateResult {
   let numerator = 0;
   let denominator = 0;
@@ -46,7 +56,9 @@ export function computeWeightedRate(
     const daysAgo = (asOf.getTime() - obs.gameDate.getTime()) / (1000 * 60 * 60 * 24);
     const weight = Math.pow(2, -daysAgo / weighting.parameters.halfLifeDays);
     denominator += weight;
-    if (valueOf(obs)) numerator += weight;
+    const raw = valueOf(obs);
+    const value = typeof raw === "boolean" ? (raw ? 1 : 0) : raw;
+    numerator += weight * value;
   }
   if (denominator === 0) {
     return { rate: null, weightedTotal: 0, found: false };
