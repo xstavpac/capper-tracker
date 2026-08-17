@@ -161,6 +161,13 @@ function looksLikePick(text: string): boolean {
   return (
     /\(\s*[\d.]+\s*u(nits?)?\b/i.test(text) ||
     /\b\d+(\.\d+)?\s*u(nits?)?\b/i.test(text) ||
+    // Same units signal, reversed word order ("Units: 1", "unit 1 each") -
+    // a capper's own bet-size shorthand is always digit-first ("1u", "2
+    // units"), but a trailing meta note describing the whole batch's unit
+    // size ("All 1 unit each", or word-order-reversed "Units: 1 each") isn't
+    // a pick at all and needs the same signal to route to `unresolved`
+    // instead of falling through to being read as a capper name.
+    /\bunits?\b\s*:?\s*\d+(\.\d+)?\b/i.test(text) ||
     /[+-]\d+(\.\d+)?/.test(text) ||
     /\bML\b/i.test(text) ||
     /money\s*line/i.test(text) ||
