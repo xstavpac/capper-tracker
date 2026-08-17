@@ -71,7 +71,14 @@ export default async function CapperDetailPage({
     : "ALL";
 
   const picks = await getPicksForCapper(user.id, params.capperId);
-  const stats = computeStats(picks);
+  // Record/ROI/Net units should reflect whichever window is selected, same as
+  // the scorecard below - but currentStreak deliberately always comes from
+  // the unfiltered, all-time computeStats call instead: a streak is a count
+  // of consecutive results in true chronological order, and filtering the
+  // input to a window would truncate a real ongoing streak into a smaller,
+  // misleading number rather than produce a meaningful "windowed" streak.
+  const stats = computeStats(filterPicksByGradedWindow(picks, window));
+  const allTimeStats = computeStats(picks);
   const allTimeScorecard = computeScorecard(picks);
   const scorecard = computeScorecard(filterPicksByGradedWindow(picks, window));
 
@@ -131,7 +138,7 @@ export default async function CapperDetailPage({
               {" · "}
               Last pick {formatRelativeTime(new Date(lastPickMs), Date.now())}
             </p>
-            <StreakBadge streak={stats.currentStreak} />
+            <StreakBadge streak={allTimeStats.currentStreak} />
           </div>
           <div className="mt-3 flex flex-wrap gap-8">
             <div>
@@ -174,11 +181,17 @@ export default async function CapperDetailPage({
         <StatCard
           label="Current streak"
           value={
-            stats.currentStreak.type === "NONE"
+            allTimeStats.currentStreak.type === "NONE"
               ? "-"
-              : stats.currentStreak.count + " " + stats.currentStreak.type
+              : allTimeStats.currentStreak.count + " " + allTimeStats.currentStreak.type
           }
-          tone={stats.currentStreak.type === "WIN" ? "up" : stats.currentStreak.type === "LOSS" ? "down" : undefined}
+          tone={
+            allTimeStats.currentStreak.type === "WIN"
+              ? "up"
+              : allTimeStats.currentStreak.type === "LOSS"
+                ? "down"
+                : undefined
+          }
         />
       </div>
 
