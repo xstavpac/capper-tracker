@@ -4,7 +4,8 @@
 // -> outcomes. Only calls existing DATA-layer/3a/3b functions; none of
 // their own logic is modified here.
 import { resolveVariable } from "./resolver";
-import { getEvaluationEventFacts, type EvaluationEventFacts } from "./facts";
+import { getEvaluationEventFacts } from "./facts";
+import { getPregameEventFacts } from "./pregame-facts";
 import { resolveGameObservations, filterObservationsBeforeAsOf, type GameObservation } from "./observations";
 import { evaluateExpression, evaluateComparison, type ValueContext } from "@/lib/model-engine/evaluate";
 import { computeWeightedRate } from "@/lib/model-engine/weighted-accumulation";
@@ -19,9 +20,27 @@ import type {
   BucketRuleWhen,
 } from "@/lib/model-engine/types";
 
-// One specific historical game, evaluated as of one specific instant - the
-// concrete input section 5 calls "an evaluation event."
-export type EvaluationEvent = { gameResultId: string; asOf: Date };
+// One specific game, evaluated as of one specific instant - the concrete
+// input section 5 calls "an evaluation event." Two shapes, discriminated by
+// key presence (same convention as Expression/Condition/Calculation) -
+// GradedEvaluationEvent for an already-finished GameResult row (unchanged
+// since 3c), and PregameEvaluationEvent (Build Step 6) for a matchup that
+// hasn't been played yet, identified by team pair instead of a GameResult
+// id since none exists. asOf still means the same thing in both: the
+// instant "as of which" every weighted-history lookup runs - for the
+// pregame path this should be the actual moment of evaluation (e.g. "now",
+// hours before that night's games start), NOT the game's own future
+// commenceTime - passing commenceTime would be harmless today (Build Step
+// 2.5's gameDate >= asOf exclusion only cares about calendar day, and a
+// pregame matchup has no GameObservation row of its own yet to leak), but
+// "now" is the honest answer to "as of when is this prediction being made,"
+// and correctly excludes any of either team's OTHER games earlier the same
+// Eastern calendar day (e.g. a doubleheader opener that already finished) -
+// the exact same same-day exclusion Build Step 2.5 already enforces,
+// reused verbatim, not reimplemented.
+export type GradedEvaluationEvent = { gameResultId: string; asOf: Date };
+export type PregameEvaluationEvent = { sportKey: string; homeTeam: string; awayTeam: string; asOf: Date };
+export type EvaluationEvent = GradedEvaluationEvent | PregameEvaluationEvent;
 
 // Deliberately NOT named ResolvedValue - that name is already taken by a
 // differently-shaped type from Build Step 2 ({ value, timestamp, found }).
@@ -74,12 +93,17 @@ function anyUnavailable(ids: string[], unavailableIds: Set<string>): boolean {
 // ---- DataInput entity resolution ----
 // Maps a DataInput's entity.role to an actual team name using this specific
 // evaluation event's canonical facts (GameResult.favTeam is the established
-// canonical field - see facts.ts; dogTeam is derived the same way
-// observations.ts already does: whichever of home/away isn't favTeam).
-// Returns null when the role can't be resolved for this event (e.g. no
-// favTeam was ever matched to this game) - the caller marks the referencing
-// node unavailable rather than crashing.
-function resolveRoleTeamName(role: string, facts: EvaluationEventFacts): string | null {
+// canonical field for the graded path - see facts.ts; PregameEventFacts'
+// favTeam is the same concept sourced from OddsSnapshot instead - see
+// pregame-facts.ts). dogTeam is derived the same way observations.ts
+// already does: whichever of home/away isn't favTeam. Deliberately typed to
+// the minimal shape both EvaluationEventFacts and the pregame branch's
+// locally-built equivalent satisfy structurally, rather than the full
+// EvaluationEventFacts type - this function never needed gameResultId/
+// externalId/scores, only these three fields. Returns null when the role
+// can't be resolved for this event (e.g. no favTeam was ever matched) - the
+// caller marks the referencing node unavailable rather than crashing.
+function resolveRoleTeamName(role: string, facts: { favTeam: string | null; homeTeam: string; awayTeam: string }): string | null {
   switch (role) {
     case "favorite":
       return facts.favTeam;
@@ -124,9 +148,31 @@ export async function runModelDefinition(
   const gridResults: Record<string, GridResult> = {};
   const outcomeResults: Record<string, AggregationOutcome<number | boolean | string>> = {};
 
-  const facts = await getEvaluationEventFacts(event.gameResultId);
-  if (!facts) {
-    throw new Error(`runModelDefinition: no GameResult found for gameResultId "${event.gameResultId}".`);
+  // ---- Resolve this event's own facts - graded (GameResult) or pregame
+  // (OddsSnapshot), completely unchanged for the graded path. Both branches
+  // produce the same minimal { sportKey, homeTeam, awayTeam, favTeam } shape
+  // resolveRoleTeamName/resolveGameObservations/resolveVariable actually
+  // need below - neither branch's own richer type (EvaluationEventFacts /
+  // PregameEventFacts) is widened or modified to make this work. ----
+  let sportKey: string;
+  let roleFacts: { favTeam: string | null; homeTeam: string; awayTeam: string };
+
+  if ("gameResultId" in event) {
+    const facts = await getEvaluationEventFacts(event.gameResultId);
+    if (!facts) {
+      throw new Error(`runModelDefinition: no GameResult found for gameResultId "${event.gameResultId}".`);
+    }
+    sportKey = facts.sportKey;
+    roleFacts = { favTeam: facts.favTeam, homeTeam: facts.homeTeam, awayTeam: facts.awayTeam };
+  } else {
+    const pregame = await getPregameEventFacts(event.sportKey, event.homeTeam, event.awayTeam);
+    if (!pregame) {
+      throw new Error(
+        `runModelDefinition: no OddsSnapshot found for "${event.awayTeam} @ ${event.homeTeam}" (sportKey "${event.sportKey}") - no pregame odds cached yet today.`
+      );
+    }
+    sportKey = event.sportKey;
+    roleFacts = { favTeam: pregame.favTeam, homeTeam: event.homeTeam, awayTeam: event.awayTeam };
   }
 
   // Fetched once for the whole run (asOf/sportKey are fixed for this
@@ -137,11 +183,11 @@ export async function runModelDefinition(
   // again for this event.
   const observations: GameObservation[] = options?.allObservations
     ? filterObservationsBeforeAsOf(options.allObservations, event.asOf)
-    : await resolveGameObservations(facts.sportKey, event.asOf);
+    : await resolveGameObservations(sportKey, event.asOf);
 
   // ---- Step 1: resolve every DataInput ----
   for (const input of model.dataInputs) {
-    const teamName = resolveRoleTeamName(input.entity.role, facts);
+    const teamName = resolveRoleTeamName(input.entity.role, roleFacts);
     if (teamName !== null) entityIdentities.set(input.id, teamName);
 
     if (teamName === null) {
@@ -158,7 +204,7 @@ export async function runModelDefinition(
       unavailableIds.add(input.id);
       continue;
     }
-    const result = await resolveVariable(input.variableId, { type: "team", teamName }, event.asOf, { sportKey: facts.sportKey });
+    const result = await resolveVariable(input.variableId, { type: "team", teamName }, event.asOf, { sportKey });
     if (result.found) {
       context[input.id] = result.value as number;
     } else {
