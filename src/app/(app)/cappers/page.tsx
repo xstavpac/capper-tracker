@@ -6,12 +6,15 @@ import {
   getSportCategoryPanelData,
   getCappersWithPickCounts,
   findSuspectedDuplicateCappers,
+  getFavoriteCappersSummary,
   type LeaderboardEntry,
+  type FavoriteCappersSummary as FavoriteCappersSummaryData,
 } from "@/server/data/cappers";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { PICK_CATEGORY_LABELS, SCORECARD_WINDOWS, type ScorecardWindow } from "@/server/data/stats";
 import { CapperForm } from "@/components/dashboard/capper-form";
 import { CappersLeaderboardTable } from "@/components/dashboard/cappers-leaderboard-table";
+import { FavoriteCappersSummary } from "@/components/dashboard/favorite-cappers-summary";
 import { BestAtPanel, type BestAtEntry } from "@/components/dashboard/best-at-panel";
 import { MostActivePanel } from "@/components/dashboard/most-active-panel";
 import { MergeCappersPanel } from "@/components/dashboard/merge-cappers-panel";
@@ -44,22 +47,39 @@ export default async function CappersPage({
   const league = LEAGUES.includes(searchParams.league ?? "") ? searchParams.league : undefined;
   const bestAtSport = league ?? DEFAULT_BEST_AT_SPORT;
 
-  const [planStatus, entriesByWindowList, mostActive, categoryPanel, cappersWithCounts, suspectedDuplicates] = await Promise.all([
-    getPlanStatus(user.id),
-    // All 5 SCORECARD_WINDOWS fetched up front, same "toggle is instant, no
-    // reload" UX the leaderboard already had for its old 2-option This-week/
-    // All-time toggle - see CappersLeaderboardTable, which just picks which
-    // of these 5 already-fetched arrays to display.
-    Promise.all(SCORECARD_WINDOWS.map((w) => getCapperLeaderboardTable(user.id, w, { sportName: league }))),
-    getMostActiveThisWeek(user.id, { sportName: league }),
-    getSportCategoryPanelData(user.id, bestAtSport),
-    getCappersWithPickCounts(user.id),
-    findSuspectedDuplicateCappers(user.id),
-  ]);
+  const [planStatus, entriesByWindowList, favoriteSummaryByWindowList, mostActive, categoryPanel, cappersWithCounts, suspectedDuplicates] =
+    await Promise.all([
+      getPlanStatus(user.id),
+      // All 5 SCORECARD_WINDOWS fetched up front, same "toggle is instant, no
+      // reload" UX the leaderboard already had for its old 2-option This-week/
+      // All-time toggle - see CappersLeaderboardTable, which just picks which
+      // of these 5 already-fetched arrays to display.
+      Promise.all(SCORECARD_WINDOWS.map((w) => getCapperLeaderboardTable(user.id, w, { sportName: league }))),
+      // Not league-filtered, unlike the leaderboard above - the Favorites
+      // summary pools every favorited capper's picks across all sports, same
+      // "collective record across all of them together" scope regardless of
+      // which league pill happens to be active.
+      Promise.all(SCORECARD_WINDOWS.map((w) => getFavoriteCappersSummary(user.id, w))),
+      getMostActiveThisWeek(user.id, { sportName: league }),
+      getSportCategoryPanelData(user.id, bestAtSport),
+      getCappersWithPickCounts(user.id),
+      findSuspectedDuplicateCappers(user.id),
+    ]);
 
   const entriesByWindow = Object.fromEntries(
     SCORECARD_WINDOWS.map((w, i) => [w, entriesByWindowList[i]])
   ) as Record<ScorecardWindow, LeaderboardEntry[]>;
+
+  // Every window either has a summary or none do - a favorite/unfavorite only
+  // flips at pick-import-independent times, so there's no scenario where one
+  // window has favorites and another doesn't. Using window 0 (TODAY) as the
+  // "does the user have any favorites at all" check is safe on that basis.
+  const hasFavorites = favoriteSummaryByWindowList[0] !== null;
+  const favoriteSummaryByWindow = hasFavorites
+    ? (Object.fromEntries(
+        SCORECARD_WINDOWS.map((w, i) => [w, favoriteSummaryByWindowList[i]])
+      ) as Record<ScorecardWindow, FavoriteCappersSummaryData>)
+    : null;
 
   const bestAtEntries: BestAtEntry[] = categoryPanel.breakdown
     .map((item) => {
@@ -80,6 +100,8 @@ export default async function CappersPage({
         </div>
         <CapperForm atLimit={false} />
       </div>
+
+      {favoriteSummaryByWindow && <FavoriteCappersSummary summaryByWindow={favoriteSummaryByWindow} />}
 
       {suspectedDuplicates.length > 0 && (
         <div className="mb-6">

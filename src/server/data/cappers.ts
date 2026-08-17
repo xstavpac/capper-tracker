@@ -75,6 +75,7 @@ export type LeaderboardEntry = {
   stats: OverallStats;
   weightedScore: number;
   specialist: SpecialistTag | null;
+  isFavorite: boolean;
 };
 
 // Backs the redesigned Cappers page's sortable leaderboard table - returns
@@ -132,8 +133,74 @@ export async function getCapperLeaderboardTable(
       stats,
       weightedScore: weightedRoiScore(stats),
       specialist: computeSpecialistTag(allByCapper.get(capper.id) ?? []),
+      isFavorite: capper.isFavorite,
     };
   });
+}
+
+// Ownership-checked so a crafted capperId can't toggle another user's
+// capper. Returns the new value (not just void) so the caller can update
+// optimistic UI state from the real persisted result rather than assuming
+// the toggle direction it guessed client-side actually landed.
+export async function toggleFavoriteCapper(userId: string, capperId: string): Promise<boolean> {
+  const capper = await prisma.capper.findFirst({ where: { id: capperId, userId } });
+  if (!capper) {
+    throw new Error("Capper not found.");
+  }
+  const updated = await prisma.capper.update({
+    where: { id: capperId },
+    data: { isFavorite: !capper.isFavorite },
+  });
+  return updated.isFavorite;
+}
+
+export type FavoriteCappersSummary = {
+  // OverallStats' currentStreak field is NOT meaningful here - see the
+  // comment where this is actually computed (getFavoriteCappersSummary
+  // below) for why. The type is shared with every other single-capper stats
+  // object, but this particular value must never be read as one.
+  collectiveStats: OverallStats;
+  entries: LeaderboardEntry[];
+};
+
+// Powers the Favorites section at the top of the Cappers page - the
+// collective card pools every favorited capper's picks into one array and
+// runs it through the exact same computeStats/filterPicksByGradedWindow
+// used everywhere else (capper detail page, leaderboard table), rather than
+// a separate aggregation. The individual-capper list below it reuses
+// getCapperLeaderboardTable wholesale (same per-capper stats+streak
+// computation as the main leaderboard) filtered down to just the
+// favorited ids, instead of recomputing anything. Returns null when the
+// user has no favorites, so the page can skip rendering the section
+// entirely rather than showing an empty state for a feature they haven't
+// used yet.
+export async function getFavoriteCappersSummary(
+  userId: string,
+  window: ScorecardWindow
+): Promise<FavoriteCappersSummary | null> {
+  const favoriteCappers = await prisma.capper.findMany({
+    where: { userId, isFavorite: true },
+    select: { id: true },
+  });
+  if (favoriteCappers.length === 0) return null;
+  const favoriteIds = new Set(favoriteCappers.map((c) => c.id));
+
+  const [allEntries, favoritePicks] = await Promise.all([
+    getCapperLeaderboardTable(userId, window),
+    prisma.pick.findMany({ where: { userId, capperId: { in: Array.from(favoriteIds) } } }),
+  ]);
+
+  // collectiveStats.currentStreak technically exists (computeStats always
+  // returns one), but is NOT meaningful on this particular object and must
+  // never be surfaced or reused - it's derived from multiple cappers' picks
+  // interleaved by gameTime, not one continuous chronological run for a
+  // single capper the way every other use of currentStreak in this app is.
+  // This is exactly why FavoriteCappersSummary (the component rendering
+  // this) never reads this field - keep it that way.
+  return {
+    collectiveStats: computeStats(filterPicksByGradedWindow(favoritePicks, window)),
+    entries: allEntries.filter((e) => favoriteIds.has(e.capperId)),
+  };
 }
 
 export type ActivityEntry = { capperId: string; name: string; colorTag: string | null; pickCount: number };

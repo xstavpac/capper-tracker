@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/server/auth";
-import { createCapper, mergeCappers, dismissDuplicatePair } from "@/server/data/cappers";
+import { createCapper, mergeCappers, dismissDuplicatePair, toggleFavoriteCapper } from "@/server/data/cappers";
 import type { Source } from "@prisma/client";
 
 export type CreateCapperResult =
@@ -64,6 +64,27 @@ export async function mergeCappersAction(primaryId: string, duplicateId: string)
     revalidatePath("/dashboard");
     revalidatePath("/reports");
     return { success: true, ...result };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Something went wrong.";
+    return { success: false, error: message };
+  }
+}
+
+export type ToggleFavoriteCapperResult =
+  | { success: true; isFavorite: boolean }
+  | { success: false; error: string };
+
+// Toggles Capper.isFavorite - no confirmation, meant to feel instant. Only
+// revalidates /cappers (the Favorites section and the star's own state both
+// live there); the capper detail page doesn't show favorite status, so no
+// need to revalidate it too.
+export async function toggleFavoriteCapperAction(capperId: string): Promise<ToggleFavoriteCapperResult> {
+  const user = await requireUser();
+
+  try {
+    const isFavorite = await toggleFavoriteCapper(user.id, capperId);
+    revalidatePath("/cappers");
+    return { success: true, isFavorite };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Something went wrong.";
     return { success: false, error: message };

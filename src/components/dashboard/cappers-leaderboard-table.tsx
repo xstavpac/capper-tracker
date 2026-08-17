@@ -1,9 +1,66 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { LeaderboardEntry } from "@/server/data/cappers";
+import { toggleFavoriteCapperAction } from "@/server/actions/cappers";
 import { getRecordColor, RANKING_MIN_SAMPLE, SCORECARD_WINDOWS, SCORECARD_WINDOW_LABELS, type ScorecardWindow } from "@/server/data/stats";
 import { Avatar, StreakBadge } from "@/components/dashboard/capper-panels";
+
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-4 w-4"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={filled ? 0 : 2}
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 2.5l2.9 6.3 6.9.7-5.2 4.7 1.6 6.8L12 17.6l-6.2 3.4 1.6-6.8-5.2-4.7 6.9-.7z" />
+    </svg>
+  );
+}
+
+// Optimistic star toggle - flips instantly on click, confirms/reverts
+// against the server action's real result. Separate from `entries`' own
+// isFavorite (which only updates after the parent server component
+// re-renders via router.refresh()) so the click feels instant without
+// waiting on a round-trip.
+function FavoriteStar({ capperId, isFavorite, onToggled }: { capperId: string; isFavorite: boolean; onToggled: () => void }) {
+  const [pending, setPending] = useState(false);
+  const [optimistic, setOptimistic] = useState<boolean | null>(null);
+  const shown = optimistic ?? isFavorite;
+
+  async function handleClick(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (pending) return;
+    setPending(true);
+    setOptimistic(!shown);
+    const result = await toggleFavoriteCapperAction(capperId);
+    setPending(false);
+    if (!result.success) {
+      setOptimistic(shown); // revert
+      return;
+    }
+    setOptimistic(result.isFavorite);
+    onToggled();
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      aria-label={shown ? "Remove from favorites" : "Add to favorites"}
+      aria-pressed={shown}
+      className={"shrink-0 transition hover:scale-110 " + (shown ? "text-amber-400" : "text-gray-300 hover:text-amber-400")}
+    >
+      <StarIcon filled={shown} />
+    </button>
+  );
+}
 
 type SortKey = "weighted" | "name" | "record" | "winPct" | "roi" | "units";
 
@@ -27,6 +84,7 @@ export function CappersLeaderboardTable({
 }: {
   entriesByWindow: Record<ScorecardWindow, LeaderboardEntry[]>;
 }) {
+  const router = useRouter();
   const [window, setWindow] = useState<ScorecardWindow>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("weighted");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -138,21 +196,28 @@ export function CappersLeaderboardTable({
                   <tr key={entry.capperId} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
                     <td className="px-3 py-3 text-gray-400">{i + 1}</td>
                     <td className="px-3 py-3">
-                      <a href={"/cappers/" + entry.capperId} className="flex flex-wrap items-center gap-2">
-                        <Avatar name={entry.name} colorTag={entry.colorTag} size={28} />
-                        <span className="font-medium text-gray-900">{entry.name}</span>
-                        {entry.specialist && (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
-                            {entry.specialist.label}
-                          </span>
-                        )}
-                        {smallSample && (
-                          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">
-                            {n} pick{n === 1 ? "" : "s"} &middot; small sample
-                          </span>
-                        )}
-                        <StreakBadge streak={entry.stats.currentStreak} compact />
-                      </a>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <FavoriteStar
+                          capperId={entry.capperId}
+                          isFavorite={entry.isFavorite}
+                          onToggled={() => router.refresh()}
+                        />
+                        <a href={"/cappers/" + entry.capperId} className="flex min-w-0 flex-wrap items-center gap-2">
+                          <Avatar name={entry.name} colorTag={entry.colorTag} size={28} />
+                          <span className="font-medium text-gray-900">{entry.name}</span>
+                          {entry.specialist && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                              {entry.specialist.label}
+                            </span>
+                          )}
+                          {smallSample && (
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">
+                              {n} pick{n === 1 ? "" : "s"} &middot; small sample
+                            </span>
+                          )}
+                          <StreakBadge streak={entry.stats.currentStreak} compact />
+                        </a>
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 text-gray-700">
                       {entry.stats.wins}-{entry.stats.losses}
