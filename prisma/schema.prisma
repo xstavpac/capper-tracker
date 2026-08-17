@@ -223,6 +223,7 @@ model Pick {
   @@index([userId, sportId])
   @@index([userId, gameTime])
   @@index([userId, gradedAt])
+  @@index([sportId, status]) // supports gradeAllPendingPicks' cross-user scan (WHERE sportId = ? AND status = 'PENDING'), which has no userId to lead with
   @@map("picks")
 }
 

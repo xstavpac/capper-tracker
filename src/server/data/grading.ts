@@ -258,6 +258,58 @@ function withinDrift<T extends { gameDate: Date }>(candidates: T[], reference: D
   return candidates.filter((c) => Math.abs(c.gameDate.getTime() - reference.getTime()) <= MAX_GAME_TIME_DRIFT_MS);
 }
 
+// Pure (no DB I/O) matching core, shared by findMatchingGameResult (single pick,
+// fetches its own ±2-day candidate pool) and gradeAllPendingPicks (many picks
+// against one pre-fetched pool spanning all of them) - same exact/fuzzy logic
+// either way, just filtered from a wider in-memory array instead of a per-pick
+// query, so a bulk grading run can't silently match differently than a single
+// page-load grade would have.
+export function matchGameResult(
+  candidates: GameResult[],
+  pick: {
+    gameTime: Date;
+    homeTeam: string;
+    awayTeam: string;
+    betDetail: string | null;
+  }
+): GameMatch | null {
+  const windowStart = pick.gameTime.getTime() - 2 * 86400000;
+  const windowEnd = pick.gameTime.getTime() + 2 * 86400000;
+  const inWindow = candidates.filter((c) => {
+    const t = c.gameDate.getTime();
+    return t >= windowStart && t < windowEnd;
+  });
+  if (inWindow.length === 0) return null;
+
+  // Picks resolved to a real game on import (see resolveGameForNickname) carry the
+  // exact team names, so prefer an exact match over the fuzzy text search below.
+  // Also requires the matched game to actually be THIS game, not just the same
+  // two teams on some other day within the window - see MAX_GAME_TIME_DRIFT_MS.
+  const exact = withinDrift(
+    inWindow.filter((c) => c.homeTeam === pick.homeTeam && c.awayTeam === pick.awayTeam),
+    pick.gameTime
+  );
+  if (exact.length > 0) return { game: closestByDate(exact, pick.gameTime), matchType: "exact" };
+
+  // Legacy/manual picks may only have raw text in homeTeam/betDetail - fall back to
+  // matching by team nickname substring. Requires BOTH teams' nicknames to appear,
+  // not just one - matching on a single side let this latch onto a candidate that
+  // shares one team but is actually a different matchup entirely (e.g. a pick's own
+  // game result hasn't been persisted yet, so this fell through to some other game
+  // that same team played on an adjacent day, against a different opponent, and
+  // silently graded against that instead). Requiring both sides keeps the fallback
+  // scoped to "this exact matchup, just spelled differently" the way it was intended.
+  const searchText = ((pick.betDetail ?? "") + " " + pick.homeTeam + " " + pick.awayTeam).toLowerCase();
+  const fuzzy = withinDrift(
+    inWindow.filter(
+      (c) => searchText.includes(teamNickname(c.homeTeam)) && searchText.includes(teamNickname(c.awayTeam))
+    ),
+    pick.gameTime
+  );
+  if (fuzzy.length === 0) return null;
+  return { game: closestByDate(fuzzy, pick.gameTime), matchType: "fuzzy" };
+}
+
 export async function findMatchingGameResult(
   sportKey: string,
   pick: {
@@ -275,33 +327,7 @@ export async function findMatchingGameResult(
   });
   if (candidates.length === 0) return null;
 
-  // Picks resolved to a real game on import (see resolveGameForNickname) carry the
-  // exact team names, so prefer an exact match over the fuzzy text search below.
-  // Also requires the matched game to actually be THIS game, not just the same
-  // two teams on some other day within the window - see MAX_GAME_TIME_DRIFT_MS.
-  const exact = withinDrift(
-    candidates.filter((c) => c.homeTeam === pick.homeTeam && c.awayTeam === pick.awayTeam),
-    pick.gameTime
-  );
-  if (exact.length > 0) return { game: closestByDate(exact, pick.gameTime), matchType: "exact" };
-
-  // Legacy/manual picks may only have raw text in homeTeam/betDetail - fall back to
-  // matching by team nickname substring. Requires BOTH teams' nicknames to appear,
-  // not just one - matching on a single side let this latch onto a candidate that
-  // shares one team but is actually a different matchup entirely (e.g. a pick's own
-  // game result hasn't been persisted yet, so this fell through to some other game
-  // that same team played on an adjacent day, against a different opponent, and
-  // silently graded against that instead). Requiring both sides keeps the fallback
-  // scoped to "this exact matchup, just spelled differently" the way it was intended.
-  const searchText = ((pick.betDetail ?? "") + " " + pick.homeTeam + " " + pick.awayTeam).toLowerCase();
-  const fuzzy = withinDrift(
-    candidates.filter(
-      (c) => searchText.includes(teamNickname(c.homeTeam)) && searchText.includes(teamNickname(c.awayTeam))
-    ),
-    pick.gameTime
-  );
-  if (fuzzy.length === 0) return null;
-  return { game: closestByDate(fuzzy, pick.gameTime), matchType: "fuzzy" };
+  return matchGameResult(candidates, pick);
 }
 
 // Shared by gradePendingPicks and regradeFuzzyMatchedPicks - picks the right score
@@ -485,6 +511,132 @@ export async function regradeFuzzyMatchedPicks(
     // isn't a new grading event, so it shouldn't reorder recent-form panels.
     await prisma.pick.update({ where: { id: pick.id }, data: { status: outcome, gradedViaFuzzyMatch: false } });
     if (changed) upgraded++;
+  }
+
+  return { checked: fuzzyGraded.length, upgraded };
+}
+
+// Concurrency cap for the bulk write passes below - bounds how many
+// simultaneous pick.update calls hit the DB per chunk. Not tuned against a
+// measured ceiling, just a conservative middle ground between "one at a time"
+// and "however many happen to be pending."
+const BULK_GRADE_CONCURRENCY = 50;
+
+// Global counterpart to gradePendingPicks - grades every user's pending picks
+// for a sport in one pass, instead of requiring each user to load /picks or
+// /live/[gameId] themselves before their own picks get graded (see the cron
+// route this backs: grading was otherwise entirely page-load-triggered, so a
+// finished game's picks could sit PENDING for as long as nobody happened to
+// visit those two pages).
+//
+// Two things make this scale where a per-user loop wouldn't: the GameResult
+// candidate pool is fetched once for the whole batch (not once per pick, and
+// not once per user) and matched in memory via matchGameResult - the exact
+// same matching logic findMatchingGameResult uses, just fed a pre-filtered
+// array instead of issuing its own query; and writes go out in bounded
+// concurrent chunks instead of one sequential await per pick.
+//
+// maxPicks caps how many picks one invocation will touch, oldest-gameTime-first,
+// so a pathological backlog can't blow a function's execution time limit in a
+// single run - each write is independent and PENDING-gated, so anything left
+// over just gets picked up whole by the next scheduled run.
+export async function gradeAllPendingPicks(
+  sportKey: string,
+  sportName: string,
+  maxPicks = 500
+): Promise<{ graded: number; notMatched: number; remaining: number }> {
+  const sport = await prisma.sport.findUnique({ where: { name: sportName } });
+  if (!sport) return { graded: 0, notMatched: 0, remaining: 0 };
+
+  const totalPending = await prisma.pick.count({ where: { sportId: sport.id, status: "PENDING" } });
+  if (totalPending === 0) return { graded: 0, notMatched: 0, remaining: 0 };
+
+  const toProcess = await prisma.pick.findMany({
+    where: { sportId: sport.id, status: "PENDING" },
+    orderBy: { gameTime: "asc" },
+    take: maxPicks,
+  });
+  const remaining = totalPending - toProcess.length;
+
+  const minTime = Math.min(...toProcess.map((p) => p.gameTime.getTime())) - 2 * 86400000;
+  const maxTime = Math.max(...toProcess.map((p) => p.gameTime.getTime())) + 2 * 86400000;
+  const candidates = await prisma.gameResult.findMany({
+    where: { sportKey, gameDate: { gte: new Date(minTime), lt: new Date(maxTime) } },
+  });
+
+  let graded = 0;
+  let notMatched = 0;
+
+  for (let i = 0; i < toProcess.length; i += BULK_GRADE_CONCURRENCY) {
+    const chunk = toProcess.slice(i, i + BULK_GRADE_CONCURRENCY);
+    const outcomes = await Promise.all(
+      chunk.map(async (pick) => {
+        const result = matchGameResult(candidates, pick);
+        if (!result) return false;
+
+        const outcome =
+          pick.betType === "PLAYER_PROP"
+            ? await gradeTouchdownProp(pick, result.game.externalId)
+            : resolveOutcome(pick, result.game);
+        if (!outcome) return false;
+
+        await prisma.pick.update({
+          where: { id: pick.id },
+          data: { status: outcome, gradedAt: new Date(), gradedViaFuzzyMatch: result.matchType === "fuzzy" },
+        });
+        return true;
+      })
+    );
+    for (const matched of outcomes) matched ? graded++ : notMatched++;
+  }
+
+  return { graded, notMatched, remaining };
+}
+
+// Global counterpart to regradeFuzzyMatchedPicks - same "upgrade a fuzzy match
+// to an exact one once a better GameResult shows up" logic, across every
+// user's fuzzy-graded picks for a sport instead of one user's. Same
+// pre-fetched-pool-plus-in-memory-match and bounded-concurrent-write shape as
+// gradeAllPendingPicks above, for the same reason.
+export async function regradeAllFuzzyMatchedPicks(
+  sportKey: string,
+  sportName: string
+): Promise<{ checked: number; upgraded: number }> {
+  const sport = await prisma.sport.findUnique({ where: { name: sportName } });
+  if (!sport) return { checked: 0, upgraded: 0 };
+
+  const fuzzyGraded = await prisma.pick.findMany({
+    where: { sportId: sport.id, status: { in: ["WIN", "LOSS", "PUSH"] }, gradedViaFuzzyMatch: true },
+  });
+  if (fuzzyGraded.length === 0) return { checked: 0, upgraded: 0 };
+
+  const minTime = Math.min(...fuzzyGraded.map((p) => p.gameTime.getTime())) - 2 * 86400000;
+  const maxTime = Math.max(...fuzzyGraded.map((p) => p.gameTime.getTime())) + 2 * 86400000;
+  const candidates = await prisma.gameResult.findMany({
+    where: { sportKey, gameDate: { gte: new Date(minTime), lt: new Date(maxTime) } },
+  });
+
+  let upgraded = 0;
+
+  for (let i = 0; i < fuzzyGraded.length; i += BULK_GRADE_CONCURRENCY) {
+    const chunk = fuzzyGraded.slice(i, i + BULK_GRADE_CONCURRENCY);
+    await Promise.all(
+      chunk.map(async (pick) => {
+        const result = matchGameResult(candidates, pick);
+        if (!result || result.matchType !== "exact") return;
+
+        const outcome =
+          pick.betType === "PLAYER_PROP"
+            ? await gradeTouchdownProp(pick, result.game.externalId)
+            : resolveOutcome(pick, result.game);
+        if (!outcome) return;
+
+        const changed = outcome !== pick.status;
+        // gradedAt intentionally untouched - same reasoning as regradeFuzzyMatchedPicks.
+        await prisma.pick.update({ where: { id: pick.id }, data: { status: outcome, gradedViaFuzzyMatch: false } });
+        if (changed) upgraded++;
+      })
+    );
   }
 
   return { checked: fuzzyGraded.length, upgraded };
