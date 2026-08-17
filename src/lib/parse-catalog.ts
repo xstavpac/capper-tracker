@@ -34,7 +34,7 @@ type TeamEntry = [string, string];
 export type AmbiguousOption = { label: string; sport: string; nickname: string };
 
 const KNOWN_SPORTS = [
-  "WNBA", "NCAAF", "NCAAB", "MLB", "NBA", "NHL", "NFL", "MLS", "UFC", "MMA",
+  "WNBA", "NCAAF", "NCAAB", "MLB", "NBA", "NHL", "NFL", "CFL", "MLS", "UFC", "MMA",
   "PGA", "ATP", "WTA", "EPL", "LA LIGA", "SERIE A", "BUNDESLIGA", "LIGUE 1",
   "CHAMPIONS LEAGUE",
 ];
@@ -79,6 +79,17 @@ const NHL_TEAMS = [
 const WNBA_TEAMS = [
   "dream", "sky", "sun", "fever", "aces", "mercury", "lynx", "liberty",
   "valkyries", "wings", "mystics", "storm",
+];
+
+// "lions" deliberately excluded - BC Lions collides with NFL's Detroit Lions,
+// same "let it fall through rather than always resolving to one sport"
+// reasoning as cardinals/panthers/giants above. Not added to
+// AMBIGUOUS_NICKNAMES either since this app has no CFL schedule data to
+// actually disambiguate against - a bare "Lions" pick just stays NFL, same
+// as before CFL support existed.
+const CFL_TEAMS = [
+  "redblacks", "blue bombers", "roughriders", "argonauts", "elks",
+  "alouettes", "stampeders", "tiger-cats",
 ];
 
 const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
@@ -135,6 +146,7 @@ const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...NFL_TEAMS.map((t): TeamEntry => [t, "NFL"]),
   ...NHL_TEAMS.map((t): TeamEntry => [t, "NHL"]),
   ...WNBA_TEAMS.map((t): TeamEntry => [t, "WNBA"]),
+  ...CFL_TEAMS.map((t): TeamEntry => [t, "CFL"]),
 ].sort((a, b) => b[0].length - a[0].length);
 
 // Strong "this is definitely a pick, not a capper's name" signals - a units
@@ -153,7 +165,13 @@ function looksLikePick(text: string): boolean {
     /\bML\b/i.test(text) ||
     /money\s*line/i.test(text) ||
     /\b(over|under)\b/i.test(text) ||
-    /\b[NY]RFI\b/i.test(text)
+    /\b[NY]RFI\b/i.test(text) ||
+    // A "Team vs Team" / "Team @ Team" matchup shape, even with no bet-type
+    // keyword on the same line (e.g. the number is stated on a following
+    // line) - two things named as opposing sides is itself a strong "this is
+    // describing a game, not a person's name" signal, independent of whether
+    // either side is a team this app actually has a nickname list for.
+    /\b\w[\w'.-]*\s+(?:vs\.?|@)\s+\w/i.test(text)
   );
 }
 
@@ -468,6 +486,39 @@ function findPlayerPick(text: string): { playerName: string; playerKey: string }
   return { playerName: candidate, playerKey: words[words.length - 1].toLowerCase() };
 }
 
+// Two-name matchup version of findPlayerPick, for individual-vs-individual
+// sports (MMA/boxing) where the pick states both sides directly ("Islam
+// Makhachev vs. Ian Machado Garry Over 2 Rounds") rather than one
+// competitor's name the way this app's tennis picks normally do
+// ("Griekspoor ML") - findPlayerPick's single-name regex never matches text
+// with a second name (and "vs.") in the middle, so a line like this
+// otherwise falls through every branch. Checked before findPlayerPick
+// wherever both are used. Defaults sportName to MMA (not ATP) - "vs" between
+// two full names is this app's real signal for combat sports specifically;
+// no tennis catalog seen here states both players this way.
+function findMatchupPlayerPick(text: string): { players: [string, string]; playerKeys: [string, string] } | null {
+  const withoutParens = text.replace(/\([^)]*\)/g, "").trim();
+  const mlMatch = withoutParens.match(/^(.+?)\s+vs\.?\s+(.+?)\s+(?:ML|money\s*line)\b/i);
+  const totalMatch = withoutParens.match(/^(.+?)\s+vs\.?\s+(.+?)\s+(?:over|under)\s+\d+(?:\.\d+)?\b/i);
+  const spreadMatch = withoutParens.match(/^(.+?)\s+vs\.?\s+(.+?)\s+[+-]\d+(?:\.\d+)?\b/);
+  const nameMatch = mlMatch ?? totalMatch ?? spreadMatch;
+  if (!nameMatch) return null;
+
+  // Requires at least TWO capitalized words per side (unlike findPlayerPick's
+  // single-name version) - a bare single word like "Ottawa" or "Winnipeg"
+  // trivially satisfies a 1-word name pattern too, which was misreading a
+  // city-vs-city matchup ("Ottawa vs Winnipeg Over 56.5") as a fighter
+  // matchup instead of leaving it unresolved. A real "vs" fight card always
+  // names both people with at least a first+last name in these catalogs.
+  const isPersonName = (s: string) => /^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){1,3}$/.test(s.trim());
+  const a = nameMatch[1].trim();
+  const b = nameMatch[2].trim();
+  if (!isPersonName(a) || !isPersonName(b)) return null;
+
+  const lastWord = (s: string) => s.split(/\s+/).pop()!.toLowerCase();
+  return { players: [a, b], playerKeys: [lastWord(a), lastWord(b)] };
+}
+
 export function findTeamNickname(text: string, sportName: string): string | undefined {
   const lower = text.toLowerCase();
   for (const [phrase, sport] of TEAM_SPORT_ENTRIES) {
@@ -478,11 +529,21 @@ export function findTeamNickname(text: string, sportName: string): string | unde
   return undefined;
 }
 
-export function parseCatalog(text: string, knownCapperNames: string[] = []): ParsedPick[] {
+export function parseCatalog(
+  text: string,
+  knownCapperNames: string[] = []
+): { picks: ParsedPick[]; unresolved: string[] } {
   const sortedNames = [...knownCapperNames].sort((a, b) => b.length - a.length);
   const rawLines = text.split("\n").map((l) => l.trim());
 
   const results: ParsedPick[] = [];
+  // Lines that look pick-shaped (looksLikePick) but couldn't be resolved to
+  // any sport/team/player - these must NOT fall through to being read as a
+  // capper name (see the final fallback below), since a misread name then
+  // silently hijacks every real pick that follows it for the rest of the
+  // paste. Surfaced separately so the caller can show them for manual
+  // review instead of either losing them or corrupting attribution.
+  const unresolved: string[] = [];
   let currentCapper = "";
   // Treated like "start of catalog" - a blank line before a name is the
   // strongest signal that what follows is a new capper's header, not a pick.
@@ -577,6 +638,25 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
             ambiguous: found.options,
             ambiguousKey: found.key,
             teamNicknames: [],
+          });
+          continue;
+        }
+
+        const matchupPick = findMatchupPlayerPick(remainder);
+        if (matchupPick) {
+          const parsed = parsePickText(remainder);
+          results.push({
+            capperName: inlineMatch,
+            sportName: "MMA",
+            description: parsed.cleanDescription,
+            betType: parsed.betType,
+            odds: parsed.odds ?? -110,
+            hasExplicitOdds: parsed.odds !== null,
+            totalSide: parsed.totalSide,
+            units: parsed.units,
+            isFirstFive: parsed.isFirstFive,
+            raw: line,
+            teamNicknames: matchupPick.playerKeys,
           });
           continue;
         }
@@ -681,6 +761,25 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
         continue;
       }
 
+      const matchupPick = findMatchupPlayerPick(strippedText);
+      if (matchupPick) {
+        const parsed = parsePickText(strippedText);
+        results.push({
+          capperName: currentCapper || "Unknown",
+          sportName: "MMA",
+          description: parsed.cleanDescription,
+          betType: parsed.betType,
+          odds: parsed.odds ?? -110,
+          hasExplicitOdds: parsed.odds !== null,
+          totalSide: parsed.totalSide,
+          units: parsed.units,
+          isFirstFive: parsed.isFirstFive,
+          raw: strippedText,
+          teamNicknames: matchupPick.playerKeys,
+        });
+        continue;
+      }
+
       const playerPick = findPlayerPick(strippedText);
       if (playerPick) {
         const parsed = parsePickText(strippedText);
@@ -699,6 +798,16 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
         });
         continue;
       }
+
+      // Looks unmistakably like a pick (bet keyword, matchup shape, etc.) but
+      // nothing above could resolve its sport/team/player - do NOT fall
+      // through to being read as a capper name (see the comment on
+      // `unresolved` above for why that's actively harmful, not just a missed
+      // pick). Surfaced for manual review instead.
+      if (looksLikePick(strippedText)) {
+        unresolved.push(strippedText);
+        continue;
+      }
     }
 
     const name = line.replace(/^[^\w]+/, "").trim();
@@ -709,5 +818,5 @@ export function parseCatalog(text: string, knownCapperNames: string[] = []): Par
     }
   }
 
-  return results;
+  return { picks: results, unresolved };
 }

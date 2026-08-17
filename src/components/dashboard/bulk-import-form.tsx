@@ -34,6 +34,12 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const [showTips, setShowTips] = useState(false);
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<ParsedPick[] | null>(null);
+  // Lines that looked pick-shaped but couldn't be resolved to any sport/team/
+  // player (see parseCatalog's `unresolved` return value) - shown so the user
+  // can add them manually instead of them either vanishing or, worse, being
+  // silently misread as a capper name that then swallows every real pick
+  // after it.
+  const [unresolvedLines, setUnresolvedLines] = useState<string[]>([]);
   const [enrichedOdds, setEnrichedOdds] = useState<Record<number, number>>({});
   const [loadingOdds, setLoadingOdds] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -120,7 +126,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setTotalLineFlags({});
     setTotalLineChoices({});
     setResolving(true);
-    const items = parseCatalog(text, existingCapperNames);
+    const { picks: items, unresolved } = parseCatalog(text, existingCapperNames);
+    setUnresolvedLines(unresolved);
     const outcome = await autoResolveAmbiguousPicks(items, ambiguousChoices);
     setResolving(false);
     setParsed(outcome.picks);
@@ -350,6 +357,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       // require re-pasting the whole catalog.
       if (!res.pickLimitBlocked) {
         setParsed(null);
+        setUnresolvedLines([]);
         setText("");
       }
     }
@@ -430,8 +438,25 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
               " - " + unresolvedDuplicateCount + " flagged as possible duplicate" + (unresolvedDuplicateCount === 1 ? "" : "s")}
             {unresolvedTotalLineCount > 0 &&
               " - " + unresolvedTotalLineCount + " missing a total number" + (unresolvedTotalLineCount === 1 ? "" : "s")}
+            {unresolvedLines.length > 0 &&
+              " - " + unresolvedLines.length + " line" + (unresolvedLines.length === 1 ? "" : "s") + " couldn't be identified"}
             {loadingOdds && <span className="ml-2 font-normal text-gray-400">Looking up real odds...</span>}
           </div>
+
+          {unresolvedLines.length > 0 && (
+            <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <div className="font-medium">
+                {unresolvedLines.length} line{unresolvedLines.length === 1 ? "" : "s"} looked like{" "}
+                {unresolvedLines.length === 1 ? "a pick" : "picks"} but couldn&apos;t be matched to a
+                sport or team - not imported and not attributed to any capper. Add these manually:
+              </div>
+              <ul className="mt-1 list-disc pl-4">
+                {unresolvedLines.map((l, i) => (
+                  <li key={i}>{l}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {ambiguousGroups.length > 0 && (
             <div className="mb-3 space-y-2">
