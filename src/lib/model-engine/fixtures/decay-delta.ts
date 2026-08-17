@@ -111,16 +111,58 @@ export const decayDeltaModel: ModelDefinition = {
   conditions: [],
 
   buckets: [
-    // Percentage-point buckets (the delta is now on a -100..100 scale, not
-    // a 0-1 fraction) - same signed, direction-split structure the
-    // fact-finding pass found in the original source's own DELTA_BUCKET_DEFS.
+    // Real 10-tier calibration scheme (replaces the original 3-bucket
+    // proof-of-mechanism placeholder from 3c, which was too coarse to show
+    // real signal - Build Step 5's first run came back nearly flat, 53-55%
+    // across all three buckets). Ten decade-wide tiers, percentage points,
+    // matching the calibration scheme this rebuild targets.
+    //
+    // Boundary convention: BucketRuleWhen's `range` is inclusive on BOTH
+    // ends (orchestrate.ts's bucketRuleMatches - shared, unmodified, also
+    // used by run-diff-era.ts's non-adjacent lt/range/gt buckets). With ten
+    // DIRECTLY ADJACENT buckets, naive shared decade boundaries under that
+    // same inclusive-both rule would double-claim every boundary (e.g. 20
+    // matching both "10 to 20" and "20 to 30"). Rather than changing
+    // bucketRuleMatches' shared range semantics (which would reopen the
+    // exact gap it was built to close for run-diff-era.ts's own buckets, at
+    // its 3/4.5 boundaries), this fixture instead relies on a property
+    // already proven above: dv_decay_delta is ALWAYS an integer (the
+    // subtraction of two round(x, 0) outputs, calc_fav_pct - calc_dog_pct).
+    // Because of that, a half-open "lower-inclusive, upper-exclusive"
+    // interval can be expressed exactly with the existing inclusive-both
+    // `range` primitive by shifting the upper bound in by 1 integer - e.g.
+    // "10 to 20" (meaning delta >= 10 and < 20) is range{min:10, max:19},
+    // not range{min:10, max:20}. This is a pure bucket-configuration choice
+    // local to this fixture - no change to BucketRuleWhen's type, to
+    // validate.ts, or to bucketRuleMatches itself.
+    //
+    // Ownership at each shared boundary, lower-inclusive/upper-exclusive
+    // throughout, EXCEPT for one deliberate, explicitly-stated tie-break:
+    // delta === 0 is assigned to "0 to 10" (the non-negative bucket), not
+    // "0 to -10" - an arbitrary but consistent choice for the one boundary
+    // that isn't naturally "lower" or "upper" of anything (zero is the
+    // pivot, not a decade edge). "0 to -10" is therefore the strictly-open
+    // interval between them (-9 to -1), owning neither 0 nor -10 - -10
+    // itself is owned by "-10 to -20" instead, consistent with every other
+    // interior boundary being owned by exactly one neighbor.
+    //
+    // Verified directly (see decay-delta-bucket-boundary-test.ts): every one
+    // of delta = 0, +-10, +-20, +-30, +-40 matches EXACTLY one rule below,
+    // never zero, never two.
     {
       id: "bucket_decay_delta",
       input: { ref: "dv_decay_delta" },
       rules: [
-        { id: "rule_underdog_edge", when: { lt: 0 } },
-        { id: "rule_neutral", when: { range: { min: 0, max: 10 } } },
-        { id: "rule_favorite_edge", when: { gt: 10 } },
+        { id: "rule_ge_40", when: { gte: 40 } },
+        { id: "rule_30_to_40", when: { range: { min: 30, max: 39 } } },
+        { id: "rule_20_to_30", when: { range: { min: 20, max: 29 } } },
+        { id: "rule_10_to_20", when: { range: { min: 10, max: 19 } } },
+        { id: "rule_0_to_10", when: { range: { min: 0, max: 9 } } },
+        { id: "rule_0_to_neg10", when: { range: { min: -9, max: -1 } } },
+        { id: "rule_neg10_to_neg20", when: { range: { min: -19, max: -10 } } },
+        { id: "rule_neg20_to_neg30", when: { range: { min: -29, max: -20 } } },
+        { id: "rule_neg30_to_neg40", when: { range: { min: -39, max: -30 } } },
+        { id: "rule_le_neg40", when: { lte: -40 } },
       ],
     },
   ],

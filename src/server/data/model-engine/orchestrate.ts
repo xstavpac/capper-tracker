@@ -5,7 +5,7 @@
 // their own logic is modified here.
 import { resolveVariable } from "./resolver";
 import { getEvaluationEventFacts, type EvaluationEventFacts } from "./facts";
-import { resolveGameObservations, type GameObservation } from "./observations";
+import { resolveGameObservations, filterObservationsBeforeAsOf, type GameObservation } from "./observations";
 import { evaluateExpression, evaluateComparison, type ValueContext } from "@/lib/model-engine/evaluate";
 import { computeWeightedRate } from "@/lib/model-engine/weighted-accumulation";
 import { evaluateObservationExpression, ObservationFieldUnavailable } from "@/lib/model-engine/observation-expression";
@@ -94,7 +94,23 @@ function resolveRoleTeamName(role: string, facts: EvaluationEventFacts): string 
   }
 }
 
-export async function runModelDefinition(model: ModelDefinition, event: EvaluationEvent): Promise<OrchestrationResult> {
+// options.allObservations (Build Step 5 performance fix) - a caller running
+// many evaluation events against the same sport in one process (e.g. a
+// historical backtest) can fetch+derive the sport's full observation history
+// ONCE via resolveAllGameObservations and pass it here for every event,
+// instead of this function re-querying and re-deriving the whole table from
+// scratch per event. When supplied, it's filtered per-event through the
+// exact same filterObservationsBeforeAsOf boundary resolveGameObservations
+// itself uses below - so the temporal-integrity guarantee (an event can
+// never see a same-day or later observation) is identical either way; this
+// only changes where the data was fetched from, never what a given event is
+// allowed to see. Omitted (the default), this behaves exactly as it always
+// has - a fresh resolveGameObservations call per event.
+export async function runModelDefinition(
+  model: ModelDefinition,
+  event: EvaluationEvent,
+  options?: { allObservations?: GameObservation[] }
+): Promise<OrchestrationResult> {
   const context: ValueContext = {};
   const unavailableIds = new Set<string>();
   // DataInput id -> team name, populated whenever a role resolves to a real
@@ -115,8 +131,13 @@ export async function runModelDefinition(model: ModelDefinition, event: Evaluati
 
   // Fetched once for the whole run (asOf/sportKey are fixed for this
   // evaluation event) and reused by every AggregationCalculation, rather
-  // than one resolveGameObservations() call per calculation.
-  const observations: GameObservation[] = await resolveGameObservations(facts.sportKey, event.asOf);
+  // than one resolveGameObservations() call per calculation. If the caller
+  // supplied a precomputed full history (see options.allObservations above),
+  // reuse it via the same filter boundary instead of hitting the database
+  // again for this event.
+  const observations: GameObservation[] = options?.allObservations
+    ? filterObservationsBeforeAsOf(options.allObservations, event.asOf)
+    : await resolveGameObservations(facts.sportKey, event.asOf);
 
   // ---- Step 1: resolve every DataInput ----
   for (const input of model.dataInputs) {
