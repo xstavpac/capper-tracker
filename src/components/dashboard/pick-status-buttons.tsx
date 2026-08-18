@@ -13,10 +13,10 @@ export function PickStatusButtons({ pickId, status }: { pickId: string; status: 
       current === "WIN" ? "Win" : current === "LOSS" ? "Loss" : current === "PUSH" ? "Push" : "Cancelled";
     const colorClass =
       current === "WIN"
-        ? "text-emerald-600"
+        ? "text-emerald-600 dark:text-emerald-400"
         : current === "LOSS"
-          ? "text-red-600"
-          : "text-gray-400";
+          ? "text-red-600 dark:text-red-400"
+          : "text-muted-foreground";
     return <span className={"text-sm font-medium " + colorClass}>{label}</span>;
   }
 
@@ -34,21 +34,21 @@ export function PickStatusButtons({ pickId, status }: { pickId: string; status: 
       <button
         disabled={updating}
         onClick={() => setStatus("WIN")}
-        className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-100 disabled:opacity-50"
+        className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/25 disabled:opacity-50"
       >
         Win
       </button>
       <button
         disabled={updating}
         onClick={() => setStatus("LOSS")}
-        className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+        className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-100 dark:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/25 disabled:opacity-50"
       >
         Loss
       </button>
       <button
         disabled={updating}
         onClick={() => setStatus("PUSH")}
-        className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-gray-200 disabled:opacity-50"
+        className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-border disabled:opacity-50"
       >
         Push
       </button>

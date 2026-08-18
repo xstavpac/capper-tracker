@@ -364,20 +364,20 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   }
 
   return (
-    <div className="rounded-card bg-white p-5 shadow-soft">
-      <h3 className="mb-1 text-sm font-medium text-gray-900">Betting Catalog Import</h3>
-      <p className="mb-2 text-xs text-gray-500">Paste capper names and picks below - we&apos;ll detect the rest.</p>
+    <div className="rounded-card bg-card p-5 shadow-soft">
+      <h3 className="mb-1 text-sm font-medium text-foreground">Betting Catalog Import</h3>
+      <p className="mb-2 text-xs text-muted-foreground">Paste capper names and picks below - we&apos;ll detect the rest.</p>
 
       <button
         type="button"
         onClick={() => setShowTips((v) => !v)}
-        className="mb-3 flex items-center gap-1 text-xs font-medium text-gray-400 transition hover:text-gray-600"
+        className="mb-3 flex items-center gap-1 text-xs font-medium text-muted-foreground transition hover:text-foreground"
       >
         <span className={"inline-block transition-transform " + (showTips ? "rotate-90" : "")}>&rsaquo;</span>
         Formatting tips
       </button>
       {showTips && (
-        <p className="mb-3 text-xs text-gray-400">
+        <p className="mb-3 text-xs text-muted-foreground">
           Capper name lines followed by their picks - we auto-detect sport, bet type, odds, and
           units for each pick. Leave a blank line between different cappers&apos; picks. Cappers
           already in your saved list are recognized automatically, even if their name contains a
@@ -394,7 +394,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         placeholder={
           "Vegas John\nCubs moneyline\nWhite Sox -1.5\n\nHigh Roller Hank\nYankees ML\nDodgers under 8.5"
         }
-        className="w-full rounded-lg border border-gray-200 px-3 py-2 font-mono text-xs focus:border-brand-400 focus:outline-none"
+        className="w-full rounded-lg border border-border bg-card px-3 py-2 font-mono text-xs text-foreground focus:border-brand-400 focus:outline-none"
       />
 
       <button onClick={handleParse} disabled={!text.trim() || resolving} className={"mt-3 " + dropCatalogButtonClass}>
@@ -402,7 +402,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         {resolving ? "Resolving..." : "Drop Catalog"}
       </button>
 
-      <div className="mt-3 flex items-start gap-2 rounded-lg bg-brand-50 px-3 py-2.5 text-[13px] text-brand-700">
+      <div className="mt-3 flex items-start gap-2 rounded-lg bg-brand-50 px-3 py-2.5 text-[13px] text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
         <svg
           viewBox="0 0 24 24"
           className="mt-0.5 h-4 w-4 shrink-0"
@@ -424,13 +424,13 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         <img
           src="/example-picks.png"
           alt="Example of picks grouped by game on the Live tab"
-          className="h-auto w-full rounded-lg border border-gray-200"
+          className="h-auto w-full rounded-lg border border-border"
         />
       </div>
 
       {parsed && (
         <div ref={resultsRef} className="mt-4">
-          <div className="mb-2 text-sm font-medium text-gray-700">
+          <div className="mb-2 text-sm font-medium text-muted-foreground">
             {validPicks.length} pick{validPicks.length === 1 ? "" : "s"} found
             {ambiguousPicks.length > 0 &&
               " - " + ambiguousPicks.length + " need clarification"}
@@ -440,11 +440,11 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
               " - " + unresolvedTotalLineCount + " missing a total number" + (unresolvedTotalLineCount === 1 ? "" : "s")}
             {unresolvedLines.length > 0 &&
               " - " + unresolvedLines.length + " line" + (unresolvedLines.length === 1 ? "" : "s") + " couldn't be identified"}
-            {loadingOdds && <span className="ml-2 font-normal text-gray-400">Looking up real odds...</span>}
+            {loadingOdds && <span className="ml-2 font-normal text-muted-foreground">Looking up real odds...</span>}
           </div>
 
           {unresolvedLines.length > 0 && (
-            <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
               <div className="font-medium">
                 {unresolvedLines.length} line{unresolvedLines.length === 1 ? "" : "s"} looked like{" "}
                 {unresolvedLines.length === 1 ? "a pick" : "picks"} but couldn&apos;t be matched to a
@@ -461,7 +461,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
           {ambiguousGroups.length > 0 && (
             <div className="mb-3 space-y-2">
               {ambiguousGroups.map(({ key, options, sampleRaw, count }) => (
-                <div key={"amb-" + key} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <div key={"amb-" + key} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
                   <div className="font-medium">
                     "{sampleRaw}"{count > 1 && " (+" + (count - 1) + " more " + key + " pick" + (count - 1 === 1 ? "" : "s") + " in this paste)"}
                   </div>
@@ -472,13 +472,13 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                         key={opt.label}
                         type="button"
                         onClick={() => resolveAmbiguousGroup(key, opt)}
-                        className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100"
+                        className="rounded-full border border-amber-300 bg-card px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
                       >
                         {opt.label}
                       </button>
                     ))}
                   </div>
-                  <div className="mt-1 text-amber-600">
+                  <div className="mt-1 text-amber-600 dark:text-amber-400">
                     {count > 1
                       ? "Answering once resolves every " + key + " pick in this paste."
                       : "Or edit the text above to specify the city, then preview again."}
@@ -491,7 +491,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
           {pendingFuzzySuggestions.length > 0 && (
             <div className="mb-3 space-y-2">
               {pendingFuzzySuggestions.map(({ name, suggestion }) => (
-                <div key={"fuzzy-" + name} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <div key={"fuzzy-" + name} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
                   <div className="font-medium">"{name}" isn&apos;t an exact match for any saved capper.</div>
                   <div className="mt-0.5">
                     Did you mean <span className="font-medium">{suggestion}</span>?
@@ -503,7 +503,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                         setCapperFuzzyChoices((prev) => ({ ...prev, [name]: suggestion }));
                         checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name));
                       }}
-                      className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100"
+                      className="rounded-full border border-amber-300 bg-card px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
                     >
                       Yes, same as {suggestion}
                     </button>
@@ -513,7 +513,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                         setCapperFuzzyChoices((prev) => ({ ...prev, [name]: CONFIRMED_NEW }));
                         checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name));
                       }}
-                      className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100"
+                      className="rounded-full border border-amber-300 bg-card px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
                     >
                       No, "{name}" is a different capper
                     </button>
@@ -523,7 +523,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
             </div>
           )}
 
-          <div className="max-h-80 overflow-y-auto rounded-lg border border-gray-100">
+          <div className="max-h-80 overflow-y-auto rounded-lg border border-border-subtle">
             <div>
               {validEntries.map(({ p, idx }, i) => {
                 const realOdds = enrichedOdds[idx];
@@ -548,7 +548,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                       // divide-y sets the border-color shorthand (all 4 sides) on every row but the
                       // first, which was silently stomping this per-capper border-l accent color.
                       "border-l-4 px-3 py-2 text-xs last:border-b-0 " +
-                      (isGroupEnd ? "border-b-2 border-b-gray-300" : "border-b border-b-gray-100") +
+                      (isGroupEnd ? "border-b-2 border-b-border" : "border-b border-b-border-subtle") +
                       " " +
                       capperAccent.get(resolvedName) +
                       (excluded ? " opacity-50" : "")
@@ -558,42 +558,42 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                       <div className="min-w-0">
                         <span className="font-medium">{resolvedName}</span>
                         {wasFuzzyMatched && (
-                          <span className="ml-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-emerald-600">
+                          <span className="ml-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400">
                             matched from "{p.capperName}"
                           </span>
                         )}
                         {!wasFuzzyMatched && !existingLower.includes(p.capperName.toLowerCase()) && (
-                          <span className="ml-1 rounded-full bg-brand-50 px-1.5 py-0.5 text-brand-600">
+                          <span className="ml-1 rounded-full bg-brand-50 px-1.5 py-0.5 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
                             new
                           </span>
                         )}
-                        <span className="ml-2 text-gray-500">
+                        <span className="ml-2 text-muted-foreground">
                           {p.sportName} - {p.description}
                         </span>
                       </div>
-                      <div className="text-gray-400 sm:shrink-0">
+                      <div className="text-muted-foreground sm:shrink-0">
                         {p.betType} - {displayOdds > 0 ? "+" : ""}
                         {displayOdds}
-                        {realOdds !== undefined && <span className="ml-1 text-emerald-600">(real)</span>}
+                        {realOdds !== undefined && <span className="ml-1 text-emerald-600 dark:text-emerald-400">(real)</span>}
                         {" - " + p.units + "u"}
                       </div>
                     </div>
                     {dupFlag && (
-                      <div className="mt-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-amber-800">
+                      <div className="mt-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
                         <div>Possible duplicate: {dupFlag.message}</div>
                         {dupChoice === undefined && (
                           <div className="mt-1 flex flex-wrap gap-1.5">
                             <button
                               type="button"
                               onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "skip" }))}
-                              className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-medium transition hover:bg-amber-100"
+                              className="rounded-full border border-amber-300 bg-card px-2 py-0.5 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
                             >
                               Skip this pick
                             </button>
                             <button
                               type="button"
                               onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "import" }))}
-                              className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-medium transition hover:bg-amber-100"
+                              className="rounded-full border border-amber-300 bg-card px-2 py-0.5 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
                             >
                               Import anyway
                             </button>
@@ -605,7 +605,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                             <button
                               type="button"
                               onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "import" }))}
-                              className="font-medium underline hover:text-amber-900"
+                              className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
                             >
                               Import anyway
                             </button>
@@ -617,7 +617,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                             <button
                               type="button"
                               onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "skip" }))}
-                              className="font-medium underline hover:text-amber-900"
+                              className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
                             >
                               Skip instead
                             </button>
@@ -626,7 +626,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                       </div>
                     )}
                     {totalFlag && (
-                      <div className="mt-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-amber-800">
+                      <div className="mt-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
                         <div>
                           {totalFlag.reason === "missing"
                             ? "No number found in this pick's text."
@@ -639,14 +639,14 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                             <button
                               type="button"
                               onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "confirm" }))}
-                              className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-medium transition hover:bg-amber-100"
+                              className="rounded-full border border-amber-300 bg-card px-2 py-0.5 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
                             >
                               Use {totalFlag.inferredLine}
                             </button>
                             <button
                               type="button"
                               onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "reject" }))}
-                              className="rounded-full border border-amber-300 bg-white px-2 py-0.5 text-[11px] font-medium transition hover:bg-amber-100"
+                              className="rounded-full border border-amber-300 bg-card px-2 py-0.5 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
                             >
                               Skip this pick
                             </button>
@@ -658,7 +658,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                             <button
                               type="button"
                               onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "reject" }))}
-                              className="font-medium underline hover:text-amber-900"
+                              className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
                             >
                               Skip instead
                             </button>
@@ -670,7 +670,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                             <button
                               type="button"
                               onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "confirm" }))}
-                              className="font-medium underline hover:text-amber-900"
+                              className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
                             >
                               Use {totalFlag.inferredLine} instead
                             </button>
@@ -695,7 +695,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       )}
 
       {result?.pickLimitBlocked && (
-        <div className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
           <div className="font-medium">Import paused - Free plan limit reached</div>
           <p className="mt-1">{result.pickLimitBlocked.message}</p>
           <a
@@ -708,18 +708,18 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       )}
 
       {result && !result.pickLimitBlocked && (
-        <div className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <div className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
           Imported {result.imported} pick{result.imported === 1 ? "" : "s"}.
           {result.skipped > 0 && " " + result.skipped + " skipped."}
           {result.errors.length > 0 && (
-            <ul className="mt-1 list-disc pl-4 text-xs text-red-600">
+            <ul className="mt-1 list-disc pl-4 text-xs text-red-600 dark:text-red-400">
               {result.errors.map((e, i) => (
                 <li key={i}>{e}</li>
               ))}
             </ul>
           )}
           {result.unmatchedGames.length > 0 && (
-            <div className="mt-2 text-xs text-amber-700">
+            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
               Couldn&apos;t match {result.unmatchedGames.length} pick
               {result.unmatchedGames.length === 1 ? "" : "s"} to today&apos;s schedule - they
               were NOT imported. Double-check the matchup and add them manually:

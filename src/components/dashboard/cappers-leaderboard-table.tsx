@@ -55,7 +55,7 @@ function FavoriteStar({ capperId, isFavorite, onToggled }: { capperId: string; i
       onClick={handleClick}
       aria-label={shown ? "Remove from favorites" : "Add to favorites"}
       aria-pressed={shown}
-      className={"shrink-0 transition hover:scale-110 " + (shown ? "text-amber-400" : "text-gray-300 hover:text-amber-400")}
+      className={"shrink-0 transition hover:scale-110 " + (shown ? "text-amber-400" : "text-muted-foreground/50 hover:text-amber-400")}
     >
       <StarIcon filled={shown} />
     </button>
@@ -71,7 +71,7 @@ function decidedCount(stats: LeaderboardEntry["stats"]) {
 function windowChipClass(isActive: boolean) {
   return (
     "rounded-full px-3 py-1.5 text-sm font-medium " +
-    (isActive ? "bg-brand-600 text-white" : "bg-white text-gray-600 shadow-soft hover:bg-gray-50")
+    (isActive ? "bg-brand-600 text-white" : "bg-card text-muted-foreground shadow-soft hover:bg-muted")
   );
 }
 
@@ -128,8 +128,8 @@ export function CappersLeaderboardTable({
 
   function headerClass(key: SortKey) {
     return (
-      "cursor-pointer select-none whitespace-nowrap px-3 py-2 text-left text-xs font-medium uppercase tracking-wide hover:text-gray-700 " +
-      (sortKey === key ? "text-gray-900" : "text-gray-500")
+      "cursor-pointer select-none whitespace-nowrap px-3 py-2 text-left text-xs font-medium uppercase tracking-wide hover:text-foreground " +
+      (sortKey === key ? "text-foreground" : "text-muted-foreground")
     );
   }
 
@@ -139,16 +139,16 @@ export function CappersLeaderboardTable({
   }
 
   return (
-    <div className="rounded-card bg-white p-5 shadow-soft">
+    <div className="rounded-card bg-card p-5 shadow-soft">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-gray-900">Leaderboard</h2>
+        <h2 className="text-base font-semibold text-foreground">Leaderboard</h2>
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search cappers..."
-            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 shadow-sm placeholder:text-gray-400 focus:border-brand-400 focus:outline-none"
+            className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus:border-brand-400 focus:outline-none"
           />
           <div className="flex flex-wrap gap-2">
             {SCORECARD_WINDOWS.map((w) => (
@@ -161,15 +161,15 @@ export function CappersLeaderboardTable({
       </div>
 
       {sorted.length === 0 ? (
-        <p className="py-10 text-center text-sm text-gray-400">
+        <p className="py-10 text-center text-sm text-muted-foreground">
           {entries.length === 0 ? "No cappers have picks in this window yet." : "No cappers match your search."}
         </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">#</th>
+              <tr className="border-b border-border-subtle">
+                <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">#</th>
                 <th className={headerClass("name")} onClick={() => toggleSort("name")}>
                   Capper{sortIndicator("name")}
                 </th>
@@ -193,8 +193,8 @@ export function CappersLeaderboardTable({
                 const smallSample = n > 0 && n < RANKING_MIN_SAMPLE;
                 const color = getRecordColor(entry.stats.winPct);
                 return (
-                  <tr key={entry.capperId} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
-                    <td className="px-3 py-3 text-gray-400">{i + 1}</td>
+                  <tr key={entry.capperId} className="border-b border-border-subtle last:border-0 hover:bg-muted">
+                    <td className="px-3 py-3 text-muted-foreground">{i + 1}</td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <FavoriteStar
@@ -204,14 +204,14 @@ export function CappersLeaderboardTable({
                         />
                         <a href={"/cappers/" + entry.capperId} className="flex min-w-0 flex-wrap items-center gap-2">
                           <Avatar name={entry.name} colorTag={entry.colorTag} size={28} />
-                          <span className="font-medium text-gray-900">{entry.name}</span>
+                          <span className="font-medium text-foreground">{entry.name}</span>
                           {entry.specialist && (
-                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
                               {entry.specialist.label}
                             </span>
                           )}
                           {smallSample && (
-                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500">
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
                               {n} pick{n === 1 ? "" : "s"} &middot; small sample
                             </span>
                           )}
@@ -219,16 +219,16 @@ export function CappersLeaderboardTable({
                         </a>
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-gray-700">
+                    <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">
                       {entry.stats.wins}-{entry.stats.losses}
                       {entry.stats.pushes > 0 ? "-" + entry.stats.pushes : ""}
                     </td>
-                    <td className={"px-3 py-3 font-medium " + (color === "green" ? "text-emerald-600" : "text-red-600")}>
+                    <td className={"px-3 py-3 font-medium " + (color === "green" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
                       {Math.round(entry.stats.winPct)}%
                     </td>
                     <td
                       className={
-                        "whitespace-nowrap px-3 py-3 font-medium " + (entry.stats.roi >= 0 ? "text-emerald-600" : "text-red-600")
+                        "whitespace-nowrap px-3 py-3 font-medium " + (entry.stats.roi >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")
                       }
                     >
                       {entry.stats.roi >= 0 ? "+" : ""}
@@ -237,7 +237,7 @@ export function CappersLeaderboardTable({
                     <td
                       className={
                         "whitespace-nowrap px-3 py-3 font-medium " +
-                        (entry.stats.netUnits >= 0 ? "text-emerald-600" : "text-red-600")
+                        (entry.stats.netUnits >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")
                       }
                     >
                       {entry.stats.netUnits >= 0 ? "+" : ""}

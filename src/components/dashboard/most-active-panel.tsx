@@ -7,10 +7,10 @@ export function MostActivePanel({ entries }: { entries: ActivityEntry[] }) {
   const max = entries[0]?.pickCount ?? 0;
 
   return (
-    <div className="rounded-card bg-white p-5 shadow-soft">
-      <h2 className="mb-3 text-base font-semibold text-gray-900">Most active this week</h2>
+    <div className="rounded-card bg-card p-5 shadow-soft">
+      <h2 className="mb-3 text-base font-semibold text-foreground">Most active this week</h2>
       {entries.length === 0 ? (
-        <p className="py-6 text-center text-sm text-gray-400">No picks logged this week yet.</p>
+        <p className="py-6 text-center text-sm text-muted-foreground">No picks logged this week yet.</p>
       ) : (
         <div className="space-y-3">
           {entries.map((entry) => {
@@ -18,12 +18,12 @@ export function MostActivePanel({ entries }: { entries: ActivityEntry[] }) {
             return (
               <a key={entry.capperId} href={"/cappers/" + entry.capperId} className="block">
                 <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="font-medium text-gray-900">{entry.name}</span>
-                  <span className="text-gray-500">
+                  <span className="font-medium text-foreground">{entry.name}</span>
+                  <span className="text-muted-foreground">
                     {entry.pickCount} pick{entry.pickCount === 1 ? "" : "s"}
                   </span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div className="h-full rounded-full bg-brand-600" style={{ width: fill + "%" }} />
                 </div>
               </a>

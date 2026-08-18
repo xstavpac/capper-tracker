@@ -10,9 +10,12 @@ import { RINGS, BOLTS, SURGE_DURATION_MS } from "@/components/dashboard/energy-s
 const BOLT_PATH = "M13 2 3 14h7l-1 8 10-12h-7l1-8Z";
 
 const TONE_HEX: Record<"up" | "down" | "neutral", string> = {
-  up: "#059669", // emerald-600 - matches HeroStat's old text-emerald-600
-  down: "#dc2626", // red-600 - matches HeroStat's old text-red-600
-  neutral: "#111827", // gray-900 - matches HeroStat's/the big stats' old default
+  up: "#059669", // emerald-600 - matches HeroStat's old text-emerald-600, readable enough on dark backgrounds unmodified
+  down: "#dc2626", // red-600 - matches HeroStat's old text-red-600, readable enough on dark backgrounds unmodified
+  // References the --foreground token (not a fixed hex, unlike up/down above) so it
+  // flips light/dark with the theme - a literal gray-900 would render near-invisible
+  // on a dark card.
+  neutral: "rgb(var(--foreground))",
 };
 
 // Wraps a stat's rendered value with a one-shot "energy surge" kickoff

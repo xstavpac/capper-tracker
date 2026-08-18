@@ -37,7 +37,7 @@ export function PanelRow({
   return (
     <a
       href={"/cappers/" + capperId}
-      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-gray-50"
+      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-muted"
     >
       <div className="flex min-w-0 items-center gap-1.5">
         <Avatar name={name} colorTag={colorTag} />
@@ -90,21 +90,21 @@ export function BarRow({
   const fill = Math.min(100, Math.max(0, winPct)) / 100;
 
   return (
-    <a href={"/cappers/" + capperId} className="block rounded-lg px-2 py-1.5 hover:bg-gray-50">
+    <a href={"/cappers/" + capperId} className="block rounded-lg px-2 py-1.5 hover:bg-muted">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <Avatar name={name} colorTag={colorTag} />
           <span className="truncate text-sm">{name}</span>
           {trending && <TrendIcon direction="up" />}
         </div>
-        <span className={"shrink-0 text-sm font-semibold " + (positive ? "text-emerald-600" : "text-red-600")}>
+        <span className={"shrink-0 text-sm font-semibold " + (positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
           {record}
           {showWinPct && (
-            <span className="ml-1 font-normal text-gray-400">{Math.round(winPct)}%</span>
+            <span className="ml-1 font-normal text-muted-foreground">{Math.round(winPct)}%</span>
           )}
         </span>
       </div>
-      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <div
           className={"h-full origin-left animate-fill-bar rounded-full " + (positive ? "bg-emerald-500" : "bg-red-500")}
           style={{
@@ -168,7 +168,9 @@ export function StreakBadge({
     <span
       className={
         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium " +
-        (isWin ? "bg-orange-50 text-orange-600" : "bg-sky-50 text-sky-600")
+        (isWin
+          ? "bg-orange-50 text-orange-600 dark:bg-orange-500/15 dark:text-orange-400"
+          : "bg-sky-50 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400")
       }
     >
       {isWin ? <FlameIcon /> : <SnowflakeIcon />}
@@ -196,17 +198,17 @@ export function Panel({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-card bg-white p-4 shadow-soft">
+    <div className="rounded-card bg-card p-4 shadow-soft">
       <div
         className={
           "flex items-center gap-1.5 " +
-          (subtitle ? "text-sm font-semibold text-gray-900" : "mb-2 text-sm font-semibold text-gray-900")
+          (subtitle ? "text-sm font-semibold text-foreground" : "mb-2 text-sm font-semibold text-foreground")
         }
       >
         {icon}
         {title}
       </div>
-      {subtitle && <p className="mb-2 text-xs text-gray-500">{subtitle}</p>}
+      {subtitle && <p className="mb-2 text-xs text-muted-foreground">{subtitle}</p>}
       <div className="space-y-0.5">{children}</div>
     </div>
   );

@@ -15,13 +15,13 @@ export function BestAtPanel({ entries }: { entries: BestAtEntry[] }) {
   if (entries.length === 0) return null;
 
   return (
-    <div className="rounded-card bg-white p-5 shadow-soft">
-      <h2 className="mb-3 text-base font-semibold text-gray-900">Best at...</h2>
-      <div className="divide-y divide-gray-100">
+    <div className="rounded-card bg-card p-5 shadow-soft">
+      <h2 className="mb-3 text-base font-semibold text-foreground">Best at...</h2>
+      <div className="divide-y divide-border-subtle">
         {entries.map((entry) => (
           <div key={entry.category} className="flex items-center justify-between py-2 text-sm">
-            <span className="text-gray-500">{entry.label}</span>
-            <a href={"/cappers/" + entry.capperId} className="font-medium text-gray-900 hover:underline">
+            <span className="text-muted-foreground">{entry.label}</span>
+            <a href={"/cappers/" + entry.capperId} className="font-medium text-foreground hover:underline">
               {entry.capperName} &middot; {Math.round(entry.winPct)}%
             </a>
           </div>

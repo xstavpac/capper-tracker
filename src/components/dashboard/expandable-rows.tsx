@@ -25,7 +25,7 @@ export function ExpandableRows({ children }: { children: ReactNode }) {
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-2 w-full rounded-full border border-gray-200 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+          className="mt-2 w-full rounded-full border border-border py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted"
         >
           {expanded ? "Show less" : "See more"}
         </button>

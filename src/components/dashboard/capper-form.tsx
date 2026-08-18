@@ -24,8 +24,8 @@ export function CapperForm({ atLimit }: { atLimit: boolean }) {
 
   if (atLimit && !isOpen) {
     return (
-      <div className="rounded-card bg-white p-4 shadow-soft">
-        <p className="text-sm text-gray-600">
+      <div className="rounded-card bg-card p-4 shadow-soft">
+        <p className="text-sm text-muted-foreground">
           You&apos;ve reached the free plan limit of 2 cappers.{" "}
           <span className="font-medium text-brand-600">Upgrade to Pro</span> for unlimited
           cappers.
@@ -68,41 +68,41 @@ export function CapperForm({ atLimit }: { atLimit: boolean }) {
     <form
       ref={formRef}
       action={handleSubmit}
-      className="rounded-card bg-white p-5 shadow-soft"
+      className="rounded-card bg-card p-5 shadow-soft"
     >
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900">Add a capper</h3>
+        <h3 className="text-sm font-medium text-foreground">Add a capper</h3>
         <button
           type="button"
           onClick={() => setIsOpen(false)}
-          className="text-sm text-gray-400 hover:text-gray-600"
+          className="text-sm text-muted-foreground hover:text-foreground"
         >
           Cancel
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+        <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">{error}</div>
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-xs font-medium text-gray-600">Name</label>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">Name</label>
           <input
             name="name"
             required
             placeholder="e.g. @JD_Picks"
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Source</label>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">Source</label>
           <select
             name="source"
             value={source}
             onChange={(e) => setSource(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
           >
             {SOURCES.map((s) => (
               <option key={s.value} value={s.value}>
@@ -114,28 +114,28 @@ export function CapperForm({ atLimit }: { atLimit: boolean }) {
 
         {source === "OTHER" && (
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">Custom source</label>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Custom source</label>
             <input
               name="customSource"
               placeholder="e.g. Reddit"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
             />
           </div>
         )}
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
             Sport specialization
           </label>
           <input
             name="sportSpecialization"
             placeholder="e.g. NBA"
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Color tag</label>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">Color tag</label>
           <div className="flex items-center gap-2 pt-1.5">
             {COLOR_TAGS.map((c) => (
               <button
@@ -144,7 +144,7 @@ export function CapperForm({ atLimit }: { atLimit: boolean }) {
                 onClick={() => setColorTag(c)}
                 className={
                   "h-6 w-6 rounded-full transition " +
-                  (colorTag === c ? "ring-2 ring-offset-2 ring-gray-400" : "")
+                  (colorTag === c ? "ring-2 ring-offset-2 ring-offset-card ring-gray-400 dark:ring-gray-300" : "")
                 }
                 style={{ backgroundColor: c }}
                 aria-label={"Select color " + c}
@@ -154,12 +154,12 @@ export function CapperForm({ atLimit }: { atLimit: boolean }) {
         </div>
 
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-xs font-medium text-gray-600">Notes (optional)</label>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">Notes (optional)</label>
           <textarea
             name="notes"
             rows={2}
             placeholder="Anything worth remembering about this capper"
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
           />
         </div>
       </div>

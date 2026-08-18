@@ -94,9 +94,9 @@ export function MergeCappersPanel({
   const manualDuplicate = cappers.find((c) => c.id === manualDuplicateId);
 
   return (
-    <div className="rounded-card bg-white p-5 shadow-soft">
-      <h3 className="text-sm font-medium text-gray-900">Merge duplicate cappers</h3>
-      <p className="mt-1 text-xs text-gray-500">
+    <div className="rounded-card bg-card p-5 shadow-soft">
+      <h3 className="text-sm font-medium text-foreground">Merge duplicate cappers</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
         Combines two capper records into one - every pick moves to the capper you keep, and the
         other record is removed. This can&apos;t be undone.
       </p>
@@ -105,7 +105,9 @@ export function MergeCappersPanel({
         <div
           className={
             "mt-3 rounded-lg px-3 py-2 text-sm " +
-            (message.tone === "success" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600")
+            (message.tone === "success"
+              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+              : "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400")
           }
         >
           {message.text}
@@ -113,13 +115,13 @@ export function MergeCappersPanel({
       )}
 
       {pending && (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
-          <div className="font-medium text-amber-900">Confirm merge</div>
-          <div className="mt-1.5 text-amber-800">
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-500/10">
+          <div className="font-medium text-amber-900 dark:text-amber-200">Confirm merge</div>
+          <div className="mt-1.5 text-amber-800 dark:text-amber-300">
             Keep <span className="font-medium">"{pending.primary.name}"</span> ({pending.primary.pickCount} pick
             {pending.primary.pickCount === 1 ? "" : "s"})
           </div>
-          <div className="text-amber-800">
+          <div className="text-amber-800 dark:text-amber-300">
             Remove <span className="font-medium">"{pending.duplicate.name}"</span> and move its{" "}
             {pending.duplicate.pickCount} pick{pending.duplicate.pickCount === 1 ? "" : "s"} onto{" "}
             {pending.primary.name}
@@ -135,14 +137,14 @@ export function MergeCappersPanel({
             <button
               onClick={swapPending}
               disabled={isMerging}
-              className="rounded-full border border-amber-300 bg-white px-4 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
+              className="rounded-full border border-amber-300 bg-card px-4 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
             >
               Swap - keep {pending.duplicate.name} instead
             </button>
             <button
               onClick={() => setPending(null)}
               disabled={isMerging}
-              className="rounded-full px-4 py-1.5 text-xs font-medium text-gray-500 transition hover:bg-gray-100"
+              className="rounded-full px-4 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted"
             >
               Cancel
             </button>
@@ -151,23 +153,23 @@ export function MergeCappersPanel({
       )}
 
       <div className="mt-4">
-        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Suspected duplicates
         </div>
         {suspected.length === 0 ? (
-          <p className="text-sm text-gray-400">No likely duplicates found.</p>
+          <p className="text-sm text-muted-foreground">No likely duplicates found.</p>
         ) : (
           <div className="space-y-1.5">
             {suspected.map((p) => {
               const key = pairKey(p.capperA.id, p.capperB.id);
               const isDismissing = dismissingKey === key;
               return (
-                <div key={key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                <div key={key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
                   <div>
-                    <span className="font-medium text-gray-900">{p.capperA.name}</span>
-                    <span className="mx-1.5 text-gray-400">~</span>
-                    <span className="font-medium text-gray-900">{p.capperB.name}</span>
-                    <span className="ml-2 text-xs text-gray-400">
+                    <span className="font-medium text-foreground">{p.capperA.name}</span>
+                    <span className="mx-1.5 text-muted-foreground">~</span>
+                    <span className="font-medium text-foreground">{p.capperB.name}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
                       {p.distance === 0 ? "exact match" : `${p.distance}-character difference`}
                     </span>
                   </div>
@@ -175,14 +177,14 @@ export function MergeCappersPanel({
                     <button
                       onClick={() => reviewSuggestedPair(p.capperA, p.capperB)}
                       disabled={isDismissing}
-                      className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
+                      className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground transition hover:bg-muted disabled:opacity-50"
                     >
                       Review merge
                     </button>
                     <button
                       onClick={() => dismissPair(p.capperA, p.capperB)}
                       disabled={isDismissing}
-                      className="rounded-full px-3 py-1 text-xs font-medium text-gray-400 transition hover:bg-gray-100 disabled:opacity-50"
+                      className="rounded-full px-3 py-1 text-xs font-medium text-muted-foreground transition hover:bg-muted disabled:opacity-50"
                     >
                       {isDismissing ? "Saving..." : "Not a duplicate"}
                     </button>
@@ -195,12 +197,12 @@ export function MergeCappersPanel({
       </div>
 
       <div className="mt-4">
-        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">Merge any two cappers</div>
+        <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Merge any two cappers</div>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={manualPrimaryId}
             onChange={(e) => setManualPrimaryId(e.target.value)}
-            className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground"
           >
             <option value="">Keep this capper...</option>
             {cappers.map((c) => (
@@ -209,11 +211,11 @@ export function MergeCappersPanel({
               </option>
             ))}
           </select>
-          <span className="text-xs text-gray-400">merge with</span>
+          <span className="text-xs text-muted-foreground">merge with</span>
           <select
             value={manualDuplicateId}
             onChange={(e) => setManualDuplicateId(e.target.value)}
-            className="rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground"
           >
             <option value="">This capper...</option>
             {cappers.map((c) => (
@@ -225,7 +227,7 @@ export function MergeCappersPanel({
           <button
             onClick={() => manualPrimary && manualDuplicate && reviewManualPair(manualPrimary, manualDuplicate)}
             disabled={!manualReady}
-            className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-100 disabled:opacity-50"
+            className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted disabled:opacity-50"
           >
             Review merge
           </button>

@@ -69,21 +69,21 @@ export function PendingTriage({ picks }: { picks: PendingPickRow[] }) {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-card bg-white p-10 text-center shadow-soft">
-        <p className="text-sm text-gray-400">No pending picks.</p>
+      <div className="rounded-card bg-card p-10 text-center shadow-soft">
+        <p className="text-sm text-muted-foreground">No pending picks.</p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-card bg-white p-5 shadow-soft">
+    <div className="rounded-card bg-card p-5 shadow-soft">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <label className="flex items-center gap-2 text-sm text-gray-700">
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <input
             type="checkbox"
             checked={allChecked}
             onChange={toggleAll}
-            className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-400"
+            className="h-4 w-4 rounded border-border text-brand-600 focus:ring-brand-400"
           />
           {checked.size} selected
         </label>
@@ -91,28 +91,28 @@ export function PendingTriage({ picks }: { picks: PendingPickRow[] }) {
           <button
             disabled={busy || checked.size === 0}
             onClick={() => gradeChecked("WIN")}
-            className={ACTION_BUTTON_CLASS + " bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}
+            className={ACTION_BUTTON_CLASS + " bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-300 dark:hover:bg-emerald-500/25"}
           >
             Grade all win
           </button>
           <button
             disabled={busy || checked.size === 0}
             onClick={() => gradeChecked("LOSS")}
-            className={ACTION_BUTTON_CLASS + " bg-red-50 text-red-700 hover:bg-red-100"}
+            className={ACTION_BUTTON_CLASS + " bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25"}
           >
             Grade all loss
           </button>
           <button
             disabled={busy || checked.size === 0}
             onClick={() => gradeChecked("CANCELLED")}
-            className={ACTION_BUTTON_CLASS + " border border-gray-200 text-gray-600 hover:bg-gray-50"}
+            className={ACTION_BUTTON_CLASS + " border border-border text-muted-foreground hover:bg-muted"}
           >
             Clear selected
           </button>
         </div>
       </div>
 
-      <div className="divide-y divide-gray-100">
+      <div className="divide-y divide-border-subtle">
         {rows.map((p) => {
           const stale = p.ageHours >= STALE_HOURS;
           return (
@@ -122,25 +122,25 @@ export function PendingTriage({ picks }: { picks: PendingPickRow[] }) {
                   type="checkbox"
                   checked={checked.has(p.id)}
                   onChange={() => toggleOne(p.id)}
-                  className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-brand-600 focus:ring-brand-400"
+                  className="mt-1 h-4 w-4 shrink-0 rounded border-border text-brand-600 focus:ring-brand-400"
                 />
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-foreground">
                     {p.capperName} &middot; {p.betDetail ?? p.betType} &middot;{" "}
                     {p.odds > 0 ? "+" : ""}
                     {p.odds} &middot; {p.units}u
                   </div>
                   <div className="mt-1">
                     {p.unmatchedReason ? (
-                      <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-600">
+                      <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-600 dark:bg-rose-500/15 dark:text-rose-400">
                         Unmatched &middot; {p.unmatchedReason}
                       </span>
                     ) : stale ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
                         {formatAge(p.ageHours)}
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-400">{formatAge(p.ageHours)}</span>
+                      <span className="text-xs text-muted-foreground">{formatAge(p.ageHours)}</span>
                     )}
                   </div>
                 </div>
@@ -149,28 +149,28 @@ export function PendingTriage({ picks }: { picks: PendingPickRow[] }) {
                 <button
                   disabled={busy}
                   onClick={() => gradeOne(p.id, "WIN")}
-                  className="rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
                 >
                   Win
                 </button>
                 <button
                   disabled={busy}
                   onClick={() => gradeOne(p.id, "LOSS")}
-                  className="rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
                 >
                   Loss
                 </button>
                 <button
                   disabled={busy}
                   onClick={() => gradeOne(p.id, "PUSH")}
-                  className="rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
                 >
                   Push
                 </button>
                 <button
                   disabled={busy}
                   onClick={() => gradeOne(p.id, "CANCELLED")}
-                  className="rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10 disabled:opacity-50"
                 >
                   Clear
                 </button>
