@@ -1,4 +1,5 @@
 import { persistFinalScores, gradeAllPendingPicks, regradeAllFuzzyMatchedPicks } from "@/server/data/grading";
+import { gradeAllPendingLegs, regradeAllFuzzyMatchedLegs } from "@/server/data/parlay-grading";
 import { RESOLVABLE_SPORT_KEYS, LIVE_SPORTS } from "@/server/data/odds";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,10 @@ export const maxDuration = 60;
 // no one happens to be looking at those two pages. Every sport in
 // RESOLVABLE_SPORT_KEYS gets its scores refreshed and its pending picks
 // (across ALL users, not just whoever's browsing) graded in the same run.
+// Parlay legs are the one exception to the page-load fast path - they have
+// no page-load-triggered grading yet, so this cron is the only place they
+// get graded at all (see parlay-grading.ts). Each leg grade/regrade pass
+// also recomputes any ParlayBet it may have just resolved.
 export async function GET(req: Request) {
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
@@ -33,7 +38,9 @@ export async function GET(req: Request) {
       const persisted = await persistFinalScores(sportKey);
       const grading = await gradeAllPendingPicks(sportKey, sportName);
       const regrading = await regradeAllFuzzyMatchedPicks(sportKey, sportName);
-      return { sport: sportKey, persisted, grading, regrading };
+      const legGrading = await gradeAllPendingLegs(sportKey, sportName);
+      const legRegrading = await regradeAllFuzzyMatchedLegs(sportKey, sportName);
+      return { sport: sportKey, persisted, grading, regrading, legGrading, legRegrading };
     })
   );
 
