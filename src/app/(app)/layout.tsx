@@ -22,7 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <AppSidebar
             user={{ name: user.name, email: user.email, profilePictureUrl: user.profilePictureUrl }}
           />
-          <main className="flex-1 bg-gray-50 p-4 md:rounded-xl md:border md:border-gray-200 md:bg-white md:p-8 md:shadow-soft">
+          <main className="flex-1 bg-background p-4 md:rounded-xl md:border md:border-border md:bg-card md:p-8 md:shadow-soft">
             {children}
           </main>
         </div>
