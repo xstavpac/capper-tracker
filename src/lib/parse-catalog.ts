@@ -36,8 +36,21 @@ export type AmbiguousOption = { label: string; sport: string; nickname: string }
 const KNOWN_SPORTS = [
   "WNBA", "NCAAF", "NCAAB", "MLB", "NBA", "NHL", "NFL", "CFL", "MLS", "UFC", "MMA",
   "PGA", "ATP", "WTA", "EPL", "LA LIGA", "SERIE A", "BUNDESLIGA", "LIGUE 1",
-  "CHAMPIONS LEAGUE",
+  "CHAMPIONS LEAGUE", "KBO",
 ];
+
+// A small, exact-match list of section labels cappers paste as boilerplate
+// between their name and their actual picks ("Full Card" seen in a real
+// catalog) - never a capper name, never a pick, so a line matching one of
+// these (whole line, case-insensitive) is skipped entirely: currentCapper is
+// left exactly as it was, nothing is added to results or unresolved. Kept
+// small and exact rather than guessed broadly - add to this only from a
+// confirmed real example, the same standard as every other list in this file.
+const BOILERPLATE_LABELS = new Set(["full card"]);
+
+function isBoilerplateLabel(text: string): boolean {
+  return BOILERPLATE_LABELS.has(text.toLowerCase().trim());
+}
 
 // "cardinals" is deliberately excluded here - it's ambiguous with NFL (see
 // AMBIGUOUS_NICKNAMES) and must fall through to that check instead of always
@@ -172,6 +185,12 @@ function looksLikePick(text: string): boolean {
     /\bML\b/i.test(text) ||
     /money\s*line/i.test(text) ||
     /\b(over|under)\b/i.test(text) ||
+    // "o3.5" / "u45.5" shorthand for over/under - the letter directly
+    // touching the digit (no space) is what makes this a safe signal; a
+    // stray "o" or "u" elsewhere in ordinary text never sits flush against a
+    // number like this.
+    /\bo\d+(\.\d+)?\b/i.test(text) ||
+    /\bu\d+(\.\d+)?\b/i.test(text) ||
     /\b[NY]RFI\b/i.test(text) ||
     // A "Team vs Team" / "Team @ Team" matchup shape, even with no bet-type
     // keyword on the same line (e.g. the number is stated on a following
@@ -180,6 +199,17 @@ function looksLikePick(text: string): boolean {
     // either side is a team this app actually has a nickname list for.
     /\b\w[\w'.-]*\s+(?:vs\.?|@)\s+\w/i.test(text)
   );
+}
+
+// Builds the word-boundary regex a multi-word team phrase ("red sox", "blue
+// jays") is matched with, tolerating zero or more spaces between its words -
+// a capper writing "RedSox" or "BlueJays" with no space at all is common
+// enough (confirmed against real pasted text) that requiring at least one
+// space (the old `\s+`) silently failed to match a real team name. `\s*`
+// still requires the words to be flush against each other or separated by
+// whitespace only, so it can't match across unrelated intervening text.
+function teamPhraseRegex(phrase: string): RegExp {
+  return new RegExp("\\b" + phrase.replace(/ /g, "\\s*") + "\\b", "i");
 }
 
 // allowNicknameFallback gates the second (fuzzy, team-nickname-only) branch -
@@ -204,8 +234,7 @@ function detectSport(text: string, allowNicknameFallback = true): { sportName: s
   for (const entry of TEAM_SPORT_ENTRIES) {
     const phrase = entry[0];
     const sport = entry[1];
-    const re = new RegExp("\\b" + phrase.replace(/ /g, "\\s+") + "\\b", "i");
-    if (re.test(lower)) {
+    if (teamPhraseRegex(phrase).test(lower)) {
       return { sportName: sport, rest: text };
     }
   }
@@ -307,10 +336,10 @@ function parsePickText(description: string): {
     betType = "PLAYER_PROP";
   } else if (/\bML\b/i.test(cleanDescription) || /money\s*line/i.test(cleanDescription)) {
     betType = "MONEYLINE";
-  } else if (/\bover\b/i.test(cleanDescription)) {
+  } else if (/\bover\b/i.test(cleanDescription) || /\bo\d+(\.\d+)?\b/i.test(cleanDescription)) {
     betType = "TOTAL";
     totalSide = "over";
-  } else if (/\bunder\b/i.test(cleanDescription)) {
+  } else if (/\bunder\b/i.test(cleanDescription) || /\bu\d+(\.\d+)?\b/i.test(cleanDescription)) {
     betType = "TOTAL";
     totalSide = "under";
   } else if (/\btotal\b/i.test(cleanDescription)) {
@@ -454,8 +483,7 @@ export function findTeamNicknames(text: string, sportName: string): string[] {
   const found: string[] = [];
   for (const [phrase, sport] of TEAM_SPORT_ENTRIES) {
     if (sport !== sportName) continue;
-    const re = new RegExp("\\b" + phrase.replace(/ /g, "\\s+") + "\\b", "i");
-    if (re.test(lower) && !found.includes(phrase)) found.push(phrase);
+    if (teamPhraseRegex(phrase).test(lower) && !found.includes(phrase)) found.push(phrase);
   }
   return found;
 }
@@ -480,7 +508,11 @@ function findPlayerPick(text: string): { playerName: string; playerKey: string }
   const mlMatch = withoutParens.match(/^(.+?)\s+(?:ML|money\s*line)\b/i);
   const spreadMatch = withoutParens.match(/^(.+?)\s+[+-]\d+(?:\.\d+)?\b/);
   const totalMatch = withoutParens.match(/^(.+?)\s+(?:over|under)\s+\d+(?:\.\d+)?\b/i);
-  const nameMatch = mlMatch ?? spreadMatch ?? totalMatch;
+  // Same "o3.5"/"u45.5" shorthand looksLikePick and parsePickText's betType
+  // detection recognize - checked only as a fallback so the spelled-out form
+  // above still wins when both are somehow present.
+  const totalShorthandMatch = withoutParens.match(/^(.+?)\s+[ou]\d+(?:\.\d+)?\b/i);
+  const nameMatch = mlMatch ?? spreadMatch ?? totalMatch ?? totalShorthandMatch;
   if (!nameMatch) return null;
 
   const candidate = nameMatch[1].trim();
@@ -530,10 +562,46 @@ export function findTeamNickname(text: string, sportName: string): string | unde
   const lower = text.toLowerCase();
   for (const [phrase, sport] of TEAM_SPORT_ENTRIES) {
     if (sport !== sportName) continue;
-    const re = new RegExp("\\b" + phrase.replace(/ /g, "\\s+") + "\\b", "i");
-    if (re.test(lower)) return phrase;
+    if (teamPhraseRegex(phrase).test(lower)) return phrase;
   }
   return undefined;
+}
+
+// A won-loss record shape specifically ("19-0", "12-2", "8-1") - digits
+// flush against both sides of the dash, no sign. Deliberately distinct from
+// the generic signed-number signal in looksLikePick, which also matches a
+// real spread/moneyline number ("-3.5", "+150") - those are always a bare
+// sign directly before the digits, never digit-DASH-digit the way a record
+// is. That narrower shape is what makes it safe to key a capper-tagline
+// extraction off of - see extractCapperNameFromTagline below.
+const RECORD_PATTERN = /\b\d+-\d+\b/;
+
+// Same "looks like a real name" shape findPlayerPick uses for a bet's player
+// name - 1 to 4 capitalized words, no digits.
+const NAME_SHAPE = /^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/;
+
+// A capper announcing their own category-specific record ("Bambino 19-0
+// NRFI Run", "Sharp Sam 12-2 ML Run", "Vegas John 8-1 ATS heater") trips
+// looksLikePick via the very keyword it's meant to signal a REAL pick with
+// (NRFI/ML/ATS/...) - a tagline and a real pick can legitimately use the
+// exact same vocabulary, so the keyword alone can't tell them apart. A
+// won-loss record can: a real pick's own numbers are always a spread/total
+// line or an explicit moneyline price, never a bare "digit-dash-digit"
+// won-loss shape, and a capper citing their own record is close to the only
+// realistic source of that shape in catalog text. So this only fires when a
+// record is actually present, and only extracts the name-shaped text before
+// it - a genuinely unresolvable pick that merely happens to have a
+// name-shaped lead-in before its keyword but no record at all (e.g. "Tokyo
+// Giants NRFI" for a team this app doesn't track) has nothing here to key
+// off of and correctly falls through to `unresolved` unchanged.
+function extractCapperNameFromTagline(text: string): string | null {
+  const match = text.match(RECORD_PATTERN);
+  if (!match || match.index === undefined) return null;
+
+  const lead = text.slice(0, match.index).trim();
+  if (!lead || !NAME_SHAPE.test(lead)) return null;
+
+  return lead;
 }
 
 export function parseCatalog(
@@ -705,7 +773,27 @@ export function parseCatalog(
     }
 
     const strippedText = line.replace(/^-\s*/, "").trim();
+
+    // A boilerplate section label ("Full Card") - not a capper name, not a
+    // pick. Skip entirely: currentCapper is left exactly as it was.
+    if (isBoilerplateLabel(strippedText)) {
+      continue;
+    }
+
     const detected = detectSport(strippedText, !afterBlank || looksLikePick(strippedText));
+
+    // A bare sport/league code with nothing else on the line ("KBO" as its
+    // own sub-header under a capper's name) - detectSport found a code but
+    // there's no team/bet-type info left in `rest` to build a real pick
+    // from. Same treatment as a boilerplate label: skip entirely rather than
+    // push a placeholder pick or (if the code fails to resolve here at all)
+    // fall through and get misread as a fake capper name - confirmed against
+    // a real "Porter Picks" / "KBO" / "Doosan Bears ML" catalog, where the
+    // bare "KBO" sub-header wrongly overwrote "Porter Picks" as the active
+    // capper before this check existed.
+    if (detected.sportName && !detected.rest.trim()) {
+      continue;
+    }
 
     if (detected.sportName) {
       const parsed = parsePickText(detected.rest);
@@ -810,8 +898,19 @@ export function parseCatalog(
       // nothing above could resolve its sport/team/player - do NOT fall
       // through to being read as a capper name (see the comment on
       // `unresolved` above for why that's actively harmful, not just a missed
-      // pick). Surfaced for manual review instead.
+      // pick), UNLESS this is actually a capper announcing their own
+      // category-specific record (e.g. "Bambino 19-0 NRFI Run") - see
+      // extractCapperNameFromTagline. Anything else that merely looks
+      // pick-shaped is surfaced for manual review instead.
       if (looksLikePick(strippedText)) {
+        const taglineName = extractCapperNameFromTagline(strippedText);
+        if (taglineName) {
+          const normalized = normalizeName(taglineName);
+          const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
+          currentCapper = existingMatch ?? taglineName;
+          continue;
+        }
+
         unresolved.push(strippedText);
         continue;
       }
