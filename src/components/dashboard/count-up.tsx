@@ -2,14 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// Matches the 0.8s fill-bar animation duration used elsewhere on the
-// Dashboard (Rising/Best Last-20 progress bars), so the page's load-in
-// animations feel like one consistent effect rather than several different
-// speeds.
-export const DURATION_MS = 800;
+// Slower and less front-loaded than the 0.8s/cubic pairing this replaced -
+// cubic's steep initial deceleration made the climb read as "jump most of
+// the way, then crawl" at 800ms. Quad decelerates more gradually, and the
+// extra ~250ms gives that gentler curve room to read as a smooth glide
+// instead of a snap.
+export const DURATION_MS = 1050;
 
-function easeOutCubic(t: number) {
-  return 1 - Math.pow(1 - t, 3);
+function easeOutQuad(t: number) {
+  return 1 - Math.pow(1 - t, 2);
 }
 
 // Animates from 0 up to `value` on mount, optionally held at 0 for
@@ -43,7 +44,7 @@ export function CountUp({
     function tick(now: number) {
       if (rafStart === null) rafStart = now;
       const t = Math.min(1, (now - rafStart) / DURATION_MS);
-      setDisplay(value * easeOutCubic(t));
+      setDisplay(value * easeOutQuad(t));
       if (t < 1) frame.current = requestAnimationFrame(tick);
     }
     const timer = window.setTimeout(() => {
