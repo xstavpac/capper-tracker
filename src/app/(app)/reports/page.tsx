@@ -1,5 +1,6 @@
 ﻿import { requireUser } from "@/server/auth";
 import { getReportsData, type ReportBreakdownItem } from "@/server/data/stats";
+import { getParlayReportsData, type ParlayOverallStats } from "@/server/data/parlay-stats";
 import { WinLossPieChart } from "@/components/dashboard/win-loss-pie-chart";
 
 function BreakdownList({ title, items }: { title: string; items: ReportBreakdownItem[] }) {
@@ -49,9 +50,51 @@ function HighlightCard({ label, item }: { label: string; item: ReportBreakdownIt
   );
 }
 
+// Separate card, separate query (getParlayReportsData, not getReportsData) -
+// deliberately never blended into the picks-only breakdowns above. See the
+// schema comment on ParlayBet for why a parlay leg must never be counted as
+// its own row in any of those.
+function ParlayCard({ overall, totalParlays }: { overall: ParlayOverallStats; totalParlays: number }) {
+  const decided = overall.wins + overall.losses + overall.pushes;
+  if (totalParlays === 0) {
+    return (
+      <div className="rounded-card bg-white p-5 shadow-soft">
+        <div className="mb-2 text-sm font-medium text-gray-700">Parlay record</div>
+        <p className="py-4 text-center text-sm text-gray-400">No parlays logged yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-card bg-white p-5 shadow-soft">
+      <div className="mb-2 text-sm font-medium text-gray-700">Parlay record</div>
+      <div className="flex items-baseline justify-between">
+        <div className="text-lg font-semibold">
+          {overall.wins}-{overall.losses}
+          {overall.pushes > 0 ? "-" + overall.pushes : ""}
+        </div>
+        <div className={"text-sm font-medium " + (overall.roi >= 0 ? "text-emerald-600" : "text-red-600")}>
+          {overall.roi >= 0 ? "+" : ""}
+          {overall.roi}% ROI
+        </div>
+      </div>
+      <div className="mt-1 text-xs text-gray-400">
+        {decided} decided{" "}
+        {overall.netUnits !== 0 && (
+          <>
+            &middot; {overall.netUnits >= 0 ? "+" : ""}
+            {overall.netUnits}u net
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default async function ReportsPage() {
   const user = await requireUser();
   const data = await getReportsData(user.id);
+  const parlayData = await getParlayReportsData(user.id);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -83,6 +126,10 @@ export default async function ReportsPage() {
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <BreakdownList title="Profit by period" items={data.byPeriod} />
         <BreakdownList title="Profit by favorite / underdog" items={data.byFavoriteDog} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ParlayCard overall={parlayData.overall} totalParlays={parlayData.totalParlays} />
       </div>
     </div>
   );
