@@ -5,8 +5,14 @@ import { updatePickStatusAction } from "@/server/actions/picks";
 import type { PendingPickRow } from "@/server/data/picks";
 import type { PickStatus } from "@prisma/client";
 
+// Negative ageHours means the game hasn't started yet (gameTime is still in
+// the future) - clamping that to "Pending 0h" read as stuck/frozen rather
+// than upcoming. Floors the same way in both directions: an elapsed pick
+// under an hour old still shows "Pending 0h" (unchanged), and a game under
+// an hour from starting shows "Starts in 0h" rather than rounding up to 1.
 function formatAge(ageHours: number) {
-  return Math.max(0, Math.floor(ageHours)) + "h";
+  if (ageHours < 0) return "Starts in " + Math.floor(-ageHours) + "h";
+  return "Pending " + Math.floor(ageHours) + "h";
 }
 
 const STALE_HOURS = 24;
@@ -131,10 +137,10 @@ export function PendingTriage({ picks }: { picks: PendingPickRow[] }) {
                       </span>
                     ) : stale ? (
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                        Pending {formatAge(p.ageHours)}
+                        {formatAge(p.ageHours)}
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-400">Pending {formatAge(p.ageHours)}</span>
+                      <span className="text-xs text-gray-400">{formatAge(p.ageHours)}</span>
                     )}
                   </div>
                 </div>
