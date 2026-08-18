@@ -1,9 +1,11 @@
 import Link from "next/link";
 
-// Bracketed placeholders below ([DATE], [CONTACT EMAIL], [X days], the
-// billing/odds-provider flags) are left exactly as provided - real values
-// need to come from the site owner before this goes live or gets submitted
-// anywhere (e.g. Google OAuth verification). Do not fill these in here.
+// Finalized with real values from the site owner (Aug 17, 2026) - the
+// Payment Information paragraph and Stripe bullet from the original draft
+// were deliberately dropped, not just filled in: billing isn't live, and
+// the owner's finalized text doesn't mention Stripe at all. Re-add both if
+// billing goes live later - see git history for the original conditional
+// wording.
 export default function PrivacyPolicyPage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-gray-700">
@@ -12,7 +14,7 @@ export default function PrivacyPolicyPage() {
       </Link>
 
       <h1 className="mt-6 text-3xl font-semibold tracking-tight text-gray-900">BettingView Privacy Policy</h1>
-      <p className="mt-2 text-sm font-medium text-gray-500">Last updated: [DATE]</p>
+      <p className="mt-2 text-sm font-medium text-gray-500">Last updated: August 17, 2026</p>
 
       <p className="mt-6 leading-relaxed">
         This Privacy Policy explains how BettingView (&ldquo;we,&rdquo; &ldquo;us,&rdquo; &ldquo;our&rdquo;) collects,
@@ -42,13 +44,6 @@ export default function PrivacyPolicyPage() {
         information &mdash; to keep the Service working correctly and to understand how it&apos;s used.
       </p>
 
-      <p className="mt-4 leading-relaxed">
-        <strong className="font-semibold text-gray-900">Payment information.</strong> [IF/WHEN BILLING IS LIVE:] If
-        you subscribe to a paid plan, payment is processed by Stripe. We do not store your full card number or other
-        sensitive payment details ourselves &mdash; Stripe handles that directly, under its own security and privacy
-        practices.
-      </p>
-
       <h2 className="mt-10 text-xl font-semibold text-gray-900">How We Use Information</h2>
 
       <p className="mt-4 leading-relaxed">We use the information we collect to:</p>
@@ -76,12 +71,8 @@ export default function PrivacyPolicyPage() {
           <strong className="font-semibold text-gray-900">Vercel</strong> &mdash; our hosting provider
         </li>
         <li>
-          <strong className="font-semibold text-gray-900">Stripe</strong> &mdash; our payment processor (if/when
-          billing is active)
-        </li>
-        <li>
-          <strong className="font-semibold text-gray-900">[The Odds API / your odds data provider]</strong> &mdash;
-          for live sports odds and scores
+          <strong className="font-semibold text-gray-900">The Odds API</strong> &mdash; for live sports odds and
+          scores
         </li>
       </ul>
 
@@ -99,7 +90,7 @@ export default function PrivacyPolicyPage() {
 
       <p className="mt-4 leading-relaxed">
         We retain your account information for as long as your account is active. If you delete your account, we
-        will delete or anonymize your personal information within [X days], except where we&apos;re required to
+        will delete or anonymize your personal information within 30 days, except where we&apos;re required to
         retain it for legal or security purposes.
       </p>
 
@@ -108,7 +99,12 @@ export default function PrivacyPolicyPage() {
       <p className="mt-4 leading-relaxed">You can:</p>
       <ul className="mt-3 list-disc space-y-1.5 pl-5">
         <li>Access or update your account information directly within the Service</li>
-        <li>Request deletion of your account and associated data by contacting us at [CONTACT EMAIL]</li>
+        <li>
+          Request deletion of your account and associated data by contacting us at{" "}
+          <a href="mailto:Bettingview@proton.me" className="font-medium text-brand-600 hover:text-brand-700">
+            Bettingview@proton.me
+          </a>
+        </li>
         <li>
           Revoke BettingView&apos;s access to your Google account at any time via your{" "}
           <a
@@ -135,7 +131,11 @@ export default function PrivacyPolicyPage() {
       <p className="mt-4 leading-relaxed">
         BettingView is not directed at, and is not intended for use by, anyone under the age of 18. We do not
         knowingly collect information from anyone under 18. If you believe a minor has provided us with information,
-        contact us at [CONTACT EMAIL] and we will delete it.
+        contact us at{" "}
+        <a href="mailto:Bettingview@proton.me" className="font-medium text-brand-600 hover:text-brand-700">
+          Bettingview@proton.me
+        </a>{" "}
+        and we will delete it.
       </p>
 
       <h2 className="mt-10 text-xl font-semibold text-gray-900">Changes to This Policy</h2>
@@ -150,7 +150,11 @@ export default function PrivacyPolicyPage() {
       <p className="mt-4 leading-relaxed">
         If you have questions about this Privacy Policy or how your information is handled, contact us at:
       </p>
-      <p className="mt-3 font-semibold text-gray-900">[CONTACT EMAIL]</p>
+      <p className="mt-3 font-semibold text-gray-900">
+        <a href="mailto:Bettingview@proton.me" className="text-brand-600 hover:text-brand-700">
+          Bettingview@proton.me
+        </a>
+      </p>
     </main>
   );
 }
