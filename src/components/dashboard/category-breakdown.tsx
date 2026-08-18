@@ -3,8 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { getRecordColor, type CategoryBreakdownItem, type PickCategoryKey } from "@/server/data/stats";
-import { CountUp } from "@/components/dashboard/count-up";
-import { SURGE_DURATION_MS } from "@/components/dashboard/energy-surge-constants";
+import { EnergyCountUp, EnergyRecordCountUp } from "@/components/dashboard/energy-surge";
 
 export type CategoryLeaderboardEntry = {
   capperId: string;
@@ -23,6 +22,15 @@ const TEXT_CLASSES: Record<ReturnType<typeof getRecordColor>, string> = {
   green: "text-emerald-700",
   red: "text-red-700",
 };
+// EnergySurge's tone drives its flash/ring color, not this panel's own
+// green/red tint - mapped from the same getRecordColor result rather than
+// introducing a second win/loss color scheme. getRecordColor never returns
+// anything else, so "neutral" is unused here (kept only because the prop
+// itself is a three-way union shared with the hero stats).
+const RECORD_COLOR_TONE: Record<ReturnType<typeof getRecordColor>, "up" | "down"> = {
+  green: "up",
+  red: "down",
+};
 
 // All-time record by pick category (favorite/underdog, over/under, spread,
 // F5 ML, NRFI) - answers "am I better off following favorites or dogs,
@@ -38,11 +46,12 @@ const TEXT_CLASSES: Record<ReturnType<typeof getRecordColor>, string> = {
 // page).
 //
 // `animateIn` is the same kind of opt-in, for the Dashboard specifically:
-// when true, each tile's record/win% counts up via the same CountUp/
-// SURGE_DURATION_MS the hero stats and Best/Worst-20 bars already key off,
-// so this panel joins their synchronized load-in beat instead of rendering
-// static. Omit it (Live page, capper detail page) and tiles render exactly
-// as they always have - plain numbers, no animation.
+// when true, each tile's record/win% counts up via the same EnergyCountUp/
+// EnergyRecordCountUp the hero stats already use (ring pulses + lightning-
+// bolt flash, then the count-up), so this panel joins their synchronized
+// load-in beat instead of rendering static. Omit it (Live page, capper
+// detail page) and tiles render exactly as they always have - plain
+// numbers, no animation.
 export function CategoryBreakdown({
   items,
   leaderboards,
@@ -97,16 +106,15 @@ export function CategoryBreakdown({
               {animateIn ? (
                 <>
                   <div className="mt-1 text-sm font-medium text-gray-900">
-                    <CountUp value={item.wins} startDelayMs={SURGE_DURATION_MS} />-
-                    <CountUp value={item.losses} startDelayMs={SURGE_DURATION_MS} />
-                    {item.pushes > 0 && (
-                      <>
-                        -<CountUp value={item.pushes} startDelayMs={SURGE_DURATION_MS} />
-                      </>
-                    )}
+                    <EnergyRecordCountUp
+                      wins={item.wins}
+                      losses={item.losses}
+                      pushes={item.pushes > 0 ? item.pushes : undefined}
+                      tone={RECORD_COLOR_TONE[color]}
+                    />
                   </div>
                   <div className={"mt-0.5 text-sm font-semibold " + TEXT_CLASSES[color]}>
-                    <CountUp value={item.winPct} startDelayMs={SURGE_DURATION_MS} suffix="%" />
+                    <EnergyCountUp value={item.winPct} suffix="%" tone={RECORD_COLOR_TONE[color]} />
                   </div>
                 </>
               ) : (

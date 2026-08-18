@@ -110,6 +110,11 @@ export function EnergyCountUp({
 // startDelayMs, so wins/losses/pushes count up in lockstep ("0-0-0" ->
 // "90-57-2") once the shared surge finishes, rather than sitting there
 // static while every other hero stat animates in.
+//
+// `pushes` is optional (omit it, e.g. by passing undefined when a caller's
+// own count is 0, to render just "wins-losses") - mirrors the
+// non-animated record display's own convention of hiding a zero push count
+// rather than always showing a "-0".
 export function EnergyRecordCountUp({
   wins,
   losses,
@@ -119,13 +124,18 @@ export function EnergyRecordCountUp({
 }: {
   wins: number;
   losses: number;
-  pushes: number;
+  pushes?: number;
   tone?: "up" | "down" | "neutral";
   className?: string;
 }) {
   return (
     <EnergySurge tone={tone} className={className}>
-      <CountUp value={wins} startDelayMs={SURGE_DURATION_MS} />-<CountUp value={losses} startDelayMs={SURGE_DURATION_MS} />-<CountUp value={pushes} startDelayMs={SURGE_DURATION_MS} />
+      <CountUp value={wins} startDelayMs={SURGE_DURATION_MS} />-<CountUp value={losses} startDelayMs={SURGE_DURATION_MS} />
+      {pushes !== undefined && (
+        <>
+          -<CountUp value={pushes} startDelayMs={SURGE_DURATION_MS} />
+        </>
+      )}
     </EnergySurge>
   );
 }
