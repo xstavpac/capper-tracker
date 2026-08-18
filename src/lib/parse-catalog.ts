@@ -55,10 +55,12 @@ function isBoilerplateLabel(text: string): boolean {
 // "cardinals" is deliberately excluded here - it's ambiguous with NFL (see
 // AMBIGUOUS_NICKNAMES) and must fall through to that check instead of always
 // resolving to MLB. "St Louis Cardinals" is still reachable via DISAMBIGUATED_TEAMS.
+// "tigers" and "twins" are excluded for the same reason - both now collide
+// with a KBO team (KIA Tigers, LG Twins); see AMBIGUOUS_NICKNAMES.
 const MLB_TEAMS = [
   "diamondbacks", "braves", "orioles", "red sox", "cubs", "white sox", "reds",
-  "guardians", "rockies", "tigers", "astros", "royals", "angels", "dodgers",
-  "marlins", "brewers", "twins", "mets", "yankees", "athletics", "phillies",
+  "guardians", "rockies", "astros", "royals", "angels", "dodgers",
+  "marlins", "brewers", "mets", "yankees", "athletics", "phillies",
   "pirates", "padres", "mariners", "rays", "blue jays", "nationals",
 ];
 
@@ -73,11 +75,14 @@ const NBA_TEAMS = [
 // "panthers" is deliberately excluded here - it's ambiguous with NHL (see
 // AMBIGUOUS_NICKNAMES) and must fall through to that check instead of always
 // resolving to NFL. "Carolina Panthers" is still reachable via DISAMBIGUATED_TEAMS.
+// "bears", "lions", and "eagles" are excluded for the same reason - all three
+// now collide with a KBO team (Doosan Bears, Samsung Lions, Hanwha Eagles);
+// see AMBIGUOUS_NICKNAMES.
 const NFL_TEAMS = [
-  "falcons", "ravens", "bills", "bears", "bengals", "browns",
-  "cowboys", "broncos", "lions", "packers", "texans", "colts", "jaguars",
+  "falcons", "ravens", "bills", "bengals", "browns",
+  "cowboys", "broncos", "packers", "texans", "colts", "jaguars",
   "chiefs", "raiders", "chargers", "rams", "dolphins", "vikings", "patriots",
-  "saints", "jets", "eagles", "steelers", "49ers", "niners", "seahawks",
+  "saints", "jets", "steelers", "49ers", "niners", "seahawks",
   "buccaneers", "titans", "commanders",
 ];
 
@@ -131,6 +136,35 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
   giants: [
     { label: "San Francisco Giants (MLB)", sport: "MLB", nickname: "san francisco giants" },
     { label: "New York Giants (NFL)", sport: "NFL", nickname: "new york giants" },
+    { label: "Lotte Giants (KBO)", sport: "KBO", nickname: "lotte giants" },
+  ],
+  // The following five keys exist solely because of KBO team-name collisions
+  // (see KBO_TEAMS/DISAMBIGUATED_TEAMS above) - each bare nickname used to
+  // resolve straight to its one US-league team in MLB_TEAMS/NFL_TEAMS; now
+  // that a KBO team shares the same bare nickname, it must fall through to
+  // here (and from there to the season/schedule/pick-context hierarchy in
+  // resolve-ambiguous-catalog.ts, or a manual choice) instead of silently
+  // guessing. A capper naming the city too ("Doosan Bears") never reaches
+  // this - it resolves directly via DISAMBIGUATED_TEAMS.
+  bears: [
+    { label: "Chicago Bears (NFL)", sport: "NFL", nickname: "chicago bears" },
+    { label: "Doosan Bears (KBO)", sport: "KBO", nickname: "doosan bears" },
+  ],
+  twins: [
+    { label: "Minnesota Twins (MLB)", sport: "MLB", nickname: "minnesota twins" },
+    { label: "LG Twins (KBO)", sport: "KBO", nickname: "lg twins" },
+  ],
+  lions: [
+    { label: "Detroit Lions (NFL)", sport: "NFL", nickname: "detroit lions" },
+    { label: "Samsung Lions (KBO)", sport: "KBO", nickname: "samsung lions" },
+  ],
+  eagles: [
+    { label: "Philadelphia Eagles (NFL)", sport: "NFL", nickname: "philadelphia eagles" },
+    { label: "Hanwha Eagles (KBO)", sport: "KBO", nickname: "hanwha eagles" },
+  ],
+  tigers: [
+    { label: "Detroit Tigers (MLB)", sport: "MLB", nickname: "detroit tigers" },
+    { label: "KIA Tigers (KBO)", sport: "KBO", nickname: "kia tigers" },
   ],
 };
 
@@ -465,12 +499,22 @@ function hasMlbTotalRangeSignal(text: string): boolean {
 // conflicting or absent signals return null so the caller falls through to
 // asking the user instead of guessing.
 export function inferSportFromPickContext(text: string, candidateSports: string[]): string | null {
-  const matches = candidateSports.filter((sport) => {
+  let matches = candidateSports.filter((sport) => {
     const patterns = SPORT_CONTEXT_SIGNALS[sport] ?? [];
     if (patterns.some((re) => re.test(text))) return true;
     if (sport === "MLB" && candidateSports.includes("NFL") && hasMlbTotalRangeSignal(text)) return true;
     return false;
   });
+  // KBO uses the exact same betting vocabulary as MLB (ML, run line, NRFI,
+  // F5) and has no terminology of its own in SPORT_CONTEXT_SIGNALS - so an
+  // "MLB" match here doesn't actually discriminate against KBO the way it
+  // discriminates against, say, NFL. Without this, a bare-nickname KBO pick
+  // (e.g. "Tigers ML" meaning KIA Tigers) would silently resolve to MLB's
+  // Detroit Tigers just because it used ordinary baseball wording - exactly
+  // the wrong-silent-guess failure mode this whole hierarchy exists to avoid.
+  if (matches.includes("MLB") && candidateSports.includes("KBO")) {
+    matches = matches.filter((s) => s !== "MLB");
+  }
   return matches.length === 1 ? matches[0] : null;
 }
 
