@@ -43,11 +43,11 @@ const STATUS_LABELS: Record<PickStatus, string> = {
   CANCELLED: "Cancelled",
 };
 const STATUS_CLASSES: Record<PickStatus, string> = {
-  PENDING: "bg-gray-100 text-gray-500",
-  WIN: "bg-emerald-100 text-emerald-700",
-  LOSS: "bg-red-100 text-red-700",
-  PUSH: "bg-gray-100 text-gray-600",
-  CANCELLED: "bg-gray-100 text-gray-400",
+  PENDING: "bg-muted text-muted-foreground",
+  WIN: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400",
+  LOSS: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400",
+  PUSH: "bg-muted text-muted-foreground",
+  CANCELLED: "bg-muted text-muted-foreground/70",
 };
 
 // Stricter than getRecordColor's plain 50% green/red split - this flags a
@@ -136,15 +136,17 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
         key={p.pickId}
         className={
           "rounded-[7px] border px-2.5 py-2 " +
-          (isTopPerformer ? "border-emerald-300 bg-emerald-50/60 ring-1 ring-emerald-200" : "border-gray-100")
+          (isTopPerformer
+            ? "border-emerald-300 bg-emerald-50/60 ring-1 ring-emerald-200 dark:border-emerald-700 dark:bg-emerald-500/10 dark:ring-emerald-800"
+            : "border-border-subtle")
         }
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <Avatar name={p.capperName} colorTag={p.capperColorTag} size={17} />
-            <span className="truncate text-[12px] font-medium text-gray-900">{p.capperName}</span>
+            <span className="truncate text-[12px] font-medium text-foreground">{p.capperName}</span>
             {isTopPerformer && record && (
-              <span className="shrink-0 rounded-full bg-emerald-100 px-1 py-0 text-[9px] font-semibold text-emerald-700">
+              <span className="shrink-0 rounded-full bg-emerald-100 px-1 py-0 text-[9px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
                 {Math.round(record.winPct)}%
               </span>
             )}
@@ -157,31 +159,34 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
             >
               {STATUS_LABELS[p.status]}
             </span>
-            <span className="text-[12px] font-semibold text-gray-900">
+            <span className="text-[12px] font-semibold text-foreground">
               {p.odds > 0 ? "+" : ""}
-              {p.odds} <span className="font-normal text-gray-400">&middot; {p.units}u</span>
+              {p.odds} <span className="font-normal text-muted-foreground">&middot; {p.units}u</span>
             </span>
           </div>
         </div>
-        <div className="mt-0.5 truncate pl-[23px] text-[11px] text-gray-500">
+        <div className="mt-0.5 truncate pl-[23px] text-[11px] text-muted-foreground">
           {p.betDetail}
           {loading ? (
-            <span className="text-[10px] text-gray-400"> &middot; Loading record...</span>
+            <span className="text-[10px] text-muted-foreground"> &middot; Loading record...</span>
           ) : record && record.count > 0 && p.category ? (
             <span className="text-[10px]">
               {" "}
               &middot;{" "}
               <span
                 className={
-                  "font-medium " + (getRecordColor(record.winPct) === "green" ? "text-emerald-600" : "text-red-600")
+                  "font-medium " +
+                  (getRecordColor(record.winPct) === "green"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-red-600 dark:text-red-400")
                 }
               >
                 {recordLabel(record)} ({Math.round(record.winPct)}%)
               </span>{" "}
-              <span className="text-gray-400">on {CATEGORY_DESCRIPTIONS[p.category]} picks</span>
+              <span className="text-muted-foreground">on {CATEGORY_DESCRIPTIONS[p.category]} picks</span>
             </span>
           ) : (
-            <span className="text-[10px] text-gray-400"> &middot; No history in this category yet</span>
+            <span className="text-[10px] text-muted-foreground"> &middot; No history in this category yet</span>
           )}
         </div>
       </div>
@@ -198,7 +203,7 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
     <div onClick={(e) => e.preventDefault()}>
       <button
         onClick={toggle}
-        className="mt-3 flex w-full items-center gap-2 rounded-lg bg-brand-50 px-3 py-2.5 text-sm font-medium text-brand-700 transition hover:bg-brand-100"
+        className="mt-3 flex w-full items-center gap-2 rounded-lg bg-brand-50 px-3 py-2.5 text-sm font-medium text-brand-700 transition hover:bg-brand-100 dark:bg-brand-500/10 dark:text-brand-300 dark:hover:bg-brand-500/20"
       >
         <ListIcon />
         <span className="flex-1 text-left">
@@ -212,7 +217,7 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
           {groups.map((group) => (
             <div key={group.teamGroup}>
               <div className="mb-1.5 flex items-center gap-2 border-l-2 border-brand-300 pl-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   {group.label} &mdash; {group.picks.length} pick{group.picks.length === 1 ? "" : "s"}
                 </span>
               </div>

@@ -31,7 +31,7 @@ export default async function ChartsPage() {
     <div className="mx-auto max-w-[1400px]">
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Charts</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Pick a team and a variable to see its history - stats and tendencies grow one day at a time as the daily
           snapshot job runs, so recent variables may only show a day or two so far.
         </p>

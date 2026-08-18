@@ -11,7 +11,7 @@ import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 function tabClass(isActive: boolean) {
   return (
     "rounded-full px-4 py-1.5 text-sm font-medium " +
-    (isActive ? "bg-red-600 text-white" : "bg-white text-gray-600 shadow-soft hover:bg-gray-50")
+    (isActive ? "bg-red-600 text-white" : "bg-card text-muted-foreground shadow-soft hover:bg-muted")
   );
 }
 
@@ -121,7 +121,7 @@ export default async function LivePage({
     <div className="mx-auto max-w-5xl">
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Live odds and scores</h1>
-        <p className="mt-1 text-sm text-gray-500">Powered by The Odds API</p>
+        <p className="mt-1 text-sm text-muted-foreground">Powered by The Odds API</p>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -132,14 +132,14 @@ export default async function LivePage({
 
       {sportCategoryBreakdown.length > 0 && (
         <div className="mb-6">
-          <h2 className="mb-2 text-sm font-semibold text-gray-900">{sportLabel} record by category</h2>
+          <h2 className="mb-2 text-sm font-semibold text-foreground">{sportLabel} record by category</h2>
           <CategoryBreakdown items={sportCategoryBreakdown} leaderboards={sportCategoryLeaderboards} />
         </div>
       )}
 
       {odds.length === 0 && hasApiKey && (
-        <div className="rounded-card bg-white p-10 text-center shadow-soft">
-          <p className="text-sm text-gray-400">No games found for this sport right now.</p>
+        <div className="rounded-card bg-card p-10 text-center shadow-soft">
+          <p className="text-sm text-muted-foreground">No games found for this sport right now.</p>
         </div>
       )}
 

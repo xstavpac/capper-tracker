@@ -13,6 +13,8 @@ import {
   Brush,
 } from "recharts";
 import type { VariableUnit } from "@/lib/model-builder";
+import { Theme } from "@prisma/client";
+import { useTheme } from "@/components/layout/theme-provider";
 
 export type ChartSeriesPoint = { date: string; value: number | null };
 
@@ -90,8 +92,8 @@ function CustomTooltip({
   if (!active || !payload || payload.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs shadow-soft">
-      <div className="mb-1 font-medium text-gray-900">{label ? formatDateTick(label) : ""}</div>
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-soft">
+      <div className="mb-1 font-medium text-foreground">{label ? formatDateTick(label) : ""}</div>
       <div className="space-y-0.5">
         {series.map((s) => {
           const entry = payload.find((p) => p.dataKey === s.id);
@@ -99,8 +101,8 @@ function CustomTooltip({
           return (
             <div key={s.id} className="flex items-center gap-1.5">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
-              <span className="text-gray-500">{s.label}:</span>
-              <span className="font-medium text-gray-900">{formatValueForUnit(entry.value, s.unit)}</span>
+              <span className="text-muted-foreground">{s.label}:</span>
+              <span className="font-medium text-foreground">{formatValueForUnit(entry.value, s.unit)}</span>
             </div>
           );
         })}
@@ -122,13 +124,21 @@ function CustomTooltip({
 // hover tooltip always shows every series' exact value regardless of how
 // many axes are visible, so nothing is ever only-approximately readable.
 export function HistoricalVariableChart({ series, height = 320 }: { series: ChartSeries[]; height?: number }) {
+  // Same reasoning as UnitsChart/WinLossPieChart - Recharts sets grid/tick/
+  // brush colors via inline SVG props, not Tailwind classes, so this needs
+  // to know the live theme itself.
+  const { theme } = useTheme();
+  const isDark = theme === Theme.DARK;
+  const gridColor = isDark ? "#1f2937" : "#f3f4f6";
+  const tickColor = isDark ? "#9ca3af" : "#6b7280";
+
   const visibleSeries = useMemo(() => series.filter((s) => s.points.some((p) => p.value !== null)), [series]);
   const data = useMemo(() => mergeSeriesForChart(visibleSeries), [visibleSeries]);
 
   if (visibleSeries.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-card border border-dashed border-gray-200 text-sm text-gray-400"
+        className="flex items-center justify-center rounded-card border border-dashed border-border text-sm text-muted-foreground"
         style={{ height }}
       >
         No historical data available for the selected range yet.
@@ -139,8 +149,8 @@ export function HistoricalVariableChart({ series, height = 320 }: { series: Char
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-        <XAxis dataKey="date" tick={{ fontSize: 11 }} tickMargin={8} tickFormatter={formatDateTick} />
+        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+        <XAxis dataKey="date" tick={{ fontSize: 11, fill: tickColor }} tickMargin={8} tickFormatter={formatDateTick} />
         {visibleSeries.map((s, i) => (
           <YAxis
             key={s.id}
@@ -148,13 +158,15 @@ export function HistoricalVariableChart({ series, height = 320 }: { series: Char
             orientation={i % 2 === 0 ? "left" : "right"}
             hide={i >= 2}
             width={i < 2 ? 48 : 0}
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 11, fill: tickColor }}
             domain={["auto", "auto"]}
             tickFormatter={(v: number) => formatValueForUnit(v, s.unit)}
           />
         ))}
         <Tooltip content={<CustomTooltip series={visibleSeries} />} />
-        {visibleSeries.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
+        {visibleSeries.length > 1 && (
+          <Legend wrapperStyle={{ fontSize: 12, color: isDark ? "#f9fafb" : "#111827" }} />
+        )}
         {visibleSeries.map((s) => (
           <Line
             key={s.id}

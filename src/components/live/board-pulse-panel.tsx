@@ -1,3 +1,5 @@
+import { Theme } from "@prisma/client";
+import { useTheme } from "@/components/layout/theme-provider";
 import { MLB_UNDERDOG_WIN_RATE, MIN_GAMES_FOR_VERDICT, type BoardPulseStats, type BoardPulseVerdict } from "@/lib/board-pulse";
 
 const GAUGE_VIEWBOX_W = 200;
@@ -28,8 +30,11 @@ function Gauge({
   verdict: BoardPulseVerdict;
   upsetRate: number | null;
 }) {
+  const { theme } = useTheme();
+  const isDark = theme === Theme.DARK;
   const fraction = expected > 0 ? Math.min(count / expected, 1) : 0;
-  const color = verdict === "hot" ? "#dc2626" : verdict === "cold" ? "#f97316" : "#9ca3af"; // red-600 / orange-500 / gray-400
+  const color = verdict === "hot" ? "#dc2626" : verdict === "cold" ? "#f97316" : "#9ca3af"; // red-600 / orange-500 / gray-400 - saturated/mid enough to stay readable on dark unmodified
+  const trackColor = isDark ? "#374151" : "#e5e7eb"; // border token's dark/light value - the arc's unfilled track
 
   return (
     <div className="relative inline-block">
@@ -38,7 +43,7 @@ function Gauge({
           d={ARC_PATH}
           pathLength={100}
           fill="none"
-          stroke="#e5e7eb"
+          stroke={trackColor}
           strokeWidth={GAUGE_STROKE}
           strokeLinecap="round"
         />
@@ -53,11 +58,11 @@ function Gauge({
         />
       </svg>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-end pb-1 text-center">
-        <div className="text-3xl font-bold text-gray-900">{count}</div>
-        <div className="text-xs text-gray-500">upsets so far</div>
+        <div className="text-3xl font-bold text-foreground">{count}</div>
+        <div className="text-xs text-muted-foreground">upsets so far</div>
       </div>
       {verdict === "hot" && upsetRate !== null && (
-        <span className="absolute right-0 top-0 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+        <span className="absolute right-0 top-0 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-500/15 dark:text-red-400">
           +{Math.round((upsetRate - MLB_UNDERDOG_WIN_RATE) * 100)}pts vs avg
         </span>
       )}
@@ -67,9 +72,9 @@ function Gauge({
 
 function StatTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-card bg-gray-50 p-4">
-      <div className="text-sm text-gray-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-gray-900">{value}</div>
+    <div className="rounded-card bg-muted p-4">
+      <div className="text-sm text-muted-foreground">{label}</div>
+      <div className="mt-1 text-2xl font-semibold text-foreground">{value}</div>
     </div>
   );
 }
@@ -77,19 +82,19 @@ function StatTile({ label, value }: { label: string; value: number }) {
 export function BoardPulsePanel({ stats }: { stats: BoardPulseStats }) {
   const badgeClass =
     stats.verdict === "hot"
-      ? "bg-red-100 text-red-700"
+      ? "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400"
       : stats.verdict === "cold"
-        ? "bg-orange-100 text-orange-700"
-        : "bg-gray-100 text-gray-500";
+        ? "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400"
+        : "bg-muted text-muted-foreground";
   const badgeText =
     stats.verdict === "insufficient"
       ? "not enough games yet"
       : "running " + (stats.verdict === "hot" ? "above" : "below") + " average";
 
   return (
-    <div className="mb-6 rounded-card bg-white p-6 shadow-soft">
-      <h2 className="text-base font-semibold text-gray-900">Board pulse &middot; live</h2>
-      <p className="mt-0.5 text-sm text-gray-500">
+    <div className="mb-6 rounded-card bg-card p-6 shadow-soft">
+      <h2 className="text-base font-semibold text-foreground">Board pulse &middot; live</h2>
+      <p className="mt-0.5 text-sm text-muted-foreground">
         {stats.gameCount} game{stats.gameCount === 1 ? "" : "s"} today &middot; updates as scores change
       </p>
 
@@ -97,16 +102,16 @@ export function BoardPulsePanel({ stats }: { stats: BoardPulseStats }) {
         <Gauge count={stats.upsetsSoFar} expected={stats.expectedUpsets} verdict={stats.verdict} upsetRate={stats.upsetRate} />
 
         <div>
-          <p className="text-base text-gray-900">
+          <p className="text-base text-foreground">
             Expected today: <span className="font-bold">{stats.expectedUpsets.toFixed(1)}</span>
           </p>
-          <p className="mt-1 max-w-xs text-sm text-gray-500">
+          <p className="mt-1 max-w-xs text-sm text-muted-foreground">
             based on MLB&apos;s historical ~{Math.round(MLB_UNDERDOG_WIN_RATE * 100)}% underdog win rate across{" "}
             {stats.gameCount} game{stats.gameCount === 1 ? "" : "s"}
           </p>
           {stats.verdict !== "insufficient" && stats.upsetRate !== null && (
-            <p className="mt-1 text-sm text-gray-500">
-              Current pace: <span className="font-medium text-gray-700">{Math.round(stats.upsetRate * 100)}%</span> upsets
+            <p className="mt-1 text-sm text-muted-foreground">
+              Current pace: <span className="font-medium text-foreground">{Math.round(stats.upsetRate * 100)}%</span> upsets
               across {stats.gamesSoFar} decided game{stats.gamesSoFar === 1 ? "" : "s"} so far
             </p>
           )}

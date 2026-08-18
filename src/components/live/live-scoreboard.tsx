@@ -135,10 +135,10 @@ export function LiveScoreboard({
           const isFinal = score?.status === "final";
 
           return (
-            <div key={game.id} className="rounded-card bg-white p-4 shadow-soft transition-shadow hover:shadow-md">
+            <div key={game.id} className="rounded-card bg-card p-4 shadow-soft transition-shadow hover:shadow-md">
               <Link href={"/live/" + game.id + "?sport=" + activeSport} className="block">
                 <div className="mb-2 flex items-center justify-between">
-                  <div className="text-xs text-gray-400">
+                  <div className="text-xs text-muted-foreground">
                     {formatEastern(new Date(game.commenceTime), {
                       month: "short",
                       day: "numeric",
@@ -150,15 +150,15 @@ export function LiveScoreboard({
                   {isLive && (
                     <span className="flex items-center gap-1.5">
                       {score?.inningHalf && score?.inningOrdinal && (
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-muted-foreground">
                           {score.inningHalf} {score.inningOrdinal}
                         </span>
                       )}
-                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600">LIVE</span>
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600 dark:bg-red-500/15 dark:text-red-400">LIVE</span>
                     </span>
                   )}
                   {isFinal && (
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">FINAL</span>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">FINAL</span>
                   )}
                 </div>
 
@@ -168,11 +168,11 @@ export function LiveScoreboard({
                       <TeamColorBar color={getTeamColor(activeSport, game.awayTeam)} />
                       <span className="truncate text-sm font-medium">{game.awayTeam}</span>
                     </span>
-                    <span className="shrink-0 text-xs text-gray-500">
+                    <span className="shrink-0 text-xs text-muted-foreground">
                       {score?.scores?.find((s) => s.name === game.awayTeam)?.score ?? ""}
                     </span>
                   </div>
-                  <div className="text-right text-xs text-gray-500">
+                  <div className="text-right text-xs text-muted-foreground">
                     {awayH2h && "ML " + formatOdds(awayH2h.price)}
                     {awaySpread && " - " + (awaySpread.point! > 0 ? "+" : "") + awaySpread.point}
                   </div>
@@ -182,18 +182,18 @@ export function LiveScoreboard({
                       <TeamColorBar color={getTeamColor(activeSport, game.homeTeam)} />
                       <span className="truncate text-sm font-medium">{game.homeTeam}</span>
                     </span>
-                    <span className="shrink-0 text-xs text-gray-500">
+                    <span className="shrink-0 text-xs text-muted-foreground">
                       {score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? ""}
                     </span>
                   </div>
-                  <div className="text-right text-xs text-gray-500">
+                  <div className="text-right text-xs text-muted-foreground">
                     {homeH2h && "ML " + formatOdds(homeH2h.price)}
                     {homeSpread && " - " + (homeSpread.point! > 0 ? "+" : "") + homeSpread.point}
                   </div>
                 </div>
 
                 {over && (
-                  <div className="mt-2 text-xs text-gray-400">
+                  <div className="mt-2 text-xs text-muted-foreground">
                     Total: O/U {over.point} ({formatOdds(over.price)})
                   </div>
                 )}

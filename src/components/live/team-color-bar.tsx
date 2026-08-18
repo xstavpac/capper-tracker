@@ -8,7 +8,7 @@ export function TeamColorBar({ color }: { color: string | null }) {
   return (
     <span
       className="h-4 w-1 shrink-0 rounded-sm"
-      style={{ backgroundColor: color ?? "#D1D5DB" }}
+      style={{ backgroundColor: color ?? "rgb(var(--muted-foreground))" }}
       aria-hidden="true"
     />
   );

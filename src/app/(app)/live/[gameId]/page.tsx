@@ -39,8 +39,8 @@ export default async function GameDetailPage({
         <Link href="/live" className="text-sm text-brand-600">
           &larr; Back to Live
         </Link>
-        <div className="mt-4 rounded-card bg-white p-10 text-center shadow-soft">
-          <p className="text-sm text-gray-400">Missing or unknown sport.</p>
+        <div className="mt-4 rounded-card bg-card p-10 text-center shadow-soft">
+          <p className="text-sm text-muted-foreground">Missing or unknown sport.</p>
         </div>
       </div>
     );
@@ -70,8 +70,8 @@ export default async function GameDetailPage({
         <Link href={"/live?sport=" + sportMeta.key} className="text-sm text-brand-600">
           &larr; Back to Live
         </Link>
-        <div className="mt-4 rounded-card bg-white p-10 text-center shadow-soft">
-          <p className="text-sm text-gray-400">
+        <div className="mt-4 rounded-card bg-card p-10 text-center shadow-soft">
+          <p className="text-sm text-muted-foreground">
             This game isn&apos;t in today&apos;s odds anymore - odds refresh daily, so a game from an
             earlier day won&apos;t show up here.
           </p>
@@ -138,9 +138,9 @@ export default async function GameDetailPage({
         &larr; Back to Live
       </Link>
 
-      <div className="mt-3 rounded-card bg-white p-5 shadow-soft">
+      <div className="mt-3 rounded-card bg-card p-5 shadow-soft">
         <div className="mb-3 flex items-center justify-between">
-          <div className="text-xs text-gray-400">
+          <div className="text-xs text-muted-foreground">
             {formatEastern(new Date(game.commenceTime), {
               month: "short",
               day: "numeric",
@@ -152,62 +152,62 @@ export default async function GameDetailPage({
           {isLive && (
             <span className="flex items-center gap-1.5">
               {score?.inningHalf && score?.inningOrdinal && (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-muted-foreground">
                   {score.inningHalf} {score.inningOrdinal}
                 </span>
               )}
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600">LIVE</span>
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600 dark:bg-red-500/15 dark:text-red-400">LIVE</span>
             </span>
           )}
           {isFinal && (
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">FINAL</span>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">FINAL</span>
           )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">{game.awayTeam}</span>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-muted-foreground">
               {score?.scores?.find((s) => s.name === game.awayTeam)?.score ?? ""}
             </span>
           </div>
-          <div className="text-right text-xs text-gray-500">
+          <div className="text-right text-xs text-muted-foreground">
             {awayH2h && "ML " + formatOdds(awayH2h.price)}
             {awaySpread && " - " + (awaySpread.point! > 0 ? "+" : "") + awaySpread.point}
           </div>
 
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">{game.homeTeam}</span>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-muted-foreground">
               {score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? ""}
             </span>
           </div>
-          <div className="text-right text-xs text-gray-500">
+          <div className="text-right text-xs text-muted-foreground">
             {homeH2h && "ML " + formatOdds(homeH2h.price)}
             {homeSpread && " - " + (homeSpread.point! > 0 ? "+" : "") + homeSpread.point}
           </div>
         </div>
 
         {over && (
-          <div className="mt-2 text-xs text-gray-400">
+          <div className="mt-2 text-xs text-muted-foreground">
             Total: O/U {over.point} ({formatOdds(over.price)})
           </div>
         )}
       </div>
 
-      <div className="mt-4 rounded-card bg-white shadow-soft">
-        <div className="border-b border-gray-100 px-5 py-3 text-sm font-medium text-gray-700">
+      <div className="mt-4 rounded-card bg-card shadow-soft">
+        <div className="border-b border-border-subtle px-5 py-3 text-sm font-medium text-muted-foreground">
           Your picks on this game
         </div>
         {matchedPicks.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-gray-400">No logged picks for this game.</p>
+          <p className="px-5 py-8 text-center text-sm text-muted-foreground">No logged picks for this game.</p>
         ) : (
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-border-subtle">
             {matchedPicks.map((pick) => (
               <div key={pick.id} className="flex items-center justify-between px-5 py-3">
                 <div>
                   <div className="text-sm font-medium">{pick.capper.name}</div>
-                  <div className="mt-0.5 text-xs text-gray-500">
+                  <div className="mt-0.5 text-xs text-muted-foreground">
                     {pick.betDetail || betTypeLabel(pick.betType)} - {pick.odds > 0 ? "+" : ""}
                     {pick.odds} - {pick.units}u
                   </div>
@@ -220,11 +220,11 @@ export default async function GameDetailPage({
       </div>
 
       {capperRecords.length > 0 && (
-        <div className="mt-4 rounded-card bg-white shadow-soft">
-          <div className="border-b border-gray-100 px-5 py-3 text-sm font-medium text-gray-700">
+        <div className="mt-4 rounded-card bg-card shadow-soft">
+          <div className="border-b border-border-subtle px-5 py-3 text-sm font-medium text-muted-foreground">
             Capper track record on this bet type
           </div>
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-border-subtle">
             {capperRecords.map((r) => (
               <div
                 key={r.capperId + r.betType + r.period}

@@ -38,20 +38,20 @@ function defaultDateRange(): DateRange {
 function HistoryNote({ result }: { result: VariableTimeSeriesResult }) {
   if (result.daysAvailable > 0) {
     return (
-      <span className="text-xs text-gray-400">
+      <span className="text-xs text-muted-foreground">
         {result.daysAvailable} day{result.daysAvailable === 1 ? "" : "s"} of history
       </span>
     );
   }
   if (result.totalSnapshotDays === 0) {
     return (
-      <span className="text-xs text-amber-600">
+      <span className="text-xs text-amber-600 dark:text-amber-400">
         Building historical depth — daily snapshots are collected automatically, more history will appear here each day.
       </span>
     );
   }
   return (
-    <span className="text-xs text-amber-600">
+    <span className="text-xs text-amber-600 dark:text-amber-400">
       {result.totalSnapshotDays} day{result.totalSnapshotDays === 1 ? "" : "s"} of snapshots collected so far, but not yet
       enough decided games to calculate this reliably.
     </span>
@@ -117,12 +117,12 @@ export function ChartsWorkspace({ sportKey, teamNames }: { sportKey: string; tea
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
       <div className="space-y-4">
-        <div className="rounded-card bg-white p-4 shadow-soft">
-          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">Team</div>
+        <div className="rounded-card bg-card p-4 shadow-soft">
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Team</div>
           <select
             value={entity}
             onChange={(e) => setEntity(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm"
+            className="w-full rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground"
           >
             {teamNames.map((name) => (
               <option key={name} value={name}>
@@ -130,38 +130,38 @@ export function ChartsWorkspace({ sportKey, teamNames }: { sportKey: string; tea
               </option>
             ))}
           </select>
-          <p className="mt-1.5 text-xs text-gray-400">Pick a variable below to plot it for this team.</p>
+          <p className="mt-1.5 text-xs text-muted-foreground">Pick a variable below to plot it for this team.</p>
         </div>
 
         <VariableLibrary onAdd={addSeries} categories={CHART_CATEGORIES} />
       </div>
 
       <div className="space-y-4">
-        <div className="rounded-card bg-white p-4 shadow-soft">
+        <div className="rounded-card bg-card p-4 shadow-soft">
           <div className="mb-3 flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 text-sm">
-              <label className="text-gray-500">From</label>
+              <label className="text-muted-foreground">From</label>
               <input
                 type="date"
                 value={dateRange.start}
                 max={dateRange.end}
                 onChange={(e) => handleDateRangeChange({ ...dateRange, start: e.target.value })}
-                className="rounded-lg border border-gray-200 px-2 py-1 text-sm"
+                className="rounded-lg border border-border bg-card px-2 py-1 text-sm text-foreground"
               />
-              <label className="text-gray-500">to</label>
+              <label className="text-muted-foreground">to</label>
               <input
                 type="date"
                 value={dateRange.end}
                 min={dateRange.start}
                 max={easternDateKey(new Date())}
                 onChange={(e) => handleDateRangeChange({ ...dateRange, end: e.target.value })}
-                className="rounded-lg border border-gray-200 px-2 py-1 text-sm"
+                className="rounded-lg border border-border bg-card px-2 py-1 text-sm text-foreground"
               />
             </div>
           </div>
 
           {series.length === 0 ? (
-            <div className="flex h-[320px] items-center justify-center rounded-card border border-dashed border-gray-200 text-sm text-gray-400">
+            <div className="flex h-[320px] items-center justify-center rounded-card border border-dashed border-border text-sm text-muted-foreground">
               Pick a team and a variable to start charting.
             </div>
           ) : (
@@ -170,27 +170,27 @@ export function ChartsWorkspace({ sportKey, teamNames }: { sportKey: string; tea
         </div>
 
         {series.length > 0 && (
-          <div className="rounded-card bg-white p-4 shadow-soft">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Plotted variables</div>
+          <div className="rounded-card bg-card p-4 shadow-soft">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Plotted variables</div>
             <div className="space-y-2">
               {series.map((s) => {
                 const variable = getModelVariable(s.variableId);
                 return (
-                  <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                  <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: s.color }} />
-                      <span className="font-medium text-gray-900">{s.entityId}</span>
-                      <span className="text-gray-400">·</span>
-                      <span className="text-gray-700">{variable?.label ?? s.variableId}</span>
-                      {s.loading && <span className="text-xs text-gray-400">Loading…</span>}
-                      {s.error && <span className="text-xs text-red-500">{s.error}</span>}
+                      <span className="font-medium text-foreground">{s.entityId}</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-muted-foreground">{variable?.label ?? s.variableId}</span>
+                      {s.loading && <span className="text-xs text-muted-foreground">Loading…</span>}
+                      {s.error && <span className="text-xs text-red-500 dark:text-red-400">{s.error}</span>}
                       {s.result && !s.loading && <HistoryNote result={s.result} />}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <button
                         onClick={() => removeSeries(s.id)}
                         aria-label="Remove"
-                        className="rounded-md p-1 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+                        className="rounded-md p-1 text-muted-foreground transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                       >
                         ✕
                       </button>
