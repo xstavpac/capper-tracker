@@ -577,6 +577,22 @@ export function findTeamNicknames(text: string, sportName: string): string[] {
 // with real examples in this app's catalogs today, and there's no text
 // signal here to distinguish it from WTA/PGA/etc when one isn't stated
 // explicitly (e.g. a "WTA" or "PGA" code earlier in the same line).
+// A short (<=3 letters), fully-uppercase word - "KT", "LG", "NC", "KIA",
+// "SSG" - is how a team abbreviation is written, never how a real person's
+// given name is written in these catalogs (always Title Case: "Tallon",
+// "Al"). Confirmed against a real mistag: "KT Wiz ML" - no KBO team list
+// existed yet for "KT Wiz" specifically, so it fell all the way through to
+// findPlayerPick/findMatchupPlayerPick and was silently guessed as an ATP
+// tennis player instead of surfacing in `unresolved` for manual review, the
+// way every other not-yet-recognized team correctly does. This is a general
+// gap, not specific to KBO or to "KT Wiz" - any not-yet-listed team from any
+// sport whose name happens to fit "capitalized word(s) + ML/spread/total"
+// hits the same false default, so the guard is name-shape-based rather than
+// KBO-specific.
+function looksLikeTeamAbbreviation(name: string): boolean {
+  return name.split(/\s+/).some((w) => w.length <= 3 && w === w.toUpperCase());
+}
+
 function findPlayerPick(text: string): { playerName: string; playerKey: string } | null {
   const withoutParens = text.replace(/\([^)]*\)/g, "").trim();
   const mlMatch = withoutParens.match(/^(.+?)\s+(?:ML|money\s*line)\b/i);
@@ -594,6 +610,7 @@ function findPlayerPick(text: string): { playerName: string; playerKey: string }
   // digits - guards against matching arbitrary unresolved text that just
   // happens to be followed by "ML" or a number (e.g. a typo'd team name).
   if (!/^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/.test(candidate)) return null;
+  if (looksLikeTeamAbbreviation(candidate)) return null;
 
   const words = candidate.split(/\s+/);
   return { playerName: candidate, playerKey: words[words.length - 1].toLowerCase() };
@@ -623,7 +640,8 @@ function findMatchupPlayerPick(text: string): { players: [string, string]; playe
   // city-vs-city matchup ("Ottawa vs Winnipeg Over 56.5") as a fighter
   // matchup instead of leaving it unresolved. A real "vs" fight card always
   // names both people with at least a first+last name in these catalogs.
-  const isPersonName = (s: string) => /^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){1,3}$/.test(s.trim());
+  const isPersonName = (s: string) =>
+    /^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){1,3}$/.test(s.trim()) && !looksLikeTeamAbbreviation(s.trim());
   const a = nameMatch[1].trim();
   const b = nameMatch[2].trim();
   if (!isPersonName(a) || !isPersonName(b)) return null;
