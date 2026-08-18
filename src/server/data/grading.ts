@@ -8,7 +8,7 @@ import {
   getNflPlayerTdStats,
   type OddsGame,
 } from "@/server/data/odds";
-import { closestByTime } from "@/lib/dates";
+import { closestByTime, sameEasternDay } from "@/lib/dates";
 import { extractLine, parseTouchdownProp } from "@/lib/bet-line";
 import { findTeamNickname } from "@/lib/parse-catalog";
 import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
@@ -26,15 +26,27 @@ function findMarket(game: OddsGame, key: string) {
 // today - the SAME cache getOddsForSport always uses, not a separate fetch.
 // Not a rigorous closing line (see the schema comment); still the best data
 // this app captures today. Returns nulls when the game isn't in that
-// snapshot at all (e.g. the day's fetch was missed) or neither market has
-// usable outcomes.
+// snapshot at all (e.g. the day's fetch was missed), no candidate falls on
+// the same Eastern day as referenceTime, or neither market has usable
+// outcomes.
+//
+// oddsGames is no longer pre-narrowed to today/tomorrow by getOddsForSport
+// (it can now hold a full week of NFL games) - so this does its own
+// same-day scoping here, then closestByTime to disambiguate same-team
+// rematches within that day, same disambiguation resolveOddsGame already
+// uses. referenceTime should be the actual finished game's own commenceTime
+// (what the caller has on hand), not "now" - grading can run well after the
+// game itself.
 function deriveLedgerFields(
   oddsGames: OddsGame[],
   homeTeam: string,
-  awayTeam: string
+  awayTeam: string,
+  referenceTime: Date
 ): { favTeam: string | null; totalLine: number | null } {
-  const match = oddsGames.find((g) => g.homeTeam === homeTeam && g.awayTeam === awayTeam);
-  if (!match) return { favTeam: null, totalLine: null };
+  const candidates = oddsGames.filter((g) => g.homeTeam === homeTeam && g.awayTeam === awayTeam);
+  const sameDay = candidates.filter((g) => sameEasternDay(new Date(g.commenceTime), referenceTime));
+  if (sameDay.length === 0) return { favTeam: null, totalLine: null };
+  const match = closestByTime(sameDay, (g) => new Date(g.commenceTime).getTime(), referenceTime.getTime());
 
   const h2h = findMarket(match, "h2h");
   const homeOutcome = h2h?.outcomes.find((o) => o.name === match.homeTeam);
@@ -104,7 +116,9 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
       // Same immutable-once-set reasoning as the first-half fields above -
       // only derive when this row doesn't already have a favTeam.
       const needsLedgerFields = !existing || existing.favTeam === null;
-      const ledger = needsLedgerFields ? deriveLedgerFields(oddsGames, g.homeTeam, g.awayTeam) : null;
+      const ledger = needsLedgerFields
+        ? deriveLedgerFields(oddsGames, g.homeTeam, g.awayTeam, new Date(g.commenceTime))
+        : null;
       const ledgerHasData = ledger && (ledger.favTeam !== null || ledger.totalLine !== null);
 
       await prisma.gameResult.upsert({
