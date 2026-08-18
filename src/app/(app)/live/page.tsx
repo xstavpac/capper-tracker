@@ -44,17 +44,17 @@ export default async function LivePage({
   const sportCategoryBreakdown = sportCategoryPanel?.breakdown ?? [];
   const sportCategoryLeaderboards = sportCategoryPanel?.leaderboards ?? {};
 
-  // The once-daily odds cache is keyed by Eastern calendar day (see
-  // easternDateKey), which lines up with how MLB's schedule is actually run -
-  // but a cache write can still land mid-evening after some of that day's
-  // late games already started. Drop anything from a strictly earlier
-  // Eastern calendar day here rather than changing what gets cached (bulk-
-  // import's odds lookup still needs to find those games by team name
-  // regardless).
+  // Restricts to today's Eastern calendar day only. sameEasternDay compares
+  // calendar dates, not time-of-day, so a not-yet-started later-today game
+  // still passes. A prior `|| gameDate > now` clause here let ANY future
+  // day's games through too (NFL odds are posted for the whole week at
+  // once), so this page's game list wasn't actually scoped to today - same
+  // root cause fixed in getLiveTickerGames (live-ticker.ts), which reuses
+  // this exact filter.
   const now = new Date();
   const odds = allOdds.filter((game) => {
     const gameDate = new Date(game.commenceTime);
-    return sameEasternDay(gameDate, now) || gameDate > now;
+    return sameEasternDay(gameDate, now);
   });
 
   // Only ever used to pick which empty-state message to show, never on its
