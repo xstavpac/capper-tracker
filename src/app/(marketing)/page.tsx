@@ -1,15 +1,5 @@
 import Link from "next/link";
 import { SiteFooter } from "@/components/marketing/site-footer";
-import { LiveTicker } from "@/components/marketing/live-ticker";
-import { getLiveTickerGames } from "@/server/data/live-ticker";
-
-// This page reads live, changing data (today's scores/odds via
-// getLiveTickerGames) - without this, Next's static optimization would
-// freeze it at whatever was true at build time, which for a marketing page
-// nobody rebuilds mid-game would mean permanently-stale or permanently-empty
-// ticker data. Same declaration the authenticated /live page and its
-// /api/live/scores polling endpoint already use.
-export const dynamic = "force-dynamic";
 
 // Same logo-mark.png asset as the sidebar's LogoMark (app-sidebar.tsx) and
 // the auth card's LogoMark (auth-card.tsx) - kept in sync visually rather
@@ -23,12 +13,9 @@ function LogoMark() {
   );
 }
 
-export default async function MarketingPage() {
-  const tickerGames = await getLiveTickerGames();
-
+export default function MarketingPage() {
   return (
     <div className="flex min-h-screen flex-col">
-      <LiveTicker initialGames={tickerGames} />
       <main className="mx-auto flex flex-1 max-w-3xl flex-col items-center justify-center gap-6 px-6 text-center">
         <LogoMark />
         <h1 className="text-4xl font-semibold tracking-tight">
