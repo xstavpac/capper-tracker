@@ -66,6 +66,7 @@ model User {
 
   cappers                 Capper[]
   picks                   Pick[]
+  parlayBets              ParlayBet[]
   subscription            Subscription?
   dismissedDuplicatePairs DismissedDuplicatePair[]
 
@@ -122,6 +123,7 @@ model Sport {
   name    String   @unique // NFL, NBA, MLB, NCAAF, NHL...
   leagues League[]
   picks   Pick[]
+  legs    Leg[]
 
   @@map("sports")
 }
@@ -132,6 +134,7 @@ model League {
   sportId String
   sport   Sport  @relation(fields: [sportId], references: [id], onDelete: Cascade)
   picks   Pick[]
+  legs    Leg[]
 
   @@unique([sportId, name])
   @@map("leagues")
@@ -153,6 +156,7 @@ model Capper {
   updatedAt           DateTime @updatedAt
 
   picks Pick[]
+  parlayBets ParlayBet[]
   dismissedPairsAsA DismissedDuplicatePair[] @relation("DismissedDuplicatePairCapperA")
   dismissedPairsAsB DismissedDuplicatePair[] @relation("DismissedDuplicatePairCapperB")
 
@@ -225,6 +229,93 @@ model Pick {
   @@index([userId, gradedAt])
   @@index([sportId, status]) // supports gradeAllPendingPicks' cross-user scan (WHERE sportId = ? AND status = 'PENDING'), which has no userId to lead with
   @@map("picks")
+}
+
+// A multi-leg bet (parlay/MLP) - one stake, one payout, resolved from N
+// independent Leg rows below rather than being a Pick itself. Kept as its
+// own table (not Pick + a nullable parentBetId) deliberately: every existing
+// stats/report/leaderboard query already reads prisma.pick directly with no
+// concept of "this row might be one leg of something bigger," and there are
+// ~25 such call sites across stats.ts, picks.ts, cappers.ts, capper-
+// panels.ts, sharp-money.ts and bulk-picks.ts. Reusing Pick would have meant
+// retrofitting a parentBetId-is-null filter into every one of them, silently
+// (not a crash - a wrong count) double/triple-counting units and W/L on any
+// call site someone forgot. Keeping ParlayBet separate means those 25 sites
+// need zero changes; only new, purpose-built parlay aggregation code has to
+// know parlays exist at all.
+//
+// status/gradedAt are NOT written the same way Pick's are (once, when this
+// row's own single game finishes) - a parlay's outcome depends on N games
+// finishing independently, so it's a derived value, recomputed by
+// recomputeParlayBetStatus (parlay-grading.ts) every time a leg leaves
+// PENDING, and only actually persisted once that computation resolves to a
+// final state. See that function for the short-circuit-on-LOSS and
+// resolved-once-more-than-N-1-legs-decided rules, and for why the write
+// itself is a conditional (status-must-still-be-PENDING) updateMany rather
+// than an unconditional update - that's what stops a leg that finishes
+// *after* the parlay has already locked in LOSS from ever touching this row
+// again.
+model ParlayBet {
+  id         String     @id @default(cuid())
+  userId     String // denormalized for fast per-user aggregation, same as Pick.userId
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  capperId   String
+  capper     Capper     @relation(fields: [capperId], references: [id], onDelete: Cascade)
+  units      Float // total stake on the whole parlay, not per-leg
+  datePosted DateTime   @default(now())
+  notes      String?
+  status     PickStatus @default(PENDING)
+  gradedAt   DateTime? // set once, when recomputeParlayBetStatus first resolves this to a non-PENDING status - never touched again after that
+
+  legs Leg[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, capperId])
+  @@index([userId, status])
+  @@map("parlay_bets")
+}
+
+// One leg of a ParlayBet - deliberately the same shape as Pick's own
+// game-matching/grading fields (homeTeam/awayTeam/betType/line/period/
+// gameTime), so grading.ts's existing pure functions (matchGameResult,
+// resolveOutcome, gradePick, gradeTouchdownProp) grade a Leg exactly the way
+// they grade a Pick today, unchanged - see parlay-grading.ts. odds is
+// per-leg (this bet's own American odds), not the parlay's combined price;
+// the parlay's effective payout is computed from surviving (non-PUSH) legs'
+// odds at resolution time, not stored as a separate static field - a pushed
+// leg changes the effective payout, so there is no single "the parlay's
+// odds" that stays correct as a fixed input the way Pick.odds does.
+model Leg {
+  id          String    @id @default(cuid())
+  parlayBetId String
+  parlayBet   ParlayBet @relation(fields: [parlayBetId], references: [id], onDelete: Cascade)
+  legIndex    Int // display/entry order within the parlay, 0-based
+
+  sportId  String
+  sport    Sport   @relation(fields: [sportId], references: [id])
+  leagueId String?
+  league   League? @relation(fields: [leagueId], references: [id])
+
+  homeTeam  String
+  awayTeam  String
+  betType   BetType
+  betDetail String?
+  odds      Int
+  line      Float?
+  period    Period     @default(FULL_GAME)
+  gameTime  DateTime
+  status    PickStatus @default(PENDING)
+  gradedAt  DateTime? // set once, on first transition out of PENDING - same rule as Pick.gradedAt
+  gradedViaFuzzyMatch Boolean?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([parlayBetId, legIndex])
+  @@index([sportId, status]) // mirrors picks' same index - supports the parlay counterpart of gradeAllPendingPicks' cross-parlay scan
+  @@map("legs")
 }
 
 model OddsSnapshot {
