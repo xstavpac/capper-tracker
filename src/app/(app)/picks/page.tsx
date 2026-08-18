@@ -2,9 +2,12 @@ import { requireUser } from "@/server/auth";
 import { getFilteredPicksForUser, getSportsWithLeagues, getPickPlanStatus } from "@/server/data/picks";
 import { getCappersForUser } from "@/server/data/cappers";
 import { persistFinalScores, gradePendingPicks, regradeFuzzyMatchedPicks } from "@/server/data/grading";
+import { getParlaysForUser } from "@/server/data/parlays";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { PickForm } from "@/components/dashboard/pick-form";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
+import { ParlayForm } from "@/components/dashboard/parlay-form";
+import { LegStatusButtons } from "@/components/dashboard/leg-status-buttons";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 import { favoriteOrUnderdog } from "@/lib/bet-line";
 import { formatEastern } from "@/lib/dates";
@@ -60,11 +63,12 @@ export default async function PicksPage({
     period: (searchParams.period as Period) || undefined,
   };
 
-  const [allPicks, cappers, sports, planStatus] = await Promise.all([
+  const [allPicks, cappers, sports, planStatus, parlays] = await Promise.all([
     getFilteredPicksForUser(user.id, filters),
     getCappersForUser(user.id),
     getSportsWithLeagues(),
     getPickPlanStatus(user.id),
+    getParlaysForUser(user.id),
   ]);
 
   // Favorite/underdog is derived (odds sign for Moneyline, line sign for Spread),
@@ -87,6 +91,7 @@ export default async function PicksPage({
         </div>
         <div className="flex items-center gap-2">
           <DropCatalogLink href="/picks/import" />
+          <ParlayForm cappers={cappers} sports={sports} />
           <PickForm cappers={cappers} sports={sports} atLimit={planStatus.atLimit} />
         </div>
       </div>
@@ -224,6 +229,55 @@ export default async function PicksPage({
                 <PickStatusButtons pickId={pick.id} status={pick.status} />
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {parlays.length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-lg font-semibold">Parlays</h2>
+          <div className="space-y-3">
+            {parlays.map((parlay) => {
+              const statusColor =
+                parlay.status === "WIN"
+                  ? "text-emerald-600"
+                  : parlay.status === "LOSS"
+                    ? "text-red-600"
+                    : parlay.status === "PENDING"
+                      ? "text-amber-600"
+                      : "text-gray-400";
+              return (
+                <div key={parlay.id} className="rounded-card bg-white shadow-soft">
+                  <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+                    <div className="text-sm font-medium">
+                      {parlay.capper.name} - {parlay.legs.length}-leg parlay - {parlay.units}u
+                    </div>
+                    <span className={"text-sm font-medium " + statusColor}>{parlay.status}</span>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {parlay.legs.map((leg) => (
+                      <div key={leg.id} className="flex items-center justify-between px-5 py-2.5">
+                        <div>
+                          <div className="text-xs font-medium text-gray-700">
+                            {leg.awayTeam} @ {leg.homeTeam}
+                            {leg.period === "FIRST_HALF" && (
+                              <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600">
+                                F5
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-gray-400">
+                            {leg.betDetail || leg.betType} - {leg.odds > 0 ? "+" : ""}
+                            {leg.odds}
+                          </div>
+                        </div>
+                        <LegStatusButtons legId={leg.id} status={leg.status} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
