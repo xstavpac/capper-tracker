@@ -34,10 +34,14 @@ const SOURCE_LABELS: Record<string, string> = {
 
 function StatCard({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
   const toneClass =
-    tone === "up" ? "text-emerald-600" : tone === "down" ? "text-red-600" : "text-gray-900";
+    tone === "up"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : tone === "down"
+        ? "text-red-600 dark:text-red-400"
+        : "text-foreground";
   return (
-    <div className="rounded-card bg-white p-4 shadow-soft">
-      <div className="text-sm text-gray-500">{label}</div>
+    <div className="rounded-card bg-card p-4 shadow-soft">
+      <div className="text-sm text-muted-foreground">{label}</div>
       <div className={"mt-1 text-2xl font-semibold " + toneClass}>{value}</div>
     </div>
   );
@@ -48,7 +52,9 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
 function chipClass(isActive: boolean) {
   return (
     "rounded-full px-3 py-1 text-xs font-medium " +
-    (isActive ? "bg-gray-900 text-white" : "bg-white text-gray-500 shadow-soft hover:bg-gray-50")
+    (isActive
+      ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+      : "bg-card text-muted-foreground shadow-soft hover:bg-muted")
   );
 }
 
@@ -121,7 +127,7 @@ export default async function CapperDetailPage({
         </div>
         <div>
           <h1 className="text-xl font-semibold">{capper.name}</h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             {capper.source === "OTHER" && capper.customSource
               ? capper.customSource
               : SOURCE_LABELS[capper.source]}
@@ -131,9 +137,9 @@ export default async function CapperDetailPage({
       </div>
 
       {trackedSinceMs !== null && lastPickMs !== null && (
-        <div className="mb-4 rounded-card bg-white p-5 shadow-soft">
+        <div className="mb-4 rounded-card bg-card p-5 shadow-soft">
           <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted-foreground">
               Tracked since {formatEastern(new Date(trackedSinceMs), { month: "short", day: "numeric" })}
               {" · "}
               Last pick {formatRelativeTime(new Date(lastPickMs), Date.now())}
@@ -142,21 +148,21 @@ export default async function CapperDetailPage({
           </div>
           <div className="mt-3 flex flex-wrap gap-8">
             <div>
-              <div className="text-xs text-gray-500">Best odds range</div>
-              <div className="mt-0.5 text-sm font-medium text-gray-900">
+              <div className="text-xs text-muted-foreground">Best odds range</div>
+              <div className="mt-0.5 text-sm font-medium text-foreground">
                 {bestOddsRange ? bestOddsRange.label : "Not enough data"}
               </div>
             </div>
             <div>
-              <div className="text-xs text-gray-500">Consistency</div>
+              <div className="text-xs text-muted-foreground">Consistency</div>
               <div
                 className={
                   "mt-0.5 text-sm font-medium " +
                   (consistency?.label === "Steady"
-                    ? "text-emerald-600"
+                    ? "text-emerald-600 dark:text-emerald-400"
                     : consistency?.label === "Volatile"
-                      ? "text-red-600"
-                      : "text-gray-400")
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-muted-foreground")
                 }
               >
                 {consistency ? consistency.label : "Not enough data"}
@@ -198,7 +204,7 @@ export default async function CapperDetailPage({
       {allTimeScorecard.length > 0 && (
         <div className="mt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm font-medium text-gray-700">Record by bet type</div>
+            <div className="text-sm font-medium text-muted-foreground">Record by bet type</div>
             <div className="flex flex-wrap gap-2">
               {SCORECARD_WINDOWS.map((w) => (
                 <a key={w} href={"?window=" + w} className={chipClass(window === w)}>
@@ -210,7 +216,7 @@ export default async function CapperDetailPage({
           {scorecard.length > 0 ? (
             <CapperScorecard buckets={scorecard} variant="grid" />
           ) : (
-            <p className="rounded-card bg-white p-6 text-center text-sm text-gray-400 shadow-soft">
+            <p className="rounded-card bg-card p-6 text-center text-sm text-muted-foreground shadow-soft">
               No graded picks in this window.
             </p>
           )}
@@ -219,33 +225,33 @@ export default async function CapperDetailPage({
 
       {mlbCategoryBreakdown.length > 0 && (
         <div className="mt-4">
-          <div className="mb-2 text-sm font-medium text-gray-700">MLB record by category</div>
+          <div className="mb-2 text-sm font-medium text-muted-foreground">MLB record by category</div>
           <CategoryBreakdown items={mlbCategoryBreakdown} />
         </div>
       )}
 
-      <div className="mt-4 rounded-card bg-white p-5 shadow-soft">
-        <div className="mb-2 text-sm font-medium text-gray-700">Units over time</div>
+      <div className="mt-4 rounded-card bg-card p-5 shadow-soft">
+        <div className="mb-2 text-sm font-medium text-muted-foreground">Units over time</div>
         <UnitsChart data={chartData} />
       </div>
 
-      <div className="mt-4 rounded-card bg-white shadow-soft">
-        <div className="border-b border-gray-100 px-5 py-3 text-sm font-medium text-gray-700">
+      <div className="mt-4 rounded-card bg-card shadow-soft">
+        <div className="border-b border-border-subtle px-5 py-3 text-sm font-medium text-muted-foreground">
           Recent picks
         </div>
         {recentPicks.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-gray-400">
+          <p className="px-5 py-8 text-center text-sm text-muted-foreground">
             No picks logged for this capper yet.
           </p>
         ) : (
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-border-subtle">
             {recentPicks.map((pick) => (
               <div key={pick.id} className="flex items-center justify-between px-5 py-3">
                 <div>
                   <div className="text-sm font-medium">
                     {pick.awayTeam} @ {pick.homeTeam}
                   </div>
-                  <div className="mt-0.5 text-xs text-gray-500">
+                  <div className="mt-0.5 text-xs text-muted-foreground">
                     {pick.betDetail || pick.betType} - {pick.odds > 0 ? "+" : ""}
                     {pick.odds} - {pick.units}u
                   </div>

@@ -10,7 +10,7 @@ export default async function BulkImportPage() {
     <div className="mx-auto max-w-3xl">
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Betting Catalog Import</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           <a href="/picks" className="text-brand-600">
             Back to Picks
           </a>

@@ -29,7 +29,7 @@ const DEFAULT_BEST_AT_SPORT = "MLB";
 function pillClass(isActive: boolean) {
   return (
     "rounded-full px-4 py-1.5 text-sm font-medium " +
-    (isActive ? "bg-brand-600 text-white" : "bg-white text-gray-600 shadow-soft hover:bg-gray-50")
+    (isActive ? "bg-brand-600 text-white" : "bg-card text-muted-foreground shadow-soft hover:bg-muted")
   );
 }
 
@@ -94,7 +94,7 @@ export default async function CappersPage({
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Cappers</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             {planStatus.capperCount + " capper" + (planStatus.capperCount === 1 ? "" : "s")}
           </p>
         </div>
@@ -121,8 +121,8 @@ export default async function CappersPage({
       </div>
 
       {planStatus.capperCount === 0 ? (
-        <div className="rounded-card bg-white p-10 text-center shadow-soft">
-          <p className="text-sm text-gray-400">No cappers yet - add the first person or channel you follow for picks.</p>
+        <div className="rounded-card bg-card p-10 text-center shadow-soft">
+          <p className="text-sm text-muted-foreground">No cappers yet - add the first person or channel you follow for picks.</p>
         </div>
       ) : (
         <>

@@ -78,7 +78,7 @@ export default async function PicksPage({
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold">Picks</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             {planStatus.unlimited
               ? planStatus.pickCount + " pick" + (planStatus.pickCount === 1 ? "" : "s") + " (" + TIER_LABELS[planStatus.tier] + " plan)"
               : planStatus.pickCount + " of " + planStatus.pickLimit + " picks (Free plan)"}
@@ -93,12 +93,12 @@ export default async function PicksPage({
 
       <form
         method="get"
-        className="mb-4 grid grid-cols-2 gap-2 rounded-card bg-white p-3 shadow-soft sm:flex sm:flex-wrap sm:items-center"
+        className="mb-4 grid grid-cols-2 gap-2 rounded-card bg-card p-3 shadow-soft sm:flex sm:flex-wrap sm:items-center"
       >
         <select
           name="capperId"
           defaultValue={filters.capperId ?? ""}
-          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm sm:w-auto"
+          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
         >
           <option value="">All cappers</option>
           {cappers.map((c) => (
@@ -111,7 +111,7 @@ export default async function PicksPage({
         <select
           name="sportId"
           defaultValue={filters.sportId ?? ""}
-          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm sm:w-auto"
+          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
         >
           <option value="">All sports</option>
           {sports.map((s) => (
@@ -124,7 +124,7 @@ export default async function PicksPage({
         <select
           name="betType"
           defaultValue={filters.betType ?? ""}
-          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm sm:w-auto"
+          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
         >
           <option value="">All bet types</option>
           {BET_TYPE_OPTIONS.map((b) => (
@@ -137,7 +137,7 @@ export default async function PicksPage({
         <select
           name="status"
           defaultValue={filters.status ?? ""}
-          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm sm:w-auto"
+          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
         >
           <option value="">All results</option>
           {STATUS_OPTIONS.map((s) => (
@@ -150,7 +150,7 @@ export default async function PicksPage({
         <select
           name="period"
           defaultValue={filters.period ?? ""}
-          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm sm:w-auto"
+          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
         >
           <option value="">Full game + first half</option>
           {PERIOD_OPTIONS.map((p) => (
@@ -163,7 +163,7 @@ export default async function PicksPage({
         <select
           name="favoriteDog"
           defaultValue={favoriteDog ?? ""}
-          className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm sm:w-auto"
+          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
         >
           <option value="">Favorite + underdog</option>
           <option value="FAVORITE">Favorite</option>
@@ -179,7 +179,7 @@ export default async function PicksPage({
           </button>
 
           {hasActiveFilters && (
-            <a href="/picks" className="text-sm text-gray-500 hover:text-gray-700">
+            <a href="/picks" className="text-sm text-muted-foreground hover:text-foreground">
               Clear
             </a>
           )}
@@ -187,27 +187,27 @@ export default async function PicksPage({
       </form>
 
       {picks.length === 0 ? (
-        <div className="rounded-card bg-white p-10 text-center shadow-soft">
-          <p className="text-sm text-gray-400">
+        <div className="rounded-card bg-card p-10 text-center shadow-soft">
+          <p className="text-sm text-muted-foreground">
             {hasActiveFilters
               ? "No picks match these filters."
               : "No picks logged yet - log your first pick above."}
           </p>
         </div>
       ) : (
-        <div className="rounded-card bg-white shadow-soft">
-          <div className="divide-y divide-gray-100">
+        <div className="rounded-card bg-card shadow-soft">
+          <div className="divide-y divide-border-subtle">
             {picks.map((pick) => (
               <div key={pick.id} className="flex items-center justify-between px-5 py-3">
                 <div>
                   <div className="text-sm font-medium">
                     {pick.awayTeam} @ {pick.homeTeam}
                     {pick.period === "FIRST_HALF" && (
-                      <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600">
+                      <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:bg-purple-500/15 dark:text-purple-400">
                         F5
                       </span>
                     )}
-                    <span className="ml-2 font-normal text-gray-400">
+                    <span className="ml-2 font-normal text-muted-foreground">
                       {formatEastern(pick.gameTime, {
                         month: "short",
                         day: "numeric",
@@ -216,7 +216,7 @@ export default async function PicksPage({
                       })}
                     </span>
                   </div>
-                  <div className="mt-0.5 text-xs text-gray-500">
+                  <div className="mt-0.5 text-xs text-muted-foreground">
                     {pick.capper.name} - {pick.betDetail || pick.betType} - {pick.odds > 0 ? "+" : ""}
                     {pick.odds} - {pick.units}u
                   </div>
