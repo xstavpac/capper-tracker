@@ -127,13 +127,13 @@ type NavItem = {
 const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/cappers", label: "Cappers", icon: CappersIcon },
+  { href: "/sharp-money", label: "Sharp Money", icon: SharpMoneyIcon },
   { href: "/picks", label: "Picks", icon: PicksIcon },
   { href: "/reports", label: "Reports", icon: ReportsIcon },
   { href: "/charts", label: "Charts", icon: ChartsIcon },
   { href: "/pricing", label: "Plans & Billing", icon: PricingIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
   { href: "/live", label: "Live", icon: LiveIcon, accent: "red" },
-  { href: "/sharp-money", label: "Sharp Money", icon: SharpMoneyIcon },
 ];
 
 function isActiveHref(pathname: string, href: string) {
