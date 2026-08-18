@@ -5,6 +5,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/backfill-odds",
+      "schedule": "0 */2 * * *"
+    },
+    {
       "path": "/api/cron/refresh-scores",
       "schedule": "55 6 * * *"
     },

@@ -114,6 +114,89 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
   return games;
 }
 
+// Runs periodically (see /api/cron/backfill-odds), well after the once-daily
+// seed fetch above. That seed fetch locks in OddsSnapshot for the rest of
+// the day the moment it succeeds - so a game whose sportsbook lines simply
+// weren't posted yet when it ran (a doubleheader nightcap, a weather-
+// rescheduled game, anything late) is silently absent from the cache with no
+// other path to ever pick it up before the next day's seed fetch. This adds
+// exactly those missing games and nothing else: it diffs a fresh API
+// response against what's already cached today by the Odds API's own event
+// id and only appends games not already present. Every already-cached game
+// is left byte-for-byte untouched - in particular this must never refresh an
+// already-cached game's price with a current/in-play one, same reason
+// getOddsForSport excludes started games from its own fetch below.
+export async function backfillOddsForSport(sportKey: string): Promise<{ added: number }> {
+  if (!isSportInSeason(sportKey)) return { added: 0 };
+
+  const fetchDate = easternDateKey(new Date());
+
+  // Nothing to merge into - creating today's first snapshot is
+  // getOddsForSport's job (via the seed cron, or a page load that beats it),
+  // not this function's. Running the full fetch below without an existing
+  // row would just duplicate that path for no benefit.
+  const existing = await prisma.oddsSnapshot.findUnique({
+    where: { sportKey_fetchDate: { sportKey, fetchDate } },
+  });
+  if (!existing) return { added: 0 };
+
+  const apiKey = process.env.ODDS_API_KEY;
+  if (!apiKey) return { added: 0 };
+
+  const existingGames = existing.data as unknown as OddsGame[];
+  const existingIds = new Set(existingGames.map((g) => g.id));
+
+  const requestSportKey = oddsApiSportKey(sportKey);
+  const url =
+    BASE_URL +
+    "/sports/" +
+    requestSportKey +
+    "/odds/?apiKey=" +
+    apiKey +
+    "&regions=us&markets=h2h,spreads,totals&oddsFormat=american";
+
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) return { added: 0 };
+
+  const raw = await res.json();
+  const fetchedAt = new Date();
+  const freshGames: OddsGame[] = raw
+    .map((g: any) => ({
+      id: g.id,
+      sportKey: g.sport_key,
+      homeTeam: g.home_team,
+      awayTeam: g.away_team,
+      commenceTime: g.commence_time,
+      bookmakers: g.bookmakers ?? [],
+    }))
+    // Identical pregame-only guarantee as getOddsForSport's own fetch - a
+    // game already under way must never get captured at all here either, so
+    // an in-play price can't sneak into the cache as if it were the pregame
+    // line. A game that started before ANY fetch (seed or backfill) ever
+    // saw it stays permanently missing - that's the existing, deliberate
+    // "missing beats wrong" tradeoff, unchanged by this function.
+    .filter((g: OddsGame) => new Date(g.commenceTime) > fetchedAt)
+    // The raw endpoint has no date bound - it's whatever the API currently
+    // has odds posted for, which by evening already includes tomorrow's
+    // slate. getOddsForSport gets away without this filter because its one
+    // fetch always runs at 4am ET, hours before any future day's lines are
+    // posted - but this function runs all day, so without this it would
+    // "backfill" every future day's entire slate into today's row on every
+    // run. Confirmed live: an unfiltered run at ~8pm ET pulled in 16 of
+    // tomorrow's games alongside the 1 real gap it was meant to fill.
+    .filter((g: OddsGame) => easternDateKey(new Date(g.commenceTime)) === fetchDate);
+
+  const missingGames = freshGames.filter((g) => !existingIds.has(g.id));
+  if (missingGames.length === 0) return { added: 0 };
+
+  await prisma.oddsSnapshot.update({
+    where: { sportKey_fetchDate: { sportKey, fetchDate } },
+    data: { data: [...existingGames, ...missingGames] as any },
+  });
+
+  return { added: missingGames.length };
+}
+
 export async function getMlbLiveScores(): Promise<ScoreGame[]> {
   const yesterday = easternDateKey(new Date(Date.now() - 86400000));
   const tomorrow = easternDateKey(new Date(Date.now() + 86400000));
