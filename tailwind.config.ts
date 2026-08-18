@@ -103,6 +103,14 @@ const config: Config = {
           "62%": { transform: "translate(0, 0)", color: "var(--surge-color)" },
           "100%": { transform: "translate(0, 0)", color: "var(--surge-color)" },
         },
+        // Marketing live-ticker marquee - the track renders its game list
+        // TWICE back to back, so scrolling exactly 50% of the track's total
+        // width brings the second copy flush into the first copy's starting
+        // position, making the loop seamless (no snap-back visible).
+        "ticker-scroll": {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
       },
       animation: {
         "glow-pulse": "glow-pulse 2.2s ease-in-out infinite",
@@ -123,6 +131,9 @@ const config: Config = {
         "energy-ring": "energy-ring 0.7s ease-out 1 both",
         "energy-bolt-crackle": "energy-bolt-crackle 0.6s ease-in-out 1 both",
         "energy-flash": "energy-flash 0.65s ease-in-out 1 both",
+        // Duration is a fixed pace, not tied to game count - a slow-scanning
+        // read speed regardless of how many games are on the slate that day.
+        "ticker-scroll": "ticker-scroll 45s linear infinite",
       },
     },
   },

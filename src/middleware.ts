@@ -16,6 +16,10 @@ const PUBLIC_ROUTES = [
   /^\/auth\/callback/,
   /^\/api\/webhooks/,
   /^\/api\/cron/,
+  // The marketing page's live-score ticker (see
+  // components/marketing/live-ticker.tsx) polls this from a logged-out
+  // visitor's browser - it has no session to be public alongside.
+  /^\/api\/public\//,
 ];
 
 export default async function middleware(req: NextRequest) {

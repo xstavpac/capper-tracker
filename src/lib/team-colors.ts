@@ -76,8 +76,56 @@ const NFL_TEAM_COLORS: Record<string, string> = {
   commanders: "#5A1414",
 };
 
+// WNBA deliberately has no table here yet - unlike the tables above, several
+// WNBA teams' exact primary hex (Sun, Wings, Storm, and the newer Valkyries
+// especially) weren't confident enough to assert as verified brand fact the
+// same way the well-documented MLB/NFL/NBA colors are. A WNBA game still
+// gets a real accent via the neutral-gray fallback below, same as any other
+// unmapped sport - only the color itself is deferred, not the team/score
+// data. Add a WNBA_TEAM_COLORS table here once the real values are verified.
+const NBA_TEAM_COLORS: Record<string, string> = {
+  hawks: "#E03A3E",
+  celtics: "#007A33",
+  nets: "#000000",
+  hornets: "#1D1160",
+  bulls: "#CE1141",
+  cavaliers: "#860038",
+  mavericks: "#00538C",
+  nuggets: "#0E2240",
+  pistons: "#C8102E",
+  warriors: "#1D428A",
+  rockets: "#CE1141",
+  pacers: "#002D62",
+  clippers: "#C8102E",
+  lakers: "#552583",
+  grizzlies: "#5D76A9",
+  heat: "#98002E",
+  bucks: "#00471B",
+  timberwolves: "#0C2340",
+  pelicans: "#0C2340",
+  knicks: "#006BB6",
+  thunder: "#007AC1",
+  magic: "#0077C0",
+  "76ers": "#006BB6",
+  sixers: "#006BB6",
+  suns: "#1D1160",
+  "trail blazers": "#E03A3E",
+  blazers: "#E03A3E",
+  spurs: "#000000",
+  raptors: "#CE1141",
+  jazz: "#002B5C",
+  wizards: "#002B5C",
+};
+
 export function getTeamColor(sportKey: string, teamName: string): string | null {
-  const table = sportKey === "baseball_mlb" ? MLB_TEAM_COLORS : sportKey === "americanfootball_nfl" ? NFL_TEAM_COLORS : null;
+  const table =
+    sportKey === "baseball_mlb"
+      ? MLB_TEAM_COLORS
+      : sportKey === "americanfootball_nfl"
+        ? NFL_TEAM_COLORS
+        : sportKey === "basketball_nba"
+          ? NBA_TEAM_COLORS
+          : null;
   if (!table) return null;
 
   const lower = teamName.toLowerCase();
