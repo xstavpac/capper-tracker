@@ -179,8 +179,12 @@ function CloseIcon() {
 function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
   const Icon = item.icon;
   const isRed = item.accent === "red";
-  const activeClass = isRed ? "bg-red-50 text-red-600" : "bg-brand-50 text-brand-700";
-  const inactiveClass = isRed ? "text-red-600 hover:bg-red-50" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900";
+  const activeClass = isRed
+    ? "bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-400"
+    : "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-400";
+  const inactiveClass = isRed
+    ? "text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
+    : "text-muted-foreground hover:bg-muted hover:text-foreground";
 
   return (
     <Link
@@ -227,7 +231,7 @@ function LogoMark() {
 function SidebarDropCatalog({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
-      <div className="my-3 border-t border-gray-100" />
+      <div className="my-3 border-t border-border-subtle" />
       <a href="/picks/import" onClick={onNavigate} className={dropCatalogButtonBaseClass + " w-full"}>
         <LightningIcon />
         Drop Catalog
@@ -277,11 +281,11 @@ function AccountRow({ user }: { user: SidebarUser }) {
           {initials}
         </div>
       )}
-      <span className="min-w-0 flex-1 truncate text-sm text-gray-700">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{label}</span>
       <button
         onClick={handleSignOut}
         aria-label="Sign out"
-        className="shrink-0 rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-50 hover:text-gray-600"
+        className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
       >
         <SignOutIcon />
       </button>
@@ -299,18 +303,18 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
 
   return (
     <>
-      <div className="flex items-center justify-between border-b border-gray-100 bg-white p-3 md:hidden">
+      <div className="flex items-center justify-between border-b border-border-subtle bg-card p-3 md:hidden">
         <LogoMark />
         <button
           onClick={() => setOpen(true)}
           aria-label="Open menu"
-          className="rounded-lg p-2 text-gray-600 hover:bg-gray-50"
+          className="rounded-lg p-2 text-muted-foreground hover:bg-muted"
         >
           <MenuIcon />
         </button>
       </div>
 
-      <aside className="hidden w-72 flex-col gap-1 rounded-xl border border-gray-200 bg-white px-4 py-5 shadow-soft md:flex">
+      <aside className="hidden w-72 flex-col gap-1 rounded-xl border border-border bg-card px-4 py-5 shadow-soft md:flex">
         <div className="mb-6 px-1">
           <LogoMark />
         </div>
@@ -322,13 +326,13 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
       {open && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-72 flex-col gap-1 bg-white px-4 py-5 shadow-lg">
+          <aside className="absolute inset-y-0 left-0 flex w-72 flex-col gap-1 bg-card px-4 py-5 shadow-lg">
             <div className="mb-4 flex items-center justify-between">
               <LogoMark />
               <button
                 onClick={() => setOpen(false)}
                 aria-label="Close menu"
-                className="rounded-lg p-2 text-gray-600 hover:bg-gray-50"
+                className="rounded-lg p-2 text-muted-foreground hover:bg-muted"
               >
                 <CloseIcon />
               </button>
