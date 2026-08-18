@@ -82,7 +82,6 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
 
   const raw = await res.json();
   const fetchedAt = new Date();
-  const tomorrowKey = easternDateKey(new Date(fetchedAt.getTime() + 86400000));
   const games: OddsGame[] = raw
     .map((g: any) => ({
       id: g.id,
@@ -104,24 +103,20 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
     // worst case we cache nothing for them (fixable by the cron catching up
     // sportsbook-side next time), never a wrong number silently treated as
     // real - since this feeds real ROI/profit tracking, missing beats wrong.
-    .filter((g: OddsGame) => new Date(g.commenceTime) > fetchedAt)
-    // The raw endpoint has no date bound of its own - for a sport like NFL,
-    // whose odds are posted for the whole week at once, this would otherwise
-    // cache an entire week's slate under today's row. Bounded to today or
-    // tomorrow (not today-only, matching backfillOddsForSport's stricter
-    // fetchDate-only filter) because bulk-import's price lookup
-    // (resolveOddsGame/findMarketPrice, via bulk-picks.ts) legitimately
-    // resolves picks against tomorrow's game when a catalog is imported the
-    // night before a slate - the schedule/score sources it resolves against
-    // (getMlbLiveScores, the ESPN-backed fetch) already use a yesterday/
-    // today/tomorrow window themselves. Yesterday is never reachable here
-    // regardless: the already-started filter just above excludes any
-    // finished game outright, and the upstream API stops listing a game's
-    // odds once it's underway anyway.
-    .filter((g: OddsGame) => {
-      const key = easternDateKey(new Date(g.commenceTime));
-      return key === fetchDate || key === tomorrowKey;
-    });
+    .filter((g: OddsGame) => new Date(g.commenceTime) > fetchedAt);
+  // Deliberately no upper date bound here - this cache is shared by
+  // consumers with genuinely different windows (the odds board wants
+  // whatever the Odds API has posted, which for NFL is a full week at once;
+  // grading/pregame-facts want today only; bulk-import wants today+tomorrow),
+  // and starving the fetch itself to satisfy the narrowest of them silently
+  // broke the others (e.g. NFL's odds board going empty days out from a
+  // Sunday slate). Each consumer now applies its own window on top of this
+  // full cache instead: grading.ts's deriveLedgerFields and pregame-
+  // facts.ts's getPregameEventFacts both same-day-scope their own match
+  // (with closestByTime disambiguation, same pattern as resolveOddsGame
+  // below) precisely to guard the same-team-rematch risk this filter used to
+  // paper over; the live ticker (live-ticker.ts) keeps its own same-day
+  // display filter independently.
 
   await prisma.oddsSnapshot.upsert({
     where: { sportKey_fetchDate: { sportKey, fetchDate } },
