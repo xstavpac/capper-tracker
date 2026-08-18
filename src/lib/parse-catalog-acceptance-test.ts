@@ -17,7 +17,15 @@
 //     reconstructed from commit messages since no fixture file was ever
 //     committed for them; if this ever drifts from what those commits
 //     actually verified, trust a real repro over this file's comments.
-import { parseCatalog } from "./parse-catalog";
+//   PART C - the KBO team-support/collision-resolution round (791fc5b,
+//     d9bfe3c, f4cd9ad): KBO team data, the Bears/Twins/Giants/Lions/Eagles/
+//     Tigers nickname collisions this introduced, and the KT Wiz -> ATP
+//     fallback bug. Includes an explicit regression check that removing the
+//     6 bare nicknames from MLB_TEAMS/NFL_TEAMS didn't break resolving the
+//     REAL (non-KBO) team on either side of each collision - the whole
+//     point of routing through DISAMBIGUATED_TEAMS/AMBIGUOUS_NICKNAMES
+//     instead of just deleting the entries outright.
+import { parseCatalog, inferSportFromPickContext } from "./parse-catalog";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -222,6 +230,129 @@ function main() {
       { bet: picks[0]?.betType, side: picks[0]?.totalSide, teams: picks[0]?.teamNicknames.sort() },
       { bet: "TOTAL", side: "over", teams: ["angels", "orioles"] }
     );
+  }
+
+  // ==========================================================================
+  // PART C - KBO team support + nickname collision resolution
+  // ==========================================================================
+  console.log("\n########## PART C: KBO team support + collision resolution ##########");
+
+  // The 4 real screenshot lines that were mis-tagged before this round - all
+  // must now resolve to KBO.
+  {
+    const { picks, unresolved } = parseCatalog(
+      `Porter Picks\nKBO\nDoosan Bears ML\nLotte Giants -1.5\nKT Wiz ML\nKIA Tigers vs Hanwha Eagles Over 9.5`,
+      []
+    );
+    check("KBO screenshots: no unresolved lines", unresolved, []);
+    check(
+      "KBO screenshots: all 4 resolve to KBO",
+      picks.map((p) => p.sportName),
+      ["KBO", "KBO", "KBO", "KBO"]
+    );
+    const kiaVsHanwha = picks.find((p) => p.description.includes("Hanwha"));
+    check(
+      "KBO screenshots: 'KIA Tigers vs Hanwha Eagles' captures both KBO teams",
+      kiaVsHanwha?.teamNicknames.sort(),
+      ["hanwha eagles", "kia tigers"]
+    );
+  }
+
+  // Regression check: removing "bears"/"tigers"/"twins"/"lions"/"eagles" from
+  // NFL_TEAMS/MLB_TEAMS (to route them through the KBO collision instead)
+  // must NOT break resolving the real, non-KBO team on the other side of
+  // each collision when its full city-qualified name is stated - the whole
+  // point of DISAMBIGUATED_TEAMS over just deleting the bare entries.
+  {
+    const cases: [string, string, string][] = [
+      ["Chicago Bears -3.5", "NFL", "chicago bears"],
+      ["Detroit Tigers ML", "MLB", "detroit tigers"],
+      ["Minnesota Twins ML", "MLB", "minnesota twins"],
+      ["Detroit Lions -3.5", "NFL", "detroit lions"],
+      ["Philadelphia Eagles ML", "NFL", "philadelphia eagles"],
+      ["San Francisco Giants ML", "MLB", "san francisco giants"],
+      ["New York Giants ML", "NFL", "new york giants"],
+    ];
+    for (const [line, expectedSport, expectedNickname] of cases) {
+      const { picks } = parseCatalog(`Capper\n${line}`, []);
+      check(
+        `Regression: real full team name '${line}' still resolves to ${expectedSport}, not KBO or ambiguous`,
+        { sport: picks[0]?.sportName, teams: picks[0]?.teamNicknames, ambiguous: picks[0]?.ambiguous },
+        { sport: expectedSport, teams: [expectedNickname], ambiguous: undefined }
+      );
+    }
+  }
+
+  // A genuinely bare nickname (no city, no other context) for one of the 6
+  // collisions must surface as ambiguous with both the real US-league team
+  // AND the KBO team offered - not silently resolve to either one.
+  {
+    const bears = parseCatalog(`Capper\nBears ML`, []).picks[0];
+    check(
+      "Bare 'Bears ML': surfaces ambiguous (NFL + KBO), not silently resolved",
+      { sport: bears?.sportName, options: bears?.ambiguous?.map((o) => o.label).sort() },
+      { sport: "", options: ["Chicago Bears (NFL)", "Doosan Bears (KBO)"] }
+    );
+    const tigers = parseCatalog(`Capper\nTigers ML`, []).picks[0];
+    check(
+      "Bare 'Tigers ML': surfaces ambiguous (MLB + KBO), not silently resolved",
+      { sport: tigers?.sportName, options: tigers?.ambiguous?.map((o) => o.label).sort() },
+      { sport: "", options: ["Detroit Tigers (MLB)", "KIA Tigers (KBO)"] }
+    );
+  }
+
+  // The specific wrong-guess this round's inferSportFromPickContext fix
+  // prevents: generic baseball wording ("ML") is NOT MLB-exclusive once KBO
+  // is a candidate (KBO uses identical terminology) - before the fix this
+  // returned "MLB" for all three baseball-worded cases below, silently
+  // mis-resolving a real KBO pick. Genuinely sport-specific NFL wording, and
+  // the pre-existing MLB-vs-NFL Cardinals case, are confirmed unaffected.
+  {
+    check(
+      "Context fix: 'Tigers ML' vs [MLB, KBO] no longer guesses MLB",
+      inferSportFromPickContext("Tigers ML", ["MLB", "KBO"]),
+      null
+    );
+    check(
+      "Context fix: 'Twins run line -1.5' vs [MLB, KBO] no longer guesses MLB",
+      inferSportFromPickContext("Twins run line -1.5", ["MLB", "KBO"]),
+      null
+    );
+    check(
+      "Context fix: 'Giants ML' vs [MLB, NFL, KBO] no longer guesses MLB",
+      inferSportFromPickContext("Giants ML", ["MLB", "NFL", "KBO"]),
+      null
+    );
+    check(
+      "Context fix: genuinely NFL-worded 'Eagles spread -3' vs [NFL, KBO] still resolves NFL",
+      inferSportFromPickContext("Eagles spread -3", ["NFL", "KBO"]),
+      "NFL"
+    );
+    check(
+      "Context fix: pre-existing 'Cardinals ML' vs [MLB, NFL] (no KBO) is unaffected",
+      inferSportFromPickContext("Cardinals ML", ["MLB", "NFL"]),
+      "MLB"
+    );
+  }
+
+  // The KT Wiz -> ATP fallback bug: an unlisted team shaped like
+  // "abbreviation + word" must land in `unresolved`, not get silently
+  // guessed as a tennis player. Tested against a team NOT in any list (KT
+  // Wiz itself is now in KBO_TEAMS as of this same round, so it no longer
+  // exercises this path) - this is the general case the fix actually covers.
+  {
+    const { picks, unresolved } = parseCatalog(`Capper\nAB Wolves ML`, []);
+    check("ATP fallback fix: unlisted abbreviation-shaped team stays unresolved", unresolved, ["AB Wolves ML"]);
+    check("ATP fallback fix: no phantom ATP pick created", picks.length, 0);
+  }
+
+  // Real tennis and MMA picks must still resolve after the ATP fallback fix
+  // - the guard only rejects abbreviation-shaped candidates, not real names.
+  {
+    const tennis = parseCatalog(`Capper\nTallon Griekspoor ML`, []).picks[0];
+    check("ATP fallback fix: real tennis pick unaffected", tennis?.sportName, "ATP");
+    const mma = parseCatalog(`Capper\nIslam Makhachev vs Ian Machado Garry ML`, []).picks[0];
+    check("ATP fallback fix: real MMA matchup unaffected", mma?.sportName, "MMA");
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
