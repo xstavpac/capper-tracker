@@ -3,11 +3,13 @@ import { updateSupabaseSession } from "@/lib/supabase/middleware";
 import { isDevAuthBypassEnabled, DEV_BYPASS_SUPABASE_ID } from "@/lib/dev-auth-bypass";
 
 // Everything under (app) requires a signed-in user.
-// Marketing pages, sign-in/sign-up, the Supabase auth callback, webhooks,
-// and cron routes stay public (cron routes have no session - they
-// authenticate via CRON_SECRET instead).
+// Marketing pages (including the public Privacy Policy - Google's OAuth
+// verification requires it be reachable logged-out), sign-in/sign-up, the
+// Supabase auth callback, webhooks, and cron routes stay public (cron
+// routes have no session - they authenticate via CRON_SECRET instead).
 const PUBLIC_ROUTES = [
   /^\/$/,
+  /^\/privacy/,
   /^\/sign-in/,
   /^\/sign-up/,
   /^\/reset-password/,

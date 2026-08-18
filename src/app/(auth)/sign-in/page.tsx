@@ -75,6 +75,14 @@ function SignInForm() {
         </button>
       </div>
 
+      <p className="mt-3 text-center text-xs text-gray-400">
+        By continuing, you agree to our{" "}
+        <Link href="/privacy" className="font-medium text-gray-500 hover:text-gray-700">
+          Privacy Policy
+        </Link>
+        .
+      </p>
+
       <div className="my-5 flex items-center gap-3">
         <div className="h-px flex-1 bg-gray-200" />
         <span className="text-xs text-gray-400">or</span>
