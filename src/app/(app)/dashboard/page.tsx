@@ -15,7 +15,7 @@ import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 function HeroStat({ label, value, href }: { label: string; value: ReactNode; href?: string }) {
   const content = (
     <>
-      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-0.5 text-lg font-semibold">{value}</div>
     </>
   );
@@ -55,17 +55,17 @@ export default async function DashboardPage() {
         <DropCatalogLink href="/picks/import" />
       </div>
 
-      <div className="mb-6 rounded-card border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-6">
+      <div className="mb-6 rounded-card border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-6 dark:border-brand-500/20 dark:from-brand-500/10 dark:to-card">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex flex-wrap gap-x-10 gap-y-4">
             <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-brand-600">Total picks tracked</div>
+              <div className="text-xs font-medium uppercase tracking-wide text-brand-600 dark:text-brand-400">Total picks tracked</div>
               <div className="mt-1 text-4xl font-bold">
                 <EnergyCountUp value={summary.totalPicks} commas />
               </div>
             </div>
             <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-brand-600">Cappers tracked</div>
+              <div className="text-xs font-medium uppercase tracking-wide text-brand-600 dark:text-brand-400">Cappers tracked</div>
               <div className="mt-1 text-4xl font-bold">
                 <EnergyCountUp value={planStatus.capperCount} commas />
               </div>
@@ -108,7 +108,7 @@ export default async function DashboardPage() {
       {stalePendingCount > 0 && (
         <a
           href="/picks/pending"
-          className="mb-6 flex items-center justify-between gap-3 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 transition hover:bg-amber-100"
+          className="mb-6 flex items-center justify-between gap-3 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 transition hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20"
         >
           <span>
             {stalePendingCount} pick{stalePendingCount === 1 ? " has" : "s have"} been pending over{" "}
@@ -120,23 +120,23 @@ export default async function DashboardPage() {
 
       {summary.categoryBreakdown.length > 0 && (
         <div className="mb-6">
-          <h2 className="mb-2 text-sm font-semibold text-gray-900">Record by category</h2>
+          <h2 className="mb-2 text-sm font-semibold text-foreground">Record by category</h2>
           <CategoryBreakdown items={summary.categoryBreakdown} animateIn />
         </div>
       )}
 
       <TrendingCappers panels={panels} />
 
-      <div className="mb-6 rounded-card bg-white p-5 shadow-soft">
-        <div className="mb-2 text-sm font-medium text-gray-700">Performance</div>
+      <div className="mb-6 rounded-card bg-card p-5 shadow-soft">
+        <div className="mb-2 text-sm font-medium text-muted-foreground">Performance</div>
         <UnitsChart data={chartData} />
       </div>
 
-      <div className="rounded-card bg-white p-4 shadow-soft">
-        <div className="text-sm text-gray-500">Recent picks</div>
-        <div className="mt-3 divide-y divide-gray-100">
+      <div className="rounded-card bg-card p-4 shadow-soft">
+        <div className="text-sm text-muted-foreground">Recent picks</div>
+        <div className="mt-3 divide-y divide-border-subtle">
           {summary.recentPicks.length === 0 && (
-            <p className="py-6 text-center text-sm text-gray-400">
+            <p className="py-6 text-center text-sm text-muted-foreground">
               No picks yet - add your first capper to get started.
             </p>
           )}
@@ -144,15 +144,15 @@ export default async function DashboardPage() {
             <div key={pick.id} className="flex items-center justify-between py-2 text-sm">
               <span>
                 {pick.awayTeam} @ {pick.homeTeam} - {pick.betDetail ?? pick.betType}
-                <span className="text-gray-400"> ({pick.capper.name})</span>
+                <span className="text-muted-foreground"> ({pick.capper.name})</span>
               </span>
               <span
                 className={
                   pick.status === "WIN"
-                    ? "text-emerald-600"
+                    ? "text-emerald-600 dark:text-emerald-400"
                     : pick.status === "LOSS"
-                      ? "text-red-600"
-                      : "text-gray-400"
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-muted-foreground"
                 }
               >
                 {pick.status === "PENDING" ? "Pending" : pick.status + " - " + pick.units + "u"}
