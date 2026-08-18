@@ -150,7 +150,36 @@ const DISAMBIGUATED_TEAMS: TeamEntry[] = [
   ["sf giants", "MLB"],
   ["new york giants", "NFL"],
   ["ny giants", "NFL"],
+  // KBO collisions (see KBO_TEAMS above) - a capper naming the city alongside
+  // the nickname (confirmed the norm for every KBO example seen: "Doosan
+  // Bears", "Lotte Giants", "KIA Tigers vs Hanwha Eagles") resolves directly
+  // here, same mechanism as every entry above. Each US-league side is also
+  // listed explicitly since removing the bare nickname from MLB_TEAMS/
+  // NFL_TEAMS below means "Chicago Bears" typed in full needs its own entry
+  // too, not just the KBO side.
+  ["doosan bears", "KBO"],
+  ["chicago bears", "NFL"],
+  ["lg twins", "KBO"],
+  ["minnesota twins", "MLB"],
+  ["lotte giants", "KBO"],
+  ["samsung lions", "KBO"],
+  ["detroit lions", "NFL"],
+  ["hanwha eagles", "KBO"],
+  ["philadelphia eagles", "NFL"],
+  ["kia tigers", "KBO"],
+  ["detroit tigers", "MLB"],
 ];
+
+// KBO (Korean Baseball Organization). Four of the ten teams' nicknames don't
+// collide with any other sport's team list (confirmed against the real
+// mis-tagged import: Doosan Bears -> NFL, Lotte Giants -> MLB, KIA Tigers/
+// Hanwha Eagles -> MLB/NFL), so they resolve the same simple way every other
+// unambiguous nickname above does - bare nickname, no city needed. The six
+// that DO collide (Bears/Twins/Giants/Lions/Eagles/Tigers) are deliberately
+// left out of this list, same as cardinals/panthers/lions-vs-CFL above - see
+// DISAMBIGUATED_TEAMS (city-qualified form) and AMBIGUOUS_NICKNAMES (bare
+// form) below for how each of those is actually resolved.
+const KBO_TEAMS = ["wiz", "landers", "dinos", "heroes"];
 
 const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...DISAMBIGUATED_TEAMS,
@@ -160,6 +189,7 @@ const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...NHL_TEAMS.map((t): TeamEntry => [t, "NHL"]),
   ...WNBA_TEAMS.map((t): TeamEntry => [t, "WNBA"]),
   ...CFL_TEAMS.map((t): TeamEntry => [t, "CFL"]),
+  ...KBO_TEAMS.map((t): TeamEntry => [t, "KBO"]),
 ].sort((a, b) => b[0].length - a[0].length);
 
 // Strong "this is definitely a pick, not a capper's name" signals - a units
