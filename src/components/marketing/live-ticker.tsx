@@ -62,11 +62,11 @@ function Segment({ game }: { game: TickerGame }) {
   const isLive = game.status === "live";
   return (
     <div
-      className="flex shrink-0 items-center gap-3 border-l-4 bg-white/5 px-4 py-3"
+      className="flex shrink-0 items-center gap-2 border-l-4 bg-white/5 px-3 py-2"
       style={{ borderColor: game.accentColor }}
     >
       <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-300">{game.sportLabel}</span>
-      <div className="flex items-center gap-1.5 text-sm font-medium text-white">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-white">
         <span>{game.awayShort}</span>
         <span className="text-blue-300">
           {game.awayScore ?? ""}
@@ -138,9 +138,20 @@ export function LiveTicker({ initialGames }: { initialGames: TickerGame[] }) {
 
   if (games.length === 0) return null;
 
+  // Duration scales with game count so per-segment dwell time stays roughly
+  // constant - the track always scrolls exactly 50% of its own width (see
+  // ticker-scroll's keyframes in tailwind.config.ts), and that width grows
+  // with games.length, so a fixed duration would make a heavy game day
+  // visibly faster than a light one. 45s floor keeps light days from
+  // scrolling too slowly to read as "live."
+  const scrollDurationSeconds = Math.max(45, games.length * 6);
+
   return (
     <div className="w-full overflow-hidden bg-brand-900 py-1" aria-label="Live scores across today's games">
-      <div className="flex w-max animate-ticker-scroll motion-reduce:animate-none">
+      <div
+        className="flex w-max animate-ticker-scroll motion-reduce:animate-none"
+        style={{ animationDuration: `${scrollDurationSeconds}s` }}
+      >
         {[0, 1].map((copy) => (
           <div key={copy} className="flex" aria-hidden={copy === 1}>
             {games.map((game) => (
