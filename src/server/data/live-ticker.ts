@@ -38,15 +38,18 @@ export async function getLiveTickerGames(): Promise<TickerGame[]> {
       const sportLabel = LIVE_SPORTS.find((s) => s.key === sportKey)?.label ?? sportKey;
       const [allOdds, scores] = await Promise.all([getOddsForSport(sportKey), getLiveScoresForSport(sportKey)]);
 
-      // Same "today or later" filter live/page.tsx applies to the raw
-      // OddsSnapshot cache - a cache write can land mid-evening after some
-      // of that day's late games already started, so this drops anything
-      // from a strictly earlier Eastern calendar day rather than trusting
-      // the cache's own fetchDate key alone.
+      // Restricts to today's Eastern calendar day only - the ticker's whole
+      // point is "what's happening today," not a running feed of everything
+      // upcoming. sameEasternDay alone still lets through a not-yet-started
+      // later-today game (it compares calendar dates, not time-of-day), so
+      // this isn't just "started or later today" - it's "today," full stop.
+      // A prior `|| gameDate > now` clause here let ANY future day's games
+      // through too (NFL odds are posted for the whole week at once), which
+      // is what caused games 2-3 days out to show up in the ticker.
       const now = new Date();
       const todaysOdds = allOdds.filter((game) => {
         const gameDate = new Date(game.commenceTime);
-        return sameEasternDay(gameDate, now) || gameDate > now;
+        return sameEasternDay(gameDate, now);
       });
 
       return todaysOdds.map((game): TickerGame => {
