@@ -18,6 +18,22 @@ const config: Config = {
           800: "#1e40af",
           900: "#1e3a8a",
         },
+        // Semantic tokens backed by the CSS variables in globals.css - swap
+        // values per-theme there rather than adding dark: variants per usage.
+        background: "rgb(var(--background) / <alpha-value>)",
+        foreground: "rgb(var(--foreground) / <alpha-value>)",
+        card: {
+          DEFAULT: "rgb(var(--card) / <alpha-value>)",
+          foreground: "rgb(var(--card-foreground) / <alpha-value>)",
+        },
+        muted: {
+          DEFAULT: "rgb(var(--muted) / <alpha-value>)",
+          foreground: "rgb(var(--muted-foreground) / <alpha-value>)",
+        },
+        border: {
+          DEFAULT: "rgb(var(--border) / <alpha-value>)",
+          subtle: "rgb(var(--border-subtle) / <alpha-value>)",
+        },
       },
       borderRadius: {
         card: "16px",
