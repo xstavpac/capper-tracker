@@ -15,7 +15,7 @@ function CheckIcon() {
 
 function LockIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-gray-300" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-muted-foreground/50" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="4" y="10" width="16" height="10" rx="2" />
       <path d="M8 10V7a4 4 0 0 1 8 0v3" />
     </svg>
@@ -26,7 +26,7 @@ function Feature({ locked, children }: { locked?: boolean; children: React.React
   return (
     <li className="flex items-center gap-2 text-sm">
       {locked ? <LockIcon /> : <CheckIcon />}
-      <span className={locked ? "text-gray-400" : "text-gray-700"}>{children}</span>
+      <span className={locked ? "text-muted-foreground/70" : "text-foreground"}>{children}</span>
     </li>
   );
 }
@@ -47,14 +47,14 @@ function CardShell({
   return (
     <div
       className={
-        "flex flex-col rounded-card bg-white p-6 shadow-soft " + (highlight ? "ring-2 ring-brand-500" : "")
+        "flex flex-col rounded-card bg-card p-6 shadow-soft " + (highlight ? "ring-2 ring-brand-500" : "")
       }
     >
       <div className="mb-1 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-900">{name}</h2>
+        <h2 className="text-base font-semibold text-foreground">{name}</h2>
         {badge}
       </div>
-      <div className="mb-4 text-2xl font-semibold text-gray-900">{price}</div>
+      <div className="mb-4 text-2xl font-semibold text-foreground">{price}</div>
       {children}
     </div>
   );
@@ -62,7 +62,7 @@ function CardShell({
 
 function CurrentPlanBadge() {
   return (
-    <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-600">Current plan</span>
+    <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-medium text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">Current plan</span>
   );
 }
 
@@ -99,14 +99,14 @@ export function PricingCards({ currentTier, checkoutStatus }: { currentTier: Tie
   return (
     <div>
       {checkoutStatus === "success" && (
-        <div className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <div className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
           Checkout complete - your plan will update in a moment.
         </div>
       )}
       {checkoutStatus === "cancelled" && (
-        <div className="mb-4 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-600">Checkout cancelled - no changes were made.</div>
+        <div className="mb-4 rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">Checkout cancelled - no changes were made.</div>
       )}
-      {error && <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {error && <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <CardShell name="Free" price="$0" badge={currentTier === "FREE" ? <CurrentPlanBadge /> : undefined}>
@@ -116,7 +116,7 @@ export function PricingCards({ currentTier, checkoutStatus }: { currentTier: Tie
             <Feature locked>Charts</Feature>
           </ul>
           {currentTier === "FREE" && (
-            <div className="mt-auto rounded-lg bg-gray-50 px-3 py-2 text-center text-xs font-medium text-gray-500">
+            <div className="mt-auto rounded-lg bg-muted px-3 py-2 text-center text-xs font-medium text-muted-foreground">
               Your current plan
             </div>
           )}
@@ -143,12 +143,12 @@ export function PricingCards({ currentTier, checkoutStatus }: { currentTier: Tie
             </button>
           )}
           {currentTier === "BASIC" && (
-            <div className="mt-auto rounded-lg bg-gray-50 px-3 py-2 text-center text-xs font-medium text-gray-500">
+            <div className="mt-auto rounded-lg bg-muted px-3 py-2 text-center text-xs font-medium text-muted-foreground">
               Your current plan
             </div>
           )}
           {currentTier === "PRO" && (
-            <div className="mt-auto rounded-lg bg-gray-50 px-3 py-2 text-center text-xs font-medium text-gray-500">
+            <div className="mt-auto rounded-lg bg-muted px-3 py-2 text-center text-xs font-medium text-muted-foreground">
               Included in your Pro plan
             </div>
           )}
@@ -165,7 +165,7 @@ export function PricingCards({ currentTier, checkoutStatus }: { currentTier: Tie
             <Feature>Charts</Feature>
             <Feature>Advanced features</Feature>
           </ul>
-          <div className="mt-auto rounded-lg bg-gray-50 px-3 py-2 text-center text-xs font-medium text-gray-400">
+          <div className="mt-auto rounded-lg bg-muted px-3 py-2 text-center text-xs font-medium text-muted-foreground">
             Not yet available for purchase
           </div>
         </CardShell>

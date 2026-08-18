@@ -5,7 +5,7 @@ import { Avatar } from "@/components/dashboard/capper-panels";
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-card bg-white p-8 text-center text-sm text-gray-400 shadow-soft">{message}</div>
+    <div className="rounded-card bg-card p-8 text-center text-sm text-muted-foreground shadow-soft">{message}</div>
   );
 }
 
@@ -14,24 +14,24 @@ function PickRow({ pick }: { pick: SharpMoneyPick }) {
   return (
     <a
       href={"/cappers/" + pick.capperId}
-      className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50"
+      className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted"
     >
       <div className="flex min-w-0 items-center gap-2.5">
         <Avatar name={pick.capperName} colorTag={pick.capperColorTag} size={28} />
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium text-gray-900">{pick.capperName}</div>
-          <div className="truncate text-xs text-gray-500">
+          <div className="truncate text-sm font-medium text-foreground">{pick.capperName}</div>
+          <div className="truncate text-xs text-muted-foreground">
             {pick.betDetail || pick.betType}
-            <span className="text-gray-400"> &middot; {pick.awayTeam} @ {pick.homeTeam}</span>
+            <span className="text-muted-foreground"> &middot; {pick.awayTeam} @ {pick.homeTeam}</span>
           </div>
         </div>
       </div>
       <div className="shrink-0 text-right">
-        <div className="text-sm font-semibold text-gray-900">
+        <div className="text-sm font-semibold text-foreground">
           {pick.odds > 0 ? "+" : ""}
-          {pick.odds} <span className="font-normal text-gray-400">&middot; {pick.units}u</span>
+          {pick.odds} <span className="font-normal text-muted-foreground">&middot; {pick.units}u</span>
         </div>
-        <div className={"text-xs font-medium " + (color === "green" ? "text-emerald-600" : "text-red-600")}>
+        <div className={"text-xs font-medium " + (color === "green" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
           {pick.record.wins}-{pick.record.losses}
           {pick.record.pushes > 0 ? "-" + pick.record.pushes : ""} ({Math.round(pick.record.winPct)}%)
         </div>
@@ -48,7 +48,7 @@ export default async function SharpMoneyPage() {
     <div className="mx-auto max-w-5xl">
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Sharp Money</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Strong historical picks in today&apos;s catalog - cappers with a 55%+ record in that exact bet category.
         </p>
       </div>
@@ -67,14 +67,14 @@ export default async function SharpMoneyPage() {
         <div className="space-y-8">
           {board.sports.map((sport) => (
             <div key={sport.sportName}>
-              <h2 className="mb-3 text-base font-semibold text-gray-900">{sport.sportName}</h2>
+              <h2 className="mb-3 text-base font-semibold text-foreground">{sport.sportName}</h2>
               <div className="space-y-4">
                 {sport.categories.map((category) => (
-                  <div key={category.key} className="rounded-card bg-white shadow-soft">
-                    <div className="border-b border-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700">
+                  <div key={category.key} className="rounded-card bg-card shadow-soft">
+                    <div className="border-b border-border-subtle px-4 py-2.5 text-sm font-medium text-muted-foreground">
                       {category.label}
                     </div>
-                    <div className="divide-y divide-gray-100">
+                    <div className="divide-y divide-border-subtle">
                       {category.picks.map((pick) => (
                         <PickRow key={pick.pickId} pick={pick} />
                       ))}

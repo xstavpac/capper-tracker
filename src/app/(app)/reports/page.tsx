@@ -5,21 +5,21 @@ import { WinLossPieChart } from "@/components/dashboard/win-loss-pie-chart";
 
 function BreakdownList({ title, items }: { title: string; items: ReportBreakdownItem[] }) {
   return (
-    <div className="rounded-card bg-white p-5 shadow-soft">
-      <div className="mb-3 text-sm font-medium text-gray-700">{title}</div>
+    <div className="rounded-card bg-card p-5 shadow-soft">
+      <div className="mb-3 text-sm font-medium text-muted-foreground">{title}</div>
       {items.length === 0 ? (
-        <p className="py-4 text-center text-sm text-gray-400">No data yet.</p>
+        <p className="py-4 text-center text-sm text-muted-foreground">No data yet.</p>
       ) : (
-        <div className="divide-y divide-gray-100">
+        <div className="divide-y divide-border-subtle">
           {items.map((item) => (
             <div key={item.name} className="flex items-center justify-between py-2 text-sm">
               <div>
                 <div className="font-medium">{item.name}</div>
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-muted-foreground">
                   {item.count} pick{item.count === 1 ? "" : "s"}
                 </div>
               </div>
-              <div className={"font-medium " + (item.stats.roi >= 0 ? "text-emerald-600" : "text-red-600")}>
+              <div className={"font-medium " + (item.stats.roi >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
                 {item.stats.roi >= 0 ? "+" : ""}
                 {item.stats.roi}%
               </div>
@@ -33,18 +33,18 @@ function BreakdownList({ title, items }: { title: string; items: ReportBreakdown
 
 function HighlightCard({ label, item }: { label: string; item: ReportBreakdownItem | null }) {
   return (
-    <div className="rounded-card bg-white p-4 shadow-soft">
-      <div className="text-sm text-gray-500">{label}</div>
+    <div className="rounded-card bg-card p-4 shadow-soft">
+      <div className="text-sm text-muted-foreground">{label}</div>
       {item ? (
         <>
           <div className="mt-1 text-lg font-semibold">{item.name}</div>
-          <div className={"text-sm font-medium " + (item.stats.roi >= 0 ? "text-emerald-600" : "text-red-600")}>
+          <div className={"text-sm font-medium " + (item.stats.roi >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
             {item.stats.roi >= 0 ? "+" : ""}
             {item.stats.roi}% ROI
           </div>
         </>
       ) : (
-        <div className="mt-1 text-sm text-gray-400">No data yet</div>
+        <div className="mt-1 text-sm text-muted-foreground">No data yet</div>
       )}
     </div>
   );
@@ -108,8 +108,8 @@ export default async function ReportsPage() {
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-card bg-white p-5 shadow-soft lg:col-span-1">
-          <div className="mb-2 text-sm font-medium text-gray-700">Win / Loss / Push</div>
+        <div className="rounded-card bg-card p-5 shadow-soft lg:col-span-1">
+          <div className="mb-2 text-sm font-medium text-muted-foreground">Win / Loss / Push</div>
           <WinLossPieChart wins={data.overall.wins} losses={data.overall.losses} pushes={data.overall.pushes} />
         </div>
         <div className="lg:col-span-2">

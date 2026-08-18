@@ -33,13 +33,13 @@ export function BillingSummary({
   }
 
   return (
-    <div className="rounded-card bg-white p-5 shadow-soft">
-      <h3 className="mb-3 text-sm font-medium text-gray-900">Plan</h3>
+    <div className="rounded-card bg-card p-5 shadow-soft">
+      <h3 className="mb-3 text-sm font-medium text-foreground">Plan</h3>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-lg font-semibold text-gray-900">{TIER_LABELS[tier]}</div>
+          <div className="text-lg font-semibold text-foreground">{TIER_LABELS[tier]}</div>
           {tier !== "FREE" && (
-            <p className="mt-0.5 text-xs text-gray-500">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {cancelAtPeriodEnd && currentPeriodEnd
                 ? "Cancels " + currentPeriodEnd + " - you keep access until then."
                 : status === "past_due"
@@ -49,7 +49,7 @@ export function BillingSummary({
                     : null}
             </p>
           )}
-          {tier === "FREE" && <p className="mt-0.5 text-xs text-gray-500">1,000 tracked picks included.</p>}
+          {tier === "FREE" && <p className="mt-0.5 text-xs text-muted-foreground">1,000 tracked picks included.</p>}
         </div>
         <div className="flex items-center gap-2">
           {tier === "FREE" && (
@@ -64,14 +64,14 @@ export function BillingSummary({
             <button
               onClick={handleManageBilling}
               disabled={loading}
-              className="rounded-full border border-gray-200 px-4 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+              className="rounded-full border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted disabled:opacity-50"
             >
               {loading ? "Opening..." : "Manage billing"}
             </button>
           )}
         </div>
       </div>
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
     </div>
   );
 }
