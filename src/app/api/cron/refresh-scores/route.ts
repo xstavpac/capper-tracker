@@ -2,6 +2,7 @@ import { persistFinalScores } from "@/server/data/grading";
 import { RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { recomputeTeamTendencies, snapshotTeamTendencies } from "@/server/data/team-tendencies";
 import { captureTeamStatSnapshots, capturePitcherStatSnapshots } from "@/server/data/stat-snapshots";
+import { syncDecayDeltaPredictions } from "@/server/data/model-engine/decay-delta-predictions";
 
 const MLB_SPORT_KEY = "baseball_mlb";
 
@@ -51,9 +52,19 @@ export async function GET(req: Request) {
   const teamSnapshots = await captureTeamStatSnapshots();
   const { starters, pitcherSnapshots } = await capturePitcherStatSnapshots();
 
+  // Build Step 7 - piggybacked on this same cron run, right after this
+  // sport's scores are persisted above, same reasoning as the tendency
+  // recompute: a freshly-graded game gets its DecayDeltaPrediction row (or
+  // has its existing pregame row converted) the same run it lands in
+  // GameResult, not a day later. MLB-only, matching the Decay Delta fixture
+  // itself (decayDeltaModel.sport === "baseball_mlb") - not looped over
+  // RESOLVABLE_SPORT_KEYS like the scores/tendencies above.
+  const decayDeltaPredictions = await syncDecayDeltaPredictions(MLB_SPORT_KEY);
+
   return Response.json({
     ok: true,
     results,
     statSnapshots: { sport: MLB_SPORT_KEY, teamSnapshots, pitcherSnapshots, gameStarters: starters },
+    decayDeltaPredictions,
   });
 }

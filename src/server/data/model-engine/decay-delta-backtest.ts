@@ -13,38 +13,12 @@ import { prisma } from "@/lib/prisma";
 import { runModelDefinition } from "./orchestrate";
 import { resolveAllGameObservations } from "./observations";
 import { decayDeltaModel } from "@/lib/model-engine/fixtures/decay-delta";
+import { actualFavWon, type GradedRow } from "./decay-delta-outcome";
 
 // Stated low-confidence threshold per this step's spec - not a reuse of the
 // unrelated capper-leaderboard RANKING_MIN_SAMPLE constant (a different
 // domain's own judgment call), just this script's own explicit bar.
 const MIN_SAMPLE = 10;
-
-type GradedRow = {
-  id: string;
-  favTeam: string | null;
-  homeTeam: string;
-  awayTeam: string;
-  homeScore: number;
-  awayScore: number;
-  gameDate: Date;
-};
-
-// Answers "did the favorite in THIS specific graded game actually win" -
-// deliberately independent of resolveGameObservations (which excludes the
-// game being evaluated via the asOf boundary, so it can never answer this
-// question about the game itself). Mirrors observations.ts's own favWon
-// derivation exactly: favIsHome/favIsAway guard against a favTeam that
-// doesn't byte-match either side, and a tied-score guard - same two defensive
-// checks, applied here to the one other place a plain boolean can't honestly
-// represent what happened.
-function actualFavWon(row: GradedRow): boolean | null {
-  if (row.favTeam === null) return null;
-  const favIsHome = row.favTeam === row.homeTeam;
-  const favIsAway = row.favTeam === row.awayTeam;
-  if (!favIsHome && !favIsAway) return null;
-  if (row.homeScore === row.awayScore) return null;
-  return favIsHome ? row.homeScore > row.awayScore : row.awayScore > row.homeScore;
-}
 
 async function main() {
   const sportKey = "baseball_mlb";

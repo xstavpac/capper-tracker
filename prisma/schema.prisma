@@ -420,3 +420,78 @@ model GameResult {
   @@unique([sportKey, externalId])
   @@map("game_results")
 }
+
+// Persisted, growing history of model-engine predictions (Build Step 7) -
+// one row per real game, populated incrementally by the cron
+// (decay-delta-predictions.ts) rather than recomputed from scratch on every
+// request the way Build Steps 5/6's own scripts do. modelId is its own
+// field (not implied by a model-specific table) so a second model could
+// reuse this same table later without a migration - scoped to computing
+// only "decay-delta-v1" rows for now, per this step's own stated scope.
+model DecayDeltaPrediction {
+  id      String @id @default(cuid())
+  modelId String @default("decay-delta-v1")
+
+  // Null until the game grades - a pregame row's only identity is the
+  // matchup itself (sportKey/homeTeam/awayTeam/gameDate). When the game
+  // later grades, the existing pregame row is found by team pair + closest
+  // gameDate (same repeat-matchup-safe matching odds.ts's matchScoreToGame
+  // already uses elsewhere - GameResult.gameDate and OddsSnapshot's own
+  // commenceTime come from two different upstream APIs and aren't
+  // guaranteed byte-identical) and updated in place, not duplicated.
+  gameResultId String?
+  sportKey     String
+  homeTeam     String
+  awayTeam     String
+  gameDate     DateTime
+
+  favTeam   String
+  dogTeam   String
+  totalLine Float?
+
+  // favRate/dogRate are the ALREADY-ROUNDED 0-100 percentages
+  // (calc_fav_pct/calc_dog_pct), not the raw 0-1 weighted fractions - same
+  // scale as delta (dv_decay_delta), matching decay-delta.ts's own
+  // round-before-subtract convention. Storing the raw fraction here instead
+  // would put favRate and delta on two different scales within the same row.
+  favRate Float
+  dogRate Float
+  delta   Float
+  bucket  String // bucket_decay_delta's matched ruleId, e.g. "rule_10_to_20"
+
+  // Totals-side fields - Decay Delta has no over/under calculation of its
+  // own, so these stay null for every row this step ever writes. Kept
+  // nullable so a future totals-based model could populate them on this
+  // same table without a migration, per this step's "keep the shape
+  // generic" instruction - not populated or read by anything yet.
+  overRate    Float?
+  underRate   Float?
+  totalDelta  Float?
+  totalBucket String?
+
+  // Both null until the game grades, then set exactly once and never
+  // touched again - same immutability discipline as GameResult elsewhere in
+  // this app (favWon/wentOver are derived at read time there; here they're
+  // stored, since this row's whole purpose is being a permanent graded
+  // record once written).
+  favWon   Boolean?
+  wentOver Boolean?
+
+  computedAt DateTime  @default(now())
+  gradedAt   DateTime?
+
+  // gameResultId, not the (sportKey, homeTeam, awayTeam, gameDate) tuple, is
+  // the real uniqueness key for a graded row - this app's seed data stores
+  // gameDate as a noon-UTC placeholder for the calendar day (confirmed: 9
+  // real same-day doubleheaders in the current baseball_mlb history share an
+  // identical gameDate for two genuinely different GameResult rows), so that
+  // tuple is NOT reliably unique. gameResultId is nullable (pregame rows),
+  // and Postgres unique indexes treat every NULL as distinct from every
+  // other NULL, so this only ever constrains graded rows against each other
+  // - exactly the immutability guarantee this step needs ("never a second
+  // graded row for the same game"). Pregame-row de-duplication is handled at
+  // the application level instead (decay-delta-predictions.ts's own
+  // exact-commenceTime check), not by a DB constraint.
+  @@unique([modelId, gameResultId])
+  @@map("decay_delta_predictions")
+}
