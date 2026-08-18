@@ -23,6 +23,15 @@ const REGULATION_INNINGS = 9;
 // not-yet-started games.
 const MIN_INNINGS_FOR_TREND = 2;
 
+// Below this many completed-or-in-progress games, an upset RATE is too noisy
+// to call "running hot" or "running cold" off of - a single early upset
+// swings a 1- or 2-game sample from 0% to 50%/100%, nowhere near a real
+// signal against the ~43% baseline. Below this, the panel shows a neutral
+// "not enough games yet" state instead of a verdict.
+export const MIN_GAMES_FOR_VERDICT = 3;
+
+export type BoardPulseVerdict = "hot" | "cold" | "insufficient";
+
 export type BoardPulseGame = {
   id: string;
   status: "preview" | "live" | "final";
@@ -38,6 +47,22 @@ export type BoardPulseStats = {
   gameCount: number;
   upsetsSoFar: number;
   expectedUpsets: number;
+  // Games with a decided leader right now (favsLeading + dogsLeading, ties
+  // and not-yet-started games excluded) - the denominator for upsetRate
+  // below, and the population "running hot/cold" is actually judged against.
+  gamesSoFar: number;
+  // upsetsSoFar / gamesSoFar - null when gamesSoFar is 0 (nothing to divide).
+  // This, not upsetsSoFar vs expectedUpsets, is what the panel should compare
+  // against MLB_UNDERDOG_WIN_RATE: a raw running count is almost always well
+  // under a full-day total early on regardless of true pace (most games
+  // simply haven't happened yet), which made the old comparison look
+  // "below average" by default for most of the day no matter how the
+  // completed games actually went. A rate stays meaningful at any point in
+  // the day, including game 1.
+  upsetRate: number | null;
+  // "insufficient" below MIN_GAMES_FOR_VERDICT, regardless of what the raw
+  // rate happens to say - see that constant's comment.
+  verdict: BoardPulseVerdict;
   favsLeading: number;
   dogsLeading: number;
   trendingOver: number;
@@ -102,10 +127,26 @@ export function computeBoardPulse(games: BoardPulseGame[]): BoardPulseStats {
     else if (projected < g.totalLine) trendingUnder++;
   }
 
+  const gamesSoFar = favsLeading + dogsLeading;
+  const upsetRate = gamesSoFar > 0 ? upsetsSoFar / gamesSoFar : null;
+  const verdict: BoardPulseVerdict =
+    gamesSoFar < MIN_GAMES_FOR_VERDICT || upsetRate === null
+      ? "insufficient"
+      : upsetRate > MLB_UNDERDOG_WIN_RATE
+        ? "hot"
+        : "cold";
+
   return {
     gameCount: games.length,
     upsetsSoFar,
+    // Unchanged - still the full day's raw expectation (games.length x the
+    // historical rate). Only the comparison this gets used for changes; the
+    // number itself is a legitimate, separate fact ("here's how many upsets
+    // today should have by the time every game is final").
     expectedUpsets: games.length * MLB_UNDERDOG_WIN_RATE,
+    gamesSoFar,
+    upsetRate,
+    verdict,
     favsLeading,
     dogsLeading,
     trendingOver,
