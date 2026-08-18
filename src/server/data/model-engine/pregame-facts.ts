@@ -6,7 +6,7 @@
 // fetch-if-missing path (which can upsert a new OddsSnapshot row) - this
 // function returns null rather than ever writing anything.
 import { prisma } from "@/lib/prisma";
-import { easternDateKey } from "@/lib/dates";
+import { easternDateKey, sameEasternDay, closestByTime } from "@/lib/dates";
 import type { OddsGame } from "@/server/data/odds";
 
 export type PregameEventFacts = {
@@ -74,8 +74,20 @@ export async function getPregameEventFacts(
   if (!snapshot) return null;
 
   const games = snapshot.data as unknown as OddsGame[];
-  const match = games.find((g) => g.homeTeam === homeTeam && g.awayTeam === awayTeam);
-  if (!match) return null;
+  // games is the day's whole cached snapshot, no longer pre-narrowed to
+  // today/tomorrow by getOddsForSport (it can now span a full week for a
+  // sport like NFL) - matching by team name alone here would risk pulling a
+  // later same-team rematch's line into "today's" pregame facts, so this
+  // scopes to today (the fetchDate this row is keyed on, same reference as
+  // the lookup above) and, if that still leaves more than one candidate,
+  // disambiguates with closestByTime - the same pattern resolveOddsGame uses
+  // in odds.ts. A team pair with no same-day candidate returns null rather
+  // than silently matching a different day's game.
+  const now = new Date();
+  const candidates = games.filter((g) => g.homeTeam === homeTeam && g.awayTeam === awayTeam);
+  const sameDay = candidates.filter((g) => sameEasternDay(new Date(g.commenceTime), now));
+  if (sameDay.length === 0) return null;
+  const match = closestByTime(sameDay, (g) => new Date(g.commenceTime).getTime(), now.getTime());
 
   const h2h = findMarket(match, "h2h");
   const homeOutcome = h2h?.outcomes.find((o) => o.name === match.homeTeam);
