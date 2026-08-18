@@ -16,7 +16,12 @@ export function LegStatusButtons({ legId, status }: { legId: string; status: Pic
   if (current !== "PENDING") {
     const label =
       current === "WIN" ? "Win" : current === "LOSS" ? "Loss" : current === "PUSH" ? "Push" : "Cancelled";
-    const colorClass = current === "WIN" ? "text-emerald-600" : current === "LOSS" ? "text-red-600" : "text-gray-400";
+    const colorClass =
+      current === "WIN"
+        ? "text-emerald-600 dark:text-emerald-400"
+        : current === "LOSS"
+          ? "text-red-600 dark:text-red-400"
+          : "text-muted-foreground";
     return <span className={"text-xs font-medium " + colorClass}>{label}</span>;
   }
 
@@ -34,21 +39,21 @@ export function LegStatusButtons({ legId, status }: { legId: string; status: Pic
       <button
         disabled={updating}
         onClick={() => setStatus("WIN")}
-        className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-600 hover:bg-emerald-100 disabled:opacity-50"
+        className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-400 dark:hover:bg-emerald-500/25 disabled:opacity-50"
       >
         Win
       </button>
       <button
         disabled={updating}
         onClick={() => setStatus("LOSS")}
-        className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+        className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600 hover:bg-red-100 dark:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/25 disabled:opacity-50"
       >
         Loss
       </button>
       <button
         disabled={updating}
         onClick={() => setStatus("PUSH")}
-        className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-500 hover:bg-gray-200 disabled:opacity-50"
+        className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-border disabled:opacity-50"
       >
         Push
       </button>

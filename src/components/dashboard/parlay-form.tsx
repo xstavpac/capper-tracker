@@ -56,8 +56,8 @@ export function ParlayForm({ cappers, sports }: { cappers: Capper[]; sports: Spo
 
   if (cappers.length === 0) {
     return (
-      <div className="rounded-card bg-white p-4 shadow-soft">
-        <p className="text-sm text-gray-600">
+      <div className="rounded-card bg-card p-4 shadow-soft">
+        <p className="text-sm text-muted-foreground">
           Add a capper first before logging a parlay -{" "}
           <a href="/cappers" className="font-medium text-brand-600">
             go to Cappers
@@ -72,7 +72,7 @@ export function ParlayForm({ cappers, sports }: { cappers: Capper[]; sports: Spo
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="rounded-full border border-brand-200 bg-white px-5 py-2.5 text-sm font-medium text-brand-600 shadow-soft transition hover:bg-brand-50"
+        className="rounded-full border border-brand-200 bg-card px-5 py-2.5 text-sm font-medium text-brand-600 shadow-soft transition hover:bg-brand-50 dark:border-brand-800 dark:text-brand-400 dark:hover:bg-brand-500/10"
       >
         + Log a parlay
       </button>
@@ -126,23 +126,23 @@ export function ParlayForm({ cappers, sports }: { cappers: Capper[]; sports: Spo
   }
 
   return (
-    <div className="rounded-card bg-white p-5 shadow-soft">
+    <div className="rounded-card bg-card p-5 shadow-soft">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900">Log a parlay</h3>
-        <button type="button" onClick={() => setIsOpen(false)} className="text-sm text-gray-400 hover:text-gray-600">
+        <h3 className="text-sm font-medium text-foreground">Log a parlay</h3>
+        <button type="button" onClick={() => setIsOpen(false)} className="text-sm text-muted-foreground hover:text-foreground">
           Cancel
         </button>
       </div>
 
-      {error && <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+      {error && <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">{error}</div>}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Capper</label>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">Capper</label>
           <select
             value={capperId}
             onChange={(e) => setCapperId(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
           >
             {cappers.map((c) => (
               <option key={c.id} value={c.id}>
@@ -153,14 +153,14 @@ export function ParlayForm({ cappers, sports }: { cappers: Capper[]; sports: Spo
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Total units (whole parlay)</label>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">Total units (whole parlay)</label>
           <input
             type="number"
             step="0.1"
             min="0.1"
             value={units}
             onChange={(e) => setUnits(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
           />
         </div>
       </div>
@@ -169,14 +169,14 @@ export function ParlayForm({ cappers, sports }: { cappers: Capper[]; sports: Spo
         {legs.map((leg, i) => {
           const selectedSport = sports.find((s) => s.id === leg.sportId);
           return (
-            <div key={i} className="rounded-lg border border-gray-100 p-4">
+            <div key={i} className="rounded-lg border border-border-subtle p-4">
               <div className="mb-3 flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-500">Leg {i + 1}</span>
+                <span className="text-xs font-semibold text-muted-foreground">Leg {i + 1}</span>
                 {legs.length > MIN_LEGS && (
                   <button
                     type="button"
                     onClick={() => removeLeg(i)}
-                    className="text-xs text-red-500 hover:text-red-700"
+                    className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                   >
                     Remove
                   </button>
@@ -185,11 +185,11 @@ export function ParlayForm({ cappers, sports }: { cappers: Capper[]; sports: Spo
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Bet type</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Bet type</label>
                   <select
                     value={leg.betType}
                     onChange={(e) => updateLeg(i, { betType: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
                   >
                     {BET_TYPES.map((b) => (
                       <option key={b.value} value={b.value}>
@@ -200,11 +200,11 @@ export function ParlayForm({ cappers, sports }: { cappers: Capper[]; sports: Spo
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Sport</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Sport</label>
                   <select
                     value={leg.sportId}
                     onChange={(e) => updateLeg(i, { sportId: e.target.value, leagueId: "" })}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
                   >
                     {sports.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -215,66 +215,66 @@ export function ParlayForm({ cappers, sports }: { cappers: Capper[]; sports: Spo
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Away team</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Away team</label>
                   <input
                     value={leg.awayTeam}
                     onChange={(e) => updateLeg(i, { awayTeam: e.target.value })}
                     placeholder="e.g. Warriors"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Home team</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Home team</label>
                   <input
                     value={leg.homeTeam}
                     onChange={(e) => updateLeg(i, { homeTeam: e.target.value })}
                     placeholder="e.g. Lakers"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
                   />
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Pick detail</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Pick detail</label>
                   <input
                     value={leg.betDetail}
                     onChange={(e) => updateLeg(i, { betDetail: e.target.value })}
                     placeholder="e.g. Lakers -4.5"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Odds (this leg)</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Odds (this leg)</label>
                   <input
                     type="number"
                     value={leg.odds}
                     onChange={(e) => updateLeg(i, { odds: e.target.value })}
                     placeholder="-110"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
                   />
                 </div>
 
                 {(leg.betType === "SPREAD" || leg.betType === "TOTAL") && (
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-600">Line</label>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Line</label>
                     <input
                       type="number"
                       step="0.5"
                       value={leg.line}
                       onChange={(e) => updateLeg(i, { line: e.target.value })}
                       placeholder={leg.betType === "SPREAD" ? "-4.5" : "224.5"}
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                      className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
                     />
                   </div>
                 )}
 
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Period</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Period</label>
                   <select
                     value={leg.period}
                     onChange={(e) => updateLeg(i, { period: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
                   >
                     <option value="FULL_GAME">Full game</option>
                     <option value="FIRST_HALF">First half / F5</option>
@@ -282,22 +282,22 @@ export function ParlayForm({ cappers, sports }: { cappers: Capper[]; sports: Spo
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Game time</label>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Game time</label>
                   <input
                     type="datetime-local"
                     value={leg.gameTime}
                     onChange={(e) => updateLeg(i, { gameTime: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
                   />
                 </div>
 
                 {selectedSport && selectedSport.leagues.length > 0 && (
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-gray-600">League (optional)</label>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">League (optional)</label>
                     <select
                       value={leg.leagueId}
                       onChange={(e) => updateLeg(i, { leagueId: e.target.value })}
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                      className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-brand-400 focus:outline-none"
                     >
                       <option value="">None</option>
                       {selectedSport.leagues.map((l) => (
@@ -317,7 +317,7 @@ export function ParlayForm({ cappers, sports }: { cappers: Capper[]; sports: Spo
       <button
         type="button"
         onClick={addLeg}
-        className="mt-3 rounded-full border border-gray-200 px-4 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+        className="mt-3 rounded-full border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
       >
         + Add leg
       </button>

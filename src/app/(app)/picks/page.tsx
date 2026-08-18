@@ -240,33 +240,33 @@ export default async function PicksPage({
             {parlays.map((parlay) => {
               const statusColor =
                 parlay.status === "WIN"
-                  ? "text-emerald-600"
+                  ? "text-emerald-600 dark:text-emerald-400"
                   : parlay.status === "LOSS"
-                    ? "text-red-600"
+                    ? "text-red-600 dark:text-red-400"
                     : parlay.status === "PENDING"
-                      ? "text-amber-600"
-                      : "text-gray-400";
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-muted-foreground";
               return (
-                <div key={parlay.id} className="rounded-card bg-white shadow-soft">
-                  <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+                <div key={parlay.id} className="rounded-card bg-card shadow-soft">
+                  <div className="flex items-center justify-between border-b border-border-subtle px-5 py-3">
                     <div className="text-sm font-medium">
                       {parlay.capper.name} - {parlay.legs.length}-leg parlay - {parlay.units}u
                     </div>
                     <span className={"text-sm font-medium " + statusColor}>{parlay.status}</span>
                   </div>
-                  <div className="divide-y divide-gray-50">
+                  <div className="divide-y divide-border-subtle">
                     {parlay.legs.map((leg) => (
                       <div key={leg.id} className="flex items-center justify-between px-5 py-2.5">
                         <div>
-                          <div className="text-xs font-medium text-gray-700">
+                          <div className="text-xs font-medium text-foreground">
                             {leg.awayTeam} @ {leg.homeTeam}
                             {leg.period === "FIRST_HALF" && (
-                              <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600">
+                              <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:bg-purple-500/15 dark:text-purple-400">
                                 F5
                               </span>
                             )}
                           </div>
-                          <div className="mt-0.5 text-[11px] text-gray-400">
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">
                             {leg.betDetail || leg.betType} - {leg.odds > 0 ? "+" : ""}
                             {leg.odds}
                           </div>

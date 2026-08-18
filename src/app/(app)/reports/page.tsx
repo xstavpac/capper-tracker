@@ -58,27 +58,27 @@ function ParlayCard({ overall, totalParlays }: { overall: ParlayOverallStats; to
   const decided = overall.wins + overall.losses + overall.pushes;
   if (totalParlays === 0) {
     return (
-      <div className="rounded-card bg-white p-5 shadow-soft">
-        <div className="mb-2 text-sm font-medium text-gray-700">Parlay record</div>
-        <p className="py-4 text-center text-sm text-gray-400">No parlays logged yet.</p>
+      <div className="rounded-card bg-card p-5 shadow-soft">
+        <div className="mb-2 text-sm font-medium text-muted-foreground">Parlay record</div>
+        <p className="py-4 text-center text-sm text-muted-foreground">No parlays logged yet.</p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-card bg-white p-5 shadow-soft">
-      <div className="mb-2 text-sm font-medium text-gray-700">Parlay record</div>
+    <div className="rounded-card bg-card p-5 shadow-soft">
+      <div className="mb-2 text-sm font-medium text-muted-foreground">Parlay record</div>
       <div className="flex items-baseline justify-between">
         <div className="text-lg font-semibold">
           {overall.wins}-{overall.losses}
           {overall.pushes > 0 ? "-" + overall.pushes : ""}
         </div>
-        <div className={"text-sm font-medium " + (overall.roi >= 0 ? "text-emerald-600" : "text-red-600")}>
+        <div className={"text-sm font-medium " + (overall.roi >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
           {overall.roi >= 0 ? "+" : ""}
           {overall.roi}% ROI
         </div>
       </div>
-      <div className="mt-1 text-xs text-gray-400">
+      <div className="mt-1 text-xs text-muted-foreground">
         {decided} decided{" "}
         {overall.netUnits !== 0 && (
           <>
