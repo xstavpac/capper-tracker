@@ -3,7 +3,6 @@ import { getOddsForSport, getLiveScoresForSport, LIVE_SPORTS } from "@/server/da
 import { getPicksForGames } from "@/server/data/picks";
 import { pickCategory, betTypeLabel, chipSetForLeague, DEFAULT_CHIP_SET } from "@/server/data/stats";
 import { getSportCategoryPanelData } from "@/server/data/cappers";
-import { sameEasternDay } from "@/lib/dates";
 import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
 import { type ExpanderPick } from "@/components/live/game-picks-expander";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
@@ -44,18 +43,16 @@ export default async function LivePage({
   const sportCategoryBreakdown = sportCategoryPanel?.breakdown ?? [];
   const sportCategoryLeaderboards = sportCategoryPanel?.leaderboards ?? {};
 
-  // Restricts to today's Eastern calendar day only. sameEasternDay compares
-  // calendar dates, not time-of-day, so a not-yet-started later-today game
-  // still passes. A prior `|| gameDate > now` clause here let ANY future
-  // day's games through too (NFL odds are posted for the whole week at
-  // once), so this page's game list wasn't actually scoped to today - same
-  // root cause fixed in getLiveTickerGames (live-ticker.ts), which reuses
-  // this exact filter.
-  const now = new Date();
-  const odds = allOdds.filter((game) => {
-    const gameDate = new Date(game.commenceTime);
-    return sameEasternDay(gameDate, now);
-  });
+  // This is the odds BOARD, not the ticker - it's meant to show the full
+  // window the Odds API has actually posted lines for (a full week at once
+  // for NFL), not just today. A same-day filter briefly lived here (copied
+  // from getLiveTickerGames' "what's happening today" ticker filter, which
+  // is a genuinely different, narrower purpose - see live-ticker.ts), but it
+  // pruned this page's own game list down to nothing on any day the active
+  // sport had no game today, which for NFL/WNBA is most days. getOddsForSport
+  // already excludes started games and gates by season, so allOdds here is
+  // already the right board contents with no extra filtering needed.
+  const odds = allOdds;
 
   // Only ever used to pick which empty-state message to show, never on its
   // own - getOddsForSport can return real cached odds for today even when
