@@ -1,8 +1,8 @@
 import { getRecordColor, type ScorecardBucket } from "@/server/data/stats";
 
 const COLOR_CLASSES: Record<ReturnType<typeof getRecordColor>, string> = {
-  green: "bg-emerald-50 text-emerald-600",
-  red: "bg-red-50 text-red-600",
+  green: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400",
+  red: "bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-400",
 };
 
 export function CapperScorecard({
@@ -32,9 +32,9 @@ export function CapperScorecard({
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
       {buckets.map((b) => (
-        <div key={b.key} className="rounded-card bg-white p-3 shadow-soft">
-          <div className="text-xs text-gray-500">{b.label}</div>
-          <div className="mt-1 text-sm font-medium text-gray-900">
+        <div key={b.key} className="rounded-card bg-card p-3 shadow-soft">
+          <div className="text-xs text-muted-foreground">{b.label}</div>
+          <div className="mt-1 text-sm font-medium text-foreground">
             {b.wins}-{b.losses}-{b.pushes}
           </div>
           <span

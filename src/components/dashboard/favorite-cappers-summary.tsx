@@ -8,7 +8,7 @@ import { Avatar, StreakBadge } from "@/components/dashboard/capper-panels";
 function windowChipClass(isActive: boolean) {
   return (
     "rounded-full px-3 py-1.5 text-sm font-medium " +
-    (isActive ? "bg-brand-600 text-white" : "bg-white text-gray-600 shadow-soft hover:bg-gray-50")
+    (isActive ? "bg-brand-600 text-white" : "bg-card text-muted-foreground shadow-soft hover:bg-muted")
   );
 }
 
@@ -18,10 +18,15 @@ function windowChipClass(isActive: boolean) {
 // (p-3/text-xl) to read as a secondary summary, not the main stat block on
 // the page.
 function SummaryStat({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
-  const toneClass = tone === "up" ? "text-emerald-600" : tone === "down" ? "text-red-600" : "text-gray-900";
+  const toneClass =
+    tone === "up"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : tone === "down"
+        ? "text-red-600 dark:text-red-400"
+        : "text-foreground";
   return (
-    <div className="rounded-card bg-white p-3 shadow-soft">
-      <div className="text-xs text-gray-500">{label}</div>
+    <div className="rounded-card bg-card p-3 shadow-soft">
+      <div className="text-xs text-muted-foreground">{label}</div>
       <div className={"mt-0.5 text-xl font-semibold " + toneClass}>{value}</div>
     </div>
   );
@@ -41,9 +46,9 @@ export function FavoriteCappersSummary({
   const { collectiveStats, entries } = summary;
 
   return (
-    <div className="mb-6 rounded-card bg-white p-5 shadow-soft">
+    <div className="mb-6 rounded-card bg-card p-5 shadow-soft">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-base font-semibold text-gray-900">
+        <div className="flex items-center gap-1.5 text-base font-semibold text-foreground">
           <span className="text-amber-400" aria-hidden="true">
             &#9733;
           </span>
@@ -86,23 +91,23 @@ export function FavoriteCappersSummary({
             <a
               key={entry.capperId}
               href={"/cappers/" + entry.capperId}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-gray-50"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-muted"
             >
               <div className="flex min-w-0 items-center gap-2">
                 <Avatar name={entry.name} colorTag={entry.colorTag} size={26} />
-                <span className="truncate text-sm font-medium text-gray-900">{entry.name}</span>
+                <span className="truncate text-sm font-medium text-foreground">{entry.name}</span>
                 <StreakBadge streak={entry.stats.currentStreak} compact />
               </div>
               <div className="flex shrink-0 items-center gap-3 text-sm">
-                <span className="text-gray-700">
+                <span className="text-muted-foreground">
                   {entry.stats.wins}-{entry.stats.losses}
                   {entry.stats.pushes > 0 ? "-" + entry.stats.pushes : ""}
                 </span>
-                <span className={"font-medium " + (color === "green" ? "text-emerald-600" : "text-red-600")}>
+                <span className={"font-medium " + (color === "green" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
                   {entry.stats.roi >= 0 ? "+" : ""}
                   {entry.stats.roi}%
                 </span>
-                <span className={"font-medium " + (entry.stats.netUnits >= 0 ? "text-emerald-600" : "text-red-600")}>
+                <span className={"font-medium " + (entry.stats.netUnits >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
                   {entry.stats.netUnits >= 0 ? "+" : ""}
                   {entry.stats.netUnits}u
                 </span>

@@ -15,12 +15,12 @@ export type CategoryLeaderboardEntry = {
 };
 
 const CARD_CLASSES: Record<ReturnType<typeof getRecordColor>, string> = {
-  green: "bg-emerald-100",
-  red: "bg-red-100",
+  green: "bg-emerald-100 dark:bg-emerald-500/20",
+  red: "bg-red-100 dark:bg-red-500/20",
 };
 const TEXT_CLASSES: Record<ReturnType<typeof getRecordColor>, string> = {
-  green: "text-emerald-700",
-  red: "text-red-700",
+  green: "text-emerald-700 dark:text-emerald-300",
+  red: "text-red-700 dark:text-red-300",
 };
 // EnergySurge's tone drives its flash/ring color, not this panel's own
 // green/red tint - mapped from the same getRecordColor result rather than
@@ -98,14 +98,14 @@ export function CategoryBreakdown({
               className={
                 "rounded-card p-3 " +
                 CARD_CLASSES[color] +
-                (isActive ? " ring-2 ring-blue-400" : "") +
+                (isActive ? " ring-2 ring-blue-400 dark:ring-blue-300" : "") +
                 (clickable ? " cursor-pointer select-none transition hover:opacity-90" : "")
               }
             >
               <div className={"text-xs " + TEXT_CLASSES[color]}>{item.label}</div>
               {animateIn ? (
                 <>
-                  <div className="mt-1 text-sm font-medium text-gray-900">
+                  <div className="mt-1 text-sm font-medium text-foreground">
                     <EnergyRecordCountUp
                       wins={item.wins}
                       losses={item.losses}
@@ -119,7 +119,7 @@ export function CategoryBreakdown({
                 </>
               ) : (
                 <>
-                  <div className="mt-1 text-sm font-medium text-gray-900">
+                  <div className="mt-1 text-sm font-medium text-foreground">
                     {item.wins}-{item.losses}
                     {item.pushes > 0 ? "-" + item.pushes : ""}
                   </div>
@@ -134,17 +134,17 @@ export function CategoryBreakdown({
       </div>
 
       {activeItem && (
-        <div className="mt-3 rounded-card bg-white p-4 shadow-soft">
-          <div className="mb-2 text-sm font-medium text-gray-700">Top cappers - {activeItem.label}</div>
+        <div className="mt-3 rounded-card bg-card p-4 shadow-soft">
+          <div className="mb-2 text-sm font-medium text-muted-foreground">Top cappers - {activeItem.label}</div>
           {activeLeaderboard.length === 0 ? (
-            <p className="py-4 text-center text-sm text-gray-400">Not enough picks in this category yet.</p>
+            <p className="py-4 text-center text-sm text-muted-foreground">Not enough picks in this category yet.</p>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-border-subtle">
               {activeLeaderboard.map((entry) => {
                 const color = getRecordColor(entry.winPct);
                 return (
                   <div key={entry.capperId} className="flex items-center justify-between py-2 text-sm">
-                    <Link href={"/cappers/" + entry.capperId} className="font-medium text-gray-900 hover:underline">
+                    <Link href={"/cappers/" + entry.capperId} className="font-medium text-foreground hover:underline">
                       {entry.name}
                     </Link>
                     <span className={TEXT_CLASSES[color]}>

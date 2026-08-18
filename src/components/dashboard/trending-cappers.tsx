@@ -93,7 +93,7 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
   return (
     <div className="mb-6">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-900">Trending cappers</h2>
+        <h2 className="text-sm font-semibold text-foreground">Trending cappers</h2>
         <a href="/cappers" className="text-xs font-medium text-brand-600 hover:text-brand-700">
           See all &rarr;
         </a>
@@ -109,7 +109,7 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
                   name={e.name}
                   colorTag={e.colorTag}
                   icon={<TrendIcon direction="up" />}
-                  right={<span className="text-emerald-600">{e.streakCount}W</span>}
+                  right={<span className="text-emerald-600 dark:text-emerald-400">{e.streakCount}W</span>}
                 />
               ))}
             </ExpandableRows>
@@ -126,7 +126,7 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
                   name={e.name}
                   colorTag={e.colorTag}
                   icon={<TrendIcon direction="down" />}
-                  right={<span className="text-red-600">{e.streakCount}L</span>}
+                  right={<span className="text-red-600 dark:text-red-400">{e.streakCount}L</span>}
                 />
               ))}
             </ExpandableRows>
@@ -182,7 +182,7 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
                   colorTag={e.colorTag}
                   icon={<TrendIcon direction="up" />}
                   right={
-                    <span className="text-emerald-600">
+                    <span className="text-emerald-600 dark:text-emerald-400">
                       {Math.round(e.previousWinPct)}% &rarr; {Math.round(e.recentWinPct)}%
                     </span>
                   }
@@ -203,7 +203,7 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
                   colorTag={e.colorTag}
                   icon={<TrendIcon direction="down" />}
                   right={
-                    <span className="text-red-600">
+                    <span className="text-red-600 dark:text-red-400">
                       {Math.round(e.lifetimeWinPct)}% &rarr; {Math.round(e.recentWinPct)}%
                     </span>
                   }
