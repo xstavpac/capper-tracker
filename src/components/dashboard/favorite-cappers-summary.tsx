@@ -91,14 +91,14 @@ export function FavoriteCappersSummary({
             <a
               key={entry.capperId}
               href={"/cappers/" + entry.capperId}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-muted"
+              className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 hover:bg-muted"
             >
               <div className="flex min-w-0 items-center gap-2">
                 <Avatar name={entry.name} colorTag={entry.colorTag} size={26} />
                 <span className="truncate text-sm font-medium text-foreground">{entry.name}</span>
                 <StreakBadge streak={entry.stats.currentStreak} compact />
               </div>
-              <div className="flex shrink-0 items-center gap-3 text-sm">
+              <div className="flex shrink-0 items-center gap-3 whitespace-nowrap text-sm">
                 <span className="text-muted-foreground">
                   {entry.stats.wins}-{entry.stats.losses}
                   {entry.stats.pushes > 0 ? "-" + entry.stats.pushes : ""}
