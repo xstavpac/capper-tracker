@@ -221,7 +221,11 @@ function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => 
 function LogoMark() {
   return (
     // eslint-disable-next-line @next/next/no-img-element -- fixed local asset, not worth next/image's overhead at this size
-    <img src="/logo-mark.png" alt="Bettingview" className="h-16 w-auto shrink-0" />
+    // The PNG is navy-on-transparent, designed for a light sidebar - flattened to
+    // solid white for dark mode (brightness-0 then invert) rather than preserving
+    // its two-tone navy/blue coloring, which a straight invert would shift toward
+    // orange instead of keeping recognizably "blue".
+    <img src="/logo-mark.png" alt="Bettingview" className="h-16 w-auto shrink-0 dark:brightness-0 dark:invert" />
   );
 }
 
