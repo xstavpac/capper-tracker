@@ -16,7 +16,7 @@ function HeroStat({ label, value, href }: { label: string; value: ReactNode; hre
   const content = (
     <>
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-lg font-semibold">{value}</div>
+      <div className="mt-0.5 whitespace-nowrap text-lg font-semibold">{value}</div>
     </>
   );
   if (href) {

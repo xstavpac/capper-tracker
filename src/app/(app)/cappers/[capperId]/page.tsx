@@ -42,7 +42,7 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
   return (
     <div className="rounded-card bg-card p-4 shadow-soft">
       <div className="text-sm text-muted-foreground">{label}</div>
-      <div className={"mt-1 text-2xl font-semibold " + toneClass}>{value}</div>
+      <div className={"mt-1 whitespace-nowrap text-2xl font-semibold " + toneClass}>{value}</div>
     </div>
   );
 }

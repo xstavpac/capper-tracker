@@ -27,7 +27,7 @@ function SummaryStat({ label, value, tone }: { label: string; value: string; ton
   return (
     <div className="rounded-card bg-card p-3 shadow-soft">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={"mt-0.5 text-xl font-semibold " + toneClass}>{value}</div>
+      <div className={"mt-0.5 whitespace-nowrap text-xl font-semibold " + toneClass}>{value}</div>
     </div>
   );
 }
@@ -70,7 +70,7 @@ export function FavoriteCappersSummary({
           coherent meaning pooled across multiple independent cappers'
           interleaved results. Each capper's own real streak is still shown
           per-row below instead. */}
-      <div className="mb-4 grid grid-cols-3 gap-3">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <SummaryStat label="Record" value={collectiveStats.wins + "-" + collectiveStats.losses + "-" + collectiveStats.pushes} />
         <SummaryStat
           label="ROI"
