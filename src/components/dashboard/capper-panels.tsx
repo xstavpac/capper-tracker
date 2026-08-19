@@ -21,6 +21,24 @@ export function Avatar({
   );
 }
 
+// Same star glyph as the Cappers leaderboard's favorite toggle
+// (cappers-leaderboard-table.tsx's filled StarIcon state) - display-only
+// here (no click/toggle affordance), so it doesn't need that component's
+// optimistic-update state machine, just the matching visual.
+export function FavoriteStarIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="h-3 w-3 shrink-0 text-amber-400"
+      fill="currentColor"
+      role="img"
+      aria-label="Favorited"
+    >
+      <path d="M12 2.5l2.9 6.3 6.9.7-5.2 4.7 1.6 6.8L12 17.6l-6.2 3.4 1.6-6.8-5.2-4.7 6.9-.7z" />
+    </svg>
+  );
+}
+
 export function PanelRow({
   capperId,
   name,

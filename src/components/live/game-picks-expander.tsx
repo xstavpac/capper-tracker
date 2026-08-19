@@ -4,13 +4,14 @@ import { useState } from "react";
 import type { PickStatus } from "@prisma/client";
 import { getCategoryRecordsAction } from "@/server/actions/picks";
 import { getRecordColor, type CategoryBreakdownItem, type PickCategoryKey } from "@/server/data/stats";
-import { Avatar } from "@/components/dashboard/capper-panels";
+import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
 
 export type ExpanderPick = {
   pickId: string;
   capperId: string;
   capperName: string;
   capperColorTag: string | null;
+  capperIsFavorite: boolean;
   category: PickCategoryKey | null;
   betDetail: string;
   odds: number;
@@ -150,6 +151,7 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
           <div className="flex min-w-0 items-center gap-1.5">
             <Avatar name={p.capperName} colorTag={p.capperColorTag} size={17} />
             <span className="truncate text-[12px] font-medium text-foreground">{p.capperName}</span>
+            {p.capperIsFavorite && <FavoriteStarIcon />}
             {isTopPerformer && record && (
               <span className="shrink-0 rounded-full bg-emerald-100 px-1 py-0 text-[9px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
                 {Math.round(record.winPct)}%
