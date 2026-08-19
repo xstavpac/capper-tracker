@@ -152,7 +152,7 @@ export async function gradeAllPendingLegs(
 
         const outcome =
           leg.betType === "PLAYER_PROP"
-            ? await gradeTouchdownProp(leg, result.game.externalId)
+            ? await gradeTouchdownProp(leg, result.game.externalId, sportName)
             : resolveOutcome(leg, result.game);
         if (!outcome) return { matched: false, parlayBetId: leg.parlayBetId };
 
@@ -206,7 +206,7 @@ export async function regradeAllFuzzyMatchedLegs(
 
         const outcome =
           leg.betType === "PLAYER_PROP"
-            ? await gradeTouchdownProp(leg, result.game.externalId)
+            ? await gradeTouchdownProp(leg, result.game.externalId, sportName)
             : resolveOutcome(leg, result.game);
         if (!outcome) return;
 

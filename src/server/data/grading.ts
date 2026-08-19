@@ -400,8 +400,20 @@ export type TouchdownPropResolution =
 // neither re-implements the parsing/matching steps.
 export async function resolveTouchdownProp(
   pick: { betDetail: string | null; homeTeam: string; awayTeam: string },
-  eventId: string
+  eventId: string,
+  sportName: string
 ): Promise<TouchdownPropResolution> {
+  // getNflPlayerTdStats below fetches ESPN's football/nfl box-score endpoint
+  // specifically - there's no per-sport dispatch here the way getEspnScores
+  // has for live scores, so calling it with an eventId sourced from any other
+  // sport's GameResult would hit the wrong endpoint entirely (NFL summary
+  // data for a numeric ID that actually identifies some other sport's game).
+  // Gated here, first, before any of the NFL-specific team-nickname stripping
+  // below even runs - the whole rest of this function assumes NFL.
+  if (sportName !== "NFL") {
+    return { outcome: null, reason: "touchdown-prop grading isn't available for " + sportName + " yet" };
+  }
+
   const parsed = pick.betDetail ? parseTouchdownProp(pick.betDetail) : null;
   if (!parsed) {
     return { outcome: null, reason: "this bet text isn't a recognized touchdown prop" };
@@ -453,9 +465,10 @@ export async function resolveTouchdownProp(
 
 export async function gradeTouchdownProp(
   pick: { betDetail: string | null; homeTeam: string; awayTeam: string },
-  eventId: string
+  eventId: string,
+  sportName: string
 ): Promise<GradeOutcome> {
-  return (await resolveTouchdownProp(pick, eventId)).outcome;
+  return (await resolveTouchdownProp(pick, eventId, sportName)).outcome;
 }
 
 export async function gradePendingPicks(
@@ -482,7 +495,7 @@ export async function gradePendingPicks(
 
     const outcome =
       pick.betType === "PLAYER_PROP"
-        ? await gradeTouchdownProp(pick, result.game.externalId)
+        ? await gradeTouchdownProp(pick, result.game.externalId, sportName)
         : resolveOutcome(pick, result.game);
     if (!outcome) {
       notMatched++;
@@ -524,7 +537,7 @@ export async function regradeFuzzyMatchedPicks(
 
     const outcome =
       pick.betType === "PLAYER_PROP"
-        ? await gradeTouchdownProp(pick, result.game.externalId)
+        ? await gradeTouchdownProp(pick, result.game.externalId, sportName)
         : resolveOutcome(pick, result.game);
     if (!outcome) continue;
 
@@ -598,7 +611,7 @@ export async function gradeAllPendingPicks(
 
         const outcome =
           pick.betType === "PLAYER_PROP"
-            ? await gradeTouchdownProp(pick, result.game.externalId)
+            ? await gradeTouchdownProp(pick, result.game.externalId, sportName)
             : resolveOutcome(pick, result.game);
         if (!outcome) return false;
 
@@ -649,7 +662,7 @@ export async function regradeAllFuzzyMatchedPicks(
 
         const outcome =
           pick.betType === "PLAYER_PROP"
-            ? await gradeTouchdownProp(pick, result.game.externalId)
+            ? await gradeTouchdownProp(pick, result.game.externalId, sportName)
             : resolveOutcome(pick, result.game);
         if (!outcome) return;
 

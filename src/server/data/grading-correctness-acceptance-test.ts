@@ -1,14 +1,22 @@
-// Structural-validation proof for gradePick's same-mascot guard - run with
-// `npx tsx src/server/data/grading-correctness-acceptance-test.ts`. Not a
-// general test suite (this repo has no test runner configured yet, see
-// parlay-grading-acceptance-test.ts for the same pattern); a standalone,
-// runnable proof that a same-mascot NCAAF matchup (e.g. Clemson Tigers @
-// LSU Tigers) can never silently mis-grade off whichever of pickedHome/
-// pickedAway happens to be checked first, while every other combination
-// (different mascots, a same-mascot tie, a same-mascot TOTAL pick) keeps
-// grading exactly as it did before the guard. Exits non-zero if any
-// assertion fails.
-import { gradePick } from "./grading";
+// Structural-validation proof for two NCAAF grading-correctness fixes - run
+// with `npx tsx src/server/data/grading-correctness-acceptance-test.ts`. Not
+// a general test suite (this repo has no test runner configured yet, see
+// parlay-grading-acceptance-test.ts for the same pattern).
+//
+// Part 1: gradePick's same-mascot guard - a same-mascot NCAAF matchup (e.g.
+// Clemson Tigers @ LSU Tigers) can never silently mis-grade off whichever of
+// pickedHome/pickedAway happens to be checked first, while every other
+// combination (different mascots, a same-mascot tie, a same-mascot TOTAL
+// pick) keeps grading exactly as it did before the guard.
+//
+// Part 2: resolveTouchdownProp's sport guard - touchdown-prop grading is
+// hardcoded to ESPN's NFL box-score endpoint, so a non-NFL sportName must be
+// rejected before any of that NFL-specific logic runs, while NFL itself is
+// provably unaffected (still reaches its own pre-existing "not a recognized
+// touchdown prop" check, not blocked by the new guard).
+//
+// Exits non-zero if any assertion fails.
+import { gradePick, resolveTouchdownProp } from "./grading";
 
 let failures = 0;
 
@@ -68,5 +76,44 @@ expect(
   "WIN"
 );
 
-console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
-if (failures > 0) process.exit(1);
+async function expectAsync<T>(label: string, actual: Promise<T>, expected: T) {
+  const resolved = await actual;
+  const pass = JSON.stringify(resolved) === JSON.stringify(expected);
+  console.log(`${pass ? "PASS" : "FAIL"}: ${label} - expected=${JSON.stringify(expected)} actual=${JSON.stringify(resolved)}`);
+  if (!pass) failures++;
+}
+
+async function main() {
+  // ---- TD-prop sport guard: rejected before any NFL-specific logic runs,
+  // for any sport that isn't NFL. Uses an obviously-fake eventId - if the
+  // guard didn't fire first, this would attempt a real network fetch and the
+  // test would hang/fail on that instead, which is itself proof the guard is
+  // doing its job.
+  await expectAsync(
+    "NCAAF touchdown prop: rejected by the sport guard, not silently graded against NFL's box score",
+    resolveTouchdownProp(
+      { betDetail: "Ryan Williams Anytime TD", homeTeam: "Alabama Crimson Tide", awayTeam: "Texas Longhorns" },
+      "fake-event-id",
+      "NCAAF"
+    ),
+    { outcome: null, reason: "touchdown-prop grading isn't available for NCAAF yet" }
+  );
+
+  // ---- Regression: NFL is unaffected - it must still reach its own
+  // pre-existing "not a recognized touchdown prop" check, proving the new
+  // guard only blocks non-NFL sports, not NFL itself.
+  await expectAsync(
+    "NFL non-TD-prop text: reaches the existing parseTouchdownProp check unblocked, not the new sport guard",
+    resolveTouchdownProp(
+      { betDetail: "Chiefs ML", homeTeam: "Kansas City Chiefs", awayTeam: "Denver Broncos" },
+      "fake-event-id",
+      "NFL"
+    ),
+    { outcome: null, reason: "this bet text isn't a recognized touchdown prop" }
+  );
+
+  console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
+  if (failures > 0) process.exit(1);
+}
+
+main();
