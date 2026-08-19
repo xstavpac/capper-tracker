@@ -1,6 +1,7 @@
 ﻿import { notFound } from "next/navigation";
 import { requireUser } from "@/server/auth";
-import { getCapperById } from "@/server/data/cappers";
+import { getCapperById, getCappersWithPickCounts } from "@/server/data/cappers";
+import { CapperEditPanel } from "@/components/dashboard/capper-edit-panel";
 import { getPicksForCapper } from "@/server/data/picks";
 import {
   computeStats,
@@ -76,7 +77,11 @@ export default async function CapperDetailPage({
     ? (searchParams.window as ScorecardWindow)
     : "ALL";
 
-  const picks = await getPicksForCapper(user.id, params.capperId);
+  const [picks, allCappers] = await Promise.all([
+    getPicksForCapper(user.id, params.capperId),
+    getCappersWithPickCounts(user.id),
+  ]);
+  const otherCappers = allCappers.filter((c) => c.id !== capper.id);
   // Record/ROI/Net units should reflect whichever window is selected, same as
   // the scorecard below - but currentStreak deliberately always comes from
   // the unfiltered, all-time computeStats call instead: a streak is a count
@@ -118,22 +123,30 @@ export default async function CapperDetailPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-6 flex items-center gap-3">
-        <div
-          className="flex h-12 w-12 items-center justify-center rounded-full text-base font-medium text-white"
-          style={{ backgroundColor: capper.colorTag ?? "#3B82F6" }}
-        >
-          {capper.name.slice(0, 2).toUpperCase()}
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-12 w-12 items-center justify-center rounded-full text-base font-medium text-white"
+            style={{ backgroundColor: capper.colorTag ?? "#3B82F6" }}
+          >
+            {capper.name.slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold">{capper.name}</h1>
+            <p className="text-sm text-muted-foreground">
+              {capper.source === "OTHER" && capper.customSource
+                ? capper.customSource
+                : SOURCE_LABELS[capper.source]}
+              {capper.sportSpecialization ? " - " + capper.sportSpecialization : ""}
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-semibold">{capper.name}</h1>
-          <p className="text-sm text-muted-foreground">
-            {capper.source === "OTHER" && capper.customSource
-              ? capper.customSource
-              : SOURCE_LABELS[capper.source]}
-            {capper.sportSpecialization ? " - " + capper.sportSpecialization : ""}
-          </p>
-        </div>
+        <CapperEditPanel
+          capperId={capper.id}
+          currentName={capper.name}
+          otherCappers={otherCappers}
+          associatedPickCount={picks.length}
+        />
       </div>
 
       {trackedSinceMs !== null && lastPickMs !== null && (

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/server/auth";
-import { createCapper, mergeCappers, dismissDuplicatePair, toggleFavoriteCapper } from "@/server/data/cappers";
+import { createCapper, mergeCappers, renameCapper, deleteCapper, dismissDuplicatePair, toggleFavoriteCapper } from "@/server/data/cappers";
 import type { Source } from "@prisma/client";
 
 export type CreateCapperResult =
@@ -61,6 +61,52 @@ export async function mergeCappersAction(primaryId: string, duplicateId: string)
     const result = await mergeCappers(user.id, primaryId, duplicateId);
     revalidatePath("/cappers");
     revalidatePath("/cappers/[capperId]", "page");
+    revalidatePath("/dashboard");
+    revalidatePath("/reports");
+    return { success: true, ...result };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Something went wrong.";
+    return { success: false, error: message };
+  }
+}
+
+export type RenameCapperResult = { success: true } | { success: false; error: string };
+
+// Plain rename only - never infers a merge from a name collision with
+// another of the user's cappers. Merge is always a separate, explicit
+// action (mergeCappersAction) the user opts into from the profile page's
+// "Merge into existing capper" picker, not something this action decides on
+// their behalf based on what they typed.
+export async function renameCapperAction(capperId: string, name: string): Promise<RenameCapperResult> {
+  const user = await requireUser();
+
+  try {
+    await renameCapper(user.id, capperId, name);
+    revalidatePath("/cappers");
+    revalidatePath("/cappers/[capperId]", "page");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Something went wrong.";
+    return { success: false, error: message };
+  }
+
+  return { success: true };
+}
+
+export type DeleteCapperResult =
+  | { success: true; deletedPickCount: number }
+  | { success: false; error: string };
+
+// Permanently removes the capper and (via schema cascade) every pick/parlay
+// leg tied to it - meant for junk/parser-misfire records with no real track
+// record worth keeping, not a soft-delete. The caller (the profile page's
+// confirmation dialog) is responsible for showing the pick count and getting
+// an explicit confirm before this is ever called.
+export async function deleteCapperAction(capperId: string): Promise<DeleteCapperResult> {
+  const user = await requireUser();
+
+  try {
+    const result = await deleteCapper(user.id, capperId);
+    revalidatePath("/cappers");
     revalidatePath("/dashboard");
     revalidatePath("/reports");
     return { success: true, ...result };

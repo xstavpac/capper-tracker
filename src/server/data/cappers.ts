@@ -455,3 +455,42 @@ export async function mergeCappers(userId: string, primaryId: string, duplicateI
 
   return { mergedPickCount: count, primaryName: primary.name, duplicateName: duplicate.name };
 }
+
+// Plain rename, no merge semantics - updateMany (not update) so the where
+// clause can carry both id and userId in one query rather than a separate
+// ownership check, letting a user rename their own capper to literally
+// anything, including a name that happens to collide with another of their
+// cappers, without that collision ever being treated as a merge signal. The
+// UI is what decides merge vs. rename (an explicit, separate action the user
+// picks), never this function inferring intent from the name string.
+export async function renameCapper(userId: string, capperId: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Capper name is required.");
+  }
+  const { count } = await prisma.capper.updateMany({ where: { id: capperId, userId }, data: { name: trimmed } });
+  if (count === 0) {
+    throw new Error("Capper not found.");
+  }
+}
+
+export type DeleteCapperResult = { deletedPickCount: number };
+
+// id+userId scoped in one query (deleteMany, not delete - Capper's only
+// unique identifier is id, so a plain delete() can't also require userId in
+// its where clause) so one user can't delete another's capper via a crafted
+// id. Pick.capperId and ParlayBet.capperId both have onDelete: Cascade
+// (prisma/schema.prisma), so this one call also removes every pick and
+// parlay leg tied to the capper - by design, for the junk/parser-misfire
+// case this exists for (see cappers-leaderboard-table.tsx's "Toronto
+// Argonauts vs. Edmonton Elks" example), not something to soften with a
+// pick-preserving alternative. The caller is responsible for confirming
+// with the user first; this function does not ask.
+export async function deleteCapper(userId: string, capperId: string): Promise<DeleteCapperResult> {
+  const deletedPickCount = await prisma.pick.count({ where: { userId, capperId } });
+  const { count } = await prisma.capper.deleteMany({ where: { id: capperId, userId } });
+  if (count === 0) {
+    throw new Error("Capper not found.");
+  }
+  return { deletedPickCount };
+}
