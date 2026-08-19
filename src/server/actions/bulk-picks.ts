@@ -14,6 +14,7 @@ import {
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
 import { extractLine } from "@/lib/bet-line";
+import { NCAAF_CANONICAL_SUFFIX } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
@@ -109,7 +110,20 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
   const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
   const resolvable = Boolean(liveSportKey && RESOLVABLE_SPORT_KEYS.includes(liveSportKey));
   if (liveSportKey && resolvable) {
-    const nicknames = item.teamNicknames;
+    // NCAAF's parse-catalog nicknames are school names (a PREFIX of the real
+    // team name, e.g. "lsu"), not bare mascots (a SUFFIX, e.g. "tigers") the
+    // way every other sport's are - translated once here to the canonical
+    // "school mascot" suffix (see NCAAF_CANONICAL_SUFFIX's own comment) so
+    // every endsWith check below (lookupGame's game-resolution, pickedSide,
+    // and the existing odds-lookup side) keeps working unchanged. A no-op
+    // for every other sport, and a no-op for any NCAAF nickname that
+    // somehow isn't in the table (falls back to itself, same as today -
+    // just won't match, which is the existing safe behavior for an
+    // unresolvable nickname).
+    const nicknames =
+      item.sportName.toUpperCase() === "NCAAF"
+        ? item.teamNicknames.map((n) => NCAAF_CANONICAL_SUFFIX[n] ?? n)
+        : item.teamNicknames;
     let game = await lookupGame(liveSportKey, nicknames);
     // One retry before giving up - covers a transient miss/blip against the
     // live schedule source rather than treating it as a genuine non-match.

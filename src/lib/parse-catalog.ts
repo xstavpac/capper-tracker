@@ -215,6 +215,117 @@ const DISAMBIGUATED_TEAMS: TeamEntry[] = [
 // form) below for how each of those is actually resolved.
 const KBO_TEAMS = ["wiz", "landers", "dinos", "heroes"];
 
+// NCAAF - Power 4 conferences (SEC/Big Ten/Big 12/ACC) + Notre Dame only,
+// the week-1 curated launch scope (see the NCAAF ecosystem investigation).
+// Each entry is [school-name key, canonical "school mascot" suffix].
+//
+// Keyed by SCHOOL name, deliberately never by bare mascot - unlike every
+// pro-sport list above, a bare college mascot is very often shared by
+// multiple schools. Within just this curated 68: Tigers (Auburn/LSU/
+// Missouri/Clemson), Wildcats (Kentucky/Northwestern/Arizona/Kansas State),
+// Bulldogs (Georgia/Mississippi State), Knights (Rutgers/UCF), Devils
+// (Arizona State/Duke), Cougars (Houston/BYU), and Bears (Baylor/California)
+// all collide within this list alone - and Ducks, Bruins, Devils, Cowboys,
+// Raiders, Hurricanes, and Cavaliers each already resolve to an existing
+// NFL/NBA/NHL entry above. A school's own name has none of these problems -
+// confirmed unique across all 68 against the live Odds API roster - so
+// that's the only thing registered here. A bare mascot-only NCAAF pick
+// ("Tigers ML", no school named) is left exactly as it already was before
+// NCAAF existed: unresolved for a mascot nobody else uses either (Wildcats,
+// Bulldogs, Knights, Cougars), or the pre-existing MLB/KBO ("tigers"),
+// NFL/KBO ("bears"), or NHL ("devils") resolution for a mascot that was
+// already meaningful - never guessed at as any particular NCAAF school.
+//
+// The second element of each pair (the canonical suffix) exists because
+// resolveGameForNickname/resolveGameForTeams (odds.ts) match a nickname
+// against the END of the real live-schedule team name - true by
+// construction for every bare mascot above (a real team name is always
+// "City/School Mascot"), but a bare school name is a PREFIX of that name,
+// not a suffix ("lsu" doesn't end "LSU Tigers"). NCAAF_CANONICAL_SUFFIX
+// below exports the translation; its one call site is lookupGame in
+// bulk-picks.ts, applied only for NCAAF - every other sport's nicknames
+// already satisfy endsWith directly and this table is never consulted for
+// them.
+const NCAAF_SCHOOLS: [string, string][] = [
+  // SEC
+  ["alabama", "alabama crimson tide"],
+  ["arkansas", "arkansas razorbacks"],
+  ["auburn", "auburn tigers"],
+  ["florida", "florida gators"],
+  ["georgia", "georgia bulldogs"],
+  ["kentucky", "kentucky wildcats"],
+  ["lsu", "lsu tigers"],
+  ["ole miss", "ole miss rebels"],
+  ["mississippi state", "mississippi state bulldogs"],
+  ["missouri", "missouri tigers"],
+  ["oklahoma", "oklahoma sooners"],
+  ["south carolina", "south carolina gamecocks"],
+  ["tennessee", "tennessee volunteers"],
+  ["texas", "texas longhorns"],
+  ["texas a&m", "texas a&m aggies"],
+  ["vanderbilt", "vanderbilt commodores"],
+  // Big Ten
+  ["illinois", "illinois fighting illini"],
+  ["iowa", "iowa hawkeyes"],
+  ["indiana", "indiana hoosiers"],
+  ["maryland", "maryland terrapins"],
+  ["michigan", "michigan wolverines"],
+  ["michigan state", "michigan state spartans"],
+  ["minnesota", "minnesota golden gophers"],
+  ["nebraska", "nebraska cornhuskers"],
+  ["northwestern", "northwestern wildcats"],
+  ["ohio state", "ohio state buckeyes"],
+  ["oregon", "oregon ducks"],
+  ["penn state", "penn state nittany lions"],
+  ["purdue", "purdue boilermakers"],
+  ["rutgers", "rutgers scarlet knights"],
+  ["ucla", "ucla bruins"],
+  ["usc", "usc trojans"],
+  ["washington", "washington huskies"],
+  ["wisconsin", "wisconsin badgers"],
+  // Big 12
+  ["arizona", "arizona wildcats"],
+  ["arizona state", "arizona state sun devils"],
+  ["colorado", "colorado buffaloes"],
+  ["utah", "utah utes"],
+  ["cincinnati", "cincinnati bearcats"],
+  ["houston", "houston cougars"],
+  ["ucf", "ucf knights"],
+  ["byu", "byu cougars"],
+  ["baylor", "baylor bears"],
+  ["iowa state", "iowa state cyclones"],
+  ["kansas", "kansas jayhawks"],
+  ["kansas state", "kansas state wildcats"],
+  ["oklahoma state", "oklahoma state cowboys"],
+  ["tcu", "tcu horned frogs"],
+  ["texas tech", "texas tech red raiders"],
+  ["west virginia", "west virginia mountaineers"],
+  // ACC
+  ["clemson", "clemson tigers"],
+  ["miami", "miami hurricanes"],
+  ["florida state", "florida state seminoles"],
+  ["louisville", "louisville cardinals"],
+  ["pittsburgh", "pittsburgh panthers"],
+  ["smu", "smu mustangs"],
+  ["north carolina", "north carolina tar heels"],
+  ["duke", "duke blue devils"],
+  ["virginia tech", "virginia tech hokies"],
+  ["syracuse", "syracuse orange"],
+  ["nc state", "nc state wolfpack"],
+  ["boston college", "boston college eagles"],
+  ["georgia tech", "georgia tech yellow jackets"],
+  ["stanford", "stanford cardinal"],
+  ["california", "california golden bears"],
+  ["virginia", "virginia cavaliers"],
+  ["wake forest", "wake forest demon deacons"],
+  // Independent
+  ["notre dame", "notre dame fighting irish"],
+];
+
+const NCAAF_TEAMS = NCAAF_SCHOOLS.map(([key]) => key);
+
+export const NCAAF_CANONICAL_SUFFIX: Record<string, string> = Object.fromEntries(NCAAF_SCHOOLS);
+
 const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...DISAMBIGUATED_TEAMS,
   ...MLB_TEAMS.map((t): TeamEntry => [t, "MLB"]),
@@ -224,6 +335,7 @@ const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...WNBA_TEAMS.map((t): TeamEntry => [t, "WNBA"]),
   ...CFL_TEAMS.map((t): TeamEntry => [t, "CFL"]),
   ...KBO_TEAMS.map((t): TeamEntry => [t, "KBO"]),
+  ...NCAAF_TEAMS.map((t): TeamEntry => [t, "NCAAF"]),
 ].sort((a, b) => b[0].length - a[0].length);
 
 // Strong "this is definitely a pick, not a capper's name" signals - a units
