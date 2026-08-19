@@ -338,6 +338,57 @@ const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...NCAAF_TEAMS.map((t): TeamEntry => [t, "NCAAF"]),
 ].sort((a, b) => b[0].length - a[0].length);
 
+// Purpose-built for classifyPickTeamGroup/shortTeamName (pick-team-group.ts)
+// ONLY - never for import parsing. Those callers are solving a different
+// problem than findTeamNickname/TEAM_SPORT_ENTRIES: they already know the
+// exact team and sport unambiguously (from the live schedule's own
+// homeTeam/awayTeam), so there's no risk of the KBO-collision misresolution
+// DISAMBIGUATED_TEAMS/AMBIGUOUS_NICKNAMES exists to prevent (see
+// "Disambiguate bare KBO nicknames..." commit) - that risk is specifically
+// about *inferring* which sport a bare nickname belongs to from free text
+// alone, which never happens here. What they need instead is the short form
+// a capper actually types for a team ("Twins", not "Minnesota Twins") to
+// match against betDetail text - using findTeamNickname for this (as
+// classifyPickTeamGroup used to) returns the disambiguated long form for any
+// KBO-collision team, which then never matches betDetail's short form,
+// silently misgrouping every Twins/Tigers/Bears/Lions/Eagles moneyline pick
+// into "Totals & Other Markets" instead of its own team header.
+//
+// Built from the same bare-nickname lists TEAM_SPORT_ENTRIES uses, plus the
+// bare key of every AMBIGUOUS_NICKNAMES entry (which is exactly the short
+// form a capper types for cardinals/rangers/kings/panthers/giants/bears/
+// twins/lions/eagles/tigers) for each sport it lists - deliberately omitting
+// DISAMBIGUATED_TEAMS (the long, city-qualified forms, wrong shape for
+// matching betDetail). The import-parsing path this must not touch
+// (parseCatalog/detectSport/findTeamNickname/TEAM_SPORT_ENTRIES) is entirely
+// separate from this constant and this function.
+const GROUPING_TEAM_NICKNAMES: TeamEntry[] = [
+  ...MLB_TEAMS.map((t): TeamEntry => [t, "MLB"]),
+  ...NBA_TEAMS.map((t): TeamEntry => [t, "NBA"]),
+  ...NFL_TEAMS.map((t): TeamEntry => [t, "NFL"]),
+  ...NHL_TEAMS.map((t): TeamEntry => [t, "NHL"]),
+  ...WNBA_TEAMS.map((t): TeamEntry => [t, "WNBA"]),
+  ...CFL_TEAMS.map((t): TeamEntry => [t, "CFL"]),
+  ...KBO_TEAMS.map((t): TeamEntry => [t, "KBO"]),
+  ...NCAAF_TEAMS.map((t): TeamEntry => [t, "NCAAF"]),
+  ...Object.entries(AMBIGUOUS_NICKNAMES).flatMap(([bare, options]): TeamEntry[] =>
+    options.map((o): TeamEntry => [bare, o.sport])
+  ),
+].sort((a, b) => b[0].length - a[0].length);
+
+// Given a live-schedule team's full name (e.g. "Minnesota Twins") and its
+// already-known sport, returns the short nickname a capper actually types
+// for it (e.g. "twins") - see GROUPING_TEAM_NICKNAMES above for why this is
+// a separate function from findTeamNickname rather than a shared one.
+export function findGroupingNickname(text: string, sportName: string): string | undefined {
+  const lower = text.toLowerCase();
+  for (const [phrase, sport] of GROUPING_TEAM_NICKNAMES) {
+    if (sport !== sportName) continue;
+    if (teamPhraseRegex(phrase).test(lower)) return phrase;
+  }
+  return undefined;
+}
+
 // Strong "this is definitely a pick, not a capper's name" signals - a units
 // annotation, an explicit signed number, or betting shorthand a real name
 // essentially never contains. Used to override the "right after a blank

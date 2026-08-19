@@ -89,8 +89,28 @@ export function LiveScoreboard({
     };
   }, [activeSport]);
 
-  const boardPulseGames: BoardPulseGame[] = odds.map((game) => {
-    const score = matchScoreToGame(scores, game);
+  // Live games first, then soonest-starting first - a currently-live game
+  // (however late it started) is the one a user opening this page actually
+  // cares about most, and burying it below not-yet-started games sorted
+  // purely by start time (the previous, unsorted-array-order behavior) reads
+  // as broken - confirmed against a real case where an in-progress Cubs/
+  // White Sox game (1:11 PM start) rendered below three not-yet-started
+  // games. Recomputed on every render (not memoized) since `scores` is
+  // client state that changes on each poll tick - a game that goes live or
+  // finishes must re-sort immediately, not just on the next navigation.
+  const gamesWithScores = odds.map((game, gameIndex) => ({
+    game,
+    gameIndex,
+    score: matchScoreToGame(scores, game),
+  }));
+  const sortedGames = [...gamesWithScores].sort((a, b) => {
+    const aLive = a.score?.status === "live";
+    const bLive = b.score?.status === "live";
+    if (aLive !== bLive) return aLive ? -1 : 1;
+    return new Date(a.game.commenceTime).getTime() - new Date(b.game.commenceTime).getTime();
+  });
+
+  const boardPulseGames: BoardPulseGame[] = gamesWithScores.map(({ game, score }) => {
     const homePrice = findMarketAcrossBooks(game, "h2h")?.outcomes.find((o) => o.name === game.homeTeam)?.price ?? null;
     const awayPrice = findMarketAcrossBooks(game, "h2h")?.outcomes.find((o) => o.name === game.awayTeam)?.price ?? null;
     const totalLine = findMarketAcrossBooks(game, "totals")?.outcomes.find((o) => o.name === "Over")?.point ?? null;
@@ -116,8 +136,7 @@ export function LiveScoreboard({
       {showBoardPulse && <BoardPulsePanel stats={boardPulseStats} />}
 
       <div className="space-y-3">
-        {odds.map((game, gameIndex) => {
-          const score = matchScoreToGame(scores, game);
+        {sortedGames.map(({ game, gameIndex, score }) => {
           const book = game.bookmakers[0];
           const matchedPicks = matchedPicksByGame[gameIndex];
 
