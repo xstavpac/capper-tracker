@@ -377,17 +377,27 @@ export function computeScorecard(picks: Pick[]): ScorecardBucket[] {
   });
 }
 
-export type ScorecardWindow = "TODAY" | "YESTERDAY" | "LAST_7" | "LAST_30" | "ALL";
+export type ScorecardWindow = "TODAY" | "YESTERDAY" | "LAST_7" | "LAST_30" | "LAST_60" | "ALL";
 
 export const SCORECARD_WINDOW_LABELS: Record<ScorecardWindow, string> = {
   TODAY: "Today",
   YESTERDAY: "Yesterday",
   LAST_7: "Last 7 days",
   LAST_30: "Last 30 days",
+  LAST_60: "60 Day",
   ALL: "All time",
 };
 
-export const SCORECARD_WINDOWS: ScorecardWindow[] = ["TODAY", "YESTERDAY", "LAST_7", "LAST_30", "ALL"];
+export const SCORECARD_WINDOWS: ScorecardWindow[] = ["TODAY", "YESTERDAY", "LAST_7", "LAST_30", "LAST_60", "ALL"];
+
+// Every window besides TODAY/YESTERDAY (which pin to Eastern day boundaries
+// instead) is just "N days back from now" - kept as a lookup here so adding
+// another rolling window is a one-line addition, not another branch.
+const WINDOW_DAYS_BACK: Partial<Record<ScorecardWindow, number>> = {
+  LAST_7: 7,
+  LAST_30: 30,
+  LAST_60: 60,
+};
 
 // Scopes the scorecard to picks graded within a window, so "am I good at
 // spread bets" can be answered for "lately" as well as all-time. Filters on
@@ -411,10 +421,8 @@ export function filterPicksByGradedWindow<T extends { gradedAt: Date | null }>(
   } else if (window === "YESTERDAY") {
     start = new Date(startOfToday.getTime() - 86400000);
     end = startOfToday;
-  } else if (window === "LAST_7") {
-    start = new Date(now.getTime() - 7 * 86400000);
   } else {
-    start = new Date(now.getTime() - 30 * 86400000);
+    start = new Date(now.getTime() - WINDOW_DAYS_BACK[window]! * 86400000);
   }
 
   return picks.filter((p) => p.gradedAt && p.gradedAt >= start && p.gradedAt < end);
