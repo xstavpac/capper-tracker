@@ -38,6 +38,7 @@ export const LIVE_SPORTS = [
   { key: "baseball_mlb", label: "MLB" },
   { key: "icehockey_nhl", label: "NHL" },
   { key: "basketball_wnba", label: "WNBA" },
+  { key: "americanfootball_ncaaf", label: "NCAAF" },
 ];
 
 const BASE_URL = "https://api.the-odds-api.com/v4";
@@ -317,11 +318,25 @@ export function getNflLiveScores(): Promise<ScoreGame[]> {
   return getEspnScores("football/nfl");
 }
 
+// Same shared ESPN scoreboard helper as every other ESPN-backed sport above,
+// just a different sport path - confirmed live (real FBS week-1 coverage,
+// same response shape) before adding this during the NCAAF ecosystem
+// investigation.
+export function getNcaafLiveScores(): Promise<ScoreGame[]> {
+  return getEspnScores("football/college-football");
+}
+
 // Sports with a real score source wired up (see getLiveScoresForSport below).
 // The rest of LIVE_SPORTS still get odds display, just no live score/badge,
 // game resolution, or auto-grading yet - add a key here (and a case below)
 // once a free score source is wired up for it.
-export const RESOLVABLE_SPORT_KEYS = ["baseball_mlb", "basketball_nba", "basketball_wnba", "americanfootball_nfl"];
+export const RESOLVABLE_SPORT_KEYS = [
+  "baseball_mlb",
+  "basketball_nba",
+  "basketball_wnba",
+  "americanfootball_nfl",
+  "americanfootball_ncaaf",
+];
 
 // Dispatches to the right free score source for a sport. Add a case here
 // (and a getXLiveScores() above) when wiring up a new sport.
@@ -336,6 +351,13 @@ export async function getLiveScoresForSport(sportKey: string): Promise<ScoreGame
     // not only the credit-costing Odds API side.
     if (!isSportInSeason(sportKey)) return [];
     return getNflLiveScores();
+  }
+  if (sportKey === "americanfootball_ncaaf") {
+    // Same reasoning as NFL above - off-season (including spring games)
+    // would otherwise leak into live display/game resolution/grading as
+    // pure noise.
+    if (!isSportInSeason(sportKey)) return [];
+    return getNcaafLiveScores();
   }
   return [];
 }
