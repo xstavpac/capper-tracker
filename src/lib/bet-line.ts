@@ -71,6 +71,24 @@ export function favoriteOrUnderdog(pick: {
   return null;
 }
 
+export type NrfiSide = "NO_RUN" | "YES_RUN";
+
+// The NRFI/YRFI side of an NRFI-betType pick, derived from betDetail free
+// text - same "never stored, always re-read" pattern as favoriteOrUnderdog's
+// spread line and TOTAL's over/under side (see parseTouchdownProp's comment
+// below). Shared by grading (win/loss against combined first-inning runs)
+// and the category/scorecard classifiers, so a pick's side can never drift
+// between "how it graded" and "which tile it counts toward". Returns null
+// for text that matches neither phrasing (shouldn't happen for a real
+// NRFI-betType pick); callers fall back to treating it as NRFI rather than
+// dropping it, matching this function's pre-split behavior.
+export function nrfiSide(betDetail: string | null): NrfiSide | null {
+  const detail = (betDetail ?? "").toLowerCase();
+  if (detail.includes("nrfi") || detail.includes("no run")) return "NO_RUN";
+  if (detail.includes("yrfi") || detail.includes("yes run") || detail.includes("run 1st")) return "YES_RUN";
+  return null;
+}
+
 export type TdPropType = "RUSHING" | "RECEIVING" | "ANY";
 
 // Extracts the player and TD type from an NFL touchdown-prop pick's free

@@ -9,7 +9,7 @@ import {
   type OddsGame,
 } from "@/server/data/odds";
 import { closestByTime, sameEasternDay } from "@/lib/dates";
-import { extractLine, parseTouchdownProp } from "@/lib/bet-line";
+import { extractLine, parseTouchdownProp, nrfiSide } from "@/lib/bet-line";
 import { findTeamNickname } from "@/lib/parse-catalog";
 import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
 
@@ -236,11 +236,10 @@ export function gradePick(
     // homeScore/awayScore here are the game's first-inning scores, not final
     // (see gradePendingPicks, which selects the score source by betType).
     const runsScored = homeScore + awayScore;
-    const pickedNoRun = detail.includes("nrfi") || detail.includes("no run");
-    const pickedYesRun = detail.includes("yrfi") || detail.includes("yes run") || detail.includes("run 1st");
+    const side = nrfiSide(detail);
 
-    if (pickedNoRun) return runsScored === 0 ? "WIN" : "LOSS";
-    if (pickedYesRun) return runsScored > 0 ? "WIN" : "LOSS";
+    if (side === "NO_RUN") return runsScored === 0 ? "WIN" : "LOSS";
+    if (side === "YES_RUN") return runsScored > 0 ? "WIN" : "LOSS";
     return null;
   }
 

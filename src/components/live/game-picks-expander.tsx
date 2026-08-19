@@ -68,6 +68,11 @@ const CATEGORY_DESCRIPTIONS: Record<PickCategoryKey, string> = {
   F5_ML: "first-half moneyline",
   FIRST_HALF_ML: "first-half moneyline",
   NRFI: "NRFI",
+  YRFI: "YRFI",
+  F5_SPREAD_MINUS: "first-half favorite spread",
+  F5_SPREAD_PLUS: "first-half underdog spread",
+  F5_OVER: "first-half over",
+  F5_UNDER: "first-half under",
 };
 
 function ListIcon() {

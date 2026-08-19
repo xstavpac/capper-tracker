@@ -48,10 +48,13 @@ function sportSortIndex(sportName: string): number {
   return idx === -1 ? LIVE_SPORTS.length : idx;
 }
 
-// Display order for category sections within a sport - every key pickCategory
-// can actually produce. First-half spread/total and touchdown props aren't
-// listed here because pickCategory itself returns null for them (genuinely
-// untracked - see stats.ts), so they never reach this function at all.
+// Display order for category sections within a sport - deliberately narrower
+// than the full PickCategoryKey universe. YRFI, F5 spread, and F5 total are
+// real, non-null categories now (see stats.ts's pickCategory), but this board
+// hasn't been extended to surface them - the `CATEGORY_ORDER.filter` below
+// silently excludes any category not listed here, even though it reaches
+// `byCategory` like any other. Touchdown props still return null from
+// pickCategory and never reach this function at all.
 const CATEGORY_ORDER: PickCategoryKey[] = [
   "FAV_ML",
   "DOG_ML",

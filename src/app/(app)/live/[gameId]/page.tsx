@@ -11,6 +11,7 @@ import { persistFinalScores, gradePendingPicks, regradeFuzzyMatchedPicks } from 
 import { getPicksForGame, getCapperScorecard } from "@/server/data/picks";
 import { formatEastern } from "@/lib/dates";
 import { betTypeLabel } from "@/server/data/stats";
+import { nrfiSide } from "@/lib/bet-line";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
 import type { BetType, Period } from "@prisma/client";
@@ -94,16 +95,21 @@ export default async function GameDetailPage({
 
   const recordKeys = new Map<
     string,
-    { capperId: string; capperName: string; betType: BetType; period: Period }
+    { capperId: string; capperName: string; betType: BetType; period: Period; betDetail: string | null }
   >();
   for (const pick of matchedPicks) {
-    const key = pick.capperId + "|" + pick.betType + "|" + pick.period;
+    // NRFI and YRFI share one betType, so the dedup key needs the resolved
+    // side too - otherwise a capper's NRFI pick and YRFI pick on the same
+    // game would collapse into one entry and only ever look up one bucket.
+    const side = pick.betType === "NRFI" ? nrfiSide(pick.betDetail) : null;
+    const key = pick.capperId + "|" + pick.betType + "|" + pick.period + "|" + (side ?? "");
     if (!recordKeys.has(key)) {
       recordKeys.set(key, {
         capperId: pick.capperId,
         capperName: pick.capper.name,
         betType: pick.betType,
         period: pick.period,
+        betDetail: pick.betDetail,
       });
     }
   }
@@ -111,7 +117,11 @@ export default async function GameDetailPage({
   const capperRecords = await Promise.all(
     Array.from(recordKeys.values()).map(async (entry) => ({
       ...entry,
-      buckets: await getCapperScorecard(user.id, entry.capperId, { betType: entry.betType, period: entry.period }),
+      buckets: await getCapperScorecard(user.id, entry.capperId, {
+        betType: entry.betType,
+        period: entry.period,
+        betDetail: entry.betDetail,
+      }),
     }))
   );
 

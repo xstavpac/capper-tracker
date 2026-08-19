@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Pick, PickStatus } from "@prisma/client";
-import { favoriteOrUnderdog, extractLine } from "@/lib/bet-line";
+import { favoriteOrUnderdog, extractLine, nrfiSide } from "@/lib/bet-line";
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
 
 export type OverallStats = {
@@ -271,7 +271,8 @@ export type ScorecardBucketKey =
   | "TOTAL"
   | "PLAYER_PROP"
   | "F5"
-  | "NRFI";
+  | "NRFI"
+  | "YRFI";
 export type ScorecardBucket = {
   key: ScorecardBucketKey;
   label: string;
@@ -306,6 +307,7 @@ const SCORECARD_BUCKET_ORDER: ScorecardBucketKey[] = [
   "PLAYER_PROP",
   "F5",
   "NRFI",
+  "YRFI",
 ];
 const SCORECARD_BUCKET_LABELS: Record<ScorecardBucketKey, string> = {
   MONEYLINE: "Moneyline",
@@ -316,6 +318,7 @@ const SCORECARD_BUCKET_LABELS: Record<ScorecardBucketKey, string> = {
   PLAYER_PROP: "Player Prop",
   F5: "F5",
   NRFI: "NRFI",
+  YRFI: "YRFI",
 };
 
 // Favorite/underdog for a spread pick, falling back to parsing the line out
@@ -349,6 +352,9 @@ function bucketKeyForPick(pick: Pick): ScorecardBucketKey {
     if (side === "FAVORITE") return "SPREAD_MINUS";
     if (side === "UNDERDOG") return "SPREAD_PLUS";
     return "SPREAD";
+  }
+  if (pick.betType === "NRFI") {
+    return nrfiSide(pick.betDetail) === "YES_RUN" ? "YRFI" : "NRFI";
   }
   return pick.betType as ScorecardBucketKey;
 }
@@ -441,7 +447,12 @@ export type PickCategoryKey =
   | "UNDER"
   | "F5_ML"
   | "FIRST_HALF_ML"
-  | "NRFI";
+  | "NRFI"
+  | "YRFI"
+  | "F5_SPREAD_MINUS"
+  | "F5_SPREAD_PLUS"
+  | "F5_OVER"
+  | "F5_UNDER";
 
 export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   FAV_ML: "Fav ML",
@@ -453,15 +464,23 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   F5_ML: "F5 ML",
   FIRST_HALF_ML: "1st Half ML",
   NRFI: "NRFI",
+  YRFI: "YRFI",
+  F5_SPREAD_MINUS: "F5 Spread -",
+  F5_SPREAD_PLUS: "F5 Spread +",
+  F5_OVER: "F5 Over",
+  F5_UNDER: "F5 Under",
 };
 
-// F5 and NRFI are MLB-only chips for now, even though Period/BetType could
-// technically represent a first-half bet in another sport - other leagues
-// intentionally don't surface those two categories yet. Non-MLB first-half
-// moneyline picks get their own FIRST_HALF_ML key instead (see pickCategory)
-// rather than sharing F5_ML - the two must never be summed together, since a
-// capper who bets both MLB and another sport would otherwise have their
-// first-half moneyline records silently blended into one misleading number.
+// F5 and NRFI/YRFI are MLB-only chips for now, even though Period/BetType
+// could technically represent a first-half bet in another sport - other
+// leagues intentionally don't surface those categories yet. Non-MLB
+// first-half moneyline picks get their own FIRST_HALF_ML key instead (see
+// pickCategory) rather than sharing F5_ML - the two must never be summed
+// together, since a capper who bets both MLB and another sport would
+// otherwise have their first-half moneyline records silently blended into
+// one misleading number. Non-MLB first-half spread/total picks have no
+// category key at all yet (same as F5_ML's non-MLB carve-out, just not
+// given a FIRST_HALF_ML-style home of their own since nothing needs it today).
 export const MLB_CHIP_SET: PickCategoryKey[] = [
   "FAV_ML",
   "DOG_ML",
@@ -470,7 +489,12 @@ export const MLB_CHIP_SET: PickCategoryKey[] = [
   "OVER",
   "UNDER",
   "F5_ML",
+  "F5_SPREAD_MINUS",
+  "F5_SPREAD_PLUS",
+  "F5_OVER",
+  "F5_UNDER",
   "NRFI",
+  "YRFI",
 ];
 export const DEFAULT_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD_MINUS", "SPREAD_PLUS", "OVER", "UNDER"];
 
@@ -499,7 +523,12 @@ type PickCategoryInput = {
 };
 
 export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
-  if (pick.betType === "NRFI") return "NRFI";
+  if (pick.betType === "NRFI") {
+    // NRFI and YRFI share one BetType (see nrfiSide's own comment for why -
+    // side is derived from betDetail, never a separate stored value), but
+    // they're opposite bets and must never be summed into one record.
+    return nrfiSide(pick.betDetail) === "YES_RUN" ? "YRFI" : "NRFI";
+  }
 
   if (pick.betType === "MONEYLINE") {
     if (pick.period === "FIRST_HALF") {
@@ -513,15 +542,30 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
     return side === "FAVORITE" ? "FAV_ML" : side === "UNDERDOG" ? "DOG_ML" : null;
   }
 
-  if (pick.betType === "SPREAD" && pick.period === "FULL_GAME") {
+  if (pick.betType === "SPREAD") {
     const side = spreadSide(pick);
+    if (pick.period === "FIRST_HALF") {
+      // Same MLB-only carve-out as F5_ML above - non-MLB first-half spread
+      // picks have no category key of their own yet, same as before.
+      if (pick.sportName.toUpperCase() !== "MLB") return null;
+      return side === "FAVORITE" ? "F5_SPREAD_MINUS" : side === "UNDERDOG" ? "F5_SPREAD_PLUS" : null;
+    }
     return side === "FAVORITE" ? "SPREAD_MINUS" : side === "UNDERDOG" ? "SPREAD_PLUS" : null;
   }
 
-  if (pick.betType === "TOTAL" && pick.period === "FULL_GAME") {
+  if (pick.betType === "TOTAL") {
     const detail = (pick.betDetail ?? "").toLowerCase();
-    if (detail.includes("over")) return "OVER";
-    if (detail.includes("under")) return "UNDER";
+    const isOver = detail.includes("over");
+    const isUnder = detail.includes("under");
+    if (pick.period === "FIRST_HALF") {
+      // Same MLB-only carve-out as F5_ML/F5 spread above.
+      if (pick.sportName.toUpperCase() !== "MLB") return null;
+      if (isOver) return "F5_OVER";
+      if (isUnder) return "F5_UNDER";
+      return null;
+    }
+    if (isOver) return "OVER";
+    if (isUnder) return "UNDER";
     return null;
   }
 
@@ -541,6 +585,11 @@ const SPECIALIST_LABELS: Record<PickCategoryKey, string> = {
   F5_ML: "First-half specialist",
   FIRST_HALF_ML: "First-half specialist",
   NRFI: "NRFI specialist",
+  YRFI: "YRFI specialist",
+  F5_SPREAD_MINUS: "F5 favorite spread specialist",
+  F5_SPREAD_PLUS: "F5 underdog spread specialist",
+  F5_OVER: "F5 overs specialist",
+  F5_UNDER: "F5 unders specialist",
 };
 
 // A category holding at least this share of a capper's decided volume is a

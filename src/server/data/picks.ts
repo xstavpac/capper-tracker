@@ -12,6 +12,7 @@ import {
   type PickCategoryKey,
 } from "@/server/data/stats";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
+import { nrfiSide } from "@/lib/bet-line";
 import { findMatchingGameResult, resolveOutcome, resolveTouchdownProp, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { FREE_PICK_LIMIT } from "@/lib/entitlements";
 import { getEntitlementsForUser, createPicksWithEntitlementCheck } from "@/server/data/subscriptions";
@@ -312,13 +313,25 @@ export async function getPicksForGames(
 export async function getCapperScorecard(
   userId: string,
   capperId: string,
-  filter?: { betType: BetType; period: Period }
+  // betDetail is required whenever betType is NRFI - an NRFI-betType pick's
+  // bucket depends on which side (NRFI vs YRFI) it's on, the same
+  // betDetail-derived split computeScorecard's own bucketKeyForPick uses, so
+  // this lookup can't just cast betType straight to a ScorecardBucketKey the
+  // way every other bet type still can.
+  filter?: { betType: BetType; period: Period; betDetail: string | null }
 ): Promise<ScorecardBucket[]> {
   const picks = await prisma.pick.findMany({ where: { userId, capperId } });
   const buckets = computeScorecard(picks);
   if (!filter) return buckets;
 
-  const key: ScorecardBucketKey = filter.period === "FIRST_HALF" ? "F5" : (filter.betType as ScorecardBucketKey);
+  const key: ScorecardBucketKey =
+    filter.period === "FIRST_HALF"
+      ? "F5"
+      : filter.betType === "NRFI"
+        ? nrfiSide(filter.betDetail) === "YES_RUN"
+          ? "YRFI"
+          : "NRFI"
+        : (filter.betType as ScorecardBucketKey);
   return buckets.filter((b) => b.key === key);
 }
 
