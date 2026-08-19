@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { GameResult } from "@prisma/client";
+import type { GameResult, PickedSide } from "@prisma/client";
 import {
   getLiveScoresForSport,
   getOddsForSport,
@@ -172,22 +172,36 @@ export function gradePick(
   homeTeam: string,
   awayTeam: string,
   homeScore: number,
-  awayScore: number
+  awayScore: number,
+  // Which side this pick landed on, captured once at import time (see
+  // schema.prisma's Pick.pickedSide comment) - authoritative when present,
+  // since resolveGameAndOdds already refused to set it for anything
+  // ambiguous. Falls back to the text-match heuristic below only for picks
+  // that predate this field (pickedSide null/undefined).
+  pickedSide?: PickedSide | null
 ): GradeOutcome {
   const detail = betDetail.toLowerCase();
   const homeNick = teamNickname(homeTeam);
   const awayNick = teamNickname(awayTeam);
 
-  // Same-mascot matchup (e.g. Clemson Tigers @ LSU Tigers) - homeNick and
-  // awayNick are identical, so detail.includes() would match BOTH sides at
-  // once and silently grade off whichever branch runs first below. No two
-  // teams share a mascot in any other sport this app grades today, so this
-  // only ever fires for a same-mascot NCAAF matchup - forcing both flags
-  // false here makes every branch below fall through to its safe "can't
-  // tell which side was picked" null/PUSH-on-tie path instead of guessing.
-  const sameMascot = homeNick === awayNick;
-  const pickedHome = !sameMascot && detail.includes(homeNick);
-  const pickedAway = !sameMascot && detail.includes(awayNick);
+  let pickedHome: boolean;
+  let pickedAway: boolean;
+  if (pickedSide) {
+    pickedHome = pickedSide === "HOME";
+    pickedAway = pickedSide === "AWAY";
+  } else {
+    // Same-mascot matchup (e.g. Clemson Tigers @ LSU Tigers) - homeNick and
+    // awayNick are identical, so detail.includes() would match BOTH sides at
+    // once and silently grade off whichever branch runs first below. No two
+    // teams share a mascot in any other sport this app grades today, so this
+    // only ever fires for a same-mascot NCAAF matchup with no pickedSide on
+    // record - forcing both flags false here makes every branch below fall
+    // through to its safe "can't tell which side was picked" null/PUSH-on-tie
+    // path instead of guessing.
+    const sameMascot = homeNick === awayNick;
+    pickedHome = !sameMascot && detail.includes(homeNick);
+    pickedAway = !sameMascot && detail.includes(awayNick);
+  }
 
   if (betType === "MONEYLINE") {
     if (pickedHome && homeScore > awayScore) return "WIN";
@@ -359,7 +373,14 @@ export async function findMatchingGameResult(
 // finish" apart from "matched fine, but the bet text itself can't be graded" -
 // e.g. a TOTAL pick with no parseable number anywhere in it.
 export function resolveOutcome(
-  pick: { betType: string; period: string; betDetail: string | null; homeTeam: string; line: number | null },
+  pick: {
+    betType: string;
+    period: string;
+    betDetail: string | null;
+    homeTeam: string;
+    line: number | null;
+    pickedSide?: PickedSide | null;
+  },
   game: GameResult
 ): GradeOutcome {
   const homeScore =
@@ -377,7 +398,16 @@ export function resolveOutcome(
 
   if (homeScore === null || awayScore === null) return null;
 
-  return gradePick(pick.betType, pick.betDetail ?? pick.homeTeam, pick.line, game.homeTeam, game.awayTeam, homeScore, awayScore);
+  return gradePick(
+    pick.betType,
+    pick.betDetail ?? pick.homeTeam,
+    pick.line,
+    game.homeTeam,
+    game.awayTeam,
+    homeScore,
+    awayScore,
+    pick.pickedSide
+  );
 }
 
 export type TouchdownPropResolution =

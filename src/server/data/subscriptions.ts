@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma, type BetType, type Period } from "@prisma/client";
+import { Prisma, type BetType, type Period, type PickedSide } from "@prisma/client";
 import {
   FREE_PICK_LIMIT,
   isEntitledToPaidTier,
@@ -102,6 +102,7 @@ export type PickInsertData = {
   units: number;
   gameTime: Date;
   notes?: string;
+  pickedSide?: PickedSide | null;
 };
 
 export type AtomicCreateResult =

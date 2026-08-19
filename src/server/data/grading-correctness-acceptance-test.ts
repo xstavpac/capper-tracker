@@ -76,6 +76,34 @@ expect(
   "WIN"
 );
 
+// ---- Layer 2: pickedSide is authoritative when present, and is what
+// actually lets a same-mascot NCAAF pick auto-grade instead of staying
+// PENDING forever under Layer 1's guard alone. ----
+
+expect(
+  "same-mascot ML with pickedSide=HOME: grades correctly even though text-match alone can't tell the sides apart",
+  gradePick("MONEYLINE", "Tigers ML", null, "LSU Tigers", "Clemson Tigers", 30, 20, "HOME"),
+  "WIN"
+);
+
+expect(
+  "same-mascot ML with pickedSide=AWAY: grades correctly for the other side of the same matchup",
+  gradePick("MONEYLINE", "Tigers ML", null, "LSU Tigers", "Clemson Tigers", 30, 20, "AWAY"),
+  "LOSS"
+);
+
+expect(
+  "same-mascot SPREAD with pickedSide=AWAY: grades correctly",
+  gradePick("SPREAD", "Tigers +7", 7, "LSU Tigers", "Clemson Tigers", 20, 17, "AWAY"),
+  "WIN"
+);
+
+expect(
+  "pickedSide is authoritative even when it contradicts the betDetail text - not just 'also considered'",
+  gradePick("MONEYLINE", "this text says nothing about either team", null, "Kansas City Chiefs", "Denver Broncos", 24, 17, "AWAY"),
+  "LOSS"
+);
+
 async function expectAsync<T>(label: string, actual: Promise<T>, expected: T) {
   const resolved = await actual;
   const pass = JSON.stringify(resolved) === JSON.stringify(expected);
