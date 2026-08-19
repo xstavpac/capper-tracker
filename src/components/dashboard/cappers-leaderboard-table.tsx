@@ -196,26 +196,38 @@ export function CappersLeaderboardTable({
                   <tr key={entry.capperId} className="border-b border-border-subtle last:border-0 hover:bg-muted">
                     <td className="px-3 py-3 text-muted-foreground">{i + 1}</td>
                     <td className="px-3 py-3">
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-start gap-2">
                         <FavoriteStar
                           capperId={entry.capperId}
                           isFavorite={entry.isFavorite}
                           onToggled={() => router.refresh()}
                         />
-                        <a href={"/cappers/" + entry.capperId} className="flex min-w-0 flex-wrap items-center gap-2">
-                          <Avatar name={entry.name} colorTag={entry.colorTag} size={28} />
-                          <span className="font-medium text-foreground">{entry.name}</span>
-                          {entry.specialist && (
-                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                              {entry.specialist.label}
+                        {/* One consistent shape regardless of badge count, instead of
+                            badge count dictating wrapping ad hoc: name+avatar always
+                            occupy their own line, and every badge (specialist/small-
+                            sample/streak) is grouped together on a second line only
+                            when at least one applies - never split with one badge
+                            trailing the name and another wrapping further down. */}
+                        <a href={"/cappers/" + entry.capperId} className="flex min-w-0 flex-col gap-1">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <Avatar name={entry.name} colorTag={entry.colorTag} size={28} />
+                            <span className="truncate font-medium text-foreground">{entry.name}</span>
+                          </span>
+                          {(entry.specialist || smallSample || entry.stats.currentStreak.count >= 2) && (
+                            <span className="flex flex-wrap items-center gap-1.5">
+                              {entry.specialist && (
+                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                                  {entry.specialist.label}
+                                </span>
+                              )}
+                              {smallSample && (
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                                  {n} pick{n === 1 ? "" : "s"} &middot; small sample
+                                </span>
+                              )}
+                              <StreakBadge streak={entry.stats.currentStreak} compact />
                             </span>
                           )}
-                          {smallSample && (
-                            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                              {n} pick{n === 1 ? "" : "s"} &middot; small sample
-                            </span>
-                          )}
-                          <StreakBadge streak={entry.stats.currentStreak} compact />
                         </a>
                       </div>
                     </td>
