@@ -9,17 +9,64 @@ import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { ParlayForm } from "@/components/dashboard/parlay-form";
 import { LegStatusButtons } from "@/components/dashboard/leg-status-buttons";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
-import { favoriteOrUnderdog } from "@/lib/bet-line";
+import { favoriteOrUnderdog, nrfiSide } from "@/lib/bet-line";
 import { formatEastern } from "@/lib/dates";
 import { TIER_LABELS } from "@/lib/entitlements";
 import type { BetType, PickStatus, Period } from "@prisma/client";
 
 const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
-const BET_TYPE_OPTIONS = ["SPREAD", "MONEYLINE", "TOTAL", "PLAYER_PROP", "NRFI"];
-const PERIOD_OPTIONS: { value: Period; label: string }[] = [
-  { value: "FULL_GAME", label: "Full game" },
-  { value: "FIRST_HALF", label: "First half / F5" },
+
+type BetTypeFilterKey =
+  | "SPREAD"
+  | "F5_SPREAD"
+  | "MONEYLINE"
+  | "F5_MONEYLINE"
+  | "TOTAL"
+  | "F5_TOTAL"
+  | "PLAYER_PROP"
+  | "NRFI"
+  | "YRFI";
+
+const BET_TYPE_FILTER_OPTIONS: { value: BetTypeFilterKey; label: string }[] = [
+  { value: "SPREAD", label: "Spread" },
+  { value: "F5_SPREAD", label: "F5 Spread" },
+  { value: "MONEYLINE", label: "Moneyline" },
+  { value: "F5_MONEYLINE", label: "F5 Moneyline" },
+  { value: "TOTAL", label: "Total" },
+  { value: "F5_TOTAL", label: "F5 Total" },
+  { value: "PLAYER_PROP", label: "Player Prop" },
+  { value: "NRFI", label: "NRFI" },
+  { value: "YRFI", label: "YRFI" },
 ];
+
+// Coarser and sport-agnostic than stats.ts's pickCategory - that classifier
+// splits favorite/dog and over/under (this page's separate "Favorite +
+// underdog" dropdown already covers the first, and there's no over/under
+// equivalent), and deliberately scopes its F5 categories to MLB only so
+// cross-sport leaderboards never blend an MLB capper's F5 record with
+// another sport's first-half record. Neither restriction belongs here - this
+// is a flat "what kind of bet is this" filter over every sport's picks, so a
+// real NFL first-half moneyline or total pick needs to show up under F5
+// Moneyline/F5 Total same as MLB's, not fall through pickCategory's MLB-only
+// carve-out and disappear from every option. Reuses nrfiSide (the same
+// betDetail-derived NRFI/YRFI split stats.ts and grading.ts use) so this
+// filter can never disagree with how those picks actually graded.
+function betTypeFilterCategory(pick: { betType: BetType; period: Period; betDetail: string | null }): BetTypeFilterKey | null {
+  if (pick.betType === "NRFI") {
+    return nrfiSide(pick.betDetail) === "YES_RUN" ? "YRFI" : "NRFI";
+  }
+  if (pick.period === "FIRST_HALF") {
+    if (pick.betType === "MONEYLINE") return "F5_MONEYLINE";
+    if (pick.betType === "SPREAD") return "F5_SPREAD";
+    if (pick.betType === "TOTAL") return "F5_TOTAL";
+    return null;
+  }
+  if (pick.betType === "SPREAD") return "SPREAD";
+  if (pick.betType === "MONEYLINE") return "MONEYLINE";
+  if (pick.betType === "TOTAL") return "TOTAL";
+  if (pick.betType === "PLAYER_PROP") return "PLAYER_PROP";
+  return null;
+}
 
 export default async function PicksPage({
   searchParams,
@@ -29,7 +76,6 @@ export default async function PicksPage({
     sportId?: string;
     status?: string;
     betType?: string;
-    period?: string;
     favoriteDog?: string;
   };
 }) {
@@ -54,13 +100,12 @@ export default async function PicksPage({
   );
 
   const favoriteDog = (searchParams.favoriteDog as "FAVORITE" | "UNDERDOG") || undefined;
+  const betTypeFilter = (searchParams.betType as BetTypeFilterKey) || undefined;
 
   const filters = {
     capperId: searchParams.capperId || undefined,
     sportId: searchParams.sportId || undefined,
     status: (searchParams.status as PickStatus) || undefined,
-    betType: (searchParams.betType as BetType) || undefined,
-    period: (searchParams.period as Period) || undefined,
   };
 
   const [allPicks, cappers, sports, planStatus, parlays] = await Promise.all([
@@ -71,11 +116,14 @@ export default async function PicksPage({
     getParlaysForUser(user.id),
   ]);
 
-  // Favorite/underdog is derived (odds sign for Moneyline, line sign for Spread),
-  // not a stored column, so it's filtered here rather than in the DB query.
-  const picks = favoriteDog ? allPicks.filter((p) => favoriteOrUnderdog(p) === favoriteDog) : allPicks;
+  // Bet type and favorite/underdog are both derived (betDetail text for
+  // NRFI/YRFI, odds/line sign for favorite/dog), not stored columns, so both
+  // are filtered here rather than in the DB query.
+  const picks = allPicks
+    .filter((p) => !betTypeFilter || betTypeFilterCategory(p) === betTypeFilter)
+    .filter((p) => !favoriteDog || favoriteOrUnderdog(p) === favoriteDog);
 
-  const hasActiveFilters = Object.values(filters).some(Boolean) || Boolean(favoriteDog);
+  const hasActiveFilters = Object.values(filters).some(Boolean) || Boolean(favoriteDog) || Boolean(betTypeFilter);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -128,13 +176,13 @@ export default async function PicksPage({
 
         <select
           name="betType"
-          defaultValue={filters.betType ?? ""}
+          defaultValue={betTypeFilter ?? ""}
           className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
         >
           <option value="">All bet types</option>
-          {BET_TYPE_OPTIONS.map((b) => (
-            <option key={b} value={b}>
-              {b}
+          {BET_TYPE_FILTER_OPTIONS.map((b) => (
+            <option key={b.value} value={b.value}>
+              {b.label}
             </option>
           ))}
         </select>
@@ -148,19 +196,6 @@ export default async function PicksPage({
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>
               {s}
-            </option>
-          ))}
-        </select>
-
-        <select
-          name="period"
-          defaultValue={filters.period ?? ""}
-          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
-        >
-          <option value="">Full game + first half</option>
-          {PERIOD_OPTIONS.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
             </option>
           ))}
         </select>

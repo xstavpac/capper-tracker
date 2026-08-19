@@ -187,10 +187,13 @@ export type PickFilters = {
   capperId?: string;
   sportId?: string;
   status?: PickStatus;
-  betType?: BetType;
-  period?: Period;
 };
 
+// betType/period aren't filtered here anymore - the Picks page's unified bet
+// type filter (Spread/F5 Spread/Moneyline/.../NRFI/YRFI) needs betDetail text
+// (for the NRFI/YRFI split) that a plain Prisma where-clause can't express, so
+// it's applied in-memory after this fetch, the same way favorite/underdog
+// filtering already is.
 export async function getFilteredPicksForUser(userId: string, filters: PickFilters) {
   return prisma.pick.findMany({
     where: {
@@ -198,8 +201,6 @@ export async function getFilteredPicksForUser(userId: string, filters: PickFilte
       ...(filters.capperId ? { capperId: filters.capperId } : {}),
       ...(filters.sportId ? { sportId: filters.sportId } : {}),
       ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.betType ? { betType: filters.betType } : {}),
-      ...(filters.period ? { period: filters.period } : {}),
     },
     include: { capper: true, sport: true, league: true },
     orderBy: { gameTime: "desc" },
