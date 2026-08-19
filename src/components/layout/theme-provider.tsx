@@ -33,7 +33,13 @@ export function ThemeProvider({ initialTheme, children }: { initialTheme: Theme;
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme, isSaving }}>
-      <div className={theme === Theme.DARK ? "dark" : undefined}>{children}</div>
+      {/* text-foreground here (not just the `dark` class) is load-bearing: <body>
+          in the root layout sets text-foreground too, but it sits outside this
+          `.dark` scope, so its computed color is always the light value and
+          that's what every descendant with no color class of its own inherits -
+          re-declaring it here restarts inheritance at the correct (possibly
+          dark-scoped) value for the whole app subtree. */}
+      <div className={(theme === Theme.DARK ? "dark " : "") + "text-foreground"}>{children}</div>
     </ThemeContext.Provider>
   );
 }
