@@ -64,7 +64,7 @@ export default async function CapperDetailPage({
   searchParams,
 }: {
   params: { capperId: string };
-  searchParams: { window?: string };
+  searchParams: { window?: string; categorySport?: string };
 }) {
   const user = await requireUser();
   const capper = await getCapperById(user.id, params.capperId);
@@ -93,12 +93,37 @@ export default async function CapperDetailPage({
   const allTimeScorecard = computeScorecard(picks);
   const scorecard = computeScorecard(filterPicksByGradedWindow(picks, window));
 
-  // F5 ML/NRFI only mean anything within MLB (see stats.ts's
-  // getCategoryBreakdownForSport) - scope this capper's category breakdown
-  // to their MLB picks specifically, alongside the bet-type scorecard above,
-  // rather than mixing it into an all-sports view that has no home for them.
-  const mlbPicks = picks.filter((p) => p.sport.name === "MLB");
-  const mlbCategoryBreakdown = computeCategoryBreakdown(mlbPicks, chipSetForLeague("MLB"));
+  // "Record by category" (favorite/dog, over/under, F5, NRFI/YRFI, ...) only
+  // makes sense within one sport at a time - chipSetForLeague's categories
+  // vary per sport (F5/NRFI/YRFI are MLB-only), and blending two sports'
+  // decided picks into one tile would produce a number that doesn't describe
+  // either sport's actual record. Computed once per sport this capper has
+  // picks in (not hardcoded to MLB) so a WNBA or NFL capper - or an MLB
+  // capper who also has WNBA/NFL picks - gets a real breakdown instead of
+  // silently having no "by category" view for anything outside MLB.
+  const categoryBreakdownsBySport = Array.from(new Set(picks.map((p) => p.sport.name)))
+    .map((sportName) => ({
+      sportName,
+      breakdown: computeCategoryBreakdown(
+        picks.filter((p) => p.sport.name === sportName),
+        chipSetForLeague(sportName)
+      ),
+    }))
+    .filter((s) => s.breakdown.length > 0)
+    // Most decided category-eligible picks first, so the default tab (no
+    // categorySport param yet) is whichever sport this capper is primarily
+    // tracked for, not an arbitrary/alphabetical one.
+    .sort(
+      (a, b) =>
+        b.breakdown.reduce((sum, item) => sum + item.count, 0) -
+        a.breakdown.reduce((sum, item) => sum + item.count, 0)
+    );
+
+  const selectedCategorySport =
+    categoryBreakdownsBySport.find((s) => s.sportName === searchParams.categorySport)?.sportName ??
+    categoryBreakdownsBySport[0]?.sportName;
+  const activeCategoryBreakdown =
+    categoryBreakdownsBySport.find((s) => s.sportName === selectedCategorySport)?.breakdown ?? [];
 
   const settled = picks.filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH");
   let running = 0;
@@ -217,10 +242,14 @@ export default async function CapperDetailPage({
       {allTimeScorecard.length > 0 && (
         <div className="mt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm font-medium text-muted-foreground">Record by bet type</div>
+            <div className="text-sm font-medium text-muted-foreground">Record by bet type (all sports)</div>
             <div className="flex flex-wrap gap-2">
               {SCORECARD_WINDOWS.map((w) => (
-                <a key={w} href={"?window=" + w} className={chipClass(window === w)}>
+                <a
+                  key={w}
+                  href={"?window=" + w + (selectedCategorySport ? "&categorySport=" + encodeURIComponent(selectedCategorySport) : "")}
+                  className={chipClass(window === w)}
+                >
                   {SCORECARD_WINDOW_LABELS[w]}
                 </a>
               ))}
@@ -236,10 +265,25 @@ export default async function CapperDetailPage({
         </div>
       )}
 
-      {mlbCategoryBreakdown.length > 0 && (
+      {activeCategoryBreakdown.length > 0 && (
         <div className="mt-4">
-          <div className="mb-2 text-sm font-medium text-muted-foreground">MLB record by category</div>
-          <CategoryBreakdown items={mlbCategoryBreakdown} />
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-medium text-muted-foreground">{selectedCategorySport} record by category</div>
+            {categoryBreakdownsBySport.length > 1 && (
+              <div className="flex flex-wrap gap-2">
+                {categoryBreakdownsBySport.map((s) => (
+                  <a
+                    key={s.sportName}
+                    href={"?window=" + window + "&categorySport=" + encodeURIComponent(s.sportName)}
+                    className={chipClass(s.sportName === selectedCategorySport)}
+                  >
+                    {s.sportName}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+          <CategoryBreakdown items={activeCategoryBreakdown} />
         </div>
       )}
 
