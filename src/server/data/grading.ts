@@ -178,8 +178,16 @@ export function gradePick(
   const homeNick = teamNickname(homeTeam);
   const awayNick = teamNickname(awayTeam);
 
-  const pickedHome = detail.includes(homeNick);
-  const pickedAway = detail.includes(awayNick);
+  // Same-mascot matchup (e.g. Clemson Tigers @ LSU Tigers) - homeNick and
+  // awayNick are identical, so detail.includes() would match BOTH sides at
+  // once and silently grade off whichever branch runs first below. No two
+  // teams share a mascot in any other sport this app grades today, so this
+  // only ever fires for a same-mascot NCAAF matchup - forcing both flags
+  // false here makes every branch below fall through to its safe "can't
+  // tell which side was picked" null/PUSH-on-tie path instead of guessing.
+  const sameMascot = homeNick === awayNick;
+  const pickedHome = !sameMascot && detail.includes(homeNick);
+  const pickedAway = !sameMascot && detail.includes(awayNick);
 
   if (betType === "MONEYLINE") {
     if (pickedHome && homeScore > awayScore) return "WIN";
