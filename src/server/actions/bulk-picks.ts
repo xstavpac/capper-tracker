@@ -14,6 +14,7 @@ import {
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
 import { extractLine } from "@/lib/bet-line";
+import { NCAAF_CANONICAL_SUFFIX } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
@@ -89,17 +90,40 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
   odds: number;
   resolvable: boolean; // sport has a real score source wired up at all
   matched: boolean; // and a specific game was actually found in it
+  // Which side of homeTeam/awayTeam this pick is actually on, captured once
+  // here (see schema.prisma's Pick.pickedSide comment) rather than re-derived
+  // from betDetail text at grading time. Deliberately MORE conservative than
+  // the odds-lookup `side` below: only set for a single-nickname ML/SPREAD
+  // pick, and only when exactly one of home/away ends with that nickname - a
+  // same-mascot NCAAF matchup (Clemson Tigers @ LSU Tigers) makes both true
+  // at once, and there's no way to tell them apart from a bare nickname
+  // alone, so this stays null rather than guessing.
+  pickedSide: "HOME" | "AWAY" | null;
 }> {
   let homeTeam = item.description;
   let awayTeam = "-";
   let gameTime = new Date();
   let odds = item.odds;
   let matched = false;
+  let pickedSide: "HOME" | "AWAY" | null = null;
 
   const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
   const resolvable = Boolean(liveSportKey && RESOLVABLE_SPORT_KEYS.includes(liveSportKey));
   if (liveSportKey && resolvable) {
-    const nicknames = item.teamNicknames;
+    // NCAAF's parse-catalog nicknames are school names (a PREFIX of the real
+    // team name, e.g. "lsu"), not bare mascots (a SUFFIX, e.g. "tigers") the
+    // way every other sport's are - translated once here to the canonical
+    // "school mascot" suffix (see NCAAF_CANONICAL_SUFFIX's own comment) so
+    // every endsWith check below (lookupGame's game-resolution, pickedSide,
+    // and the existing odds-lookup side) keeps working unchanged. A no-op
+    // for every other sport, and a no-op for any NCAAF nickname that
+    // somehow isn't in the table (falls back to itself, same as today -
+    // just won't match, which is the existing safe behavior for an
+    // unresolvable nickname).
+    const nicknames =
+      item.sportName.toUpperCase() === "NCAAF"
+        ? item.teamNicknames.map((n) => NCAAF_CANONICAL_SUFFIX[n] ?? n)
+        : item.teamNicknames;
     let game = await lookupGame(liveSportKey, nicknames);
     // One retry before giving up - covers a transient miss/blip against the
     // live schedule source rather than treating it as a genuine non-match.
@@ -113,7 +137,21 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
       awayTeam = game.awayTeam;
       gameTime = new Date(game.commenceTime);
 
+      if ((item.betType === "MONEYLINE" || item.betType === "SPREAD") && nicknames.length === 1) {
+        const homeMatch = game.homeTeam.toLowerCase().endsWith(nicknames[0]);
+        const awayMatch = game.awayTeam.toLowerCase().endsWith(nicknames[0]);
+        pickedSide = homeMatch && !awayMatch ? "HOME" : awayMatch && !homeMatch ? "AWAY" : null;
+      }
+
       if (!item.hasExplicitOdds) {
+        // Unchanged from before pickedSide existed - always resolves to
+        // "home" or "away" for a non-TOTAL bet, same as it always has, for
+        // the market-price lookup only. Deliberately NOT reused for
+        // pickedSide above: this always picks a side even when ambiguous,
+        // which is fine for "which market price to fetch" (worst case, a
+        // same-mascot pick's auto-filled odds come from the wrong side's
+        // price) but not for the DB field grading depends on to decide
+        // WIN/LOSS, which must stay null rather than guess.
         const side =
           item.betType === "TOTAL"
             ? item.totalSide
@@ -129,7 +167,7 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
     }
   }
 
-  return { homeTeam, awayTeam, gameTime, odds, resolvable, matched };
+  return { homeTeam, awayTeam, gameTime, odds, resolvable, matched, pickedSide };
 }
 
 // Read-only preview enrichment: the client-side catalog parser has no access
@@ -322,7 +360,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         sportCache.set(sportKey, sportId);
       }
 
-      const { homeTeam, awayTeam, gameTime, odds, resolvable, matched } = await resolveGameAndOdds(item);
+      const { homeTeam, awayTeam, gameTime, odds, resolvable, matched, pickedSide } = await resolveGameAndOdds(item);
       if (resolvable && !matched) {
         // Don't persist this item at all - homeTeam/awayTeam/gameTime from
         // resolveGameAndOdds are just placeholders when matched is false,
@@ -357,6 +395,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         period: item.isFirstFive ? "FIRST_HALF" : "FULL_GAME",
         units: item.units,
         gameTime,
+        pickedSide,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "failed";

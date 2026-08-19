@@ -56,6 +56,12 @@ export const SPORT_SEASON_CONFIG: Record<string, SportSeasonWindow> = {
   // 2026 season tips off mid-May; seasonEnd covers through the WNBA Finals
   // (mid-to-late Oct 2026).
   basketball_wnba: { seasonStart: "2026-05-15", seasonEnd: "2026-10-20" },
+  // FBS Week 0 is confirmed live for 2026-08-29 (matches the Odds API's own
+  // posted slate, checked live during the NCAAF ecosystem investigation);
+  // seasonStart is a few days earlier as a buffer, same reasoning as NFL's
+  // own preseason buffer above. seasonEnd covers through the 12-team CFP
+  // National Championship, confirmed for 2027-01-25, plus a buffer past it.
+  americanfootball_ncaaf: { seasonStart: "2026-08-25", seasonEnd: "2027-02-01" },
 };
 
 // Fails closed, not open: a sportKey with no entry here is treated as

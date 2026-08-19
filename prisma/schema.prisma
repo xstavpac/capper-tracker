@@ -52,6 +52,11 @@ enum Period {
   FIRST_HALF // "F5" in baseball terms, first half elsewhere
 }
 
+enum PickedSide {
+  HOME
+  AWAY
+}
+
 // ---------- Models ----------
 
 model User {
@@ -218,6 +223,14 @@ model Pick {
   gradedViaFuzzyMatch Boolean? // true if auto-graded against a fuzzy (non-exact-team-name) GameResult match -
     // lets regradeFuzzyMatchedPicks find and re-check these later once a better/exact match may be available.
     // null for manually-graded picks and picks predating this field, which are never auto-re-checked.
+  pickedSide PickedSide? // which side of homeTeam/awayTeam this pick is actually on, captured once at import
+    // time from the specific matched game (see resolveGameAndOdds in bulk-picks.ts) - not re-derived from
+    // betDetail text at grading time. Exists because gradePick's old bare-last-word-mascot text match breaks
+    // down for a same-mascot NCAAF matchup (Clemson Tigers @ LSU Tigers - both reduce to "tigers"), where
+    // detail.includes() can't tell the sides apart at all. null for picks predating this field and for any
+    // import where the side genuinely couldn't be determined (including a same-mascot game where even the
+    // matched nickname was ambiguous) - gradePick falls back to the old text-match path in that case, which
+    // itself now refuses to guess when homeTeam and awayTeam share a mascot.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

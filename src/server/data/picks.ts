@@ -143,7 +143,7 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
           // not resolveOutcome/gradePick's team-score path) - reuses the same
           // resolveTouchdownProp the real grader calls, so this reason always
           // reflects the actual reason grading is stuck, not a generic guess.
-          const propResult = await resolveTouchdownProp(p, match.game.externalId);
+          const propResult = await resolveTouchdownProp(p, match.game.externalId, p.sport.name);
           if (propResult.outcome === null) {
             unmatchedReason = "matched game, but " + propResult.reason;
           }

@@ -25,7 +25,21 @@
 //     REAL (non-KBO) team on either side of each collision - the whole
 //     point of routing through DISAMBIGUATED_TEAMS/AMBIGUOUS_NICKNAMES
 //     instead of just deleting the entries outright.
-import { parseCatalog, inferSportFromPickContext } from "./parse-catalog";
+//   PART D - NCAAF week-1 curated launch (Power 4 + Notre Dame, 68 schools),
+//     keyed by school name rather than bare mascot (see NCAAF_SCHOOLS'
+//     comment in parse-catalog.ts for why). Verifies all 68 resolve to
+//     NCAAF from realistic capper text, and - the actual point of the
+//     school-name design - that none of the 7 mascots shared by 2+ curated
+//     schools (Tigers/Wildcats/Bulldogs/Knights/Devils/Cougars/Bears) or the
+//     7 mascots already claimed by an existing NFL/NBA/NHL entry
+//     (Ducks/Bruins/Devils/Cowboys/Raiders/Hurricanes/Cavaliers) resolve to
+//     NCAAF, or to a different school than before, when typed bare. Where
+//     that bare-mascot behavior was previously undocumented here, this
+//     records what it actually verified to be (some are a pre-existing,
+//     unrelated ATP phantom-pick fallback via findPlayerPick - not
+//     "unresolved" - confirmed live before writing these assertions, not
+//     assumed).
+import { parseCatalog, inferSportFromPickContext, NCAAF_CANONICAL_SUFFIX } from "./parse-catalog";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -353,6 +367,92 @@ function main() {
     check("ATP fallback fix: real tennis pick unaffected", tennis?.sportName, "ATP");
     const mma = parseCatalog(`Capper\nIslam Makhachev vs Ian Machado Garry ML`, []).picks[0];
     check("ATP fallback fix: real MMA matchup unaffected", mma?.sportName, "MMA");
+  }
+
+  // ==========================================================================
+  // PART D - NCAAF week-1 curated launch (Power 4 + Notre Dame)
+  // ==========================================================================
+  console.log("\n########## PART D: NCAAF curated team data (school-name keyed) ##########");
+
+  {
+    const keys = Object.keys(NCAAF_CANONICAL_SUFFIX);
+    check("NCAAF curated list: exactly 68 schools", keys.length, 68);
+    check("NCAAF curated list: no duplicate keys", new Set(keys).size, keys.length);
+
+    // (a) Every one of the 68 schools resolves to NCAAF from realistic
+    // capper text (school name + a bet keyword) - no mascot needed.
+    const misresolved = keys.filter((key) => {
+      const pick = parseCatalog(`Capper\n${key} ML`, []).picks[0];
+      return pick?.sportName !== "NCAAF";
+    });
+    check("NCAAF curated list: all 68 schools resolve to NCAAF from a bare school-name pick", misresolved, []);
+  }
+
+  // (b) The 7 mascots shared by 2+ curated NCAAF schools - typed bare, none
+  // of them may resolve to NCAAF, and none of them may change behavior from
+  // whatever they already did before NCAAF existed. Each expectation below
+  // was confirmed against the actual parser (not assumed) before being
+  // written - see the PART D header comment for what "unresolved" turned
+  // out to really mean for 4 of these 7.
+  {
+    const tigers = parseCatalog(`Capper\nTigers ML`, []).picks[0];
+    check("in-sport collision 'tigers': still the pre-existing MLB/KBO ambiguous prompt, not NCAAF", tigers?.ambiguousKey, "tigers");
+    check(
+      "in-sport collision 'tigers': NCAAF is not among the ambiguous options",
+      tigers?.ambiguous?.some((o) => o.sport === "NCAAF"),
+      false
+    );
+
+    const bears = parseCatalog(`Capper\nBears ML`, []).picks[0];
+    check("in-sport collision 'bears': still the pre-existing NFL/KBO ambiguous prompt, not NCAAF", bears?.ambiguousKey, "bears");
+    check(
+      "in-sport collision 'bears': NCAAF is not among the ambiguous options",
+      bears?.ambiguous?.some((o) => o.sport === "NCAAF"),
+      false
+    );
+
+    const devils = parseCatalog(`Capper\nDevils ML`, []).picks[0];
+    check("in-sport collision 'devils': still resolves directly to NHL, not NCAAF", devils?.sportName, "NHL");
+
+    // Wildcats/Bulldogs/Knights/Cougars are registered nowhere bare (not in
+    // any pro list, not in AMBIGUOUS_NICKNAMES) either before or after this
+    // change - confirmed live that this already falls through to
+    // findPlayerPick's ATP phantom-pick fallback (a single capitalized word
+    // before "ML" looks like a one-word player name) - a pre-existing,
+    // NCAAF-unrelated gap, not something this change creates OR fixes. The
+    // only thing that matters here is that it's still ATP, never NCAAF.
+    for (const word of ["Wildcats", "Bulldogs", "Knights", "Cougars"]) {
+      const pick = parseCatalog(`Capper\n${word} ML`, []).picks[0];
+      check(`in-sport collision '${word}': unaffected pre-existing behavior (ATP phantom fallback), never NCAAF`, pick?.sportName, "ATP");
+    }
+  }
+
+  // (c) The 7 mascots already claimed by an existing NFL/NBA/NHL entry -
+  // typed bare, still resolve to that existing pro team, completely
+  // unaffected by NCAAF_TEAMS being appended to TEAM_SPORT_ENTRIES.
+  {
+    const expected: [string, string][] = [
+      ["Ducks", "NHL"],
+      ["Bruins", "NHL"],
+      ["Cowboys", "NFL"],
+      ["Raiders", "NFL"],
+      ["Hurricanes", "NHL"],
+      ["Cavaliers", "NBA"],
+    ];
+    for (const [word, sport] of expected) {
+      const pick = parseCatalog(`Capper\n${word} ML`, []).picks[0];
+      check(`cross-sport collision '${word}': still resolves to ${sport}, unaffected by NCAAF`, pick?.sportName, sport);
+    }
+  }
+
+  // A capper naming both teams in a two-word matchup shape still works for
+  // NCAAF the same way it does for every other sport - not part of the
+  // curated-collision story, just confirming the ordinary multi-team path
+  // wasn't disturbed by NCAAF_TEAMS being appended.
+  {
+    const pick = parseCatalog(`Capper\nOhio State vs Michigan Over 45.5`, []).picks[0];
+    check("NCAAF matchup shape: sport resolves correctly", pick?.sportName, "NCAAF");
+    check("NCAAF matchup shape: both team nicknames captured", pick?.teamNicknames?.sort(), ["michigan", "ohio state"]);
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
