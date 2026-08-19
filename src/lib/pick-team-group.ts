@@ -1,4 +1,4 @@
-import { findTeamNickname } from "@/lib/parse-catalog";
+import { findGroupingNickname } from "@/lib/parse-catalog";
 
 export type PickTeamGroup = "AWAY" | "HOME" | "OTHER";
 
@@ -10,10 +10,13 @@ export type PickTeamGroup = "AWAY" | "HOME" | "OTHER";
 const TEAM_TIED_BET_TYPES = new Set(["MONEYLINE", "SPREAD"]);
 
 // Which side of the matchup a pick is on, inferred from betDetail text
-// against each team's nickname - the same "does betDetail mention this
-// team's nickname" check matchPicksToGame (server/data/picks.ts) already
-// uses to decide whether a pick belongs to a game at all, just applied to
-// each side separately instead of OR'd together.
+// against each team's nickname - similar in spirit to the "does betDetail
+// mention this team's nickname" check matchPicksToGame (server/data/picks.ts)
+// uses to decide whether a pick belongs to a game at all (applied to each
+// side separately instead of OR'd together), but deliberately using
+// findGroupingNickname instead of matchPicksToGame's findTeamNickname - see
+// findGroupingNickname's comment in parse-catalog.ts for why those can't be
+// the same lookup.
 export function classifyPickTeamGroup(
   pick: { betType: string; betDetail: string | null },
   game: { homeTeam: string; awayTeam: string },
@@ -23,10 +26,10 @@ export function classifyPickTeamGroup(
 
   const text = (pick.betDetail ?? "").toLowerCase();
 
-  const awayNickname = findTeamNickname(game.awayTeam, sportName);
+  const awayNickname = findGroupingNickname(game.awayTeam, sportName);
   if (awayNickname && text.includes(awayNickname)) return "AWAY";
 
-  const homeNickname = findTeamNickname(game.homeTeam, sportName);
+  const homeNickname = findGroupingNickname(game.homeTeam, sportName);
   if (homeNickname && text.includes(homeNickname)) return "HOME";
 
   return "OTHER";
@@ -36,7 +39,7 @@ export function classifyPickTeamGroup(
 // next to a pick count - falls back to the full name on the rare team whose
 // nickname isn't in the lookup tables rather than showing nothing.
 export function shortTeamName(fullName: string, sportName: string): string {
-  const nickname = findTeamNickname(fullName, sportName);
+  const nickname = findGroupingNickname(fullName, sportName);
   if (!nickname) return fullName;
   return nickname
     .split(" ")
