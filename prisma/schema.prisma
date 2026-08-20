@@ -503,6 +503,15 @@ model GameResult {
   firstFiveAwayScore Int?
   firstInningHomeScore Int? // runs in inning 1 only - null until inning 1 is complete, for grading NRFI
   firstInningAwayScore Int?
+  // MLB only - the game's full per-inning linescore, shape ScoreGameInning[]
+  // from server/data/odds.ts ({num, home: {runs}|null, away: {runs}|null}),
+  // captured at persistFinalScores time straight from the schedule API
+  // response it already fetches (no extra call). Null for every other sport
+  // and for rows persisted before this field existed - Game Pulse's
+  // situational win-rate lookups only draw from rows where this is set, so
+  // the usable sample starts accruing from whenever this shipped, not
+  // retroactively.
+  inningsJson        Json?
   gameDate           DateTime
   createdAt          DateTime @default(now())
 

@@ -113,6 +113,12 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
       const firstHalfHome = early?.firstFive?.home ?? nflFirstHalf?.home ?? null;
       const firstHalfAway = early?.firstFive?.away ?? nflFirstHalf?.away ?? null;
 
+      // g.innings already comes for free with the same schedule-API fetch
+      // getLiveScoresForSport just made (see getMlbLiveScores) - no separate
+      // "needs" gate or extra fetch required, unlike firstInning/firstHalf
+      // above. MLB-only; g.innings is always null for every other sport.
+      const inningsJson = g.innings ?? undefined;
+
       // Same immutable-once-set reasoning as the first-half fields above -
       // only derive when this row doesn't already have a favTeam.
       const needsLedgerFields = !existing || existing.favTeam === null;
@@ -130,6 +136,7 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
           ...(firstInning
             ? { firstInningHomeScore: firstInning.home, firstInningAwayScore: firstInning.away }
             : {}),
+          ...(inningsJson ? { inningsJson } : {}),
           ...(ledgerHasData
             ? { favTeam: ledger!.favTeam, totalLine: ledger!.totalLine, lineSource: "odds_snapshot" }
             : {}),
@@ -145,6 +152,7 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
           firstFiveAwayScore: firstHalfAway,
           firstInningHomeScore: firstInning?.home ?? null,
           firstInningAwayScore: firstInning?.away ?? null,
+          inningsJson,
           gameDate: new Date(g.commenceTime),
           favTeam: ledger?.favTeam ?? null,
           totalLine: ledger?.totalLine ?? null,
