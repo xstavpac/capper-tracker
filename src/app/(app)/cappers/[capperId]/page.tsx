@@ -313,7 +313,7 @@ export default async function CapperDetailPage({
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
                     {pick.betDetail || pick.betType} - {pick.odds > 0 ? "+" : ""}
-                    {pick.odds} - {pick.units}u
+                    {pick.odds} - {pick.units}u - {formatEastern(pick.gameTime, { month: "short", day: "numeric" })}
                   </div>
                 </div>
                 <PickStatusButtons pickId={pick.id} status={pick.status} />
