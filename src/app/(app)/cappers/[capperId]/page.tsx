@@ -1,4 +1,5 @@
 ﻿import { notFound } from "next/navigation";
+import Link from "next/link";
 import { requireUser } from "@/server/auth";
 import { getCapperById, getCappersWithPickCounts } from "@/server/data/cappers";
 import { CapperEditPanel } from "@/components/dashboard/capper-edit-panel";
@@ -245,13 +246,14 @@ export default async function CapperDetailPage({
             <div className="text-sm font-medium text-muted-foreground">Record by bet type (all sports)</div>
             <div className="flex flex-wrap gap-2">
               {SCORECARD_WINDOWS.map((w) => (
-                <a
+                <Link
                   key={w}
                   href={"?window=" + w + (selectedCategorySport ? "&categorySport=" + encodeURIComponent(selectedCategorySport) : "")}
+                  scroll={false}
                   className={chipClass(window === w)}
                 >
                   {SCORECARD_WINDOW_LABELS[w]}
-                </a>
+                </Link>
               ))}
             </div>
           </div>
@@ -272,13 +274,14 @@ export default async function CapperDetailPage({
             {categoryBreakdownsBySport.length > 1 && (
               <div className="flex flex-wrap gap-2">
                 {categoryBreakdownsBySport.map((s) => (
-                  <a
+                  <Link
                     key={s.sportName}
                     href={"?window=" + window + "&categorySport=" + encodeURIComponent(s.sportName)}
+                    scroll={false}
                     className={chipClass(s.sportName === selectedCategorySport)}
                   >
                     {s.sportName}
-                  </a>
+                  </Link>
                 ))}
               </div>
             )}
