@@ -11,6 +11,8 @@ export type SituationalQuestionKey = "scoredFirst" | "leadingAfter5" | "leadingA
 
 export type SituationalQuestion = {
   key: SituationalQuestionKey;
+  // Present tense, written to read naturally after "when they " - the
+  // evidence UI's sentence template (see GamePulseBadge).
   label: string;
   // Given a game's per-inning runs in inning order (starting at inning 1,
   // index 0), returns which side currently holds this situation - "home",
@@ -85,11 +87,11 @@ function bigInning(homeRuns: (number | null)[], awayRuns: (number | null)[]): "h
 }
 
 export const SITUATIONAL_QUESTIONS: SituationalQuestion[] = [
-  { key: "scoredFirst", label: "scored first", evaluate: scoredFirst },
-  { key: "leadingAfter5", label: "leading after 5", evaluate: leadingAfter(5) },
-  { key: "leadingAfter7", label: "leading after 7", evaluate: leadingAfter(7) },
-  { key: "bigInning", label: "had a " + BIG_INNING_RUN_THRESHOLD + "+ run inning", evaluate: bigInning },
-  { key: "trailingAfter7", label: "trailing after 7", evaluate: trailingAfter(7) },
+  { key: "scoredFirst", label: "score first", evaluate: scoredFirst },
+  { key: "leadingAfter5", label: "lead after 5", evaluate: leadingAfter(5) },
+  { key: "leadingAfter7", label: "lead after 7", evaluate: leadingAfter(7) },
+  { key: "bigInning", label: "have a " + BIG_INNING_RUN_THRESHOLD + "+ run inning", evaluate: bigInning },
+  { key: "trailingAfter7", label: "trail after 7", evaluate: trailingAfter(7) },
 ];
 
 export type SituationalRate = { wins: number; total: number; winPct: number };

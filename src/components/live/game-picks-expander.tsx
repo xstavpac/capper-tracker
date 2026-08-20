@@ -89,7 +89,7 @@ function ListIcon() {
   );
 }
 
-function ChevronIcon({ up }: { up: boolean }) {
+export function ChevronIcon({ up }: { up: boolean }) {
   return (
     <svg
       viewBox="0 0 24 24"

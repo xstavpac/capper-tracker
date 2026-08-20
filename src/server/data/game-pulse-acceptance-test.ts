@@ -97,10 +97,10 @@ expect(
     NONE
   ),
   { leaningTeam: "Home Team", margin: 4, evidence: [
-    { questionKey: "leadingAfter7", label: "leading after 7", subjectTeam: "Home Team", winPct: 90, sampleSize: 20 },
-    { questionKey: "scoredFirst", label: "scored first", subjectTeam: "Home Team", winPct: 80, sampleSize: 15 },
-    { questionKey: "leadingAfter5", label: "leading after 5", subjectTeam: "Home Team", winPct: 80, sampleSize: 10 },
-    { questionKey: "bigInning", label: "had a 3+ run inning", subjectTeam: "Home Team", winPct: 70, sampleSize: 10 },
+    { questionKey: "leadingAfter7", label: "lead after 7", subjectTeam: "Home Team", winPct: 90, sampleSize: 20 },
+    { questionKey: "scoredFirst", label: "score first", subjectTeam: "Home Team", winPct: 80, sampleSize: 15 },
+    { questionKey: "leadingAfter5", label: "lead after 5", subjectTeam: "Home Team", winPct: 80, sampleSize: 10 },
+    { questionKey: "bigInning", label: "have a 3+ run inning", subjectTeam: "Home Team", winPct: 70, sampleSize: 10 },
   ] }
 );
 
@@ -179,8 +179,8 @@ expect(
     NONE
   ),
   { leaningTeam: "Away Team", margin: 2, evidence: [
-    { questionKey: "leadingAfter5", label: "leading after 5", subjectTeam: "Home Team", winPct: 20, sampleSize: 15 },
-    { questionKey: "leadingAfter7", label: "leading after 7", subjectTeam: "Home Team", winPct: 20, sampleSize: 20 },
+    { questionKey: "leadingAfter5", label: "lead after 5", subjectTeam: "Home Team", winPct: 20, sampleSize: 15 },
+    { questionKey: "leadingAfter7", label: "lead after 7", subjectTeam: "Home Team", winPct: 20, sampleSize: 20 },
   ] }
 );
 
