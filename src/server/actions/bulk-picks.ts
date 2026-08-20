@@ -45,7 +45,22 @@ export type BulkImportResult =
       imported: number;
       skipped: number;
       errors: string[];
+      // No scheduled game could be found for this pick at all (unresolved
+      // team/sport, or the game simply isn't in the resolvable window) - a
+      // real "double-check the matchup" problem.
       unmatchedGames: string[];
+      // The game itself resolved fine, but this TOTAL pick's own text had no
+      // parseable number and no confirmed inferredLine came through - either
+      // the client's own market-line lookup (previewMissingTotalLines) found
+      // nothing to propose (e.g. no totals market cached yet for that game),
+      // or the item reached import without the prompt ever being confirmed.
+      // Deliberately kept separate from unmatchedGames: same rejection point
+      // (bulkImportPicksAction refuses to persist an ungradeable TOTAL pick
+      // either way), but a completely different reason - conflating the two
+      // under one message previously left the user unable to tell "wrong/no
+      // game" apart from "right game, just needs a number" (see the
+      // Orioles/Braves-Under investigation).
+      unresolvedTotalLines: string[];
       // Set only when the ENTIRE batch was rejected by the Free-plan pick
       // limit (never a partial import) - distinct from `errors`, which is
       // per-item failures unrelated to billing (bad data, unresolved game,
@@ -324,6 +339,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
   const sportCache = new Map<string, string>();
   const errors: string[] = [];
   const unmatchedGames: string[] = [];
+  const unresolvedTotalLines: string[] = [];
   // Every item that resolves cleanly gets queued here, not inserted yet -
   // the pick-limit check has to see the FULL batch size before any row is
   // written, or a Free user at 995 picks importing 20 could see the first 5
@@ -386,8 +402,10 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         // confirmed an auto-filled market line for it (either it bypassed
         // the confirmation step, or the lookup itself found nothing to
         // propose) - refuse to persist an ungradeable TOTAL pick, same
-        // principle as the unmatched-game rejection above.
-        unmatchedGames.push(item.capperName + " - " + item.description);
+        // principle as the unmatched-game rejection above but a genuinely
+        // different reason (the game DID match here - see unresolvedTotalLines'
+        // own type comment) - kept in its own list, not unmatchedGames.
+        unresolvedTotalLines.push(item.capperName + " - " + item.description);
         continue;
       }
 
@@ -428,6 +446,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
       skipped: items.length,
       errors,
       unmatchedGames,
+      unresolvedTotalLines,
       pickLimitBlocked: { message: result.message, remaining: result.remaining },
     };
   }
@@ -438,5 +457,6 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
     skipped: items.length - result.created.length,
     errors,
     unmatchedGames,
+    unresolvedTotalLines,
   };
 }

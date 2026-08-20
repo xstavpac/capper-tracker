@@ -48,6 +48,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     skipped: number;
     errors: string[];
     unmatchedGames: string[];
+    unresolvedTotalLines: string[];
     pickLimitBlocked?: { message: string; remaining: number };
   } | null>(null);
   // Keyed by the raw capper name as it appears in the pasted text - value is
@@ -350,6 +351,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         skipped: res.skipped,
         errors: res.errors,
         unmatchedGames: res.unmatchedGames,
+        unresolvedTotalLines: res.unresolvedTotalLines,
         pickLimitBlocked: res.pickLimitBlocked,
       });
       // Blocked by the pick limit means nothing was imported - keep the
@@ -721,10 +723,23 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
           {result.unmatchedGames.length > 0 && (
             <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
               Couldn&apos;t match {result.unmatchedGames.length} pick
-              {result.unmatchedGames.length === 1 ? "" : "s"} to today&apos;s schedule - they
-              were NOT imported. Double-check the matchup and add them manually:
+              {result.unmatchedGames.length === 1 ? "" : "s"} to a scheduled game - they were
+              NOT imported. Double-check the matchup and add them manually:
               <ul className="mt-1 list-disc pl-4">
                 {result.unmatchedGames.map((g, i) => (
+                  <li key={i}>{g}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result.unresolvedTotalLines.length > 0 && (
+            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+              {result.unresolvedTotalLines.length} total pick
+              {result.unresolvedTotalLines.length === 1 ? "" : "s"} matched a game fine, but had
+              no number in the text and no market line could be found to propose - they were NOT
+              imported. Add the total number and import manually:
+              <ul className="mt-1 list-disc pl-4">
+                {result.unresolvedTotalLines.map((g, i) => (
                   <li key={i}>{g}</li>
                 ))}
               </ul>
