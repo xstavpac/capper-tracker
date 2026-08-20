@@ -94,7 +94,7 @@ export const SITUATIONAL_QUESTIONS: SituationalQuestion[] = [
 
 export type SituationalRate = { wins: number; total: number; winPct: number };
 
-function inningsToRunsArrays(innings: ScoreGameInning[]): { homeRuns: (number | null)[]; awayRuns: (number | null)[] } {
+export function inningsToRunsArrays(innings: ScoreGameInning[]): { homeRuns: (number | null)[]; awayRuns: (number | null)[] } {
   const sorted = [...innings].sort((a, b) => a.num - b.num);
   return {
     homeRuns: sorted.map((i) => i.home?.runs ?? null),
@@ -102,20 +102,21 @@ function inningsToRunsArrays(innings: ScoreGameInning[]): { homeRuns: (number | 
   };
 }
 
-// Team's historical win rate in MLB games (any season captured so far) where
-// `questionKey`'s situation held true for them specifically - e.g. for
-// "leadingAfter5", only games this team was actually ahead after 5 count
-// toward wins/total, not every game they played. Draws only from
-// GameResult rows with inningsJson set (see persistFinalScores) - rows
-// predating that field, and every non-MLB sport, are silently excluded, so
-// the eligible sample starts at 0 and grows as games are graded going
-// forward. Returns { wins: 0, total: 0, winPct: 0 } rather than null when no
+export type SituationalRatesByQuestion = Record<SituationalQuestionKey, SituationalRate>;
+
+// Team's historical win rate in MLB games (any season captured so far),
+// broken out per situational question - e.g. under "leadingAfter5", only
+// games this team was actually ahead after 5 count toward that question's
+// wins/total, not every game they played. One query for the team (not one
+// per question) since every question is evaluated against the same row set.
+// Draws only from GameResult rows with inningsJson set (see
+// persistFinalScores) - rows predating that field, and every non-MLB sport,
+// are silently excluded, so the eligible sample starts at 0 and grows as
+// games are graded going forward. Each question resolves to
+// { wins: 0, total: 0, winPct: 0 } rather than being omitted when no
 // eligible games exist yet - callers apply their own minimum-sample-size
 // floor before treating a rate as meaningful.
-export async function getTeamSituationalRate(team: string, questionKey: SituationalQuestionKey): Promise<SituationalRate> {
-  const question = SITUATIONAL_QUESTIONS.find((q) => q.key === questionKey);
-  if (!question) return { wins: 0, total: 0, winPct: 0 };
-
+export async function getTeamSituationalRates(team: string): Promise<SituationalRatesByQuestion> {
   const rows = await prisma.gameResult.findMany({
     where: {
       sportKey: "baseball_mlb",
@@ -125,20 +126,23 @@ export async function getTeamSituationalRate(team: string, questionKey: Situatio
     select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true, inningsJson: true },
   });
 
-  let wins = 0;
-  let total = 0;
-  for (const row of rows) {
-    const isHome = row.homeTeam === team;
-    const innings = (row.inningsJson as unknown as ScoreGameInning[] | null) ?? [];
-    const { homeRuns, awayRuns } = inningsToRunsArrays(innings);
-    const holder = question.evaluate(homeRuns, awayRuns);
-    if (holder === null || holder !== (isHome ? "home" : "away")) continue;
+  const result = {} as SituationalRatesByQuestion;
+  for (const question of SITUATIONAL_QUESTIONS) {
+    let wins = 0;
+    let total = 0;
+    for (const row of rows) {
+      const isHome = row.homeTeam === team;
+      const innings = (row.inningsJson as unknown as ScoreGameInning[] | null) ?? [];
+      const { homeRuns, awayRuns } = inningsToRunsArrays(innings);
+      const holder = question.evaluate(homeRuns, awayRuns);
+      if (holder === null || holder !== (isHome ? "home" : "away")) continue;
 
-    total++;
-    const teamScore = isHome ? row.homeScore : row.awayScore;
-    const oppScore = isHome ? row.awayScore : row.homeScore;
-    if (teamScore > oppScore) wins++;
+      total++;
+      const teamScore = isHome ? row.homeScore : row.awayScore;
+      const oppScore = isHome ? row.awayScore : row.homeScore;
+      if (teamScore > oppScore) wins++;
+    }
+    result[question.key] = total === 0 ? { wins: 0, total: 0, winPct: 0 } : { wins, total, winPct: (wins / total) * 100 };
   }
-
-  return total === 0 ? { wins: 0, total: 0, winPct: 0 } : { wins, total, winPct: (wins / total) * 100 };
+  return result;
 }
