@@ -64,9 +64,17 @@ type ResolvableItem = {
   description: string;
 };
 
+// includeUpcoming: true - a capper's picks routinely get posted (and
+// pasted/imported) days before kickoff, especially for NFL where the whole
+// week's slate goes up at once, so import resolution needs the same
+// no-upper-date-bound game pool the live odds board already reads from
+// (getOddsForSport), not just the yesterday/today/tomorrow live-score
+// window every other resolveGameForNickname/Teams caller uses by default
+// (see resolveGameForNickname's own comment in server/data/odds.ts).
 function lookupGame(liveSportKey: string, nicknames: string[]) {
-  if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1]);
-  if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0]);
+  const options = { includeUpcoming: true };
+  if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1], undefined, options);
+  if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0], undefined, options);
   return Promise.resolve(null);
 }
 

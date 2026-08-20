@@ -489,19 +489,72 @@ export async function getNflPlayerTdStats(eventId: string): Promise<NflPlayerTdS
   return Array.from(byPlayer.values());
 }
 
+// The yesterday/today/tomorrow live-score window (getLiveScoresForSport)
+// alone, or - when includeUpcoming is true - that same window merged with
+// whatever getOddsForSport already has cached for the day (the exact same,
+// no-upper-date-bound source the live odds board itself reads from, which
+// for NFL is a full week's slate posted at once). Real posted lines
+// routinely arrive days before kickoff (confirmed: real NFL picks like
+// "Bears +1"/"Titans -2.5" posted well ahead of game day, visible on the
+// live board, but invisible to the plain yesterday/today/tomorrow window),
+// so catalog-import resolution (bulk-picks.ts) opts into the merged pool -
+// see resolveGameForNickname/resolveGameForTeams's own `includeUpcoming`
+// param. checkAmbiguousTeamSchedules (disambiguate-catalog.ts) deliberately
+// keeps the narrow default: STEP 2 of the disambiguation hierarchy is
+// specifically asking "does this sport have a game for this team TODAY" as a
+// signal for which of two candidate sports is actually active right now - a
+// game 6 days out answers a different question and would wrongly count as a
+// "yes" for a sport that has nothing on today's slate.
+//
+// getOddsForSport entries are mapped into ScoreGame shape with status
+// "preview" and scores null (an odds-listed game is by construction one
+// that, as of its snapshot's fetch, hadn't started yet - see
+// getOddsForSport's own commenceTime > fetchedAt filter) - deduped against
+// the live-score window by the (homeTeam, awayTeam, commenceTime) triple, so
+// a game already present via the live-score window (with its real
+// live/final status intact for the notFinal tie-break below) is never
+// shadowed by a status-less duplicate from the odds side.
+async function getResolutionCandidates(sportKey: string, includeUpcoming: boolean): Promise<ScoreGame[]> {
+  const liveScores = await getLiveScoresForSport(sportKey);
+  if (!includeUpcoming) return liveScores;
+
+  const oddsGames = await getOddsForSport(sportKey);
+  const byKey = new Map<string, ScoreGame>();
+  const keyOf = (g: { homeTeam: string; awayTeam: string; commenceTime: string }) =>
+    g.homeTeam + "|" + g.awayTeam + "|" + g.commenceTime;
+  for (const g of liveScores) byKey.set(keyOf(g), g);
+  for (const g of oddsGames) {
+    const key = keyOf(g);
+    if (byKey.has(key)) continue;
+    byKey.set(key, {
+      id: g.id,
+      homeTeam: g.homeTeam,
+      awayTeam: g.awayTeam,
+      status: "preview",
+      scores: null,
+      commenceTime: g.commenceTime,
+      inningHalf: null,
+      inningOrdinal: null,
+    });
+  }
+  return Array.from(byKey.values());
+}
+
 // Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw
-// pick text) to the real game it refers to, using the yesterday/today/
-// tomorrow schedule window for the given sport. Same-team matchups repeat
-// every few days in a season (series/back-to-backs), so when a nickname
-// matches more than one game we prefer a game on the same local calendar day
-// as `referenceTime`, and within that, prefer one that hasn't finished yet -
+// pick text) to the real game it refers to. Same-team matchups repeat every
+// few days in a season (series/back-to-backs), so when a nickname matches
+// more than one game we prefer a game on the same local calendar day as
+// `referenceTime`, and within that, prefer one that hasn't finished yet -
 // falling back to whichever candidate started closest to `referenceTime`.
+// includeUpcoming widens the candidate pool beyond the yesterday/today/
+// tomorrow live-score window - see getResolutionCandidates above.
 export async function resolveGameForNickname(
   sportKey: string,
   nickname: string,
-  referenceTime: Date = new Date()
+  referenceTime: Date = new Date(),
+  options: { includeUpcoming?: boolean } = {}
 ): Promise<ScoreGame | null> {
-  const games = await getLiveScoresForSport(sportKey);
+  const games = await getResolutionCandidates(sportKey, options.includeUpcoming ?? false);
   const candidates = games.filter(
     (g) => g.homeTeam.toLowerCase().endsWith(nickname) || g.awayTeam.toLowerCase().endsWith(nickname)
   );
@@ -524,9 +577,10 @@ export async function resolveGameForTeams(
   sportKey: string,
   nicknameA: string,
   nicknameB: string,
-  referenceTime: Date = new Date()
+  referenceTime: Date = new Date(),
+  options: { includeUpcoming?: boolean } = {}
 ): Promise<ScoreGame | null> {
-  const games = await getLiveScoresForSport(sportKey);
+  const games = await getResolutionCandidates(sportKey, options.includeUpcoming ?? false);
   const candidates = games.filter((g) => {
     const home = g.homeTeam.toLowerCase();
     const away = g.awayTeam.toLowerCase();
