@@ -72,6 +72,96 @@ function CoolingOffIcon() {
   );
 }
 
+// Concentric rings + an incoming arrow, static (the "hit" is shown by the
+// per-row fill bar, not by animating the header glyph itself) - matches
+// Tabler's ti-target-arrow.
+function BestIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400"
+      aria-hidden="true"
+    >
+      <circle cx="9" cy="9" r="7" />
+      <circle cx="9" cy="9" r="4" />
+      <circle cx="9" cy="9" r="1" fill="currentColor" stroke="none" />
+      <path d="M21 21 15.5 15.5" />
+      <path d="M13 13 16.2 14 14 16.2Z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+// Same rings, crossed out - matches Tabler's ti-target-off. Static, same
+// reasoning as BestIcon above.
+function WorstIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5 shrink-0 text-red-600 dark:text-red-400"
+      aria-hidden="true"
+    >
+      <circle cx="10" cy="10" r="7" />
+      <circle cx="10" cy="10" r="4" />
+      <path d="M3 21 21 3" />
+    </svg>
+  );
+}
+
+// Capsule body + window + fins, matches Tabler's ti-rocket. Drifts up and
+// settles on a slow loop - same low-frequency, non-distracting pace as the
+// Hot streaks flame, just a vertical bob instead of a flicker.
+function TrendingIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400 animate-rocket-drift"
+      aria-hidden="true"
+    >
+      <rect x="9.5" y="3.5" width="5" height="11" rx="2.5" />
+      <circle cx="12" cy="8" r="1.1" />
+      <path d="M9.5 11 6 15.5 9.5 14.3" />
+      <path d="M14.5 11 18 15.5 14.5 14.3" />
+    </svg>
+  );
+}
+
+// Canopy + shroud lines + basket, matches Tabler's ti-parachute. Rocks
+// gently side to side from the canopy, same slow pace as the rocket's drift
+// and the flame/snowflake treatments.
+function FallingIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5 shrink-0 origin-top text-red-600 dark:text-red-400 animate-parachute-sway"
+      aria-hidden="true"
+    >
+      <path d="M3 10a9 9 0 0 1 18 0" />
+      <path d="M4.5 10 9 17M9.5 10 10.5 17M14.5 10 13.5 17M19.5 10 15 17" />
+      <rect x="9" y="17" width="6" height="3" rx="1" />
+    </svg>
+  );
+}
+
 // Condensed cheat-sheet version of the Cappers-page panels, right on the
 // Dashboard so "who's hot right now" doesn't require a navigation - same
 // data, same row components, just fewer rows each. Six panels in a 2x3
@@ -134,7 +224,7 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
         )}
 
         {panels.bestLast20.length > 0 && (
-          <Panel title="Best last 20 picks">
+          <Panel title="Best last 20 picks" icon={<BestIcon />}>
             <ExpandableRows>
               {panels.bestLast20.slice(0, EXPANDABLE_ROWS_MAX).map((e) => (
                 <BarRow
@@ -153,7 +243,7 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
         )}
 
         {panels.worstLast20.length > 0 && (
-          <Panel title="Worst last 20 picks">
+          <Panel title="Worst last 20 picks" icon={<WorstIcon />}>
             <ExpandableRows>
               {panels.worstLast20.slice(0, EXPANDABLE_ROWS_MAX).map((e) => (
                 <BarRow
@@ -172,7 +262,11 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
         )}
 
         {panels.rising.length > 0 && (
-          <Panel title="Trending" subtitle="Recent form meaningfully better than their stretch before it">
+          <Panel
+            title="Trending"
+            subtitle="Recent form meaningfully better than their stretch before it"
+            icon={<TrendingIcon />}
+          >
             <ExpandableRows>
               {panels.rising.slice(0, EXPANDABLE_ROWS_MAX).map((e) => (
                 <PanelRow
@@ -193,7 +287,11 @@ export function TrendingCappers({ panels }: { panels: CapperPanels }) {
         )}
 
         {panels.fallingOff.length > 0 && (
-          <Panel title="Falling off" subtitle="Recent form well below their lifetime rate">
+          <Panel
+            title="Falling off"
+            subtitle="Recent form well below their lifetime rate"
+            icon={<FallingIcon />}
+          >
             <ExpandableRows>
               {panels.fallingOff.slice(0, EXPANDABLE_ROWS_MAX).map((e) => (
                 <PanelRow
