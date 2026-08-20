@@ -84,6 +84,16 @@ export async function renameCapperAction(capperId: string, name: string): Promis
     await renameCapper(user.id, capperId, name);
     revalidatePath("/cappers");
     revalidatePath("/cappers/[capperId]", "page");
+    // The Betting Catalog Import page (bulk-import-form.tsx) reads its known-
+    // capper-name list from this route at render time - without revalidating
+    // it too, a client-side navigation there right after a rename can still
+    // serve the pre-rename name list, which is exactly the staleness window
+    // that let a renamed capper's picks silently misattribute to an unrelated
+    // existing capper whose name happened to be a prefix of the new one (see
+    // the capper-rename-misattribution investigation). parseCatalog's inline
+    // matching is now hardened against this independently too, but closing
+    // the staleness window itself is still the right fix, not just the backstop.
+    revalidatePath("/picks/import");
   } catch (err) {
     const message = err instanceof Error ? err.message : "Something went wrong.";
     return { success: false, error: message };

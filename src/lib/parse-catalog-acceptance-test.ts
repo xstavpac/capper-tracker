@@ -455,6 +455,63 @@ function main() {
     check("NCAAF matchup shape: both team nicknames captured", pick?.teamNicknames?.sort(), ["michigan", "ohio state"]);
   }
 
+  // ==========================================================================
+  // PART E - capper-rename misattribution hardening (inline-prefix matching)
+  // ==========================================================================
+  // Real incident: a capper renamed "Sharg sheet" (typo) -> "Sharp sheet" had
+  // subsequent picks silently attributed to "Sharp", a different, pre-existing
+  // capper whose name happens to be a literal prefix of the new one. The
+  // known-capper-name list `parseCatalog` matches against can go stale for
+  // reasons outside the parser's control (see the revalidatePath fix in
+  // renameCapperAction) - these fixtures prove the parser itself no longer
+  // silently misattributes even when the correct longer name is genuinely
+  // absent from `knownCapperNames`, independent of that staleness fix.
+  console.log("\n########## PART E: capper-rename misattribution hardening ##########");
+
+  // The exact repro: "Sharp" is a known capper, "Sharp sheet" (the freshly
+  // renamed name) is NOT in the known list at all - simulating the stale-list
+  // window. Old behavior: "Sharp" matched as an inline prefix, and "49ers"
+  // further into the leftover "sheet: 49ers ML" text still resolved NFL,
+  // silently producing a pick attributed to "Sharp". Hardened behavior: the
+  // text right after "Sharp"'s separator ("sheet: 49ers ML") doesn't itself
+  // start with anything pick-shaped, so the match is rejected and the whole
+  // line is surfaced as unresolved instead of guessed.
+  {
+    const { picks, unresolved } = parseCatalog(`Sharp sheet: 49ers ML`, ["Sharp"]);
+    check("Rename hardening: no pick silently attributed to the wrong capper 'Sharp'", picks.length, 0);
+    check("Rename hardening: line surfaced as unresolved instead of guessed", unresolved, ["Sharp sheet: 49ers ML"]);
+  }
+
+  // Same shape, but a real pick genuinely belonging to the short-named
+  // capper "Sharp" - must still resolve normally. Proves the hardening only
+  // rejects a match when the leftover text ISN'T pick-shaped, not every
+  // short-prefix match.
+  {
+    const pick = parseCatalog(`Sharp: 49ers ML`, ["Sharp"]).picks[0];
+    check("Rename hardening: genuine short-name inline pick still attributes correctly", pick?.capperName, "Sharp");
+    check("Rename hardening: genuine short-name inline pick still resolves sport", pick?.sportName, "NFL");
+  }
+
+  // Once the longer name IS present in the known list (the non-stale case -
+  // e.g. after the page has actually revalidated), it must still be
+  // preferred over the shorter colliding name, unchanged from before this
+  // fix - sortedNames' longest-first order already handled this and must
+  // keep doing so.
+  {
+    const pick = parseCatalog(`Sharp sheet: 49ers ML`, ["Sharp", "Sharp sheet"]).picks[0];
+    check("Rename hardening: longer known name still preferred once present", pick?.capperName, "Sharp sheet");
+    check("Rename hardening: longer known name match still resolves sport", pick?.sportName, "NFL");
+  }
+
+  // A pure header line (no pick text on the same line) for the longer name
+  // must still work via the exact savedNameMatch path, same as always -
+  // this fix only touches the inline same-line name+pick case.
+  {
+    const { picks, unresolved } = parseCatalog(`Sharp sheet\n49ers ML`, ["Sharp", "Sharp sheet"]);
+    check("Rename hardening: standalone header line for the longer name is unaffected", unresolved, []);
+    check("Rename hardening: standalone header line attributes the following pick correctly", picks[0]?.capperName, "Sharp sheet");
+  }
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }

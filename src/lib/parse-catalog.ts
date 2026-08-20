@@ -439,6 +439,32 @@ function teamPhraseRegex(phrase: string): RegExp {
   return new RegExp("\\b" + phrase.replace(/ /g, "\\s*") + "\\b", "i");
 }
 
+// Gates an inline capper-name prefix match (see the `inlineMatch` search
+// below) - a known name is only accepted as the capper for this line if what
+// immediately follows it (after the separator) itself starts with something
+// pick-shaped, not merely CONTAINS a team/sport signal somewhere further in.
+// Without this, a known capper name that's a literal prefix of a longer,
+// not-yet-recognized capper name (e.g. saved "Sharp" vs. a freshly renamed
+// "Sharp sheet") would silently swallow leftover name text ("sheet: 49ers
+// ML" still resolves NFL via "49ers" even though "sheet:" is garbage) and
+// misattribute the whole pick to the wrong, unrelated capper - a real
+// data-corruption risk, not just a missed match. Deliberately anchored (^),
+// unlike detectSport's own nickname fallback, which intentionally scans
+// anywhere in text - that's safe there because it's only ever applied to
+// text already known to have no leading capper-name ambiguity (a standalone
+// pick line under an already-established header, or a remainder already
+// confirmed to start immediately after a fully-consumed known name here).
+function remainderStartsLikePick(remainder: string): boolean {
+  const trimmed = remainder.trimStart();
+  for (const code of KNOWN_SPORTS) {
+    if (new RegExp("^" + code.replace(/ /g, "\\s+"), "i").test(trimmed)) return true;
+  }
+  for (const [phrase] of TEAM_SPORT_ENTRIES) {
+    if (new RegExp("^" + phrase.replace(/ /g, "\\s*"), "i").test(trimmed)) return true;
+  }
+  return /^(ML\b|money\s*line|over\b|under\b|o\d|u\d|[+-]\d|[NY]RFI\b|total\b)/i.test(trimmed);
+}
+
 // allowNicknameFallback gates the second (fuzzy, team-nickname-only) branch -
 // callers pass false right after a blank line, where a bare nickname match
 // ("Tigers Kitchen") is far more likely to be a capper's name than a pick
@@ -918,13 +944,39 @@ export function parseCatalog(
     }
 
     const lower = line.toLowerCase();
-    const inlineMatch = sortedNames.find((name) => {
+    // A raw prefix candidate (name + separator, no adjacency check yet) -
+    // used below only to detect a rejected near-miss, never to attribute a
+    // pick directly. Kept as a separate pass from the hardened search so the
+    // near-miss signal survives even when the hardened search finds nothing.
+    const rawPrefixCandidate = sortedNames.find((name) => {
       const nameLower = name.toLowerCase();
       return (
         lower === nameLower ||
         (lower.startsWith(nameLower) && /[\s:.-]/.test(line[name.length] ?? " "))
       );
     });
+    const inlineMatch = sortedNames.find((name) => {
+      const nameLower = name.toLowerCase();
+      if (lower === nameLower) return true;
+      if (!(lower.startsWith(nameLower) && /[\s:.-]/.test(line[name.length] ?? " "))) return false;
+      const remainder = line.slice(name.length).replace(/^[\s:.-]+/, "").trim();
+      return remainder === "" || remainderStartsLikePick(remainder);
+    });
+    // The raw scan found a name-prefix match that the hardened scan rejected -
+    // the text right after the matched name doesn't itself look like a pick,
+    // meaning this is very likely a longer, not-yet-recognized capper name
+    // (e.g. a fresh rename) that happens to start with a shorter saved
+    // capper's name, not that shorter capper's own pick. Don't let this fall
+    // through to the generic capper-name/pick detection below - that would
+    // either misattribute it to whatever `currentCapper` currently is, or
+    // (if it looks pick-shaped) risk swallowing the leading name text into
+    // the pick description. Surface it for manual review instead, same
+    // treatment as any other line that looks like a pick but can't be
+    // resolved with confidence.
+    if (!inlineMatch && rawPrefixCandidate && looksLikePick(line)) {
+      unresolved.push(line.replace(/^-\s*/, "").trim());
+      continue;
+    }
 
     if (inlineMatch) {
       const remainder = line.slice(inlineMatch.length).replace(/^[\s:.-]+/, "").trim();
