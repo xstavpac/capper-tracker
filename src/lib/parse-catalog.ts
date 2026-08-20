@@ -101,10 +101,14 @@ const WNBA_TEAMS = [
 
 // "lions" deliberately excluded - BC Lions collides with NFL's Detroit Lions,
 // same "let it fall through rather than always resolving to one sport"
-// reasoning as cardinals/panthers/giants above. Not added to
-// AMBIGUOUS_NICKNAMES either since this app has no CFL schedule data to
-// actually disambiguate against - a bare "Lions" pick just stays NFL, same
-// as before CFL support existed.
+// reasoning as cardinals/panthers/giants above. "lions" IS already an
+// AMBIGUOUS_NICKNAMES key (NFL vs KBO's Samsung Lions, added later for that
+// unrelated collision) - deliberately left untouched by CFL support: a bare
+// "Lions" pick still only prompts NFL/KBO, exactly as it did before CFL had
+// real schedule data, never gaining CFL as a third silent guess. A capper
+// naming the city ("BC Lions") never hits that prompt at all - see
+// CFL_TEAMS_BY_CITY below, whose bare "bc" key resolves straight to CFL with
+// no ambiguity (nothing else in this file's team lists uses "bc").
 const CFL_TEAMS = [
   "redblacks", "blue bombers", "roughriders", "argonauts", "elks",
   "alouettes", "stampeders", "tiger-cats",
@@ -326,6 +330,54 @@ const NCAAF_TEAMS = NCAAF_SCHOOLS.map(([key]) => key);
 
 export const NCAAF_CANONICAL_SUFFIX: Record<string, string> = Object.fromEntries(NCAAF_SCHOOLS);
 
+// CFL - keyed by city (the form cappers actually type: "Ottawa vs Montreal
+// Over 62.5", not "Redblacks vs Alouettes") rather than bare mascot, same
+// "prefix, not suffix" reasoning as NCAAF_SCHOOLS above: a real CFL schedule
+// team name is always "City Mascot" ("Ottawa Redblacks"), so a bare city
+// name is a PREFIX of it, not a SUFFIX - CFL_CANONICAL_SUFFIX below exists
+// for the exact same reason NCAAF_CANONICAL_SUFFIX does (see its own comment
+// on NCAAF_SCHOOLS), consulted the same way at the same single call site
+// (lookupGame in bulk-picks.ts). All 9 CFL teams; none of these 9 city keys
+// collide with any other sport/league's team list in this file - "bc" is
+// the one worth flagging as unusually short (2 letters, shorter than any
+// other entry here), but \b-anchored matching keeps it scoped to the exact
+// standalone word, and it doesn't collide with any existing entry.
+const CFL_TEAMS_BY_CITY: [string, string][] = [
+  ["ottawa", "ottawa redblacks"],
+  ["montreal", "montreal alouettes"],
+  ["toronto", "toronto argonauts"],
+  ["hamilton", "hamilton tiger-cats"],
+  ["winnipeg", "winnipeg blue bombers"],
+  ["saskatchewan", "saskatchewan roughriders"],
+  ["calgary", "calgary stampeders"],
+  ["edmonton", "edmonton elks"],
+  ["bc", "bc lions"],
+];
+
+const CFL_CITY_TEAMS = CFL_TEAMS_BY_CITY.map(([key]) => key);
+
+export const CFL_CANONICAL_SUFFIX: Record<string, string> = Object.fromEntries(CFL_TEAMS_BY_CITY);
+
+// CFL registers BOTH a city nickname ("ottawa") and its own bare mascot
+// ("redblacks") as separate TEAM_SPORT_ENTRIES entries - deliberately, since
+// a capper types either form alone ("Ottawa vs Montreal" or "Redblacks vs
+// Alouettes"). But a capper naming BOTH together for one team ("Ottawa
+// Redblacks ML") then produces two found nicknames that, once
+// CFL_CANONICAL_SUFFIX translates "ottawa" to "ottawa redblacks", both
+// describe the SAME real team - resolveGameForTeams (odds.ts) would then
+// require two DIFFERENT teams to each match one of them, which no real game
+// can ever satisfy (nothing else ends in "redblacks"), silently failing to
+// match a game that obviously exists. Its one call site (bulk-picks.ts,
+// right after the NCAAF/CFL suffix translation) collapses any nickname
+// that's a trailing substring of another down to just the longer, more
+// specific one before a two-nickname lookup ever runs - harmless no-op for
+// every other sport, which has no same-team-two-aliases case to begin with.
+export function dedupeSameTeamNicknames(nicknames: string[]): string[] {
+  return nicknames.filter(
+    (n, i) => !nicknames.some((other, j) => j !== i && other.length > n.length && other.endsWith(n))
+  );
+}
+
 const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...DISAMBIGUATED_TEAMS,
   ...MLB_TEAMS.map((t): TeamEntry => [t, "MLB"]),
@@ -334,6 +386,7 @@ const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...NHL_TEAMS.map((t): TeamEntry => [t, "NHL"]),
   ...WNBA_TEAMS.map((t): TeamEntry => [t, "WNBA"]),
   ...CFL_TEAMS.map((t): TeamEntry => [t, "CFL"]),
+  ...CFL_CITY_TEAMS.map((t): TeamEntry => [t, "CFL"]),
   ...KBO_TEAMS.map((t): TeamEntry => [t, "KBO"]),
   ...NCAAF_TEAMS.map((t): TeamEntry => [t, "NCAAF"]),
 ].sort((a, b) => b[0].length - a[0].length);
@@ -369,6 +422,7 @@ const GROUPING_TEAM_NICKNAMES: TeamEntry[] = [
   ...NHL_TEAMS.map((t): TeamEntry => [t, "NHL"]),
   ...WNBA_TEAMS.map((t): TeamEntry => [t, "WNBA"]),
   ...CFL_TEAMS.map((t): TeamEntry => [t, "CFL"]),
+  ...CFL_CITY_TEAMS.map((t): TeamEntry => [t, "CFL"]),
   ...KBO_TEAMS.map((t): TeamEntry => [t, "KBO"]),
   ...NCAAF_TEAMS.map((t): TeamEntry => [t, "NCAAF"]),
   ...Object.entries(AMBIGUOUS_NICKNAMES).flatMap(([bare, options]): TeamEntry[] =>

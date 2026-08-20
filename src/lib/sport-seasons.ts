@@ -62,6 +62,13 @@ export const SPORT_SEASON_CONFIG: Record<string, SportSeasonWindow> = {
   // own preseason buffer above. seasonEnd covers through the 12-team CFP
   // National Championship, confirmed for 2027-01-25, plus a buffer past it.
   americanfootball_ncaaf: { seasonStart: "2026-08-25", seasonEnd: "2027-02-01" },
+  // CFL regular season typically runs June through early November, Grey Cup
+  // mid-November - UNLIKE every other window above, this one is NOT
+  // confirmed against a live schedule/odds source (the Odds API quota was
+  // exhausted during this investigation before a real 2026 CFL slate could
+  // be checked) - approximate based on the league's known real-world
+  // cadence only. Sanity-check the exact dates before this ships.
+  americanfootball_cfl: { seasonStart: "2026-06-01", seasonEnd: "2026-11-30" },
 };
 
 // Fails closed, not open: a sportKey with no entry here is treated as

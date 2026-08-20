@@ -39,7 +39,13 @@
 //     unrelated ATP phantom-pick fallback via findPlayerPick - not
 //     "unresolved" - confirmed live before writing these assertions, not
 //     assumed).
-import { parseCatalog, inferSportFromPickContext, NCAAF_CANONICAL_SUFFIX } from "./parse-catalog";
+import {
+  parseCatalog,
+  inferSportFromPickContext,
+  NCAAF_CANONICAL_SUFFIX,
+  CFL_CANONICAL_SUFFIX,
+  dedupeSameTeamNicknames,
+} from "./parse-catalog";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -175,24 +181,34 @@ function main() {
     );
   }
 
-  // Ottawa vs Winnipeg (a81d565) - single-word CITY names, not in CFL_TEAMS
-  // (which only has nicknames like "redblacks"/"blue bombers"). The
-  // documented fix tightened findMatchupPlayerPick to require 2-4
-  // capitalized words per side, so this correctly stays unresolved instead
-  // of being misread as a two-fighter MMA matchup - and, via the matchup-
-  // shape signal in looksLikePick, does NOT fall through to becoming a fake
-  // capper either.
+  // Ottawa vs Winnipeg (a81d565, updated by the CFL city-name support in
+  // PART F below) - single-word CITY names. Originally neither "ottawa" nor
+  // "winnipeg" were tracked at all (only mascots like "redblacks"/"blue
+  // bombers" were), so this correctly stayed unresolved instead of being
+  // misread as a two-fighter MMA matchup (findMatchupPlayerPick's 2-4
+  // capitalized-word-per-side requirement, and looksLikePick's matchup-shape
+  // signal, both still apply and still matter for genuinely untracked
+  // city-vs-city text in other sports/leagues). Now that CFL_TEAMS_BY_CITY
+  // tracks both cities, this is a real, resolvable CFL matchup - Ottawa
+  // Redblacks vs Winnipeg Blue Bombers - and correctly resolves as one,
+  // exactly the class of bug the CFL city-name support exists to fix (see
+  // the near-identical real report: "Ottawa vs Montreal Over 62.5", PART F).
   {
     const { picks, unresolved } = parseCatalog(`Gridiron Capper\n\nOttawa vs Winnipeg Over 56.5\nBraves ML`, []);
-    check("Ottawa/Winnipeg: stays unresolved (not an MMA fighter match, not a pick)", unresolved, ["Ottawa vs Winnipeg Over 56.5"]);
+    check("Ottawa/Winnipeg: now resolves as a real CFL pick, not unresolved", unresolved, []);
+    const ottawaWinnipeg = picks.find((p) => p.description.includes("56.5"));
+    check(
+      "Ottawa/Winnipeg: resolves to CFL with both city nicknames captured",
+      { sport: ottawaWinnipeg?.sportName, teams: ottawaWinnipeg?.teamNicknames.slice().sort() },
+      { sport: "CFL", teams: ["ottawa", "winnipeg"] }
+    );
     const braves = picks.find((p) => p.description.includes("Braves"));
     check("Ottawa/Winnipeg: following real pick still attributed to Gridiron Capper", braves?.capperName, "Gridiron Capper");
   }
 
-  // Real CFL_TEAMS nickname resolution (a81d565) - the positive case Ottawa/
-  // Winnipeg is deliberately NOT: an actual tracked CFL nickname pair
-  // resolves cleanly to sportName "CFL", same "untracked-sport" bucket ATP
-  // occupies for tennis.
+  // Real CFL_TEAMS nickname resolution (a81d565) - a tracked bare-mascot CFL
+  // matchup resolves cleanly to sportName "CFL", unaffected by the city-name
+  // support added alongside it.
   {
     const { picks } = parseCatalog(`Capper\nRedblacks vs Blue Bombers Over 45.5`, []);
     check(
@@ -510,6 +526,94 @@ function main() {
     const { picks, unresolved } = parseCatalog(`Sharp sheet\n49ers ML`, ["Sharp", "Sharp sheet"]);
     check("Rename hardening: standalone header line for the longer name is unaffected", unresolved, []);
     check("Rename hardening: standalone header line attributes the following pick correctly", picks[0]?.capperName, "Sharp sheet");
+  }
+
+  // ==========================================================================
+  // PART F - CFL support (city-name keyed, following the NCAAF pattern)
+  // ==========================================================================
+  console.log("\n########## PART F: CFL support ##########");
+
+  // The literal reported bug: a city-vs-city CFL pick, no mascot named at
+  // all, previously had zero recognized team signal and landed in
+  // `unresolved`.
+  {
+    const pick = parseCatalog(`Capper\nOttawa vs Montreal Over 62.5`, []).picks[0];
+    check("CFL bug repro: 'Ottawa vs Montreal' resolves to CFL", pick?.sportName, "CFL");
+    check(
+      "CFL bug repro: both city nicknames captured",
+      pick?.teamNicknames?.slice().sort(),
+      ["montreal", "ottawa"]
+    );
+  }
+
+  // All 9 city keys resolve to CFL from a bare city-name pick, same
+  // "exactly N, no dupes, all resolve" shape as NCAAF's PART D check.
+  {
+    const keys = Object.keys(CFL_CANONICAL_SUFFIX);
+    check("CFL city list: exactly 9 teams", keys.length, 9);
+    check("CFL city list: no duplicate keys", new Set(keys).size, keys.length);
+
+    const misresolved = keys.filter((key) => {
+      const pick = parseCatalog(`Capper\n${key} ML`, []).picks[0];
+      return pick?.sportName !== "CFL";
+    });
+    check("CFL city list: all 9 cities resolve to CFL from a bare city-name pick", misresolved, []);
+  }
+
+  // Bare-mascot CFL picks (the pre-existing, already-shipped support)
+  // continue to resolve correctly now that the city keys share the same
+  // TEAM_SPORT_ENTRIES array and sort.
+  {
+    const pick = parseCatalog(`Capper\nRedblacks ML`, []).picks[0];
+    check("CFL bare mascot still resolves to CFL unaffected by city keys", pick?.sportName, "CFL");
+  }
+
+  // dedupeSameTeamNicknames - the fix for the city+mascot-together bug found
+  // while wiring this up: a capper naming both forms for the same team must
+  // collapse to one nickname, not silently fail to match as two different
+  // teams. Exercised directly since bulk-picks.ts (its one real call site)
+  // can't run outside a live Next.js request.
+  {
+    check(
+      "dedupe: city+mascot for the same team collapses to the longer form",
+      dedupeSameTeamNicknames(["ottawa redblacks", "redblacks"]),
+      ["ottawa redblacks"]
+    );
+    check(
+      "dedupe: two real different teams (both already city+mascot) are both kept",
+      dedupeSameTeamNicknames(["ottawa redblacks", "montreal alouettes", "redblacks", "alouettes"])
+        .slice()
+        .sort(),
+      ["montreal alouettes", "ottawa redblacks"]
+    );
+    check(
+      "dedupe: two genuinely different bare city nicknames are both kept unchanged",
+      dedupeSameTeamNicknames(["ottawa", "montreal"]).slice().sort(),
+      ["montreal", "ottawa"]
+    );
+  }
+
+  // Lions collision - confirmed untouched by CFL support. Bare "lions" still
+  // only prompts NFL vs KBO's Samsung Lions (a pre-existing, unrelated
+  // collision - see AMBIGUOUS_NICKNAMES.lions), never gaining CFL as a
+  // silent third option or a third prompt choice.
+  {
+    const pick = parseCatalog(`Capper\nLions ML`, []).picks[0];
+    check("Lions collision: bare 'Lions' still only ambiguous NFL/KBO, untouched by CFL", pick?.ambiguousKey, "lions");
+    const sports = pick?.ambiguous?.map((o) => o.sport).sort();
+    check("Lions collision: CFL is not among the ambiguous options", sports, ["KBO", "NFL"]);
+  }
+
+  // "bc" is the shortest team key in this file (2 letters) - confirms
+  // word-boundary matching keeps it scoped to the standalone word "bc" only,
+  // never firing inside an unrelated longer word.
+  {
+    const bcLions = parseCatalog(`Capper\nBC Lions ML`, []).picks[0];
+    check("'BC Lions' (city-qualified) resolves directly to CFL, no ambiguity prompt", bcLions?.sportName, "CFL");
+    const bareBc = parseCatalog(`Capper\nBC ML`, []).picks[0];
+    check("bare 'BC' alone also resolves to CFL", bareBc?.sportName, "CFL");
+    const subcategory = parseCatalog(`Capper\nSubcategory ML`, []).picks[0];
+    check("'bc' does not misfire inside an unrelated word ('Subcategory')", subcategory?.sportName === "CFL", false);
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

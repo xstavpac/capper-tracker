@@ -14,7 +14,7 @@ import {
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
 import { extractLine } from "@/lib/bet-line";
-import { NCAAF_CANONICAL_SUFFIX } from "@/lib/parse-catalog";
+import { NCAAF_CANONICAL_SUFFIX, CFL_CANONICAL_SUFFIX, dedupeSameTeamNicknames } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
@@ -143,9 +143,20 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
     // somehow isn't in the table (falls back to itself, same as today -
     // just won't match, which is the existing safe behavior for an
     // unresolvable nickname).
+    //
+    // CFL has the identical problem for its city-name nicknames ("ottawa" is
+    // a prefix of "Ottawa Redblacks", not a suffix) - CFL_CANONICAL_SUFFIX
+    // covers exactly those 9 city keys; a CFL pick's bare-mascot nicknames
+    // ("redblacks") are already real suffixes and pass through unchanged
+    // (the `?? n` fallback), same as every other sport. Also runs through
+    // dedupeSameTeamNicknames (see its own comment) - CFL-only, since it's
+    // the only sport here with both a city and a mascot nickname registered
+    // for the same team.
     const nicknames =
       item.sportName.toUpperCase() === "NCAAF"
         ? item.teamNicknames.map((n) => NCAAF_CANONICAL_SUFFIX[n] ?? n)
+        : item.sportName.toUpperCase() === "CFL"
+        ? dedupeSameTeamNicknames(item.teamNicknames.map((n) => CFL_CANONICAL_SUFFIX[n] ?? n))
         : item.teamNicknames;
     let game = await lookupGame(liveSportKey, nicknames);
     // One retry before giving up - covers a transient miss/blip against the

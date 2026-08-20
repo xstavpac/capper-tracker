@@ -39,6 +39,11 @@ export const LIVE_SPORTS = [
   { key: "icehockey_nhl", label: "NHL" },
   { key: "basketball_wnba", label: "WNBA" },
   { key: "americanfootball_ncaaf", label: "NCAAF" },
+  // Confirmed live against the Odds API's own sport listing: "CFL" is a
+  // real, active sport (key "americanfootball_cfl", no outrights) - see
+  // RESOLVABLE_SPORT_KEYS/getLiveScoresForSport below for why it has no live
+  // score source despite being listed here.
+  { key: "americanfootball_cfl", label: "CFL" },
 ];
 
 const BASE_URL = "https://api.the-odds-api.com/v4";
@@ -330,12 +335,29 @@ export function getNcaafLiveScores(): Promise<ScoreGame[]> {
 // The rest of LIVE_SPORTS still get odds display, just no live score/badge,
 // game resolution, or auto-grading yet - add a key here (and a case below)
 // once a free score source is wired up for it.
+//
+// CFL is a deliberate exception to that rule, not an oversight: it's listed
+// here (and gets real game resolution, via getResolutionCandidates'
+// includeUpcoming merge pulling straight from the Odds API - see that
+// function's own comment) specifically WITHOUT a real score source behind
+// it. Confirmed live (during the CFL support investigation) that ESPN's own
+// football/cfl scoreboard endpoint - the same one every other ESPN-backed
+// sport here uses - has had zero events for any 2024/2025/2026 date range;
+// its last real coverage was the November 2022 Grey Cup. No other free,
+// unauthenticated live-score source was found. Practical effect: a CFL pick
+// imports correctly matched to its real scheduled game (fixing the actual
+// reported bug - team/schedule matching), shows on the Live tab with real
+// odds, but never gets a live/final score badge and can't be auto-graded
+// until a real score source is found - it stays Pending like any other pick
+// grading.ts has no final score to compare against, an accepted tradeoff for
+// now rather than blocking the matching fix on finding one.
 export const RESOLVABLE_SPORT_KEYS = [
   "baseball_mlb",
   "basketball_nba",
   "basketball_wnba",
   "americanfootball_nfl",
   "americanfootball_ncaaf",
+  "americanfootball_cfl",
 ];
 
 // Dispatches to the right free score source for a sport. Add a case here
@@ -358,6 +380,16 @@ export async function getLiveScoresForSport(sportKey: string): Promise<ScoreGame
     // pure noise.
     if (!isSportInSeason(sportKey)) return [];
     return getNcaafLiveScores();
+  }
+  if (sportKey === "americanfootball_cfl") {
+    // No free live-score source available - see RESOLVABLE_SPORT_KEYS' own
+    // comment above for what was actually checked. Returning [] here (rather
+    // than omitting a case and falling through to the same [] default below)
+    // is deliberate and documented, not a placeholder - CFL's real game
+    // resolution comes entirely from the Odds-API side of
+    // getResolutionCandidates' includeUpcoming merge, which doesn't need
+    // this function to return anything for CFL to work.
+    return [];
   }
   return [];
 }
