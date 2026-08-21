@@ -58,11 +58,24 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
     where: { sportKey_fetchDate: { sportKey, fetchDate } },
   });
   if (existing) {
-    return existing.data as unknown as OddsGame[];
+    const cachedGames = existing.data as unknown as OddsGame[];
+    // Temporary diagnostic for the 2026-08-21 live-page-empty incident -
+    // distinguishes "cache hit but the day's snapshot was empty" (e.g. the
+    // 4am seed fetch itself failed and got written as [] - it shouldn't per
+    // the empty-fetch-doesn't-write logic below, but this catches it if that
+    // assumption is ever wrong) from "cache hit, genuinely has games."
+    console.log(
+      "[getOddsForSport] cache hit",
+      JSON.stringify({ sportKey, fetchDate, gameCount: cachedGames.length })
+    );
+    return cachedGames;
   }
 
   const apiKey = process.env.ODDS_API_KEY;
-  if (!apiKey) return [];
+  if (!apiKey) {
+    console.error("[getOddsForSport] no ODDS_API_KEY configured", JSON.stringify({ sportKey, fetchDate }));
+    return [];
+  }
 
   // Almost always sportKey itself - only differs during a sport's preseason
   // window, and only for a sport with a preseason-specific Odds API key
@@ -79,7 +92,27 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
     "&regions=us&markets=h2h,spreads,totals&oddsFormat=american";
 
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    // Temporary diagnostic for the 2026-08-21 live-page-empty incident -
+    // this failure path previously returned [] with zero logging, making a
+    // real outage indistinguishable from a legitimately empty slate. Body is
+    // truncated (the-odds-api.com error responses are small JSON, but this
+    // guards against ever logging something unexpectedly large) and the URL
+    // is never logged as-is since it carries apiKey as a query param.
+    const bodyText = await res.text().catch(() => "<unreadable body>");
+    console.error(
+      "[getOddsForSport] upstream fetch failed",
+      JSON.stringify({
+        sportKey,
+        requestSportKey,
+        fetchDate,
+        status: res.status,
+        statusText: res.statusText,
+        body: bodyText.slice(0, 500),
+      })
+    );
+    return [];
+  }
 
   const raw = await res.json();
   const fetchedAt = new Date();
@@ -124,6 +157,16 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
     update: { data: games as any },
     create: { sportKey, fetchDate, data: games as any },
   });
+
+  // Temporary diagnostic for the 2026-08-21 live-page-empty incident - a
+  // "success" (res.ok) response that itself came back with rawCount 0 (or
+  // every game already started, so the post-filter games.length is 0 while
+  // the upstream actually returned some) is a different failure mode than
+  // the upstream error case above, and was equally invisible before this.
+  console.log(
+    "[getOddsForSport] live fetch cached",
+    JSON.stringify({ sportKey, requestSportKey, fetchDate, rawCount: raw.length, cachedCount: games.length })
+  );
 
   return games;
 }
