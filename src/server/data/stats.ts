@@ -447,6 +447,9 @@ export type PickCategoryKey =
   | "UNDER"
   | "F5_ML"
   | "FIRST_HALF_ML"
+  | "FIRST_HALF_OVER"
+  | "FIRST_HALF_UNDER"
+  | "TD_PROP"
   | "NRFI"
   | "YRFI"
   | "F5_SPREAD_MINUS"
@@ -463,6 +466,9 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   UNDER: "Under",
   F5_ML: "F5 ML",
   FIRST_HALF_ML: "1st Half ML",
+  FIRST_HALF_OVER: "1st Half Over",
+  FIRST_HALF_UNDER: "1st Half Under",
+  TD_PROP: "TD Prop",
   NRFI: "NRFI",
   YRFI: "YRFI",
   F5_SPREAD_MINUS: "F5 Spread -",
@@ -498,15 +504,68 @@ export const MLB_CHIP_SET: PickCategoryKey[] = [
 ];
 export const DEFAULT_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD_MINUS", "SPREAD_PLUS", "OVER", "UNDER"];
 
+// NFL's own chip set, same idea as MLB_CHIP_SET - first-half ML/over/under
+// (real box-score data, see persistFinalScores' supportsFirstHalf) plus
+// touchdown-prop (resolveTouchdownProp, NFL-only grading) get their own
+// tiles instead of falling back to DEFAULT_CHIP_SET's universal six.
+export const NFL_CHIP_SET: PickCategoryKey[] = [
+  "FAV_ML",
+  "DOG_ML",
+  "SPREAD_MINUS",
+  "SPREAD_PLUS",
+  "OVER",
+  "UNDER",
+  "FIRST_HALF_ML",
+  "FIRST_HALF_OVER",
+  "FIRST_HALF_UNDER",
+  "TD_PROP",
+];
+
+// Same as NFL_CHIP_SET minus TD_PROP - NCAAF has its own first-half score
+// source now (getNcaafFirstHalfScore, wired into persistFinalScores'
+// supportsFirstHalf) so FIRST_HALF_ML/OVER/UNDER are real, gradable
+// categories here too, but touchdown-prop grading is explicitly NFL-only
+// (resolveTouchdownProp) - confirmed not being built for NCAAF, so TD_PROP
+// is deliberately left out rather than added as a category that could never
+// leave PENDING.
+export const NCAAF_CHIP_SET: PickCategoryKey[] = [
+  "FAV_ML",
+  "DOG_ML",
+  "SPREAD_MINUS",
+  "SPREAD_PLUS",
+  "OVER",
+  "UNDER",
+  "FIRST_HALF_ML",
+  "FIRST_HALF_OVER",
+  "FIRST_HALF_UNDER",
+];
+
+// Sport-specific chip sets, keyed by the sport's display label (uppercased)
+// - chipSetForLeague looks this up and falls back to DEFAULT_CHIP_SET for
+// every sport not listed here. A map instead of a growing ternary/switch so
+// adding another sport's own set is one entry, not a new branch.
+const CHIP_SET_BY_SPORT: Record<string, PickCategoryKey[]> = {
+  MLB: MLB_CHIP_SET,
+  NFL: NFL_CHIP_SET,
+  NCAAF: NCAAF_CHIP_SET,
+};
+
 // The full universe of every PickCategoryKey value, independent of any one
 // sport's own display chip set - getCapperCategoryRecord (picks.ts) relies
 // on this to look up an arbitrary single category (which might be F5 ML,
 // 1st Half ML, or NRFI) without it being filtered out by a sport-specific
-// list like MLB_CHIP_SET, which deliberately does NOT include FIRST_HALF_ML.
-export const ALL_CATEGORY_KEYS: PickCategoryKey[] = [...MLB_CHIP_SET, "FIRST_HALF_ML"];
+// list like MLB_CHIP_SET, which deliberately does NOT include FIRST_HALF_ML
+// (or NFL_CHIP_SET's FIRST_HALF_OVER/FIRST_HALF_UNDER/TD_PROP).
+export const ALL_CATEGORY_KEYS: PickCategoryKey[] = [
+  ...MLB_CHIP_SET,
+  "FIRST_HALF_ML",
+  "FIRST_HALF_OVER",
+  "FIRST_HALF_UNDER",
+  "TD_PROP",
+];
 
 export function chipSetForLeague(sportName: string): PickCategoryKey[] {
-  return sportName.toUpperCase() === "MLB" ? MLB_CHIP_SET : DEFAULT_CHIP_SET;
+  return CHIP_SET_BY_SPORT[sportName.toUpperCase()] ?? DEFAULT_CHIP_SET;
 }
 
 type PickCategoryInput = {
@@ -558,15 +617,36 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
     const isOver = detail.includes("over");
     const isUnder = detail.includes("under");
     if (pick.period === "FIRST_HALF") {
-      // Same MLB-only carve-out as F5_ML/F5 spread above.
-      if (pick.sportName.toUpperCase() !== "MLB") return null;
-      if (isOver) return "F5_OVER";
-      if (isUnder) return "F5_UNDER";
+      // Same MLB-only vs everyone-else split as F5_ML/FIRST_HALF_ML above -
+      // F5 is baseball-only terminology, every other sport's first-half
+      // total gets its own FIRST_HALF_OVER/FIRST_HALF_UNDER key instead.
+      // Unlike F5_ML's carve-out, this key isn't graded for every sport that
+      // reaches it yet (see persistFinalScores' supportsFirstHalf - only NFL
+      // has a first-half score source right now); a non-MLB, non-NFL sport's
+      // first-half total pick gets a real category here but will just sit
+      // ungraded (PENDING) until that sport gets its own score source too.
+      if (pick.sportName.toUpperCase() === "MLB") {
+        if (isOver) return "F5_OVER";
+        if (isUnder) return "F5_UNDER";
+        return null;
+      }
+      if (isOver) return "FIRST_HALF_OVER";
+      if (isUnder) return "FIRST_HALF_UNDER";
       return null;
     }
     if (isOver) return "OVER";
     if (isUnder) return "UNDER";
     return null;
+  }
+
+  if (pick.betType === "PLAYER_PROP") {
+    // This app only supports touchdown props today (see parseTouchdownProp's
+    // own comment) - PLAYER_PROP never means anything else yet, so no
+    // per-sport branch is needed here the way TOTAL/MONEYLINE have. Grading
+    // itself stays NFL-only (resolveTouchdownProp), independent of this -
+    // a non-NFL PLAYER_PROP pick still categorizes as TD_PROP, it just never
+    // leaves PENDING since nothing resolves it.
+    return "TD_PROP";
   }
 
   return null;
@@ -584,6 +664,9 @@ const SPECIALIST_LABELS: Record<PickCategoryKey, string> = {
   UNDER: "Unders specialist",
   F5_ML: "First-half specialist",
   FIRST_HALF_ML: "First-half specialist",
+  FIRST_HALF_OVER: "First-half overs specialist",
+  FIRST_HALF_UNDER: "First-half unders specialist",
+  TD_PROP: "Touchdown-prop specialist",
   NRFI: "NRFI specialist",
   YRFI: "YRFI specialist",
   F5_SPREAD_MINUS: "F5 favorite spread specialist",
