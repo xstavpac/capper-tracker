@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/server/auth";
 import { SiteFooter } from "@/components/marketing/site-footer";
 
 // Same logo-mark.png asset as the sidebar's LogoMark (app-sidebar.tsx) and
@@ -13,7 +15,26 @@ function LogoMark() {
   );
 }
 
-export default function MarketingPage() {
+// This root route is deliberately PUBLIC in middleware.ts (PUBLIC_ROUTES
+// includes "/") so a logged-out visitor can always reach it - that part is
+// unchanged. But the page itself never used to check session state at all,
+// so a logged-IN visitor who typed the bare domain fresh (rather than
+// following a link straight to /dashboard) saw this generic marketing page
+// every single time, not intermittently - confirmed as a real, distinct
+// gap during the "session isn't persisting" investigation, separate from
+// the auth-callback cookie fix and the bfcache Cache-Control fix. Reuses
+// getCurrentUser() (server/auth.ts) - the same function every protected
+// (app) page already calls - rather than a new/lighter-weight session
+// check, so this stays consistent with how the rest of the app determines
+// "am I logged in" and inherits its existing graceful-degradation-to-null
+// behavior if Supabase is ever misconfigured (this page still renders the
+// public marketing content in that case, never crashes).
+export default async function MarketingPage() {
+  const user = await getCurrentUser();
+  if (user) {
+    redirect("/dashboard");
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <main className="mx-auto flex flex-1 max-w-3xl flex-col items-center justify-center gap-6 px-6 text-center">
