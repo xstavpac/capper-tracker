@@ -77,26 +77,35 @@ const NBA_TEAMS = [
 // resolving to NFL. "Carolina Panthers" is still reachable via DISAMBIGUATED_TEAMS.
 // "bears", "lions", and "eagles" are excluded for the same reason - all three
 // now collide with a KBO team (Doosan Bears, Samsung Lions, Hanwha Eagles);
-// see AMBIGUOUS_NICKNAMES.
+// see AMBIGUOUS_NICKNAMES. "jets" is excluded too - it collides with NHL's
+// Winnipeg Jets (confirmed a real, currently-tracked team, not hypothetical
+// - see the "sport not tracked" grading-bug investigation), same treatment.
 const NFL_TEAMS = [
   "falcons", "ravens", "bills", "bengals", "browns",
   "cowboys", "broncos", "packers", "texans", "colts", "jaguars",
   "chiefs", "raiders", "chargers", "rams", "dolphins", "vikings", "patriots",
-  "saints", "jets", "steelers", "49ers", "niners", "seahawks",
+  "saints", "steelers", "49ers", "niners", "seahawks",
   "buccaneers", "titans", "commanders",
 ];
 
+// "jets" is deliberately excluded here - it's ambiguous with NFL's New York
+// Jets (see AMBIGUOUS_NICKNAMES) and must fall through to that check instead
+// of always resolving to whichever league's array happened to list it first.
+// "Winnipeg Jets" is still reachable via DISAMBIGUATED_TEAMS. "coyotes" is
+// kept even though the Arizona Coyotes relocated and rebranded to Utah
+// Mammoth - a capper referencing old game history/props by the former name
+// should still resolve, and "coyotes" doesn't collide with anything else.
 const NHL_TEAMS = [
   "ducks", "coyotes", "bruins", "sabres", "flames", "hurricanes", "blackhawks",
   "avalanche", "blue jackets", "stars", "red wings", "oilers", "wild",
   "canadiens", "predators", "devils", "islanders", "senators", "flyers",
   "penguins", "sharks", "kraken", "blues", "lightning", "maple leafs",
-  "canucks", "golden knights", "capitals", "jets",
+  "canucks", "golden knights", "capitals", "mammoth",
 ];
 
 const WNBA_TEAMS = [
   "dream", "sky", "sun", "fever", "aces", "mercury", "lynx", "liberty",
-  "valkyries", "wings", "mystics", "storm",
+  "valkyries", "wings", "mystics", "storm", "sparks", "fire", "tempo",
 ];
 
 // "lions" deliberately excluded - BC Lions collides with NFL's Detroit Lions,
@@ -166,6 +175,16 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "Detroit Tigers (MLB)", sport: "MLB", nickname: "detroit tigers" },
     { label: "KIA Tigers (KBO)", sport: "KBO", nickname: "kia tigers" },
   ],
+  // Confirmed a real, currently-tracked collision (not hypothetical) during
+  // the "sport not tracked" grading-bug investigation - both are real teams
+  // with real games in this app's own live odds data, and bare "jets" was
+  // silently always resolving NFL regardless (NFL_TEAMS happened to be
+  // spread into TEAM_SPORT_ENTRIES before NHL_TEAMS, and same-length entries
+  // keep their original order in the length-sort).
+  jets: [
+    { label: "New York Jets (NFL)", sport: "NFL", nickname: "new york jets" },
+    { label: "Winnipeg Jets (NHL)", sport: "NHL", nickname: "winnipeg jets" },
+  ],
 };
 
 const DISAMBIGUATED_TEAMS: TeamEntry[] = [
@@ -202,6 +221,9 @@ const DISAMBIGUATED_TEAMS: TeamEntry[] = [
   ["philadelphia eagles", "NFL"],
   ["kia tigers", "KBO"],
   ["detroit tigers", "MLB"],
+  ["new york jets", "NFL"],
+  ["ny jets", "NFL"],
+  ["winnipeg jets", "NHL"],
 ];
 
 // KBO (Korean Baseball Organization). Four of the ten teams' nicknames don't
