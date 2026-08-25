@@ -22,8 +22,23 @@ const PUBLIC_ROUTES = [
   /^\/api\/public\//,
 ];
 
+// Routes whose content never depends on session state - safe to leave
+// cacheable (and therefore browser-back-forward-cache-eligible) for
+// performance. Every other page middleware touches gets Cache-Control:
+// no-store below, so the browser's bfcache can't serve a stale
+// authenticated (or stale logged-out) page snapshot after a login/logout -
+// confirmed as a real gap during the "session isn't persisting" bug
+// investigation (production was sending `public, max-age=0,
+// must-revalidate`, which doesn't reliably block bfcache the way no-store
+// does). API routes are deliberately left alone too - they're not full
+// page navigations, so they were never subject to bfcache the same way,
+// and touching them isn't needed to fix this bug.
+const CACHEABLE_ROUTES = [/^\/$/, /^\/privacy/];
+
 export default async function middleware(req: NextRequest) {
   const isPublic = PUBLIC_ROUTES.some((re) => re.test(req.nextUrl.pathname));
+  const isCacheable = CACHEABLE_ROUTES.some((re) => re.test(req.nextUrl.pathname));
+  const isApiRoute = req.nextUrl.pathname.startsWith("/api/") || req.nextUrl.pathname.startsWith("/trpc/");
 
   // Supabase's client throws synchronously if its URL/key aren't configured
   // (e.g. env vars not yet set in this deployment) - since this runs on
@@ -50,7 +65,11 @@ export default async function middleware(req: NextRequest) {
   if (!isPublic && !user) {
     const signInUrl = new URL("/sign-in", req.nextUrl.origin);
     signInUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
-    return NextResponse.redirect(signInUrl);
+    response = NextResponse.redirect(signInUrl);
+  }
+
+  if (!isCacheable && !isApiRoute) {
+    response.headers.set("Cache-Control", "no-store");
   }
 
   return response;
