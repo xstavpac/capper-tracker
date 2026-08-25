@@ -841,6 +841,35 @@ export function findTeamNicknames(text: string, sportName: string): string[] {
 // sport whose name happens to fit "capitalized word(s) + ML/spread/total"
 // hits the same false default, so the guard is name-shape-based rather than
 // KBO-specific.
+//
+// TODO(follow-up, not urgent): the abbreviation guard above narrows this gap
+// but doesn't close it - a real, currently-tracked team whose bare name is
+// plain Title Case (not a short all-caps abbreviation) still falls all the
+// way through to this ATP default with no warning. Confirmed again during
+// the "sport not tracked" grading-bug investigation: "Fire over 165.5"
+// (Portland Fire, a real WNBA team) mistagged ATP the same way "KT Wiz" once
+// did, purely because "fire" wasn't yet in WNBA_TEAMS - same for "Sparks"/
+// "Tempo" (WNBA) and "Mammoth" (NHL) at the same time. All four are fixed
+// now (see WNBA_TEAMS/NHL_TEAMS above), but the underlying failure mode -
+// any future missing team silently mistagging as a confident ATP pick
+// instead of surfacing as `unresolved` - is still there by design.
+//
+// Proposed fix (real architectural work, not a quick patch, hence not done
+// here): before accepting an ATP match, check the candidate word against the
+// real, currently-tracked team names this app already caches (OddsSnapshot/
+// GameResult) - the same real-data cross-check used to find the four gaps
+// above. If the candidate is a substring of any real, currently-known team
+// name across any tracked sport, refuse the ATP fallback and report the
+// line as unresolved with a pointed reason ("looks like a team name we
+// don't recognize yet") instead of guessing. This must NOT just require 2+
+// capitalized words instead - real ATP picks are commonly typed as a bare
+// surname ("Djokovic ML"), so tightening the name-shape check alone would
+// fix this gap by breaking legitimate tennis picks instead.
+// The real cost: parse-catalog.ts is a pure, synchronous, DB-free module
+// today - this guard needs a "known real team names" set threaded in from
+// whichever caller already has DB access (the bulk-import server action),
+// which is a real signature/architecture change to this file, not a small
+// patch alongside it.
 function looksLikeTeamAbbreviation(name: string): boolean {
   return name.split(/\s+/).some((w) => w.length <= 3 && w === w.toUpperCase());
 }
