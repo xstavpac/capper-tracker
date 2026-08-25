@@ -39,6 +39,13 @@
 //     unrelated ATP phantom-pick fallback via findPlayerPick - not
 //     "unresolved" - confirmed live before writing these assertions, not
 //     assumed).
+//   PART E - Washington/Mystics investigation: an NCAAF school name sharing
+//     a word with a different sport's real team ("Washington Mystics" ->
+//     WNBA, not NCAAF's Washington Huskies) was resolving to the wrong
+//     sport because TEAM_SPORT_ENTRIES was matched purely longest-string-
+//     first. Also covers the inverse - a school's OWN real mascot already
+//     claimed bare by an NFL/NBA/NHL entry ("Oregon Ducks", "UCLA Bruins")
+//     must still resolve NCAAF.
 import { parseCatalog, inferSportFromPickContext, NCAAF_CANONICAL_SUFFIX } from "./parse-catalog";
 
 let failures = 0;
@@ -453,6 +460,112 @@ function main() {
     const pick = parseCatalog(`Capper\nOhio State vs Michigan Over 45.5`, []).picks[0];
     check("NCAAF matchup shape: sport resolves correctly", pick?.sportName, "NCAAF");
     check("NCAAF matchup shape: both team nicknames captured", pick?.teamNicknames?.sort(), ["michigan", "ohio state"]);
+  }
+
+  // ==========================================================================
+  // PART E - Washington/Mystics investigation: a city/state name shared by an
+  // NCAAF school and a DIFFERENT sport's real team ("Washington Mystics")
+  // was resolving to the NCAAF school instead of the real team, because
+  // TEAM_SPORT_ENTRIES was tried purely longest-string-first and the NCAAF
+  // school key ("washington", 10 chars) outranked the WNBA mascot key
+  // ("mystics", 7 chars) with no regard for which one was the text's real
+  // identity. Fixed in detectSport by preferring a match nothing else
+  // recognized trails, with a canonical-full-name carve-out (pass 0) for
+  // when the trailing word actually is that SAME school's own real mascot
+  // (e.g. "Oregon Ducks", "UCLA Bruins") even though that mascot is also
+  // separately claimed bare by an NFL/NBA/NHL entry.
+  // ==========================================================================
+  console.log("\n########## PART E: NCAAF-school/other-sport word collision (Washington/Mystics) ##########");
+
+  {
+    const mystics = parseCatalog(`Capper\nWashington Mystics ML`, []).picks[0];
+    check("'Washington Mystics' resolves WNBA, not NCAAF", mystics?.sportName, "WNBA");
+
+    const huskies = parseCatalog(`Capper\nWashington Huskies ML`, []).picks[0];
+    check("real NCAAF 'Washington Huskies' still resolves NCAAF", huskies?.sportName, "NCAAF");
+
+    const bareWashington = parseCatalog(`Capper\nWashington ML`, []).picks[0];
+    check("bare 'Washington' (no mascot) still resolves NCAAF", bareWashington?.sportName, "NCAAF");
+
+    const bareMystics = parseCatalog(`Capper\nMystics ML`, []).picks[0];
+    check("bare 'Mystics' (no city) still resolves WNBA, unaffected", bareMystics?.sportName, "WNBA");
+
+    // Same collision class, different pair - a school name (Miami) sharing a
+    // word with a real pro team elsewhere in TEAM_SPORT_ENTRIES (Miami Heat,
+    // NBA), confirming the fix isn't specific to Washington/Mystics.
+    const heat = parseCatalog(`Capper\nMiami Heat ML`, []).picks[0];
+    check("'Miami Heat' resolves NBA, not NCAAF", heat?.sportName, "NBA");
+
+    // The inverse shape: the school's OWN real mascot happens to already be
+    // claimed bare by an NFL/NBA/NHL entry (documented in NCAAF_SCHOOLS'
+    // comment) - typed together with its school, it must still resolve
+    // NCAAF, not the pro team, even though the pro mascot word is longer
+    // than the school abbreviation and would otherwise win pass 1 outright.
+    const ownMascot: [string, string][] = [
+      ["Oregon Ducks", "NCAAF"],
+      ["UCLA Bruins", "NCAAF"],
+      ["Duke Blue Devils", "NCAAF"],
+      ["Arizona State Sun Devils", "NCAAF"],
+      ["Oklahoma State Cowboys", "NCAAF"],
+    ];
+    for (const [text, sport] of ownMascot) {
+      const pick = parseCatalog(`Capper\n${text} ML`, []).picks[0];
+      check(`school's own real mascot '${text}' still resolves ${sport}`, pick?.sportName, sport);
+    }
+  }
+
+  // A follow-up to the Washington/Mystics fix: a NESTED-name variant of the
+  // same collision class. "West Virginia" contains "Virginia" as a whole
+  // word, and Virginia is itself a separate curated NCAAF school whose own
+  // real mascot is "Cavaliers" - the same word NBA's Cleveland Cavaliers
+  // uses bare. Before this guard, "West Virginia Cavaliers" matched
+  // Virginia's canonical "Virginia Cavaliers" embedded inside the longer
+  // name, even though West Virginia's real mascot is the Mountaineers and
+  // has nothing to do with Cavaliers. Decided this resolves to NBA, not
+  // NCAAF: West Virginia has no genuine "Cavaliers" identity of its own, so
+  // (like Miami+Heat and Washington+Mystics before it) the real matching
+  // pro team wins rather than a school name that only coincidentally
+  // contains another, unrelated school's name as a trailing word. Checked
+  // against every school in the curated 68 that could have the same shape
+  // (Michigan State/Michigan, Kansas State/Kansas, Iowa State/Iowa,
+  // Oklahoma State/Oklahoma, Georgia Tech/Georgia, Texas Tech or Texas A&M/
+  // Texas, Arizona State/Arizona) - West Virginia/Virginia turned out to be
+  // the ONLY one where the shorter name is a true trailing-word SUFFIX of
+  // the longer one; the others are all prefixes ("Michigan" + " State"),
+  // which never collided in the first place since a real mascot word can't
+  // sit contiguously right after a school name with another word in between.
+  console.log("\n########## PART F: nested NCAAF school-name collision (West Virginia/Virginia) ##########");
+
+  {
+    const westVirginiaCavaliers = parseCatalog(`Capper\nWest Virginia Cavaliers ML`, []).picks[0];
+    check("'West Virginia Cavaliers' resolves NBA (West Virginia has no real Cavaliers identity)", westVirginiaCavaliers?.sportName, "NBA");
+
+    const westVirginiaMountaineers = parseCatalog(`Capper\nWest Virginia Mountaineers ML`, []).picks[0];
+    check("'West Virginia Mountaineers' (its real mascot) still resolves NCAAF", westVirginiaMountaineers?.sportName, "NCAAF");
+
+    const virginiaCavaliers = parseCatalog(`Capper\nVirginia Cavaliers ML`, []).picks[0];
+    check("'Virginia Cavaliers' (Virginia's own real mascot) still resolves NCAAF", virginiaCavaliers?.sportName, "NCAAF");
+
+    const bareCavaliers = parseCatalog(`Capper\nCavaliers ML`, []).picks[0];
+    check("bare 'Cavaliers' (no school) still resolves NBA, unaffected", bareCavaliers?.sportName, "NBA");
+
+    // The other prefix-shaped compound schools that could plausibly have
+    // hit the same class of bug - none of them actually did (verified
+    // above they're prefixes, not suffixes, of their embedded shorter
+    // school name), but each must still resolve NCAAF from its OWN real
+    // mascot after this guard was added, same as before it.
+    const compoundSchools: [string, string][] = [
+      ["Michigan State Spartans", "NCAAF"],
+      ["Kansas State Wildcats", "NCAAF"],
+      ["Iowa State Cyclones", "NCAAF"],
+      ["Georgia Tech Yellow Jackets", "NCAAF"],
+      ["Texas Tech Red Raiders", "NCAAF"],
+      ["Arizona State Sun Devils", "NCAAF"],
+    ];
+    for (const [text, sport] of compoundSchools) {
+      const pick = parseCatalog(`Capper\n${text} ML`, []).picks[0];
+      check(`compound school's own real mascot '${text}' still resolves ${sport}`, pick?.sportName, sport);
+    }
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

@@ -458,6 +458,73 @@ function detectSport(text: string, allowNicknameFallback = true): { sportName: s
   if (!allowNicknameFallback) return { sportName: "", rest: text };
 
   const lower = text.toLowerCase();
+
+  // Pass 0 (canonical NCAAF full name): a school's OWN real mascot appearing
+  // right after its name ("Oregon Ducks", "Duke Blue Devils", "Arizona
+  // State Sun Devils") is stronger, more specific evidence than either word
+  // matched alone - checked first so it can't be shadowed by (or itself
+  // shadow) some unrelated single-word entry on either side. Several of
+  // these mascots are, by this file's own design, already claimed bare by
+  // an NFL/NBA/NHL entry (see the NCAAF_SCHOOLS comment) - e.g. "bruins"
+  // is longer than "ucla" and would otherwise win the length-sorted pass 1
+  // below outright before "ucla" is ever even reached. NCAAF_CANONICAL_SUFFIX
+  // (already used elsewhere for this exact prefix-vs-suffix mismatch) is
+  // checked uniformly for all 68 schools; nothing team-specific is hardcoded.
+  for (const [school, canonical] of NCAAF_SCHOOLS) {
+    const match = teamPhraseRegex(canonical).exec(lower);
+    if (!match) continue;
+
+    // Guard against a DIFFERENT, shorter school name that's actually just
+    // the trailing word of a longer one also in this list ("West Virginia"
+    // contains "Virginia" as a whole word) - without this, "West Virginia
+    // Cavaliers" would match Virginia's own canonical "Virginia Cavaliers"
+    // embedded inside it, even though West Virginia (Mountaineers) has
+    // nothing to do with Virginia (Cavaliers). Checked uniformly against
+    // all 68 schools, not just this one pair - only the school that's
+    // genuinely the LONGEST match starting at this exact word boundary is
+    // allowed to claim it.
+    const schoolEnd = match.index + school.length;
+    const shadowedByLongerSchool = NCAAF_SCHOOLS.some(([otherSchool]) => {
+      if (otherSchool.length <= school.length || !otherSchool.endsWith(school)) return false;
+      return new RegExp("\\b" + otherSchool.replace(/ /g, "\\s*") + "$").test(lower.slice(0, schoolEnd));
+    });
+    if (shadowedByLongerSchool) continue;
+
+    return { sportName: "NCAAF", rest: text };
+  }
+
+  // Pass 1 (exact): a match only counts here if nothing immediately after
+  // it is ALSO a recognized team entry - i.e. it isn't sitting in front of
+  // a different, more specific team match. This is what lets a real mascot
+  // ("Washington Mystics" -> WNBA's "mystics") win over an NCAAF school
+  // name that happens to precede it ("washington" -> Washington Huskies)
+  // when pass 0 didn't already resolve it via the school's OWN mascot:
+  // NCAAF_SCHOOLS is deliberately keyed by school name, which is always a
+  // PREFIX of the live team name (see its comment above), never a suffix -
+  // so a school-name match is structurally the only kind that can
+  // legitimately have another sport's real match trailing it. Nothing here
+  // names any specific team; it falls out of adjacency between two
+  // independently-matching TEAM_SPORT_ENTRIES.
+  for (const entry of TEAM_SPORT_ENTRIES) {
+    const phrase = entry[0];
+    const sport = entry[1];
+    const match = teamPhraseRegex(phrase).exec(lower);
+    if (!match) continue;
+    const after = lower.slice(match.index + match[0].length);
+    const followedByAnotherTeam = TEAM_SPORT_ENTRIES.some(
+      ([otherPhrase]) => otherPhrase !== phrase && teamPhraseRegex(otherPhrase).test(after)
+    );
+    if (!followedByAnotherTeam) {
+      return { sportName: sport, rest: text };
+    }
+  }
+
+  // Pass 2 (fallback): the original longest-first substring/word search.
+  // Provably unreachable when pass 1 finds any match at all - the
+  // rightmost-starting match in the text can never have another match
+  // trailing it, so pass 1 always resolves whenever pass 2 would - but kept
+  // explicit as a safety net rather than relying on that proof staying true
+  // through future edits.
   for (const entry of TEAM_SPORT_ENTRIES) {
     const phrase = entry[0];
     const sport = entry[1];
