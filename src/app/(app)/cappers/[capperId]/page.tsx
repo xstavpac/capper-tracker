@@ -103,13 +103,18 @@ export default async function CapperDetailPage({
   // capper who also has WNBA/NFL picks - gets a real breakdown instead of
   // silently having no "by category" view for anything outside MLB.
   const categoryBreakdownsBySport = Array.from(new Set(picks.map((p) => p.sport.name)))
-    .map((sportName) => ({
-      sportName,
-      breakdown: computeCategoryBreakdown(
-        picks.filter((p) => p.sport.name === sportName),
-        chipSetForLeague(sportName)
-      ),
-    }))
+    .map((sportName) => {
+      const sportPicks = picks.filter((p) => p.sport.name === sportName);
+      return {
+        sportName,
+        breakdown: computeCategoryBreakdown(sportPicks, chipSetForLeague(sportName)),
+        // All-time, not windowed by the bet-type scorecard's `window` param -
+        // this sits above the category tiles, which are themselves always
+        // all-time (see their own comment above), so the aggregate over them
+        // should match that scope rather than the bet-type scorecard's.
+        stats: computeStats(sportPicks),
+      };
+    })
     .filter((s) => s.breakdown.length > 0)
     // Most decided category-eligible picks first, so the default tab (no
     // categorySport param yet) is whichever sport this capper is primarily
@@ -125,6 +130,8 @@ export default async function CapperDetailPage({
     categoryBreakdownsBySport[0]?.sportName;
   const activeCategoryBreakdown =
     categoryBreakdownsBySport.find((s) => s.sportName === selectedCategorySport)?.breakdown ?? [];
+  const activeSportStats =
+    categoryBreakdownsBySport.find((s) => s.sportName === selectedCategorySport)?.stats ?? null;
 
   const settled = picks.filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH");
   let running = 0;
@@ -270,7 +277,13 @@ export default async function CapperDetailPage({
       {activeCategoryBreakdown.length > 0 && (
         <div className="mt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm font-medium text-muted-foreground">{selectedCategorySport} record by category</div>
+            <div className="flex items-baseline gap-2">
+              <div className="text-sm font-medium text-muted-foreground">{selectedCategorySport} record by category</div>
+              {/* Category tiles (and the summary strip above them) are always
+                  all-time, unlike the bet-type scorecard's window filter above
+                  - called out here so that's not mistaken for a bug. */}
+              <div className="text-xs text-muted-foreground">All time</div>
+            </div>
             {categoryBreakdownsBySport.length > 1 && (
               <div className="flex flex-wrap gap-2">
                 {categoryBreakdownsBySport.map((s) => (
@@ -286,6 +299,24 @@ export default async function CapperDetailPage({
               </div>
             )}
           </div>
+          {activeSportStats && (
+            <div className="mb-4 grid grid-cols-3 gap-4">
+              <StatCard
+                label={selectedCategorySport + " record"}
+                value={activeSportStats.wins + "-" + activeSportStats.losses + "-" + activeSportStats.pushes}
+              />
+              <StatCard
+                label="ROI"
+                value={(activeSportStats.roi >= 0 ? "+" : "") + activeSportStats.roi + "%"}
+                tone={activeSportStats.roi >= 0 ? "up" : "down"}
+              />
+              <StatCard
+                label="Net units"
+                value={(activeSportStats.netUnits >= 0 ? "+" : "") + activeSportStats.netUnits + "u"}
+                tone={activeSportStats.netUnits >= 0 ? "up" : "down"}
+              />
+            </div>
+          )}
           <CategoryBreakdown items={activeCategoryBreakdown} />
         </div>
       )}
