@@ -55,6 +55,7 @@ function FavoriteStar({ capperId, isFavorite, onToggled }: { capperId: string; i
       onClick={handleClick}
       aria-label={shown ? "Remove from favorites" : "Add to favorites"}
       aria-pressed={shown}
+      title={shown ? "Click to remove from favorites" : "Click to favorite this capper"}
       className={"shrink-0 transition hover:scale-110 " + (shown ? "text-amber-400" : "text-muted-foreground/50 hover:text-amber-400")}
     >
       <StarIcon filled={shown} />
@@ -141,7 +142,12 @@ export function CappersLeaderboardTable({
   return (
     <div className="rounded-card bg-card p-5 shadow-soft">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-foreground">Leaderboard</h2>
+        <div className="flex flex-wrap items-baseline gap-2">
+          <h2 className="text-base font-semibold text-foreground">Leaderboard</h2>
+          <span className="text-xs text-muted-foreground">
+            <span className="text-amber-400">&#9733;</span> = Favorite
+          </span>
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="search"
