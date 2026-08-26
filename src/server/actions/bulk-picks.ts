@@ -93,11 +93,15 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
   // Which side of homeTeam/awayTeam this pick is actually on, captured once
   // here (see schema.prisma's Pick.pickedSide comment) rather than re-derived
   // from betDetail text at grading time. Deliberately MORE conservative than
-  // the odds-lookup `side` below: only set for a single-nickname ML/SPREAD
-  // pick, and only when exactly one of home/away ends with that nickname - a
-  // same-mascot NCAAF matchup (Clemson Tigers @ LSU Tigers) makes both true
-  // at once, and there's no way to tell them apart from a bare nickname
-  // alone, so this stays null rather than guessing.
+  // the odds-lookup `side` below: only set for a single-nickname ML/SPREAD/
+  // TEAM_TOTAL pick, and only when exactly one of home/away ends with that
+  // nickname - a same-mascot NCAAF matchup (Clemson Tigers @ LSU Tigers)
+  // makes both true at once, and there's no way to tell them apart from a
+  // bare nickname alone, so this stays null rather than guessing. TEAM_TOTAL
+  // needs this exactly as much as ML/SPREAD does - gradePick's TEAM_TOTAL
+  // branch reads the SAME pickedHome/pickedAway they do, so without this a
+  // team-total pick would only ever get the weaker mascot/school text-match
+  // fallback at grading time, never the authoritative side captured here.
   pickedSide: "HOME" | "AWAY" | null;
 }> {
   let homeTeam = item.description;
@@ -137,7 +141,10 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
       awayTeam = game.awayTeam;
       gameTime = new Date(game.commenceTime);
 
-      if ((item.betType === "MONEYLINE" || item.betType === "SPREAD") && nicknames.length === 1) {
+      if (
+        (item.betType === "MONEYLINE" || item.betType === "SPREAD" || item.betType === "TEAM_TOTAL") &&
+        nicknames.length === 1
+      ) {
         const homeMatch = game.homeTeam.toLowerCase().endsWith(nicknames[0]);
         const awayMatch = game.awayTeam.toLowerCase().endsWith(nicknames[0]);
         pickedSide = homeMatch && !awayMatch ? "HOME" : awayMatch && !homeMatch ? "AWAY" : null;
@@ -153,13 +160,20 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
         // price) but not for the DB field grading depends on to decide
         // WIN/LOSS, which must stay null rather than guess.
         const side =
-          item.betType === "TOTAL"
+          item.betType === "TOTAL" || item.betType === "TEAM_TOTAL"
             ? item.totalSide
             : game.homeTeam.toLowerCase().endsWith(nicknames[0])
             ? "home"
             : "away";
 
-        const marketPrice = side ? await findMarketPrice(liveSportKey, game, item.betType, side) : null;
+        // No real market exists for team totals in this app's cached odds
+        // (getOddsForSport only fetches h2h/spreads/totals) - findMarketPrice
+        // has no TEAM_TOTAL case and returns null for it, same as it already
+        // does for PLAYER_PROP/NRFI, so this is a no-op price lookup rather
+        // than a real one; team-total picks keep whatever odds the capper
+        // typed (or the -110 default), same as before this bet type existed.
+        const marketPrice =
+          side && item.betType !== "TEAM_TOTAL" ? await findMarketPrice(liveSportKey, game, item.betType, side) : null;
         if (marketPrice !== null) {
           odds = marketPrice;
         }

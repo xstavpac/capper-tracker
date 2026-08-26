@@ -467,7 +467,18 @@ export type PickCategoryKey =
   | "F5_SPREAD_MINUS"
   | "F5_SPREAD_PLUS"
   | "F5_OVER"
-  | "F5_UNDER";
+  | "F5_UNDER"
+  // One tile per sport, combining every period (full game, F5, 1st half,
+  // quarters, ...) into a single record - unlike OVER/UNDER, which split by
+  // period (F5_OVER vs FIRST_HALF_OVER vs OVER). Backed by BetType.TEAM_TOTAL
+  // (schema.prisma), a distinct value from TOTAL - a team total (one team's
+  // own score vs a line) is a different market than a game total (both teams
+  // combined) and must never be conflated with it, confirmed as a real,
+  // already-happened mis-grading bug during the pre-launch Team Total
+  // investigation. Only picks tagged TEAM_TOTAL at import time (see
+  // parsePickText's isTeamTotalText) land here - existing TOTAL rows are
+  // never reclassified retroactively by this category logic.
+  | "TEAM_TOTAL";
 
 export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   FAV_ML: "Fav ML",
@@ -487,6 +498,7 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   F5_SPREAD_PLUS: "F5 Spread +",
   F5_OVER: "F5 Over",
   F5_UNDER: "F5 Under",
+  TEAM_TOTAL: "Team Total",
 };
 
 // F5 and NRFI/YRFI are MLB-only chips for now, even though Period/BetType
@@ -513,6 +525,7 @@ export const MLB_CHIP_SET: PickCategoryKey[] = [
   "F5_UNDER",
   "NRFI",
   "YRFI",
+  "TEAM_TOTAL",
 ];
 export const DEFAULT_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD_MINUS", "SPREAD_PLUS", "OVER", "UNDER"];
 
@@ -531,6 +544,7 @@ export const NFL_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_OVER",
   "FIRST_HALF_UNDER",
   "TD_PROP",
+  "TEAM_TOTAL",
 ];
 
 // Same as NFL_CHIP_SET minus TD_PROP - NCAAF has its own first-half score
@@ -550,7 +564,23 @@ export const NCAAF_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_ML",
   "FIRST_HALF_OVER",
   "FIRST_HALF_UNDER",
+  "TEAM_TOTAL",
 ];
+
+// The remaining leagues the Team Total tile was asked for (NBA, NCAAB, NHL,
+// WNBA, KBO) have no bespoke chip set of their own today - they all fall
+// back to DEFAULT_CHIP_SET via chipSetForLeague. DEFAULT_CHIP_SET itself is
+// also shared by every OTHER sport this app recognizes but wasn't asked to
+// get this tile (CFL, MLS, UFC/MMA, ATP - see parse-catalog.ts's
+// KNOWN_SPORTS), so adding TEAM_TOTAL there directly would hand it to those
+// too. Each of the five gets its own one-line set (DEFAULT_CHIP_SET plus
+// TEAM_TOTAL) instead, registered below - same "a map entry, not a new
+// branch" reasoning CHIP_SET_BY_SPORT's own comment already gives.
+const NBA_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
+const NCAAB_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
+const NHL_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
+const WNBA_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
+const KBO_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
 
 // Sport-specific chip sets, keyed by the sport's display label (uppercased)
 // - chipSetForLeague looks this up and falls back to DEFAULT_CHIP_SET for
@@ -560,6 +590,11 @@ const CHIP_SET_BY_SPORT: Record<string, PickCategoryKey[]> = {
   MLB: MLB_CHIP_SET,
   NFL: NFL_CHIP_SET,
   NCAAF: NCAAF_CHIP_SET,
+  NBA: NBA_CHIP_SET,
+  NCAAB: NCAAB_CHIP_SET,
+  NHL: NHL_CHIP_SET,
+  WNBA: WNBA_CHIP_SET,
+  KBO: KBO_CHIP_SET,
 };
 
 // The full universe of every PickCategoryKey value, independent of any one
@@ -624,6 +659,14 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
     return side === "FAVORITE" ? "SPREAD_MINUS" : side === "UNDERDOG" ? "SPREAD_PLUS" : null;
   }
 
+  if (pick.betType === "TEAM_TOTAL") {
+    // One tile per sport regardless of period (see TEAM_TOTAL's own
+    // comment) - unlike TOTAL below, which splits OVER/UNDER by period
+    // (F5_OVER vs FIRST_HALF_OVER vs OVER), a team total's period doesn't
+    // fork into a separate category at all.
+    return "TEAM_TOTAL";
+  }
+
   if (pick.betType === "TOTAL") {
     const detail = (pick.betDetail ?? "").toLowerCase();
     const isOver = detail.includes("over");
@@ -685,6 +728,7 @@ const SPECIALIST_LABELS: Record<PickCategoryKey, string> = {
   F5_SPREAD_PLUS: "F5 underdog spread specialist",
   F5_OVER: "F5 overs specialist",
   F5_UNDER: "F5 unders specialist",
+  TEAM_TOTAL: "Team-total specialist",
 };
 
 // A category holding at least this share of a capper's decided volume is a
@@ -863,6 +907,8 @@ export function betTypeLabel(betType: string) {
       return "Moneyline";
     case "TOTAL":
       return "Total";
+    case "TEAM_TOTAL":
+      return "Team Total";
     case "PLAYER_PROP":
       return "Player Prop";
     default:

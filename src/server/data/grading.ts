@@ -310,6 +310,36 @@ export function gradePick(
     return null;
   }
 
+  if (betType === "TEAM_TOTAL") {
+    // A team total is ONE team's own score vs a line - never the combined
+    // score TOTAL uses above. Reuses the exact same pickedHome/pickedAway
+    // (pickedSide when present, else the mascot/school-name text-match
+    // fallback) every other team-specific bet type already relies on, so a
+    // team total's side is resolved identically to how a Moneyline/Spread
+    // pick's side is - not a separate, parallel mechanism. Confirmed as a
+    // real, already-happened bug during the Team Total investigation: 7 real
+    // logged team-total picks had been silently graded against the combined
+    // score (TOTAL's logic) before this branch existed.
+    const totalLine = line ?? extractLine("TEAM_TOTAL", detail);
+    if (totalLine === null) return null;
+    const teamScore = pickedHome ? homeScore : pickedAway ? awayScore : null;
+    if (teamScore === null) return null;
+    const isOver = detail.includes("over");
+    const isUnder = detail.includes("under");
+
+    if (isOver) {
+      if (teamScore > totalLine) return "WIN";
+      if (teamScore < totalLine) return "LOSS";
+      return "PUSH";
+    }
+    if (isUnder) {
+      if (teamScore < totalLine) return "WIN";
+      if (teamScore > totalLine) return "LOSS";
+      return "PUSH";
+    }
+    return null;
+  }
+
   if (betType === "NRFI") {
     // Binary market on combined (both teams') first-inning runs - no push.
     // homeScore/awayScore here are the game's first-inning scores, not final

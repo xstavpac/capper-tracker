@@ -11,6 +11,7 @@ const BET_TYPES = [
   { value: "SPREAD", label: "Spread" },
   { value: "MONEYLINE", label: "Moneyline" },
   { value: "TOTAL", label: "Total" },
+  { value: "TEAM_TOTAL", label: "Team Total" },
   { value: "PLAYER_PROP", label: "Player Prop" },
   { value: "NRFI", label: "NRFI / YRFI" },
 ];
@@ -90,7 +91,9 @@ export function PickForm({ cappers, sports, atLimit }: { cappers: Capper[]; spor
         ? "e.g. Celtics ML"
         : betType === "TOTAL"
           ? "e.g. Over 224.5"
-          : "e.g. LeBron James Over 27.5 pts";
+          : betType === "TEAM_TOTAL"
+            ? "e.g. Lakers Team Total Over 112.5"
+            : "e.g. LeBron James Over 27.5 pts";
 
   return (
     <form
@@ -220,7 +223,7 @@ export function PickForm({ cappers, sports, atLimit }: { cappers: Capper[]; spor
           />
         </div>
 
-        {(betType === "SPREAD" || betType === "TOTAL") && (
+        {(betType === "SPREAD" || betType === "TOTAL" || betType === "TEAM_TOTAL") && (
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">
               {betType === "SPREAD" ? "Spread line (e.g. -4.5)" : "Total line (e.g. 224.5)"}

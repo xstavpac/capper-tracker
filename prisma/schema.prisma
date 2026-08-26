@@ -35,6 +35,7 @@ enum BetType {
   SPREAD
   MONEYLINE
   TOTAL
+  TEAM_TOTAL // one team's own score vs a line, e.g. "Athletics over 4.5" - NOT the same market as TOTAL (both teams combined); see grading.ts's gradePick for why these must never share a code path
   PLAYER_PROP
   NRFI // "No Run First Inning" - MLB-only, graded on combined 1st-inning runs
 }

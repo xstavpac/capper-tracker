@@ -23,6 +23,7 @@ type BetTypeFilterKey =
   | "F5_MONEYLINE"
   | "TOTAL"
   | "F5_TOTAL"
+  | "TEAM_TOTAL"
   | "PLAYER_PROP"
   | "NRFI"
   | "YRFI";
@@ -34,6 +35,7 @@ const BET_TYPE_FILTER_OPTIONS: { value: BetTypeFilterKey; label: string }[] = [
   { value: "F5_MONEYLINE", label: "F5 Moneyline" },
   { value: "TOTAL", label: "Total" },
   { value: "F5_TOTAL", label: "F5 Total" },
+  { value: "TEAM_TOTAL", label: "Team Total" },
   { value: "PLAYER_PROP", label: "Player Prop" },
   { value: "NRFI", label: "NRFI" },
   { value: "YRFI", label: "YRFI" },
@@ -55,6 +57,11 @@ function betTypeFilterCategory(pick: { betType: BetType; period: Period; betDeta
   if (pick.betType === "NRFI") {
     return nrfiSide(pick.betDetail) === "YES_RUN" ? "YRFI" : "NRFI";
   }
+  // TEAM_TOTAL is period-independent, same as stats.ts's pickCategory - one
+  // filter option regardless of full game/F5/1st half, unlike TOTAL above
+  // which splits by period. Checked before the FIRST_HALF branch so a
+  // first-half team total doesn't fall into F5_TOTAL/get dropped instead.
+  if (pick.betType === "TEAM_TOTAL") return "TEAM_TOTAL";
   if (pick.period === "FIRST_HALF") {
     if (pick.betType === "MONEYLINE") return "F5_MONEYLINE";
     if (pick.betType === "SPREAD") return "F5_SPREAD";

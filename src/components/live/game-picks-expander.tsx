@@ -77,6 +77,7 @@ const CATEGORY_DESCRIPTIONS: Record<PickCategoryKey, string> = {
   F5_SPREAD_PLUS: "first-half underdog spread",
   F5_OVER: "first-half over",
   F5_UNDER: "first-half under",
+  TEAM_TOTAL: "team total",
 };
 
 function ListIcon() {

@@ -5,7 +5,7 @@ export type ParsedPick = {
   capperName: string;
   sportName: string;
   description: string;
-  betType: "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP" | "NRFI";
+  betType: "SPREAD" | "MONEYLINE" | "TOTAL" | "TEAM_TOTAL" | "PLAYER_PROP" | "NRFI";
   odds: number;
   hasExplicitOdds: boolean;
   totalSide?: "over" | "under";
@@ -558,6 +558,23 @@ function detectSport(text: string, allowNicknameFallback = true): { sportName: s
   return { sportName: "", rest: text };
 }
 
+// Explicit, safe-only signals that a total is about ONE team's own score
+// (TEAM_TOTAL), not the combined game total - the literal "team total"
+// phrase, or the standalone "TT" shorthand real cappers use ("Twins TT
+// o5.5 -125"). Deliberately does NOT infer team-total from a team name
+// merely being present in the text - a real game total's text often names a
+// team too, just to identify the game ("Dodgers/Padres Over 8.5"), not as
+// the bet's actual subject - confirmed unreliable during the Team Total
+// investigation. "TT" is matched as its own word only (never a substring of
+// another word like "MATT"/"ATTACK"), same word-boundary care as the
+// o3.5/u45.5 shorthand below. Only ever called from within a branch that has
+// already matched an over/under/total keyword (see parsePickText), so a
+// bare "TT" with no total signal at all (e.g. a capper's own initials) can
+// never misclassify an otherwise-MONEYLINE pick.
+function isTeamTotalText(text: string): boolean {
+  return /\bteam\s*total\b/i.test(text) || /\bTT\b/i.test(text);
+}
+
 function parsePickText(description: string): {
   betType: ParsedPick["betType"];
   odds: number | null;
@@ -653,13 +670,13 @@ function parsePickText(description: string): {
   } else if (/\bML\b/i.test(cleanDescription) || /money\s*line/i.test(cleanDescription)) {
     betType = "MONEYLINE";
   } else if (/\bover\b/i.test(cleanDescription) || /\bo\d+(\.\d+)?\b/i.test(cleanDescription)) {
-    betType = "TOTAL";
+    betType = isTeamTotalText(cleanDescription) ? "TEAM_TOTAL" : "TOTAL";
     totalSide = "over";
   } else if (/\bunder\b/i.test(cleanDescription) || /\bu\d+(\.\d+)?\b/i.test(cleanDescription)) {
-    betType = "TOTAL";
+    betType = isTeamTotalText(cleanDescription) ? "TEAM_TOTAL" : "TOTAL";
     totalSide = "under";
   } else if (/\btotal\b/i.test(cleanDescription)) {
-    betType = "TOTAL";
+    betType = isTeamTotalText(cleanDescription) ? "TEAM_TOTAL" : "TOTAL";
   } else if (hasExplicitSpreadNumber || hasSpreadKeyword) {
     betType = "SPREAD";
   }

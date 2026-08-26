@@ -1,4 +1,4 @@
-type BetTypeLike = "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP" | "NRFI";
+type BetTypeLike = "SPREAD" | "MONEYLINE" | "TOTAL" | "TEAM_TOTAL" | "PLAYER_PROP" | "NRFI";
 
 // Cappers occasionally spell a total out ("under nine" instead of "under 9") -
 // one through twenty covers realistic bet totals (MLB/NBA/NFL totals don't
@@ -42,7 +42,17 @@ export function extractLine(betType: BetTypeLike, text: string): number | null {
     const match = text.match(/([+-]\d+(\.\d+)?)/);
     return match ? parseFloat(match[1]) : null;
   }
-  if (betType === "TOTAL") {
+  if (betType === "TOTAL" || betType === "TEAM_TOTAL") {
+    // Prefer the number that actually follows "over"/"under" (or the o5.5/
+    // u45.5 shorthand) - the real total line - over a bare "first number
+    // anywhere in the text" scan. The old bare scan silently grabbed a
+    // period marker's own digit instead: "First 5 Under 4.5" extracted 5
+    // (from "First 5"), not 4.5; "1st Half Over 19.5" extracted 1 (from
+    // "1st"). Confirmed against real logged picks during the Team Total
+    // investigation - this corrupted the stored line on 17 real rows.
+    const afterOverUnder =
+      text.match(/\b(?:over|under)\s+(\d+(?:\.\d+)?)\b/i) ?? text.match(/\b[ou](\d+(?:\.\d+)?)\b/i);
+    if (afterOverUnder) return parseFloat(afterOverUnder[1]);
     const match = text.match(/(\d+(\.\d+)?)/);
     if (match) return parseFloat(match[1]);
     return extractSpelledOutNumber(text);
