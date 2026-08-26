@@ -60,12 +60,26 @@ function chipClass(isActive: boolean) {
   );
 }
 
+// Every link on this page can change exactly one of these three independent
+// params (which bet-type-scorecard window, which sport's category section,
+// which category-section window) while the other two must survive the
+// navigation unchanged - centralized here so every Link builds its href the
+// same way instead of each one re-assembling (and risking dropping) the
+// params it isn't touching.
+function pageHref(state: { window: ScorecardWindow; categorySport?: string; categoryWindow: ScorecardWindow }) {
+  const params = new URLSearchParams();
+  params.set("window", state.window);
+  if (state.categorySport) params.set("categorySport", state.categorySport);
+  params.set("categoryWindow", state.categoryWindow);
+  return "?" + params.toString();
+}
+
 export default async function CapperDetailPage({
   params,
   searchParams,
 }: {
   params: { capperId: string };
-  searchParams: { window?: string; categorySport?: string };
+  searchParams: { window?: string; categorySport?: string; categoryWindow?: string };
 }) {
   const user = await requireUser();
   const capper = await getCapperById(user.id, params.capperId);
@@ -76,6 +90,12 @@ export default async function CapperDetailPage({
 
   const window = SCORECARD_WINDOWS.includes(searchParams.window as ScorecardWindow)
     ? (searchParams.window as ScorecardWindow)
+    : "ALL";
+  // Fully independent of `window` above - its own searchParam, its own
+  // default, never read or written by the bet-type scorecard's toggle. Scopes
+  // the per-sport category section (summary strip, tiles, units chart) only.
+  const categoryWindow = SCORECARD_WINDOWS.includes(searchParams.categoryWindow as ScorecardWindow)
+    ? (searchParams.categoryWindow as ScorecardWindow)
     : "ALL";
 
   const [picks, allCappers] = await Promise.all([
@@ -107,13 +127,14 @@ export default async function CapperDetailPage({
       const sportPicks = picks.filter((p) => p.sport.name === sportName);
       return {
         sportName,
+        sportPicks,
+        // All-time, deliberately NOT filtered by categoryWindow - this
+        // determines which sports get a tab at all and which one is the
+        // default, and that structural presence shouldn't flicker in and out
+        // as someone changes the section's own window filter. The actual
+        // displayed breakdown/stats/chart for whichever sport is SELECTED
+        // are computed further down, windowed by categoryWindow.
         breakdown: computeCategoryBreakdown(sportPicks, chipSetForLeague(sportName)),
-        // All-time, not windowed by the bet-type scorecard's `window` param -
-        // this sits above the category tiles, which are themselves always
-        // all-time (see their own comment above), so the aggregate over them
-        // should match that scope rather than the bet-type scorecard's.
-        stats: computeStats(sportPicks),
-        chartData: computeUnitsChartData(sportPicks),
       };
     })
     .filter((s) => s.breakdown.length > 0)
@@ -129,12 +150,21 @@ export default async function CapperDetailPage({
   const selectedCategorySport =
     categoryBreakdownsBySport.find((s) => s.sportName === searchParams.categorySport)?.sportName ??
     categoryBreakdownsBySport[0]?.sportName;
-  const activeCategoryBreakdown =
-    categoryBreakdownsBySport.find((s) => s.sportName === selectedCategorySport)?.breakdown ?? [];
-  const activeSportStats =
-    categoryBreakdownsBySport.find((s) => s.sportName === selectedCategorySport)?.stats ?? null;
-  const activeSportChartData =
-    categoryBreakdownsBySport.find((s) => s.sportName === selectedCategorySport)?.chartData ?? [];
+  const activeSportPicks =
+    categoryBreakdownsBySport.find((s) => s.sportName === selectedCategorySport)?.sportPicks ?? [];
+
+  // The per-sport section's own independent window, applied only here - see
+  // categoryWindow's own comment above. Everything the section actually
+  // displays (summary strip, category tiles, units chart) is derived from
+  // this one windowed array, so the three can never drift out of sync with
+  // each other or with the selected window.
+  const activeSportPicksInWindow = filterPicksByGameWindow(activeSportPicks, categoryWindow);
+  const activeCategoryBreakdown = computeCategoryBreakdown(
+    activeSportPicksInWindow,
+    chipSetForLeague(selectedCategorySport ?? "")
+  );
+  const activeSportStats = activeSportPicksInWindow.length > 0 ? computeStats(activeSportPicksInWindow) : null;
+  const activeSportChartData = computeUnitsChartData(activeSportPicksInWindow);
 
   // Same window as the hero stats/scorecard above, so this chart's cumulative
   // line actually matches whichever period (Today/Last 7 days/...) they're
@@ -250,7 +280,7 @@ export default async function CapperDetailPage({
               {SCORECARD_WINDOWS.map((w) => (
                 <Link
                   key={w}
-                  href={"?window=" + w + (selectedCategorySport ? "&categorySport=" + encodeURIComponent(selectedCategorySport) : "")}
+                  href={pageHref({ window: w, categorySport: selectedCategorySport, categoryWindow })}
                   scroll={false}
                   className={chipClass(window === w)}
                 >
@@ -274,22 +304,16 @@ export default async function CapperDetailPage({
         <UnitsChart data={chartData} />
       </div>
 
-      {activeCategoryBreakdown.length > 0 && (
+      {categoryBreakdownsBySport.length > 0 && (
         <div className="mt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-baseline gap-2">
-              <div className="text-sm font-medium text-muted-foreground">{selectedCategorySport} record by category</div>
-              {/* Category tiles (and the summary strip above them) are always
-                  all-time, unlike the bet-type scorecard's window filter above
-                  - called out here so that's not mistaken for a bug. */}
-              <div className="text-xs text-muted-foreground">All time</div>
-            </div>
+            <div className="text-sm font-medium text-muted-foreground">{selectedCategorySport} record by category</div>
             {categoryBreakdownsBySport.length > 1 && (
               <div className="flex flex-wrap gap-2">
                 {categoryBreakdownsBySport.map((s) => (
                   <Link
                     key={s.sportName}
-                    href={"?window=" + window + "&categorySport=" + encodeURIComponent(s.sportName)}
+                    href={pageHref({ window, categorySport: s.sportName, categoryWindow })}
                     scroll={false}
                     className={chipClass(s.sportName === selectedCategorySport)}
                   >
@@ -298,6 +322,23 @@ export default async function CapperDetailPage({
                 ))}
               </div>
             )}
+          </div>
+          {/* This section's own window filter - fully independent of the bet-
+              type scorecard's `window` above (separate searchParam, separate
+              state); scopes the summary strip, category tiles, and units
+              chart below, all three sourced from the same categoryWindow-
+              filtered pick array so they can never disagree with each other. */}
+          <div className="mb-4 flex flex-wrap gap-2">
+            {SCORECARD_WINDOWS.map((w) => (
+              <Link
+                key={w}
+                href={pageHref({ window, categorySport: selectedCategorySport, categoryWindow: w })}
+                scroll={false}
+                className={chipClass(categoryWindow === w)}
+              >
+                {SCORECARD_WINDOW_LABELS[w]}
+              </Link>
+            ))}
           </div>
           {activeSportStats && (
             <div className="mb-4 grid grid-cols-3 gap-4">
@@ -317,10 +358,16 @@ export default async function CapperDetailPage({
               />
             </div>
           )}
-          <CategoryBreakdown items={activeCategoryBreakdown} />
+          {activeCategoryBreakdown.length > 0 ? (
+            <CategoryBreakdown items={activeCategoryBreakdown} />
+          ) : (
+            <p className="rounded-card bg-card p-6 text-center text-sm text-muted-foreground shadow-soft">
+              No graded picks in this window.
+            </p>
+          )}
           <div className="mt-4 rounded-card bg-card p-4 shadow-soft">
             <div className="mb-2 text-xs text-muted-foreground">
-              {selectedCategorySport} units over time — All time
+              {selectedCategorySport} units over time — {SCORECARD_WINDOW_LABELS[categoryWindow]}
             </div>
             <UnitsChart data={activeSportChartData} compact />
           </div>
