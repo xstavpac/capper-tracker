@@ -9,7 +9,7 @@ import {
   chipSetForLeague,
   weightedRoiScore,
   filterPicksByGameWindow,
-  DAY_SPECIFIC_WINDOWS,
+  ALL_TIME_WINDOW,
   RANKING_MIN_SAMPLE,
   type OverallStats,
   type PickCategoryKey,
@@ -84,11 +84,11 @@ export type LeaderboardEntry = {
 // table can sort by any column the user clicks; "small sample" and
 // rank-worthiness become display concerns (a tag, not an exclusion) rather
 // than being decided here. The one exclusion this DOES apply: a capper with
-// zero decided picks in a day-specific window (Today/Yesterday) is left out
-// entirely, not shown at 0% - see DAY_SPECIFIC_WINDOWS. `window` reuses
-// ScorecardWindow/filterPicksByGameWindow (the same This-week/All-time
-// toggle already used on the capper detail page) rather than inventing a
-// separate windowing concept.
+// zero decided picks in the selected window is left out entirely (not
+// shown at 0%) for every window except ALL - see ALL_TIME_WINDOW. `window`
+// reuses ScorecardWindow/filterPicksByGameWindow (the same This-week/
+// All-time toggle already used on the capper detail page) rather than
+// inventing a separate windowing concept.
 export async function getCapperLeaderboardTable(
   userId: string,
   window: ScorecardWindow,
@@ -127,14 +127,14 @@ export async function getCapperLeaderboardTable(
     else allByCapper.set(pick.capperId, [pick]);
   }
 
-  // Day-specific windows (Today/Yesterday) only list cappers who actually
-  // had a decided pick that day - a 0-pick capper isn't part of that day's
-  // action and would otherwise sit at 0% in the middle of the ranking. The
-  // rolling/all-time windows keep every capper, 0-pick or not.
-  const isDaySpecific = DAY_SPECIFIC_WINDOWS.includes(window);
+  // Every window but ALL only lists cappers who actually had a decided pick
+  // in that period - a 0-pick capper isn't part of that period's action and
+  // would otherwise sit at 0% in the middle of the ranking. ALL keeps every
+  // capper, 0-pick or not, since it's meant to represent the full roster.
+  const excludesZeroPick = window !== ALL_TIME_WINDOW;
 
   return cappers
-    .filter((capper) => !isDaySpecific || byCapper.has(capper.id))
+    .filter((capper) => !excludesZeroPick || byCapper.has(capper.id))
     .map((capper) => {
       const stats = computeStats(byCapper.get(capper.id) ?? []);
       return {
