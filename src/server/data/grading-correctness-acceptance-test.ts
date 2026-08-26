@@ -1,6 +1,6 @@
-// Structural-validation proof for two NCAAF grading-correctness fixes - run
-// with `npx tsx src/server/data/grading-correctness-acceptance-test.ts`. Not
-// a general test suite (this repo has no test runner configured yet, see
+// Structural-validation proof for three NCAAF grading-correctness fixes -
+// run with `npx tsx src/server/data/grading-correctness-acceptance-test.ts`.
+// Not a general test suite (this repo has no test runner configured yet, see
 // parlay-grading-acceptance-test.ts for the same pattern).
 //
 // Part 1: gradePick's same-mascot guard - a same-mascot NCAAF matchup (e.g.
@@ -14,6 +14,24 @@
 // rejected before any of that NFL-specific logic runs, while NFL itself is
 // provably unaffected (still reaches its own pre-existing "not a recognized
 // touchdown prop" check, not blocked by the new guard).
+//
+// Part 3: gradePick's school-name fallback (added during the pre-launch
+// NCAAF grading investigation) - the text-match fallback used to only ever
+// check the MASCOT (teamNickname(), last word of the full team name), so a
+// manually-entered pick written with the SCHOOL name ("Alabama ML") - the
+// overwhelmingly normal way people actually talk about college football,
+// unlike NFL/MLB/NBA where the mascot IS the short form - stayed ungraded
+// forever even though the identical bet written as "Crimson Tide ML" graded
+// fine. Fixed by also matching against ncaafSchoolKey(homeTeam/awayTeam) via
+// NCAAF_CANONICAL_SUFFIX. Covers: the fix working for an ordinary matchup,
+// the fix working for a SAME-MASCOT matchup (Duke/Arizona State both reduce
+// to "devils" but their school names don't collide, so "Duke ML" can now
+// auto-grade something "Devils ML" correctly still can't and shouldn't), the
+// same-mascot guard still refusing to guess off the bare mascot post-fix,
+// and the nested-school-name ambiguity the fix has to resolve on its own
+// (Arizona vs Arizona State - "arizona" is a whole word inside "arizona
+// state", the grading-time equivalent of the West Virginia/Virginia bug
+// parse-catalog.ts's import-time resolver already guards against).
 //
 // Exits non-zero if any assertion fails.
 import { gradePick, resolveTouchdownProp } from "./grading";
@@ -102,6 +120,76 @@ expect(
   "pickedSide is authoritative even when it contradicts the betDetail text - not just 'also considered'",
   gradePick("MONEYLINE", "this text says nothing about either team", null, "Kansas City Chiefs", "Denver Broncos", 24, 17, "AWAY"),
   "LOSS"
+);
+
+// ---- School-name fallback: an ordinary (non-collision) NCAAF matchup ----
+
+expect(
+  "school-name ML on an ordinary matchup: 'Alabama ML' grades correctly, not just 'Crimson Tide ML'",
+  gradePick("MONEYLINE", "Alabama ML", null, "Alabama Crimson Tide", "Georgia Bulldogs", 27, 24),
+  "WIN"
+);
+
+expect(
+  "school-name SPREAD on an ordinary matchup: 'Georgia +3.5' grades correctly",
+  gradePick("SPREAD", "Georgia +3.5", 3.5, "Alabama Crimson Tide", "Georgia Bulldogs", 27, 24),
+  "WIN"
+);
+
+// ---- School-name fallback on a SAME-MASCOT matchup: Duke (Blue Devils) and
+// Arizona State (Sun Devils) both reduce to "devils" via teamNickname(), so
+// the mascot guard still (correctly) refuses "Devils ML" - but their SCHOOL
+// names don't collide at all, so "Duke ML"/"Arizona State ML" can and must
+// still auto-grade without needing pickedSide. ----
+
+expect(
+  "same-mascot game, school-name text: 'Duke ML' grades correctly even though 'Devils ML' can't",
+  gradePick("MONEYLINE", "Duke ML", null, "Duke Blue Devils", "Arizona State Sun Devils", 20, 27),
+  "LOSS"
+);
+
+expect(
+  "same-mascot game, school-name text: 'Arizona State ML' grades correctly for the other side",
+  gradePick("MONEYLINE", "Arizona State ML", null, "Duke Blue Devils", "Arizona State Sun Devils", 20, 27),
+  "WIN"
+);
+
+expect(
+  "same-mascot guard regression: bare 'Devils ML' with no pickedSide is STILL ungraded post-fix - the school-name fallback must never override it",
+  gradePick("MONEYLINE", "Devils ML", null, "Duke Blue Devils", "Arizona State Sun Devils", 20, 27),
+  null
+);
+
+// ---- Nested-school-name ambiguity the fallback has to resolve on its own:
+// Arizona (Wildcats) vs Arizona State (Sun Devils) - "arizona" is a whole
+// word inside "arizona state", same family of bug as West Virginia/Virginia
+// in parse-catalog.ts's import-time resolver, but this is the grading-time
+// fallback's own version of it (it never reuses that resolver). A match on
+// the shorter name must not fire when the longer name is what's actually
+// present, in both directions. ----
+
+expect(
+  "nested school names: 'Arizona State ML' resolves to Arizona State only, not confused with Arizona",
+  gradePick("MONEYLINE", "Arizona State ML", null, "Arizona Wildcats", "Arizona State Sun Devils", 17, 25),
+  "WIN"
+);
+
+expect(
+  "nested school names: 'Arizona ML' (the shorter, different school) resolves to Arizona",
+  gradePick("MONEYLINE", "Arizona ML", null, "Arizona Wildcats", "Arizona State Sun Devils", 17, 25),
+  "LOSS"
+);
+
+expect(
+  "nested school names: 'Arizona State -7' (school-name spread) resolves to the away side only",
+  gradePick("SPREAD", "Arizona State -7", -7, "Arizona Wildcats", "Arizona State Sun Devils", 17, 25),
+  "WIN"
+);
+
+expect(
+  "school-name fallback is a no-op for non-NCAAF teams: unaffected by full team names that don't appear in NCAAF_CANONICAL_SUFFIX",
+  gradePick("MONEYLINE", "Chiefs ML", null, "Kansas City Chiefs", "Denver Broncos", 24, 17),
+  "WIN"
 );
 
 async function expectAsync<T>(label: string, actual: Promise<T>, expected: T) {

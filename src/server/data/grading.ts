@@ -11,7 +11,7 @@ import {
 } from "@/server/data/odds";
 import { closestByTime, sameEasternDay } from "@/lib/dates";
 import { extractLine, parseTouchdownProp, nrfiSide } from "@/lib/bet-line";
-import { findTeamNickname } from "@/lib/parse-catalog";
+import { findTeamNickname, NCAAF_CANONICAL_SUFFIX } from "@/lib/parse-catalog";
 import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
 
 function findMarket(game: OddsGame, key: string) {
@@ -172,6 +172,41 @@ function teamNickname(fullName: string): string {
   return parts[parts.length - 1].toLowerCase();
 }
 
+// Reverse of NCAAF_CANONICAL_SUFFIX (parse-catalog.ts): real full team name
+// ("alabama crimson tide") -> bare school key ("alabama") - null for every
+// team outside the curated 68. teamNickname() above (the mascot / last word)
+// is what a capper types for every other sport, but NCAAF bettors just as
+// often name the SCHOOL ("Alabama ML", "Ohio State -7") - a real gap found
+// during the pre-launch grading investigation: identical bet, identical
+// game, "Crimson Tide ML" graded fine while "Alabama ML" stayed ungraded
+// forever, since the text-match fallback below only ever checked the mascot.
+const NCAAF_SCHOOL_BY_CANONICAL: Record<string, string> = Object.fromEntries(
+  Object.entries(NCAAF_CANONICAL_SUFFIX).map(([school, canonical]) => [canonical, school])
+);
+
+function ncaafSchoolKey(fullName: string): string | null {
+  return NCAAF_SCHOOL_BY_CANONICAL[fullName.trim().toLowerCase()] ?? null;
+}
+
+// Whether `detail` names `school`, guarding against the same nested-name
+// problem parse-catalog.ts's detectSport already solves for import parsing
+// (e.g. "arizona" is a whole word inside "arizona state", "virginia" inside
+// "west virginia") - scoped here to just this one pick's two actual teams
+// rather than all 68 schools, since gradePick only ever has two candidates
+// to tell apart. A match only counts when the OTHER team's school name isn't
+// ALSO present as the more specific (longer) match at the same word - e.g.
+// "Arizona State ML" must resolve to Arizona State only, never spuriously
+// flag Arizona too just because "arizona" is a literal substring of it.
+function matchesSchoolName(detail: string, school: string, otherSchool: string | null): boolean {
+  const re = new RegExp("\\b" + school.replace(/ /g, "\\s+") + "\\b");
+  if (!re.test(detail)) return false;
+  if (otherSchool && otherSchool.length > school.length && otherSchool.includes(school)) {
+    const otherRe = new RegExp("\\b" + otherSchool.replace(/ /g, "\\s+") + "\\b");
+    if (otherRe.test(detail)) return false;
+  }
+  return true;
+}
+
 type GradeOutcome = "WIN" | "LOSS" | "PUSH" | null;
 
 export function gradePick(
@@ -208,8 +243,21 @@ export function gradePick(
     // through to its safe "can't tell which side was picked" null/PUSH-on-tie
     // path instead of guessing.
     const sameMascot = homeNick === awayNick;
-    pickedHome = !sameMascot && detail.includes(homeNick);
-    pickedAway = !sameMascot && detail.includes(awayNick);
+
+    // School-name match is independent of the sameMascot guard above (and
+    // must stay that way): Duke Blue Devils and Arizona State Sun Devils
+    // share a mascot ("Devils"), but their SCHOOL names ("duke"/"arizona
+    // state") don't collide at all, so "Duke ML" can - and should - still
+    // grade correctly even though "Devils ML" correctly can't. Resolves to
+    // null (not the mascot) for every non-NCAAF team, so this is a no-op
+    // everywhere else.
+    const homeSchool = ncaafSchoolKey(homeTeam);
+    const awaySchool = ncaafSchoolKey(awayTeam);
+    const homeSchoolMatch = homeSchool !== null && matchesSchoolName(detail, homeSchool, awaySchool);
+    const awaySchoolMatch = awaySchool !== null && matchesSchoolName(detail, awaySchool, homeSchool);
+
+    pickedHome = (!sameMascot && detail.includes(homeNick)) || homeSchoolMatch;
+    pickedAway = (!sameMascot && detail.includes(awayNick)) || awaySchoolMatch;
   }
 
   if (betType === "MONEYLINE") {
