@@ -48,8 +48,23 @@ const KNOWN_SPORTS = [
 // confirmed real example, the same standard as every other list in this file.
 const BOILERPLATE_LABELS = new Set(["full card"]);
 
+// Same idea as BOILERPLATE_LABELS above, but for the "Play of the Day" family
+// of pick-highlight labels cappers paste directly under their name, before
+// the actual pick line - confirmed real example: "Play of the Month" sitting
+// between "Out of Line Bets" and its real pick "Lorenzo Musetti ML (6u)".
+// Without this, "Play of the Month" fell through every other check (it
+// doesn't look like a pick, so detectSport's nickname fallback and the
+// pick-detection branches below are both gated off) all the way to the
+// generic "unrecognized line -> new capper name" fallback at the bottom of
+// the loop, silently overwriting currentCapper and misattributing every pick
+// under it. Matched as a whole line (case-insensitive), same as
+// isBoilerplateLabel, so it can't eat a real pick or name that merely
+// contains one of these words.
+const LABEL_LINE_PATTERN = /^(?:play|pick|lock)\s+of\s+the\s+(?:day|week|month|year)$|^best\s+bets?$/i;
+
 function isBoilerplateLabel(text: string): boolean {
-  return BOILERPLATE_LABELS.has(text.toLowerCase().trim());
+  const trimmed = text.toLowerCase().trim();
+  return BOILERPLATE_LABELS.has(trimmed) || LABEL_LINE_PATTERN.test(trimmed);
 }
 
 // "cardinals" is deliberately excluded here - it's ambiguous with NFL (see
@@ -984,14 +999,36 @@ const NAME_SHAPE = /^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/;
 // name-shaped lead-in before its keyword but no record at all (e.g. "Tokyo
 // Giants NRFI" for a team this app doesn't track) has nothing here to key
 // off of and correctly falls through to `unresolved` unchanged.
+// Strips a leading emoji/symbol prefix the same way the generic "unrecognized
+// line -> new capper name" fallback at the bottom of parseCatalog's loop
+// already does (line.replace(/^[^\w]+/, "")) - cappers commonly prefix their
+// section header with an emoji ("⚾ Bambino Bets"), and without stripping it
+// here first, NAME_SHAPE (anchored on a leading [A-Z]) would reject the name
+// outright.
+function stripLeadingSymbols(text: string): string {
+  return text.replace(/^[^\w]+/, "").trim();
+}
+
 function extractCapperNameFromTagline(text: string): string | null {
   const match = text.match(RECORD_PATTERN);
   if (!match || match.index === undefined) return null;
 
-  const lead = text.slice(0, match.index).trim();
-  if (!lead || !NAME_SHAPE.test(lead)) return null;
+  const lead = stripLeadingSymbols(text.slice(0, match.index));
+  if (lead && NAME_SHAPE.test(lead)) return lead;
 
-  return lead;
+  // The record can also sit inside a trailing parenthetical AFTER the name,
+  // rather than directly after it with no parens ("Bambino Bets (24-6 NRFI
+  // Run)" vs "Bambino 19-0 NRFI Run") - confirmed real example. When the
+  // record match falls inside a "(...)" that runs to the end of the line,
+  // the name is everything before that parenthetical, not everything before
+  // the record itself (which would wrongly include the open paren).
+  const trailingParen = text.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
+  if (trailingParen && RECORD_PATTERN.test(trailingParen[2])) {
+    const parenLead = stripLeadingSymbols(trailingParen[1]);
+    if (parenLead && NAME_SHAPE.test(parenLead)) return parenLead;
+  }
+
+  return null;
 }
 
 export function parseCatalog(

@@ -568,6 +568,79 @@ function main() {
     }
   }
 
+  // ==========================================================================
+  // PART G - "Play of the Month" / parenthetical-record header misattribution
+  // ==========================================================================
+  // Real catalog post, verbatim (5 sections, one capper each). Before the
+  // fix: "Play of the Month" (an intermediate label line between the
+  // "Out of Line Bets" header and its real pick) fell through every
+  // pick-detection check, hit the generic "unrecognized line -> new capper"
+  // fallback, and silently became the active capper - so "Lorenzo Musetti ML
+  // (6u)" was misattributed to "Play of the Month" instead of "Out of Line
+  // Bets". Separately, "⚾ Bambino Bets (24-6 NRFI Run)" and "⚽ Hammering Hank
+  // (9-2 Soccer Run)" - headers with a won-loss record inside a trailing
+  // parenthetical rather than directly after the name - tripped looksLikePick
+  // (the record's dash-digit shape plus NRFI/"Run" wording) and then failed
+  // extractCapperNameFromTagline (whose lead capture ran up to the record,
+  // landing on "Bambino Bets (" - trailing "(" fails NAME_SHAPE), so both
+  // headers were pushed to `unresolved` and never became the active capper.
+  console.log("\n########## PART G: Play of the Month / parenthetical-record headers ##########");
+
+  {
+    const text = `\u{1F410} Nicky Cashin
+
+Jets ML
+Brewers under 6
+Yankees -1.5
+Orioles ML
+White Sox ML
+Mariners ML
+(1.5u each)
+
+\u{1F3BE} Out of Line Bets
+
+Play of the Month
+Lorenzo Musetti ML (6u)
+
+\u{26BE} Bambino Bets (24-6 NRFI Run)
+
+Braves vs Brewers NRFI + under 7.5
+Giants vs Red Sox NRFI
+Mets vs White Sox NRFI
+
+⚽ Hammering Hank (9-2 Soccer Run)
+
+Coventry +2 (3u)
+
+\u{1F3C0} Bet Labs
+
+WNBA
+Mystics +4.5 (1u)`;
+
+    const { picks } = parseCatalog(text, []);
+    const byCapper = (name: string) => picks.filter((p) => p.capperName === name);
+
+    check("Nicky Cashin: 6 picks attributed correctly", byCapper("Nicky Cashin").length, 6);
+    check(
+      "Out of Line Bets: 'Play of the Month' is a skipped label, not a capper - Musetti pick attributed to 'Out of Line Bets'",
+      byCapper("Out of Line Bets").map((p) => p.description),
+      ["Lorenzo Musetti ML"]
+    );
+    check("No pick is ever attributed to 'Play of the Month'", byCapper("Play of the Month").length, 0);
+    check(
+      "Bambino Bets: parenthetical-record header resolves to the capper, all 3 NRFI picks attributed",
+      byCapper("Bambino Bets").length,
+      3
+    );
+    check(
+      "Hammering Hank: parenthetical-record header resolves to the capper",
+      byCapper("Hammering Hank").map((p) => p.description),
+      ["Coventry +2"]
+    );
+    check("Bet Labs: WNBA sub-header picks attributed correctly", byCapper("Bet Labs").length, 1);
+    check("All 12 real picks recovered across the 5 sections", picks.length, 12);
+  }
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }
