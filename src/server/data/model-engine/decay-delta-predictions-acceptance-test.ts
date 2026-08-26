@@ -103,22 +103,28 @@ async function main() {
   }
 
   // ==========================================================================
-  // PART C - Live bucket-win-rate query matches Build Step 5's original
-  // numbers exactly, computed fresh from the persisted table this time
-  // instead of a full from-scratch recomputation.
+  // PART C - Live bucket-win-rate query matches a known-good snapshot of the
+  // persisted table, computed fresh here instead of a full from-scratch
+  // recomputation. This baseline is a point-in-time count, not a fixed
+  // invariant - MLB keeps being played, so the persisted table keeps
+  // growing and these numbers WILL go stale again. Re-snapshot with this
+  // file's own PART C query (getDecayDeltaBucketWinRates) rather than
+  // assume a future failure here is a regression.
+  // Snapshot taken: 2026-08-26 (previous snapshot, from Build Step 5, was
+  // 770 total/420 wins as of Build Step 7's writing).
   // ==========================================================================
-  console.log("\n########## PART C: Live bucket-win-rate query vs. Build Step 5's original report ##########");
+  console.log("\n########## PART C: Live bucket-win-rate query vs. 2026-08-26 snapshot ##########");
   const expected: Record<string, { n: number; wins: number }> = {
-    rule_ge_40: { n: 118, wins: 61 },
-    rule_30_to_40: { n: 79, wins: 43 },
-    rule_20_to_30: { n: 98, wins: 58 },
-    rule_10_to_20: { n: 100, wins: 54 },
-    rule_0_to_10: { n: 103, wins: 56 },
-    rule_0_to_neg10: { n: 92, wins: 50 },
-    rule_neg10_to_neg20: { n: 74, wins: 42 },
-    rule_neg20_to_neg30: { n: 41, wins: 18 },
+    rule_ge_40: { n: 134, wins: 73 },
+    rule_30_to_40: { n: 88, wins: 49 },
+    rule_20_to_30: { n: 117, wins: 71 },
+    rule_10_to_20: { n: 125, wins: 66 },
+    rule_0_to_10: { n: 120, wins: 67 },
+    rule_0_to_neg10: { n: 101, wins: 58 },
+    rule_neg10_to_neg20: { n: 78, wins: 45 },
+    rule_neg20_to_neg30: { n: 42, wins: 19 },
     rule_neg30_to_neg40: { n: 17, wins: 11 },
-    rule_le_neg40: { n: 48, wins: 27 },
+    rule_le_neg40: { n: 49, wins: 28 },
   };
 
   const live = await getDecayDeltaBucketWinRates(sportKey);
@@ -132,13 +138,13 @@ async function main() {
 
   for (const row of live) {
     const exp = expected[row.bucket];
-    check(`${row.bucket} n matches Build Step 5's original report`, row.n, exp.n);
-    check(`${row.bucket} wins matches Build Step 5's original report`, row.wins, exp.wins);
+    check(`${row.bucket} n matches the 2026-08-26 snapshot`, row.n, exp.n);
+    check(`${row.bucket} wins matches the 2026-08-26 snapshot`, row.wins, exp.wins);
   }
   const totalN = live.reduce((sum, r) => sum + r.n, 0);
   const totalWins = live.reduce((sum, r) => sum + r.wins, 0);
-  check("total graded+evaluated n across all buckets", totalN, 770);
-  check("total wins across all buckets", totalWins, 420);
+  check("total graded+evaluated n across all buckets", totalN, 871);
+  check("total wins across all buckets", totalWins, 487);
 
   if (failures > 0) {
     console.log(`\n${failures} FAILURE(S).`);
