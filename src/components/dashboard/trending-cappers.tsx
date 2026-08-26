@@ -117,9 +117,18 @@ function WorstIcon() {
   );
 }
 
-// Capsule body + window + fins, matches Tabler's ti-rocket. Drifts up and
-// settles on a slow loop - same low-frequency, non-distracting pace as the
-// Hot streaks flame, just a vertical bob instead of a flicker.
+// Capsule body + window + fins, matches Tabler's ti-rocket, plus a small
+// 3-line exhaust trail fanning out below the fins so the capsule reads as
+// under thrust rather than just floating - without it, a bare capsule+fins
+// silhouette doesn't read as "launching." The trail paths inherit the same
+// `stroke="currentColor"` as the capsule but override `color` to amber
+// (matching the Hot Streaks flame's palette) so they're legible as exhaust
+// distinct from the emerald body, and painted first so the fins sit in front
+// of them. Drifts up and settles on a slow loop - same low-frequency,
+// non-distracting pace as the Hot streaks flame, just a vertical bob instead
+// of a flicker; the exhaust lines get their own quick, staggered opacity
+// flicker (same staggering idea as HotStreaksIcon's embers) layered under
+// that bob so the trail stays attached to the capsule as it drifts.
 function TrendingIcon() {
   return (
     <svg
@@ -132,6 +141,21 @@ function TrendingIcon() {
       className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400 animate-rocket-drift"
       aria-hidden="true"
     >
+      <path
+        d="M10.3 15.4 9.3 18.6"
+        className="text-amber-500 dark:text-amber-400 animate-thrust-flicker"
+        style={{ animationDelay: "0.3s" }}
+      />
+      <path
+        d="M12 16 12 20.4"
+        className="text-amber-500 dark:text-amber-400 animate-thrust-flicker"
+        style={{ animationDelay: "0s" }}
+      />
+      <path
+        d="M13.7 15.4 14.5 18.2"
+        className="text-amber-500 dark:text-amber-400 animate-thrust-flicker"
+        style={{ animationDelay: "0.6s" }}
+      />
       <rect x="9.5" y="3.5" width="5" height="11" rx="2.5" />
       <circle cx="12" cy="8" r="1.1" />
       <path d="M9.5 11 6 15.5 9.5 14.3" />

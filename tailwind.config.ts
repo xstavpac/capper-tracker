@@ -96,6 +96,10 @@ const config: Config = {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-2px)" },
         },
+        "thrust-flicker": {
+          "0%, 100%": { opacity: "0.9" },
+          "50%": { opacity: "0.35" },
+        },
         "parachute-sway": {
           "0%, 100%": { transform: "rotate(-4deg)" },
           "50%": { transform: "rotate(4deg)" },
@@ -149,6 +153,7 @@ const config: Config = {
         "snow-fall-a": "snow-fall-a 2.4s linear infinite",
         "snow-fall-b": "snow-fall-b 2.8s linear infinite",
         "rocket-drift": "rocket-drift 2.4s ease-in-out infinite",
+        "thrust-flicker": "thrust-flicker 0.9s ease-in-out infinite",
         "parachute-sway": "parachute-sway 2.6s ease-in-out infinite",
         // One-shot (iteration-count 1, no infinite) - these play once, before
         // the count-up starts (see energy-surge.tsx's SURGE_DURATION_MS,
