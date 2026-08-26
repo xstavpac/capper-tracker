@@ -31,7 +31,7 @@ function easternOffsetMinutes(date: Date): number {
 
 // The real UTC instant corresponding to 00:00:00 Eastern on the Eastern
 // calendar day that `reference` falls on - used for "today"/"yesterday"
-// window boundaries (see filterPicksByGradedWindow in server/data/stats.ts).
+// window boundaries (see filterPicksByGameWindow in server/data/stats.ts).
 export function startOfEasternDay(reference: Date): Date {
   const { year, month, day } = easternDateParts(reference);
   const utcMidnightGuess = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));

@@ -8,7 +8,7 @@ import {
   pickCategory,
   chipSetForLeague,
   weightedRoiScore,
-  filterPicksByGradedWindow,
+  filterPicksByGameWindow,
   RANKING_MIN_SAMPLE,
   type OverallStats,
   type PickCategoryKey,
@@ -83,7 +83,7 @@ export type LeaderboardEntry = {
 // split) so the table can sort by any column the user clicks; "small
 // sample" and rank-worthiness become display concerns (a tag, not an
 // exclusion) rather than being decided here. `window` reuses
-// ScorecardWindow/filterPicksByGradedWindow (the same This-week/All-time
+// ScorecardWindow/filterPicksByGameWindow (the same This-week/All-time
 // toggle already used on the capper detail page) rather than inventing a
 // separate windowing concept.
 export async function getCapperLeaderboardTable(
@@ -105,7 +105,7 @@ export async function getCapperLeaderboardTable(
   const scoped = filter?.category
     ? allPicks.filter((p) => pickCategory({ ...p, sportName: p.sport.name }) === filter.category)
     : allPicks;
-  const windowed = filterPicksByGradedWindow(scoped, window);
+  const windowed = filterPicksByGameWindow(scoped, window);
 
   const byCapper = new Map<string, typeof windowed>();
   for (const pick of windowed) {
@@ -165,7 +165,7 @@ export type FavoriteCappersSummary = {
 
 // Powers the Favorites section at the top of the Cappers page - the
 // collective card pools every favorited capper's picks into one array and
-// runs it through the exact same computeStats/filterPicksByGradedWindow
+// runs it through the exact same computeStats/filterPicksByGameWindow
 // used everywhere else (capper detail page, leaderboard table), rather than
 // a separate aggregation. The individual-capper list below it reuses
 // getCapperLeaderboardTable wholesale (same per-capper stats+streak
@@ -198,7 +198,7 @@ export async function getFavoriteCappersSummary(
   // This is exactly why FavoriteCappersSummary (the component rendering
   // this) never reads this field - keep it that way.
   return {
-    collectiveStats: computeStats(filterPicksByGradedWindow(favoritePicks, window)),
+    collectiveStats: computeStats(filterPicksByGameWindow(favoritePicks, window)),
     entries: allEntries.filter((e) => favoriteIds.has(e.capperId)),
   };
 }

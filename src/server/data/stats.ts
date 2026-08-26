@@ -405,13 +405,18 @@ const WINDOW_DAYS_BACK: Partial<Record<ScorecardWindow, number>> = {
   LAST_60: 60,
 };
 
-// Scopes the scorecard to picks graded within a window, so "am I good at
-// spread bets" can be answered for "lately" as well as all-time. Filters on
-// gradedAt (when the real result came in), not gameTime/datePosted - a pick
-// posted today for a game next week isn't graded yet and has no place in any
-// window but ALL (where it's excluded anyway, same as everywhere else that
-// derives records from decided picks only).
-export function filterPicksByGradedWindow<T extends { gradedAt: Date | null }>(
+// Scopes the scorecard to picks whose GAME fell within a window, so "am I
+// good at spread bets" can be answered for "lately" as well as all-time.
+// Windows on gameTime (when the game actually happened), not gradedAt - a
+// game's picks can finish grading on either side of an Eastern midnight
+// boundary depending on when the async grading cron happens to catch them
+// (see grading.ts), which would otherwise split one game's picks across
+// Today and Yesterday. Still requires gradedAt to be set, so a pick posted
+// today for a game next week (not graded yet) has no place in any window
+// but ALL (where it's excluded anyway, same as everywhere else that derives
+// records from decided picks only) - that guarantee doesn't require
+// gradedAt to be the window's date anchor, just a non-null gate.
+export function filterPicksByGameWindow<T extends { gameTime: Date; gradedAt: Date | null }>(
   picks: T[],
   window: ScorecardWindow
 ): T[] {
@@ -431,7 +436,7 @@ export function filterPicksByGradedWindow<T extends { gradedAt: Date | null }>(
     start = new Date(now.getTime() - WINDOW_DAYS_BACK[window]! * 86400000);
   }
 
-  return picks.filter((p) => p.gradedAt && p.gradedAt >= start && p.gradedAt < end);
+  return picks.filter((p) => p.gradedAt && p.gameTime >= start && p.gameTime < end);
 }
 
 // A finer split than ScorecardBucketKey, built for the Cappers-page

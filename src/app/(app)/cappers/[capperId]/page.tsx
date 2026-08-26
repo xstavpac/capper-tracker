@@ -11,7 +11,7 @@ import {
   computeBestOddsRange,
   computeConsistency,
   unitsWonOnBet,
-  filterPicksByGradedWindow,
+  filterPicksByGameWindow,
   chipSetForLeague,
   SCORECARD_WINDOWS,
   SCORECARD_WINDOW_LABELS,
@@ -89,10 +89,10 @@ export default async function CapperDetailPage({
   // of consecutive results in true chronological order, and filtering the
   // input to a window would truncate a real ongoing streak into a smaller,
   // misleading number rather than produce a meaningful "windowed" streak.
-  const stats = computeStats(filterPicksByGradedWindow(picks, window));
+  const stats = computeStats(filterPicksByGameWindow(picks, window));
   const allTimeStats = computeStats(picks);
   const allTimeScorecard = computeScorecard(picks);
-  const scorecard = computeScorecard(filterPicksByGradedWindow(picks, window));
+  const scorecard = computeScorecard(filterPicksByGameWindow(picks, window));
 
   // "Record by category" (favorite/dog, over/under, F5, NRFI/YRFI, ...) only
   // makes sense within one sport at a time - chipSetForLeague's categories
