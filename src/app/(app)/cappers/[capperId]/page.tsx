@@ -10,14 +10,14 @@ import {
   computeCategoryBreakdown,
   computeBestOddsRange,
   computeConsistency,
-  unitsWonOnBet,
+  computeUnitsChartData,
   filterPicksByGameWindow,
   chipSetForLeague,
   SCORECARD_WINDOWS,
   SCORECARD_WINDOW_LABELS,
   type ScorecardWindow,
 } from "@/server/data/stats";
-import { UnitsChart, type UnitsChartPoint } from "@/components/dashboard/units-chart";
+import { UnitsChart } from "@/components/dashboard/units-chart";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
@@ -113,6 +113,7 @@ export default async function CapperDetailPage({
         // all-time (see their own comment above), so the aggregate over them
         // should match that scope rather than the bet-type scorecard's.
         stats: computeStats(sportPicks),
+        chartData: computeUnitsChartData(sportPicks),
       };
     })
     .filter((s) => s.breakdown.length > 0)
@@ -132,20 +133,14 @@ export default async function CapperDetailPage({
     categoryBreakdownsBySport.find((s) => s.sportName === selectedCategorySport)?.breakdown ?? [];
   const activeSportStats =
     categoryBreakdownsBySport.find((s) => s.sportName === selectedCategorySport)?.stats ?? null;
+  const activeSportChartData =
+    categoryBreakdownsBySport.find((s) => s.sportName === selectedCategorySport)?.chartData ?? [];
 
-  const settled = picks.filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH");
-  let running = 0;
-  const chartData: UnitsChartPoint[] = settled.map((pick) => {
-    if (pick.status === "WIN") {
-      running += unitsWonOnBet(pick.units, pick.odds);
-    } else if (pick.status === "LOSS") {
-      running -= pick.units;
-    }
-    return {
-      date: formatEastern(pick.gameTime, { month: "short", day: "numeric" }),
-      cumulativeUnits: Math.round(running * 100) / 100,
-    };
-  });
+  // Same window as the hero stats/scorecard above, so this chart's cumulative
+  // line actually matches whichever period (Today/Last 7 days/...) they're
+  // currently showing, instead of always plotting all-time regardless of the
+  // window toggle.
+  const chartData = computeUnitsChartData(filterPicksByGameWindow(picks, window));
 
   const recentPicks = [...picks].reverse().slice(0, 10);
 
@@ -274,6 +269,11 @@ export default async function CapperDetailPage({
         </div>
       )}
 
+      <div className="mt-4 rounded-card bg-card p-5 shadow-soft">
+        <div className="mb-2 text-sm font-medium text-muted-foreground">Units over time</div>
+        <UnitsChart data={chartData} />
+      </div>
+
       {activeCategoryBreakdown.length > 0 && (
         <div className="mt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -318,13 +318,14 @@ export default async function CapperDetailPage({
             </div>
           )}
           <CategoryBreakdown items={activeCategoryBreakdown} />
+          <div className="mt-4 rounded-card bg-card p-4 shadow-soft">
+            <div className="mb-2 text-xs text-muted-foreground">
+              {selectedCategorySport} units over time — All time
+            </div>
+            <UnitsChart data={activeSportChartData} compact />
+          </div>
         </div>
       )}
-
-      <div className="mt-4 rounded-card bg-card p-5 shadow-soft">
-        <div className="mb-2 text-sm font-medium text-muted-foreground">Units over time</div>
-        <UnitsChart data={chartData} />
-      </div>
 
       <div className="mt-4 rounded-card bg-card shadow-soft">
         <div className="border-b border-border-subtle px-5 py-3 text-sm font-medium text-muted-foreground">

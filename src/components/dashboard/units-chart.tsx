@@ -9,17 +9,21 @@ export type UnitsChartPoint = {
   cumulativeUnits: number;
 };
 
-export function UnitsChart({ data }: { data: UnitsChartPoint[] }) {
+// `compact` shrinks the chart for secondary placements (e.g. a per-sport
+// chart sitting alongside a primary all-picks one) without changing any of
+// the underlying data/series logic - purely a sizing variant.
+export function UnitsChart({ data, compact = false }: { data: UnitsChartPoint[]; compact?: boolean }) {
   // Recharts renders raw SVG with colors set via inline props, not Tailwind
   // classes - a `dark:` variant can't reach them, so this needs to know the
   // live theme and pick hex values itself (kept close to the border-subtle/
   // muted-foreground/card tokens' actual light/dark values).
   const { theme } = useTheme();
   const isDark = theme === Theme.DARK;
+  const heightClass = compact ? "h-40" : "h-64";
 
   if (data.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+      <div className={"flex items-center justify-center text-sm text-muted-foreground " + heightClass}>
         No settled picks yet to chart.
       </div>
     );
@@ -29,7 +33,7 @@ export function UnitsChart({ data }: { data: UnitsChartPoint[] }) {
   const tickColor = isDark ? "#9ca3af" : "#6b7280";
 
   return (
-    <div className="h-64">
+    <div className={heightClass}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
