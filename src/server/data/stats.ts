@@ -405,6 +405,13 @@ const WINDOW_DAYS_BACK: Partial<Record<ScorecardWindow, number>> = {
   LAST_60: 60,
 };
 
+// TODAY/YESTERDAY are the only windows pinned to a single calendar day - a
+// capper with zero picks on that specific day is meaningfully "not part of
+// today's action," unlike the rolling/all-time windows where a 0-pick capper
+// is still a real leaderboard member who just hasn't posted lately. Used by
+// getCapperLeaderboardTable to exclude 0-pick cappers only for these two.
+export const DAY_SPECIFIC_WINDOWS: ScorecardWindow[] = ["TODAY", "YESTERDAY"];
+
 // Scopes the scorecard to picks whose GAME fell within a window, so "am I
 // good at spread bets" can be answered for "lately" as well as all-time.
 // Windows on gameTime (when the game actually happened), not gradedAt - a
