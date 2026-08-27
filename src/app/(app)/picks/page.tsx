@@ -10,8 +10,9 @@ import { ParlayForm } from "@/components/dashboard/parlay-form";
 import { LegStatusButtons } from "@/components/dashboard/leg-status-buttons";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 import { favoriteOrUnderdog, nrfiSide } from "@/lib/bet-line";
-import { formatEastern } from "@/lib/dates";
+import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
 import { TIER_LABELS } from "@/lib/entitlements";
+import { DateRangeFilter } from "@/components/picks/date-range-filter";
 import type { BetType, PickStatus, Period } from "@prisma/client";
 
 const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
@@ -75,6 +76,34 @@ function betTypeFilterCategory(pick: { betType: BetType; period: Period; betDeta
   return null;
 }
 
+// Resolves the page's three date searchParams (`date` for single-day mode,
+// `startDate`/`endDate` for range mode) down to one definite Eastern-
+// calendar-day range - defaulting to TODAY when none of the three are
+// present, so a plain /picks load (including "Clear") always queries just
+// today's picks rather than the entire history. Range mode wins whenever
+// either range param is present (even alone - the missing side falls back to
+// the one that IS given, so a single-sided link/bookmark still resolves to a
+// real one-day range rather than an unbounded query), and a reversed
+// start/end pair is swapped rather than silently returning zero rows.
+function resolveDateFilter(searchParams: { date?: string; startDate?: string; endDate?: string }): {
+  startDateKey: string;
+  endDateKey: string;
+  isRange: boolean;
+} {
+  const isRange = Boolean(searchParams.startDate || searchParams.endDate);
+  if (!isRange) {
+    const dateKey = searchParams.date || easternDateKey(new Date());
+    return { startDateKey: dateKey, endDateKey: dateKey, isRange: false };
+  }
+
+  let startDateKey = searchParams.startDate || searchParams.endDate!;
+  let endDateKey = searchParams.endDate || searchParams.startDate!;
+  if (startDateKey > endDateKey) {
+    [startDateKey, endDateKey] = [endDateKey, startDateKey];
+  }
+  return { startDateKey, endDateKey, isRange: true };
+}
+
 export default async function PicksPage({
   searchParams,
 }: {
@@ -84,6 +113,9 @@ export default async function PicksPage({
     status?: string;
     betType?: string;
     favoriteDog?: string;
+    date?: string;
+    startDate?: string;
+    endDate?: string;
   };
 }) {
   const user = await requireUser();
@@ -108,11 +140,14 @@ export default async function PicksPage({
 
   const favoriteDog = (searchParams.favoriteDog as "FAVORITE" | "UNDERDOG") || undefined;
   const betTypeFilter = (searchParams.betType as BetTypeFilterKey) || undefined;
+  const { startDateKey, endDateKey, isRange } = resolveDateFilter(searchParams);
 
   const filters = {
     capperId: searchParams.capperId || undefined,
     sportId: searchParams.sportId || undefined,
     status: (searchParams.status as PickStatus) || undefined,
+    startDateKey,
+    endDateKey,
   };
 
   const [allPicks, cappers, sports, planStatus, parlays] = await Promise.all([
@@ -130,7 +165,22 @@ export default async function PicksPage({
     .filter((p) => !betTypeFilter || betTypeFilterCategory(p) === betTypeFilter)
     .filter((p) => !favoriteDog || favoriteOrUnderdog(p) === favoriteDog);
 
-  const hasActiveFilters = Object.values(filters).some(Boolean) || Boolean(favoriteDog) || Boolean(betTypeFilter);
+  // Deliberately excludes startDateKey/endDateKey - those are always set
+  // (defaulting to today), so including them here would make this true on
+  // every load and permanently show "Clear"/the match-count line even with
+  // no filter the user actually chose. `dateFilterActive` below tracks the
+  // date scope separately, since it's "active" only once the user has
+  // navigated away from the implicit today default.
+  const otherFiltersActive =
+    Boolean(filters.capperId) || Boolean(filters.sportId) || Boolean(filters.status) || Boolean(favoriteDog) || Boolean(betTypeFilter);
+  const dateFilterActive = Boolean(searchParams.date) || isRange;
+  const hasActiveFilters = otherFiltersActive || dateFilterActive;
+
+  const dateRangeLabel = isRange
+    ? formatEastern(easternDayStart(startDateKey), { month: "short", day: "numeric" }) +
+      " - " +
+      formatEastern(easternDayStart(endDateKey), { month: "short", day: "numeric", year: "numeric" })
+    : formatEastern(easternDayStart(startDateKey), { month: "short", day: "numeric", year: "numeric" });
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -138,10 +188,13 @@ export default async function PicksPage({
         <div>
           <h1 className="text-xl font-semibold">Picks</h1>
           <p className="mt-1 text-sm text-muted-foreground">
+            {picks.length + " pick" + (picks.length === 1 ? "" : "s") + " - " + dateRangeLabel}
+            {otherFiltersActive ? " (filtered)" : ""}
+          </p>
+          <p className="text-xs text-muted-foreground">
             {planStatus.unlimited
-              ? planStatus.pickCount + " pick" + (planStatus.pickCount === 1 ? "" : "s") + " (" + TIER_LABELS[planStatus.tier] + " plan)"
-              : planStatus.pickCount + " of " + planStatus.pickLimit + " picks (Free plan)"}
-            {hasActiveFilters ? " - " + picks.length + " match filters" : ""}
+              ? TIER_LABELS[planStatus.tier] + " plan"
+              : planStatus.pickCount + " of " + planStatus.pickLimit + " picks logged (Free plan)"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -155,6 +208,13 @@ export default async function PicksPage({
         method="get"
         className="mb-4 grid grid-cols-2 gap-2 rounded-card bg-card p-3 shadow-soft sm:flex sm:flex-wrap sm:items-center"
       >
+        <DateRangeFilter
+          initialDate={startDateKey}
+          initialStartDate={startDateKey}
+          initialEndDate={endDateKey}
+          initialIsRange={isRange}
+        />
+
         <select
           name="capperId"
           defaultValue={filters.capperId ?? ""}

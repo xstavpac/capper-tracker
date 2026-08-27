@@ -56,6 +56,31 @@ export function sameEasternDay(a: Date, b: Date): boolean {
   return pa.year === pb.year && pa.month === pb.month && pa.day === pb.day;
 }
 
+// Turns a "YYYY-MM-DD" Eastern-calendar-day key (as typed into a native
+// <input type="date">, or produced by easternDateKey above) into the UTC
+// instant for that day's Eastern midnight. Parses via noon UTC first - the
+// same trick model-engine/resolver.ts's snapshotDateToTimestamp already uses
+// for this exact "YYYY-MM-DD" -> Eastern-day-instant problem - rather than
+// `new Date(dateKey)` directly, which parses as UTC MIDNIGHT: for several
+// hours every Eastern evening that's already the PREVIOUS Eastern calendar
+// day, which would silently shift the boundary a day early.
+export function easternDayStart(dateKey: string): Date {
+  return startOfEasternDay(new Date(dateKey + "T12:00:00.000Z"));
+}
+
+// The UTC instant range [start, end) covering every Eastern calendar day
+// from startKey through endKey inclusive - used to scope a DB query's
+// gameTime column to a single day (startKey === endKey) or a date range.
+// `end` is the NEXT day's Eastern midnight, computed by adding to the
+// calendar digits directly (via Date.UTC, which correctly overflows month/
+// year boundaries) rather than a fixed 86400000ms - a range crossing a DST
+// transition still lands on the right wall-clock boundary that way.
+export function easternDateRange(startKey: string, endKey: string): { start: Date; end: Date } {
+  const [y, m, d] = endKey.split("-").map(Number);
+  const nextDayKey = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+  return { start: easternDayStart(startKey), end: easternDayStart(nextDayKey) };
+}
+
 // Formats `date` for display, always in Eastern - a thin wrapper so display
 // call sites can't accidentally omit the timeZone and fall back to whatever
 // zone the rendering server happens to be in.

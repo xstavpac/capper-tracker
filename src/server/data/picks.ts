@@ -12,6 +12,7 @@ import {
   type PickCategoryKey,
 } from "@/server/data/stats";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
+import { easternDateRange } from "@/lib/dates";
 import { nrfiSide } from "@/lib/bet-line";
 import { findMatchingGameResult, resolveOutcome, resolveTouchdownProp, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { FREE_PICK_LIMIT } from "@/lib/entitlements";
@@ -187,6 +188,13 @@ export type PickFilters = {
   capperId?: string;
   sportId?: string;
   status?: PickStatus;
+  // Eastern-calendar-day keys ("YYYY-MM-DD"), both inclusive - a single day
+  // is startDateKey === endDateKey. Required in practice (the Picks page
+  // always resolves a default of "today" before calling this), but optional
+  // here so every other caller of this file's PickFilters-shaped filtering
+  // isn't forced to thread a date range through for no reason.
+  startDateKey?: string;
+  endDateKey?: string;
 };
 
 // betType/period aren't filtered here anymore - the Picks page's unified bet
@@ -194,13 +202,26 @@ export type PickFilters = {
 // (for the NRFI/YRFI split) that a plain Prisma where-clause can't express, so
 // it's applied in-memory after this fetch, the same way favorite/underdog
 // filtering already is.
+//
+// The date range, unlike those two, IS applied here at the query level (on
+// `gameTime`, real DB WHERE clause via easternDateRange) rather than fetched-
+// then-filtered - this is the actual fix for the Picks page loading its
+// entire pick history (2,000+ rows and growing with every sport added) on
+// every page load. Every other caller of PickFilters that doesn't pass a
+// date range is unaffected (no date clause is added at all), same as before.
 export async function getFilteredPicksForUser(userId: string, filters: PickFilters) {
+  const dateRange =
+    filters.startDateKey && filters.endDateKey
+      ? easternDateRange(filters.startDateKey, filters.endDateKey)
+      : undefined;
+
   return prisma.pick.findMany({
     where: {
       userId,
       ...(filters.capperId ? { capperId: filters.capperId } : {}),
       ...(filters.sportId ? { sportId: filters.sportId } : {}),
       ...(filters.status ? { status: filters.status } : {}),
+      ...(dateRange ? { gameTime: { gte: dateRange.start, lt: dateRange.end } } : {}),
     },
     include: { capper: true, sport: true, league: true },
     orderBy: { gameTime: "desc" },
