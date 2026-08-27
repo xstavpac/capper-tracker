@@ -10,6 +10,7 @@ import {
 import { persistFinalScores, gradePendingPicks, regradeFuzzyMatchedPicks } from "@/server/data/grading";
 import { getPicksForGame, getCapperScorecard } from "@/server/data/picks";
 import { getGamePulsePanelRows } from "@/server/data/game-pulse";
+import { getNflGamePulsePanelRows } from "@/server/data/nfl-game-pulse";
 import { formatEastern } from "@/lib/dates";
 import { betTypeLabel } from "@/server/data/stats";
 import { nrfiSide } from "@/lib/bet-line";
@@ -92,8 +93,14 @@ export default async function GameDetailPage({
   // own live/final state - unlike the old tile badge this replaces (which
   // only ever evaluated a currently-live game's own innings), the panel
   // shows each team's track record regardless of whether this particular
-  // game has started yet.
-  const pulseRows = await getGamePulsePanelRows(game.homeTeam, game.awayTeam);
+  // game has started yet. NFL gets its own football-specific question set
+  // (nfl-game-pulse.ts); every other sport still falls through to the MLB
+  // rate lookup, which harmlessly returns all-"not enough data" rows for a
+  // non-MLB team name - unchanged from before this sport branch existed.
+  const pulseRows =
+    sportMeta.key === "americanfootball_nfl"
+      ? await getNflGamePulsePanelRows(game.homeTeam, game.awayTeam)
+      : await getGamePulsePanelRows(game.homeTeam, game.awayTeam);
 
   const matchedPicks = await getPicksForGame(user.id, {
     sportName: sportMeta.label,

@@ -513,6 +513,27 @@ model GameResult {
   // the usable sample starts accruing from whenever this shipped, not
   // retroactively.
   inningsJson        Json?
+  // NFL only - per-quarter {home, away} score array (Q1..Q4, plus any OT
+  // periods) from ESPN's summary endpoint linescores, same "captured once at
+  // persistFinalScores time, null for every other sport and for rows
+  // predating this field" pattern as inningsJson above. Feeds NFL Game
+  // Pulse's leadingAtHalftime (Q1+Q2) and trailingEntering4th (Q1+Q2+Q3)
+  // questions - see nfl-game-pulse-situations.ts.
+  quartersJson       Json?
+  // NFL only - every scoring play in the game, in chronological order, as
+  // {home, away} running score snapshots (the score immediately after that
+  // play - which team scored is derivable from which number increased, so
+  // team identity doesn't need to be stored separately). Feeds NFL Game
+  // Pulse's scoredFirst (first entry) and ledByDoubleDigits (largest margin
+  // reached at any entry) questions.
+  scoringPlaysJson   Json?
+  // NFL only - total turnovers (interceptions thrown + fumbles lost) per
+  // team for the game, from ESPN's boxscore team statistics. Feeds NFL Game
+  // Pulse's wonTurnoverBattle question - fewer turnovers wins, equal counts
+  // as no winner (null), same tie handling as every other Game Pulse
+  // question.
+  homeTurnovers      Int?
+  awayTurnovers      Int?
   gameDate           DateTime
   createdAt          DateTime @default(now())
 

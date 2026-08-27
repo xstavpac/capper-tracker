@@ -4,7 +4,7 @@ import {
   getLiveScoresForSport,
   getOddsForSport,
   getMlbEarlyInningScores,
-  getNflFirstHalfScore,
+  getNflGameFacts,
   getNcaafFirstHalfScore,
   getNbaFirstHalfScore,
   getNflPlayerTdStats,
@@ -113,13 +113,35 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
       // game is final" reasoning as MLB's early innings above. NFL, NCAAF,
       // and NBA each have their own ESPN summary endpoint (different sport
       // path), so which fetcher runs depends on sportKey - not a shared
-      // function, matching getNflFirstHalfScore/getNcaafFirstHalfScore/
+      // function, matching getNflGameFacts/getNcaafFirstHalfScore/
       // getNbaFirstHalfScore's own precedent of one function per sport
       // rather than a generic dispatcher.
       const needsFirstHalf = supportsFirstHalf && (!existing || existing.firstFiveHomeScore === null);
+
+      // NFL Game Pulse fields (see nfl-game-pulse-situations.ts) - gated
+      // independently of needsFirstHalf since a row captured before this
+      // shipped may already have firstFiveHomeScore set but still be
+      // missing these. All three come from the same summary-endpoint fetch
+      // (getNflGameFacts), so they're gated as one bundle rather than
+      // separately - "any of them still missing" is enough to justify the
+      // one fetch that fills in all three at once.
+      const needsNflGamePulseFacts =
+        sportKey === "americanfootball_nfl" &&
+        (!existing || existing.quartersJson === null || existing.scoringPlaysJson === null || existing.homeTurnovers === null);
+
+      // One fetch covers both needs for NFL - the old getNflFirstHalfScore
+      // hit this same summary endpoint on its own just for Q1+Q2; folding
+      // that into getNflGameFacts means a game needing both first-half
+      // grading AND Game Pulse capture (the common case for any newly-final
+      // NFL game) makes one request instead of two.
+      const nflFacts =
+        sportKey === "americanfootball_nfl" && (needsFirstHalf || needsNflGamePulseFacts)
+          ? await getNflGameFacts(g.id)
+          : null;
+
       const espnFirstHalf = needsFirstHalf
         ? sportKey === "americanfootball_nfl"
-          ? await getNflFirstHalfScore(g.id)
+          ? nflFacts?.firstHalf ?? null
           : sportKey === "americanfootball_ncaaf"
             ? await getNcaafFirstHalfScore(g.id)
             : await getNbaFirstHalfScore(g.id)
@@ -127,6 +149,22 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
 
       const firstHalfHome = early?.firstFive?.home ?? espnFirstHalf?.home ?? null;
       const firstHalfAway = early?.firstFive?.away ?? espnFirstHalf?.away ?? null;
+
+      // undefined (matching inningsJson's own convention just below, and
+      // Prisma's JSON-field typing, which rejects a literal null here in
+      // favor of Prisma.JsonNull/omission) when not fetched this run OR the
+      // fetch didn't return usable data - the update spread only writes a
+      // field when it has a real value, so an existing row's already-set
+      // column is left untouched either way; a brand-new row with no value
+      // yet gets an implicit NULL from omitting the key, and picks the data
+      // up on a later run once ESPN has it.
+      const quartersJson = needsNflGamePulseFacts ? (nflFacts?.quarters ?? undefined) : undefined;
+      const scoringPlaysJson = needsNflGamePulseFacts ? (nflFacts?.scoringPlays ?? undefined) : undefined;
+      // Turnovers is a plain Int, not an array/object - 0 is a common, valid
+      // value (a team with a clean game), so the update-gate below checks
+      // `!== null` rather than truthiness, unlike quartersJson/scoringPlaysJson.
+      const homeTurnovers = needsNflGamePulseFacts ? (nflFacts?.turnovers?.home ?? null) : null;
+      const awayTurnovers = needsNflGamePulseFacts ? (nflFacts?.turnovers?.away ?? null) : null;
 
       // g.innings already comes for free with the same schedule-API fetch
       // getLiveScoresForSport just made (see getMlbLiveScores) - no separate
@@ -152,6 +190,9 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
             ? { firstInningHomeScore: firstInning.home, firstInningAwayScore: firstInning.away }
             : {}),
           ...(inningsJson ? { inningsJson } : {}),
+          ...(quartersJson ? { quartersJson } : {}),
+          ...(scoringPlaysJson ? { scoringPlaysJson } : {}),
+          ...(homeTurnovers !== null ? { homeTurnovers, awayTurnovers } : {}),
           ...(ledgerHasData
             ? { favTeam: ledger!.favTeam, totalLine: ledger!.totalLine, lineSource: "odds_snapshot" }
             : {}),
@@ -168,6 +209,10 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
           firstInningHomeScore: firstInning?.home ?? null,
           firstInningAwayScore: firstInning?.away ?? null,
           inningsJson,
+          quartersJson,
+          scoringPlaysJson,
+          homeTurnovers,
+          awayTurnovers,
           gameDate: new Date(g.commenceTime),
           favTeam: ledger?.favTeam ?? null,
           totalLine: ledger?.totalLine ?? null,

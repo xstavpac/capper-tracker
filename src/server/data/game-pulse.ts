@@ -25,8 +25,13 @@ const ROW_TITLES: Record<SituationalQuestionKey, string> = {
   trailingAfter7: "Trailing after 7",
 };
 
+// key is a plain string (not SituationalQuestionKey) so this same row shape
+// is reusable by any sport's panel - NFL Game Pulse (nfl-game-pulse.ts)
+// builds this exact type with its own question keys, reusing GamePulsePanel
+// (the UI component) and SAMPLE_SIZE_FLOOR/SKEW_FLOOR_HIGH/SKEW_FLOOR_LOW
+// unchanged rather than duplicating either.
 export type GamePulsePanelRow = {
-  key: SituationalQuestionKey;
+  key: string;
   title: string;
   home: SituationalRate;
   away: SituationalRate;

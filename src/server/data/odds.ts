@@ -346,7 +346,7 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
 // just a different URL path segment. This only covers full-game status/
 // scores, enough for live display and full-game Moneyline/Spread/Total
 // grading - first-half and touchdown-prop grading need the heavier
-// per-event summary endpoint instead (see getNflFirstHalfScore and
+// per-event summary endpoint instead (see getNflGameFacts and
 // getNflPlayerTdStats below, NFL-only for now).
 async function getEspnScores(sportPath: string): Promise<ScoreGame[]> {
   const fmt = (d: Date) => easternDateKey(d).replace(/-/g, "");
@@ -487,15 +487,42 @@ export async function getMlbEarlyInningScores(gamePk: string): Promise<MlbEarlyI
   return { firstInning, firstFive };
 }
 
-// Reads Q1+Q2 from a finished NFL game's linescores for grading 1st-half
-// Moneyline/Spread/Total picks - same per-event ESPN summary endpoint as
-// getNflPlayerTdStats below (one fetch, used by both persistFinalScores and
-// touchdown-prop grading independently). Each competitor's `linescores`
-// entries only carry a `displayValue` string (confirmed against a real
-// final game), no numeric `value` field, so this parses it. Only call this
-// once a game is Final - a still-in-progress Q2 would report an incomplete
-// score, same caution as getMlbEarlyInningScores.
-export async function getNflFirstHalfScore(eventId: string): Promise<{ home: number; away: number } | null> {
+export type NflGameFacts = {
+  // Q1+Q2 summed - same value the old getNflFirstHalfScore returned, for
+  // grading 1st-half Moneyline/Spread/Total picks.
+  firstHalf: { home: number; away: number } | null;
+  // Per-quarter {home, away} score array (Q1..Q4, plus any OT periods), in
+  // order - feeds NFL Game Pulse's leadingAtHalftime and trailingEntering4th
+  // questions (see nfl-game-pulse-situations.ts). Persisted as
+  // GameResult.quartersJson.
+  quarters: { home: number; away: number }[] | null;
+  // Every scoring play in the game, in chronological order, as {home, away}
+  // running score snapshots (the score immediately after that play) - which
+  // team scored on a given play is derivable from which number increased,
+  // so team identity doesn't need to be captured separately. Empty array
+  // (not null) for a genuine scoreless game; null only when ESPN didn't
+  // return this field at all. Feeds scoredFirst and ledByDoubleDigits.
+  // Persisted as GameResult.scoringPlaysJson.
+  scoringPlays: { home: number; away: number }[] | null;
+  // Turnovers (interceptions thrown + fumbles lost) per team, from ESPN's
+  // boxscore team statistics. Feeds wonTurnoverBattle. Persisted as
+  // GameResult.homeTurnovers/awayTurnovers.
+  turnovers: { home: number; away: number } | null;
+};
+
+// Single fetch to ESPN's NFL summary endpoint - replaces the old
+// getNflFirstHalfScore (which hit this same URL for Q1+Q2 alone) with
+// everything persistFinalScores needs to capture for a finished NFL game in
+// one round trip: first-half score (unchanged grading behavior), the full
+// per-quarter linescore and scoring-play margin trail for NFL Game Pulse,
+// and each team's turnover count. getNflPlayerTdStats below stays a
+// separate fetch to this same endpoint deliberately - it's called
+// independently at touchdown-prop GRADING time (resolveTouchdownProp, once
+// per pending prop pick), not at this capture-time step, so folding it in
+// here wouldn't actually eliminate a redundant call. Only call this once a
+// game is Final - a still-in-progress game would report incomplete
+// quarters/scoring plays, same caution as getMlbEarlyInningScores.
+export async function getNflGameFacts(eventId: string): Promise<NflGameFacts | null> {
   const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=" + eventId, {
     next: { revalidate: 3600 },
   });
@@ -507,30 +534,63 @@ export async function getNflFirstHalfScore(eventId: string): Promise<{ home: num
   const away = competitors.find((c: any) => c.homeAway === "away");
   if (!home || !away) return null;
 
-  const sumFirstHalf = (linescores: any[] | undefined): number | null => {
-    if (!linescores || linescores.length < 2) return null;
-    const q1 = parseFloat(linescores[0]?.displayValue ?? "");
-    const q2 = parseFloat(linescores[1]?.displayValue ?? "");
-    if (Number.isNaN(q1) || Number.isNaN(q2)) return null;
-    return q1 + q2;
+  // Each competitor's `linescores` entries only carry a `displayValue`
+  // string (confirmed against real final games), no numeric `value` field,
+  // so this parses it. Missing/empty entirely -> null (no usable checkpoint
+  // at all) - a real finished NFL game always has at least 4 linescores, so
+  // there's no legitimate "empty but valid" case to preserve here, unlike
+  // scoringPlays below.
+  const parseQuarterValues = (linescores: any[] | undefined): number[] | null => {
+    if (!linescores || linescores.length === 0) return null;
+    const values = linescores.map((l: any) => parseFloat(l?.displayValue ?? ""));
+    return values.some((v) => Number.isNaN(v)) ? null : values;
   };
+  const homeQuarterValues = parseQuarterValues(home.linescores);
+  const awayQuarterValues = parseQuarterValues(away.linescores);
 
-  const homeFirstHalf = sumFirstHalf(home.linescores);
-  const awayFirstHalf = sumFirstHalf(away.linescores);
-  if (homeFirstHalf === null || awayFirstHalf === null) return null;
+  let quarters: { home: number; away: number }[] | null = null;
+  if (homeQuarterValues && awayQuarterValues && homeQuarterValues.length === awayQuarterValues.length) {
+    quarters = homeQuarterValues.map((h, i) => ({ home: h, away: awayQuarterValues[i] }));
+  }
 
-  return { home: homeFirstHalf, away: awayFirstHalf };
+  const firstHalf =
+    quarters && quarters.length >= 2
+      ? { home: quarters[0].home + quarters[1].home, away: quarters[0].away + quarters[1].away }
+      : null;
+
+  // Array.isArray, not a length/truthiness check - a genuinely scoreless
+  // game (0-0) legitimately has an empty scoringPlays array, distinct from
+  // ESPN not returning the field at all (null, "we don't have this data").
+  const scoringPlays: { home: number; away: number }[] | null = Array.isArray(data.scoringPlays)
+    ? data.scoringPlays.map((p: any) => ({ home: p.homeScore ?? 0, away: p.awayScore ?? 0 }))
+    : null;
+
+  const boxscoreTeams = data.boxscore?.teams ?? [];
+  const homeBox = boxscoreTeams.find((t: any) => t.homeAway === "home");
+  const awayBox = boxscoreTeams.find((t: any) => t.homeAway === "away");
+  const findTurnovers = (team: any): number | null => {
+    const stat = team?.statistics?.find((s: any) => s.name === "turnovers");
+    const parsed = stat ? parseInt(stat.displayValue, 10) : NaN;
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+  const homeTurnovers = findTurnovers(homeBox);
+  const awayTurnovers = findTurnovers(awayBox);
+  const turnovers = homeTurnovers !== null && awayTurnovers !== null ? { home: homeTurnovers, away: awayTurnovers } : null;
+
+  return { firstHalf, quarters, scoringPlays, turnovers };
 }
 
-// Same as getNflFirstHalfScore above, just the college-football summary
-// endpoint instead of NFL's - confirmed live against a real finished game
-// (Ohio State 7-10-14-7, Penn State 0-14-0-0) during the NFL/NCAAF category-
-// tile investigation: identical `competitors[].linescores[].displayValue`
-// shape, so this is a straight copy with the URL path swapped, not a new
-// parsing approach. Kept as its own function (not a shared helper taking a
-// sport path) to match getNflFirstHalfScore's own precedent of one function
-// per sport rather than a generic dispatcher - see that function's comment
-// for why only a Final game's linescores should ever be read here.
+// Same first-half-only linescores parsing getNflGameFacts above does for
+// NFL (before that function grew quarters/scoringPlays/turnovers for Game
+// Pulse), just the college-football summary endpoint instead - confirmed
+// live against a real finished game (Ohio State 7-10-14-7, Penn State
+// 0-14-0-0) during the NFL/NCAAF category-tile investigation: identical
+// `competitors[].linescores[].displayValue` shape, so this is a straight
+// copy with the URL path swapped, not a new parsing approach. Kept as its
+// own function (not a shared helper taking a sport path) to match this
+// file's own precedent of one function per sport rather than a generic
+// dispatcher - see getNflGameFacts' comment for why only a Final game's
+// linescores should ever be read here.
 export async function getNcaafFirstHalfScore(eventId: string): Promise<{ home: number; away: number } | null> {
   const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=" + eventId, {
     next: { revalidate: 3600 },
@@ -558,8 +618,9 @@ export async function getNcaafFirstHalfScore(eventId: string): Promise<{ home: n
   return { home: homeFirstHalf, away: awayFirstHalf };
 }
 
-// Same as getNflFirstHalfScore above, just the NBA summary endpoint instead
-// of NFL's - confirmed live against two real finished games (PHI 109-97 ORL:
+// Same first-half-only linescores parsing getNflGameFacts above does for
+// NFL, just the NBA summary endpoint instead - confirmed live against two
+// real finished games (PHI 109-97 ORL:
 // linescores [28,31,20,30]/[24,31,19,23], summing to the real final score on
 // both sides; GS 126-121 LAC: [22,31,30,43]/[31,30,28,32], same self-check)
 // during the NBA chip-set investigation: identical
