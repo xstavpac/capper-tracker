@@ -1,5 +1,6 @@
 import { requireUser } from "@/server/auth";
 import { getOddsForSport, getLiveScoresForSport, LIVE_SPORTS } from "@/server/data/odds";
+import { attachGamePulse } from "@/server/data/game-pulse";
 import { getPicksForGames } from "@/server/data/picks";
 import { pickCategory, betTypeLabel, chipSetForLeague, DEFAULT_CHIP_SET } from "@/server/data/stats";
 import { getSportCategoryPanelData } from "@/server/data/cappers";
@@ -35,13 +36,18 @@ export default async function LivePage({
   // to show, so skip the extra query entirely.
   const hasSportSpecificCategories = chipSetForLeague(sportLabel).length > DEFAULT_CHIP_SET.length;
 
-  const [allOdds, scores, sportCategoryPanel] = await Promise.all([
+  const [allOdds, rawScores, sportCategoryPanel] = await Promise.all([
     getOddsForSport(activeSport),
     getLiveScoresForSport(activeSport),
     hasSportSpecificCategories ? getSportCategoryPanelData(user.id, sportLabel) : Promise.resolve(null),
   ]);
   const sportCategoryBreakdown = sportCategoryPanel?.breakdown ?? [];
   const sportCategoryLeaderboards = sportCategoryPanel?.leaderboards ?? {};
+
+  // Same attachGamePulse the poll endpoint uses (/api/live/scores) - without
+  // this, a game that's already live on first page load would show no
+  // pulse badge until the first 25s poll tick landed.
+  const scores = await attachGamePulse(rawScores);
 
   // This is the odds BOARD, not the ticker - it's meant to show the full
   // window the Odds API has actually posted lines for (a full week at once

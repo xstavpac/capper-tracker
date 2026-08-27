@@ -18,6 +18,17 @@ export type OddsGame = {
   }[];
 };
 
+// One entry per inning that has started. `runs` is null (not 0) for a half
+// that hasn't been played yet - the schedule endpoint's linescore just omits
+// the "runs" key on an in-progress/upcoming half, and collapsing that to 0
+// would make "hasn't batted yet" indistinguishable from "batted and scored
+// nothing," which situational reads like "scored first" depend on.
+export type ScoreGameInning = {
+  num: number;
+  home: { runs: number } | null;
+  away: { runs: number } | null;
+};
+
 export type ScoreGame = {
   id: string;
   homeTeam: string;
@@ -30,6 +41,10 @@ export type ScoreGame = {
   // games and for every ESPN-backed sport (innings are baseball-specific).
   inningHalf: string | null;
   inningOrdinal: string | null;
+  // MLB-only, same `hydrate=linescore` payload as inningHalf/inningOrdinal -
+  // populated for live and final games, null for preview and for every
+  // ESPN-backed sport.
+  innings: ScoreGameInning[] | null;
 };
 
 export const LIVE_SPORTS = [
@@ -295,6 +310,14 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
       commenceTime: g.gameDate,
       inningHalf: status === "live" ? (g.linescore?.inningState ?? null) : null,
       inningOrdinal: status === "live" ? (g.linescore?.currentInningOrdinal ?? null) : null,
+      innings:
+        status === "live" || status === "final"
+          ? (g.linescore?.innings ?? []).map((i: any) => ({
+              num: i.num,
+              home: typeof i.home?.runs === "number" ? { runs: i.home.runs } : null,
+              away: typeof i.away?.runs === "number" ? { runs: i.away.runs } : null,
+            }))
+          : null,
     };
   });
 }
@@ -345,6 +368,7 @@ async function getEspnScores(sportPath: string): Promise<ScoreGame[]> {
       commenceTime: e.date,
       inningHalf: null,
       inningOrdinal: null,
+      innings: null,
     };
   });
 }

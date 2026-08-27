@@ -1,0 +1,12 @@
+-- AlterTable
+-- Uses IF NOT EXISTS rather than a plain ADD COLUMN: this feature (Game
+-- Pulse) was originally built on an unmerged investigation branch back on
+-- 2026-08-19/20, and that branch's own migration was applied by hand
+-- directly against the real dev/prod database at the time (never through
+-- `prisma migrate deploy`, and never merged into main's tracked migration
+-- history) - so the "inningsJson" column already physically exists in
+-- production today, with no corresponding row in `_prisma_migrations`. This
+-- migration reconciles that: idempotent so it's safe to apply now (no-op,
+-- since the column is already there) and also safe on any environment
+-- where it genuinely doesn't exist yet (a fresh DB, a preview branch).
+ALTER TABLE "game_results" ADD COLUMN IF NOT EXISTS "inningsJson" JSONB;
