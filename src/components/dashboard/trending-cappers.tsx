@@ -10,7 +10,11 @@ const FLAME_PATH = "M12 2c1 3-2 4-2 7a3 3 0 1 0 6 0c1 1 2 2.5 2 4.5A6.5 6.5 0 0 
 // Two layered flame shapes (same silhouette, different color/scale) flicker
 // on independent keyframes/durations so they don't move as one rigid unit -
 // plus a few embers that rise and fade above the flame on a staggered loop.
-function HotStreaksIcon() {
+// Exported so the Sharp Money page's Fav ML category icon (same "flame"
+// concept - a capper on a hot run of favorite-moneyline picks) can reuse this
+// exact component instead of duplicating the flame shape/animation - see
+// src/components/sharp-money/category-icons.tsx.
+export function HotStreaksIcon() {
   return (
     <span className="relative inline-block h-5 w-5 shrink-0" aria-hidden="true">
       <span

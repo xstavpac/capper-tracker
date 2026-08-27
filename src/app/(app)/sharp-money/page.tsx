@@ -2,6 +2,7 @@ import { requireUser } from "@/server/auth";
 import { getSharpMoneyBoard, type SharpMoneyPick } from "@/server/data/sharp-money";
 import { getRecordColor } from "@/server/data/stats";
 import { Avatar } from "@/components/dashboard/capper-panels";
+import { CategoryIcon } from "@/components/sharp-money/category-icons";
 
 function EmptyState({ message }: { message: string }) {
   return (
@@ -71,8 +72,10 @@ export default async function SharpMoneyPage() {
               <div className="space-y-4">
                 {sport.categories.map((category) => (
                   <div key={category.key} className="rounded-card bg-card shadow-soft">
-                    <div className="border-b border-border-subtle px-4 py-2.5 text-sm font-medium text-muted-foreground">
+                    <div className="flex items-center gap-2 border-b border-border-subtle px-4 py-2.5 text-base font-medium text-muted-foreground">
+                      <CategoryIcon categoryKey={category.key} />
                       {category.label}
+                      <span className="text-xs font-normal text-muted-foreground">({category.picks.length})</span>
                     </div>
                     <div className="divide-y divide-border-subtle">
                       {category.picks.map((pick) => (
