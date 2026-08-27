@@ -567,16 +567,36 @@ export const NCAAF_CHIP_SET: PickCategoryKey[] = [
   "TEAM_TOTAL",
 ];
 
-// The remaining leagues the Team Total tile was asked for (NBA, NCAAB, NHL,
-// WNBA, KBO) have no bespoke chip set of their own today - they all fall
-// back to DEFAULT_CHIP_SET via chipSetForLeague. DEFAULT_CHIP_SET itself is
-// also shared by every OTHER sport this app recognizes but wasn't asked to
-// get this tile (CFL, MLS, UFC/MMA, ATP - see parse-catalog.ts's
-// KNOWN_SPORTS), so adding TEAM_TOTAL there directly would hand it to those
-// too. Each of the five gets its own one-line set (DEFAULT_CHIP_SET plus
-// TEAM_TOTAL) instead, registered below - same "a map entry, not a new
-// branch" reasoning CHIP_SET_BY_SPORT's own comment already gives.
-const NBA_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
+// NBA's own chip set, same idea as NFL_CHIP_SET (minus TD_PROP - touchdown
+// props obviously don't apply to basketball) - first-half ML/Spread/Over/
+// Under get their own tiles instead of falling back to DEFAULT_CHIP_SET's
+// universal six, now that NBA has its own first-half score source
+// (getNbaFirstHalfScore, wired into persistFinalScores' supportsFirstHalf,
+// same ESPN summary-endpoint pattern NCAAF's fetcher already uses).
+export const NBA_CHIP_SET: PickCategoryKey[] = [
+  "FAV_ML",
+  "DOG_ML",
+  "SPREAD_MINUS",
+  "SPREAD_PLUS",
+  "OVER",
+  "UNDER",
+  "FIRST_HALF_ML",
+  "FIRST_HALF_OVER",
+  "FIRST_HALF_UNDER",
+  "TEAM_TOTAL",
+];
+
+// The remaining leagues the Team Total tile was asked for (NCAAB, NHL, WNBA,
+// KBO) have no bespoke chip set of their own today - they all fall back to
+// DEFAULT_CHIP_SET via chipSetForLeague. DEFAULT_CHIP_SET itself is also
+// shared by every OTHER sport this app recognizes but wasn't asked to get
+// this tile (CFL, MLS, UFC/MMA, ATP - see parse-catalog.ts's KNOWN_SPORTS),
+// so adding TEAM_TOTAL there directly would hand it to those too. Each of
+// the four gets its own one-line set (DEFAULT_CHIP_SET plus TEAM_TOTAL)
+// instead, registered below - same "a map entry, not a new branch"
+// reasoning CHIP_SET_BY_SPORT's own comment already gives. NBA used to be
+// in this group too (DEFAULT_CHIP_SET + TEAM_TOTAL, nothing sport-specific)
+// until it got its own first-half score source - see NBA_CHIP_SET above.
 const NCAAB_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
 const NHL_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
 const WNBA_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
@@ -676,10 +696,11 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
       // F5 is baseball-only terminology, every other sport's first-half
       // total gets its own FIRST_HALF_OVER/FIRST_HALF_UNDER key instead.
       // Unlike F5_ML's carve-out, this key isn't graded for every sport that
-      // reaches it yet (see persistFinalScores' supportsFirstHalf - only NFL
-      // has a first-half score source right now); a non-MLB, non-NFL sport's
-      // first-half total pick gets a real category here but will just sit
-      // ungraded (PENDING) until that sport gets its own score source too.
+      // reaches it yet (see persistFinalScores' supportsFirstHalf - only
+      // NFL/NCAAF/NBA have a first-half score source so far); any other
+      // sport's first-half total pick gets a real category here but will
+      // just sit ungraded (PENDING) until that sport gets its own score
+      // source too.
       if (pick.sportName.toUpperCase() === "MLB") {
         if (isOver) return "F5_OVER";
         if (isUnder) return "F5_UNDER";

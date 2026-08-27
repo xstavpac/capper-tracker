@@ -6,6 +6,7 @@ import {
   getMlbEarlyInningScores,
   getNflFirstHalfScore,
   getNcaafFirstHalfScore,
+  getNbaFirstHalfScore,
   getNflPlayerTdStats,
   type OddsGame,
 } from "@/server/data/odds";
@@ -64,17 +65,19 @@ function deriveLedgerFields(
 // Persists final scores for a sport's finished games into GameResult, so
 // gradePendingPicks has something to grade against. First-half scores are
 // only captured for sports with a free box-score-by-half source wired up
-// (MLB's innings-1-5, NFL/NCAAF's Q1+Q2) - period=FIRST_HALF picks in every
-// other sport just won't match (see gradePendingPicks) until one is built
-// for them too. All three write into the SAME firstFiveHomeScore/AwayScore
-// columns - the column names are MLB-flavored (this app's first use), but
-// resolveOutcome below already reads them generically for any sport's
-// period=FIRST_HALF pick, so neither NFL nor NCAAF needed their own columns.
+// (MLB's innings-1-5, NFL/NCAAF/NBA's Q1+Q2) - period=FIRST_HALF picks in
+// every other sport just won't match (see gradePendingPicks) until one is
+// built for them too. All four write into the SAME firstFiveHomeScore/
+// AwayScore columns - the column names are MLB-flavored (this app's first
+// use), but resolveOutcome below already reads them generically for any
+// sport's period=FIRST_HALF pick, so none of the other three needed their
+// own columns.
 export async function persistFinalScores(sportKey: string): Promise<number> {
   const games = await getLiveScoresForSport(sportKey);
   const finals = games.filter((g) => g.status === "final" && g.scores);
   const supportsFirstFive = sportKey === "baseball_mlb";
-  const supportsFirstHalf = sportKey === "americanfootball_nfl" || sportKey === "americanfootball_ncaaf";
+  const supportsFirstHalf =
+    sportKey === "americanfootball_nfl" || sportKey === "americanfootball_ncaaf" || sportKey === "basketball_nba";
 
   // Same daily cache getOddsForSport always serves elsewhere - fetched once
   // for this whole batch (not per-game) to derive the team-trend ledger
@@ -107,20 +110,23 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
       const firstInning = early?.firstInning ?? null;
 
       // Same "only fetch what's still missing, values are immutable once a
-      // game is final" reasoning as MLB's early innings above. NFL and NCAAF
-      // each have their own ESPN summary endpoint (different sport path),
-      // so which fetcher runs depends on sportKey - not a shared function,
-      // matching getNflFirstHalfScore/getNcaafFirstHalfScore's own precedent
-      // of one function per sport rather than a generic dispatcher.
+      // game is final" reasoning as MLB's early innings above. NFL, NCAAF,
+      // and NBA each have their own ESPN summary endpoint (different sport
+      // path), so which fetcher runs depends on sportKey - not a shared
+      // function, matching getNflFirstHalfScore/getNcaafFirstHalfScore/
+      // getNbaFirstHalfScore's own precedent of one function per sport
+      // rather than a generic dispatcher.
       const needsFirstHalf = supportsFirstHalf && (!existing || existing.firstFiveHomeScore === null);
-      const footballFirstHalf = needsFirstHalf
+      const espnFirstHalf = needsFirstHalf
         ? sportKey === "americanfootball_nfl"
           ? await getNflFirstHalfScore(g.id)
-          : await getNcaafFirstHalfScore(g.id)
+          : sportKey === "americanfootball_ncaaf"
+            ? await getNcaafFirstHalfScore(g.id)
+            : await getNbaFirstHalfScore(g.id)
         : null;
 
-      const firstHalfHome = early?.firstFive?.home ?? footballFirstHalf?.home ?? null;
-      const firstHalfAway = early?.firstFive?.away ?? footballFirstHalf?.away ?? null;
+      const firstHalfHome = early?.firstFive?.home ?? espnFirstHalf?.home ?? null;
+      const firstHalfAway = early?.firstFive?.away ?? espnFirstHalf?.away ?? null;
 
       // Same immutable-once-set reasoning as the first-half fields above -
       // only derive when this row doesn't already have a favTeam.

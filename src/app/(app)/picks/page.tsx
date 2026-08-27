@@ -14,6 +14,7 @@ import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
 import { TIER_LABELS } from "@/lib/entitlements";
 import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
 import { DateRangeFilter } from "@/components/picks/date-range-filter";
+import { SportBetTypeFilter } from "@/components/picks/sport-bet-type-filter";
 import type { BetType, PickStatus, Period } from "@prisma/client";
 
 const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
@@ -101,6 +102,20 @@ function firstHalfLabelPrefix(sportName: string | undefined): "F5" | "1H" {
 }
 
 const FIRST_HALF_BET_TYPE_KEYS: BetTypeFilterKey[] = ["F5_SPREAD", "F5_MONEYLINE", "F5_TOTAL"];
+
+// Combines betTypeOptionsForSport (which options are relevant) with
+// firstHalfLabelPrefix (what to call the first-half ones) into the final
+// {value, label}[] a <select> renders for one sport - factored out since
+// SportBetTypeFilter's live client-side update needs this computed for
+// EVERY sport up front (see optionsBySportId below), not just whichever one
+// happens to be selected server-side at render time.
+function computeVisibleBetTypeOptions(sportName: string | undefined): { value: BetTypeFilterKey; label: string }[] {
+  const relevant = betTypeOptionsForSport(sportName);
+  const prefix = firstHalfLabelPrefix(sportName);
+  return BET_TYPE_FILTER_OPTIONS.filter((o) => relevant.has(o.value)).map((o) =>
+    FIRST_HALF_BET_TYPE_KEYS.includes(o.value) ? { ...o, label: o.label.replace(/^F5\b/, prefix) } : o
+  );
+}
 
 // Coarser and sport-agnostic than stats.ts's pickCategory - that classifier
 // splits favorite/dog and over/under (this page's separate "Favorite +
@@ -225,13 +240,15 @@ export default async function PicksPage({
     .filter((p) => !betTypeFilter || betTypeFilterCategory(p) === betTypeFilter)
     .filter((p) => !favoriteDog || favoriteOrUnderdog(p) === favoriteDog);
 
-  // "All sports" (no sportId) shows every option, unfiltered, same as today.
-  const selectedSportName = sports.find((s) => s.id === filters.sportId)?.name;
-  const relevantBetTypes = betTypeOptionsForSport(selectedSportName);
-  const firstHalfPrefix = firstHalfLabelPrefix(selectedSportName);
-  const visibleBetTypeOptions = BET_TYPE_FILTER_OPTIONS.filter((o) => relevantBetTypes.has(o.value)).map((o) =>
-    FIRST_HALF_BET_TYPE_KEYS.includes(o.value) ? { ...o, label: o.label.replace(/^F5\b/, firstHalfPrefix) } : o
-  );
+  // Precomputed for every sport (plus "" for "All sports") so
+  // SportBetTypeFilter can update the bet-type options live, client-side, as
+  // soon as the sport selection changes - no full page reload required.
+  const optionsBySportId: Record<string, { value: BetTypeFilterKey; label: string }[]> = {
+    "": computeVisibleBetTypeOptions(undefined),
+  };
+  for (const s of sports) {
+    optionsBySportId[s.id] = computeVisibleBetTypeOptions(s.name);
+  }
 
   // Deliberately excludes startDateKey/endDateKey - those are always set
   // (defaulting to today), so including them here would make this true on
@@ -296,31 +313,12 @@ export default async function PicksPage({
           ))}
         </select>
 
-        <select
-          name="sportId"
-          defaultValue={filters.sportId ?? ""}
-          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
-        >
-          <option value="">All sports</option>
-          {sports.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-
-        <select
-          name="betType"
-          defaultValue={betTypeFilter ?? ""}
-          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
-        >
-          <option value="">All bet types</option>
-          {visibleBetTypeOptions.map((b) => (
-            <option key={b.value} value={b.value}>
-              {b.label}
-            </option>
-          ))}
-        </select>
+        <SportBetTypeFilter
+          sports={sports}
+          optionsBySportId={optionsBySportId}
+          initialSportId={filters.sportId ?? ""}
+          initialBetType={betTypeFilter ?? ""}
+        />
 
         <select
           name="status"

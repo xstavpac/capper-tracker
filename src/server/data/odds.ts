@@ -516,6 +516,43 @@ export async function getNcaafFirstHalfScore(eventId: string): Promise<{ home: n
   return { home: homeFirstHalf, away: awayFirstHalf };
 }
 
+// Same as getNflFirstHalfScore above, just the NBA summary endpoint instead
+// of NFL's - confirmed live against two real finished games (PHI 109-97 ORL:
+// linescores [28,31,20,30]/[24,31,19,23], summing to the real final score on
+// both sides; GS 126-121 LAC: [22,31,30,43]/[31,30,28,32], same self-check)
+// during the NBA chip-set investigation: identical
+// `competitors[].linescores[].displayValue` shape as football, quarters
+// instead of halves-of-quarters but still index [0]/[1] = Q1/Q2 = first
+// half, so this is a straight copy with the URL path swapped, not a new
+// parsing approach. An overtime game just has extra linescores entries past
+// index 3, which sumFirstHalf never reads - doesn't affect this function.
+export async function getNbaFirstHalfScore(eventId: string): Promise<{ home: number; away: number } | null> {
+  const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=" + eventId, {
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  const competitors = data.header?.competitions?.[0]?.competitors ?? [];
+  const home = competitors.find((c: any) => c.homeAway === "home");
+  const away = competitors.find((c: any) => c.homeAway === "away");
+  if (!home || !away) return null;
+
+  const sumFirstHalf = (linescores: any[] | undefined): number | null => {
+    if (!linescores || linescores.length < 2) return null;
+    const q1 = parseFloat(linescores[0]?.displayValue ?? "");
+    const q2 = parseFloat(linescores[1]?.displayValue ?? "");
+    if (Number.isNaN(q1) || Number.isNaN(q2)) return null;
+    return q1 + q2;
+  };
+
+  const homeFirstHalf = sumFirstHalf(home.linescores);
+  const awayFirstHalf = sumFirstHalf(away.linescores);
+  if (homeFirstHalf === null || awayFirstHalf === null) return null;
+
+  return { home: homeFirstHalf, away: awayFirstHalf };
+}
+
 export type NflPlayerTdStats = {
   playerName: string;
   rushTds: number;
