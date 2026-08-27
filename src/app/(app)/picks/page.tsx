@@ -12,6 +12,7 @@ import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 import { favoriteOrUnderdog, nrfiSide } from "@/lib/bet-line";
 import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
 import { TIER_LABELS } from "@/lib/entitlements";
+import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
 import { DateRangeFilter } from "@/components/picks/date-range-filter";
 import type { BetType, PickStatus, Period } from "@prisma/client";
 
@@ -41,6 +42,65 @@ const BET_TYPE_FILTER_OPTIONS: { value: BetTypeFilterKey; label: string }[] = [
   { value: "NRFI", label: "NRFI" },
   { value: "YRFI", label: "YRFI" },
 ];
+
+// Two different sports' vocabulary for the same "first half of the game"
+// period (schema.prisma's Period.FIRST_HALF comment: `"F5" in baseball
+// terms, first half elsewhere`) - split into two lists (rather than the one
+// combined list this used to be) so a label can be chosen per sport, not
+// just a single yes/no "does this sport have first-half categories at all".
+// MLB is the only chip set with the F5_* keys; NFL/NCAAF are the only chip
+// sets with FIRST_HALF_ML/OVER/UNDER (see MLB_CHIP_SET/NFL_CHIP_SET's own
+// comments in stats.ts) - KBO_CHIP_SET has neither, so KBO never reaches
+// either branch and (same as before this split) gets no F5/1H options at
+// all, not "F5" by virtue of also being a baseball-family sport.
+const F5_INNINGS_CATEGORY_KEYS: PickCategoryKey[] = ["F5_ML", "F5_SPREAD_MINUS", "F5_SPREAD_PLUS", "F5_OVER", "F5_UNDER"];
+const FIRST_HALF_PERIOD_CATEGORY_KEYS: PickCategoryKey[] = ["FIRST_HALF_ML", "FIRST_HALF_OVER", "FIRST_HALF_UNDER"];
+const FIRST_HALF_CATEGORY_KEYS: PickCategoryKey[] = [...F5_INNINGS_CATEGORY_KEYS, ...FIRST_HALF_PERIOD_CATEGORY_KEYS];
+
+// Reuses chipSetForLeague (stats.ts) - the same per-sport category mapping
+// that already drives the Sharp Money page and capper detail tiles - as the
+// single source of truth for which bet types are relevant to a sport, rather
+// than a second, hand-maintained per-sport list. Spread/Moneyline/Total are
+// unconditional since every chip set (MLB_CHIP_SET, NFL_CHIP_SET,
+// DEFAULT_CHIP_SET, ...) includes their underlying FAV_ML/DOG_ML/
+// SPREAD_MINUS/SPREAD_PLUS/OVER/UNDER categories.
+function betTypeOptionsForSport(sportName: string | undefined): Set<BetTypeFilterKey> {
+  const always: BetTypeFilterKey[] = ["SPREAD", "MONEYLINE", "TOTAL"];
+  if (!sportName) return new Set(BET_TYPE_FILTER_OPTIONS.map((o) => o.value));
+
+  const chipSet = chipSetForLeague(sportName);
+  const has = (keys: PickCategoryKey[]) => keys.some((k) => chipSet.includes(k));
+
+  const options = [...always];
+  if (has(FIRST_HALF_CATEGORY_KEYS)) options.push("F5_SPREAD", "F5_MONEYLINE", "F5_TOTAL");
+  if (chipSet.includes("TEAM_TOTAL")) options.push("TEAM_TOTAL");
+  if (chipSet.includes("TD_PROP")) options.push("PLAYER_PROP");
+  if (has(["NRFI", "YRFI"])) options.push("NRFI", "YRFI");
+  return new Set(options);
+}
+
+// "F5" (baseball's first-5-innings term) is only correct for MLB - a
+// football sport's first-half picks share the same F5_SPREAD/F5_MONEYLINE/
+// F5_TOTAL filter KEYS (see betTypeFilterCategory below, which buckets any
+// sport's period===FIRST_HALF pick the same way) but must never be LABELED
+// "F5" anywhere on this page - the bet-type dropdown options below AND the
+// per-row "FIRST_HALF" period badge (both the pick rows and the parlay leg
+// rows) both call this, always passing a specific pick/leg's own real
+// sport.name rather than the page's `sportId` filter, so a row's badge is
+// always correct for that ROW's sport even when the sport filter itself is
+// "All sports" and rows from multiple sports are mixed together on the page.
+// The one caller that passes `undefined` (the dropdown, when no sportId
+// filter is selected) keeps the original "F5" label there - that case isn't
+// scoped to one sport's vocabulary, and every sport that actually has
+// first-half data reaches this from MLB or NFL/NCAAF (never both at once),
+// so there's no real ambiguity being papered over.
+function firstHalfLabelPrefix(sportName: string | undefined): "F5" | "1H" {
+  if (!sportName) return "F5";
+  const chipSet = chipSetForLeague(sportName);
+  return chipSet.some((k) => F5_INNINGS_CATEGORY_KEYS.includes(k)) ? "F5" : "1H";
+}
+
+const FIRST_HALF_BET_TYPE_KEYS: BetTypeFilterKey[] = ["F5_SPREAD", "F5_MONEYLINE", "F5_TOTAL"];
 
 // Coarser and sport-agnostic than stats.ts's pickCategory - that classifier
 // splits favorite/dog and over/under (this page's separate "Favorite +
@@ -165,6 +225,14 @@ export default async function PicksPage({
     .filter((p) => !betTypeFilter || betTypeFilterCategory(p) === betTypeFilter)
     .filter((p) => !favoriteDog || favoriteOrUnderdog(p) === favoriteDog);
 
+  // "All sports" (no sportId) shows every option, unfiltered, same as today.
+  const selectedSportName = sports.find((s) => s.id === filters.sportId)?.name;
+  const relevantBetTypes = betTypeOptionsForSport(selectedSportName);
+  const firstHalfPrefix = firstHalfLabelPrefix(selectedSportName);
+  const visibleBetTypeOptions = BET_TYPE_FILTER_OPTIONS.filter((o) => relevantBetTypes.has(o.value)).map((o) =>
+    FIRST_HALF_BET_TYPE_KEYS.includes(o.value) ? { ...o, label: o.label.replace(/^F5\b/, firstHalfPrefix) } : o
+  );
+
   // Deliberately excludes startDateKey/endDateKey - those are always set
   // (defaulting to today), so including them here would make this true on
   // every load and permanently show "Clear"/the match-count line even with
@@ -247,7 +315,7 @@ export default async function PicksPage({
           className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
         >
           <option value="">All bet types</option>
-          {BET_TYPE_FILTER_OPTIONS.map((b) => (
+          {visibleBetTypeOptions.map((b) => (
             <option key={b.value} value={b.value}>
               {b.label}
             </option>
@@ -311,7 +379,7 @@ export default async function PicksPage({
                     {pick.awayTeam} @ {pick.homeTeam}
                     {pick.period === "FIRST_HALF" && (
                       <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:bg-purple-500/15 dark:text-purple-400">
-                        F5
+                        {firstHalfLabelPrefix(pick.sport.name)}
                       </span>
                     )}
                     <span className="ml-2 font-normal text-muted-foreground">
@@ -364,7 +432,7 @@ export default async function PicksPage({
                             {leg.awayTeam} @ {leg.homeTeam}
                             {leg.period === "FIRST_HALF" && (
                               <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:bg-purple-500/15 dark:text-purple-400">
-                                F5
+                                {firstHalfLabelPrefix(leg.sport.name)}
                               </span>
                             )}
                           </div>
