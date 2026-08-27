@@ -9,7 +9,7 @@ import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { ParlayForm } from "@/components/dashboard/parlay-form";
 import { LegStatusButtons } from "@/components/dashboard/leg-status-buttons";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
-import { favoriteOrUnderdog, nrfiSide } from "@/lib/bet-line";
+import { nrfiSide } from "@/lib/bet-line";
 import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
 import { TIER_LABELS } from "@/lib/entitlements";
 import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
@@ -187,7 +187,6 @@ export default async function PicksPage({
     sportId?: string;
     status?: string;
     betType?: string;
-    favoriteDog?: string;
     date?: string;
     startDate?: string;
     endDate?: string;
@@ -213,7 +212,6 @@ export default async function PicksPage({
     })
   );
 
-  const favoriteDog = (searchParams.favoriteDog as "FAVORITE" | "UNDERDOG") || undefined;
   const betTypeFilter = (searchParams.betType as BetTypeFilterKey) || undefined;
   const { startDateKey, endDateKey, isRange } = resolveDateFilter(searchParams);
 
@@ -233,12 +231,9 @@ export default async function PicksPage({
     getParlaysForUser(user.id),
   ]);
 
-  // Bet type and favorite/underdog are both derived (betDetail text for
-  // NRFI/YRFI, odds/line sign for favorite/dog), not stored columns, so both
-  // are filtered here rather than in the DB query.
-  const picks = allPicks
-    .filter((p) => !betTypeFilter || betTypeFilterCategory(p) === betTypeFilter)
-    .filter((p) => !favoriteDog || favoriteOrUnderdog(p) === favoriteDog);
+  // Bet type is derived (betDetail text for NRFI/YRFI), not a stored column,
+  // so it's filtered here rather than in the DB query.
+  const picks = allPicks.filter((p) => !betTypeFilter || betTypeFilterCategory(p) === betTypeFilter);
 
   // Precomputed for every sport (plus "" for "All sports") so
   // SportBetTypeFilter can update the bet-type options live, client-side, as
@@ -257,7 +252,7 @@ export default async function PicksPage({
   // date scope separately, since it's "active" only once the user has
   // navigated away from the implicit today default.
   const otherFiltersActive =
-    Boolean(filters.capperId) || Boolean(filters.sportId) || Boolean(filters.status) || Boolean(favoriteDog) || Boolean(betTypeFilter);
+    Boolean(filters.capperId) || Boolean(filters.sportId) || Boolean(filters.status) || Boolean(betTypeFilter);
   const dateFilterActive = Boolean(searchParams.date) || isRange;
   const hasActiveFilters = otherFiltersActive || dateFilterActive;
 
@@ -331,16 +326,6 @@ export default async function PicksPage({
               {s}
             </option>
           ))}
-        </select>
-
-        <select
-          name="favoriteDog"
-          defaultValue={favoriteDog ?? ""}
-          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
-        >
-          <option value="">Favorite + underdog</option>
-          <option value="FAVORITE">Favorite</option>
-          <option value="UNDERDOG">Underdog</option>
         </select>
 
         <div className="col-span-2 flex items-center gap-3 sm:col-span-1 sm:contents">
