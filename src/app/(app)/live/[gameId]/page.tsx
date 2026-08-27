@@ -9,11 +9,13 @@ import {
 } from "@/server/data/odds";
 import { persistFinalScores, gradePendingPicks, regradeFuzzyMatchedPicks } from "@/server/data/grading";
 import { getPicksForGame, getCapperScorecard } from "@/server/data/picks";
+import { getGamePulsePanelRows } from "@/server/data/game-pulse";
 import { formatEastern } from "@/lib/dates";
 import { betTypeLabel } from "@/server/data/stats";
 import { nrfiSide } from "@/lib/bet-line";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
+import { GamePulsePanel } from "@/components/live/game-pulse-panel";
 import type { BetType, Period } from "@prisma/client";
 
 function formatOdds(price: number) {
@@ -85,6 +87,13 @@ export default async function GameDetailPage({
   const score = matchScoreToGame(scores, game);
   const isLive = score?.status === "live";
   const isFinal = score?.status === "final";
+
+  // Historical situational rates for both teams, independent of this game's
+  // own live/final state - unlike the old tile badge this replaces (which
+  // only ever evaluated a currently-live game's own innings), the panel
+  // shows each team's track record regardless of whether this particular
+  // game has started yet.
+  const pulseRows = await getGamePulsePanelRows(game.homeTeam, game.awayTeam);
 
   const matchedPicks = await getPicksForGame(user.id, {
     sportName: sportMeta.label,
@@ -204,6 +213,8 @@ export default async function GameDetailPage({
           </div>
         )}
       </div>
+
+      <GamePulsePanel rows={pulseRows} homeTeam={game.homeTeam} awayTeam={game.awayTeam} sportLabel={sportMeta.label} />
 
       <div className="mt-4 rounded-card bg-card shadow-soft">
         <div className="border-b border-border-subtle px-5 py-3 text-sm font-medium text-muted-foreground">

@@ -11,8 +11,11 @@ export type SituationalQuestionKey = "scoredFirst" | "leadingAfter5" | "leadingA
 
 export type SituationalQuestion = {
   key: SituationalQuestionKey;
-  // Present tense, written to read naturally after "when they " - the
-  // evidence UI's sentence template (see GamePulseBadge).
+  // Present tense, written to read naturally after "when they " - historically
+  // the evidence UI's sentence template (GamePulseBadge, since replaced by the
+  // game detail page's GamePulsePanel, which uses its own fixed row titles
+  // instead). Kept for now as part of this file's unmodified calculation
+  // logic even though nothing currently renders it.
   label: string;
   // Given a game's per-inning runs in inning order (starting at inning 1,
   // index 0), returns which side currently holds this situation - "home",
@@ -22,7 +25,7 @@ export type SituationalQuestion = {
   evaluate: (homeRuns: (number | null)[], awayRuns: (number | null)[]) => "home" | "away" | null;
 };
 
-const BIG_INNING_RUN_THRESHOLD = 3;
+export const BIG_INNING_RUN_THRESHOLD = 3;
 
 function sumThroughInning(runs: (number | null)[], inningNumber: number): number | null {
   let sum = 0;

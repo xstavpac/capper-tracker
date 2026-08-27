@@ -3,29 +3,21 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { OddsGame, ScoreGame } from "@/server/data/odds";
-import type { GamePulseResult } from "@/server/data/game-pulse";
 import { computeBoardPulse, type BoardPulseGame } from "@/lib/board-pulse";
 import { formatEastern, closestByTime } from "@/lib/dates";
 import { getTeamColor } from "@/lib/team-colors";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
-import { GamePulseBadge } from "@/components/live/game-pulse-badge";
 import { TeamColorBar } from "@/components/live/team-color-bar";
 import { BoardPulsePanel } from "@/components/live/board-pulse-panel";
-
-// The /api/live/scores route attaches this alongside every ScoreGame (null
-// for anything not MLB-and-live - see attachGamePulse in
-// server/data/game-pulse.ts) - not part of ScoreGame itself since grading
-// and other ScoreGame consumers have no use for it.
-type ScoreGameWithPulse = ScoreGame & { pulse: GamePulseResult | null };
 
 // Duplicated from server/data/odds.ts rather than imported - that module has
 // a module-level prisma import, which a "use client" component must never
 // pull in even transitively (odds.ts itself is fine server-side; the risk is
 // only in crossing into the client bundle).
 function matchScoreToGame(
-  scores: ScoreGameWithPulse[],
+  scores: ScoreGame[],
   game: { homeTeam: string; awayTeam: string; commenceTime: string }
-): ScoreGameWithPulse | undefined {
+): ScoreGame | undefined {
   const candidates = scores.filter((s) => s.homeTeam === game.homeTeam && s.awayTeam === game.awayTeam);
   if (candidates.length === 0) return undefined;
   if (candidates.length === 1) return candidates[0];
@@ -63,7 +55,7 @@ export function LiveScoreboard({
 }: {
   activeSport: string;
   odds: OddsGame[];
-  initialScores: ScoreGameWithPulse[];
+  initialScores: ScoreGame[];
   matchedPicksByGame: ExpanderPick[][];
   showBoardPulse: boolean;
 }) {
@@ -226,7 +218,6 @@ export function LiveScoreboard({
                 )}
               </Link>
 
-              <GamePulseBadge pulse={score?.pulse ?? null} />
               <GamePicksExpander picks={matchedPicks} />
             </div>
           );

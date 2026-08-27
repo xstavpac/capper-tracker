@@ -1,5 +1,4 @@
 import { getLiveScoresForSport } from "@/server/data/odds";
-import { attachGamePulse } from "@/server/data/game-pulse";
 import { requireUser } from "@/server/auth";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +24,5 @@ export async function GET(request: Request) {
   }
 
   const scores = await getLiveScoresForSport(sportKey);
-  const scoresWithPulse = await attachGamePulse(scores);
-  return Response.json({ scores: scoresWithPulse });
+  return Response.json({ scores });
 }

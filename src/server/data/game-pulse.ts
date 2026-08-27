@@ -1,114 +1,108 @@
-import type { ScoreGame, ScoreGameInning } from "@/server/data/odds";
 import {
   SITUATIONAL_QUESTIONS,
   getTeamSituationalRates,
-  inningsToRunsArrays,
-  type SituationalQuestion,
+  BIG_INNING_RUN_THRESHOLD,
+  type SituationalQuestionKey,
   type SituationalRate,
   type SituationalRatesByQuestion,
 } from "@/server/data/game-pulse-situations";
 
 // Thresholds signed off on 2026-08-19 - see the investigation writeup this
 // feature came out of. Not tunable via env/config for v1; change here and
-// redeploy if they need revisiting.
-const SAMPLE_SIZE_FLOOR = 10; // a team+situation needs this many historical GameResult rows before its rate counts at all
-const SKEW_FLOOR_HIGH = 58; // win% at/above this favors the team that currently holds the situation
-const SKEW_FLOOR_LOW = 42; // win% at/below this favors the OPPONENT of the team that currently holds the situation
-const BADGE_MARGIN_MIN = 2; // net tally magnitude required before a badge shows at all
-const BADGE_MIN_ELIGIBLE = 2; // minimum number of questions that must have cleared both floors above
-const MAX_EVIDENCE = 4; // "the 3-4 strongest pieces of evidence" per the product spec
+// redeploy if they need revisiting. Exported so the panel-row builder below
+// (and its acceptance test) share the exact same floor as the rest of Game
+// Pulse - this is the "confidence floor" the game detail panel gates each
+// row's display on.
+export const SAMPLE_SIZE_FLOOR = 10; // a team+situation needs this many historical GameResult rows before its rate counts at all
+export const SKEW_FLOOR_HIGH = 58; // win% at/above this counts as a meaningfully strong rate
+export const SKEW_FLOOR_LOW = 42; // win% at/below this counts as a meaningfully weak rate (also "clears the floor" - just in the other direction)
 
-export type GamePulseEvidence = {
-  questionKey: SituationalQuestion["key"];
-  label: string;
-  // Whose historical rate this evidence cites - the team that currently
-  // holds the situation tonight, which is NOT always the leaning team (see
-  // computeGamePulseFromRates: a team's own bad history in a situation they
-  // hold can lean the badge toward their opponent instead). winPct/sampleSize
-  // are always about subjectTeam, so a low winPct here reads as bad news for
-  // subjectTeam regardless of which side the badge ultimately favors.
-  subjectTeam: string;
-  winPct: number;
-  sampleSize: number;
+const ROW_TITLES: Record<SituationalQuestionKey, string> = {
+  scoredFirst: "Scored first",
+  leadingAfter5: "Leading after 5",
+  leadingAfter7: "Leading after 7",
+  bigInning: "Big inning (" + BIG_INNING_RUN_THRESHOLD + "+ runs)",
+  trailingAfter7: "Trailing after 7",
 };
 
-export type GamePulseResult = {
-  leaningTeam: string;
-  margin: number;
-  evidence: GamePulseEvidence[];
+export type GamePulsePanelRow = {
+  key: SituationalQuestionKey;
+  title: string;
+  home: SituationalRate;
+  away: SituationalRate;
+  // Whether each team's OWN rate individually clears the confidence floor
+  // (sample size + skew) - used to decide who gets highlighted, not whether
+  // the row shows data at all (see showData below).
+  homeEligible: boolean;
+  awayEligible: boolean;
+  // A row shows real numbers once at least one team's rate clears the
+  // floor - the whole point of a floor is to keep a near-coin-flip or
+  // tiny-sample rate from being displayed as if it meant something, but
+  // once ONE side has a real signal the comparison itself is still
+  // meaningful even if the other side's rate is unremarkable. Only when
+  // NEITHER team clears it is there nothing real to show.
+  showData: boolean;
+  // Whichever team's rate deviates further from 50% - the "notably higher/
+  // more skewed" side the row should visually emphasize. Null when there's
+  // no data to show, or (rare) both sides deviate identically.
+  highlightSide: "home" | "away" | null;
 };
 
-type PulseGame = { homeTeam: string; awayTeam: string; innings: ScoreGameInning[] | null };
-
-type Contribution = {
-  question: SituationalQuestion;
-  creditedSide: "home" | "away";
-  holderTeam: string;
-  rate: SituationalRate;
-};
-
-// Pure tally logic - no I/O, so this is the part real-data verification and
-// the acceptance test actually exercise directly. Evaluates all 5 fixed
-// questions against the game's current innings, credits each eligible one
-// to whichever side its historical rate actually favors (see
-// SKEW_FLOOR_HIGH/LOW above - that's not always the side currently holding
-// the situation), and returns null ("too close to call" = silence) unless
-// the tally clears both the margin and eligible-question floors.
-export function computeGamePulseFromRates(game: PulseGame, homeRates: SituationalRatesByQuestion, awayRates: SituationalRatesByQuestion): GamePulseResult | null {
-  if (!game.innings || game.innings.length === 0) return null;
-  const { homeRuns, awayRuns } = inningsToRunsArrays(game.innings);
-
-  const tally = { home: 0, away: 0 };
-  const contributions: Contribution[] = [];
-
-  for (const question of SITUATIONAL_QUESTIONS) {
-    const holder = question.evaluate(homeRuns, awayRuns);
-    if (holder === null) continue;
-
-    const holderTeam = holder === "home" ? game.homeTeam : game.awayTeam;
-    const rate = (holder === "home" ? homeRates : awayRates)[question.key];
-    if (rate.total < SAMPLE_SIZE_FLOOR) continue;
-
-    if (rate.winPct >= SKEW_FLOOR_HIGH) {
-      tally[holder]++;
-      contributions.push({ question, creditedSide: holder, holderTeam, rate });
-    } else if (rate.winPct <= SKEW_FLOOR_LOW) {
-      const opponent: "home" | "away" = holder === "home" ? "away" : "home";
-      tally[opponent]++;
-      contributions.push({ question, creditedSide: opponent, holderTeam, rate });
-    }
-    // else: win% is a coin flip for this team+situation - not eligible, skip
-  }
-
-  const eligibleCount = tally.home + tally.away;
-  const margin = Math.abs(tally.home - tally.away);
-  if (eligibleCount < BADGE_MIN_ELIGIBLE || margin < BADGE_MARGIN_MIN) return null;
-
-  const leaningSide: "home" | "away" = tally.home > tally.away ? "home" : "away";
-  const evidence = contributions
-    .filter((c) => c.creditedSide === leaningSide)
-    .sort((a, b) => Math.abs(b.rate.winPct - 50) - Math.abs(a.rate.winPct - 50))
-    .slice(0, MAX_EVIDENCE)
-    .map((c) => ({
-      questionKey: c.question.key,
-      label: c.question.label,
-      subjectTeam: c.holderTeam,
-      winPct: Math.round(c.rate.winPct),
-      sampleSize: c.rate.total,
-    }));
-
-  return {
-    leaningTeam: leaningSide === "home" ? game.homeTeam : game.awayTeam,
-    margin,
-    evidence,
-  };
+function clearsFloor(rate: SituationalRate): boolean {
+  return rate.total >= SAMPLE_SIZE_FLOOR && (rate.winPct >= SKEW_FLOOR_HIGH || rate.winPct <= SKEW_FLOOR_LOW);
 }
 
-// Per-team situational rates barely change poll to poll (they only move
-// when persistFinalScores grades a new game), so re-querying GameResult on
-// every 25s /live poll for every team in every live MLB game is pure waste.
-// Cached in module scope, same "survives warm serverless invocations, reset
-// on a cold one" reasoning lib/prisma.ts already relies on for its
+// Pure tally-free row builder - no I/O, so this is the part real-data
+// verification and the acceptance test actually exercise directly. Always
+// returns exactly 5 rows (one per SITUATIONAL_QUESTIONS entry, in that
+// fixed order) regardless of data availability - the detail page never
+// hides a row, it shows "Not enough data yet" via showData instead.
+export function buildGamePulsePanelRows(
+  homeRates: SituationalRatesByQuestion,
+  awayRates: SituationalRatesByQuestion
+): GamePulsePanelRow[] {
+  return SITUATIONAL_QUESTIONS.map((question) => {
+    const home = homeRates[question.key];
+    const away = awayRates[question.key];
+    const homeEligible = clearsFloor(home);
+    const awayEligible = clearsFloor(away);
+    const showData = homeEligible || awayEligible;
+
+    // Only compare raw deviation-from-50 between two teams that are BOTH
+    // individually eligible - an ineligible team's winPct is often a
+    // meaningless artifact (0% for a team with zero qualifying games, e.g.)
+    // that can look more "extreme" than a real, floor-clearing rate on the
+    // other side. When only one side clears the floor, that side is the
+    // highlight by definition - there's nothing statistically real to
+    // compare it against.
+    let highlightSide: "home" | "away" | null = null;
+    if (homeEligible && !awayEligible) highlightSide = "home";
+    else if (awayEligible && !homeEligible) highlightSide = "away";
+    else if (homeEligible && awayEligible) {
+      const homeDeviation = Math.abs(home.winPct - 50);
+      const awayDeviation = Math.abs(away.winPct - 50);
+      if (homeDeviation > awayDeviation) highlightSide = "home";
+      else if (awayDeviation > homeDeviation) highlightSide = "away";
+    }
+
+    return {
+      key: question.key,
+      title: ROW_TITLES[question.key],
+      home,
+      away,
+      homeEligible,
+      awayEligible,
+      showData,
+      highlightSide,
+    };
+  });
+}
+
+// Per-team situational rates barely change from one page load to the next
+// (they only move when persistFinalScores grades a new game), so re-querying
+// GameResult on every /live/[gameId] visit for the same two teams is pure
+// waste. Cached in module scope, same "survives warm serverless invocations,
+// reset on a cold one" reasoning lib/prisma.ts already relies on for its
 // singleton client - a cold-start cache miss just recomputes, it's a cost
 // optimization, not a correctness dependency.
 const RATE_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -122,23 +116,13 @@ async function getCachedTeamRates(team: string): Promise<SituationalRatesByQuest
   return value;
 }
 
-export async function computeGamePulse(game: PulseGame): Promise<GamePulseResult | null> {
-  if (!game.innings || game.innings.length === 0) return null;
-  const [homeRates, awayRates] = await Promise.all([getCachedTeamRates(game.homeTeam), getCachedTeamRates(game.awayTeam)]);
-  return computeGamePulseFromRates(game, homeRates, awayRates);
-}
-
-// Hooks into the /live poll cycle already running (see
-// src/app/api/live/scores/route.ts) instead of adding a new timer - pulse is
-// computed fresh on each existing poll response, MLB-only in practice since
-// computeGamePulse immediately returns null for any game without innings
-// data (every non-MLB sport, see getMlbLiveScores vs getEspnScores), and
-// live-only since a finished/upcoming game isn't what this badge is for.
-export async function attachGamePulse(games: ScoreGame[]): Promise<(ScoreGame & { pulse: GamePulseResult | null })[]> {
-  return Promise.all(
-    games.map(async (g) => ({
-      ...g,
-      pulse: g.status === "live" ? await computeGamePulse(g) : null,
-    }))
-  );
+// The game detail page's data entry point - fetches both teams' historical
+// situational rates (cached, see above) and builds the fixed 5-row panel.
+// MLB-only in practice, same as the rest of Game Pulse: getTeamSituationalRates
+// only ever returns non-zero rates for baseball_mlb rows, so every other
+// sport's rows come back all showData: false ("Not enough data yet"
+// everywhere), which is the correct behavior rather than a special case.
+export async function getGamePulsePanelRows(homeTeam: string, awayTeam: string): Promise<GamePulsePanelRow[]> {
+  const [homeRates, awayRates] = await Promise.all([getCachedTeamRates(homeTeam), getCachedTeamRates(awayTeam)]);
+  return buildGamePulsePanelRows(homeRates, awayRates);
 }

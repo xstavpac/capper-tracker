@@ -1,21 +1,19 @@
-// Correctness proof for computeGamePulseFromRates' tally/threshold logic in
-// game-pulse.ts, run with:
+// Correctness proof for buildGamePulsePanelRows' per-row floor/highlight
+// logic in game-pulse.ts, run with:
 //   npx tsx src/server/data/game-pulse-acceptance-test.ts
 // Not a general test suite (see grading-correctness-acceptance-test.ts for
 // the same pattern - this repo has no test runner configured).
 //
-// Every fixture below - both the rate inputs and the innings arrays - is
-// hand-constructed synthetic data, not pulled from a real game. The
-// situation-detection half of this pipeline (which questions are even in
-// play for a given set of innings) is exactly what
-// game-pulse-situations-acceptance-test.ts and its separate real-data run
-// already verified against genuine live MLB games; this file only needs to
-// exercise the NEW logic on top of that - the tally/threshold arithmetic -
-// so synthetic, exact-boundary-value fixtures are more useful here than
-// real ones would be.
+// Every fixture below is hand-constructed synthetic rate data, not pulled
+// from a real game - the situation-detection half of this pipeline (which
+// questions are even in play for a given set of innings) lives in
+// game-pulse-situations.ts and is verified separately by
+// game-pulse-situations-acceptance-test.ts. This file only exercises the
+// NEW logic on top of that: per-row eligibility, the "show data if at least
+// one side clears the floor" rule, and which side gets highlighted.
 //
 // Exits non-zero if any assertion fails.
-import { computeGamePulseFromRates } from "./game-pulse";
+import { buildGamePulsePanelRows } from "./game-pulse";
 import { SITUATIONAL_QUESTIONS, type SituationalQuestionKey, type SituationalRatesByQuestion } from "./game-pulse-situations";
 
 let failures = 0;
@@ -30,9 +28,8 @@ function expect(label: string, actual: unknown, expected: unknown) {
   }
 }
 
-// All-zero rates (every question ineligible - either team) as a base to
-// override per test case, so each case only has to specify what it cares
-// about.
+// All-zero rates (every question ineligible) as a base to override per test
+// case, so each case only has to specify what it cares about.
 function ratesWith(overrides: Partial<Record<SituationalQuestionKey, { wins: number; total: number; winPct: number }>>): SituationalRatesByQuestion {
   const base = {} as SituationalRatesByQuestion;
   for (const q of SITUATIONAL_QUESTIONS) base[q.key] = { wins: 0, total: 0, winPct: 0 };
@@ -41,175 +38,98 @@ function ratesWith(overrides: Partial<Record<SituationalQuestionKey, { wins: num
 
 const NONE = ratesWith({});
 
-// ---- Synthetic: scoreless through 7, one run in the 8th - every question
-// resolves to null (nobody's led, trailed, or had a big inning) regardless
-// of what rates are supplied ----
-const scorelessGame = { homeTeam: "Home Team", awayTeam: "Away Team", innings: [
-  { num: 1, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 2, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 3, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 4, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 5, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 6, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 7, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 8, home: { runs: 1 }, away: { runs: 0 } },
-] };
-
+// ---- Always exactly 5 rows, in SITUATIONAL_QUESTIONS' fixed order, even
+// with zero data anywhere ----
 expect(
-  "scoreless-through-7 game with no historical data at all: no badge (nothing eligible)",
-  computeGamePulseFromRates(scorelessGame, NONE, NONE),
-  null
+  "no historical data for either team: still returns all 5 rows, all showData: false",
+  buildGamePulsePanelRows(NONE, NONE).map((r) => ({ key: r.key, showData: r.showData })),
+  SITUATIONAL_QUESTIONS.map((q) => ({ key: q.key, showData: false }))
 );
 
-// ---- Synthetic but game-shaped: home leads after 5 and after 7, home also
-// scored first and had a big inning - a team sweeping every question ----
-const homeSweepGame = { homeTeam: "Home Team", awayTeam: "Away Team", innings: [
-  { num: 1, home: { runs: 4 }, away: { runs: 0 } },
-  { num: 2, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 3, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 4, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 5, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 6, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 7, home: { runs: 0 }, away: { runs: 0 } },
-] };
-// scoredFirst -> home, leadingAfter5 -> home, leadingAfter7 -> home,
-// bigInning -> home (4 in inning 1), trailingAfter7 -> null (nobody's behind
-// from home's perspective in a losing sense - away is behind, but that's a
-// DIFFERENT credited side; away's rate isn't part of this fixture and won't
-// be eligible under NONE)
-
+// ---- Row-level gate: neither team clears the floor -> "Not enough data" ----
 expect(
-  "home holds all 4 evaluable questions, but zero historical sample for anyone: still no badge - sample floor blocks everything",
-  computeGamePulseFromRates(homeSweepGame, NONE, NONE),
-  null
+  "one team has a skewed rate but below the 10-game sample floor: still not enough data (floor requires sample AND skew)",
+  buildGamePulsePanelRows(ratesWith({ scoredFirst: { wins: 9, total: 9, winPct: 100 } }), NONE).find((r) => r.key === "scoredFirst")?.showData,
+  false
 );
 
 expect(
-  "home holds all 4 questions, all with strong (>=58%) and sufficient (>=10 games) rates: badge fires for home with 4 evidence entries",
-  computeGamePulseFromRates(
-    homeSweepGame,
-    ratesWith({
-      scoredFirst: { wins: 12, total: 15, winPct: 80 },
-      leadingAfter5: { wins: 8, total: 10, winPct: 80 },
-      leadingAfter7: { wins: 18, total: 20, winPct: 90 },
-      bigInning: { wins: 7, total: 10, winPct: 70 },
-    }),
-    NONE
-  ),
-  { leaningTeam: "Home Team", margin: 4, evidence: [
-    { questionKey: "leadingAfter7", label: "lead after 7", subjectTeam: "Home Team", winPct: 90, sampleSize: 20 },
-    { questionKey: "scoredFirst", label: "score first", subjectTeam: "Home Team", winPct: 80, sampleSize: 15 },
-    { questionKey: "leadingAfter5", label: "lead after 5", subjectTeam: "Home Team", winPct: 80, sampleSize: 10 },
-    { questionKey: "bigInning", label: "have a 3+ run inning", subjectTeam: "Home Team", winPct: 70, sampleSize: 10 },
-  ] }
+  "one team has plenty of sample but a coin-flip (55%) rate: still not enough data (needs to clear the 58/42 skew too)",
+  buildGamePulsePanelRows(ratesWith({ scoredFirst: { wins: 55, total: 100, winPct: 55 } }), NONE).find((r) => r.key === "scoredFirst")?.showData,
+  false
+);
+
+// ---- Row-level gate: at least one team clears the floor -> shows data ----
+expect(
+  "home clears the floor (15 games, 71%), away has nothing: row shows data, home highlighted",
+  buildGamePulsePanelRows(ratesWith({ scoredFirst: { wins: 11, total: 15, winPct: 71 } }), NONE).find((r) => r.key === "scoredFirst"),
+  {
+    key: "scoredFirst",
+    title: "Scored first",
+    home: { wins: 11, total: 15, winPct: 71 },
+    away: { wins: 0, total: 0, winPct: 0 },
+    homeEligible: true,
+    awayEligible: false,
+    showData: true,
+    highlightSide: "home",
+  }
+);
+
+// ---- Both teams clear the floor: highlight whichever deviates further
+// from 50%, not just whichever is numerically higher ----
+expect(
+  "both teams clear the floor, home is more extreme (80% vs away's 60%): home highlighted",
+  buildGamePulsePanelRows(
+    ratesWith({ leadingAfter5: { wins: 8, total: 10, winPct: 80 } }),
+    ratesWith({ leadingAfter5: { wins: 6, total: 10, winPct: 60 } })
+  ).find((r) => r.key === "leadingAfter5")?.highlightSide,
+  "home"
 );
 
 expect(
-  "same game, but only 1 question clears both floors: no badge - below BADGE_MIN_ELIGIBLE",
-  computeGamePulseFromRates(
-    homeSweepGame,
-    ratesWith({ scoredFirst: { wins: 12, total: 15, winPct: 80 } }),
-    NONE
-  ),
-  null
+  "both teams clear the floor on the LOW side, away is more extreme (10% vs home's 42%): away highlighted",
+  buildGamePulsePanelRows(
+    ratesWith({ trailingAfter7: { wins: 42, total: 100, winPct: 42 } }),
+    ratesWith({ trailingAfter7: { wins: 5, total: 50, winPct: 10 } })
+  ).find((r) => r.key === "trailingAfter7")?.highlightSide,
+  "away"
 );
 
+// ---- Skew floor boundary: exactly 58/42 clears, one point inside doesn't ----
 expect(
-  "same game, exactly 2 questions clear both floors and agree: badge fires (meets margin=2, min-eligible=2 exactly)",
-  computeGamePulseFromRates(
-    homeSweepGame,
-    ratesWith({
-      scoredFirst: { wins: 12, total: 15, winPct: 80 },
-      leadingAfter5: { wins: 8, total: 10, winPct: 80 },
-    }),
-    NONE
-  ) !== null,
+  "skew floor boundary: exactly 58% clears (>=, not >)",
+  buildGamePulsePanelRows(ratesWith({ bigInning: { wins: 58, total: 100, winPct: 58 } }), NONE).find((r) => r.key === "bigInning")?.showData,
+  true
+);
+expect(
+  "skew floor boundary: 57% (one point inside the coin-flip band) does not clear",
+  buildGamePulsePanelRows(ratesWith({ bigInning: { wins: 57, total: 100, winPct: 57 } }), NONE).find((r) => r.key === "bigInning")?.showData,
+  false
+);
+expect(
+  "skew floor boundary: exactly 42% clears on the low side",
+  buildGamePulsePanelRows(ratesWith({ trailingAfter7: { wins: 42, total: 100, winPct: 42 } }), NONE).find((r) => r.key === "trailingAfter7")?.showData,
   true
 );
 
+// ---- Sample floor boundary: exactly 10 clears, 9 doesn't (even at 100%) ----
 expect(
-  "sample floor: 9 historical games (one below the 10-game floor) does not count even at a strong win%",
-  computeGamePulseFromRates(
-    homeSweepGame,
-    ratesWith({
-      scoredFirst: { wins: 9, total: 9, winPct: 100 },
-      leadingAfter5: { wins: 8, total: 10, winPct: 80 },
-    }),
-    NONE
-  ),
-  null // only 1 question (leadingAfter5) actually clears the floor - below BADGE_MIN_ELIGIBLE
-);
-
-expect(
-  "skew floor: a 55% win rate (inside the 42-58 coin-flip band) does not count even with plenty of sample",
-  computeGamePulseFromRates(
-    homeSweepGame,
-    ratesWith({
-      scoredFirst: { wins: 55, total: 100, winPct: 55 },
-      leadingAfter5: { wins: 8, total: 10, winPct: 80 },
-    }),
-    NONE
-  ),
-  null
-);
-
-expect(
-  "skew floor boundary: exactly 58% counts as eligible (>=, not >)",
-  computeGamePulseFromRates(
-    homeSweepGame,
-    ratesWith({
-      scoredFirst: { wins: 58, total: 100, winPct: 58 },
-      leadingAfter5: { wins: 8, total: 10, winPct: 80 },
-    }),
-    NONE
-  ) !== null,
+  "sample floor boundary: exactly 10 games clears",
+  buildGamePulsePanelRows(ratesWith({ leadingAfter7: { wins: 10, total: 10, winPct: 100 } }), NONE).find((r) => r.key === "leadingAfter7")?.showData,
   true
 );
-
-// ---- The "opponent" branch: a team's own bad history (<=42%) in a
-// situation THEY hold credits the OTHER team, not them ----
 expect(
-  "home holds leadingAfter5 and leadingAfter7, but home historically has a LOW win% in both (<=42) - both credit away instead, badge leans away even though away never held anything directly",
-  computeGamePulseFromRates(
-    homeSweepGame,
-    ratesWith({
-      leadingAfter5: { wins: 3, total: 15, winPct: 20 },
-      leadingAfter7: { wins: 4, total: 20, winPct: 20 },
-    }),
-    NONE
-  ),
-  { leaningTeam: "Away Team", margin: 2, evidence: [
-    { questionKey: "leadingAfter5", label: "lead after 5", subjectTeam: "Home Team", winPct: 20, sampleSize: 15 },
-    { questionKey: "leadingAfter7", label: "lead after 7", subjectTeam: "Home Team", winPct: 20, sampleSize: 20 },
-  ] }
+  "sample floor boundary: 9 games (one below the floor) does not clear even at 100%",
+  buildGamePulsePanelRows(ratesWith({ leadingAfter7: { wins: 9, total: 9, winPct: 100 } }), NONE).find((r) => r.key === "leadingAfter7")?.showData,
+  false
 );
 
-// ---- Evidence cap: more than 4 eligible-and-agreeing questions still only
-// returns the 4 strongest ----
-const trailingHomeGame = { homeTeam: "Home Team", awayTeam: "Away Team", innings: [
-  { num: 1, home: { runs: 0 }, away: { runs: 4 } },
-  { num: 2, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 3, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 4, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 5, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 6, home: { runs: 0 }, away: { runs: 0 } },
-  { num: 7, home: { runs: 0 }, away: { runs: 0 } },
-] };
-// away holds: scoredFirst, leadingAfter5, leadingAfter7, bigInning (all 4) -
-// home holds: trailingAfter7 (the 5th and only remaining question)
+// ---- Row title includes the live BIG_INNING_RUN_THRESHOLD value, not a
+// hardcoded "3" ----
 expect(
-  "5 questions all eligible and agreeing (4 credited to away directly + home's own bad trailingAfter7 rate also credits away): evidence caps at the 4 strongest by |winPct-50|, not all 5",
-  computeGamePulseFromRates(
-    trailingHomeGame,
-    ratesWith({ trailingAfter7: { wins: 2, total: 20, winPct: 10 } }), // home's own rate when trailing after 7 - very low, credits away
-    ratesWith({
-      scoredFirst: { wins: 19, total: 20, winPct: 95 },
-      leadingAfter5: { wins: 18, total: 20, winPct: 90 },
-      leadingAfter7: { wins: 17, total: 20, winPct: 85 },
-      bigInning: { wins: 12, total: 15, winPct: 80 },
-    })
-  )?.evidence.length,
-  4
+  "bigInning row title reflects the threshold constant",
+  buildGamePulsePanelRows(NONE, NONE).find((r) => r.key === "bigInning")?.title,
+  "Big inning (3+ runs)"
 );
 
 console.log(`\n${failures === 0 ? "ALL PASS" : failures + " FAILURE(S)"}`);
