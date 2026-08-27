@@ -2,7 +2,7 @@ import { backfillOddsForSport, LIVE_SPORTS } from "@/server/data/odds";
 
 export const dynamic = "force-dynamic";
 
-// Vercel Cron hits this every 2 hours, around the clock. The once-daily seed
+// Vercel Cron hits this every 4 hours, around the clock. The once-daily seed
 // fetch (/api/cron/refresh-odds) runs at 4am ET specifically to lock in
 // pregame lines before any game starts - but a game whose sportsbook lines
 // simply aren't posted yet at that hour (a doubleheader nightcap, a
@@ -10,11 +10,15 @@ export const dynamic = "force-dynamic";
 // OddsSnapshot's once-daily cache means it then stays missing for the rest
 // of the day with no other path to pick it up. This fills in exactly those
 // gaps - purely additive (see backfillOddsForSport), never touching a game
-// the seed fetch already captured correctly. A 2-hour cadence means a
-// late-posted line shows up the same day within a couple hours worst case,
+// the seed fetch already captured correctly. A 4-hour cadence means a
+// late-posted line shows up the same day within a few hours worst case,
 // without needing 15-minute-grading-cron urgency - a game missing from the
-// board for an hour or two is a display gap, not a correctness problem the
-// way an ungraded pick is.
+// board for a few hours is a display gap, not a correctness problem the way
+// an ungraded pick is. backfillOddsForSport itself also skips the real API
+// call once every game cached for today has already started, so runs late
+// in the day (after every game of the day is underway) cost nothing even at
+// this cadence - the 4-hour interval mainly bounds cost during the window
+// where a real gap could still exist.
 export async function GET(req: Request) {
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {

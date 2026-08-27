@@ -218,6 +218,24 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
   const existingGames = existing.data as unknown as OddsGame[];
   const existingIds = new Set(existingGames.map((g) => g.id));
 
+  // Credit-cost guard: once every game already cached for today has started,
+  // there's nothing left this function could add for today - it only ever
+  // appends not-yet-started games (see the already-started filter below), so
+  // a still-missing game that has ALSO already started is unrecoverable
+  // either way, same "missing beats wrong" tradeoff as everywhere else in
+  // this file. Skipping here avoids an API call - and its Odds API credit
+  // cost (markets x regions, not free) - that's guaranteed to find nothing.
+  // Only skips when there's at least one cached game for today AND all of
+  // them have started: an empty todayGames list (e.g. the 4am seed fetch
+  // found nothing posted yet) must NOT skip, since that's exactly the
+  // "genuinely still missing" case this function exists to catch - the
+  // original doubleheader-nightcap incident this was built for.
+  const now = new Date();
+  const todayGames = existingGames.filter((g) => easternDateKey(new Date(g.commenceTime)) === fetchDate);
+  if (todayGames.length > 0 && todayGames.every((g) => new Date(g.commenceTime) <= now)) {
+    return { added: 0 };
+  }
+
   const requestSportKey = oddsApiSportKey(sportKey);
   const url =
     BASE_URL +
