@@ -148,7 +148,7 @@ export function ChartsWorkspace({
             </div>
           ) : (
             <div onDoubleClick={fs.supported ? fs.toggle : undefined}>
-              <HistoricalVariableChart series={chartSeries} height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 320} />
+              <HistoricalVariableChart series={chartSeries} height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 320} />
             </div>
           )}
         </div>

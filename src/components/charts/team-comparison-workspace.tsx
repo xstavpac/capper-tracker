@@ -226,7 +226,10 @@ export function TeamComparisonWorkspace({
             </div>
           ) : view === "overlay" ? (
             <div onDoubleClick={fs.supported ? fs.toggle : undefined}>
-              <HistoricalVariableChart series={overlaySeries} height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 320} />
+              <HistoricalVariableChart
+                series={overlaySeries}
+                height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 320}
+              />
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -234,14 +237,14 @@ export function TeamComparisonWorkspace({
                 <div className="mb-2 text-xs font-semibold text-foreground">{teamA || "Team A"}</div>
                 <HistoricalVariableChart
                   series={toChartSeries(entriesA, teamA)}
-                  height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 280}
+                  height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 280}
                 />
               </div>
               <div onDoubleClick={fs.supported ? fs.toggle : undefined}>
                 <div className="mb-2 text-xs font-semibold text-foreground">{teamB || "Team B"}</div>
                 <HistoricalVariableChart
                   series={toChartSeries(entriesB, teamB)}
-                  height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 280}
+                  height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 280}
                 />
               </div>
             </div>

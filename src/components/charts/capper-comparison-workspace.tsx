@@ -323,7 +323,10 @@ export function CapperComparisonWorkspace({
             <ProfileTiles profile={data.b} color={PALETTE_B} />
           </div>
           <div className="rounded-card bg-card p-4 shadow-soft" onDoubleClick={fs.supported ? fs.toggle : undefined}>
-            <CapperComparisonChart series={overlaySeries} height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 320} />
+            <CapperComparisonChart
+              series={overlaySeries}
+              height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 320}
+            />
           </div>
         </>
       )}
@@ -335,7 +338,7 @@ export function CapperComparisonWorkspace({
             <div className="rounded-card bg-card p-4 shadow-soft" onDoubleClick={fs.supported ? fs.toggle : undefined}>
               <CapperComparisonChart
                 series={[{ id: "a", label: data.a.capperName, color: PALETTE_A, points: data.a.chartData }]}
-                height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 260}
+                height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 260}
               />
             </div>
           </div>
@@ -344,7 +347,7 @@ export function CapperComparisonWorkspace({
             <div className="rounded-card bg-card p-4 shadow-soft" onDoubleClick={fs.supported ? fs.toggle : undefined}>
               <CapperComparisonChart
                 series={[{ id: "b", label: data.b.capperName, color: PALETTE_B, points: data.b.chartData }]}
-                height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 260}
+                height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 260}
               />
             </div>
           </div>
