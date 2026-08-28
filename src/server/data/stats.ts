@@ -92,7 +92,11 @@ export function computeStats(picks: Pick[]): OverallStats {
   };
 }
 
-function currentStreak(
+// Exported (not just used internally by computeStats) so computeMomentum
+// below can call this exact same function repeatedly over successive
+// prefixes of a capper's picks, rather than re-deriving streak logic of its
+// own - see computeMomentum's comment for why that matters here specifically.
+export function currentStreak(
   sortedOldestFirst: Pick[]
 ): { type: "WIN" | "LOSS" | "NONE"; count: number } {
   const decided = sortedOldestFirst.filter(
@@ -110,6 +114,94 @@ function currentStreak(
   }
 
   return { type, count };
+}
+
+export type MomentumStreakLength = "1" | "2" | "3" | "4+";
+
+export type MomentumRow = {
+  length: MomentumStreakLength;
+  wins: number;
+  losses: number;
+  winPct: number;
+  netUnits: number;
+  sampleSize: number;
+};
+
+export type MomentumBreakdown = {
+  afterLoss: MomentumRow[]; // fixed 4 rows, in order: "1", "2", "3", "4+"
+  afterWin: MomentumRow[];
+};
+
+const MOMENTUM_LENGTHS: MomentumStreakLength[] = ["1", "2", "3", "4+"];
+
+function momentumBucketKey(count: number): MomentumStreakLength {
+  return count >= 4 ? "4+" : (String(count) as MomentumStreakLength);
+}
+
+// How a capper has performed on the pick immediately following a losing or
+// winning streak of each length - "after 2L" means every decided pick that
+// came right after exactly 2 consecutive losses (not 2+; a 3rd loss's
+// following pick counts toward "after 3L" instead), with "4+" bucketing
+// every streak of 4 or longer together.
+//
+// Reuses currentStreak() above directly rather than re-implementing streak
+// tracking: for each pick, the streak "entering" it is exactly what
+// currentStreak() would report for every pick strictly before it in
+// chronological order, so this just calls that function once per pick
+// against a growing prefix of the (already win/loss-filtered, chronologically
+// sorted) picks array. That also means this automatically inherits
+// currentStreak()'s own convention for pushes - they're filtered out before
+// the scan even starts (same as currentStreak's own `decided` filter), so a
+// push is invisible to streak tracking here exactly like it is for the
+// "Current streak" stat card, not a streak-breaker and not itself a pick
+// that gets bucketed as "after" anything. O(n^2) in the number of a
+// capper's decided picks, which is trivial at realistic volumes (low
+// hundreds at most) and far simpler/safer than a second streak
+// implementation that could quietly drift from the displayed current streak.
+export function computeMomentum(picks: Pick[]): MomentumBreakdown {
+  const decided = [...picks]
+    .filter((p) => p.status === "WIN" || p.status === "LOSS")
+    .sort((a, b) => a.gameTime.getTime() - b.gameTime.getTime());
+
+  const emptyBuckets = (): Record<MomentumStreakLength, { wins: number; losses: number; netUnits: number }> => ({
+    "1": { wins: 0, losses: 0, netUnits: 0 },
+    "2": { wins: 0, losses: 0, netUnits: 0 },
+    "3": { wins: 0, losses: 0, netUnits: 0 },
+    "4+": { wins: 0, losses: 0, netUnits: 0 },
+  });
+  const afterLossBuckets = emptyBuckets();
+  const afterWinBuckets = emptyBuckets();
+
+  for (let i = 1; i < decided.length; i++) {
+    const preceding = currentStreak(decided.slice(0, i));
+    if (preceding.type === "NONE") continue;
+
+    const bucket = (preceding.type === "LOSS" ? afterLossBuckets : afterWinBuckets)[momentumBucketKey(preceding.count)];
+    const pick = decided[i];
+    if (pick.status === "WIN") {
+      bucket.wins++;
+      bucket.netUnits += unitsWonOnBet(pick.units, pick.odds);
+    } else {
+      bucket.losses++;
+      bucket.netUnits -= pick.units;
+    }
+  }
+
+  const toRows = (buckets: Record<MomentumStreakLength, { wins: number; losses: number; netUnits: number }>): MomentumRow[] =>
+    MOMENTUM_LENGTHS.map((length) => {
+      const b = buckets[length];
+      const sampleSize = b.wins + b.losses;
+      return {
+        length,
+        wins: b.wins,
+        losses: b.losses,
+        winPct: sampleSize > 0 ? (b.wins / sampleSize) * 100 : 0,
+        netUnits: round2(b.netUnits),
+        sampleSize,
+      };
+    });
+
+  return { afterLoss: toRows(afterLossBuckets), afterWin: toRows(afterWinBuckets) };
 }
 
 export function round2(n: number) {

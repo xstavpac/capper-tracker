@@ -11,6 +11,7 @@ import {
   computeBestOddsRange,
   computeConsistency,
   computeUnitsChartData,
+  computeMomentum,
   filterPicksByGameWindow,
   chipSetForLeague,
   SCORECARD_WINDOWS,
@@ -21,6 +22,7 @@ import { UnitsChart } from "@/components/dashboard/units-chart";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
+import { MomentumPanel } from "@/components/dashboard/momentum-panel";
 import { StreakBadge } from "@/components/dashboard/capper-panels";
 import { formatEastern, formatRelativeTime } from "@/lib/dates";
 
@@ -112,6 +114,11 @@ export default async function CapperDetailPage({
   const stats = computeStats(filterPicksByGameWindow(picks, window));
   const allTimeStats = computeStats(picks);
   const allTimeScorecard = computeScorecard(picks);
+  // Always all-time, same as allTimeStats.currentStreak above and for the
+  // same reason - a streak (and what history says about it) is a
+  // chronological, not-windowed concept, and this is the full historical
+  // picture across every streak length, not scoped to any one window.
+  const momentum = computeMomentum(picks);
   const scorecard = computeScorecard(filterPicksByGameWindow(picks, window));
 
   // "Record by category" (favorite/dog, over/under, F5, NRFI/YRFI, ...) only
@@ -271,6 +278,8 @@ export default async function CapperDetailPage({
           }
         />
       </div>
+
+      <MomentumPanel breakdown={momentum} currentStreak={allTimeStats.currentStreak} />
 
       {allTimeScorecard.length > 0 && (
         <div className="mt-4">
