@@ -7,6 +7,8 @@ import type { VariableTimeSeriesResult, DateRange } from "@/server/data/historic
 import { easternDateKey } from "@/lib/dates";
 import { VariableLibrary } from "@/components/model-builder/variable-library";
 import { HistoricalVariableChart, type ChartSeries } from "@/components/charts/historical-variable-chart";
+import { HistoryNote } from "@/components/charts/history-note";
+import { DateRangePicker } from "@/components/charts/date-range-picker";
 
 // Team stats/tendencies only - the only entity type with a fixed, known
 // selector today (pitchers have no equivalent static catalog, and market
@@ -33,29 +35,6 @@ function defaultDateRange(): DateRange {
   const end = easternDateKey(new Date());
   const start = easternDateKey(new Date(Date.now() - 30 * 86400000));
   return { start, end };
-}
-
-function HistoryNote({ result }: { result: VariableTimeSeriesResult }) {
-  if (result.daysAvailable > 0) {
-    return (
-      <span className="text-xs text-muted-foreground">
-        {result.daysAvailable} day{result.daysAvailable === 1 ? "" : "s"} of history
-      </span>
-    );
-  }
-  if (result.totalSnapshotDays === 0) {
-    return (
-      <span className="text-xs text-amber-600 dark:text-amber-400">
-        Building historical depth — daily snapshots are collected automatically, more history will appear here each day.
-      </span>
-    );
-  }
-  return (
-    <span className="text-xs text-amber-600 dark:text-amber-400">
-      {result.totalSnapshotDays} day{result.totalSnapshotDays === 1 ? "" : "s"} of snapshots collected so far, but not yet
-      enough decided games to calculate this reliably.
-    </span>
-  );
 }
 
 export function ChartsWorkspace({ sportKey, teamNames }: { sportKey: string; teamNames: string[] }) {
@@ -139,25 +118,7 @@ export function ChartsWorkspace({ sportKey, teamNames }: { sportKey: string; tea
       <div className="space-y-4">
         <div className="rounded-card bg-card p-4 shadow-soft">
           <div className="mb-3 flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 text-sm">
-              <label className="text-muted-foreground">From</label>
-              <input
-                type="date"
-                value={dateRange.start}
-                max={dateRange.end}
-                onChange={(e) => handleDateRangeChange({ ...dateRange, start: e.target.value })}
-                className="rounded-lg border border-border bg-card px-2 py-1 text-sm text-foreground"
-              />
-              <label className="text-muted-foreground">to</label>
-              <input
-                type="date"
-                value={dateRange.end}
-                min={dateRange.start}
-                max={easternDateKey(new Date())}
-                onChange={(e) => handleDateRangeChange({ ...dateRange, end: e.target.value })}
-                className="rounded-lg border border-border bg-card px-2 py-1 text-sm text-foreground"
-              />
-            </div>
+            <DateRangePicker value={dateRange} onChange={handleDateRangeChange} />
           </div>
 
           {series.length === 0 ? (

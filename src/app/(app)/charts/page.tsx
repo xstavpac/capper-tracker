@@ -1,6 +1,6 @@
 import { requireUser } from "@/server/auth";
 import { getAllMlbTeamNames } from "@/server/data/mlb-stats";
-import { ChartsWorkspace } from "@/components/charts/charts-workspace";
+import { ChartsModeSwitcher } from "@/components/charts/charts-mode-switcher";
 import { getEntitlementsForUser } from "@/server/data/subscriptions";
 import { UpgradeGate } from "@/components/billing/upgrade-gate";
 
@@ -37,7 +37,7 @@ export default async function ChartsPage() {
         </p>
       </div>
 
-      <ChartsWorkspace sportKey={CHARTS_SPORT_KEY} teamNames={teamNames} />
+      <ChartsModeSwitcher sportKey={CHARTS_SPORT_KEY} teamNames={teamNames} />
     </div>
   );
 }
