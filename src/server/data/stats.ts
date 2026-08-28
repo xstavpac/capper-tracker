@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Pick, PickStatus } from "@prisma/client";
-import { favoriteOrUnderdog, extractLine, nrfiSide } from "@/lib/bet-line";
+import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, type OddsBucketKey } from "@/lib/bet-line";
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
 
 export type OverallStats = {
@@ -234,31 +234,6 @@ export function weightedRoiScore(stats: OverallStats): number {
   const n = stats.wins + stats.losses + stats.pushes;
   if (n === 0) return 0;
   return round2((stats.roi * n) / (n + RANKING_SHRINKAGE_K));
-}
-
-// Coarse, fixed odds bands - no precedent for this anywhere else in the app
-// (odds is a raw Int on Pick), and MLB/NFL/NBA all use roughly the same
-// American-odds shape, so one universal set of bands works across sports.
-// Deliberately broad rather than tight (e.g. the classic -110/-120/-130
-// splits) - narrower bands would leave most cappers without a real sample in
-// more than one bucket to compare, defeating the point of "which range are
-// they best in."
-export type OddsBucketKey = "HEAVY_FAV" | "FAV" | "EVEN" | "DOG" | "HEAVY_DOG";
-
-export const ODDS_BUCKET_LABELS: Record<OddsBucketKey, string> = {
-  HEAVY_FAV: "-200 or shorter",
-  FAV: "-199 to -110",
-  EVEN: "-109 to +109",
-  DOG: "+110 to +199",
-  HEAVY_DOG: "+200 or longer",
-};
-
-export function oddsBucket(odds: number): OddsBucketKey {
-  if (odds <= -200) return "HEAVY_FAV";
-  if (odds <= -110) return "FAV";
-  if (odds <= 109) return "EVEN";
-  if (odds <= 199) return "DOG";
-  return "HEAVY_DOG";
 }
 
 export type OddsRangeStat = {
@@ -1037,8 +1012,19 @@ async function getUserPicksWithRelations(userId: string) {
 }
 
 export type UnitsChartPoint = { date: string; cumulativeUnits: number };
+export type PickNumberChartPoint = { pickNumber: number; cumulativeUnits: number };
 
-export function computeUnitsChartData(picks: Pick[]): UnitsChartPoint[] {
+type CumulativeUnitsPoint = { pick: Pick; cumulativeUnits: number };
+
+// The actual profit-curve math, shared by every consumer that needs a
+// running cumulative-units total in chronological order - computeUnitsChartData
+// (below, date-labeled x-axis) and computeUnitsChartByPickNumber /
+// computeMaxDrawdown (index-labeled x-axis, for the capper comparison tool,
+// which can't use calendar dates since two cappers' picks won't share
+// days). One accumulation pass, two label projections - a date and a pick
+// count are just two different names for the same position in this same
+// series, not two different calculations.
+function computeCumulativeUnitsSeries(picks: Pick[]): CumulativeUnitsPoint[] {
   const settled = [...picks]
     .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
     .sort((a, b) => a.gameTime.getTime() - b.gameTime.getTime());
@@ -1050,9 +1036,48 @@ export function computeUnitsChartData(picks: Pick[]): UnitsChartPoint[] {
     } else if (pick.status === "LOSS") {
       running -= pick.units;
     }
-    return {
-      date: formatEastern(pick.gameTime, { month: "short", day: "numeric" }),
-      cumulativeUnits: Math.round(running * 100) / 100,
-    };
+    return { pick, cumulativeUnits: round2(running) };
   });
+}
+
+export function computeUnitsChartData(picks: Pick[]): UnitsChartPoint[] {
+  return computeCumulativeUnitsSeries(picks).map((p) => ({
+    date: formatEastern(p.pick.gameTime, { month: "short", day: "numeric" }),
+    cumulativeUnits: p.cumulativeUnits,
+  }));
+}
+
+// Same series as computeUnitsChartData, x-axis relabeled to "pick 1, 2,
+// 3..." instead of calendar date - what the capper comparison tool's
+// Overlay view plots both cappers on, so trajectory SHAPE is comparable
+// regardless of how many picks each capper has logged or over what real
+// date range.
+export function computeUnitsChartByPickNumber(picks: Pick[]): PickNumberChartPoint[] {
+  return computeCumulativeUnitsSeries(picks).map((p, i) => ({
+    pickNumber: i + 1,
+    cumulativeUnits: p.cumulativeUnits,
+  }));
+}
+
+// Largest peak-to-trough decline in cumulative units ever observed, walking
+// the same chronological series computeUnitsChartData/
+// computeUnitsChartByPickNumber use - the standard drawdown definition
+// (running peak, not just "lowest point reached"), so a capper who went
+// +10u then fell to +4u shows a 6u drawdown even though they're still up
+// overall, not 0 just because they never went negative. Peak starts at 0
+// (before any picks are placed, cumulative units is 0 by definition), so a
+// capper's very first pick being a loss already counts as a real drawdown
+// from that starting point, not a value waiting to be established. Returns
+// 0 for a capper with no settled picks (or one whose picks only ever went
+// up) - never negative.
+export function computeMaxDrawdown(picks: Pick[]): number {
+  const series = computeCumulativeUnitsSeries(picks);
+  let peak = 0;
+  let maxDrawdown = 0;
+  for (const point of series) {
+    if (point.cumulativeUnits > peak) peak = point.cumulativeUnits;
+    const drawdown = peak - point.cumulativeUnits;
+    if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+  }
+  return round2(maxDrawdown);
 }

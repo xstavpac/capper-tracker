@@ -148,3 +148,32 @@ export function parseTouchdownProp(text: string): { playerName: string; propType
 
   return { playerName, propType };
 }
+
+// Coarse, fixed odds bands - no precedent for this anywhere else in the app
+// (odds is a raw Int on Pick), and MLB/NFL/NBA all use roughly the same
+// American-odds shape, so one universal set of bands works across sports.
+// Deliberately broad rather than tight (e.g. the classic -110/-120/-130
+// splits) - narrower bands would leave most cappers without a real sample in
+// more than one bucket to compare, defeating the point of "which range are
+// they best in." Lives here (not server/data/stats.ts, its only consumer
+// until the capper comparison tool) specifically because it's pure and
+// needs to be importable from a "use client" component - stats.ts has a
+// module-level prisma import, which taints anything defined there for
+// client-bundle purposes even if the function itself never touches prisma.
+export type OddsBucketKey = "HEAVY_FAV" | "FAV" | "EVEN" | "DOG" | "HEAVY_DOG";
+
+export const ODDS_BUCKET_LABELS: Record<OddsBucketKey, string> = {
+  HEAVY_FAV: "-200 or shorter",
+  FAV: "-199 to -110",
+  EVEN: "-109 to +109",
+  DOG: "+110 to +199",
+  HEAVY_DOG: "+200 or longer",
+};
+
+export function oddsBucket(odds: number): OddsBucketKey {
+  if (odds <= -200) return "HEAVY_FAV";
+  if (odds <= -110) return "FAV";
+  if (odds <= 109) return "EVEN";
+  if (odds <= 199) return "DOG";
+  return "HEAVY_DOG";
+}

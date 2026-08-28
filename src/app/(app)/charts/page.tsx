@@ -5,6 +5,8 @@ import { getEntitlementsForUser } from "@/server/data/subscriptions";
 import { UpgradeGate } from "@/components/billing/upgrade-gate";
 import { MODEL_VARIABLES } from "@/lib/model-builder";
 import { getCustomMetricVariables } from "@/server/data/custom-metrics";
+import { getCappersForUser } from "@/server/data/cappers";
+import { getSportsWithLeagues } from "@/server/data/picks";
 
 // MLB-only, matching the model builder - every chartable variable
 // (team_stats/team_tendencies) is sourced from MLB-specific tables.
@@ -33,7 +35,11 @@ export default async function ChartsPage() {
   // Custom Metrics (getCustomMetricVariables, per-user). Merged here, once,
   // server-side, and handed down as one prop - VariableLibrary and the two
   // workspaces never need to know which entries came from which source.
-  const customVariables = await getCustomMetricVariables(user.id, CHARTS_SPORT_KEY);
+  const [customVariables, cappers, sports] = await Promise.all([
+    getCustomMetricVariables(user.id, CHARTS_SPORT_KEY),
+    getCappersForUser(user.id),
+    getSportsWithLeagues(),
+  ]);
   const variables = [...MODEL_VARIABLES, ...customVariables];
 
   return (
@@ -47,7 +53,13 @@ export default async function ChartsPage() {
         </p>
       </div>
 
-      <ChartsModeSwitcher sportKey={CHARTS_SPORT_KEY} teamNames={teamNames} variables={variables} />
+      <ChartsModeSwitcher
+        sportKey={CHARTS_SPORT_KEY}
+        teamNames={teamNames}
+        variables={variables}
+        cappers={cappers}
+        sports={sports}
+      />
     </div>
   );
 }

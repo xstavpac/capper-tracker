@@ -9,40 +9,15 @@ import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { ParlayForm } from "@/components/dashboard/parlay-form";
 import { LegStatusButtons } from "@/components/dashboard/leg-status-buttons";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
-import { nrfiSide } from "@/lib/bet-line";
 import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
 import { TIER_LABELS } from "@/lib/entitlements";
 import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
 import { DateRangeFilter } from "@/components/picks/date-range-filter";
 import { SportBetTypeFilter } from "@/components/picks/sport-bet-type-filter";
-import type { BetType, PickStatus, Period } from "@prisma/client";
+import { betTypeFilterCategory, BET_TYPE_FILTER_OPTIONS, type BetTypeFilterKey } from "@/lib/bet-type-filter";
+import type { PickStatus } from "@prisma/client";
 
 const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
-
-type BetTypeFilterKey =
-  | "SPREAD"
-  | "F5_SPREAD"
-  | "MONEYLINE"
-  | "F5_MONEYLINE"
-  | "TOTAL"
-  | "F5_TOTAL"
-  | "TEAM_TOTAL"
-  | "PLAYER_PROP"
-  | "NRFI"
-  | "YRFI";
-
-const BET_TYPE_FILTER_OPTIONS: { value: BetTypeFilterKey; label: string }[] = [
-  { value: "SPREAD", label: "Spread" },
-  { value: "F5_SPREAD", label: "F5 Spread" },
-  { value: "MONEYLINE", label: "Moneyline" },
-  { value: "F5_MONEYLINE", label: "F5 Moneyline" },
-  { value: "TOTAL", label: "Total" },
-  { value: "F5_TOTAL", label: "F5 Total" },
-  { value: "TEAM_TOTAL", label: "Team Total" },
-  { value: "PLAYER_PROP", label: "Player Prop" },
-  { value: "NRFI", label: "NRFI" },
-  { value: "YRFI", label: "YRFI" },
-];
 
 // Two different sports' vocabulary for the same "first half of the game"
 // period (schema.prisma's Period.FIRST_HALF comment: `"F5" in baseball
@@ -117,39 +92,10 @@ function computeVisibleBetTypeOptions(sportName: string | undefined): { value: B
   );
 }
 
-// Coarser and sport-agnostic than stats.ts's pickCategory - that classifier
-// splits favorite/dog and over/under (this page's separate "Favorite +
-// underdog" dropdown already covers the first, and there's no over/under
-// equivalent), and deliberately scopes its F5 categories to MLB only so
-// cross-sport leaderboards never blend an MLB capper's F5 record with
-// another sport's first-half record. Neither restriction belongs here - this
-// is a flat "what kind of bet is this" filter over every sport's picks, so a
-// real NFL first-half moneyline or total pick needs to show up under F5
-// Moneyline/F5 Total same as MLB's, not fall through pickCategory's MLB-only
-// carve-out and disappear from every option. Reuses nrfiSide (the same
-// betDetail-derived NRFI/YRFI split stats.ts and grading.ts use) so this
-// filter can never disagree with how those picks actually graded.
-function betTypeFilterCategory(pick: { betType: BetType; period: Period; betDetail: string | null }): BetTypeFilterKey | null {
-  if (pick.betType === "NRFI") {
-    return nrfiSide(pick.betDetail) === "YES_RUN" ? "YRFI" : "NRFI";
-  }
-  // TEAM_TOTAL is period-independent, same as stats.ts's pickCategory - one
-  // filter option regardless of full game/F5/1st half, unlike TOTAL above
-  // which splits by period. Checked before the FIRST_HALF branch so a
-  // first-half team total doesn't fall into F5_TOTAL/get dropped instead.
-  if (pick.betType === "TEAM_TOTAL") return "TEAM_TOTAL";
-  if (pick.period === "FIRST_HALF") {
-    if (pick.betType === "MONEYLINE") return "F5_MONEYLINE";
-    if (pick.betType === "SPREAD") return "F5_SPREAD";
-    if (pick.betType === "TOTAL") return "F5_TOTAL";
-    return null;
-  }
-  if (pick.betType === "SPREAD") return "SPREAD";
-  if (pick.betType === "MONEYLINE") return "MONEYLINE";
-  if (pick.betType === "TOTAL") return "TOTAL";
-  if (pick.betType === "PLAYER_PROP") return "PLAYER_PROP";
-  return null;
-}
+// betTypeFilterCategory now lives in lib/bet-type-filter.ts, reused as-is by
+// the capper comparison tool - see that file's own comment for why it's a
+// deliberately different (coarser, cross-sport) classification than
+// stats.ts's pickCategory.
 
 // Resolves the page's three date searchParams (`date` for single-day mode,
 // `startDate`/`endDate` for range mode) down to one definite Eastern-
