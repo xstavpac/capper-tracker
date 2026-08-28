@@ -41,7 +41,15 @@ function mergeByPickNumber(series: ComparisonSeries[]): Record<string, number | 
 // hardcodes a single series on a `date` x-axis, and HistoricalVariableChart's
 // date-union merge/tick-formatting is built specifically for calendar dates,
 // not the "pick 1, 2, 3..." ordinal axis this needs.
-export function CapperComparisonChart({ series, height = 320 }: { series: ComparisonSeries[]; height?: number }) {
+export function CapperComparisonChart({
+  series,
+  height = 320,
+}: {
+  series: ComparisonSeries[];
+  // See HistoricalVariableChart's height prop - same vh-string-or-pixel-number
+  // contract, for the same fullscreen reason.
+  height?: number | string;
+}) {
   const { theme } = useTheme();
   const isDark = theme === Theme.DARK;
   const gridColor = isDark ? "#1f2937" : "#f3f4f6";

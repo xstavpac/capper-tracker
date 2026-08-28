@@ -8,6 +8,8 @@ import { BET_TYPE_FILTER_OPTIONS, type BetTypeFilterKey } from "@/lib/bet-type-f
 import { DateRangePicker } from "@/components/charts/date-range-picker";
 import { CapperComparisonChart, type ComparisonSeries } from "@/components/charts/capper-comparison-chart";
 import { getRecordColor } from "@/server/data/stats";
+import { useFullscreen, FULLSCREEN_CHART_HEIGHT, FULLSCREEN_SURFACE_CLASS } from "@/components/charts/use-fullscreen";
+import { FullscreenButton } from "@/components/charts/fullscreen-button";
 
 const PALETTE_A = "#2563eb";
 const PALETTE_B = "#dc2626";
@@ -95,6 +97,10 @@ export function CapperComparisonWorkspace({
   const [data, setData] = useState<{ a: CapperComparisonProfile; b: CapperComparisonProfile } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Same whole-workspace fullscreen target as the other two /charts modes -
+  // see use-fullscreen.ts. Declared before the "need 2+ cappers" early
+  // return below so hook order stays fixed regardless of that branch.
+  const fs = useFullscreen<HTMLDivElement>();
 
   useEffect(() => {
     if (!capperAId || !capperBId) return;
@@ -137,7 +143,7 @@ export function CapperComparisonWorkspace({
   }
 
   return (
-    <div className="space-y-4">
+    <div ref={fs.ref} className={(fs.isFullscreen ? FULLSCREEN_SURFACE_CLASS + " " : "") + "space-y-4"}>
       <div className="rounded-card bg-card p-4 shadow-soft">
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 text-sm">
@@ -161,19 +167,22 @@ export function CapperComparisonWorkspace({
             </select>
           </div>
 
-          <div className="ml-auto flex gap-1 rounded-full bg-muted p-1">
-            {(["overlay", "split"] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setView(mode)}
-                className={
-                  "rounded-full px-3 py-1 text-xs font-medium capitalize transition " +
-                  (view === mode ? "bg-card text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")
-                }
-              >
-                {mode}
-              </button>
-            ))}
+          <div className="ml-auto flex items-center gap-2">
+            <div className="flex gap-1 rounded-full bg-muted p-1">
+              {(["overlay", "split"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setView(mode)}
+                  className={
+                    "rounded-full px-3 py-1 text-xs font-medium capitalize transition " +
+                    (view === mode ? "bg-card text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")
+                  }
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+            {fs.supported && <FullscreenButton isFullscreen={fs.isFullscreen} onClick={fs.toggle} />}
           </div>
         </div>
 
@@ -313,8 +322,8 @@ export function CapperComparisonWorkspace({
             <ProfileTiles profile={data.a} color={PALETTE_A} />
             <ProfileTiles profile={data.b} color={PALETTE_B} />
           </div>
-          <div className="rounded-card bg-card p-4 shadow-soft">
-            <CapperComparisonChart series={overlaySeries} />
+          <div className="rounded-card bg-card p-4 shadow-soft" onDoubleClick={fs.supported ? fs.toggle : undefined}>
+            <CapperComparisonChart series={overlaySeries} height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 320} />
           </div>
         </>
       )}
@@ -323,14 +332,20 @@ export function CapperComparisonWorkspace({
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-4">
             <ProfileTiles profile={data.a} color={PALETTE_A} />
-            <div className="rounded-card bg-card p-4 shadow-soft">
-              <CapperComparisonChart series={[{ id: "a", label: data.a.capperName, color: PALETTE_A, points: data.a.chartData }]} height={260} />
+            <div className="rounded-card bg-card p-4 shadow-soft" onDoubleClick={fs.supported ? fs.toggle : undefined}>
+              <CapperComparisonChart
+                series={[{ id: "a", label: data.a.capperName, color: PALETTE_A, points: data.a.chartData }]}
+                height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 260}
+              />
             </div>
           </div>
           <div className="space-y-4">
             <ProfileTiles profile={data.b} color={PALETTE_B} />
-            <div className="rounded-card bg-card p-4 shadow-soft">
-              <CapperComparisonChart series={[{ id: "b", label: data.b.capperName, color: PALETTE_B, points: data.b.chartData }]} height={260} />
+            <div className="rounded-card bg-card p-4 shadow-soft" onDoubleClick={fs.supported ? fs.toggle : undefined}>
+              <CapperComparisonChart
+                series={[{ id: "b", label: data.b.capperName, color: PALETTE_B, points: data.b.chartData }]}
+                height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 260}
+              />
             </div>
           </div>
         </div>

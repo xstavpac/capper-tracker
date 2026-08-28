@@ -9,6 +9,8 @@ import { VariableLibrary } from "@/components/model-builder/variable-library";
 import { HistoricalVariableChart, type ChartSeries } from "@/components/charts/historical-variable-chart";
 import { HistoryNote } from "@/components/charts/history-note";
 import { DateRangePicker } from "@/components/charts/date-range-picker";
+import { useFullscreen, FULLSCREEN_CHART_HEIGHT, FULLSCREEN_SURFACE_CLASS } from "@/components/charts/use-fullscreen";
+import { FullscreenButton } from "@/components/charts/fullscreen-button";
 
 // Same restriction as ChartsWorkspace, same reason.
 const CHART_CATEGORIES: VariableCategory[] = ["team_tendencies", "team_stats", "custom_metric"];
@@ -69,6 +71,9 @@ export function TeamComparisonWorkspace({
   const [entries, setEntries] = useState<PlottedEntry[]>([]);
   const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange);
   const [view, setView] = useState<ViewMode>("overlay");
+  // Same whole-workspace fullscreen target as ChartsWorkspace - see its
+  // comment and use-fullscreen.ts.
+  const fs = useFullscreen<HTMLDivElement>();
 
   async function fetchOne(entityId: string, variableId: string, range: DateRange): Promise<VariableTimeSeriesResult> {
     return getVariableSeriesAction(sportKey, variableId, entityId, undefined, range);
@@ -153,7 +158,12 @@ export function TeamComparisonWorkspace({
   const overlaySeries = [...toChartSeries(entriesA, teamA), ...toChartSeries(entriesB, teamB)];
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
+    <div
+      ref={fs.ref}
+      className={
+        (fs.isFullscreen ? FULLSCREEN_SURFACE_CLASS + " " : "") + "grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]"
+      }
+    >
       <div className="space-y-4">
         <div className="rounded-card bg-card p-4 shadow-soft">
           <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Team A</div>
@@ -191,19 +201,22 @@ export function TeamComparisonWorkspace({
         <div className="rounded-card bg-card p-4 shadow-soft">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <DateRangePicker value={dateRange} onChange={handleDateRangeChange} />
-            <div className="flex gap-1 rounded-full bg-muted p-1">
-              {(["overlay", "split"] as ViewMode[]).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setView(mode)}
-                  className={
-                    "rounded-full px-3 py-1 text-xs font-medium capitalize transition " +
-                    (view === mode ? "bg-card text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")
-                  }
-                >
-                  {mode}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1 rounded-full bg-muted p-1">
+                {(["overlay", "split"] as ViewMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setView(mode)}
+                    className={
+                      "rounded-full px-3 py-1 text-xs font-medium capitalize transition " +
+                      (view === mode ? "bg-card text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")
+                    }
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+              {fs.supported && <FullscreenButton isFullscreen={fs.isFullscreen} onClick={fs.toggle} />}
             </div>
           </div>
 
@@ -212,16 +225,24 @@ export function TeamComparisonWorkspace({
               Pick two teams and a variable to start comparing.
             </div>
           ) : view === "overlay" ? (
-            <HistoricalVariableChart series={overlaySeries} />
+            <div onDoubleClick={fs.supported ? fs.toggle : undefined}>
+              <HistoricalVariableChart series={overlaySeries} height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 320} />
+            </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
+              <div onDoubleClick={fs.supported ? fs.toggle : undefined}>
                 <div className="mb-2 text-xs font-semibold text-foreground">{teamA || "Team A"}</div>
-                <HistoricalVariableChart series={toChartSeries(entriesA, teamA)} height={280} />
+                <HistoricalVariableChart
+                  series={toChartSeries(entriesA, teamA)}
+                  height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 280}
+                />
               </div>
-              <div>
+              <div onDoubleClick={fs.supported ? fs.toggle : undefined}>
                 <div className="mb-2 text-xs font-semibold text-foreground">{teamB || "Team B"}</div>
-                <HistoricalVariableChart series={toChartSeries(entriesB, teamB)} height={280} />
+                <HistoricalVariableChart
+                  series={toChartSeries(entriesB, teamB)}
+                  height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 280}
+                />
               </div>
             </div>
           )}

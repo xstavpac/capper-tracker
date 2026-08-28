@@ -9,6 +9,8 @@ import { VariableLibrary } from "@/components/model-builder/variable-library";
 import { HistoricalVariableChart, type ChartSeries } from "@/components/charts/historical-variable-chart";
 import { HistoryNote } from "@/components/charts/history-note";
 import { DateRangePicker } from "@/components/charts/date-range-picker";
+import { useFullscreen, FULLSCREEN_CHART_HEIGHT, FULLSCREEN_SURFACE_CLASS } from "@/components/charts/use-fullscreen";
+import { FullscreenButton } from "@/components/charts/fullscreen-button";
 
 // Team stats/tendencies/custom metrics only - the only entity type with a
 // fixed, known selector today (pitchers have no equivalent static catalog,
@@ -49,6 +51,11 @@ export function ChartsWorkspace({
   const [entity, setEntity] = useState(teamNames[0] ?? "");
   const [series, setSeries] = useState<PlottedSeries[]>([]);
   const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange);
+  // Fullscreens the WHOLE workspace root below (Team select, variable
+  // picker, and the chart together) - not just the chart card - so the
+  // toolbar a user needs to keep adjusting what's plotted stays reachable
+  // without leaving fullscreen. See use-fullscreen.ts.
+  const fs = useFullscreen<HTMLDivElement>();
 
   async function fetchSeries(entityId: string, variableId: string, range: DateRange): Promise<VariableTimeSeriesResult> {
     return getVariableSeriesAction(sportKey, variableId, entityId, undefined, range);
@@ -102,7 +109,12 @@ export function ChartsWorkspace({
     }));
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
+    <div
+      ref={fs.ref}
+      className={
+        (fs.isFullscreen ? FULLSCREEN_SURFACE_CLASS + " " : "") + "grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]"
+      }
+    >
       <div className="space-y-4">
         <div className="rounded-card bg-card p-4 shadow-soft">
           <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Team</div>
@@ -125,8 +137,9 @@ export function ChartsWorkspace({
 
       <div className="space-y-4">
         <div className="rounded-card bg-card p-4 shadow-soft">
-          <div className="mb-3 flex flex-wrap items-center gap-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <DateRangePicker value={dateRange} onChange={handleDateRangeChange} />
+            {fs.supported && <FullscreenButton isFullscreen={fs.isFullscreen} onClick={fs.toggle} />}
           </div>
 
           {series.length === 0 ? (
@@ -134,7 +147,9 @@ export function ChartsWorkspace({
               Pick a team and a variable to start charting.
             </div>
           ) : (
-            <HistoricalVariableChart series={chartSeries} />
+            <div onDoubleClick={fs.supported ? fs.toggle : undefined}>
+              <HistoricalVariableChart series={chartSeries} height={fs.isFullscreen ? FULLSCREEN_CHART_HEIGHT : 320} />
+            </div>
           )}
         </div>
 

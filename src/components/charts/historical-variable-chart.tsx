@@ -129,7 +129,18 @@ function CustomTooltip({
 // they don't draw a ruler but still correctly scale their own line. The
 // hover tooltip always shows every series' exact value regardless of how
 // many axes are visible, so nothing is ever only-approximately readable.
-export function HistoricalVariableChart({ series, height = 320 }: { series: ChartSeries[]; height?: number }) {
+export function HistoricalVariableChart({
+  series,
+  height = 320,
+}: {
+  series: ChartSeries[];
+  // Accepts a vh-based CSS string (e.g. "68vh") as well as a pixel number -
+  // ResponsiveContainer sets it as the wrapping div's inline height style
+  // either way and measures the resulting box with its own ResizeObserver,
+  // so a viewport-relative fullscreen height resizes correctly with zero
+  // extra resize handling of our own. See use-fullscreen.ts.
+  height?: number | string;
+}) {
   // Same reasoning as UnitsChart/WinLossPieChart - Recharts sets grid/tick/
   // brush colors via inline SVG props, not Tailwind classes, so this needs
   // to know the live theme itself.
