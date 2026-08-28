@@ -23,6 +23,12 @@ export type ChartSeries = {
   label: string; // legend/tooltip display name, e.g. "Yankees ERA"
   unit: VariableUnit;
   color: string;
+  // Optional Recharts strokeDasharray (e.g. "6 4") for callers that need to
+  // distinguish multiple series sharing one color (e.g. TeamComparisonWorkspace
+  // varying line style per variable within a team's color). Undefined renders
+  // a normal solid line, so callers like ChartsWorkspace that never set this
+  // are completely unaffected.
+  strokeDasharray?: string;
   points: ChartSeriesPoint[]; // dates need not line up across series - see mergeSeriesForChart
 };
 
@@ -174,6 +180,7 @@ export function HistoricalVariableChart({ series, height = 320 }: { series: Char
             dataKey={s.id}
             name={s.label}
             stroke={s.color}
+            strokeDasharray={s.strokeDasharray}
             dot={data.length <= 30}
             connectNulls={false}
             strokeWidth={2}

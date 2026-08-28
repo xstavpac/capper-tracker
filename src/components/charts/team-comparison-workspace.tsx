@@ -13,7 +13,18 @@ import { DateRangePicker } from "@/components/charts/date-range-picker";
 // Same restriction as ChartsWorkspace, same reason.
 const CHART_CATEGORIES: VariableCategory[] = ["team_tendencies", "team_stats", "custom_metric"];
 
-const PALETTE = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
+// Color communicates TEAM identity here, not variable identity (unlike
+// ChartsWorkspace's PALETTE, which is per-variable since it only ever shows
+// one team). Keyed by slot ("A"/"B"), not by team name, so it stays constant
+// regardless of which team occupies the slot - same dynamic-by-slot approach
+// as capper-comparison-workspace's PALETTE_A/PALETTE_B.
+const TEAM_SLOT_COLOR: Record<TeamSlot, string> = { A: "#2563eb", B: "#dc2626" };
+
+// Within a team's color, multiple variables are told apart by line style
+// instead of hue - cycles by how many variables were already plotted when a
+// new one is added. Undefined (solid) first so the common one-variable-per-
+// team case still renders a plain line.
+const DASH_PATTERNS: (string | undefined)[] = [undefined, "6 4", "2 3", "10 3 2 3"];
 
 type TeamSlot = "A" | "B";
 
@@ -25,6 +36,7 @@ type PlottedEntry = {
   slot: TeamSlot;
   variableId: string;
   color: string;
+  dash: string | undefined;
   result: VariableTimeSeriesResult | null;
   loading: boolean;
   error: string | null;
@@ -80,12 +92,12 @@ export function TeamComparisonWorkspace({
   function addVariable(variableId: string) {
     if (!teamA || !teamB || variableIds.includes(variableId)) return;
 
-    const color = PALETTE[variableIds.length % PALETTE.length];
+    const dash = DASH_PATTERNS[variableIds.length % DASH_PATTERNS.length];
     setVariableIds((prev) => [...prev, variableId]);
     setEntries((prev) => [
       ...prev,
-      { slot: "A", variableId, color, result: null, loading: true, error: null },
-      { slot: "B", variableId, color, result: null, loading: true, error: null },
+      { slot: "A", variableId, color: TEAM_SLOT_COLOR.A, dash, result: null, loading: true, error: null },
+      { slot: "B", variableId, color: TEAM_SLOT_COLOR.B, dash, result: null, loading: true, error: null },
     ]);
 
     fetchIntoSlot("A", teamA, variableId, dateRange);
@@ -131,6 +143,7 @@ export function TeamComparisonWorkspace({
         label: `${teamId} · ${e.result!.variableLabel}`,
         unit: e.result!.unit,
         color: e.color,
+        strokeDasharray: e.dash,
         points: e.result!.points,
       }));
   }
@@ -226,7 +239,6 @@ export function TeamComparisonWorkspace({
                   <div key={variableId} className="rounded-lg bg-muted px-3 py-2 text-sm">
                     <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: a?.color ?? "#999" }} />
                         <span className="font-medium text-foreground">{variable?.label ?? variableId}</span>
                       </div>
                       <button
@@ -243,6 +255,7 @@ export function TeamComparisonWorkspace({
                         { teamId: teamB, entry: b },
                       ].map(({ teamId, entry }) => (
                         <div key={teamId} className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: entry?.color ?? "#999" }} />
                           <span className="font-medium text-foreground">{teamId}</span>
                           {entry?.loading && <span>Loading…</span>}
                           {entry?.error && <span className="text-red-500 dark:text-red-400">{entry.error}</span>}
