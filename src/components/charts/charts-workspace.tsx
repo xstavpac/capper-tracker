@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getModelVariable, type VariableCategory } from "@/lib/model-builder";
+import type { ModelVariableDef, VariableCategory } from "@/lib/model-builder";
 import { getVariableSeriesAction } from "@/server/actions/charts";
 import type { VariableTimeSeriesResult, DateRange } from "@/server/data/historical-variables";
 import { easternDateKey } from "@/lib/dates";
@@ -10,10 +10,10 @@ import { HistoricalVariableChart, type ChartSeries } from "@/components/charts/h
 import { HistoryNote } from "@/components/charts/history-note";
 import { DateRangePicker } from "@/components/charts/date-range-picker";
 
-// Team stats/tendencies only - the only entity type with a fixed, known
-// selector today (pitchers have no equivalent static catalog, and market
-// variables aren't chartable yet - see historical-variables.ts).
-const CHART_CATEGORIES: VariableCategory[] = ["team_tendencies", "team_stats"];
+// Team stats/tendencies/custom metrics only - the only entity type with a
+// fixed, known selector today (pitchers have no equivalent static catalog,
+// and market variables aren't chartable yet - see historical-variables.ts).
+const CHART_CATEGORIES: VariableCategory[] = ["team_tendencies", "team_stats", "custom_metric"];
 
 const PALETTE = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
 
@@ -37,7 +37,15 @@ function defaultDateRange(): DateRange {
   return { start, end };
 }
 
-export function ChartsWorkspace({ sportKey, teamNames }: { sportKey: string; teamNames: string[] }) {
+export function ChartsWorkspace({
+  sportKey,
+  teamNames,
+  variables,
+}: {
+  sportKey: string;
+  teamNames: string[];
+  variables: ModelVariableDef[];
+}) {
   const [entity, setEntity] = useState(teamNames[0] ?? "");
   const [series, setSeries] = useState<PlottedSeries[]>([]);
   const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange);
@@ -112,7 +120,7 @@ export function ChartsWorkspace({ sportKey, teamNames }: { sportKey: string; tea
           <p className="mt-1.5 text-xs text-muted-foreground">Pick a variable below to plot it for this team.</p>
         </div>
 
-        <VariableLibrary onAdd={addSeries} categories={CHART_CATEGORIES} />
+        <VariableLibrary variables={variables} onAdd={addSeries} categories={CHART_CATEGORIES} />
       </div>
 
       <div className="space-y-4">
@@ -135,7 +143,7 @@ export function ChartsWorkspace({ sportKey, teamNames }: { sportKey: string; tea
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Plotted variables</div>
             <div className="space-y-2">
               {series.map((s) => {
-                const variable = getModelVariable(s.variableId);
+                const variable = variables.find((v) => v.id === s.variableId);
                 return (
                   <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
                     <div className="flex min-w-0 items-center gap-2">

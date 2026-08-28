@@ -75,6 +75,7 @@ model User {
   parlayBets              ParlayBet[]
   subscription            Subscription?
   dismissedDuplicatePairs DismissedDuplicatePair[]
+  customMetrics           CustomMetric[]
 
   @@map("users")
 }
@@ -490,6 +491,58 @@ model PitcherStatSnapshot {
 
   @@unique([sportKey, pitcherId, snapshotDate])
   @@map("pitcher_stat_snapshots")
+}
+
+// A user-uploaded metric (Charts' Custom Metrics feature) - the catalog
+// entry (name, whether it's team-scoped, unit) for one imported CSV column.
+// Deliberately narrow/EAV-shaped (CustomMetricPoint below is one row per
+// date+team+value), unlike TeamStatSnapshot/PitcherStatSnapshot's "wide, one
+// column per known stat" shape - a user can upload an arbitrary metric name,
+// so there's no fixed column to add it to. Surfaced in the Charts variable
+// catalog (lib/model-builder.ts's ModelVariableDef shape) alongside the
+// built-in variables at request time - see getUserVariables in
+// server/data/custom-metrics.ts - never as a parallel/separate UI.
+model CustomMetric {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sportKey      String
+  name          String // user-editable label, defaults to the CSV column header
+  unit          String    @default("decimal") // matches lib/model-builder.ts's VariableUnit union
+  // False when the uploaded CSV had no recognized team column - the metric
+  // is then globally applicable (same team regardless of which team is
+  // selected), matching the "no Team column -> global metric" import rule.
+  hasTeamColumn Boolean
+  sourceId      String    @default("user_upload")
+  scope         DataScope @default(PER_USER)
+  createdAt     DateTime  @default(now())
+
+  points CustomMetricPoint[]
+
+  @@index([userId, sportKey])
+  @@map("custom_metrics")
+}
+
+// One (date[, team]) -> value point for a CustomMetric, one row per line of
+// the imported CSV (after validation). teamName is null exactly when the
+// owning CustomMetric.hasTeamColumn is false. The unique constraint is a
+// database-level backstop for the importer's own duplicate-key check (Step 4
+// of the upload flow), NOT the only guard - Postgres treats every NULL
+// teamName as distinct for uniqueness purposes, so this constraint can't
+// catch a duplicate (date, no team) pair for a global metric the way it can
+// for a team-scoped one. The importer's own pre-write duplicate check (see
+// custom-metrics.ts) is what's actually authoritative for both cases; this
+// constraint only adds real extra protection for team-scoped metrics.
+model CustomMetricPoint {
+  id             String       @id @default(cuid())
+  customMetricId String
+  metric         CustomMetric @relation(fields: [customMetricId], references: [id], onDelete: Cascade)
+  snapshotDate   String // "YYYY-MM-DD", Eastern - same convention as every other snapshot table
+  teamName       String?
+  value          Float
+
+  @@unique([customMetricId, snapshotDate, teamName])
+  @@map("custom_metric_points")
 }
 
 model GameResult {

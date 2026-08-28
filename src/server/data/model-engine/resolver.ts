@@ -103,6 +103,18 @@ export async function resolveVariable(
       // per-entity snapshot tables the other three categories share. Not
       // implemented here either - a known, flagged gap, not a guess.
       throw new Error("odds_market variables are not resolvable yet (same known gap as Charts - see historical-variables.ts).");
+    case "custom_metric":
+      // Unreachable in practice: getModelVariable(variableId) above only
+      // ever searches the fixed MODEL_VARIABLES catalog, which custom
+      // metrics are never added to (they're merged in separately, at
+      // request time, only for Charts - see getCustomMetricVariables in
+      // server/data/custom-metrics.ts) - so a real custom metric id would
+      // already have thrown "Unknown variableId" before reaching this
+      // switch at all. Handled explicitly anyway so this stays an
+      // exhaustive, compiler-checked switch over VariableCategory rather
+      // than silently falling through the `default` case if that ever
+      // changed.
+      throw new Error("Custom metrics aren't resolvable as model conditions - they're a Charts-only variable source.");
     default: {
       const exhaustive: never = variable.category;
       throw new Error(`Unhandled variable category "${exhaustive}".`);

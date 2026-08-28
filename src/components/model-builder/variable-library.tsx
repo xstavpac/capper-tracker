@@ -1,19 +1,30 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MODEL_VARIABLES, VARIABLE_CATEGORY_LABELS, type VariableCategory } from "@/lib/model-builder";
+import { VARIABLE_CATEGORY_LABELS, type ModelVariableDef, type VariableCategory } from "@/lib/model-builder";
 
-const CATEGORY_ORDER: VariableCategory[] = ["team_tendencies", "team_stats", "pitcher_stats", "odds_market"];
+const CATEGORY_ORDER: VariableCategory[] = ["team_tendencies", "team_stats", "pitcher_stats", "odds_market", "custom_metric"];
 
+// `variables` is the full catalog to search/list - built-ins
+// (MODEL_VARIABLES) merged with the requesting user's own custom metrics,
+// assembled by the Server Component that renders this (see
+// getCustomMetricVariables in server/data/custom-metrics.ts). Deliberately
+// a prop, not a module-level import of MODEL_VARIABLES the way this
+// component used to work - a plain constant import can never reflect one
+// user's own uploaded metrics without every user's browser bundle somehow
+// containing every user's data, so the merge has to happen server-side,
+// per request, and flow down as a prop instead.
+//
 // `categories` narrows which catalog categories are offered - e.g. Charts'
-// entity-first flow only has a team selector today, so it passes just
-// ["team_tendencies", "team_stats"] (no pitcher entity picker yet, and
-// odds_market isn't chartable - see historical-variables.ts). Defaults to
-// every category, matching the model builder's own unfiltered use.
+// entity-first flow only has a team selector today, so it passes
+// ["team_tendencies", "team_stats", "custom_metric"] (no pitcher entity
+// picker yet, and odds_market isn't chartable - see historical-variables.ts).
 export function VariableLibrary({
+  variables,
   onAdd,
   categories = CATEGORY_ORDER,
 }: {
+  variables: ModelVariableDef[];
   onAdd: (variableId: string) => void;
   categories?: VariableCategory[];
 }) {
@@ -22,8 +33,8 @@ export function VariableLibrary({
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = q
-      ? MODEL_VARIABLES.filter((v) => v.label.toLowerCase().includes(q) || v.description.toLowerCase().includes(q))
-      : MODEL_VARIABLES;
+      ? variables.filter((v) => v.label.toLowerCase().includes(q) || v.description.toLowerCase().includes(q))
+      : variables;
 
     return categories
       .map((category) => ({
@@ -31,7 +42,7 @@ export function VariableLibrary({
         variables: filtered.filter((v) => v.category === category),
       }))
       .filter((group) => group.variables.length > 0);
-  }, [query, categories]);
+  }, [query, categories, variables]);
 
   return (
     <div className="rounded-card bg-card p-4 shadow-soft">
@@ -59,7 +70,14 @@ export function VariableLibrary({
                   title={variable.description}
                   className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm text-muted-foreground transition hover:bg-brand-50 hover:text-brand-700 dark:hover:bg-brand-500/10 dark:hover:text-brand-400"
                 >
-                  <span>{variable.label}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate">{variable.label}</span>
+                    {variable.category === "custom_metric" && (
+                      <span className="shrink-0 rounded-full bg-muted px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Custom
+                      </span>
+                    )}
+                  </span>
                   <span className="text-lg leading-none text-muted-foreground/50 group-hover:text-brand-500">+</span>
                 </button>
               ))}

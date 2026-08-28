@@ -19,13 +19,19 @@ export type VariableSide = "favorite" | "underdog";
 // axis entirely.
 export type VariableScope = "team" | "pitcher" | "market";
 
-export type VariableCategory = "team_tendencies" | "team_stats" | "pitcher_stats" | "odds_market";
+// custom_metric entries are never part of MODEL_VARIABLES itself (that
+// array is the fixed, built-in catalog) - they're built at request time
+// from the requesting user's own CustomMetric rows (see
+// server/data/custom-metrics.ts's getCustomMetricVariables) and merged in
+// alongside MODEL_VARIABLES by the page/workspace that needs them.
+export type VariableCategory = "team_tendencies" | "team_stats" | "pitcher_stats" | "odds_market" | "custom_metric";
 
 export const VARIABLE_CATEGORY_LABELS: Record<VariableCategory, string> = {
   team_tendencies: "MLB team tendencies",
   team_stats: "MLB team stats",
   pitcher_stats: "MLB pitcher stats",
   odds_market: "Odds/market",
+  custom_metric: "Custom metrics",
 };
 
 export type VariableUnit = "percent" | "decimal" | "runs" | "innings" | "odds" | "games";
@@ -50,9 +56,24 @@ export type ModelVariableDef = {
   dataScope: DataScope;
 };
 
-const MLB_STATS_API = "mlb_stats_api";
-const INTERNAL_TENDENCIES = "internal_tendencies";
+// Split into two distinct sourceIds (was one shared "mlb_stats_api" for
+// both) so sourceId is a true 1:1 key into the provider registry
+// (server/data/historical-variables.ts) - team_stats and pitcher_stats need
+// different providers (different snapshot tables/entity shapes), so a
+// shared id would have meant the registry still had to branch internally on
+// category, defeating the point of keying providers by source at all.
+// Exported (not just used internally by MODEL_VARIABLES below) so the
+// provider registry in server/data/historical-variables.ts can key its
+// dispatch map by the exact same symbols the catalog entries carry, instead
+// of duplicating these strings as separate literals that could drift.
+export const MLB_TEAM_STATS_API = "mlb_team_stats_api";
+export const MLB_PITCHER_STATS_API = "mlb_pitcher_stats_api";
+export const INTERNAL_TENDENCIES = "internal_tendencies";
 const ODDS_API = "odds_api";
+// Custom Metrics (Charts) - one provider handles every user-uploaded
+// metric, dispatched the same way as every built-in source; see
+// getCustomMetricSeries in historical-variables.ts.
+export const USER_UPLOAD = "user_upload";
 
 // MLB batter stats were dropped from v1: individual batters can't be
 // reliably auto-resolved per game (no confirmed lineup until close to game
@@ -109,7 +130,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "team",
     unit: "percent",
     description: "Season win percentage.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_TEAM_STATS_API,
     dataScope: "global",
   },
   {
@@ -119,7 +140,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "team",
     unit: "runs",
     description: "Season runs scored minus runs allowed.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_TEAM_STATS_API,
     dataScope: "global",
   },
   {
@@ -129,7 +150,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "team",
     unit: "decimal",
     description: "Team season batting average.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_TEAM_STATS_API,
     dataScope: "global",
   },
   {
@@ -139,7 +160,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "team",
     unit: "decimal",
     description: "Team season on-base percentage.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_TEAM_STATS_API,
     dataScope: "global",
   },
   {
@@ -149,7 +170,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "team",
     unit: "decimal",
     description: "Team season slugging percentage.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_TEAM_STATS_API,
     dataScope: "global",
   },
   {
@@ -159,7 +180,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "team",
     unit: "decimal",
     description: "Team season on-base plus slugging.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_TEAM_STATS_API,
     dataScope: "global",
   },
   {
@@ -169,7 +190,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "team",
     unit: "decimal",
     description: "Team season earned run average.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_TEAM_STATS_API,
     dataScope: "global",
   },
   {
@@ -179,7 +200,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "team",
     unit: "decimal",
     description: "Team season walks + hits per inning pitched.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_TEAM_STATS_API,
     dataScope: "global",
   },
   {
@@ -189,7 +210,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "team",
     unit: "percent",
     description: "Win percentage in home games this season.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_TEAM_STATS_API,
     dataScope: "global",
   },
   {
@@ -199,7 +220,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "team",
     unit: "percent",
     description: "Win percentage in away games this season.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_TEAM_STATS_API,
     dataScope: "global",
   },
   {
@@ -209,7 +230,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "team",
     unit: "percent",
     description: "Win percentage over the team's last 10 games.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_TEAM_STATS_API,
     dataScope: "global",
   },
   {
@@ -219,7 +240,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "team",
     unit: "games",
     description: "Current win/loss streak - positive for a winning streak, negative for a losing streak.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_TEAM_STATS_API,
     dataScope: "global",
   },
 
@@ -231,7 +252,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "pitcher",
     unit: "decimal",
     description: "Probable starter's season earned run average.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_PITCHER_STATS_API,
     dataScope: "global",
   },
   {
@@ -241,7 +262,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "pitcher",
     unit: "decimal",
     description: "Probable starter's season walks + hits per inning pitched.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_PITCHER_STATS_API,
     dataScope: "global",
   },
   {
@@ -251,7 +272,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "pitcher",
     unit: "decimal",
     description: "Probable starter's season strikeout-to-walk ratio.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_PITCHER_STATS_API,
     dataScope: "global",
   },
   {
@@ -261,7 +282,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "pitcher",
     unit: "innings",
     description: "Probable starter's total innings pitched this season.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_PITCHER_STATS_API,
     dataScope: "global",
   },
   {
@@ -271,7 +292,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "pitcher",
     unit: "games",
     description: "Days since the probable starter's last appearance.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_PITCHER_STATS_API,
     dataScope: "global",
   },
   {
@@ -281,7 +302,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "pitcher",
     unit: "decimal",
     description: "Probable starter's season ERA in home games.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_PITCHER_STATS_API,
     dataScope: "global",
   },
   {
@@ -291,7 +312,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     scope: "pitcher",
     unit: "decimal",
     description: "Probable starter's season ERA in road games.",
-    sourceId: MLB_STATS_API,
+    sourceId: MLB_PITCHER_STATS_API,
     dataScope: "global",
   },
 

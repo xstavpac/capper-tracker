@@ -15,6 +15,6 @@ export async function getVariableSeriesAction(
   side: VariableSide | undefined,
   range: DateRange
 ): Promise<VariableTimeSeriesResult> {
-  await requireUser();
-  return getHistoricalVariableSeries(sportKey, variableId, entityId, side, range);
+  const user = await requireUser();
+  return getHistoricalVariableSeries(sportKey, variableId, entityId, side, range, user.id);
 }

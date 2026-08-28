@@ -1,24 +1,42 @@
 // The Charts feature's data adapter: (sportKey, variable, entity, side?,
 // date range) -> a plain time series. This is deliberately NOT a new
-// calculation path - every value returned here comes from the exact same
-// snapshot-row-to-value functions the model builder's backtester already
-// uses (resolveTeamStatFromSnapshot / resolvePitcherStatFromSnapshot /
-// readRate+computeTendencyRates), imported directly rather than
+// calculation path - every built-in value returned here comes from the
+// exact same snapshot-row-to-value functions the model builder's backtester
+// already uses (resolveTeamStatFromSnapshot / resolvePitcherStatFromSnapshot
+// / readRate+computeTendencyRates), imported directly rather than
 // reimplemented, so a value a user sees on a chart is provably the same
 // value that variable would resolve to as a model condition.
 //
 // Query shape: exactly one ranged query per call (`WHERE sportKey = ? AND
 // <entity column> = ? AND snapshotDate BETWEEN ? AND ?`), reading rows that
-// already sit in Postgres from the daily snapshot cron - no external API
-// calls at any point, regardless of how wide the range or how many
-// variables a caller requests. This is the "one ranged query per variable-
-// entity pair" pattern flagged as a hard requirement during the Phase 1
-// audit; do not replace it with a per-day or per-condition query loop.
+// already sit in Postgres from the daily snapshot cron (or, for a custom
+// metric, from the user's own CSV import) - no external API calls at any
+// point, regardless of how wide the range or how many variables a caller
+// requests. This is the "one ranged query per variable-entity pair" pattern
+// flagged as a hard requirement during the Phase 1 audit; do not replace it
+// with a per-day or per-condition query loop.
+//
+// Dispatch is a registry keyed by ModelVariableDef.sourceId (see
+// PROVIDERS below), not a branch on `category` - adding a new data source
+// (built-in or, as of Custom Metrics, user-uploaded) means registering one
+// more provider function here, never adding another `if` to this file's own
+// logic. getHistoricalVariableSeries itself doesn't know or care whether a
+// variable is built-in or custom; neither does any caller.
 import { prisma } from "@/lib/prisma";
-import { getModelVariable, type VariableSide, type VariableUnit } from "@/lib/model-builder";
+import {
+  getModelVariable,
+  MLB_TEAM_STATS_API,
+  MLB_PITCHER_STATS_API,
+  INTERNAL_TENDENCIES,
+  USER_UPLOAD,
+  type ModelVariableDef,
+  type VariableSide,
+  type VariableUnit,
+} from "@/lib/model-builder";
 import { computeTendencyRates } from "@/server/data/team-tendencies";
 import { resolveTeamStatFromSnapshot, resolvePitcherStatFromSnapshot } from "@/server/data/providers/mlb-stats-provider";
 import { readRate } from "@/server/data/providers/tendency-provider";
+import { resolveCustomMetricVariable } from "@/server/data/custom-metrics";
 
 export type VariableTimeSeriesPoint = { date: string; value: number | null };
 
@@ -38,7 +56,8 @@ export type VariableTimeSeriesResult = {
   points: VariableTimeSeriesPoint[];
   // Count of points with a real (non-null) value - what "Historical data: N
   // days available" should display. Grows automatically as the daily
-  // snapshot cron adds rows; never a fixed/precomputed number.
+  // snapshot cron (or a fresh CSV import) adds rows; never a fixed/
+  // precomputed number.
   daysAvailable: number;
   // Count of snapshot rows found in range, regardless of whether their
   // computed value came out null (e.g. MIN_TENDENCY_SAMPLE not met yet).
@@ -71,94 +90,171 @@ function unsupportedResult(
   };
 }
 
+// One provider per sourceId - given the already-resolved catalog entry (so
+// it never needs to re-look-up variableId) plus the same
+// (sportKey, entityId, side, range, userId) every caller already passes.
+// Built-ins and Custom Metrics implement this exact same shape; nothing
+// about the type favors one over the other. userId is only actually read by
+// customMetricProvider (ownership re-check - see there), but every provider
+// accepts it for a consistent call signature, same convention `side`
+// already follows for the providers that don't need it.
+type SeriesProvider = (
+  variable: ModelVariableDef,
+  sportKey: string,
+  entityId: string,
+  side: VariableSide | undefined,
+  range: DateRange,
+  userId: string
+) => Promise<VariableTimeSeriesResult>;
+
+// Role-independent when charting a standalone team - ERA is just ERA,
+// there's no "as favorite" version of it the way tendency rates have.
+// `side` is accepted for a consistent provider signature but not used here.
+async function teamStatsProvider(variable: ModelVariableDef, sportKey: string, entityId: string, side: VariableSide | undefined, range: DateRange): Promise<VariableTimeSeriesResult> {
+  const rows = await prisma.teamStatSnapshot.findMany({
+    where: { sportKey, teamName: entityId, snapshotDate: { gte: range.start, lte: range.end } },
+    orderBy: { snapshotDate: "asc" },
+  });
+  const points = rows.map((row) => ({ date: row.snapshotDate, value: resolveTeamStatFromSnapshot(row, variable.id) }));
+  return {
+    variableId: variable.id,
+    variableLabel: variable.label,
+    unit: variable.unit,
+    entityId,
+    side,
+    supported: true,
+    points,
+    daysAvailable: points.filter((p) => p.value !== null).length,
+    totalSnapshotDays: rows.length,
+  };
+}
+
+async function pitcherStatsProvider(variable: ModelVariableDef, sportKey: string, entityId: string, side: VariableSide | undefined, range: DateRange): Promise<VariableTimeSeriesResult> {
+  const pitcherId = Number(entityId);
+  if (!Number.isFinite(pitcherId)) return unsupportedResult(variable.id, entityId, side, "Invalid pitcher id.");
+  const rows = await prisma.pitcherStatSnapshot.findMany({
+    where: { sportKey, pitcherId, snapshotDate: { gte: range.start, lte: range.end } },
+    orderBy: { snapshotDate: "asc" },
+  });
+  const points = rows.map((row) => ({ date: row.snapshotDate, value: resolvePitcherStatFromSnapshot(row, variable.id) }));
+  return {
+    variableId: variable.id,
+    variableLabel: variable.label,
+    unit: variable.unit,
+    entityId,
+    side,
+    supported: true,
+    points,
+    daysAvailable: points.filter((p) => p.value !== null).length,
+    totalSnapshotDays: rows.length,
+  };
+}
+
+// No side requirement here, unlike the model builder's game-relative
+// condition rows: readRate switches on variableId alone
+// ("tendency_fav_win_pct" vs "tendency_dog_win_pct" are already two
+// distinct catalog entries/two distinct stored rates of the SAME team), and
+// over/under rate are role-independent entirely (accumulated across every
+// game regardless of favorite/dog role - see computeTendencyRates). `side`
+// is still accepted/carried through for callers that want it in the result
+// (e.g. building a model-builder deep link), just never required to
+// compute a value.
+async function tendencyProvider(variable: ModelVariableDef, sportKey: string, entityId: string, side: VariableSide | undefined, range: DateRange): Promise<VariableTimeSeriesResult> {
+  const rows = await prisma.teamTendencySnapshot.findMany({
+    where: { sportKey, teamName: entityId, snapshotDate: { gte: range.start, lte: range.end } },
+    orderBy: { snapshotDate: "asc" },
+  });
+  const points = rows.map((row) => ({ date: row.snapshotDate, value: readRate(computeTendencyRates(row), variable.id) }));
+  return {
+    variableId: variable.id,
+    variableLabel: variable.label,
+    unit: variable.unit,
+    entityId,
+    side,
+    supported: true,
+    points,
+    daysAvailable: points.filter((p) => p.value !== null).length,
+    totalSnapshotDays: rows.length,
+  };
+}
+
+// A user-uploaded metric (see server/data/custom-metrics.ts for the import
+// side). entityId is a team name for a team-scoped metric, or ignored
+// entirely for a global one (variable.id is the CustomMetric's own id,
+// looked up directly - custom metric ids are real cuids, never collide with
+// a built-in variable's short hand-picked id string). teamName is null in
+// the query for a global metric (hasTeamColumn: false at import time
+// guarantees every CustomMetricPoint row for it also has a null teamName),
+// matching the "ignore the selected team" rule from the import spec.
+//
+// userId is checked again here even though getHistoricalVariableSeries
+// below already only reaches this provider via a variable resolved through
+// resolveCustomMetricVariable's own ownership-scoped query - defense in
+// depth against this provider ever being reached some other way in the
+// future, same "re-check ownership at the point of use, don't rely solely
+// on an earlier check" pattern used throughout this app's server/data/*
+// mutations (e.g. deleteCapper).
+async function customMetricProvider(variable: ModelVariableDef, sportKey: string, entityId: string, side: VariableSide | undefined, range: DateRange, userId: string): Promise<VariableTimeSeriesResult> {
+  const metric = await prisma.customMetric.findFirst({ where: { id: variable.id, userId, sportKey } });
+  if (!metric) return unsupportedResult(variable.id, entityId, side, "This custom metric no longer exists.");
+
+  const rows = await prisma.customMetricPoint.findMany({
+    where: {
+      customMetricId: metric.id,
+      teamName: metric.hasTeamColumn ? entityId : null,
+      snapshotDate: { gte: range.start, lte: range.end },
+    },
+    orderBy: { snapshotDate: "asc" },
+  });
+  const points = rows.map((row) => ({ date: row.snapshotDate, value: row.value }));
+  return {
+    variableId: variable.id,
+    variableLabel: variable.label,
+    unit: variable.unit,
+    entityId,
+    side,
+    supported: true,
+    points,
+    daysAvailable: points.length, // every stored point is a real value - no MIN_SAMPLE-style nulling for a custom metric
+    totalSnapshotDays: rows.length,
+  };
+}
+
+const PROVIDERS: Record<string, SeriesProvider> = {
+  [MLB_TEAM_STATS_API]: teamStatsProvider,
+  [MLB_PITCHER_STATS_API]: pitcherStatsProvider,
+  [INTERNAL_TENDENCIES]: tendencyProvider,
+  [USER_UPLOAD]: customMetricProvider,
+  // odds_market variables (sourceId "odds_api") deliberately have no
+  // registered provider - charting them per standalone team would mean
+  // scanning every day's OddsSnapshot blob for a game involving that team
+  // and applying favorite/underdog role-matching per game, a genuinely
+  // different query shape than the per-entity snapshot tables every
+  // registered provider shares. Falls through to the "no provider
+  // registered" branch below, same observable behavior as before this file
+  // had a registry at all.
+};
+
 export async function getHistoricalVariableSeries(
   sportKey: string,
   variableId: string,
   entityId: string,
   side: VariableSide | undefined,
-  range: DateRange
+  range: DateRange,
+  userId: string
 ): Promise<VariableTimeSeriesResult> {
-  const variable = getModelVariable(variableId);
+  // getModelVariable only ever knows about the fixed built-in catalog
+  // (it's a synchronous, prisma-free lookup by design - see
+  // lib/model-builder.ts). A variableId it doesn't recognize might still be
+  // one of THIS user's own Custom Metrics, so that's checked next -
+  // ownership-scoped by resolveCustomMetricVariable itself, so a variableId
+  // belonging to a different user's metric resolves to null here exactly
+  // like a nonexistent one would, not "found but not yours".
+  const variable = getModelVariable(variableId) ?? (await resolveCustomMetricVariable(userId, variableId));
   if (!variable) return unsupportedResult(variableId, entityId, side, "Unknown variable.");
 
-  if (variable.category === "team_stats") {
-    // Role-independent when charting a standalone team - ERA is just ERA,
-    // there's no "as favorite" version of it the way tendency rates have.
-    // `side` is accepted for a consistent call signature but not used here.
-    const rows = await prisma.teamStatSnapshot.findMany({
-      where: { sportKey, teamName: entityId, snapshotDate: { gte: range.start, lte: range.end } },
-      orderBy: { snapshotDate: "asc" },
-    });
-    const points = rows.map((row) => ({ date: row.snapshotDate, value: resolveTeamStatFromSnapshot(row, variableId) }));
-    return {
-      variableId,
-      variableLabel: variable.label,
-      unit: variable.unit,
-      entityId,
-      side,
-      supported: true,
-      points,
-      daysAvailable: points.filter((p) => p.value !== null).length,
-      totalSnapshotDays: rows.length,
-    };
-  }
+  const provider = PROVIDERS[variable.sourceId];
+  if (!provider) return unsupportedResult(variableId, entityId, side, "Charting isn't available yet for this variable.");
 
-  if (variable.category === "pitcher_stats") {
-    const pitcherId = Number(entityId);
-    if (!Number.isFinite(pitcherId)) return unsupportedResult(variableId, entityId, side, "Invalid pitcher id.");
-    const rows = await prisma.pitcherStatSnapshot.findMany({
-      where: { sportKey, pitcherId, snapshotDate: { gte: range.start, lte: range.end } },
-      orderBy: { snapshotDate: "asc" },
-    });
-    const points = rows.map((row) => ({ date: row.snapshotDate, value: resolvePitcherStatFromSnapshot(row, variableId) }));
-    return {
-      variableId,
-      variableLabel: variable.label,
-      unit: variable.unit,
-      entityId,
-      side,
-      supported: true,
-      points,
-      daysAvailable: points.filter((p) => p.value !== null).length,
-      totalSnapshotDays: rows.length,
-    };
-  }
-
-  if (variable.category === "team_tendencies") {
-    // No side requirement here, unlike the model builder's game-relative
-    // condition rows: readRate switches on variableId alone
-    // ("tendency_fav_win_pct" vs "tendency_dog_win_pct" are already two
-    // distinct catalog entries/two distinct stored rates of the SAME team),
-    // and over/under rate are role-independent entirely (accumulated across
-    // every game regardless of favorite/dog role - see computeTendencyRates).
-    // `side` is still accepted/carried through for callers that want it in
-    // the result (e.g. building a model-builder deep link), just never
-    // required to compute a value.
-    const rows = await prisma.teamTendencySnapshot.findMany({
-      where: { sportKey, teamName: entityId, snapshotDate: { gte: range.start, lte: range.end } },
-      orderBy: { snapshotDate: "asc" },
-    });
-    const points = rows.map((row) => ({ date: row.snapshotDate, value: readRate(computeTendencyRates(row), variableId) }));
-    return {
-      variableId,
-      variableLabel: variable.label,
-      unit: variable.unit,
-      entityId,
-      side,
-      supported: true,
-      points,
-      daysAvailable: points.filter((p) => p.value !== null).length,
-      totalSnapshotDays: rows.length,
-    };
-  }
-
-  // odds_market: deliberately out of scope for this pass. These variables
-  // are properties of a specific matchup ("the favorite's moneyline"), read
-  // from OddsSnapshot's one-JSON-blob-per-day-per-sport shape - charting them
-  // per standalone team would mean scanning every day's blob for a game
-  // involving that team and applying favorite/underdog role-matching per
-  // game, a genuinely different query shape than the per-entity snapshot
-  // tables the other three categories share. Flagged as a known gap rather
-  // than guessed at.
-  return unsupportedResult(variableId, entityId, side, "Charting isn't available yet for odds/market variables.");
+  return provider(variable, sportKey, entityId, side, range, userId);
 }

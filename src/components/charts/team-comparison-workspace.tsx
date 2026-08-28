@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getModelVariable, type VariableCategory } from "@/lib/model-builder";
+import type { ModelVariableDef, VariableCategory } from "@/lib/model-builder";
 import { getVariableSeriesAction } from "@/server/actions/charts";
 import type { VariableTimeSeriesResult, DateRange } from "@/server/data/historical-variables";
 import { easternDateKey } from "@/lib/dates";
@@ -11,7 +11,7 @@ import { HistoryNote } from "@/components/charts/history-note";
 import { DateRangePicker } from "@/components/charts/date-range-picker";
 
 // Same restriction as ChartsWorkspace, same reason.
-const CHART_CATEGORIES: VariableCategory[] = ["team_tendencies", "team_stats"];
+const CHART_CATEGORIES: VariableCategory[] = ["team_tendencies", "team_stats", "custom_metric"];
 
 const PALETTE = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
 
@@ -38,7 +38,15 @@ function defaultDateRange(): DateRange {
 
 type ViewMode = "overlay" | "split";
 
-export function TeamComparisonWorkspace({ sportKey, teamNames }: { sportKey: string; teamNames: string[] }) {
+export function TeamComparisonWorkspace({
+  sportKey,
+  teamNames,
+  variables,
+}: {
+  sportKey: string;
+  teamNames: string[];
+  variables: ModelVariableDef[];
+}) {
   const [teamA, setTeamA] = useState(teamNames[0] ?? "");
   const [teamB, setTeamB] = useState(teamNames[1] ?? teamNames[0] ?? "");
   // Order of selection - the source of truth for "what's being compared".
@@ -163,7 +171,7 @@ export function TeamComparisonWorkspace({ sportKey, teamNames }: { sportKey: str
           <p className="mt-1.5 text-xs text-muted-foreground">Pick a variable below to plot it for both teams.</p>
         </div>
 
-        <VariableLibrary onAdd={addVariable} categories={CHART_CATEGORIES} />
+        <VariableLibrary variables={variables} onAdd={addVariable} categories={CHART_CATEGORIES} />
       </div>
 
       <div className="space-y-4">
@@ -211,7 +219,7 @@ export function TeamComparisonWorkspace({ sportKey, teamNames }: { sportKey: str
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Plotted variables</div>
             <div className="space-y-3">
               {variableIds.map((variableId) => {
-                const variable = getModelVariable(variableId);
+                const variable = variables.find((v) => v.id === variableId);
                 const a = entriesA.find((e) => e.variableId === variableId);
                 const b = entriesB.find((e) => e.variableId === variableId);
                 return (

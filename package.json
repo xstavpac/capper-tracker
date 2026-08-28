@@ -19,6 +19,7 @@
     "@supabase/supabase-js": "^2.112.2",
     "clsx": "^2.1.1",
     "next": "14.2.35",
+    "papaparse": "^5.7.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "@types/papaparse": "^5.5.2",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
