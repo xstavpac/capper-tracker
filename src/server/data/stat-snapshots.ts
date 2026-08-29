@@ -14,6 +14,8 @@
 import { prisma } from "@/lib/prisma";
 import { easternDateKey } from "@/lib/dates";
 import { currentMlbSeason, mlbTeamNameById } from "@/server/data/mlb-stats";
+import { currentNflSeason } from "@/server/data/nfl-team-stats";
+import { buildNflTeamStatRows } from "@/server/data/nfl-team-stat-snapshots";
 
 const MLB_SPORT_KEY = "baseball_mlb";
 
@@ -302,4 +304,79 @@ export async function capturePitcherStatSnapshots(
   );
 
   return { starters: starterCount, pitcherSnapshots: rows.length };
+}
+
+// ---------------------------------------------------------------------------
+// NFL team-stat snapshots (nflverse)
+// ---------------------------------------------------------------------------
+//
+// The NFL counterpart to captureTeamStatSnapshots above, but a completely
+// different pipeline: no MLB Stats API equivalent exists for NFL, so this
+// reads nflverse's static CSV release files over plain HTTP. These are not
+// metered API calls - no key, no rate limit, no per-request cost - so unlike
+// the Odds API fetches elsewhere there is nothing to throttle or conserve,
+// and it runs unconditionally on every refresh-scores pass (same "piggyback
+// the existing cron, don't add a schedule entry" choice as the MLB snapshots).
+//
+// Rows land in NflTeamStatSnapshot (its own table, NOT a sport-discriminated
+// TeamStatSnapshot - the schemas barely overlap). See
+// server/data/nfl-team-stat-snapshots.ts for the pure CSV -> row transform
+// (joins stats_team_week to games.csv for dates/scores, self-joins on
+// game_id for allowed-side stats) and server/data/nfl-team-stats.ts for the
+// abbreviation -> full-name map.
+//
+// Data source: nflverse (github.com/nflverse/nflverse-data), CC-BY-4.0 -
+// attribution is surfaced in the Charts UI.
+const NFLVERSE_GAMES_URL =
+  "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv";
+const nflverseStatsTeamWeekUrl = (season: number) =>
+  `https://github.com/nflverse/nflverse-data/releases/download/stats_team/stats_team_week_${season}.csv`;
+
+export async function captureNflTeamStatSnapshots(): Promise<{ rowsWritten: number; errors: number }> {
+  const season = currentNflSeason();
+
+  const [statsRes, gamesRes] = await Promise.all([
+    fetch(nflverseStatsTeamWeekUrl(season), { cache: "no-store" }),
+    fetch(NFLVERSE_GAMES_URL, { cache: "no-store" }),
+  ]);
+
+  // Expected, not an error: nflverse has no preseason data in this dataset
+  // and does not create stats_team_week_{season}.csv until Week 1 of the
+  // regular season, so this 404s for the entire preseason / early-week
+  // window every year. Succeed with zero rows written - the first cron run
+  // after Week 1 populates the file and this picks it up with no code change.
+  if (statsRes.status === 404) return { rowsWritten: 0, errors: 0 };
+
+  if (!statsRes.ok || !gamesRes.ok) {
+    console.error(
+      `[nfl-team-stats] nflverse fetch failed - stats_team_week_${season}=${statsRes.status}, games.csv=${gamesRes.status}`
+    );
+    return { rowsWritten: 0, errors: 1 };
+  }
+
+  const [statsCsv, gamesCsv] = await Promise.all([statsRes.text(), gamesRes.text()]);
+  const { rows, errors } = buildNflTeamStatRows(statsCsv, gamesCsv);
+
+  // Fail loudly per bad row (unmappable team, game_id missing from
+  // schedules, missing opponent row, malformed row) - but one bad row never
+  // aborts the run, same skip-and-continue partial-failure handling
+  // captureTeamStatSnapshots uses for a team missing from the MLB response.
+  for (const err of errors) {
+    console.error(`[nfl-team-stats] ${err.kind}${err.gameId ? ` (${err.gameId})` : ""}: ${err.detail}`);
+  }
+
+  // Upsert keyed on (team, gameId) so a nightly re-fetch of the current
+  // season's file never duplicates, and a revised source row (nflverse
+  // restates stats during the week) updates the existing snapshot in place.
+  await Promise.all(
+    rows.map((row) =>
+      prisma.nflTeamStatSnapshot.upsert({
+        where: { team_gameId: { team: row.team, gameId: row.gameId } },
+        update: row,
+        create: row,
+      })
+    )
+  );
+
+  return { rowsWritten: rows.length, errors: errors.length };
 }

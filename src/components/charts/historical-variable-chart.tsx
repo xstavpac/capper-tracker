@@ -59,6 +59,15 @@ function formatValueForUnit(value: number, unit: VariableUnit): string {
     case "innings":
     case "games":
       return value.toFixed(1);
+    // NFL box-score units - whole numbers. "yards" gets a thousands
+    // separator (season totals reach the thousands); "points"/"count" are
+    // small enough not to need one. "count" can be a signed integer
+    // (turnover margin).
+    case "yards":
+      return Math.round(value).toLocaleString();
+    case "points":
+    case "count":
+      return String(Math.round(value));
     default:
       return String(value);
   }
@@ -132,6 +141,7 @@ function CustomTooltip({
 export function HistoricalVariableChart({
   series,
   height = 320,
+  emptyMessage = "No historical data available for the selected range yet.",
 }: {
   series: ChartSeries[];
   // Accepts a vh-based CSS string (e.g. "68vh") as well as a pixel number -
@@ -140,6 +150,10 @@ export function HistoricalVariableChart({
   // so a viewport-relative fullscreen height resizes correctly with zero
   // extra resize handling of our own. See use-fullscreen.ts.
   height?: number | string;
+  // What to show when no plotted series has a single real value in range.
+  // Defaulted, so existing MLB call sites are unaffected; NFL passes a
+  // sport-aware message (see ChartsWorkspace).
+  emptyMessage?: string;
 }) {
   // Same reasoning as UnitsChart/WinLossPieChart - Recharts sets grid/tick/
   // brush colors via inline SVG props, not Tailwind classes, so this needs
@@ -155,10 +169,10 @@ export function HistoricalVariableChart({
   if (visibleSeries.length === 0) {
     return (
       <div
-        className="flex items-center justify-center rounded-card border border-dashed border-border text-sm text-muted-foreground"
+        className="flex items-center justify-center rounded-card border border-dashed border-border px-4 text-center text-sm text-muted-foreground"
         style={{ height }}
       >
-        No historical data available for the selected range yet.
+        {emptyMessage}
       </div>
     );
   }

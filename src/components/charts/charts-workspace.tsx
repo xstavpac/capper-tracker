@@ -43,10 +43,14 @@ export function ChartsWorkspace({
   sportKey,
   teamNames,
   variables,
+  emptyMessage,
 }: {
   sportKey: string;
   teamNames: string[];
   variables: ModelVariableDef[];
+  // Shown in place of an empty chart - sport-aware, supplied by
+  // ChartsModeSwitcher. Undefined falls back to the chart's default wording.
+  emptyMessage?: string;
 }) {
   const [entity, setEntity] = useState(teamNames[0] ?? "");
   const [series, setSeries] = useState<PlottedSeries[]>([]);
@@ -148,7 +152,11 @@ export function ChartsWorkspace({
             </div>
           ) : (
             <div onDoubleClick={fs.supported ? fs.toggle : undefined}>
-              <HistoricalVariableChart series={chartSeries} height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 320} />
+              <HistoricalVariableChart
+                series={chartSeries}
+                height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 320}
+                emptyMessage={emptyMessage}
+              />
             </div>
           )}
         </div>
@@ -168,7 +176,7 @@ export function ChartsWorkspace({
                       <span className="text-muted-foreground">{variable?.label ?? s.variableId}</span>
                       {s.loading && <span className="text-xs text-muted-foreground">Loading…</span>}
                       {s.error && <span className="text-xs text-red-500 dark:text-red-400">{s.error}</span>}
-                      {s.result && !s.loading && <HistoryNote result={s.result} />}
+                      {s.result && !s.loading && <HistoryNote result={s.result} sport={sportKey} />}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <button

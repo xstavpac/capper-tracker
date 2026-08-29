@@ -493,6 +493,86 @@ model PitcherStatSnapshot {
   @@map("pitcher_stat_snapshots")
 }
 
+// One NFL team's box-score line for one game - the NFL counterpart to
+// TeamStatSnapshot, but deliberately its OWN table rather than a
+// sport-discriminated extension of it. The shapes barely overlap (yards/
+// EPA/downs per GAME here, vs batting/pitching rates per cumulative DAY
+// there); one shared table would mean pervasive nullable-column sprawl and
+// would couple NFL ingestion changes to MLB backtesting. Kept isolated so
+// future NFL-specific metrics never force an MLB-schema redesign.
+//
+// Source: nflverse (github.com/nflverse/nflverse-data, CC-BY-4.0). Captured
+// nightly by captureNflTeamStatSnapshots (server/data/stat-snapshots.ts)
+// from the stats_team_week feed joined to games.csv for date + final score,
+// self-joined on game_id for allowed-side stats. No play-by-play ingestion.
+//
+// team/opponent are the full "City Nickname" form (see nfl-team-stats.ts) so
+// they join directly against GameResult.homeTeam / GameResult.awayTeam.
+//
+// totalYards / totalYardsAllowed are NET (passing + rushing - sack yards
+// lost), matching how NFL box scores report "total yards"; passingYards is
+// the raw gross feed figure (sackYardsLost is kept so net passing is
+// derivable). thirdDownPct(Allowed) and timeOfPossessionSeconds are always
+// null - the stats_team_week feed carries no third-down or possession-time
+// columns (verified against the live file) and computing them needs a
+// play-by-play pipeline this table does not build; left nullable for a
+// future backfill.
+model NflTeamStatSnapshot {
+  id       String  @id @default(cuid())
+  gameId   String // nflverse game_id, e.g. "2025_01_KC_LAC"
+  season   Int
+  week     Int
+  gameType String // games.csv game_type: REG | WC | DIV | CON | SB
+  gameDate String // "YYYY-MM-DD", from games.csv gameday
+  team     String // full "City Nickname" - joins to GameResult
+  opponent String // full "City Nickname"
+  homeAway String // "home" | "away"
+  completed Boolean
+
+  points        Int? // null until the game is final
+  pointsAllowed Int?
+
+  totalYards          Int // NET (passing + rushing - sack yards lost)
+  totalYardsAllowed   Int
+  passingYards        Int // raw feed figure (gross of sacks)
+  passingYardsAllowed Int
+  rushingYards        Int
+  rushingYardsAllowed Int
+  offensivePlays      Int // pass attempts + carries + sacks taken
+  yardsPerPlay        Float? // totalYards / offensivePlays
+
+  firstDowns Int // passing + rushing 1st downs only (feed has no penalty-1st-down column)
+
+  thirdDownPct            Float? // always null - not in stats_team_week
+  thirdDownPctAllowed     Float? // always null - not in stats_team_week
+  timeOfPossessionSeconds Int? //  always null - not in stats_team_week
+
+  turnovers      Int
+  takeaways      Int
+  turnoverMargin Int
+
+  sacks         Int // recorded by this team's defense
+  sacksAllowed  Int // suffered by this team's offense
+  sackYardsLost Int // positive number
+
+  penalties    Int
+  penaltyYards Int
+
+  passingEpa   Float
+  rushingEpa   Float
+  receivingEpa Float
+  offensiveEpa Float // passingEpa + rushingEpa
+
+  sourceId  String    @default("nflverse")
+  scope     DataScope @default(GLOBAL)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([team, gameId])
+  @@index([team, gameDate])
+  @@map("nfl_team_stat_snapshots")
+}
+
 // A user-uploaded metric (Charts' Custom Metrics feature) - the catalog
 // entry (name, whether it's team-scoped, unit) for one imported CSV column.
 // Deliberately narrow/EAV-shaped (CustomMetricPoint below is one row per

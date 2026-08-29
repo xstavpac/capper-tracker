@@ -24,17 +24,34 @@ export type VariableScope = "team" | "pitcher" | "market";
 // from the requesting user's own CustomMetric rows (see
 // server/data/custom-metrics.ts's getCustomMetricVariables) and merged in
 // alongside MODEL_VARIABLES by the page/workspace that needs them.
+//
+// Categories are sport-neutral: NFL team_stats/team_tendencies entries reuse
+// the same category values as MLB's, told apart by the `sport` field below.
+// (Kept sport-neutral deliberately - model-engine/resolver.ts has an
+// exhaustive compiler-checked switch over VariableCategory, and adding
+// NFL-specific category members would force a change there for no gain,
+// since model-engine only ever resolves the hardcoded MLB variable ids.)
 export type VariableCategory = "team_tendencies" | "team_stats" | "pitcher_stats" | "odds_market" | "custom_metric";
 
+// Which sport a built-in catalog entry belongs to. Charts filters the
+// variable library by the sport toggle so MLB and NFL variables never mix
+// in the picker. Custom metrics carry their own sportKey (CustomMetric.
+// sportKey) and are filtered separately - this field is for MODEL_VARIABLES.
+export type VariableSport = "baseball_mlb" | "americanfootball_nfl";
+
 export const VARIABLE_CATEGORY_LABELS: Record<VariableCategory, string> = {
-  team_tendencies: "MLB team tendencies",
-  team_stats: "MLB team stats",
-  pitcher_stats: "MLB pitcher stats",
+  team_tendencies: "Team tendencies",
+  team_stats: "Team stats",
+  pitcher_stats: "Pitcher stats",
   odds_market: "Odds/market",
   custom_metric: "Custom metrics",
 };
 
-export type VariableUnit = "percent" | "decimal" | "runs" | "innings" | "odds" | "games";
+// "yards" / "points" / "count" back NFL box-score variables - integer
+// display, no decimal places (see formatValueForUnit in
+// components/charts/historical-variable-chart.tsx). "count" also covers
+// signed integers like turnover margin.
+export type VariableUnit = "percent" | "decimal" | "runs" | "innings" | "odds" | "games" | "yards" | "points" | "count";
 
 // Whether a variable's data is shared globally (every source in this app
 // today) or scoped to one user (no such source exists yet - a future
@@ -46,6 +63,11 @@ export type ModelVariableDef = {
   id: string;
   label: string;
   category: VariableCategory;
+  // Which sport this built-in variable belongs to - Charts filters the
+  // picker by the sport toggle. Custom metrics (built at request time, never
+  // in MODEL_VARIABLES) don't carry this; they're filtered by their own
+  // CustomMetric.sportKey instead.
+  sport: VariableSport;
   scope: VariableScope;
   unit: VariableUnit;
   description: string;
@@ -70,6 +92,11 @@ export const MLB_TEAM_STATS_API = "mlb_team_stats_api";
 export const MLB_PITCHER_STATS_API = "mlb_pitcher_stats_api";
 export const INTERNAL_TENDENCIES = "internal_tendencies";
 const ODDS_API = "odds_api";
+// NFL per-game team box-score stats, from nflverse (NflTeamStatSnapshot).
+// Resolved by nflTeamStatsProvider in historical-variables.ts. NFL team
+// tendencies reuse INTERNAL_TENDENCIES above - that provider already keys
+// its snapshot query on sportKey, so it serves NFL rows unchanged.
+export const NFL_TEAM_STATS_API = "nfl_team_stats_api";
 // Custom Metrics (Charts) - one provider handles every user-uploaded
 // metric, dispatched the same way as every built-in source; see
 // getCustomMetricSeries in historical-variables.ts.
@@ -85,6 +112,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "tendency_fav_win_pct",
     label: "Win% as favorite",
     category: "team_tendencies",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "percent",
     description: "This team's historical win rate in games where they were the moneyline favorite.",
@@ -95,6 +123,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "tendency_dog_win_pct",
     label: "Win% as underdog",
     category: "team_tendencies",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "percent",
     description: "This team's historical win rate in games where they were the moneyline underdog.",
@@ -105,6 +134,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "tendency_over_rate",
     label: "Over rate",
     category: "team_tendencies",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "percent",
     description: "Share of this team's games that have gone over the total line.",
@@ -115,6 +145,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "tendency_under_rate",
     label: "Under rate",
     category: "team_tendencies",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "percent",
     description: "Share of this team's games that have gone under the total line.",
@@ -127,6 +158,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "team_win_pct",
     label: "Win%",
     category: "team_stats",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "percent",
     description: "Season win percentage.",
@@ -137,6 +169,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "team_run_differential",
     label: "Run differential",
     category: "team_stats",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "runs",
     description: "Season runs scored minus runs allowed.",
@@ -147,6 +180,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "team_batting_avg",
     label: "Batting average",
     category: "team_stats",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "decimal",
     description: "Team season batting average.",
@@ -157,6 +191,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "team_obp",
     label: "On-base percentage",
     category: "team_stats",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "decimal",
     description: "Team season on-base percentage.",
@@ -167,6 +202,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "team_slg",
     label: "Slugging percentage",
     category: "team_stats",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "decimal",
     description: "Team season slugging percentage.",
@@ -177,6 +213,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "team_ops",
     label: "OPS",
     category: "team_stats",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "decimal",
     description: "Team season on-base plus slugging.",
@@ -187,6 +224,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "team_era",
     label: "ERA",
     category: "team_stats",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "decimal",
     description: "Team season earned run average.",
@@ -197,6 +235,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "team_whip",
     label: "WHIP",
     category: "team_stats",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "decimal",
     description: "Team season walks + hits per inning pitched.",
@@ -207,6 +246,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "team_home_win_pct",
     label: "Home win%",
     category: "team_stats",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "percent",
     description: "Win percentage in home games this season.",
@@ -217,6 +257,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "team_away_win_pct",
     label: "Away win%",
     category: "team_stats",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "percent",
     description: "Win percentage in away games this season.",
@@ -227,6 +268,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "team_last10_win_pct",
     label: "Last-10 win%",
     category: "team_stats",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "percent",
     description: "Win percentage over the team's last 10 games.",
@@ -237,6 +279,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "team_streak",
     label: "Current streak",
     category: "team_stats",
+    sport: "baseball_mlb",
     scope: "team",
     unit: "games",
     description: "Current win/loss streak - positive for a winning streak, negative for a losing streak.",
@@ -249,6 +292,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "pitcher_era",
     label: "ERA",
     category: "pitcher_stats",
+    sport: "baseball_mlb",
     scope: "pitcher",
     unit: "decimal",
     description: "Probable starter's season earned run average.",
@@ -259,6 +303,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "pitcher_whip",
     label: "WHIP",
     category: "pitcher_stats",
+    sport: "baseball_mlb",
     scope: "pitcher",
     unit: "decimal",
     description: "Probable starter's season walks + hits per inning pitched.",
@@ -269,6 +314,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "pitcher_kbb",
     label: "K/BB ratio",
     category: "pitcher_stats",
+    sport: "baseball_mlb",
     scope: "pitcher",
     unit: "decimal",
     description: "Probable starter's season strikeout-to-walk ratio.",
@@ -279,6 +325,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "pitcher_innings_pitched",
     label: "Innings pitched (season)",
     category: "pitcher_stats",
+    sport: "baseball_mlb",
     scope: "pitcher",
     unit: "innings",
     description: "Probable starter's total innings pitched this season.",
@@ -289,6 +336,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "pitcher_days_rest",
     label: "Days rest",
     category: "pitcher_stats",
+    sport: "baseball_mlb",
     scope: "pitcher",
     unit: "games",
     description: "Days since the probable starter's last appearance.",
@@ -299,6 +347,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "pitcher_home_era",
     label: "Home ERA",
     category: "pitcher_stats",
+    sport: "baseball_mlb",
     scope: "pitcher",
     unit: "decimal",
     description: "Probable starter's season ERA in home games.",
@@ -309,6 +358,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "pitcher_road_era",
     label: "Road ERA",
     category: "pitcher_stats",
+    sport: "baseball_mlb",
     scope: "pitcher",
     unit: "decimal",
     description: "Probable starter's season ERA in road games.",
@@ -321,6 +371,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "market_favorite_moneyline",
     label: "Favorite's moneyline",
     category: "odds_market",
+    sport: "baseball_mlb",
     scope: "market",
     unit: "odds",
     description: "The favorite's American moneyline price.",
@@ -331,6 +382,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "market_underdog_moneyline",
     label: "Underdog's moneyline",
     category: "odds_market",
+    sport: "baseball_mlb",
     scope: "market",
     unit: "odds",
     description: "The underdog's American moneyline price.",
@@ -341,6 +393,7 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "market_spread",
     label: "Run line (spread)",
     category: "odds_market",
+    sport: "baseball_mlb",
     scope: "market",
     unit: "runs",
     description: "The favorite's run line point (typically -1.5 in MLB).",
@@ -351,10 +404,294 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     id: "market_total_line",
     label: "Total line",
     category: "odds_market",
+    sport: "baseball_mlb",
     scope: "market",
     unit: "runs",
     description: "The game's over/under total line.",
     sourceId: ODDS_API,
+    dataScope: "global",
+  },
+
+  // ---- NFL team tendencies (same derivation as MLB - INTERNAL_TENDENCIES
+  //      provider keys on sportKey - gated on MIN_TENDENCY_SAMPLE, so these
+  //      stay empty until the regular season builds enough decided games) ----
+  {
+    id: "nfl_tendency_fav_win_pct",
+    label: "Win% as favorite",
+    category: "team_tendencies",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "This team's historical win rate in games where they were the moneyline favorite.",
+    sourceId: INTERNAL_TENDENCIES,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_tendency_dog_win_pct",
+    label: "Win% as underdog",
+    category: "team_tendencies",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "This team's historical win rate in games where they were the moneyline underdog.",
+    sourceId: INTERNAL_TENDENCIES,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_tendency_over_rate",
+    label: "Over rate",
+    category: "team_tendencies",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "Share of this team's games that have gone over the total line.",
+    sourceId: INTERNAL_TENDENCIES,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_tendency_under_rate",
+    label: "Under rate",
+    category: "team_tendencies",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "Share of this team's games that have gone under the total line.",
+    sourceId: INTERNAL_TENDENCIES,
+    dataScope: "global",
+  },
+
+  // ---- NFL team stats (per game, nflverse - NflTeamStatSnapshot). Only
+  //      metrics actually populated in that table: no third-down % or time
+  //      of possession (absent from the nflverse stats_team_week feed). ----
+  {
+    id: "nfl_points",
+    label: "Points scored",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "points",
+    description: "Points this team scored in the game.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_points_allowed",
+    label: "Points allowed",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "points",
+    description: "Points this team's opponent scored in the game.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_total_yards",
+    label: "Total yards",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "yards",
+    description: "Net total yards (passing + rushing - sack yards lost).",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_total_yards_allowed",
+    label: "Total yards allowed",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "yards",
+    description: "Net total yards allowed to the opponent.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_passing_yards",
+    label: "Passing yards",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "yards",
+    description: "Gross passing yards.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_passing_yards_allowed",
+    label: "Passing yards allowed",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "yards",
+    description: "Gross passing yards allowed to the opponent.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_rushing_yards",
+    label: "Rushing yards",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "yards",
+    description: "Rushing yards.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_rushing_yards_allowed",
+    label: "Rushing yards allowed",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "yards",
+    description: "Rushing yards allowed to the opponent.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_yards_per_play",
+    label: "Yards per play",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "decimal",
+    description: "Net total yards divided by offensive plays (pass attempts + carries + sacks taken).",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_first_downs",
+    label: "First downs",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "count",
+    description: "Passing + rushing first downs (penalty first downs not included - absent from the feed).",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_turnovers",
+    label: "Turnovers (giveaways)",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "count",
+    description: "Interceptions thrown + fumbles lost.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_takeaways",
+    label: "Takeaways",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "count",
+    description: "Defensive interceptions + opponent fumbles recovered.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_turnover_margin",
+    label: "Turnover margin",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "count",
+    description: "Takeaways minus turnovers (can be negative).",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_sacks",
+    label: "Sacks (by defense)",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "count",
+    description: "Sacks recorded by this team's defense.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_sacks_allowed",
+    label: "Sacks allowed",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "count",
+    description: "Sacks this team's offense suffered.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_penalties",
+    label: "Penalties",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "count",
+    description: "Total penalties committed.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_penalty_yards",
+    label: "Penalty yards",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "yards",
+    description: "Total penalty yards.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_passing_epa",
+    label: "Passing EPA",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "decimal",
+    description: "Total expected points added on pass plays (from nflverse's pre-summed feed).",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_rushing_epa",
+    label: "Rushing EPA",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "decimal",
+    description: "Total expected points added on rush plays.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_receiving_epa",
+    label: "Receiving EPA",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "decimal",
+    description: "Total expected points added credited to receivers.",
+    sourceId: NFL_TEAM_STATS_API,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_offensive_epa",
+    label: "Offensive EPA",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "decimal",
+    description: "Passing EPA + rushing EPA.",
+    sourceId: NFL_TEAM_STATS_API,
     dataScope: "global",
   },
 ];

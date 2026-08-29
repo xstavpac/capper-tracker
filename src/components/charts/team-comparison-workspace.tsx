@@ -56,10 +56,14 @@ export function TeamComparisonWorkspace({
   sportKey,
   teamNames,
   variables,
+  emptyMessage,
 }: {
   sportKey: string;
   teamNames: string[];
   variables: ModelVariableDef[];
+  // Shown in place of an empty chart - sport-aware, supplied by
+  // ChartsModeSwitcher. Undefined falls back to the chart's default wording.
+  emptyMessage?: string;
 }) {
   const [teamA, setTeamA] = useState(teamNames[0] ?? "");
   const [teamB, setTeamB] = useState(teamNames[1] ?? teamNames[0] ?? "");
@@ -229,6 +233,7 @@ export function TeamComparisonWorkspace({
               <HistoricalVariableChart
                 series={overlaySeries}
                 height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 320}
+                emptyMessage={emptyMessage}
               />
             </div>
           ) : (
@@ -238,6 +243,7 @@ export function TeamComparisonWorkspace({
                 <HistoricalVariableChart
                   series={toChartSeries(entriesA, teamA)}
                   height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 280}
+                  emptyMessage={emptyMessage}
                 />
               </div>
               <div onDoubleClick={fs.supported ? fs.toggle : undefined}>
@@ -245,6 +251,7 @@ export function TeamComparisonWorkspace({
                 <HistoricalVariableChart
                   series={toChartSeries(entriesB, teamB)}
                   height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 280}
+                  emptyMessage={emptyMessage}
                 />
               </div>
             </div>
@@ -283,7 +290,7 @@ export function TeamComparisonWorkspace({
                           <span className="font-medium text-foreground">{teamId}</span>
                           {entry?.loading && <span>Loading…</span>}
                           {entry?.error && <span className="text-red-500 dark:text-red-400">{entry.error}</span>}
-                          {entry?.result && !entry.loading && <HistoryNote result={entry.result} />}
+                          {entry?.result && !entry.loading && <HistoryNote result={entry.result} sport={sportKey} />}
                         </div>
                       ))}
                     </div>

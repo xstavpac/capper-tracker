@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { CustomMetric } from "@prisma/client";
-import { USER_UPLOAD, type ModelVariableDef, type VariableUnit } from "@/lib/model-builder";
+import { USER_UPLOAD, type ModelVariableDef, type VariableSport, type VariableUnit } from "@/lib/model-builder";
 import type { ImportRow } from "@/lib/csv-metric-import";
 
 function toModelVariableDef(m: CustomMetric): ModelVariableDef {
@@ -8,6 +8,10 @@ function toModelVariableDef(m: CustomMetric): ModelVariableDef {
     id: m.id,
     label: m.name,
     category: "custom_metric",
+    // A custom metric belongs to the sport it was uploaded under
+    // (CustomMetric.sportKey). getCustomMetricVariables already filters by
+    // sportKey, so this only ever carries a sport Charts supports.
+    sport: m.sportKey as VariableSport,
     // Charts never actually asks a custom metric for a "side" (the
     // favorite/underdog distinction only ever mattered for the now-removed
     // model builder) - "team" is just the closest available VariableScope

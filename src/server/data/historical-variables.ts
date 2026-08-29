@@ -28,6 +28,7 @@ import {
   MLB_TEAM_STATS_API,
   MLB_PITCHER_STATS_API,
   INTERNAL_TENDENCIES,
+  NFL_TEAM_STATS_API,
   USER_UPLOAD,
   type ModelVariableDef,
   type VariableSide,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/model-builder";
 import { computeTendencyRates } from "@/server/data/team-tendencies";
 import { resolveTeamStatFromSnapshot, resolvePitcherStatFromSnapshot } from "@/server/data/providers/mlb-stats-provider";
+import { resolveNflTeamStatFromSnapshot } from "@/server/data/providers/nfl-team-stats-provider";
 import { readRate } from "@/server/data/providers/tendency-provider";
 import { resolveCustomMetricVariable } from "@/server/data/custom-metrics";
 
@@ -116,6 +118,32 @@ async function teamStatsProvider(variable: ModelVariableDef, sportKey: string, e
     orderBy: { snapshotDate: "asc" },
   });
   const points = rows.map((row) => ({ date: row.snapshotDate, value: resolveTeamStatFromSnapshot(row, variable.id) }));
+  return {
+    variableId: variable.id,
+    variableLabel: variable.label,
+    unit: variable.unit,
+    entityId,
+    side,
+    supported: true,
+    points,
+    daysAvailable: points.filter((p) => p.value !== null).length,
+    totalSnapshotDays: rows.length,
+  };
+}
+
+// NflTeamStatSnapshot is one row per team per GAME (not per calendar day
+// like MLB's cumulative snapshots) - so `date` here is the game date and
+// daysAvailable/totalSnapshotDays read as game counts, not day counts. Its
+// own dedicated table has no sportKey column (NFL-only by construction), so
+// `sportKey` is accepted for the shared provider signature but not used, the
+// same way `side` is. entityId is the full "City Nickname" team name, which
+// is exactly what NflTeamStatSnapshot.team stores.
+async function nflTeamStatsProvider(variable: ModelVariableDef, sportKey: string, entityId: string, side: VariableSide | undefined, range: DateRange): Promise<VariableTimeSeriesResult> {
+  const rows = await prisma.nflTeamStatSnapshot.findMany({
+    where: { team: entityId, gameDate: { gte: range.start, lte: range.end } },
+    orderBy: { gameDate: "asc" },
+  });
+  const points = rows.map((row) => ({ date: row.gameDate, value: resolveNflTeamStatFromSnapshot(row, variable.id) }));
   return {
     variableId: variable.id,
     variableLabel: variable.label,
@@ -223,6 +251,7 @@ async function customMetricProvider(variable: ModelVariableDef, sportKey: string
 const PROVIDERS: Record<string, SeriesProvider> = {
   [MLB_TEAM_STATS_API]: teamStatsProvider,
   [MLB_PITCHER_STATS_API]: pitcherStatsProvider,
+  [NFL_TEAM_STATS_API]: nflTeamStatsProvider,
   [INTERNAL_TENDENCIES]: tendencyProvider,
   [USER_UPLOAD]: customMetricProvider,
   // odds_market variables (sourceId "odds_api") deliberately have no

@@ -1,7 +1,7 @@
 import { persistFinalScores } from "@/server/data/grading";
 import { RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { recomputeTeamTendencies, snapshotTeamTendencies } from "@/server/data/team-tendencies";
-import { captureTeamStatSnapshots, capturePitcherStatSnapshots } from "@/server/data/stat-snapshots";
+import { captureTeamStatSnapshots, capturePitcherStatSnapshots, captureNflTeamStatSnapshots } from "@/server/data/stat-snapshots";
 import { syncDecayDeltaPredictions } from "@/server/data/model-engine/decay-delta-predictions";
 
 const MLB_SPORT_KEY = "baseball_mlb";
@@ -52,6 +52,14 @@ export async function GET(req: Request) {
   const teamSnapshots = await captureTeamStatSnapshots();
   const { starters, pitcherSnapshots } = await capturePitcherStatSnapshots();
 
+  // NFL team-stat snapshots from nflverse's static CSV releases (no API key,
+  // no rate limit, no credit cost - nothing to throttle, unlike the Odds
+  // API). Same piggyback-the-cron pattern as the MLB snapshots above. Runs
+  // unconditionally: nflverse has no preseason data and no current-season
+  // file until Week 1, and captureNflTeamStatSnapshots returns zero rows
+  // without error in that window rather than needing a season gate here.
+  const nflTeamSnapshots = await captureNflTeamStatSnapshots();
+
   // Build Step 7 - piggybacked on this same cron run, right after this
   // sport's scores are persisted above, same reasoning as the tendency
   // recompute: a freshly-graded game gets its DecayDeltaPrediction row (or
@@ -65,6 +73,7 @@ export async function GET(req: Request) {
     ok: true,
     results,
     statSnapshots: { sport: MLB_SPORT_KEY, teamSnapshots, pitcherSnapshots, gameStarters: starters },
+    nflTeamSnapshots,
     decayDeltaPredictions,
   });
 }
