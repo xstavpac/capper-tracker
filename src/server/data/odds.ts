@@ -186,6 +186,23 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
   return games;
 }
 
+// Yesterday's cached OddsSnapshot, read-only - never fetches, never writes.
+// The Live tab uses this to carry a game that started last night and is
+// still in progress after midnight onto today's board: getOddsForSport is
+// keyed to today's Eastern date, so once the clock rolls over, a game whose
+// commenceTime was "yesterday" is no longer in the list it returns, and a
+// still-live game would otherwise just vanish (see LiveScoreboard, which
+// drops these again the moment they go Final). Returns [] if last night's
+// snapshot is missing - same "nothing to show" outcome as any other day
+// with no cached odds.
+export async function getYesterdayOddsForSport(sportKey: string): Promise<OddsGame[]> {
+  const fetchDate = easternDateKey(new Date(Date.now() - 86400000));
+  const snapshot = await prisma.oddsSnapshot.findUnique({
+    where: { sportKey_fetchDate: { sportKey, fetchDate } },
+  });
+  return snapshot ? (snapshot.data as unknown as OddsGame[]) : [];
+}
+
 // Runs periodically (see /api/cron/backfill-odds), well after the once-daily
 // seed fetch above. That seed fetch locks in OddsSnapshot for the rest of
 // the day the moment it succeeds - so a game whose sportsbook lines simply

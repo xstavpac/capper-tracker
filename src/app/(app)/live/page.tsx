@@ -1,5 +1,5 @@
 import { requireUser } from "@/server/auth";
-import { getOddsForSport, getLiveScoresForSport, LIVE_SPORTS } from "@/server/data/odds";
+import { getOddsForSport, getYesterdayOddsForSport, getLiveScoresForSport, LIVE_SPORTS } from "@/server/data/odds";
 import { getPicksForGames } from "@/server/data/picks";
 import { pickCategory, betTypeLabel, chipSetForLeague, DEFAULT_CHIP_SET } from "@/server/data/stats";
 import { getSportCategoryPanelData } from "@/server/data/cappers";
@@ -35,8 +35,9 @@ export default async function LivePage({
   // to show, so skip the extra query entirely.
   const hasSportSpecificCategories = chipSetForLeague(sportLabel).length > DEFAULT_CHIP_SET.length;
 
-  const [allOdds, scores, sportCategoryPanel] = await Promise.all([
+  const [allOdds, yesterdayOdds, scores, sportCategoryPanel] = await Promise.all([
     getOddsForSport(activeSport),
+    getYesterdayOddsForSport(activeSport),
     getLiveScoresForSport(activeSport),
     hasSportSpecificCategories ? getSportCategoryPanelData(user.id, sportLabel) : Promise.resolve(null),
   ]);
@@ -52,7 +53,15 @@ export default async function LivePage({
   // sport had no game today, which for NFL/WNBA is most days. getOddsForSport
   // already excludes started games and gates by season, so allOdds here is
   // already the right board contents with no extra filtering needed.
-  const odds = allOdds;
+  //
+  // Plus any game from last night's snapshot that isn't already in today's -
+  // getOddsForSport is keyed to today's Eastern date, so a game that started
+  // yesterday evening drops out of its result at midnight even while still
+  // in progress. LiveScoreboard keeps a carried-over game only while its
+  // score status is "live" and drops it once it goes Final, so this can't
+  // pile stale games onto the board.
+  const todayGameIds = new Set(allOdds.map((g) => g.id));
+  const odds = [...allOdds, ...yesterdayOdds.filter((g) => !todayGameIds.has(g.id))];
 
   // Only ever used to pick which empty-state message to show, never on its
   // own - getOddsForSport can return real cached odds for today even when

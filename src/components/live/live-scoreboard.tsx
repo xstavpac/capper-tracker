@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { OddsGame, ScoreGame } from "@/server/data/odds";
 import { computeBoardPulse, type BoardPulseGame } from "@/lib/board-pulse";
-import { formatEastern, closestByTime } from "@/lib/dates";
+import { formatEastern, closestByTime, easternDateKey } from "@/lib/dates";
+import { orderBoardGames } from "@/components/live/live-scoreboard-ordering";
 import { getTeamColor } from "@/lib/team-colors";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 import { TeamColorBar } from "@/components/live/team-color-bar";
@@ -89,28 +90,22 @@ export function LiveScoreboard({
     };
   }, [activeSport]);
 
-  // Live games first, then soonest-starting first - a currently-live game
-  // (however late it started) is the one a user opening this page actually
-  // cares about most, and burying it below not-yet-started games sorted
-  // purely by start time (the previous, unsorted-array-order behavior) reads
-  // as broken - confirmed against a real case where an in-progress Cubs/
-  // White Sox game (1:11 PM start) rendered below three not-yet-started
-  // games. Recomputed on every render (not memoized) since `scores` is
-  // client state that changes on each poll tick - a game that goes live or
-  // finishes must re-sort immediately, not just on the next navigation.
+  // Recomputed on every render (not memoized) since `scores` is client state
+  // that changes on each poll tick - a game that goes live or finishes must
+  // re-sort / drop off immediately, not just on the next navigation.
+  // easternDateKey(new Date()) is re-evaluated here each render too, so the
+  // "is this yesterday's game" boundary advances on its own for a tab left
+  // open across midnight. See live-scoreboard-ordering.ts for both rules.
   const gamesWithScores = odds.map((game, gameIndex) => ({
     game,
     gameIndex,
     score: matchScoreToGame(scores, game),
   }));
-  const sortedGames = [...gamesWithScores].sort((a, b) => {
-    const aLive = a.score?.status === "live";
-    const bLive = b.score?.status === "live";
-    if (aLive !== bLive) return aLive ? -1 : 1;
-    return new Date(a.game.commenceTime).getTime() - new Date(b.game.commenceTime).getTime();
-  });
+  const sortedGames = orderBoardGames(gamesWithScores, easternDateKey(new Date()));
 
-  const boardPulseGames: BoardPulseGame[] = gamesWithScores.map(({ game, score }) => {
+  // Same set the board actually shows - a stale carried-over game that's
+  // been filtered out must not still count toward the pulse.
+  const boardPulseGames: BoardPulseGame[] = sortedGames.map(({ game, score }) => {
     const homePrice = findMarketAcrossBooks(game, "h2h")?.outcomes.find((o) => o.name === game.homeTeam)?.price ?? null;
     const awayPrice = findMarketAcrossBooks(game, "h2h")?.outcomes.find((o) => o.name === game.awayTeam)?.price ?? null;
     const totalLine = findMarketAcrossBooks(game, "totals")?.outcomes.find((o) => o.name === "Over")?.point ?? null;
