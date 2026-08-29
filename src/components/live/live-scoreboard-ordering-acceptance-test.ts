@@ -9,7 +9,7 @@
 //   npx tsx src/components/live/live-scoreboard-ordering-acceptance-test.ts
 //
 // Exits non-zero if any assertion fails.
-import { orderBoardGames } from "./live-scoreboard-ordering";
+import { orderBoardGames, slateCutoffKey } from "./live-scoreboard-ordering";
 
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {
@@ -94,6 +94,76 @@ const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
     g("yesterday-no-score", "2026-08-28T19:00:00-04:00"),
   ];
   expect("carried-over games that aren't live are dropped", ids(orderBoardGames(board, TODAY)), ["today-1pm"]);
+}
+
+// ---- Rule 3: forward window capped to the next slate ----
+
+{
+  // The Tennessee State case, board form: today has games; the same team
+  // also has a game a week out that the sportsbook already posted a line
+  // for. Only the next slate shows - the far game is dropped.
+  const board = [
+    g("today-sat", "2026-08-29T19:30:00-04:00", "preview"),
+    g("sunday", "2026-08-30T16:00:00-04:00", "preview"),
+    g("next-thu", "2026-09-03T19:00:00-04:00", "preview"),
+    g("next-sat-georgia", "2026-09-05T15:00:00-04:00", "preview"),
+    g("week-later", "2026-09-12T15:00:00-04:00", "preview"),
+  ];
+  expect(
+    "forward window: only this weekend's slate shows, next week + beyond dropped",
+    ids(orderBoardGames(board, TODAY)),
+    ["today-sat", "sunday"]
+  );
+}
+
+{
+  // Off-day: nothing today (Tue 2026-09-01), next games are the Thu-Mon
+  // football week. "Next slate" still shows a full board - the anchor is the
+  // next game day, not today - and a game 11 days out is still dropped.
+  const OFFDAY = "2026-09-01";
+  const board = [
+    g("thu", "2026-09-03T19:00:00-04:00", "preview"),
+    g("fri", "2026-09-04T19:00:00-04:00", "preview"),
+    g("sat", "2026-09-05T15:00:00-04:00", "preview"),
+    g("sun", "2026-09-06T13:00:00-04:00", "preview"),
+    g("mon", "2026-09-07T19:00:00-04:00", "preview"),
+    g("far", "2026-09-12T15:00:00-04:00", "preview"),
+  ];
+  expect(
+    "off-day: the whole upcoming Thu-Mon slate shows, not just 'today' (which has nothing)",
+    ids(orderBoardGames(board, OFFDAY)),
+    ["thu", "fri", "sat", "sun", "mon"]
+  );
+}
+
+{
+  // A still-live carry-over from last night is never pruned by the forward
+  // cap (its start date is behind todayKey, well under the cutoff).
+  const board = [
+    g("today", "2026-08-29T19:00:00-04:00", "preview"),
+    g("crossed-midnight", "2026-08-28T23:00:00-04:00", "live"),
+    g("far", "2026-09-20T15:00:00-04:00", "preview"),
+  ];
+  expect("forward cap keeps the live carry-over, still drops the far game", ids(orderBoardGames(board, TODAY)), [
+    "crossed-midnight",
+    "today",
+  ]);
+}
+
+{
+  // slateCutoffKey directly: anchors on the earliest upcoming game, adds the
+  // lookahead, ignores past games; falls back to todayKey with no upcoming.
+  expect(
+    "slateCutoffKey: anchors on earliest upcoming game + lookahead",
+    slateCutoffKey(["2026-08-29T19:00:00-04:00", "2026-09-05T15:00:00-04:00"], TODAY),
+    "2026-09-02"
+  );
+  expect(
+    "slateCutoffKey: past games don't move the anchor",
+    slateCutoffKey(["2026-08-20T19:00:00-04:00", "2026-09-04T15:00:00-04:00"], TODAY),
+    "2026-09-08"
+  );
+  expect("slateCutoffKey: no upcoming games -> lookahead from today", slateCutoffKey([], TODAY), "2026-09-02");
 }
 
 console.log(`\n${failures === 0 ? "ALL PASS" : failures + " FAILURE(S)"}`);

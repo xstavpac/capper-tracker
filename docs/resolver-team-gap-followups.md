@@ -44,3 +44,29 @@ for `basketball_nba`), re-run the same cross-check: pull every unique
 `homeTeam`/`awayTeam` for that sport, run each through `parseCatalog`, and
 confirm it resolves to `NBA` (or a correctly-handled ambiguous prompt, like
 "Cavaliers" already does).
+
+## 3. FCS-vs-FCS college games are absent from both NCAAF feeds (known gap, no action)
+
+Confirmed 2026-08-29 against both live APIs: an all-FCS matchup (the trigger
+case was Jackson State @ Tennessee State, a SWAC game) appears in **neither**
+`getLiveScoresForSport("americanfootball_ncaaf")` (ESPN's
+`football/college-football` scoreboard - checked across a full week range,
+only the ~8 FBS/FBS-vs-FCS openers came back) **nor**
+`getOddsForSport("americanfootball_ncaaf")` (The Odds API's
+`americanfootball_ncaaf` `/events` list - FBS only). Both NCAAF sources are
+FBS-scoped upstream.
+
+Consequence: a capper pick on an all-FCS game can't be resolved to a real
+game - it lands in `unresolved` / "add manually", same as any team not in
+`NCAAF_SCHOOLS`. This is distinct from the curated-list gap (issue 1) and
+from the widening done in the full-FBS commit - those are about the parser's
+team list; this is about the score/odds feeds themselves not carrying the
+game. No fix planned: it needs an FCS score source wired into
+`getLiveScoresForSport`, and FCS isn't in scope.
+
+The related wrong-game-attach risk (a pick matching a *different*, later game
+for an FCS team that also plays an FBS team - e.g. Tennessee State @ Georgia,
+Sept 5) is separately closed by `withinResolveWindow` in `odds.ts`
+(`MAX_RESOLVE_DATE_DRIFT_DAYS`): a candidate more than 2 Eastern days from
+the pick's import date is rejected, so the resolver returns "no match"
+rather than silently attaching the far game.

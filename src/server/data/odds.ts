@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sameEasternDay, easternDateKey, closestByTime } from "@/lib/dates";
+import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays } from "@/lib/dates";
 import { isSportInSeason, oddsApiSportKey } from "@/lib/sport-seasons";
 
 export type OddsGame = {
@@ -725,6 +725,22 @@ export async function getNflPlayerTdStats(eventId: string): Promise<NflPlayerTdS
   return Array.from(byPlayer.values());
 }
 
+// How many Eastern calendar days a candidate game may sit from `referenceTime`
+// (import time, normally) and still be accepted as the game a pick refers to.
+// getLiveScoresForSport's feeds only span ~yesterday..tomorrow, so for a
+// present-time import this rejects nothing they legitimately return - it's an
+// explicit backstop for the case where a team's game today is missing from
+// the feed (an ingestion gap - e.g. an FCS-vs-FCS college game ESPN's FBS
+// scoreboard omits) but a DIFFERENT game for that same team, a week or more
+// out, IS in the feed. Without the check that lone far-off game gets silently
+// attached to the pick; a clean "couldn't match, add manually" is much safer
+// than a wrong-game attach that then grades against the wrong result.
+const MAX_RESOLVE_DATE_DRIFT_DAYS = 2;
+
+function withinResolveWindow(commenceTime: string, referenceTime: Date): boolean {
+  return withinDateDriftDays(new Date(commenceTime), referenceTime, MAX_RESOLVE_DATE_DRIFT_DAYS);
+}
+
 // Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw
 // pick text) to the real game it refers to, using the yesterday/today/
 // tomorrow schedule window for the given sport. Same-team matchups repeat
@@ -732,6 +748,9 @@ export async function getNflPlayerTdStats(eventId: string): Promise<NflPlayerTdS
 // matches more than one game we prefer a game on the same local calendar day
 // as `referenceTime`, and within that, prefer one that hasn't finished yet -
 // falling back to whichever candidate started closest to `referenceTime`.
+// Every candidate is first constrained to MAX_RESOLVE_DATE_DRIFT_DAYS of
+// `referenceTime` (see withinResolveWindow) so a lone far-future game can't
+// be attached to a pick meant for a game that isn't in the feed.
 export async function resolveGameForNickname(
   sportKey: string,
   nickname: string,
@@ -739,7 +758,9 @@ export async function resolveGameForNickname(
 ): Promise<ScoreGame | null> {
   const games = await getLiveScoresForSport(sportKey);
   const candidates = games.filter(
-    (g) => g.homeTeam.toLowerCase().endsWith(nickname) || g.awayTeam.toLowerCase().endsWith(nickname)
+    (g) =>
+      (g.homeTeam.toLowerCase().endsWith(nickname) || g.awayTeam.toLowerCase().endsWith(nickname)) &&
+      withinResolveWindow(g.commenceTime, referenceTime)
   );
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
@@ -766,10 +787,10 @@ export async function resolveGameForTeams(
   const candidates = games.filter((g) => {
     const home = g.homeTeam.toLowerCase();
     const away = g.awayTeam.toLowerCase();
-    return (
+    const teamsMatch =
       (home.endsWith(nicknameA) && away.endsWith(nicknameB)) ||
-      (home.endsWith(nicknameB) && away.endsWith(nicknameA))
-    );
+      (home.endsWith(nicknameB) && away.endsWith(nicknameA));
+    return teamsMatch && withinResolveWindow(g.commenceTime, referenceTime);
   });
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];

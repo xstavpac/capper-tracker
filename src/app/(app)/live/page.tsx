@@ -6,7 +6,9 @@ import { getSportCategoryPanelData } from "@/server/data/cappers";
 import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
 import { type ExpanderPick } from "@/components/live/game-picks-expander";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
+import { slateCutoffKey } from "@/components/live/live-scoreboard-ordering";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
+import { easternDateKey } from "@/lib/dates";
 
 function tabClass(isActive: boolean) {
   return (
@@ -44,15 +46,16 @@ export default async function LivePage({
   const sportCategoryBreakdown = sportCategoryPanel?.breakdown ?? [];
   const sportCategoryLeaderboards = sportCategoryPanel?.leaderboards ?? {};
 
-  // This is the odds BOARD, not the ticker - it's meant to show the full
-  // window the Odds API has actually posted lines for (a full week at once
-  // for NFL), not just today. A same-day filter briefly lived here (copied
-  // from getLiveTickerGames' "what's happening today" ticker filter, which
-  // is a genuinely different, narrower purpose - see live-ticker.ts), but it
-  // pruned this page's own game list down to nothing on any day the active
-  // sport had no game today, which for NFL/WNBA is most days. getOddsForSport
-  // already excludes started games and gates by season, so allOdds here is
-  // already the right board contents with no extra filtering needed.
+  // This is the odds BOARD, not the ticker - it shows the next SLATE, not
+  // just today (a strict same-day filter briefly lived here, copied from
+  // getLiveTickerGames' narrower "what's happening today" purpose, and
+  // pruned the board to nothing on any day the active sport had no game -
+  // most days for NFL/WNBA). getOddsForSport has no upper date bound and the
+  // Odds API posts NFL/NCAAF lines a full week (marquee matchups months)
+  // ahead, so the board is capped to slateCutoffKey - the next game day plus
+  // a few, see live-scoreboard-ordering.ts. Scoping it here too (not just in
+  // orderBoardGames on the client) keeps getPicksForGames below from
+  // matching picks against a game weeks out that the board won't even show.
   //
   // Plus any game from last night's snapshot that isn't already in today's -
   // getOddsForSport is keyed to today's Eastern date, so a game that started
@@ -60,8 +63,14 @@ export default async function LivePage({
   // in progress. LiveScoreboard keeps a carried-over game only while its
   // score status is "live" and drops it once it goes Final, so this can't
   // pile stale games onto the board.
-  const todayGameIds = new Set(allOdds.map((g) => g.id));
-  const odds = [...allOdds, ...yesterdayOdds.filter((g) => !todayGameIds.has(g.id))];
+  const todayKey = easternDateKey(new Date());
+  const cutoffKey = slateCutoffKey(
+    allOdds.map((g) => g.commenceTime),
+    todayKey
+  );
+  const boardOdds = allOdds.filter((g) => easternDateKey(new Date(g.commenceTime)) <= cutoffKey);
+  const boardGameIds = new Set(boardOdds.map((g) => g.id));
+  const odds = [...boardOdds, ...yesterdayOdds.filter((g) => !boardGameIds.has(g.id))];
 
   // Only ever used to pick which empty-state message to show, never on its
   // own - getOddsForSport can return real cached odds for today even when

@@ -68,6 +68,25 @@ export function easternDayStart(dateKey: string): Date {
   return startOfEasternDay(new Date(dateKey + "T12:00:00.000Z"));
 }
 
+// "YYYY-MM-DD" + `days` calendar days, still "YYYY-MM-DD". Pure calendar
+// math on the key via Date.UTC (which overflows month/year boundaries
+// correctly) - no wall-clock instant is involved, so it's inherently
+// DST-proof, unlike adding 86400000ms.
+export function addDaysToDateKey(dateKey: string, days: number): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+// Do `a` and `b` fall within `maxDays` Eastern calendar days of each other?
+// Compares the two Eastern midnights (not raw timestamps), so it counts
+// whole calendar days regardless of time-of-day - "2 days" means up to the
+// day-before-yesterday / day-after-tomorrow, inclusive, never a rolling 48h.
+// Used to keep a pick's resolved game near its import date (see odds.ts).
+export function withinDateDriftDays(a: Date, b: Date, maxDays: number): boolean {
+  const dayMs = startOfEasternDay(a).getTime() - startOfEasternDay(b).getTime();
+  return Math.round(Math.abs(dayMs) / 86400000) <= maxDays;
+}
+
 // The UTC instant range [start, end) covering every Eastern calendar day
 // from startKey through endKey inclusive - used to scope a DB query's
 // gameTime column to a single day (startKey === endKey) or a date range.
@@ -76,9 +95,7 @@ export function easternDayStart(dateKey: string): Date {
 // year boundaries) rather than a fixed 86400000ms - a range crossing a DST
 // transition still lands on the right wall-clock boundary that way.
 export function easternDateRange(startKey: string, endKey: string): { start: Date; end: Date } {
-  const [y, m, d] = endKey.split("-").map(Number);
-  const nextDayKey = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
-  return { start: easternDayStart(startKey), end: easternDayStart(nextDayKey) };
+  return { start: easternDayStart(startKey), end: easternDayStart(addDaysToDateKey(endKey, 1)) };
 }
 
 // Formats `date` for display, always in Eastern - a thin wrapper so display

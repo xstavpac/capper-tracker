@@ -5,7 +5,7 @@
 //
 // No test framework exists in this repo; this follows the same persisted
 // tsx-script convention parse-catalog-acceptance-test.ts established.
-import { easternDateKey, easternDayStart, easternDateRange } from "./dates";
+import { easternDateKey, easternDayStart, easternDateRange, addDaysToDateKey, withinDateDriftDays } from "./dates";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -67,6 +67,31 @@ function main() {
   {
     const { end } = easternDateRange("2026-12-30", "2026-12-31");
     check("year-boundary range: end instant rolls into next year", easternDateKey(end), "2027-01-01");
+  }
+
+  // addDaysToDateKey - pure calendar-key math, overflows month/year.
+  check("addDaysToDateKey: +4 within a month", addDaysToDateKey("2026-08-29", 4), "2026-09-02");
+  check("addDaysToDateKey: crosses a month boundary", addDaysToDateKey("2026-08-30", 4), "2026-09-03");
+  check("addDaysToDateKey: negative days", addDaysToDateKey("2026-09-02", -4), "2026-08-29");
+  check("addDaysToDateKey: year overflow", addDaysToDateKey("2026-12-30", 3), "2027-01-02");
+
+  // withinDateDriftDays - the resolver's date backstop (odds.ts). The
+  // Tennessee State case: a pick imported Aug 29 must NOT accept a Sept 5
+  // game (7 days out), but must accept a game the same day or a day or two
+  // out (a Thu import for a Sat game).
+  {
+    const importDay = new Date("2026-08-29T15:00:00-04:00");
+    const sameDayGame = new Date("2026-08-29T19:30:00-04:00");
+    const twoDaysOut = new Date("2026-08-31T13:00:00-04:00");
+    const threeDaysOut = new Date("2026-09-01T13:00:00-04:00");
+    const sept5Georgia = new Date("2026-09-05T15:00:00-04:00");
+    check("withinDateDriftDays: same-day game accepted", withinDateDriftDays(sameDayGame, importDay, 2), true);
+    check("withinDateDriftDays: 2 days out accepted", withinDateDriftDays(twoDaysOut, importDay, 2), true);
+    check("withinDateDriftDays: 3 days out rejected (>2)", withinDateDriftDays(threeDaysOut, importDay, 2), false);
+    check("withinDateDriftDays: the Sept 5 Georgia game (7 days out) rejected", withinDateDriftDays(sept5Georgia, importDay, 2), false);
+    // Direction doesn't matter - a stale pick imported a few days after a
+    // game is still 'near' it.
+    check("withinDateDriftDays: 2 days BEFORE reference also accepted", withinDateDriftDays(new Date("2026-08-27T19:00:00-04:00"), importDay, 2), true);
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
