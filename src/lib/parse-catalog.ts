@@ -252,37 +252,48 @@ const DISAMBIGUATED_TEAMS: TeamEntry[] = [
 // form) below for how each of those is actually resolved.
 const KBO_TEAMS = ["wiz", "landers", "dinos", "heroes"];
 
-// NCAAF - Power 4 conferences (SEC/Big Ten/Big 12/ACC) + Notre Dame only,
-// the week-1 curated launch scope (see the NCAAF ecosystem investigation).
-// Each entry is [school-name key, canonical "school mascot" suffix].
+// NCAAF - all 138 FBS schools (every team in ESPN's group-80 roster for the
+// current season, the exact same live feed getEspnScores/resolveGameForNickname
+// resolve picks against). Originally a Power-4-plus-Notre-Dame curated 68 for
+// the week-1 launch; widened to full FBS after a real capper's slate ("Porter
+// PICKS") mixed Group-of-5 games in with Power-4 ones and the missing schools
+// ("Hawaii +5.5", "UNLV -5.5", "Louisiana Tech -3") fell straight through to
+// findPlayerPick's ATP tennis-phantom fallback - see the comment above
+// looksLikeTeamAbbreviation and docs/resolver-team-gap-followups.md.
+//
+// Each entry is [school-name key, canonical ESPN displayName]. A school may
+// have SEVERAL entries - one per spelling a capper realistically types
+// (abbreviations like "fau"/"wku"/"umass", alternate forms like "appalachian
+// state" alongside "app state", "louisiana monroe"/"ulm" alongside "ul
+// monroe") - all pointing at the same canonical.
 //
 // Keyed by SCHOOL name, deliberately never by bare mascot - unlike every
-// pro-sport list above, a bare college mascot is very often shared by
-// multiple schools. Within just this curated 68: Tigers (Auburn/LSU/
-// Missouri/Clemson), Wildcats (Kentucky/Northwestern/Arizona/Kansas State),
-// Bulldogs (Georgia/Mississippi State), Knights (Rutgers/UCF), Devils
-// (Arizona State/Duke), Cougars (Houston/BYU), and Bears (Baylor/California)
-// all collide within this list alone - and Ducks, Bruins, Devils, Cowboys,
-// Raiders, Hurricanes, and Cavaliers each already resolve to an existing
-// NFL/NBA/NHL entry above. A school's own name has none of these problems -
-// confirmed unique across all 68 against the live Odds API roster - so
-// that's the only thing registered here. A bare mascot-only NCAAF pick
-// ("Tigers ML", no school named) is left exactly as it already was before
-// NCAAF existed: unresolved for a mascot nobody else uses either (Wildcats,
-// Bulldogs, Knights, Cougars), or the pre-existing MLB/KBO ("tigers"),
-// NFL/KBO ("bears"), or NHL ("devils") resolution for a mascot that was
-// already meaningful - never guessed at as any particular NCAAF school.
+// pro-sport list above, a bare college mascot is very often shared by many
+// schools (Tigers: Auburn/LSU/Missouri/Clemson/Memphis; Bulldogs: Georgia/
+// Miss State/Fresno State/Louisiana Tech; Aggies: Texas A&M/New Mexico State/
+// Utah State; and so on) - and Ducks, Bruins, Cowboys, Raiders, Hurricanes,
+// Cavaliers, Rebels, Cardinals, Panthers etc. each already resolve to an
+// existing pro entry above. A school's own name has none of these problems.
+// A bare mascot-only NCAAF pick ("Tigers ML", no school named) is left
+// exactly as it was before NCAAF existed - the pre-existing pro/ambiguous
+// resolution, or unresolved - never guessed at as any particular school.
 //
-// The second element of each pair (the canonical suffix) exists because
-// resolveGameForNickname/resolveGameForTeams (odds.ts) match a nickname
-// against the END of the real live-schedule team name - true by
-// construction for every bare mascot above (a real team name is always
-// "City/School Mascot"), but a bare school name is a PREFIX of that name,
-// not a suffix ("lsu" doesn't end "LSU Tigers"). NCAAF_CANONICAL_SUFFIX
-// below exports the translation; its one call site is lookupGame in
-// bulk-picks.ts, applied only for NCAAF - every other sport's nicknames
-// already satisfy endsWith directly and this table is never consulted for
-// them.
+// The canonical (second element) exists because resolveGameForNickname/
+// resolveGameForTeams (odds.ts) match a nickname against the END of the real
+// live-schedule team name via endsWith - a bare school name is a PREFIX of
+// that name, not a suffix ("lsu" doesn't end "LSU Tigers"). It is the exact
+// ESPN displayName, lowercased, so the endsWith is against the same string
+// the score feed returns (keeping the "'" in "hawai'i rainbow warriors" and
+// the "(oh)" in "miami (oh) redhawks"). NCAAF_CANONICAL_SUFFIX below exports
+// the translation; its one call site is lookupGame in bulk-picks.ts, applied
+// only for NCAAF.
+//
+// "liberty" collides with WNBA's New York Liberty (still in WNBA_TEAMS).
+// Both entries exist; the WNBA one is spread into TEAM_SPORT_ENTRIES first,
+// so a bare "Liberty ML" resolves WNBA - the same "let the more prominent
+// team win the bare form" call as cardinals/panthers. The NCAAF entry below
+// still resolves "Liberty Flames", an explicit "NCAAF" code, or a two-team
+// matchup line ("Liberty vs Sam Houston ...").
 const NCAAF_SCHOOLS: [string, string][] = [
   // SEC
   ["alabama", "alabama crimson tide"],
@@ -357,6 +368,85 @@ const NCAAF_SCHOOLS: [string, string][] = [
   ["wake forest", "wake forest demon deacons"],
   // Independent
   ["notre dame", "notre dame fighting irish"],
+
+  // ---- Group of 5 + the remaining independents (full-FBS widening) ----
+  // American (AAC)
+  ["army", "army black knights"],
+  ["charlotte", "charlotte 49ers"],
+  ["east carolina", "east carolina pirates"],
+  ["florida atlantic", "florida atlantic owls"], ["fau", "florida atlantic owls"],
+  ["memphis", "memphis tigers"],
+  ["navy", "navy midshipmen"],
+  ["north texas", "north texas mean green"],
+  ["rice", "rice owls"],
+  ["south florida", "south florida bulls"], ["usf", "south florida bulls"],
+  ["temple", "temple owls"],
+  ["tulane", "tulane green wave"],
+  ["tulsa", "tulsa golden hurricane"],
+  ["uab", "uab blazers"],
+  ["utsa", "utsa roadrunners"],
+  // Conference USA
+  ["delaware", "delaware blue hens"],
+  ["florida international", "florida international panthers"], ["fiu", "florida international panthers"],
+  ["jacksonville state", "jacksonville state gamecocks"],
+  ["kennesaw state", "kennesaw state owls"],
+  ["liberty", "liberty flames"],
+  ["middle tennessee", "middle tennessee blue raiders"], ["mtsu", "middle tennessee blue raiders"], ["middle tennessee state", "middle tennessee blue raiders"],
+  ["missouri state", "missouri state bears"],
+  ["new mexico state", "new mexico state aggies"],
+  ["sam houston", "sam houston bearkats"], ["sam houston state", "sam houston bearkats"],
+  ["western kentucky", "western kentucky hilltoppers"], ["wku", "western kentucky hilltoppers"],
+  // MAC
+  ["akron", "akron zips"],
+  ["ball state", "ball state cardinals"],
+  ["bowling green", "bowling green falcons"],
+  ["buffalo", "buffalo bulls"],
+  ["central michigan", "central michigan chippewas"],
+  ["eastern michigan", "eastern michigan eagles"],
+  ["kent state", "kent state golden flashes"],
+  ["massachusetts", "massachusetts minutemen"], ["umass", "massachusetts minutemen"],
+  ["miami (oh)", "miami (oh) redhawks"], ["miami oh", "miami (oh) redhawks"], ["miami ohio", "miami (oh) redhawks"],
+  ["ohio", "ohio bobcats"],
+  ["sacramento state", "sacramento state hornets"],
+  ["toledo", "toledo rockets"],
+  ["western michigan", "western michigan broncos"],
+  // Mountain West
+  ["air force", "air force falcons"],
+  ["hawaii", "hawai'i rainbow warriors"],
+  ["nevada", "nevada wolf pack"],
+  ["new mexico", "new mexico lobos"],
+  ["north dakota state", "north dakota state bison"],
+  ["northern illinois", "northern illinois huskies"],
+  ["san jose state", "san josé state spartans"], ["san jose st", "san josé state spartans"],
+  ["unlv", "unlv rebels"],
+  ["utep", "utep miners"],
+  ["wyoming", "wyoming cowboys"],
+  // Pac-12
+  ["boise state", "boise state broncos"],
+  ["colorado state", "colorado state rams"],
+  ["fresno state", "fresno state bulldogs"],
+  ["oregon state", "oregon state beavers"],
+  ["san diego state", "san diego state aztecs"],
+  ["texas state", "texas state bobcats"],
+  ["utah state", "utah state aggies"],
+  ["washington state", "washington state cougars"],
+  // Sun Belt
+  ["app state", "app state mountaineers"], ["appalachian state", "app state mountaineers"],
+  ["arkansas state", "arkansas state red wolves"],
+  ["coastal carolina", "coastal carolina chanticleers"],
+  ["georgia southern", "georgia southern eagles"],
+  ["georgia state", "georgia state panthers"],
+  ["james madison", "james madison dukes"],
+  ["louisiana", "louisiana ragin' cajuns"], ["louisiana lafayette", "louisiana ragin' cajuns"], ["ul lafayette", "louisiana ragin' cajuns"], ["ragin cajuns", "louisiana ragin' cajuns"],
+  ["louisiana tech", "louisiana tech bulldogs"], ["la tech", "louisiana tech bulldogs"],
+  ["marshall", "marshall thundering herd"],
+  ["old dominion", "old dominion monarchs"],
+  ["south alabama", "south alabama jaguars"],
+  ["southern miss", "southern miss golden eagles"], ["southern mississippi", "southern miss golden eagles"],
+  ["troy", "troy trojans"],
+  ["ul monroe", "ul monroe warhawks"], ["louisiana monroe", "ul monroe warhawks"], ["ulm", "ul monroe warhawks"], ["la monroe", "ul monroe warhawks"],
+  // Independent (non-Notre Dame)
+  ["uconn", "uconn huskies"], ["connecticut", "uconn huskies"],
 ];
 
 const NCAAF_TEAMS = NCAAF_SCHOOLS.map(([key]) => key);
@@ -472,8 +562,17 @@ function looksLikePick(text: string): boolean {
 // space (the old `\s+`) silently failed to match a real team name. `\s*`
 // still requires the words to be flush against each other or separated by
 // whitespace only, so it can't match across unrelated intervening text.
+//
+// Regex metacharacters in the phrase are escaped first, so "Miami (OH)"
+// matches a literal "(OH)" (not a capture group) and "St." matches a literal
+// dot (not any char - a latent bug the old `\b...\b` form had for the one
+// "st. louis cardinals" entry). Anchors are `(?<!\w) / (?!\w)` rather than
+// `\b` so a phrase that ends in a non-word char - "miami (oh)" ends in ")" -
+// still anchors correctly; for phrases that begin and end with letters
+// (every other entry) these are exactly equivalent to `\b`.
 function teamPhraseRegex(phrase: string): RegExp {
-  return new RegExp("\\b" + phrase.replace(/ /g, "\\s*") + "\\b", "i");
+  const body = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s*");
+  return new RegExp("(?<!\\w)" + body + "(?!\\w)", "i");
 }
 
 // allowNicknameFallback gates the second (fuzzy, team-nickname-only) branch -
@@ -523,7 +622,8 @@ function detectSport(text: string, allowNicknameFallback = true): { sportName: s
     const schoolEnd = match.index + school.length;
     const shadowedByLongerSchool = NCAAF_SCHOOLS.some(([otherSchool]) => {
       if (otherSchool.length <= school.length || !otherSchool.endsWith(school)) return false;
-      return new RegExp("\\b" + otherSchool.replace(/ /g, "\\s*") + "$").test(lower.slice(0, schoolEnd));
+      const body = otherSchool.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s*");
+      return new RegExp("(?<!\\w)" + body + "$").test(lower.slice(0, schoolEnd));
     });
     if (shadowedByLongerSchool) continue;
 
@@ -833,17 +933,63 @@ function resolveAmbiguousPair(text: string): { sportName: string; teamNicknames:
   return { sportName: common[0], teamNicknames: nicknames };
 }
 
+// Words that can legitimately sit right after a team name in a pick - bet
+// types, sides, periods, matchup joiners. Used by the NCAAF prefix-match
+// guard in findTeamNicknames: a capitalized word after a school name that is
+// NOT one of these (and not part of the school's own name) means the capper
+// typed a longer school name we only prefix-matched.
+const NCAAF_TRAILING_TOKEN_OK =
+  /^(ml|moneyline|money|line|pk|pick|tt|f5|ats|vs|v|at|over|under|o|u|spread|spreads|total|totals|runline|puckline|first|second|1h|2h|1q|2q|3q|4q|half|reg|alt|team)$/i;
+
 // Returns every distinct team nickname found in the text, longest-match-first
 // (matches the order TEAM_SPORT_ENTRIES is sorted in). Lets a caller pin an
 // exact matchup when a pick names both teams, e.g. "Dodgers Cubs under 8.5".
+//
+// A phrase whose match sits entirely inside a longer phrase's match at the
+// same spot ("tennessee" inside "middle tennessee", "virginia" inside "west
+// virginia", "new mexico" inside "new mexico state", "florida" inside
+// "florida state") is dropped - it's the same one team named once, not a
+// second opponent, and lookupGame (bulk-picks.ts) would otherwise read the
+// two as a matchup and fail to resolve either. A genuine two-team pick names
+// the sides in non-overlapping spans, so both survive.
 export function findTeamNicknames(text: string, sportName: string): string[] {
   const lower = text.toLowerCase();
-  const found: string[] = [];
+  const hits: { phrase: string; start: number; end: number }[] = [];
   for (const [phrase, sport] of TEAM_SPORT_ENTRIES) {
     if (sport !== sportName) continue;
-    if (teamPhraseRegex(phrase).test(lower) && !found.includes(phrase)) found.push(phrase);
+    const m = teamPhraseRegex(phrase).exec(lower);
+    if (m && !hits.some((h) => h.phrase === phrase)) {
+      hits.push({ phrase, start: m.index, end: m.index + m[0].length });
+    }
   }
-  return found;
+  const kept = hits.filter(
+    (h) =>
+      !hits.some(
+        (o) => o !== h && o.start <= h.start && o.end >= h.end && o.end - o.start > h.end - h.start
+      )
+  );
+
+  // NCAAF school keys are a PREFIX of the real team name (see NCAAF_SCHOOLS),
+  // so a bare "north carolina" match is just as likely the front of a school
+  // we DON'T list - "North Carolina A&T", "North Carolina Central" (both
+  // FCS). When exactly one school matched and the next word in the text is
+  // capitalized, is not part of that school's own name, and is not a bet
+  // keyword, the capper named a different school we only prefix-matched -
+  // drop it so the pick surfaces as "couldn't match, add manually" instead
+  // of being silently attached to the listed school's game. Only the
+  // one-match case is guarded: a genuine two-team line ("North Carolina vs
+  // Clemson") is left alone.
+  if (sportName === "NCAAF" && kept.length === 1) {
+    const only = kept[0];
+    const after = text.slice(only.end).replace(/^[\s.:-]+/, "");
+    const nextWord = after.match(/^([A-Za-z][A-Za-z&.'-]*)/)?.[1];
+    if (nextWord && !NCAAF_TRAILING_TOKEN_OK.test(nextWord)) {
+      const canonical = NCAAF_CANONICAL_SUFFIX[only.phrase] ?? only.phrase;
+      if (!canonical.includes(nextWord.toLowerCase())) return [];
+    }
+  }
+
+  return kept.map((h) => h.phrase);
 }
 
 // Player-based (not team-based) picks - e.g. tennis moneylines like "Tallon

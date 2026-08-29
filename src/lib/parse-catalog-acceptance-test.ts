@@ -25,20 +25,15 @@
 //     REAL (non-KBO) team on either side of each collision - the whole
 //     point of routing through DISAMBIGUATED_TEAMS/AMBIGUOUS_NICKNAMES
 //     instead of just deleting the entries outright.
-//   PART D - NCAAF week-1 curated launch (Power 4 + Notre Dame, 68 schools),
-//     keyed by school name rather than bare mascot (see NCAAF_SCHOOLS'
-//     comment in parse-catalog.ts for why). Verifies all 68 resolve to
-//     NCAAF from realistic capper text, and - the actual point of the
-//     school-name design - that none of the 7 mascots shared by 2+ curated
-//     schools (Tigers/Wildcats/Bulldogs/Knights/Devils/Cougars/Bears) or the
-//     7 mascots already claimed by an existing NFL/NBA/NHL entry
+//   PART D - NCAAF team data, keyed by school name rather than bare mascot
+//     (see NCAAF_SCHOOLS' comment in parse-catalog.ts for why). Verifies
+//     every key resolves to NCAAF from realistic capper text, and - the
+//     actual point of the school-name design - that none of the mascots
+//     shared by 2+ schools (Tigers/Wildcats/Bulldogs/Knights/Devils/Cougars/
+//     Bears) or already claimed by an existing NFL/NBA/NHL entry
 //     (Ducks/Bruins/Devils/Cowboys/Raiders/Hurricanes/Cavaliers) resolve to
-//     NCAAF, or to a different school than before, when typed bare. Where
-//     that bare-mascot behavior was previously undocumented here, this
-//     records what it actually verified to be (some are a pre-existing,
-//     unrelated ATP phantom-pick fallback via findPlayerPick - not
-//     "unresolved" - confirmed live before writing these assertions, not
-//     assumed).
+//     NCAAF, or to a different school than before, when typed bare. Started
+//     as a curated Power-4-plus-Notre-Dame 68; PART H widened it to full FBS.
 //   PART E - Washington/Mystics investigation: an NCAAF school name sharing
 //     a word with a different sport's real team ("Washington Mystics" ->
 //     WNBA, not NCAAF's Washington Huskies) was resolving to the wrong
@@ -383,16 +378,27 @@ function main() {
 
   {
     const keys = Object.keys(NCAAF_CANONICAL_SUFFIX);
-    check("NCAAF curated list: exactly 68 schools", keys.length, 68);
-    check("NCAAF curated list: no duplicate keys", new Set(keys).size, keys.length);
+    // 138 FBS schools, several with more than one key (abbreviations /
+    // alternate spellings a capper types) - see NCAAF_SCHOOLS in
+    // parse-catalog.ts. Assert the total rather than a school count so a
+    // stray dupe or a dropped entry is caught.
+    check("NCAAF list: 159 keys (138 FBS schools + capper-shorthand aliases)", keys.length, 159);
+    check("NCAAF list: no duplicate keys", new Set(keys).size, keys.length);
 
-    // (a) Every one of the 68 schools resolves to NCAAF from realistic
-    // capper text (school name + a bet keyword) - no mascot needed.
+    // (a) Every key resolves to NCAAF from realistic capper text (the key +
+    // a bet keyword) - no mascot needed. "liberty" is the one deliberate
+    // exception: it is shared with WNBA's New York Liberty, which wins the
+    // bare form by list order (see NCAAF_SCHOOLS' comment) - "Liberty
+    // Flames" and two-team lines still resolve NCAAF (covered in PART H).
     const misresolved = keys.filter((key) => {
+      if (key === "liberty") return false;
       const pick = parseCatalog(`Capper\n${key} ML`, []).picks[0];
       return pick?.sportName !== "NCAAF";
     });
-    check("NCAAF curated list: all 68 schools resolve to NCAAF from a bare school-name pick", misresolved, []);
+    check("NCAAF list: every key (except bare 'liberty') resolves to NCAAF from a bare pick", misresolved, []);
+
+    const liberty = parseCatalog(`Capper\nLiberty ML`, []).picks[0];
+    check("bare 'Liberty' resolves WNBA (New York Liberty wins the bare form), not NCAAF", liberty?.sportName, "WNBA");
   }
 
   // (b) The 7 mascots shared by 2+ curated NCAAF schools - typed bare, none
@@ -639,6 +645,127 @@ Mystics +4.5 (1u)`;
     );
     check("Bet Labs: WNBA sub-header picks attributed correctly", byCapper("Bet Labs").length, 1);
     check("All 12 real picks recovered across the 5 sections", picks.length, 12);
+  }
+
+  // ==========================================================================
+  // PART H - NCAAF widened from the curated 68 to full FBS (138 schools)
+  // ==========================================================================
+  // A real "Porter PICKS" slate mixed Group-of-5 games in with Power-4 ones.
+  // Two coordinated bugs:
+  //   1. Schools outside the curated 68 ("Hawaii +5.5", "UNLV -5.5",
+  //      "Louisiana Tech -3") matched no NCAAF key and fell through to
+  //      findPlayerPick's ATP tennis-phantom fallback (a lone capitalized
+  //      word before a spread number looks like "Djokovic -1.5").
+  //   2. "Florida State" also matched the shorter key "florida" (a whole
+  //      word inside it), so a one-team pick produced the nickname pair
+  //      ["florida state","florida"] -> canonicals ["florida state
+  //      seminoles","florida gators"] -> lookupGame treated it as an
+  //      FSU-vs-Florida matchup and found no such game today, failing 4
+  //      real picks with "couldn't match to today's schedule". Fixed by a
+  //      span-subsumption filter in findTeamNicknames (a shorter match
+  //      wholly inside a longer one at the same spot is the same team, not
+  //      an opponent).
+  console.log("\n########## PART H: full-FBS widening (Porter PICKS slate) ##########");
+
+  {
+    // Bug 1 - the three schools that were mistagged ATP, verbatim from the
+    // reported import.
+    for (const [text, nick] of [
+      ["Hawaii +5.5", "hawaii"],
+      ["UNLV -5.5", "unlv"],
+      ["Louisiana Tech -3", "louisiana tech"],
+    ] as [string, string][]) {
+      const pick = parseCatalog(`Porter PICKS\n${text}`, []).picks[0];
+      check(`'${text}' resolves NCAAF, not ATP`, pick?.sportName, "NCAAF");
+      check(`'${text}' captures the right school nickname`, pick?.teamNicknames, [nick]);
+    }
+
+    // Bug 2 - "Florida State" must produce exactly one nickname, not the
+    // phantom ["florida state","florida"] pair that broke schedule matching.
+    const fsuSpread = parseCatalog(`ALGOPICKS\nFlorida State -31`, []).picks[0];
+    check("'Florida State -31' -> single nickname (no phantom 'florida')", fsuSpread?.teamNicknames, ["florida state"]);
+    check(
+      "'Florida State' canonical is the exact ESPN displayName",
+      NCAAF_CANONICAL_SUFFIX["florida state"],
+      "florida state seminoles"
+    );
+
+    const fsuMatchup = parseCatalog(`Porter PICKS\nNew Mexico State vs Florida State over 53`, []).picks[0];
+    check("'New Mexico State vs Florida State' -> both real teams, in order", fsuMatchup?.teamNicknames, [
+      "new mexico state",
+      "florida state",
+    ]);
+    check(
+      "New Mexico State canonical is the exact ESPN displayName",
+      NCAAF_CANONICAL_SUFFIX["new mexico state"],
+      "new mexico state aggies"
+    );
+
+    // Subsumption filter - a shorter school name nested in a longer one is
+    // dropped (it was previously double-reported, working only by luck of
+    // TEAM_SPORT_ENTRIES ordering).
+    const nested: [string, string[]][] = [
+      ["Middle Tennessee +7", ["middle tennessee"]],
+      ["West Virginia Mountaineers -3", ["west virginia"]],
+      ["Eastern Michigan -9.5", ["eastern michigan"]],
+      ["Michigan State vs Ohio State over 45", ["michigan state", "ohio state"]],
+    ];
+    for (const [text, expected] of nested) {
+      const pick = parseCatalog(`Cap\n${text}`, []).picks[0];
+      check(`nested-name subsumption: '${text}'`, pick?.teamNicknames, expected);
+    }
+
+    // Miami (OH) - the one FBS name with parentheses. The key must not
+    // collide with Miami FL, and the parenthesised canonical must still be
+    // matchable (teamPhraseRegex now escapes metacharacters).
+    check("'Miami OH -3' resolves NCAAF via the paren-free alias", parseCatalog(`Cap\nMiami OH -3`, []).picks[0]?.sportName, "NCAAF");
+    check(
+      "'Miami (OH) RedHawks -3' resolves NCAAF (canonical with literal parens)",
+      parseCatalog(`Cap\nMiami (OH) RedHawks -3`, []).picks[0]?.sportName,
+      "NCAAF"
+    );
+    check("bare 'Miami -3' still resolves NCAAF as Miami FL (Hurricanes)", parseCatalog(`Cap\nMiami -3`, []).picks[0]?.teamNicknames, ["miami"]);
+
+    // Liberty (see PART D) - the NCAAF entry still covers the non-bare forms.
+    check("'Liberty Flames -7' resolves NCAAF", parseCatalog(`Cap\nLiberty Flames -7`, []).picks[0]?.sportName, "NCAAF");
+    check(
+      "'Liberty vs Sam Houston over 50' resolves NCAAF via the opponent",
+      parseCatalog(`Cap\nLiberty vs Sam Houston over 50`, []).picks[0]?.sportName,
+      "NCAAF"
+    );
+
+    // Prefix-match guard: a school name we list that is only the FRONT of a
+    // school the capper actually named (NC A&T, NC Central - both FCS, not
+    // in the list) must NOT silently resolve to the listed school's game.
+    // findTeamNicknames returns [] -> the pick surfaces as "add manually".
+    for (const text of ["North Carolina A&T +7", "North Carolina Central -3"]) {
+      const pick = parseCatalog(`Cap\n${text}`, []).picks[0];
+      check(`prefix-match guard: '${text}' captures no nickname`, pick?.teamNicknames, []);
+    }
+    // ...but the real listed schools, their mascots, sides and periods are
+    // all still fine after the guard.
+    for (const [text, nick] of [
+      ["North Carolina -7", "north carolina"],
+      ["North Carolina Tar Heels ML", "north carolina"],
+      ["North Carolina First Half -3", "north carolina"],
+      ["Ohio State Buckeyes -7", "ohio state"],
+      ["Sam Houston State +6", "sam houston state"],
+      ["Boise State Broncos ML", "boise state"],
+    ] as [string, string][]) {
+      const pick = parseCatalog(`Cap\n${text}`, []).picks[0];
+      check(`prefix-match guard: '${text}' still resolves`, pick?.teamNicknames, [nick]);
+    }
+
+    // The reported slate as one paste - every pick lands on NCAAF (or its
+    // capper), none on ATP.
+    const slate = `Porter PICKS
+Eastern Michigan -9.5
+Hawaii +5.5
+UNLV -5.5
+New Mexico State vs Florida State over 53
+NC State +4.5`;
+    const slatePicks = parseCatalog(slate, []).picks;
+    check("Porter slate: 5 picks, all NCAAF", slatePicks.map((p) => p.sportName), ["NCAAF", "NCAAF", "NCAAF", "NCAAF", "NCAAF"]);
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
