@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # postinstall already runs this, but be explicit - tsc needs the
+      # generated @prisma/client types to typecheck.
+      - run: npx prisma generate
+
+      - run: npx tsc --noEmit
+
+      # DATABASE_URL is deliberately unset here, so the six DB-backed
+      # model-engine suites report SKIP rather than fail. See
+      # scripts/run-tests.mjs.
+      - run: npm test
