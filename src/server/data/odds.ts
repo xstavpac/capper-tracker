@@ -1,6 +1,8 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays } from "@/lib/dates";
 import { isSportInSeason, oddsApiSportKey } from "@/lib/sport-seasons";
+import { memoizeWithTtl, LIVE_SCORES_TTL_SECONDS } from "@/server/data/live-scores-cache";
 
 export type OddsGame = {
   id: string;
@@ -314,12 +316,12 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
     tomorrow +
     "&hydrate=linescore";
 
-  // Live scores need to be current on every load, not cached for up to a
-  // minute - Next's fetch Data Cache serves the stale entry to whichever
-  // request lands right after the revalidate window closes (and keeps doing
-  // so until some later request happens to trigger the background refresh),
-  // which is exactly what was showing an old score until a manual reload.
-  const res = await fetch(url, { cache: "no-store" });
+  // No per-fetch cache directive here on purpose: live-score caching is owned
+  // by getLiveScoresForSport's wrapper (see live-scores-cache.ts) - a short
+  // TTL layer that fetches once per sport per window and serves that to every
+  // polling client. Setting no-store here as well would conflict with the
+  // unstable_cache boundary that wrapper puts around this call.
+  const res = await fetch(url);
   if (!res.ok) return [];
 
   const data = await res.json();
@@ -372,10 +374,9 @@ async function getEspnScores(sportPath: string): Promise<ScoreGame[]> {
   const url =
     "https://site.api.espn.com/apis/site/v2/sports/" + sportPath + "/scoreboard?dates=" + yesterday + "-" + tomorrow;
 
-  // Same reasoning as getMlbLiveScores - live scores can't sit on a revalidate
-  // window, since that serves the stale value to the request right after it
-  // expires instead of refreshing until some later request happens to hit it.
-  const res = await fetch(url, { cache: "no-store" });
+  // Same as getMlbLiveScores: no per-fetch cache directive here - caching is
+  // owned by getLiveScoresForSport's short-TTL wrapper (live-scores-cache.ts).
+  const res = await fetch(url);
   if (!res.ok) return [];
 
   const data = await res.json();
@@ -442,7 +443,7 @@ export const RESOLVABLE_SPORT_KEYS = [
 
 // Dispatches to the right free score source for a sport. Add a case here
 // (and a getXLiveScores() above) when wiring up a new sport.
-export async function getLiveScoresForSport(sportKey: string): Promise<ScoreGame[]> {
+async function dispatchLiveScoresForSport(sportKey: string): Promise<ScoreGame[]> {
   if (sportKey === "baseball_mlb") return getMlbLiveScores();
   if (sportKey === "basketball_nba") return getNbaLiveScores();
   if (sportKey === "basketball_wnba") return getWnbaLiveScores();
@@ -462,6 +463,35 @@ export async function getLiveScoresForSport(sportKey: string): Promise<ScoreGame
     return getNcaafLiveScores();
   }
   return [];
+}
+
+// Cross-instance layer: unstable_cache stores the parsed result in the
+// Next.js Data Cache, which on Vercel is shared across every serverless
+// instance - so one upstream fetch per sport per TTL serves the whole fleet.
+// The result is small and the whole point is to be current-ish, so the TTL is
+// short (LIVE_SCORES_TTL_SECONDS, default 15). Tagged so a manual purge is
+// possible if ever needed.
+//
+// Outside a Next request/render context (bare scripts, the tsx acceptance
+// tests) there is no incremental cache and unstable_cache rejects with an
+// invariant - fall back to calling straight through in that case. Real
+// traffic (route handlers, cron routes) always has the context.
+function dataCachedLiveScores(sportKey: string): Promise<ScoreGame[]> {
+  const run = unstable_cache(() => dispatchLiveScoresForSport(sportKey), ["live-scores", sportKey], {
+    revalidate: LIVE_SCORES_TTL_SECONDS,
+    tags: [`live-scores-${sportKey}`],
+  });
+  return run().catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("incrementalCache")) return dispatchLiveScoresForSport(sportKey);
+    throw err;
+  });
+}
+
+// Public entry point. memoizeWithTtl is the process-local layer in front of
+// the Data Cache - see live-scores-cache.ts for why both exist.
+export async function getLiveScoresForSport(sportKey: string): Promise<ScoreGame[]> {
+  return memoizeWithTtl(`live-scores:${sportKey}`, () => dataCachedLiveScores(sportKey));
 }
 
 export type MlbEarlyInningScores = {
