@@ -109,6 +109,10 @@ model Subscription {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
+  // Stripe webhook events that carry no userId in metadata fall back to
+  // looking the subscription up by customer id (see
+  // findUserIdByStripeCustomerId) - without this that's a full-table scan.
+  @@index([stripeCustomerId])
   @@map("subscriptions")
 }
 
@@ -242,7 +246,12 @@ model Pick {
   @@index([userId, sportId])
   @@index([userId, gameTime])
   @@index([userId, gradedAt])
-  @@index([sportId, status]) // supports gradeAllPendingPicks' cross-user scan (WHERE sportId = ? AND status = 'PENDING'), which has no userId to lead with
+  // Supports gradeAllPendingPicks' cross-user scan (WHERE sportId = ? AND
+  // status = 'PENDING' ORDER BY gameTime) and the regrade jobs' bounded
+  // WHERE sportId = ? AND status IN (...) AND gameTime >= cutoff - neither
+  // has a userId to lead with. gameTime is in the index so the ordering /
+  // range filter is served by it, not a post-scan sort.
+  @@index([sportId, status, gameTime])
   @@map("picks")
 }
 
@@ -329,7 +338,10 @@ model Leg {
   updatedAt DateTime @updatedAt
 
   @@unique([parlayBetId, legIndex])
-  @@index([sportId, status]) // mirrors picks' same index - supports the parlay counterpart of gradeAllPendingPicks' cross-parlay scan
+  // Mirrors picks' same index - supports the parlay counterpart of
+  // gradeAllPendingLegs' cross-parlay scan and regradeAllFuzzyMatchedLegs'
+  // bounded gameTime-windowed scan.
+  @@index([sportId, status, gameTime])
   @@map("legs")
 }
 
@@ -686,6 +698,11 @@ model GameResult {
   lineSource String? // "odds_snapshot" today (best-available daily cache) - reserved for a future "closing_capture" value if true near-gametime capture gets built later
 
   @@unique([sportKey, externalId])
+  // Every grading path (findMatchingGameResult per pick, gradeAllPendingPicks'
+  // pre-fetched candidate pool, parlay leg grading, the model-engine
+  // observation queries) filters GameResult by sportKey + a gameDate range.
+  // Without this that's a sequential scan that gets slower as history grows.
+  @@index([sportKey, gameDate])
   @@map("game_results")
 }
 
