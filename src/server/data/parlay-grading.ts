@@ -1,6 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import type { PickStatus } from "@prisma/client";
-import { matchGameResult, resolveOutcome, gradeTouchdownProp } from "@/server/data/grading";
+import {
+  matchGameResult,
+  resolveOutcome,
+  gradeTouchdownProp,
+  regradeLookbackCutoff,
+  REGRADE_MAX_ROWS,
+} from "@/server/data/grading";
 
 // Concurrency cap for the bulk write passes below - same value and same
 // reasoning as grading.ts's BULK_GRADE_CONCURRENCY (not shared/exported
@@ -184,7 +190,14 @@ export async function regradeAllFuzzyMatchedLegs(
   if (!sport) return { checked: 0, upgraded: 0 };
 
   const fuzzyGraded = await prisma.leg.findMany({
-    where: { sport: { id: sport.id }, status: { in: ["WIN", "LOSS", "PUSH"] }, gradedViaFuzzyMatch: true },
+    where: {
+      sport: { id: sport.id },
+      status: { in: ["WIN", "LOSS", "PUSH"] },
+      gradedViaFuzzyMatch: true,
+      gameTime: { gte: regradeLookbackCutoff() },
+    },
+    orderBy: { gameTime: "desc" },
+    take: REGRADE_MAX_ROWS,
   });
   if (fuzzyGraded.length === 0) return { checked: 0, upgraded: 0 };
 

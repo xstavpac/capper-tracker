@@ -701,7 +701,15 @@ export async function regradeFuzzyMatchedPicks(
   sportKey: string
 ): Promise<{ checked: number; upgraded: number }> {
   const fuzzyGraded = await prisma.pick.findMany({
-    where: { userId, sport: { name: sportName }, status: { in: ["WIN", "LOSS", "PUSH"] }, gradedViaFuzzyMatch: true },
+    where: {
+      userId,
+      sport: { name: sportName },
+      status: { in: ["WIN", "LOSS", "PUSH"] },
+      gradedViaFuzzyMatch: true,
+      gameTime: { gte: regradeLookbackCutoff() },
+    },
+    orderBy: { gameTime: "desc" },
+    take: REGRADE_MAX_ROWS,
   });
 
   let upgraded = 0;
@@ -731,6 +739,40 @@ export async function regradeFuzzyMatchedPicks(
 // measured ceiling, just a conservative middle ground between "one at a time"
 // and "however many happen to be pending."
 const BULK_GRADE_CONCURRENCY = 50;
+
+// ---- Regrade-job bounds (see regradeFuzzyMatchedPicks /
+// regradeAllFuzzyMatchedPicks / regradeAllFuzzyMatchedLegs) ----
+//
+// The regrade pass only exists to upgrade a fuzzy-matched grade to an exact
+// one once a better GameResult row appears. Exact rows are persisted by
+// persistFinalScores, which runs on every /picks and /live/[gameId] load for
+// a resolvable sport plus the daily refresh-scores cron - so the correct
+// exact result for a finished game almost always lands within 24-48h. A pick
+// still fuzzy after two weeks either already got upgraded on an earlier pass
+// or never will (a team-name mismatch that won't resolve), so re-scanning it
+// every 15 minutes forever is pure waste and, unbounded, eventually blows the
+// grade-picks function's time limit.
+//
+// 14 days (not 3/7): comfortably covers weather postponements, a multi-day
+// cron/deploy outage, and a stale catalog imported last week, while capping
+// every run's scan at ~2 weeks of one sport's fuzzy picks regardless of total
+// history. REGRADE_MAX_ROWS is a hard per-run ceiling so a burst can't blow
+// the time limit either - leftovers are picked up on the next run. Both are
+// env-overridable: each regrade logs checked/upgraded, so if a genuine
+// late upgrade ever shows up in the logs, bump REGRADE_LOOKBACK_DAYS without
+// a deploy.
+export const REGRADE_LOOKBACK_DAYS = clampPositiveInt(process.env.REGRADE_LOOKBACK_DAYS, 14);
+export const REGRADE_MAX_ROWS = clampPositiveInt(process.env.REGRADE_MAX_ROWS, 2000);
+
+function clampPositiveInt(raw: string | undefined, fallback: number): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+
+// The earliest gameTime a regrade pass will look back to.
+export function regradeLookbackCutoff(now: Date = new Date()): Date {
+  return new Date(now.getTime() - REGRADE_LOOKBACK_DAYS * 86400000);
+}
 
 // Global counterpart to gradePendingPicks - grades every user's pending picks
 // for a sport in one pass, instead of requiring each user to load /picks or
@@ -816,7 +858,14 @@ export async function regradeAllFuzzyMatchedPicks(
   if (!sport) return { checked: 0, upgraded: 0 };
 
   const fuzzyGraded = await prisma.pick.findMany({
-    where: { sportId: sport.id, status: { in: ["WIN", "LOSS", "PUSH"] }, gradedViaFuzzyMatch: true },
+    where: {
+      sportId: sport.id,
+      status: { in: ["WIN", "LOSS", "PUSH"] },
+      gradedViaFuzzyMatch: true,
+      gameTime: { gte: regradeLookbackCutoff() },
+    },
+    orderBy: { gameTime: "desc" },
+    take: REGRADE_MAX_ROWS,
   });
   if (fuzzyGraded.length === 0) return { checked: 0, upgraded: 0 };
 
