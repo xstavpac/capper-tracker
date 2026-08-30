@@ -61,8 +61,8 @@ export default async function LivePage({
   // getOddsForSport is keyed to today's Eastern date, so a game that started
   // yesterday evening drops out of its result at midnight even while still
   // in progress. LiveScoreboard keeps a carried-over game only while its
-  // score status is "live" and drops it once it goes Final, so this can't
-  // pile stale games onto the board.
+  // score status is "live" and drops it (like any game) the moment it goes
+  // Final, so this can't pile stale games onto the board.
   const todayKey = easternDateKey(new Date());
   const cutoffKey = slateCutoffKey(
     allOdds.map((g) => g.commenceTime),

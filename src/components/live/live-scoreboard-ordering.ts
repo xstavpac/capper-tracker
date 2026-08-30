@@ -3,18 +3,21 @@
 // (live-scoreboard-ordering-acceptance-test.ts) without rendering React or
 // mocking the two external score APIs.
 //
-// Two rules, in order:
+// Three rules, in order:
 //
-//  1. Visibility - a game carried onto today's board from last night's odds
-//     snapshot (its start date is before `todayKey`) is kept only while its
-//     score status is "live". Once it goes Final it drops off; today's board
-//     is not where you look for last night's finished games. A game that
-//     starts today is always kept, Final or not.
+//  1. Visibility - once a game goes Final it drops off the board entirely,
+//     whether it started today or was carried over from last night's odds
+//     snapshot. The Live tab is for games you can still watch or bet; final
+//     scores are already carried separately by the live score ticker, and a
+//     full slate of finished games grouped at the bottom was just clutter. A
+//     game carried onto today's board from a past odds snapshot (its start
+//     date is before `todayKey`) is kept only while its score status is
+//     "live"; a game that starts today is kept until it goes Final.
 //
-//  2. Order - status is the primary key: "live" (0) at the top, not-yet-
-//     started (1) in the middle, "final" (2) grouped at the bottom. Within a
-//     tier, soonest start time first. This is what stops a completed early
-//     game (1 PM Final) from sorting in among still-upcoming later ones.
+//  2. Order - live games (0) sort above not-yet-started games (1). Within a
+//     tier, soonest start time first. This is what keeps a still-live early
+//     game above a later game that hasn't started, rather than ordering
+//     purely by start time.
 //
 //  3. Forward window - the board shows the next slate only, not every future
 //     game a sportsbook has posted a line for. getOddsForSport has no upper
@@ -32,8 +35,10 @@ type OrderableGame = { game: { commenceTime: string }; score?: Pick<ScoreGame, "
 
 export const SLATE_LOOKAHEAD_DAYS = 4;
 
+// Only two tiers now that Final games are filtered out entirely (rule 1):
+// live on top, everything not-yet-started below.
 function statusRank(status: ScoreGame["status"] | undefined): number {
-  return status === "live" ? 0 : status === "final" ? 2 : 1;
+  return status === "live" ? 0 : 1;
 }
 
 // The last Eastern calendar day (inclusive, "YYYY-MM-DD") the board should
@@ -64,6 +69,7 @@ export function orderBoardGames<T extends OrderableGame>(games: T[], todayKey: s
   );
 
   const visible = games.filter(({ game, score }) => {
+    if (score?.status === "final") return false; // finished - off the board entirely; the score ticker still carries the final
     const key = easternDateKey(new Date(game.commenceTime));
     if (key > cutoffKey) return false; // a later slate the book merely has early lines for
     return key >= todayKey || score?.status === "live"; // today onward, or a still-live carry-over

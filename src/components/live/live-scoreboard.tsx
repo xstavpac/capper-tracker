@@ -145,8 +145,9 @@ export function LiveScoreboard({
           const awaySpread = spreads?.outcomes.find((o) => o.name === game.awayTeam);
           const over = totals?.outcomes.find((o) => o.name === "Over");
 
+          // Final games are filtered out upstream by orderBoardGames, so the
+          // board only ever renders live or not-yet-started games here.
           const isLive = score?.status === "live";
-          const isFinal = score?.status === "final";
 
           return (
             <div key={game.id} className="rounded-card bg-card p-4 shadow-soft transition-shadow hover:shadow-md">
@@ -170,9 +171,6 @@ export function LiveScoreboard({
                       )}
                       <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600 dark:bg-red-500/15 dark:text-red-400">LIVE</span>
                     </span>
-                  )}
-                  {isFinal && (
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">FINAL</span>
                   )}
                 </div>
 

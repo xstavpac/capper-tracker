@@ -1,7 +1,7 @@
 // Correctness proof for orderBoardGames (live-scoreboard-ordering.ts) - the
-// Live tab's filter + sort. Covers the two bugs it fixes:
-//   1. a completed early game must sort to the bottom, below still-upcoming
-//      later games, not in among them by start time
+// Live tab's filter + sort. Covers:
+//   1. a Final game drops off the board entirely - same-day or carried over -
+//      so the sort only ever deals with live vs not-yet-started
 //   2. a game that started last night and is still in progress after
 //      midnight must stay on the board (it was carried over from yesterday's
 //      odds snapshot) - and drop off only once it goes Final
@@ -27,7 +27,7 @@ const g = (id: string, iso: string, status?: "preview" | "live" | "final") => ({
 });
 const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
 
-// ---- Bug 1: 3-tier status order, start-time tiebreak within a tier ----
+// ---- Rule 1 + 2: Finals dropped, then live-above-upcoming, time tiebreak ----
 
 {
   const board = [
@@ -38,9 +38,9 @@ const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
     g("final-4pm", "2026-08-29T16:00:00-04:00", "final"),
   ];
   expect(
-    "user's case (b): live, then upcoming by time, then finals grouped at the bottom by time",
+    "finals drop off entirely; remaining = live, then upcoming by start time",
     ids(orderBoardGames(board, TODAY)),
-    ["live-541pm", "upcoming-541pm", "upcoming-7pm", "final-1pm", "final-4pm"]
+    ["live-541pm", "upcoming-541pm", "upcoming-7pm"]
   );
 }
 
@@ -55,13 +55,13 @@ const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
 }
 
 {
-  // A same-day Final is kept - it just sorts to the bottom (not dropped the
-  // way a carried-over Final is).
+  // A same-day Final now drops off the board too, exactly like a carried-over
+  // Final - the live score ticker is where final scores live.
   const board = [
     g("final-1pm", "2026-08-29T13:00:00-04:00", "final"),
     g("upcoming-8pm", "2026-08-29T20:00:00-04:00", "preview"),
   ];
-  expect("same-day Final stays on the board, at the bottom", ids(orderBoardGames(board, TODAY)), ["upcoming-8pm", "final-1pm"]);
+  expect("same-day Final drops off the board", ids(orderBoardGames(board, TODAY)), ["upcoming-8pm"]);
 }
 
 // ---- Bug 2: a game that crossed midnight ----
