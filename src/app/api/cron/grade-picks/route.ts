@@ -23,6 +23,23 @@ export const maxDuration = 60;
 // no page-load-triggered grading yet, so this cron is the only place they
 // get graded at all (see parlay-grading.ts). Each leg grade/regrade pass
 // also recomputes any ParlayBet it may have just resolved.
+//
+// Instrumentation: this route emits one structured console.log line tagged
+// "grade-picks-run" per invocation - total wall-clock, per-sport per-phase
+// durations, and the graded / not-matched / remaining counts already
+// computed by the grading functions. It is measurement only: no query, no
+// write, no locking, no retry, no branching on the captured values, and the
+// HTTP response body is unchanged. See docs/c4-grading-throughput.md for why
+// (we measure before deciding whether to tune the cron or move to a queue).
+
+// Awaits `fn` and returns its value alongside the elapsed milliseconds. Pure
+// timing wrapper - preserves the original sequential await order.
+async function timed<T>(fn: () => Promise<T>): Promise<[T, number]> {
+  const start = Date.now();
+  const value = await fn();
+  return [value, Date.now() - start];
+}
+
 export async function GET(req: Request) {
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
@@ -32,16 +49,19 @@ export async function GET(req: Request) {
     }
   }
 
+  const runStart = Date.now();
+
   const results = await Promise.all(
     RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
       const sportName = LIVE_SPORTS.find((s) => s.key === sportKey)?.label;
-      if (!sportName) return { sport: sportKey, skipped: true, changedUserIds: new Set<string>() };
+      if (!sportName) return { sport: sportKey, skipped: true, changedUserIds: new Set<string>(), timing: null };
 
-      const persisted = await persistFinalScores(sportKey);
-      const grading = await gradeAllPendingPicks(sportKey, sportName);
-      const regrading = await regradeAllFuzzyMatchedPicks(sportKey, sportName);
-      const legGrading = await gradeAllPendingLegs(sportKey, sportName);
-      const legRegrading = await regradeAllFuzzyMatchedLegs(sportKey, sportName);
+      const [persisted, persistMs] = await timed(() => persistFinalScores(sportKey));
+      const [grading, gradeMs] = await timed(() => gradeAllPendingPicks(sportKey, sportName));
+      const [regrading, regradeMs] = await timed(() => regradeAllFuzzyMatchedPicks(sportKey, sportName));
+      const [legGrading, legGradeMs] = await timed(() => gradeAllPendingLegs(sportKey, sportName));
+      const [legRegrading, legRegradeMs] = await timed(() => regradeAllFuzzyMatchedLegs(sportKey, sportName));
+
       return {
         sport: sportKey,
         persisted,
@@ -50,6 +70,17 @@ export async function GET(req: Request) {
         legGrading,
         legRegrading,
         changedUserIds: new Set([...grading.changedUserIds, ...regrading.changedUserIds]),
+        timing: {
+          persistMs,
+          gradeMs,
+          regradeMs,
+          legGradeMs,
+          legRegradeMs,
+          graded: grading.graded,
+          notMatched: grading.notMatched,
+          remaining: grading.remaining,
+          legRemaining: legGrading.remaining,
+        },
       };
     })
   );
@@ -64,10 +95,23 @@ export async function GET(req: Request) {
     revalidateTag(cacheKeys.reports(userId));
   }
 
+  // Measurement only (see docs/c4-grading-throughput.md). One line per run so
+  // run duration, per-phase timing, and `remaining` (backlog left after the
+  // run) are queryable from Vercel runtime logs without opening each response
+  // body.
+  console.log(
+    JSON.stringify({
+      tag: "grade-picks-run",
+      totalMs: Date.now() - runStart,
+      invalidatedUsers: changedUserIds.size,
+      sports: results.map((r) => (r.timing ? { sport: r.sport, ...r.timing } : { sport: r.sport, skipped: true })),
+    })
+  );
+
   return Response.json({
     ok: true,
     invalidatedUsers: changedUserIds.size,
-    results: results.map(({ changedUserIds: _o, grading, regrading, ...rest }) => ({
+    results: results.map(({ changedUserIds: _o, timing: _t, grading, regrading, ...rest }) => ({
       ...rest,
       ...(grading ? { grading: { graded: grading.graded, notMatched: grading.notMatched, remaining: grading.remaining } } : {}),
       ...(regrading ? { regrading: { checked: regrading.checked, upgraded: regrading.upgraded } } : {}),
