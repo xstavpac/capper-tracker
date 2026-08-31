@@ -73,7 +73,7 @@ for (const rel of files) {
     continue;
   }
 
-  const res = spawnSync("npx", ["tsx", rel], { cwd: repoRoot, stdio: "inherit", env: process.env, shell: true });
+  const res = spawnSync(process.execPath, ["--import", "tsx", rel], { cwd: repoRoot, stdio: "inherit", env: process.env });
   if (res.error) {
     console.log(`FAIL (could not launch: ${res.error.message})  ${rel}\n`);
     failed++;
