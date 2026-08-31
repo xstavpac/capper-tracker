@@ -1,10 +1,20 @@
 ﻿"use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { requireUser } from "@/server/auth";
-import { createPick, updatePickStatus, getCapperCategoryRecord } from "@/server/data/picks";
+import { createPick, updatePickStatus, getCapperCategoryRecords } from "@/server/data/picks";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
+import { cacheKeys } from "@/lib/cache-keys";
 import type { BetType, PickStatus, Period } from "@prisma/client";
+
+// The Dashboard and Reports pages cache their pick aggregations per user
+// (see getDashboardSummary / getReportsData). Any action that changes this
+// user's picks must bust both, by tag - revalidatePath alone does not
+// reliably evict unstable_cache entries.
+function revalidatePickStats(userId: string) {
+  revalidateTag(cacheKeys.dashboard(userId));
+  revalidateTag(cacheKeys.reports(userId));
+}
 
 export type ActionResult = { success: true } | { success: false; error: string };
 
@@ -69,6 +79,7 @@ export async function createPickAction(formData: FormData): Promise<ActionResult
     return { success: false, error: message };
   }
 
+  revalidatePickStats(user.id);
   revalidatePath("/picks");
   revalidatePath("/dashboard");
   revalidatePath("/cappers");
@@ -88,9 +99,11 @@ export async function updatePickStatusAction(
     return { success: false, error: message };
   }
 
+  revalidatePickStats(user.id);
   revalidatePath("/picks");
   revalidatePath("/picks/pending");
   revalidatePath("/dashboard");
+  revalidatePath("/reports");
   revalidatePath("/cappers");
   revalidatePath("/cappers/[capperId]", "page");
   revalidatePath("/live/[gameId]", "page");
@@ -98,21 +111,13 @@ export async function updatePickStatusAction(
 }
 
 // Lazy-loaded on demand (a game card expanding on /live), not on page load -
-// each entry requires pulling a capper's full pick history and recomputing
-// their category breakdown, which isn't cheap to do for every capper on
-// every game up front. Deduped so the same capper+category pair (e.g. two
-// picks on the same underdog moneyline) is only computed once per call.
+// each entry requires pulling a capper's pick history and recomputing their
+// category breakdown, which isn't cheap to do for every capper on every game
+// up front. getCapperCategoryRecords batches: one query for every capper in
+// the request, one breakdown per capper (deduped pairs included).
 export async function getCategoryRecordsAction(
   pairs: { capperId: string; category: PickCategoryKey }[]
 ): Promise<Record<string, CategoryBreakdownItem | null>> {
   const user = await requireUser();
-
-  const unique = Array.from(new Map(pairs.map((p) => [p.capperId + "|" + p.category, p])).values());
-  const entries = await Promise.all(
-    unique.map(async (p) => {
-      const record = await getCapperCategoryRecord(user.id, p.capperId, p.category);
-      return [p.capperId + "|" + p.category, record] as const;
-    })
-  );
-  return Object.fromEntries(entries);
+  return getCapperCategoryRecords(user.id, pairs);
 }

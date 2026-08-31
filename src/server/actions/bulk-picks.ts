@@ -1,8 +1,9 @@
 ﻿"use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { requireUser } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
+import { cacheKeys } from "@/lib/cache-keys";
 import { createCapper } from "@/server/data/cappers";
 import { createPicksWithEntitlementCheck, type PickInsertData } from "@/server/data/subscriptions";
 import {
@@ -422,6 +423,11 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
   // Pick row yet.
   const result = await createPicksWithEntitlementCheck(user.id, toInsert);
 
+  // Bust this user's cached Dashboard/Reports aggregations by tag (see
+  // getDashboardSummary / getReportsData) - revalidatePath does not reliably
+  // evict unstable_cache entries.
+  revalidateTag(cacheKeys.dashboard(user.id));
+  revalidateTag(cacheKeys.reports(user.id));
   revalidatePath("/picks");
   revalidatePath("/dashboard");
   revalidatePath("/cappers");

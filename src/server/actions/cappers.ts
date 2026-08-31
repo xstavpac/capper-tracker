@@ -1,9 +1,18 @@
 ﻿"use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { requireUser } from "@/server/auth";
 import { createCapper, mergeCappers, renameCapper, deleteCapper, dismissDuplicatePair, toggleFavoriteCapper } from "@/server/data/cappers";
+import { cacheKeys } from "@/lib/cache-keys";
 import type { Source } from "@prisma/client";
+
+// The Dashboard/Reports pick aggregations cache per user and group by capper
+// name/id, so any capper change that reassigns, removes, or renames picks'
+// capper must bust both by tag (revalidatePath does not evict unstable_cache).
+function revalidatePickStats(userId: string) {
+  revalidateTag(cacheKeys.dashboard(userId));
+  revalidateTag(cacheKeys.reports(userId));
+}
 
 export type CreateCapperResult =
   | { success: true }
@@ -59,6 +68,7 @@ export async function mergeCappersAction(primaryId: string, duplicateId: string)
 
   try {
     const result = await mergeCappers(user.id, primaryId, duplicateId);
+    revalidatePickStats(user.id);
     revalidatePath("/cappers");
     revalidatePath("/cappers/[capperId]", "page");
     revalidatePath("/dashboard");
@@ -82,8 +92,12 @@ export async function renameCapperAction(capperId: string, name: string): Promis
 
   try {
     await renameCapper(user.id, capperId, name);
+    // Reports groups by capper name; the dashboard's recent-picks list shows it.
+    revalidatePickStats(user.id);
     revalidatePath("/cappers");
     revalidatePath("/cappers/[capperId]", "page");
+    revalidatePath("/dashboard");
+    revalidatePath("/reports");
   } catch (err) {
     const message = err instanceof Error ? err.message : "Something went wrong.";
     return { success: false, error: message };
@@ -106,6 +120,7 @@ export async function deleteCapperAction(capperId: string): Promise<DeleteCapper
 
   try {
     const result = await deleteCapper(user.id, capperId);
+    revalidatePickStats(user.id);
     revalidatePath("/cappers");
     revalidatePath("/dashboard");
     revalidatePath("/reports");

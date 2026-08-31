@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { requireUser } from "@/server/auth";
-import { getDashboardSummary, getUserPicks, computeUnitsChartData } from "@/server/data/stats";
+import { getDashboardSummary } from "@/server/data/stats";
 import { getPlanStatus } from "@/server/data/cappers";
 import { getCapperPanels } from "@/server/data/capper-panels";
 import { UnitsChart } from "@/components/dashboard/units-chart";
@@ -38,15 +38,7 @@ export default async function DashboardPage() {
     getCapperPanels(user.id),
     getPlanStatus(user.id),
   ]);
-  const { overall } = summary;
-
-  const allPicks = await getUserPicks(user.id);
-  const chartData = computeUnitsChartData(allPicks);
-
-  const staleCutoff = Date.now() - STALE_PENDING_HOURS * 3600000;
-  const stalePendingCount = allPicks.filter(
-    (p) => p.status === "PENDING" && p.gameTime.getTime() < staleCutoff
-  ).length;
+  const { overall, chartData, stalePendingCount } = summary;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -143,8 +135,8 @@ export default async function DashboardPage() {
           {summary.recentPicks.map((pick) => (
             <div key={pick.id} className="flex items-center justify-between py-2 text-sm">
               <span>
-                {pick.awayTeam} @ {pick.homeTeam} - {pick.betDetail ?? pick.betType}
-                <span className="text-muted-foreground"> ({pick.capper.name})</span>
+                {pick.awayTeam} @ {pick.homeTeam} - {pick.label}
+                <span className="text-muted-foreground"> ({pick.capperName})</span>
               </span>
               <span
                 className={

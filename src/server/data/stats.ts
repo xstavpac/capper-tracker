@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import type { Pick, PickStatus } from "@prisma/client";
 import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, type OddsBucketKey } from "@/lib/bet-line";
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
+import { cacheKeys } from "@/lib/cache-keys";
+import { cachedByTag } from "@/server/data/cached";
 
 export type OverallStats = {
   wins: number;
@@ -906,37 +908,79 @@ export function computeCategoryBreakdown(
   });
 }
 
-/** All picks for a user, scoped by userId — never call prisma.pick directly. */
-export async function getUserPicks(userId: string) {
+// Lean pick rows for the dashboard + reports aggregations: every scalar
+// column (computeStats / computeCategoryBreakdown / computeUnitsChartData all
+// need those) plus ONLY the id/name of each relation the breakdowns group
+// by. Deliberately not `include: { capper: true, ... }` - that shipped a full
+// capper row per pick, which on a 10k-30k-pick history is ~10-20x this
+// payload and a lot of wasted Prisma hydration. Scoped by userId - never
+// call prisma.pick directly.
+async function getPickRowsForStats(userId: string) {
   return prisma.pick.findMany({
     where: { userId },
-    include: { capper: true, sport: true, league: true },
     orderBy: { gameTime: "desc" },
+    include: {
+      sport: { select: { name: true } },
+      capper: { select: { id: true, name: true } },
+      league: { select: { id: true, name: true } },
+    },
   });
 }
 
-/** Dashboard summary: overall stats, category breakdown, recent picks. */
+// Dashboard/Reports read only Pick rows, so their caches are invalidated
+// purely by pick mutations (see cacheKeys + the revalidateTag calls in the
+// pick/capper server actions and the grade-picks cron). revalidate is the
+// backstop for the one path that can't tag - opportunistic page-load grading,
+// which runs during render where revalidateTag is illegal.
+const DASHBOARD_REPORTS_CACHE_TTL_SECONDS = 60;
+const STALE_PENDING_HOURS = 24;
+
+/** Dashboard summary - fully derived; callers never re-process a pick array. */
 export async function getDashboardSummary(userId: string) {
-  const picks = await getUserPicks(userId);
-  const overall = computeStats(picks);
+  return cachedByTag(cacheKeys.dashboard(userId), DASHBOARD_REPORTS_CACHE_TTL_SECONDS, () =>
+    computeDashboardSummary(userId)
+  );
+}
+
+async function computeDashboardSummary(userId: string) {
+  const picks = await getPickRowsForStats(userId);
+  const staleCutoff = Date.now() - STALE_PENDING_HOURS * 3600000;
 
   return {
-    overall,
+    overall: computeStats(picks),
     totalPicks: picks.length,
     // DEFAULT_CHIP_SET, not chipSetForLeague - this mixes every sport
     // together, and F5 ML/NRFI only mean anything within MLB (see
     // getSportCategoryPanelData in server/data/cappers.ts for the per-sport
     // equivalent, which also powers that panel's per-category leaderboards).
     categoryBreakdown: computeCategoryBreakdown(picks, DEFAULT_CHIP_SET),
+    // Derived here, once, from the array already in hand - the page must not
+    // re-fetch the history to build its own chart.
+    chartData: computeUnitsChartData(picks),
     pendingCount: picks.filter((p) => p.status === "PENDING").length,
-    recentPicks: picks.slice(0, 10),
+    stalePendingCount: picks.filter((p) => p.status === "PENDING" && p.gameTime.getTime() < staleCutoff).length,
+    // Flattened to exactly what the Recent Picks list renders - keeps the
+    // cached payload small and free of Date-serialization ambiguity.
+    recentPicks: picks.slice(0, 10).map((p) => ({
+      id: p.id,
+      awayTeam: p.awayTeam,
+      homeTeam: p.homeTeam,
+      label: p.betDetail ?? betTypeLabel(p.betType),
+      capperName: p.capper.name,
+      status: p.status,
+      units: p.units,
+    })),
   };
 }
 
 export type ReportBreakdownItem = { name: string; stats: OverallStats; count: number };
 
 export async function getReportsData(userId: string) {
-  const picks = await getUserPicksWithRelations(userId);
+  return cachedByTag(cacheKeys.reports(userId), DASHBOARD_REPORTS_CACHE_TTL_SECONDS, () => computeReportsData(userId));
+}
+
+async function computeReportsData(userId: string) {
+  const picks = await getPickRowsForStats(userId);
   const overall = computeStats(picks);
 
   function groupBy<T extends { id: string; name: string }>(
@@ -1004,12 +1048,6 @@ export function betTypeLabel(betType: string) {
   }
 }
 
-async function getUserPicksWithRelations(userId: string) {
-  return prisma.pick.findMany({
-    where: { userId },
-    include: { capper: true, sport: true, league: true },
-  });
-}
 
 export type UnitsChartPoint = { date: string; cumulativeUnits: number };
 export type PickNumberChartPoint = { pickNumber: number; cumulativeUnits: number };

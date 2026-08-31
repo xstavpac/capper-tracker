@@ -1,6 +1,8 @@
+import { revalidateTag } from "next/cache";
 import { persistFinalScores, gradeAllPendingPicks, regradeAllFuzzyMatchedPicks } from "@/server/data/grading";
 import { gradeAllPendingLegs, regradeAllFuzzyMatchedLegs } from "@/server/data/parlay-grading";
 import { RESOLVABLE_SPORT_KEYS, LIVE_SPORTS } from "@/server/data/odds";
+import { cacheKeys } from "@/lib/cache-keys";
 
 export const dynamic = "force-dynamic";
 // Pro plan default (15s) isn't enough headroom for a sport with a large
@@ -33,16 +35,42 @@ export async function GET(req: Request) {
   const results = await Promise.all(
     RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
       const sportName = LIVE_SPORTS.find((s) => s.key === sportKey)?.label;
-      if (!sportName) return { sport: sportKey, skipped: true };
+      if (!sportName) return { sport: sportKey, skipped: true, changedUserIds: new Set<string>() };
 
       const persisted = await persistFinalScores(sportKey);
       const grading = await gradeAllPendingPicks(sportKey, sportName);
       const regrading = await regradeAllFuzzyMatchedPicks(sportKey, sportName);
       const legGrading = await gradeAllPendingLegs(sportKey, sportName);
       const legRegrading = await regradeAllFuzzyMatchedLegs(sportKey, sportName);
-      return { sport: sportKey, persisted, grading, regrading, legGrading, legRegrading };
+      return {
+        sport: sportKey,
+        persisted,
+        grading,
+        regrading,
+        legGrading,
+        legRegrading,
+        changedUserIds: new Set([...grading.changedUserIds, ...regrading.changedUserIds]),
+      };
     })
   );
 
-  return Response.json({ ok: true, results });
+  // Only the users whose pick status actually changed this run get their
+  // Dashboard/Reports caches busted - never a global flush. Leg grading is
+  // deliberately not included: those cached surfaces read only Pick rows
+  // (parlay stats are a separate uncached query).
+  const changedUserIds = new Set<string>(results.flatMap((r) => [...r.changedUserIds]));
+  for (const userId of changedUserIds) {
+    revalidateTag(cacheKeys.dashboard(userId));
+    revalidateTag(cacheKeys.reports(userId));
+  }
+
+  return Response.json({
+    ok: true,
+    invalidatedUsers: changedUserIds.size,
+    results: results.map(({ changedUserIds: _o, grading, regrading, ...rest }) => ({
+      ...rest,
+      ...(grading ? { grading: { graded: grading.graded, notMatched: grading.notMatched, remaining: grading.remaining } } : {}),
+      ...(regrading ? { regrading: { checked: regrading.checked, upgraded: regrading.upgraded } } : {}),
+    })),
+  });
 }
