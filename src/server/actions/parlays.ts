@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/server/auth";
-import { createParlayBet, updateLegStatus } from "@/server/data/parlays";
+import { createParlayBet, updateLegStatus, deleteParlayBet } from "@/server/data/parlays";
 import type { BetType, Period, PickStatus } from "@prisma/client";
 
 export type ParlayActionResult = { success: true } | { success: false; error: string };
@@ -89,6 +89,26 @@ export async function updateLegStatusAction(legId: string, status: PickStatus): 
 
   try {
     await updateLegStatus(user.id, legId, status);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Something went wrong.";
+    return { success: false, error: message };
+  }
+
+  revalidatePath("/picks");
+  revalidatePath("/reports");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+// Deletes a whole parlay (legs cascade). No revalidateTag for the
+// dashboard/reports caches here - those read only Pick rows; the parlay
+// numbers on /reports come from getParlayReportsData, which is uncached and
+// picked up by the revalidatePath below.
+export async function deleteParlayAction(parlayBetId: string): Promise<ParlayActionResult> {
+  const user = await requireUser();
+
+  try {
+    await deleteParlayBet(user.id, parlayBetId);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Something went wrong.";
     return { success: false, error: message };

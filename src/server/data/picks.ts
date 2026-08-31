@@ -95,6 +95,19 @@ export async function updatePickStatus(userId: string, pickId: string, status: P
   });
 }
 
+// Permanently removes one standalone Pick. Scoped by id + userId ONLY (never
+// a name or text match - standing project rule after the production
+// delete-by-text incident); the single deleteMany is atomic, so a pick that
+// isn't this user's simply matches nothing. count === 0 means "not found or
+// not yours" - same opaque message either way, so this never confirms
+// another user's pick id exists.
+export async function deletePick(userId: string, pickId: string): Promise<void> {
+  const { count } = await prisma.pick.deleteMany({ where: { id: pickId, userId } });
+  if (count === 0) {
+    throw new Error("Pick not found.");
+  }
+}
+
 export type PendingPickRow = {
   id: string;
   capperName: string;

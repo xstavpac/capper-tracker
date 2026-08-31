@@ -33,6 +33,13 @@ const NEEDS_DB = new Set([
   "src/lib/model-engine/weighted-accumulation-acceptance-test.ts",
 ]);
 
+// Suites that import `@/lib/prisma` but never actually query - they swap a
+// prisma method for a spy before calling. The auto-detect would wrongly skip
+// these without a DB; force them to always run.
+const PURE_DESPITE_PRISMA_IMPORT = new Set([
+  "src/server/data/delete-scoping-acceptance-test.ts",
+]);
+
 function walk(dir) {
   const out = [];
   for (const entry of readdirSync(dir)) {
@@ -66,7 +73,9 @@ let passed = 0;
 let skipped = 0;
 
 for (const rel of files) {
-  const needsDb = NEEDS_DB.has(rel) || readFileSync(join(repoRoot, rel), "utf8").includes('from "@/lib/prisma"');
+  const needsDb =
+    !PURE_DESPITE_PRISMA_IMPORT.has(rel) &&
+    (NEEDS_DB.has(rel) || readFileSync(join(repoRoot, rel), "utf8").includes('from "@/lib/prisma"'));
   if (needsDb && !hasDbUrl) {
     console.log(`SKIP (needs DB, DATABASE_URL unset)  ${rel}`);
     skipped++;

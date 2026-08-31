@@ -2,7 +2,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { requireUser } from "@/server/auth";
-import { createPick, updatePickStatus, getCapperCategoryRecords } from "@/server/data/picks";
+import { createPick, updatePickStatus, deletePick, getCapperCategoryRecords } from "@/server/data/picks";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import { cacheKeys } from "@/lib/cache-keys";
 import type { BetType, PickStatus, Period } from "@prisma/client";
@@ -94,6 +94,30 @@ export async function updatePickStatusAction(
 
   try {
     await updatePickStatus(user.id, pickId, status);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Something went wrong.";
+    return { success: false, error: message };
+  }
+
+  revalidatePickStats(user.id);
+  revalidatePath("/picks");
+  revalidatePath("/picks/pending");
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
+  revalidatePath("/cappers");
+  revalidatePath("/cappers/[capperId]", "page");
+  revalidatePath("/live/[gameId]", "page");
+  return { success: true };
+}
+
+// Permanently deletes one standalone pick. Same cache-invalidation surface as
+// updatePickStatusAction - a removed pick changes every aggregate a graded
+// one would (dashboard/reports by tag, plus the paths below).
+export async function deletePickAction(pickId: string): Promise<ActionResult> {
+  const user = await requireUser();
+
+  try {
+    await deletePick(user.id, pickId);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Something went wrong.";
     return { success: false, error: message };

@@ -8,6 +8,9 @@ import { PickForm } from "@/components/dashboard/pick-form";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { ParlayForm } from "@/components/dashboard/parlay-form";
 import { LegStatusButtons } from "@/components/dashboard/leg-status-buttons";
+import { RowDeleteButton } from "@/components/dashboard/row-delete-button";
+import { deletePickAction } from "@/server/actions/picks";
+import { deleteParlayAction } from "@/server/actions/parlays";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
 import { TIER_LABELS } from "@/lib/entitlements";
@@ -325,7 +328,10 @@ export default async function PicksPage({
                     {pick.odds} - {pick.units}u
                   </div>
                 </div>
-                <PickStatusButtons pickId={pick.id} status={pick.status} />
+                <div className="flex items-center gap-2">
+                  <PickStatusButtons pickId={pick.id} status={pick.status} />
+                  <RowDeleteButton onConfirm={deletePickAction.bind(null, pick.id)} itemLabel="pick" />
+                </div>
               </div>
             ))}
           </div>
@@ -351,7 +357,10 @@ export default async function PicksPage({
                     <div className="text-sm font-medium">
                       {parlay.capper.name} - {parlay.legs.length}-leg parlay - {parlay.units}u
                     </div>
-                    <span className={"text-sm font-medium " + statusColor}>{parlay.status}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={"text-sm font-medium " + statusColor}>{parlay.status}</span>
+                      <RowDeleteButton onConfirm={deleteParlayAction.bind(null, parlay.id)} itemLabel="parlay" />
+                    </div>
                   </div>
                   <div className="divide-y divide-border-subtle">
                     {parlay.legs.map((leg) => (

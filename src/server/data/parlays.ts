@@ -53,6 +53,20 @@ export async function createParlayBet(
   });
 }
 
+// Permanently removes one ParlayBet and, via the schema's
+// Leg.onDelete: Cascade, every leg under it. Scoped by id + userId ONLY
+// (standing project rule). Individual legs are deliberately never deletable
+// on their own - a parlay's stake and effective payout are defined by its
+// original leg set, and legIndex is a unique key assigned once at creation;
+// removing one leg would leave a malformed bet. The correct fix for a
+// mis-entered parlay is to delete the whole thing and re-enter it.
+export async function deleteParlayBet(userId: string, parlayBetId: string): Promise<void> {
+  const { count } = await prisma.parlayBet.deleteMany({ where: { id: parlayBetId, userId } });
+  if (count === 0) {
+    throw new Error("Parlay not found.");
+  }
+}
+
 export async function getParlaysForUser(userId: string) {
   return prisma.parlayBet.findMany({
     where: { userId },
