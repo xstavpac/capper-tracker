@@ -2,7 +2,15 @@ import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays } from "@/lib/dates";
 import { isSportInSeason, oddsApiSportKey } from "@/lib/sport-seasons";
-import { memoizeWithTtl, LIVE_SCORES_TTL_SECONDS } from "@/server/data/live-scores-cache";
+import { cacheKeys } from "@/lib/cache-keys";
+import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
+
+// Live scores are current-ish data polled every 25s per open /live tab -
+// keep the window tight. Odds change at most every 4h (the backfill cron)
+// and usually once a day, so a longer window is invisible and still
+// collapses the /live polling burst. Both env-overridable, clamped 1-300s.
+const LIVE_SCORES_TTL_SECONDS = resolveTtlSeconds(process.env.LIVE_SCORES_TTL_SECONDS, 15);
+const ODDS_CACHE_TTL_SECONDS = resolveTtlSeconds(process.env.ODDS_CACHE_TTL_SECONDS, 60);
 
 export type OddsGame = {
   id: string;
@@ -60,7 +68,20 @@ export const LIVE_SPORTS = [
 
 const BASE_URL = "https://api.the-odds-api.com/v4";
 
+// Process-local layer over getOddsForSportUncached: the OddsSnapshot row for
+// a sport changes at most every 4h, but /live re-runs this on every render
+// (staleTimes: { dynamic: 0 }), each time re-parsing a JSON blob that can be
+// 100KB-1MB for a full week of games across all bookmakers. The memo makes
+// repeat hits within ODDS_CACHE_TTL_SECONDS reuse the already-parsed array -
+// no DB round-trip, no re-parse. No unstable_cache layer here (unlike live
+// scores): the source is already one indexed row in our own DB.
 export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
+  return memoizeWithTtl(cacheKeys.odds(sportKey), () => getOddsForSportUncached(sportKey), {
+    ttlMs: ODDS_CACHE_TTL_SECONDS * 1000,
+  });
+}
+
+async function getOddsForSportUncached(sportKey: string): Promise<OddsGame[]> {
   // Every sport in LIVE_SPORTS used to hit the Odds API bulk endpoint every
   // day year-round, including months of pure off-season - the API charges
   // per markets x regions requested regardless of how many (or how few)
@@ -317,7 +338,7 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
     "&hydrate=linescore";
 
   // No per-fetch cache directive here on purpose: live-score caching is owned
-  // by getLiveScoresForSport's wrapper (see live-scores-cache.ts) - a short
+  // by getLiveScoresForSport's wrapper (see ttl-memo.ts) - a short
   // TTL layer that fetches once per sport per window and serves that to every
   // polling client. Setting no-store here as well would conflict with the
   // unstable_cache boundary that wrapper puts around this call.
@@ -375,7 +396,7 @@ async function getEspnScores(sportPath: string): Promise<ScoreGame[]> {
     "https://site.api.espn.com/apis/site/v2/sports/" + sportPath + "/scoreboard?dates=" + yesterday + "-" + tomorrow;
 
   // Same as getMlbLiveScores: no per-fetch cache directive here - caching is
-  // owned by getLiveScoresForSport's short-TTL wrapper (live-scores-cache.ts).
+  // owned by getLiveScoresForSport's short-TTL wrapper (ttl-memo.ts).
   const res = await fetch(url);
   if (!res.ok) return [];
 
@@ -477,9 +498,9 @@ async function dispatchLiveScoresForSport(sportKey: string): Promise<ScoreGame[]
 // invariant - fall back to calling straight through in that case. Real
 // traffic (route handlers, cron routes) always has the context.
 function dataCachedLiveScores(sportKey: string): Promise<ScoreGame[]> {
-  const run = unstable_cache(() => dispatchLiveScoresForSport(sportKey), ["live-scores", sportKey], {
+  const run = unstable_cache(() => dispatchLiveScoresForSport(sportKey), [cacheKeys.liveScores(sportKey)], {
     revalidate: LIVE_SCORES_TTL_SECONDS,
-    tags: [`live-scores-${sportKey}`],
+    tags: [cacheKeys.liveScores(sportKey)],
   });
   return run().catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err);
@@ -489,9 +510,11 @@ function dataCachedLiveScores(sportKey: string): Promise<ScoreGame[]> {
 }
 
 // Public entry point. memoizeWithTtl is the process-local layer in front of
-// the Data Cache - see live-scores-cache.ts for why both exist.
+// the Data Cache - see ttl-memo.ts for why both exist.
 export async function getLiveScoresForSport(sportKey: string): Promise<ScoreGame[]> {
-  return memoizeWithTtl(`live-scores:${sportKey}`, () => dataCachedLiveScores(sportKey));
+  return memoizeWithTtl(cacheKeys.liveScores(sportKey), () => dataCachedLiveScores(sportKey), {
+    ttlMs: LIVE_SCORES_TTL_SECONDS * 1000,
+  });
 }
 
 export type MlbEarlyInningScores = {

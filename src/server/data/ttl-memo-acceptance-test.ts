@@ -1,14 +1,13 @@
-// Proof for memoizeWithTtl (live-scores-cache.ts) - the process-local layer
-// that stops every /live poll from becoming an upstream ESPN / MLB Stats
-// request. Run with:
-//   npx tsx src/server/data/live-scores-cache-acceptance-test.ts
+// Proof for memoizeWithTtl (ttl-memo.ts) - the process-local layer behind
+// getLiveScoresForSport and getOddsForSport that stops every /live poll from
+// re-hitting an upstream API or re-parsing the odds blob. Run with:
+//   npx tsx src/server/data/ttl-memo-acceptance-test.ts
 // Exits non-zero if any assertion fails.
 //
-// unstable_cache (the cross-instance layer) can't be exercised here - it
-// throws "incrementalCache missing" outside a Next request context - so this
-// covers the layer that is testable. The invariant is what dataCachedLiveScores
-// catches and falls back from.
-import { memoizeWithTtl, __clearLiveScoresMemo, LIVE_SCORES_TTL_SECONDS } from "./live-scores-cache";
+// unstable_cache (the cross-instance layer over live scores) can't be
+// exercised here - it throws "incrementalCache missing" outside a Next
+// request context - so this covers the layer that is testable.
+import { memoizeWithTtl, resolveTtlSeconds, __clearTtlMemo } from "./ttl-memo";
 
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {
@@ -36,7 +35,7 @@ async function main() {
 
   // ---- repeated calls within the TTL hit the fetcher exactly once ----
   {
-    __clearLiveScoresMemo();
+    __clearTtlMemo();
     let t = 10_000;
     const now = () => t;
     const f = makeFetcher();
@@ -53,7 +52,7 @@ async function main() {
 
   // ---- once the TTL elapses, the next call refetches ----
   {
-    __clearLiveScoresMemo();
+    __clearTtlMemo();
     let t = 0;
     const now = () => t;
     const f = makeFetcher();
@@ -71,7 +70,7 @@ async function main() {
 
   // ---- distinct keys (sports) never share an entry ----
   {
-    __clearLiveScoresMemo();
+    __clearTtlMemo();
     const now = () => 0;
     const mlb = makeFetcher("mlb");
     const nfl = makeFetcher("nfl");
@@ -86,7 +85,7 @@ async function main() {
 
   // ---- a rejected fetch is evicted, so the next call retries ----
   {
-    __clearLiveScoresMemo();
+    __clearTtlMemo();
     const now = () => 0;
     let calls = 0;
     const flaky = async () => {
@@ -108,12 +107,12 @@ async function main() {
     expect("second call succeeds", second, { tag: "recovered" });
   }
 
-  // ---- the resolved TTL is a sane short window ----
-  expect(
-    "resolved TTL is a short positive window (<= 60s)",
-    Number.isInteger(LIVE_SCORES_TTL_SECONDS) && LIVE_SCORES_TTL_SECONDS >= 1 && LIVE_SCORES_TTL_SECONDS <= 60,
-    true
-  );
+  // ---- resolveTtlSeconds: falls back, clamps, and floors ----
+  expect("resolveTtlSeconds: missing -> fallback", resolveTtlSeconds(undefined, 15), 15);
+  expect("resolveTtlSeconds: garbage -> fallback", resolveTtlSeconds("abc", 60), 60);
+  expect("resolveTtlSeconds: zero/negative -> fallback", resolveTtlSeconds("0", 15), 15);
+  expect("resolveTtlSeconds: valid -> floored int", resolveTtlSeconds("42.9", 15), 42);
+  expect("resolveTtlSeconds: clamped to 300", resolveTtlSeconds("99999", 15), 300);
 
   console.log(`\n${failures === 0 ? "ALL PASS" : failures + " FAILURE(S)"}`);
   if (failures > 0) process.exit(1);
