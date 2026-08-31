@@ -758,7 +758,9 @@ async function inChunks<T>(items: T[], fn: (item: T) => Promise<void>): Promise<
   }
 }
 
-async function gradePickPool(
+// Exported for grading-idempotency-acceptance-test.ts (the conditional-write
+// behavior). Not a public API - gradeAllPendingPicks / gradePendingPicks are.
+export async function gradePickPool(
   picks: Pick[],
   sportKey: string,
   sportName: string
@@ -784,18 +786,30 @@ async function gradePickPool(
       notMatched++;
       return;
     }
-    await prisma.pick.update({
-      where: { id: pick.id },
+    // updateMany with a status:PENDING guard, not update({ where: { id } }):
+    //  - if the pick was already graded (page-load fast path, a concurrent
+    //    grading pass, or a duplicate queue delivery) this matches 0 rows and
+    //    is a clean no-op - the other writer computed the identical
+    //    deterministic outcome from the same GameResult, so nothing is lost.
+    //  - if the pick was DELETED mid-run (the /picks delete feature),
+    //    update({ where: { id } }) throws P2025, which propagates out of
+    //    Promise.all and 500s the whole cron run with no retry. updateMany
+    //    returns { count: 0 } and the run carries on.
+    const { count } = await prisma.pick.updateMany({
+      where: { id: pick.id, status: "PENDING" },
       data: { status: outcome, gradedAt: new Date(), gradedViaFuzzyMatch: result.matchType === "fuzzy" },
     });
-    graded++;
-    changedUserIds.add(pick.userId);
+    if (count === 1) {
+      graded++;
+      changedUserIds.add(pick.userId);
+    }
   });
 
   return { graded, notMatched, changedUserIds };
 }
 
-async function regradeFuzzyPool(
+// Exported for grading-idempotency-acceptance-test.ts, same as gradePickPool.
+export async function regradeFuzzyPool(
   picks: Pick[],
   sportKey: string,
   sportName: string
@@ -816,8 +830,16 @@ async function regradeFuzzyPool(
     if (!outcome) return;
     const changed = outcome !== pick.status;
     // gradedAt intentionally untouched - a correction, not a new grading event.
-    await prisma.pick.update({ where: { id: pick.id }, data: { status: outcome, gradedViaFuzzyMatch: false } });
-    if (changed) {
+    // Guard on gradedViaFuzzyMatch (not status - regrade targets already-graded
+    // WIN/LOSS/PUSH picks): if another pass already upgraded this pick to an
+    // exact match, or it was deleted mid-run, this matches 0 rows instead of
+    // throwing P2025. count === 0 also short-circuits the stale-`pick.status`
+    // comparison above.
+    const { count } = await prisma.pick.updateMany({
+      where: { id: pick.id, gradedViaFuzzyMatch: true },
+      data: { status: outcome, gradedViaFuzzyMatch: false },
+    });
+    if (count === 1 && changed) {
       upgraded++;
       changedUserIds.add(pick.userId);
     }

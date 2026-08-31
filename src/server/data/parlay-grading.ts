@@ -162,11 +162,18 @@ export async function gradeAllPendingLegs(
             : resolveOutcome(leg, result.game);
         if (!outcome) return { matched: false, parlayBetId: leg.parlayBetId };
 
-        await prisma.leg.update({
-          where: { id: leg.id },
+        // updateMany with a status:PENDING guard, not update({ where: { id } }):
+        // if another pass already graded this leg, or its parlay was deleted
+        // mid-run (cascading the leg away), this matches 0 rows instead of
+        // throwing P2025 and 500ing the whole cron run. `matched` reflects
+        // whether THIS run graded it, so the parent recompute below only fires
+        // for legs actually touched here - and recomputeParlayBetStatus is a
+        // PENDING-gated CAS anyway, so a redundant recompute would be harmless.
+        const { count } = await prisma.leg.updateMany({
+          where: { id: leg.id, status: "PENDING" },
           data: { status: outcome, gradedAt: new Date(), gradedViaFuzzyMatch: result.matchType === "fuzzy" },
         });
-        return { matched: true, parlayBetId: leg.parlayBetId };
+        return { matched: count === 1, parlayBetId: leg.parlayBetId };
       })
     );
     for (const o of outcomes) o.matched ? graded++ : notMatched++;
@@ -226,9 +233,15 @@ export async function regradeAllFuzzyMatchedLegs(
         const changed = outcome !== leg.status;
         // gradedAt intentionally untouched - same reasoning as
         // regradeFuzzyMatchedPicks: this corrects the original grading, it
-        // isn't a new grading event.
-        await prisma.leg.update({ where: { id: leg.id }, data: { status: outcome, gradedViaFuzzyMatch: false } });
-        if (changed) {
+        // isn't a new grading event. Guard on gradedViaFuzzyMatch (not status):
+        // if another pass already upgraded this leg, or its parlay was deleted
+        // mid-run, this matches 0 rows instead of throwing P2025. count === 0
+        // also short-circuits the stale-`leg.status` comparison above.
+        const { count } = await prisma.leg.updateMany({
+          where: { id: leg.id, gradedViaFuzzyMatch: true },
+          data: { status: outcome, gradedViaFuzzyMatch: false },
+        });
+        if (count === 1 && changed) {
           upgraded++;
           touchedParlayIds.push(leg.parlayBetId);
         }

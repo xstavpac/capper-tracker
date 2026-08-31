@@ -4,9 +4,26 @@
 until the instrumentation produces real numbers. This supersedes the C4 line in
 `scale-readiness-followups.md`.
 
+**Update (2026-08-31, later):** two previously-Unknown production facts are now
+confirmed by the project owner from the Vercel dashboard / env config:
+
+- **Fluid Compute is ENABLED** for this project (Vercel → Settings → Functions).
+  The applicable Vercel Pro Fluid Compute maximum function duration is
+  **800 s** — **Verified**.
+- The current `grade-picks` route still declares **`maxDuration = 60`** —
+  **Verified** (repo). So the *platform* ceiling is 800 s while the
+  *application* ceiling is 60 s.
+- Production `DATABASE_URL` query parameters are **`pgbouncer=true&connection_limit=1`**
+  — both **Verified** (owner-confirmed; credentials never requested or exposed).
+
+Throughput numbers that depend on write round-trip latency or on real function
+execution time remain **[ESTIMATE]** — knowing `connection_limit=1` does not
+convert any modeled number into a measured one.
+
 **Epistemic tags used below**
-- **Verified** — established directly from this repository or from current
-  official Vercel/Supabase/Prisma documentation.
+- **Verified** — established directly from this repository, from current
+  official Vercel/Supabase/Prisma documentation, or owner-confirmed from the
+  Vercel dashboard/config.
 - **[ESTIMATE]** — modeled or calculated from assumptions; **not** measured in
   production.
 - **Unknown** — genuinely unavailable from anything inspectable right now.
@@ -23,14 +40,22 @@ No [ESTIMATE] number in this document is an observed fact.
 - `src/app/api/cron/grade-picks/route.ts`: `export const maxDuration = 60`,
   `export const dynamic = "force-dynamic"`, no `runtime` export (⇒ Node.js), no
   `preferredRegion`.
+- **Fluid Compute is ENABLED** (owner-confirmed). Platform max function
+  duration on Vercel Pro + Fluid = **800 s**; the route caps itself at 60 s.
 - Next.js `14.2.35`.
 - `prisma/schema.prisma` datasource: `url = env("DATABASE_URL")`,
   `directUrl = env("DIRECT_URL")`. No `connection_limit`, `pgbouncer`, or
-  `pool_timeout` in the schema.
+  `pool_timeout` in the schema — they are set as query parameters on the
+  production `DATABASE_URL` env var instead.
+- **Production `DATABASE_URL` query parameters: `pgbouncer=true&connection_limit=1`**
+  (owner-confirmed). `pgbouncer=true` ⇒ Prisma disables prepared statements and
+  treats the connection as transaction-pooled (Supavisor). `connection_limit=1`
+  ⇒ Prisma's client-side pool holds **exactly one** connection per running
+  function instance.
 - `src/lib/prisma.ts`: `new PrismaClient()` with **no configuration** — no
   `datasources` override, no explicit pool settings. Just the dev hot-reload
   singleton guard. All request paths and all 5 sport callbacks in the cron
-  share this one `PrismaClient` instance ⇒ **one connection pool**.
+  share this one `PrismaClient` instance ⇒ **one client-side pool of size 1**.
 
 ## 2. Actual grading flow (Verified — traced in code)
 
@@ -75,7 +100,7 @@ gradePickPool(picks, sportKey, sportName):
   / `inChunks`) and the pure `matchGameResult` / `resolveOutcome` / `gradePick`
   functions are the baseline and are unchanged by C4.
 
-## 3. Concurrency characteristics (Verified reasoning)
+## 3. Concurrency characteristics (Verified)
 
 The cron's `Promise.all` over 5 sports runs the 5 sport callbacks concurrently.
 Within a sport, `gradePickPool`'s `inChunks` issues bursts of up to 50
@@ -83,16 +108,21 @@ Within a sport, `gradePickPool`'s `inChunks` issues bursts of up to 50
 
 - **In-flight promise count** peaks at ~`5 sports × 50 = 250` `pick.update`
   promises.
-- **Actual concurrent database writes** = `min(250, effective connection_limit)`.
-  Everything above `connection_limit` **queues inside the Prisma client**, not
-  at Postgres.
-- Therefore the sport count multiplies *Prisma-side queue depth*, **not**
-  database write throughput. Whole-run grading-write throughput is
-  approximately `connection_limit ÷ write_round_trip_latency`.
-- **If `connection_limit` is small (e.g. 1–3, the common serverless value),
-  `BULK_GRADE_CONCURRENCY = 50` and the 5-way sport parallelism are largely
-  cosmetic** — all grading writes for the whole run serialize through 1–3 real
-  connections.
+- **`connection_limit = 1` (Verified) ⇒ actual concurrent database writes for
+  the entire cron run = 1.** All ~250 in-flight `pick.update` / `leg.update`
+  promises — across all 5 sports and all chunks — queue inside the single
+  Prisma client and execute **strictly one at a time**. `BULK_GRADE_CONCURRENCY
+  = 50` and the 5-way sport `Promise.all` do **not** produce concurrent writes;
+  they only change how deep the Prisma-side queue gets. (`pgbouncer=true` means
+  each of those serial statements is its own pooled transaction on Supavisor.)
+- **Whole-run grading-write throughput ≈ `1 ÷ write_round_trip_latency`.** The
+  round-trip latency is **[ESTIMATE]** (see A4) until the instrumentation
+  measures it, so the resulting writes-per-second figure is **[ESTIMATE]**.
+- Reads in the grading path (`sport.findUnique`, `pick.count`, `pick.findMany`,
+  the single `gameResult.findMany` candidate pool) also serialize through the
+  same one connection, but there are only a handful per sport.
+- The pure work (`matchGameResult`, `resolveOutcome`) is in-memory and does not
+  touch the connection.
 
 ## 4. Measured vs estimated throughput
 
@@ -106,14 +136,19 @@ Within a sport, `gradePickPool`'s `inChunks` issues bursts of up to 50
   a ceiling of **[ESTIMATE] ~10,000 pick-grades/hour** — and only *if* every
   run completes within its 15-minute window and every sport has ≥ 500 pending.
   Whether runs complete in time is **Unknown** (unmeasured).
-- **Per-run wall-clock: [ESTIMATE] only** — dominated by 2,500–10,000 autocommit
-  writes at unknown effective concurrency (see §7 `connection_limit`) and
-  unknown Vercel↔Supabase latency. Plausible band **[ESTIMATE] ~10–70 s**,
-  which straddles both "comfortably under `maxDuration = 60`" and "exceeds it."
-  Cannot be narrowed without the `connection_limit` value **and** one real
-  run's logs.
+- **Per-run wall-clock: [ESTIMATE] only.** With `connection_limit = 1`
+  (Verified), a fully-loaded run performs its writes **serially**: up to
+  `2,500 pick.update + 2,500 leg.update = 5,000` serial round-trips, plus
+  regrades, plus ~4 serial reads per sport, plus the 5 `persistFinalScores`
+  phases (each doing its own external score/odds fetches + per-final-game
+  upserts). At an **[ESTIMATE]** write round-trip of ~4–8 ms (A4), 5,000 serial
+  writes alone are **[ESTIMATE] ~20–40 s**; a run where several sports are at
+  their caps could plausibly **approach or exceed the current 60 s
+  application-level `maxDuration`**, well under the 800 s platform ceiling. This
+  is a modeled range, not an observation — the instrumentation's `totalMs` will
+  replace it.
 - **50k-user projections: [ESTIMATE]** built on the assumptions in §5. Not
-  recorded here as throughput facts; revisit once §4 has measured data.
+  recorded here as throughput facts; revisit once measured data exists.
 
 ## 5. Assumptions & confidence
 
@@ -124,9 +159,9 @@ Assume a **realistic mixed user base**, not a bulk-importer-heavy skew.
 | A1 | Pick volume at 50k users follows a power law — weighted **~2–4 picks/day/user**, **~100–200k picks/day** total. | Medium |
 | A2 | **40–65%** of a day's gradeable picks resolve inside a **4–6 hour** window; football Saturdays/Sundays are the worst case. | Medium |
 | A3 | Steady state: picks created/day ≈ picks gradeable/day. | High |
-| A4 | Vercel and Supabase are co-located in `us-east-1`; write round-trip **[ESTIMATE] ~4–8 ms**. | Medium — Vercel region unverified; Supabase region inferred from the pooler host. |
-| A5 | Supabase Pro + at least Small compute; Supavisor multiplexes to hundreds of client connections. | Medium |
-| A6 | Vercel plan is Pro. | Medium-high — inferred from a `"plan":"pro"` claim in a now-deleted `vercel env pull` artifact, not the dashboard. |
+| A4 | Vercel and Supabase are co-located in `us-east-1`; write round-trip **[ESTIMATE] ~4–8 ms**. | Medium — Vercel region unverified; Supabase region inferred from the pooler host. The instrumentation will measure this indirectly (per-phase `gradeMs` ÷ writes performed). |
+| A5 | Supabase compute tier and Supavisor pool size are sufficient for the workload. | **Unknown** — the specific compute add-on / pool settings have not been read from the Supabase dashboard. |
+| A6 | Vercel plan is Pro. | **Verified** — Fluid Compute (Pro/Enterprise feature) is confirmed enabled. |
 
 ## 6. Concurrency & correctness properties relevant to any future change (Verified)
 
@@ -145,13 +180,25 @@ Assume a **realistic mixed user base**, not a bulk-importer-heavy skew.
   the whole cron run; Vercel does **not** retry it, so that run's grading is
   lost until the next tick. See §9 (deferred `updateMany` hardening).
 
-## 7. Unresolved production facts
+## 7. Production facts — resolved and still-unresolved
+
+### Resolved (Verified — owner-confirmed 2026-08-31)
+
+| Fact | Value | Implication |
+|---|---|---|
+| Prisma `connection_limit` | **`1`** (query param on prod `DATABASE_URL`) | The whole cron run's DB writes are serial (§3). |
+| `pgbouncer` | **`true`** | Transaction-pooled (Supavisor); prepared statements disabled; session-level advisory locks confirmed unavailable (§8). |
+| Fluid Compute | **ENABLED** | Platform max function duration = **800 s** on Pro. The route's `maxDuration = 60` is a self-imposed cap with ~13× headroom to raise. |
+| Vercel plan | **Pro** (Fluid is a Pro feature) | Per-minute cron allowed; 800 s duration available. |
+
+### Still Unknown
 
 | Fact | Status | How to resolve |
 |---|---|---|
-| **Prisma `connection_limit`** (and whether `DATABASE_URL` is transaction pooler `:6543`, session pooler `:5432`, or direct; whether `pgbouncer=true`; `pool_timeout`) | **Unknown.** Not in the repo. The prod `DATABASE_URL` is Sensitive-type in Vercel (masked on `vercel env pull`) and was set manually. Prisma's default when absent is `num_physical_cpus * 2 + 1`, and the CPU count Prisma detects on a Vercel function is itself uncertain. | Owner pastes the prod `DATABASE_URL` **query string only** (host:port + params, credentials redacted). |
-| **Fluid Compute enabled for this project?** | **Unknown.** Project-level dashboard toggle (Settings → Functions), not in any repo file. Default-on only for projects created after the mid-2025 rollout; this project predates that. | Owner reads Vercel → Settings → Functions. Determines whether the max function duration is **300 s** (no Fluid) or **800 s** (Fluid), per current Vercel docs. |
-| Vercel deployment region | Unknown | Vercel → Settings → Functions (default region). Affects A4. |
+| Write round-trip latency Vercel↔Supabase | **Unknown / [ESTIMATE] ~4–8 ms** | The `grade-picks-run` instrumentation will let us back it out (`gradeMs` ÷ writes performed). |
+| Supabase compute add-on / Supavisor pool size / `default_pool_size` | **Unknown** | Supabase dashboard → Database → Connection pooling settings and compute tier. Needed before *raising* `connection_limit` (§ item 2). |
+| Vercel deployment region | **Unknown** | Vercel → Settings → Functions (default region). Affects the latency estimate. |
+| Real per-run duration / whether `remaining > 0` ever occurs | **Unknown — pending the new instrumentation** (~1 week, incl. a football weekend). | Read the `grade-picks-run` log lines. |
 
 ## 8. Overlap protection — why `pg_try_advisory_lock` is not acceptable now
 
@@ -161,21 +208,22 @@ Assume a **realistic mixed user base**, not a bulk-importer-heavy skew.
   race conditions, duplicate processing, or data corruption."* It also does
   **not** retry a failed invocation, and delivery is best-effort (can
   double-invoke or skip a scheduled run).
-- **Verified:** session-level `pg_advisory_lock` / `pg_try_advisory_lock` is
-  **incompatible with Supavisor transaction mode (`:6543`)** — *"Session-level
-  settings cannot be used with Supavisor in Transaction mode."* Transaction
-  mode reassigns the backend connection per transaction, so a lock acquired in
-  one statement is stranded on a backend the next query won't get.
+- **Verified:** `pgbouncer=true` is set on the production `DATABASE_URL` (§7),
+  so Prisma is running against a transaction-pooled Supavisor connection.
+  Session-level `pg_advisory_lock` / `pg_try_advisory_lock` is
+  **incompatible with Supavisor transaction mode** — *"Session-level settings
+  cannot be used with Supavisor in Transaction mode."* Transaction mode
+  reassigns the backend connection per transaction, so a lock acquired in one
+  statement is stranded on a backend the next query won't get. This is now a
+  confirmed constraint, not a hypothetical.
 - `pg_advisory_xact_lock` (transaction-scoped) works with transaction pooling
   but auto-releases at transaction end — it cannot span the multi-statement
   grading run, which is deliberately not wrapped in a transaction.
-- We also do not know whether `DATABASE_URL` is transaction mode (§7), so the
-  guard's safety cannot even be assessed today.
 
-**Conclusion:** no advisory-lock guard. It is also not *needed* now — the cron
-frequency is not being changed, and the grading writes already tolerate a
-double invocation (deterministic outcomes), except for the `P2025` fragility in
-§6.
+**Conclusion:** no advisory-lock guard of any kind. It is also not *needed* now
+— the cron frequency is not being changed, and the grading writes already
+tolerate a double invocation (deterministic outcomes), except for the `P2025`
+fragility in §6.
 
 **Possible future mechanism if cron frequency is ever increased:** a
 **row-based lock table** (`cron_lock(name text pk, locked_at timestamptz,
@@ -188,15 +236,15 @@ the longest legitimate run. **Not implemented; recorded as the approach.**
 
 ## 9. Intermediate tuning options considered (none implemented)
 
-| Option | Gating unknown / prerequisite |
+| Option | Status now that §7 is resolved |
 |---|---|
-| Enable Fluid Compute + raise `maxDuration` 60 → 300 | §7 Fluid state; one real run's `totalMs` (if runs are well under 40 s this is premature). |
-| Cron `*/15` → `*/5` (Pro allows per-minute — Verified) | A real run duration; confirmation runs aren't already overlapping/skipped; the row-lock guard (§8) built first. |
-| `maxPicks` 500 → 1500 | Same as above; multiplies with frequency. |
-| Verify / adjust `connection_limit` | **Report the discovered value first.** Do not change without explicit approval — if it is `=1` that is a deliberate serverless tradeoff needing Supabase-compute-tier coordination. |
-| `BULK_GRADE_CONCURRENCY` 50 → higher | Only helps if `connection_limit` allows it; risks a write storm otherwise. |
-| Conditional `updateMany({ where: { id, status: "PENDING" } })` grading writes | Deferred, independently justified as a **delete-race fix** (§6). Safe for every grading path (deterministic outcomes; no pre-write side effects; `recomputeParlayBetStatus` already a CAS). Needs its own idempotency/race tests. Not part of the instrumentation commit. |
-| Raw-SQL write batching (`$executeRaw` CASE) | Excluded — real correctness risk for a problem tuning solves. |
+| Raise `maxDuration` 60 → (up to 800; Fluid is on) | Gives **timeout headroom only** — it does not raise DB throughput (writes stay serial at `connection_limit=1`). Sensible to raise once we know a real `totalMs`, so a long run finishes instead of being killed at 60 s. **Measure first** — pick the value from the measured distribution. |
+| Cron `*/15` → `*/5` | Multiplies the *ceiling* by 3, but only helps if a single run actually clears a sport's backlog in time — undetermined until measured. Also **requires an overlap guard** (§8 row-lock table) because a run that already runs long would now overlap the next. **Measure + build guard first.** |
+| `maxPicks` 500 → 1500 | With `connection_limit=1` this makes each run **3× longer in serial write time** — a run that is [ESTIMATE] ~30 s at 500/sport becomes [ESTIMATE] ~90 s at 1500/sport, which exceeds the current `maxDuration` and needs it raised. Trades "smaller batches, more runs" for "bigger batches, longer runs" without adding write concurrency. **Measure first; likely prefer frequency over batch size.** |
+| Raise `connection_limit` above 1 | The single lever that would actually add write concurrency. **Blocked on Unknown Supabase pool/compute config** (§7). Must not change `DATABASE_URL` without reading the Supabase Connection-pooling settings first. See § item 2. |
+| `BULK_GRADE_CONCURRENCY` 50 → higher | **No effect while `connection_limit=1`** — the writes serialize regardless. Only meaningful *after* `connection_limit` is raised. |
+| Conditional `updateMany({ where: { id, status: "PENDING" } })` grading writes | Deferred, independently justified as a **delete-race fix** (§6). Safe for every grading path (deterministic outcomes; no pre-write side effects; `recomputeParlayBetStatus` already a CAS). Needs its own idempotency/race tests. Independent of the queue decision. |
+| Raw-SQL write batching (`$executeRaw` CASE) | Excluded — real correctness risk. *(Note: at `connection_limit=1` this is the one thing that would meaningfully cut per-run time — collapsing 50 serial round-trips into 1 — but it is out of scope per the owner's constraints.)* |
 
 ## 10. Current decision
 
@@ -206,6 +254,20 @@ retry, no branching, HTTP response unchanged). Collect ~1 week including a
 football Saturday/Sunday, then use `totalMs`, per-phase timings, and
 `remaining` to make the §9 decisions.
 
+The two variables that were Unknown at first write are now resolved
+(`connection_limit = 1`, Fluid enabled / 800 s ceiling). That sharpens the
+picture but does **not** change the decision:
+
+- The write path is now **known** to be single-connection-serial. The only
+  in-scope tuning levers (`maxDuration`, cron frequency, `maxPicks`) add
+  *timeout headroom* or *more runs*, not *write concurrency* — so they buy
+  runway, not a fundamentally different ceiling.
+- Raising `connection_limit` — the one lever that adds concurrency — is
+  blocked on the still-Unknown Supabase pool/compute config and must not be
+  done by editing `DATABASE_URL` blind.
+- Therefore the measured `totalMs` / `remaining` still gate every next step,
+  and the queue remains the eventual answer for genuine concurrency control.
+
 **Do NOT, in this pass:** change `maxDuration`, Fluid Compute config,
 `DATABASE_URL`, `connection_limit`, Prisma connection settings, cron frequency,
 `maxPicks`, `BULK_GRADE_CONCURRENCY`; add advisory locks or a row-lock table;
@@ -213,9 +275,16 @@ apply the `updateMany` hardening; build a queue; touch M2 / M7 / M9.
 
 ## 11. Deferred: the queue
 
-Not now. Current scale does not need it; the measured tuning path in §9 is
-expected to cover the realistic 50k-user range (§5, [ESTIMATE]); Vercel Queues
-is in public beta; and the migration, though low-risk, is real work.
+Not now. Current scale does not need it; Vercel Queues is in public beta; and
+the migration, though low-risk, is real work.
+
+Note that `connection_limit = 1` (Verified) *strengthens* the eventual case for
+a queue: the only way to safely add write concurrency later is a bounded pool
+(`connection_limit > 1`) **plus** a global throttle so a large backlog can't
+open many connections at once. Vercel Queues' per-consumer-group max-concurrency
+setting is exactly that throttle; the current `Promise.all`-over-5-sports design
+has no equivalent. Until then, single-connection-serial writes are the ceiling
+and the tuning levers in §9 only move the timeout/frequency around it.
 
 ## 12. Eventual queue recommendation — FUTURE, not being implemented
 
@@ -279,7 +348,9 @@ Act when **any** of these is true, using the new instrumentation:
 1. **`remaining > 0` for 3+ consecutive runs** during a peak window (backlog
    is actually accumulating, not just a one-off).
 2. **`totalMs` consistently exceeds ~50% of the configured `maxDuration`**
-   (headroom gone).
+   (headroom gone). Against the current 60 s cap that threshold is ~30 s;
+   if `maxDuration` is later raised toward 800 s, re-anchor this to ~50% of
+   whatever it is set to, and also watch the *absolute* trend.
 3. **Active users (30-day) cross ~10,000** — the conservative low end of the
    §5 estimate band; a leading indicator so a queue lands *before* the first
    bad football Sunday, not during one.
