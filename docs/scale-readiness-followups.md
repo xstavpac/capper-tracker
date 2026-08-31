@@ -45,6 +45,38 @@ Loads every `GameResult` + every `OddsSnapshot` for a sport on each daily
 `refresh-scores` run. Grows with years of history (not users). Window it to
 the last N days once the row counts justify it.
 
+## CI / tooling
+
+### Bump CI `node-version` from 20 to 22
+
+`.github/workflows/ci.yml` pins `actions/setup-node` to `node-version: 20`.
+GitHub is deprecating the Node 20 runtime and already forces `checkout` /
+`setup-node`'s own action code onto Node 24 (a `##[warning]` in every run,
+linking https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/).
+That deprecation currently only affects the actions themselves, not the
+`node-version` we install for our own steps - so nothing is broken. Bump to
+`node-version: 22` (current LTS) once GitHub extends the deprecation to
+user-workflow versions, or opportunistically. Local dev is on Node 24
+already; the runner script uses `node --import tsx`, which needs Node >= 20.6,
+so 22 is fine.
+
+### Give CI a seeded Postgres so the model-engine suites run there
+
+Six suites need a database with production-like historical rows (specific
+hardcoded cuids like the "real Rangers/Braves GameResult"): the five under
+`src/server/data/model-engine/` plus `weighted-accumulation` (which reaches
+the DB transitively via `resolveGameObservations`). `scripts/run-tests.mjs`
+skips any suite that needs a DB when `DATABASE_URL` is unset, so CI currently
+reports them as SKIP rather than running them.
+
+To run them in CI: add a `postgres:16` service container to the `verify`
+job, run `prisma migrate deploy` against it, and add a CI-specific seed that
+creates the exact fixture rows those suites assert on (the regular
+`prisma/seed-dev.ts` is synthetic and does not reproduce them). Then set
+`DATABASE_URL` for the `npm test` step so the skip logic lets them run.
+`prisma/seed-dev.ts` is the starting point for the seed; the fixture ids the
+suites expect can be pulled from the assertions in each file.
+
 ## Deferred by explicit decision
 
 ### C4 - Grading queue / worker architecture
