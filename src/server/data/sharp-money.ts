@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { startOfEasternDay } from "@/lib/dates";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { pickCategory, PICK_CATEGORY_LABELS, type PickCategoryKey } from "@/server/data/stats";
-import { getCapperCategoryRecord } from "@/server/data/picks";
+import { getCapperCategoryRecords, categoryRecordKey } from "@/server/data/picks";
 
 // No minimum sample size by design (a 1-1 capper qualifies) - the actual
 // wins/losses/pushes always accompany the percentage in the UI so the user
@@ -92,25 +92,22 @@ export async function getSharpMoneyBoard(userId: string): Promise<SharpMoneyBoar
     .map((p) => ({ pick: p, category: pickCategory({ ...p, sportName: p.sport.name }) }))
     .filter((e): e is { pick: (typeof todaysPicks)[number]; category: PickCategoryKey } => e.category !== null);
 
-  // One category-record lookup per distinct (capperId, category) pair, not
-  // per pick - several of today's picks can share the same capper+category.
+  // One batched lookup for every distinct (capperId, category) pair - several
+  // of today's picks can share a capper+category, and getCapperCategoryRecords
+  // collapses the whole set to a single query.
   const uniquePairs = Array.from(
     new Map(
-      categorized.map((e) => [e.pick.capperId + "|" + e.category, { capperId: e.pick.capperId, category: e.category }])
+      categorized.map((e) => [
+        categoryRecordKey(e.pick.capperId, e.category),
+        { capperId: e.pick.capperId, category: e.category },
+      ])
     ).values()
   );
-  const records = new Map(
-    await Promise.all(
-      uniquePairs.map(async (pair) => {
-        const record = await getCapperCategoryRecord(userId, pair.capperId, pair.category);
-        return [pair.capperId + "|" + pair.category, record] as const;
-      })
-    )
-  );
+  const records = await getCapperCategoryRecords(userId, uniquePairs);
 
   const bySport = new Map<string, Map<PickCategoryKey, SharpMoneyPick[]>>();
   for (const { pick, category } of categorized) {
-    const record = records.get(pick.capperId + "|" + category);
+    const record = records[categoryRecordKey(pick.capperId, category)];
     if (!record || record.winPct < QUALIFYING_WIN_PCT) continue;
 
     const sportName = pick.sport.name;

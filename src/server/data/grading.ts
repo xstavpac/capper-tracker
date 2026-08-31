@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { GameResult, PickedSide } from "@prisma/client";
+import type { GameResult, Pick, PickedSide } from "@prisma/client";
 import {
   getLiveScoresForSport,
   getOddsForSport,
@@ -646,44 +646,18 @@ export async function gradeTouchdownProp(
   return (await resolveTouchdownProp(pick, eventId, sportName)).outcome;
 }
 
+// Per-user counterpart of gradeAllPendingPicks, run opportunistically when a
+// user loads /picks or /live/[gameId]. Same one-pool-plus-chunked-writes path
+// (gradePickPool) - not a per-pick query loop.
 export async function gradePendingPicks(
   userId: string,
   sportName: string,
   sportKey: string
-): Promise<{
-  graded: number;
-  notMatched: number;
-}> {
+): Promise<{ graded: number; notMatched: number }> {
   const pendingPicks = await prisma.pick.findMany({
     where: { userId, status: "PENDING", sport: { name: sportName } },
   });
-
-  let graded = 0;
-  let notMatched = 0;
-
-  for (const pick of pendingPicks) {
-    const result = await findMatchingGameResult(sportKey, pick);
-    if (!result) {
-      notMatched++;
-      continue;
-    }
-
-    const outcome =
-      pick.betType === "PLAYER_PROP"
-        ? await gradeTouchdownProp(pick, result.game.externalId, sportName)
-        : resolveOutcome(pick, result.game);
-    if (!outcome) {
-      notMatched++;
-      continue;
-    }
-
-    await prisma.pick.update({
-      where: { id: pick.id },
-      data: { status: outcome, gradedAt: new Date(), gradedViaFuzzyMatch: result.matchType === "fuzzy" },
-    });
-    graded++;
-  }
-
+  const { graded, notMatched } = await gradePickPool(pendingPicks, sportKey, sportName);
   return { graded, notMatched };
 }
 
@@ -711,27 +685,8 @@ export async function regradeFuzzyMatchedPicks(
     orderBy: { gameTime: "desc" },
     take: REGRADE_MAX_ROWS,
   });
-
-  let upgraded = 0;
-
-  for (const pick of fuzzyGraded) {
-    const result = await findMatchingGameResult(sportKey, pick);
-    if (!result || result.matchType !== "exact") continue;
-
-    const outcome =
-      pick.betType === "PLAYER_PROP"
-        ? await gradeTouchdownProp(pick, result.game.externalId, sportName)
-        : resolveOutcome(pick, result.game);
-    if (!outcome) continue;
-
-    const changed = outcome !== pick.status;
-    // gradedAt intentionally untouched - this corrects the original grading, it
-    // isn't a new grading event, so it shouldn't reorder recent-form panels.
-    await prisma.pick.update({ where: { id: pick.id }, data: { status: outcome, gradedViaFuzzyMatch: false } });
-    if (changed) upgraded++;
-  }
-
-  return { checked: fuzzyGraded.length, upgraded };
+  const { checked, upgraded } = await regradeFuzzyPool(fuzzyGraded, sportKey, sportName);
+  return { checked, upgraded };
 }
 
 // Concurrency cap for the bulk write passes below - bounds how many
@@ -774,6 +729,103 @@ export function regradeLookbackCutoff(now: Date = new Date()): Date {
   return new Date(now.getTime() - REGRADE_LOOKBACK_DAYS * 86400000);
 }
 
+// ---- Shared grading passes ----
+// The cron (all users) and page-load (one user) paths both funnel into these,
+// so match-and-write has exactly one implementation - no parallel logic to
+// drift. Each caller runs its own query for the pick set (by sportId for the
+// cron, by userId for the page), then hands the rows here. The GameResult
+// candidate pool is fetched once for the whole set (window = oldest gameTime
+// - 2d .. newest + 2d, the same window findMatchingGameResult applies per
+// pick), matched in memory via the pure matchGameResult, and writes go out in
+// BULK_GRADE_CONCURRENCY-sized concurrent chunks - never one await per pick.
+// changedUserIds is returned so a Route Handler caller (the cron) can
+// revalidateTag each affected user's cached surfaces; the page-load callers
+// ignore it (revalidateTag is illegal during render - they rely on the cache
+// TTL instead).
+
+async function fetchCandidatePool(picks: { gameTime: Date }[], sportKey: string): Promise<GameResult[]> {
+  const times = picks.map((p) => p.gameTime.getTime());
+  const min = Math.min(...times) - 2 * 86400000;
+  const max = Math.max(...times) + 2 * 86400000;
+  return prisma.gameResult.findMany({
+    where: { sportKey, gameDate: { gte: new Date(min), lt: new Date(max) } },
+  });
+}
+
+async function inChunks<T>(items: T[], fn: (item: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < items.length; i += BULK_GRADE_CONCURRENCY) {
+    await Promise.all(items.slice(i, i + BULK_GRADE_CONCURRENCY).map(fn));
+  }
+}
+
+async function gradePickPool(
+  picks: Pick[],
+  sportKey: string,
+  sportName: string
+): Promise<{ graded: number; notMatched: number; changedUserIds: Set<string> }> {
+  const changedUserIds = new Set<string>();
+  if (picks.length === 0) return { graded: 0, notMatched: 0, changedUserIds };
+
+  const candidates = await fetchCandidatePool(picks, sportKey);
+  let graded = 0;
+  let notMatched = 0;
+
+  await inChunks(picks, async (pick) => {
+    const result = matchGameResult(candidates, pick);
+    if (!result) {
+      notMatched++;
+      return;
+    }
+    const outcome =
+      pick.betType === "PLAYER_PROP"
+        ? await gradeTouchdownProp(pick, result.game.externalId, sportName)
+        : resolveOutcome(pick, result.game);
+    if (!outcome) {
+      notMatched++;
+      return;
+    }
+    await prisma.pick.update({
+      where: { id: pick.id },
+      data: { status: outcome, gradedAt: new Date(), gradedViaFuzzyMatch: result.matchType === "fuzzy" },
+    });
+    graded++;
+    changedUserIds.add(pick.userId);
+  });
+
+  return { graded, notMatched, changedUserIds };
+}
+
+async function regradeFuzzyPool(
+  picks: Pick[],
+  sportKey: string,
+  sportName: string
+): Promise<{ checked: number; upgraded: number; changedUserIds: Set<string> }> {
+  const changedUserIds = new Set<string>();
+  if (picks.length === 0) return { checked: 0, upgraded: 0, changedUserIds };
+
+  const candidates = await fetchCandidatePool(picks, sportKey);
+  let upgraded = 0;
+
+  await inChunks(picks, async (pick) => {
+    const result = matchGameResult(candidates, pick);
+    if (!result || result.matchType !== "exact") return;
+    const outcome =
+      pick.betType === "PLAYER_PROP"
+        ? await gradeTouchdownProp(pick, result.game.externalId, sportName)
+        : resolveOutcome(pick, result.game);
+    if (!outcome) return;
+    const changed = outcome !== pick.status;
+    // gradedAt intentionally untouched - a correction, not a new grading event.
+    await prisma.pick.update({ where: { id: pick.id }, data: { status: outcome, gradedViaFuzzyMatch: false } });
+    if (changed) {
+      upgraded++;
+      changedUserIds.add(pick.userId);
+    }
+  });
+
+  return { checked: picks.length, upgraded, changedUserIds };
+}
+
 // Global counterpart to gradePendingPicks - grades every user's pending picks
 // for a sport in one pass, instead of requiring each user to load /picks or
 // /live/[gameId] themselves before their own picks get graded (see the cron
@@ -796,12 +848,12 @@ export async function gradeAllPendingPicks(
   sportKey: string,
   sportName: string,
   maxPicks = 500
-): Promise<{ graded: number; notMatched: number; remaining: number }> {
+): Promise<{ graded: number; notMatched: number; remaining: number; changedUserIds: Set<string> }> {
   const sport = await prisma.sport.findUnique({ where: { name: sportName } });
-  if (!sport) return { graded: 0, notMatched: 0, remaining: 0 };
+  if (!sport) return { graded: 0, notMatched: 0, remaining: 0, changedUserIds: new Set() };
 
   const totalPending = await prisma.pick.count({ where: { sportId: sport.id, status: "PENDING" } });
-  if (totalPending === 0) return { graded: 0, notMatched: 0, remaining: 0 };
+  if (totalPending === 0) return { graded: 0, notMatched: 0, remaining: 0, changedUserIds: new Set() };
 
   const toProcess = await prisma.pick.findMany({
     where: { sportId: sport.id, status: "PENDING" },
@@ -810,39 +862,8 @@ export async function gradeAllPendingPicks(
   });
   const remaining = totalPending - toProcess.length;
 
-  const minTime = Math.min(...toProcess.map((p) => p.gameTime.getTime())) - 2 * 86400000;
-  const maxTime = Math.max(...toProcess.map((p) => p.gameTime.getTime())) + 2 * 86400000;
-  const candidates = await prisma.gameResult.findMany({
-    where: { sportKey, gameDate: { gte: new Date(minTime), lt: new Date(maxTime) } },
-  });
-
-  let graded = 0;
-  let notMatched = 0;
-
-  for (let i = 0; i < toProcess.length; i += BULK_GRADE_CONCURRENCY) {
-    const chunk = toProcess.slice(i, i + BULK_GRADE_CONCURRENCY);
-    const outcomes = await Promise.all(
-      chunk.map(async (pick) => {
-        const result = matchGameResult(candidates, pick);
-        if (!result) return false;
-
-        const outcome =
-          pick.betType === "PLAYER_PROP"
-            ? await gradeTouchdownProp(pick, result.game.externalId, sportName)
-            : resolveOutcome(pick, result.game);
-        if (!outcome) return false;
-
-        await prisma.pick.update({
-          where: { id: pick.id },
-          data: { status: outcome, gradedAt: new Date(), gradedViaFuzzyMatch: result.matchType === "fuzzy" },
-        });
-        return true;
-      })
-    );
-    for (const matched of outcomes) matched ? graded++ : notMatched++;
-  }
-
-  return { graded, notMatched, remaining };
+  const { graded, notMatched, changedUserIds } = await gradePickPool(toProcess, sportKey, sportName);
+  return { graded, notMatched, remaining, changedUserIds };
 }
 
 // Global counterpart to regradeFuzzyMatchedPicks - same "upgrade a fuzzy match
@@ -853,9 +874,9 @@ export async function gradeAllPendingPicks(
 export async function regradeAllFuzzyMatchedPicks(
   sportKey: string,
   sportName: string
-): Promise<{ checked: number; upgraded: number }> {
+): Promise<{ checked: number; upgraded: number; changedUserIds: Set<string> }> {
   const sport = await prisma.sport.findUnique({ where: { name: sportName } });
-  if (!sport) return { checked: 0, upgraded: 0 };
+  if (!sport) return { checked: 0, upgraded: 0, changedUserIds: new Set() };
 
   const fuzzyGraded = await prisma.pick.findMany({
     where: {
@@ -867,37 +888,6 @@ export async function regradeAllFuzzyMatchedPicks(
     orderBy: { gameTime: "desc" },
     take: REGRADE_MAX_ROWS,
   });
-  if (fuzzyGraded.length === 0) return { checked: 0, upgraded: 0 };
-
-  const minTime = Math.min(...fuzzyGraded.map((p) => p.gameTime.getTime())) - 2 * 86400000;
-  const maxTime = Math.max(...fuzzyGraded.map((p) => p.gameTime.getTime())) + 2 * 86400000;
-  const candidates = await prisma.gameResult.findMany({
-    where: { sportKey, gameDate: { gte: new Date(minTime), lt: new Date(maxTime) } },
-  });
-
-  let upgraded = 0;
-
-  for (let i = 0; i < fuzzyGraded.length; i += BULK_GRADE_CONCURRENCY) {
-    const chunk = fuzzyGraded.slice(i, i + BULK_GRADE_CONCURRENCY);
-    await Promise.all(
-      chunk.map(async (pick) => {
-        const result = matchGameResult(candidates, pick);
-        if (!result || result.matchType !== "exact") return;
-
-        const outcome =
-          pick.betType === "PLAYER_PROP"
-            ? await gradeTouchdownProp(pick, result.game.externalId, sportName)
-            : resolveOutcome(pick, result.game);
-        if (!outcome) return;
-
-        const changed = outcome !== pick.status;
-        // gradedAt intentionally untouched - same reasoning as regradeFuzzyMatchedPicks.
-        await prisma.pick.update({ where: { id: pick.id }, data: { status: outcome, gradedViaFuzzyMatch: false } });
-        if (changed) upgraded++;
-      })
-    );
-  }
-
-  return { checked: fuzzyGraded.length, upgraded };
+  return regradeFuzzyPool(fuzzyGraded, sportKey, sportName);
 }
 

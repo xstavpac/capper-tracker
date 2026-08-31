@@ -369,13 +369,57 @@ export async function getCapperCategoryRecord(
   capperId: string,
   category: PickCategoryKey
 ): Promise<CategoryBreakdownItem | null> {
-  const picks = await prisma.pick.findMany({ where: { userId, capperId }, include: { sport: true } });
-  // ALL_CATEGORY_KEYS, not a sport-scoped set - `category` here is whatever
-  // this one pick's own category is (see pickCategory), which might be F5
-  // ML, 1st Half ML, or NRFI regardless of what sport the caller happens to
-  // be looking at. Querying every sport's picks together is safe now that
-  // pickCategory itself splits F5_ML (MLB) from FIRST_HALF_ML (everything
-  // else) - a capper who bets both no longer gets those two blended.
-  const breakdown = computeCategoryBreakdown(picks, ALL_CATEGORY_KEYS);
-  return breakdown.find((b) => b.key === category) ?? null;
+  const records = await getCapperCategoryRecords(userId, [{ capperId, category }]);
+  return records[categoryRecordKey(capperId, category)] ?? null;
+}
+
+export function categoryRecordKey(capperId: string, category: PickCategoryKey): string {
+  return capperId + "|" + category;
+}
+
+// Batched form of getCapperCategoryRecord for callers that need many
+// (capper, category) records at once - the Sharp Money board and the /live
+// game-card expander. Instead of one "load this capper's whole history"
+// query per pair (the same capper's picks reloaded once per category, and a
+// full round-trip per pair), this issues ONE query for every capper
+// involved and runs computeCategoryBreakdown ONCE per capper (it already
+// computes every category in a single pass). N queries + N breakdowns
+// collapse to 1 query + (distinct capper count) breakdowns.
+//
+// ALL_CATEGORY_KEYS, not a sport-scoped set - each pair's `category` is
+// whatever that pick's own category is (F5 ML, 1st Half ML, NRFI...),
+// independent of any sport the caller is looking at. Safe to query every
+// sport's picks together since pickCategory splits F5_ML (MLB) from
+// FIRST_HALF_ML.
+export async function getCapperCategoryRecords(
+  userId: string,
+  pairs: { capperId: string; category: PickCategoryKey }[]
+): Promise<Record<string, CategoryBreakdownItem | null>> {
+  const capperIds = Array.from(new Set(pairs.map((p) => p.capperId)));
+  if (capperIds.length === 0) return {};
+
+  const picks = await prisma.pick.findMany({
+    where: { userId, capperId: { in: capperIds } },
+    include: { sport: { select: { name: true } } },
+  });
+
+  const byCapper = new Map<string, typeof picks>();
+  for (const pick of picks) {
+    const list = byCapper.get(pick.capperId);
+    if (list) list.push(pick);
+    else byCapper.set(pick.capperId, [pick]);
+  }
+
+  // One breakdown per capper (every category in one pass), indexed for O(1) lookup.
+  const breakdownByCapper = new Map<string, Map<PickCategoryKey, CategoryBreakdownItem>>();
+  for (const capperId of capperIds) {
+    const items = computeCategoryBreakdown(byCapper.get(capperId) ?? [], ALL_CATEGORY_KEYS);
+    breakdownByCapper.set(capperId, new Map(items.map((i) => [i.key, i])));
+  }
+
+  const out: Record<string, CategoryBreakdownItem | null> = {};
+  for (const { capperId, category } of pairs) {
+    out[categoryRecordKey(capperId, category)] = breakdownByCapper.get(capperId)?.get(category) ?? null;
+  }
+  return out;
 }
