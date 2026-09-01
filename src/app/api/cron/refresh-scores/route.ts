@@ -8,6 +8,24 @@ const MLB_SPORT_KEY = "baseball_mlb";
 
 export const dynamic = "force-dynamic";
 
+// Instrumentation: like grade-picks/route.ts, this route emits one structured
+// console.log line tagged "refresh-scores-run" per invocation - total
+// wall-clock plus per-sport per-phase durations (persist / tendency recompute
+// / snapshot) and the row/blob counts recomputeTeamTendencies scanned. It is
+// measurement only: no extra query, no write, no branching on the captured
+// values. The per-sport history scan in recomputeTeamTendencies is M9 in the
+// scale audit - the calculation is all-captured-history by design, so these
+// counts are what tell us when the larger fix is worth its cost. See
+// docs/m9-team-tendencies.md.
+
+// Awaits `fn` and returns its value alongside the elapsed milliseconds. Pure
+// timing wrapper - preserves the original sequential await order.
+async function timed<T>(fn: () => Promise<T>): Promise<[T, number]> {
+  const start = Date.now();
+  const value = await fn();
+  return [value, Date.now() - start];
+}
+
 // Vercel Cron hits this once daily. Without it, GameResult only ever gets
 // populated as a side effect of someone loading /picks or /live/[gameId] -
 // getLiveScoresForSport's yesterday/today/tomorrow window means a finished
@@ -26,19 +44,36 @@ export async function GET(req: Request) {
     }
   }
 
+  const runStart = Date.now();
+
   const results = await Promise.all(
     RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
-      const persisted = await persistFinalScores(sportKey);
+      const [persisted, persistMs] = await timed(() => persistFinalScores(sportKey));
       // Recompute right after this sport's scores are persisted, so a
       // freshly-final game is reflected in tendencies the same run it
       // lands in GameResult, not a day later on the next cron pass.
-      const tendencies = await recomputeTeamTendencies(sportKey);
+      const [tendencies, tendencyMs] = await timed(() => recomputeTeamTendencies(sportKey));
       // Preserves today's cumulative counts as a dated row - pure DB
       // read-then-write of what recomputeTeamTendencies just computed, no
       // extra API calls. Without this, TeamTendency's history is lost the
       // moment tomorrow's recompute overwrites it in place.
-      const tendencySnapshots = await snapshotTeamTendencies(sportKey);
-      return { sport: sportKey, persisted, tendencies, tendencySnapshots };
+      const [tendencySnapshots, snapshotMs] = await timed(() => snapshotTeamTendencies(sportKey));
+      return {
+        sport: sportKey,
+        persisted,
+        tendencies,
+        tendencySnapshots,
+        timing: {
+          persistMs,
+          tendencyMs,
+          snapshotMs,
+          gameResultRows: tendencies.gameResultRows,
+          oddsSnapshotRows: tendencies.oddsSnapshotRows,
+          oddsGamesFlattened: tendencies.oddsGamesFlattened,
+          gamesProcessed: tendencies.gamesProcessed,
+          teamsUpdated: tendencies.teamsUpdated,
+        },
+      };
     })
   );
 
@@ -68,6 +103,17 @@ export async function GET(req: Request) {
   // itself (decayDeltaModel.sport === "baseball_mlb") - not looped over
   // RESOLVABLE_SPORT_KEYS like the scores/tendencies above.
   const decayDeltaPredictions = await syncDecayDeltaPredictions(MLB_SPORT_KEY);
+
+  // Measurement only (see docs/m9-team-tendencies.md). One line per run so the
+  // tendency-recompute scan size and per-phase timing are queryable from
+  // Vercel runtime logs without opening each response body.
+  console.log(
+    JSON.stringify({
+      tag: "refresh-scores-run",
+      totalMs: Date.now() - runStart,
+      sports: results.map((r) => ({ sport: r.sport, ...r.timing })),
+    })
+  );
 
   return Response.json({
     ok: true,

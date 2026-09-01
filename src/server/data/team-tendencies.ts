@@ -112,10 +112,27 @@ export function spreadPoint(oddsGame: OddsGame, teamName: string): number | null
 // (a bug fix to the tendency logic self-heals on the next run) at the cost of
 // redoing the join, which stays trivial at this data volume for the
 // foreseeable future.
-export async function recomputeTeamTendencies(sportKey: string): Promise<{ gamesProcessed: number; teamsUpdated: number }> {
+//
+// The unbounded per-sport history scan is M9 in the scale audit - see
+// docs/m9-team-tendencies.md. The calculation is all-captured-history by
+// design (not a rolling/seasonal window), so there is no date bound to add;
+// the row/blob counts returned here are instrumentation to decide when the
+// larger fix (drop the OddsSnapshot scan, read GameResult.favTeam/totalLine)
+// is worth its correctness cost. The `select` clauses below are the free part:
+// this function only reads five GameResult columns and only OddsSnapshot.data.
+export async function recomputeTeamTendencies(sportKey: string): Promise<{
+  gamesProcessed: number;
+  teamsUpdated: number;
+  gameResultRows: number;
+  oddsSnapshotRows: number;
+  oddsGamesFlattened: number;
+}> {
   const [gameResults, snapshots] = await Promise.all([
-    prisma.gameResult.findMany({ where: { sportKey } }),
-    prisma.oddsSnapshot.findMany({ where: { sportKey } }),
+    prisma.gameResult.findMany({
+      where: { sportKey },
+      select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true, gameDate: true },
+    }),
+    prisma.oddsSnapshot.findMany({ where: { sportKey }, select: { data: true } }),
   ]);
 
   const oddsGames: OddsGame[] = snapshots.flatMap((s) => s.data as unknown as OddsGame[]);
@@ -197,7 +214,13 @@ export async function recomputeTeamTendencies(sportKey: string): Promise<{ games
     )
   );
 
-  return { gamesProcessed, teamsUpdated: acc.size };
+  return {
+    gamesProcessed,
+    teamsUpdated: acc.size,
+    gameResultRows: gameResults.length,
+    oddsSnapshotRows: snapshots.length,
+    oddsGamesFlattened: oddsGames.length,
+  };
 }
 
 // Copies today's cumulative TeamTendency rows into a dated
