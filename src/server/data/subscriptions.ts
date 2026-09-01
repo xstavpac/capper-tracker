@@ -174,13 +174,25 @@ export async function createPicksWithEntitlementCheck(userId: string, rows: Pick
 
 // --- Stripe-facing helpers (used by the webhook handler and checkout action) ---
 
-export async function findUserIdByStripeCustomerId(customerId: string): Promise<string | null> {
-  const sub = await prisma.subscription.findFirst({ where: { stripeCustomerId: customerId }, select: { userId: true } });
+// `db` defaults to the shared client but accepts an interactive-transaction
+// client so the Stripe webhook handler can run this read/write inside the
+// same transaction that claims the event id (see stripe-webhook.ts). With
+// `connection_limit=1` in production, a call to the bare `prisma` singleton
+// from inside a `$transaction` callback would deadlock waiting for the one
+// connection the transaction already holds - so every DB call the webhook
+// makes mid-transaction must be threaded through `tx`, not just the writes.
+type SubscriptionDb = Prisma.TransactionClient | typeof prisma;
+
+export async function findUserIdByStripeCustomerId(
+  customerId: string,
+  db: SubscriptionDb = prisma
+): Promise<string | null> {
+  const sub = await db.subscription.findFirst({ where: { stripeCustomerId: customerId }, select: { userId: true } });
   return sub?.userId ?? null;
 }
 
-export async function setStripeCustomerId(userId: string, stripeCustomerId: string) {
-  await prisma.subscription.update({ where: { userId }, data: { stripeCustomerId } });
+export async function setStripeCustomerId(userId: string, stripeCustomerId: string, db: SubscriptionDb = prisma) {
+  await db.subscription.update({ where: { userId }, data: { stripeCustomerId } });
 }
 
 export type StripeSubscriptionSync = {
@@ -199,13 +211,19 @@ export type StripeSubscriptionSync = {
   stripeSubscriptionId: string;
 };
 
-// Idempotent by construction (an upsert on userId, always writing Stripe's
+// Idempotent by construction (an update on userId, always writing Stripe's
 // current field values, never incrementing/toggling anything) - applying the
-// same webhook payload twice leaves the row identical both times. Combined
-// with the StripeWebhookEvent dedupe table (checked before this is ever
-// called), duplicate delivery of the same event is a non-issue twice over.
-export async function syncSubscriptionFromStripe(userId: string, data: StripeSubscriptionSync) {
-  await prisma.subscription.update({
+// same webhook payload twice leaves the row identical both times. The webhook
+// handler additionally claims the event id in the SAME transaction as this
+// write (see applyStripeWebhookEvent in stripe-webhook.ts), so a committed
+// stripe_webhook_events row and its subscription mutation always agree:
+// duplicate delivery is a no-op, and a transient failure rolls back both.
+export async function syncSubscriptionFromStripe(
+  userId: string,
+  data: StripeSubscriptionSync,
+  db: SubscriptionDb = prisma
+) {
+  await db.subscription.update({
     where: { userId },
     data: {
       plan: data.plan,
@@ -217,21 +235,4 @@ export async function syncSubscriptionFromStripe(userId: string, data: StripeSub
       stripeSubscriptionId: data.stripeSubscriptionId,
     },
   });
-}
-
-// Records a Stripe event id as processed, atomically - relies on the
-// unique-constraint violation from a duplicate insert to signal "already
-// handled" rather than a separate check-then-insert (which would itself be
-// racy under concurrent delivery of the same event). Returns false if this
-// event was already processed (caller should skip handling it).
-export async function markWebhookEventProcessed(eventId: string, type: string): Promise<boolean> {
-  try {
-    await prisma.stripeWebhookEvent.create({ data: { id: eventId, type } });
-    return true;
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      return false; // already processed - duplicate delivery
-    }
-    throw err;
-  }
 }
