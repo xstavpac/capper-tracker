@@ -200,6 +200,21 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "New York Jets (NFL)", sport: "NFL", nickname: "new york jets" },
     { label: "Winnipeg Jets (NHL)", sport: "NHL", nickname: "winnipeg jets" },
   ],
+  // A city-only reference to a Boston team - three sports, told apart by the
+  // season -> schedule -> pick-context hierarchy in resolve-ambiguous-catalog.ts,
+  // same as every entry above. The only bare CITY name in this table (the rest
+  // are shared nicknames): added because "Shark - Boston Over 7.5" (a Red Sox
+  // total) was mistagging as a phantom ATP tennis pick - "boston" is in no
+  // nickname list, so it fell all the way through to findPlayerPick. Boston is
+  // the one metro where this resolves cleanly: one team per sport, and not an
+  // NCAAF school name (unlike Miami/Washington/etc, which detectSport already
+  // claims as NCAAF). Every OTHER bare city routes to `unresolved` instead -
+  // see SPORTS_PLACE_NAMES near findPlayerPick.
+  boston: [
+    { label: "Boston Red Sox (MLB)", sport: "MLB", nickname: "red sox" },
+    { label: "Boston Celtics (NBA)", sport: "NBA", nickname: "celtics" },
+    { label: "Boston Bruins (NHL)", sport: "NHL", nickname: "bruins" },
+  ],
 };
 
 const DISAMBIGUATED_TEAMS: TeamEntry[] = [
@@ -1052,6 +1067,36 @@ function looksLikeTeamAbbreviation(name: string): boolean {
   return name.split(/\s+/).some((w) => w.length <= 3 && w === w.toUpperCase());
 }
 
+// Place names that are the locality of a tracked pro franchise (MLB / NBA /
+// NFL / NHL / WNBA / CFL). A bare one of these reaching findPlayerPick means a
+// capper wrote a city/state/region with no nickname and nothing above could
+// resolve it - route it to `unresolved` ("add manually") rather than silently
+// inventing a tennis player named after the place. This is the general guard
+// against the phantom-ATP fallback (see the long TODO above and
+// docs/resolver-team-gap-followups.md #1); "Sharp Sheet - Ottawa +7.5" (a CFL
+// pick) and "Shark - Boston Over 7.5" were both hitting it.
+//
+// Short all-caps abbreviations ("LA", "NY", "SF", "KC", "GB") are already
+// rejected by looksLikeTeamAbbreviation, so this only needs spelled-out forms
+// (plus "nola", 4 letters, which slips past that check). Many entries here
+// (arizona, miami, washington, ...) are also NCAAF school keys that detectSport
+// claims first - listing them is redundant-but-safe defense if that list ever
+// changes. "boston" is deliberately ABSENT: it has an AMBIGUOUS_NICKNAMES
+// entry checked earlier, so it never reaches here.
+const SPORTS_PLACE_NAMES = new Set<string>([
+  "anaheim", "arizona", "atlanta", "baltimore", "brooklyn", "buffalo",
+  "calgary", "carolina", "charlotte", "chicago", "cincinnati", "cleveland",
+  "colorado", "columbus", "dallas", "denver", "detroit", "edmonton",
+  "golden state", "green bay", "hamilton", "houston", "indiana", "indianapolis",
+  "jacksonville", "kansas city", "las vegas", "los angeles", "memphis", "miami",
+  "milwaukee", "minnesota", "montreal", "nashville", "new england",
+  "new orleans", "new york", "oklahoma city", "orlando", "ottawa",
+  "philadelphia", "phoenix", "pittsburgh", "portland", "sacramento",
+  "san antonio", "san diego", "san francisco", "san jose", "saskatchewan",
+  "seattle", "st louis", "st. louis", "tampa", "tampa bay", "tennessee",
+  "toronto", "utah", "vancouver", "vegas", "washington", "winnipeg", "nola",
+]);
+
 function findPlayerPick(text: string): { playerName: string; playerKey: string } | null {
   const withoutParens = text.replace(/\([^)]*\)/g, "").trim();
   const mlMatch = withoutParens.match(/^(.+?)\s+(?:ML|money\s*line)\b/i);
@@ -1070,6 +1115,7 @@ function findPlayerPick(text: string): { playerName: string; playerKey: string }
   // happens to be followed by "ML" or a number (e.g. a typo'd team name).
   if (!/^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/.test(candidate)) return null;
   if (looksLikeTeamAbbreviation(candidate)) return null;
+  if (SPORTS_PLACE_NAMES.has(candidate.toLowerCase())) return null;
 
   const words = candidate.split(/\s+/);
   return { playerName: candidate, playerKey: words[words.length - 1].toLowerCase() };

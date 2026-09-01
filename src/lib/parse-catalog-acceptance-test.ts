@@ -41,7 +41,8 @@
 //     first. Also covers the inverse - a school's OWN real mascot already
 //     claimed bare by an NFL/NBA/NHL entry ("Oregon Ducks", "UCLA Bruins")
 //     must still resolve NCAAF.
-import { parseCatalog, inferSportFromPickContext, NCAAF_CANONICAL_SUFFIX } from "./parse-catalog";
+import { parseCatalog, inferSportFromPickContext, NCAAF_CANONICAL_SUFFIX, ambiguousOptionsFor } from "./parse-catalog";
+import { isSportLabelInSeason } from "./sport-seasons";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -766,6 +767,99 @@ New Mexico State vs Florida State over 53
 NC State +4.5`;
     const slatePicks = parseCatalog(slate, []).picks;
     check("Porter slate: 5 picks, all NCAAF", slatePicks.map((p) => p.sportName), ["NCAAF", "NCAAF", "NCAAF", "NCAAF", "NCAAF"]);
+  }
+
+  // ==========================================================================
+  // PART I - "sport not tracked" pending-page investigation (2026-09):
+  //   1. "Boston" (bare city) -> AMBIGUOUS_NICKNAMES entry resolving via the
+  //      season/schedule/pick-context hierarchy, like rangers/kings/cardinals.
+  //   2. SPORTS_PLACE_NAMES guard in findPlayerPick: any OTHER bare city/
+  //      state/region name routes to `unresolved` instead of the phantom-ATP
+  //      tennis-player fallback ("Sharp Sheet - Ottawa +7.5" was a CFL pick
+  //      mistagging as ATP).
+  // ==========================================================================
+  console.log("\n########## PART I: bare-city resolution (Boston ambiguous + place-name guard) ##########");
+  {
+    // --- Fix 1: "Boston" as an ambiguous nickname ---
+    const boston = parseCatalog(`Cap\nBoston Over 7.5`, []).picks[0];
+    check(
+      "'Boston Over 7.5': surfaces ambiguous (MLB + NBA + NHL), not a phantom ATP pick",
+      { sport: boston?.sportName, key: boston?.ambiguousKey, labels: boston?.ambiguous?.map((o) => o.label) },
+      { sport: "", key: "boston", labels: ["Boston Red Sox (MLB)", "Boston Celtics (NBA)", "Boston Bruins (NHL)"] }
+    );
+    check(
+      "ambiguousOptionsFor('boston') carries the disambiguated nicknames game resolution needs",
+      ambiguousOptionsFor("boston"),
+      [
+        { label: "Boston Red Sox (MLB)", sport: "MLB", nickname: "red sox" },
+        { label: "Boston Celtics (NBA)", sport: "NBA", nickname: "celtics" },
+        { label: "Boston Bruins (NHL)", sport: "NHL", nickname: "bruins" },
+      ]
+    );
+    // Season step of the disambiguation hierarchy (resolve-ambiguous-catalog.ts
+    // step 1): in September only MLB is in season, so "Boston" resolves to the
+    // Red Sox with no schedule call.
+    check(
+      "season step: on 2026-09-01 exactly one Boston option is in season (MLB / Red Sox)",
+      ambiguousOptionsFor("boston").filter((o) => isSportLabelInSeason(o.sport, new Date("2026-09-01T12:00:00Z"))),
+      [{ label: "Boston Red Sox (MLB)", sport: "MLB", nickname: "red sox" }]
+    );
+    // Overlap window: MLB (through Nov 5) and NHL (from Oct 7) are both in
+    // season on Oct 15, so the season step correctly does NOT guess - it
+    // defers to the schedule check.
+    check(
+      "season step: on 2026-10-15 two Boston options are in season (defers, no guess)",
+      ambiguousOptionsFor("boston")
+        .filter((o) => isSportLabelInSeason(o.sport, new Date("2026-10-15T12:00:00Z")))
+        .map((o) => o.sport),
+      ["MLB", "NHL"]
+    );
+    // Full name and the NCAAF school are unaffected by the new bare-city key.
+    check(
+      "'Boston Red Sox Over 7.5' still resolves straight to MLB (full name unaffected)",
+      { sport: parseCatalog(`Cap\nBoston Red Sox Over 7.5`, []).picks[0]?.sportName, teams: parseCatalog(`Cap\nBoston Red Sox Over 7.5`, []).picks[0]?.teamNicknames },
+      { sport: "MLB", teams: ["red sox"] }
+    );
+    check(
+      "'Boston College +7.5' still resolves NCAAF (school not shadowed by the 'boston' key)",
+      parseCatalog(`Cap\nBoston College +7.5`, []).picks[0]?.sportName,
+      "NCAAF"
+    );
+  }
+  {
+    // --- Fix 2: SPORTS_PLACE_NAMES guard -> unresolved, not phantom ATP ---
+    const ottawa = parseCatalog(`Sharp Sheet\nOttawa +7.5`, []);
+    check("'Ottawa +7.5': routes to unresolved, no phantom ATP pick", { picks: ottawa.picks.length, unresolved: ottawa.unresolved }, { picks: 0, unresolved: ["Ottawa +7.5"] });
+
+    const denver = parseCatalog(`Cap\nDenver -3.5`, []);
+    check("'Denver -3.5': bare city routes to unresolved", denver.unresolved, ["Denver -3.5"]);
+
+    const ny = parseCatalog(`Cap\nNew York Over 8.5`, []);
+    check("'New York Over 8.5': multi-word city routes to unresolved (not ATP 'york')", ny.unresolved, ["New York Over 8.5"]);
+
+    // The guard must not eat a following real pick.
+    const mixed = parseCatalog(`Cap\nDenver -3.5\nYankees ML`, []);
+    check(
+      "'Denver -3.5' then 'Yankees ML': Denver unresolved, Yankees still resolves MLB for the same capper",
+      {
+        unresolved: mixed.unresolved,
+        yanks: mixed.picks.map((p) => ({ capper: p.capperName, sport: p.sportName, teams: p.teamNicknames })),
+      },
+      { unresolved: ["Denver -3.5"], yanks: [{ capper: "Cap", sport: "MLB", teams: ["yankees"] }] }
+    );
+
+    // City + real nickname is still fine - the guard only fires on the bare city.
+    check(
+      "'Ottawa Redblacks +7.5' still resolves CFL (guard only hits the bare city)",
+      parseCatalog(`Cap\nOttawa Redblacks +7.5`, []).picks[0]?.sportName,
+      "CFL"
+    );
+
+    // Real individual-sport picks are unaffected - the guard rejects place
+    // names, never personal names (including bare surnames).
+    check("'Tallon Griekspoor ML' still resolves ATP", parseCatalog(`Cap\nTallon Griekspoor ML`, []).picks[0]?.sportName, "ATP");
+    check("'Alcaraz Over 22.5' (bare surname) still resolves ATP", parseCatalog(`Cap\nAlcaraz Over 22.5`, []).picks[0]?.sportName, "ATP");
+    check("'Sinner ML' (bare surname) still resolves ATP", parseCatalog(`Cap\nSinner ML`, []).picks[0]?.sportName, "ATP");
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
