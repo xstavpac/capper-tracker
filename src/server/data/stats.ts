@@ -4,6 +4,7 @@ import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABE
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
 import { cacheKeys } from "@/lib/cache-keys";
 import { cachedByTag } from "@/server/data/cached";
+import { downsampleUnitsChart } from "@/server/data/units-chart-downsample";
 
 export type OverallStats = {
   wins: number;
@@ -955,8 +956,12 @@ async function computeDashboardSummary(userId: string) {
     // equivalent, which also powers that panel's per-category leaderboards).
     categoryBreakdown: computeCategoryBreakdown(picks, DEFAULT_CHIP_SET),
     // Derived here, once, from the array already in hand - the page must not
-    // re-fetch the history to build its own chart.
-    chartData: computeUnitsChartData(picks),
+    // re-fetch the history to build its own chart. Downsampled for the
+    // dashboard ONLY (see units-chart-downsample.ts): a 20k+ settled-pick
+    // history is more points than the chart can render distinctly and bloats
+    // this cached payload. computeUnitsChartData itself stays full-fidelity
+    // for the per-capper page and computeMaxDrawdown.
+    chartData: downsampleUnitsChart(computeUnitsChartData(picks)),
     pendingCount: picks.filter((p) => p.status === "PENDING").length,
     stalePendingCount: picks.filter((p) => p.status === "PENDING" && p.gameTime.getTime() < staleCutoff).length,
     // Flattened to exactly what the Recent Picks list renders - keeps the

@@ -5,31 +5,51 @@ users). Each was deliberately left for later, not forgotten.
 
 ## Not yet started
 
-### Units chart emits one point per pick (client-side cost)
+### Units chart downsampling - DONE for the dashboard (2026-09)
 
-`computeUnitsChartData` / `computeUnitsChartByPickNumber` return one data
-point per settled pick. A power user with 10k-30k picks makes the dashboard
-(and the per-capper page, and the capper-comparison overlay) render an SVG
-with that many points - a real client-side cost even though the server-side
-query is now lean and cached.
+`computeUnitsChartData` returned one point per settled pick; a 20k+ settled
+history is more points than the ~900px chart renders distinctly and bloated
+the M3 dashboard cache payload.
 
-**Fix when it matters:** downsample the series server-side to ~500 points
-(e.g. largest-triangle-three-buckets, or simple every-Nth with the last
-point always kept) before returning it from `computeDashboardSummary` and the
-capper pages. Keep the full-resolution series only where the exact shape is
-load-bearing (it currently isn't - the chart is decorative trend context).
+**Done:** `src/server/data/units-chart-downsample.ts` - `downsampleUnitsChart`
+applies extrema-preserving **index** bucketing (the chart's x-axis is a
+categorical `dataKey="date"`, i.e. pick-sequence, not a time scale) when a
+series exceeds `UNITS_CHART_MAX_POINTS` (2000). First and last points kept
+exactly; each of ~999 interior buckets keeps its cumulative-value min AND max;
+every returned point is an exact original in order;
+`downsampled[last].cumulative === full[last].cumulative` exactly. Applied
+**only inside `computeDashboardSummary`** - `computeUnitsChartData`,
+`computeCumulativeUnitsSeries`, and `computeMaxDrawdown` stay full-fidelity.
+Deterministic, so it caches under the existing `dashboard:${userId}` key with
+no new dimension. Tested in `units-chart-downsample-acceptance-test.ts`
+(reconstruction error, cross-bucket extrema survival, exact endpoints,
+threshold pass-through).
 
-Scope note: purely a rendering concern. The M3 work (2026-08) made the
-underlying query lean + cached; this is the remaining piece and is safe to
-do independently.
+**Still open (lower priority):** the per-capper page
+(`cappers/[capperId]/page.tsx`) calls `computeUnitsChartData` directly,
+uncached, and is not downsampled. Series there are per-single-capper and
+windowed, so much smaller - apply the same helper if a whale capper's
+all-time view ever proves heavy. The capper-comparison overlay
+(`computeUnitsChartByPickNumber`) is also untouched; it is per-single-capper
+and index-based already, so the same helper would drop in.
 
-### M2 - Auth double round-trip
+### Units chart emits one point per pick on the per-capper page (client-side cost)
 
-`supabase.auth.getUser()` runs in middleware **and** again in
-`getCurrentUser()`, both network calls to Supabase Auth, on every request
-including every 25s `/api/live/scores` poll. Fix: verify the JWT locally
-(`jose` / project JWT secret) in the fast path, reserve `getUser()` for where
-freshness matters.
+See the "Still open" note directly above - the dashboard is handled; the
+per-capper page and comparison overlay are the remaining, lower-priority
+surfaces. Purely a rendering/payload concern; the M3 work made the underlying
+query lean + cached.
+
+### M2 - Auth double round-trip - DONE (2026-09, bc3be6e)
+
+`supabase.auth.getUser()` ran in middleware **and** again in `getCurrentUser()`,
+two network calls to Supabase Auth on every request (incl. every 25s
+`/api/live/scores` poll). Both now call `supabase.auth.getClaims()`, which -
+this project signs JWTs with an asymmetric ES256 key - verifies the token
+signature locally via WebCrypto against a cached JWKS, no Auth-server
+round-trip on the hot path. Token refresh (via `getSession()` internally) is
+unchanged. Full writeup, security tradeoff, and the deferred JWT-expiry
+decision in `docs/m2-auth-round-trips.md`.
 
 ### M7 - Stripe webhook: transient failure loses the update
 
