@@ -863,6 +863,12 @@ export function computeSpecialistTag(picks: (Pick & { sport: { name: string } })
   return best ? { category: best.category, label: SPECIALIST_LABELS[best.category] } : null;
 }
 
+// A capper's record over just their most recent N decided picks in one
+// category - a "recent form" signal alongside the all-time record. Same
+// winPct convention as everywhere else (wins / (wins + losses); pushes shown
+// in the W-L-P string but not the %).
+export type CategoryRecentForm = { wins: number; losses: number; pushes: number; winPct: number; count: number };
+
 export type CategoryBreakdownItem = {
   key: PickCategoryKey;
   label: string;
@@ -871,7 +877,19 @@ export type CategoryBreakdownItem = {
   pushes: number;
   winPct: number;
   count: number; // decided picks: wins + losses + pushes
+  // Populated ONLY when computeCategoryBreakdown is called with a recentForm
+  // option AND this category has at least `minSample` decided picks - the
+  // staleness-guard threshold below which "all-time" is still the honest
+  // signal and no partial recent-form teaser is shown. Undefined for every
+  // caller that doesn't ask for it (Dashboard / Reports / Cappers page).
+  recent?: CategoryRecentForm | null;
 };
+
+// The two thresholds the /live game-card expander uses for the recent-form
+// indicator (see game-picks-expander.tsx): only surface "last 20" once a
+// capper has enough category volume for all-time to plausibly be stale.
+export const CATEGORY_RECENT_FORM_MIN_SAMPLE = 100;
+export const CATEGORY_RECENT_FORM_WINDOW = 20;
 
 // All-time record split by pickCategory (the same favorite/underdog,
 // over/under classifier the Cappers-page filter chips use) - answers "am I
@@ -881,9 +899,16 @@ export type CategoryBreakdownItem = {
 // multiple sports at once (the Dashboard) must pass DEFAULT_CHIP_SET, since
 // F5 ML and NRFI only mean anything for MLB; a single-sport view can pass
 // chipSetForLeague(sportName) to get those back.
+//
+// `recentForm`, when given, additionally attaches item.recent: the record
+// over that category's most recent `window` decided picks (by gameTime desc -
+// the same axis computeMomentum uses for "recent"), but only for categories
+// with >= `minSample` total decided picks. It's one extra computeStats() call
+// on a slice of an already-grouped list, not a second classification pass.
 export function computeCategoryBreakdown(
   picks: (Pick & { sport: { name: string } })[],
-  order: PickCategoryKey[]
+  order: PickCategoryKey[],
+  recentForm?: { window: number; minSample: number }
 ): CategoryBreakdownItem[] {
   const byCategory = new Map<PickCategoryKey, Pick[]>();
   for (const pick of picks) {
@@ -895,8 +920,23 @@ export function computeCategoryBreakdown(
   }
 
   return order.filter((key) => byCategory.has(key)).map((key) => {
-    const stats = computeStats(byCategory.get(key)!);
+    const categoryPicks = byCategory.get(key)!;
+    const stats = computeStats(categoryPicks);
     const count = stats.wins + stats.losses + stats.pushes;
+
+    let recent: CategoryRecentForm | null | undefined;
+    if (recentForm) {
+      recent = null;
+      if (count >= recentForm.minSample) {
+        const lastN = categoryPicks
+          .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
+          .sort((a, b) => b.gameTime.getTime() - a.gameTime.getTime())
+          .slice(0, recentForm.window);
+        const rs = computeStats(lastN);
+        recent = { wins: rs.wins, losses: rs.losses, pushes: rs.pushes, winPct: rs.winPct, count: rs.wins + rs.losses + rs.pushes };
+      }
+    }
+
     return {
       key,
       label: PICK_CATEGORY_LABELS[key],
@@ -905,6 +945,7 @@ export function computeCategoryBreakdown(
       pushes: stats.pushes,
       winPct: stats.winPct,
       count,
+      ...(recent !== undefined ? { recent } : {}),
     };
   });
 }

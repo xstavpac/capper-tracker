@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { PickStatus } from "@prisma/client";
 import { getCategoryRecordsAction } from "@/server/actions/picks";
-import { getRecordColor, type CategoryBreakdownItem, type PickCategoryKey } from "@/server/data/stats";
+import { getRecordColor, CATEGORY_RECENT_FORM_WINDOW, type CategoryBreakdownItem, type PickCategoryKey } from "@/server/data/stats";
 import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
 
 export type ExpanderPick = {
@@ -110,8 +110,25 @@ export function ChevronIcon({ up }: { up: boolean }) {
   );
 }
 
-function recordLabel(record: CategoryBreakdownItem) {
+function recordLabel(record: { wins: number; losses: number; pushes: number }) {
   return record.wins + "-" + record.losses + (record.pushes > 0 ? "-" + record.pushes : "");
+}
+
+// One record + win% chip, green/red by its own win rate (independent of the
+// other half when both all-time and last-20 are shown).
+function ColoredRecord({ record }: { record: { wins: number; losses: number; pushes: number; winPct: number } }) {
+  return (
+    <span
+      className={
+        "font-medium " +
+        (getRecordColor(record.winPct) === "green"
+          ? "text-emerald-600 dark:text-emerald-400"
+          : "text-red-600 dark:text-red-400")
+      }
+    >
+      {recordLabel(record)} ({Math.round(record.winPct)}%)
+    </span>
+  );
 }
 
 export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
@@ -176,7 +193,7 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
             </span>
           </div>
         </div>
-        <div className="mt-0.5 truncate pl-[23px] text-[11px] text-muted-foreground">
+        <div className="mt-0.5 pl-[23px] text-[11px] text-muted-foreground">
           {p.betDetail}
           {loading ? (
             <span className="text-[10px] text-muted-foreground"> &middot; Loading record...</span>
@@ -184,16 +201,18 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
             <span className="text-[10px]">
               {" "}
               &middot;{" "}
-              <span
-                className={
-                  "font-medium " +
-                  (getRecordColor(record.winPct) === "green"
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-red-600 dark:text-red-400")
-                }
-              >
-                {recordLabel(record)} ({Math.round(record.winPct)}%)
-              </span>{" "}
+              {record.recent ? (
+                <>
+                  <ColoredRecord record={record} /> <span className="text-muted-foreground">all-time</span>
+                  <span className="mx-1 text-muted-foreground/60">|</span>
+                  <ColoredRecord record={record.recent} />{" "}
+                  <span className="text-muted-foreground">last {CATEGORY_RECENT_FORM_WINDOW}</span>{" "}
+                </>
+              ) : (
+                <>
+                  <ColoredRecord record={record} />{" "}
+                </>
+              )}
               <span className="text-muted-foreground">on {CATEGORY_DESCRIPTIONS[p.category]} picks</span>
             </span>
           ) : (

@@ -6,6 +6,8 @@ import {
   computeScorecard,
   computeCategoryBreakdown,
   ALL_CATEGORY_KEYS,
+  CATEGORY_RECENT_FORM_MIN_SAMPLE,
+  CATEGORY_RECENT_FORM_WINDOW,
   type ScorecardBucket,
   type ScorecardBucketKey,
   type CategoryBreakdownItem,
@@ -425,10 +427,16 @@ export async function getCapperCategoryRecords(
     else byCapper.set(pick.capperId, [pick]);
   }
 
-  // One breakdown per capper (every category in one pass), indexed for O(1) lookup.
+  // One breakdown per capper (every category in one pass), indexed for O(1)
+  // lookup. recentForm attaches item.recent (last-20 record by gameTime) for
+  // any category with >= 100 decided picks - the /live game-card expander is
+  // the one surface that renders it (see game-picks-expander.tsx).
   const breakdownByCapper = new Map<string, Map<PickCategoryKey, CategoryBreakdownItem>>();
   for (const capperId of capperIds) {
-    const items = computeCategoryBreakdown(byCapper.get(capperId) ?? [], ALL_CATEGORY_KEYS);
+    const items = computeCategoryBreakdown(byCapper.get(capperId) ?? [], ALL_CATEGORY_KEYS, {
+      window: CATEGORY_RECENT_FORM_WINDOW,
+      minSample: CATEGORY_RECENT_FORM_MIN_SAMPLE,
+    });
     breakdownByCapper.set(capperId, new Map(items.map((i) => [i.key, i])));
   }
 
