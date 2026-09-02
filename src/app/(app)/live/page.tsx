@@ -4,6 +4,7 @@ import { getPicksForGames } from "@/server/data/picks";
 import { pickCategory, betTypeLabel, chipSetForLeague, DEFAULT_CHIP_SET } from "@/server/data/stats";
 import { getSportCategoryPanelData } from "@/server/data/cappers";
 import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
+import { formatPickLabel } from "@/lib/bet-line";
 import { type ExpanderPick } from "@/components/live/game-picks-expander";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
 import { slateCutoffKey } from "@/components/live/live-scoreboard-ordering";
@@ -115,7 +116,7 @@ export default async function LivePage({
         capperColorTag: p.capper.colorTag,
         capperIsFavorite: p.capper.isFavorite,
         category: pickCategory({ ...p, sportName: sportLabel }),
-        betDetail: p.betDetail || betTypeLabel(p.betType),
+        betDetail: formatPickLabel(p.betDetail, p.betType, p.line) ?? betTypeLabel(p.betType),
         odds: p.odds,
         units: p.units,
         status: p.status,

@@ -1,6 +1,7 @@
 import { requireUser } from "@/server/auth";
 import { getSharpMoneyBoard, type SharpMoneyPick } from "@/server/data/sharp-money";
 import { getRecordColor } from "@/server/data/stats";
+import { formatPickLabel } from "@/lib/bet-line";
 import { Avatar } from "@/components/dashboard/capper-panels";
 import { CategoryIcon } from "@/components/sharp-money/category-icons";
 
@@ -22,7 +23,7 @@ function PickRow({ pick }: { pick: SharpMoneyPick }) {
         <div className="min-w-0">
           <div className="truncate text-sm font-medium text-foreground">{pick.capperName}</div>
           <div className="truncate text-xs text-muted-foreground">
-            {pick.betDetail || pick.betType}
+            {formatPickLabel(pick.betDetail, pick.betType, pick.line) ?? pick.betType}
             <span className="text-muted-foreground"> &middot; {pick.awayTeam} @ {pick.homeTeam}</span>
           </div>
         </div>

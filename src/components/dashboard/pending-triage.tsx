@@ -4,6 +4,7 @@ import { useState } from "react";
 import { updatePickStatusAction } from "@/server/actions/picks";
 import type { PendingPickRow } from "@/server/data/picks";
 import type { PickStatus } from "@prisma/client";
+import { formatPickLabel } from "@/lib/bet-line";
 
 // Negative ageHours means the game hasn't started yet (gameTime is still in
 // the future) - clamping that to "Pending 0h" read as stuck/frozen rather
@@ -126,7 +127,7 @@ export function PendingTriage({ picks }: { picks: PendingPickRow[] }) {
                 />
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-foreground">
-                    {p.capperName} &middot; {p.betDetail ?? p.betType} &middot;{" "}
+                    {p.capperName} &middot; {formatPickLabel(p.betDetail, p.betType, p.line) ?? p.betType} &middot;{" "}
                     {p.odds > 0 ? "+" : ""}
                     {p.odds} &middot; {p.units}u
                   </div>

@@ -18,6 +18,7 @@ export type SharpMoneyPick = {
   awayTeam: string;
   betDetail: string | null;
   betType: string;
+  line: number | null;
   odds: number;
   units: number;
   gameTime: Date;
@@ -123,6 +124,7 @@ export async function getSharpMoneyBoard(userId: string): Promise<SharpMoneyBoar
       awayTeam: pick.awayTeam,
       betDetail: pick.betDetail,
       betType: pick.betType,
+      line: pick.line,
       odds: pick.odds,
       units: pick.units,
       gameTime: pick.gameTime,

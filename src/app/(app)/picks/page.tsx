@@ -18,6 +18,7 @@ import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
 import { DateRangeFilter } from "@/components/picks/date-range-filter";
 import { SportBetTypeFilter } from "@/components/picks/sport-bet-type-filter";
 import { betTypeFilterCategory, BET_TYPE_FILTER_OPTIONS, type BetTypeFilterKey } from "@/lib/bet-type-filter";
+import { formatPickLabel } from "@/lib/bet-line";
 import type { PickStatus } from "@prisma/client";
 
 const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
@@ -324,7 +325,8 @@ export default async function PicksPage({
                     </span>
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    {pick.capper.name} - {pick.betDetail || pick.betType} - {pick.odds > 0 ? "+" : ""}
+                    {pick.capper.name} - {formatPickLabel(pick.betDetail, pick.betType, pick.line) ?? pick.betType} -{" "}
+                    {pick.odds > 0 ? "+" : ""}
                     {pick.odds} - {pick.units}u
                   </div>
                 </div>
@@ -375,7 +377,8 @@ export default async function PicksPage({
                             )}
                           </div>
                           <div className="mt-0.5 text-[11px] text-muted-foreground">
-                            {leg.betDetail || leg.betType} - {leg.odds > 0 ? "+" : ""}
+                            {formatPickLabel(leg.betDetail, leg.betType, leg.line) ?? leg.betType} -{" "}
+                            {leg.odds > 0 ? "+" : ""}
                             {leg.odds}
                           </div>
                         </div>

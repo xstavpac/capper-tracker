@@ -115,6 +115,7 @@ export type PendingPickRow = {
   awayTeam: string;
   betType: BetType;
   betDetail: string | null;
+  line: number | null;
   odds: number;
   units: number;
   gameTime: Date;
@@ -179,6 +180,7 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
         awayTeam: p.awayTeam,
         betType: p.betType,
         betDetail: p.betDetail,
+        line: p.line,
         odds: p.odds,
         units: p.units,
         gameTime: p.gameTime,

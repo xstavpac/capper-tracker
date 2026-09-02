@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Pick, PickStatus } from "@prisma/client";
-import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, type OddsBucketKey } from "@/lib/bet-line";
+import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, formatPickLabel, type OddsBucketKey } from "@/lib/bet-line";
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
 import { cacheKeys } from "@/lib/cache-keys";
 import { cachedByTag } from "@/server/data/cached";
@@ -970,7 +970,7 @@ async function computeDashboardSummary(userId: string) {
       id: p.id,
       awayTeam: p.awayTeam,
       homeTeam: p.homeTeam,
-      label: p.betDetail ?? betTypeLabel(p.betType),
+      label: formatPickLabel(p.betDetail, p.betType, p.line) ?? betTypeLabel(p.betType),
       capperName: p.capper.name,
       status: p.status,
       units: p.units,

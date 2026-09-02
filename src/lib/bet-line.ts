@@ -81,6 +81,29 @@ export function favoriteOrUnderdog(pick: {
   return null;
 }
 
+// The short label shown for a pick on every pick list (/picks, /cappers,
+// /live, dashboard, ...). `betDetail` is the capper's own text ("Athletics
+// Under"). When that text carries no line of its own but a `line` value was
+// captured separately - the total-line confirmation flow at catalog import,
+// or the manual pick form's dedicated line field - the number is appended so
+// "Under" reads as "Under 7.5". Text that already expresses its line is
+// returned untouched: "already expressed" is `extractLine` finding a number,
+// the same check grading and import already trust, so "Over 8.5", "u220" and
+// "under nine" are all left alone rather than getting a duplicate appended.
+// Returns null when betDetail is empty, so each caller keeps its own betType-
+// label fallback.
+export function formatPickLabel(
+  betDetail: string | null | undefined,
+  betType: string,
+  line: number | null | undefined
+): string | null {
+  if (!betDetail) return null;
+  if (line === null || line === undefined) return betDetail;
+  if (extractLine(betType as BetTypeLike, betDetail) !== null) return betDetail;
+  const suffix = betType === "SPREAD" && line > 0 ? `+${line}` : `${line}`;
+  return `${betDetail} ${suffix}`;
+}
+
 export type NrfiSide = "NO_RUN" | "YES_RUN";
 
 // The NRFI/YRFI side of an NRFI-betType pick, derived from betDetail free

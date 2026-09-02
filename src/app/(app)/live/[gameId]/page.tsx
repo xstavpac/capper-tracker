@@ -13,7 +13,7 @@ import { getGamePulsePanelRows } from "@/server/data/game-pulse";
 import { getNflGamePulsePanelRows } from "@/server/data/nfl-game-pulse";
 import { formatEastern } from "@/lib/dates";
 import { betTypeLabel } from "@/server/data/stats";
-import { nrfiSide } from "@/lib/bet-line";
+import { nrfiSide, formatPickLabel } from "@/lib/bet-line";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
 import { GamePulsePanel } from "@/components/live/game-pulse-panel";
@@ -236,7 +236,8 @@ export default async function GameDetailPage({
                 <div>
                   <div className="text-sm font-medium">{pick.capper.name}</div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    {pick.betDetail || betTypeLabel(pick.betType)} - {pick.odds > 0 ? "+" : ""}
+                    {formatPickLabel(pick.betDetail, pick.betType, pick.line) ?? betTypeLabel(pick.betType)} -{" "}
+                    {pick.odds > 0 ? "+" : ""}
                     {pick.odds} - {pick.units}u
                   </div>
                 </div>
