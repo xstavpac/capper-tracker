@@ -136,7 +136,12 @@ export function ChartsWorkspace({
           <p className="mt-1.5 text-xs text-muted-foreground">Pick a variable below to plot it for this team.</p>
         </div>
 
-        <VariableLibrary variables={variables} onAdd={addSeries} categories={CHART_CATEGORIES} />
+        <VariableLibrary
+          variables={variables}
+          onAdd={addSeries}
+          categories={CHART_CATEGORIES}
+          onCustomMetricDeleted={(variableId) => setSeries((prev) => prev.filter((s) => s.variableId !== variableId))}
+        />
       </div>
 
       <div className="space-y-4">

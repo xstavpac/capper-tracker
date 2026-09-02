@@ -198,7 +198,12 @@ export function TeamComparisonWorkspace({
           <p className="mt-1.5 text-xs text-muted-foreground">Pick a variable below to plot it for both teams.</p>
         </div>
 
-        <VariableLibrary variables={variables} onAdd={addVariable} categories={CHART_CATEGORIES} />
+        <VariableLibrary
+          variables={variables}
+          onAdd={addVariable}
+          categories={CHART_CATEGORIES}
+          onCustomMetricDeleted={removeVariable}
+        />
       </div>
 
       <div className="space-y-4">
