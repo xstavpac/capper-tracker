@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { Pick, PickStatus } from "@prisma/client";
+import type { Pick, PickStatus, PickedSide } from "@prisma/client";
 import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, formatPickLabel, type OddsBucketKey } from "@/lib/bet-line";
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
 import { cacheKeys } from "@/lib/cache-keys";
@@ -716,6 +716,12 @@ type PickCategoryInput = {
   // FIRST_HALF_ML below), and a forgotten/wrong value would silently blend
   // two different sports' first-half records together again.
   sportName: string;
+  // Optional - only the MONEYLINE FAV_ML/DOG_ML split reads these, and only
+  // when both are present (see favoriteOrUnderdog). Every real call site spreads
+  // a full Pick row so they flow through automatically; the few that build a
+  // partial object by hand simply fall back to the odds-sign heuristic.
+  pickedSide?: PickedSide | null;
+  mlFavoredSide?: PickedSide | null;
 };
 
 export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {

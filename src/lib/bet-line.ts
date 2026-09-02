@@ -1,4 +1,5 @@
 type BetTypeLike = "SPREAD" | "MONEYLINE" | "TOTAL" | "TEAM_TOTAL" | "PLAYER_PROP" | "NRFI";
+type SideLike = "HOME" | "AWAY";
 
 // Cappers occasionally spell a total out ("under nine" instead of "under 9") -
 // one through twenty covers realistic bet totals (MLB/NBA/NFL totals don't
@@ -60,15 +61,30 @@ export function extractLine(betType: BetTypeLike, text: string): number | null {
   return null;
 }
 
-// Favorite/underdog for Moneyline comes straight from the odds sign. For Spread it
-// comes from the line's sign (negative = laying points = favorite). Not derivable
-// for Total/Player Prop bets, which don't have a favored side.
+// Favorite/underdog for Spread comes from the line's sign (negative = laying
+// points = favorite). Not derivable for Total/Player Prop bets, which don't have
+// a favored side.
+//
+// Moneyline prefers Pick.mlFavoredSide - the side that was actually favored per
+// the real h2h market, captured at bulk-import time. The odds sign alone can't
+// tell favorite from underdog in a juiced near-pick'em where BOTH sides are
+// priced negative (e.g. -112 / -104), and every no-explicit-odds pick defaults
+// to -110 and would read as a favorite regardless of side. Using mlFavoredSide
+// needs pickedSide too (which side this pick is on); when either is missing - as
+// it is for every pick predating that column, every manually entered pick, and
+// any import where the market couldn't be resolved - it falls back to the
+// original odds-sign heuristic, no better and no worse than before.
 export function favoriteOrUnderdog(pick: {
   betType: BetTypeLike;
   odds: number;
   line: number | null;
+  pickedSide?: SideLike | null;
+  mlFavoredSide?: SideLike | null;
 }): "FAVORITE" | "UNDERDOG" | null {
   if (pick.betType === "MONEYLINE") {
+    if (pick.mlFavoredSide && pick.pickedSide) {
+      return pick.pickedSide === pick.mlFavoredSide ? "FAVORITE" : "UNDERDOG";
+    }
     if (pick.odds < 0) return "FAVORITE";
     if (pick.odds > 0) return "UNDERDOG";
     return null;

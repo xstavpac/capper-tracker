@@ -886,6 +886,41 @@ async function resolveOddsGame(
   return closestByTime(candidates, (g) => new Date(g.commenceTime).getTime(), gameStart);
 }
 
+// The favored side of a game's head-to-head (moneyline) market: "HOME"/"AWAY"
+// by comparing the two outcome prices (lower American price = more favored), or
+// null when the h2h market is absent, a side's price is missing, or the two are
+// exactly equal (a true pick'em has no favorite). Pure - the same
+// homePrice < awayPrice comparison recomputeTeamTendencies already uses, just
+// off a single OddsGame. First bookmaker that lists both sides wins, matching
+// findMarketPrice's first-bookmaker-wins style.
+export function favoredSideFromOddsGame(oddsGame: OddsGame): "HOME" | "AWAY" | null {
+  for (const bookmaker of oddsGame.bookmakers) {
+    const market = bookmaker.markets.find((m) => m.key === "h2h");
+    if (!market) continue;
+    const home = market.outcomes.find((o) => o.name === oddsGame.homeTeam);
+    const away = market.outcomes.find((o) => o.name === oddsGame.awayTeam);
+    if (home && away && home.price !== away.price) {
+      return home.price < away.price ? "HOME" : "AWAY";
+    }
+  }
+  return null;
+}
+
+// Resolves which odds-listed game a schedule game corresponds to (same team-pair
+// + closest-commenceTime match findMarketPrice uses) and returns its h2h favored
+// side. Null when the game isn't in the odds cache (e.g. it has already started -
+// getOddsForSport drops in-progress games) or has no usable h2h market. Called
+// once per bulk-imported MONEYLINE pick to stamp Pick.mlFavoredSide, so
+// favoriteOrUnderdog can classify FAV_ML vs DOG_ML correctly even in a juiced
+// near-pick'em where the odds sign alone can't.
+export async function findFavoredSide(
+  sportKey: string,
+  game: { homeTeam: string; awayTeam: string; commenceTime: string }
+): Promise<"HOME" | "AWAY" | null> {
+  const oddsGame = await resolveOddsGame(sportKey, game);
+  return oddsGame ? favoredSideFromOddsGame(oddsGame) : null;
+}
+
 // Looks up the real market price for a resolved game (see
 // resolveGameForNickname), so bulk-imported picks that didn't state an
 // explicit price can use the actual line instead of a hardcoded -110.

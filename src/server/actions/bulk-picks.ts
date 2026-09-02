@@ -11,6 +11,7 @@ import {
   resolveGameForTeams,
   findMarketPrice,
   findMarketTotalLine,
+  findFavoredSide,
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
@@ -104,6 +105,11 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
   // team-total pick would only ever get the weaker mascot/school text-match
   // fallback at grading time, never the authoritative side captured here.
   pickedSide: "HOME" | "AWAY" | null;
+  // Which side the real h2h market had as the moneyline favorite, for MONEYLINE
+  // picks only (see schema.prisma's Pick.mlFavoredSide and favoriteOrUnderdog).
+  // null for every non-MONEYLINE pick and whenever the game couldn't be matched
+  // to a live odds row with a usable h2h market.
+  mlFavoredSide: "HOME" | "AWAY" | null;
 }> {
   let homeTeam = item.description;
   let awayTeam = "-";
@@ -111,6 +117,7 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
   let odds = item.odds;
   let matched = false;
   let pickedSide: "HOME" | "AWAY" | null = null;
+  let mlFavoredSide: "HOME" | "AWAY" | null = null;
 
   const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
   const resolvable = Boolean(liveSportKey && RESOLVABLE_SPORT_KEYS.includes(liveSportKey));
@@ -151,6 +158,15 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
         pickedSide = homeMatch && !awayMatch ? "HOME" : awayMatch && !homeMatch ? "AWAY" : null;
       }
 
+      if (item.betType === "MONEYLINE") {
+        // The real favored side from the h2h market - the one signal the odds
+        // sign can't recover for a juiced near-pick'em (both sides negative).
+        // MONEYLINE only; SPREAD's fav/dog already comes correctly off the line
+        // sign. One getOddsForSport read, memoized within the request (and
+        // already triggered above for any no-explicit-odds pick in the batch).
+        mlFavoredSide = await findFavoredSide(liveSportKey, game);
+      }
+
       if (!item.hasExplicitOdds) {
         // Unchanged from before pickedSide existed - always resolves to
         // "home" or "away" for a non-TOTAL bet, same as it always has, for
@@ -182,7 +198,7 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
     }
   }
 
-  return { homeTeam, awayTeam, gameTime, odds, resolvable, matched, pickedSide };
+  return { homeTeam, awayTeam, gameTime, odds, resolvable, matched, pickedSide, mlFavoredSide };
 }
 
 // Read-only preview enrichment: the client-side catalog parser has no access
@@ -282,13 +298,18 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
       // "same game" has nothing reliable to compare against (see
       // resolveGameAndOdds; unresolved items fall back to placeholder
       // homeTeam/awayTeam values that aren't safe to match on).
-      const { homeTeam, awayTeam, gameTime, odds, matched } = await resolveGameAndOdds(item);
+      const { homeTeam, awayTeam, gameTime, odds, matched, pickedSide, mlFavoredSide } =
+        await resolveGameAndOdds(item);
       if (!matched) return;
 
       // odds (not item.odds) - for a pick with no explicit price, item.odds
       // is still the parser's un-resolved default and would misclassify a
       // moneyline's favorite/underdog side (see favoriteOrUnderdog). odds is
       // resolveGameAndOdds' resolved real market price for this exact pick.
+      // pickedSide + mlFavoredSide let pickCategory tell FAV_ML from DOG_ML in a
+      // juiced pick'em, where without them "Phillies ML" and "Diamondbacks ML"
+      // both classify as FAV_ML and the real opposite-side pick gets wrongly
+      // flagged here as a duplicate of the first.
       const period = item.isFirstFive ? "FIRST_HALF" : "FULL_GAME";
       const line = extractLine(item.betType, item.description);
       const category = pickCategory({
@@ -298,6 +319,8 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
         odds,
         line,
         sportName: item.sportName,
+        pickedSide,
+        mlFavoredSide,
       });
       // Can't determine a comparable side for this bet (e.g. a player prop,
       // or a first-half spread) - don't guess at a match either way.
@@ -375,7 +398,8 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         sportCache.set(sportKey, sportId);
       }
 
-      const { homeTeam, awayTeam, gameTime, odds, resolvable, matched, pickedSide } = await resolveGameAndOdds(item);
+      const { homeTeam, awayTeam, gameTime, odds, resolvable, matched, pickedSide, mlFavoredSide } =
+        await resolveGameAndOdds(item);
       if (resolvable && !matched) {
         // Don't persist this item at all - homeTeam/awayTeam/gameTime from
         // resolveGameAndOdds are just placeholders when matched is false,
@@ -411,6 +435,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         units: item.units,
         gameTime,
         pickedSide,
+        mlFavoredSide,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "failed";

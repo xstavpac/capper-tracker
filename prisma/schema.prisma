@@ -237,6 +237,14 @@ model Pick {
     // import where the side genuinely couldn't be determined (including a same-mascot game where even the
     // matched nickname was ambiguous) - gradePick falls back to the old text-match path in that case, which
     // itself now refuses to guess when homeTeam and awayTeam share a mascot.
+  mlFavoredSide PickedSide? // which side (HOME/AWAY) was the moneyline favorite per the h2h market resolved
+    // at bulk-import time (see findFavoredSide in server/data/odds.ts). Lets favoriteOrUnderdog classify a
+    // MONEYLINE pick as FAV_ML vs DOG_ML correctly even in a juiced near-pick'em where BOTH sides are priced
+    // negative (e.g. -112 / -104), which the odds-sign heuristic alone cannot. Set only for bulk-imported
+    // MONEYLINE picks whose game resolved to a live odds row with a usable h2h market. null for: every pick
+    // predating this column (no historical backfill - see docs/ml-favorite-classification.md), manually
+    // entered picks, and any import where the market couldn't be resolved (off-season, name mismatch, game
+    // already started). When null, favoriteOrUnderdog falls back to the odds sign exactly as it does today.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

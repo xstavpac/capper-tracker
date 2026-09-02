@@ -103,6 +103,7 @@ export type PickInsertData = {
   gameTime: Date;
   notes?: string;
   pickedSide?: PickedSide | null;
+  mlFavoredSide?: PickedSide | null;
 };
 
 export type AtomicCreateResult =
