@@ -8,6 +8,7 @@
 // Everything here is idempotent (upserts, or delete-by-owner then recreate)
 // so re-running just refreshes the fake data.
 import { PrismaClient } from "@prisma/client";
+import { seedModelEngineFixtures } from "./seed-ci";
 
 const prisma = new PrismaClient();
 
@@ -124,6 +125,11 @@ async function main() {
       },
     });
   }
+
+  // Fixture rows the DB-backed model-engine acceptance suites query by
+  // hardcoded id/team/date - shared with prisma/seed-ci.ts so `npm test`
+  // passes those suites locally too, not just in CI.
+  await seedModelEngineFixtures(prisma);
 
   const counts = {
     users: await prisma.user.count(),

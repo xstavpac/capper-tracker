@@ -3,12 +3,18 @@
 // written (each file `console.log`s PASS/FAIL lines and calls process.exit(1)
 // on failure - there is no shared test framework).
 //
-// DB-backed tests: the six model-engine suites under
-// src/server/data/model-engine/ import `@/lib/prisma` and query real seeded
-// rows by hardcoded id. They only run when DATABASE_URL is set (locally,
-// against a seeded dev DB). CI does not set DATABASE_URL, so they are
-// reported as SKIP there rather than failing. See ci.yml and the follow-up
-// to give CI a seeded Postgres service.
+// DB-backed tests: five model-engine suites (four under
+// src/server/data/model-engine/ plus src/lib/model-engine/weighted-accumulation)
+// import `@/lib/prisma` (directly or transitively) and query rows by hardcoded
+// id / team / date. They run whenever DATABASE_URL is set - locally against a
+// seeded dev DB, and in CI against a postgres:16 service seeded by
+// prisma/seed-ci.ts (see ci.yml). Without a DB they report SKIP.
+//
+// decay-delta-predictions-acceptance-test.ts is in MANUAL_ONLY: its PART C
+// asserts a point-in-time snapshot of the real production decay_delta_predictions
+// table (see that file's own header - "these numbers WILL go stale again"),
+// so it can't pass against a fixture without an assertion rewrite. Run it by
+// hand against a real DB when needed.
 //
 // Usage: `npm test`  (or `node scripts/run-tests.mjs`)
 // Exits non-zero if any test that actually ran reported a failure.
@@ -22,8 +28,24 @@ const srcDir = join(repoRoot, "src");
 
 // A file is a test if its name ends with one of these.
 const TEST_SUFFIXES = ["-acceptance-test.ts", "-test.ts"];
-// ...except this one, which is a manual backtest harness, not a pass/fail suite.
-const NOT_A_TEST = new Set(["src/server/data/model-engine/decay-delta-backtest.ts"]);
+// ...except these, which aren't pass/fail suites: decay-delta-backtest is a
+// manual backtest harness; pregame-acceptance-test has no assertions and no
+// failure exit at all (it only prints what tonight's real slate evaluates to),
+// so running it "green" in CI is meaningless.
+const NOT_A_TEST = new Set([
+  "src/server/data/model-engine/decay-delta-backtest.ts",
+  "src/server/data/model-engine/pregame-acceptance-test.ts",
+]);
+
+// Real pass/fail suites that the auto-runner must NOT run: their assertions
+// are tied to live production data that drifts. Reported as SKIP (so they stay
+// visible), run by hand against a real DB. Map of file -> one-line reason.
+const MANUAL_ONLY = new Map([
+  [
+    "src/server/data/model-engine/decay-delta-predictions-acceptance-test.ts",
+    "PART C asserts a point-in-time snapshot of the real decay_delta_predictions table - see that file's own header",
+  ],
+]);
 
 // Suites that need a seeded database. Most are caught automatically (they
 // import `@/lib/prisma` directly - see needsDb below); these reach the DB
@@ -76,6 +98,13 @@ let passed = 0;
 let skipped = 0;
 
 for (const rel of files) {
+  const manualReason = MANUAL_ONLY.get(rel);
+  if (manualReason) {
+    console.log(`SKIP (manual only: ${manualReason})  ${rel}`);
+    skipped++;
+    continue;
+  }
+
   const needsDb =
     !PURE_DESPITE_PRISMA_IMPORT.has(rel) &&
     (NEEDS_DB.has(rel) || readFileSync(join(repoRoot, rel), "utf8").includes('from "@/lib/prisma"'));

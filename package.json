@@ -13,6 +13,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:seed-dev": "tsx prisma/seed-dev.ts",
+    "prisma:seed-ci": "tsx prisma/seed-ci.ts",
     "prisma:studio": "prisma studio",
     "test": "node scripts/run-tests.mjs"
   },

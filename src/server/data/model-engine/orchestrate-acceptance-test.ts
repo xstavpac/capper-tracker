@@ -25,8 +25,12 @@ async function main() {
 
   const decayEvent = await prisma.gameResult.findUnique({ where: { id: "cmsqu2pbr0031j52lw78k55cg" } });
   if (!decayEvent) {
+    // A bare `return` here would skip the `process.exit(1)` at the end of
+    // main(), so a missing prerequisite row printed FAIL but exited 0 (the
+    // runner reported PASS). Exit non-zero immediately instead.
     check("prerequisite: the real Rangers/Braves GameResult row exists", false, null);
-    return;
+    await prisma.$disconnect();
+    process.exit(1);
   }
   console.log("\nreal evaluation event (GameResult row):", decayEvent);
   const decayAsOf = new Date("2026-07-19T18:00:00.000Z"); // same Eastern day as the game itself

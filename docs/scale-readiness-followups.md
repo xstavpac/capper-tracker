@@ -77,22 +77,23 @@ user-workflow versions, or opportunistically. Local dev is on Node 24
 already; the runner script uses `node --import tsx`, which needs Node >= 20.6,
 so 22 is fine.
 
-### Give CI a seeded Postgres so the model-engine suites run there
+### Seeded Postgres in CI so the model-engine suites run there - DONE (2026-09)
 
-Six suites need a database with production-like historical rows (specific
-hardcoded cuids like the "real Rangers/Braves GameResult"): the five under
-`src/server/data/model-engine/` plus `weighted-accumulation` (which reaches
-the DB transitively via `resolveGameObservations`). `scripts/run-tests.mjs`
-skips any suite that needs a DB when `DATABASE_URL` is unset, so CI currently
-reports them as SKIP rather than running them.
+The gap was **7** skipped suites, not 6 (the old comment undercounted). `ci.yml`
+now runs a `postgres:16` service, `npx prisma migrate deploy`, then
+`npm run prisma:seed-ci`, with `DATABASE_URL` set at the job level. `npm test`
+runs the 5 DB-backed suites (`observations`, `weighted-accumulation`,
+`decay-delta-bucket-boundary`, `acceptance-test`, `orchestrate`) instead of
+SKIPping. `prisma/seed-ci.ts` exports `seedModelEngineFixtures()` - synthetic
+rows matched to each test's hardcoded id/team/date/pitcherId; `prisma/seed-dev.ts`
+calls it too, so `npm test` is green locally as well.
 
-To run them in CI: add a `postgres:16` service container to the `verify`
-job, run `prisma migrate deploy` against it, and add a CI-specific seed that
-creates the exact fixture rows those suites assert on (the regular
-`prisma/seed-dev.ts` is synthetic and does not reproduce them). Then set
-`DATABASE_URL` for the `npm test` step so the skip logic lets them run.
-`prisma/seed-dev.ts` is the starting point for the seed; the fixture ids the
-suites expect can be pulled from the assertions in each file.
+Not brought in: `decay-delta-predictions-acceptance-test.ts` (its PART C
+asserts a point-in-time snapshot of the real `decay_delta_predictions` table
+that drifts as MLB is played - `MANUAL_ONLY` in `run-tests.mjs`, run by hand);
+`pregame-acceptance-test.ts` (no assertions at all - reclassified `NOT_A_TEST`).
+Also fixed a latent false-pass in `orchestrate-acceptance-test.ts` (a bare
+`return` on a missing prerequisite skipped the non-zero exit).
 
 ## Deferred by explicit decision
 

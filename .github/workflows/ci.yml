@@ -13,6 +13,28 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+
+    # Ephemeral Postgres so the DB-backed model-engine acceptance suites run
+    # here instead of SKIPping. Seeded by prisma/seed-ci.ts below.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: capper_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/capper_ci
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/capper_ci
+
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +51,11 @@ jobs:
 
       - run: npx tsc --noEmit
 
-      # DATABASE_URL is deliberately unset here, so the six DB-backed
-      # model-engine suites report SKIP rather than fail. See
-      # scripts/run-tests.mjs.
+      # Bring the schema up on the service DB, then insert exactly the fixture
+      # rows the DB-backed model-engine suites query by hardcoded id/team/date.
+      - run: npx prisma migrate deploy
+      - run: npm run prisma:seed-ci
+
+      # DATABASE_URL is set (job env), so the DB-backed suites run rather than
+      # SKIP. See scripts/run-tests.mjs.
       - run: npm test
