@@ -1,69 +1,66 @@
 # Scale-readiness follow-ups
 
-Tracked items deferred out of the scale-readiness work (audit target: 50,000
-users). Each was deliberately left for later, not forgotten.
+Tracked items from the scale-readiness work (audit target: 50,000 users).
+
+## Shipped
+
+- **Units chart downsampling (dashboard)** - 2026-09, `fd36a99`.
+  `computeUnitsChartData` returned one point per settled pick.
+  `src/server/data/units-chart-downsample.ts` (`downsampleUnitsChart`) applies
+  extrema-preserving **index** bucketing (the chart x-axis is a categorical
+  `dataKey="date"`, i.e. pick-sequence, not a time scale) when a series exceeds
+  `UNITS_CHART_MAX_POINTS` (2000): first/last kept exactly, each of ~999
+  interior buckets keeps its cumulative-value min AND max, every returned point
+  is an exact original in order, `downsampled[last].cumulative ===
+  full[last].cumulative` exactly. Applied **only inside
+  `computeDashboardSummary`**; `computeUnitsChartData` /
+  `computeCumulativeUnitsSeries` / `computeMaxDrawdown` stay full-fidelity.
+  Deterministic, caches under the existing `dashboard:${userId}` key.
+
+- **M2 - auth double round-trip** - 2026-09, `bc3be6e`. `supabase.auth.getUser()`
+  ran in middleware **and** `getCurrentUser()` (two Supabase Auth network calls
+  per request). Both now call `supabase.auth.getClaims()` - this project signs
+  JWTs with an asymmetric ES256 key, so it verifies the signature locally via
+  WebCrypto against a cached JWKS, no Auth-server round-trip on the hot path.
+  Token refresh unchanged. Security tradeoff + deferred JWT-expiry decision in
+  `docs/m2-auth-round-trips.md`.
+
+- **M7 - Stripe webhook transient-failure loss** - 2026-08, `adc0bc1`. The
+  webhook recorded the event id as processed before running the handler, so a
+  transient mid-handler failure stranded the subscription mutation and Stripe's
+  retry hit the dedupe skip. `applyStripeWebhookEvent`
+  (`src/server/data/stripe-webhook.ts`) now claims the event id and applies
+  every subscription write in one transaction - a handler throw rolls back the
+  claim too, so the retry reprocesses cleanly; exactly-once preserved. Design C
+  (status column + replay cron) recorded as the future async step in
+  `docs/m7-stripe-webhook-idempotency.md`.
+
+- **M9 - `recomputeTeamTendencies` unbounded scan** (instrumented; bounded fix
+  deferred) - 2026-08, `6f5bf8f`. The tendencies are all-captured-history
+  (career) metrics by design, so there is no date bound to add.
+  `select`-narrowed both queries; the `refresh-scores` cron now logs per-sport
+  scan sizes + timings (`refresh-scores-run`). The larger fix (Option A - drop
+  the `OddsSnapshot` scan, read `GameResult.favTeam`/`totalLine`) is documented
+  in `docs/m9-team-tendencies.md` with triggers to act on; it touches the
+  grading path, so it needs its own scoped approval.
+
+- **C4 - grading throughput instrumentation** - 2026-08, `026945e` / `bad21d0`.
+  The `grade-picks` cron emits a `grade-picks-run` structured log line
+  (per-phase timings, backlog counts), and the grading writes are hardened
+  against the delete-mid-run race (conditional `updateMany`). The queue /
+  worker architecture itself remains deferred - see below.
 
 ## Not yet started
 
-### Units chart downsampling - DONE for the dashboard (2026-09)
+### Units chart on the per-capper page (client-side cost)
 
-`computeUnitsChartData` returned one point per settled pick; a 20k+ settled
-history is more points than the ~900px chart renders distinctly and bloated
-the M3 dashboard cache payload.
-
-**Done:** `src/server/data/units-chart-downsample.ts` - `downsampleUnitsChart`
-applies extrema-preserving **index** bucketing (the chart's x-axis is a
-categorical `dataKey="date"`, i.e. pick-sequence, not a time scale) when a
-series exceeds `UNITS_CHART_MAX_POINTS` (2000). First and last points kept
-exactly; each of ~999 interior buckets keeps its cumulative-value min AND max;
-every returned point is an exact original in order;
-`downsampled[last].cumulative === full[last].cumulative` exactly. Applied
-**only inside `computeDashboardSummary`** - `computeUnitsChartData`,
-`computeCumulativeUnitsSeries`, and `computeMaxDrawdown` stay full-fidelity.
-Deterministic, so it caches under the existing `dashboard:${userId}` key with
-no new dimension. Tested in `units-chart-downsample-acceptance-test.ts`
-(reconstruction error, cross-bucket extrema survival, exact endpoints,
-threshold pass-through).
-
-**Still open (lower priority):** the per-capper page
-(`cappers/[capperId]/page.tsx`) calls `computeUnitsChartData` directly,
-uncached, and is not downsampled. Series there are per-single-capper and
-windowed, so much smaller - apply the same helper if a whale capper's
-all-time view ever proves heavy. The capper-comparison overlay
-(`computeUnitsChartByPickNumber`) is also untouched; it is per-single-capper
-and index-based already, so the same helper would drop in.
-
-### Units chart emits one point per pick on the per-capper page (client-side cost)
-
-See the "Still open" note directly above - the dashboard is handled; the
-per-capper page and comparison overlay are the remaining, lower-priority
-surfaces. Purely a rendering/payload concern; the M3 work made the underlying
-query lean + cached.
-
-### M2 - Auth double round-trip - DONE (2026-09, bc3be6e)
-
-`supabase.auth.getUser()` ran in middleware **and** again in `getCurrentUser()`,
-two network calls to Supabase Auth on every request (incl. every 25s
-`/api/live/scores` poll). Both now call `supabase.auth.getClaims()`, which -
-this project signs JWTs with an asymmetric ES256 key - verifies the token
-signature locally via WebCrypto against a cached JWKS, no Auth-server
-round-trip on the hot path. Token refresh (via `getSession()` internally) is
-unchanged. Full writeup, security tradeoff, and the deferred JWT-expiry
-decision in `docs/m2-auth-round-trips.md`.
-
-### M7 - Stripe webhook: transient failure loses the update
-
-On a handler exception the event is already marked processed, so Stripe's
-retry hits the idempotency skip and 200s without applying. Under DB
-contention at scale this silently strands a few users on the wrong plan.
-Fix: only mark processed after the handler succeeds, or record a
-failed-events table for replay.
-
-### M9 - `recomputeTeamTendencies` unbounded scan
-
-Loads every `GameResult` + every `OddsSnapshot` for a sport on each daily
-`refresh-scores` run. Grows with years of history (not users). Window it to
-the last N days once the row counts justify it.
+`cappers/[capperId]/page.tsx` calls `computeUnitsChartData` directly, uncached,
+and is not downsampled. Series there are per-single-capper and windowed, so
+much smaller than the dashboard's cross-capper total - apply
+`downsampleUnitsChart` here if a whale capper's all-time view ever proves
+heavy. The capper-comparison overlay (`computeUnitsChartByPickNumber`) is
+untouched too; it is per-single-capper and index-based already, so the same
+helper would drop in. Purely a rendering/payload concern.
 
 ## CI / tooling
 
@@ -102,6 +99,8 @@ suites expect can be pulled from the assertions in each file.
 ### C4 - Grading queue / worker architecture
 
 `gradeAllPendingPicks` is capped at 500 picks/sport/run every 15 min
-(~240k grades/day capacity). Revisit a queued/batched background job only
-once production metrics show the pending backlog actually approaching that
-ceiling - not before. Building it now would be premature.
+(~240k grades/day capacity). Instrumentation shipped (see "Shipped" above);
+revisit a queued/batched background job only once the `grade-picks-run` metrics
+show the pending backlog actually approaching that ceiling - not before.
+Eventual queue recommendation (Vercel Queues, push mode) is written up in
+`docs/c4-grading-throughput.md`.
