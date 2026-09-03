@@ -9,6 +9,7 @@ const SPORTS: Record<string, string[]> = {
   NBA: ["NBA"],
   MLB: ["MLB"],
   NHL: ["NHL"],
+  CFL: ["CFL"],
   NCAAF: ["NCAAF"],
   NCAAB: ["NCAAB"],
   Soccer: ["EPL", "La Liga", "Champions League", "MLS"],

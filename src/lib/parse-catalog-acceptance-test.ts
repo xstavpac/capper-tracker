@@ -201,7 +201,10 @@ function main() {
     check(
       "CFL_TEAMS: 'Redblacks vs Blue Bombers Over 45.5' resolves as a real CFL pick",
       { sport: picks[0]?.sportName, teams: picks[0]?.teamNicknames.sort() },
-      { sport: "CFL", teams: ["blue bombers", "redblacks"] }
+      // "redblacks" also matches the "red blacks" CFL_TEAMS entry added for the
+      // CFL grading build (The Odds API's Ottawa spelling was unconfirmed) -
+      // extra nickname, same CFL resolution, game matching tries each.
+      { sport: "CFL", teams: ["blue bombers", "red blacks", "redblacks"] }
     );
   }
 
@@ -912,6 +915,69 @@ NC State +4.5`;
     check("'Los Angeles Kings ML' resolves straight to NHL", parseCatalog(`Cap\nLos Angeles Kings ML`, []).picks[0]?.sportName, "NHL");
     check("'Florida Panthers ML' resolves straight to NHL", parseCatalog(`Cap\nFlorida Panthers ML`, []).picks[0]?.sportName, "NHL");
     check("'Winnipeg Jets ML' resolves straight to NHL", parseCatalog(`Cap\nWinnipeg Jets ML`, []).picks[0]?.sportName, "NHL");
+  }
+
+  // ==========================================================================
+  // PART K: CFL team coverage (for the CFL grading build). CFL parser support
+  // was mostly in place from earlier work; this build fixed two gaps - "BC
+  // Lions" (couldn't resolve to CFL at all, since bare "lions" is NFL/KBO-
+  // ambiguous) and "Ottawa Red Blacks" as two words (mis-parsed as a tennis
+  // player). This is the persisted regression net for all 9 teams.
+  // ==========================================================================
+  console.log("\n########## PART K: CFL team coverage ##########");
+  {
+    // The 7 bare nicknames that resolve straight to CFL.
+    const bareCflNicknames = [
+      ["Redblacks", ["red blacks", "redblacks"]],
+      ["Blue Bombers", ["blue bombers"]],
+      ["Roughriders", ["roughriders"]],
+      ["Argonauts", ["argonauts"]],
+      ["Elks", ["elks"]],
+      ["Alouettes", ["alouettes"]],
+      ["Stampeders", ["stampeders"]],
+      ["Tiger-Cats", ["tiger-cats"]],
+    ] as const;
+    for (const [nick, teams] of bareCflNicknames) {
+      const pick = parseCatalog(`Cap\n${nick} ML`, []).picks[0];
+      check(
+        `bare '${nick} ML' resolves to CFL`,
+        { sport: pick?.sportName, teams: pick?.teamNicknames.slice().sort() },
+        { sport: "CFL", teams: [...teams].sort() }
+      );
+    }
+
+    // Gap fix 1: "BC Lions" - explicit city form resolves to CFL, bare "Lions"
+    // stays NFL/KBO-ambiguous (unchanged - no CFL schedule data to break the
+    // tie until enable).
+    check("'BC Lions ML' resolves to CFL", parseCatalog(`Cap\nBC Lions ML`, []).picks[0]?.sportName, "CFL");
+    check(
+      "bare 'Lions ML' still surfaces NFL/KBO ambiguous, NOT silently CFL",
+      {
+        sport: parseCatalog(`Cap\nLions ML`, []).picks[0]?.sportName,
+        options: parseCatalog(`Cap\nLions ML`, []).picks[0]?.ambiguous?.map((o: { label: string }) => o.label).sort(),
+      },
+      { sport: "", options: ["Detroit Lions (NFL)", "Samsung Lions (KBO)"] }
+    );
+
+    // Gap fix 2: Ottawa's team, both spellings (The Odds API's is unconfirmed),
+    // no longer mis-parses as a tennis player.
+    check("'Red Blacks ML' (two words) resolves to CFL, not a phantom ATP pick", parseCatalog(`Cap\nRed Blacks ML`, []).picks[0]?.sportName, "CFL");
+    check("'Ottawa Red Blacks +3' resolves to CFL", parseCatalog(`Cap\nOttawa Red Blacks +3`, []).picks[0]?.sportName, "CFL");
+    check("'Ottawa Redblacks +3' (one word) still resolves to CFL", parseCatalog(`Cap\nOttawa Redblacks +3`, []).picks[0]?.sportName, "CFL");
+
+    // Bare "Ottawa" (city, no nickname) still routes to unresolved, not a
+    // phantom ATP pick - unchanged by this build.
+    check("bare 'Ottawa +7.5' still routes to unresolved", parseCatalog(`Cap\nOttawa +7.5`, []).unresolved, ["Ottawa +7.5"]);
+
+    // City-qualified forms of the other 8 teams all resolve to CFL.
+    const cityQualified = [
+      "Saskatchewan Roughriders ML", "Toronto Argonauts ML", "Hamilton Tiger-Cats ML",
+      "Winnipeg Blue Bombers ML", "Montreal Alouettes ML", "Edmonton Elks ML",
+      "Calgary Stampeders ML",
+    ];
+    for (const text of cityQualified) {
+      check(`'${text}' resolves to CFL`, parseCatalog(`Cap\n${text}`, []).picks[0]?.sportName, "CFL");
+    }
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

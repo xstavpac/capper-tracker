@@ -470,6 +470,114 @@ export function getNhlLiveScores(): Promise<ScoreGame[]> {
   return getEspnScores("hockey/nhl");
 }
 
+// How many days back The Odds API's /scores endpoint is asked to include
+// completed games. 3 covers a Thursday-Saturday CFL slate even if the grade
+// cron didn't run again until Monday. daysFrom is what makes /scores return
+// completed games at all (without it the endpoint is upcoming + live only) -
+// and it also doubles the credit cost of the call from 1 to 2.
+const CFL_SCORE_DAYS_FROM = 3;
+
+// How far around a CFL game's start time getCflLiveScores is allowed to hit
+// the paid /scores endpoint (see cflGameWithinScoreWindow). 7h back covers a
+// ~3h game plus a wide margin for a late final; 1h forward lets the first
+// poll land just before kickoff.
+const CFL_SCORE_WINDOW_BEFORE_MS = 7 * 60 * 60 * 1000;
+const CFL_SCORE_WINDOW_AFTER_MS = 60 * 60 * 1000;
+
+// CFL has no free score source - ESPN dropped CFL coverage after 2022 and
+// the official api.cfl.ca is discontinued - so scores come from The Odds
+// API's own /scores endpoint at 2 credits per call (daysFrom is required to
+// get completed games). The grade cron would otherwise poll this every 15
+// minutes all season for a league that plays ~4 games a week, ~90% of those
+// calls returning nothing. This gate reads the already-cached CFL
+// OddsSnapshot (no API call, no cost) and only allows the /scores fetch when
+// a CFL game is currently in progress or just finished. In the dormant state
+// (no CFL OddsSnapshot because CFL isn't in LIVE_SPORTS / SPORT_SEASON_CONFIG
+// yet) there are no rows, so this returns false and getCflLiveScores never
+// hits the network.
+async function cflGameWithinScoreWindow(): Promise<boolean> {
+  const today = easternDateKey(new Date());
+  const yesterday = easternDateKey(new Date(Date.now() - 86400000));
+  const snapshots = await prisma.oddsSnapshot.findMany({
+    where: { sportKey: "americanfootball_cfl", fetchDate: { in: [today, yesterday] } },
+    select: { data: true },
+  });
+  const now = Date.now();
+  for (const snapshot of snapshots) {
+    for (const game of snapshot.data as unknown as OddsGame[]) {
+      const start = new Date(game.commenceTime).getTime();
+      if (start <= now + CFL_SCORE_WINDOW_AFTER_MS && start >= now - CFL_SCORE_WINDOW_BEFORE_MS) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// CFL live/final scores from The Odds API's /scores endpoint - the ONLY
+// viable source (see cflGameWithinScoreWindow's note). Unlike every
+// getEspnScores-backed sport this hits a paid, authenticated endpoint, so
+// callers reach it through dispatchLiveScoresForSport, which applies both the
+// season gate and the score-window gate first. The response is flat
+// (home_team/away_team/completed/scores), not ESPN's nested
+// competitions[].competitors[] - and its event `id` is the SAME id as the
+// odds snapshot's (same provider), so game resolution against the odds
+// board is exact with no team-name matching needed.
+//
+// NOT yet wired for grading: americanfootball_cfl is absent from
+// RESOLVABLE_SPORT_KEYS, LIVE_SPORTS, and SPORT_SEASON_CONFIG, so nothing
+// reaches this in production. Built dormant per
+// docs/sports-props-expansion-plan.md.
+export async function getCflLiveScores(): Promise<ScoreGame[]> {
+  const apiKey = process.env.ODDS_API_KEY;
+  if (!apiKey) {
+    console.error("[getCflLiveScores] no ODDS_API_KEY configured");
+    return [];
+  }
+
+  const url =
+    BASE_URL +
+    "/sports/americanfootball_cfl/scores/?apiKey=" +
+    apiKey +
+    "&daysFrom=" +
+    CFL_SCORE_DAYS_FROM +
+    "&dateFormat=iso";
+
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) {
+    const bodyText = await res.text().catch(() => "<unreadable body>");
+    console.error(
+      "[getCflLiveScores] upstream fetch failed",
+      JSON.stringify({ status: res.status, statusText: res.statusText, body: bodyText.slice(0, 500) })
+    );
+    return [];
+  }
+
+  const raw = await res.json();
+  if (!Array.isArray(raw)) return [];
+
+  return raw.map((g: any): ScoreGame => {
+    // completed -> final; has partial scores but not completed -> live;
+    // no scores yet -> preview. Mirrors ESPN's post/in/pre mapping.
+    const status: "preview" | "live" | "final" = g.completed ? "final" : g.scores ? "live" : "preview";
+    return {
+      id: String(g.id),
+      homeTeam: g.home_team,
+      awayTeam: g.away_team,
+      status,
+      scores: Array.isArray(g.scores)
+        ? g.scores.map((s: any) => ({ name: s.name, score: String(s.score) }))
+        : null,
+      commenceTime: g.commence_time,
+      // CFL has no half/inning data from this endpoint - full-game only, same
+      // initial scope as every ESPN-backed sport.
+      inningHalf: null,
+      inningOrdinal: null,
+      innings: null,
+    };
+  });
+}
+
 // Sports with a real score source wired up (see getLiveScoresForSport below).
 // The rest of LIVE_SPORTS still get odds display, just no live score/badge,
 // game resolution, or auto-grading yet - add a key here (and a case below)
@@ -511,6 +619,18 @@ async function dispatchLiveScoresForSport(sportKey: string): Promise<ScoreGame[]
     // added to RESOLVABLE_SPORT_KEYS - see getNhlLiveScores' note.
     if (!isSportInSeason(sportKey)) return [];
     return getNhlLiveScores();
+  }
+  if (sportKey === "americanfootball_cfl") {
+    // Two gates, not one, because CFL scores are NOT free - each getCflLiveScores
+    // call spends 2 Odds API credits (see its note). Season gate first (cheap,
+    // and it short-circuits the whole thing in the dormant state since CFL has
+    // no SPORT_SEASON_CONFIG entry yet); then the score-window gate, which reads
+    // only the already-cached OddsSnapshot, so the paid /scores endpoint is hit
+    // only while a CFL game is actually in progress or just finished. Reachable
+    // only once americanfootball_cfl is added to RESOLVABLE_SPORT_KEYS.
+    if (!isSportInSeason(sportKey)) return [];
+    if (!(await cflGameWithinScoreWindow())) return [];
+    return getCflLiveScores();
   }
   return [];
 }

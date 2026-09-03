@@ -125,12 +125,19 @@ const WNBA_TEAMS = [
 
 // "lions" deliberately excluded - BC Lions collides with NFL's Detroit Lions,
 // same "let it fall through rather than always resolving to one sport"
-// reasoning as cardinals/panthers/giants above. Not added to
-// AMBIGUOUS_NICKNAMES either since this app has no CFL schedule data to
-// actually disambiguate against - a bare "Lions" pick just stays NFL, same
-// as before CFL support existed.
+// reasoning as cardinals/panthers/giants above. Bare "Lions" stays NFL/KBO-
+// ambiguous; the city-qualified "BC Lions" resolves via DISAMBIGUATED_TEAMS
+// below. Adding BC Lions as a third bare AMBIGUOUS_NICKNAMES option waits for
+// CFL to gain real schedule data (LIVE_SPORTS + SPORT_SEASON_CONFIG at
+// enable time) - until then there'd be no way to disambiguate it.
+//
+// "red blacks" (two words) is listed alongside "redblacks": The Odds API's
+// spelling of the Ottawa team is unconfirmed (no Ottawa game in the slate
+// during the CFL grading build) and could be either, and without the
+// two-word form a pick written "Ottawa Red Blacks" mis-parses as a tennis
+// player ("Blacks") - a real latent bug. Both forms resolve to CFL.
 const CFL_TEAMS = [
-  "redblacks", "blue bombers", "roughriders", "argonauts", "elks",
+  "redblacks", "red blacks", "blue bombers", "roughriders", "argonauts", "elks",
   "alouettes", "stampeders", "tiger-cats",
 ];
 
@@ -254,6 +261,10 @@ const DISAMBIGUATED_TEAMS: TeamEntry[] = [
   ["new york jets", "NFL"],
   ["ny jets", "NFL"],
   ["winnipeg jets", "NHL"],
+  // "lions" is excluded from CFL_TEAMS (collides with Detroit Lions / Samsung
+  // Lions), so the BC Lions need an explicit city-qualified entry to resolve
+  // to CFL at all - same pattern as chicago bears / detroit lions above.
+  ["bc lions", "CFL"],
 ];
 
 // KBO (Korean Baseball Organization). Four of the ten teams' nicknames don't
