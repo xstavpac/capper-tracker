@@ -73,6 +73,16 @@ export default async function LivePage({
   const boardGameIds = new Set(boardOdds.map((g) => g.id));
   const odds = [...boardOdds, ...yesterdayOdds.filter((g) => !boardGameIds.has(g.id))];
 
+  // Board Pulse's slate is FIXED for the day: every game scheduled for today's
+  // Eastern date, whether it's already Final (and thus hidden from the board by
+  // orderBoardGames) or hasn't started yet. Taken straight from today's odds
+  // snapshot here, never from the board's filtered/rendered list - that
+  // coupling made "expected upsets today" shrink through the day as games
+  // finalized (see board-pulse.ts and the note in live-scoreboard-ordering.ts).
+  // Carried-over still-live games from last night are a different slate and are
+  // excluded by the date match.
+  const boardPulseOdds = odds.filter((g) => easternDateKey(new Date(g.commenceTime)) === todayKey);
+
   // Only ever used to pick which empty-state message to show, never on its
   // own - getOddsForSport can return real cached odds for today even when
   // this is false (a prior successful fetch already populated OddsSnapshot,
@@ -168,6 +178,7 @@ export default async function LivePage({
           key={activeSport}
           activeSport={activeSport}
           odds={odds}
+          boardPulseOdds={boardPulseOdds}
           initialScores={scores}
           matchedPicksByGame={expanderPicksByGame}
           showBoardPulse={showBoardPulse}

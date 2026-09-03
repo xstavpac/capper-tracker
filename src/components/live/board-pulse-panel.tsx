@@ -89,7 +89,9 @@ export function BoardPulsePanel({ stats }: { stats: BoardPulseStats }) {
   const badgeText =
     stats.verdict === "insufficient"
       ? "not enough games yet"
-      : "running " + (stats.verdict === "hot" ? "above" : "below") + " average";
+      : stats.verdict === "on pace"
+        ? "running on pace"
+        : "running " + (stats.verdict === "hot" ? "above" : "below") + " average";
 
   return (
     <div className="mb-6 rounded-card bg-card p-6 shadow-soft">

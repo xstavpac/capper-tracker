@@ -23,14 +23,15 @@ const REGULATION_INNINGS = 9;
 // not-yet-started games.
 const MIN_INNINGS_FOR_TREND = 2;
 
-// Below this many completed-or-in-progress games, an upset RATE is too noisy
-// to call "running hot" or "running cold" off of - a single early upset
-// swings a 1- or 2-game sample from 0% to 50%/100%, nowhere near a real
-// signal against the ~43% baseline. Below this, the panel shows a neutral
-// "not enough games yet" state instead of a verdict.
+// Below this many FINISHED games the pace signal is too noisy to call "running
+// hot" or "running cold" off of at all - a hard floor on top of the dynamic
+// +/-sigma dead band (which already widens the "on pace" zone at small samples,
+// but a 1- or 2-game sample is worth no verdict regardless). In-progress games
+// are excluded from this count entirely (a lead can evaporate). Below this, the
+// panel shows a neutral "not enough games yet" state instead of a verdict.
 export const MIN_GAMES_FOR_VERDICT = 3;
 
-export type BoardPulseVerdict = "hot" | "cold" | "insufficient";
+export type BoardPulseVerdict = "hot" | "cold" | "on pace" | "insufficient";
 
 export type BoardPulseGame = {
   id: string;
@@ -44,29 +45,68 @@ export type BoardPulseGame = {
 };
 
 export type BoardPulseStats = {
+  // The full fixed slate: every game passed in, including not-yet-started ones.
+  // This is what expectedUpsets is based on, and it must stay constant through
+  // the day - the caller feeds computeBoardPulse a today-scoped list built off
+  // the odds snapshot, never the Live board's filtered/rendered list (which
+  // drops finished games). See live/page.tsx and live-scoreboard-ordering.ts.
   gameCount: number;
-  upsetsSoFar: number;
   expectedUpsets: number;
-  // Games with a decided leader right now (favsLeading + dogsLeading, ties
-  // and not-yet-started games excluded) - the denominator for upsetRate
-  // below, and the population "running hot/cold" is actually judged against.
-  gamesSoFar: number;
-  // upsetsSoFar / gamesSoFar - null when gamesSoFar is 0 (nothing to divide).
-  // This, not upsetsSoFar vs expectedUpsets, is what the panel should compare
-  // against MLB_UNDERDOG_WIN_RATE: a raw running count is almost always well
-  // under a full-day total early on regardless of true pace (most games
-  // simply haven't happened yet), which made the old comparison look
-  // "below average" by default for most of the day no matter how the
-  // completed games actually went. A rate stays meaningful at any point in
-  // the day, including game 1.
-  upsetRate: number | null;
-  // "insufficient" below MIN_GAMES_FOR_VERDICT, regardless of what the raw
-  // rate happens to say - see that constant's comment.
-  verdict: BoardPulseVerdict;
+
+  // ---- Confirmed: game is Final ----
+  favsWon: number;
+  dogsWon: number;
+  upsetsConfirmed: number; // === dogsWon - a favorite that actually lost
+  // favsWon + dogsWon (final ties, which MLB can't have anyway, excluded).
+  // The verdict denominator and the sample the MIN_GAMES_FOR_VERDICT guard
+  // counts - an in-progress lead is not a result and never feeds this.
+  decidedGames: number;
+
+  // ---- Live: game in progress, has a current leader ----
+  favsLeadingLive: number;
+  dogsLeadingLive: number;
+  upsetsLive: number; // === dogsLeadingLive - a favorite currently trailing
+
+  // Blended (won OR currently leading) - unchanged from the pre-split shape so
+  // BoardPulsePanel keeps rendering until the confirmed-vs-live display
+  // treatment is designed separately.
   favsLeading: number;
   dogsLeading: number;
+
+  // upsetsConfirmed / decidedGames - null when decidedGames is 0 (nothing to
+  // divide). The panel's "+N pts vs avg" pill still shows this against
+  // MLB_UNDERDOG_WIN_RATE; the verdict itself no longer uses it (see paceDelta).
+  upsetRate: number | null;
+
+  // ---- Pace: confirmed upsets vs what the historical rate predicts for the
+  //      games finished SO FAR (not the whole day - that's expectedUpsets) ----
+  // decidedGames * MLB_UNDERDOG_WIN_RATE - the pro-rated yardstick.
+  expectedUpsetsSoFar: number;
+  // upsetsConfirmed - expectedUpsetsSoFar. Signed: positive = more upsets than
+  // the baseline predicts at this many finished games, negative = fewer.
+  paceDelta: number;
+  // One binomial standard deviation on the confirmed-upset count at this sample
+  // size: sqrt(decidedGames * p * (1 - p)), p = MLB_UNDERDOG_WIN_RATE. The
+  // dead band the verdict uses - |paceDelta| within one sigma is "on pace".
+  // Grows with sample size, so a raw +1 upset reads as noise at 3 games and as
+  // signal at 15.
+  sigma: number;
+
+  // "insufficient" below MIN_GAMES_FOR_VERDICT decided (final) games. Otherwise
+  // paceDelta against the +/-sigma band: strictly above -> "hot", strictly
+  // below -> "cold", on-or-within -> "on pace". Judged only on finished games;
+  // a live lead can evaporate. See classifyPace.
+  verdict: BoardPulseVerdict;
+
   trendingOver: number;
   trendingUnder: number;
+
+  // Deprecated aliases, both pointing at the confirmed values, kept so
+  // BoardPulsePanel's gauge headline and "pace across N decided games" line
+  // stay internally consistent with the confirmed-only verdict until the panel
+  // is reworked for the confirmed-vs-live split.
+  upsetsSoFar: number; // === upsetsConfirmed
+  gamesSoFar: number; // === decidedGames
 };
 
 // How many innings are "in the books" right now, as a fraction that can land
@@ -86,10 +126,23 @@ function completedInnings(inningHalf: string | null, inningOrdinal: string | nul
   return n - 1;
 }
 
+// The verdict decision, split out so the exact dead-band boundaries are
+// directly testable (paceDelta === +/-sigma etc. can't be hit with an integer
+// upset count from a real fixture). "insufficient" below MIN_GAMES_FOR_VERDICT
+// finished games; otherwise paceDelta against the +/-sigma band - strictly
+// outside it is "hot"/"cold", exactly on or inside it is "on pace".
+export function classifyPace(paceDelta: number, sigma: number, decidedGames: number): BoardPulseVerdict {
+  if (decidedGames < MIN_GAMES_FOR_VERDICT) return "insufficient";
+  if (paceDelta > sigma) return "hot";
+  if (paceDelta < -sigma) return "cold";
+  return "on pace";
+}
+
 export function computeBoardPulse(games: BoardPulseGame[]): BoardPulseStats {
-  let upsetsSoFar = 0;
-  let favsLeading = 0;
-  let dogsLeading = 0;
+  let favsWon = 0;
+  let dogsWon = 0;
+  let favsLeadingLive = 0;
+  let dogsLeadingLive = 0;
   let trendingOver = 0;
   let trendingUnder = 0;
 
@@ -100,13 +153,14 @@ export function computeBoardPulse(games: BoardPulseGame[]): BoardPulseStats {
     if (g.favorite) {
       const favScore = g.favorite === "home" ? g.homeScore : g.awayScore;
       const dogScore = g.favorite === "home" ? g.awayScore : g.homeScore;
-      if (favScore > dogScore) {
-        favsLeading++;
-      } else if (dogScore > favScore) {
-        dogsLeading++;
-        upsetsSoFar++;
-      }
       // A tie counts toward neither - the favorite isn't "losing" yet.
+      if (g.status === "final") {
+        if (favScore > dogScore) favsWon++;
+        else if (dogScore > favScore) dogsWon++;
+      } else {
+        if (favScore > dogScore) favsLeadingLive++;
+        else if (dogScore > favScore) dogsLeadingLive++;
+      }
     }
 
     if (g.totalLine === null) continue;
@@ -127,29 +181,40 @@ export function computeBoardPulse(games: BoardPulseGame[]): BoardPulseStats {
     else if (projected < g.totalLine) trendingUnder++;
   }
 
-  const gamesSoFar = favsLeading + dogsLeading;
-  const upsetRate = gamesSoFar > 0 ? upsetsSoFar / gamesSoFar : null;
-  const verdict: BoardPulseVerdict =
-    gamesSoFar < MIN_GAMES_FOR_VERDICT || upsetRate === null
-      ? "insufficient"
-      : upsetRate > MLB_UNDERDOG_WIN_RATE
-        ? "hot"
-        : "cold";
+  const favsLeading = favsWon + favsLeadingLive;
+  const dogsLeading = dogsWon + dogsLeadingLive;
+  const upsetsConfirmed = dogsWon;
+  const upsetsLive = dogsLeadingLive;
+  const decidedGames = favsWon + dogsWon;
+  const upsetRate = decidedGames > 0 ? upsetsConfirmed / decidedGames : null;
+  const expectedUpsetsSoFar = decidedGames * MLB_UNDERDOG_WIN_RATE;
+  const paceDelta = upsetsConfirmed - expectedUpsetsSoFar;
+  const sigma = Math.sqrt(decidedGames * MLB_UNDERDOG_WIN_RATE * (1 - MLB_UNDERDOG_WIN_RATE));
+  const verdict = classifyPace(paceDelta, sigma, decidedGames);
 
   return {
+    // games.length is the full fixed slate (every game handed in, including
+    // not-yet-started ones) - the caller guarantees this list does not shrink
+    // as games finalize, so expectedUpsets is a constant for the whole day.
     gameCount: games.length,
-    upsetsSoFar,
-    // Unchanged - still the full day's raw expectation (games.length x the
-    // historical rate). Only the comparison this gets used for changes; the
-    // number itself is a legitimate, separate fact ("here's how many upsets
-    // today should have by the time every game is final").
     expectedUpsets: games.length * MLB_UNDERDOG_WIN_RATE,
-    gamesSoFar,
-    upsetRate,
-    verdict,
+    favsWon,
+    dogsWon,
+    upsetsConfirmed,
+    decidedGames,
+    favsLeadingLive,
+    dogsLeadingLive,
+    upsetsLive,
     favsLeading,
     dogsLeading,
+    upsetRate,
+    expectedUpsetsSoFar,
+    paceDelta,
+    sigma,
+    verdict,
     trendingOver,
     trendingUnder,
+    upsetsSoFar: upsetsConfirmed,
+    gamesSoFar: decidedGames,
   };
 }

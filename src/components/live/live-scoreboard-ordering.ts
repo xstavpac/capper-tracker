@@ -3,6 +3,15 @@
 // (live-scoreboard-ordering-acceptance-test.ts) without rendering React or
 // mocking the two external score APIs.
 //
+// RENDER-ONLY. This intentionally drops finished games (rule 1 below), so its
+// output must never be the source for Board Pulse or any other "full day's
+// slate" calculation. Feeding orderBoardGames' result to Board Pulse made
+// "expected upsets today" shrink through the day as games finalized - it
+// regressed once already ("Drop finished games from the Live board entirely")
+// and was fixed by sourcing the pulse from a fixed today-scoped slate built off
+// the odds snapshot in live/page.tsx (boardPulseOdds). If you need every game
+// for the day regardless of status, start from that, not from sortedGames.
+//
 // Three rules, in order:
 //
 //  1. Visibility - once a game goes Final it drops off the board entirely,

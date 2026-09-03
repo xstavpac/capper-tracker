@@ -50,12 +50,18 @@ function favoriteSide(homePrice: number | null, awayPrice: number | null): "home
 export function LiveScoreboard({
   activeSport,
   odds,
+  boardPulseOdds,
   initialScores,
   matchedPicksByGame,
   showBoardPulse,
 }: {
   activeSport: string;
   odds: OddsGame[];
+  // The fixed full slate Board Pulse runs off (see live/page.tsx) - today's
+  // scheduled games regardless of status, NOT the board's shrinking rendered
+  // list. Distinct from `odds`, which also carries future-slate and carried-
+  // over games and is what the visible board is built from.
+  boardPulseOdds: OddsGame[];
   initialScores: ScoreGame[];
   matchedPicksByGame: ExpanderPick[][];
   showBoardPulse: boolean;
@@ -103,9 +109,14 @@ export function LiveScoreboard({
   }));
   const sortedGames = orderBoardGames(gamesWithScores, easternDateKey(new Date()));
 
-  // Same set the board actually shows - a stale carried-over game that's
-  // been filtered out must not still count toward the pulse.
-  const boardPulseGames: BoardPulseGame[] = sortedGames.map(({ game, score }) => {
+  // Built from the FIXED today-scoped slate (boardPulseOdds), NOT sortedGames -
+  // orderBoardGames drops finished games from the board, and feeding that
+  // shrinking list here made "expected upsets today" collapse through the day
+  // (see live-scoreboard-ordering.ts's render-only note). matchScoreToGame
+  // still resolves a final game's score from the same poll; it's just hidden
+  // from the rendered board below.
+  const boardPulseGames: BoardPulseGame[] = boardPulseOdds.map((game) => {
+    const score = matchScoreToGame(scores, game);
     const homePrice = findMarketAcrossBooks(game, "h2h")?.outcomes.find((o) => o.name === game.homeTeam)?.price ?? null;
     const awayPrice = findMarketAcrossBooks(game, "h2h")?.outcomes.find((o) => o.name === game.awayTeam)?.price ?? null;
     const totalLine = findMarketAcrossBooks(game, "totals")?.outcomes.find((o) => o.name === "Over")?.point ?? null;
