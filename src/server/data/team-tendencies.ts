@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { OddsGame } from "@/server/data/odds";
 import { closestByTime, easternDateKey } from "@/lib/dates";
+import { teamNamesMatch } from "@/lib/team-name-match";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 
 // Below this many decided (non-push) games in a split, a team's tendency is
@@ -46,7 +47,12 @@ export function findOddsGameForResult(
   oddsGames: OddsGame[],
   game: { homeTeam: string; awayTeam: string; gameDate: Date }
 ): OddsGame | null {
-  const candidates = oddsGames.filter((g) => g.homeTeam === game.homeTeam && g.awayTeam === game.awayTeam);
+  // teamNamesMatch, not ===: `game` is a GameResult (score-source spelling),
+  // oddsGames come from The Odds API, which disagree on a few names (see
+  // team-name-match.ts).
+  const candidates = oddsGames.filter(
+    (g) => teamNamesMatch(g.homeTeam, game.homeTeam) && teamNamesMatch(g.awayTeam, game.awayTeam)
+  );
   if (candidates.length === 0) return null;
 
   const withinDrift = candidates.filter(
@@ -59,10 +65,13 @@ export function findOddsGameForResult(
 
 // First bookmaker's price for `teamName` in the moneyline (h2h) market -
 // same "first bookmaker that has it" convention as findMarketPrice (odds.ts).
+// teamNamesMatch, not ===: recomputeTeamTendencies calls this with a
+// GameResult's (score-source) team name against odds-source outcome names
+// (see team-name-match.ts).
 export function moneylinePrice(oddsGame: OddsGame, teamName: string): number | null {
   for (const bookmaker of oddsGame.bookmakers) {
     const market = bookmaker.markets.find((m) => m.key === "h2h");
-    const outcome = market?.outcomes.find((o) => o.name === teamName);
+    const outcome = market?.outcomes.find((o) => teamNamesMatch(o.name, teamName));
     if (outcome) return outcome.price;
   }
   return null;
@@ -98,7 +107,9 @@ export function totalOutcomePrice(oddsGame: OddsGame, side: "Over" | "Under"): n
 export function spreadPoint(oddsGame: OddsGame, teamName: string): number | null {
   for (const bookmaker of oddsGame.bookmakers) {
     const market = bookmaker.markets.find((m) => m.key === "spreads");
-    const outcome = market?.outcomes.find((o) => o.name === teamName);
+    // teamNamesMatch, not ===: same cross-source-spelling reason as
+    // moneylinePrice above.
+    const outcome = market?.outcomes.find((o) => teamNamesMatch(o.name, teamName));
     if (outcome?.point !== undefined) return outcome.point;
   }
   return null;

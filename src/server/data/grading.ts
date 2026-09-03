@@ -11,6 +11,7 @@ import {
   type OddsGame,
 } from "@/server/data/odds";
 import { closestByTime, sameEasternDay } from "@/lib/dates";
+import { teamNamesMatch } from "@/lib/team-name-match";
 import { extractLine, parseTouchdownProp, nrfiSide } from "@/lib/bet-line";
 import { findTeamNickname, NCAAF_CANONICAL_SUFFIX } from "@/lib/parse-catalog";
 import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
@@ -45,7 +46,12 @@ function deriveLedgerFields(
   awayTeam: string,
   referenceTime: Date
 ): { favTeam: string | null; totalLine: number | null } {
-  const candidates = oddsGames.filter((g) => g.homeTeam === homeTeam && g.awayTeam === awayTeam);
+  // teamNamesMatch, not ===: homeTeam/awayTeam come from the score source
+  // (ESPN), oddsGames from The Odds API, and the two disagree on a few names
+  // (see team-name-match.ts).
+  const candidates = oddsGames.filter(
+    (g) => teamNamesMatch(g.homeTeam, homeTeam) && teamNamesMatch(g.awayTeam, awayTeam)
+  );
   const sameDay = candidates.filter((g) => sameEasternDay(new Date(g.commenceTime), referenceTime));
   if (sameDay.length === 0) return { favTeam: null, totalLine: null };
   const match = closestByTime(sameDay, (g) => new Date(g.commenceTime).getTime(), referenceTime.getTime());
@@ -53,8 +59,13 @@ function deriveLedgerFields(
   const h2h = findMarket(match, "h2h");
   const homeOutcome = h2h?.outcomes.find((o) => o.name === match.homeTeam);
   const awayOutcome = h2h?.outcomes.find((o) => o.name === match.awayTeam);
+  // Return the caller's (score-source) spelling, not the odds game's - this
+  // value is stored in GameResult.favTeam alongside GameResult.homeTeam/
+  // awayTeam (also score-source), and downstream code (decay-delta-backtest,
+  // team-tendencies) assumes favTeam is string-equal to one of them. For the
+  // ~all teams whose two spellings agree this is identical to match.homeTeam.
   const favTeam =
-    homeOutcome && awayOutcome ? (homeOutcome.price < awayOutcome.price ? match.homeTeam : match.awayTeam) : null;
+    homeOutcome && awayOutcome ? (homeOutcome.price < awayOutcome.price ? homeTeam : awayTeam) : null;
 
   const totals = findMarket(match, "totals");
   const totalLine = totals?.outcomes.find((o) => o.point !== undefined)?.point ?? null;

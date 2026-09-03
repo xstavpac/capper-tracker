@@ -2,6 +2,7 @@ import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays } from "@/lib/dates";
 import { isSportInSeason, oddsApiSportKey } from "@/lib/sport-seasons";
+import { teamNamesMatch } from "@/lib/team-name-match";
 import { cacheKeys } from "@/lib/cache-keys";
 import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
 
@@ -450,6 +451,25 @@ export function getNcaafLiveScores(): Promise<ScoreGame[]> {
   return getEspnScores("football/college-football");
 }
 
+// Same shared ESPN scoreboard helper again, sport path "hockey/nhl".
+// Confirmed live (real 2025-26 regular-season, overtime, and shootout finals,
+// plus preseason previews) during the NHL grading build: identical
+// `events[].competitions[0].competitors[]` shape as every other ESPN sport -
+// `competitor.score` is the final score INCLUDING overtime and the shootout
+// deciding goal, which is exactly what sportsbooks grade NHL moneyline / puck
+// line / total against, so no OT/SO-specific handling is needed here or in
+// gradePick. Period-by-period `linescores` and the "Final/OT"/"Final/SO"
+// status detail are also present but unused for now - full-game markets only,
+// same initial scope as every other ESPN-backed sport.
+//
+// NOT yet wired for grading: icehockey_nhl is deliberately absent from
+// RESOLVABLE_SPORT_KEYS, so nothing calls this in production yet (the grade
+// cron, the live-score routes, and catalog-import game resolution are all
+// gated on that list). Built dormant per docs/sports-props-expansion-plan.md.
+export function getNhlLiveScores(): Promise<ScoreGame[]> {
+  return getEspnScores("hockey/nhl");
+}
+
 // Sports with a real score source wired up (see getLiveScoresForSport below).
 // The rest of LIVE_SPORTS still get odds display, just no live score/badge,
 // game resolution, or auto-grading yet - add a key here (and a case below)
@@ -482,6 +502,15 @@ async function dispatchLiveScoresForSport(sportKey: string): Promise<ScoreGame[]
     // pure noise.
     if (!isSportInSeason(sportKey)) return [];
     return getNcaafLiveScores();
+  }
+  if (sportKey === "icehockey_nhl") {
+    // Same season gate as NFL/NCAAF above - NHL preseason (late September)
+    // is on ESPN's scoreboard too, and SPORT_SEASON_CONFIG's NHL window is
+    // regular-season-only (starts Oct 7), so this keeps preseason games out
+    // of live display and grading. Reachable only once icehockey_nhl is
+    // added to RESOLVABLE_SPORT_KEYS - see getNhlLiveScores' note.
+    if (!isSportInSeason(sportKey)) return [];
+    return getNhlLiveScores();
   }
   return [];
 }
@@ -859,11 +888,16 @@ export async function resolveGameForTeams(
 // Matches a single odds-listed game to its live/final score by team pair,
 // preferring whichever score candidate started closest to the odds game's
 // commenceTime - same repeat-matchup problem resolveGameForNickname solves.
+// teamNamesMatch, not ===: `scores` is score-source-spelled (ESPN) and `game`
+// is odds-source-spelled (The Odds API), which disagree for a few teams (see
+// team-name-match.ts).
 export function matchScoreToGame(
   scores: ScoreGame[],
   game: { homeTeam: string; awayTeam: string; commenceTime: string }
 ): ScoreGame | undefined {
-  const candidates = scores.filter((s) => s.homeTeam === game.homeTeam && s.awayTeam === game.awayTeam);
+  const candidates = scores.filter(
+    (s) => teamNamesMatch(s.homeTeam, game.homeTeam) && teamNamesMatch(s.awayTeam, game.awayTeam)
+  );
   if (candidates.length === 0) return undefined;
   if (candidates.length === 1) return candidates[0];
 
@@ -874,12 +908,16 @@ export function matchScoreToGame(
 // Shared by findMarketPrice and findMarketTotalLine - resolves which
 // odds-listed game (by team pair + closest commenceTime) a schedule-sourced
 // game corresponds to, same repeat-matchup handling as matchScoreToGame.
+// teamNamesMatch, not ===: `game` here is schedule/score-source-spelled while
+// oddsGames is odds-source-spelled (see team-name-match.ts).
 async function resolveOddsGame(
   sportKey: string,
   game: { homeTeam: string; awayTeam: string; commenceTime: string }
 ): Promise<OddsGame | null> {
   const oddsGames = await getOddsForSport(sportKey);
-  const candidates = oddsGames.filter((g) => g.homeTeam === game.homeTeam && g.awayTeam === game.awayTeam);
+  const candidates = oddsGames.filter(
+    (g) => teamNamesMatch(g.homeTeam, game.homeTeam) && teamNamesMatch(g.awayTeam, game.awayTeam)
+  );
   if (candidates.length === 0) return null;
 
   const gameStart = new Date(game.commenceTime).getTime();

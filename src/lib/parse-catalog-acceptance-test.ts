@@ -862,6 +862,58 @@ NC State +4.5`;
     check("'Sinner ML' (bare surname) still resolves ATP", parseCatalog(`Cap\nSinner ML`, []).picks[0]?.sportName, "ATP");
   }
 
+  // ==========================================================================
+  // PART J: NHL team coverage (for the NHL grading build). NHL parser support
+  // was added earlier with NHL odds display; this is the persisted regression
+  // net for it - every one of the 32 teams resolves, the 4 that collide with
+  // another league surface as ambiguous rather than silently guessing, and the
+  // city-qualified form of each of those 4 resolves straight to NHL.
+  // ==========================================================================
+  console.log("\n########## PART J: NHL team coverage ##########");
+  {
+    // The 28 current franchises (+ "coyotes" legacy alias for Utah Mammoth)
+    // whose bare mascot is NHL-unambiguous - NOT rangers/kings/panthers/jets,
+    // which collide with an MLB/NBA/NFL team and are checked separately below.
+    const bareNhlNicknames = [
+      "ducks", "coyotes", "bruins", "sabres", "flames", "hurricanes", "blackhawks",
+      "avalanche", "blue jackets", "stars", "red wings", "oilers", "wild",
+      "canadiens", "predators", "devils", "islanders", "senators", "flyers",
+      "penguins", "sharks", "kraken", "blues", "lightning", "maple leafs",
+      "canucks", "golden knights", "capitals", "mammoth",
+    ];
+    for (const nick of bareNhlNicknames) {
+      const title = nick.replace(/\b\w/g, (c) => c.toUpperCase());
+      check(
+        `bare '${title} ML' resolves to NHL`,
+        parseCatalog(`Cap\n${title} ML`, []).picks[0]?.sportName,
+        "NHL"
+      );
+    }
+
+    // The 4 collisions: a bare mascot must surface ambiguous with the NHL team
+    // among the options, never silently resolve to one league.
+    const collisions: [string, string[]][] = [
+      ["Rangers", ["New York Rangers (NHL)", "Texas Rangers (MLB)"]],
+      ["Kings", ["Los Angeles Kings (NHL)", "Sacramento Kings (NBA)"]],
+      ["Panthers", ["Florida Panthers (NHL)", "Carolina Panthers (NFL)"]],
+      ["Jets", ["Winnipeg Jets (NHL)", "New York Jets (NFL)"]],
+    ];
+    for (const [nick, expectedLabels] of collisions) {
+      const pick = parseCatalog(`Cap\n${nick} ML`, []).picks[0];
+      check(
+        `bare '${nick} ML' surfaces ambiguous (incl. the NHL team), does not silently resolve`,
+        { sport: pick?.sportName, options: pick?.ambiguous?.map((o: { label: string }) => o.label).sort() },
+        { sport: "", options: [...expectedLabels].sort() }
+      );
+    }
+
+    // The city-qualified form of each collision resolves straight to NHL.
+    check("'New York Rangers ML' resolves straight to NHL", parseCatalog(`Cap\nNew York Rangers ML`, []).picks[0]?.sportName, "NHL");
+    check("'Los Angeles Kings ML' resolves straight to NHL", parseCatalog(`Cap\nLos Angeles Kings ML`, []).picks[0]?.sportName, "NHL");
+    check("'Florida Panthers ML' resolves straight to NHL", parseCatalog(`Cap\nFlorida Panthers ML`, []).picks[0]?.sportName, "NHL");
+    check("'Winnipeg Jets ML' resolves straight to NHL", parseCatalog(`Cap\nWinnipeg Jets ML`, []).picks[0]?.sportName, "NHL");
+  }
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }
