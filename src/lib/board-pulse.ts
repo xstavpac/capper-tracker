@@ -67,14 +67,8 @@ export type BoardPulseStats = {
   dogsLeadingLive: number;
   upsetsLive: number; // === dogsLeadingLive - a favorite currently trailing
 
-  // Blended (won OR currently leading) - unchanged from the pre-split shape so
-  // BoardPulsePanel keeps rendering until the confirmed-vs-live display
-  // treatment is designed separately.
-  favsLeading: number;
-  dogsLeading: number;
-
   // upsetsConfirmed / decidedGames - null when decidedGames is 0 (nothing to
-  // divide). The panel's "+N pts vs avg" pill still shows this against
+  // divide). The panel's "+N pts vs avg" line still shows this against
   // MLB_UNDERDOG_WIN_RATE; the verdict itself no longer uses it (see paceDelta).
   upsetRate: number | null;
 
@@ -100,13 +94,6 @@ export type BoardPulseStats = {
 
   trendingOver: number;
   trendingUnder: number;
-
-  // Deprecated aliases, both pointing at the confirmed values, kept so
-  // BoardPulsePanel's gauge headline and "pace across N decided games" line
-  // stay internally consistent with the confirmed-only verdict until the panel
-  // is reworked for the confirmed-vs-live split.
-  upsetsSoFar: number; // === upsetsConfirmed
-  gamesSoFar: number; // === decidedGames
 };
 
 // How many innings are "in the books" right now, as a fraction that can land
@@ -181,8 +168,6 @@ export function computeBoardPulse(games: BoardPulseGame[]): BoardPulseStats {
     else if (projected < g.totalLine) trendingUnder++;
   }
 
-  const favsLeading = favsWon + favsLeadingLive;
-  const dogsLeading = dogsWon + dogsLeadingLive;
   const upsetsConfirmed = dogsWon;
   const upsetsLive = dogsLeadingLive;
   const decidedGames = favsWon + dogsWon;
@@ -205,8 +190,6 @@ export function computeBoardPulse(games: BoardPulseGame[]): BoardPulseStats {
     favsLeadingLive,
     dogsLeadingLive,
     upsetsLive,
-    favsLeading,
-    dogsLeading,
     upsetRate,
     expectedUpsetsSoFar,
     paceDelta,
@@ -214,7 +197,5 @@ export function computeBoardPulse(games: BoardPulseGame[]): BoardPulseStats {
     verdict,
     trendingOver,
     trendingUnder,
-    upsetsSoFar: upsetsConfirmed,
-    gamesSoFar: decidedGames,
   };
 }

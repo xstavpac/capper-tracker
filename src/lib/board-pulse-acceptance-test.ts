@@ -80,16 +80,15 @@ function main() {
     check("B: decidedGames = finals only", s.decidedGames, 4);
   }
 
-  // C. Confirmed vs live split; blended fields add up.
+  // C. Confirmed vs live are counted separately.
   {
     const s = computeBoardPulse([favWin("a"), favWin("b"), dogWin("c"), favLeadingLive("d"), dogLeadingLive("e")]);
     check("C: favsWon / dogsWon", [s.favsWon, s.dogsWon], [2, 1]);
     check("C: favsLeadingLive / dogsLeadingLive", [s.favsLeadingLive, s.dogsLeadingLive], [1, 1]);
-    check("C: favsLeading = won + leading", s.favsLeading, 3);
-    check("C: dogsLeading = won + leading", s.dogsLeading, 2);
-    check("C: upsetsLive = dogsLeadingLive", s.upsetsLive, 1);
+    check("C: upsetsConfirmed = dogsWon (finals only)", s.upsetsConfirmed, 1);
+    check("C: upsetsLive = dogsLeadingLive (in-progress only)", s.upsetsLive, 1);
+    check("C: decidedGames excludes live games", s.decidedGames, 3);
     check("C: upsetRate preserved (confirmed / decided)", s.upsetRate, 1 / 3);
-    check("C: deprecated aliases point at confirmed values", [s.upsetsSoFar, s.gamesSoFar], [s.upsetsConfirmed, s.decidedGames]);
   }
 
   // D. Not-yet-started games count toward expectedUpsets, not "so far".
@@ -98,8 +97,8 @@ function main() {
     check("D: gameCount includes previews", s.gameCount, 10);
     check("D: expectedUpsets includes previews", s.expectedUpsets, 10 * MLB_UNDERDOG_WIN_RATE);
     check("D: nothing decided yet", [s.upsetsConfirmed, s.decidedGames], [0, 0]);
+    check("D: no live leaders", [s.favsLeadingLive, s.dogsLeadingLive], [0, 0]);
     check("D: upsetRate null with nothing decided", s.upsetRate, null);
-    check("D: favsLeading / dogsLeading 0", [s.favsLeading, s.dogsLeading], [0, 0]);
   }
 
   // ==== Pace-relative verdict ====
