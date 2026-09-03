@@ -1,6 +1,6 @@
 ﻿import { prisma } from "@/lib/prisma";
 import type { BetType, PickStatus, Period } from "@prisma/client";
-import { findTeamNickname } from "@/lib/parse-catalog";
+import { findTeamNickname, teamPhraseRegex } from "@/lib/parse-catalog";
 import {
   computeStats,
   computeScorecard,
@@ -264,7 +264,9 @@ export async function getPicksForUser(userId: string) {
 // name alone isn't enough to tell "this specific game" from "the same
 // matchup two days ago." Same reasoning as findMatchingGameResult's
 // withinDrift, just picks-to-a-game instead of a-pick-to-its-game-result.
-function matchPicksToGame<T extends { homeTeam: string; awayTeam: string; betDetail: string | null; gameTime: Date }>(
+export function matchPicksToGame<
+  T extends { homeTeam: string; awayTeam: string; betDetail: string | null; gameTime: Date },
+>(
   candidates: T[],
   game: { homeTeam: string; awayTeam: string; commenceTime: Date },
   sportName: string
@@ -275,14 +277,28 @@ function matchPicksToGame<T extends { homeTeam: string; awayTeam: string; betDet
   const exact = withinDrift(candidates.filter((p) => p.homeTeam === game.homeTeam && p.awayTeam === game.awayTeam));
   if (exact.length > 0) return exact;
 
+  // Fuzzy fallback for picks whose homeTeam/awayTeam is raw text, or is
+  // spelled by a different feed than this board's game (picks resolve against
+  // the ESPN score feed, the board is Odds-API-spelled - the two disagree for
+  // some teams). Mirrors grading's matchGameResult: BOTH teams' nicknames
+  // must appear, not just one. Matching on a single side let a pick latch
+  // onto an unrelated game that merely shares one team's name - a Colorado /
+  // Georgia Tech pick showed up under "West Georgia @ Kennesaw State" (both
+  // contain "georgia") and under "Albany @ Buffalo Bulls" ("buffalo" is a
+  // substring of "Buffaloes"). teamPhraseRegex, not includes(), so "buffalo"
+  // no longer matches inside "buffaloes". If either side's nickname can't be
+  // resolved, the matchup can't be confirmed - skip the fuzzy branch (the
+  // exact branch above still applies).
   const homeNickname = findTeamNickname(game.homeTeam, sportName);
   const awayNickname = findTeamNickname(game.awayTeam, sportName);
-  if (!homeNickname && !awayNickname) return [];
+  if (!homeNickname || !awayNickname) return [];
+  const homeRe = teamPhraseRegex(homeNickname);
+  const awayRe = teamPhraseRegex(awayNickname);
 
   return withinDrift(
     candidates.filter((p) => {
       const text = ((p.betDetail ?? "") + " " + p.homeTeam + " " + p.awayTeam).toLowerCase();
-      return (homeNickname && text.includes(homeNickname)) || (awayNickname && text.includes(awayNickname));
+      return homeRe.test(text) && awayRe.test(text);
     })
   );
 }

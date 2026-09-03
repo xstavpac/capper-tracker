@@ -596,7 +596,7 @@ function looksLikePick(text: string): boolean {
 // `\b` so a phrase that ends in a non-word char - "miami (oh)" ends in ")" -
 // still anchors correctly; for phrases that begin and end with letters
 // (every other entry) these are exactly equivalent to `\b`.
-function teamPhraseRegex(phrase: string): RegExp {
+export function teamPhraseRegex(phrase: string): RegExp {
   const body = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s*");
   return new RegExp("(?<!\\w)" + body + "(?!\\w)", "i");
 }
