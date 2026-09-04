@@ -37,24 +37,51 @@ export default async function MarketingPage() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <main className="mx-auto flex flex-1 max-w-3xl flex-col items-center justify-center gap-6 px-6 text-center">
-        <LogoMark />
-        <h1 className="text-4xl font-semibold tracking-tight">
-          Know who actually makes you money.
-        </h1>
-        <p className="max-w-xl text-lg text-gray-600">
-          Bettingview is a private analytics platform for tracking the
-          sports betting cappers you follow — from Twitter, Discord, Telegram,
-          or a friend. Drop your catalog, and we calculate the rest.
-        </p>
-        <div className="flex flex-col items-center gap-2">
-          <Link
-            href="/sign-in"
-            className="rounded-full bg-brand-600 px-6 py-3 font-medium text-white shadow-soft transition hover:bg-brand-700"
-          >
-            Get started free
-          </Link>
-          <span className="text-xs text-gray-400">1,000 free picks · No credit card required</span>
+      {/* relative + overflow-hidden turns this into the video's containing
+          box; the video and its readability overlay are absolutely
+          positioned behind the hero content (z-10) rather than affecting
+          its layout. */}
+      <main className="relative flex flex-1 flex-col items-center justify-center overflow-hidden">
+        {/* Full-bleed, decorative, silent, looping - autoPlay+muted+loop+
+            playsInline is what lets it autoplay across browsers (playsInline
+            in particular avoids iOS Safari forcing fullscreen playback).
+            object-cover fills the section on any screen size without
+            distorting the footage; pointer-events-none keeps it from ever
+            intercepting clicks meant for the button/links on top of it. */}
+        <video
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          src="/videos/homepage-background.mp4"
+          autoPlay
+          muted
+          loop
+          playsInline
+          aria-hidden="true"
+        />
+        {/* The footage is soft/blurred abstract motion, but still needs a
+            light scrim so the dark headline/body text stay easily legible
+            over it - matches the page's existing light background instead
+            of introducing a new tone. */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-white/70" />
+
+        <div className="relative z-10 mx-auto flex max-w-3xl flex-col items-center gap-6 px-6 text-center">
+          <LogoMark />
+          <h1 className="text-4xl font-semibold tracking-tight">
+            Know who actually makes you money.
+          </h1>
+          <p className="max-w-xl text-lg text-gray-600">
+            Bettingview is a private analytics platform for tracking the
+            sports betting cappers you follow — from Twitter, Discord, Telegram,
+            or a friend. Drop your catalog, and we calculate the rest.
+          </p>
+          <div className="flex flex-col items-center gap-2">
+            <Link
+              href="/sign-in"
+              className="rounded-full bg-brand-600 px-6 py-3 font-medium text-white shadow-soft transition hover:bg-brand-700"
+            >
+              Get started free
+            </Link>
+            <span className="text-xs text-gray-400">1,000 free picks · No credit card required</span>
+          </div>
         </div>
       </main>
       <SiteFooter />
