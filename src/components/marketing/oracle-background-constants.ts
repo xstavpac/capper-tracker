@@ -25,14 +25,18 @@ export const RIGHT_X = 1006; // left edge of the result cards (1280 - 24 - 250)
 // illegible clutter at phone widths.
 export const MOBILE_BREAKPOINT = 768;
 
-// ---- Sequencer timing (from runForever / firePick in the prototype) ----
-export const IN_DUR = 1100; // capper -> slot leg
-export const OUT_DUR = 1100; // slot -> result leg
-export const CUBE_DUR = 500; // passthrough flash behind the slot
-export const GAP_MIN = 350; // gap before the next pick fires...
-export const GAP_RANGE = 550; // ...plus up to this much jitter
-export const ROUND_PAUSE_MIN = 1200; // pause after all 5 fire, before reshuffling...
-export const ROUND_PAUSE_RANGE = 800;
+// ---- Sequencer timing ----
+// Deliberately slower than the prototype (which used 1100/1100/500 and a
+// 350-900ms gap): the pacing here reads as a calm, deliberate pulse rather
+// than a fast flicker. The randomized order and strict one-at-a-time
+// behavior are unchanged - only the durations grew.
+export const IN_DUR = 2200; // capper -> slot leg (was 1100)
+export const OUT_DUR = 2200; // slot -> result leg (was 1100)
+export const CUBE_DUR = 800; // passthrough flash behind the slot (was 500)
+export const GAP_MIN = 900; // gap before the next pick fires... (was 350)
+export const GAP_RANGE = 700; // ...plus up to this much jitter -> 900-1600ms (was 350-900ms)
+export const ROUND_PAUSE_MIN = 1800; // pause after all 5 fire, before reshuffling... (was 1200)
+export const ROUND_PAUSE_RANGE = 1000; // -> 1800-2800ms before the next round (was 1200-2000ms)
 
 // ---- Card content (fixed demo data) ----
 const CARD_TOPS = [130, 225, 320, 415, 510] as const;
