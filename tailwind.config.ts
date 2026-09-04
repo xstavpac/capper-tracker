@@ -2,6 +2,14 @@ import type { Config } from "tailwindcss";
 
 const config: Config = {
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
+  // oracle-background.tsx's pulse sequencer applies these animations
+  // imperatively (`el.style.animation = "oracle-travel ..."`), so the class
+  // names never appear in source for the content scanner to find. Without
+  // safelisting them Tailwind purges the utilities AND their @keyframes,
+  // leaving the sequencer setting an animation-name that resolves to nothing
+  // (the traveling pulses silently never move). oracle-ambient-pulse /
+  // oracle-drift are used as real classes and don't need this.
+  safelist: ["animate-oracle-travel", "animate-oracle-glow-flash", "animate-oracle-pass-glow"],
   darkMode: "class",
   theme: {
     extend: {
@@ -148,12 +156,13 @@ const config: Config = {
           "100%": { transform: "translateX(-50%)" },
         },
         // --- Marketing "oracle" login background (oracle-background.tsx) ---
-        // The pulse legs (oracle-travel / oracle-glow-flash) are (re)triggered
-        // imperatively from that component's sequencer via `el.style.animation`
-        // using these keyframe names; they get `animation` entries below only
-        // so Tailwind actually emits the @keyframes rules (it drops any
-        // keyframes not referenced by an animation utility). oracle-drift and
-        // oracle-ambient-pulse are applied as plain `animate-*` classes.
+        // The pulse legs (oracle-travel / oracle-glow-flash / oracle-pass-glow)
+        // are (re)triggered imperatively from that component's sequencer via
+        // `el.style.animation` using these keyframe names. Tailwind only emits a
+        // @keyframes rule when its `animate-*` utility survives content
+        // purging, so those three utilities are safelisted above (their class
+        // names never appear in source). oracle-drift / oracle-ambient-pulse
+        // are applied as real `animate-*` classes and need no safelist entry.
         "oracle-travel": {
           "0%": { offsetDistance: "0%", opacity: "0" },
           "6%": { opacity: "1" },
