@@ -215,32 +215,22 @@ export function OracleBackground({ children }: { children: ReactNode }) {
             }}
           />
 
-          {/* top-[44px] (not the prototype's 22px): the stage is COVER-scaled
-              and center-anchored, so on viewports wider than 16:9 its top edge
-              sits above the fold - the extra headroom keeps the headline clear
-              on normal laptop/desktop ratios (ultrawide can still crop it). */}
-          <div className="absolute left-0 right-0 top-[44px] z-[5] text-center">
-            <h1 className="m-0 font-orbitron text-[32px] font-extrabold tracking-[1px] text-[#0f172a]">
-              WE TURN PICKS INTO{" "}
-              <span className="text-[#2563eb] [text-shadow:0_0_14px_rgba(37,99,235,0.45)]">
-                PROOF.
-              </span>
-            </h1>
-            <p className="m-0 mt-2 text-[13px] tracking-[0.5px] text-[#64748b]">
-              EVERY PICK IS COLLECTED · MATCHED AGAINST REAL RESULTS · GRADED AUTOMATICALLY
-            </p>
-          </div>
-
-          <div className="absolute left-[24px] top-[80px] z-[5] text-[13px] font-bold tracking-[2px] text-[#1d4ed8]">
+          {/* Column labels sit just above the first card pair. The prototype's
+              "WE TURN PICKS INTO PROOF." headline + subtext that used to live
+              near the top of the stage were removed - they clipped under
+              cover-scaling and weren't needed. The card / wire / cube cluster
+              stays centered on CUBE_Y (= stage & viewport center), so nothing
+              else needs to move. */}
+          <div className="absolute left-[24px] top-[92px] z-[5] text-[13px] font-bold tracking-[2px] text-[#1d4ed8]">
             CAPPERS
           </div>
-          <div className="absolute left-[24px] top-[100px] z-[5] text-[11px] tracking-[1px] text-[#94a3b8]">
+          <div className="absolute left-[24px] top-[112px] z-[5] text-[11px] tracking-[1px] text-[#94a3b8]">
             UNVERIFIED PICKS
           </div>
-          <div className="absolute right-[24px] top-[80px] z-[5] text-right text-[13px] font-bold tracking-[2px] text-[#1d4ed8]">
+          <div className="absolute right-[24px] top-[92px] z-[5] text-right text-[13px] font-bold tracking-[2px] text-[#1d4ed8]">
             LEAGUES
           </div>
-          <div className="absolute right-[24px] top-[100px] z-[5] text-right text-[11px] tracking-[1px] text-[#94a3b8]">
+          <div className="absolute right-[24px] top-[112px] z-[5] text-right text-[11px] tracking-[1px] text-[#94a3b8]">
             VERIFIED OUTCOMES
           </div>
 
