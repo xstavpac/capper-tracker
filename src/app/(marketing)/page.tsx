@@ -47,10 +47,23 @@ export default async function MarketingPage() {
             in particular avoids iOS Safari forcing fullscreen playback).
             object-cover fills the section on any screen size without
             distorting the footage; pointer-events-none keeps it from ever
-            intercepting clicks meant for the button/links on top of it. */}
+            intercepting clicks meant for the button/links on top of it.
+
+            The footage is landscape (1920x1080); on a narrow/tall viewport
+            object-fit:cover has to scale it up until height matches, which
+            leaves only a slice of the horizontal center visible - and that
+            center slice happens to be the flattest, least-textured part of
+            this clip (the actual wave curve and its highlight lines sweep
+            through more toward the left). object-center (50% 50%, unchanged)
+            still governs every wider viewport; only below 768px does the crop
+            window shift left to 10% so the curve reads instead of a flat
+            wash. Confirmed against extracted frames and the real poster
+            rendered at 390x844 - vertical position never matters here since
+            height is always the binding dimension. */}
         <video
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center [@media(max-width:767px)]:object-[10%_50%]"
           src="/videos/homepage-background.mp4"
+          poster="/videos/homepage-background-poster.jpg"
           autoPlay
           muted
           loop
