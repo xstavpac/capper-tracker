@@ -24,21 +24,31 @@ export function AuthCard({
   heading,
   subtitle,
   children,
+  // When true, render just the card - no full-screen centering/background
+  // wrapper. Used by the sign-in page, which drops the card into the center
+  // slot of <OracleBackground> and does its own centering. The other auth
+  // pages (sign-up, forgot/reset password) leave this false.
+  bare = false,
 }: {
   heading: string;
   subtitle: string;
   children: React.ReactNode;
+  bare?: boolean;
 }) {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-10">
-      <div className="w-full max-w-[340px] rounded-2xl bg-white p-8 shadow-soft">
-        <Link href="/" className="mb-6 block">
-          <LogoMark />
-        </Link>
-        <h1 className="text-2xl font-semibold text-gray-900">{heading}</h1>
-        <p className="mt-1 text-sm text-gray-500">{subtitle}</p>
-        <div className="mt-6">{children}</div>
-      </div>
+  const card = (
+    <div className="w-full max-w-[340px] rounded-2xl bg-white p-8 shadow-soft">
+      <Link href="/" className="mb-6 block">
+        <LogoMark />
+      </Link>
+      <h1 className="text-2xl font-semibold text-gray-900">{heading}</h1>
+      <p className="mt-1 text-sm text-gray-500">{subtitle}</p>
+      <div className="mt-6">{children}</div>
     </div>
+  );
+
+  if (bare) return card;
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-10">{card}</div>
   );
 }

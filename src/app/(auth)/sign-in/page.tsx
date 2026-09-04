@@ -7,6 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { AuthCard, AUTH_PRIMARY_BUTTON_CLASS, AUTH_INPUT_CLASS } from "@/components/auth/auth-card";
 import { GoogleIcon } from "@/components/auth/google-icon";
 import { XIcon } from "@/components/auth/x-icon";
+import { OracleBackground } from "@/components/marketing/oracle-background";
 
 function SignInForm() {
   const router = useRouter();
@@ -53,7 +54,7 @@ function SignInForm() {
   }
 
   return (
-    <AuthCard heading="Welcome back" subtitle="Sign in to your account">
+    <AuthCard bare heading="Welcome back" subtitle="Sign in to your account">
       <div className="flex flex-col gap-3">
         <button
           type="button"
@@ -133,8 +134,10 @@ function SignInForm() {
 
 export default function SignInPage() {
   return (
-    <Suspense>
-      <SignInForm />
-    </Suspense>
+    <OracleBackground>
+      <Suspense>
+        <SignInForm />
+      </Suspense>
+    </OracleBackground>
   );
 }
