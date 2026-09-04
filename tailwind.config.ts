@@ -41,6 +41,14 @@ const config: Config = {
       boxShadow: {
         soft: "0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 6px -1px rgb(0 0 0 / 0.04)",
       },
+      fontFamily: {
+        // Display faces for the marketing "oracle" login background
+        // (components/marketing/oracle-background.tsx). Loaded via
+        // next/font/google in that component, which sets the CSS variables on
+        // its own subtree - these utilities are scoped to that usage.
+        orbitron: ["var(--font-orbitron)", "sans-serif"],
+        rajdhani: ["var(--font-rajdhani)", "sans-serif"],
+      },
       keyframes: {
         "glow-pulse": {
           "0%, 100%": { boxShadow: "0 0 18px 2px rgba(168,85,247,0.55)" },
@@ -139,6 +147,39 @@ const config: Config = {
           "0%": { transform: "translateX(0)" },
           "100%": { transform: "translateX(-50%)" },
         },
+        // --- Marketing "oracle" login background (oracle-background.tsx) ---
+        // The pulse legs (oracle-travel / oracle-glow-flash) are (re)triggered
+        // imperatively from that component's sequencer via `el.style.animation`
+        // using these keyframe names; they get `animation` entries below only
+        // so Tailwind actually emits the @keyframes rules (it drops any
+        // keyframes not referenced by an animation utility). oracle-drift and
+        // oracle-ambient-pulse are applied as plain `animate-*` classes.
+        "oracle-travel": {
+          "0%": { offsetDistance: "0%", opacity: "0" },
+          "6%": { opacity: "1" },
+          "94%": { opacity: "1" },
+          "100%": { offsetDistance: "100%", opacity: "0" },
+        },
+        "oracle-glow-flash": {
+          "0%": { opacity: "0" },
+          "15%": { opacity: "1" },
+          "85%": { opacity: "1" },
+          "100%": { opacity: "0" },
+        },
+        "oracle-pass-glow": {
+          "0%, 100%": { opacity: "0.6" },
+          "50%": { opacity: "1", filter: "brightness(1.4)" },
+        },
+        "oracle-ambient-pulse": {
+          "0%, 100%": { opacity: "0.6", transform: "scale(0.94)" },
+          "50%": { opacity: "1", transform: "scale(1.05)" },
+        },
+        "oracle-drift": {
+          "0%": { transform: "translateY(0) scale(0.6)", opacity: "0" },
+          "15%": { opacity: "0.7" },
+          "85%": { opacity: "0.5" },
+          "100%": { transform: "translateY(-70px) scale(1)", opacity: "0" },
+        },
       },
       animation: {
         "glow-pulse": "glow-pulse 2.2s ease-in-out infinite",
@@ -165,6 +206,15 @@ const config: Config = {
         // Duration is a fixed pace, not tied to game count - a slow-scanning
         // read speed regardless of how many games are on the slate that day.
         "ticker-scroll": "ticker-scroll 45s linear infinite",
+        // oracle-background.tsx - see the keyframes note above. travel/glow-flash
+        // durations here are placeholders; the sequencer sets its own timing
+        // (IN_DUR / OUT_DUR / CUBE_DUR in oracle-background-constants.ts) when
+        // it assigns el.style.animation.
+        "oracle-travel": "oracle-travel 1.1s linear forwards",
+        "oracle-glow-flash": "oracle-glow-flash 1.1s ease-in-out forwards",
+        "oracle-pass-glow": "oracle-pass-glow 0.5s ease-in-out",
+        "oracle-ambient-pulse": "oracle-ambient-pulse 5s ease-in-out infinite",
+        "oracle-drift": "oracle-drift 8s linear infinite",
       },
     },
   },
