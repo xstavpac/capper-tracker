@@ -77,7 +77,13 @@ export default async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    // mp4 added for the marketing homepage's background video
+    // (public/videos/homepage-background.mp4, see (marketing)/page.tsx) -
+    // without it this static asset falls through to the !isPublic branch
+    // above and every logged-out request for it 307s to /sign-in, since
+    // "/videos/..." isn't in PUBLIC_ROUTES. Same treatment as the other
+    // static file types already excluded here (png, svg, etc.).
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|mp4|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
   ],
 };
