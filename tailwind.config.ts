@@ -219,9 +219,9 @@ const config: Config = {
         // durations here are placeholders; the sequencer sets its own timing
         // (IN_DUR / OUT_DUR / CUBE_DUR in oracle-background-constants.ts) when
         // it assigns el.style.animation.
-        "oracle-travel": "oracle-travel 1.1s linear forwards",
-        "oracle-glow-flash": "oracle-glow-flash 1.1s ease-in-out forwards",
-        "oracle-pass-glow": "oracle-pass-glow 0.5s ease-in-out",
+        "oracle-travel": "oracle-travel 2.2s linear forwards",
+        "oracle-glow-flash": "oracle-glow-flash 2.2s ease-in-out forwards",
+        "oracle-pass-glow": "oracle-pass-glow 0.8s ease-in-out",
         "oracle-ambient-pulse": "oracle-ambient-pulse 5s ease-in-out infinite",
         "oracle-drift": "oracle-drift 8s linear infinite",
       },
