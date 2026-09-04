@@ -386,7 +386,7 @@ function main() {
     // alternate spellings a capper types) - see NCAAF_SCHOOLS in
     // parse-catalog.ts. Assert the total rather than a school count so a
     // stray dupe or a dropped entry is caught.
-    check("NCAAF list: 159 keys (138 FBS schools + capper-shorthand aliases)", keys.length, 159);
+    check("NCAAF list: 163 keys (138 FBS schools + capper-shorthand aliases)", keys.length, 163);
     check("NCAAF list: no duplicate keys", new Set(keys).size, keys.length);
 
     // (a) Every key resolves to NCAAF from realistic capper text (the key +
@@ -977,6 +977,51 @@ NC State +4.5`;
     ];
     for (const text of cityQualified) {
       check(`'${text}' resolves to CFL`, parseCatalog(`Cap\n${text}`, []).picks[0]?.sportName, "CFL");
+    }
+  }
+
+  // ==========================================================================
+  // PART L - NCAAF abbreviation gaps: EMU/CMU/WMU/ECU (2026-09)
+  // ==========================================================================
+  // Reported bug: "EMU -3" failed to resolve even though Eastern Michigan has
+  // been in NCAAF_SCHOOLS since the PART H full-FBS widening. Investigation
+  // found the school's own full name ("eastern michigan") was already
+  // present and resolved fine - only its 3-letter acronym was missing, and
+  // it didn't collide with anything else in the app (unlike the earlier
+  // same-mascot/cross-sport collisions elsewhere in this file) - it just
+  // wasn't in the list, so it landed in `unresolved` (a safe failure, not
+  // the ATP phantom-pick fallback from PART H).
+  //
+  // Not a one-off: Central Michigan and Western Michigan - the other two
+  // "directional Michigan" MAC schools in the exact same list section - had
+  // the identical gap, while siblings in the same section (Western Kentucky
+  // -> wku, Middle Tennessee -> mtsu) already had theirs. East Carolina, in
+  // a different conference, had the same kind of gap too. All four are
+  // collision-free (confirmed no other entry anywhere claims emu/cmu/wmu/ecu)
+  // and are now added to NCAAF_SCHOOLS alongside their existing full names.
+  //
+  // Deliberately NOT added: MSU/OSU/PSU/ASU/ISU-style acronyms for the
+  // several "___ State" schools (Michigan State, Ohio State, Penn State,
+  // Arizona State, Iowa State, etc.) - several of those genuinely collide
+  // across real schools (MSU = Michigan State or Mississippi State; OSU =
+  // Ohio State or Oklahoma State), so adding them would trade a safe
+  // "unresolved" gap for a real wrong-school risk. This file's PART D
+  // key-count assertion (159 -> 163) is the forcing function that makes any
+  // future addition to NCAAF_SCHOOLS a deliberate, reviewed change here too.
+  console.log("\n########## PART L: NCAAF abbreviation gaps (EMU/CMU/WMU/ECU) ##########");
+
+  {
+    const abbreviations: [string, string, string][] = [
+      ["EMU -3", "emu", "eastern michigan eagles"],
+      ["CMU -3", "cmu", "central michigan chippewas"],
+      ["WMU -3", "wmu", "western michigan broncos"],
+      ["ECU -3", "ecu", "east carolina pirates"],
+    ];
+    for (const [text, nick, canonical] of abbreviations) {
+      const pick = parseCatalog(`Cap\n${text}`, []).picks[0];
+      check(`'${text}' resolves to NCAAF (previously unresolved)`, pick?.sportName, "NCAAF");
+      check(`'${text}' captures the school nickname, not the bare abbreviation`, pick?.teamNicknames, [nick]);
+      check(`'${nick}' canonical is the exact ESPN displayName`, NCAAF_CANONICAL_SUFFIX[nick], canonical);
     }
   }
 
