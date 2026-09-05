@@ -26,17 +26,35 @@ export const RIGHT_X = 1006; // left edge of the result cards (1280 - 24 - 250)
 export const MOBILE_BREAKPOINT = 768;
 
 // ---- Sequencer timing ----
-// Deliberately slower than the prototype (which used 1100/1100/500 and a
-// 350-900ms gap): the pacing here reads as a calm, deliberate pulse rather
-// than a fast flicker. The randomized order and strict one-at-a-time
-// behavior are unchanged - only the durations grew.
-export const IN_DUR = 2200; // capper -> slot leg (was 1100)
-export const OUT_DUR = 2200; // slot -> result leg (was 1100)
-export const CUBE_DUR = 800; // passthrough flash behind the slot (was 500)
-export const GAP_MIN = 900; // gap before the next pick fires... (was 350)
-export const GAP_RANGE = 700; // ...plus up to this much jitter -> 900-1600ms (was 350-900ms)
-export const ROUND_PAUSE_MIN = 1800; // pause after all 5 fire, before reshuffling... (was 1200)
-export const ROUND_PAUSE_RANGE = 1000; // -> 1800-2800ms before the next round (was 1200-2000ms)
+// Landed here after two rounds of tuning: the prototype's 1100/1100/500 and
+// 350-900ms gap read as a fast flicker; slowing everything to 2200/2200/800
+// and a 900-1600ms gap read as too deliberate/sluggish the other way. These
+// values split the difference - noticeably snappier than the slowed-down
+// round without going all the way back to the original rushed pace - and
+// keep every other duration scaled by the same ~0.66 factor the leg speed
+// changed by, so the whole sequence still feels like one consistent tempo
+// rather than just the travel legs being sped up in isolation.
+export const IN_DUR = 1450; // capper -> slot leg (was 2200, originally 1100)
+export const OUT_DUR = 1450; // slot -> result leg (was 2200, originally 1100)
+export const CUBE_DUR = 550; // passthrough flash behind the slot (was 800, originally 500)
+export const GAP_MIN = 600; // gap before the next pick fires... (was 900, originally 350)
+export const GAP_RANGE = 450; // ...plus up to this much jitter -> 600-1050ms (was 900-1600ms, originally 350-900ms)
+export const ROUND_PAUSE_MIN = 1200; // pause after all 5 fire, before reshuffling... (was 1800, originally 1200)
+export const ROUND_PAUSE_RANGE = 650; // -> 1200-1850ms before the next round (was 1800-2800ms, originally 1200-2000ms)
+
+// ---- Badge arrival ripple (sonar-ping rings on a result card's WIN/LOSS
+// badge, fired the instant that row's outbound pulse finishes traveling) ----
+// Same 3-rings-staggered-then-fading recipe as the dashboard's EnergySurge
+// effect (energy-surge-constants.ts's RINGS/RING_DURATION_MS), duplicated
+// rather than imported - these are two unrelated features that happen to
+// want the same "sonar ping" shape, not a shared dependency - but scaled
+// down (700ms/0-100-200ms delays there -> 450ms/0-60-120ms here) to match
+// this component's faster travel pace: at OUT_DUR=1450ms a 900ms-long ripple
+// would visibly outlast the gap before the next pulse; this finishes in the
+// 500-700ms window that was tuned for.
+export const BADGE_RING_COUNT = 3;
+export const BADGE_RING_DURATION_MS = 450;
+export const BADGE_RING_DELAYS_MS = [0, 60, 120]; // last ring starts at 120ms, ends at 570ms total
 
 // ---- Card content (fixed demo data) ----
 const CARD_TOPS = [130, 225, 320, 415, 510] as const;
