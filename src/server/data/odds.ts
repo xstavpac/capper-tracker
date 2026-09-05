@@ -389,12 +389,29 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
 // grading - first-half and touchdown-prop grading need the heavier
 // per-event summary endpoint instead (see getNflGameFacts and
 // getNflPlayerTdStats below, NFL-only for now).
-async function getEspnScores(sportPath: string): Promise<ScoreGame[]> {
+async function getEspnScores(sportPath: string, options: { groups?: string } = {}): Promise<ScoreGame[]> {
   const fmt = (d: Date) => easternDateKey(d).replace(/-/g, "");
   const yesterday = fmt(new Date(Date.now() - 86400000));
   const tomorrow = fmt(new Date(Date.now() + 86400000));
+  // `limit` is REQUIRED for a correct response, not an optimization. ESPN's
+  // scoreboard endpoint defaults to a small page (~25 events) - fine for
+  // NBA/WNBA/NFL/NHL (a full day is <=16 games, and a 3-day range never
+  // approaches 25) but silently truncating for college-football, where a
+  // single Saturday is 60-90 FBS games and the 3-day range spans Fri+Sat+Sun.
+  // A dropped event means every pick for that game fails to resolve against
+  // the live schedule with no error, just an unexplained "couldn't match".
+  // 1000 is ESPN's own documented ceiling and clears any real slate.
+  //
+  // `groups` narrows college sports to one division: "80" is FBS (I-A),
+  // matching NCAAF_SCHOOLS (FBS-only) and the Odds API's own NCAAF coverage.
+  // Without it the CFB scoreboard also returns FCS/DII/DIII/NAIA games, which
+  // both pad the event count toward the limit and add name collisions
+  // (multiple "Bulldogs"/"Tigers" across divisions). An FCS-vs-FBS "money
+  // game" still appears under groups=80 - it's the FBS team's game.
+  const params = new URLSearchParams({ dates: yesterday + "-" + tomorrow, limit: "1000" });
+  if (options.groups) params.set("groups", options.groups);
   const url =
-    "https://site.api.espn.com/apis/site/v2/sports/" + sportPath + "/scoreboard?dates=" + yesterday + "-" + tomorrow;
+    "https://site.api.espn.com/apis/site/v2/sports/" + sportPath + "/scoreboard?" + params.toString();
 
   // Same as getMlbLiveScores: no per-fetch cache directive here - caching is
   // owned by getLiveScoresForSport's short-TTL wrapper (ttl-memo.ts).
@@ -403,6 +420,19 @@ async function getEspnScores(sportPath: string): Promise<ScoreGame[]> {
 
   const data = await res.json();
   const events = data.events ?? [];
+
+  // Lightweight completeness signal: if ESPN ever caps a response despite the
+  // explicit limit, the count here would sit suspiciously flat against a busy
+  // slate. Cheap to leave in - one line per sport per TTL window (~15s).
+  console.log(
+    "[getEspnScores]",
+    sportPath,
+    "dates=" + yesterday + "-" + tomorrow,
+    options.groups ? "groups=" + options.groups : "",
+    "->",
+    events.length,
+    "events"
+  );
 
   return events.map((e: any) => {
     const competitors = e.competitions?.[0]?.competitors ?? [];
@@ -446,9 +476,11 @@ export function getNflLiveScores(): Promise<ScoreGame[]> {
 // Same shared ESPN scoreboard helper as every other ESPN-backed sport above,
 // just a different sport path - confirmed live (real FBS week-1 coverage,
 // same response shape) before adding this during the NCAAF ecosystem
-// investigation.
+// investigation. groups=80 pins it to FBS (see getEspnScores' note) - the
+// one sport where the default response is both truncated and
+// division-mixed.
 export function getNcaafLiveScores(): Promise<ScoreGame[]> {
-  return getEspnScores("football/college-football");
+  return getEspnScores("football/college-football", { groups: "80" });
 }
 
 // Same shared ESPN scoreboard helper again, sport path "hockey/nhl".
