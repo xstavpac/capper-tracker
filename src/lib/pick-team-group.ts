@@ -1,4 +1,4 @@
-import { findGroupingNickname } from "@/lib/parse-catalog";
+import { findGroupingNickname, teamGroupAliases, teamPhraseRegex, normalizeForGrouping } from "@/lib/parse-catalog";
 
 export type PickTeamGroup = "AWAY" | "HOME" | "OTHER";
 
@@ -10,13 +10,20 @@ export type PickTeamGroup = "AWAY" | "HOME" | "OTHER";
 const TEAM_TIED_BET_TYPES = new Set(["MONEYLINE", "SPREAD"]);
 
 // Which side of the matchup a pick is on, inferred from betDetail text
-// against each team's nickname - similar in spirit to the "does betDetail
+// against each team's nicknames - similar in spirit to the "does betDetail
 // mention this team's nickname" check matchPicksToGame (server/data/picks.ts)
 // uses to decide whether a pick belongs to a game at all (applied to each
-// side separately instead of OR'd together), but deliberately using
-// findGroupingNickname instead of matchPicksToGame's findTeamNickname - see
-// findGroupingNickname's comment in parse-catalog.ts for why those can't be
-// the same lookup.
+// side separately instead of OR'd together).
+//
+// Checks betDetail against the team's WHOLE alias set (teamGroupAliases), not
+// a single nickname: for NCAAF one school ("Florida International Panthers")
+// has several keys ("florida international", "fiu"), and a capper writing the
+// one this view didn't derive from the schedule name was landing in "Totals
+// & other markets". Uses teamPhraseRegex (word boundaries), not includes(),
+// so a 3-letter alias like "fiu"/"ecu"/"usf" can't false-match inside an
+// unrelated word - the same reason matchPicksToGame switched off includes().
+// betDetail is diacritic/apostrophe-folded to line up with the ascii alias
+// keys ("San José State" -> "san jose state").
 export function classifyPickTeamGroup(
   pick: { betType: string; betDetail: string | null },
   game: { homeTeam: string; awayTeam: string },
@@ -24,13 +31,11 @@ export function classifyPickTeamGroup(
 ): PickTeamGroup {
   if (!TEAM_TIED_BET_TYPES.has(pick.betType)) return "OTHER";
 
-  const text = (pick.betDetail ?? "").toLowerCase();
+  const text = normalizeForGrouping(pick.betDetail ?? "");
+  const mentions = (aliases: string[]) => aliases.some((a) => teamPhraseRegex(a).test(text));
 
-  const awayNickname = findGroupingNickname(game.awayTeam, sportName);
-  if (awayNickname && text.includes(awayNickname)) return "AWAY";
-
-  const homeNickname = findGroupingNickname(game.homeTeam, sportName);
-  if (homeNickname && text.includes(homeNickname)) return "HOME";
+  if (mentions(teamGroupAliases(game.awayTeam, sportName))) return "AWAY";
+  if (mentions(teamGroupAliases(game.homeTeam, sportName))) return "HOME";
 
   return "OTHER";
 }

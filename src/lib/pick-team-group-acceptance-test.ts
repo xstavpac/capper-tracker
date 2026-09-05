@@ -23,7 +23,7 @@
 // same KBO-collision behavior parse-catalog-acceptance-test.ts's PART C
 // already covers, from this file's own imports.
 import { classifyPickTeamGroup, shortTeamName } from "./pick-team-group";
-import { parseCatalog } from "./parse-catalog";
+import { parseCatalog, teamGroupAliases } from "./parse-catalog";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -130,6 +130,156 @@ function main() {
     const kiaTigers = picks.find((p) => p.description.toLowerCase().includes("kia"));
     check("'LG Twins ML' import still resolves directly to KBO", lgTwins?.sportName, "KBO");
     check("'KIA Tigers ML' import still resolves directly to KBO", kiaTigers?.sportName, "KBO");
+  }
+
+  console.log("\n########## PART D: NCAAF multi-alias schools group under the right team ##########");
+
+  // Reported bug: "Florida International Panthers @ South Florida Bulls" - a
+  // "FIU +14.5" spread pick landed in "Totals & other markets" while a
+  // "Florida International +14.5" pick on the same game grouped correctly.
+  // Root cause: classifyPickTeamGroup derived ONE nickname from the schedule
+  // name ("florida international", the longest NCAAF_SCHOOLS key in it) and
+  // checked only that against betDetail - the school's other aliases ("fiu"),
+  // which the alias table already knows, were invisible. Now it checks the
+  // whole alias set (teamGroupAliases).
+  {
+    const game = { homeTeam: "South Florida Bulls", awayTeam: "Florida International Panthers" };
+    check("teamGroupAliases(FIU) is the full set, not just one", teamGroupAliases(game.awayTeam, "NCAAF"), ["florida international", "fiu"]);
+    check("teamGroupAliases(USF) is the full set", teamGroupAliases(game.homeTeam, "NCAAF"), ["south florida", "usf"]);
+    check("'Florida International +14.5' still groups AWAY", classifyPickTeamGroup({ betType: "SPREAD", betDetail: "Florida International +14.5" }, game, "NCAAF"), "AWAY");
+    check("'FIU +14.5' NOW groups AWAY (was OTHER)", classifyPickTeamGroup({ betType: "SPREAD", betDetail: "FIU +14.5" }, game, "NCAAF"), "AWAY");
+    check("'South Florida -14.5' groups HOME", classifyPickTeamGroup({ betType: "SPREAD", betDetail: "South Florida -14.5" }, game, "NCAAF"), "HOME");
+    check("'USF -14.5' NOW groups HOME (was OTHER)", classifyPickTeamGroup({ betType: "SPREAD", betDetail: "USF -14.5" }, game, "NCAAF"), "HOME");
+  }
+
+  // The other alias-collision families from the investigation. Each row:
+  // game away/home, then [betDetail, expected group] pairs mixing the
+  // abbreviation and the full form on both sides.
+  {
+    const families: {
+      game: { homeTeam: string; awayTeam: string };
+      picks: [string, "AWAY" | "HOME" | "OTHER"][];
+    }[] = [
+      {
+        // abbreviation misgroups (schedule name carries the full form)
+        game: { homeTeam: "Central Michigan Chippewas", awayTeam: "Eastern Michigan Eagles" },
+        picks: [
+          ["EMU +7", "AWAY"],
+          ["Eastern Michigan +7", "AWAY"],
+          ["CMU -7", "HOME"],
+          ["Central Michigan -7", "HOME"],
+        ],
+      },
+      {
+        game: { homeTeam: "James Madison Dukes", awayTeam: "Middle Tennessee Blue Raiders" },
+        picks: [
+          ["MTSU +10", "AWAY"],
+          ["Middle Tennessee +10", "AWAY"],
+          ["JMU -10", "HOME"],
+          ["James Madison -10", "HOME"],
+        ],
+      },
+      {
+        // reverse direction: schedule name carries the abbreviation, capper
+        // writes the full form
+        game: { homeTeam: "UConn Huskies", awayTeam: "UMass Minutemen" },
+        picks: [
+          ["Connecticut -7", "HOME"],
+          ["UConn -7", "HOME"],
+          ["Massachusetts +7", "AWAY"],
+          ["UMass +7", "AWAY"],
+        ],
+      },
+    ];
+    for (const f of families) {
+      for (const [betDetail, expected] of f.picks) {
+        check(
+          `'${betDetail}' on ${f.game.awayTeam} @ ${f.game.homeTeam} -> ${expected}`,
+          classifyPickTeamGroup({ betType: "SPREAD", betDetail }, f.game, "NCAAF"),
+          expected
+        );
+      }
+    }
+  }
+
+  // Bare mascot for NCAAF still groups OTHER (NCAAF_SCHOOLS has no mascot
+  // keys - "Panthers" is shared by Pitt / Georgia State / FIU) - unchanged,
+  // and confirms the fix didn't over-reach into mascot matching.
+  {
+    const game = { homeTeam: "South Florida Bulls", awayTeam: "Florida International Panthers" };
+    check("bare 'Panthers +14.5' still groups OTHER for NCAAF", classifyPickTeamGroup({ betType: "SPREAD", betDetail: "Panthers +14.5" }, game, "NCAAF"), "OTHER");
+  }
+
+  console.log("\n########## PART E: accented / apostrophe team names now resolve ##########");
+
+  // findGroupingNickname returned undefined for "San José State Spartans" and
+  // "Hawai'i Rainbow Warriors" (the regex ran against the raw accented
+  // string), so EVERY spread/ML pick on those teams fell to OTHER and the
+  // group header showed the raw full name. normalizeForGrouping folds the
+  // diacritics/apostrophe (same NFD + combining-mark strip as
+  // team-name-match.ts) so the ascii keys ("san jose state", "hawaii") match.
+  {
+    const game = { homeTeam: "San José State Spartans", awayTeam: "Hawai'i Rainbow Warriors" };
+    check("teamGroupAliases resolves the accented home name", teamGroupAliases(game.homeTeam, "NCAAF"), ["san jose state", "san jose st"]);
+    check("teamGroupAliases resolves the apostrophe away name", teamGroupAliases(game.awayTeam, "NCAAF"), ["hawaii"]);
+    check("shortTeamName folds the accent for the header (was raw 'San José State Spartans')", shortTeamName(game.homeTeam, "NCAAF"), "San Jose State");
+    check("shortTeamName folds the apostrophe for the header", shortTeamName(game.awayTeam, "NCAAF"), "Hawaii");
+
+    check("'San Jose State -3' (plain) groups HOME", classifyPickTeamGroup({ betType: "SPREAD", betDetail: "San Jose State -3" }, game, "NCAAF"), "HOME");
+    check("'San José State -3' (accented in betDetail too) groups HOME", classifyPickTeamGroup({ betType: "SPREAD", betDetail: "San José State -3" }, game, "NCAAF"), "HOME");
+    check("'Hawaii +3' groups AWAY", classifyPickTeamGroup({ betType: "SPREAD", betDetail: "Hawaii +3" }, game, "NCAAF"), "AWAY");
+    check("'Hawai'i +3' (apostrophe in betDetail) groups AWAY", classifyPickTeamGroup({ betType: "SPREAD", betDetail: "Hawai'i +3" }, game, "NCAAF"), "AWAY");
+  }
+
+  console.log("\n########## PART F: non-NCAAF sports unaffected (single bare nickname, no reverse-map) ##########");
+
+  // The whole-alias-set behavior is NCAAF-only. Every other sport's
+  // teamGroupAliases is exactly the single nickname findGroupingNickname
+  // returned - re-assert the KBO-collision teams from PART A and a couple of
+  // plain ones, now through teamGroupAliases + the word-boundary match.
+  {
+    for (const [sport, name, expected] of [
+      ["MLB", "Minnesota Twins", ["twins"]],
+      ["MLB", "Detroit Tigers", ["tigers"]],
+      ["NFL", "Chicago Bears", ["bears"]],
+      ["NFL", "Philadelphia Eagles", ["eagles"]],
+      ["MLB", "San Diego Padres", ["padres"]],
+      ["NBA", "Sacramento Kings", ["kings"]],
+      ["NHL", "Winnipeg Jets", ["jets"]],
+      ["WNBA", "Las Vegas Aces", ["aces"]],
+    ] as [string, string, string[]][]) {
+      check(`teamGroupAliases('${name}', ${sport}) is the single nickname`, teamGroupAliases(name, sport), expected);
+    }
+
+    // Behavior parity with PART A: the exact Twins/Tigers/Bears moneyline
+    // rows still group to their team, not OTHER.
+    check(
+      "Twins moneyline still groups HOME (KBO-collision handling intact)",
+      classifyPickTeamGroup(
+        { betType: "MONEYLINE", betDetail: "Twins Moneyline - 8-14 (36%) on favorite moneyline picks" },
+        { homeTeam: "Minnesota Twins", awayTeam: "Atlanta Braves" },
+        "MLB"
+      ),
+      "HOME"
+    );
+    check(
+      "Bears moneyline groups AWAY",
+      classifyPickTeamGroup(
+        { betType: "MONEYLINE", betDetail: "Bears ML" },
+        { homeTeam: "Green Bay Packers", awayTeam: "Chicago Bears" },
+        "NFL"
+      ),
+      "AWAY"
+    );
+    check(
+      "an MLB game total still groups OTHER",
+      classifyPickTeamGroup(
+        { betType: "TOTAL", betDetail: "Twins Braves Over 8.5 - 1-1 (50%) on over picks" },
+        { homeTeam: "Minnesota Twins", awayTeam: "Atlanta Braves" },
+        "MLB"
+      ),
+      "OTHER"
+    );
   }
 
   console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
