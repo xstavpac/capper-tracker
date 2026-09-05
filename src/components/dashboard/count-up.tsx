@@ -25,10 +25,14 @@ import { useEffect, useRef } from "react";
 // 80% elapsed - so the motion is spread evenly across the whole duration
 // instead of front-loaded into the first half, while still keeping a
 // (shorter, gentler) deceleration into the final number rather than
-// snapping to a stop the way pure linear would. Quadrupled from the
-// original 1050ms to 4000ms on top of that, per explicit request for an
-// obvious difference rather than another small bump.
-export const DURATION_MS = 4000;
+// snapping to a stop the way pure linear would.
+//
+// Duration: with the curve finally right, the 4000ms bump (a one-time
+// "make it obviously different" step) read as too slow. Reverted to 2100ms -
+// the value from the round before the curve fix, re-confirmed as the good
+// pace now that easeInOutQuad's even spread, not the duration, is doing the
+// work.
+export const DURATION_MS = 2100;
 
 export function easeInOutQuad(t: number) {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
