@@ -1,7 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays } from "@/lib/dates";
-import { isSportInSeason, oddsApiSportKey } from "@/lib/sport-seasons";
+import { isSportInSeason, oddsApiRequestKeys } from "@/lib/sport-seasons";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { cacheKeys } from "@/lib/cache-keys";
 import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
@@ -82,6 +82,102 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
   });
 }
 
+const ODDS_MARKET_PARAMS = "&regions=us&markets=h2h,spreads,totals&oddsFormat=american";
+
+// Fetches the raw Odds API odds listing for one or more sport keys (see
+// oddsApiRequestKeys) and merges them into one deduped OddsGame[] by event
+// id, BEFORE any date/started-game filtering the caller applies on top.
+//
+// `requestKeys[0]` is the authoritative key (the app's real sportKey): if it
+// fails, `primaryFailed` is true and the caller must NOT cache the result
+// ("missing beats wrong" - a real outage must stay distinguishable from an
+// empty slate). Any additional key is the NFL preseason key, queried only
+// during the ~5-week pre-regular-season window; its failure is logged and
+// skipped (best-effort supplement, not a reason to blow away a good primary
+// result). For the ~11 months requestKeys is a single element this is a plain
+// one-key fetch, byte-for-byte the same request as before.
+export async function fetchMergedOddsListing(
+  sportKey: string,
+  requestKeys: string[],
+  apiKey: string,
+  context: { fetchDate: string }
+): Promise<{ games: OddsGame[]; primaryFailed: boolean }> {
+  const byId = new Map<string, OddsGame>();
+  let primaryFailed = false;
+  const multiKey = requestKeys.length > 1;
+
+  for (let i = 0; i < requestKeys.length; i++) {
+    const requestSportKey = requestKeys[i];
+    const isPrimary = i === 0;
+    const url = BASE_URL + "/sports/" + requestSportKey + "/odds/?apiKey=" + apiKey + ODDS_MARKET_PARAMS;
+
+    let res: Response;
+    try {
+      res = await fetch(url, { cache: "no-store" });
+    } catch (err) {
+      console.error(
+        "[getOddsForSport] upstream fetch threw",
+        // URL is never logged as-is - it carries apiKey as a query param.
+        JSON.stringify({
+          sportKey,
+          requestSportKey,
+          primary: isPrimary,
+          fetchDate: context.fetchDate,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      );
+      if (isPrimary) primaryFailed = true;
+      continue;
+    }
+
+    if (!res.ok) {
+      // Body is truncated (the-odds-api.com error responses are small JSON,
+      // but this guards against ever logging something unexpectedly large).
+      const bodyText = await res.text().catch(() => "<unreadable body>");
+      console.error(
+        "[getOddsForSport] upstream fetch failed",
+        JSON.stringify({
+          sportKey,
+          requestSportKey,
+          primary: isPrimary,
+          fetchDate: context.fetchDate,
+          status: res.status,
+          statusText: res.statusText,
+          body: bodyText.slice(0, 500),
+        })
+      );
+      if (isPrimary) primaryFailed = true;
+      continue;
+    }
+
+    const raw = await res.json();
+    const list = Array.isArray(raw) ? raw : [];
+    for (const g of list) {
+      if (byId.has(g.id)) continue;
+      byId.set(g.id, {
+        id: g.id,
+        sportKey: g.sport_key,
+        homeTeam: g.home_team,
+        awayTeam: g.away_team,
+        commenceTime: g.commence_time,
+        bookmakers: g.bookmakers ?? [],
+      });
+    }
+
+    if (multiKey) {
+      // Only during the preseason->regular-season merge window, so it's rare
+      // and its whole point is showing which key carried the slate across the
+      // handoff.
+      console.log(
+        "[getOddsForSport] key listing",
+        JSON.stringify({ sportKey, requestSportKey, primary: isPrimary, count: list.length })
+      );
+    }
+  }
+
+  return { games: [...byId.values()], primaryFailed };
+}
+
 async function getOddsForSportUncached(sportKey: string): Promise<OddsGame[]> {
   // Every sport in LIVE_SPORTS used to hit the Odds API bulk endpoint every
   // day year-round, including months of pure off-season - the API charges
@@ -116,54 +212,25 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsGame[]> {
     return [];
   }
 
-  // Almost always sportKey itself - only differs during a sport's preseason
-  // window, and only for a sport with a preseason-specific Odds API key
-  // configured (NFL today, see SPORT_SEASON_CONFIG). The cache above and
-  // everything below stays keyed on the app's own sportKey regardless -
-  // this only changes which upstream listing gets fetched.
-  const requestSportKey = oddsApiSportKey(sportKey);
-  const url =
-    BASE_URL +
-    "/sports/" +
-    requestSportKey +
-    "/odds/?apiKey=" +
-    apiKey +
-    "&regions=us&markets=h2h,spreads,totals&oddsFormat=american";
+  // Almost always just [sportKey] - a second entry (the NFL preseason key)
+  // appears only during the ~5-week pre-regular-season window, where both are
+  // fetched and merged so the last preseason games and the first Week 1 lines
+  // are both captured across the handoff (see oddsApiRequestKeys). The cache
+  // above and everything below stays keyed on the app's own sportKey.
+  const requestKeys = oddsApiRequestKeys(sportKey);
+  const { games: mergedRaw, primaryFailed } = await fetchMergedOddsListing(sportKey, requestKeys, apiKey, {
+    fetchDate,
+  });
+  // Primary (regular-season) key failed -> a real outage, not an empty slate.
+  // Return [] WITHOUT writing a row, exactly as the single-key failure path
+  // did before, so a later request (or the backfill cron) retries and a real
+  // API error stays distinguishable in the logs from a legitimately empty
+  // day. A supplementary preseason-key failure alone does not land here -
+  // fetchMergedOddsListing logged it and carried on with the primary result.
+  if (primaryFailed) return [];
 
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
-    // Temporary diagnostic for the 2026-08-21 live-page-empty incident -
-    // this failure path previously returned [] with zero logging, making a
-    // real outage indistinguishable from a legitimately empty slate. Body is
-    // truncated (the-odds-api.com error responses are small JSON, but this
-    // guards against ever logging something unexpectedly large) and the URL
-    // is never logged as-is since it carries apiKey as a query param.
-    const bodyText = await res.text().catch(() => "<unreadable body>");
-    console.error(
-      "[getOddsForSport] upstream fetch failed",
-      JSON.stringify({
-        sportKey,
-        requestSportKey,
-        fetchDate,
-        status: res.status,
-        statusText: res.statusText,
-        body: bodyText.slice(0, 500),
-      })
-    );
-    return [];
-  }
-
-  const raw = await res.json();
   const fetchedAt = new Date();
-  const games: OddsGame[] = raw
-    .map((g: any) => ({
-      id: g.id,
-      sportKey: g.sport_key,
-      homeTeam: g.home_team,
-      awayTeam: g.away_team,
-      commenceTime: g.commence_time,
-      bookmakers: g.bookmakers ?? [],
-    }))
+  const games: OddsGame[] = mergedRaw
     // The whole point of caching once/day is to lock in pregame lines - but
     // that only holds if this is the day's first fetch AND it happens before
     // any of that day's games start. Neither is guaranteed: the scheduled
@@ -198,13 +265,19 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsGame[]> {
   });
 
   // Temporary diagnostic for the 2026-08-21 live-page-empty incident - a
-  // "success" (res.ok) response that itself came back with rawCount 0 (or
-  // every game already started, so the post-filter games.length is 0 while
-  // the upstream actually returned some) is a different failure mode than
-  // the upstream error case above, and was equally invisible before this.
+  // "success" response that came back with mergedCount 0 (or every game
+  // already started, so the post-filter games.length is 0 while the upstream
+  // actually returned some) is a different failure mode than the upstream
+  // error case above, and was equally invisible before this.
   console.log(
     "[getOddsForSport] live fetch cached",
-    JSON.stringify({ sportKey, requestSportKey, fetchDate, rawCount: raw.length, cachedCount: games.length })
+    JSON.stringify({
+      sportKey,
+      requestKeys,
+      fetchDate,
+      mergedCount: mergedRaw.length,
+      cachedCount: games.length,
+    })
   );
 
   return games;
@@ -277,29 +350,18 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
     return { added: 0 };
   }
 
-  const requestSportKey = oddsApiSportKey(sportKey);
-  const url =
-    BASE_URL +
-    "/sports/" +
-    requestSportKey +
-    "/odds/?apiKey=" +
-    apiKey +
-    "&regions=us&markets=h2h,spreads,totals&oddsFormat=american";
+  // Same key selection + merge as getOddsForSport's own fetch (single key for
+  // ~11 months, the regular + preseason pair during the NFL handoff window).
+  // A primary-key failure aborts this additive pass the same way `!res.ok`
+  // did before; a preseason-key-only failure is logged and ignored.
+  const requestKeys = oddsApiRequestKeys(sportKey);
+  const { games: mergedRaw, primaryFailed } = await fetchMergedOddsListing(sportKey, requestKeys, apiKey, {
+    fetchDate,
+  });
+  if (primaryFailed) return { added: 0 };
 
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) return { added: 0 };
-
-  const raw = await res.json();
   const fetchedAt = new Date();
-  const freshGames: OddsGame[] = raw
-    .map((g: any) => ({
-      id: g.id,
-      sportKey: g.sport_key,
-      homeTeam: g.home_team,
-      awayTeam: g.away_team,
-      commenceTime: g.commence_time,
-      bookmakers: g.bookmakers ?? [],
-    }))
+  const freshGames: OddsGame[] = mergedRaw
     // Identical pregame-only guarantee as getOddsForSport's own fetch - a
     // game already under way must never get captured at all here either, so
     // an in-play price can't sneak into the cache as if it were the pregame
