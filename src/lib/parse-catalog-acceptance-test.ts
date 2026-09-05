@@ -41,7 +41,7 @@
 //     first. Also covers the inverse - a school's OWN real mascot already
 //     claimed bare by an NFL/NBA/NHL entry ("Oregon Ducks", "UCLA Bruins")
 //     must still resolve NCAAF.
-import { parseCatalog, inferSportFromPickContext, NCAAF_CANONICAL_SUFFIX, ambiguousOptionsFor } from "./parse-catalog";
+import { parseCatalog, inferSportFromPickContext, NCAAF_CANONICAL_SUFFIX, ambiguousOptionsFor, resolveAmbiguousPick } from "./parse-catalog";
 import { isSportLabelInSeason } from "./sport-seasons";
 
 let failures = 0;
@@ -1023,6 +1023,71 @@ NC State +4.5`;
       check(`'${text}' captures the school nickname, not the bare abbreviation`, pick?.teamNicknames, [nick]);
       check(`'${nick}' canonical is the exact ESPN displayName`, NCAAF_CANONICAL_SUFFIX[nick], canonical);
     }
+  }
+
+  // ==========================================================================
+  // PART M - rejected-batch investigation: Trojans + 4 FCS schools (2026-09)
+  // ==========================================================================
+  // A capper batch had 5 real picks stuck "Unmatched - sport not tracked":
+  // "Trojans -22.5", "Merrimack +28.5", "Albany +24.5", "Samford +23",
+  // "Lindenwood +4.5". Investigation found two distinct causes, both
+  // instances of the pre-existing phantom-ATP fallback (docs/resolver-
+  // team-gap-followups.md #1), not a new failure mode:
+  //   1. "Trojans" is shared by two real, tracked FBS schools (USC, Troy)
+  //      but was registered nowhere as a bare nickname - added to
+  //      AMBIGUOUS_NICKNAMES (same mechanism as Tigers/Bears/Cardinals/
+  //      etc), since no text-based heuristic can pick USC vs Troy.
+  //   2. Merrimack/Albany/Samford/Lindenwood are real FCS schools - genuinely
+  //      out of NCAAF's tracked scope (both live sources are FBS-only,
+  //      docs/resolver-team-gap-followups.md #3), so adding them to
+  //      NCAAF_SCHOOLS would not make them resolvable to a real game. Added
+  //      to KNOWN_OUT_OF_SCOPE_SCHOOLS instead, so they land in a clean
+  //      `unresolved` ("add manually") the same safe way EMU originally
+  //      needed to, rather than a false ATP tag.
+  console.log("\n########## PART M: Trojans ambiguity + FCS out-of-scope schools ##########");
+
+  {
+    // Bare "Trojans" now surfaces the same kind of manual-choice prompt as
+    // Tigers/Bears/Cardinals, instead of mistagging ATP.
+    const trojans = parseCatalog(`Cap\nTrojans -22.5`, []).picks[0];
+    check("'Trojans -22.5' is NOT mistagged ATP", trojans?.sportName, "");
+    check("'Trojans -22.5' surfaces the ambiguous prompt", trojans?.ambiguousKey, "trojans");
+    check("'Trojans -22.5' offers exactly USC and Troy, both NCAAF", trojans?.ambiguous, [
+      { label: "USC Trojans (NCAAF)", sport: "NCAAF", nickname: "usc" },
+      { label: "Troy Trojans (NCAAF)", sport: "NCAAF", nickname: "troy" },
+    ]);
+
+    // School name stated (no ambiguity) is untouched by the new entry -
+    // detectSport's NCAAF pass already resolves these directly and never
+    // reaches AMBIGUOUS_NICKNAMES.
+    const uscTrojans = parseCatalog(`Cap\nUSC Trojans -22.5`, []).picks[0];
+    check("'USC Trojans -22.5' still resolves straight to NCAAF", uscTrojans?.sportName, "NCAAF");
+    check("'USC Trojans -22.5' still captures the 'usc' key", uscTrojans?.teamNicknames, ["usc"]);
+    const troyTrojans = parseCatalog(`Cap\nTroy Trojans -22.5`, []).picks[0];
+    check("'Troy Trojans -22.5' still resolves straight to NCAAF", troyTrojans?.sportName, "NCAAF");
+    check("'Troy Trojans -22.5' still captures the 'troy' key", troyTrojans?.teamNicknames, ["troy"]);
+
+    // Choosing either option round-trips to a normal NCAAF pick, the same
+    // shape lookupGame (bulk-picks.ts) already handles for every other
+    // NCAAF pick - proves the AMBIGUOUS_NICKNAMES nickname field (the
+    // NCAAF_SCHOOLS key, not the canonical suffix) is wired correctly.
+    const uscChoice = ambiguousOptionsFor("trojans").find((o) => o.nickname === "usc")!;
+    const resolvedUsc = resolveAmbiguousPick(trojans!, uscChoice);
+    check("choosing 'USC Trojans' resolves to NCAAF with the 'usc' key", resolvedUsc.sportName, "NCAAF");
+    check("choosing 'USC Trojans' resolves to NCAAF with the 'usc' key (nicknames)", resolvedUsc.teamNicknames, ["usc"]);
+
+    // The 4 rejected FCS schools: real team names, no longer a false ATP
+    // tag - land in `unresolved` instead, same safe failure as any other
+    // not-yet-recognized team.
+    for (const text of ["Merrimack +28.5", "Albany +24.5", "Samford +23", "Lindenwood +4.5"]) {
+      const { picks, unresolved } = parseCatalog(`Cap\n${text}`, []);
+      check(`'${text}' is NOT mistagged ATP`, picks[0]?.sportName, undefined);
+      check(`'${text}' routes to unresolved (real team, out of tracked scope)`, unresolved, [text]);
+    }
+
+    // Guard didn't overreach: real ATP picks (bare surname) are unaffected.
+    const djokovic = parseCatalog(`Cap\nDjokovic ML`, []).picks[0];
+    check("'Djokovic ML' still resolves ATP (guard is name-specific, not shape-based)", djokovic?.sportName, "ATP");
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
