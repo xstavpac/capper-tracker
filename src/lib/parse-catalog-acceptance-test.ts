@@ -386,13 +386,14 @@ function main() {
     // alternate spellings a capper types) - see NCAAF_SCHOOLS in
     // parse-catalog.ts. Assert the total rather than a school count so a
     // stray dupe or a dropped entry is caught.
-    check("NCAAF list: 163 keys (138 FBS schools + capper-shorthand aliases)", keys.length, 163);
+    check("NCAAF list: 167 keys (138 FBS schools + capper-shorthand aliases)", keys.length, 167);
     check("NCAAF list: no duplicate keys", new Set(keys).size, keys.length);
 
     // (a) Every key resolves to NCAAF from realistic capper text (the key +
     // a bet keyword) - no mascot needed. "liberty" is the one deliberate
-    // exception: it is shared with WNBA's New York Liberty, which wins the
-    // bare form by list order (see NCAAF_SCHOOLS' comment) - "Liberty
+    // exception: it's shared with WNBA's New York Liberty, so a bare
+    // "Liberty" is now routed to the schedule-first ambiguous hierarchy
+    // (see PART N) rather than resolving to either sport directly. "Liberty
     // Flames" and two-team lines still resolve NCAAF (covered in PART H).
     const misresolved = keys.filter((key) => {
       if (key === "liberty") return false;
@@ -402,7 +403,15 @@ function main() {
     check("NCAAF list: every key (except bare 'liberty') resolves to NCAAF from a bare pick", misresolved, []);
 
     const liberty = parseCatalog(`Capper\nLiberty ML`, []).picks[0];
-    check("bare 'Liberty' resolves WNBA (New York Liberty wins the bare form), not NCAAF", liberty?.sportName, "WNBA");
+    check("bare 'Liberty' surfaces the ambiguous prompt (WNBA + NCAAF), not a direct resolve", {
+      sport: liberty?.sportName,
+      key: liberty?.ambiguousKey,
+      labels: liberty?.ambiguous?.map((o) => o.label),
+    }, {
+      sport: "",
+      key: "liberty",
+      labels: ["New York Liberty (WNBA)", "Liberty Flames (NCAAF)"],
+    });
   }
 
   // (b) The 7 mascots shared by 2+ curated NCAAF schools - typed bare, none
@@ -799,19 +808,20 @@ NC State +4.5`;
         { label: "Boston Bruins (NHL)", sport: "NHL", nickname: "bruins" },
       ]
     );
-    // Season step of the disambiguation hierarchy (resolve-ambiguous-catalog.ts
-    // step 1): in September only MLB is in season, so "Boston" resolves to the
-    // Red Sox with no schedule call.
+    // Calendar-fallback step of the disambiguation hierarchy (see
+    // ambiguous-hierarchy.ts - reached only when the live schedule check is
+    // inconclusive or errors): in September only MLB is in season, so
+    // "Boston" narrows to the Red Sox on the calendar alone.
     check(
-      "season step: on 2026-09-01 exactly one Boston option is in season (MLB / Red Sox)",
+      "calendar fallback: on 2026-09-01 exactly one Boston option is in season (MLB / Red Sox)",
       ambiguousOptionsFor("boston").filter((o) => isSportLabelInSeason(o.sport, new Date("2026-09-01T12:00:00Z"))),
       [{ label: "Boston Red Sox (MLB)", sport: "MLB", nickname: "red sox" }]
     );
     // Overlap window: MLB (through Nov 5) and NHL (from Oct 7) are both in
-    // season on Oct 15, so the season step correctly does NOT guess - it
-    // defers to the schedule check.
+    // season on Oct 15, so the calendar fallback correctly does NOT guess -
+    // only the schedule check (which runs first) could tell them apart.
     check(
-      "season step: on 2026-10-15 two Boston options are in season (defers, no guess)",
+      "calendar fallback: on 2026-10-15 two Boston options are in season (no guess)",
       ambiguousOptionsFor("boston")
         .filter((o) => isSportLabelInSeason(o.sport, new Date("2026-10-15T12:00:00Z")))
         .map((o) => o.sport),
@@ -1053,8 +1063,8 @@ NC State +4.5`;
     check("'Trojans -22.5' is NOT mistagged ATP", trojans?.sportName, "");
     check("'Trojans -22.5' surfaces the ambiguous prompt", trojans?.ambiguousKey, "trojans");
     check("'Trojans -22.5' offers exactly USC and Troy, both NCAAF", trojans?.ambiguous, [
-      { label: "USC Trojans (NCAAF)", sport: "NCAAF", nickname: "usc" },
-      { label: "Troy Trojans (NCAAF)", sport: "NCAAF", nickname: "troy" },
+      { label: "USC Trojans (NCAAF)", sport: "NCAAF", nickname: "usc trojans" },
+      { label: "Troy Trojans (NCAAF)", sport: "NCAAF", nickname: "troy trojans" },
     ]);
 
     // School name stated (no ambiguity) is untouched by the new entry -
@@ -1068,13 +1078,15 @@ NC State +4.5`;
     check("'Troy Trojans -22.5' still captures the 'troy' key", troyTrojans?.teamNicknames, ["troy"]);
 
     // Choosing either option round-trips to a normal NCAAF pick, the same
-    // shape lookupGame (bulk-picks.ts) already handles for every other
-    // NCAAF pick - proves the AMBIGUOUS_NICKNAMES nickname field (the
-    // NCAAF_SCHOOLS key, not the canonical suffix) is wired correctly.
-    const uscChoice = ambiguousOptionsFor("trojans").find((o) => o.nickname === "usc")!;
+    // shape lookupGame (bulk-picks.ts) already handles for every other NCAAF
+    // pick - proves the AMBIGUOUS_NICKNAMES nickname field (now the canonical
+    // ESPN suffix "usc trojans", so the schedule check and lookupGame's
+    // endsWith-match hit the live feed directly with no NCAAF_CANONICAL_SUFFIX
+    // round-trip) is wired through.
+    const uscChoice = ambiguousOptionsFor("trojans").find((o) => o.nickname === "usc trojans")!;
     const resolvedUsc = resolveAmbiguousPick(trojans!, uscChoice);
-    check("choosing 'USC Trojans' resolves to NCAAF with the 'usc' key", resolvedUsc.sportName, "NCAAF");
-    check("choosing 'USC Trojans' resolves to NCAAF with the 'usc' key (nicknames)", resolvedUsc.teamNicknames, ["usc"]);
+    check("choosing 'USC Trojans' resolves to NCAAF with the canonical suffix", resolvedUsc.sportName, "NCAAF");
+    check("choosing 'USC Trojans' resolves to NCAAF with the canonical suffix (nicknames)", resolvedUsc.teamNicknames, ["usc trojans"]);
 
     // The 4 rejected FCS schools: real team names, no longer a false ATP
     // tag - land in `unresolved` instead, same safe failure as any other
@@ -1088,6 +1100,97 @@ NC State +4.5`;
     // Guard didn't overreach: real ATP picks (bare surname) are unaffected.
     const djokovic = parseCatalog(`Cap\nDjokovic ML`, []).picks[0];
     check("'Djokovic ML' still resolves ATP (guard is name-specific, not shape-based)", djokovic?.sportName, "ATP");
+  }
+
+  // ==========================================================================
+  // PART N - the 2026-09 catalog-import "20 skipped picks" investigation,
+  //   items 2-4 (item 1, the bare-"Liberty" WNBA/NCAAF collision, is the
+  //   schedule-first hierarchy - see ambiguous-hierarchy-acceptance-test.ts).
+  //   Every line below is verbatim from a real rejected import that named a
+  //   game live on that day's ESPN scoreboard.
+  //     2. "vs Liberty" two-team NCAAF lines were being hijacked into a
+  //        single-team WNBA pick (bare "liberty" resolved WNBA before the
+  //        two-team NCAAF parse ran). Fixed by removing "liberty" from
+  //        WNBA_TEAMS + the detectSport ambiguous-key skip.
+  //     3. "Miami, Ohio" (comma form) was not a recognized alias for Miami
+  //        (OH) RedHawks - only "Miami (OH)" / "Miami OH" / "Miami Ohio" were.
+  //     4. The NCAAF trailing-token guard dropped the whole team for
+  //        "Tennessee State" (State is the front of a longer real school) and
+  //        "West Virginia University" (University is a generic institutional
+  //        suffix, not a different school).
+  // ==========================================================================
+  console.log("\n########## PART N: catalog-import 'skipped picks' items 2-4 ##########");
+  {
+    // --- Item 2: "vs Liberty" two-team NCAAF lines ---
+    const jmVsLib = parseCatalog(`Cody covers spreads\nJames Madison vs Liberty under 51`, []).picks[0];
+    check("'James Madison vs Liberty under 51' -> NCAAF two-team, not a WNBA single-team pick", {
+      sport: jmVsLib?.sportName,
+      teams: jmVsLib?.teamNicknames,
+      bet: jmVsLib?.betType,
+      side: jmVsLib?.totalSide,
+      ambiguous: jmVsLib?.ambiguousKey,
+    }, { sport: "NCAAF", teams: ["james madison", "liberty"], bet: "TOTAL", side: "under", ambiguous: undefined });
+    // ...and both nicknames map to the ESPN canonical forms lookupGame
+    // (bulk-picks.ts) resolves a matchup with.
+    check("'James Madison vs Liberty' nicknames -> ESPN canonicals", jmVsLib?.teamNicknames?.map((n) => NCAAF_CANONICAL_SUFFIX[n] ?? n), [
+      "james madison dukes",
+      "liberty flames",
+    ]);
+
+    const libVsJmu = parseCatalog(`Dirty Bubble\nLiberty vs JMU under 51.5`, []).picks[0];
+    check("'Liberty vs JMU under 51.5' -> NCAAF two-team via the 'jmu' alias", {
+      sport: libVsJmu?.sportName,
+      teams: libVsJmu?.teamNicknames?.map((n) => NCAAF_CANONICAL_SUFFIX[n] ?? n),
+      bet: libVsJmu?.betType,
+      side: libVsJmu?.totalSide,
+    }, { sport: "NCAAF", teams: ["liberty flames", "james madison dukes"], bet: "TOTAL", side: "under" });
+
+    // --- Item 3: "Miami, Ohio" comma form ---
+    for (const text of ["Miami, Ohio", "Miami, OH"]) {
+      const pick = parseCatalog(`SHARP\n${text}`, []).picks[0];
+      check(`'${text}' -> NCAAF Miami (OH) RedHawks`, {
+        sport: pick?.sportName,
+        canonical: (pick?.teamNicknames ?? []).map((n) => NCAAF_CANONICAL_SUFFIX[n] ?? n),
+      }, { sport: "NCAAF", canonical: ["miami (oh) redhawks"] });
+    }
+    const miamiVsPitt = parseCatalog(`Sharp Sheet\nMiami, Ohio vs Pittsburgh under 47.5`, []).picks[0];
+    check("'Miami, Ohio vs Pittsburgh under 47.5' -> NCAAF two-team (RedHawks + Panthers)", {
+      sport: miamiVsPitt?.sportName,
+      teams: (miamiVsPitt?.teamNicknames ?? []).map((n) => NCAAF_CANONICAL_SUFFIX[n] ?? n),
+      bet: miamiVsPitt?.betType,
+      side: miamiVsPitt?.totalSide,
+    }, { sport: "NCAAF", teams: ["miami (oh) redhawks", "pittsburgh panthers"], bet: "TOTAL", side: "under" });
+    // The bare "Miami -3" (no state) is still Miami FL (Hurricanes), untouched.
+    check("bare 'Miami -3' still Miami FL, not shadowed by the comma alias", parseCatalog(`Cap\nMiami -3`, []).picks[0]?.teamNicknames, ["miami"]);
+
+    // --- Item 4: trailing-token guard on "State" and institutional suffixes ---
+    const tnState = parseCatalog(`BEEZOWINS\nTennessee State +47.5`, []).picks[0];
+    check("'Tennessee State +47.5' -> NCAAF, keeps the full 'tennessee state' (not dropped, not bare 'tennessee')", {
+      sport: tnState?.sportName,
+      teams: tnState?.teamNicknames,
+      bet: tnState?.betType,
+    }, { sport: "NCAAF", teams: ["tennessee state"], bet: "SPREAD" });
+
+    const tnStateVs = parseCatalog(`Vinny\nTennessee State vs George over 54.5`, []).picks[0];
+    check("'Tennessee State vs George over 54.5' -> NCAAF, 'tennessee state' captured (opponent typo ignored)", {
+      sport: tnStateVs?.sportName,
+      teams: tnStateVs?.teamNicknames,
+      side: tnStateVs?.totalSide,
+    }, { sport: "NCAAF", teams: ["tennessee state"], side: "over" });
+
+    const wvu = parseCatalog(`BET LABS\nWest Virginia University Moneyline`, []).picks[0];
+    check("'West Virginia University Moneyline' -> NCAAF, 'University' stripped not read as a different school", {
+      sport: wvu?.sportName,
+      teams: wvu?.teamNicknames,
+      bet: wvu?.betType,
+    }, { sport: "NCAAF", teams: ["west virginia"], bet: "MONEYLINE" });
+
+    // Guard still protects the case it was built for: "North Carolina A&T" is
+    // a real, longer school we DON'T list - it must NOT silently resolve to
+    // the North Carolina Tar Heels. (Also covered at PART H; re-asserted here
+    // as the explicit item-4 regression guard.)
+    check("'North Carolina A&T +6.5' still captures no nickname (no false Tar Heels match)", parseCatalog(`Cap\nNorth Carolina A&T +6.5`, []).picks[0]?.teamNicknames, []);
+    check("'West Virginia +7' (bare, no suffix) still resolves as itself", parseCatalog(`Cap\nWest Virginia +7`, []).picks[0]?.teamNicknames, ["west virginia"]);
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

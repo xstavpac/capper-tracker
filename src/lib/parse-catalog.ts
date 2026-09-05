@@ -118,8 +118,14 @@ const NHL_TEAMS = [
   "canucks", "golden knights", "capitals", "mammoth",
 ];
 
+// "liberty" deliberately excluded - it collides with NCAAF's Liberty Flames,
+// and during the ~5 months WNBA and NCAAF seasons overlap a bare "Liberty"
+// pick is far more often the Flames than the NY Liberty. Bare "Liberty"
+// resolves via AMBIGUOUS_NICKNAMES (schedule-first hierarchy - see
+// ambiguous-hierarchy.ts); "New York Liberty" typed in full resolves via
+// DISAMBIGUATED_TEAMS below, and "Liberty Flames" via NCAAF pass 0.
 const WNBA_TEAMS = [
-  "dream", "sky", "sun", "fever", "aces", "mercury", "lynx", "liberty",
+  "dream", "sky", "sun", "fever", "aces", "mercury", "lynx",
   "valkyries", "wings", "mystics", "storm", "sparks", "fire", "tempo",
 ];
 
@@ -173,8 +179,8 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
   // (see KBO_TEAMS/DISAMBIGUATED_TEAMS above) - each bare nickname used to
   // resolve straight to its one US-league team in MLB_TEAMS/NFL_TEAMS; now
   // that a KBO team shares the same bare nickname, it must fall through to
-  // here (and from there to the season/schedule/pick-context hierarchy in
-  // resolve-ambiguous-catalog.ts, or a manual choice) instead of silently
+  // here (and from there to the schedule/season/pick-context hierarchy in
+  // ambiguous-hierarchy.ts, or a manual choice) instead of silently
   // guessing. A capper naming the city too ("Doosan Bears") never reaches
   // this - it resolves directly via DISAMBIGUATED_TEAMS.
   bears: [
@@ -208,7 +214,7 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "Winnipeg Jets (NHL)", sport: "NHL", nickname: "winnipeg jets" },
   ],
   // A city-only reference to a Boston team - three sports, told apart by the
-  // season -> schedule -> pick-context hierarchy in resolve-ambiguous-catalog.ts,
+  // schedule -> season -> pick-context hierarchy in ambiguous-hierarchy.ts,
   // same as every entry above. The only bare CITY name in this table (the rest
   // are shared nicknames): added because "Shark - Boston Over 7.5" (a Red Sox
   // total) was mistagging as a phantom ATP tennis pick - "boston" is in no
@@ -236,13 +242,28 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
   // resolves those confidently, and this table is only consulted after
   // detectSport fails to find a sport.
   //
-  // `nickname` here is the NCAAF_SCHOOLS KEY ("usc"/"troy"), not the
-  // canonical suffix - bulk-picks.ts's lookupGame maps every NCAAF
-  // teamNickname through NCAAF_CANONICAL_SUFFIX before matching the live
-  // schedule, the same as any other NCAAF pick's teamNicknames.
+  // `nickname` is the real, full team name (canonical ESPN suffix for the
+  // NCAAF sides) - the disambiguation hierarchy's schedule check and
+  // bulk-picks.ts's lookupGame both `endsWith`-match it against the live
+  // schedule directly, no NCAAF_CANONICAL_SUFFIX round-trip needed. Same
+  // shape as every other entry in this table (all use the full team name).
   trojans: [
-    { label: "USC Trojans (NCAAF)", sport: "NCAAF", nickname: "usc" },
-    { label: "Troy Trojans (NCAAF)", sport: "NCAAF", nickname: "troy" },
+    { label: "USC Trojans (NCAAF)", sport: "NCAAF", nickname: "usc trojans" },
+    { label: "Troy Trojans (NCAAF)", sport: "NCAAF", nickname: "troy trojans" },
+  ],
+  // "Liberty" collides across two real, tracked, currently-in-season teams:
+  // WNBA's New York Liberty and NCAAF's Liberty Flames. It used to resolve
+  // silently to WNBA (WNBA_TEAMS was spread into TEAM_SPORT_ENTRIES first) -
+  // a wrong-import risk for the ~5 months the seasons overlap, since a bare
+  // "Liberty" pick in that window is far more often the Flames. Now it goes
+  // through the schedule-first hierarchy (ambiguous-hierarchy.ts): whichever
+  // one actually has a game resolves it, calendar season only as a
+  // fallback, prompt only if both are genuinely playing. "Liberty Flames" /
+  // "New York Liberty" typed in full still resolve directly (pass 0 /
+  // DISAMBIGUATED_TEAMS).
+  liberty: [
+    { label: "New York Liberty (WNBA)", sport: "WNBA", nickname: "new york liberty" },
+    { label: "Liberty Flames (NCAAF)", sport: "NCAAF", nickname: "liberty flames" },
   ],
 };
 
@@ -287,6 +308,12 @@ const DISAMBIGUATED_TEAMS: TeamEntry[] = [
   // Lions), so the BC Lions need an explicit city-qualified entry to resolve
   // to CFL at all - same pattern as chicago bears / detroit lions above.
   ["bc lions", "CFL"],
+  // "liberty" is removed from WNBA_TEAMS (collides with NCAAF's Liberty
+  // Flames) - the full/city-qualified WNBA form needs its own entry, same
+  // pattern as chicago bears / bc lions above. "Liberty Flames" resolves via
+  // NCAAF pass 0 (its canonical), so only the WNBA side is listed here.
+  ["new york liberty", "WNBA"],
+  ["ny liberty", "WNBA"],
 ];
 
 // KBO (Korean Baseball Organization). Four of the ten teams' nicknames don't
@@ -336,12 +363,15 @@ const KBO_TEAMS = ["wiz", "landers", "dinos", "heroes"];
 // the translation; its one call site is lookupGame in bulk-picks.ts, applied
 // only for NCAAF.
 //
-// "liberty" collides with WNBA's New York Liberty (still in WNBA_TEAMS).
-// Both entries exist; the WNBA one is spread into TEAM_SPORT_ENTRIES first,
-// so a bare "Liberty ML" resolves WNBA - the same "let the more prominent
-// team win the bare form" call as cardinals/panthers. The NCAAF entry below
-// still resolves "Liberty Flames", an explicit "NCAAF" code, or a two-team
-// matchup line ("Liberty vs Sam Houston ...").
+// "liberty" collides with WNBA's New York Liberty. It's removed from
+// WNBA_TEAMS and lives in AMBIGUOUS_NICKNAMES now: a bare "Liberty" pick
+// runs the schedule-first hierarchy (whichever team actually has a game
+// resolves it) instead of silently taking WNBA. It stays a KEY here (not
+// removed the way cardinals/bears were from their lists) because it's still
+// needed for two-team lines ("Liberty vs Sam Houston"), an explicit "NCAAF"
+// code, and its own canonical ("Liberty Flames") in pass 0 - detectSport's
+// pass 1/2 skip any phrase that is also an AMBIGUOUS_NICKNAMES key, so
+// keeping it here doesn't let a bare "Liberty" resolve NCAAF directly.
 const NCAAF_SCHOOLS: [string, string][] = [
   // SEC
   ["alabama", "alabama crimson tide"],
@@ -453,7 +483,7 @@ const NCAAF_SCHOOLS: [string, string][] = [
   ["eastern michigan", "eastern michigan eagles"], ["emu", "eastern michigan eagles"],
   ["kent state", "kent state golden flashes"],
   ["massachusetts", "massachusetts minutemen"], ["umass", "massachusetts minutemen"],
-  ["miami (oh)", "miami (oh) redhawks"], ["miami oh", "miami (oh) redhawks"], ["miami ohio", "miami (oh) redhawks"],
+  ["miami (oh)", "miami (oh) redhawks"], ["miami oh", "miami (oh) redhawks"], ["miami ohio", "miami (oh) redhawks"], ["miami, oh", "miami (oh) redhawks"], ["miami, ohio", "miami (oh) redhawks"],
   ["ohio", "ohio bobcats"],
   ["sacramento state", "sacramento state hornets"],
   ["toledo", "toledo rockets"],
@@ -484,7 +514,7 @@ const NCAAF_SCHOOLS: [string, string][] = [
   ["coastal carolina", "coastal carolina chanticleers"],
   ["georgia southern", "georgia southern eagles"],
   ["georgia state", "georgia state panthers"],
-  ["james madison", "james madison dukes"],
+  ["james madison", "james madison dukes"], ["jmu", "james madison dukes"],
   ["louisiana", "louisiana ragin' cajuns"], ["louisiana lafayette", "louisiana ragin' cajuns"], ["ul lafayette", "louisiana ragin' cajuns"], ["ragin cajuns", "louisiana ragin' cajuns"],
   ["louisiana tech", "louisiana tech bulldogs"], ["la tech", "louisiana tech bulldogs"],
   ["marshall", "marshall thundering herd"],
@@ -495,6 +525,20 @@ const NCAAF_SCHOOLS: [string, string][] = [
   ["ul monroe", "ul monroe warhawks"], ["louisiana monroe", "ul monroe warhawks"], ["ulm", "ul monroe warhawks"], ["la monroe", "ul monroe warhawks"],
   // Independent (non-Notre Dame)
   ["uconn", "uconn huskies"], ["connecticut", "uconn huskies"],
+
+  // ---- FCS schools that appear on ESPN's FBS scoreboard by virtue of
+  // playing an FBS opponent (a "money game"). docs/resolver-team-gap-
+  // followups.md #3 is about all-FCS games, which are in NEITHER feed - an
+  // FCS-vs-FBS game IS on ESPN's college-football scoreboard (it's the FBS
+  // team's game), so the FCS side just needs to be a resolvable name.
+  // Currently only the one confirmed in a real rejected import; the ~30
+  // other FCS money-game opponents on a given Saturday have the same gap
+  // and can be added the same way. NOTE: the canonical (2nd element) must
+  // exactly match ESPN's team.displayName for the live endsWith match to
+  // work - "Tennessee State Tigers" is the expected form but was not
+  // verifiable from the dev environment (ESPN API is IP-blocked here);
+  // worth a real-import spot check.
+  ["tennessee state", "tennessee state tigers"],
 ];
 
 const NCAAF_TEAMS = NCAAF_SCHOOLS.map(([key]) => key);
@@ -690,9 +734,21 @@ function detectSport(text: string, allowNicknameFallback = true): { sportName: s
   // legitimately have another sport's real match trailing it. Nothing here
   // names any specific team; it falls out of adjacency between two
   // independently-matching TEAM_SPORT_ENTRIES.
+  //
+  // A phrase that is also a bare AMBIGUOUS_NICKNAMES key ("liberty" - a real
+  // NCAAF school key AND the WNBA nickname) is skipped in both passes below:
+  // resolving it here to whichever sport happens to be listed first is
+  // exactly the silent-wrong-guess the ambiguous hierarchy exists to
+  // prevent. Falling through leaves detectSport with no sport, which routes
+  // it to findAmbiguousNickname. (Every other AMBIGUOUS_NICKNAMES key -
+  // cardinals, bears, boston, ... - is already absent from the team lists,
+  // so this guard is a no-op for them; it only matters for keys that must
+  // stay in a team list for a DIFFERENT reason, like "liberty" staying in
+  // NCAAF_TEAMS so two-team lines and the canonical still resolve.)
   for (const entry of TEAM_SPORT_ENTRIES) {
     const phrase = entry[0];
     const sport = entry[1];
+    if (AMBIGUOUS_NICKNAMES[phrase]) continue;
     const match = teamPhraseRegex(phrase).exec(lower);
     if (!match) continue;
     const after = lower.slice(match.index + match[0].length);
@@ -713,6 +769,7 @@ function detectSport(text: string, allowNicknameFallback = true): { sportName: s
   for (const entry of TEAM_SPORT_ENTRIES) {
     const phrase = entry[0];
     const sport = entry[1];
+    if (AMBIGUOUS_NICKNAMES[phrase]) continue;
     if (teamPhraseRegex(phrase).test(lower)) {
       return { sportName: sport, rest: text };
     }
@@ -882,7 +939,7 @@ function findAmbiguousNickname(text: string): { key: string; options: AmbiguousO
 }
 
 // Every candidate sport for a given AMBIGUOUS_NICKNAMES key - exported so the
-// auto-resolution pipeline (resolve-ambiguous-catalog.ts) can enumerate
+// auto-resolution pipeline (ambiguous-hierarchy.ts) can enumerate
 // candidates without duplicating this table.
 export function ambiguousOptionsFor(key: string): AmbiguousOption[] {
   return AMBIGUOUS_NICKNAMES[key] ?? [];
@@ -925,8 +982,10 @@ function hasMlbTotalRangeSignal(text: string): boolean {
   return /\b(over|under)\s*(6|7|8|9|10|11)\.5\b/i.test(text);
 }
 
-// STEP 3 of the disambiguation hierarchy (see resolve-ambiguous-catalog.ts) -
-// supporting evidence only. Returns a single sport only when exactly one
+// The pick-context step of the disambiguation hierarchy (see
+// ambiguous-hierarchy.ts), reached only after the schedule and calendar
+// steps both come back inconclusive - supporting evidence only. Returns a
+// single sport only when exactly one
 // candidate's terminology matches and none of the others also match -
 // conflicting or absent signals return null so the caller falls through to
 // asking the user instead of guessing.
@@ -989,6 +1048,12 @@ function resolveAmbiguousPair(text: string): { sportName: string; teamNicknames:
 const NCAAF_TRAILING_TOKEN_OK =
   /^(ml|moneyline|money|line|pk|pick|tt|f5|ats|vs|v|at|over|under|o|u|spread|spreads|total|totals|runline|puckline|first|second|1h|2h|1q|2q|3q|4q|half|reg|alt|team)$/i;
 
+// Generic words that formalize a school's name without changing which
+// school it is - "West Virginia University", "Miami College". The NCAAF
+// prefix-match guard in findTeamNicknames strips these rather than reading
+// them as evidence of a DIFFERENT, longer school ("North Carolina A&T").
+const INSTITUTIONAL_SUFFIX = /^(university|college|univ)$/i;
+
 // Returns every distinct team nickname found in the text, longest-match-first
 // (matches the order TEAM_SPORT_ENTRIES is sorted in). Lets a caller pin an
 // exact matchup when a pick names both teams, e.g. "Dodgers Cubs under 8.5".
@@ -1032,8 +1097,22 @@ export function findTeamNicknames(text: string, sportName: string): string[] {
     const after = text.slice(only.end).replace(/^[\s.:-]+/, "");
     const nextWord = after.match(/^([A-Za-z][A-Za-z&.'-]*)/)?.[1];
     if (nextWord && !NCAAF_TRAILING_TOKEN_OK.test(nextWord)) {
+      const nextLower = nextWord.toLowerCase();
+      // (a) The prefix-match is actually the front of a longer school we DO
+      // list ("Tennessee" -> "Tennessee State", "Ohio" -> "Ohio State") -
+      // resolve to that fuller school rather than dropping. Checked against
+      // the real canonical list, so it only fires for schools genuinely in
+      // it.
+      const combined = only.phrase + " " + nextLower;
+      if (NCAAF_CANONICAL_SUFFIX[combined]) return [combined];
+      // (b) A generic institutional suffix ("West Virginia University") is
+      // just the same school written formally - keep the match.
+      if (INSTITUTIONAL_SUFFIX.test(nextWord)) return kept.map((h) => h.phrase);
+      // Otherwise: a longer school we DON'T list ("North Carolina A&T",
+      // "Tennessee Tech") - drop it so the pick surfaces for manual review
+      // rather than being silently attached to the listed school's game.
       const canonical = NCAAF_CANONICAL_SUFFIX[only.phrase] ?? only.phrase;
-      if (!canonical.includes(nextWord.toLowerCase())) return [];
+      if (!canonical.includes(nextLower)) return [];
     }
   }
 

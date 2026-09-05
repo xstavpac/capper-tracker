@@ -103,7 +103,13 @@ export const SPORT_LABEL_TO_KEY: Record<string, string> = {
   MLB: "baseball_mlb",
   NHL: "icehockey_nhl",
   WNBA: "basketball_wnba",
+  NCAAF: "americanfootball_ncaaf",
 };
+// KBO / CFL / ATP are deliberately absent: they have no SPORT_SEASON_CONFIG
+// entry, and mapping them here would flip isSportLabelInSeason from its
+// fail-open default to a permanent `false` (isSportInSeason fails closed on a
+// missing config), wrongly eliminating those candidates from every ambiguous
+// nickname they appear in.
 
 // Same idea as isSportInSeason, but for the AMBIGUOUS_NICKNAMES-style display
 // label rather than a sportKey - used by the catalog-import disambiguation

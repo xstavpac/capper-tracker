@@ -114,10 +114,11 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
 
   // parseCatalog itself stays a pure sync function (unchanged) - everything
   // it can't resolve on its own (an ambiguous team name like "Cardinals")
-  // then runs through the auto-resolution hierarchy: season -> schedule ->
-  // pick-text context -> this same-import's remembered answers, in that
-  // order, before anything is shown to the user as a question. See
-  // lib/resolve-ambiguous-catalog.ts for the actual hierarchy.
+  // then runs through the auto-resolution hierarchy: this same-import's
+  // remembered answers -> live schedule (does exactly one candidate have a
+  // game today) -> calendar season as a fallback -> pick-text context, in
+  // that order, before anything is shown to the user as a question. See
+  // lib/ambiguous-hierarchy.ts for the actual hierarchy.
   async function handleParse() {
     setResult(null);
     setEnrichedOdds({});
