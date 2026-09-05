@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Orbitron, Rajdhani } from "next/font/google";
 import {
+  BADGE_RING_COUNT,
+  BADGE_RING_DELAYS_MS,
+  BADGE_RING_DURATION_MS,
   CANVAS_H,
   CANVAS_W,
   CAPPER_CARDS,
@@ -65,6 +68,11 @@ export function OracleBackground({ children }: { children: ReactNode }) {
   const glowOutRefs = useRef<(SVGPathElement | null)[]>([]);
   const dotInRefs = useRef<(SVGCircleElement | null)[]>([]);
   const dotOutRefs = useRef<(SVGCircleElement | null)[]>([]);
+  // Flat, indexed [row * BADGE_RING_COUNT + ringIndex] rather than a nested
+  // array - both lengths are compile-time constants, and a flat array keeps
+  // the ref-callback and the sequencer's lookup below symmetric with the
+  // other *Refs arrays above.
+  const badgeRingRefs = useRef<(HTMLSpanElement | null)[]>([]);
 
   // null until mounted: the server render and the first client render both show
   // just the ambient glow + form (no wide diagram), so there is no hydration
@@ -129,6 +137,33 @@ export function OracleBackground({ children }: { children: ReactNode }) {
       el.style.opacity = "0";
     };
 
+    const clearRing = (el: HTMLSpanElement | null) => {
+      if (!el) return;
+      el.style.animation = "none";
+      el.style.opacity = "0";
+    };
+
+    // Sonar-ping arrival confirmation: 2-3 concentric rings, staggered so
+    // they ripple outward one after another instead of firing all at once,
+    // in the row's own WIN/LOSS color. Fired the instant that row's outbound
+    // pulse finishes traveling (see the out-leg below) - never on its own
+    // timer, so it can't drift out of sync with the line/dot arrival it's
+    // confirming.
+    const fireBadgeRipple = (i: number) => {
+      for (let ring = 0; ring < BADGE_RING_COUNT; ring++) {
+        const el = badgeRingRefs.current[i * BADGE_RING_COUNT + ring];
+        if (!el) continue;
+        el.style.animation = "none";
+        // Force a reflow so the browser actually registers the "none" state
+        // before the next line reapplies the animation - without this,
+        // re-triggering the identical animation value in the same
+        // synchronous call can be coalesced into a no-op restart.
+        void el.offsetWidth;
+        el.style.animation = `oracle-badge-ring ${BADGE_RING_DURATION_MS}ms ease-out forwards`;
+        el.style.animationDelay = `${BADGE_RING_DELAYS_MS[ring]}ms`;
+      }
+    };
+
     const firePick = async (i: number) => {
       const glowIn = glowInRefs.current[i];
       const glowOut = glowOutRefs.current[i];
@@ -158,6 +193,10 @@ export function OracleBackground({ children }: { children: ReactNode }) {
       if (cancelled) return;
       clearLeg(glowOut);
       clearLeg(dotOut);
+      // Arrival: the instant the outbound pulse finishes traveling, ping the
+      // badge it just reached - one continuous motion (travel -> arrive ->
+      // confirm) rather than a separate, independently-timed effect.
+      fireBadgeRipple(i);
     };
 
     const run = async () => {
@@ -184,6 +223,7 @@ export function OracleBackground({ children }: { children: ReactNode }) {
         clearLeg(dotInRefs.current[i]);
         clearLeg(dotOutRefs.current[i]);
       }
+      for (const ring of badgeRingRefs.current) clearRing(ring);
       if (glowRef.current) glowRef.current.style.animation = "";
     };
   }, [mode, reducedMotion]);
@@ -317,11 +357,13 @@ export function OracleBackground({ children }: { children: ReactNode }) {
           ))}
 
           {/* result cards - outcomes locked, never change */}
-          {RESULT_CARDS.map((card) => (
+          {RESULT_CARDS.map((card, i) => (
             <div key={card.score} className={`${CARD_BASE} right-[24px]`} style={{ top: card.top }}>
               <span className="absolute left-[10px] top-[22px] text-[24px]">{card.emoji}</span>
               <div className="ml-[36px] text-[14px] font-bold text-[#0f172a]">{card.score}</div>
               <div className="ml-[36px] mt-[4px] text-[11px] text-[#64748b]">{card.sub}</div>
+              {/* Positioned (not static), so it's already a valid containing
+                  block for the ripple rings below - no extra wrapper needed. */}
               <span
                 className={`absolute right-[12px] top-[8px] rounded-[4px] px-[10px] py-[4px] font-orbitron text-[10px] font-bold tracking-[1px] text-white ${
                   card.outcome === "win"
@@ -330,6 +372,23 @@ export function OracleBackground({ children }: { children: ReactNode }) {
                 }`}
               >
                 {card.outcome === "win" ? "WIN" : "LOSS"}
+                {/* Arrival ripple: 2-3 concentric rings centered on the
+                    badge, in its own WIN/LOSS color, fired by the sequencer
+                    the instant this row's outbound pulse finishes traveling.
+                    Idle (opacity: 0, no animation) the rest of the time -
+                    purely a confirmation flourish, never the source of truth
+                    for the outcome, which is always the static text above. */}
+                {Array.from({ length: BADGE_RING_COUNT }).map((_, ring) => (
+                  <span
+                    key={ring}
+                    aria-hidden="true"
+                    ref={(el) => {
+                      badgeRingRefs.current[i * BADGE_RING_COUNT + ring] = el;
+                    }}
+                    className="pointer-events-none absolute left-1/2 top-1/2 h-[22px] w-[22px] -ml-[11px] -mt-[11px] rounded-full border-2 opacity-0"
+                    style={{ borderColor: LIT_OUT[card.outcome] }}
+                  />
+                ))}
               </span>
               <span className="absolute bottom-[8px] right-[14px] text-[9px] tracking-[1px] text-[#94a3b8]">
                 FINAL
