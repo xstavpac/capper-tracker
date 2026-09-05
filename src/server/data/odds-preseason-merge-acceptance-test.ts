@@ -13,6 +13,9 @@
 //   - the real bug scenario: regular key has Week 1 games, preseason key is
 //     empty -> merged result IS the Week 1 games (before the fix this window
 //     fetched only the empty preseason key)
+//   - the Odds API usage headers (x-requests-remaining / -used / -last) are
+//     parsed off the response - including an error response - and returned
+//     for the refresh-odds cron to surface as an early-warning signal
 import { fetchMergedOddsListing } from "./odds";
 
 let failures = 0;
@@ -32,18 +35,22 @@ const game = (id: string, home: string, away: string, key = "americanfootball_nf
   bookmakers: [],
 });
 
+type Route = { ok: boolean; status?: number; body?: unknown; throwErr?: boolean; headers?: Record<string, string> };
+
 // Route each stubbed request by the sport key in its URL path.
-function stubFetchByKey(routes: Record<string, { ok: boolean; status?: number; body?: unknown; throwErr?: boolean }>) {
+function stubFetchByKey(routes: Record<string, Route>) {
   return (async (input: RequestInfo | URL) => {
     const url = String(input);
     const key = Object.keys(routes).find((k) => url.includes("/sports/" + k + "/odds"));
     const r = key ? routes[key] : undefined;
     if (!r) throw new Error("unexpected fetch: " + url.replace(/apiKey=[^&]+/, "apiKey=REDACTED"));
     if (r.throwErr) throw new Error("simulated network failure");
+    const headers = new Headers(r.headers ?? {});
     return {
       ok: r.ok,
       status: r.status ?? (r.ok ? 200 : 500),
       statusText: r.ok ? "OK" : "ERR",
+      headers,
       json: async () => r.body ?? [],
       text: async () => JSON.stringify(r.body ?? {}),
     } as Response;
@@ -117,6 +124,36 @@ async function main() {
     out = await fetchMergedOddsListing("americanfootball_nfl", ["americanfootball_nfl", "americanfootball_nfl_preseason"], "k", CTX);
     check("preseason-gap: Week 1 games come through the regular key", out.games.map((g) => g.id).sort(), ["wk1-1", "wk1-2"]);
     check("preseason-gap: not primaryFailed", out.primaryFailed, false);
+
+    // 8. Odds API usage headers are parsed off the response and returned for
+    // the refresh-odds cron to surface. Freshest (last) response wins.
+    globalThis.fetch = stubFetchByKey({
+      americanfootball_nfl: {
+        ok: true,
+        body: [game("a", "Bills", "Jets")],
+        headers: { "x-requests-remaining": "41234.5", "x-requests-used": "58765.5", "x-requests-last": "3" },
+      },
+    });
+    out = await fetchMergedOddsListing("americanfootball_nfl", ["americanfootball_nfl"], "k", CTX);
+    check("credits: usage headers parsed to numbers", out.credits, { remaining: 41234.5, used: 58765.5, lastCost: 3 });
+
+    // 9. Usage headers are read off an ERROR response too - a plan-exhausted
+    // 401 reports remaining: 0, which is exactly what the cron should echo.
+    globalThis.fetch = stubFetchByKey({
+      americanfootball_nfl: {
+        ok: false,
+        status: 401,
+        body: { message: "OUT_OF_USAGE_CREDITS" },
+        headers: { "x-requests-remaining": "0", "x-requests-used": "100000" },
+      },
+    });
+    out = await fetchMergedOddsListing("americanfootball_nfl", ["americanfootball_nfl"], "k", CTX);
+    check("credits: read from a 401 error response", { remaining: out.credits?.remaining, failed: out.primaryFailed }, { remaining: 0, failed: true });
+
+    // 10. Missing usage headers -> nulls, never a crash.
+    globalThis.fetch = stubFetchByKey({ americanfootball_nfl: { ok: true, body: [] } });
+    out = await fetchMergedOddsListing("americanfootball_nfl", ["americanfootball_nfl"], "k", CTX);
+    check("credits: absent headers -> all null", out.credits, { remaining: null, used: null, lastCost: null });
   } finally {
     globalThis.fetch = realFetch;
   }

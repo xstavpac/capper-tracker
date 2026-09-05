@@ -2,6 +2,7 @@ import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays } from "@/lib/dates";
 import { isSportInSeason, oddsApiRequestKeys } from "@/lib/sport-seasons";
+import type { OddsFetchStatus, BackfillStatus } from "@/lib/odds-cron-status";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { cacheKeys } from "@/lib/cache-keys";
 import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
@@ -12,6 +13,15 @@ import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
 // collapses the /live polling burst. Both env-overridable, clamped 1-300s.
 const LIVE_SCORES_TTL_SECONDS = resolveTtlSeconds(process.env.LIVE_SCORES_TTL_SECONDS, 15);
 const ODDS_CACHE_TTL_SECONDS = resolveTtlSeconds(process.env.ODDS_CACHE_TTL_SECONDS, 60);
+
+// The Odds API returns x-requests-remaining / -used / -last on every response.
+// Once `remaining` drops below this, the per-call credits log escalates from
+// info to warning, so an imminent monthly-cap exhaustion is visible in the
+// logs BEFORE fetches start failing - the failure mode that silently blanked
+// the Live/odds board for stretches of late 2026 on the free tier. Default is
+// deliberately generous (roughly a day's worth of fetch budget) so the
+// warning leads the actual outage by days, not minutes. Env-overridable.
+const ODDS_API_CREDITS_LOW_WATERMARK = Number(process.env.ODDS_API_CREDITS_LOW_WATERMARK) || 1000;
 
 export type OddsGame = {
   id: string;
@@ -77,12 +87,55 @@ const BASE_URL = "https://api.the-odds-api.com/v4";
 // no DB round-trip, no re-parse. No unstable_cache layer here (unlike live
 // scores): the source is already one indexed row in our own DB.
 export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
-  return memoizeWithTtl(cacheKeys.odds(sportKey), () => getOddsForSportUncached(sportKey), {
+  const result = await memoizeWithTtl(cacheKeys.odds(sportKey), () => getOddsForSportUncached(sportKey), {
     ttlMs: ODDS_CACHE_TTL_SECONDS * 1000,
   });
+  return result.games;
+}
+
+// Seed/refresh today's OddsSnapshot for one sport and report what actually
+// happened - the /api/cron/refresh-odds route uses this instead of
+// getOddsForSport so it can return a real failure status (and surface Odds
+// API credits remaining) rather than a blanket { ok: true } that hid the
+// free-tier exhaustion outages. Calls the uncached path directly: the cron
+// is the authoritative daily attempt, not a cache consumer.
+export async function seedOddsSnapshot(
+  sportKey: string
+): Promise<{ sportKey: string; status: OddsFetchStatus; games: number; creditsRemaining: number | null }> {
+  const { games, status, credits } = await getOddsForSportUncached(sportKey);
+  return { sportKey, status, games: games.length, creditsRemaining: credits?.remaining ?? null };
 }
 
 const ODDS_MARKET_PARAMS = "&regions=us&markets=h2h,spreads,totals&oddsFormat=american";
+
+export type OddsApiCredits = { remaining: number | null; used: number | null; lastCost: number | null };
+
+// Reads the Odds API usage headers off a response (they're present on error
+// responses too, e.g. a 401 OUT_OF_USAGE_CREDITS carries `remaining: 0`) and
+// logs them - one `[odds-api] credits` line per real HTTP call, escalated to
+// `[odds-api] credits LOW` (warning level) once `remaining` is under
+// ODDS_API_CREDITS_LOW_WATERMARK. Returns the parsed values so the
+// refresh-odds cron can echo `remaining` in its own response body.
+function readOddsApiCredits(res: Response, ctx: { sportKey: string; requestSportKey: string }): OddsApiCredits {
+  const num = (header: string) => {
+    const raw = res.headers.get(header);
+    if (raw === null || raw.trim() === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+  const credits: OddsApiCredits = {
+    remaining: num("x-requests-remaining"),
+    used: num("x-requests-used"),
+    lastCost: num("x-requests-last"),
+  };
+  const line = JSON.stringify({ ...ctx, ...credits, watermark: ODDS_API_CREDITS_LOW_WATERMARK });
+  if (credits.remaining !== null && credits.remaining < ODDS_API_CREDITS_LOW_WATERMARK) {
+    console.warn("[odds-api] credits LOW", line);
+  } else {
+    console.log("[odds-api] credits", line);
+  }
+  return credits;
+}
 
 // Fetches the raw Odds API odds listing for one or more sport keys (see
 // oddsApiRequestKeys) and merges them into one deduped OddsGame[] by event
@@ -101,9 +154,13 @@ export async function fetchMergedOddsListing(
   requestKeys: string[],
   apiKey: string,
   context: { fetchDate: string }
-): Promise<{ games: OddsGame[]; primaryFailed: boolean }> {
+): Promise<{ games: OddsGame[]; primaryFailed: boolean; credits: OddsApiCredits | null }> {
   const byId = new Map<string, OddsGame>();
   let primaryFailed = false;
+  // Freshest usage headers seen this call - the keys are fetched sequentially
+  // against the one account, so the last response's `remaining` is the most
+  // current.
+  let credits: OddsApiCredits | null = null;
   const multiKey = requestKeys.length > 1;
 
   for (let i = 0; i < requestKeys.length; i++) {
@@ -129,6 +186,11 @@ export async function fetchMergedOddsListing(
       if (isPrimary) primaryFailed = true;
       continue;
     }
+
+    // Usage headers are on the error response too - a 401/429 for an
+    // exhausted plan reports `x-requests-remaining: 0`, which is exactly what
+    // we want surfaced when fetches start failing.
+    credits = readOddsApiCredits(res, { sportKey, requestSportKey });
 
     if (!res.ok) {
       // Body is truncated (the-odds-api.com error responses are small JSON,
@@ -175,17 +237,21 @@ export async function fetchMergedOddsListing(
     }
   }
 
-  return { games: [...byId.values()], primaryFailed };
+  return { games: [...byId.values()], primaryFailed, credits };
 }
 
-async function getOddsForSportUncached(sportKey: string): Promise<OddsGame[]> {
+// OddsFetchStatus / BackfillStatus live in @/lib/odds-cron-status (pure, so
+// the cron-verdict classification is tsx-testable) and are imported above.
+type OddsFetchResult = { games: OddsGame[]; status: OddsFetchStatus; credits: OddsApiCredits | null };
+
+async function getOddsForSportUncached(sportKey: string): Promise<OddsFetchResult> {
   // Every sport in LIVE_SPORTS used to hit the Odds API bulk endpoint every
   // day year-round, including months of pure off-season - the API charges
   // per markets x regions requested regardless of how many (or how few)
   // games come back, so this was pure waste. Checked first, before any DB
   // read/write, so an out-of-season sport never touches the cache table or
   // the network at all.
-  if (!isSportInSeason(sportKey)) return [];
+  if (!isSportInSeason(sportKey)) return { games: [], status: "off_season", credits: null };
 
   const fetchDate = easternDateKey(new Date());
 
@@ -203,13 +269,13 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsGame[]> {
       "[getOddsForSport] cache hit",
       JSON.stringify({ sportKey, fetchDate, gameCount: cachedGames.length })
     );
-    return cachedGames;
+    return { games: cachedGames, status: "cached", credits: null };
   }
 
   const apiKey = process.env.ODDS_API_KEY;
   if (!apiKey) {
     console.error("[getOddsForSport] no ODDS_API_KEY configured", JSON.stringify({ sportKey, fetchDate }));
-    return [];
+    return { games: [], status: "no_api_key", credits: null };
   }
 
   // Almost always just [sportKey] - a second entry (the NFL preseason key)
@@ -218,7 +284,7 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsGame[]> {
   // are both captured across the handoff (see oddsApiRequestKeys). The cache
   // above and everything below stays keyed on the app's own sportKey.
   const requestKeys = oddsApiRequestKeys(sportKey);
-  const { games: mergedRaw, primaryFailed } = await fetchMergedOddsListing(sportKey, requestKeys, apiKey, {
+  const { games: mergedRaw, primaryFailed, credits } = await fetchMergedOddsListing(sportKey, requestKeys, apiKey, {
     fetchDate,
   });
   // Primary (regular-season) key failed -> a real outage, not an empty slate.
@@ -227,7 +293,7 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsGame[]> {
   // API error stays distinguishable in the logs from a legitimately empty
   // day. A supplementary preseason-key failure alone does not land here -
   // fetchMergedOddsListing logged it and carried on with the primary result.
-  if (primaryFailed) return [];
+  if (primaryFailed) return { games: [], status: "fetch_failed", credits };
 
   const fetchedAt = new Date();
   const games: OddsGame[] = mergedRaw
@@ -280,7 +346,7 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsGame[]> {
     })
   );
 
-  return games;
+  return { games, status: "seeded", credits };
 }
 
 // Yesterday's cached OddsSnapshot, read-only - never fetches, never writes.
@@ -312,8 +378,8 @@ export async function getYesterdayOddsForSport(sportKey: string): Promise<OddsGa
 // is left byte-for-byte untouched - in particular this must never refresh an
 // already-cached game's price with a current/in-play one, same reason
 // getOddsForSport excludes started games from its own fetch below.
-export async function backfillOddsForSport(sportKey: string): Promise<{ added: number }> {
-  if (!isSportInSeason(sportKey)) return { added: 0 };
+export async function backfillOddsForSport(sportKey: string): Promise<{ added: number; status: BackfillStatus }> {
+  if (!isSportInSeason(sportKey)) return { added: 0, status: "off_season" };
 
   const fetchDate = easternDateKey(new Date());
 
@@ -324,10 +390,10 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
   const existing = await prisma.oddsSnapshot.findUnique({
     where: { sportKey_fetchDate: { sportKey, fetchDate } },
   });
-  if (!existing) return { added: 0 };
+  if (!existing) return { added: 0, status: "no_base_row" };
 
   const apiKey = process.env.ODDS_API_KEY;
-  if (!apiKey) return { added: 0 };
+  if (!apiKey) return { added: 0, status: "no_api_key" };
 
   const existingGames = existing.data as unknown as OddsGame[];
   const existingIds = new Set(existingGames.map((g) => g.id));
@@ -347,7 +413,7 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
   const now = new Date();
   const todayGames = existingGames.filter((g) => easternDateKey(new Date(g.commenceTime)) === fetchDate);
   if (todayGames.length > 0 && todayGames.every((g) => new Date(g.commenceTime) <= now)) {
-    return { added: 0 };
+    return { added: 0, status: "all_started" };
   }
 
   // Same key selection + merge as getOddsForSport's own fetch (single key for
@@ -358,7 +424,7 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
   const { games: mergedRaw, primaryFailed } = await fetchMergedOddsListing(sportKey, requestKeys, apiKey, {
     fetchDate,
   });
-  if (primaryFailed) return { added: 0 };
+  if (primaryFailed) return { added: 0, status: "fetch_failed" };
 
   const fetchedAt = new Date();
   const freshGames: OddsGame[] = mergedRaw
@@ -380,14 +446,14 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
     .filter((g: OddsGame) => easternDateKey(new Date(g.commenceTime)) === fetchDate);
 
   const missingGames = freshGames.filter((g) => !existingIds.has(g.id));
-  if (missingGames.length === 0) return { added: 0 };
+  if (missingGames.length === 0) return { added: 0, status: "nothing_missing" };
 
   await prisma.oddsSnapshot.update({
     where: { sportKey_fetchDate: { sportKey, fetchDate } },
     data: { data: [...existingGames, ...missingGames] as any },
   });
 
-  return { added: missingGames.length };
+  return { added: missingGames.length, status: "added" };
 }
 
 export async function getMlbLiveScores(): Promise<ScoreGame[]> {

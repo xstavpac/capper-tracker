@@ -1,4 +1,5 @@
 import { backfillOddsForSport, LIVE_SPORTS } from "@/server/data/odds";
+import { classifyBackfillOddsRun } from "@/lib/odds-cron-status";
 
 export const dynamic = "force-dynamic";
 
@@ -10,15 +11,15 @@ export const dynamic = "force-dynamic";
 // OddsSnapshot's once-daily cache means it then stays missing for the rest
 // of the day with no other path to pick it up. This fills in exactly those
 // gaps - purely additive (see backfillOddsForSport), never touching a game
-// the seed fetch already captured correctly. A 4-hour cadence means a
-// late-posted line shows up the same day within a few hours worst case,
-// without needing 15-minute-grading-cron urgency - a game missing from the
-// board for a few hours is a display gap, not a correctness problem the way
-// an ungraded pick is. backfillOddsForSport itself also skips the real API
-// call once every game cached for today has already started, so runs late
-// in the day (after every game of the day is underway) cost nothing even at
-// this cadence - the 4-hour interval mainly bounds cost during the window
-// where a real gap could still exist.
+// the seed fetch already captured correctly.
+//
+// Response contract: most runs are `nothing_missing` for every sport - that
+// is the healthy steady state, NOT a warning (unlike refresh-odds, where an
+// empty result is suspicious). Only a real Odds API failure (fetch_failed /
+// no_api_key) is an "error" (HTTP 500). `no_base_row` for an in-season sport
+// means today's seed never landed - surfaced as a "warning" here because this
+// cron runs hours after the 8am seed and is the only thing that would catch
+// a seed that failed after the fact.
 export async function GET(req: Request) {
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
@@ -30,10 +31,22 @@ export async function GET(req: Request) {
 
   const results = await Promise.all(
     LIVE_SPORTS.map(async (sport) => {
-      const { added } = await backfillOddsForSport(sport.key);
-      return { sport: sport.key, added };
+      const { added, status } = await backfillOddsForSport(sport.key);
+      return { sport: sport.key, added, status };
     })
   );
 
-  return Response.json({ ok: true, results });
+  const { ok, status, httpStatus } = classifyBackfillOddsRun(results);
+
+  console.log(
+    "[backfill-odds-run]",
+    JSON.stringify({
+      status,
+      failed: results.filter((r) => r.status === "fetch_failed" || r.status === "no_api_key").map((r) => r.sport),
+      missingSeed: results.filter((r) => r.status === "no_base_row").map((r) => r.sport),
+      results,
+    })
+  );
+
+  return Response.json({ ok, status, results }, { status: httpStatus });
 }
