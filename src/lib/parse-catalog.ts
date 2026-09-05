@@ -595,17 +595,55 @@ const GROUPING_TEAM_NICKNAMES: TeamEntry[] = [
   ),
 ].sort((a, b) => b[0].length - a[0].length);
 
+// Folds diacritics and drops apostrophes/periods for the pick-grouping match
+// ONLY (pick-team-group.ts) - the same NFD + combining-mark strip that
+// team-name-match.ts's normalizeTeamName uses for cross-source team matching,
+// plus apostrophes, so an accented / punctuated live-schedule name lines up
+// with its plain-ascii nickname keys: "Hawai'i Rainbow Warriors" -> "hawaii
+// rainbow warriors" matches the key "hawaii", "San José State Spartans" ->
+// "san jose state spartans" matches "san jose state". Without this,
+// findGroupingNickname returned undefined for those teams and every one of
+// their picks fell through to "Totals & other markets". NOT used by the
+// import parser (detectSport/findTeamNickname/parseCatalog).
+export function normalizeForGrouping(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/['’.]/g, "")
+    .toLowerCase();
+}
+
 // Given a live-schedule team's full name (e.g. "Minnesota Twins") and its
 // already-known sport, returns the short nickname a capper actually types
 // for it (e.g. "twins") - see GROUPING_TEAM_NICKNAMES above for why this is
 // a separate function from findTeamNickname rather than a shared one.
 export function findGroupingNickname(text: string, sportName: string): string | undefined {
-  const lower = text.toLowerCase();
+  const lower = normalizeForGrouping(text);
   for (const [phrase, sport] of GROUPING_TEAM_NICKNAMES) {
     if (sport !== sportName) continue;
     if (teamPhraseRegex(phrase).test(lower)) return phrase;
   }
   return undefined;
+}
+
+// Every short alias a capper might realistically type for a live-schedule
+// team, for pick-team-group.ts's betDetail matching. For NCAAF - where one
+// school has several NCAAF_SCHOOLS keys ("fiu"/"florida international",
+// "emu"/"eastern michigan", "connecticut"/"uconn") all pointing at one
+// canonical ESPN name - this returns the WHOLE set, so a pick written with
+// any of them groups under the right team header instead of the single
+// nickname findGroupingNickname happens to derive from the schedule name.
+// Every other sport keeps that single bare nickname: MLB/NFL/NBA/NHL/WNBA
+// nicknames are bare mascots that don't have this many-aliases-per-team
+// problem (the Twins/Tigers/Bears collisions are cross-SPORT, one nickname
+// each - see GROUPING_TEAM_NICKNAMES).
+export function teamGroupAliases(teamDisplayName: string, sportName: string): string[] {
+  const primary = findGroupingNickname(teamDisplayName, sportName);
+  if (!primary) return [];
+  if (sportName !== "NCAAF") return [primary];
+  const canonical = NCAAF_CANONICAL_SUFFIX[primary];
+  if (!canonical) return [primary];
+  return NCAAF_SCHOOLS.filter(([, c]) => c === canonical).map(([key]) => key);
 }
 
 // Strong "this is definitely a pick, not a capper's name" signals - a units
