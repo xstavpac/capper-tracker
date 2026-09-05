@@ -3,13 +3,14 @@
 import { requireUser } from "@/server/auth";
 import { resolveGameForNickname, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { SPORT_LABEL_TO_KEY } from "@/lib/sport-seasons";
+import type { ScheduleCheckQuery } from "@/lib/ambiguous-hierarchy";
 
-export type ScheduleCheckQuery = { nickname: string; sport: string };
+export type { ScheduleCheckQuery };
 
-// STEP 2 of the catalog-import disambiguation hierarchy (see
-// resolve-ambiguous-catalog.ts) - for each (nickname, candidate sport) pair
-// still ambiguous after the season check, looks up whether that sport's
-// schedule has a game for that team today. Uses resolveGameForNickname, the
+// The primary signal in the catalog-import disambiguation hierarchy (see
+// ambiguous-hierarchy.ts) - for each (nickname, candidate sport) pair, looks
+// up whether that sport's schedule has a game for that team today. Runs
+// before the calendar/season check now, not after. Uses resolveGameForNickname, the
 // exact same live-game data source the real import already uses to match
 // picks to games (and that powers the Live tab) - not a UI scrape, and not a
 // separate/parallel resolution path.
