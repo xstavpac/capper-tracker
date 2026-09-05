@@ -516,6 +516,31 @@ export function filterPicksByGameWindow<T extends { gameTime: Date; gradedAt: Da
   return picks.filter((p) => p.gradedAt && p.gameTime >= start && p.gameTime < end);
 }
 
+// The capper detail page's "Recent picks" list is always scoped to whatever
+// sport the "record by category" section is currently showing - including
+// that section's DEFAULT sport on first load, not just after an explicit tab
+// click. The two sections never disagree: if the stats above read "NCAAF
+// record by category", this list reads "recent NCAAF picks". Pass
+// `selectedCategorySport` (the already-resolved value, which the page derives
+// from the categorySport param falling back to the capper's primary sport).
+// It is undefined only when the capper has no category-eligible picks at all
+// (no category section renders) - then this falls back to all-sport, since
+// there is no sport to be consistent with.
+//
+// `picks` must be gameTime-ascending (as getPicksForCapper returns them); the
+// result is the `limit` most recent, newest first, and the limit applies to
+// the SCOPED set (10 recent NCAAF picks, not "NCAAF picks that survive the
+// top 10 overall"). `scopedSport` is echoed back for the section heading.
+export function selectCapperRecentPicks<T extends { sport: { name: string } }>(
+  picks: T[],
+  selectedCategorySport: string | undefined,
+  limit = 10
+): { picks: T[]; scopedSport: string | null } {
+  const scopedSport = selectedCategorySport ?? null;
+  const base = scopedSport ? picks.filter((p) => p.sport.name === scopedSport) : picks;
+  return { picks: [...base].reverse().slice(0, limit), scopedSport };
+}
+
 // A finer split than ScorecardBucketKey, built for the Cappers-page
 // league/bet-type filter chips - e.g. "Fav ML" and "Dog ML" are both
 // MONEYLINE picks but represent opposite sides, so they can't share a

@@ -14,6 +14,7 @@ import {
   computeUnitsChartData,
   computeMomentum,
   filterPicksByGameWindow,
+  selectCapperRecentPicks,
   chipSetForLeague,
   SCORECARD_WINDOWS,
   SCORECARD_WINDOW_LABELS,
@@ -180,7 +181,15 @@ export default async function CapperDetailPage({
   // window toggle.
   const chartData = computeUnitsChartData(filterPicksByGameWindow(picks, window));
 
-  const recentPicks = [...picks].reverse().slice(0, 10);
+  // "Recent picks" is always scoped to whatever sport the "record by category"
+  // section is currently showing (selectedCategorySport, including its default
+  // on first load) so the two sections never disagree - see
+  // selectCapperRecentPicks. All-sport only when this capper has no category
+  // section at all.
+  const { picks: recentPicks, scopedSport: recentPicksSport } = selectCapperRecentPicks(
+    picks,
+    selectedCategorySport
+  );
 
   const trackedSinceMs = picks.length > 0 ? Math.min(...picks.map((p) => p.datePosted.getTime())) : null;
   const lastPickMs = picks.length > 0 ? Math.max(...picks.map((p) => p.datePosted.getTime())) : null;
@@ -386,11 +395,13 @@ export default async function CapperDetailPage({
 
       <div className="mt-4 rounded-card bg-card shadow-soft">
         <div className="border-b border-border-subtle px-5 py-3 text-sm font-medium text-muted-foreground">
-          Recent picks
+          {recentPicksSport ? "Recent " + recentPicksSport + " picks" : "Recent picks"}
         </div>
         {recentPicks.length === 0 ? (
           <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-            No picks logged for this capper yet.
+            {recentPicksSport
+              ? "No " + recentPicksSport + " picks logged for this capper yet."
+              : "No picks logged for this capper yet."}
           </p>
         ) : (
           <div className="divide-y divide-border-subtle">

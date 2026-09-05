@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireUser } from "@/server/auth";
 import {
   getPlanStatus,
@@ -109,14 +110,21 @@ export default async function CappersPage({
         </div>
       )}
 
+      {/* Link with scroll={false}, not a raw <a>: a plain anchor is a full
+          browser navigation (the App Router never sees it) and browsers reset
+          scroll to top on any full navigation, so filtering from partway down
+          the page jumped back to the top. This is the same fix already made
+          for the capper detail page's tab row in commit fbc82b0 - a soft
+          client navigation that swaps the filtered data in place with the
+          scroll position untouched. */}
       <div className="mb-6 flex flex-wrap gap-2">
-        <a href={buildHref(undefined)} className={pillClass(!league)}>
+        <Link href={buildHref(undefined)} scroll={false} className={pillClass(!league)}>
           All leagues
-        </a>
+        </Link>
         {LEAGUES.map((l) => (
-          <a key={l} href={buildHref(l)} className={pillClass(league === l)}>
+          <Link key={l} href={buildHref(l)} scroll={false} className={pillClass(league === l)}>
             {l}
-          </a>
+          </Link>
         ))}
       </div>
 
