@@ -1,11 +1,13 @@
 // Proof for selectCapperRecentPicks - the capper detail page's "Recent picks"
-// list, which now follows the "record by category" section's sport tab.
+// list, which is scoped to whatever sport the "record by category" section is
+// currently showing.
 //
-// Behaviour (product decision, 2026-09): with a category sport tab explicitly
-// selected, "Recent picks" scopes to that sport so it matches the scoped
-// stats above it; with no tab selected it stays all-sport (the category
-// section renders a default sport, but the two are decoupled until the user
-// actually picks a lens).
+// Behaviour (product decision, 2026-09): the two sections never disagree. If
+// the category stats read "NCAAF record by category" - whether because the
+// user clicked the NCAAF tab OR because NCAAF is the capper's primary sport
+// and the section defaulted to it - then "Recent picks" reads "recent NCAAF
+// picks" and shows only NCAAF picks. All-sport only for a capper with no
+// category section at all (no category-eligible picks in any sport).
 //
 // Pure: takes plain pick-shaped objects. Run with:
 //   npx tsx src/server/data/capper-recent-picks-acceptance-test.ts
@@ -23,7 +25,9 @@ const pick = (id: string, sport: string): FakePick => ({ id, sport: { name: spor
 
 // getPicksForCapper returns picks gameTime-ascending, so index 0 is the
 // OLDEST. The exact reported scenario for "Dorm Room Degenerates": a couple
-// of older MLB picks, then a run of recent NCAAF picks.
+// of older MLB picks, then a run of recent NCAAF picks. His primary sport
+// (most category-eligible picks) is NCAAF, so selectedCategorySport defaults
+// to "NCAAF" on a plain page load.
 const ascending: FakePick[] = [
   pick("mlb-yankees-angels", "MLB"),
   pick("mlb-brewers-cubs", "MLB"),
@@ -36,31 +40,14 @@ const ascending: FakePick[] = [
   pick("ncaaf-colorado-gt", "NCAAF"),
   pick("ncaaf-akron-wake", "NCAAF"),
 ];
-const TABS = ["NCAAF", "MLB"];
 
-// --- No tab selected: all-sport, newest first, unchanged from before ---
+// --- Default page load: category section defaults to the capper's primary
+// sport (NCAAF), so "Recent picks" is NCAAF too - the two MLB picks are gone
+// WITHOUT any tab click. This is the reported scenario, fixed. ---
 {
-  const r = selectCapperRecentPicks(ascending, undefined, TABS);
-  check("no tab: scopedSport is null", r.scopedSport, null);
-  check("no tab: all sports, newest-first (the reported mix - NCAAF on top, MLB trailing)", r.picks.map((p) => p.id), [
-    "ncaaf-akron-wake",
-    "ncaaf-colorado-gt",
-    "ncaaf-idaho-utah",
-    "ncaaf-sjsu-emu",
-    "ncaaf-toledo-msu",
-    "ncaaf-miami-stanford",
-    "ncaaf-clemson-lsu",
-    "ncaaf-ucla",
-    "mlb-brewers-cubs",
-    "mlb-yankees-angels",
-  ]);
-}
-
-// --- NCAAF tab selected: scopes to NCAAF, the two MLB picks drop out ---
-{
-  const r = selectCapperRecentPicks(ascending, "NCAAF", TABS);
-  check("NCAAF tab: scopedSport is NCAAF", r.scopedSport, "NCAAF");
-  check("NCAAF tab: only NCAAF picks, newest-first, no MLB", r.picks.map((p) => p.id), [
+  const r = selectCapperRecentPicks(ascending, "NCAAF");
+  check("default load (primary=NCAAF): scopedSport is NCAAF", r.scopedSport, "NCAAF");
+  check("default load: only NCAAF picks, newest-first, no MLB", r.picks.map((p) => p.id), [
     "ncaaf-akron-wake",
     "ncaaf-colorado-gt",
     "ncaaf-idaho-utah",
@@ -70,12 +57,14 @@ const TABS = ["NCAAF", "MLB"];
     "ncaaf-clemson-lsu",
     "ncaaf-ucla",
   ]);
-  check("NCAAF tab: every returned pick is NCAAF", r.picks.every((p) => p.sport.name === "NCAAF"), true);
+  check("default load: every returned pick is NCAAF", r.picks.every((p) => p.sport.name === "NCAAF"), true);
 }
 
-// --- MLB tab selected: scopes to MLB ---
+// --- MLB tab selected (selectedCategorySport resolves to "MLB"): both the
+// category stats and this list switch to MLB together ---
 {
-  const r = selectCapperRecentPicks(ascending, "MLB", TABS);
+  const r = selectCapperRecentPicks(ascending, "MLB");
+  check("MLB tab: scopedSport is MLB", r.scopedSport, "MLB");
   check("MLB tab: only the two MLB picks, newest-first", r.picks.map((p) => p.id), [
     "mlb-brewers-cubs",
     "mlb-yankees-angels",
@@ -83,45 +72,50 @@ const TABS = ["NCAAF", "MLB"];
 }
 
 // --- The limit applies to the SCOPED set, not the raw list ---
-// 12 MLB picks interleaved after 15 NCAAF picks: scoping to MLB must return
-// the 10 most recent MLB picks, not "whatever MLB picks survive in the top 10
-// overall" (which would be zero here). This is the concrete improvement over
-// the old unfiltered slice.
+// 15 NCAAF picks then 12 MLB picks: scoping to MLB must return the 10 most
+// recent MLB picks, not "MLB picks that survive the top 10 overall" (zero).
 {
   const many: FakePick[] = [
     ...Array.from({ length: 15 }, (_, i) => pick(`ncaaf-${i}`, "NCAAF")),
     ...Array.from({ length: 12 }, (_, i) => pick(`mlb-${i}`, "MLB")),
   ];
-  const r = selectCapperRecentPicks(many, "MLB", TABS);
+  const r = selectCapperRecentPicks(many, "MLB");
   check("scoped limit: 10 most recent MLB picks (not starved by newer NCAAF picks)", r.picks.map((p) => p.id), [
     "mlb-11", "mlb-10", "mlb-9", "mlb-8", "mlb-7", "mlb-6", "mlb-5", "mlb-4", "mlb-3", "mlb-2",
   ]);
   check("scoped limit: exactly 10", r.picks.length, 10);
 }
 
-// --- Guard: a categorySport param that is NOT one of the visible tabs
-// (stale/hand-edited URL, or a sport the capper has no category-eligible
-// picks in) falls back to all-sport rather than hiding everything ---
+// --- No category section at all (capper has no category-eligible picks in
+// any sport -> selectedCategorySport is undefined): falls back to all-sport,
+// since there is no sport for it to be consistent with ---
 {
-  const r = selectCapperRecentPicks(ascending, "NHL", TABS);
-  check("unknown/invalid categorySport: falls back to all-sport", r.scopedSport, null);
-  check("unknown/invalid categorySport: returns all picks", r.picks.length, 10);
-}
-{
-  const r = selectCapperRecentPicks(ascending, "", TABS);
-  check("empty-string categorySport: treated as no selection", r.scopedSport, null);
+  const r = selectCapperRecentPicks(ascending, undefined);
+  check("no category section: scopedSport is null", r.scopedSport, null);
+  check("no category section: all sports, newest-first", r.picks.map((p) => p.id), [
+    "ncaaf-akron-wake",
+    "ncaaf-colorado-gt",
+    "ncaaf-idaho-utah",
+    "ncaaf-sjsu-emu",
+    "ncaaf-toledo-msu",
+    "ncaaf-miami-stanford",
+    "ncaaf-clemson-lsu",
+    "ncaaf-ucla",
+    "mlb-brewers-cubs",
+    "mlb-yankees-angels",
+  ]);
 }
 
 // --- Empty capper ---
 {
-  const r = selectCapperRecentPicks([] as FakePick[], "NCAAF", TABS);
-  check("no picks: empty result, scopedSport still resolves from a valid tab", { picks: r.picks.length, scoped: r.scopedSport }, { picks: 0, scoped: "NCAAF" });
+  const r = selectCapperRecentPicks([] as FakePick[], "NCAAF");
+  check("no picks: empty result, scopedSport still echoes the selected sport", { picks: r.picks.length, scoped: r.scopedSport }, { picks: 0, scoped: "NCAAF" });
 }
 
 // --- Custom limit passes through ---
 {
-  const r = selectCapperRecentPicks(ascending, undefined, TABS, 3);
-  check("custom limit: 3 most recent", r.picks.map((p) => p.id), ["ncaaf-akron-wake", "ncaaf-colorado-gt", "ncaaf-idaho-utah"]);
+  const r = selectCapperRecentPicks(ascending, "NCAAF", 3);
+  check("custom limit: 3 most recent NCAAF", r.picks.map((p) => p.id), ["ncaaf-akron-wake", "ncaaf-colorado-gt", "ncaaf-idaho-utah"]);
 }
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

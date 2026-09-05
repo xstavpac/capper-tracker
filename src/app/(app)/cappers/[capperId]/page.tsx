@@ -181,14 +181,14 @@ export default async function CapperDetailPage({
   // window toggle.
   const chartData = computeUnitsChartData(filterPicksByGameWindow(picks, window));
 
-  // "Recent picks" follows the category section's sport tab once the user has
-  // explicitly selected one (see selectCapperRecentPicks) - so the scoped
-  // stats above and this list below describe the same sport - and stays
-  // all-sport on first load when no tab has been chosen.
+  // "Recent picks" is always scoped to whatever sport the "record by category"
+  // section is currently showing (selectedCategorySport, including its default
+  // on first load) so the two sections never disagree - see
+  // selectCapperRecentPicks. All-sport only when this capper has no category
+  // section at all.
   const { picks: recentPicks, scopedSport: recentPicksSport } = selectCapperRecentPicks(
     picks,
-    searchParams.categorySport,
-    categoryBreakdownsBySport.map((s) => s.sportName)
+    selectedCategorySport
   );
 
   const trackedSinceMs = picks.length > 0 ? Math.min(...picks.map((p) => p.datePosted.getTime())) : null;

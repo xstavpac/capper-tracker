@@ -516,26 +516,27 @@ export function filterPicksByGameWindow<T extends { gameTime: Date; gradedAt: Da
   return picks.filter((p) => p.gradedAt && p.gameTime >= start && p.gameTime < end);
 }
 
-// The capper detail page's "Recent picks" list follows the sport tab of the
-// "record by category" section - but only once the user has EXPLICITLY picked
-// one (a `categorySport` search param that matches a visible tab). On first
-// load, with no param, it stays all-sport even though the category section
-// itself renders a default sport: the two are decoupled until the user has
-// actually chosen a sport lens, then coupled so "Recent picks" reads as
-// "recent <sport> picks" consistent with the scoped stats above it.
+// The capper detail page's "Recent picks" list is always scoped to whatever
+// sport the "record by category" section is currently showing - including
+// that section's DEFAULT sport on first load, not just after an explicit tab
+// click. The two sections never disagree: if the stats above read "NCAAF
+// record by category", this list reads "recent NCAAF picks". Pass
+// `selectedCategorySport` (the already-resolved value, which the page derives
+// from the categorySport param falling back to the capper's primary sport).
+// It is undefined only when the capper has no category-eligible picks at all
+// (no category section renders) - then this falls back to all-sport, since
+// there is no sport to be consistent with.
 //
 // `picks` must be gameTime-ascending (as getPicksForCapper returns them); the
-// result is the `limit` most recent, newest first. `scopedSport` is the sport
-// the list was narrowed to, or null when it's showing all sports - the page
-// uses it for the section heading.
+// result is the `limit` most recent, newest first, and the limit applies to
+// the SCOPED set (10 recent NCAAF picks, not "NCAAF picks that survive the
+// top 10 overall"). `scopedSport` is echoed back for the section heading.
 export function selectCapperRecentPicks<T extends { sport: { name: string } }>(
   picks: T[],
-  categorySportParam: string | undefined,
-  visibleTabSports: string[],
+  selectedCategorySport: string | undefined,
   limit = 10
 ): { picks: T[]; scopedSport: string | null } {
-  const scopedSport =
-    categorySportParam && visibleTabSports.includes(categorySportParam) ? categorySportParam : null;
+  const scopedSport = selectedCategorySport ?? null;
   const base = scopedSport ? picks.filter((p) => p.sport.name === scopedSport) : picks;
   return { picks: [...base].reverse().slice(0, limit), scopedSport };
 }
