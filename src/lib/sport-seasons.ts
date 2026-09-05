@@ -18,10 +18,11 @@ export type SportSeasonWindow = {
   // "americanfootball_nfl", even though this app treats the two as one
   // continuous NFL season everywhere else - one entry in LIVE_SPORTS, one
   // seasonStart/seasonEnd window, one set of grading rules). Before
-  // regularSeasonStart, getOddsForSport (odds.ts) queries oddsApiPreseasonKey
-  // instead of the sport's own key; on/after it, the sport's own key is used
-  // exactly as it always has been. No other sport needs these two fields
-  // today - they're absent, so oddsApiSportKey below is a no-op for them.
+  // regularSeasonStart, getOddsForSport (odds.ts) also queries
+  // oddsApiPreseasonKey and merges it in; on/after it, only the sport's own
+  // key is used, exactly as it always has been. No other sport needs these
+  // two fields today - they're absent, so oddsApiRequestKeys below returns a
+  // plain [sportKey] for them.
   regularSeasonStart?: string;
   oddsApiPreseasonKey?: string;
 };
@@ -37,7 +38,10 @@ export const SPORT_SEASON_CONFIG: Record<string, SportSeasonWindow> = {
   // one place preseason genuinely does need different sourcing - see the
   // type comment above and oddsApiSportKey below; confirmed live that
   // americanfootball_nfl_preseason actually has real odds data before wiring
-  // this in (16 games, full h2h/spreads/totals, 9 books).
+  // this in (16 games, full h2h/spreads/totals, 9 books). regularSeasonStart
+  // is the real Week 1 date; the ~10-day gap between the last preseason game
+  // and it is bridged by oddsApiRequestKeys querying both keys, not by
+  // fudging this date - see that function.
   americanfootball_nfl: {
     seasonStart: "2026-08-06",
     seasonEnd: "2027-02-15",
@@ -77,19 +81,41 @@ export function isSportInSeason(sportKey: string, referenceDate: Date = new Date
   return today >= window.seasonStart && today <= window.seasonEnd;
 }
 
-// Which literal Odds API sport key to actually query for `sportKey` right
-// now - only ever differs from sportKey itself during a preseason window,
-// and only for a sport that has oddsApiPreseasonKey configured (NFL today).
-// Purely additive: every other sport, and NFL itself once its regular season
-// starts, gets sportKey back unchanged, so this doesn't touch the
-// already-working regular-season path at all. This app's own idea of the
-// sport (LIVE_SPORTS, RESOLVABLE_SPORT_KEYS, SPORT_SEASON_CONFIG, grading)
-// stays keyed on sportKey throughout - only the fetch URL changes.
-export function oddsApiSportKey(sportKey: string, referenceDate: Date = new Date()): string {
+// Which Odds API sport key(s) to actually query for `sportKey` right now, in
+// priority order - element 0 is authoritative. Only ever more than one entry,
+// or different from `sportKey` itself, for a sport with a preseason-specific
+// Odds API key configured (NFL today): NFL preseason odds live under
+// "americanfootball_nfl_preseason", separate from the regular-season key.
+//
+// Between the last preseason game and the Week 1 opener - roughly the first
+// ~10 days of September - the preseason key is already empty while the
+// regular-season key already carries Week 1 lines (books post ~a week ahead).
+// A single hardcoded `regularSeasonStart` cutoff can't sit right for both
+// ends of that gap: set it to the Week 1 date (as it is) and the ~10-day gap
+// has NFL querying an empty preseason key (the 2026-09 "NFL board blank"
+// bug); set it earlier and mid-preseason games route to the wrong key. So for
+// the whole pre-regular-season window this returns BOTH keys and the caller
+// merges the listings - whichever key currently has games contributes them,
+// and neither SPORT_SEASON_CONFIG date has to line up precisely with the day
+// preseason actually ends. Outside that window (the other ~11 months) it's a
+// single-element list identical to just `[sportKey]`, so the established
+// regular-season fetch path is completely untouched.
+//
+// The regular-season key (`sportKey`) is always element 0: a caller treats
+// its failure as a hard failure ("missing beats wrong", don't cache) but a
+// supplementary preseason-key failure as best-effort - see
+// fetchMergedOddsListing in odds.ts. This app's own idea of the sport
+// (LIVE_SPORTS, RESOLVABLE_SPORT_KEYS, SPORT_SEASON_CONFIG, grading) stays
+// keyed on `sportKey` throughout - only which upstream listing(s) get fetched
+// changes.
+export function oddsApiRequestKeys(sportKey: string, referenceDate: Date = new Date()): string[] {
   const window = SPORT_SEASON_CONFIG[sportKey];
-  if (!window?.oddsApiPreseasonKey || !window.regularSeasonStart) return sportKey;
+  if (!window?.oddsApiPreseasonKey || !window.regularSeasonStart) return [sportKey];
   const today = easternDateKey(referenceDate);
-  return today < window.regularSeasonStart ? window.oddsApiPreseasonKey : sportKey;
+  if (today >= window.seasonStart && today < window.regularSeasonStart) {
+    return [sportKey, window.oddsApiPreseasonKey];
+  }
+  return [sportKey];
 }
 
 // Maps the short display labels used by parse-catalog.ts's AMBIGUOUS_NICKNAMES
