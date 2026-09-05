@@ -222,6 +222,28 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "Boston Celtics (NBA)", sport: "NBA", nickname: "celtics" },
     { label: "Boston Bruins (NHL)", sport: "NHL", nickname: "bruins" },
   ],
+  // "Trojans" is shared by two real, tracked FBS schools (USC, Troy) - a
+  // bare "Trojans -22.5" was falling all the way through to the phantom-ATP
+  // fallback (same failure mode SPORTS_PLACE_NAMES/findPlayerPick guard
+  // against below), since NCAAF_SCHOOLS is deliberately keyed by school
+  // name, never bare mascot (see its own header comment), so this nickname
+  // was registered nowhere at all - unlike Tigers/Bears/Wildcats/etc, whose
+  // NCAAF collisions were at least considered (see PART D(b) in the test
+  // file). No text-based heuristic can pick USC vs Troy from the bare word
+  // alone, so - same as every entry above - this surfaces for a manual
+  // choice instead of guessing. "USC Trojans"/"Troy Trojans" (school name
+  // stated) never reach here at all: detectSport's NCAAF pass already
+  // resolves those confidently, and this table is only consulted after
+  // detectSport fails to find a sport.
+  //
+  // `nickname` here is the NCAAF_SCHOOLS KEY ("usc"/"troy"), not the
+  // canonical suffix - bulk-picks.ts's lookupGame maps every NCAAF
+  // teamNickname through NCAAF_CANONICAL_SUFFIX before matching the live
+  // schedule, the same as any other NCAAF pick's teamNicknames.
+  trojans: [
+    { label: "USC Trojans (NCAAF)", sport: "NCAAF", nickname: "usc" },
+    { label: "Troy Trojans (NCAAF)", sport: "NCAAF", nickname: "troy" },
+  ],
 };
 
 const DISAMBIGUATED_TEAMS: TeamEntry[] = [
@@ -1108,6 +1130,27 @@ const SPORTS_PLACE_NAMES = new Set<string>([
   "toronto", "utah", "vancouver", "vegas", "washington", "winnipeg", "nola",
 ]);
 
+// Real FCS college football schools, confirmed hitting the exact same
+// phantom-ATP fallback as SPORTS_PLACE_NAMES guards against above (a bare
+// Title Case school name before a spread/ML/total reads as a tennis
+// player's surname). Unlike SPORTS_PLACE_NAMES this isn't a pro-franchise
+// locality - it's a real team name with nowhere to go: both of this app's
+// NCAAF sources (ESPN's scoreboard, The Odds API) are FBS-only upstream
+// (docs/resolver-team-gap-followups.md #3), so adding these to
+// NCAAF_SCHOOLS would not make them resolvable to a real game - there is
+// no live schedule/odds data for an FCS game to match against. Routing to
+// `unresolved` ("add manually") instead of a false ATP tag is the fix here,
+// not adding these to a team list that can't actually grade them.
+//
+// This list is NOT a general "every FCS school" registry - it's the
+// specific instances confirmed in a real capper's rejected batch (2026-09).
+// A future FCS name hitting this same fallback is the same still-open,
+// deprioritized gap this file's long TODO above describes; add it here as
+// found, the same way SPORTS_PLACE_NAMES/AMBIGUOUS_NICKNAMES grew.
+const KNOWN_OUT_OF_SCOPE_SCHOOLS = new Set<string>([
+  "merrimack", "albany", "samford", "lindenwood",
+]);
+
 function findPlayerPick(text: string): { playerName: string; playerKey: string } | null {
   const withoutParens = text.replace(/\([^)]*\)/g, "").trim();
   const mlMatch = withoutParens.match(/^(.+?)\s+(?:ML|money\s*line)\b/i);
@@ -1127,6 +1170,7 @@ function findPlayerPick(text: string): { playerName: string; playerKey: string }
   if (!/^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/.test(candidate)) return null;
   if (looksLikeTeamAbbreviation(candidate)) return null;
   if (SPORTS_PLACE_NAMES.has(candidate.toLowerCase())) return null;
+  if (KNOWN_OUT_OF_SCOPE_SCHOOLS.has(candidate.toLowerCase())) return null;
 
   const words = candidate.split(/\s+/);
   return { playerName: candidate, playerKey: words[words.length - 1].toLowerCase() };
