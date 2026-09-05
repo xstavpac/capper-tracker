@@ -7,7 +7,14 @@ import { useEffect, useRef } from "react";
 // the way, then crawl" at 800ms. Quad decelerates more gradually, and the
 // extra ~250ms gives that gentler curve room to read as a smooth glide
 // instead of a snap.
-export const DURATION_MS = 1050;
+//
+// Doubled again from 1050ms once the setState->ref-write fix (see the RAF
+// loop below) actually made the motion smooth enough to watch - at 1050ms
+// the climb was over before the eased deceleration had room to read as
+// deliberate, rather than a blink. 2100ms gives the same easeOutQuad curve
+// more time to visibly decelerate into the final number - a satisfying
+// reveal instead of something that flickers past.
+export const DURATION_MS = 2100;
 
 export function easeOutQuad(t: number) {
   return 1 - Math.pow(1 - t, 2);
