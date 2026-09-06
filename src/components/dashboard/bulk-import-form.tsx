@@ -10,6 +10,7 @@ import {
   previewMissingTotalLines,
   type MissingTotalLineResult,
 } from "@/server/actions/bulk-picks";
+import { recoverUnresolvedPicksAction } from "@/server/actions/recover-unresolved-picks";
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
 import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
 import { isSkippedAsDuplicate, importButtonLabel } from "@/lib/duplicate-pick-detection";
@@ -41,6 +42,11 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // silently misread as a capper name that then swallows every real pick
   // after it.
   const [unresolvedLines, setUnresolvedLines] = useState<string[]>([]);
+  // Indices in `parsed` for picks the static parser couldn't place and the
+  // server's live-schedule fallback recovered (see recoverUnresolvedPicksAction).
+  // Shown with a "live schedule" tag so the user can eyeball them - these
+  // matched a team playing right now, not the curated lists.
+  const [recoveredIndices, setRecoveredIndices] = useState<Set<number>>(new Set());
   const [enrichedOdds, setEnrichedOdds] = useState<Record<number, number>>({});
   const [loadingOdds, setLoadingOdds] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -135,8 +141,30 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setTotalLineChoices({});
     setResolving(true);
     const { picks: items, unresolved } = parseCatalog(text, existingCapperNames);
-    setUnresolvedLines(unresolved);
-    const outcome = await autoResolveAmbiguousPicks(items, ambiguousChoices);
+    // Last-resort pass: hand the lines parseCatalog couldn't place to the
+    // server, which checks them against the real team names on today's live
+    // schedule + odds board (see recoverUnresolvedPicksAction). Only an
+    // exact-one match is recovered; anything ambiguous or unmatched stays in
+    // the manual list. parseCatalog itself is untouched.
+    let effectiveItems = items;
+    let unresolvedAfter = unresolved;
+    let recovered: ParsedPick[] = [];
+    if (unresolved.length > 0) {
+      try {
+        const res = await recoverUnresolvedPicksAction(text, existingCapperNames);
+        recovered = res.recovered;
+        effectiveItems = [...items, ...recovered];
+        unresolvedAfter = res.stillUnresolved;
+      } catch {
+        // Best-effort - a fallback failure just leaves every line unresolved,
+        // exactly as before this pass existed.
+      }
+    }
+    setUnresolvedLines(unresolvedAfter);
+    // autoResolveAmbiguousPicks preserves array order and length, so the
+    // recovered picks keep the tail slots they were appended into.
+    setRecoveredIndices(new Set(recovered.map((_, i) => items.length + i)));
+    const outcome = await autoResolveAmbiguousPicks(effectiveItems, ambiguousChoices);
     setResolving(false);
     setParsed(outcome.picks);
     setScrollTrigger((v) => v + 1);
@@ -588,6 +616,11 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                         {!wasFuzzyMatched && !existingLower.includes(p.capperName.toLowerCase()) && (
                           <span className="ml-1 rounded-full bg-brand-50 px-1.5 py-0.5 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
                             new
+                          </span>
+                        )}
+                        {recoveredIndices.has(idx) && (
+                          <span className="ml-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                            matched to live schedule
                           </span>
                         )}
                         <span className="ml-2 text-muted-foreground">
