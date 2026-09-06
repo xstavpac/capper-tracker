@@ -4,6 +4,9 @@
 // Covers the 2026-09 within-batch detection fix (the "Clemson +6.5" /
 // "Clemson +7" report - two picks that are the same side-aware category but
 // never touch the DB, so a DB-only check let a paste duplicate itself), the
+// game-segment fix (a Q1 total and a full-game total on one matchup both
+// classify as OVER, so period must be part of the dup key - the "Louisville
+// Over 54.5" vs "Louisville over 12.5 first quarter" report), the
 // end-of-import summary's skip predicate, and the button copy.
 import {
   computeDuplicateFlags,
@@ -33,6 +36,7 @@ function cand(over: Partial<ResolvedDupCandidate> & { index: number }): Resolved
     awayTeam: over.awayTeam ?? "Clemson Tigers",
     gameTimeMs: over.gameTimeMs ?? T0,
     category: over.category ?? "SPREAD_PLUS",
+    period: over.period ?? "FULL_GAME",
     description: over.description ?? "Clemson +7",
     dbDuplicateLabel: over.dbDuplicateLabel ?? null,
   };
@@ -93,6 +97,106 @@ console.log("########## within-batch: the Clemson +6.5 / +7 report ##########");
     DRIFT
   );
   check("different capper / different game: nothing flagged", Object.keys(flags), []);
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## game segment / period: different scopes are different bets ##########");
+
+// THE BUG (from the report): a Q1-scoped total and a full-game total on the
+// same matchup both classify into the plain OVER category (pickCategory only
+// forks by period for FIRST_HALF), so before this fix they flagged each other
+// as duplicates. betDetail lines (12.5 vs 54.5) are never compared - only the
+// team pair + category + period.
+//
+// The report was the DB-match path ("...already has a Louisville vs Ole Miss
+// Over 54.5 pick logged"), where checkDuplicatePicksAction filters existing
+// picks by `p.period === period && pickCategory(...) === category`. That
+// filter isn't reachable from here (it needs prisma), but it applies the
+// EXACT same (category, period) identity these within-paste cases exercise -
+// two items with the same category but a different period must not match.
+{
+  const flags = computeDuplicateFlags(
+    [
+      cand({ index: 0, description: "Louisville vs Ole Miss Over 54.5", category: "OVER", period: "FULL_GAME",
+        homeTeam: "Ole Miss Rebels", awayTeam: "Louisville Cardinals" }),
+      cand({ index: 1, description: "Louisville ole miss over 12.5 first quarter", category: "OVER", period: "FIRST_QUARTER",
+        homeTeam: "Ole Miss Rebels", awayTeam: "Louisville Cardinals" }),
+    ],
+    DRIFT
+  );
+  check("full-game Over 54.5 and Q1 Over 12.5 on one game: NEITHER flagged", Object.keys(flags), []);
+}
+
+// Every segment type vs full game, and adjacent segments vs each other -
+// all genuinely different bets, none should flag.
+{
+  const flags = computeDuplicateFlags(
+    [
+      cand({ index: 0, description: "over 54.5", category: "OVER", period: "FULL_GAME" }),
+      cand({ index: 1, description: "1H over 27.5", category: "FIRST_HALF_OVER", period: "FIRST_HALF" }),
+      cand({ index: 2, description: "2H over 26.5", category: "OVER", period: "SECOND_HALF" }),
+      cand({ index: 3, description: "Q1 over 12.5", category: "OVER", period: "FIRST_QUARTER" }),
+      cand({ index: 4, description: "Q2 over 13.5", category: "OVER", period: "SECOND_QUARTER" }),
+      cand({ index: 5, description: "Q3 over 13", category: "OVER", period: "THIRD_QUARTER" }),
+      cand({ index: 6, description: "Q4 over 14", category: "OVER", period: "FOURTH_QUARTER" }),
+    ],
+    DRIFT
+  );
+  check("full / 1H / 2H / Q1 / Q2 / Q3 / Q4 overs on one game: nothing flagged", Object.keys(flags), []);
+}
+
+// NHL periods: P1 / P2 / P3 vs each other and vs full game.
+{
+  const flags = computeDuplicateFlags(
+    [
+      cand({ index: 0, description: "over 5.5", category: "OVER", period: "FULL_GAME" }),
+      cand({ index: 1, description: "1st period over 1.5", category: "OVER", period: "FIRST_PERIOD" }),
+      cand({ index: 2, description: "2nd period over 2", category: "OVER", period: "SECOND_PERIOD" }),
+      cand({ index: 3, description: "3rd period over 1.5", category: "OVER", period: "THIRD_PERIOD" }),
+    ],
+    DRIFT
+  );
+  check("NHL full / P1 / P2 / P3 overs on one game: nothing flagged", Object.keys(flags), []);
+}
+
+// The fix must NOT let a genuine same-segment duplicate through: two Q1 overs
+// on the same game are still the same bet.
+{
+  const flags = computeDuplicateFlags(
+    [
+      cand({ index: 0, description: "Q1 over 12.5", category: "OVER", period: "FIRST_QUARTER" }),
+      cand({ index: 1, description: "1st quarter over 13", category: "OVER", period: "FIRST_QUARTER" }),
+    ],
+    DRIFT
+  );
+  check("two Q1 overs, same game: the second IS flagged as a paste duplicate", Boolean(flags[1]), true);
+  check("first Q1 over still imports", flags[0], undefined);
+}
+
+// F5 (period FIRST_HALF, category F5_OVER) vs full-game over: distinct on
+// both category and period - still not a duplicate, and two F5 overs still are.
+{
+  const flags = computeDuplicateFlags(
+    [
+      cand({ index: 0, description: "over 8.5", category: "OVER", period: "FULL_GAME" }),
+      cand({ index: 1, description: "F5 over 4.5", category: "F5_OVER", period: "FIRST_HALF" }),
+      cand({ index: 2, description: "first 5 over 5", category: "F5_OVER", period: "FIRST_HALF" }),
+    ],
+    DRIFT
+  );
+  check("full-game over and F5 over: not flagged; the 2nd F5 over IS", [flags[0], flags[1], Boolean(flags[2])], [undefined, undefined, true]);
+}
+
+// Q1 spread vs full-game spread (same SPREAD_PLUS category, different period).
+{
+  const flags = computeDuplicateFlags(
+    [
+      cand({ index: 0, description: "Clemson +7", category: "SPREAD_PLUS", period: "FULL_GAME" }),
+      cand({ index: 1, description: "Clemson 1Q +2.5", category: "SPREAD_PLUS", period: "FIRST_QUARTER" }),
+    ],
+    DRIFT
+  );
+  check("full-game +7 and Q1 +2.5: not flagged", Object.keys(flags), []);
 }
 
 // Two picks tagged to the same matchup but game times too far apart (a

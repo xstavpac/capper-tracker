@@ -217,8 +217,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   }
 
   // Checks each entry against this user's already-logged picks for the same
-  // capper + game + bet type/side (see checkDuplicatePicksAction for the
-  // exact definition). Needs the resolved capper name, so this is re-run
+  // capper + game + bet type/side + game segment (see checkDuplicatePicksAction
+  // for the exact definition). Needs the resolved capper name, so this is re-run
   // whenever a fuzzy-match choice is confirmed, not just once at parse time -
   // duplicate detection can only match an existing capper once we know which
   // saved capper this pick's name actually refers to. Same index-remapping
