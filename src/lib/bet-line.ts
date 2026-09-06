@@ -138,6 +138,65 @@ export function nrfiSide(betDetail: string | null): NrfiSide | null {
   return null;
 }
 
+// Which slice of a game a pick's free text scopes it to, re-derived from
+// betDetail every time - the same "never stored, always re-read from
+// betDetail" pattern this file already uses for TOTAL's over/under side and
+// NRFI's yes/no side, and for good reason here: Prisma's Period enum only has
+// FULL_GAME and FIRST_HALF, so a "first quarter" pick is stored
+// period=FULL_GAME and is otherwise indistinguishable from a real full-game
+// pick at grading time.
+//
+// The grader only has a score source for two of these:
+//   - FULL_GAME       -> GameResult.homeScore / awayScore
+//   - FIRST_HALF      -> GameResult.firstFive{Home,Away}Score (F5 for MLB,
+//                        Q1+Q2 for NFL/NCAAF/NBA - see persistFinalScores)
+// Every other segment scope a capper can write - a single quarter, the 2nd
+// half, one hockey period, a single inning that isn't the F5 block - has NO
+// score source wired up. Grading MUST decline those (return null -> the pick
+// stays PENDING for manual grading) rather than silently fall through to the
+// full-game score, which is exactly how a real pick was mis-graded:
+// "UNLV vs Hawaii over 13.5 first quarter" graded WIN off the 27-point final
+// when Q1 was only 7.
+//
+// The FIRST_HALF patterns here are a deliberate superset of parse-catalog.ts's
+// isFirstFive detection (they add bare "1h") so that grading.ts can also catch
+// a first-half pick the importer failed to tag as Period.FIRST_HALF and would
+// otherwise grade against the full game.
+export type BetScope = "FULL_GAME" | "FIRST_HALF" | "UNSUPPORTED_SEGMENT";
+
+const FIRST_HALF_PATTERNS: RegExp[] = [
+  /\bf5\b/,
+  /\b1st\s*5\b/,
+  /\bfirst\s*5\b/,
+  /\b1st\s+five\b/,
+  /\bfirst\s+five\b/,
+  /\b1st\s*half\b/,
+  /\bfirst\s*half\b/,
+  /\b1h\b/,
+];
+
+const UNSUPPORTED_SEGMENT_PATTERNS: RegExp[] = [
+  // A single quarter: "1st quarter", "first qtr", "q1", "1q", "2nd-quarter".
+  /\b(1st|2nd|3rd|4th|first|second|third|fourth)[\s-]*(quarter|qtr)\b/,
+  /\bq[1-4]\b/,
+  /\b[1-4]q\b/,
+  // Second half (first half is supported above and handled before this list).
+  /\b(2nd|second)\s*half\b/,
+  /\b2h\b/,
+  // A single hockey period.
+  /\b(1st|2nd|3rd|first|second|third)\s*period\b/,
+  // A single inning that isn't the first-five block (NRFI is its own betType
+  // and never reaches this check).
+  /\b(1st|2nd|3rd|4th|5th|6th|7th|8th|9th|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth)\s+inning\b/,
+];
+
+export function betScope(betDetail: string | null): BetScope {
+  const t = (betDetail ?? "").toLowerCase();
+  if (FIRST_HALF_PATTERNS.some((re) => re.test(t))) return "FIRST_HALF";
+  if (UNSUPPORTED_SEGMENT_PATTERNS.some((re) => re.test(t))) return "UNSUPPORTED_SEGMENT";
+  return "FULL_GAME";
+}
+
 export type TdPropType = "RUSHING" | "RECEIVING" | "ANY";
 
 // Extracts the player and TD type from an NFL touchdown-prop pick's free
