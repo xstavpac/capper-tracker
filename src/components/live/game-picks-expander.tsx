@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import type { PickStatus } from "@prisma/client";
-import { getCategoryRecordsAction } from "@/server/actions/picks";
-import { getRecordColor, CATEGORY_RECENT_FORM_WINDOW, splitSegmentCategoryKey, type CategoryBreakdownItem, type PickCategoryKey } from "@/server/data/stats";
-import { periodLabel } from "@/lib/bet-line";
+import { getLeagueRecordsAction } from "@/server/actions/picks";
+import { getRecordColor, LEAGUE_RECORD_LAST_N, type LeagueRecordCard, type PickCategoryKey } from "@/server/data/stats";
+import { gameCardRecordSegments } from "@/lib/game-card-record-line";
 import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
 
 export type ExpanderPick = {
@@ -14,6 +14,9 @@ export type ExpanderPick = {
   capperColorTag: string | null;
   capperIsFavorite: boolean;
   category: PickCategoryKey | null;
+  // The game's league (sport name, e.g. "NCAAF") - the emphasized middle
+  // column of the condensed record line. One per /live page tab.
+  leagueName: string;
   betDetail: string;
   odds: number;
   units: number;
@@ -57,47 +60,6 @@ const STATUS_CLASSES: Record<PickStatus, string> = {
 // out with a highlighted row instead of just a colored badge.
 const TOP_PERFORMER_THRESHOLD = 60;
 
-// Fuller phrasing than the terse chip labels (PICK_CATEGORY_LABELS) used
-// elsewhere - "on underdog moneyline picks" reads naturally in a sentence,
-// where "Dog ML" doesn't. Segment categories (Q1 Over, 2H ML, ...) aren't
-// listed - they're derived in categoryDescription below from periodLabel.
-const CATEGORY_DESCRIPTIONS: Partial<Record<PickCategoryKey, string>> = {
-  FAV_ML: "favorite moneyline",
-  DOG_ML: "underdog moneyline",
-  SPREAD_MINUS: "favorite spread",
-  SPREAD_PLUS: "underdog spread",
-  SPREAD: "spread",
-  OVER: "over",
-  UNDER: "under",
-  F5_ML: "first-half moneyline",
-  FIRST_HALF_ML: "first-half moneyline",
-  FIRST_HALF_OVER: "first-half over",
-  FIRST_HALF_UNDER: "first-half under",
-  FIRST_HALF_SPREAD: "first-half spread",
-  TD_PROP: "touchdown prop",
-  NRFI: "NRFI",
-  YRFI: "YRFI",
-  F5_SPREAD_MINUS: "first-half favorite spread",
-  F5_SPREAD_PLUS: "first-half underdog spread",
-  F5_OVER: "first-half over",
-  F5_UNDER: "first-half under",
-  TEAM_TOTAL: "team total",
-};
-
-// "1st quarter over", "2nd half moneyline", "1st period under" for a segment
-// category; the static phrasing above otherwise.
-function categoryDescription(key: PickCategoryKey): string {
-  const base = CATEGORY_DESCRIPTIONS[key];
-  if (base) return base;
-  const seg = splitSegmentCategoryKey(key);
-  if (seg) {
-    // side.toLowerCase() covers over / under / spread; ML is spelled out.
-    const sideWord = seg.side === "ML" ? "moneyline" : seg.side.toLowerCase();
-    return `${periodLabel(seg.period)} ${sideWord}`;
-  }
-  return "this category";
-}
-
 function ListIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0" aria-hidden="true">
@@ -128,23 +90,35 @@ export function ChevronIcon({ up }: { up: boolean }) {
   );
 }
 
-function recordLabel(record: { wins: number; losses: number; pushes: number }) {
-  return record.wins + "-" + record.losses + (record.pushes > 0 ? "-" + record.pushes : "");
-}
-
-// One record + win% chip, green/red by its own win rate (independent of the
-// other half when both all-time and last-20 are shown).
-function ColoredRecord({ record }: { record: { wins: number; losses: number; pushes: number; winPct: number } }) {
+// One segment of the condensed record line ("All 12-3 80%", "NCAAF 8-2 80%",
+// "L20 4-1 80%"). Every segment's record + % is green/red by its OWN win
+// rate; the current-league segment additionally gets bold weight (label and
+// numbers) since it's the number the viewer is deciding on. Character content
+// matches gameCardRecordLineText (game-card-record-line.ts), which the width
+// guard tests against.
+function RecordSegment({
+  label,
+  record,
+  pct,
+  winPct,
+  emphasized,
+}: {
+  label: string;
+  record: string;
+  pct: string;
+  winPct: number;
+  emphasized: boolean;
+}) {
+  const color =
+    getRecordColor(winPct) === "green"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : "text-red-600 dark:text-red-400";
   return (
-    <span
-      className={
-        "font-medium " +
-        (getRecordColor(record.winPct) === "green"
-          ? "text-emerald-600 dark:text-emerald-400"
-          : "text-red-600 dark:text-red-400")
-      }
-    >
-      {recordLabel(record)} ({Math.round(record.winPct)}%)
+    <span className="whitespace-nowrap">
+      <span className={emphasized ? "font-semibold text-muted-foreground" : "text-muted-foreground"}>{label}</span>{" "}
+      <span className={color + (emphasized ? " font-bold" : " font-medium")}>
+        {record} {pct}
+      </span>
     </span>
   );
 }
@@ -152,9 +126,12 @@ function ColoredRecord({ record }: { record: { wins: number; losses: number; pus
 export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [records, setRecords] = useState<Record<string, CategoryBreakdownItem | null> | null>(null);
+  const [records, setRecords] = useState<Record<string, LeagueRecordCard | null> | null>(null);
 
   if (picks.length === 0) return null;
+
+  // capperId | leagueSport | category - matches leagueRecordKey (picks.ts).
+  const recordKey = (p: ExpanderPick) => p.capperId + "|" + p.leagueName + "|" + p.category;
 
   async function toggle(e: React.MouseEvent) {
     e.preventDefault();
@@ -166,16 +143,21 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
       setLoading(true);
       const pairs = picks
         .filter((p) => p.category !== null)
-        .map((p) => ({ capperId: p.capperId, category: p.category as PickCategoryKey }));
-      const result = await getCategoryRecordsAction(pairs);
+        .map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category as PickCategoryKey }));
+      const result = await getLeagueRecordsAction(pairs);
       setRecords(result);
       setLoading(false);
     }
   }
 
   function renderPickCard(p: ExpanderPick) {
-    const record = p.category ? records?.[p.capperId + "|" + p.category] : null;
-    const isTopPerformer = Boolean(record && record.count > 0 && record.winPct >= TOP_PERFORMER_THRESHOLD);
+    const card = p.category ? records?.[recordKey(p)] : null;
+    const hasHistory = Boolean(card && card.overall.count > 0);
+    // "Top performer" highlight keys off the current-league record (the
+    // emphasized number) - "good at this bet type in THIS league", not blended.
+    const isTopPerformer = Boolean(card && card.league.count > 0 && card.league.winPct >= TOP_PERFORMER_THRESHOLD);
+    const segments =
+      card && hasHistory ? gameCardRecordSegments(card, p.leagueName, LEAGUE_RECORD_LAST_N) : [];
     return (
       <div
         key={p.pickId}
@@ -191,9 +173,9 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
             <Avatar name={p.capperName} colorTag={p.capperColorTag} size={17} />
             <span className="truncate text-[12px] font-medium text-foreground">{p.capperName}</span>
             {p.capperIsFavorite && <FavoriteStarIcon />}
-            {isTopPerformer && record && (
+            {isTopPerformer && card && (
               <span className="shrink-0 rounded-full bg-emerald-100 px-1 py-0 text-[9px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
-                {Math.round(record.winPct)}%
+                {Math.round(card.league.winPct)}%
               </span>
             )}
           </div>
@@ -212,26 +194,17 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
           </div>
         </div>
         <div className="mt-0.5 pl-[23px] text-[11px] text-muted-foreground">
-          {p.betDetail}
+          <span className="text-foreground/90">{p.betDetail}</span>
           {loading ? (
             <span className="text-[10px] text-muted-foreground"> &middot; Loading record...</span>
-          ) : record && record.count > 0 && p.category ? (
+          ) : segments.length > 0 ? (
             <span className="text-[10px]">
-              {" "}
-              &middot;{" "}
-              {record.recent ? (
-                <>
-                  <ColoredRecord record={record} /> <span className="text-muted-foreground">all-time</span>
-                  <span className="mx-1 text-muted-foreground/60">|</span>
-                  <ColoredRecord record={record.recent} />{" "}
-                  <span className="text-muted-foreground">last {CATEGORY_RECENT_FORM_WINDOW}</span>{" "}
-                </>
-              ) : (
-                <>
-                  <ColoredRecord record={record} />{" "}
-                </>
-              )}
-              <span className="text-muted-foreground">on {categoryDescription(p.category)} picks</span>
+              {segments.map((s, i) => (
+                <span key={s.label} className="text-muted-foreground/60">
+                  {i === 0 ? " · " : " | "}
+                  <RecordSegment {...s} />
+                </span>
+              ))}
             </span>
           ) : (
             <span className="text-[10px] text-muted-foreground"> &middot; No history in this category yet</span>

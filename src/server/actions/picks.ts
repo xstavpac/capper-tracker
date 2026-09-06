@@ -2,8 +2,8 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { requireUser } from "@/server/auth";
-import { createPick, updatePickStatus, deletePick, getCapperCategoryRecords } from "@/server/data/picks";
-import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
+import { createPick, updatePickStatus, deletePick, getCapperLeagueRecords } from "@/server/data/picks";
+import type { LeagueRecordCard, PickCategoryKey } from "@/server/data/stats";
 import { cacheKeys } from "@/lib/cache-keys";
 import type { BetType, PickStatus, Period } from "@prisma/client";
 
@@ -136,12 +136,12 @@ export async function deletePickAction(pickId: string): Promise<ActionResult> {
 
 // Lazy-loaded on demand (a game card expanding on /live), not on page load -
 // each entry requires pulling a capper's pick history and recomputing their
-// category breakdown, which isn't cheap to do for every capper on every game
-// up front. getCapperCategoryRecords batches: one query for every capper in
-// the request, one breakdown per capper (deduped pairs included).
-export async function getCategoryRecordsAction(
-  pairs: { capperId: string; category: PickCategoryKey }[]
-): Promise<Record<string, CategoryBreakdownItem | null>> {
+// records, which isn't cheap to do for every capper on every game up front.
+// getCapperLeagueRecords batches: one query for every capper in the request,
+// one computeLeagueRecordCards pass per (capper, league).
+export async function getLeagueRecordsAction(
+  pairs: { capperId: string; leagueSport: string; category: PickCategoryKey }[]
+): Promise<Record<string, LeagueRecordCard | null>> {
   const user = await requireUser();
-  return getCapperCategoryRecords(user.id, pairs);
+  return getCapperLeagueRecords(user.id, pairs);
 }
