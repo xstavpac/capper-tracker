@@ -212,7 +212,7 @@ async function main() {
       "fake-event-id",
       "NCAAF"
     ),
-    { outcome: null, reason: "touchdown-prop grading isn't available for NCAAF yet" }
+    { outcome: null, reason: "player-prop grading is NFL-only; this NCAAF pick needs manual grading" }
   );
 
   // ---- Regression: NFL is unaffected - it must still reach its own

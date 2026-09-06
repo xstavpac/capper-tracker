@@ -339,8 +339,18 @@ export type ScorecardBucketKey =
   | "SPREAD_PLUS"
   | "SPREAD"
   | "TOTAL"
+  // A team total (one team's own score vs a line) is a distinct market from
+  // TOTAL and must never be summed into it - the same reason it's a distinct
+  // BetType and a distinct pickCategory key. Was silently dropped from the
+  // scorecard before this: bucketKeyForPick fell through to
+  // `pick.betType as ScorecardBucketKey`, and "TEAM_TOTAL" wasn't a real key.
+  | "TEAM_TOTAL"
   | "PLAYER_PROP"
   | "F5"
+  // Every quarter / 2nd-half / hockey-period pick, any bet type, in one
+  // bucket - same "graded against a different score, keep it out of the
+  // full-game record" reasoning as F5, one step further.
+  | "SEGMENT"
   | "NRFI"
   | "YRFI";
 export type ScorecardBucket = {
@@ -374,8 +384,10 @@ const SCORECARD_BUCKET_ORDER: ScorecardBucketKey[] = [
   "SPREAD_PLUS",
   "SPREAD",
   "TOTAL",
+  "TEAM_TOTAL",
   "PLAYER_PROP",
   "F5",
+  "SEGMENT",
   "NRFI",
   "YRFI",
 ];
@@ -385,8 +397,10 @@ const SCORECARD_BUCKET_LABELS: Record<ScorecardBucketKey, string> = {
   SPREAD_PLUS: "Spread +",
   SPREAD: "Spread",
   TOTAL: "Total",
+  TEAM_TOTAL: "Team Total",
   PLAYER_PROP: "Player Prop",
   F5: "F5",
+  SEGMENT: "Quarter / period",
   NRFI: "NRFI",
   YRFI: "YRFI",
 };
@@ -416,7 +430,15 @@ function spreadSide(pick: {
 // "SPREAD" bucket stays as a fallback for the rare pick with no usable line
 // (missing or pick-em/0), so those still get one, rather than being dropped.
 function bucketKeyForPick(pick: Pick): ScorecardBucketKey {
+  // Team total is its own bucket regardless of period (same as pickCategory's
+  // TEAM_TOTAL key and betTypeFilterCategory) - checked first so a first-half
+  // or quarter team total doesn't land in F5 / SEGMENT instead.
+  if (pick.betType === "TEAM_TOTAL") return "TEAM_TOTAL";
   if (pick.period === "FIRST_HALF") return "F5";
+  // Every non-full-game, non-first-half period (quarters, 2nd half, hockey
+  // periods) shares one bucket, same as F5 - keeps the Moneyline/Spread/Total
+  // records full-game-only.
+  if (segmentCategoryPeriod(pick.period)) return "SEGMENT";
   if (pick.betType === "SPREAD") {
     const side = spreadSide(pick);
     if (side === "FAVORITE") return "SPREAD_MINUS";
@@ -550,12 +572,23 @@ export type PickCategoryKey =
   | "DOG_ML"
   | "SPREAD_MINUS"
   | "SPREAD_PLUS"
+  // Plain "SPREAD" is the fallback for a full-game / MLB-F5 spread pick whose
+  // side can't be read (line is pick'em/0, or missing and unparseable from
+  // betDetail) - it used to return null and vanish from every category stat.
+  // Mirrors the scorecard's own SPREAD fallback bucket. Not in any chip set.
+  | "SPREAD"
   | "OVER"
   | "UNDER"
   | "F5_ML"
   | "FIRST_HALF_ML"
   | "FIRST_HALF_OVER"
   | "FIRST_HALF_UNDER"
+  // Non-MLB first-half spread. Single key (no favorite/underdog split), same
+  // as FIRST_HALF_ML - a first-half spread pick used to return null here
+  // ("no category yet"), silently dropping out of every category stat; it's
+  // gradable now (persistFinalScores' first-half score sources), so it gets a
+  // real home. MLB first-half spread stays F5_SPREAD_MINUS/PLUS below.
+  | "FIRST_HALF_SPREAD"
   | "TD_PROP"
   | "NRFI"
   | "YRFI"
@@ -573,19 +606,113 @@ export type PickCategoryKey =
   // investigation. Only picks tagged TEAM_TOTAL at import time (see
   // parsePickText's isTeamTotalText) land here - existing TOTAL rows are
   // never reclassified retroactively by this category logic.
-  | "TEAM_TOTAL";
+  | "TEAM_TOTAL"
+  // Segment-scoped categories: a Q1 / 2nd-half / hockey-period pick is graded
+  // against a different score than the full game (grading.ts resolveOutcome),
+  // so its record must never be summed into the plain FAV_ML / OVER / UNDER
+  // numbers - the same reasoning FIRST_HALF_ML / FIRST_HALF_OVER already
+  // apply, one step further. Key is `<Pick.period>_<side>`. SPREAD stays
+  // uncategorized for a segment pick, exactly as a non-MLB first-half spread
+  // already is (a consistent gap, not this change's concern). These are
+  // deliberately absent from every sport chip set (MLB_CHIP_SET etc.) so the
+  // capper "Record by category" tiles stay full-game-only, but they ARE in
+  // ALL_CATEGORY_KEYS, so the /live game-card snippet shows a segment pick
+  // its own record instead of a conflated one.
+  | SegmentCategoryKey;
+
+export const SEGMENT_CATEGORY_PERIODS = [
+  "SECOND_HALF",
+  "FIRST_QUARTER",
+  "SECOND_QUARTER",
+  "THIRD_QUARTER",
+  "FOURTH_QUARTER",
+  "FIRST_PERIOD",
+  "SECOND_PERIOD",
+  "THIRD_PERIOD",
+] as const;
+export type SegmentCategoryPeriod = (typeof SEGMENT_CATEGORY_PERIODS)[number];
+type SegmentCategorySide = "ML" | "OVER" | "UNDER" | "SPREAD";
+export type SegmentCategoryKey = `${SegmentCategoryPeriod}_${SegmentCategorySide}`;
+
+const SEGMENT_CATEGORY_SIDES: SegmentCategorySide[] = ["ML", "OVER", "UNDER", "SPREAD"];
+const SEGMENT_CATEGORY_SIDE_SET = new Set<string>(SEGMENT_CATEGORY_SIDES);
+
+export const SEGMENT_CATEGORY_KEYS: SegmentCategoryKey[] = SEGMENT_CATEGORY_PERIODS.flatMap((p) =>
+  SEGMENT_CATEGORY_SIDES.map((s) => `${p}_${s}` as SegmentCategoryKey)
+);
+
+const SEGMENT_CATEGORY_PERIOD_SET = new Set<string>(SEGMENT_CATEGORY_PERIODS);
+
+// Narrows a raw Pick.period to a SegmentCategoryPeriod (or null for
+// FULL_GAME / FIRST_HALF, which have their own category paths).
+function segmentCategoryPeriod(period: string): SegmentCategoryPeriod | null {
+  return SEGMENT_CATEGORY_PERIOD_SET.has(period) ? (period as SegmentCategoryPeriod) : null;
+}
+
+// Short label for a segment period, matching the F5 / 1st-Half chip style
+// ("Q1 Over", "2H ML", "P1 Under").
+const SEGMENT_PERIOD_SHORT: Record<SegmentCategoryPeriod, string> = {
+  SECOND_HALF: "2H",
+  FIRST_QUARTER: "Q1",
+  SECOND_QUARTER: "Q2",
+  THIRD_QUARTER: "Q3",
+  FOURTH_QUARTER: "Q4",
+  FIRST_PERIOD: "P1",
+  SECOND_PERIOD: "P2",
+  THIRD_PERIOD: "P3",
+};
+// Sentence phrasing for the "specialist" tag ("2nd quarter overs specialist").
+const SEGMENT_PERIOD_LONG: Record<SegmentCategoryPeriod, string> = {
+  SECOND_HALF: "2nd half",
+  FIRST_QUARTER: "1st quarter",
+  SECOND_QUARTER: "2nd quarter",
+  THIRD_QUARTER: "3rd quarter",
+  FOURTH_QUARTER: "4th quarter",
+  FIRST_PERIOD: "1st period",
+  SECOND_PERIOD: "2nd period",
+  THIRD_PERIOD: "3rd period",
+};
+const SEGMENT_SIDE_CHIP: Record<SegmentCategorySide, string> = { ML: "ML", OVER: "Over", UNDER: "Under", SPREAD: "Spread" };
+
+function buildSegmentCategoryMap<T>(
+  fn: (period: SegmentCategoryPeriod, side: SegmentCategorySide) => T
+): Record<SegmentCategoryKey, T> {
+  const out = {} as Record<SegmentCategoryKey, T>;
+  for (const period of SEGMENT_CATEGORY_PERIODS) {
+    for (const side of SEGMENT_CATEGORY_SIDES) {
+      out[`${period}_${side}` as SegmentCategoryKey] = fn(period, side);
+    }
+  }
+  return out;
+}
+
+// Split "FIRST_QUARTER_OVER" -> { period: "FIRST_QUARTER", side: "OVER" }, or
+// null for a non-segment key. Exported for the /live game-card snippet, which
+// renders its own sentence-fragment phrasing off it.
+export function splitSegmentCategoryKey(
+  key: PickCategoryKey
+): { period: SegmentCategoryPeriod; side: SegmentCategorySide } | null {
+  const i = key.lastIndexOf("_");
+  if (i < 0) return null;
+  const period = key.slice(0, i);
+  const side = key.slice(i + 1);
+  if (!SEGMENT_CATEGORY_PERIOD_SET.has(period) || !SEGMENT_CATEGORY_SIDE_SET.has(side)) return null;
+  return { period: period as SegmentCategoryPeriod, side: side as SegmentCategorySide };
+}
 
 export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   FAV_ML: "Fav ML",
   DOG_ML: "Dog ML",
   SPREAD_MINUS: "Spread -",
   SPREAD_PLUS: "Spread +",
+  SPREAD: "Spread",
   OVER: "Over",
   UNDER: "Under",
   F5_ML: "F5 ML",
   FIRST_HALF_ML: "1st Half ML",
   FIRST_HALF_OVER: "1st Half Over",
   FIRST_HALF_UNDER: "1st Half Under",
+  FIRST_HALF_SPREAD: "1st Half Spread",
   TD_PROP: "TD Prop",
   NRFI: "NRFI",
   YRFI: "YRFI",
@@ -594,6 +721,7 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   F5_OVER: "F5 Over",
   F5_UNDER: "F5 Under",
   TEAM_TOTAL: "Team Total",
+  ...buildSegmentCategoryMap((period, side) => `${SEGMENT_PERIOD_SHORT[period]} ${SEGMENT_SIDE_CHIP[side]}`),
 };
 
 // F5 and NRFI/YRFI are MLB-only chips for now, even though Period/BetType
@@ -638,6 +766,7 @@ export const NFL_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_ML",
   "FIRST_HALF_OVER",
   "FIRST_HALF_UNDER",
+  "FIRST_HALF_SPREAD",
   "TD_PROP",
   "TEAM_TOTAL",
 ];
@@ -659,6 +788,7 @@ export const NCAAF_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_ML",
   "FIRST_HALF_OVER",
   "FIRST_HALF_UNDER",
+  "FIRST_HALF_SPREAD",
   "TEAM_TOTAL",
 ];
 
@@ -678,24 +808,33 @@ export const NBA_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_ML",
   "FIRST_HALF_OVER",
   "FIRST_HALF_UNDER",
+  "FIRST_HALF_SPREAD",
   "TEAM_TOTAL",
 ];
 
-// The remaining leagues the Team Total tile was asked for (NCAAB, NHL, WNBA,
-// KBO) have no bespoke chip set of their own today - they all fall back to
-// DEFAULT_CHIP_SET via chipSetForLeague. DEFAULT_CHIP_SET itself is also
-// shared by every OTHER sport this app recognizes but wasn't asked to get
-// this tile (CFL, MLS, UFC/MMA, ATP - see parse-catalog.ts's KNOWN_SPORTS),
-// so adding TEAM_TOTAL there directly would hand it to those too. Each of
-// the four gets its own one-line set (DEFAULT_CHIP_SET plus TEAM_TOTAL)
-// instead, registered below - same "a map entry, not a new branch"
-// reasoning CHIP_SET_BY_SPORT's own comment already gives. NBA used to be
-// in this group too (DEFAULT_CHIP_SET + TEAM_TOTAL, nothing sport-specific)
-// until it got its own first-half score source - see NBA_CHIP_SET above.
+// NCAAB, NHL, KBO have no first-half score source, so they just get
+// DEFAULT_CHIP_SET plus TEAM_TOTAL - same "a map entry, not a new branch"
+// reasoning CHIP_SET_BY_SPORT's own comment gives. (NBA used to be here too,
+// until it got its own first-half source - see NBA_CHIP_SET above.)
 const NCAAB_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
 const NHL_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
-const WNBA_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
 const KBO_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
+// WNBA has a first-half score source (persistFinalScores' supportsFirstHalf),
+// so its first-half ML/Over/Under/Spread picks are real gradable categories -
+// same chip set as NBA (no TD_PROP, basketball).
+const WNBA_CHIP_SET: PickCategoryKey[] = [
+  "FAV_ML",
+  "DOG_ML",
+  "SPREAD_MINUS",
+  "SPREAD_PLUS",
+  "OVER",
+  "UNDER",
+  "FIRST_HALF_ML",
+  "FIRST_HALF_OVER",
+  "FIRST_HALF_UNDER",
+  "FIRST_HALF_SPREAD",
+  "TEAM_TOTAL",
+];
 
 // Sport-specific chip sets, keyed by the sport's display label (uppercased)
 // - chipSetForLeague looks this up and falls back to DEFAULT_CHIP_SET for
@@ -715,15 +854,19 @@ const CHIP_SET_BY_SPORT: Record<string, PickCategoryKey[]> = {
 // The full universe of every PickCategoryKey value, independent of any one
 // sport's own display chip set - getCapperCategoryRecord (picks.ts) relies
 // on this to look up an arbitrary single category (which might be F5 ML,
-// 1st Half ML, or NRFI) without it being filtered out by a sport-specific
-// list like MLB_CHIP_SET, which deliberately does NOT include FIRST_HALF_ML
-// (or NFL_CHIP_SET's FIRST_HALF_OVER/FIRST_HALF_UNDER/TD_PROP).
+// 1st Half ML, NRFI, or a segment category like Q1 Over) without it being
+// filtered out by a sport-specific list like MLB_CHIP_SET, which deliberately
+// does NOT include FIRST_HALF_ML (or NFL_CHIP_SET's FIRST_HALF_OVER/
+// FIRST_HALF_UNDER/TD_PROP, or any segment category).
 export const ALL_CATEGORY_KEYS: PickCategoryKey[] = [
   ...MLB_CHIP_SET,
+  "SPREAD",
   "FIRST_HALF_ML",
   "FIRST_HALF_OVER",
   "FIRST_HALF_UNDER",
+  "FIRST_HALF_SPREAD",
   "TD_PROP",
+  ...SEGMENT_CATEGORY_KEYS,
 ];
 
 export function chipSetForLeague(sportName: string): PickCategoryKey[] {
@@ -765,19 +908,32 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
       // together with an MLB capper's F5 ML record for someone who bets both.
       return pick.sportName.toUpperCase() === "MLB" ? "F5_ML" : "FIRST_HALF_ML";
     }
+    const seg = segmentCategoryPeriod(pick.period);
+    if (seg) return `${seg}_ML`;
     const side = favoriteOrUnderdog(pick);
     return side === "FAVORITE" ? "FAV_ML" : side === "UNDERDOG" ? "DOG_ML" : null;
   }
 
   if (pick.betType === "SPREAD") {
+    // Quarter / 2nd-half / period spread: its own single <period>_SPREAD key
+    // (no favorite/underdog split, same as the segment ML key). Never folded
+    // into the full-game SPREAD_MINUS/PLUS record, and - unlike before -
+    // never dropped as null.
+    const seg = segmentCategoryPeriod(pick.period);
+    if (seg) return `${seg}_SPREAD`;
     const side = spreadSide(pick);
     if (pick.period === "FIRST_HALF") {
-      // Same MLB-only carve-out as F5_ML above - non-MLB first-half spread
-      // picks have no category key of their own yet, same as before.
-      if (pick.sportName.toUpperCase() !== "MLB") return null;
-      return side === "FAVORITE" ? "F5_SPREAD_MINUS" : side === "UNDERDOG" ? "F5_SPREAD_PLUS" : null;
+      // Non-MLB first-half spread gets its own single FIRST_HALF_SPREAD key
+      // (it's gradable now - persistFinalScores' first-half score sources -
+      // and used to return null, silently vanishing from category stats).
+      // MLB first-half spread keeps its favorite/underdog split, falling back
+      // to plain SPREAD (not null) when the side can't be read.
+      if (pick.sportName.toUpperCase() !== "MLB") return "FIRST_HALF_SPREAD";
+      return side === "FAVORITE" ? "F5_SPREAD_MINUS" : side === "UNDERDOG" ? "F5_SPREAD_PLUS" : "SPREAD";
     }
-    return side === "FAVORITE" ? "SPREAD_MINUS" : side === "UNDERDOG" ? "SPREAD_PLUS" : null;
+    // Plain "SPREAD" (not null) when the pick is pick'em / has no usable line -
+    // mirrors bucketKeyForPick's own SPREAD fallback bucket.
+    return side === "FAVORITE" ? "SPREAD_MINUS" : side === "UNDERDOG" ? "SPREAD_PLUS" : "SPREAD";
   }
 
   if (pick.betType === "TEAM_TOTAL") {
@@ -811,6 +967,12 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
       if (isUnder) return "FIRST_HALF_UNDER";
       return null;
     }
+    const seg = segmentCategoryPeriod(pick.period);
+    if (seg) {
+      if (isOver) return `${seg}_OVER`;
+      if (isUnder) return `${seg}_UNDER`;
+      return null;
+    }
     if (isOver) return "OVER";
     if (isUnder) return "UNDER";
     return null;
@@ -837,12 +999,14 @@ const SPECIALIST_LABELS: Record<PickCategoryKey, string> = {
   DOG_ML: "Underdog specialist",
   SPREAD_MINUS: "Favorite spread specialist",
   SPREAD_PLUS: "Underdog spread specialist",
+  SPREAD: "Spread specialist",
   OVER: "Overs specialist",
   UNDER: "Unders specialist",
   F5_ML: "First-half specialist",
   FIRST_HALF_ML: "First-half specialist",
   FIRST_HALF_OVER: "First-half overs specialist",
   FIRST_HALF_UNDER: "First-half unders specialist",
+  FIRST_HALF_SPREAD: "First-half spread specialist",
   TD_PROP: "Touchdown-prop specialist",
   NRFI: "NRFI specialist",
   YRFI: "YRFI specialist",
@@ -851,6 +1015,17 @@ const SPECIALIST_LABELS: Record<PickCategoryKey, string> = {
   F5_OVER: "F5 overs specialist",
   F5_UNDER: "F5 unders specialist",
   TEAM_TOTAL: "Team-total specialist",
+  ...buildSegmentCategoryMap((period, side) => {
+    const noun =
+      side === "ML"
+        ? "moneyline specialist"
+        : side === "OVER"
+          ? "overs specialist"
+          : side === "UNDER"
+            ? "unders specialist"
+            : "spread specialist";
+    return `${SEGMENT_PERIOD_LONG[period]} ${noun}`;
+  }),
 };
 
 // A category holding at least this share of a capper's decided volume is a

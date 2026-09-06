@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import type { PickCategoryKey } from "@/server/data/stats";
+import { SEGMENT_CATEGORY_KEYS, splitSegmentCategoryKey, type PickCategoryKey } from "@/server/data/stats";
 import { HotStreaksIcon } from "@/components/dashboard/trending-cappers";
 
 // Straight vertical arrow (shaft + open chevron head, not a filled triangle
@@ -200,22 +200,49 @@ const FUCHSIA = "text-fuchsia-600 dark:text-fuchsia-400";
 const AMBER_1H = "text-amber-600 dark:text-amber-400";
 const RED = "text-red-600 dark:text-red-400";
 const EMERALD = "text-emerald-600 dark:text-emerald-400";
+const SLATE = "text-slate-600 dark:text-slate-400";
+
+// Segment categories (Q1 Over, 2H ML, P1 Under, ...) - one shape family in a
+// neutral color, derived so a new segment period doesn't need 3 more entries
+// here. Not surfaced by CATEGORY_ORDER (sharp-money.ts) or any chip set today,
+// so these only render if a future change adds a segment category to one.
+const SEGMENT_CATEGORY_ICONS = Object.fromEntries(
+  SEGMENT_CATEGORY_KEYS.map((key) => {
+    const side = splitSegmentCategoryKey(key)!.side;
+    return [
+      key,
+      () =>
+        side === "OVER" ? (
+          <VerticalArrowIcon direction="up" colorClass={SLATE} />
+        ) : side === "UNDER" ? (
+          <VerticalArrowIcon direction="down" colorClass={SLATE} />
+        ) : side === "SPREAD" ? (
+          <DiagonalArrowIcon direction="down" colorClass={SLATE} />
+        ) : (
+          <HalfIcon colorClass={SLATE} />
+        ),
+    ];
+  })
+) as Record<PickCategoryKey, () => ReactElement>;
 
 // One entry per PickCategoryKey (same exhaustive-Record convention
 // PICK_CATEGORY_LABELS/SPECIALIST_LABELS already use in stats.ts) so this
 // can't silently go stale if CATEGORY_ORDER (sharp-money.ts) is ever extended
 // to surface a category it doesn't today.
 const CATEGORY_ICONS: Record<PickCategoryKey, () => ReactElement> = {
+  ...SEGMENT_CATEGORY_ICONS,
   FAV_ML: () => <HotStreaksIcon />,
   DOG_ML: () => <DogMlIcon />,
   SPREAD_MINUS: () => <DiagonalArrowIcon direction="down" colorClass={VIOLET} />,
   SPREAD_PLUS: () => <DiagonalArrowIcon direction="up" colorClass={FUCHSIA} />,
+  SPREAD: () => <DiagonalArrowIcon direction="down" colorClass={SLATE} />,
   OVER: () => <VerticalArrowIcon direction="up" colorClass={SKY} />,
   UNDER: () => <VerticalArrowIcon direction="down" colorClass={INDIGO} />,
   F5_ML: () => <F5MlIcon colorClass={VIOLET} />,
   FIRST_HALF_ML: () => <HalfIcon colorClass={AMBER_1H} />,
   FIRST_HALF_OVER: () => <VerticalArrowIcon direction="up" colorClass={AMBER_1H} />,
   FIRST_HALF_UNDER: () => <VerticalArrowIcon direction="down" colorClass={AMBER_1H} />,
+  FIRST_HALF_SPREAD: () => <DiagonalArrowIcon direction="down" colorClass={AMBER_1H} />,
   TD_PROP: () => <TdPropIcon />,
   NRFI: () => <BadgeIcon glyph="no" colorClass={RED} />,
   YRFI: () => <BadgeIcon glyph="yes" colorClass={EMERALD} />,

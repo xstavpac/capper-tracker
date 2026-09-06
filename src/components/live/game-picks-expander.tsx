@@ -3,7 +3,8 @@
 import { useState } from "react";
 import type { PickStatus } from "@prisma/client";
 import { getCategoryRecordsAction } from "@/server/actions/picks";
-import { getRecordColor, CATEGORY_RECENT_FORM_WINDOW, type CategoryBreakdownItem, type PickCategoryKey } from "@/server/data/stats";
+import { getRecordColor, CATEGORY_RECENT_FORM_WINDOW, splitSegmentCategoryKey, type CategoryBreakdownItem, type PickCategoryKey } from "@/server/data/stats";
+import { periodLabel } from "@/lib/bet-line";
 import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
 
 export type ExpanderPick = {
@@ -58,18 +59,21 @@ const TOP_PERFORMER_THRESHOLD = 60;
 
 // Fuller phrasing than the terse chip labels (PICK_CATEGORY_LABELS) used
 // elsewhere - "on underdog moneyline picks" reads naturally in a sentence,
-// where "Dog ML" doesn't.
-const CATEGORY_DESCRIPTIONS: Record<PickCategoryKey, string> = {
+// where "Dog ML" doesn't. Segment categories (Q1 Over, 2H ML, ...) aren't
+// listed - they're derived in categoryDescription below from periodLabel.
+const CATEGORY_DESCRIPTIONS: Partial<Record<PickCategoryKey, string>> = {
   FAV_ML: "favorite moneyline",
   DOG_ML: "underdog moneyline",
   SPREAD_MINUS: "favorite spread",
   SPREAD_PLUS: "underdog spread",
+  SPREAD: "spread",
   OVER: "over",
   UNDER: "under",
   F5_ML: "first-half moneyline",
   FIRST_HALF_ML: "first-half moneyline",
   FIRST_HALF_OVER: "first-half over",
   FIRST_HALF_UNDER: "first-half under",
+  FIRST_HALF_SPREAD: "first-half spread",
   TD_PROP: "touchdown prop",
   NRFI: "NRFI",
   YRFI: "YRFI",
@@ -79,6 +83,20 @@ const CATEGORY_DESCRIPTIONS: Record<PickCategoryKey, string> = {
   F5_UNDER: "first-half under",
   TEAM_TOTAL: "team total",
 };
+
+// "1st quarter over", "2nd half moneyline", "1st period under" for a segment
+// category; the static phrasing above otherwise.
+function categoryDescription(key: PickCategoryKey): string {
+  const base = CATEGORY_DESCRIPTIONS[key];
+  if (base) return base;
+  const seg = splitSegmentCategoryKey(key);
+  if (seg) {
+    // side.toLowerCase() covers over / under / spread; ML is spelled out.
+    const sideWord = seg.side === "ML" ? "moneyline" : seg.side.toLowerCase();
+    return `${periodLabel(seg.period)} ${sideWord}`;
+  }
+  return "this category";
+}
 
 function ListIcon() {
   return (
@@ -213,7 +231,7 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
                   <ColoredRecord record={record} />{" "}
                 </>
               )}
-              <span className="text-muted-foreground">on {CATEGORY_DESCRIPTIONS[p.category]} picks</span>
+              <span className="text-muted-foreground">on {categoryDescription(p.category)} picks</span>
             </span>
           ) : (
             <span className="text-[10px] text-muted-foreground"> &middot; No history in this category yet</span>
