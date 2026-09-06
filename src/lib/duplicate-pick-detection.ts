@@ -32,6 +32,13 @@ export type ResolvedDupCandidate = {
   awayTeam: string;
   gameTimeMs: number;
   category: string; // pickCategory key - SPREAD_PLUS, FAV_ML, OVER, ...
+  // The pick's game-segment scope (Pick.period). pickCategory only forks
+  // OVER/UNDER/ML/SPREAD by period for FIRST_HALF, so without comparing this
+  // too a "Q1 over 12.5" and a full-game "over 54.5" on the same matchup both
+  // land in the OVER category and get wrongly flagged as duplicates of each
+  // other. Same team pair + same category + DIFFERENT period is a different
+  // bet and must never collide, no matter how close (or far) the lines are.
+  period: string; // Pick.period - FULL_GAME, FIRST_HALF, SECOND_HALF, FIRST_QUARTER, ...
   description: string; // the pick's own text, for naming the earlier copy
   // Non-null only when the caller found this pick already logged for the
   // user (the DB check). Its value is the label of the existing pick.
@@ -41,9 +48,9 @@ export type ResolvedDupCandidate = {
 // One flag per item that duplicates either a logged pick or an earlier item
 // in the same paste. Keyed by `index`. "First one wins": a DB match flags
 // immediately; otherwise the item is matched against the earlier RESOLVED
-// items (same capper + game + side-aware category, game times within
-// `maxGameTimeDriftMs`). Every resolved item joins the running set whether or
-// not it was flagged, so a third copy still matches the first.
+// items (same capper + game + side-aware category + game-segment period, game
+// times within `maxGameTimeDriftMs`). Every resolved item joins the running
+// set whether or not it was flagged, so a third copy still matches the first.
 export function computeDuplicateFlags(
   resolved: ResolvedDupCandidate[],
   maxGameTimeDriftMs: number
@@ -61,6 +68,7 @@ export function computeDuplicateFlags(
         (e) =>
           e.capperKey === r.capperKey &&
           e.category === r.category &&
+          e.period === r.period &&
           e.homeTeam === r.homeTeam &&
           e.awayTeam === r.awayTeam &&
           Math.abs(e.gameTimeMs - r.gameTimeMs) <= maxGameTimeDriftMs

@@ -272,14 +272,18 @@ export type DuplicateCheckItem = ResolvableItem & { capperName: string; period: 
 export type { DuplicateFlag };
 
 // A duplicate is specifically the SAME capper + SAME game + SAME bet type
-// AND side (e.g. two "Cubs Moneyline" picks) - NOT just the same team, and
-// NOT the same capper on the same game with a different bet (a capper can
-// legitimately have both "Cubs Moneyline" and "Cubs -1.5" on one game).
-// pickCategory already draws exactly that side-aware line (FAV_ML vs DOG_ML,
-// SPREAD_MINUS vs SPREAD_PLUS, OVER vs UNDER) for the app's existing
-// category panels, so it's reused here rather than re-deriving "same side"
-// from scratch. Odds/line/units are deliberately never compared - two picks
-// on the same side with different prices are still the same pick logged
+// AND side AND game-segment (e.g. two "Cubs Moneyline" picks) - NOT just the
+// same team, and NOT the same capper on the same game with a different bet (a
+// capper can legitimately have both "Cubs Moneyline" and "Cubs -1.5" on one
+// game, or a full-game "Over 54.5" AND a "Q1 Over 12.5").
+// pickCategory draws the side-aware line (FAV_ML vs DOG_ML, SPREAD_MINUS vs
+// SPREAD_PLUS, OVER vs UNDER), so it's reused here rather than re-deriving
+// "same side" from scratch - but pickCategory only forks by period for
+// FIRST_HALF, so `period` is compared alongside it: a quarter / 2nd-half /
+// period pick classifies into the same OVER/UNDER/ML/SPREAD bucket as its
+// full-game counterpart, and only the period tells them apart.
+// Odds/line/units are deliberately never compared - two picks on the same
+// side and segment with different prices are still the same pick logged
 // twice, per how this was scoped with the user, so "Clemson +6.5" and
 // "Clemson +7" are already the same SPREAD_PLUS pick here.
 //
@@ -347,8 +351,13 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
           where: { userId: user.id, capperId: capper.id, homeTeam, awayTeam, gameTime: { gte: windowStart, lte: windowEnd } },
         });
         // existingPicks are matched to this exact game, so item.sportName is
-        // correct for all of them too.
-        const dbDup = existingPicks.find((p) => pickCategory({ ...p, sportName: item.sportName }) === category);
+        // correct for all of them too. period is compared explicitly (not
+        // just via pickCategory) - see this function's header comment: a Q1 /
+        // 2nd-half / period pick shares the plain OVER/UNDER/ML/SPREAD
+        // category with its full-game counterpart.
+        const dbDup = existingPicks.find(
+          (p) => p.period === period && pickCategory({ ...p, sportName: item.sportName }) === category
+        );
         if (dbDup) dbDuplicateLabel = dbDup.betDetail || betTypeLabel(dbDup.betType);
       }
 
@@ -360,6 +369,7 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
         awayTeam,
         gameTimeMs: gameTime.getTime(),
         category,
+        period,
         description: item.description,
         dbDuplicateLabel,
       };
