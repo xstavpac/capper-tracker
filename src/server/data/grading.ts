@@ -12,7 +12,7 @@ import {
 } from "@/server/data/odds";
 import { closestByTime, sameEasternDay } from "@/lib/dates";
 import { teamNamesMatch } from "@/lib/team-name-match";
-import { extractLine, parseTouchdownProp, nrfiSide } from "@/lib/bet-line";
+import { extractLine, parseTouchdownProp, nrfiSide, betScope } from "@/lib/bet-line";
 import { findTeamNickname, NCAAF_CANONICAL_SUFFIX } from "@/lib/parse-catalog";
 import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
 
@@ -295,6 +295,18 @@ export function gradePick(
   pickedSide?: PickedSide | null
 ): GradeOutcome {
   const detail = betDetail.toLowerCase();
+
+  // A pick whose text scopes it to a slice of the game the grader has no
+  // score source for (a single quarter, the 2nd half, one hockey period, a
+  // single inning) must NOT fall through to the branches below, which all
+  // grade against whatever homeScore/awayScore pair the caller passed - for a
+  // non-FIRST_HALF pick that's the full-game final. Returning null keeps the
+  // pick PENDING for manual grading instead of silently mis-grading it. NRFI
+  // is inherently first-inning-scoped and has its own score source (see
+  // resolveOutcome), so it's exempt. See bet-line.ts's betScope comment - a
+  // real "over 13.5 first quarter" pick graded WIN off a 27-point final here.
+  if (betType !== "NRFI" && betScope(betDetail) === "UNSUPPORTED_SEGMENT") return null;
+
   const homeNick = teamNickname(homeTeam);
   const awayNick = teamNickname(awayTeam);
 
@@ -539,6 +551,22 @@ export function resolveOutcome(
   },
   game: GameResult
 ): GradeOutcome {
+  // Segment-scope guard, re-derived from betDetail (Period only encodes
+  // FULL_GAME/FIRST_HALF - see bet-line.ts's betScope):
+  //  - UNSUPPORTED_SEGMENT (a quarter, 2nd half, a period, a lone inning):
+  //    no score source exists, so gradePick would grade it against the
+  //    full-game final. Decline -> stays PENDING.
+  //  - FIRST_HALF text on a pick the importer left as period=FULL_GAME: the
+  //    score selection below keys off pick.period, so this would also grade
+  //    against the full game. Decline rather than guess which half-score to
+  //    use.
+  // NRFI has its own first-inning score source and is exempt from both.
+  if (pick.betType !== "NRFI") {
+    const scope = betScope(pick.betDetail);
+    if (scope === "UNSUPPORTED_SEGMENT") return null;
+    if (scope === "FIRST_HALF" && pick.period !== "FIRST_HALF") return null;
+  }
+
   const homeScore =
     pick.betType === "NRFI"
       ? game.firstInningHomeScore

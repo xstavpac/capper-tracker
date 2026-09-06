@@ -15,7 +15,7 @@ import {
 } from "@/server/data/stats";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { easternDateRange } from "@/lib/dates";
-import { nrfiSide } from "@/lib/bet-line";
+import { nrfiSide, betScope } from "@/lib/bet-line";
 import { findMatchingGameResult, resolveOutcome, resolveTouchdownProp, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { FREE_PICK_LIMIT } from "@/lib/entitlements";
 import { getEntitlementsForUser, createPicksWithEntitlementCheck } from "@/server/data/subscriptions";
@@ -164,6 +164,13 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
           if (propResult.outcome === null) {
             unmatchedReason = "matched game, but " + propResult.reason;
           }
+        } else if (p.betType !== "NRFI" && betScope(p.betDetail) === "UNSUPPORTED_SEGMENT") {
+          // The pick's text scopes it to a slice of the game the grader has
+          // no score source for (a single quarter, the 2nd half, one hockey
+          // period, a lone inning). resolveOutcome deliberately returns null
+          // for these rather than grading against the full-game final - spell
+          // that out here so it doesn't read as the generic "no number" case.
+          unmatchedReason = "matched game, but this bet is scoped to a game segment (e.g. a quarter or period) the grader can't resolve yet - needs manual grading";
         } else if (!resolveOutcome(p, match.game)) {
           // Game matched fine - the score data is there, but gradePick still
           // couldn't produce WIN/LOSS/PUSH from this pick's own fields (most
