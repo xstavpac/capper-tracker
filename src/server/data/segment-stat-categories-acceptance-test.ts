@@ -1,0 +1,163 @@
+// Segment-scoped stat categories - run with:
+//   npx tsx src/server/data/segment-stat-categories-acceptance-test.ts
+//
+// Follow-up to the quarter/period grading + duplicate-detection PRs. Before
+// this, pickCategory only forked by period for FIRST_HALF; a Q1 / 2nd-half /
+// hockey-period pick collapsed into the plain FAV_ML / OVER / UNDER category
+// (and the plain MONEYLINE / TOTAL scorecard bucket) alongside full-game
+// picks - so a capper's "92% on favorite moneyline picks" silently mixed
+// full-game and quarter-scoped bets with a different risk profile.
+//
+// Proves:
+//  - segment ML / TOTAL picks get their own <period>_<side> category, one per
+//    Pick.period value (SECOND_HALF, FIRST_QUARTER..FOURTH_QUARTER,
+//    FIRST_PERIOD..THIRD_PERIOD)
+//  - full-game categories (FAV_ML, OVER, ...) and the scorecard's Moneyline /
+//    Total buckets no longer count those picks
+//  - a per-sport chip set (NBA_CHIP_SET etc.) excludes segment categories, so
+//    the capper "Record by category" tiles stay full-game-only; ALL_CATEGORY_
+//    KEYS includes them, so the /live game-card snippet shows a segment pick
+//    its own record
+//  - FIRST_HALF and F5 behavior is completely unchanged
+//  - segment SPREAD stays uncategorized, exactly as a non-MLB first-half
+//    spread already was
+
+import {
+  pickCategory,
+  computeScorecard,
+  computeCategoryBreakdown,
+  computeSpecialistTag,
+  chipSetForLeague,
+  ALL_CATEGORY_KEYS,
+  SEGMENT_CATEGORY_KEYS,
+  PICK_CATEGORY_LABELS,
+} from "@/server/data/stats";
+import type { Pick } from "@prisma/client";
+
+let failures = 0;
+function check(label: string, actual: unknown, expected: unknown) {
+  const pass = JSON.stringify(actual) === JSON.stringify(expected);
+  console.log(`${pass ? "PASS" : "FAIL"}: ${label} -> actual=${JSON.stringify(actual)} expected=${JSON.stringify(expected)}`);
+  if (!pass) failures++;
+}
+
+const cat = (over: {
+  betType: Pick["betType"];
+  period: Pick["period"];
+  betDetail: string;
+  sportName?: string;
+  line?: number | null;
+  pickedSide?: "HOME" | "AWAY" | null;
+}) =>
+  pickCategory({
+    betType: over.betType,
+    period: over.period,
+    betDetail: over.betDetail,
+    odds: -110,
+    line: over.line ?? null,
+    sportName: over.sportName ?? "NBA",
+    pickedSide: over.pickedSide ?? null,
+    mlFavoredSide: null,
+  });
+
+// ---------------------------------------------------------------------------
+console.log("########## pickCategory: segment picks get their own category ##########");
+
+check("full-game ML (fav) -> FAV_ML", cat({ betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Lakers ML", pickedSide: "HOME" }), "FAV_ML");
+check("Q1 ML -> FIRST_QUARTER_ML", cat({ betType: "MONEYLINE", period: "FIRST_QUARTER", betDetail: "Lakers 1Q ML" }), "FIRST_QUARTER_ML");
+check("Q2 ML -> SECOND_QUARTER_ML", cat({ betType: "MONEYLINE", period: "SECOND_QUARTER", betDetail: "Lakers Q2 ML" }), "SECOND_QUARTER_ML");
+check("Q3 ML -> THIRD_QUARTER_ML", cat({ betType: "MONEYLINE", period: "THIRD_QUARTER", betDetail: "Lakers 3Q ML" }), "THIRD_QUARTER_ML");
+check("Q4 ML -> FOURTH_QUARTER_ML", cat({ betType: "MONEYLINE", period: "FOURTH_QUARTER", betDetail: "Lakers 4Q ML" }), "FOURTH_QUARTER_ML");
+check("2nd half ML -> SECOND_HALF_ML", cat({ betType: "MONEYLINE", period: "SECOND_HALF", betDetail: "Lakers 2H ML" }), "SECOND_HALF_ML");
+check("NHL 1st period ML -> FIRST_PERIOD_ML", cat({ betType: "MONEYLINE", period: "FIRST_PERIOD", betDetail: "Rangers 1st period ML", sportName: "NHL" }), "FIRST_PERIOD_ML");
+check("NHL 2nd period ML -> SECOND_PERIOD_ML", cat({ betType: "MONEYLINE", period: "SECOND_PERIOD", betDetail: "Rangers P2 ML", sportName: "NHL" }), "SECOND_PERIOD_ML");
+check("NHL 3rd period ML -> THIRD_PERIOD_ML", cat({ betType: "MONEYLINE", period: "THIRD_PERIOD", betDetail: "Rangers 3rd period ML", sportName: "NHL" }), "THIRD_PERIOD_ML");
+
+check("full-game over -> OVER", cat({ betType: "TOTAL", period: "FULL_GAME", betDetail: "over 220.5" }), "OVER");
+check("Q1 over -> FIRST_QUARTER_OVER", cat({ betType: "TOTAL", period: "FIRST_QUARTER", betDetail: "over 55.5 1Q" }), "FIRST_QUARTER_OVER");
+check("Q1 under -> FIRST_QUARTER_UNDER", cat({ betType: "TOTAL", period: "FIRST_QUARTER", betDetail: "under 55.5 1Q" }), "FIRST_QUARTER_UNDER");
+check("2nd half under -> SECOND_HALF_UNDER", cat({ betType: "TOTAL", period: "SECOND_HALF", betDetail: "under 110.5 2H" }), "SECOND_HALF_UNDER");
+check("NHL 1st period over -> FIRST_PERIOD_OVER", cat({ betType: "TOTAL", period: "FIRST_PERIOD", betDetail: "over 1.5 1st period", sportName: "NHL" }), "FIRST_PERIOD_OVER");
+
+// SPREAD: no segment category, same as a non-MLB first-half spread.
+check("Q1 spread -> null (uncategorized, same as non-MLB 1H spread)", cat({ betType: "SPREAD", period: "FIRST_QUARTER", betDetail: "Lakers 1Q -3.5", line: -3.5 }), null);
+check("2nd half spread -> null", cat({ betType: "SPREAD", period: "SECOND_HALF", betDetail: "Lakers 2H -6.5", line: -6.5 }), null);
+
+// ---------------------------------------------------------------------------
+console.log("\n########## FIRST_HALF / F5 unchanged ##########");
+check("non-MLB 1H ML -> FIRST_HALF_ML (unchanged)", cat({ betType: "MONEYLINE", period: "FIRST_HALF", betDetail: "Lakers 1H ML" }), "FIRST_HALF_ML");
+check("non-MLB 1H over -> FIRST_HALF_OVER (unchanged)", cat({ betType: "TOTAL", period: "FIRST_HALF", betDetail: "over 110.5 1H" }), "FIRST_HALF_OVER");
+check("MLB F5 ML -> F5_ML (unchanged)", cat({ betType: "MONEYLINE", period: "FIRST_HALF", betDetail: "Yankees F5 ML", sportName: "MLB" }), "F5_ML");
+check("MLB F5 over -> F5_OVER (unchanged)", cat({ betType: "TOTAL", period: "FIRST_HALF", betDetail: "F5 over 4.5", sportName: "MLB" }), "F5_OVER");
+check("MLB F5 spread (fav) -> F5_SPREAD_MINUS (unchanged)", cat({ betType: "SPREAD", period: "FIRST_HALF", betDetail: "Yankees F5 -1.5", sportName: "MLB", line: -1.5 }), "F5_SPREAD_MINUS");
+check("non-MLB 1H spread -> null (unchanged)", cat({ betType: "SPREAD", period: "FIRST_HALF", betDetail: "Lakers 1H -3.5", line: -3.5 }), null);
+
+// ---------------------------------------------------------------------------
+console.log("\n########## labels + key set ##########");
+check("24 segment category keys (8 periods x ML/OVER/UNDER)", SEGMENT_CATEGORY_KEYS.length, 24);
+check("FIRST_QUARTER_OVER chip label", PICK_CATEGORY_LABELS["FIRST_QUARTER_OVER"], "Q1 Over");
+check("SECOND_HALF_ML chip label", PICK_CATEGORY_LABELS["SECOND_HALF_ML"], "2H ML");
+check("THIRD_PERIOD_UNDER chip label", PICK_CATEGORY_LABELS["THIRD_PERIOD_UNDER"], "P3 Under");
+check("segment keys are in ALL_CATEGORY_KEYS", SEGMENT_CATEGORY_KEYS.every((k) => ALL_CATEGORY_KEYS.includes(k)), true);
+check("segment keys are NOT in any per-sport chip set", ["NBA", "NFL", "NCAAF", "MLB", "NHL", "WNBA"].some((s) => chipSetForLeague(s).some((k) => (SEGMENT_CATEGORY_KEYS as string[]).includes(k))), false);
+
+// ---------------------------------------------------------------------------
+console.log("\n########## the capping scenario: full-game + Q1 ML records are separated ##########");
+
+let pid = 0;
+const pick = (over: Partial<Pick> & { status: Pick["status"]; betType: Pick["betType"]; period: Pick["period"]; betDetail: string }): Pick & { sport: { name: string } } =>
+  ({
+    id: "p" + pid++,
+    status: over.status,
+    betType: over.betType,
+    period: over.period,
+    betDetail: over.betDetail,
+    odds: -110,
+    line: over.line ?? null,
+    units: 1,
+    gameTime: new Date("2026-01-0" + ((pid % 8) + 1) + "T20:00:00Z"),
+    pickedSide: over.pickedSide ?? "HOME",
+    mlFavoredSide: null,
+    sport: { name: "NBA" },
+  }) as unknown as Pick & { sport: { name: string } };
+
+// 12-1 on full-game favorite ML, 1-3 on Q1 ML.
+const capperPicks = [
+  ...Array.from({ length: 12 }, () => pick({ status: "WIN", betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Nuggets ML" })),
+  pick({ status: "LOSS", betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Nuggets ML" }),
+  pick({ status: "WIN", betType: "MONEYLINE", period: "FIRST_QUARTER", betDetail: "Nuggets 1Q ML" }),
+  pick({ status: "LOSS", betType: "MONEYLINE", period: "FIRST_QUARTER", betDetail: "Nuggets 1Q ML" }),
+  pick({ status: "LOSS", betType: "MONEYLINE", period: "FIRST_QUARTER", betDetail: "Nuggets 1Q ML" }),
+  pick({ status: "LOSS", betType: "MONEYLINE", period: "FIRST_QUARTER", betDetail: "Nuggets 1Q ML" }),
+];
+
+// (a) the game-card snippet path: ALL_CATEGORY_KEYS -> both records, separated.
+const allBreakdown = computeCategoryBreakdown(capperPicks, ALL_CATEGORY_KEYS);
+const favMl = allBreakdown.find((b) => b.key === "FAV_ML");
+const q1Ml = allBreakdown.find((b) => b.key === "FIRST_QUARTER_ML");
+check("FAV_ML record is the full-game picks only: 12-1", favMl && [favMl.wins, favMl.losses], [12, 1]);
+check("FIRST_QUARTER_ML record is the Q1 picks only: 1-3", q1Ml && [q1Ml.wins, q1Ml.losses], [1, 3]);
+check("FAV_ML win% is 92 (13-decided, 12 W) - NOT diluted by the 1-3 Q1 record", favMl && Math.round(favMl.winPct), 92);
+
+// (b) the capper "Record by category" tiles path: chip set -> Q1 excluded.
+const nbaBreakdown = computeCategoryBreakdown(capperPicks, chipSetForLeague("NBA"));
+check("chip-set breakdown shows FAV_ML (12-1) and NOT FIRST_QUARTER_ML", nbaBreakdown.map((b) => b.key), ["FAV_ML"]);
+
+// (c) the scorecard: Moneyline bucket is full-game only, SEGMENT bucket holds Q1.
+const scorecard = computeScorecard(capperPicks as unknown as Pick[]);
+const mlBucket = scorecard.find((b) => b.key === "MONEYLINE");
+const segBucket = scorecard.find((b) => b.key === "SEGMENT");
+check("scorecard Moneyline bucket: 12-1 (full-game only)", mlBucket && [mlBucket.wins, mlBucket.losses], [12, 1]);
+check("scorecard SEGMENT bucket: 1-3 (the Q1 picks), labelled 'Quarter / period'", segBucket && [segBucket.wins, segBucket.losses, segBucket.label], [1, 3, "Quarter / period"]);
+
+// (d) specialist tag: a Q1-overs-heavy capper is tagged for that segment, not "Overs specialist".
+const q1OverHeavy = [
+  ...Array.from({ length: 8 }, () => pick({ status: "WIN", betType: "TOTAL", period: "FIRST_QUARTER", betDetail: "over 55.5 1Q" })),
+  ...Array.from({ length: 2 }, () => pick({ status: "LOSS", betType: "TOTAL", period: "FIRST_QUARTER", betDetail: "over 55.5 1Q" })),
+  pick({ status: "LOSS", betType: "TOTAL", period: "FULL_GAME", betDetail: "over 220.5" }),
+];
+const tag = computeSpecialistTag(q1OverHeavy);
+check("specialist tag is the 1st-quarter one, not a full-game 'Overs specialist'", tag && [tag.category, tag.label], ["FIRST_QUARTER_OVER", "1st quarter overs specialist"]);
+
+console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
+if (failures > 0) process.exit(1);

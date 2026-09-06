@@ -6,6 +6,7 @@ import {
   computeScorecard,
   computeCategoryBreakdown,
   ALL_CATEGORY_KEYS,
+  SEGMENT_CATEGORY_PERIODS,
   CATEGORY_RECENT_FORM_MIN_SAMPLE,
   CATEGORY_RECENT_FORM_WINDOW,
   type ScorecardBucket,
@@ -390,11 +391,13 @@ export async function getCapperScorecard(
   const key: ScorecardBucketKey =
     filter.period === "FIRST_HALF"
       ? "F5"
-      : filter.betType === "NRFI"
-        ? nrfiSide(filter.betDetail) === "YES_RUN"
-          ? "YRFI"
-          : "NRFI"
-        : (filter.betType as ScorecardBucketKey);
+      : (SEGMENT_CATEGORY_PERIODS as readonly string[]).includes(filter.period)
+        ? "SEGMENT"
+        : filter.betType === "NRFI"
+          ? nrfiSide(filter.betDetail) === "YES_RUN"
+            ? "YRFI"
+            : "NRFI"
+          : (filter.betType as ScorecardBucketKey);
   return buckets.filter((b) => b.key === key);
 }
 
