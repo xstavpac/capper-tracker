@@ -205,5 +205,64 @@ check(
   true
 );
 
+// ---------------------------------------------------------------------------
+console.log("\n########## audit follow-ups: nothing silently uncounted ##########");
+
+// A1: TEAM_TOTAL used to fall through bucketKeyForPick to
+// `pick.betType as ScorecardBucketKey` and vanish from computeScorecard.
+{
+  const picks = [
+    pick({ status: "WIN", betType: "TEAM_TOTAL", period: "FULL_GAME", betDetail: "Nuggets TT over 115.5" }),
+    pick({ status: "WIN", betType: "TEAM_TOTAL", period: "FULL_GAME", betDetail: "Nuggets TT over 115.5" }),
+    pick({ status: "LOSS", betType: "TEAM_TOTAL", period: "FULL_GAME", betDetail: "Nuggets TT over 115.5" }),
+    pick({ status: "WIN", betType: "TOTAL", period: "FULL_GAME", betDetail: "over 230.5" }),
+  ];
+  const sc = computeScorecard(picks as unknown as Pick[]);
+  check(
+    "scorecard now has a Team Total bucket (2-1), separate from Total (1-0)",
+    sc.map((b) => [b.key, b.wins, b.losses]),
+    [
+      ["TOTAL", 1, 0],
+      ["TEAM_TOTAL", 2, 1],
+    ]
+  );
+}
+// A1: team total is period-independent in the scorecard, same as its category
+// - a first-half / quarter team total goes to TEAM_TOTAL, not F5 / SEGMENT.
+check(
+  "1st-half team total -> TEAM_TOTAL bucket (not F5)",
+  computeScorecard([pick({ status: "WIN", betType: "TEAM_TOTAL", period: "FIRST_HALF", betDetail: "Nuggets 1H TT over 58.5" })] as unknown as Pick[]).map((b) => b.key),
+  ["TEAM_TOTAL"]
+);
+check(
+  "Q1 team total -> TEAM_TOTAL bucket (not SEGMENT)",
+  computeScorecard([pick({ status: "WIN", betType: "TEAM_TOTAL", period: "FIRST_QUARTER", betDetail: "Nuggets 1Q TT over 30.5" })] as unknown as Pick[]).map((b) => b.key),
+  ["TEAM_TOTAL"]
+);
+
+// A3/A4: a spread pick whose side can't be read (pick'em line / no line) now
+// gets the plain SPREAD category instead of null.
+check("full-game pick'em spread (line 0) -> SPREAD, not null", cat({ betType: "SPREAD", period: "FULL_GAME", betDetail: "Nuggets pk", line: 0 }), "SPREAD");
+check("full-game spread, no line, nothing parseable -> SPREAD, not null", cat({ betType: "SPREAD", period: "FULL_GAME", betDetail: "Nuggets spread", line: null }), "SPREAD");
+check("MLB F5 spread, no readable side -> SPREAD, not null", cat({ betType: "SPREAD", period: "FIRST_HALF", betDetail: "Yankees F5 spread", sportName: "MLB", line: null }), "SPREAD");
+check("a normal full-game spread is unchanged -> SPREAD_MINUS", cat({ betType: "SPREAD", period: "FULL_GAME", betDetail: "Nuggets -3.5", line: -3.5 }), "SPREAD_MINUS");
+check("plain SPREAD is in ALL_CATEGORY_KEYS (game card can show it) but NOT in any chip set", ALL_CATEGORY_KEYS.includes("SPREAD") && !["NBA", "NFL", "MLB", "NCAAF"].some((s) => chipSetForLeague(s).includes("SPREAD")), true);
+
+// A6: WNBA first-half is gradable, so WNBA gets a real chip set with the
+// FIRST_HALF_* keys instead of falling back to DEFAULT_CHIP_SET.
+check(
+  "WNBA chip set now carries the first-half categories",
+  ["FIRST_HALF_ML", "FIRST_HALF_OVER", "FIRST_HALF_UNDER", "FIRST_HALF_SPREAD"].every((k) => chipSetForLeague("WNBA").includes(k as never)),
+  true
+);
+check(
+  "WNBA 1H over pick lands in the WNBA chip-set breakdown (was excluded)",
+  computeCategoryBreakdown(
+    [pick({ status: "WIN", betType: "TOTAL", period: "FIRST_HALF", betDetail: "over 82.5 1H" })].map((p) => ({ ...p, sport: { name: "WNBA" } })) as unknown as (Pick & { sport: { name: string } })[],
+    chipSetForLeague("WNBA")
+  ).map((b) => b.key),
+  ["FIRST_HALF_OVER"]
+);
+
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);

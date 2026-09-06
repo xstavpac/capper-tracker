@@ -388,16 +388,20 @@ export async function getCapperScorecard(
   const buckets = computeScorecard(picks);
   if (!filter) return buckets;
 
+  // Mirror bucketKeyForPick's precedence exactly: TEAM_TOTAL is
+  // period-independent and wins over the FIRST_HALF / SEGMENT checks.
   const key: ScorecardBucketKey =
-    filter.period === "FIRST_HALF"
-      ? "F5"
-      : (SEGMENT_CATEGORY_PERIODS as readonly string[]).includes(filter.period)
-        ? "SEGMENT"
-        : filter.betType === "NRFI"
-          ? nrfiSide(filter.betDetail) === "YES_RUN"
-            ? "YRFI"
-            : "NRFI"
-          : (filter.betType as ScorecardBucketKey);
+    filter.betType === "TEAM_TOTAL"
+      ? "TEAM_TOTAL"
+      : filter.period === "FIRST_HALF"
+        ? "F5"
+        : (SEGMENT_CATEGORY_PERIODS as readonly string[]).includes(filter.period)
+          ? "SEGMENT"
+          : filter.betType === "NRFI"
+            ? nrfiSide(filter.betDetail) === "YES_RUN"
+              ? "YRFI"
+              : "NRFI"
+            : (filter.betType as ScorecardBucketKey);
   return buckets.filter((b) => b.key === key);
 }
 

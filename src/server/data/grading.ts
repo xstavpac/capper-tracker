@@ -661,7 +661,10 @@ export async function resolveTouchdownProp(
   // Gated here, first, before any of the NFL-specific team-nickname stripping
   // below even runs - the whole rest of this function assumes NFL.
   if (sportName !== "NFL") {
-    return { outcome: null, reason: "touchdown-prop grading isn't available for " + sportName + " yet" };
+    // Not "...yet" - player-prop grading is NFL-only by design (it reads
+    // ESPN's NFL box-score endpoint), not a roadmap gap. A non-NFL
+    // player-prop pick needs manual grading.
+    return { outcome: null, reason: "player-prop grading is NFL-only; this " + sportName + " pick needs manual grading" };
   }
 
   const parsed = pick.betDetail ? parseTouchdownProp(pick.betDetail) : null;

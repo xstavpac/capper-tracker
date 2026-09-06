@@ -66,6 +66,7 @@ const CATEGORY_DESCRIPTIONS: Partial<Record<PickCategoryKey, string>> = {
   DOG_ML: "underdog moneyline",
   SPREAD_MINUS: "favorite spread",
   SPREAD_PLUS: "underdog spread",
+  SPREAD: "spread",
   OVER: "over",
   UNDER: "under",
   F5_ML: "first-half moneyline",

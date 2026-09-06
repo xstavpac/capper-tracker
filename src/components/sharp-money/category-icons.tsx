@@ -235,6 +235,7 @@ const CATEGORY_ICONS: Record<PickCategoryKey, () => ReactElement> = {
   DOG_ML: () => <DogMlIcon />,
   SPREAD_MINUS: () => <DiagonalArrowIcon direction="down" colorClass={VIOLET} />,
   SPREAD_PLUS: () => <DiagonalArrowIcon direction="up" colorClass={FUCHSIA} />,
+  SPREAD: () => <DiagonalArrowIcon direction="down" colorClass={SLATE} />,
   OVER: () => <VerticalArrowIcon direction="up" colorClass={SKY} />,
   UNDER: () => <VerticalArrowIcon direction="down" colorClass={INDIGO} />,
   F5_ML: () => <F5MlIcon colorClass={VIOLET} />,

@@ -339,6 +339,12 @@ export type ScorecardBucketKey =
   | "SPREAD_PLUS"
   | "SPREAD"
   | "TOTAL"
+  // A team total (one team's own score vs a line) is a distinct market from
+  // TOTAL and must never be summed into it - the same reason it's a distinct
+  // BetType and a distinct pickCategory key. Was silently dropped from the
+  // scorecard before this: bucketKeyForPick fell through to
+  // `pick.betType as ScorecardBucketKey`, and "TEAM_TOTAL" wasn't a real key.
+  | "TEAM_TOTAL"
   | "PLAYER_PROP"
   | "F5"
   // Every quarter / 2nd-half / hockey-period pick, any bet type, in one
@@ -378,6 +384,7 @@ const SCORECARD_BUCKET_ORDER: ScorecardBucketKey[] = [
   "SPREAD_PLUS",
   "SPREAD",
   "TOTAL",
+  "TEAM_TOTAL",
   "PLAYER_PROP",
   "F5",
   "SEGMENT",
@@ -390,6 +397,7 @@ const SCORECARD_BUCKET_LABELS: Record<ScorecardBucketKey, string> = {
   SPREAD_PLUS: "Spread +",
   SPREAD: "Spread",
   TOTAL: "Total",
+  TEAM_TOTAL: "Team Total",
   PLAYER_PROP: "Player Prop",
   F5: "F5",
   SEGMENT: "Quarter / period",
@@ -422,6 +430,10 @@ function spreadSide(pick: {
 // "SPREAD" bucket stays as a fallback for the rare pick with no usable line
 // (missing or pick-em/0), so those still get one, rather than being dropped.
 function bucketKeyForPick(pick: Pick): ScorecardBucketKey {
+  // Team total is its own bucket regardless of period (same as pickCategory's
+  // TEAM_TOTAL key and betTypeFilterCategory) - checked first so a first-half
+  // or quarter team total doesn't land in F5 / SEGMENT instead.
+  if (pick.betType === "TEAM_TOTAL") return "TEAM_TOTAL";
   if (pick.period === "FIRST_HALF") return "F5";
   // Every non-full-game, non-first-half period (quarters, 2nd half, hockey
   // periods) shares one bucket, same as F5 - keeps the Moneyline/Spread/Total
@@ -560,6 +572,11 @@ export type PickCategoryKey =
   | "DOG_ML"
   | "SPREAD_MINUS"
   | "SPREAD_PLUS"
+  // Plain "SPREAD" is the fallback for a full-game / MLB-F5 spread pick whose
+  // side can't be read (line is pick'em/0, or missing and unparseable from
+  // betDetail) - it used to return null and vanish from every category stat.
+  // Mirrors the scorecard's own SPREAD fallback bucket. Not in any chip set.
+  | "SPREAD"
   | "OVER"
   | "UNDER"
   | "F5_ML"
@@ -688,6 +705,7 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   DOG_ML: "Dog ML",
   SPREAD_MINUS: "Spread -",
   SPREAD_PLUS: "Spread +",
+  SPREAD: "Spread",
   OVER: "Over",
   UNDER: "Under",
   F5_ML: "F5 ML",
@@ -794,21 +812,29 @@ export const NBA_CHIP_SET: PickCategoryKey[] = [
   "TEAM_TOTAL",
 ];
 
-// The remaining leagues the Team Total tile was asked for (NCAAB, NHL, WNBA,
-// KBO) have no bespoke chip set of their own today - they all fall back to
-// DEFAULT_CHIP_SET via chipSetForLeague. DEFAULT_CHIP_SET itself is also
-// shared by every OTHER sport this app recognizes but wasn't asked to get
-// this tile (CFL, MLS, UFC/MMA, ATP - see parse-catalog.ts's KNOWN_SPORTS),
-// so adding TEAM_TOTAL there directly would hand it to those too. Each of
-// the four gets its own one-line set (DEFAULT_CHIP_SET plus TEAM_TOTAL)
-// instead, registered below - same "a map entry, not a new branch"
-// reasoning CHIP_SET_BY_SPORT's own comment already gives. NBA used to be
-// in this group too (DEFAULT_CHIP_SET + TEAM_TOTAL, nothing sport-specific)
-// until it got its own first-half score source - see NBA_CHIP_SET above.
+// NCAAB, NHL, KBO have no first-half score source, so they just get
+// DEFAULT_CHIP_SET plus TEAM_TOTAL - same "a map entry, not a new branch"
+// reasoning CHIP_SET_BY_SPORT's own comment gives. (NBA used to be here too,
+// until it got its own first-half source - see NBA_CHIP_SET above.)
 const NCAAB_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
 const NHL_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
-const WNBA_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
 const KBO_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
+// WNBA has a first-half score source (persistFinalScores' supportsFirstHalf),
+// so its first-half ML/Over/Under/Spread picks are real gradable categories -
+// same chip set as NBA (no TD_PROP, basketball).
+const WNBA_CHIP_SET: PickCategoryKey[] = [
+  "FAV_ML",
+  "DOG_ML",
+  "SPREAD_MINUS",
+  "SPREAD_PLUS",
+  "OVER",
+  "UNDER",
+  "FIRST_HALF_ML",
+  "FIRST_HALF_OVER",
+  "FIRST_HALF_UNDER",
+  "FIRST_HALF_SPREAD",
+  "TEAM_TOTAL",
+];
 
 // Sport-specific chip sets, keyed by the sport's display label (uppercased)
 // - chipSetForLeague looks this up and falls back to DEFAULT_CHIP_SET for
@@ -834,6 +860,7 @@ const CHIP_SET_BY_SPORT: Record<string, PickCategoryKey[]> = {
 // FIRST_HALF_UNDER/TD_PROP, or any segment category).
 export const ALL_CATEGORY_KEYS: PickCategoryKey[] = [
   ...MLB_CHIP_SET,
+  "SPREAD",
   "FIRST_HALF_ML",
   "FIRST_HALF_OVER",
   "FIRST_HALF_UNDER",
@@ -899,11 +926,14 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
       // Non-MLB first-half spread gets its own single FIRST_HALF_SPREAD key
       // (it's gradable now - persistFinalScores' first-half score sources -
       // and used to return null, silently vanishing from category stats).
-      // MLB first-half spread keeps its favorite/underdog split.
+      // MLB first-half spread keeps its favorite/underdog split, falling back
+      // to plain SPREAD (not null) when the side can't be read.
       if (pick.sportName.toUpperCase() !== "MLB") return "FIRST_HALF_SPREAD";
-      return side === "FAVORITE" ? "F5_SPREAD_MINUS" : side === "UNDERDOG" ? "F5_SPREAD_PLUS" : null;
+      return side === "FAVORITE" ? "F5_SPREAD_MINUS" : side === "UNDERDOG" ? "F5_SPREAD_PLUS" : "SPREAD";
     }
-    return side === "FAVORITE" ? "SPREAD_MINUS" : side === "UNDERDOG" ? "SPREAD_PLUS" : null;
+    // Plain "SPREAD" (not null) when the pick is pick'em / has no usable line -
+    // mirrors bucketKeyForPick's own SPREAD fallback bucket.
+    return side === "FAVORITE" ? "SPREAD_MINUS" : side === "UNDERDOG" ? "SPREAD_PLUS" : "SPREAD";
   }
 
   if (pick.betType === "TEAM_TOTAL") {
@@ -969,6 +999,7 @@ const SPECIALIST_LABELS: Record<PickCategoryKey, string> = {
   DOG_ML: "Underdog specialist",
   SPREAD_MINUS: "Favorite spread specialist",
   SPREAD_PLUS: "Underdog spread specialist",
+  SPREAD: "Spread specialist",
   OVER: "Overs specialist",
   UNDER: "Unders specialist",
   F5_ML: "First-half specialist",
