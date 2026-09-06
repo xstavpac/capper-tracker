@@ -12,6 +12,7 @@ import {
 } from "@/server/actions/bulk-picks";
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
 import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
+import { isSkippedAsDuplicate, importButtonLabel } from "@/lib/duplicate-pick-detection";
 
 // Sentinel stored in capperFuzzyChoices when the user explicitly confirms a
 // name really is a new capper, not a typo of an existing one - distinct from
@@ -48,6 +49,12 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     skipped: number;
     errors: string[];
     unmatchedGames: string[];
+    // Picks left out because they matched an existing/earlier pick and the
+    // user either chose "Skip" or never answered the prompt (the default is
+    // to skip - see isPendingOrSkippedDuplicate). Captured client-side before
+    // the preview is cleared so the outcome names them, the same way
+    // unmatchedGames does for schedule misses.
+    skippedDuplicates: string[];
     pickLimitBlocked?: { message: string; remaining: number };
   } | null>(null);
   // Keyed by the raw capper name as it appears in the pasted text - value is
@@ -275,9 +282,10 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // A flagged duplicate is excluded from the import by default - "Skip" just
   // confirms that exclusion explicitly, "Import anyway" is the only way back
   // in. Every other valid pick imports normally, same as before this feature
-  // existed - only the flagged ones ever need a decision.
+  // existed - only the flagged ones ever need a decision. (Rule lives in
+  // duplicate-pick-detection.ts so it's covered by that module's test.)
   function isPendingOrSkippedDuplicate(idx: number): boolean {
-    return Boolean(duplicateFlags[idx]) && duplicateChoices[idx] !== "import";
+    return isSkippedAsDuplicate(Boolean(duplicateFlags[idx]), duplicateChoices[idx]);
   }
   // Same default-excluded-until-confirmed shape as duplicates - a flagged
   // auto-filled total line never imports until the user explicitly confirms
@@ -289,6 +297,12 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     (e) => !isPendingOrSkippedDuplicate(e.idx) && !isPendingOrRejectedTotalLine(e.idx)
   );
   const includedPicks = includedEntries.map((e) => e.p);
+  // Every flagged duplicate that won't be imported - the user's explicit
+  // "Skip" and the never-answered default alike. Drives both the pre-import
+  // button hint and the post-import summary.
+  const skippedDuplicateEntries = validEntries.filter((e) => isPendingOrSkippedDuplicate(e.idx));
+  const dedupeLabel = (p: ParsedPick) =>
+    resolvedCapperName(p.capperName) + " - " + p.sportName + " - " + p.description;
   const unresolvedDuplicateCount = validEntries.filter(
     (e) => duplicateFlags[e.idx] && duplicateChoices[e.idx] === undefined
   ).length;
@@ -327,7 +341,14 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   }
 
   async function handleImport() {
-    if (includedPicks.length === 0) return;
+    // Runs even at 0 included picks as long as there's something to report -
+    // re-pasting an already-imported catalog leaves nothing to import but
+    // still needs the "all N skipped as duplicates" outcome shown.
+    if (includedPicks.length === 0 && skippedDuplicateEntries.length === 0) return;
+    // Snapshot before the request - the preview (and this list) is cleared on
+    // success, and these picks were never sent to the server so it can't
+    // report them back.
+    const skippedDuplicates = skippedDuplicateEntries.map((e) => dedupeLabel(e.p));
     setImporting(true);
     const res = await bulkImportPicksAction(
       includedEntries.map(({ p, idx }) => ({
@@ -351,6 +372,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         skipped: res.skipped,
         errors: res.errors,
         unmatchedGames: res.unmatchedGames,
+        skippedDuplicates,
         pickLimitBlocked: res.pickLimitBlocked,
       });
       // Blocked by the pick limit means nothing was imported - keep the
@@ -687,10 +709,10 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
 
           <button
             onClick={handleImport}
-            disabled={importing || includedPicks.length === 0}
+            disabled={importing || (includedPicks.length === 0 && skippedDuplicateEntries.length === 0)}
             className="mt-3 rounded-full bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700 disabled:opacity-50"
           >
-            {importing ? "Importing..." : "Import " + includedPicks.length + " picks"}
+            {importing ? "Importing..." : importButtonLabel(includedPicks.length, skippedDuplicateEntries.length)}
           </button>
         </div>
       )}
@@ -711,7 +733,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       {result && !result.pickLimitBlocked && (
         <div className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
           Imported {result.imported} pick{result.imported === 1 ? "" : "s"}.
-          {result.skipped > 0 && " " + result.skipped + " skipped."}
+          {result.skipped + result.skippedDuplicates.length > 0 &&
+            " " + (result.skipped + result.skippedDuplicates.length) + " skipped."}
           {result.errors.length > 0 && (
             <ul className="mt-1 list-disc pl-4 text-xs text-red-600 dark:text-red-400">
               {result.errors.map((e, i) => (
@@ -727,6 +750,18 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
               <ul className="mt-1 list-disc pl-4">
                 {result.unmatchedGames.map((g, i) => (
                   <li key={i}>{g}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result.skippedDuplicates.length > 0 && (
+            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+              Skipped {result.skippedDuplicates.length} pick
+              {result.skippedDuplicates.length === 1 ? "" : "s"} as a possible duplicate - they
+              were NOT imported (either you chose Skip, or the prompt was left unanswered):
+              <ul className="mt-1 list-disc pl-4">
+                {result.skippedDuplicates.map((d, i) => (
+                  <li key={i}>{d}</li>
                 ))}
               </ul>
             </div>

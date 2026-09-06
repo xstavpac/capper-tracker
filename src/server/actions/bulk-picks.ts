@@ -20,6 +20,7 @@ import { NCAAF_CANONICAL_SUFFIX } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
+import { computeDuplicateFlags, type ResolvedDupCandidate, type DuplicateFlag } from "@/lib/duplicate-pick-detection";
 import type { BetType } from "@prisma/client";
 
 export type BulkImportItem = {
@@ -266,7 +267,9 @@ export async function previewMissingTotalLines(items: ResolvableItem[]): Promise
 }
 
 export type DuplicateCheckItem = ResolvableItem & { capperName: string; isFirstFive: boolean };
-export type DuplicateFlag = { message: string };
+// Re-exported so callers of checkDuplicatePicksAction keep importing it from
+// here; the shape lives in @/lib/duplicate-pick-detection now.
+export type { DuplicateFlag };
 
 // A duplicate is specifically the SAME capper + SAME game + SAME bet type
 // AND side (e.g. two "Cubs Moneyline" picks) - NOT just the same team, and
@@ -277,22 +280,30 @@ export type DuplicateFlag = { message: string };
 // category panels, so it's reused here rather than re-deriving "same side"
 // from scratch. Odds/line/units are deliberately never compared - two picks
 // on the same side with different prices are still the same pick logged
-// twice, per how this was scoped with the user. Read-only, same pattern as
-// previewBulkImportOdds: keyed by each item's position in the input array so
-// the caller can remap into `parsed` indices itself.
+// twice, per how this was scoped with the user, so "Clemson +6.5" and
+// "Clemson +7" are already the same SPREAD_PLUS pick here.
+//
+// Each item is checked against BOTH (a) this user's already-logged picks
+// and (b) the EARLIER items in this same paste. (b) is what catches the
+// "Clemson +6.5"/"Clemson +7" case: those never touch the database yet, so
+// a DB-only check (all this used to do) let a paste duplicate itself
+// silently. The first occurrence in the paste imports; the second onward is
+// flagged, exactly like a re-import of an already-logged pick.
+//
+// Read-only, same pattern as previewBulkImportOdds: keyed by each item's
+// position in the input array so the caller can remap into `parsed` indices.
 export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Promise<Record<number, DuplicateFlag>> {
   const user = await requireUser();
-  const flags: Record<number, DuplicateFlag> = {};
 
   const existingCappers = await prisma.capper.findMany({ where: { userId: user.id } });
   const capperByNormalizedName = new Map(existingCappers.map((c) => [normalizeName(c.name), c]));
 
-  await Promise.all(
-    items.map(async (item, i) => {
-      // A brand-new capper (not yet in this user's list) can't already have
-      // a pick logged, by definition.
-      const capper = capperByNormalizedName.get(normalizeName(item.capperName));
-      if (!capper) return;
+  const resolved = await Promise.all(
+    items.map(async (item, index): Promise<ResolvedDupCandidate | null> => {
+      const normalized = normalizeName(item.capperName);
+      const capper = capperByNormalizedName.get(normalized);
+      const capperKey = capper ? capper.id : "new:" + normalized;
+      const capperName = capper ? capper.name : item.capperName;
 
       // Only checked once resolved to a real scheduled game - without that,
       // "same game" has nothing reliable to compare against (see
@@ -300,7 +311,7 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
       // homeTeam/awayTeam values that aren't safe to match on).
       const { homeTeam, awayTeam, gameTime, odds, matched, pickedSide, mlFavoredSide } =
         await resolveGameAndOdds(item);
-      if (!matched) return;
+      if (!matched) return null;
 
       // odds (not item.odds) - for a pick with no explicit price, item.odds
       // is still the parser's un-resolved default and would misclassify a
@@ -324,25 +335,42 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
       });
       // Can't determine a comparable side for this bet (e.g. a player prop,
       // or a first-half spread) - don't guess at a match either way.
-      if (!category) return;
+      if (!category) return null;
 
-      const windowStart = new Date(gameTime.getTime() - MAX_GAME_TIME_DRIFT_MS);
-      const windowEnd = new Date(gameTime.getTime() + MAX_GAME_TIME_DRIFT_MS);
-      const existingPicks = await prisma.pick.findMany({
-        where: { userId: user.id, capperId: capper.id, homeTeam, awayTeam, gameTime: { gte: windowStart, lte: windowEnd } },
-      });
-
-      // existingPicks are matched to this exact game (same homeTeam/awayTeam
-      // window as item), so item.sportName is correct for all of them too.
-      const duplicate = existingPicks.find((p) => pickCategory({ ...p, sportName: item.sportName }) === category);
-      if (duplicate) {
-        const label = duplicate.betDetail || betTypeLabel(duplicate.betType);
-        flags[i] = { message: capper.name + " already has a " + label + " pick logged for this game." };
+      // A brand-new capper (not yet in this user's list) can't already have
+      // a pick logged, by definition - skip the DB read for them.
+      let dbDuplicateLabel: string | null = null;
+      if (capper) {
+        const windowStart = new Date(gameTime.getTime() - MAX_GAME_TIME_DRIFT_MS);
+        const windowEnd = new Date(gameTime.getTime() + MAX_GAME_TIME_DRIFT_MS);
+        const existingPicks = await prisma.pick.findMany({
+          where: { userId: user.id, capperId: capper.id, homeTeam, awayTeam, gameTime: { gte: windowStart, lte: windowEnd } },
+        });
+        // existingPicks are matched to this exact game, so item.sportName is
+        // correct for all of them too.
+        const dbDup = existingPicks.find((p) => pickCategory({ ...p, sportName: item.sportName }) === category);
+        if (dbDup) dbDuplicateLabel = dbDup.betDetail || betTypeLabel(dbDup.betType);
       }
+
+      return {
+        index,
+        capperKey,
+        capperName,
+        homeTeam,
+        awayTeam,
+        gameTimeMs: gameTime.getTime(),
+        category,
+        description: item.description,
+        dbDuplicateLabel,
+      };
     })
   );
 
-  return flags;
+  // The DB-vs-earlier-in-paste decision is pure (see duplicate-pick-detection.ts).
+  return computeDuplicateFlags(
+    resolved.filter((r): r is ResolvedDupCandidate => r !== null),
+    MAX_GAME_TIME_DRIFT_MS
+  );
 }
 
 export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<BulkImportResult> {
