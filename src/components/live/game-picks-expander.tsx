@@ -72,6 +72,7 @@ const CATEGORY_DESCRIPTIONS: Partial<Record<PickCategoryKey, string>> = {
   FIRST_HALF_ML: "first-half moneyline",
   FIRST_HALF_OVER: "first-half over",
   FIRST_HALF_UNDER: "first-half under",
+  FIRST_HALF_SPREAD: "first-half spread",
   TD_PROP: "touchdown prop",
   NRFI: "NRFI",
   YRFI: "YRFI",
@@ -89,6 +90,7 @@ function categoryDescription(key: PickCategoryKey): string {
   if (base) return base;
   const seg = splitSegmentCategoryKey(key);
   if (seg) {
+    // side.toLowerCase() covers over / under / spread; ML is spelled out.
     const sideWord = seg.side === "ML" ? "moneyline" : seg.side.toLowerCase();
     return `${periodLabel(seg.period)} ${sideWord}`;
   }

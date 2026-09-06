@@ -9,18 +9,19 @@
 // full-game and quarter-scoped bets with a different risk profile.
 //
 // Proves:
-//  - segment ML / TOTAL picks get their own <period>_<side> category, one per
-//    Pick.period value (SECOND_HALF, FIRST_QUARTER..FOURTH_QUARTER,
-//    FIRST_PERIOD..THIRD_PERIOD)
+//  - segment ML / TOTAL / SPREAD picks get their own <period>_<side>
+//    category, one per Pick.period value (SECOND_HALF,
+//    FIRST_QUARTER..FOURTH_QUARTER, FIRST_PERIOD..THIRD_PERIOD) - nothing
+//    returns null
+//  - non-MLB first-half SPREAD gets FIRST_HALF_SPREAD (was null before)
 //  - full-game categories (FAV_ML, OVER, ...) and the scorecard's Moneyline /
 //    Total buckets no longer count those picks
 //  - a per-sport chip set (NBA_CHIP_SET etc.) excludes segment categories, so
 //    the capper "Record by category" tiles stay full-game-only; ALL_CATEGORY_
 //    KEYS includes them, so the /live game-card snippet shows a segment pick
 //    its own record
-//  - FIRST_HALF and F5 behavior is completely unchanged
-//  - segment SPREAD stays uncategorized, exactly as a non-MLB first-half
-//    spread already was
+//  - FIRST_HALF and F5 behavior is otherwise unchanged (MLB F5 spread still
+//    splits favorite/underdog)
 
 import {
   pickCategory,
@@ -79,9 +80,12 @@ check("Q1 under -> FIRST_QUARTER_UNDER", cat({ betType: "TOTAL", period: "FIRST_
 check("2nd half under -> SECOND_HALF_UNDER", cat({ betType: "TOTAL", period: "SECOND_HALF", betDetail: "under 110.5 2H" }), "SECOND_HALF_UNDER");
 check("NHL 1st period over -> FIRST_PERIOD_OVER", cat({ betType: "TOTAL", period: "FIRST_PERIOD", betDetail: "over 1.5 1st period", sportName: "NHL" }), "FIRST_PERIOD_OVER");
 
-// SPREAD: no segment category, same as a non-MLB first-half spread.
-check("Q1 spread -> null (uncategorized, same as non-MLB 1H spread)", cat({ betType: "SPREAD", period: "FIRST_QUARTER", betDetail: "Lakers 1Q -3.5", line: -3.5 }), null);
-check("2nd half spread -> null", cat({ betType: "SPREAD", period: "SECOND_HALF", betDetail: "Lakers 2H -6.5", line: -6.5 }), null);
+// SPREAD: a single <period>_SPREAD key (no favorite/underdog split), never
+// null - the same "nothing falls through uncounted" fix as ML/TOTAL.
+check("Q1 spread -> FIRST_QUARTER_SPREAD", cat({ betType: "SPREAD", period: "FIRST_QUARTER", betDetail: "Lakers 1Q -3.5", line: -3.5 }), "FIRST_QUARTER_SPREAD");
+check("Q1 spread with no usable line -> still FIRST_QUARTER_SPREAD (never null)", cat({ betType: "SPREAD", period: "FIRST_QUARTER", betDetail: "Lakers 1Q spread", line: null }), "FIRST_QUARTER_SPREAD");
+check("2nd half spread -> SECOND_HALF_SPREAD", cat({ betType: "SPREAD", period: "SECOND_HALF", betDetail: "Lakers 2H -6.5", line: -6.5 }), "SECOND_HALF_SPREAD");
+check("NHL 3rd period spread -> THIRD_PERIOD_SPREAD", cat({ betType: "SPREAD", period: "THIRD_PERIOD", betDetail: "Rangers 3rd period -1.5", sportName: "NHL", line: -1.5 }), "THIRD_PERIOD_SPREAD");
 
 // ---------------------------------------------------------------------------
 console.log("\n########## FIRST_HALF / F5 unchanged ##########");
@@ -90,14 +94,17 @@ check("non-MLB 1H over -> FIRST_HALF_OVER (unchanged)", cat({ betType: "TOTAL", 
 check("MLB F5 ML -> F5_ML (unchanged)", cat({ betType: "MONEYLINE", period: "FIRST_HALF", betDetail: "Yankees F5 ML", sportName: "MLB" }), "F5_ML");
 check("MLB F5 over -> F5_OVER (unchanged)", cat({ betType: "TOTAL", period: "FIRST_HALF", betDetail: "F5 over 4.5", sportName: "MLB" }), "F5_OVER");
 check("MLB F5 spread (fav) -> F5_SPREAD_MINUS (unchanged)", cat({ betType: "SPREAD", period: "FIRST_HALF", betDetail: "Yankees F5 -1.5", sportName: "MLB", line: -1.5 }), "F5_SPREAD_MINUS");
-check("non-MLB 1H spread -> null (unchanged)", cat({ betType: "SPREAD", period: "FIRST_HALF", betDetail: "Lakers 1H -3.5", line: -3.5 }), null);
+check("non-MLB 1H spread -> FIRST_HALF_SPREAD (gap CLOSED - was null)", cat({ betType: "SPREAD", period: "FIRST_HALF", betDetail: "Lakers 1H -3.5", line: -3.5 }), "FIRST_HALF_SPREAD");
+check("non-MLB 1H spread with no line -> still FIRST_HALF_SPREAD (never null)", cat({ betType: "SPREAD", period: "FIRST_HALF", betDetail: "Lakers 1H spread", line: null }), "FIRST_HALF_SPREAD");
+check("FIRST_HALF_SPREAD is in the NFL / NCAAF / NBA chip sets", ["NFL", "NCAAF", "NBA"].every((s) => chipSetForLeague(s).includes("FIRST_HALF_SPREAD")), true);
 
 // ---------------------------------------------------------------------------
 console.log("\n########## labels + key set ##########");
-check("24 segment category keys (8 periods x ML/OVER/UNDER)", SEGMENT_CATEGORY_KEYS.length, 24);
+check("32 segment category keys (8 periods x ML/OVER/UNDER/SPREAD)", SEGMENT_CATEGORY_KEYS.length, 32);
 check("FIRST_QUARTER_OVER chip label", PICK_CATEGORY_LABELS["FIRST_QUARTER_OVER"], "Q1 Over");
 check("SECOND_HALF_ML chip label", PICK_CATEGORY_LABELS["SECOND_HALF_ML"], "2H ML");
 check("THIRD_PERIOD_UNDER chip label", PICK_CATEGORY_LABELS["THIRD_PERIOD_UNDER"], "P3 Under");
+check("FIRST_QUARTER_SPREAD chip label", PICK_CATEGORY_LABELS["FIRST_QUARTER_SPREAD"], "Q1 Spread");
 check("segment keys are in ALL_CATEGORY_KEYS", SEGMENT_CATEGORY_KEYS.every((k) => ALL_CATEGORY_KEYS.includes(k)), true);
 check("segment keys are NOT in any per-sport chip set", ["NBA", "NFL", "NCAAF", "MLB", "NHL", "WNBA"].some((s) => chipSetForLeague(s).some((k) => (SEGMENT_CATEGORY_KEYS as string[]).includes(k))), false);
 
@@ -158,6 +165,30 @@ const q1OverHeavy = [
 ];
 const tag = computeSpecialistTag(q1OverHeavy);
 check("specialist tag is the 1st-quarter one, not a full-game 'Overs specialist'", tag && [tag.category, tag.label], ["FIRST_QUARTER_OVER", "1st quarter overs specialist"]);
+
+// (e) SPREAD: full-game / Q1 / non-MLB-1H spread records are all separated,
+// and nothing lands in null.
+const spreadPicks = [
+  pick({ status: "WIN", betType: "SPREAD", period: "FULL_GAME", betDetail: "Nuggets -3.5", line: -3.5 }),
+  pick({ status: "LOSS", betType: "SPREAD", period: "FULL_GAME", betDetail: "Nuggets -3.5", line: -3.5 }),
+  pick({ status: "WIN", betType: "SPREAD", period: "FIRST_QUARTER", betDetail: "Nuggets 1Q -1.5", line: -1.5 }),
+  pick({ status: "WIN", betType: "SPREAD", period: "FIRST_HALF", betDetail: "Nuggets 1H -2.5", line: -2.5 }),
+];
+const spreadBreakdown = computeCategoryBreakdown(spreadPicks, ALL_CATEGORY_KEYS);
+check(
+  "spread records split by scope: SPREAD_MINUS 1-1, FIRST_QUARTER_SPREAD 1-0, FIRST_HALF_SPREAD 1-0",
+  spreadBreakdown.map((b) => [b.key, b.wins, b.losses]),
+  [
+    ["SPREAD_MINUS", 1, 1],
+    ["FIRST_HALF_SPREAD", 1, 0],
+    ["FIRST_QUARTER_SPREAD", 1, 0],
+  ]
+);
+check(
+  "every spread pick got a category - none dropped as null",
+  spreadPicks.every((p) => pickCategory({ ...p, sportName: "NBA" }) !== null),
+  true
+);
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);

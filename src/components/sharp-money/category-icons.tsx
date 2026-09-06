@@ -216,6 +216,8 @@ const SEGMENT_CATEGORY_ICONS = Object.fromEntries(
           <VerticalArrowIcon direction="up" colorClass={SLATE} />
         ) : side === "UNDER" ? (
           <VerticalArrowIcon direction="down" colorClass={SLATE} />
+        ) : side === "SPREAD" ? (
+          <DiagonalArrowIcon direction="down" colorClass={SLATE} />
         ) : (
           <HalfIcon colorClass={SLATE} />
         ),
@@ -239,6 +241,7 @@ const CATEGORY_ICONS: Record<PickCategoryKey, () => ReactElement> = {
   FIRST_HALF_ML: () => <HalfIcon colorClass={AMBER_1H} />,
   FIRST_HALF_OVER: () => <VerticalArrowIcon direction="up" colorClass={AMBER_1H} />,
   FIRST_HALF_UNDER: () => <VerticalArrowIcon direction="down" colorClass={AMBER_1H} />,
+  FIRST_HALF_SPREAD: () => <DiagonalArrowIcon direction="down" colorClass={AMBER_1H} />,
   TD_PROP: () => <TdPropIcon />,
   NRFI: () => <BadgeIcon glyph="no" colorClass={RED} />,
   YRFI: () => <BadgeIcon glyph="yes" colorClass={EMERALD} />,
