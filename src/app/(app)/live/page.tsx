@@ -126,6 +126,7 @@ export default async function LivePage({
         capperColorTag: p.capper.colorTag,
         capperIsFavorite: p.capper.isFavorite,
         category: pickCategory({ ...p, sportName: sportLabel }),
+        leagueName: sportLabel,
         betDetail: formatPickLabel(p.betDetail, p.betType, p.line) ?? betTypeLabel(p.betType),
         odds: p.odds,
         units: p.units,

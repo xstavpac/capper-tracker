@@ -5,6 +5,7 @@ import {
   computeStats,
   computeScorecard,
   computeCategoryBreakdown,
+  computeLeagueRecordCards,
   ALL_CATEGORY_KEYS,
   SEGMENT_CATEGORY_PERIODS,
   CATEGORY_RECENT_FORM_MIN_SAMPLE,
@@ -12,6 +13,7 @@ import {
   type ScorecardBucket,
   type ScorecardBucketKey,
   type CategoryBreakdownItem,
+  type LeagueRecordCard,
   type PickCategoryKey,
 } from "@/server/data/stats";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
@@ -439,6 +441,23 @@ export function categoryRecordKey(capperId: string, category: PickCategoryKey): 
 // independent of any sport the caller is looking at. Safe to query every
 // sport's picks together since pickCategory splits F5_ML (MLB) from
 // FIRST_HALF_ML.
+// Shared by getCapperCategoryRecords and getCapperLeagueRecords: ONE query
+// for every capper involved, grouped by capperId. Each capper's full pick
+// history (with sport.name, the only relation the breakdowns group by).
+async function fetchPicksByCapper(userId: string, capperIds: string[]) {
+  const picks = await prisma.pick.findMany({
+    where: { userId, capperId: { in: capperIds } },
+    include: { sport: { select: { name: true } } },
+  });
+  const byCapper = new Map<string, typeof picks>();
+  for (const pick of picks) {
+    const list = byCapper.get(pick.capperId);
+    if (list) list.push(pick);
+    else byCapper.set(pick.capperId, [pick]);
+  }
+  return byCapper;
+}
+
 export async function getCapperCategoryRecords(
   userId: string,
   pairs: { capperId: string; category: PickCategoryKey }[]
@@ -446,17 +465,7 @@ export async function getCapperCategoryRecords(
   const capperIds = Array.from(new Set(pairs.map((p) => p.capperId)));
   if (capperIds.length === 0) return {};
 
-  const picks = await prisma.pick.findMany({
-    where: { userId, capperId: { in: capperIds } },
-    include: { sport: { select: { name: true } } },
-  });
-
-  const byCapper = new Map<string, typeof picks>();
-  for (const pick of picks) {
-    const list = byCapper.get(pick.capperId);
-    if (list) list.push(pick);
-    else byCapper.set(pick.capperId, [pick]);
-  }
+  const byCapper = await fetchPicksByCapper(userId, capperIds);
 
   // One breakdown per capper (every category in one pass), indexed for O(1)
   // lookup. recentForm attaches item.recent (last-20 record by gameTime) for
@@ -474,6 +483,48 @@ export async function getCapperCategoryRecords(
   const out: Record<string, CategoryBreakdownItem | null> = {};
   for (const { capperId, category } of pairs) {
     out[categoryRecordKey(capperId, category)] = breakdownByCapper.get(capperId)?.get(category) ?? null;
+  }
+  return out;
+}
+
+export function leagueRecordKey(capperId: string, leagueSport: string, category: PickCategoryKey): string {
+  return capperId + "|" + leagueSport + "|" + category;
+}
+
+// The three-way (Overall / league / Last 20) form of getCapperCategoryRecords,
+// for the condensed game-card record line. Same one-query-per-batch,
+// one-computation-per-capper shape; reuses computeLeagueRecordCards (see
+// stats.ts) - no new aggregation. `leagueSport` is the game's sport (the
+// /live page has one per tab). Returns null for a (capper, category) the
+// capper has never had a pick in.
+export async function getCapperLeagueRecords(
+  userId: string,
+  pairs: { capperId: string; leagueSport: string; category: PickCategoryKey }[]
+): Promise<Record<string, LeagueRecordCard | null>> {
+  const capperIds = Array.from(new Set(pairs.map((p) => p.capperId)));
+  if (capperIds.length === 0) return {};
+
+  const byCapper = await fetchPicksByCapper(userId, capperIds);
+
+  // One computeLeagueRecordCards pass per (capper, leagueSport) - it already
+  // produces every category's card in that pass. ALL_CATEGORY_KEYS so a
+  // segment-scoped pick on the board still resolves to its own segment
+  // category (PR #22); a full-game category's card still excludes segment
+  // picks, since they classify under a different key.
+  const cardsByCapperLeague = new Map<string, Map<PickCategoryKey, LeagueRecordCard>>();
+  const seen = new Set<string>();
+  for (const { capperId, leagueSport } of pairs) {
+    const k = capperId + "|" + leagueSport;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const cards = computeLeagueRecordCards(byCapper.get(capperId) ?? [], leagueSport, ALL_CATEGORY_KEYS);
+    cardsByCapperLeague.set(k, new Map(cards.map((c) => [c.category, c])));
+  }
+
+  const out: Record<string, LeagueRecordCard | null> = {};
+  for (const { capperId, leagueSport, category } of pairs) {
+    out[leagueRecordKey(capperId, leagueSport, category)] =
+      cardsByCapperLeague.get(capperId + "|" + leagueSport)?.get(category) ?? null;
   }
   return out;
 }
