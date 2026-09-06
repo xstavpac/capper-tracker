@@ -48,9 +48,26 @@ enum PickStatus {
   CANCELLED
 }
 
+// Which slice of a game a pick is scoped to. Flat (not a kind+index pair)
+// because every consumer - grading, pickCategory, the bet-type filter, the
+// pick/parlay forms, ParlayLeg - already treats period as one enum column,
+// and a quarter score and a hockey-period score come from different places
+// in different sports anyway, so distinct self-documenting values beat a
+// generic QUARTER + index. FIRST_HALF stays "F5" for MLB / first half
+// elsewhere (unchanged). Quarters: NFL, NBA, WNBA, NCAAF. Periods: NHL.
+// SECOND_HALF: NFL/NBA/WNBA/NCAAF, derived as final minus first half (so it
+// includes OT, matching how books grade a 2nd-half bet).
 enum Period {
   FULL_GAME
   FIRST_HALF // "F5" in baseball terms, first half elsewhere
+  SECOND_HALF
+  FIRST_QUARTER
+  SECOND_QUARTER
+  THIRD_QUARTER
+  FOURTH_QUARTER
+  FIRST_PERIOD
+  SECOND_PERIOD
+  THIRD_PERIOD
 }
 
 enum PickedSide {
@@ -671,8 +688,19 @@ model GameResult {
   // persistFinalScores time, null for every other sport and for rows
   // predating this field" pattern as inningsJson above. Feeds NFL Game
   // Pulse's leadingAtHalftime (Q1+Q2) and trailingEntering4th (Q1+Q2+Q3)
-  // questions - see nfl-game-pulse-situations.ts.
+  // questions - see nfl-game-pulse-situations.ts. Kept NFL-only and unchanged
+  // for Game Pulse; linescoreJson below is the sport-generic version grading
+  // reads (for NFL the two hold the same data).
   quartersJson       Json?
+  // Per-segment {home, away} score array from ESPN's summary-endpoint
+  // linescores - one entry per completed quarter (NFL, NBA, WNBA, NCAAF) or
+  // period (NHL), in order, with any OT/shootout entries left on the end.
+  // Captured once at persistFinalScores time; null for MLB, for sports with
+  // no free box-score source, and for rows persisted before this shipped.
+  // grading.ts's resolveOutcome reads index 0..3 for FIRST_QUARTER..
+  // FOURTH_QUARTER and 0..2 for FIRST_PERIOD..THIRD_PERIOD; a pick whose
+  // segment index isn't present here stays PENDING rather than grading wrong.
+  linescoreJson      Json?
   // NFL only - every scoring play in the game, in chronological order, as
   // {home, away} running score snapshots (the score immediately after that
   // play - which team scored is derivable from which number increased, so
