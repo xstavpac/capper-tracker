@@ -21,24 +21,22 @@ locked set of 12 leagues, plus player-prop support for 4 of them.
 
 ### Current state (today)
 
-- **5 fully resolvable leagues** (odds + live scores + grading): **MLB, NBA,
-  WNBA, NFL, NCAAF**
-- **1 odds-only league** (odds polled and displayed, no grading yet): **NHL**
+- **6 fully resolvable leagues** (odds + live scores + grading): **MLB, NBA,
+  WNBA, NFL, NCAAF, NHL** (NHL added with quarter/period grading; inert until
+  the NHL season window opens 2026-10-07)
 - **Target:** **12 total leagues, 4 of them with player props**
 
-The 5 resolvable leagues are the ones listed in `RESOLVABLE_SPORT_KEYS`
-(`src/server/data/odds.ts`). NHL is in `LIVE_SPORTS` and `SPORT_SEASON_CONFIG`
-but is **deliberately absent** from `RESOLVABLE_SPORT_KEYS`, so its odds flow and
-display but nothing attempts to resolve or grade an NHL pick.
+The resolvable leagues are the ones listed in `RESOLVABLE_SPORT_KEYS`
+(`src/server/data/odds.ts`).
 
-| League | Odds | Live scores | Grading | Player props |
-| --- | --- | --- | --- | --- |
-| MLB | ✅ | ✅ | ✅ | ❌ (planned) |
-| NBA | ✅ | ✅ | ✅ | ✅ |
-| WNBA | ✅ | ✅ | ✅ | ❌ (not in scope) |
-| NFL | ✅ | ✅ | ✅ | ✅ |
-| NCAAF | ✅ | ✅ | ✅ | ❌ (not in scope) |
-| NHL | ✅ | ❌ | ❌ | ❌ (planned) |
+| League | Odds | Live scores | Grading | Segment grading | Player props |
+| --- | --- | --- | --- | --- | --- |
+| MLB | ✅ | ✅ | ✅ | F5, NRFI/YRFI | ❌ (planned) |
+| NBA | ✅ | ✅ | ✅ | 1H, 2H, Q1-Q4 | ✅ |
+| WNBA | ✅ | ✅ | ✅ | 1H, 2H, Q1-Q4 | ❌ (not in scope) |
+| NFL | ✅ | ✅ | ✅ | 1H, 2H, Q1-Q4 | ✅ |
+| NCAAF | ✅ | ✅ | ✅ | 1H, 2H, Q1-Q4 | ❌ (not in scope) |
+| NHL | ✅ | ✅ | ✅ | P1-P3 | ❌ (planned) |
 
 ### Target end state
 
@@ -349,8 +347,9 @@ it).
 
 ### Confirmed gaps (decided facts)
 
-- **No grading path exists today for CFL, KBO, ATP, WTA, NCAAB, or NHL.**
-  - NHL: has odds display, needs a score source + `RESOLVABLE_SPORT_KEYS` entry.
+- **No grading path exists today for CFL, KBO, ATP, WTA, or NCAAB.** (NHL now
+  grades - full game + P1-P3 - via `getNhlLiveScores` / `getEspnGameSegments`;
+  inert until the NHL season window opens.)
   - CFL, NCAAB: ESPN almost certainly covers them; the `getEspnScores` path
     shape needs confirming per sport.
   - KBO: MLB Stats API does **not** cover it. A Korean baseball score source
@@ -461,7 +460,7 @@ window scoping cut the game-line portion ~70%; adding MLB props then added
 | Per-league launch gate / Definition of Done (§4) | **Decided** |
 | UFC props excluded (no data) | **Decided** (provider limitation) |
 | Score sources for CFL/KBO/ATP/WTA/NCAAB | **Open** — research required |
-| NHL full grading | **Open** — needs score source |
+| NHL full grading | **Done** — full game + P1-P3 periods |
 | Build order across leagues | **Open** — deliberately not sequenced here |
 | Hourly-window polling schedule | **Open** — implementation task |
 | When to purchase the plan | **Open** — after infra is built & tested (§4) |

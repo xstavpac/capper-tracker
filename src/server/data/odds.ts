@@ -622,10 +622,9 @@ export function getNcaafLiveScores(): Promise<ScoreGame[]> {
 // grading (getEspnGameSegments -> GameResult.linescoreJson); "Final/OT" /
 // "Final/SO" status details remain unused (the score already accounts for them).
 //
-// NOT yet wired for grading: icehockey_nhl is deliberately absent from
-// RESOLVABLE_SPORT_KEYS, so nothing calls this in production yet (the grade
-// cron, the live-score routes, and catalog-import game resolution are all
-// gated on that list). Built dormant per docs/sports-props-expansion-plan.md.
+// icehockey_nhl is in RESOLVABLE_SPORT_KEYS, so the grade cron / live routes /
+// catalog-import game resolution all reach this - but the NHL season gate
+// (SPORT_SEASON_CONFIG: 2026-10-07) keeps it inert until the season opens.
 export function getNhlLiveScores(): Promise<ScoreGame[]> {
   return getEspnScores("hockey/nhl");
 }
@@ -748,6 +747,13 @@ export const RESOLVABLE_SPORT_KEYS = [
   "basketball_wnba",
   "americanfootball_nfl",
   "americanfootball_ncaaf",
+  // NHL: free score source (getNhlLiveScores) is confirmed live and has an
+  // acceptance test; full-game grading needs no NHL-specific code (see
+  // nhl-grading-acceptance-test.ts), and per-period grading (P1-P3) is wired
+  // via getEspnGameSegments + GameResult.linescoreJson. Inert until the NHL
+  // season window opens (SPORT_SEASON_CONFIG: 2026-10-07) - the season gate
+  // in dispatchLiveScoresForSport returns [] before then.
+  "icehockey_nhl",
 ];
 
 // Dispatches to the right free score source for a sport. Add a case here
