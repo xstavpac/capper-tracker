@@ -859,7 +859,14 @@ function parsePickText(description: string): {
     if (unitMatch) {
       units = parseFloat(unitMatch[1]);
     } else if (/^[+-]?\d+$/.test(val)) {
-      odds = parseInt(val, 10);
+      // American odds are never 0 (risk $X to win $0 is meaningless), so a
+      // parenthetical "(0)" / "(+0)" is a stray token, not a real price -
+      // treat it as no odds parsed, so odds falls through to the -110 default
+      // and the real-market lookup (bulk-picks' resolveGameAndOdds), same as
+      // any pick with no odds in its text. The manual pick form already
+      // rejects a 0 the same way (createPickAction).
+      const parsedOdds = parseInt(val, 10);
+      if (parsedOdds !== 0) odds = parsedOdds;
     }
   }
 

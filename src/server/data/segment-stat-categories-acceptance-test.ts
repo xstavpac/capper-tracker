@@ -34,6 +34,7 @@ import {
   SEGMENT_CATEGORY_KEYS,
   PICK_CATEGORY_LABELS,
 } from "@/server/data/stats";
+import { parseCatalog } from "@/lib/parse-catalog";
 import type { Pick } from "@prisma/client";
 
 let failures = 0;
@@ -263,6 +264,27 @@ check(
   ).map((b) => b.key),
   ["FIRST_HALF_OVER"]
 );
+
+// A5: a stray zero-odds token in a pasted pick (e.g. "(0)") must not land in
+// Pick.odds as 0 - that made favoriteOrUnderdog / pickCategory return null and
+// the pick vanish from every category stat. parsePickText now ignores a
+// parsed 0, so odds falls through to the -110 default (and, in bulk-picks,
+// the real-market lookup), and the pick classifies normally.
+for (const [label, text] of [
+  ["(0)", "Cody\nLakers ML (0)"],
+  ["(+0)", "Cody\nLakers ML (+0)"],
+  ["(0) with a real unit tag", "Cody\nLakers ML (0) 2u"],
+] as const) {
+  const p = parseCatalog(text).picks[0];
+  check(`stray zero-odds ${label} -> odds is the -110 default, not 0`, [p.odds, p.hasExplicitOdds], [-110, false]);
+  check(
+    `stray zero-odds ${label} -> pickCategory returns a real category, not null`,
+    pickCategory({ betType: p.betType, period: "FULL_GAME", betDetail: p.description, odds: p.odds, line: null, sportName: "NBA", pickedSide: null, mlFavoredSide: null }),
+    "FAV_ML",
+  );
+}
+check("a real odds token still parses through unchanged", parseCatalog("Cody\nLakers ML (-150)").picks[0].odds, -150);
+check("(0) doesn't eat the unit size", parseCatalog("Cody\nLakers ML (0) 2u").picks[0].units, 2);
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
