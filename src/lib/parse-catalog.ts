@@ -1,5 +1,5 @@
 import { normalizeName } from "@/lib/fuzzy-match";
-import { parseTouchdownProp } from "@/lib/bet-line";
+import { parseTouchdownProp, pickPeriodFromText, type SegmentPeriod } from "@/lib/bet-line";
 
 export type ParsedPick = {
   capperName: string;
@@ -10,7 +10,11 @@ export type ParsedPick = {
   hasExplicitOdds: boolean;
   totalSide?: "over" | "under";
   units: number;
-  isFirstFive: boolean;
+  // Which slice of the game this pick is scoped to, derived from the text via
+  // bet-line.ts's betScope - stored on Pick.period at import (see bulk-picks).
+  // "FIRST_HALF" still doubles as MLB's F5. Was a bare isFirstFive boolean
+  // before quarter/period grading existed.
+  period: SegmentPeriod;
   raw: string;
   ambiguous?: AmbiguousOption[];
   // The AMBIGUOUS_NICKNAMES key (e.g. "cardinals") that produced `ambiguous`,
@@ -837,7 +841,7 @@ function parsePickText(description: string): {
   betType: ParsedPick["betType"];
   odds: number | null;
   units: number;
-  isFirstFive: boolean;
+  period: SegmentPeriod;
   cleanDescription: string;
   totalSide?: "over" | "under";
 } {
@@ -877,23 +881,14 @@ function parsePickText(description: string): {
   let cleanDescription = description.replace(/\([^)]*\)/g, "");
   if (bareUnitPhrase) cleanDescription = cleanDescription.replace(bareUnitPhrase, "");
   cleanDescription = cleanDescription.replace(/\s{2,}/g, " ").trim();
-  // Catches both abbreviated ("F5", "1st 5"/"1st5") and fully spelled-out
-  // ("first 5", "first five", "1st five") phrasing - the abbreviated-only
-  // version silently left every spelled-out F5 pick stored as period=
-  // FULL_GAME (graded/priced against the wrong, full-game score). Also
-  // catches NFL's "1st half"/"first half" phrasing under this same flag -
-  // the field is still named for baseball's F5 (its original use), but
-  // Period.FIRST_HALF and the GameResult columns it reads (see grading.ts's
-  // resolveOutcome) are already sport-generic, so NFL just reuses the same
-  // flag rather than needing its own.
-  const isFirstFive =
-    /\bf5\b/i.test(cleanDescription) ||
-    /\b1st\s*5\b/i.test(cleanDescription) ||
-    /\bfirst\s*5\b/i.test(cleanDescription) ||
-    /\b1st\s+five\b/i.test(cleanDescription) ||
-    /\bfirst\s+five\b/i.test(cleanDescription) ||
-    /\b1st\s*half\b/i.test(cleanDescription) ||
-    /\bfirst\s*half\b/i.test(cleanDescription);
+  // Which slice of the game this pick is scoped to: F5 / first half (both map
+  // to FIRST_HALF), second half, an individual quarter (NFL/NBA/WNBA/NCAAF),
+  // or an individual period (NHL). One shared classifier (bet-line.ts) so the
+  // importer and grading.ts can never disagree on what "Q1" / "1st half" /
+  // "P2" means. A segment the grader has no score source for at all (a lone
+  // inning outside MLB's F5 path) collapses to FULL_GAME here and is declined
+  // later in grading, not graded against the full-game score.
+  const period = pickPeriodFromText(cleanDescription);
 
   // Bare team name with no qualifier (e.g. "Tampa Bay Rays") defaults to
   // MONEYLINE, not SPREAD - a straight team-name pick is the standard
@@ -939,7 +934,7 @@ function parsePickText(description: string): {
     betType = "SPREAD";
   }
 
-  return { betType, odds, units: units ?? 1, isFirstFive, cleanDescription, totalSide };
+  return { betType, odds, units: units ?? 1, period, cleanDescription, totalSide };
 }
 
 // Re-parses an ambiguous pick's original text now that the user has picked a
@@ -960,7 +955,7 @@ export function resolveAmbiguousPick(pick: ParsedPick, choice: AmbiguousOption):
     hasExplicitOdds: parsed.odds !== null,
     totalSide: parsed.totalSide,
     units: parsed.units,
-    isFirstFive: parsed.isFirstFive,
+    period: parsed.period,
     teamNicknames: [choice.nickname],
     ambiguous: undefined,
     ambiguousKey: undefined,
@@ -1482,7 +1477,7 @@ export function parseCatalog(
             hasExplicitOdds: parsed.odds !== null,
             totalSide: parsed.totalSide,
             units: parsed.units,
-            isFirstFive: parsed.isFirstFive,
+            period: parsed.period,
             raw: line,
             teamNicknames: pairResolved.teamNicknames,
           });
@@ -1499,7 +1494,7 @@ export function parseCatalog(
             odds: -110,
             hasExplicitOdds: false,
             units: 1,
-            isFirstFive: false,
+            period: "FULL_GAME",
             raw: line,
             ambiguous: found.options,
             ambiguousKey: found.key,
@@ -1520,7 +1515,7 @@ export function parseCatalog(
             hasExplicitOdds: parsed.odds !== null,
             totalSide: parsed.totalSide,
             units: parsed.units,
-            isFirstFive: parsed.isFirstFive,
+            period: parsed.period,
             raw: line,
             teamNicknames: matchupPick.playerKeys,
           });
@@ -1539,7 +1534,7 @@ export function parseCatalog(
             hasExplicitOdds: parsed.odds !== null,
             totalSide: parsed.totalSide,
             units: parsed.units,
-            isFirstFive: parsed.isFirstFive,
+            period: parsed.period,
             raw: line,
             teamNicknames: [playerPick.playerKey],
           });
@@ -1556,7 +1551,7 @@ export function parseCatalog(
         hasExplicitOdds: parsed.odds !== null,
         totalSide: parsed.totalSide,
         units: parsed.units,
-        isFirstFive: parsed.isFirstFive,
+        period: parsed.period,
         raw: line,
         teamNicknames: findTeamNicknames(detected.rest, detected.sportName),
       });
@@ -1597,7 +1592,7 @@ export function parseCatalog(
         hasExplicitOdds: parsed.odds !== null,
         totalSide: parsed.totalSide,
         units: parsed.units,
-        isFirstFive: parsed.isFirstFive,
+        period: parsed.period,
         raw: strippedText,
         teamNicknames: findTeamNicknames(detected.rest, detected.sportName),
       });
@@ -1621,7 +1616,7 @@ export function parseCatalog(
           hasExplicitOdds: parsed.odds !== null,
           totalSide: parsed.totalSide,
           units: parsed.units,
-          isFirstFive: parsed.isFirstFive,
+          period: parsed.period,
           raw: strippedText,
           teamNicknames: pairResolved.teamNicknames,
         });
@@ -1638,7 +1633,7 @@ export function parseCatalog(
           odds: -110,
           hasExplicitOdds: false,
           units: 1,
-          isFirstFive: false,
+          period: "FULL_GAME",
           raw: strippedText,
           ambiguous: found.options,
           ambiguousKey: found.key,
@@ -1659,7 +1654,7 @@ export function parseCatalog(
           hasExplicitOdds: parsed.odds !== null,
           totalSide: parsed.totalSide,
           units: parsed.units,
-          isFirstFive: parsed.isFirstFive,
+          period: parsed.period,
           raw: strippedText,
           teamNicknames: matchupPick.playerKeys,
         });
@@ -1678,7 +1673,7 @@ export function parseCatalog(
           hasExplicitOdds: parsed.odds !== null,
           totalSide: parsed.totalSide,
           units: parsed.units,
-          isFirstFive: parsed.isFirstFive,
+          period: parsed.period,
           raw: strippedText,
           teamNicknames: [playerPick.playerKey],
         });

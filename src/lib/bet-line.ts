@@ -138,6 +138,142 @@ export function nrfiSide(betDetail: string | null): NrfiSide | null {
   return null;
 }
 
+// Which slice of a game a pick's free text scopes it to, re-derived from
+// betDetail every time - the same "never stored, always re-read from
+// betDetail" pattern this file already uses for TOTAL's over/under side and
+// NRFI's yes/no side. Also the single source of truth for the pick's
+// Period: parse-catalog.ts maps this onto Period at import time, and
+// grading.ts re-runs it as a cross-check so an old / mis-tagged pick can
+// still grade (or safely decline) off its own text.
+//
+// The string values line up 1:1 with Prisma's Period enum, plus one extra:
+//   FULL_GAME      -> GameResult.homeScore / awayScore
+//   FIRST_HALF     -> GameResult.firstFive{Home,Away}Score  (F5 for MLB,
+//                     Q1+Q2 for NFL/NBA/WNBA/NCAAF - see persistFinalScores)
+//   SECOND_HALF    -> final minus first half (includes OT, as books grade it)
+//   FIRST_QUARTER..FOURTH_QUARTER   -> GameResult.linescoreJson[0..3]
+//                     (NFL, NBA, WNBA, NCAAF)
+//   FIRST_PERIOD..THIRD_PERIOD      -> GameResult.linescoreJson[0..2]  (NHL)
+//   UNSUPPORTED_SEGMENT -> a segment with no score source at all (a single
+//                     inning outside MLB's F5 path, etc.) - grading returns
+//                     null so the pick stays PENDING for manual grading
+//                     rather than being graded against the full-game score.
+//
+// A segment that IS a known Period but has no data for a specific game (the
+// linescore array came back short, first-half score never captured) also
+// ends up PENDING - that check lives in grading.ts, not here.
+export type SegmentPeriod =
+  | "FULL_GAME"
+  | "FIRST_HALF"
+  | "SECOND_HALF"
+  | "FIRST_QUARTER"
+  | "SECOND_QUARTER"
+  | "THIRD_QUARTER"
+  | "FOURTH_QUARTER"
+  | "FIRST_PERIOD"
+  | "SECOND_PERIOD"
+  | "THIRD_PERIOD";
+
+export type BetScope = SegmentPeriod | "UNSUPPORTED_SEGMENT";
+
+// First match wins, so order matters: quarters and hockey periods (the most
+// specific phrasings) are tested before the broader half patterns, and the
+// inning fallback is last. Every pattern is word-boundaried and lower-cased.
+const BET_SCOPE_RULES: [RegExp, BetScope][] = [
+  // ---- Quarters (NFL / NBA / WNBA / NCAAF) ----
+  [/\b(1st|first)[\s.-]*(quarter|qtr)\b/, "FIRST_QUARTER"],
+  [/\b(2nd|second)[\s.-]*(quarter|qtr)\b/, "SECOND_QUARTER"],
+  [/\b(3rd|third)[\s.-]*(quarter|qtr)\b/, "THIRD_QUARTER"],
+  [/\b(4th|fourth)[\s.-]*(quarter|qtr)\b/, "FOURTH_QUARTER"],
+  [/\b(quarter|qtr)\s*1\b/, "FIRST_QUARTER"],
+  [/\b(quarter|qtr)\s*2\b/, "SECOND_QUARTER"],
+  [/\b(quarter|qtr)\s*3\b/, "THIRD_QUARTER"],
+  [/\b(quarter|qtr)\s*4\b/, "FOURTH_QUARTER"],
+  [/\bq1\b/, "FIRST_QUARTER"],
+  [/\bq2\b/, "SECOND_QUARTER"],
+  [/\bq3\b/, "THIRD_QUARTER"],
+  [/\bq4\b/, "FOURTH_QUARTER"],
+  [/\b1q\b/, "FIRST_QUARTER"],
+  [/\b2q\b/, "SECOND_QUARTER"],
+  [/\b3q\b/, "THIRD_QUARTER"],
+  [/\b4q\b/, "FOURTH_QUARTER"],
+  // ---- Hockey periods (NHL) ----
+  // Spelled forms only for the "Nth period" phrasing; "P1/P2/P3" solid is
+  // safe, but the reverse "1P/2P/3P" is deliberately NOT matched - "3P" is
+  // an NBA three-pointers prop.
+  [/\b(1st|first)[\s.-]*period\b/, "FIRST_PERIOD"],
+  [/\b(2nd|second)[\s.-]*period\b/, "SECOND_PERIOD"],
+  [/\b(3rd|third)[\s.-]*period\b/, "THIRD_PERIOD"],
+  [/\bperiod\s*1\b/, "FIRST_PERIOD"],
+  [/\bperiod\s*2\b/, "SECOND_PERIOD"],
+  [/\bperiod\s*3\b/, "THIRD_PERIOD"],
+  [/\bp1\b/, "FIRST_PERIOD"],
+  [/\bp2\b/, "SECOND_PERIOD"],
+  [/\bp3\b/, "THIRD_PERIOD"],
+  // ---- Second half ----
+  [/\b(2nd|second)[\s.-]*half\b/, "SECOND_HALF"],
+  [/\b2h\b/, "SECOND_HALF"],
+  // ---- First half / first five innings (unchanged from PR #19) ----
+  [/\bf5\b/, "FIRST_HALF"],
+  [/\b1st\s*5\b/, "FIRST_HALF"],
+  [/\bfirst\s*5\b/, "FIRST_HALF"],
+  [/\b1st\s+five\b/, "FIRST_HALF"],
+  [/\bfirst\s+five\b/, "FIRST_HALF"],
+  [/\b1st[\s.-]*half\b/, "FIRST_HALF"],
+  [/\bfirst[\s.-]*half\b/, "FIRST_HALF"],
+  [/\b1h\b/, "FIRST_HALF"],
+  // ---- A single inning outside MLB's own F5/NRFI paths: no score source ----
+  [
+    /\b(1st|2nd|3rd|4th|5th|6th|7th|8th|9th|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth)\s+inning\b/,
+    "UNSUPPORTED_SEGMENT",
+  ],
+];
+
+export function betScope(betDetail: string | null): BetScope {
+  const t = (betDetail ?? "").toLowerCase();
+  for (const [re, scope] of BET_SCOPE_RULES) {
+    if (re.test(t)) return scope;
+  }
+  return "FULL_GAME";
+}
+
+// The Period a freshly-imported pick with this text should be stored as -
+// betScope, but with the ungradeable UNSUPPORTED_SEGMENT collapsed to
+// FULL_GAME (there's no Period value for it, and grading re-derives the real
+// scope from the text anyway and declines it there).
+export function pickPeriodFromText(betDetail: string | null): SegmentPeriod {
+  const scope = betScope(betDetail);
+  return scope === "UNSUPPORTED_SEGMENT" ? "FULL_GAME" : scope;
+}
+
+// Human-readable label for a Period / BetScope value, for pick-list badges
+// and the pending-picks triage reasons. Accepts a plain string so callers can
+// pass a Prisma Period without a cast.
+export function periodLabel(period: string): string {
+  switch (period) {
+    case "FIRST_HALF":
+      return "1st half / F5";
+    case "SECOND_HALF":
+      return "2nd half";
+    case "FIRST_QUARTER":
+      return "1st quarter";
+    case "SECOND_QUARTER":
+      return "2nd quarter";
+    case "THIRD_QUARTER":
+      return "3rd quarter";
+    case "FOURTH_QUARTER":
+      return "4th quarter";
+    case "FIRST_PERIOD":
+      return "1st period";
+    case "SECOND_PERIOD":
+      return "2nd period";
+    case "THIRD_PERIOD":
+      return "3rd period";
+    default:
+      return "full game";
+  }
+}
+
 export type TdPropType = "RUSHING" | "RECEIVING" | "ANY";
 
 // Extracts the player and TD type from an NFL touchdown-prop pick's free

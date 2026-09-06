@@ -236,7 +236,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         totalSide: e.p.totalSide,
         teamNicknames: e.p.teamNicknames,
         description: e.p.description,
-        isFirstFive: e.p.isFirstFive,
+        period: e.p.period,
       }))
     ).then((flags) => {
       setDuplicateFlags((prev) => {
@@ -389,7 +389,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         totalSide: p.totalSide,
         teamNicknames: p.teamNicknames,
         units: p.units,
-        isFirstFive: p.isFirstFive,
+        period: p.period,
         inferredLine: totalLineChoices[idx] === "confirm" ? totalLineFlags[idx]?.inferredLine : undefined,
       }))
     );

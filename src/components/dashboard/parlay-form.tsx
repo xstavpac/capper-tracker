@@ -278,6 +278,18 @@ export function ParlayForm({ cappers, sports }: { cappers: Capper[]; sports: Spo
                   >
                     <option value="FULL_GAME">Full game</option>
                     <option value="FIRST_HALF">First half / F5</option>
+                    <option value="SECOND_HALF">Second half</option>
+                    <optgroup label="Quarters (NFL / NBA / WNBA / NCAAF)">
+                      <option value="FIRST_QUARTER">1st quarter</option>
+                      <option value="SECOND_QUARTER">2nd quarter</option>
+                      <option value="THIRD_QUARTER">3rd quarter</option>
+                      <option value="FOURTH_QUARTER">4th quarter</option>
+                    </optgroup>
+                    <optgroup label="Periods (NHL)">
+                      <option value="FIRST_PERIOD">1st period</option>
+                      <option value="SECOND_PERIOD">2nd period</option>
+                      <option value="THIRD_PERIOD">3rd period</option>
+                    </optgroup>
                   </select>
                 </div>
 
