@@ -29,6 +29,7 @@ import {
   computeCategoryBreakdown,
   computeSpecialistTag,
   chipSetForLeague,
+  splitSegmentCategoryKey,
   ALL_CATEGORY_KEYS,
   SEGMENT_CATEGORY_KEYS,
   PICK_CATEGORY_LABELS,
@@ -106,6 +107,20 @@ check("SECOND_HALF_ML chip label", PICK_CATEGORY_LABELS["SECOND_HALF_ML"], "2H M
 check("THIRD_PERIOD_UNDER chip label", PICK_CATEGORY_LABELS["THIRD_PERIOD_UNDER"], "P3 Under");
 check("FIRST_QUARTER_SPREAD chip label", PICK_CATEGORY_LABELS["FIRST_QUARTER_SPREAD"], "Q1 Spread");
 check("segment keys are in ALL_CATEGORY_KEYS", SEGMENT_CATEGORY_KEYS.every((k) => ALL_CATEGORY_KEYS.includes(k)), true);
+// splitSegmentCategoryKey must round-trip EVERY generated key (it's called at
+// module-init in category-icons.tsx and per-pick in the game-card snippet - a
+// null here is a hard crash, not a silent miss). Regression guard for the
+// side-set drift that broke the SPREAD addition.
+check(
+  "splitSegmentCategoryKey round-trips all 32 segment keys, none null",
+  SEGMENT_CATEGORY_KEYS.every((k) => {
+    const s = splitSegmentCategoryKey(k);
+    return s !== null && `${s.period}_${s.side}` === k;
+  }),
+  true
+);
+check("splitSegmentCategoryKey(non-segment key) -> null", splitSegmentCategoryKey("FAV_ML"), null);
+check("splitSegmentCategoryKey(FIRST_HALF_SPREAD) -> null (base key, not a segment)", splitSegmentCategoryKey("FIRST_HALF_SPREAD"), null);
 check("segment keys are NOT in any per-sport chip set", ["NBA", "NFL", "NCAAF", "MLB", "NHL", "WNBA"].some((s) => chipSetForLeague(s).some((k) => (SEGMENT_CATEGORY_KEYS as string[]).includes(k))), false);
 
 // ---------------------------------------------------------------------------

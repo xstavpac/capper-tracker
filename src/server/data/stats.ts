@@ -618,6 +618,7 @@ type SegmentCategorySide = "ML" | "OVER" | "UNDER" | "SPREAD";
 export type SegmentCategoryKey = `${SegmentCategoryPeriod}_${SegmentCategorySide}`;
 
 const SEGMENT_CATEGORY_SIDES: SegmentCategorySide[] = ["ML", "OVER", "UNDER", "SPREAD"];
+const SEGMENT_CATEGORY_SIDE_SET = new Set<string>(SEGMENT_CATEGORY_SIDES);
 
 export const SEGMENT_CATEGORY_KEYS: SegmentCategoryKey[] = SEGMENT_CATEGORY_PERIODS.flatMap((p) =>
   SEGMENT_CATEGORY_SIDES.map((s) => `${p}_${s}` as SegmentCategoryKey)
@@ -678,7 +679,7 @@ export function splitSegmentCategoryKey(
   if (i < 0) return null;
   const period = key.slice(0, i);
   const side = key.slice(i + 1);
-  if (!SEGMENT_CATEGORY_PERIOD_SET.has(period) || (side !== "ML" && side !== "OVER" && side !== "UNDER")) return null;
+  if (!SEGMENT_CATEGORY_PERIOD_SET.has(period) || !SEGMENT_CATEGORY_SIDE_SET.has(side)) return null;
   return { period: period as SegmentCategoryPeriod, side: side as SegmentCategorySide };
 }
 
