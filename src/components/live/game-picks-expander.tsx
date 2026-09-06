@@ -90,11 +90,12 @@ export function ChevronIcon({ up }: { up: boolean }) {
   );
 }
 
-// One segment of the condensed record line ("Ovr 12-3", "NCAAF 8-2 (80%)",
-// "L20 4-1") - the label muted, the record green/red by its own win rate, the
-// current-league segment's label bold. Character content matches
-// gameCardRecordLineText (game-card-record-line.ts), which the width guard
-// tests against.
+// One segment of the condensed record line ("All 12-3 80%", "NCAAF 8-2 80%",
+// "L20 4-1 80%"). Every segment's record + % is green/red by its OWN win
+// rate; the current-league segment additionally gets bold weight (label and
+// numbers) since it's the number the viewer is deciding on. Character content
+// matches gameCardRecordLineText (game-card-record-line.ts), which the width
+// guard tests against.
 function RecordSegment({
   label,
   record,
@@ -104,23 +105,19 @@ function RecordSegment({
 }: {
   label: string;
   record: string;
-  pct: string | null;
+  pct: string;
   winPct: number;
   emphasized: boolean;
 }) {
+  const color =
+    getRecordColor(winPct) === "green"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : "text-red-600 dark:text-red-400";
   return (
     <span className="whitespace-nowrap">
-      <span className={emphasized ? "font-semibold text-foreground" : "text-muted-foreground"}>{label}</span>{" "}
-      <span
-        className={
-          "font-medium " +
-          (getRecordColor(winPct) === "green"
-            ? "text-emerald-600 dark:text-emerald-400"
-            : "text-red-600 dark:text-red-400")
-        }
-      >
-        {record}
-        {pct ? " (" + pct + ")" : ""}
+      <span className={emphasized ? "font-semibold text-muted-foreground" : "text-muted-foreground"}>{label}</span>{" "}
+      <span className={color + (emphasized ? " font-bold" : " font-medium")}>
+        {record} {pct}
       </span>
     </span>
   );
@@ -202,10 +199,10 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
             <span className="text-[10px] text-muted-foreground"> &middot; Loading record...</span>
           ) : segments.length > 0 ? (
             <span className="text-[10px]">
-              {segments.map((s) => (
-                <span key={s.label}>
-                  {" "}
-                  &middot; <RecordSegment {...s} />
+              {segments.map((s, i) => (
+                <span key={s.label} className="text-muted-foreground/60">
+                  {i === 0 ? " · " : " | "}
+                  <RecordSegment {...s} />
                 </span>
               ))}
             </span>
