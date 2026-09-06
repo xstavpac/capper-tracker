@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Pick, PickStatus, PickedSide } from "@prisma/client";
-import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, formatPickLabel, type OddsBucketKey } from "@/lib/bet-line";
+import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, formatPickLabel, periodLabel, type OddsBucketKey } from "@/lib/bet-line";
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
 import { cacheKeys } from "@/lib/cache-keys";
 import { cachedByTag } from "@/server/data/cached";
@@ -1085,7 +1085,12 @@ async function computeReportsData(userId: string) {
   const byBetType = groupBy((p) => ({ id: p.betType, name: betTypeLabel(p.betType) }));
   const byPeriod = groupBy((p) => ({
     id: p.period,
-    name: p.period === "FIRST_HALF" ? "First half / F5" : "Full game",
+    name:
+      p.period === "FIRST_HALF"
+        ? "First half / F5"
+        : p.period === "FULL_GAME"
+          ? "Full game"
+          : periodLabel(p.period).replace(/^./, (c) => c.toUpperCase()),
   }));
   const byFavoriteDog = groupBy((p) => {
     const side = favoriteOrUnderdog(p);

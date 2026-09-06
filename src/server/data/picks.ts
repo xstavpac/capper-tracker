@@ -15,7 +15,7 @@ import {
 } from "@/server/data/stats";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { easternDateRange } from "@/lib/dates";
-import { nrfiSide, betScope } from "@/lib/bet-line";
+import { nrfiSide, betScope, periodLabel } from "@/lib/bet-line";
 import { findMatchingGameResult, resolveOutcome, resolveTouchdownProp, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { FREE_PICK_LIMIT } from "@/lib/entitlements";
 import { getEntitlementsForUser, createPicksWithEntitlementCheck } from "@/server/data/subscriptions";
@@ -164,21 +164,22 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
           if (propResult.outcome === null) {
             unmatchedReason = "matched game, but " + propResult.reason;
           }
-        } else if (p.betType !== "NRFI" && betScope(p.betDetail) === "UNSUPPORTED_SEGMENT") {
-          // The pick's text scopes it to a slice of the game the grader has
-          // no score source for (a single quarter, the 2nd half, one hockey
-          // period, a lone inning). resolveOutcome deliberately returns null
-          // for these rather than grading against the full-game final - spell
-          // that out here so it doesn't read as the generic "no number" case.
-          unmatchedReason = "matched game, but this bet is scoped to a game segment (e.g. a quarter or period) the grader can't resolve yet - needs manual grading";
         } else if (!resolveOutcome(p, match.game)) {
-          // Game matched fine - the score data is there, but gradePick still
-          // couldn't produce WIN/LOSS/PUSH from this pick's own fields (most
-          // often a TOTAL/SPREAD pick with no parseable number anywhere in its
-          // betDetail). Without this, a pick like this stays PENDING forever
-          // with no visible reason at all, since findMatchingGameResult alone
-          // has nothing to complain about.
-          unmatchedReason = "matched game, but couldn't parse a gradable number from the bet text";
+          // Game matched fine but resolveOutcome couldn't produce WIN/LOSS/
+          // PUSH. Spell out which of the three reasons it is so this doesn't
+          // always read as the generic "no number" case.
+          const scope = p.betType === "NRFI" ? "FULL_GAME" : betScope(p.betDetail);
+          if (scope === "UNSUPPORTED_SEGMENT") {
+            unmatchedReason =
+              "matched game, but this bet is scoped to a game segment the grader can't resolve (e.g. a single inning outside MLB) - needs manual grading";
+          } else if (scope !== "FULL_GAME" && scope !== p.period) {
+            unmatchedReason =
+              "matched game, but this " + periodLabel(scope) + " pick predates segment grading - needs manual grading or re-import";
+          } else if (scope !== "FULL_GAME") {
+            unmatchedReason = "matched game, but the " + periodLabel(scope) + " score isn't posted for this game yet";
+          } else {
+            unmatchedReason = "matched game, but couldn't parse a gradable number from the bet text";
+          }
         }
       }
 

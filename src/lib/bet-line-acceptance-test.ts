@@ -9,7 +9,7 @@
 //
 // Pure: no DB, no imports beyond the module under test. Run with:
 //   npx tsx src/lib/bet-line-acceptance-test.ts
-import { formatPickLabel } from "@/lib/bet-line";
+import { formatPickLabel, betScope, pickPeriodFromText, periodLabel } from "@/lib/bet-line";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -17,6 +17,64 @@ function check(label: string, actual: unknown, expected: unknown) {
   console.log(`${pass ? "PASS" : "FAIL"}: ${label} -> actual=${JSON.stringify(actual)} expected=${JSON.stringify(expected)}`);
   if (!pass) failures++;
 }
+
+// ---- betScope: classifying a pick's game-segment scope from its text ----
+// The full phrasing matrix. betScope lower-cases internally, so callers pass
+// raw betDetail. First match wins; quarters/periods are tested before the
+// broader half patterns.
+const SCOPE_CASES: [string, string][] = [
+  // full game
+  ["UNLV -7", "FULL_GAME"],
+  ["Dodgers/Padres over 8.5", "FULL_GAME"],
+  ["Curry 3P over 2.5", "FULL_GAME"], // "3P" (threes) must NOT read as THIRD_PERIOD
+  // first half / F5 (unchanged from PR #19)
+  ["over 20.5 1st half", "FIRST_HALF"],
+  ["first half spread -3", "FIRST_HALF"],
+  ["UNLV 1H over 20.5", "FIRST_HALF"],
+  ["Yankees F5 -1.5", "FIRST_HALF"],
+  ["first 5 innings under 4.5", "FIRST_HALF"],
+  // second half
+  ["over 27.5 2nd half", "SECOND_HALF"],
+  ["Hawaii second half +7", "SECOND_HALF"],
+  ["UNLV 2H -3", "SECOND_HALF"],
+  // quarters
+  ["over 13.5 first quarter", "FIRST_QUARTER"],
+  ["Hawaii 1st qtr ML", "FIRST_QUARTER"],
+  ["Q1 -3.5", "FIRST_QUARTER"],
+  ["UNLV 1Q over 6.5", "FIRST_QUARTER"],
+  ["quarter 1 total over 10", "FIRST_QUARTER"],
+  ["2nd quarter over 14.5", "SECOND_QUARTER"],
+  ["q2 spread", "SECOND_QUARTER"],
+  ["3rd quarter ML", "THIRD_QUARTER"],
+  ["over 14.5 q3", "THIRD_QUARTER"],
+  ["4th quarter under 12.5", "FOURTH_QUARTER"],
+  ["UNLV ML 4q", "FOURTH_QUARTER"],
+  // hockey periods
+  ["over 2.5 1st period", "FIRST_PERIOD"],
+  ["Jets 2nd period ML", "SECOND_PERIOD"],
+  ["3rd period over 1.5", "THIRD_PERIOD"],
+  ["p1 total over 1.5", "FIRST_PERIOD"],
+  ["period 3 ML", "THIRD_PERIOD"],
+  // no score source anywhere -> UNSUPPORTED_SEGMENT
+  ["over 0.5 1st inning", "UNSUPPORTED_SEGMENT"],
+  ["yankees 7th inning over 0.5", "UNSUPPORTED_SEGMENT"],
+];
+for (const [text, expected] of SCOPE_CASES) {
+  check(`betScope(${JSON.stringify(text)})`, betScope(text), expected);
+}
+
+// pickPeriodFromText collapses only the ungradeable UNSUPPORTED_SEGMENT to
+// FULL_GAME (it has no Period value); everything else passes through.
+check("pickPeriodFromText: Q1 text -> FIRST_QUARTER", pickPeriodFromText("over 13.5 first quarter"), "FIRST_QUARTER");
+check("pickPeriodFromText: 2H text -> SECOND_HALF", pickPeriodFromText("over 27.5 2nd half"), "SECOND_HALF");
+check("pickPeriodFromText: lone-inning text -> FULL_GAME (no Period for it)", pickPeriodFromText("over 0.5 1st inning"), "FULL_GAME");
+check("pickPeriodFromText: plain text -> FULL_GAME", pickPeriodFromText("UNLV -7"), "FULL_GAME");
+
+check("periodLabel(FIRST_QUARTER)", periodLabel("FIRST_QUARTER"), "1st quarter");
+check("periodLabel(SECOND_HALF)", periodLabel("SECOND_HALF"), "2nd half");
+check("periodLabel(THIRD_PERIOD)", periodLabel("THIRD_PERIOD"), "3rd period");
+check("periodLabel(FIRST_HALF)", periodLabel("FIRST_HALF"), "1st half / F5");
+check("periodLabel(FULL_GAME)", periodLabel("FULL_GAME"), "full game");
 
 // (a) betDetail with no number + line present -> number appended.
 check("(a) 'Athletics Under' + line 7.5 -> appended", formatPickLabel("Athletics Under", "TOTAL", 7.5), "Athletics Under 7.5");

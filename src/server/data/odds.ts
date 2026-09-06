@@ -618,9 +618,9 @@ export function getNcaafLiveScores(): Promise<ScoreGame[]> {
 // `competitor.score` is the final score INCLUDING overtime and the shootout
 // deciding goal, which is exactly what sportsbooks grade NHL moneyline / puck
 // line / total against, so no OT/SO-specific handling is needed here or in
-// gradePick. Period-by-period `linescores` and the "Final/OT"/"Final/SO"
-// status detail are also present but unused for now - full-game markets only,
-// same initial scope as every other ESPN-backed sport.
+// gradePick. Per-period `linescores` from the summary endpoint feed P1-P3
+// grading (getEspnGameSegments -> GameResult.linescoreJson); "Final/OT" /
+// "Final/SO" status details remain unused (the score already accounts for them).
 //
 // NOT yet wired for grading: icehockey_nhl is deliberately absent from
 // RESOLVABLE_SPORT_KEYS, so nothing calls this in production yet (the grade
@@ -959,80 +959,72 @@ export async function getNflGameFacts(eventId: string): Promise<NflGameFacts | n
   return { firstHalf, quarters, scoringPlays, turnovers };
 }
 
-// Same first-half-only linescores parsing getNflGameFacts above does for
-// NFL (before that function grew quarters/scoringPlays/turnovers for Game
-// Pulse), just the college-football summary endpoint instead - confirmed
-// live against a real finished game (Ohio State 7-10-14-7, Penn State
-// 0-14-0-0) during the NFL/NCAAF category-tile investigation: identical
-// `competitors[].linescores[].displayValue` shape, so this is a straight
-// copy with the URL path swapped, not a new parsing approach. Kept as its
-// own function (not a shared helper taking a sport path) to match this
-// file's own precedent of one function per sport rather than a generic
-// dispatcher - see getNflGameFacts' comment for why only a Final game's
-// linescores should ever be read here.
-export async function getNcaafFirstHalfScore(eventId: string): Promise<{ home: number; away: number } | null> {
-  const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=" + eventId, {
-    next: { revalidate: 3600 },
-  });
-  if (!res.ok) return null;
+export type EspnGameSegments = {
+  // Ordered per-quarter (football/basketball) or per-period (hockey)
+  // {home, away} scores, straight from ESPN's summary-endpoint linescores.
+  // Any overtime / shootout entries are left on the end (index >= 4 for
+  // football/basketball, >= 3 for hockey), so a Q4 / P3 read never picks
+  // them up. null if the linescores are missing or any entry is non-numeric.
+  linescore: { home: number; away: number }[] | null;
+  // Q1+Q2 sum - the first-half score for football/basketball, grading's
+  // Period.FIRST_HALF source (same value getNflGameFacts.firstHalf returns).
+  // null for hockey (no first-half market) and whenever linescore is null or
+  // shorter than two entries.
+  firstHalf: { home: number; away: number } | null;
+};
 
-  const data = await res.json();
-  const competitors = data.header?.competitions?.[0]?.competitors ?? [];
+// The ESPN summary-endpoint sport path for each sport whose per-segment
+// linescore grading reads. Confirmed live for all five (NFL/NCAAF/NBA/WNBA
+// via the earlier first-half work, NHL during this build): identical
+// `header.competitions[0].competitors[].linescores[].displayValue` shape,
+// string values only (no numeric `value` field). Football/basketball have 4
+// quarter entries; NHL has 3 period entries, plus a 4th for OT and a 5th for
+// a shootout on games that reach them.
+const ESPN_SUMMARY_SPORT_PATH: Record<string, string> = {
+  americanfootball_nfl: "football/nfl",
+  americanfootball_ncaaf: "football/college-football",
+  basketball_nba: "basketball/nba",
+  basketball_wnba: "basketball/wnba",
+  icehockey_nhl: "hockey/nhl",
+};
+
+function parseEspnLinescores(data: any): { home: number; away: number }[] | null {
+  const competitors = data?.header?.competitions?.[0]?.competitors ?? [];
   const home = competitors.find((c: any) => c.homeAway === "home");
   const away = competitors.find((c: any) => c.homeAway === "away");
-  if (!home || !away) return null;
-
-  const sumFirstHalf = (linescores: any[] | undefined): number | null => {
-    if (!linescores || linescores.length < 2) return null;
-    const q1 = parseFloat(linescores[0]?.displayValue ?? "");
-    const q2 = parseFloat(linescores[1]?.displayValue ?? "");
-    if (Number.isNaN(q1) || Number.isNaN(q2)) return null;
-    return q1 + q2;
+  const nums = (linescores: any[] | undefined): number[] | null => {
+    if (!Array.isArray(linescores) || linescores.length === 0) return null;
+    const v = linescores.map((l: any) => parseFloat(l?.displayValue ?? ""));
+    return v.some((n) => Number.isNaN(n)) ? null : v;
   };
-
-  const homeFirstHalf = sumFirstHalf(home.linescores);
-  const awayFirstHalf = sumFirstHalf(away.linescores);
-  if (homeFirstHalf === null || awayFirstHalf === null) return null;
-
-  return { home: homeFirstHalf, away: awayFirstHalf };
+  const h = nums(home?.linescores);
+  const a = nums(away?.linescores);
+  if (!h || !a || h.length !== a.length) return null;
+  return h.map((hv, i) => ({ home: hv, away: a[i] }));
 }
 
-// Same first-half-only linescores parsing getNflGameFacts above does for
-// NFL, just the NBA summary endpoint instead - confirmed live against two
-// real finished games (PHI 109-97 ORL:
-// linescores [28,31,20,30]/[24,31,19,23], summing to the real final score on
-// both sides; GS 126-121 LAC: [22,31,30,43]/[31,30,28,32], same self-check)
-// during the NBA chip-set investigation: identical
-// `competitors[].linescores[].displayValue` shape as football, quarters
-// instead of halves-of-quarters but still index [0]/[1] = Q1/Q2 = first
-// half, so this is a straight copy with the URL path swapped, not a new
-// parsing approach. An overtime game just has extra linescores entries past
-// index 3, which sumFirstHalf never reads - doesn't affect this function.
-export async function getNbaFirstHalfScore(eventId: string): Promise<{ home: number; away: number } | null> {
-  const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=" + eventId, {
+// One fetch to ESPN's per-event summary endpoint for a FINAL game, returning
+// its per-segment linescore (+ derived first-half sum). Replaces the old
+// per-sport getNcaafFirstHalfScore / getNbaFirstHalfScore first-half-only
+// helpers with one function covering NCAAF, NBA, WNBA and NHL - NFL keeps its
+// own getNflGameFacts (which also pulls Game Pulse data from the same fetch).
+// Only call once a game is Final: an in-progress game reports incomplete
+// segments, same caution as getNflGameFacts / getMlbEarlyInningScores.
+export async function getEspnGameSegments(sportKey: string, eventId: string): Promise<EspnGameSegments | null> {
+  const path = ESPN_SUMMARY_SPORT_PATH[sportKey];
+  if (!path) return null;
+  const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/" + path + "/summary?event=" + eventId, {
     next: { revalidate: 3600 },
   });
   if (!res.ok) return null;
 
   const data = await res.json();
-  const competitors = data.header?.competitions?.[0]?.competitors ?? [];
-  const home = competitors.find((c: any) => c.homeAway === "home");
-  const away = competitors.find((c: any) => c.homeAway === "away");
-  if (!home || !away) return null;
-
-  const sumFirstHalf = (linescores: any[] | undefined): number | null => {
-    if (!linescores || linescores.length < 2) return null;
-    const q1 = parseFloat(linescores[0]?.displayValue ?? "");
-    const q2 = parseFloat(linescores[1]?.displayValue ?? "");
-    if (Number.isNaN(q1) || Number.isNaN(q2)) return null;
-    return q1 + q2;
-  };
-
-  const homeFirstHalf = sumFirstHalf(home.linescores);
-  const awayFirstHalf = sumFirstHalf(away.linescores);
-  if (homeFirstHalf === null || awayFirstHalf === null) return null;
-
-  return { home: homeFirstHalf, away: awayFirstHalf };
+  const linescore = parseEspnLinescores(data);
+  const firstHalf =
+    sportKey !== "icehockey_nhl" && linescore && linescore.length >= 2
+      ? { home: linescore[0].home + linescore[1].home, away: linescore[0].away + linescore[1].away }
+      : null;
+  return { linescore, firstHalf };
 }
 
 export type NflPlayerTdStats = {

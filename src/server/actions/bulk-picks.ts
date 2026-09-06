@@ -21,7 +21,7 @@ import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { computeDuplicateFlags, type ResolvedDupCandidate, type DuplicateFlag } from "@/lib/duplicate-pick-detection";
-import type { BetType } from "@prisma/client";
+import type { BetType, Period } from "@prisma/client";
 
 export type BulkImportItem = {
   capperName: string;
@@ -33,7 +33,7 @@ export type BulkImportItem = {
   totalSide?: "over" | "under";
   teamNicknames: string[];
   units: number;
-  isFirstFive: boolean;
+  period: Period;
   // Set only once the client has shown the user the auto-filled total line
   // (see previewMissingTotalLines) and they've confirmed it - never set for
   // a TOTAL pick that already has a real, valid number in its own text, and
@@ -266,7 +266,7 @@ export async function previewMissingTotalLines(items: ResolvableItem[]): Promise
   return results;
 }
 
-export type DuplicateCheckItem = ResolvableItem & { capperName: string; isFirstFive: boolean };
+export type DuplicateCheckItem = ResolvableItem & { capperName: string; period: Period };
 // Re-exported so callers of checkDuplicatePicksAction keep importing it from
 // here; the shape lives in @/lib/duplicate-pick-detection now.
 export type { DuplicateFlag };
@@ -321,7 +321,7 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
       // juiced pick'em, where without them "Phillies ML" and "Diamondbacks ML"
       // both classify as FAV_ML and the real opposite-side pick gets wrongly
       // flagged here as a duplicate of the first.
-      const period = item.isFirstFive ? "FIRST_HALF" : "FULL_GAME";
+      const period = item.period;
       const line = extractLine(item.betType, item.description);
       const category = pickCategory({
         betType: item.betType,
@@ -459,7 +459,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         betDetail: item.description,
         odds,
         line: extractedLine ?? item.inferredLine ?? null,
-        period: item.isFirstFive ? "FIRST_HALF" : "FULL_GAME",
+        period: item.period,
         units: item.units,
         gameTime,
         pickedSide,

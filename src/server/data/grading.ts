@@ -5,8 +5,7 @@ import {
   getOddsForSport,
   getMlbEarlyInningScores,
   getNflGameFacts,
-  getNcaafFirstHalfScore,
-  getNbaFirstHalfScore,
+  getEspnGameSegments,
   getNflPlayerTdStats,
   type OddsGame,
 } from "@/server/data/odds";
@@ -74,21 +73,31 @@ function deriveLedgerFields(
 }
 
 // Persists final scores for a sport's finished games into GameResult, so
-// gradePendingPicks has something to grade against. First-half scores are
-// only captured for sports with a free box-score-by-half source wired up
-// (MLB's innings-1-5, NFL/NCAAF/NBA's Q1+Q2) - period=FIRST_HALF picks in
-// every other sport just won't match (see gradePendingPicks) until one is
-// built for them too. All four write into the SAME firstFiveHomeScore/
-// AwayScore columns - the column names are MLB-flavored (this app's first
-// use), but resolveOutcome below already reads them generically for any
-// sport's period=FIRST_HALF pick, so none of the other three needed their
-// own columns.
+// gradePendingPicks has something to grade against. Segment scores are only
+// captured for sports with a free box-score source wired up:
+//   - MLB           -> innings 1 and 1-5 (firstInning*, firstFive* columns)
+//   - NFL/NCAAF/NBA/WNBA -> Q1+Q2 -> firstFive* columns; the full per-quarter
+//                     linescore -> linescoreJson (grades Q1..Q4 + 2nd half)
+//   - NHL           -> the full per-period linescore -> linescoreJson (grades
+//                     P1..P3; NHL has no first-half market so firstFive stays
+//                     null)
+// A period=FIRST_HALF / SECOND_HALF / quarter / hockey-period pick in any
+// sport without its source wired up just stays PENDING (resolveOutcome
+// returns null) rather than grading wrong. The firstFive* columns are
+// MLB-flavored by name only - resolveOutcome reads them generically.
 export async function persistFinalScores(sportKey: string): Promise<number> {
   const games = await getLiveScoresForSport(sportKey);
   const finals = games.filter((g) => g.status === "final" && g.scores);
   const supportsFirstFive = sportKey === "baseball_mlb";
   const supportsFirstHalf =
-    sportKey === "americanfootball_nfl" || sportKey === "americanfootball_ncaaf" || sportKey === "basketball_nba";
+    sportKey === "americanfootball_nfl" ||
+    sportKey === "americanfootball_ncaaf" ||
+    sportKey === "basketball_nba" ||
+    sportKey === "basketball_wnba";
+  // Football/basketball (quarters) plus NHL (periods) - every sport whose
+  // per-segment linescore ESPN's summary endpoint exposes (see
+  // getEspnGameSegments / getNflGameFacts).
+  const supportsLinescore = supportsFirstHalf || sportKey === "icehockey_nhl";
 
   // Same daily cache getOddsForSport always serves elsewhere - fetched once
   // for this whole batch (not per-game) to derive the team-trend ledger
@@ -120,46 +129,47 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
       const early = needsEarlyInnings ? await getMlbEarlyInningScores(g.id) : null;
       const firstInning = early?.firstInning ?? null;
 
-      // Same "only fetch what's still missing, values are immutable once a
-      // game is final" reasoning as MLB's early innings above. NFL, NCAAF,
-      // and NBA each have their own ESPN summary endpoint (different sport
-      // path), so which fetcher runs depends on sportKey - not a shared
-      // function, matching getNflGameFacts/getNcaafFirstHalfScore/
-      // getNbaFirstHalfScore's own precedent of one function per sport
-      // rather than a generic dispatcher.
-      const needsFirstHalf = supportsFirstHalf && (!existing || existing.firstFiveHomeScore === null);
+      // Same "only fetch what's still missing, immutable once the game is
+      // Final" reasoning as MLB's early innings. One gate covers the
+      // first-half score AND the full per-segment linescore (same
+      // summary-endpoint fetch). NHL has no first-half score, so for NHL this
+      // keys off linescoreJson alone - otherwise every NHL row would look
+      // "incomplete" forever and refetch on every cron run.
+      const needsSegments =
+        supportsLinescore &&
+        (!existing ||
+          existing.linescoreJson === null ||
+          (supportsFirstHalf && existing.firstFiveHomeScore === null));
 
       // NFL Game Pulse fields (see nfl-game-pulse-situations.ts) - gated
-      // independently of needsFirstHalf since a row captured before this
-      // shipped may already have firstFiveHomeScore set but still be
-      // missing these. All three come from the same summary-endpoint fetch
-      // (getNflGameFacts), so they're gated as one bundle rather than
-      // separately - "any of them still missing" is enough to justify the
-      // one fetch that fills in all three at once.
+      // independently since a row captured before this shipped may already
+      // have firstFiveHomeScore set but still be missing these. All three
+      // come from the same getNflGameFacts fetch, so they're gated as one
+      // bundle - "any still missing" justifies the one fetch.
       const needsNflGamePulseFacts =
         sportKey === "americanfootball_nfl" &&
         (!existing || existing.quartersJson === null || existing.scoringPlaysJson === null || existing.homeTurnovers === null);
 
-      // One fetch covers both needs for NFL - the old getNflFirstHalfScore
-      // hit this same summary endpoint on its own just for Q1+Q2; folding
-      // that into getNflGameFacts means a game needing both first-half
-      // grading AND Game Pulse capture (the common case for any newly-final
-      // NFL game) makes one request instead of two.
+      // NFL keeps its own getNflGameFacts (one fetch also pulls Game Pulse
+      // data); every other sport uses the shared getEspnGameSegments. Both
+      // return the per-segment linescore in the same {home,away}[] shape.
       const nflFacts =
-        sportKey === "americanfootball_nfl" && (needsFirstHalf || needsNflGamePulseFacts)
+        sportKey === "americanfootball_nfl" && (needsSegments || needsNflGamePulseFacts)
           ? await getNflGameFacts(g.id)
           : null;
+      const otherSegments =
+        needsSegments && sportKey !== "americanfootball_nfl" ? await getEspnGameSegments(sportKey, g.id) : null;
 
-      const espnFirstHalf = needsFirstHalf
-        ? sportKey === "americanfootball_nfl"
-          ? nflFacts?.firstHalf ?? null
-          : sportKey === "americanfootball_ncaaf"
-            ? await getNcaafFirstHalfScore(g.id)
-            : await getNbaFirstHalfScore(g.id)
-        : null;
+      const espnFirstHalf =
+        sportKey === "americanfootball_nfl" ? nflFacts?.firstHalf ?? null : otherSegments?.firstHalf ?? null;
+      const linescore =
+        sportKey === "americanfootball_nfl" ? nflFacts?.quarters ?? null : otherSegments?.linescore ?? null;
 
       const firstHalfHome = early?.firstFive?.home ?? espnFirstHalf?.home ?? null;
       const firstHalfAway = early?.firstFive?.away ?? espnFirstHalf?.away ?? null;
+      // Written only when this run actually fetched a usable array (same
+      // undefined-means-leave-untouched convention as quartersJson below).
+      const linescoreJson = needsSegments ? linescore ?? undefined : undefined;
 
       // undefined (matching inningsJson's own convention just below, and
       // Prisma's JSON-field typing, which rejects a literal null here in
@@ -202,6 +212,7 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
             : {}),
           ...(inningsJson ? { inningsJson } : {}),
           ...(quartersJson ? { quartersJson } : {}),
+          ...(linescoreJson ? { linescoreJson } : {}),
           ...(scoringPlaysJson ? { scoringPlaysJson } : {}),
           ...(homeTurnovers !== null ? { homeTurnovers, awayTurnovers } : {}),
           ...(ledgerHasData
@@ -221,6 +232,7 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
           firstInningAwayScore: firstInning?.away ?? null,
           inningsJson,
           quartersJson,
+          linescoreJson,
           scoringPlaysJson,
           homeTurnovers,
           awayTurnovers,
@@ -296,15 +308,12 @@ export function gradePick(
 ): GradeOutcome {
   const detail = betDetail.toLowerCase();
 
-  // A pick whose text scopes it to a slice of the game the grader has no
-  // score source for (a single quarter, the 2nd half, one hockey period, a
-  // single inning) must NOT fall through to the branches below, which all
-  // grade against whatever homeScore/awayScore pair the caller passed - for a
-  // non-FIRST_HALF pick that's the full-game final. Returning null keeps the
-  // pick PENDING for manual grading instead of silently mis-grading it. NRFI
-  // is inherently first-inning-scoped and has its own score source (see
-  // resolveOutcome), so it's exempt. See bet-line.ts's betScope comment - a
-  // real "over 13.5 first quarter" pick graded WIN off a 27-point final here.
+  // Last-resort guard: a pick whose text scopes it to a game segment with no
+  // score source at all (a lone inning outside MLB's F5 path) must not fall
+  // through to the branches below, which grade against whatever score pair
+  // the caller passed. resolveOutcome already handles this (and picks the
+  // right segment's scores for quarters / periods / halves); this keeps a
+  // direct gradePick call safe too. NRFI is first-inning-scoped and exempt.
   if (betType !== "NRFI" && betScope(betDetail) === "UNSUPPORTED_SEGMENT") return null;
 
   const homeNick = teamNickname(homeTeam);
@@ -534,12 +543,55 @@ export async function findMatchingGameResult(
   return matchGameResult(candidates, pick);
 }
 
+type SegmentScore = { home: number; away: number };
+
+// The {home, away} score for one slice of a finished game, or null when that
+// slice's data isn't available for THIS game (linescore array came back
+// short, first-half score was never captured) - null means the pick stays
+// PENDING, never a guessed grade. FULL_GAME and FIRST_HALF are unchanged from
+// before; SECOND_HALF is derived (final minus first half, so it includes OT
+// the way books grade a 2nd-half bet); quarters and hockey periods read the
+// per-segment linescoreJson array persistFinalScores captures.
+function segmentScore(period: string, game: GameResult): SegmentScore | null {
+  const firstHalf =
+    game.firstFiveHomeScore !== null && game.firstFiveAwayScore !== null
+      ? { home: game.firstFiveHomeScore, away: game.firstFiveAwayScore }
+      : null;
+  const line = game.linescoreJson as unknown as SegmentScore[] | null;
+  const at = (i: number): SegmentScore | null => {
+    if (!Array.isArray(line)) return null;
+    const s = line[i];
+    return s && typeof s.home === "number" && typeof s.away === "number" ? { home: s.home, away: s.away } : null;
+  };
+  switch (period) {
+    case "FULL_GAME":
+      return { home: game.homeScore, away: game.awayScore };
+    case "FIRST_HALF":
+      return firstHalf;
+    case "SECOND_HALF":
+      return firstHalf ? { home: game.homeScore - firstHalf.home, away: game.awayScore - firstHalf.away } : null;
+    case "FIRST_QUARTER":
+    case "FIRST_PERIOD":
+      return at(0);
+    case "SECOND_QUARTER":
+    case "SECOND_PERIOD":
+      return at(1);
+    case "THIRD_QUARTER":
+    case "THIRD_PERIOD":
+      return at(2);
+    case "FOURTH_QUARTER":
+      return at(3);
+    default:
+      return null;
+  }
+}
+
 // Shared by gradePendingPicks and regradeFuzzyMatchedPicks - picks the right score
-// pair for the bet (final / first-five / first-inning) and runs gradePick. Also
-// exported for getPendingPicksForUser (picks.ts), which uses a null result here
-// (game matched, but nothing gradable came out) to tell "waiting on a game to
-// finish" apart from "matched fine, but the bet text itself can't be graded" -
-// e.g. a TOTAL pick with no parseable number anywhere in it.
+// pair for the bet (final / half / quarter / period / first-inning) and runs
+// gradePick. Also exported for getPendingPicksForUser (picks.ts), which uses a
+// null result here (game matched, but nothing gradable came out) to tell
+// "waiting on a game to finish" apart from "matched fine, but the bet text
+// itself can't be graded".
 export function resolveOutcome(
   pick: {
     betType: string;
@@ -551,47 +603,31 @@ export function resolveOutcome(
   },
   game: GameResult
 ): GradeOutcome {
-  // Segment-scope guard, re-derived from betDetail (Period only encodes
-  // FULL_GAME/FIRST_HALF - see bet-line.ts's betScope):
-  //  - UNSUPPORTED_SEGMENT (a quarter, 2nd half, a period, a lone inning):
-  //    no score source exists, so gradePick would grade it against the
-  //    full-game final. Decline -> stays PENDING.
-  //  - FIRST_HALF text on a pick the importer left as period=FULL_GAME: the
-  //    score selection below keys off pick.period, so this would also grade
-  //    against the full game. Decline rather than guess which half-score to
-  //    use.
-  // NRFI has its own first-inning score source and is exempt from both.
-  if (pick.betType !== "NRFI") {
-    const scope = betScope(pick.betDetail);
-    if (scope === "UNSUPPORTED_SEGMENT") return null;
-    if (scope === "FIRST_HALF" && pick.period !== "FIRST_HALF") return null;
+  const runGrade = (home: number, away: number): GradeOutcome =>
+    gradePick(pick.betType, pick.betDetail ?? pick.homeTeam, pick.line, game.homeTeam, game.awayTeam, home, away, pick.pickedSide);
+
+  // NRFI has its own dedicated first-inning score source and ignores period.
+  if (pick.betType === "NRFI") {
+    if (game.firstInningHomeScore === null || game.firstInningAwayScore === null) return null;
+    return runGrade(game.firstInningHomeScore, game.firstInningAwayScore);
   }
 
-  const homeScore =
-    pick.betType === "NRFI"
-      ? game.firstInningHomeScore
-      : pick.period === "FIRST_HALF"
-        ? game.firstFiveHomeScore
-        : game.homeScore;
-  const awayScore =
-    pick.betType === "NRFI"
-      ? game.firstInningAwayScore
-      : pick.period === "FIRST_HALF"
-        ? game.firstFiveAwayScore
-        : game.awayScore;
+  // Re-derive the pick's game-segment scope from its text (bet-line.ts's
+  // betScope, the same "always re-read from betDetail" pattern) and reconcile
+  // it with the stored Period:
+  //  - UNSUPPORTED_SEGMENT (a lone inning outside MLB's F5 path, etc.): no
+  //    score source exists at all -> null, stays PENDING.
+  //  - the text names a segment the pick wasn't stored with (an old pick from
+  //    before quarter/period Periods existed, or an importer miss): don't
+  //    grade off a slice the importer never assigned -> null. New picks carry
+  //    the right Period, so this only ever hits legacy rows.
+  const scope = betScope(pick.betDetail);
+  if (scope === "UNSUPPORTED_SEGMENT") return null;
+  if (scope !== "FULL_GAME" && scope !== pick.period) return null;
 
-  if (homeScore === null || awayScore === null) return null;
-
-  return gradePick(
-    pick.betType,
-    pick.betDetail ?? pick.homeTeam,
-    pick.line,
-    game.homeTeam,
-    game.awayTeam,
-    homeScore,
-    awayScore,
-    pick.pickedSide
-  );
+  const seg = segmentScore(pick.period, game);
+  if (!seg) return null;
+  return runGrade(seg.home, seg.away);
 }
 
 export type TouchdownPropResolution =

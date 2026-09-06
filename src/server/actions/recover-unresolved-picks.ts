@@ -94,7 +94,7 @@ export async function recoverUnresolvedPicksAction(
       hasExplicitOdds: bet.hasExplicitOdds,
       totalSide: bet.totalSide,
       units: bet.units,
-      isFirstFive: false,
+      period: "FULL_GAME",
       raw: line,
       teamNicknames: [res.nickname],
     });

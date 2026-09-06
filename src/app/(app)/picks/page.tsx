@@ -80,6 +80,24 @@ function firstHalfLabelPrefix(sportName: string | undefined): "F5" | "1H" {
   return chipSet.some((k) => F5_INNINGS_CATEGORY_KEYS.includes(k)) ? "F5" : "1H";
 }
 
+// Short badge text for a pick's period, or null for a plain full-game pick.
+// FIRST_HALF keeps the sport-aware F5/1H split; the rest are the standard
+// quarter / hockey-period / 2nd-half shorthands.
+const PERIOD_BADGE: Record<string, string> = {
+  SECOND_HALF: "2H",
+  FIRST_QUARTER: "Q1",
+  SECOND_QUARTER: "Q2",
+  THIRD_QUARTER: "Q3",
+  FOURTH_QUARTER: "Q4",
+  FIRST_PERIOD: "P1",
+  SECOND_PERIOD: "P2",
+  THIRD_PERIOD: "P3",
+};
+function periodBadgeLabel(period: string, sportName: string | undefined): string | null {
+  if (period === "FIRST_HALF") return firstHalfLabelPrefix(sportName);
+  return PERIOD_BADGE[period] ?? null;
+}
+
 const FIRST_HALF_BET_TYPE_KEYS: BetTypeFilterKey[] = ["F5_SPREAD", "F5_MONEYLINE", "F5_TOTAL"];
 
 // Combines betTypeOptionsForSport (which options are relevant) with
@@ -310,9 +328,9 @@ export default async function PicksPage({
                 <div>
                   <div className="text-sm font-medium">
                     {pick.awayTeam} @ {pick.homeTeam}
-                    {pick.period === "FIRST_HALF" && (
+                    {periodBadgeLabel(pick.period, pick.sport.name) && (
                       <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:bg-purple-500/15 dark:text-purple-400">
-                        {firstHalfLabelPrefix(pick.sport.name)}
+                        {periodBadgeLabel(pick.period, pick.sport.name)}
                       </span>
                     )}
                     <span className="ml-2 font-normal text-muted-foreground">
@@ -370,9 +388,9 @@ export default async function PicksPage({
                         <div>
                           <div className="text-xs font-medium text-foreground">
                             {leg.awayTeam} @ {leg.homeTeam}
-                            {leg.period === "FIRST_HALF" && (
+                            {periodBadgeLabel(leg.period, leg.sport.name) && (
                               <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:bg-purple-500/15 dark:text-purple-400">
-                                {firstHalfLabelPrefix(leg.sport.name)}
+                                {periodBadgeLabel(leg.period, leg.sport.name)}
                               </span>
                             )}
                           </div>
