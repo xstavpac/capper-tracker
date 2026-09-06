@@ -1156,6 +1156,80 @@ export function computeCategoryBreakdown(
   });
 }
 
+// The "league-specific record card": for ONE bet-type category, a capper's
+// record shown three ways - Overall (all leagues), the current league only,
+// and their most recent 20 graded picks. All three come from the SAME
+// pipeline as the category tiles (computeCategoryBreakdown -> computeStats),
+// just fed different slices:
+//   - category-scoped to `key` - a full-game / first-half chip-set key, so
+//     computeCategoryBreakdown's `order` filter drops any segment key
+//     (FIRST_QUARTER_*, SECOND_HALF_*, ...) exactly as the category tiles do
+//     (see PR #22). Segment picks never contribute to any of the three.
+//   - PENDING / CANCELLED excluded (computeStats)
+//   - winPct always derived from that slice's own W-L count, never averaged
+// Overall and League have NO minimum sample. `last20` is populated only once
+// the category has >= LEAGUE_RECORD_LAST_N graded picks; below that it's null
+// and the caller renders "Need 20 picks" (never a partial "last N").
+export const LEAGUE_RECORD_LAST_N = 20;
+
+export type LeagueRecordColumn = { wins: number; losses: number; pushes: number; winPct: number; count: number };
+export type LeagueRecordCard = {
+  category: PickCategoryKey;
+  label: string;
+  overall: LeagueRecordColumn;
+  league: LeagueRecordColumn;
+  last20: LeagueRecordColumn | null;
+};
+
+const EMPTY_LEAGUE_RECORD_COLUMN: LeagueRecordColumn = { wins: 0, losses: 0, pushes: 0, winPct: 0, count: 0 };
+
+function toLeagueRecordColumn(item: {
+  wins: number;
+  losses: number;
+  pushes: number;
+  winPct: number;
+  count: number;
+}): LeagueRecordColumn {
+  return { wins: item.wins, losses: item.losses, pushes: item.pushes, winPct: item.winPct, count: item.count };
+}
+
+// `categories` is the chip set the caller wants cards for (chipSetForLeague);
+// a card is returned for every one the capper has ANY pick in (the caller
+// decides whether to render a card whose `overall.count` is 0). Order follows
+// `categories`.
+export function computeLeagueRecordCards(
+  picks: (Pick & { sport: { name: string } })[],
+  leagueSportName: string,
+  categories: PickCategoryKey[]
+): LeagueRecordCard[] {
+  const overall = new Map(
+    computeCategoryBreakdown(picks, categories, {
+      window: LEAGUE_RECORD_LAST_N,
+      minSample: LEAGUE_RECORD_LAST_N,
+    }).map((item) => [item.key, item] as const)
+  );
+  const league = new Map(
+    computeCategoryBreakdown(
+      picks.filter((p) => p.sport.name === leagueSportName),
+      categories
+    ).map((item) => [item.key, item] as const)
+  );
+
+  return categories
+    .filter((key) => overall.has(key))
+    .map((key) => {
+      const o = overall.get(key)!;
+      const l = league.get(key);
+      return {
+        category: key,
+        label: o.label,
+        overall: toLeagueRecordColumn(o),
+        league: l ? toLeagueRecordColumn(l) : EMPTY_LEAGUE_RECORD_COLUMN,
+        last20: o.recent ? toLeagueRecordColumn(o.recent) : null,
+      };
+    });
+}
+
 // Lean pick rows for the dashboard + reports aggregations: every scalar
 // column (computeStats / computeCategoryBreakdown / computeUnitsChartData all
 // need those) plus ONLY the id/name of each relation the breakdowns group

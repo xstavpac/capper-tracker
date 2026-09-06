@@ -9,6 +9,7 @@ import {
   computeStats,
   computeScorecard,
   computeCategoryBreakdown,
+  computeLeagueRecordCards,
   computeBestOddsRange,
   computeConsistency,
   computeUnitsChartData,
@@ -24,6 +25,7 @@ import { UnitsChart } from "@/components/dashboard/units-chart";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
+import { LeagueRecordCard } from "@/components/dashboard/league-record-card";
 import { MomentumPanel } from "@/components/dashboard/momentum-panel";
 import { StreakBadge } from "@/components/dashboard/capper-panels";
 import { formatEastern, formatRelativeTime } from "@/lib/dates";
@@ -173,6 +175,17 @@ export default async function CapperDetailPage({
     chipSetForLeague(selectedCategorySport ?? "")
   );
   const activeSportStats = activeSportPicksInWindow.length > 0 ? computeStats(activeSportPicksInWindow) : null;
+
+  // League-specific record cards - LIFETIME (not windowed), one per bet-type
+  // category this capper has picks in for the selected sport. Overall (all
+  // leagues) / [selected sport] / last 20, all from computeLeagueRecordCards'
+  // one shared pipeline. Rendered above the windowed "record by category"
+  // tiles, which are left exactly as they were.
+  const leagueRecordCards = selectedCategorySport
+    ? computeLeagueRecordCards(picks, selectedCategorySport, chipSetForLeague(selectedCategorySport)).filter(
+        (c) => c.league.count > 0
+      )
+    : [];
   const activeSportChartData = computeUnitsChartData(activeSportPicksInWindow);
 
   // Same window as the hero stats/scorecard above, so this chart's cumulative
@@ -322,6 +335,28 @@ export default async function CapperDetailPage({
         <div className="mb-2 text-sm font-medium text-muted-foreground">Units over time</div>
         <UnitsChart data={chartData} />
       </div>
+
+      {leagueRecordCards.length > 0 && selectedCategorySport && (
+        <div className="mt-4">
+          <div className="mb-2 text-sm font-medium text-muted-foreground">
+            {selectedCategorySport} record by market <span className="text-muted-foreground/70">&middot; all-time</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {leagueRecordCards.map((c) => (
+              <LeagueRecordCard
+                key={c.category}
+                capperName={capper.name}
+                isVerified={capper.isFavorite}
+                betTypeLabel={c.label}
+                leagueName={selectedCategorySport}
+                overall={c.overall}
+                league={c.league}
+                last20={c.last20}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {categoryBreakdownsBySport.length > 0 && (
         <div className="mt-4">
