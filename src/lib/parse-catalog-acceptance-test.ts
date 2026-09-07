@@ -73,13 +73,22 @@ function main() {
   // the "red sox" team entry and got misread as an ATP player named
   // "RedSox". "Carrington o3.5 Rebounds" (o3.5 = over 3.5, unrecognized)
   // silently became ANOTHER fake capper header, swallowing itself.
+  //
+  // As of the ATP-phantom-fix (2026-09), "Carrington o3.5 Rebounds" no
+  // longer becomes a phantom ATP pick either - "carrington" is not a known
+  // tennis player and "rebounds" is not tennis vocabulary, so it now routes
+  // to `unresolved` (the honest outcome for an NBA rebounds prop with an
+  // unrecognized player). The block's real concern - that it must NOT be
+  // misread as a fake capper header that hijacks the following picks - is
+  // still satisfied: currentCapper stays "Bambino" and the other 4 picks
+  // are unaffected.
   {
     const { picks, unresolved } = parseCatalog(
       `Bambino 19-0 NRFI Run \u{1F4AA}\n\nFull Card\nYankees vs Blue Jays NRFI\nRedSox ML\nAstros ML\nBraves ML\nCarrington o3.5 Rebounds`,
       []
     );
-    check("Bambino: no unresolved lines", unresolved, []);
-    check("Bambino: 5 real picks recovered", picks.length, 5);
+    check("Bambino: 'Carrington o3.5 Rebounds' routes to unresolved, not a phantom ATP pick", unresolved, ["Carrington o3.5 Rebounds"]);
+    check("Bambino: 4 real picks recovered (Carrington unresolved)", picks.length, 4);
     check(
       "Bambino: every pick attributed to 'Bambino' (currentCapper set from the tagline, not lost, not 'Full Card')",
       picks.every((p) => p.capperName === "Bambino"),
@@ -93,12 +102,7 @@ function main() {
       { sport: redSox?.sportName, teamNicknames: redSox?.teamNicknames },
       { sport: "MLB", teamNicknames: ["red sox"] }
     );
-    const carrington = picks.find((p) => p.description.includes("Carrington"));
-    check(
-      "Bambino: 'Carrington o3.5 Rebounds' resolves as a real TOTAL/over prop pick, not a fake capper header",
-      { sport: carrington?.sportName, bet: carrington?.betType, side: carrington?.totalSide },
-      { sport: "ATP", bet: "TOTAL", side: "over" }
-    );
+    check("Bambino: 'Carrington o3.5 Rebounds' is not attributed as a capper (no pick under that name)", picks.some((p) => p.capperName.includes("Carrington")), false);
   }
 
   // KBO sub-header case: a bare sport/league code line on its own (no team,
@@ -450,15 +454,15 @@ function main() {
     check("in-sport collision 'devils': still resolves directly to NHL, not NCAAF", devils?.sportName, "NHL");
 
     // Wildcats/Bulldogs/Knights/Cougars are registered nowhere bare (not in
-    // any pro list, not in AMBIGUOUS_NICKNAMES) either before or after this
-    // change - confirmed live that this already falls through to
-    // findPlayerPick's ATP phantom-pick fallback (a single capitalized word
-    // before "ML" looks like a one-word player name) - a pre-existing,
-    // NCAAF-unrelated gap, not something this change creates OR fixes. The
-    // only thing that matters here is that it's still ATP, never NCAAF.
+    // any pro list, not in AMBIGUOUS_NICKNAMES). Before the ATP-phantom-fix
+    // they fell through to findPlayerPick and were silently stamped ATP (a
+    // single capitalized word before "ML" reads as a one-word player name);
+    // as of that fix they route to `unresolved` instead - none of them is a
+    // known tennis player and there's no tennis vocabulary. Still never
+    // NCAAF (the only thing this NCAAF-collision block ever cared about).
     for (const word of ["Wildcats", "Bulldogs", "Knights", "Cougars"]) {
-      const pick = parseCatalog(`Capper\n${word} ML`, []).picks[0];
-      check(`in-sport collision '${word}': unaffected pre-existing behavior (ATP phantom fallback), never NCAAF`, pick?.sportName, "ATP");
+      const { picks, unresolved } = parseCatalog(`Capper\n${word} ML`, []);
+      check(`in-sport collision '${word}': no phantom ATP pick, routes to unresolved`, { picks: picks.length, unresolved }, { picks: 0, unresolved: [`${word} ML`] });
     }
   }
 
@@ -645,7 +649,7 @@ Coventry +2 (3u)
 WNBA
 Mystics +4.5 (1u)`;
 
-    const { picks } = parseCatalog(text, []);
+    const { picks, unresolved } = parseCatalog(text, []);
     const byCapper = (name: string) => picks.filter((p) => p.capperName === name);
 
     check("Nicky Cashin: 6 picks attributed correctly", byCapper("Nicky Cashin").length, 6);
@@ -660,13 +664,18 @@ Mystics +4.5 (1u)`;
       byCapper("Bambino Bets").length,
       3
     );
-    check(
-      "Hammering Hank: parenthetical-record header resolves to the capper",
-      byCapper("Hammering Hank").map((p) => p.description),
-      ["Coventry +2"]
-    );
+    // "⚽ Hammering Hank (9-2 Soccer Run)" is still consumed as a capper
+    // header (not pushed to unresolved) - the PART G fix. Its one pick
+    // "Coventry +2" is an English-soccer team this app can't resolve; before
+    // the ATP-phantom-fix it was silently stamped as a tennis player
+    // ("coventry"), now it routes to `unresolved` (no soccer team list /
+    // schedule to place it against, and no tennis signal). No pick is ever
+    // attributed to a fake capper, which is what this block guards.
+    check("Hammering Hank: never attributed a phantom-ATP pick", byCapper("Hammering Hank").length, 0);
+    check("Coventry +2: routes to unresolved (unsupported soccer team), not a phantom ATP pick", unresolved.some((u) => u.startsWith("Coventry +2")), true);
+    check("Coventry +2: not a phantom ATP pick anywhere in results", picks.some((p) => p.description.includes("Coventry")), false);
     check("Bet Labs: WNBA sub-header picks attributed correctly", byCapper("Bet Labs").length, 1);
-    check("All 12 real picks recovered across the 5 sections", picks.length, 12);
+    check("11 real picks recovered across the sections (Coventry -> unresolved)", picks.length, 11);
   }
 
   // ==========================================================================
@@ -1305,6 +1314,86 @@ NC State +4.5`;
     // Full "Red Sox" / "White Sox" still resolve (regression).
     check("'Red Sox -1.5' still resolves MLB", parseCatalog(`Cap\nRed Sox -1.5`, []).picks[0]?.teamNicknames, ["red sox"]);
     check("'White Sox -1.5' still resolves MLB", parseCatalog(`Cap\nWhite Sox -1.5`, []).picks[0]?.teamNicknames, ["white sox"]);
+  }
+
+  // ==========================================================================
+  // PART P - the ATP phantom-pick fix (docs/resolver-team-gap-followups.md #1)
+  // ==========================================================================
+  // findPlayerPick used to accept ANY 1-4 Title-Case word candidate before a
+  // bet keyword as a confident ATP tennis pick, purely because every other
+  // resolver failed. Real data corruption: the two 2026-09-06 stuck picks
+  // "Mississippi -6.5" and "Red +1.5" were both stamped ATP with the raw bet
+  // text left in the pick's homeTeam, ungradeable forever. The fix requires
+  // POSITIVE tennis evidence - a known player, tennis bet vocabulary, or an
+  // explicit "tennis" word - otherwise the line routes to `unresolved`
+  // (where the recover-unresolved-picks pass then re-checks it against the
+  // real live schedule).
+  console.log("\n########## PART P: ATP phantom-pick fix ##########");
+
+  {
+    // --- The two real stuck picks: now unresolved, never phantom ATP ---
+    for (const text of ["Mississippi -6.5", "Red +1.5"]) {
+      const { picks, unresolved } = parseCatalog(`SomeCapper\n${text}`, []);
+      check(`'${text}': no phantom ATP pick`, picks.length, 0);
+      check(`'${text}': routes to unresolved for manual review`, unresolved, [text]);
+    }
+
+    // In a tennis-context batch, the real tennis picks still resolve and only
+    // the non-tennis lines fall out - the "sibling picks are ATP" context
+    // does NOT drag Mississippi/Red along.
+    const { picks: mixed, unresolved: mixedUnresolved } = parseCatalog(
+      `TennisCapper\nSinner ML\nAlcaraz -1.5\nMississippi -6.5\nRed +1.5`,
+      []
+    );
+    check("tennis batch: only the real ATP picks resolve", mixed.map((p) => `${p.sportName}:${p.teamNicknames[0]}`), ["ATP:sinner", "ATP:alcaraz"]);
+    check("tennis batch: the non-tennis lines are unresolved", mixedUnresolved, ["Mississippi -6.5", "Red +1.5"]);
+
+    // --- Genuine ATP picks MUST still resolve (positive test cases) ---
+    const validAtp: [string, string][] = [
+      ["Tallon Griekspoor ML", "griekspoor"],
+      ["Griekspoor -150", "griekspoor"],
+      ["Sinner ML", "sinner"],
+      ["Alcaraz Over 22.5", "alcaraz"],
+      ["Djokovic ML", "djokovic"],
+      ["Lorenzo Musetti ML", "musetti"],
+      ["Coco Gauff ML", "gauff"],
+      ["Sabalenka -3.5", "sabalenka"],
+    ];
+    for (const [text, key] of validAtp) {
+      const pick = parseCatalog(`Cap\n${text}`, []).picks[0];
+      check(`valid ATP '${text}' still resolves`, { sport: pick?.sportName, key: pick?.teamNicknames[0] }, { sport: "ATP", key });
+    }
+
+    // An unlisted player is still accepted when the line carries tennis
+    // vocabulary - the vocabulary is the safety valve so the player list
+    // doesn't have to be exhaustive. (Player name still first, vocab after,
+    // the way a real tennis prop is written.)
+    const gamesTotal = parseCatalog(`Cap\nKrueger over 21.5 games`, []).picks[0];
+    check("unlisted name + 'over N games' vocab still resolves ATP", gamesTotal?.sportName, "ATP");
+    const gamesWon = parseCatalog(`Cap\nHartono -4.5 total games won`, []).picks[0];
+    check("unlisted name + 'games won' vocab still resolves ATP", gamesWon?.sportName, "ATP");
+    const straightSets = parseCatalog(`Cap\nVanhicksville ML in straight sets`, []).picks[0];
+    check("unlisted name + 'straight sets' vocab still resolves ATP", straightSets?.sportName, "ATP");
+
+    // --- The guard: non-tennis mystery names route to unresolved ---
+    // ("Carolina" is deliberately excluded - it has an AMBIGUOUS_NICKNAMES
+    //  entry via "panthers"/"hurricanes" and its own resolution path.)
+    for (const text of [
+      "Wildcats ML",
+      "Bulldogs -7",
+      "Coventry +2",
+      "Vermont -3.5",
+      "Springfield ML",
+    ]) {
+      const { picks, unresolved } = parseCatalog(`Cap\n${text}`, []);
+      check(`guard: '${text}' does not become a phantom ATP pick`, picks.some((p) => p.sportName === "ATP"), false);
+      check(`guard: '${text}' routes to unresolved`, unresolved, [text]);
+    }
+
+    // A recognized team phrase that somehow reaches findPlayerPick is still
+    // never tennis (defense in depth - normally resolved far upstream).
+    const cardinals = parseCatalog(`Cap\nCardinals ML`, []).picks[0];
+    check("guard: bare 'Cardinals' is the ambiguous prompt, never phantom ATP", { sport: cardinals?.sportName, key: cardinals?.ambiguousKey }, { sport: "", key: "cardinals" });
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

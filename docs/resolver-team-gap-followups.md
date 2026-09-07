@@ -1,34 +1,62 @@
 # Resolver team-gap follow-ups
 
-Two open items from the "sport not tracked" grading-bug investigation
+Open items from the "sport not tracked" grading-bug investigation
 (BET LABS' "Fire over 165.5" pick mistagging as `ATP` instead of `WNBA`),
 kept separate from `docs/ncaaf-launch-checklist.md` since neither is
 NCAAF-specific.
 
-## 1. Systemic guard against the ATP phantom-pick fallback (not urgent)
+## 1. Systemic guard against the ATP phantom-pick fallback - FIXED 2026-09
 
-Not built yet - full writeup lives as a code comment directly above
-`looksLikeTeamAbbreviation` in `src/lib/parse-catalog.ts`, since that's
-where the next person touching this logic will actually see it.
+`findPlayerPick` (`src/lib/parse-catalog.ts`) used to accept **any** 1-4
+Title-Case word candidate before a bet keyword as a confident `ATP` tennis
+pick, purely because every other resolver had failed - "nothing else
+matched" was treated as implicit confirmation. That is real, active data
+corruption, not just a missed pick: the mystery line gets a Sport, a
+capper, a `PENDING` status, and the raw bet text left in `homeTeam`, and it
+can never grade or re-match. The two 2026-09-06 stuck picks
+`"Mississippi -6.5"` (CBLEZ - Ole Miss / Miss State) and `"Red +1.5"`
+(BET Sharper) were the trigger; `"Fire +13.5"` / `"Trojans -22.5"` /
+`"KT Wiz ML"` were earlier instances.
 
-Short version: a real, currently-tracked team whose bare name doesn't
-happen to collide with anything else (like Portland Fire, LA Sparks,
-Toronto Tempo, or Utah Mammoth were until this session's fix) will
-silently mistag as a confident `ATP` tennis pick instead of surfacing as
-`unresolved`, if it's simply missing from that sport's team list. The four
-teams above are fixed now, but the underlying failure mode - any *future*
-missing team hitting the same false default - is still there by design.
-Deprioritized because it only bites when a real team name is missing from
-our lists, which is now cleaned up across MLB/WNBA/NHL (see below) as of
-2026-08-25.
+**The fix** (implemented, not the "cross-check a DB team-name set" direction
+originally proposed): `findPlayerPick` now requires **positive** tennis
+evidence before it will accept a pick as `ATP`:
 
-Proposed direction (see the code comment for full reasoning and the
-tradeoff to avoid): cross-check the ATP candidate against real,
-currently-tracked team names (`OddsSnapshot`/`GameResult`) before accepting
-the match, instead of tightening the name-shape check - the latter would
-break legitimate single-surname tennis picks ("Djokovic ML"). Real
-architectural work since `parse-catalog.ts` is a pure, synchronous,
-DB-free module today.
+  1. the candidate surname (or full name) is in `KNOWN_TENNIS_PLAYERS` - a
+     curated ATP + WTA list, keyed by surname, not exhaustive; or
+  2. the line carries tennis-specific bet vocabulary (`TENNIS_BET_CONTEXT` -
+     "straight sets", "games won", "tiebreak", "over N games", "double
+     faults", ...); or
+  3. an explicit `tennis` / `challenger` / `qualifying` word.
+
+Plus hardened negative guards: `US_STATE_NAMES` (no tennis player is named
+after a US state - catches "Mississippi") and `RECOGNIZED_TEAM_PHRASES`
+(any bare team nickname / ambiguous key that somehow reaches here).
+
+Anything with **no** tennis signal returns `null` and the line routes to
+`unresolved` - exactly the safe, visible failure every other unrecognized
+name already gets. From there the existing `recover-unresolved-picks` pass
+(`live-team-fallback.ts`) still cross-checks it against the real live
+schedule, so a genuine-but-unlisted team ("Mississippi") can still be
+recovered as a real pick; only the silent tennis guess is gone.
+
+Why not the DB cross-check: `parse-catalog.ts` stays pure/sync/DB-free, and
+the recover-unresolved pass already owns the "check against real team
+names" step - routing here to `unresolved` hands the line straight to it.
+
+Deliberately NOT tightened: the name **shape** (real tennis picks are
+commonly a bare surname - "Djokovic ML", "Sinner ML"). `KNOWN_TENNIS_PLAYERS`
+grows the same way `SPORTS_PLACE_NAMES` did - add names as real picks on
+unlisted players show up as `unresolved`.
+
+### Residual: MMA fighters still route to `unresolved` (accepted)
+
+A single-name MMA pick ("Jalin Turner Moneyline", from cappers like
+"Thunder MMA") is not "X vs Y" so `findMatchupPlayerPick` (which resolves
+`MMA`) doesn't catch it, and the fighter isn't in `KNOWN_TENNIS_PLAYERS`,
+so it now routes to `unresolved` instead of a phantom `ATP` pick. That is
+still the correct improvement (unresolved beats a wrong Sport), but a
+proper `MMA` single-name path is a possible future follow-up.
 
 ## 2. Re-run the team-gap scan for NBA once preseason odds data exists
 
