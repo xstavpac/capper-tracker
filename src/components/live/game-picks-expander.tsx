@@ -100,10 +100,11 @@ export function ChevronIcon({ up }: { up: boolean }) {
   );
 }
 
-// One record row: "40% (2-3) overall on underdog moneyline picks" or
-// "55% (11-9) in NCAAF". The win% and the parenthesised record render as ONE
-// colored, semibold unit (green/red by that row's own win rate) so they stay
-// visually together; the scope that follows is muted. Text content matches
+// One record row: "40% (2-3) overall on Underdog Moneyline Picks",
+// "55% (11-9) in MLB Underdog Moneyline Picks", "67% (14-6) over the last 20
+// picks". The win% and the parenthesised record render as ONE colored,
+// semibold unit (green/red by that row's own win rate) so they stay visually
+// together; the scope that follows is muted. Text content matches
 // gameCardRecordRowText (game-card-record-line.ts), which the tests check.
 function RecordRow({ pct, record, scope, winPct }: GameCardRecordRow) {
   const color =

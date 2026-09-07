@@ -3,21 +3,31 @@
 //
 // It is a stack of rows now (not the old inline sentence + width guard):
 //
-//   Team +3.5
-//   40% (2-3) overall on underdog moneyline picks     <- row 1
-//   55% (11-9) in NCAAF                                <- row 2 (omitted if no
-//   🔥 4 game win streak                                    league history)
-//                                                     <- row 3 (only if 2+)
+//   Twins Moneyline
+//   40% (2-3) overall on Underdog Moneyline Picks       <- Overall
+//   55% (11-9) in MLB Underdog Moneyline Picks          <- League (omitted with
+//   67% (14-6) over the last 20 picks                        no league history,
+//   🔥 4 game win streak                                     or if == Overall)
+//                                                       <- Last 20 (>= 20 graded)
+//                                                       <- Streak (only if 2+)
 //
-// Proven here: exact row-1 / row-2 text (win% and record stay together as one
-// "40% (2-3)" unit), row 2 omitted with no league history (never a fake
-// "0% (0-0)"), the category wording naming the exact side so no two
-// opposite-side categories (fav/dog ML & spread, over/under every period,
-// NRFI/YRFI) collapse onto one phrase, the spelled-out streak row + its glyph
-// + its hover tooltip, the below-2 cases (rows omitted, no fallback number),
-// all four with/without-league × with/without-streak combinations, and that
-// the row-3 glyph still carries the pulse animation + reduced-motion classes
-// from PR #34/#35.
+// Proven here:
+//  - Title Case on the market/category term ("Underdog Moneyline Picks", not
+//    "underdog moneyline picks"), matching the capper's own pick-detail line
+//    above the block; acronyms kept ("NRFI" stays "NRFI"); the league stays an
+//    all-caps abbreviation ("in MLB ...").
+//  - The League row names the market too ("in MLB Underdog Moneyline Picks"),
+//    not just the bare league.
+//  - Duplicate-row collapse: when Overall and League show the same record and
+//    the same percentage the League row is dropped (NRFI, an MLB-only market),
+//    and when they differ both rows show - a general value comparison, not a
+//    hardcoded market list.
+//  - The Last 20 row: present once `last20` is populated, omitted (no partial
+//    "last N") when it is null, correct at the threshold boundary, and always
+//    after the League row and before the streak row.
+//  - The spelled-out streak row + its glyph + its hover tooltip, the below-2
+//    cases (row omitted, no fallback number), and the row-3 glyph still
+//    carrying the pulse animation + reduced-motion classes from PR #34/#35.
 
 import {
   gameCardRecordRows,
@@ -27,6 +37,7 @@ import {
   gameCardStreakTooltip,
   GAME_CARD_NO_HISTORY_TEXT,
   GAME_CARD_STREAK_GLYPH_CLASS,
+  GAME_CARD_LAST_N,
   type GameCardStreak,
 } from "@/lib/game-card-record-line";
 import { PICK_CATEGORY_MARKET_NOUN, type PickCategoryKey } from "@/server/data/stats";
@@ -56,10 +67,11 @@ const rowsFor = (
   overall: ReturnType<typeof col>,
   league: ReturnType<typeof col> | null,
   marketNoun = "underdog moneyline",
-  leagueName = "NCAAF"
+  leagueName = "MLB",
+  last20: ReturnType<typeof col> | null = null
 ) =>
   gameCardRecordRows(
-    { overall, league: league ?? col(0, 0) },
+    { overall, league: league ?? col(0, 0), last20 },
     { leagueName, marketNoun, hasLeagueHistory: league !== null }
   );
 
@@ -72,44 +84,188 @@ const blockLines = (rows: ReturnType<typeof rowsFor>, streak?: GameCardStreak | 
 };
 
 // ---------------------------------------------------------------------------
-console.log("########## row 1 / row 2 text - win% and record stay together ##########");
+console.log("########## Overall / League row text - win% and record stay together ##########");
 {
   const rows = rowsFor(col(2, 3), col(11, 9));
   check("two rows: overall then league", rows.map((r) => r.scope), [
-    "overall on underdog moneyline picks",
-    "in NCAAF",
+    "overall on Underdog Moneyline Picks",
+    "in MLB Underdog Moneyline Picks",
   ]);
   check(
-    "row 1: '<pct>% (<record>) overall on <side> <market> picks'",
+    "Overall row: '<pct> (<record>) overall on <Side> <Market> Picks'",
     gameCardRecordRowText(rows[0]),
-    "40% (2-3) overall on underdog moneyline picks"
+    "40% (2-3) overall on Underdog Moneyline Picks"
   );
-  check("row 2: '<pct>% (<record>) in <league>'", gameCardRecordRowText(rows[1]), "55% (11-9) in NCAAF");
-  // The percentage is immediately followed by "(record)" - not separated by
-  // the description the way the old inline sentence had it.
-  checkTrue("row 1: pct and record are adjacent", /^40% \(2-3\) /.test(gameCardRecordRowText(rows[0])));
-  checkTrue("row 2: pct and record are adjacent", /^55% \(11-9\) /.test(gameCardRecordRowText(rows[1])));
+  check(
+    "League row: '<pct> (<record>) in <LEAGUE> <Side> <Market> Picks'",
+    gameCardRecordRowText(rows[1]),
+    "55% (11-9) in MLB Underdog Moneyline Picks"
+  );
+  checkTrue("Overall row: pct and record are adjacent", /^40% \(2-3\) /.test(gameCardRecordRowText(rows[0])));
+  checkTrue("League row: pct and record are adjacent", /^55% \(11-9\) /.test(gameCardRecordRowText(rows[1])));
 }
 check(
   "pushes render inside the record (3-3-1 style)",
   gameCardRecordRowText(rowsFor(col(3, 3, 1), null, "under")[0]),
-  "50% (3-3-1) overall on under picks"
+  "50% (3-3-1) overall on Under Picks"
 );
 
 // ---------------------------------------------------------------------------
-console.log("\n########## row 2 omitted when the capper has no league history ##########");
+console.log("\n########## FIX 1 - Title Case on the market/category term ##########");
 {
-  const rows = rowsFor(col(2, 3), null);
-  check("only row 1 is produced", rows.map((r) => r.scope), ["overall on underdog moneyline picks"]);
-  check("no fake '0% (0-0) in NCAAF' row", blockLines(rows), ["40% (2-3) overall on underdog moneyline picks"]);
+  // The term after "overall on" / "in <LEAGUE>" is Title-cased, matching the
+  // capper's own pick line ("Twins Moneyline"); sentence-case alone would do
+  // nothing since the row starts with a digit.
+  const scope = (noun: string) => rowsFor(col(5, 4), null, noun)[0].scope;
+  check("multi-word market -> every word capped", scope("underdog moneyline"), "overall on Underdog Moneyline Picks");
+  check("single word market", scope("under"), "overall on Under Picks");
+  check("'picks' itself is capped too", scope("over").endsWith("Over Picks"), true);
+  check("hyphen group cased part-by-part: first-5 over", scope("first-5 over"), "overall on First-5 Over Picks");
+  check("hyphen group: first-half under", scope("first-half under"), "overall on First-Half Under Picks");
+  check("leading digit left alone: 1st quarter over", scope("1st quarter over"), "overall on 1st Quarter Over Picks");
+  check("2nd half spread", scope("2nd half spread"), "overall on 2nd Half Spread Picks");
+  check("team total", scope("team total"), "overall on Team Total Picks");
+  check("touchdown prop", scope("touchdown prop"), "overall on Touchdown Prop Picks");
+
+  // Acronyms stay all-caps - never "Nrfi" / "Yrfi".
+  check("NRFI stays NRFI", scope("NRFI"), "overall on NRFI Picks");
+  check("YRFI stays YRFI", scope("YRFI"), "overall on YRFI Picks");
+  checkTrue("no lowercased acronym anywhere", !/\bNrfi\b|\bYrfi\b/.test(scope("NRFI") + scope("YRFI")));
+
+  // The league abbreviation stays an all-caps abbreviation regardless of the
+  // casing it arrives in ("in mlb" -> "in MLB").
+  check("league arg already upper -> unchanged", rowsFor(col(2, 1), col(2, 1), "over", "NCAAF")[0].scope, "overall on Over Picks");
+  check(
+    "league row uppercases the league ('in mlb' -> 'in MLB')",
+    rowsFor(col(9, 6), col(3, 1), "underdog moneyline", "mlb")[1].scope,
+    "in MLB Underdog Moneyline Picks"
+  );
+
+  // A real fetched noun end-to-end.
+  check(
+    "row for a FAV_ML pick reads 'Favorite Moneyline Picks'",
+    gameCardRecordRowText(rowsFor(col(9, 6), null, PICK_CATEGORY_MARKET_NOUN.FAV_ML)[0]),
+    "60% (9-6) overall on Favorite Moneyline Picks"
+  );
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## FIX 2 - the League row names the market, not just the league ##########");
+{
+  const rows = rowsFor(col(5, 10), col(2, 1), "underdog moneyline", "MLB");
+  check("league row wording", gameCardRecordRowText(rows[1]), "67% (2-1) in MLB Underdog Moneyline Picks");
+  checkTrue("league row is not the bare 'in MLB'", rows[1].scope !== "in MLB");
+  checkTrue("league row still leads with 'in <LEAGUE>'", rows[1].scope.startsWith("in MLB "));
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## FIX 3 - collapse the League row when it equals Overall ##########");
+{
+  // Confirmed real case: Bambino's NRFI pick - every graded NRFI pick is in
+  // MLB, so Overall and League are the exact same 26-18 / 59%. One row, not two.
+  const nrfi = rowsFor(col(26, 18), col(26, 18), "NRFI", "MLB");
+  check("NRFI: collapses to a single row", nrfi.map((r) => r.scope), ["overall on NRFI Picks"]);
+  check(
+    "NRFI: the surviving row is the Overall row",
+    blockLines(nrfi),
+    ["59% (26-18) overall on NRFI Picks"]
+  );
+
+  // Same record, same rounded percentage but different raw winPct still
+  // collapses - the rule compares what the row DISPLAYS.
+  const sameDisplay = rowsFor(
+    { wins: 26, losses: 18, pushes: 0, winPct: 59.09 },
+    { wins: 26, losses: 18, pushes: 0, winPct: 59.11 },
+    "NRFI",
+    "MLB"
+  );
+  check("identical displayed record+pct -> collapsed", sameDisplay.length, 1);
+
+  // Different record -> both rows show.
+  const differ = rowsFor(col(30, 20), col(8, 2), "underdog spread", "NCAAF");
+  check("different records -> two rows", differ.map((r) => r.scope), [
+    "overall on Underdog Spread Picks",
+    "in NCAAF Underdog Spread Picks",
+  ]);
+  check("both rows show their own numbers", differ.map(gameCardRecordRowText), [
+    "60% (30-20) overall on Underdog Spread Picks",
+    "80% (8-2) in NCAAF Underdog Spread Picks",
+  ]);
+
+  // Both halves of the rule matter: same displayed pct but a different record
+  // (a push shows on only one side) -> NOT collapsed, both rows show.
+  const pushOnLeague = rowsFor(col(10, 10), col(10, 10, 4), "over", "MLB");
+  checkTrue(
+    "same pct but different record -> not collapsed",
+    pushOnLeague.length === 2 &&
+      pushOnLeague[0].pct === pushOnLeague[1].pct &&
+      pushOnLeague[0].record !== pushOnLeague[1].record
+  );
+
+  // No league history at all -> League row omitted (unchanged behavior), never
+  // a fake "0% (0-0)".
+  check("no league history -> only the Overall row", rowsFor(col(2, 3), null).map((r) => r.scope), [
+    "overall on Underdog Moneyline Picks",
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## FIX 4 - the Last 20 row, restored ##########");
+{
+  check("GAME_CARD_LAST_N mirrors the upstream window", GAME_CARD_LAST_N, 20);
+
+  // Populated -> row shows, after League, before the streak.
+  const withL20 = rowsFor(col(40, 30), col(12, 8), "over", "MLB", col(14, 6));
+  check("row order: Overall -> League -> Last 20", withL20.map((r) => r.scope), [
+    "overall on Over Picks",
+    "in MLB Over Picks",
+    "over the last 20 picks",
+  ]);
+  check(
+    "Last 20 row text",
+    gameCardRecordRowText(withL20[2]),
+    "70% (14-6) over the last 20 picks"
+  );
+  check("full block: Overall -> League -> Last 20 -> Streak", blockLines(withL20, winStreak(3)), [
+    "57% (40-30) overall on Over Picks",
+    "60% (12-8) in MLB Over Picks",
+    "70% (14-6) over the last 20 picks",
+    "🔥 3 game win streak",
+  ]);
+
+  // Null (below the 20-graded threshold) -> row omitted entirely, no partial.
+  const noL20 = rowsFor(col(8, 5), col(3, 2), "over", "MLB", null);
+  check("last20 null -> no Last 20 row", noL20.map((r) => r.scope), [
+    "overall on Over Picks",
+    "in MLB Over Picks",
+  ]);
+  checkTrue("last20 null -> nothing mentions 'last 20'", !blockLines(noL20).some((l) => l.includes("last 20")));
+
+  // Threshold boundary: exactly at 20 graded the row appears; the streak row
+  // still follows it.
+  const atThreshold = rowsFor(col(11, 9), null, "under", "MLB", col(11, 9));
+  check("at threshold (20 graded): Last 20 present, then streak", blockLines(atThreshold, lossStreak(4)), [
+    "55% (11-9) overall on Under Picks",
+    "55% (11-9) over the last 20 picks",
+    "🧊 4 game losing streak",
+  ]);
+  const belowThreshold = rowsFor(col(11, 8), null, "under", "MLB", null);
+  check("below threshold (19 graded): no Last 20 row", blockLines(belowThreshold, lossStreak(4)), [
+    "58% (11-8) overall on Under Picks",
+    "🧊 4 game losing streak",
+  ]);
+
+  // Last 20 shows even with no league history (it is overall-scoped).
+  const l20NoLeague = rowsFor(col(25, 15), null, "over", "MLB", col(13, 7));
+  check("Last 20 with no league history", l20NoLeague.map((r) => r.scope), [
+    "overall on Over Picks",
+    "over the last 20 picks",
+  ]);
 }
 
 // ---------------------------------------------------------------------------
 console.log("\n########## category wording names the exact side - no two opposite-side categories collapse ##########");
 {
-  // Every category the record block can show is ONE category's record. Two
-  // categories that are opposite sides of the same bet (and that the capper
-  // detail page shows as separate tiles) must get different phrases here.
   const opposites: [PickCategoryKey, PickCategoryKey][] = [
     ["FAV_ML", "DOG_ML"],
     ["SPREAD_MINUS", "SPREAD_PLUS"],
@@ -127,63 +283,20 @@ console.log("\n########## category wording names the exact side - no two opposit
       PICK_CATEGORY_MARKET_NOUN[a] !== PICK_CATEGORY_MARKET_NOUN[b]
     );
   }
-
-  // Exact wording.
-  check("FAV_ML", PICK_CATEGORY_MARKET_NOUN.FAV_ML, "favorite moneyline");
-  check("DOG_ML", PICK_CATEGORY_MARKET_NOUN.DOG_ML, "underdog moneyline");
-  check("SPREAD_MINUS", PICK_CATEGORY_MARKET_NOUN.SPREAD_MINUS, "favorite spread");
-  check("SPREAD_PLUS", PICK_CATEGORY_MARKET_NOUN.SPREAD_PLUS, "underdog spread");
-  check("F5_SPREAD_MINUS", PICK_CATEGORY_MARKET_NOUN.F5_SPREAD_MINUS, "first-5 favorite spread");
-  check("F5_SPREAD_PLUS", PICK_CATEGORY_MARKET_NOUN.F5_SPREAD_PLUS, "first-5 underdog spread");
-  check("OVER", PICK_CATEGORY_MARKET_NOUN.OVER, "over");
-  check("UNDER", PICK_CATEGORY_MARKET_NOUN.UNDER, "under");
-  check("FIRST_HALF_OVER", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_OVER, "first-half over");
-  check("FIRST_HALF_UNDER", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_UNDER, "first-half under");
-  check("F5_OVER", PICK_CATEGORY_MARKET_NOUN.F5_OVER, "first-5 over");
-  check("F5_UNDER", PICK_CATEGORY_MARKET_NOUN.F5_UNDER, "first-5 under");
-  check("segment key: FIRST_QUARTER_OVER", PICK_CATEGORY_MARKET_NOUN.FIRST_QUARTER_OVER, "1st quarter over");
-  check("segment key: FIRST_QUARTER_UNDER", PICK_CATEGORY_MARKET_NOUN.FIRST_QUARTER_UNDER, "1st quarter under");
-
-  // YRFI / NRFI specifically (the addendum) - the bettor-facing terms, matching
-  // the capper detail page's separate tiles, not one shared "first-inning run".
-  check("NRFI reads 'NRFI'", PICK_CATEGORY_MARKET_NOUN.NRFI, "NRFI");
-  check("YRFI reads 'YRFI'", PICK_CATEGORY_MARKET_NOUN.YRFI, "YRFI");
-  checkTrue(
-    "neither NRFI nor YRFI still says 'first-inning run'",
-    PICK_CATEGORY_MARKET_NOUN.NRFI !== "first-inning run" && PICK_CATEGORY_MARKET_NOUN.YRFI !== "first-inning run"
-  );
   check(
-    "row 1 for a YRFI pick reads 'overall on YRFI picks'",
+    "row for a YRFI pick reads 'overall on YRFI Picks'",
     gameCardRecordRowText(rowsFor(col(10, 13), null, PICK_CATEGORY_MARKET_NOUN.YRFI)[0]),
-    "43% (10-13) overall on YRFI picks"
+    "43% (10-13) overall on YRFI Picks"
   );
   check(
-    "row 1 for an NRFI pick reads 'overall on NRFI picks'",
+    "row for an NRFI pick reads 'overall on NRFI Picks'",
     gameCardRecordRowText(rowsFor(col(26, 18), null, PICK_CATEGORY_MARKET_NOUN.NRFI)[0]),
-    "59% (26-18) overall on NRFI picks"
-  );
-
-  // Genuinely single categories (no opposite-side sibling in the category
-  // system) keep a plain noun.
-  check("TEAM_TOTAL (one key, over/under already blended)", PICK_CATEGORY_MARKET_NOUN.TEAM_TOTAL, "team total");
-  check("TD_PROP (one key)", PICK_CATEGORY_MARKET_NOUN.TD_PROP, "touchdown prop");
-  check("FIRST_HALF_ML (no fav/dog split)", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_ML, "first-half moneyline");
-  check("FIRST_HALF_SPREAD (no fav/dog split)", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_SPREAD, "first-half spread");
-  check("F5_ML (no fav/dog split)", PICK_CATEGORY_MARKET_NOUN.F5_ML, "first-5 moneyline");
-  check("SPREAD fallback (side unreadable)", PICK_CATEGORY_MARKET_NOUN.SPREAD, "spread");
-  check("segment key: FIRST_QUARTER_ML", PICK_CATEGORY_MARKET_NOUN.FIRST_QUARTER_ML, "1st quarter moneyline");
-  check("segment key: SECOND_HALF_SPREAD", PICK_CATEGORY_MARKET_NOUN.SECOND_HALF_SPREAD, "2nd half spread");
-
-  // A real row using a fetched noun.
-  check(
-    "row 1 for a FAV_ML pick reads 'favorite moneyline'",
-    gameCardRecordRowText(rowsFor(col(9, 6), null, PICK_CATEGORY_MARKET_NOUN.FAV_ML)[0]),
-    "60% (9-6) overall on favorite moneyline picks"
+    "59% (26-18) overall on NRFI Picks"
   );
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n########## row 3 - spelled-out streak, only at 2+ ##########");
+console.log("\n########## streak row - spelled-out, only at 2+ ##########");
 {
   check("2 win streak", gameCardStreakRowText(winStreak(2)), "🔥 2 game win streak");
   check("4 win streak", gameCardStreakRowText(winStreak(4)), "🔥 4 game win streak");
@@ -192,7 +305,6 @@ console.log("\n########## row 3 - spelled-out streak, only at 2+ ##########");
   check("glyph alone: win", gameCardStreakGlyph(winStreak(3)), "🔥");
   check("glyph alone: loss", gameCardStreakGlyph(lossStreak(3)), "🧊");
 
-  // Below 2 in either direction -> row is omitted entirely, no fallback.
   const below: (GameCardStreak | null | undefined)[] = [
     winStreak(1),
     lossStreak(1),
@@ -207,7 +319,7 @@ console.log("\n########## row 3 - spelled-out streak, only at 2+ ##########");
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n########## row 3 hover tooltip - preserved, count + direction ##########");
+console.log("\n########## streak row hover tooltip - preserved, count + direction ##########");
 {
   for (const n of [2, 4, 7, 12]) {
     check(`win ${n} -> "Won ${n} in a row"`, gameCardStreakTooltip(winStreak(n)), `Won ${n} in a row`);
@@ -216,8 +328,6 @@ console.log("\n########## row 3 hover tooltip - preserved, count + direction ###
   check("below 2 -> no tooltip", gameCardStreakTooltip(winStreak(1)), "");
   check("null -> no tooltip", gameCardStreakTooltip(null), "");
 
-  // Tooltip and the visible row always agree about whether they show, and the
-  // count/direction line up.
   for (const s of [winStreak(2), winStreak(9), lossStreak(2), lossStreak(6)]) {
     const row = gameCardStreakRowText(s);
     const tip = gameCardStreakTooltip(s);
@@ -233,15 +343,12 @@ console.log("\n########## row 3 hover tooltip - preserved, count + direction ###
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n########## row 3 glyph keeps the PR #34/#35 pulse + reduced-motion classes ##########");
+console.log("\n########## streak glyph keeps the PR #34/#35 pulse + reduced-motion classes ##########");
 {
   const classes = GAME_CARD_STREAK_GLYPH_CLASS.split(/\s+/);
   checkTrue("glyph class carries the pulse animation", classes.includes("animate-streak-pulse"));
   checkTrue("glyph class carries the reduced-motion guard", classes.includes("motion-reduce:animate-none"));
-  checkTrue(
-    "glyph is inline-block so the pulse transform applies without shifting the text",
-    classes.includes("inline-block")
-  );
+  checkTrue("glyph is inline-block so the pulse transform applies without shifting text", classes.includes("inline-block"));
   check(
     "exact class string (shared with the component)",
     GAME_CARD_STREAK_GLYPH_CLASS,
@@ -250,27 +357,37 @@ console.log("\n########## row 3 glyph keeps the PR #34/#35 pulse + reduced-motio
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n########## the four combinations: {league history?} x {2+ streak?} ##########");
+console.log("\n########## the combinations: {league history?} x {last 20?} x {2+ streak?} ##########");
 {
   const overall = col(2, 3);
   const league = col(11, 9);
 
-  check("league history + streak -> 3 rows", blockLines(rowsFor(overall, league), winStreak(4)), [
-    "40% (2-3) overall on underdog moneyline picks",
-    "55% (11-9) in NCAAF",
+  check("league history + streak, no L20 -> 3 lines", blockLines(rowsFor(overall, league), winStreak(4)), [
+    "40% (2-3) overall on Underdog Moneyline Picks",
+    "55% (11-9) in MLB Underdog Moneyline Picks",
     "🔥 4 game win streak",
   ]);
-  check("league history, no streak -> 2 rows", blockLines(rowsFor(overall, league), winStreak(1)), [
-    "40% (2-3) overall on underdog moneyline picks",
-    "55% (11-9) in NCAAF",
+  check("league history, no streak, no L20 -> 2 lines", blockLines(rowsFor(overall, league), winStreak(1)), [
+    "40% (2-3) overall on Underdog Moneyline Picks",
+    "55% (11-9) in MLB Underdog Moneyline Picks",
   ]);
-  check("no league history + streak -> 2 rows (row 2 dropped)", blockLines(rowsFor(overall, null), lossStreak(3)), [
-    "40% (2-3) overall on underdog moneyline picks",
+  check("no league history + streak -> 2 lines (League row dropped)", blockLines(rowsFor(overall, null), lossStreak(3)), [
+    "40% (2-3) overall on Underdog Moneyline Picks",
     "🧊 3 game losing streak",
   ]);
-  check("no league history, no streak -> 1 row", blockLines(rowsFor(overall, null), null), [
-    "40% (2-3) overall on underdog moneyline picks",
+  check("no league history, no streak, no L20 -> 1 line", blockLines(rowsFor(overall, null), null), [
+    "40% (2-3) overall on Underdog Moneyline Picks",
   ]);
+  check(
+    "everything on: Overall -> League -> Last 20 -> Streak",
+    blockLines(rowsFor(col(40, 30), col(12, 8), "underdog moneyline", "MLB", col(15, 5)), winStreak(5)),
+    [
+      "57% (40-30) overall on Underdog Moneyline Picks",
+      "60% (12-8) in MLB Underdog Moneyline Picks",
+      "75% (15-5) over the last 20 picks",
+      "🔥 5 game win streak",
+    ]
+  );
 }
 
 // ---------------------------------------------------------------------------
