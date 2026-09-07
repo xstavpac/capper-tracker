@@ -27,10 +27,15 @@
 //    Overall and League are always the same number. That collapse is a general
 //    value comparison, not a hardcoded market list, so it self-corrects for any
 //    market whose Overall and League records happen to coincide.
-//  - Last 20 - the capper's record over their most recent LEAGUE_RECORD_LAST_N
-//    graded picks in this category (all leagues). Shown only once the category
-//    has at least that many graded picks; below the threshold `last20` arrives
-//    null and the row is omitted entirely (never a partial "last N").
+//  - Last 20 - the capper's record over their most recent GAME_CARD_LAST_N
+//    graded picks ACROSS EVERY category and league, segment (Q1-Q4 / half /
+//    period) picks included - a capper-wide recent-form signal, NOT scoped to
+//    this card's category the way Overall / League are. It renders from
+//    `opts.last20` alone, so it appears even when the capper has no history in
+//    this pick's category. Shown only once the capper has at least
+//    GAME_CARD_LAST_N graded picks total; below that `opts.last20` arrives
+//    null and the row is omitted entirely (never a partial "last N"). The
+//    wording stays "over the last 20 picks" - it never named a category.
 //  - Streak - the capper's current OVERALL streak (any sport / any bet type),
 //    only when it is 2+ in either direction: "🔥 4 game win streak" /
 //    "🧊 5 game losing streak". The glyph carries the pulse animation +
@@ -56,11 +61,11 @@ export type GameCardStreak = { type: "WIN" | "LOSS" | "NONE"; count: number };
 // Same 2+ cutoff StreakBadge uses - a single win or loss isn't a "streak."
 export const GAME_CARD_STREAK_MIN = 2;
 
-// The recent-form window for the Last 20 row. Mirrors LEAGUE_RECORD_LAST_N
-// (stats.ts), which is what actually decides whether `last20` is populated -
-// this file can't import stats.ts (module-level prisma), so the number is
-// restated here for the row's wording, the same way GAME_CARD_STREAK_MIN
-// mirrors StreakBadge's cutoff.
+// The window for the capper-wide "over the last 20 picks" row. Mirrors
+// LEAGUE_RECORD_LAST_N (stats.ts), which is what actually decides whether
+// `opts.last20` is populated - this file can't import stats.ts (module-level
+// prisma), so the number is restated here for the row's wording, the same way
+// GAME_CARD_STREAK_MIN mirrors StreakBadge's cutoff.
 export const GAME_CARD_LAST_N = 20;
 
 // The component's placeholder when the capper has no graded pick in this
@@ -79,8 +84,10 @@ export const GAME_CARD_STREAK_GLYPH_CLASS = "inline-block animate-streak-pulse m
 
 // One record row. `scope` is everything after the "<pct> (<record>)" unit -
 // "overall on Underdog Moneyline Picks", "in MLB Underdog Moneyline Picks",
-// "over the last 20 picks".
+// "over the last 20 picks". `kind` names which of the three rows it is (each
+// appears at most once), for stable React keys and targeted test assertions.
 export type GameCardRecordRow = {
+  kind: "overall" | "league" | "last20";
   pct: string; // "40%"
   record: string; // "2-3"
   scope: string;
@@ -114,52 +121,75 @@ function titleCaseMarket(phrase: string): string {
     .join(" ");
 }
 
-// The record rows from a capper's league-record card. `marketNoun` is
+// The record rows for a capper's /live game-card block.
+//
+// `card` carries the category-scoped Overall + League columns. It is null when
+// the capper has no graded pick in this pick's category, or the pick has no
+// category at all - only the Last 20 row can appear then. `marketNoun` is
 // PICK_CATEGORY_MARKET_NOUN[category] (already includes the favorite/underdog
-// side where the category has one). The League row is included only when
-// `hasLeagueHistory` is true AND its numbers differ from the Overall row's.
-// The Last 20 row is included only when `last20` is non-null (the caller /
-// computeLeagueRecordCards nulls it below LEAGUE_RECORD_LAST_N graded picks).
+// side where the category has one), unused when `card` is null. The League row
+// is included only when `hasLeagueHistory` is true AND its numbers differ from
+// the Overall row's.
+//
+// `opts.last20` is the capper's CAPPER-WIDE record over their most recent
+// GAME_CARD_LAST_N graded picks - every bet type, every league, segment picks
+// included - NOT scoped to this card's category (that is the whole point of
+// the row). Its row is included only when `opts.last20` is non-null (the
+// caller nulls it below GAME_CARD_LAST_N graded picks); it renders
+// independently of `card`, so it shows even with no Overall/League card.
 export function gameCardRecordRows(
   card: {
     overall: GameCardRecordColumn;
     league: GameCardRecordColumn;
+  } | null,
+  opts: {
+    leagueName: string;
+    marketNoun: string;
+    hasLeagueHistory: boolean;
     last20: GameCardRecordColumn | null;
-  },
-  opts: { leagueName: string; marketNoun: string; hasLeagueHistory: boolean }
+  }
 ): GameCardRecordRow[] {
-  const marketLabel = titleCaseMarket(opts.marketNoun + " picks");
-  const leagueLabel = opts.leagueName.toUpperCase();
+  const rows: GameCardRecordRow[] = [];
 
-  const overallRow: GameCardRecordRow = {
-    pct: pctText(card.overall),
-    record: recordText(card.overall),
-    scope: "overall on " + marketLabel,
-    winPct: card.overall.winPct,
-  };
-  const rows: GameCardRecordRow[] = [overallRow];
+  if (card) {
+    const marketLabel = titleCaseMarket(opts.marketNoun + " picks");
+    const leagueLabel = opts.leagueName.toUpperCase();
 
-  // Collapse the League row into Overall whenever the two would show the same
-  // record and the same percentage - a general value check, so it self-
-  // corrects for NRFI/YRFI and any other market that only ever runs in one
-  // league without a hardcoded list to maintain.
-  const leagueMatchesOverall =
-    recordText(card.league) === overallRow.record && pctText(card.league) === overallRow.pct;
-  if (opts.hasLeagueHistory && !leagueMatchesOverall) {
-    rows.push({
-      pct: pctText(card.league),
-      record: recordText(card.league),
-      scope: "in " + leagueLabel + " " + marketLabel,
-      winPct: card.league.winPct,
-    });
+    const overallRow: GameCardRecordRow = {
+      kind: "overall",
+      pct: pctText(card.overall),
+      record: recordText(card.overall),
+      scope: "overall on " + marketLabel,
+      winPct: card.overall.winPct,
+    };
+    rows.push(overallRow);
+
+    // Collapse the League row into Overall whenever the two would show the
+    // same record and the same percentage - a general value check, so it
+    // self-corrects for NRFI/YRFI and any other market that only ever runs in
+    // one league without a hardcoded list to maintain.
+    const leagueMatchesOverall =
+      recordText(card.league) === overallRow.record && pctText(card.league) === overallRow.pct;
+    if (opts.hasLeagueHistory && !leagueMatchesOverall) {
+      rows.push({
+        kind: "league",
+        pct: pctText(card.league),
+        record: recordText(card.league),
+        scope: "in " + leagueLabel + " " + marketLabel,
+        winPct: card.league.winPct,
+      });
+    }
   }
 
-  if (card.last20) {
+  // Capper-wide recent form - independent of `card`, so it shows even when the
+  // capper has no history in this pick's category.
+  if (opts.last20) {
     rows.push({
-      pct: pctText(card.last20),
-      record: recordText(card.last20),
+      kind: "last20",
+      pct: pctText(opts.last20),
+      record: recordText(opts.last20),
       scope: "over the last " + GAME_CARD_LAST_N + " picks",
-      winPct: card.last20.winPct,
+      winPct: opts.last20.winPct,
     });
   }
 

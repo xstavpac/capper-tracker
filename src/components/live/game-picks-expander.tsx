@@ -181,20 +181,23 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
   }
 
   function renderPickCard(p: ExpanderPick) {
-    const card = p.category ? data?.records[recordKey(p)] : null;
+    const card = (p.category ? data?.records[recordKey(p)] : null) ?? null;
     const streak = data?.streaks[p.capperId] ?? null;
+    // Capper-wide (every category / league, segment picks included) - shown
+    // whether or not this capper has any history in THIS card's category.
+    const last20 = data?.last20[p.capperId] ?? null;
     const hasHistory = Boolean(card && card.overall.count > 0);
     // "Top performer" highlight keys off the current-league record - "good at
     // this bet type in THIS league", not blended.
     const isTopPerformer = Boolean(card && card.league.count > 0 && card.league.winPct >= TOP_PERFORMER_THRESHOLD);
-    const rows =
-      card && hasHistory && p.category
-        ? gameCardRecordRows(card, {
-            leagueName: p.leagueName,
-            marketNoun: PICK_CATEGORY_MARKET_NOUN[p.category],
-            hasLeagueHistory: card.league.count > 0,
-          })
-        : [];
+    const rows = data
+      ? gameCardRecordRows(hasHistory && p.category ? card : null, {
+          leagueName: p.leagueName,
+          marketNoun: p.category ? PICK_CATEGORY_MARKET_NOUN[p.category] : "",
+          hasLeagueHistory: Boolean(card && card.league.count > 0),
+          last20,
+        })
+      : [];
     return (
       <div
         key={p.pickId}
@@ -246,11 +249,14 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
             <div className="mt-0.5 text-[10px] text-muted-foreground">Loading record&hellip;</div>
           ) : (
             <div className="mt-0.5 space-y-0.5 text-[10px] leading-snug">
-              {rows.length > 0 ? (
-                rows.map((r) => <RecordRow key={r.scope} {...r} />)
-              ) : (
+              {/* The placeholder speaks to THIS card's category (Overall /
+                  League); the capper-wide Last 20 row can still follow it. */}
+              {!hasHistory && (
                 <div className="text-muted-foreground">{GAME_CARD_NO_HISTORY_TEXT}</div>
               )}
+              {rows.map((r) => (
+                <RecordRow key={r.kind} {...r} />
+              ))}
               <StreakRow streak={streak} />
             </div>
           )}

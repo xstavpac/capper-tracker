@@ -6,7 +6,9 @@ import {
   computeScorecard,
   computeCategoryBreakdown,
   computeLeagueRecordCards,
+  recentPicksRecord,
   ALL_CATEGORY_KEYS,
+  LEAGUE_RECORD_LAST_N,
   SEGMENT_CATEGORY_PERIODS,
   CATEGORY_RECENT_FORM_MIN_SAMPLE,
   CATEGORY_RECENT_FORM_WINDOW,
@@ -14,6 +16,7 @@ import {
   type ScorecardBucketKey,
   type CategoryBreakdownItem,
   type LeagueRecordCard,
+  type LeagueRecordColumn,
   type PickCategoryKey,
 } from "@/server/data/stats";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
@@ -607,16 +610,26 @@ export type CapperLeagueRecords = {
   // that powers the Leaderboard / Favorites flame badge. One entry per capper
   // in the request; { type: "NONE", count: 0 } when they have no decided pick.
   streaks: Record<string, GameCardStreak>;
+  // keyed by capperId - the capper's record over their most recent
+  // LEAGUE_RECORD_LAST_N graded picks across EVERY category and league,
+  // segment (Q1-Q4 / half / period) picks included - the same full per-capper
+  // history the streak above is derived from, NOT scoped to any card's
+  // category or league. null when the capper has fewer than
+  // LEAGUE_RECORD_LAST_N graded picks total; the /live card then omits the
+  // "over the last 20 picks" row rather than showing a partial count.
+  last20: Record<string, LeagueRecordColumn | null>;
 };
 
-// The three-way (Overall / league / Last 20) form of getCapperCategoryRecords,
-// for the condensed game-card record line, plus each capper's current overall
-// streak for the line's trailing 🔥/🧊 indicator. Same one-query-per-batch,
-// one-computation-per-capper shape; reuses computeLeagueRecordCards and
-// computeStats (see stats.ts) - no new aggregation, no extra query (the
-// streak is computed from the same full pick history fetchPicksByCapper
-// already loads). `leagueSport` is the game's sport (the /live page has one
-// per tab).
+// The game-card record block's data: per (capper, category) the Overall /
+// League columns (getCapperCategoryRecords, scoped to the card's category),
+// plus two capper-wide values keyed by capperId alone - the current overall
+// streak for the trailing 🔥/🧊 indicator, and `last20`, the record over the
+// capper's most recent LEAGUE_RECORD_LAST_N graded picks across every category
+// and league. Same one-query-per-batch, one-computation-per-capper shape;
+// reuses computeLeagueRecordCards, computeStats and recentPicksRecord (see
+// stats.ts) - no new aggregation, no extra query (streak and last20 both come
+// from the full pick history fetchPicksByCapper already loads). `leagueSport`
+// is the game's sport (the /live page has one per tab).
 //
 // `entries` is every pick on the card. A null-category entry still puts its
 // capper in the streak map (the indicator shows on every pick card) but gets
@@ -627,7 +640,7 @@ export async function getCapperLeagueRecords(
   entries: { capperId: string; leagueSport: string; category: PickCategoryKey | null }[]
 ): Promise<CapperLeagueRecords> {
   const capperIds = Array.from(new Set(entries.map((e) => e.capperId)));
-  if (capperIds.length === 0) return { records: {}, streaks: {} };
+  if (capperIds.length === 0) return { records: {}, streaks: {}, last20: {} };
 
   const pairs = entries.filter(
     (e): e is { capperId: string; leagueSport: string; category: PickCategoryKey } => e.category !== null
@@ -658,10 +671,23 @@ export async function getCapperLeagueRecords(
     streaks[capperId] = computeStats(byCapper.get(capperId) ?? []).currentStreak;
   }
 
+  // The /live card's "over the last 20 picks" row - capper-wide, NOT scoped to
+  // any card's category or league (unlike the Overall / League rows). Drawn
+  // from the same full per-capper history the streak uses; recentPicksRecord
+  // applies the 20-graded-pick minimum below which the row is omitted.
+  const last20: Record<string, LeagueRecordColumn | null> = {};
+  for (const capperId of capperIds) {
+    last20[capperId] = recentPicksRecord(
+      byCapper.get(capperId) ?? [],
+      LEAGUE_RECORD_LAST_N,
+      LEAGUE_RECORD_LAST_N
+    );
+  }
+
   const records: Record<string, LeagueRecordCard | null> = {};
   for (const { capperId, leagueSport, category } of pairs) {
     records[leagueRecordKey(capperId, leagueSport, category)] =
       cardsByCapperLeague.get(capperId + "|" + leagueSport)?.get(category) ?? null;
   }
-  return { records, streaks };
+  return { records, streaks, last20 };
 }

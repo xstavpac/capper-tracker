@@ -1,23 +1,25 @@
 // League-specific capper record card - the aggregation layer.
 // Run with: npx tsx src/server/data/league-record-card-acceptance-test.ts
 //
-// Spec: three columns (Overall / [League] / Last 20) for ONE bet-type
-// category, all from the SAME pipeline (computeLeagueRecordCards ->
-// computeCategoryBreakdown -> computeStats). Rules proven here:
+// Spec: two columns (Overall / [League]) for ONE bet-type category, both from
+// the SAME pipeline (computeLeagueRecordCards -> computeCategoryBreakdown ->
+// computeStats). Rules proven here:
 //  - Aggregation Matrix filters, exactly: Overall = all leagues lifetime,
-//    [League] = one league lifetime, Last 20 = most recent 20 GRADED picks
-//  - PENDING / CANCELLED excluded from every column ("graded only")
+//    [League] = one league lifetime
+//  - PENDING / CANCELLED excluded from both columns ("graded only")
 //  - No minimum on Overall / League (1-0, 2-0 render as-is)
-//  - Last 20 requires >= 20 graded picks in the category, else null ("Need 20
-//    picks") - never a partial "last N"
 //  - win% is always derived from that column's own W-L count, never averaged
 //    across subsets
 //  - a segment-scoped pick (Q1, 2H, period, ...) never dilutes a full-game
 //    category's card - it classifies under its own <period>_<side> key, which
 //    gets its own card when `categories` includes it (the football/basketball/
 //    hockey chip sets and ALL_CATEGORY_KEYS do; DEFAULT_CHIP_SET / MLB do not)
+//
+// The card's old third column, the capper's most-recent-20 record, is gone
+// from this card: the /live "over the last 20 picks" row is now capper-wide
+// (every category / league) and lives in recent-picks-record-acceptance-test.ts.
 
-import { computeLeagueRecordCards, chipSetForLeague, LEAGUE_RECORD_LAST_N } from "@/server/data/stats";
+import { computeLeagueRecordCards, chipSetForLeague } from "@/server/data/stats";
 import type { Pick } from "@prisma/client";
 
 let failures = 0;
@@ -87,7 +89,6 @@ console.log("\n########## No minimum on Overall / League ##########");
   const c = card([dogSpread("WIN", "NCAAF")], "NCAAF")!;
   check("a single 1-0 record renders as-is (no gate)", wl(c.overall), [1, 0, 100]);
   check("League also 1-0", wl(c.league), [1, 0, 100]);
-  check("Last 20 is null below the threshold (1 graded pick)", c.last20, null);
 }
 {
   const c = card([dogSpread("WIN", "NCAAF"), dogSpread("WIN", "NCAAF")], "NCAAF")!;
@@ -95,32 +96,15 @@ console.log("\n########## No minimum on Overall / League ##########");
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n########## Last 20: 20-graded-pick minimum, exact recency ##########");
+console.log("\n########## Overall reflects every graded pick in the category ##########");
 {
-  // 19 graded -> still null.
-  const c19 = card(
-    Array.from({ length: 19 }, (_, i) => dogSpread("WIN", "NCAAF", i + 1)),
-    "NCAAF"
-  )!;
-  check(`${LEAGUE_RECORD_LAST_N - 1} graded -> Last 20 still null ("Need 20 picks")`, c19.last20, null);
-
-  // 20 graded -> populated, and it IS the last 20 by gameTime.
-  const first10Win10Loss = [
-    ...Array.from({ length: 10 }, (_, i) => dogSpread("WIN", "NCAAF", i + 1)),
-    ...Array.from({ length: 10 }, (_, i) => dogSpread("LOSS", "NCAAF", i + 11)),
-  ];
-  const c20 = card(first10Win10Loss, "NCAAF")!;
-  check("exactly 20 graded -> Last 20 populated", wl(c20.last20), [10, 10, 50]);
-
   // 30 graded: first 25 WIN (days 1-25), last 5 LOSS (days 26-30).
-  // Overall = 25-5. Last 20 = days 11-30 = 15 W + 5 L.
   const c30picks = [
     ...Array.from({ length: 25 }, (_, i) => dogSpread("WIN", "NCAAF", i + 1)),
     ...Array.from({ length: 5 }, (_, i) => dogSpread("LOSS", "NCAAF", i + 26)),
   ];
   const c30 = card(c30picks, "NCAAF")!;
   check("30 graded -> Overall 25-5", wl(c30.overall), [25, 5, 83]);
-  check("30 graded -> Last 20 is the most-recent 20 by gameTime -> 15-5", wl(c30.last20), [15, 5, 75]);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,18 +121,6 @@ console.log("\n########## win% is derived from the aggregate, never averaged ###
   const c = card(picks, "NCAAF")!;
   check("Overall win% = 1/(1+3) = 25%, NOT the 50% average of 100% and 0%", Math.round(c.overall.winPct), 25);
   check("[League] win% = NCAAF's own 1-0 = 100%", Math.round(c.league.winPct), 100);
-}
-{
-  // Last 20 %: 12 W / 8 L in the window -> 60%, from the count, not an average
-  // of any pre-computed values.
-  const picks = [
-    ...Array.from({ length: 5 }, (_, i) => dogSpread("LOSS", "NCAAF", i + 1)), // old, outside the window
-    ...Array.from({ length: 12 }, (_, i) => dogSpread("WIN", "NCAAF", i + 6)),
-    ...Array.from({ length: 8 }, (_, i) => dogSpread("LOSS", "NCAAF", i + 18)),
-  ];
-  const c = card(picks, "NCAAF")!;
-  check("Last 20 win% = 12/(12+8) = 60%", wl(c.last20), [12, 8, 60]);
-  check("Overall (25 graded) win% = 12/(12+13) = 48%", Math.round(c.overall.winPct), 48);
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +140,6 @@ console.log("\n########## a segment pick never dilutes a full-game category's ca
   const c = card(picks, "NCAAF")!;
   check("SPREAD_PLUS card: Overall = the 3 full-game picks only -> 2-1", wl(c.overall), [2, 1, 67]);
   check("SPREAD_PLUS card: [League] = the 3 full-game picks only -> 2-1", wl(c.league), [2, 1, 67]);
-  check("SPREAD_PLUS card: segment wins did NOT push it over the Last-20 threshold", c.last20, null);
 
   const cards = computeLeagueRecordCards(picks, "NCAAF", chipSetForLeague("NCAAF"));
   check(
