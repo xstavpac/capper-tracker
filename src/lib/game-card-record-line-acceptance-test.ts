@@ -4,12 +4,12 @@
 // It is a stack of rows now (not the old inline sentence + width guard):
 //
 //   Twins Moneyline
-//   40% (2-3) overall on Underdog Moneyline Picks       <- Overall (category, all-time)
-//   55% (11-9) in MLB Underdog Moneyline Picks          <- League (category+league; omitted
-//                                                          with no league history / if == Overall)
-//   67% (14-6) over the last 20 picks                   <- Last 20 (capper-wide: any type,
-//                                                          any league; >= 20 graded total)
-//   🔥 4 game win streak                                <- Streak (only if 2+)
+//   40% (2-3) All-Time Underdog Moneyline Picks   <- All-Time (this pick's category, every league)
+//   55% (11-9) in MLB Underdog Moneyline Picks    <- League (category + league; omitted with
+//                                                    no league history / if == All-Time)
+//   67% (14-6) Last 20 Picks                      <- Last 20 (capper-wide: any type, any
+//                                                    league; >= 20 graded total)
+//   🔥 4 game win streak                          <- Streak (only if 2+)
 //
 // Proven here:
 //  - Title Case on the market/category term ("Underdog Moneyline Picks", not
@@ -88,17 +88,17 @@ const blockLines = (rows: ReturnType<typeof rowsFor>, streak?: GameCardStreak | 
 };
 
 // ---------------------------------------------------------------------------
-console.log("########## Overall / League row text - win% and record stay together ##########");
+console.log("########## All-Time / League row text - win% and record stay together ##########");
 {
   const rows = rowsFor(col(2, 3), col(11, 9));
   check("two rows: overall then league", rows.map((r) => r.scope), [
-    "overall on Underdog Moneyline Picks",
+    "All-Time Underdog Moneyline Picks",
     "in MLB Underdog Moneyline Picks",
   ]);
   check(
-    "Overall row: '<pct> (<record>) overall on <Side> <Market> Picks'",
+    "All-Time row: '<pct> (<record>) All-Time <Side> <Market> Picks'",
     gameCardRecordRowText(rows[0]),
-    "40% (2-3) overall on Underdog Moneyline Picks"
+    "40% (2-3) All-Time Underdog Moneyline Picks"
   );
   check(
     "League row: '<pct> (<record>) in <LEAGUE> <Side> <Market> Picks'",
@@ -111,34 +111,34 @@ console.log("########## Overall / League row text - win% and record stay togethe
 check(
   "pushes render inside the record (3-3-1 style)",
   gameCardRecordRowText(rowsFor(col(3, 3, 1), null, "under")[0]),
-  "50% (3-3-1) overall on Under Picks"
+  "50% (3-3-1) All-Time Under Picks"
 );
 
 // ---------------------------------------------------------------------------
 console.log("\n########## FIX 1 - Title Case on the market/category term ##########");
 {
-  // The term after "overall on" / "in <LEAGUE>" is Title-cased, matching the
+  // The term after "All-Time" / "in <LEAGUE>" is Title-cased, matching the
   // capper's own pick line ("Twins Moneyline"); sentence-case alone would do
   // nothing since the row starts with a digit.
   const scope = (noun: string) => rowsFor(col(5, 4), null, noun)[0].scope;
-  check("multi-word market -> every word capped", scope("underdog moneyline"), "overall on Underdog Moneyline Picks");
-  check("single word market", scope("under"), "overall on Under Picks");
+  check("multi-word market -> every word capped", scope("underdog moneyline"), "All-Time Underdog Moneyline Picks");
+  check("single word market", scope("under"), "All-Time Under Picks");
   check("'picks' itself is capped too", scope("over").endsWith("Over Picks"), true);
-  check("hyphen group cased part-by-part: first-5 over", scope("first-5 over"), "overall on First-5 Over Picks");
-  check("hyphen group: first-half under", scope("first-half under"), "overall on First-Half Under Picks");
-  check("leading digit left alone: 1st quarter over", scope("1st quarter over"), "overall on 1st Quarter Over Picks");
-  check("2nd half spread", scope("2nd half spread"), "overall on 2nd Half Spread Picks");
-  check("team total", scope("team total"), "overall on Team Total Picks");
-  check("touchdown prop", scope("touchdown prop"), "overall on Touchdown Prop Picks");
+  check("hyphen group cased part-by-part: first-5 over", scope("first-5 over"), "All-Time First-5 Over Picks");
+  check("hyphen group: first-half under", scope("first-half under"), "All-Time First-Half Under Picks");
+  check("leading digit left alone: 1st quarter over", scope("1st quarter over"), "All-Time 1st Quarter Over Picks");
+  check("2nd half spread", scope("2nd half spread"), "All-Time 2nd Half Spread Picks");
+  check("team total", scope("team total"), "All-Time Team Total Picks");
+  check("touchdown prop", scope("touchdown prop"), "All-Time Touchdown Prop Picks");
 
   // Acronyms stay all-caps - never "Nrfi" / "Yrfi".
-  check("NRFI stays NRFI", scope("NRFI"), "overall on NRFI Picks");
-  check("YRFI stays YRFI", scope("YRFI"), "overall on YRFI Picks");
+  check("NRFI stays NRFI", scope("NRFI"), "All-Time NRFI Picks");
+  check("YRFI stays YRFI", scope("YRFI"), "All-Time YRFI Picks");
   checkTrue("no lowercased acronym anywhere", !/\bNrfi\b|\bYrfi\b/.test(scope("NRFI") + scope("YRFI")));
 
   // The league abbreviation stays an all-caps abbreviation regardless of the
   // casing it arrives in ("in mlb" -> "in MLB").
-  check("league arg already upper -> unchanged", rowsFor(col(2, 1), col(2, 1), "over", "NCAAF")[0].scope, "overall on Over Picks");
+  check("league arg already upper -> unchanged", rowsFor(col(2, 1), col(2, 1), "over", "NCAAF")[0].scope, "All-Time Over Picks");
   check(
     "league row uppercases the league ('in mlb' -> 'in MLB')",
     rowsFor(col(9, 6), col(3, 1), "underdog moneyline", "mlb")[1].scope,
@@ -149,7 +149,7 @@ console.log("\n########## FIX 1 - Title Case on the market/category term #######
   check(
     "row for a FAV_ML pick reads 'Favorite Moneyline Picks'",
     gameCardRecordRowText(rowsFor(col(9, 6), null, PICK_CATEGORY_MARKET_NOUN.FAV_ML)[0]),
-    "60% (9-6) overall on Favorite Moneyline Picks"
+    "60% (9-6) All-Time Favorite Moneyline Picks"
   );
 }
 
@@ -163,16 +163,16 @@ console.log("\n########## FIX 2 - the League row names the market, not just the 
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n########## FIX 3 - collapse the League row when it equals Overall ##########");
+console.log("\n########## FIX 3 - collapse the League row when it equals All-Time ##########");
 {
   // Confirmed real case: Bambino's NRFI pick - every graded NRFI pick is in
   // MLB, so Overall and League are the exact same 26-18 / 59%. One row, not two.
   const nrfi = rowsFor(col(26, 18), col(26, 18), "NRFI", "MLB");
-  check("NRFI: collapses to a single row", nrfi.map((r) => r.scope), ["overall on NRFI Picks"]);
+  check("NRFI: collapses to a single row", nrfi.map((r) => r.scope), ["All-Time NRFI Picks"]);
   check(
     "NRFI: the surviving row is the Overall row",
     blockLines(nrfi),
-    ["59% (26-18) overall on NRFI Picks"]
+    ["59% (26-18) All-Time NRFI Picks"]
   );
 
   // Same record, same rounded percentage but different raw winPct still
@@ -188,11 +188,11 @@ console.log("\n########## FIX 3 - collapse the League row when it equals Overall
   // Different record -> both rows show.
   const differ = rowsFor(col(30, 20), col(8, 2), "underdog spread", "NCAAF");
   check("different records -> two rows", differ.map((r) => r.scope), [
-    "overall on Underdog Spread Picks",
+    "All-Time Underdog Spread Picks",
     "in NCAAF Underdog Spread Picks",
   ]);
   check("both rows show their own numbers", differ.map(gameCardRecordRowText), [
-    "60% (30-20) overall on Underdog Spread Picks",
+    "60% (30-20) All-Time Underdog Spread Picks",
     "80% (8-2) in NCAAF Underdog Spread Picks",
   ]);
 
@@ -209,7 +209,7 @@ console.log("\n########## FIX 3 - collapse the League row when it equals Overall
   // No league history at all -> League row omitted (unchanged behavior), never
   // a fake "0% (0-0)".
   check("no league history -> only the Overall row", rowsFor(col(2, 3), null).map((r) => r.scope), [
-    "overall on Underdog Moneyline Picks",
+    "All-Time Underdog Moneyline Picks",
   ]);
 }
 
@@ -221,41 +221,41 @@ console.log("\n########## FIX 4 - the Last 20 row (now capper-wide) ##########")
   // Populated -> row shows, after League, before the streak.
   const withL20 = rowsFor(col(40, 30), col(12, 8), "over", "MLB", col(14, 6));
   check("row order: Overall -> League -> Last 20", withL20.map((r) => r.scope), [
-    "overall on Over Picks",
+    "All-Time Over Picks",
     "in MLB Over Picks",
-    "over the last 20 picks",
+    "Last 20 Picks",
   ]);
   check(
     "Last 20 row text",
     gameCardRecordRowText(withL20[2]),
-    "70% (14-6) over the last 20 picks"
+    "70% (14-6) Last 20 Picks"
   );
   check("full block: Overall -> League -> Last 20 -> Streak", blockLines(withL20, winStreak(3)), [
-    "57% (40-30) overall on Over Picks",
+    "57% (40-30) All-Time Over Picks",
     "60% (12-8) in MLB Over Picks",
-    "70% (14-6) over the last 20 picks",
+    "70% (14-6) Last 20 Picks",
     "🔥 3 game win streak",
   ]);
 
   // Null (below the 20-graded threshold) -> row omitted entirely, no partial.
   const noL20 = rowsFor(col(8, 5), col(3, 2), "over", "MLB", null);
   check("last20 null -> no Last 20 row", noL20.map((r) => r.scope), [
-    "overall on Over Picks",
+    "All-Time Over Picks",
     "in MLB Over Picks",
   ]);
-  checkTrue("last20 null -> nothing mentions 'last 20'", !blockLines(noL20).some((l) => l.includes("last 20")));
+  checkTrue("last20 null -> nothing mentions 'Last 20 Picks'", !blockLines(noL20).some((l) => l.includes("Last 20 Picks")));
 
   // Threshold boundary: exactly at 20 graded the row appears; the streak row
   // still follows it.
   const atThreshold = rowsFor(col(11, 9), null, "under", "MLB", col(11, 9));
   check("at threshold (20 graded): Last 20 present, then streak", blockLines(atThreshold, lossStreak(4)), [
-    "55% (11-9) overall on Under Picks",
-    "55% (11-9) over the last 20 picks",
+    "55% (11-9) All-Time Under Picks",
+    "55% (11-9) Last 20 Picks",
     "🧊 4 game losing streak",
   ]);
   const belowThreshold = rowsFor(col(11, 8), null, "under", "MLB", null);
   check("below threshold (19 graded): no Last 20 row", blockLines(belowThreshold, lossStreak(4)), [
-    "58% (11-8) overall on Under Picks",
+    "58% (11-8) All-Time Under Picks",
     "🧊 4 game losing streak",
   ]);
 
@@ -263,8 +263,8 @@ console.log("\n########## FIX 4 - the Last 20 row (now capper-wide) ##########")
   // to the card at all).
   const l20NoLeague = rowsFor(col(25, 15), null, "over", "MLB", col(13, 7));
   check("Last 20 with no league history", l20NoLeague.map((r) => r.scope), [
-    "overall on Over Picks",
-    "over the last 20 picks",
+    "All-Time Over Picks",
+    "Last 20 Picks",
   ]);
 }
 
@@ -281,8 +281,8 @@ console.log("\n########## Last 20 is capper-wide - detached from the category ca
     hasLeagueHistory: false,
     last20: col(13, 7),
   });
-  check("no card + last20 -> just the Last 20 row", only20.map((r) => r.scope), ["over the last 20 picks"]);
-  check("no card + last20 -> row text", only20.map(gameCardRecordRowText), ["65% (13-7) over the last 20 picks"]);
+  check("no card + last20 -> just the Last 20 row", only20.map((r) => r.scope), ["Last 20 Picks"]);
+  check("no card + last20 -> row text", only20.map(gameCardRecordRowText), ["65% (13-7) Last 20 Picks"]);
   check("no card + last20 -> row kind is last20", only20.map((r) => r.kind), ["last20"]);
 
   // No card and below the 20-graded threshold -> nothing at all.
@@ -336,14 +336,14 @@ console.log("\n########## category wording names the exact side - no two opposit
     );
   }
   check(
-    "row for a YRFI pick reads 'overall on YRFI Picks'",
+    "row for a YRFI pick reads 'All-Time YRFI Picks'",
     gameCardRecordRowText(rowsFor(col(10, 13), null, PICK_CATEGORY_MARKET_NOUN.YRFI)[0]),
-    "43% (10-13) overall on YRFI Picks"
+    "43% (10-13) All-Time YRFI Picks"
   );
   check(
-    "row for an NRFI pick reads 'overall on NRFI Picks'",
+    "row for an NRFI pick reads 'All-Time NRFI Picks'",
     gameCardRecordRowText(rowsFor(col(26, 18), null, PICK_CATEGORY_MARKET_NOUN.NRFI)[0]),
-    "59% (26-18) overall on NRFI Picks"
+    "59% (26-18) All-Time NRFI Picks"
   );
 }
 
@@ -415,28 +415,28 @@ console.log("\n########## the combinations: {league history?} x {last 20?} x {2+
   const league = col(11, 9);
 
   check("league history + streak, no L20 -> 3 lines", blockLines(rowsFor(overall, league), winStreak(4)), [
-    "40% (2-3) overall on Underdog Moneyline Picks",
+    "40% (2-3) All-Time Underdog Moneyline Picks",
     "55% (11-9) in MLB Underdog Moneyline Picks",
     "🔥 4 game win streak",
   ]);
   check("league history, no streak, no L20 -> 2 lines", blockLines(rowsFor(overall, league), winStreak(1)), [
-    "40% (2-3) overall on Underdog Moneyline Picks",
+    "40% (2-3) All-Time Underdog Moneyline Picks",
     "55% (11-9) in MLB Underdog Moneyline Picks",
   ]);
   check("no league history + streak -> 2 lines (League row dropped)", blockLines(rowsFor(overall, null), lossStreak(3)), [
-    "40% (2-3) overall on Underdog Moneyline Picks",
+    "40% (2-3) All-Time Underdog Moneyline Picks",
     "🧊 3 game losing streak",
   ]);
   check("no league history, no streak, no L20 -> 1 line", blockLines(rowsFor(overall, null), null), [
-    "40% (2-3) overall on Underdog Moneyline Picks",
+    "40% (2-3) All-Time Underdog Moneyline Picks",
   ]);
   check(
     "everything on: Overall -> League -> Last 20 -> Streak",
     blockLines(rowsFor(col(40, 30), col(12, 8), "underdog moneyline", "MLB", col(15, 5)), winStreak(5)),
     [
-      "57% (40-30) overall on Underdog Moneyline Picks",
+      "57% (40-30) All-Time Underdog Moneyline Picks",
       "60% (12-8) in MLB Underdog Moneyline Picks",
-      "75% (15-5) over the last 20 picks",
+      "75% (15-5) Last 20 Picks",
       "🔥 5 game win streak",
     ]
   );

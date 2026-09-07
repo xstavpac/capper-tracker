@@ -16,7 +16,7 @@
 //    hockey chip sets and ALL_CATEGORY_KEYS do; DEFAULT_CHIP_SET / MLB do not)
 //
 // The card's old third column, the capper's most-recent-20 record, is gone
-// from this card: the /live "over the last 20 picks" row is now capper-wide
+// from this card: the /live "Last 20 Picks" row is now capper-wide
 // (every category / league) and lives in recent-picks-record-acceptance-test.ts.
 
 import { computeLeagueRecordCards, chipSetForLeague } from "@/server/data/stats";
