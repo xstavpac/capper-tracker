@@ -7,7 +7,6 @@ import { getPicksForCapper } from "@/server/data/picks";
 import { formatPickLabel } from "@/lib/bet-line";
 import {
   computeStats,
-  computeScorecard,
   computeCategoryBreakdown,
   computeBestOddsRange,
   computeConsistency,
@@ -16,13 +15,13 @@ import {
   filterPicksByGameWindow,
   selectCapperRecentPicks,
   chipSetForLeague,
+  DEFAULT_CHIP_SET,
   SCORECARD_WINDOWS,
   SCORECARD_WINDOW_LABELS,
   type ScorecardWindow,
 } from "@/server/data/stats";
 import { UnitsChart } from "@/components/dashboard/units-chart";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
-import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { MomentumPanel } from "@/components/dashboard/momentum-panel";
 import { StreakBadge } from "@/components/dashboard/capper-panels";
@@ -115,20 +114,28 @@ export default async function CapperDetailPage({
   // misleading number rather than produce a meaningful "windowed" streak.
   const stats = computeStats(filterPicksByGameWindow(picks, window));
   const allTimeStats = computeStats(picks);
-  const allTimeScorecard = computeScorecard(picks);
+  // The top "record by bet type" section is the six markets every sport shares
+  // (DEFAULT_CHIP_SET) - a Fav ML / Dog ML / Spread +/- / Over / Under split
+  // across ALL sports at once. Sport-specific markets (F5, quarters/periods,
+  // Team Total, Player Prop, NRFI/YRFI) are deliberately excluded here - they
+  // only make sense per league and live in the per-sport section below.
+  // computeCategoryBreakdown with DEFAULT_CHIP_SET drops every non-universal
+  // key exactly the way the Dashboard's all-sports breakdown does.
+  const allTimeUniversalBreakdown = computeCategoryBreakdown(picks, DEFAULT_CHIP_SET);
   // Always all-time, same as allTimeStats.currentStreak above and for the
   // same reason - a streak (and what history says about it) is a
   // chronological, not-windowed concept, and this is the full historical
   // picture across every streak length, not scoped to any one window.
   const momentum = computeMomentum(picks);
-  const scorecard = computeScorecard(filterPicksByGameWindow(picks, window));
+  const universalBreakdown = computeCategoryBreakdown(filterPicksByGameWindow(picks, window), DEFAULT_CHIP_SET);
 
-  // "Record by category" (favorite/dog, over/under, F5, NRFI/YRFI, ...) only
-  // makes sense within one sport at a time - chipSetForLeague's categories
-  // vary per sport (F5/NRFI/YRFI are MLB-only), and blending two sports'
-  // decided picks into one tile would produce a number that doesn't describe
-  // either sport's actual record. Computed once per sport this capper has
-  // picks in (not hardcoded to MLB) so a WNBA or NFL capper - or an MLB
+  // "Record by category" (favorite/dog, over/under, and the sport's specialty
+  // markets - F5/NRFI for MLB, quarters/2nd-half for football & basketball,
+  // periods for hockey, Team Total, ...) only makes sense within one sport at
+  // a time: chipSetForLeague's categories vary per sport, and blending two
+  // sports' decided picks into one tile would produce a number that doesn't
+  // describe either sport's actual record. Computed once per sport this capper
+  // has picks in (not hardcoded to MLB) so a WNBA or NFL capper - or an MLB
   // capper who also has WNBA/NFL picks - gets a real breakdown instead of
   // silently having no "by category" view for anything outside MLB.
   const categoryBreakdownsBySport = Array.from(new Set(picks.map((p) => p.sport.name)))
@@ -291,7 +298,7 @@ export default async function CapperDetailPage({
 
       <MomentumPanel breakdown={momentum} currentStreak={allTimeStats.currentStreak} />
 
-      {allTimeScorecard.length > 0 && (
+      {allTimeUniversalBreakdown.length > 0 && (
         <div className="mt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm font-medium text-muted-foreground">Record by bet type (all sports)</div>
@@ -308,8 +315,8 @@ export default async function CapperDetailPage({
               ))}
             </div>
           </div>
-          {scorecard.length > 0 ? (
-            <CapperScorecard buckets={scorecard} variant="grid" />
+          {universalBreakdown.length > 0 ? (
+            <CategoryBreakdown items={universalBreakdown} />
           ) : (
             <p className="rounded-card bg-card p-6 text-center text-sm text-muted-foreground shadow-soft">
               No graded picks in this window.

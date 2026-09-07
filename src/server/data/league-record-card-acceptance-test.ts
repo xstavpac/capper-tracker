@@ -12,8 +12,10 @@
 //    picks") - never a partial "last N"
 //  - win% is always derived from that column's own W-L count, never averaged
 //    across subsets
-//  - segment-scoped picks (Q1, 2H, periods, ...) are excluded from ALL three
-//    columns (PR #22 category-breakdown rule)
+//  - a segment-scoped pick (Q1, 2H, period, ...) never dilutes a full-game
+//    category's card - it classifies under its own <period>_<side> key, which
+//    gets its own card when `categories` includes it (the football/basketball/
+//    hockey chip sets and ALL_CATEGORY_KEYS do; DEFAULT_CHIP_SET / MLB do not)
 
 import { computeLeagueRecordCards, chipSetForLeague, LEAGUE_RECORD_LAST_N } from "@/server/data/stats";
 import type { Pick } from "@prisma/client";
@@ -150,11 +152,12 @@ console.log("\n########## win% is derived from the aggregate, never averaged ###
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n########## segment picks excluded from ALL THREE columns (PR #22) ##########");
+console.log("\n########## a segment pick never dilutes a full-game category's card ##########");
 {
   // 3 full-game underdog spreads (2-1) + 6 first-quarter spreads (all WIN) +
-  // 4 second-half spreads (all WIN), all NCAAF. The segment picks must not
-  // touch Overall, League, or Last 20.
+  // 4 second-half spreads (all WIN), all NCAAF. The full-game SPREAD_PLUS
+  // card must read the 3 full-game picks only; the segment picks get their
+  // own separate cards (NCAAF's chip set now carries the segment keys).
   const picks = [
     dogSpread("WIN", "NCAAF", 1),
     dogSpread("WIN", "NCAAF", 2),
@@ -163,10 +166,28 @@ console.log("\n########## segment picks excluded from ALL THREE columns (PR #22)
     ...Array.from({ length: 4 }, (_, i) => p({ status: "WIN", sport: "NCAAF", betType: "SPREAD", period: "SECOND_HALF", betDetail: "Team 2H +1.5", line: 1.5, day: 20 + i })),
   ];
   const c = card(picks, "NCAAF")!;
-  check("Overall = the 3 full-game picks only -> 2-1", wl(c.overall), [2, 1, 67]);
-  check("[League] = the 3 full-game picks only -> 2-1", wl(c.league), [2, 1, 67]);
-  check("segment wins did NOT push the category over the Last-20 threshold", c.last20, null);
-  check("no segment category key leaked into the card list", computeLeagueRecordCards(picks, "NCAAF", chipSetForLeague("NCAAF")).map((x) => x.category), ["SPREAD_PLUS"]);
+  check("SPREAD_PLUS card: Overall = the 3 full-game picks only -> 2-1", wl(c.overall), [2, 1, 67]);
+  check("SPREAD_PLUS card: [League] = the 3 full-game picks only -> 2-1", wl(c.league), [2, 1, 67]);
+  check("SPREAD_PLUS card: segment wins did NOT push it over the Last-20 threshold", c.last20, null);
+
+  const cards = computeLeagueRecordCards(picks, "NCAAF", chipSetForLeague("NCAAF"));
+  check(
+    "the segment spreads get their own separate cards, each with its own record",
+    cards.map((x) => [x.category, x.overall.wins, x.overall.losses]),
+    [
+      ["SPREAD_PLUS", 2, 1],
+      ["FIRST_QUARTER_SPREAD", 6, 0],
+      ["SECOND_HALF_SPREAD", 4, 0],
+    ]
+  );
+
+  // ...but with a chip set that excludes segments (MLB / DEFAULT), only the
+  // full-game card comes back.
+  check(
+    "MLB chip set (no segment keys): only the SPREAD_PLUS card",
+    computeLeagueRecordCards(picks, "NCAAF", chipSetForLeague("MLB")).map((x) => x.category),
+    ["SPREAD_PLUS"]
+  );
 }
 
 // ---------------------------------------------------------------------------

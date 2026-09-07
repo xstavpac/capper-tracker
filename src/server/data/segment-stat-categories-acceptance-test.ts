@@ -16,12 +16,15 @@
 //  - non-MLB first-half SPREAD gets FIRST_HALF_SPREAD (was null before)
 //  - full-game categories (FAV_ML, OVER, ...) and the scorecard's Moneyline /
 //    Total buckets no longer count those picks
-//  - a per-sport chip set (NBA_CHIP_SET etc.) excludes segment categories, so
-//    the capper "Record by category" tiles stay full-game-only; ALL_CATEGORY_
-//    KEYS includes them, so the /live game-card snippet shows a segment pick
-//    its own record
+//  - the football / basketball chip sets carry Q1-Q4 + 2nd-half segment
+//    categories and NHL carries P1-P3, so a segment pick gets its own tile in
+//    the per-league "record by category" section (the same place F5 / Team
+//    Total already show); MLB / NCAAB / the default set carry none, and the
+//    all-sports DEFAULT_CHIP_SET summary never shows a segment tile
 //  - FIRST_HALF and F5 behavior is otherwise unchanged (MLB F5 spread still
 //    splits favorite/underdog)
+//  - a category with no graded pick (all PENDING) produces no tile at all -
+//    computeCategoryBreakdown / computeScorecard filter count > 0
 
 import {
   pickCategory,
@@ -31,6 +34,7 @@ import {
   chipSetForLeague,
   splitSegmentCategoryKey,
   ALL_CATEGORY_KEYS,
+  DEFAULT_CHIP_SET,
   SEGMENT_CATEGORY_KEYS,
   PICK_CATEGORY_LABELS,
 } from "@/server/data/stats";
@@ -122,7 +126,34 @@ check(
 );
 check("splitSegmentCategoryKey(non-segment key) -> null", splitSegmentCategoryKey("FAV_ML"), null);
 check("splitSegmentCategoryKey(FIRST_HALF_SPREAD) -> null (base key, not a segment)", splitSegmentCategoryKey("FIRST_HALF_SPREAD"), null);
-check("segment keys are NOT in any per-sport chip set", ["NBA", "NFL", "NCAAF", "MLB", "NHL", "WNBA"].some((s) => chipSetForLeague(s).some((k) => (SEGMENT_CATEGORY_KEYS as string[]).includes(k))), false);
+
+// Segment categories now have a home in the per-league "record by category"
+// section, scoped to the leagues that can actually grade them.
+check(
+  "football / basketball chip sets carry Q1-Q4 + 2nd-half (ML/Over/Under/Spread)",
+  ["NFL", "NCAAF", "NBA", "WNBA"].every((s) =>
+    ["FIRST_QUARTER_ML", "SECOND_QUARTER_OVER", "THIRD_QUARTER_UNDER", "FOURTH_QUARTER_SPREAD", "SECOND_HALF_ML"].every((k) =>
+      (chipSetForLeague(s) as string[]).includes(k)
+    )
+  ),
+  true
+);
+check(
+  "football / basketball chip sets do NOT carry hockey periods",
+  ["NFL", "NBA"].some((s) => (chipSetForLeague(s) as string[]).includes("FIRST_PERIOD_ML")),
+  false
+);
+check(
+  "NHL chip set carries P1-P3 (ML/Over/Under/Spread), not quarters or 2nd-half",
+  ["FIRST_PERIOD_ML", "SECOND_PERIOD_OVER", "THIRD_PERIOD_SPREAD"].every((k) => (chipSetForLeague("NHL") as string[]).includes(k)) &&
+    !["FIRST_QUARTER_ML", "SECOND_HALF_ML"].some((k) => (chipSetForLeague("NHL") as string[]).includes(k)),
+  true
+);
+check(
+  "MLB / NCAAB / KBO / default chip sets carry no segment category",
+  ["MLB", "NCAAB", "KBO", "CFL"].some((s) => chipSetForLeague(s).some((k) => (SEGMENT_CATEGORY_KEYS as string[]).includes(k))),
+  false
+);
 
 // ---------------------------------------------------------------------------
 console.log("\n########## the capping scenario: full-game + Q1 ML records are separated ##########");
@@ -162,9 +193,25 @@ check("FAV_ML record is the full-game picks only: 12-1", favMl && [favMl.wins, f
 check("FIRST_QUARTER_ML record is the Q1 picks only: 1-3", q1Ml && [q1Ml.wins, q1Ml.losses], [1, 3]);
 check("FAV_ML win% is 92 (13-decided, 12 W) - NOT diluted by the 1-3 Q1 record", favMl && Math.round(favMl.winPct), 92);
 
-// (b) the capper "Record by category" tiles path: chip set -> Q1 excluded.
+// (b) the capper "Record by category" tiles path: the NBA chip set now carries
+// segment categories, so Q1 gets its OWN tile - still a separate record from
+// the full-game FAV_ML one, never blended into it.
 const nbaBreakdown = computeCategoryBreakdown(capperPicks, chipSetForLeague("NBA"));
-check("chip-set breakdown shows FAV_ML (12-1) and NOT FIRST_QUARTER_ML", nbaBreakdown.map((b) => b.key), ["FAV_ML"]);
+check(
+  "NBA chip-set breakdown: FAV_ML 12-1 and FIRST_QUARTER_ML 1-3, as separate tiles",
+  nbaBreakdown.map((b) => [b.key, b.wins, b.losses]),
+  [
+    ["FAV_ML", 12, 1],
+    ["FIRST_QUARTER_ML", 1, 3],
+  ]
+);
+// ...but the all-sports DEFAULT_CHIP_SET summary (the capper page's top
+// section) never shows a segment tile.
+check(
+  "DEFAULT_CHIP_SET breakdown is full-game only - no FIRST_QUARTER_ML",
+  computeCategoryBreakdown(capperPicks, DEFAULT_CHIP_SET).map((b) => b.key),
+  ["FAV_ML"]
+);
 
 // (c) the scorecard: Moneyline bucket is full-game only, SEGMENT bucket holds Q1.
 const scorecard = computeScorecard(capperPicks as unknown as Pick[]);
@@ -285,6 +332,41 @@ for (const [label, text] of [
 }
 check("a real odds token still parses through unchanged", parseCatalog("Cody\nLakers ML (-150)").picks[0].odds, -150);
 check("(0) doesn't eat the unit size", parseCatalog("Cody\nLakers ML (0) 2u").picks[0].units, 2);
+
+// ---------------------------------------------------------------------------
+console.log("\n########## no dead 0-0 tiles: a category with only PENDING picks gets none ##########");
+{
+  const pendingRow = (over: { betType: Pick["betType"]; period: Pick["period"]; betDetail: string; line?: number | null }) =>
+    pick({ status: "PENDING", ...over });
+
+  // A capper with graded FAV_ML picks + a not-yet-graded Q1 total + a
+  // not-yet-graded full-game under.
+  const mixed = [
+    pick({ status: "WIN", betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Nuggets ML" }),
+    pick({ status: "LOSS", betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Nuggets ML" }),
+    pendingRow({ betType: "TOTAL", period: "FIRST_QUARTER", betDetail: "over 55.5 1Q" }),
+    pendingRow({ betType: "TOTAL", period: "FULL_GAME", betDetail: "under 220.5" }),
+  ];
+
+  check(
+    "computeCategoryBreakdown: only the graded FAV_ML tile - no 0-0 UNDER, no 0-0 FIRST_QUARTER_OVER",
+    computeCategoryBreakdown(mixed, chipSetForLeague("NBA")).map((b) => [b.key, b.count]),
+    [["FAV_ML", 2]]
+  );
+  check(
+    "computeScorecard: only the graded Moneyline bucket - no 0-0 Total, no 0-0 SEGMENT",
+    computeScorecard(mixed as unknown as Pick[]).map((b) => [b.key, b.count]),
+    [["MONEYLINE", 2]]
+  );
+
+  // Once the Q1 total grades, its tile appears.
+  const graded = [...mixed.slice(0, 2), pick({ status: "WIN", betType: "TOTAL", period: "FIRST_QUARTER", betDetail: "over 55.5 1Q" })];
+  check(
+    "the segment tile appears as soon as there's one graded pick in it",
+    computeCategoryBreakdown(graded, chipSetForLeague("NBA")).map((b) => b.key),
+    ["FAV_ML", "FIRST_QUARTER_OVER"]
+  );
+}
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);

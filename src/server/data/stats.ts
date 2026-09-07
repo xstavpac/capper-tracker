@@ -460,19 +460,24 @@ export function computeScorecard(picks: Pick[]): ScorecardBucket[] {
     else byBucket.set(key, [pick]);
   }
 
-  return SCORECARD_BUCKET_ORDER.filter((key) => byBucket.has(key)).map((key) => {
-    const stats = computeStats(byBucket.get(key)!);
-    const count = stats.wins + stats.losses + stats.pushes;
-    return {
-      key,
-      label: SCORECARD_BUCKET_LABELS[key],
-      wins: stats.wins,
-      losses: stats.losses,
-      pushes: stats.pushes,
-      winPct: stats.winPct,
-      count,
-    };
-  });
+  return SCORECARD_BUCKET_ORDER.filter((key) => byBucket.has(key))
+    .map((key) => {
+      const stats = computeStats(byBucket.get(key)!);
+      const count = stats.wins + stats.losses + stats.pushes;
+      return {
+        key,
+        label: SCORECARD_BUCKET_LABELS[key],
+        wins: stats.wins,
+        losses: stats.losses,
+        pushes: stats.pushes,
+        winPct: stats.winPct,
+        count,
+      };
+    })
+    // Only surface a bucket once it has a real record - a bet type the capper
+    // has placed picks in but none graded yet would otherwise render as a dead
+    // "0-0 / 0%" tile. Same rule computeCategoryBreakdown applies.
+    .filter((b) => b.count > 0);
 }
 
 export type ScorecardWindow = "TODAY" | "YESTERDAY" | "LAST_7" | "LAST_30" | "LAST_60" | "ALL";
@@ -752,6 +757,26 @@ export const MLB_CHIP_SET: PickCategoryKey[] = [
 ];
 export const DEFAULT_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD_MINUS", "SPREAD_PLUS", "OVER", "UNDER"];
 
+// Quarter (Q1-Q4) + 2nd-half segment categories, each split ML / Over / Under
+// / Spread - the same four-tile shape as the FIRST_HALF_* keys, so a capper
+// who bets Q1 totals and Q4 moneylines differently keeps a distinct record
+// for each. Football and basketball only: NFL / NCAAF / NBA / WNBA are the
+// leagues with a per-quarter and 2nd-half score source (grading.ts's
+// supportsLinescore / segmentScore); every other sport's quarter/half pick
+// stays PENDING, so a tile for it would never fill in. These live only in
+// the per-league "record by category" section, never the all-sports summary.
+// Only non-empty tiles render (computeCategoryBreakdown drops any category
+// with no graded pick), so a real capper sees the two or three they bet.
+const QUARTER_SECOND_HALF_CATEGORY_KEYS: PickCategoryKey[] = (
+  ["FIRST_QUARTER", "SECOND_QUARTER", "THIRD_QUARTER", "FOURTH_QUARTER", "SECOND_HALF"] as const
+).flatMap((p) => [`${p}_ML`, `${p}_OVER`, `${p}_UNDER`, `${p}_SPREAD`] as PickCategoryKey[]);
+
+// Hockey has periods, not quarters or halves - P1/P2/P3, same four sides.
+// NHL is the one league with a hockey-period score source.
+const HOCKEY_PERIOD_CATEGORY_KEYS: PickCategoryKey[] = (
+  ["FIRST_PERIOD", "SECOND_PERIOD", "THIRD_PERIOD"] as const
+).flatMap((p) => [`${p}_ML`, `${p}_OVER`, `${p}_UNDER`, `${p}_SPREAD`] as PickCategoryKey[]);
+
 // NFL's own chip set, same idea as MLB_CHIP_SET - first-half ML/over/under
 // (real box-score data, see persistFinalScores' supportsFirstHalf) plus
 // touchdown-prop (resolveTouchdownProp, NFL-only grading) get their own
@@ -767,6 +792,7 @@ export const NFL_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_OVER",
   "FIRST_HALF_UNDER",
   "FIRST_HALF_SPREAD",
+  ...QUARTER_SECOND_HALF_CATEGORY_KEYS,
   "TD_PROP",
   "TEAM_TOTAL",
 ];
@@ -789,6 +815,7 @@ export const NCAAF_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_OVER",
   "FIRST_HALF_UNDER",
   "FIRST_HALF_SPREAD",
+  ...QUARTER_SECOND_HALF_CATEGORY_KEYS,
   "TEAM_TOTAL",
 ];
 
@@ -809,19 +836,24 @@ export const NBA_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_OVER",
   "FIRST_HALF_UNDER",
   "FIRST_HALF_SPREAD",
+  ...QUARTER_SECOND_HALF_CATEGORY_KEYS,
   "TEAM_TOTAL",
 ];
 
-// NCAAB, NHL, KBO have no first-half score source, so they just get
+// NCAAB and KBO have no segment score source at all, so they just get
 // DEFAULT_CHIP_SET plus TEAM_TOTAL - same "a map entry, not a new branch"
 // reasoning CHIP_SET_BY_SPORT's own comment gives. (NBA used to be here too,
 // until it got its own first-half source - see NBA_CHIP_SET above.)
 const NCAAB_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
-const NHL_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
 const KBO_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
-// WNBA has a first-half score source (persistFinalScores' supportsFirstHalf),
-// so its first-half ML/Over/Under/Spread picks are real gradable categories -
-// same chip set as NBA (no TD_PROP, basketball).
+// NHL has no "half" (hockey is period-based, not in supportsFirstHalf) but it
+// does have a per-period linescore source, so it gets the P1/P2/P3 segment
+// categories plus TEAM_TOTAL - no first-half keys.
+const NHL_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, ...HOCKEY_PERIOD_CATEGORY_KEYS, "TEAM_TOTAL"];
+// WNBA has a first-half score source (persistFinalScores' supportsFirstHalf)
+// and a per-quarter one, so its first-half and quarter/2nd-half ML/Over/Under/
+// Spread picks are real gradable categories - same chip set as NBA (no
+// TD_PROP, basketball).
 const WNBA_CHIP_SET: PickCategoryKey[] = [
   "FAV_ML",
   "DOG_ML",
@@ -833,6 +865,7 @@ const WNBA_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_OVER",
   "FIRST_HALF_UNDER",
   "FIRST_HALF_SPREAD",
+  ...QUARTER_SECOND_HALF_CATEGORY_KEYS,
   "TEAM_TOTAL",
 ];
 
@@ -1125,35 +1158,44 @@ export function computeCategoryBreakdown(
     else byCategory.set(key, [pick]);
   }
 
-  return order.filter((key) => byCategory.has(key)).map((key) => {
-    const categoryPicks = byCategory.get(key)!;
-    const stats = computeStats(categoryPicks);
-    const count = stats.wins + stats.losses + stats.pushes;
+  return order
+    .filter((key) => byCategory.has(key))
+    .map((key) => {
+      const categoryPicks = byCategory.get(key)!;
+      const stats = computeStats(categoryPicks);
+      const count = stats.wins + stats.losses + stats.pushes;
 
-    let recent: CategoryRecentForm | null | undefined;
-    if (recentForm) {
-      recent = null;
-      if (count >= recentForm.minSample) {
-        const lastN = categoryPicks
-          .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
-          .sort((a, b) => b.gameTime.getTime() - a.gameTime.getTime())
-          .slice(0, recentForm.window);
-        const rs = computeStats(lastN);
-        recent = { wins: rs.wins, losses: rs.losses, pushes: rs.pushes, winPct: rs.winPct, count: rs.wins + rs.losses + rs.pushes };
+      let recent: CategoryRecentForm | null | undefined;
+      if (recentForm) {
+        recent = null;
+        if (count >= recentForm.minSample) {
+          const lastN = categoryPicks
+            .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
+            .sort((a, b) => b.gameTime.getTime() - a.gameTime.getTime())
+            .slice(0, recentForm.window);
+          const rs = computeStats(lastN);
+          recent = { wins: rs.wins, losses: rs.losses, pushes: rs.pushes, winPct: rs.winPct, count: rs.wins + rs.losses + rs.pushes };
+        }
       }
-    }
 
-    return {
-      key,
-      label: PICK_CATEGORY_LABELS[key],
-      wins: stats.wins,
-      losses: stats.losses,
-      pushes: stats.pushes,
-      winPct: stats.winPct,
-      count,
-      ...(recent !== undefined ? { recent } : {}),
-    };
-  });
+      return {
+        key,
+        label: PICK_CATEGORY_LABELS[key],
+        wins: stats.wins,
+        losses: stats.losses,
+        pushes: stats.pushes,
+        winPct: stats.winPct,
+        count,
+        ...(recent !== undefined ? { recent } : {}),
+      };
+    })
+    // A category the capper has placed picks in but has no graded pick in yet
+    // (every pick still PENDING) would otherwise render as a dead "0-0 / 0%"
+    // tile. Drop it so a tile only ever appears once there's a real record -
+    // consistently across every surface this feeds: the capper page's two tile
+    // sections, the Dashboard breakdown, the /live sport panel, and (via
+    // computeLeagueRecordCards) the /live game-card record line.
+    .filter((item) => item.count > 0);
 }
 
 // The "league-specific record card": for ONE bet-type category, a capper's
@@ -1161,13 +1203,16 @@ export function computeCategoryBreakdown(
 // and their most recent 20 graded picks. All three come from the SAME
 // pipeline as the category tiles (computeCategoryBreakdown -> computeStats),
 // just fed different slices:
-//   - category-scoped to `key` - a full-game / first-half chip-set key, so
-//     computeCategoryBreakdown's `order` filter drops any segment key
-//     (FIRST_QUARTER_*, SECOND_HALF_*, ...) exactly as the category tiles do
-//     (see PR #22). Segment picks never contribute to any of the three.
+//   - category-scoped to `key`. A segment pick (Q1 / 2nd half / period)
+//     classifies under its own <period>_<side> key, so a full-game key's card
+//     never counts it; whether the segment key itself gets a card depends on
+//     `categories` (ALL_CATEGORY_KEYS and the football/basketball/hockey chip
+//     sets include the segment keys; DEFAULT_CHIP_SET and MLB do not).
 //   - PENDING / CANCELLED excluded (computeStats)
 //   - winPct always derived from that slice's own W-L count, never averaged
-// Overall and League have NO minimum sample. `last20` is populated only once
+// Overall and League have NO minimum sample - one graded pick is enough (a
+// category with zero graded picks gets no card at all, see
+// computeCategoryBreakdown's count>0 filter). `last20` is populated only once
 // the category has >= LEAGUE_RECORD_LAST_N graded picks; below that it's null
 // and the caller renders "Need 20 picks" (never a partial "last N").
 export const LEAGUE_RECORD_LAST_N = 20;
@@ -1193,10 +1238,9 @@ function toLeagueRecordColumn(item: {
   return { wins: item.wins, losses: item.losses, pushes: item.pushes, winPct: item.winPct, count: item.count };
 }
 
-// `categories` is the chip set the caller wants cards for (chipSetForLeague);
-// a card is returned for every one the capper has ANY pick in (the caller
-// decides whether to render a card whose `overall.count` is 0). Order follows
-// `categories`.
+// `categories` is the chip set the caller wants cards for (chipSetForLeague
+// or ALL_CATEGORY_KEYS); a card is returned for every one the capper has at
+// least one GRADED pick in. Order follows `categories`.
 export function computeLeagueRecordCards(
   picks: (Pick & { sport: { name: string } })[],
   leagueSportName: string,
