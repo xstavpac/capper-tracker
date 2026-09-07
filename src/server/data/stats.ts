@@ -729,13 +729,18 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   ...buildSegmentCategoryMap((period, side) => `${SEGMENT_PERIOD_SHORT[period]} ${SEGMENT_SIDE_CHIP[side]}`),
 };
 
-// The market a category belongs to, side dropped, as a noun that slots into
-// "N% overall on ___ picks" - the natural-phrasing form of the /live
-// game-card record line (see game-card-record-line.ts). Favorite/underdog and
-// over/under both collapse here ("moneyline", "total") because the card is
-// already showing the viewer which side this specific pick is on; the record
-// phrase only needs to name the market. Period-scoped keys keep their period
-// prefix so a 1st-half or quarter record is never read as a full-game one.
+// The category a pick belongs to, phrased as a noun that slots into
+// "N% (W-L) overall on ___ picks" - the /live game-card record block (see
+// game-card-record-line.ts). The favorite/underdog side is PART of the phrase
+// wherever the category carries one ("underdog moneyline", "favorite spread"):
+// a capper's underdog-moneyline record is a different number from their
+// favorite-moneyline record, so dropping the side (as PR #33 briefly did) made
+// the block ambiguous in live use. Over/under still collapse to "total" - that
+// market has no favorite/underdog, and the pick text itself shows over vs
+// under. Period-scoped keys keep their period prefix so a 1st-half or quarter
+// record is never read as a full-game one. FIRST_HALF_* / F5_ML / segment ML &
+// SPREAD keys have no side split of their own (see PickCategoryKey), so they
+// get no side word.
 const SEGMENT_MARKET_NOUN: Record<SegmentCategorySide, string> = {
   ML: "moneyline",
   OVER: "total",
@@ -743,10 +748,10 @@ const SEGMENT_MARKET_NOUN: Record<SegmentCategorySide, string> = {
   SPREAD: "spread",
 };
 export const PICK_CATEGORY_MARKET_NOUN: Record<PickCategoryKey, string> = {
-  FAV_ML: "moneyline",
-  DOG_ML: "moneyline",
-  SPREAD_MINUS: "spread",
-  SPREAD_PLUS: "spread",
+  FAV_ML: "favorite moneyline",
+  DOG_ML: "underdog moneyline",
+  SPREAD_MINUS: "favorite spread",
+  SPREAD_PLUS: "underdog spread",
   SPREAD: "spread",
   OVER: "total",
   UNDER: "total",
@@ -758,8 +763,8 @@ export const PICK_CATEGORY_MARKET_NOUN: Record<PickCategoryKey, string> = {
   TD_PROP: "touchdown prop",
   NRFI: "first-inning run",
   YRFI: "first-inning run",
-  F5_SPREAD_MINUS: "first-5 spread",
-  F5_SPREAD_PLUS: "first-5 spread",
+  F5_SPREAD_MINUS: "first-5 favorite spread",
+  F5_SPREAD_PLUS: "first-5 underdog spread",
   F5_OVER: "first-5 total",
   F5_UNDER: "first-5 total",
   TEAM_TOTAL: "team total",
