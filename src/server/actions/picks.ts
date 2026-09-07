@@ -2,8 +2,8 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { requireUser } from "@/server/auth";
-import { createPick, updatePickStatus, deletePick, getCapperLeagueRecords } from "@/server/data/picks";
-import type { LeagueRecordCard, PickCategoryKey } from "@/server/data/stats";
+import { createPick, updatePickStatus, deletePick, getCapperLeagueRecords, type CapperLeagueRecords } from "@/server/data/picks";
+import type { PickCategoryKey } from "@/server/data/stats";
 import { cacheKeys } from "@/lib/cache-keys";
 import type { BetType, PickStatus, Period } from "@prisma/client";
 
@@ -139,9 +139,14 @@ export async function deletePickAction(pickId: string): Promise<ActionResult> {
 // records, which isn't cheap to do for every capper on every game up front.
 // getCapperLeagueRecords batches: one query for every capper in the request,
 // one computeLeagueRecordCards pass per (capper, league).
+//
+// `entries` is EVERY pick on the game card, category included when it has one.
+// A null-category entry still contributes its capper to the overall-streak
+// map (the 🔥/🧊 indicator shows on every pick card, category history or not);
+// it just gets no record card.
 export async function getLeagueRecordsAction(
-  pairs: { capperId: string; leagueSport: string; category: PickCategoryKey }[]
-): Promise<Record<string, LeagueRecordCard | null>> {
+  entries: { capperId: string; leagueSport: string; category: PickCategoryKey | null }[]
+): Promise<CapperLeagueRecords> {
   const user = await requireUser();
-  return getCapperLeagueRecords(user.id, pairs);
+  return getCapperLeagueRecords(user.id, entries);
 }
