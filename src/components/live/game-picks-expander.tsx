@@ -126,13 +126,22 @@ function RecordClause({ pct, scope, record, winPct }: GameCardRecordClause) {
 // (gameCardStreakSuffix returns "") - the slot then falls back to nothing, not
 // to some other number. Shown on every pick card - even one with no category
 // record - since the streak is about the capper, not this bet type. Hovering
-// the glyph shows a plain-text explanation ("Won 4 in a row") via a title
+// the indicator shows a plain-text explanation ("Won 4 in a row") via a title
 // attribute; the codebase has no tooltip component. Text content ("🔥3")
 // matches what the width-guard tests feed gameCardRecordLineText /
 // gameCardNoHistoryLineText.
+//
+// The glyph itself gets a subtle infinite opacity+scale breathe
+// (animate-streak-pulse, tailwind.config.ts) to draw a little attention to a
+// capper on a run. Only the emoji animates, not the count, and it's wrapped
+// in its own inline-block span so the transform applies without nudging the
+// count or the record text beside it. `motion-reduce:animate-none` leaves the
+// glyph completely static for anyone with prefers-reduced-motion set. The
+// title attribute lives on the outer span, untouched by the animation.
 function StreakIndicator({ streak }: { streak: GameCardStreak | null | undefined }) {
   const suffix = gameCardStreakSuffix(streak);
   if (!suffix) return null;
+  const glyph = streak!.type === "WIN" ? "🔥" : "🧊";
   const color =
     streak!.type === "WIN"
       ? "text-orange-600 dark:text-orange-400"
@@ -140,7 +149,8 @@ function StreakIndicator({ streak }: { streak: GameCardStreak | null | undefined
   return (
     <span className={"whitespace-nowrap font-semibold " + color} title={gameCardStreakTooltip(streak)}>
       {" "}
-      {suffix}
+      <span className="inline-block animate-streak-pulse motion-reduce:animate-none">{glyph}</span>
+      {streak!.count}
     </span>
   );
 }
