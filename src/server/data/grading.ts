@@ -255,38 +255,50 @@ function teamNickname(fullName: string): string {
 }
 
 // Reverse of NCAAF_CANONICAL_SUFFIX (parse-catalog.ts): real full team name
-// ("alabama crimson tide") -> bare school key ("alabama") - null for every
-// team outside the curated 68. teamNickname() above (the mascot / last word)
-// is what a capper types for every other sport, but NCAAF bettors just as
-// often name the SCHOOL ("Alabama ML", "Ohio State -7") - a real gap found
-// during the pre-launch grading investigation: identical bet, identical
-// game, "Crimson Tide ML" graded fine while "Alabama ML" stayed ungraded
-// forever, since the text-match fallback below only ever checked the mascot.
-const NCAAF_SCHOOL_BY_CANONICAL: Record<string, string> = Object.fromEntries(
-  Object.entries(NCAAF_CANONICAL_SUFFIX).map(([school, canonical]) => [canonical, school])
-);
+// ("alabama crimson tide") -> EVERY school key a capper might have typed for
+// it (["alabama", "bama"], ["east carolina", "ecu"]) - empty for any team
+// outside the FBS list. teamNickname() above (the mascot / last word) is
+// what a capper types for every other sport, but NCAAF bettors just as often
+// name the SCHOOL ("Alabama ML", "Bama ML", "Ohio State -7") - a real gap
+// found during the pre-launch grading investigation: identical bet,
+// identical game, "Crimson Tide ML" graded fine while "Alabama ML" stayed
+// ungraded forever, since the text-match fallback below only ever checked
+// the mascot. A canonical with several keys (a school with an abbreviation
+// or slang form) must return ALL of them - a single reverse entry would
+// silently only grade whichever spelling happened to be listed last.
+const NCAAF_SCHOOL_KEYS_BY_CANONICAL: Record<string, string[]> = (() => {
+  const map: Record<string, string[]> = {};
+  for (const [school, canonical] of Object.entries(NCAAF_CANONICAL_SUFFIX)) {
+    (map[canonical] ??= []).push(school);
+  }
+  return map;
+})();
 
-function ncaafSchoolKey(fullName: string): string | null {
-  return NCAAF_SCHOOL_BY_CANONICAL[fullName.trim().toLowerCase()] ?? null;
+function ncaafSchoolKeys(fullName: string): string[] {
+  return NCAAF_SCHOOL_KEYS_BY_CANONICAL[fullName.trim().toLowerCase()] ?? [];
 }
 
-// Whether `detail` names `school`, guarding against the same nested-name
-// problem parse-catalog.ts's detectSport already solves for import parsing
-// (e.g. "arizona" is a whole word inside "arizona state", "virginia" inside
-// "west virginia") - scoped here to just this one pick's two actual teams
-// rather than all 68 schools, since gradePick only ever has two candidates
-// to tell apart. A match only counts when the OTHER team's school name isn't
-// ALSO present as the more specific (longer) match at the same word - e.g.
-// "Arizona State ML" must resolve to Arizona State only, never spuriously
-// flag Arizona too just because "arizona" is a literal substring of it.
-function matchesSchoolName(detail: string, school: string, otherSchool: string | null): boolean {
-  const re = new RegExp("\\b" + school.replace(/ /g, "\\s+") + "\\b");
-  if (!re.test(detail)) return false;
-  if (otherSchool && otherSchool.length > school.length && otherSchool.includes(school)) {
-    const otherRe = new RegExp("\\b" + otherSchool.replace(/ /g, "\\s+") + "\\b");
-    if (otherRe.test(detail)) return false;
-  }
-  return true;
+// Whether `detail` names any of `schools` (this team's keys), guarding
+// against the same nested-name problem parse-catalog.ts's detectSport already
+// solves for import parsing (e.g. "arizona" is a whole word inside "arizona
+// state", "virginia" inside "west virginia") - scoped here to just this one
+// pick's two actual teams rather than all 138 schools, since gradePick only
+// ever has two candidates to tell apart. A key match is discarded when one of
+// the OTHER team's keys is a longer name that contains it and is ALSO present
+// in the text - e.g. "Arizona State ML" must resolve to Arizona State only,
+// never spuriously flag Arizona too just because "arizona" is a substring.
+function matchesSchoolName(detail: string, schools: string[], otherSchools: string[]): boolean {
+  return schools.some((school) => {
+    const re = new RegExp("\\b" + school.replace(/ /g, "\\s+") + "\\b");
+    if (!re.test(detail)) return false;
+    for (const other of otherSchools) {
+      if (other.length > school.length && other.includes(school)) {
+        const otherRe = new RegExp("\\b" + other.replace(/ /g, "\\s+") + "\\b");
+        if (otherRe.test(detail)) return false;
+      }
+    }
+    return true;
+  });
 }
 
 type GradeOutcome = "WIN" | "LOSS" | "PUSH" | null;
@@ -342,10 +354,10 @@ export function gradePick(
     // grade correctly even though "Devils ML" correctly can't. Resolves to
     // null (not the mascot) for every non-NCAAF team, so this is a no-op
     // everywhere else.
-    const homeSchool = ncaafSchoolKey(homeTeam);
-    const awaySchool = ncaafSchoolKey(awayTeam);
-    const homeSchoolMatch = homeSchool !== null && matchesSchoolName(detail, homeSchool, awaySchool);
-    const awaySchoolMatch = awaySchool !== null && matchesSchoolName(detail, awaySchool, homeSchool);
+    const homeSchools = ncaafSchoolKeys(homeTeam);
+    const awaySchools = ncaafSchoolKeys(awayTeam);
+    const homeSchoolMatch = homeSchools.length > 0 && matchesSchoolName(detail, homeSchools, awaySchools);
+    const awaySchoolMatch = awaySchools.length > 0 && matchesSchoolName(detail, awaySchools, homeSchools);
 
     pickedHome = (!sameMascot && detail.includes(homeNick)) || homeSchoolMatch;
     pickedAway = (!sameMascot && detail.includes(awayNick)) || awaySchoolMatch;

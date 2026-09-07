@@ -233,22 +233,27 @@ function main() {
 
   console.log("\n########## PART F: non-NCAAF sports unaffected (single bare nickname, no reverse-map) ##########");
 
-  // The whole-alias-set behavior is NCAAF-only. Every other sport's
-  // teamGroupAliases is exactly the single nickname findGroupingNickname
-  // returned - re-assert the KBO-collision teams from PART A and a couple of
-  // plain ones, now through teamGroupAliases + the word-boundary match.
+  // For a pro team, teamGroupAliases is the single bare-mascot nickname
+  // findGroupingNickname returned, PLUS any curated short-form aliases that
+  // translate to it (PRO_TEAM_ALIASES) - "Philadelphia Eagles" -> the mascot
+  // and "iggles". A team with no slang alias (most of them) still returns
+  // just the one. Re-assert the KBO-collision teams from PART A and a couple
+  // of plain ones through teamGroupAliases + the word-boundary match.
   {
     for (const [sport, name, expected] of [
       ["MLB", "Minnesota Twins", ["twins"]],
       ["MLB", "Detroit Tigers", ["tigers"]],
       ["NFL", "Chicago Bears", ["bears"]],
-      ["NFL", "Philadelphia Eagles", ["eagles"]],
+      ["NFL", "Philadelphia Eagles", ["eagles", "iggles"]],
       ["MLB", "San Diego Padres", ["padres"]],
       ["NBA", "Sacramento Kings", ["kings"]],
       ["NHL", "Winnipeg Jets", ["jets"]],
       ["WNBA", "Las Vegas Aces", ["aces"]],
+      // A pro team that DOES carry slang aliases returns the whole set.
+      ["MLB", "Chicago Cubs", ["cubs", "cubbies", "cub"]],
+      ["MLB", "Arizona Diamondbacks", ["diamondbacks", "dbacks", "d-backs"]],
     ] as [string, string, string[]][]) {
-      check(`teamGroupAliases('${name}', ${sport}) is the single nickname`, teamGroupAliases(name, sport), expected);
+      check(`teamGroupAliases('${name}', ${sport})`, teamGroupAliases(name, sport), expected);
     }
 
     // Behavior parity with PART A: the exact Twins/Tigers/Bears moneyline

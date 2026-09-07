@@ -378,21 +378,21 @@ const KBO_TEAMS = ["wiz", "landers", "dinos", "heroes"];
 // keeping it here doesn't let a bare "Liberty" resolve NCAAF directly.
 const NCAAF_SCHOOLS: [string, string][] = [
   // SEC
-  ["alabama", "alabama crimson tide"],
+  ["alabama", "alabama crimson tide"], ["bama", "alabama crimson tide"],
   ["arkansas", "arkansas razorbacks"],
   ["auburn", "auburn tigers"],
   ["florida", "florida gators"],
-  ["georgia", "georgia bulldogs"],
+  ["georgia", "georgia bulldogs"], ["uga", "georgia bulldogs"],
   ["kentucky", "kentucky wildcats"],
   ["lsu", "lsu tigers"],
   ["ole miss", "ole miss rebels"],
   ["mississippi state", "mississippi state bulldogs"],
-  ["missouri", "missouri tigers"],
+  ["missouri", "missouri tigers"], ["mizzou", "missouri tigers"],
   ["oklahoma", "oklahoma sooners"],
   ["south carolina", "south carolina gamecocks"],
   ["tennessee", "tennessee volunteers"],
   ["texas", "texas longhorns"],
-  ["texas a&m", "texas a&m aggies"],
+  ["texas a&m", "texas a&m aggies"], ["tamu", "texas a&m aggies"],
   ["vanderbilt", "vanderbilt commodores"],
   // Big Ten
   ["illinois", "illinois fighting illini"],
@@ -429,18 +429,18 @@ const NCAAF_SCHOOLS: [string, string][] = [
   ["oklahoma state", "oklahoma state cowboys"],
   ["tcu", "tcu horned frogs"],
   ["texas tech", "texas tech red raiders"],
-  ["west virginia", "west virginia mountaineers"],
+  ["west virginia", "west virginia mountaineers"], ["wvu", "west virginia mountaineers"],
   // ACC
   ["clemson", "clemson tigers"],
   ["miami", "miami hurricanes"],
   ["florida state", "florida state seminoles"],
   ["louisville", "louisville cardinals"],
-  ["pittsburgh", "pittsburgh panthers"],
+  ["pittsburgh", "pittsburgh panthers"], ["pitt", "pittsburgh panthers"],
   ["smu", "smu mustangs"],
   ["north carolina", "north carolina tar heels"],
   ["duke", "duke blue devils"],
   ["virginia tech", "virginia tech hokies"],
-  ["syracuse", "syracuse orange"],
+  ["syracuse", "syracuse orange"], ["cuse", "syracuse orange"],
   ["nc state", "nc state wolfpack"],
   ["boston college", "boston college eagles"],
   ["georgia tech", "georgia tech yellow jackets"],
@@ -547,7 +547,60 @@ const NCAAF_SCHOOLS: [string, string][] = [
 
 const NCAAF_TEAMS = NCAAF_SCHOOLS.map(([key]) => key);
 
+// ---- Short-form / slang aliases a capper types for a PRO team ----
+// [alias, sport, canonicalMascot]. Unlike the bare-mascot lists above, a
+// slang alias is NOT a suffix of the real live-schedule team name ("halos"
+// is not the end of "Los Angeles Angels", "dbacks" not the end of "Arizona
+// Diamondbacks"), so - exactly like the NCAAF school keys, which are a
+// PREFIX - it has to be translated to its canonical mascot (which IS the
+// suffix) before any resolveGameForNickname / pickedSide `endsWith` check.
+// That translation is TEAM_NICKNAME_CANONICAL below; bulk-picks.ts applies
+// it for every sport now (NCAAF used to be the only one that needed it).
+//
+// Curated low-collision only (see the pro-team short-alias proposal): every
+// entry is a token that (a) is not an ordinary word in capper text and (b)
+// maps to exactly one tracked team. Slang that doubles as a common word
+// ("caps", "boys", "wings") or collides across teams ("bucs" = Buccaneers +
+// Pirates, "canes" = Hurricanes + Miami, "sox" = Red Sox + White Sox, "red"
+// = Reds + Red Sox + Red Wings) is deliberately NOT here.
+const PRO_TEAM_ALIASES: [string, string, string][] = [
+  // MLB
+  ["dbacks", "MLB", "diamondbacks"], ["d-backs", "MLB", "diamondbacks"],
+  ["bosox", "MLB", "red sox"], ["sawx", "MLB", "red sox"],
+  ["chisox", "MLB", "white sox"],
+  ["stros", "MLB", "astros"],
+  ["halos", "MLB", "angels"],
+  ["yanks", "MLB", "yankees"],
+  ["nats", "MLB", "nationals"],
+  ["cubbies", "MLB", "cubs"], ["cub", "MLB", "cubs"],
+  ["phils", "MLB", "phillies"],
+  // NBA
+  ["mavs", "NBA", "mavericks"],
+  // NFL - "iggles" only ever means Philadelphia, so unlike bare "eagles"
+  // (which collides with KBO's Hanwha Eagles and routes through the
+  // ambiguous hierarchy) it can resolve NFL directly.
+  ["iggles", "NFL", "eagles"],
+  ["jags", "NFL", "jaguars"],
+  // NHL
+  ["habs", "NHL", "canadiens"],
+  ["preds", "NHL", "predators"],
+  ["nucks", "NHL", "canucks"],
+  ["yotes", "NHL", "coyotes"],
+  ["leafs", "NHL", "maple leafs"],
+];
+
 export const NCAAF_CANONICAL_SUFFIX: Record<string, string> = Object.fromEntries(NCAAF_SCHOOLS);
+
+// alias / school-key -> the canonical mascot phrase that IS a suffix of the
+// real live-schedule team name. bulk-picks.ts maps every teamNickname
+// through this before its `endsWith` game-resolution (see the comment
+// there). NCAAF school keys and pro slang aliases share one table; a bare
+// mascot that's already its own suffix ("cubs", "yankees") isn't in here and
+// passes straight through unchanged.
+export const TEAM_NICKNAME_CANONICAL: Record<string, string> = {
+  ...NCAAF_CANONICAL_SUFFIX,
+  ...Object.fromEntries(PRO_TEAM_ALIASES.map(([alias, , canonical]) => [alias, canonical])),
+};
 
 const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...DISAMBIGUATED_TEAMS,
@@ -559,6 +612,7 @@ const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...CFL_TEAMS.map((t): TeamEntry => [t, "CFL"]),
   ...KBO_TEAMS.map((t): TeamEntry => [t, "KBO"]),
   ...NCAAF_TEAMS.map((t): TeamEntry => [t, "NCAAF"]),
+  ...PRO_TEAM_ALIASES.map(([alias, sport]): TeamEntry => [alias, sport]),
 ].sort((a, b) => b[0].length - a[0].length);
 
 // Purpose-built for classifyPickTeamGroup/shortTeamName (pick-team-group.ts)
@@ -594,6 +648,7 @@ const GROUPING_TEAM_NICKNAMES: TeamEntry[] = [
   ...CFL_TEAMS.map((t): TeamEntry => [t, "CFL"]),
   ...KBO_TEAMS.map((t): TeamEntry => [t, "KBO"]),
   ...NCAAF_TEAMS.map((t): TeamEntry => [t, "NCAAF"]),
+  ...PRO_TEAM_ALIASES.map(([alias, sport]): TeamEntry => [alias, sport]),
   ...Object.entries(AMBIGUOUS_NICKNAMES).flatMap(([bare, options]): TeamEntry[] =>
     options.map((o): TeamEntry => [bare, o.sport])
   ),
@@ -644,10 +699,19 @@ export function findGroupingNickname(text: string, sportName: string): string | 
 export function teamGroupAliases(teamDisplayName: string, sportName: string): string[] {
   const primary = findGroupingNickname(teamDisplayName, sportName);
   if (!primary) return [];
-  if (sportName !== "NCAAF") return [primary];
-  const canonical = NCAAF_CANONICAL_SUFFIX[primary];
-  if (!canonical) return [primary];
-  return NCAAF_SCHOOLS.filter(([, c]) => c === canonical).map(([key]) => key);
+  if (sportName === "NCAAF") {
+    const canonical = NCAAF_CANONICAL_SUFFIX[primary];
+    if (!canonical) return [primary];
+    return NCAAF_SCHOOLS.filter(([, c]) => c === canonical).map(([key]) => key);
+  }
+  // Pro sports: `primary` is the bare mascot ("cubs"); add any curated
+  // short-form aliases that translate to it ("cub", "cubbies") so a pick
+  // written with the alias still groups under the right team header on
+  // /live instead of "Totals & other markets".
+  const aliases = PRO_TEAM_ALIASES.filter(([, s, canonical]) => s === sportName && canonical === primary).map(
+    ([alias]) => alias
+  );
+  return [primary, ...aliases];
 }
 
 // Strong "this is definitely a pick, not a capper's name" signals - a units
