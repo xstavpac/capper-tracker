@@ -1,26 +1,32 @@
-// The condensed three-number record line shown under each pick on a /live
-// game card, replacing the verbose
+// The record line shown under each pick on a /live game card. It replaces the
+// verbose
 //   "12-3 (80%) all-time | 4-1 (80%) last 20 on underdog spread picks"
-// with:
-//   "Team +3.5 · All 12-3 80% | NCAAF 8-2 80% | L20 4-1 80%"
+// with a natural-phrasing sentence fragment:
+//   "Team +3.5 · 58% overall on total picks (21-15-2) · 60% in NCAAF (3-2) 🔥4"
 //
-// Format (final, per PR #25 review):
-//  - "All" (not "Ovr" - avoids reading as "Over"), the game's league, "L20"
-//  - "|" between the three segments; "·" separates them from the bet detail
-//  - record then win% space-separated, NO parentheses
-//  - every segment is green/red by its OWN record's win rate
-//  - the league segment additionally gets bold weight (it's the number the
-//    viewer is deciding on)
-//  - L20 (segment + its "|" divider) is dropped entirely below the 20-graded
-//    threshold - no placeholder text
-//  - a 🔥/🧊 streak indicator is appended to the very end (after L20) when the
-//    capper is on a current OVERALL streak of 2+ - see gameCardStreakSuffix
+// Format (natural phrasing, per the game-card mockup):
+//  - one clause per record: "<win%> overall on <market> picks (<W-L[-P]>)" for
+//    the capper's all-time record in this pick's market, then
+//    "<win%> in <league> (<W-L[-P]>)" for their record in the game's league
+//  - the market noun is side-dropped ("total", "spread", "moneyline") - the
+//    card already shows which side this pick is on; PICK_CATEGORY_MARKET_NOUN
+//    (stats.ts) owns that mapping
+//  - "·" separates the bet detail from the first clause and the clauses from
+//    each other; each clause's win% and (record) are green/red by that
+//    clause's own win rate
+//  - the "in <league>" clause is dropped entirely when the capper has no
+//    graded pick in the game's league yet (no "0% in NCAAF (0-0)")
+//  - on dense cards the line is allowed to wrap to a second row - an accepted
+//    tradeoff for the plainer wording, and still far better than the verbose
+//    line it replaces, which wrapped to 2-3 rows for every pick
+//  - a 🔥/🧊 streak indicator is appended at the very end when the capper is on
+//    a current OVERALL streak of 2+ - this occupies the slot the old "L20"
+//    segment used to; see gameCardStreakSuffix / gameCardStreakTooltip
 //
 // Pure (no React, no DB) so game-picks-expander.tsx renders it and the tests
-// check the exact text plus the mobile-width guard - a game card stacks 8+
-// picks and this line must stay the same one-row footprint it replaces. The
-// numbers come from computeLeagueRecordCards (stats.ts) via
-// getLeagueRecordsAction; this file only formats them.
+// check the exact text plus the mobile-width guard. The numbers come from
+// computeLeagueRecordCards (stats.ts) via getLeagueRecordsAction and the
+// streak from computeStats().currentStreak - this file only formats them.
 
 export type GameCardRecordColumn = { wins: number; losses: number; pushes: number; winPct: number };
 
@@ -33,13 +39,22 @@ export type GameCardStreak = { type: "WIN" | "LOSS" | "NONE"; count: number };
 export const GAME_CARD_STREAK_MIN = 2;
 
 // The record line's trailing indicator: "🔥" + count on a 2+ win streak,
-// "🧊" + count on a 2+ loss streak, "" below that in either direction (so the
-// line renders exactly as it did before). This is the ONLY streak formatting
-// in this file - it does not compute the streak, callers pass currentStreak()'s
-// result straight through.
+// "🧊" + count on a 2+ loss streak, "" below that in either direction (the
+// slot then simply renders nothing - it does NOT fall back to any other
+// number). This is the ONLY streak formatting in this file - it does not
+// compute the streak, callers pass currentStreak()'s result straight through.
 export function gameCardStreakSuffix(streak: GameCardStreak | null | undefined): string {
   if (!streak || streak.type === "NONE" || streak.count < GAME_CARD_STREAK_MIN) return "";
   return (streak.type === "WIN" ? "🔥" : "🧊") + streak.count;
+}
+
+// Plain-text explanation of the streak, shown on hover over the 🔥/🧊 glyph
+// (a standard title attribute - the codebase has no tooltip component). Empty
+// string below the 2+ cutoff, matching gameCardStreakSuffix - no glyph, no
+// tooltip.
+export function gameCardStreakTooltip(streak: GameCardStreak | null | undefined): string {
+  if (!streak || streak.type === "NONE" || streak.count < GAME_CARD_STREAK_MIN) return "";
+  return (streak.type === "WIN" ? "Won " : "Lost ") + streak.count + " in a row";
 }
 
 // The component's placeholder when the capper has no graded pick in this
@@ -48,49 +63,63 @@ export function gameCardStreakSuffix(streak: GameCardStreak | null | undefined):
 // overall, not category-scoped, so it shows whenever the capper's name does).
 export const GAME_CARD_NO_HISTORY_TEXT = "No history in this category yet";
 
-export type GameCardRecordSegment = {
-  label: string;
-  record: string; // "12-3" or "12-3-1"
-  pct: string; // "80%"
-  winPct: number; // for the segment's own green/red color
-  emphasized: boolean; // the current-league segment - bold on top of color
+// One clause of the natural-phrasing line. `scope` is everything between the
+// win% and the parenthesised record ("overall on total picks", "in NCAAF").
+export type GameCardRecordClause = {
+  pct: string; // "58%"
+  scope: string; // "overall on total picks" | "in NCAAF"
+  record: string; // "21-15-2"
+  winPct: number; // for the clause's own green/red color
 };
 
 function recordText(c: GameCardRecordColumn): string {
   return c.wins + "-" + c.losses + (c.pushes > 0 ? "-" + c.pushes : "");
 }
 
-export function gameCardRecordSegments(
-  card: {
-    overall: GameCardRecordColumn;
-    league: GameCardRecordColumn;
-    last20: GameCardRecordColumn | null;
-  },
-  leagueName: string,
-  lastN: number
-): GameCardRecordSegment[] {
-  const seg = (label: string, c: GameCardRecordColumn, emphasized: boolean): GameCardRecordSegment => ({
-    label,
-    record: recordText(c),
-    pct: Math.round(c.winPct) + "%",
-    winPct: c.winPct,
-    emphasized,
-  });
-  const segments = [seg("All", card.overall, false), seg(leagueName, card.league, true)];
-  if (card.last20) segments.push(seg("L" + lastN, card.last20, false));
-  return segments;
+function pctText(c: GameCardRecordColumn): string {
+  return Math.round(c.winPct) + "%";
 }
 
-// The record portion ("All 12-3 80% | NCAAF 8-2 80% | L20 4-1 80% 🔥3") -
-// what's appended after the bet detail. Character content matches what the
-// component renders (it only adds per-segment color / weight). The optional
-// streak suffix is appended after the last segment; if there are no segments
-// (no category history) the suffix stands alone.
+// Builds the clause list from a capper's league-record card. `marketNoun` is
+// PICK_CATEGORY_MARKET_NOUN[category]. The "in <league>" clause is included
+// only when hasLeagueHistory is true (the caller checks card.league.count).
+export function gameCardRecordClauses(
+  card: { overall: GameCardRecordColumn; league: GameCardRecordColumn },
+  opts: { leagueName: string; marketNoun: string; hasLeagueHistory: boolean }
+): GameCardRecordClause[] {
+  const clauses: GameCardRecordClause[] = [
+    {
+      pct: pctText(card.overall),
+      scope: "overall on " + opts.marketNoun + " picks",
+      record: recordText(card.overall),
+      winPct: card.overall.winPct,
+    },
+  ];
+  if (opts.hasLeagueHistory) {
+    clauses.push({
+      pct: pctText(card.league),
+      scope: "in " + opts.leagueName,
+      record: recordText(card.league),
+      winPct: card.league.winPct,
+    });
+  }
+  return clauses;
+}
+
+function clauseText(c: GameCardRecordClause): string {
+  return c.pct + " " + c.scope + " (" + c.record + ")";
+}
+
+// The record portion ("58% overall on total picks (21-15-2) · 60% in NCAAF
+// (3-2) 🔥4") - what's appended after the bet detail. Character content
+// matches what the component renders (it only adds per-clause color). The
+// optional streak suffix is appended after the last clause; if there are no
+// clauses (no category history) the suffix stands alone.
 export function gameCardRecordPortionText(
-  segments: GameCardRecordSegment[],
+  clauses: GameCardRecordClause[],
   streak?: GameCardStreak | null
 ): string {
-  const base = segments.map((s) => s.label + " " + s.record + " " + s.pct).join(" | ");
+  const base = clauses.map(clauseText).join(" · ");
   const suffix = gameCardStreakSuffix(streak);
   if (!suffix) return base;
   return base ? base + " " + suffix : suffix;
@@ -99,10 +128,10 @@ export function gameCardRecordPortionText(
 // The full line, for the width guard / a plain-text fallback.
 export function gameCardRecordLineText(
   betDetail: string,
-  segments: GameCardRecordSegment[],
+  clauses: GameCardRecordClause[],
   streak?: GameCardStreak | null
 ): string {
-  const portion = gameCardRecordPortionText(segments, streak);
+  const portion = gameCardRecordPortionText(clauses, streak);
   return portion ? betDetail + " · " + portion : betDetail;
 }
 
@@ -128,10 +157,10 @@ export function estimateGameCardLineWidthPx(text: string): number {
 
 // Usable run for this line before it wraps: it sits at pl-[23px] inside the
 // expander's px-2.5 pick card, inside the game card's padding. On a 390px
-// viewport (iPhone 12/13/14/15 and up - the current mainstream) that's ~300px;
-// the record PORTION alone is budgeted 260px so it shares a row with a normal
-// bet detail. Genuinely long college team names ("Washington State -7") wrap
-// the full line to a second row - still strictly better than the verbose line
-// it replaces, which wrapped to 2-3 rows for EVERY pick.
+// viewport (iPhone 12/13/14/15 and up - the current mainstream) that's ~300px.
+// The natural-phrasing line is longer than the compact format it replaces and
+// is EXPECTED to wrap to a second row on dense cards - an accepted tradeoff.
+// The guard now only asserts the line never balloons past two rows (and that a
+// short, common pick still fits one); it is no longer a one-row contract.
 export const GAME_CARD_LINE_MOBILE_BUDGET_PX = 300;
-export const GAME_CARD_RECORD_PORTION_BUDGET_PX = 260;
+export const GAME_CARD_LINE_MAX_ROWS = 2;
