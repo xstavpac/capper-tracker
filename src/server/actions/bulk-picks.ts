@@ -16,7 +16,7 @@ import {
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
 import { extractLine } from "@/lib/bet-line";
-import { NCAAF_CANONICAL_SUFFIX } from "@/lib/parse-catalog";
+import { TEAM_NICKNAME_CANONICAL } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
@@ -123,20 +123,20 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
   const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
   const resolvable = Boolean(liveSportKey && RESOLVABLE_SPORT_KEYS.includes(liveSportKey));
   if (liveSportKey && resolvable) {
-    // NCAAF's parse-catalog nicknames are school names (a PREFIX of the real
-    // team name, e.g. "lsu"), not bare mascots (a SUFFIX, e.g. "tigers") the
-    // way every other sport's are - translated once here to the canonical
-    // "school mascot" suffix (see NCAAF_CANONICAL_SUFFIX's own comment) so
+    // Some parse-catalog nicknames aren't a SUFFIX of the real live-schedule
+    // team name the way a bare mascot is ("cubs" ends "Chicago Cubs"):
+    // NCAAF school keys are a PREFIX ("lsu"), and the curated pro slang
+    // aliases ("halos", "dbacks", "habs") are neither. TEAM_NICKNAME_CANONICAL
+    // translates each to the canonical mascot phrase that IS the suffix, so
     // every endsWith check below (lookupGame's game-resolution, pickedSide,
-    // and the existing odds-lookup side) keeps working unchanged. A no-op
-    // for every other sport, and a no-op for any NCAAF nickname that
-    // somehow isn't in the table (falls back to itself, same as today -
-    // just won't match, which is the existing safe behavior for an
-    // unresolvable nickname).
-    const nicknames =
-      item.sportName.toUpperCase() === "NCAAF"
-        ? item.teamNicknames.map((n) => NCAAF_CANONICAL_SUFFIX[n] ?? n)
-        : item.teamNicknames;
+    // and the odds-lookup side) keeps working unchanged. A no-op for a bare
+    // mascot (not in the table -> falls back to itself), and a no-op for any
+    // nickname that somehow isn't in the table (same safe "just won't match"
+    // behavior as today). Deduped after translation: a capper who writes
+    // both the full name and an alias ("Diamondbacks (Dbacks) -1.5") would
+    // otherwise hand lookupGame two nicknames that both resolve to the same
+    // team, which it reads as a two-team matchup and fails.
+    const nicknames = [...new Set(item.teamNicknames.map((n) => TEAM_NICKNAME_CANONICAL[n] ?? n))];
     let game = await lookupGame(liveSportKey, nicknames);
     // One retry before giving up - covers a transient miss/blip against the
     // live schedule source rather than treating it as a genuine non-match.
