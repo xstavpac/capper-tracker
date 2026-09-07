@@ -8,18 +8,27 @@
 //   - every segment colored by its own record; the league segment also bold
 //   - L20 (segment + its "|") dropped entirely below the 20-graded threshold
 //
-// Proven here: exact text above/below threshold, pushes, and the mobile-width
-// behaviour - including the two stress cases the format was reviewed against
-// (a long college team name, and a 3-digit lifetime record like 142-38).
+// Proven here: exact text above/below threshold, pushes, the trailing 🔥/🧊
+// overall-streak indicator, and the mobile-width behaviour - including the two
+// stress cases the format was reviewed against (a long college team name, and
+// a 3-digit lifetime record like 142-38), each re-checked with the indicator
+// appended.
 
 import {
   gameCardRecordSegments,
   gameCardRecordPortionText,
   gameCardRecordLineText,
+  gameCardNoHistoryLineText,
+  gameCardStreakSuffix,
   estimateGameCardLineWidthPx,
   GAME_CARD_LINE_MOBILE_BUDGET_PX,
   GAME_CARD_RECORD_PORTION_BUDGET_PX,
+  GAME_CARD_NO_HISTORY_TEXT,
+  type GameCardStreak,
 } from "@/lib/game-card-record-line";
+
+const winStreak = (count: number): GameCardStreak => ({ type: "WIN", count });
+const lossStreak = (count: number): GameCardStreak => ({ type: "LOSS", count });
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -85,6 +94,71 @@ check(
 );
 
 // ---------------------------------------------------------------------------
+console.log("\n##########  trailing 🔥/🧊 overall-streak indicator  ##########");
+{
+  // Below 2 in either direction -> nothing (line renders exactly as before).
+  check("no streak: 1 win -> empty suffix", gameCardStreakSuffix(winStreak(1)), "");
+  check("no streak: 1 loss -> empty suffix", gameCardStreakSuffix(lossStreak(1)), "");
+  check("no streak: NONE -> empty suffix", gameCardStreakSuffix({ type: "NONE", count: 0 }), "");
+  check("no streak: null -> empty suffix", gameCardStreakSuffix(null), "");
+  check("no streak: undefined -> empty suffix", gameCardStreakSuffix(undefined), "");
+
+  // 2+ win streak -> flame + count; 2+ loss streak -> ice cube + count.
+  check("2 win streak -> 🔥2", gameCardStreakSuffix(winStreak(2)), "🔥2");
+  check("3 win streak -> 🔥3", gameCardStreakSuffix(winStreak(3)), "🔥3");
+  check("2 loss streak -> 🧊2", gameCardStreakSuffix(lossStreak(2)), "🧊2");
+  check("6 loss streak -> 🧊6", gameCardStreakSuffix(lossStreak(6)), "🧊6");
+  check("double-digit streak keeps the full count -> 🔥12", gameCardStreakSuffix(winStreak(12)), "🔥12");
+
+  const segs = segsFor(col(12, 3), col(8, 2), col(4, 1));
+  // Below 2 -> portion / line are byte-identical to the no-streak form.
+  check(
+    "portion with a sub-2 streak == portion with no streak",
+    gameCardRecordPortionText(segs, winStreak(1)),
+    gameCardRecordPortionText(segs)
+  );
+  check(
+    "line with a sub-2 streak == line with no streak",
+    gameCardRecordLineText("Team +3.5", segs, lossStreak(1)),
+    gameCardRecordLineText("Team +3.5", segs)
+  );
+
+  // 2+ -> appended after the last segment, single space, at the very end.
+  check(
+    "win streak appends 🔥3 after L20",
+    gameCardRecordPortionText(segs, winStreak(3)),
+    "All 12-3 80% | NCAAF 8-2 80% | L20 4-1 80% 🔥3"
+  );
+  check(
+    "loss streak appends 🧊2 after L20",
+    gameCardRecordLineText("Team +3.5", segs, lossStreak(2)),
+    "Team +3.5 · All 12-3 80% | NCAAF 8-2 80% | L20 4-1 80% 🧊2"
+  );
+  // Below the L20 threshold the indicator still lands at the end.
+  check(
+    "indicator appends after the league segment when L20 is dropped",
+    gameCardRecordLineText("Team +3.5", segsFor(col(6, 3), col(4, 2), null), winStreak(4)),
+    "Team +3.5 · All 6-3 67% | NCAAF 4-2 67% 🔥4"
+  );
+
+  // No category history: the streak is overall, not category-scoped, so it
+  // shows on the "no history" line too - the whole reason this indicator
+  // exists on every pick card, not just ones with a record.
+  check(
+    "streak shows on the no-category-history line",
+    gameCardNoHistoryLineText("Team +3.5", winStreak(3)),
+    "Team +3.5 · " + GAME_CARD_NO_HISTORY_TEXT + " 🔥3"
+  );
+  check(
+    "no-history line without a streak is unchanged",
+    gameCardNoHistoryLineText("Team +3.5", lossStreak(1)),
+    "Team +3.5 · " + GAME_CARD_NO_HISTORY_TEXT
+  );
+  // Standalone (empty segments) - portion is just the suffix.
+  check("empty segments + streak -> portion is the bare suffix", gameCardRecordPortionText([], winStreak(2)), "🔥2");
+}
+
+// ---------------------------------------------------------------------------
 console.log("\n##########  mobile width: the common case is one row  ##########");
 {
   const segsAbove = segsFor(col(12, 3), col(8, 2), col(4, 1));
@@ -104,6 +178,73 @@ console.log("\n##########  mobile width: the common case is one row  ##########"
   checkLte(
     'below-threshold line fits with room to spare: "Team +3.5"',
     estimateGameCardLineWidthPx(gameCardRecordLineText("Team +3.5", segsBelow)),
+    GAME_CARD_LINE_MOBILE_BUDGET_PX
+  );
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n##########  mobile width: with the 🔥/🧊 indicator appended  ##########");
+{
+  // The PR #25 one-row check, re-run with BOTH indicator variants folded into
+  // the width calculation.
+  const segsAbove = segsFor(col(12, 3), col(8, 2), col(4, 1));
+  const commonVariants: GameCardStreak[] = [winStreak(3), lossStreak(2)];
+
+  for (const streak of commonVariants) {
+    const suffix = gameCardStreakSuffix(streak);
+    checkLte(
+      `record portion + "${suffix}" still fits the portion budget`,
+      estimateGameCardLineWidthPx(gameCardRecordPortionText(segsAbove, streak)),
+      GAME_CARD_RECORD_PORTION_BUDGET_PX
+    );
+    // Short bet details - the common case - stay one row with the indicator.
+    for (const bet of ["Team +3.5", "Over 55.5", "UNLV +7", "Bama ML"]) {
+      checkLte(
+        `full line + "${suffix}" fits one row: "${bet}"`,
+        estimateGameCardLineWidthPx(gameCardRecordLineText(bet, segsAbove, streak)),
+        GAME_CARD_LINE_MOBILE_BUDGET_PX
+      );
+    }
+    // A medium bet detail that already sat near the edge in PR #25 can tip to
+    // a SECOND row once the indicator is added - never more than 2, same
+    // documented treatment as the long-team-name / 3-digit-record cases.
+    const medium = estimateGameCardLineWidthPx(gameCardRecordLineText("Under 210.5", segsAbove, streak));
+    checkTrue(
+      `medium bet + "${suffix}" is at most 2 rows ("Under 210.5", ${medium}px)`,
+      medium <= GAME_CARD_LINE_MOBILE_BUDGET_PX * 2
+    );
+  }
+
+  // Worst case: a double-digit overall streak (10+ in a row - rare). The
+  // extra digit alone can nudge even a short bet detail's full line ~2px past
+  // the 300px budget; still one row for really short details, at most two for
+  // the rest. The record portion still fits its own budget.
+  const big = winStreak(12);
+  checkLte(
+    'record portion + "🔥12" fits the portion budget',
+    estimateGameCardLineWidthPx(gameCardRecordPortionText(segsAbove, big)),
+    GAME_CARD_RECORD_PORTION_BUDGET_PX
+  );
+  for (const bet of ["UNLV +7", "Bama ML"]) {
+    checkLte(
+      `full line + "🔥12" fits one row: "${bet}"`,
+      estimateGameCardLineWidthPx(gameCardRecordLineText(bet, segsAbove, big)),
+      GAME_CARD_LINE_MOBILE_BUDGET_PX
+    );
+  }
+  for (const bet of ["Team +3.5", "Over 55.5", "Under 210.5"]) {
+    const w = estimateGameCardLineWidthPx(gameCardRecordLineText(bet, segsAbove, big));
+    checkTrue(`full line + "🔥12" is at most 2 rows: "${bet}" (${w}px)`, w <= GAME_CARD_LINE_MOBILE_BUDGET_PX * 2);
+  }
+
+  // The no-category-history line + indicator - also at most one extra row.
+  for (const bet of ["Team +3.5", "Washington State -7"]) {
+    const w = estimateGameCardLineWidthPx(gameCardNoHistoryLineText(bet, lossStreak(6)));
+    checkTrue(`no-history line + "🧊6" is at most 2 rows: "${bet}" (${w}px)`, w <= GAME_CARD_LINE_MOBILE_BUDGET_PX * 2);
+  }
+  checkLte(
+    'no-history line + "🔥3" fits one row for a short bet: "Team +3.5"',
+    estimateGameCardLineWidthPx(gameCardNoHistoryLineText("Team +3.5", winStreak(3))),
     GAME_CARD_LINE_MOBILE_BUDGET_PX
   );
 }
@@ -184,6 +325,22 @@ console.log("\n##########  a dense 9-pick card stays compact  ##########");
     (p) => estimateGameCardLineWidthPx(gameCardRecordLineText(p.bet, p.segs)) <= GAME_CARD_LINE_MOBILE_BUDGET_PX
   );
   checkTrue(`at least 7 of 9 dense-card picks are a clean single row (got ${oneRow.length})`, oneRow.length >= 7);
+
+  // Same dense card, now every capper on a streak (alternating 🔥/🧊): the
+  // record portions still don't overflow, and the majority of full lines are
+  // still one row.
+  const withStreak = stacked.map((p, i) => ({ ...p, streak: i % 2 === 0 ? winStreak(3) : lossStreak(2) }));
+  const portionOverflowsStreak = withStreak.filter(
+    (p) => estimateGameCardLineWidthPx(gameCardRecordPortionText(p.segs, p.streak)) > GAME_CARD_RECORD_PORTION_BUDGET_PX
+  );
+  check("with indicators, no record portion overflows", portionOverflowsStreak.map((p) => p.bet), []);
+  const oneRowStreak = withStreak.filter(
+    (p) => estimateGameCardLineWidthPx(gameCardRecordLineText(p.bet, p.segs, p.streak)) <= GAME_CARD_LINE_MOBILE_BUDGET_PX
+  );
+  checkTrue(
+    `with indicators, at least 6 of 9 dense-card picks are still one row (got ${oneRowStreak.length})`,
+    oneRowStreak.length >= 6
+  );
 }
 
 // ---------------------------------------------------------------------------

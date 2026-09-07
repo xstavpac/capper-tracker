@@ -13,6 +13,8 @@
 //    viewer is deciding on)
 //  - L20 (segment + its "|" divider) is dropped entirely below the 20-graded
 //    threshold - no placeholder text
+//  - a 🔥/🧊 streak indicator is appended to the very end (after L20) when the
+//    capper is on a current OVERALL streak of 2+ - see gameCardStreakSuffix
 //
 // Pure (no React, no DB) so game-picks-expander.tsx renders it and the tests
 // check the exact text plus the mobile-width guard - a game card stacks 8+
@@ -21,6 +23,30 @@
 // getLeagueRecordsAction; this file only formats them.
 
 export type GameCardRecordColumn = { wins: number; losses: number; pushes: number; winPct: number };
+
+// The capper's current overall streak, any sport / any bet type - the exact
+// same { type, count } shape currentStreak() (stats.ts) returns and the
+// Leaderboard/Favorites flame badge (StreakBadge) already renders.
+export type GameCardStreak = { type: "WIN" | "LOSS" | "NONE"; count: number };
+
+// Same 2+ cutoff StreakBadge uses - a single win or loss isn't a "streak."
+export const GAME_CARD_STREAK_MIN = 2;
+
+// The record line's trailing indicator: "🔥" + count on a 2+ win streak,
+// "🧊" + count on a 2+ loss streak, "" below that in either direction (so the
+// line renders exactly as it did before). This is the ONLY streak formatting
+// in this file - it does not compute the streak, callers pass currentStreak()'s
+// result straight through.
+export function gameCardStreakSuffix(streak: GameCardStreak | null | undefined): string {
+  if (!streak || streak.type === "NONE" || streak.count < GAME_CARD_STREAK_MIN) return "";
+  return (streak.type === "WIN" ? "🔥" : "🧊") + streak.count;
+}
+
+// The component's placeholder when the capper has no graded pick in this
+// pick's category. Exported so the component and the width test share the
+// exact string (the streak suffix still appends after it - the streak is
+// overall, not category-scoped, so it shows whenever the capper's name does).
+export const GAME_CARD_NO_HISTORY_TEXT = "No history in this category yet";
 
 export type GameCardRecordSegment = {
   label: string;
@@ -55,17 +81,37 @@ export function gameCardRecordSegments(
   return segments;
 }
 
-// The record portion ("All 12-3 80% | NCAAF 8-2 80% | L20 4-1 80%") - what's
-// appended after the bet detail. Character content matches what the component
-// renders (it only adds per-segment color / weight).
-export function gameCardRecordPortionText(segments: GameCardRecordSegment[]): string {
-  return segments.map((s) => s.label + " " + s.record + " " + s.pct).join(" | ");
+// The record portion ("All 12-3 80% | NCAAF 8-2 80% | L20 4-1 80% 🔥3") -
+// what's appended after the bet detail. Character content matches what the
+// component renders (it only adds per-segment color / weight). The optional
+// streak suffix is appended after the last segment; if there are no segments
+// (no category history) the suffix stands alone.
+export function gameCardRecordPortionText(
+  segments: GameCardRecordSegment[],
+  streak?: GameCardStreak | null
+): string {
+  const base = segments.map((s) => s.label + " " + s.record + " " + s.pct).join(" | ");
+  const suffix = gameCardStreakSuffix(streak);
+  if (!suffix) return base;
+  return base ? base + " " + suffix : suffix;
 }
 
 // The full line, for the width guard / a plain-text fallback.
-export function gameCardRecordLineText(betDetail: string, segments: GameCardRecordSegment[]): string {
-  const portion = gameCardRecordPortionText(segments);
+export function gameCardRecordLineText(
+  betDetail: string,
+  segments: GameCardRecordSegment[],
+  streak?: GameCardStreak | null
+): string {
+  const portion = gameCardRecordPortionText(segments, streak);
   return portion ? betDetail + " · " + portion : betDetail;
+}
+
+// The plain-text form of the "no category history" line the component shows
+// in place of the record portion - placeholder text plus the same overall
+// streak suffix. For the mobile-width guard.
+export function gameCardNoHistoryLineText(betDetail: string, streak?: GameCardStreak | null): string {
+  const suffix = gameCardStreakSuffix(streak);
+  return betDetail + " · " + GAME_CARD_NO_HISTORY_TEXT + (suffix ? " " + suffix : "");
 }
 
 // Single-line width estimate at the game card's text-[10px]. ~5.2px per
@@ -73,8 +119,11 @@ export function gameCardRecordLineText(betDetail: string, segments: GameCardReco
 // guard, not a layout measurement.
 export const GAME_CARD_LINE_PX_PER_CHAR = 5.2;
 
+// Counted by Unicode code point, not UTF-16 unit, so the streak emoji (🔥/🧊,
+// a surrogate pair - String length 2) is treated as the single ~1-char glyph
+// it renders as, not two. Pure-ASCII lines are unaffected.
 export function estimateGameCardLineWidthPx(text: string): number {
-  return Math.ceil(text.length * GAME_CARD_LINE_PX_PER_CHAR);
+  return Math.ceil([...text].length * GAME_CARD_LINE_PX_PER_CHAR);
 }
 
 // Usable run for this line before it wraps: it sits at pl-[23px] inside the

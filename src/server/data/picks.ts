@@ -17,6 +17,7 @@ import {
   type PickCategoryKey,
 } from "@/server/data/stats";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
+import type { GameCardStreak } from "@/lib/game-card-record-line";
 import { easternDateRange } from "@/lib/dates";
 import { nrfiSide, betScope, periodLabel } from "@/lib/bet-line";
 import { findMatchingGameResult, resolveOutcome, resolveTouchdownProp, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
@@ -598,18 +599,39 @@ export function leagueRecordKey(capperId: string, leagueSport: string, category:
   return capperId + "|" + leagueSport + "|" + category;
 }
 
+export type CapperLeagueRecords = {
+  // keyed by leagueRecordKey(capperId, leagueSport, category)
+  records: Record<string, LeagueRecordCard | null>;
+  // keyed by capperId - the capper's CURRENT OVERALL streak (every sport,
+  // every bet type), the exact same currentStreak() value (via computeStats)
+  // that powers the Leaderboard / Favorites flame badge. One entry per capper
+  // in the request; { type: "NONE", count: 0 } when they have no decided pick.
+  streaks: Record<string, GameCardStreak>;
+};
+
 // The three-way (Overall / league / Last 20) form of getCapperCategoryRecords,
-// for the condensed game-card record line. Same one-query-per-batch,
-// one-computation-per-capper shape; reuses computeLeagueRecordCards (see
-// stats.ts) - no new aggregation. `leagueSport` is the game's sport (the
-// /live page has one per tab). Returns null for a (capper, category) the
-// capper has never had a pick in.
+// for the condensed game-card record line, plus each capper's current overall
+// streak for the line's trailing 🔥/🧊 indicator. Same one-query-per-batch,
+// one-computation-per-capper shape; reuses computeLeagueRecordCards and
+// computeStats (see stats.ts) - no new aggregation, no extra query (the
+// streak is computed from the same full pick history fetchPicksByCapper
+// already loads). `leagueSport` is the game's sport (the /live page has one
+// per tab).
+//
+// `entries` is every pick on the card. A null-category entry still puts its
+// capper in the streak map (the indicator shows on every pick card) but gets
+// no record card. records is null for a (capper, category) the capper has
+// never had a pick in.
 export async function getCapperLeagueRecords(
   userId: string,
-  pairs: { capperId: string; leagueSport: string; category: PickCategoryKey }[]
-): Promise<Record<string, LeagueRecordCard | null>> {
-  const capperIds = Array.from(new Set(pairs.map((p) => p.capperId)));
-  if (capperIds.length === 0) return {};
+  entries: { capperId: string; leagueSport: string; category: PickCategoryKey | null }[]
+): Promise<CapperLeagueRecords> {
+  const capperIds = Array.from(new Set(entries.map((e) => e.capperId)));
+  if (capperIds.length === 0) return { records: {}, streaks: {} };
+
+  const pairs = entries.filter(
+    (e): e is { capperId: string; leagueSport: string; category: PickCategoryKey } => e.category !== null
+  );
 
   const byCapper = await fetchPicksByCapper(userId, capperIds);
 
@@ -628,10 +650,18 @@ export async function getCapperLeagueRecords(
     cardsByCapperLeague.set(k, new Map(cards.map((c) => [c.category, c])));
   }
 
-  const out: Record<string, LeagueRecordCard | null> = {};
+  // Current overall streak per capper - computeStats over the capper's whole
+  // history (every sport / bet type), identical to how getCapperLeaderboardTable
+  // derives the flame badge's value.
+  const streaks: Record<string, GameCardStreak> = {};
+  for (const capperId of capperIds) {
+    streaks[capperId] = computeStats(byCapper.get(capperId) ?? []).currentStreak;
+  }
+
+  const records: Record<string, LeagueRecordCard | null> = {};
   for (const { capperId, leagueSport, category } of pairs) {
-    out[leagueRecordKey(capperId, leagueSport, category)] =
+    records[leagueRecordKey(capperId, leagueSport, category)] =
       cardsByCapperLeague.get(capperId + "|" + leagueSport)?.get(category) ?? null;
   }
-  return out;
+  return { records, streaks };
 }

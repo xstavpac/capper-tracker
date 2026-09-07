@@ -3,8 +3,14 @@
 import { useState } from "react";
 import type { PickStatus } from "@prisma/client";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
-import { getRecordColor, LEAGUE_RECORD_LAST_N, type LeagueRecordCard, type PickCategoryKey } from "@/server/data/stats";
-import { gameCardRecordSegments } from "@/lib/game-card-record-line";
+import { getRecordColor, LEAGUE_RECORD_LAST_N, type PickCategoryKey } from "@/server/data/stats";
+import type { CapperLeagueRecords } from "@/server/data/picks";
+import {
+  gameCardRecordSegments,
+  gameCardStreakSuffix,
+  GAME_CARD_NO_HISTORY_TEXT,
+  type GameCardStreak,
+} from "@/lib/game-card-record-line";
 import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
 
 export type ExpanderPick = {
@@ -123,10 +129,28 @@ function RecordSegment({
   );
 }
 
+// The trailing 🔥/🧊 indicator on the record line - the capper's CURRENT
+// OVERALL streak (any sport, any bet type), the same currentStreak() value
+// the Leaderboard/Favorites flame badge uses. Renders nothing below a 2+
+// streak in either direction (gameCardStreakSuffix returns ""), so the line
+// looks exactly as it did before for cappers who aren't on a run. Shown on
+// every pick card - even one with no category record - since the streak is
+// about the capper, not this bet type. Text content ("🔥3") matches what the
+// width-guard tests feed gameCardRecordLineText / gameCardNoHistoryLineText.
+function StreakIndicator({ streak }: { streak: GameCardStreak | null | undefined }) {
+  const suffix = gameCardStreakSuffix(streak);
+  if (!suffix) return null;
+  const color =
+    streak!.type === "WIN"
+      ? "text-orange-600 dark:text-orange-400"
+      : "text-sky-600 dark:text-sky-400";
+  return <span className={"whitespace-nowrap font-semibold " + color}> {suffix}</span>;
+}
+
 export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [records, setRecords] = useState<Record<string, LeagueRecordCard | null> | null>(null);
+  const [data, setData] = useState<CapperLeagueRecords | null>(null);
 
   if (picks.length === 0) return null;
 
@@ -139,19 +163,25 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
     const next = !open;
     setOpen(next);
 
-    if (next && records === null) {
+    if (next && data === null) {
       setLoading(true);
-      const pairs = picks
-        .filter((p) => p.category !== null)
-        .map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category as PickCategoryKey }));
-      const result = await getLeagueRecordsAction(pairs);
-      setRecords(result);
+      // Every pick, category or not - a null-category pick still contributes
+      // its capper to the overall-streak map (the indicator shows on every
+      // card), it just gets no record card back.
+      const entries = picks.map((p) => ({
+        capperId: p.capperId,
+        leagueSport: p.leagueName,
+        category: p.category,
+      }));
+      const result = await getLeagueRecordsAction(entries);
+      setData(result);
       setLoading(false);
     }
   }
 
   function renderPickCard(p: ExpanderPick) {
-    const card = p.category ? records?.[recordKey(p)] : null;
+    const card = p.category ? data?.records[recordKey(p)] : null;
+    const streak = data?.streaks[p.capperId] ?? null;
     const hasHistory = Boolean(card && card.overall.count > 0);
     // "Top performer" highlight keys off the current-league record (the
     // emphasized number) - "good at this bet type in THIS league", not blended.
@@ -197,17 +227,20 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
           <span className="text-foreground/90">{p.betDetail}</span>
           {loading ? (
             <span className="text-[10px] text-muted-foreground"> &middot; Loading record...</span>
-          ) : segments.length > 0 ? (
-            <span className="text-[10px]">
-              {segments.map((s, i) => (
-                <span key={s.label} className="text-muted-foreground/60">
-                  {i === 0 ? " · " : " | "}
-                  <RecordSegment {...s} />
-                </span>
-              ))}
-            </span>
           ) : (
-            <span className="text-[10px] text-muted-foreground"> &middot; No history in this category yet</span>
+            <span className="text-[10px]">
+              {segments.length > 0 ? (
+                segments.map((s, i) => (
+                  <span key={s.label} className="text-muted-foreground/60">
+                    {i === 0 ? " · " : " | "}
+                    <RecordSegment {...s} />
+                  </span>
+                ))
+              ) : (
+                <span className="text-muted-foreground"> &middot; {GAME_CARD_NO_HISTORY_TEXT}</span>
+              )}
+              <StreakIndicator streak={streak} />
+            </span>
           )}
         </div>
       </div>
