@@ -73,13 +73,15 @@ const config: Config = {
           "50%": { boxShadow: "0 0 16px 2px rgba(168,85,247,0.9)" },
         },
         // The 🔥/🧊 streak glyph on the /live game-card record line
-        // (game-picks-expander.tsx StreakIndicator). A gentle, low-key breathe
-        // - the scale bump is small and the opacity dip shallow on purpose, so
-        // a dense card with several picks all pulsing at once stays calm
-        // rather than busy. Applied with `motion-reduce:animate-none`.
+        // (game-picks-expander.tsx StreakIndicator). A breathing pulse to draw
+        // the eye to a capper on a run. The original values (scale 1.12,
+        // opacity 0.75, 2.2s) were too shallow to read as motion on a 10px
+        // glyph in production, so it's deliberately bolder now: a bigger scale
+        // swing, a deeper opacity dip, and a quicker cycle. Applied with
+        // `motion-reduce:animate-none`.
         "streak-pulse": {
           "0%, 100%": { opacity: "1", transform: "scale(1)" },
-          "50%": { opacity: "0.75", transform: "scale(1.12)" },
+          "50%": { opacity: "0.55", transform: "scale(1.35)" },
         },
         "fill-bar": {
           from: { transform: "scaleX(0)" },
@@ -218,7 +220,7 @@ const config: Config = {
       animation: {
         "glow-pulse": "glow-pulse 2.2s ease-in-out infinite",
         "glow-pulse-compact": "glow-pulse-compact 2.2s ease-in-out infinite",
-        "streak-pulse": "streak-pulse 2.2s ease-in-out infinite",
+        "streak-pulse": "streak-pulse 1.3s ease-in-out infinite",
         "fill-bar": "fill-bar 0.8s ease-out",
         "trend-surge-up": "trend-surge-up 1.6s ease-in-out infinite",
         "trend-surge-down": "trend-surge-down 1.6s ease-in-out infinite",
