@@ -616,7 +616,7 @@ export type CapperLeagueRecords = {
   // history the streak above is derived from, NOT scoped to any card's
   // category or league. null when the capper has fewer than
   // LEAGUE_RECORD_LAST_N graded picks total; the /live card then omits the
-  // "over the last 20 picks" row rather than showing a partial count.
+  // "Last 20 Picks" row rather than showing a partial count.
   last20: Record<string, LeagueRecordColumn | null>;
 };
 
@@ -671,8 +671,8 @@ export async function getCapperLeagueRecords(
     streaks[capperId] = computeStats(byCapper.get(capperId) ?? []).currentStreak;
   }
 
-  // The /live card's "over the last 20 picks" row - capper-wide, NOT scoped to
-  // any card's category or league (unlike the Overall / League rows). Drawn
+  // The /live card's "Last 20 Picks" row - capper-wide, NOT scoped to
+  // any card's category or league (unlike the All-Time / League rows). Drawn
   // from the same full per-capper history the streak uses; recentPicksRecord
   // applies the 20-graded-pick minimum below which the row is omitted.
   const last20: Record<string, LeagueRecordColumn | null> = {};

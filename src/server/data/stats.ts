@@ -730,7 +730,7 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
 };
 
 // The category a pick belongs to, phrased as a noun that slots into
-// "N% (W-L) overall on ___ picks" - the /live game-card record block (see
+// "N% (W-L) All-Time ___ Picks" - the /live game-card record block (see
 // game-card-record-line.ts).
 //
 // The record shown is that ONE category's record, so the phrase must name the
@@ -1302,8 +1302,8 @@ export function computeCategoryBreakdown(
 // category with zero graded picks gets no card at all, see
 // computeCategoryBreakdown's count>0 filter).
 //
-// The /live game card's third record row, "over the last 20 picks", is NOT
-// part of this card: it is capper-wide (every category, every league, segment
+// The /live game card's third record row, "Last 20 Picks", is NOT part of
+// this card: it is capper-wide (every category, every league, segment
 // picks included), computed once per capper in getCapperLeagueRecords via
 // recentPicksRecord and gated at LEAGUE_RECORD_LAST_N graded picks.
 export const LEAGUE_RECORD_LAST_N = 20;

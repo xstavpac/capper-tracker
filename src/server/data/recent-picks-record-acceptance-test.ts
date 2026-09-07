@@ -1,4 +1,4 @@
-// The capper-wide "over the last 20 picks" row on the /live game card - the
+// The capper-wide "Last 20 Picks" row on the /live game card - the
 // aggregation layer. Proves recentRecordColumn / recentPicksRecord (stats.ts),
 // which getCapperLeagueRecords calls once per capper over that capper's ENTIRE
 // pick history - every category, every league, segment (Q1-Q4 / half / period)

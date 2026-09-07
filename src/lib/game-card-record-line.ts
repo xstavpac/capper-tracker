@@ -4,14 +4,14 @@
 // form, so it is now a small stack of rows:
 //
 //   Twins Moneyline
-//   40% (2-3) overall on Underdog Moneyline Picks
+//   40% (2-3) All-Time Underdog Moneyline Picks
 //   55% (11-9) in MLB Underdog Moneyline Picks
-//   67% (14-6) over the last 20 picks
+//   67% (14-6) Last 20 Picks
 //   🔥 4 game win streak
 //
 // Rows, in order:
-//  - Overall - the capper's all-time record in this pick's exact category:
-//    "<win%> (<W-L[-P]>) overall on <Side> <Market> Picks". The win% and the
+//  - All-Time - the capper's all-time record in this pick's exact category:
+//    "<win%> (<W-L[-P]>) All-Time <Side> <Market> Picks". The win% and the
 //    parenthesised record stay together as one unit (an earlier form split
 //    them across the sentence, which read badly). The category wording keeps
 //    the favorite/underdog side ("Underdog Moneyline", not just "Moneyline") -
@@ -22,20 +22,21 @@
 //    too so the row stands on its own: "<win%> (<W-L[-P]>) in <LEAGUE> <Side>
 //    <Market> Picks". Dropped entirely when the capper has no graded pick in
 //    that league yet - never a fake "0% (0-0) in MLB ...". Also dropped when it
-//    would be identical to the Overall row (same record, same percentage) -
+//    would be identical to the All-Time row (same record, same percentage) -
 //    e.g. an MLB-only market like NRFI, where every graded pick is in MLB, so
-//    Overall and League are always the same number. That collapse is a general
+//    All-Time and League are always the same number. That collapse is a general
 //    value comparison, not a hardcoded market list, so it self-corrects for any
-//    market whose Overall and League records happen to coincide.
+//    market whose All-Time and League records happen to coincide.
 //  - Last 20 - the capper's record over their most recent GAME_CARD_LAST_N
 //    graded picks ACROSS EVERY category and league, segment (Q1-Q4 / half /
 //    period) picks included - a capper-wide recent-form signal, NOT scoped to
-//    this card's category the way Overall / League are. It renders from
+//    this card's category the way All-Time / League are. It renders from
 //    `opts.last20` alone, so it appears even when the capper has no history in
 //    this pick's category. Shown only once the capper has at least
 //    GAME_CARD_LAST_N graded picks total; below that `opts.last20` arrives
 //    null and the row is omitted entirely (never a partial "last N"). The
-//    wording stays "over the last 20 picks" - it never named a category.
+//    wording is a bare "Last 20 Picks" - no category name, since it is not
+//    scoped to one.
 //  - Streak - the capper's current OVERALL streak (any sport / any bet type),
 //    only when it is 2+ in either direction: "🔥 4 game win streak" /
 //    "🧊 5 game losing streak". The glyph carries the pulse animation +
@@ -61,7 +62,7 @@ export type GameCardStreak = { type: "WIN" | "LOSS" | "NONE"; count: number };
 // Same 2+ cutoff StreakBadge uses - a single win or loss isn't a "streak."
 export const GAME_CARD_STREAK_MIN = 2;
 
-// The window for the capper-wide "over the last 20 picks" row. Mirrors
+// The window for the capper-wide "Last 20 Picks" row. Mirrors
 // LEAGUE_RECORD_LAST_N (stats.ts), which is what actually decides whether
 // `opts.last20` is populated - this file can't import stats.ts (module-level
 // prisma), so the number is restated here for the row's wording, the same way
@@ -83,9 +84,9 @@ export const GAME_CARD_NO_HISTORY_TEXT = "No history in this category yet";
 export const GAME_CARD_STREAK_GLYPH_CLASS = "inline-block animate-streak-pulse motion-reduce:animate-none";
 
 // One record row. `scope` is everything after the "<pct> (<record>)" unit -
-// "overall on Underdog Moneyline Picks", "in MLB Underdog Moneyline Picks",
-// "over the last 20 picks". `kind` names which of the three rows it is (each
-// appears at most once), for stable React keys and targeted test assertions.
+// "All-Time Underdog Moneyline Picks", "in MLB Underdog Moneyline Picks",
+// "Last 20 Picks". `kind` names which of the three rows it is (each appears at
+// most once), for stable React keys and targeted test assertions.
 export type GameCardRecordRow = {
   kind: "overall" | "league" | "last20";
   pct: string; // "40%"
@@ -123,13 +124,13 @@ function titleCaseMarket(phrase: string): string {
 
 // The record rows for a capper's /live game-card block.
 //
-// `card` carries the category-scoped Overall + League columns. It is null when
-// the capper has no graded pick in this pick's category, or the pick has no
-// category at all - only the Last 20 row can appear then. `marketNoun` is
+// `card` carries the category-scoped All-Time + League columns. It is null
+// when the capper has no graded pick in this pick's category, or the pick has
+// no category at all - only the Last 20 row can appear then. `marketNoun` is
 // PICK_CATEGORY_MARKET_NOUN[category] (already includes the favorite/underdog
 // side where the category has one), unused when `card` is null. The League row
 // is included only when `hasLeagueHistory` is true AND its numbers differ from
-// the Overall row's.
+// the All-Time row's.
 //
 // `opts.last20` is the capper's CAPPER-WIDE record over their most recent
 // GAME_CARD_LAST_N graded picks - every bet type, every league, segment picks
@@ -159,12 +160,12 @@ export function gameCardRecordRows(
       kind: "overall",
       pct: pctText(card.overall),
       record: recordText(card.overall),
-      scope: "overall on " + marketLabel,
+      scope: "All-Time " + marketLabel,
       winPct: card.overall.winPct,
     };
     rows.push(overallRow);
 
-    // Collapse the League row into Overall whenever the two would show the
+    // Collapse the League row into All-Time whenever the two would show the
     // same record and the same percentage - a general value check, so it
     // self-corrects for NRFI/YRFI and any other market that only ever runs in
     // one league without a hardcoded list to maintain.
@@ -188,7 +189,7 @@ export function gameCardRecordRows(
       kind: "last20",
       pct: pctText(opts.last20),
       record: recordText(opts.last20),
-      scope: "over the last " + GAME_CARD_LAST_N + " picks",
+      scope: "Last " + GAME_CARD_LAST_N + " Picks",
       winPct: opts.last20.winPct,
     });
   }
@@ -196,7 +197,7 @@ export function gameCardRecordRows(
   return rows;
 }
 
-// Plain text of one record row: "40% (2-3) overall on Underdog Moneyline Picks".
+// Plain text of one record row: "40% (2-3) All-Time Underdog Moneyline Picks".
 // The component renders the "<pct> (<record>)" unit as a single colored span
 // and this exact string is what the tests check.
 export function gameCardRecordRowText(row: GameCardRecordRow): string {
