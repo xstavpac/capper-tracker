@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { PickStatus } from "@prisma/client";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import { getRecordColor, PICK_CATEGORY_MARKET_NOUN, type PickCategoryKey } from "@/server/data/stats";
@@ -206,7 +207,17 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <Avatar name={p.capperName} colorTag={p.capperColorTag} size={17} />
-            <span className="truncate text-[12px] font-medium text-foreground">{p.capperName}</span>
+            {/* Own distinct click target: navigates to the capper detail page
+                (/cappers/[capperId]). stopPropagation keeps the click off the
+                expander root's onClick preventDefault wrapper, which would
+                otherwise cancel the navigation. */}
+            <Link
+              href={"/cappers/" + p.capperId}
+              onClick={(e) => e.stopPropagation()}
+              className="truncate text-[12px] font-medium text-foreground hover:underline"
+            >
+              {p.capperName}
+            </Link>
             {p.capperIsFavorite && <FavoriteStarIcon />}
             {isTopPerformer && card && (
               <span className="shrink-0 rounded-full bg-emerald-100 px-1 py-0 text-[9px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
