@@ -11,11 +11,13 @@
 //
 // Proven here: exact row-1 / row-2 text (win% and record stay together as one
 // "40% (2-3)" unit), row 2 omitted with no league history (never a fake
-// "0% (0-0)"), the favorite/underdog side back in the category wording, the
-// spelled-out streak row + its glyph + its hover tooltip, the below-2 cases
-// (rows omitted, no fallback number), all four with/without-league ×
-// with/without-streak combinations, and that the row-3 glyph still carries the
-// pulse animation + reduced-motion classes from PR #34/#35.
+// "0% (0-0)"), the category wording naming the exact side so no two
+// opposite-side categories (fav/dog ML & spread, over/under every period,
+// NRFI/YRFI) collapse onto one phrase, the spelled-out streak row + its glyph
+// + its hover tooltip, the below-2 cases (rows omitted, no fallback number),
+// all four with/without-league × with/without-streak combinations, and that
+// the row-3 glyph still carries the pulse animation + reduced-motion classes
+// from PR #34/#35.
 
 import {
   gameCardRecordRows,
@@ -27,7 +29,7 @@ import {
   GAME_CARD_STREAK_GLYPH_CLASS,
   type GameCardStreak,
 } from "@/lib/game-card-record-line";
-import { PICK_CATEGORY_MARKET_NOUN } from "@/server/data/stats";
+import { PICK_CATEGORY_MARKET_NOUN, type PickCategoryKey } from "@/server/data/stats";
 
 const winStreak = (count: number): GameCardStreak => ({ type: "WIN", count });
 const lossStreak = (count: number): GameCardStreak => ({ type: "LOSS", count });
@@ -90,8 +92,8 @@ console.log("########## row 1 / row 2 text - win% and record stay together #####
 }
 check(
   "pushes render inside the record (3-3-1 style)",
-  gameCardRecordRowText(rowsFor(col(3, 3, 1), null, "total")[0]),
-  "50% (3-3-1) overall on total picks"
+  gameCardRecordRowText(rowsFor(col(3, 3, 1), null, "under")[0]),
+  "50% (3-3-1) overall on under picks"
 );
 
 // ---------------------------------------------------------------------------
@@ -103,28 +105,75 @@ console.log("\n########## row 2 omitted when the capper has no league history ##
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n########## favorite/underdog side is back in the category wording ##########");
+console.log("\n########## category wording names the exact side - no two opposite-side categories collapse ##########");
 {
-  // The record IS side-specific, so the label has to name the side.
+  // Every category the record block can show is ONE category's record. Two
+  // categories that are opposite sides of the same bet (and that the capper
+  // detail page shows as separate tiles) must get different phrases here.
+  const opposites: [PickCategoryKey, PickCategoryKey][] = [
+    ["FAV_ML", "DOG_ML"],
+    ["SPREAD_MINUS", "SPREAD_PLUS"],
+    ["F5_SPREAD_MINUS", "F5_SPREAD_PLUS"],
+    ["OVER", "UNDER"],
+    ["FIRST_HALF_OVER", "FIRST_HALF_UNDER"],
+    ["F5_OVER", "F5_UNDER"],
+    ["NRFI", "YRFI"],
+    ["FIRST_QUARTER_OVER", "FIRST_QUARTER_UNDER"],
+    ["THIRD_PERIOD_OVER", "THIRD_PERIOD_UNDER"],
+  ];
+  for (const [a, b] of opposites) {
+    checkTrue(
+      `${a} vs ${b} read differently ("${PICK_CATEGORY_MARKET_NOUN[a]}" vs "${PICK_CATEGORY_MARKET_NOUN[b]}")`,
+      PICK_CATEGORY_MARKET_NOUN[a] !== PICK_CATEGORY_MARKET_NOUN[b]
+    );
+  }
+
+  // Exact wording.
   check("FAV_ML", PICK_CATEGORY_MARKET_NOUN.FAV_ML, "favorite moneyline");
   check("DOG_ML", PICK_CATEGORY_MARKET_NOUN.DOG_ML, "underdog moneyline");
   check("SPREAD_MINUS", PICK_CATEGORY_MARKET_NOUN.SPREAD_MINUS, "favorite spread");
   check("SPREAD_PLUS", PICK_CATEGORY_MARKET_NOUN.SPREAD_PLUS, "underdog spread");
   check("F5_SPREAD_MINUS", PICK_CATEGORY_MARKET_NOUN.F5_SPREAD_MINUS, "first-5 favorite spread");
   check("F5_SPREAD_PLUS", PICK_CATEGORY_MARKET_NOUN.F5_SPREAD_PLUS, "first-5 underdog spread");
+  check("OVER", PICK_CATEGORY_MARKET_NOUN.OVER, "over");
+  check("UNDER", PICK_CATEGORY_MARKET_NOUN.UNDER, "under");
+  check("FIRST_HALF_OVER", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_OVER, "first-half over");
+  check("FIRST_HALF_UNDER", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_UNDER, "first-half under");
+  check("F5_OVER", PICK_CATEGORY_MARKET_NOUN.F5_OVER, "first-5 over");
+  check("F5_UNDER", PICK_CATEGORY_MARKET_NOUN.F5_UNDER, "first-5 under");
+  check("segment key: FIRST_QUARTER_OVER", PICK_CATEGORY_MARKET_NOUN.FIRST_QUARTER_OVER, "1st quarter over");
+  check("segment key: FIRST_QUARTER_UNDER", PICK_CATEGORY_MARKET_NOUN.FIRST_QUARTER_UNDER, "1st quarter under");
+
+  // YRFI / NRFI specifically (the addendum) - the bettor-facing terms, matching
+  // the capper detail page's separate tiles, not one shared "first-inning run".
+  check("NRFI reads 'NRFI'", PICK_CATEGORY_MARKET_NOUN.NRFI, "NRFI");
+  check("YRFI reads 'YRFI'", PICK_CATEGORY_MARKET_NOUN.YRFI, "YRFI");
   checkTrue(
-    "favorite vs underdog moneyline are different phrases",
-    PICK_CATEGORY_MARKET_NOUN.FAV_ML !== PICK_CATEGORY_MARKET_NOUN.DOG_ML
+    "neither NRFI nor YRFI still says 'first-inning run'",
+    PICK_CATEGORY_MARKET_NOUN.NRFI !== "first-inning run" && PICK_CATEGORY_MARKET_NOUN.YRFI !== "first-inning run"
   );
-  // Markets with no favorite/underdog concept stay side-less.
-  check("OVER stays 'total'", PICK_CATEGORY_MARKET_NOUN.OVER, "total");
-  check("UNDER stays 'total'", PICK_CATEGORY_MARKET_NOUN.UNDER, "total");
-  check("TEAM_TOTAL stays 'team total'", PICK_CATEGORY_MARKET_NOUN.TEAM_TOTAL, "team total");
-  // Keys with no favorite/underdog split of their own get no side word.
-  check("FIRST_HALF_ML (single key)", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_ML, "first-half moneyline");
-  check("FIRST_HALF_SPREAD (single key)", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_SPREAD, "first-half spread");
-  check("SPREAD fallback (side unknown)", PICK_CATEGORY_MARKET_NOUN.SPREAD, "spread");
+  check(
+    "row 1 for a YRFI pick reads 'overall on YRFI picks'",
+    gameCardRecordRowText(rowsFor(col(10, 13), null, PICK_CATEGORY_MARKET_NOUN.YRFI)[0]),
+    "43% (10-13) overall on YRFI picks"
+  );
+  check(
+    "row 1 for an NRFI pick reads 'overall on NRFI picks'",
+    gameCardRecordRowText(rowsFor(col(26, 18), null, PICK_CATEGORY_MARKET_NOUN.NRFI)[0]),
+    "59% (26-18) overall on NRFI picks"
+  );
+
+  // Genuinely single categories (no opposite-side sibling in the category
+  // system) keep a plain noun.
+  check("TEAM_TOTAL (one key, over/under already blended)", PICK_CATEGORY_MARKET_NOUN.TEAM_TOTAL, "team total");
+  check("TD_PROP (one key)", PICK_CATEGORY_MARKET_NOUN.TD_PROP, "touchdown prop");
+  check("FIRST_HALF_ML (no fav/dog split)", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_ML, "first-half moneyline");
+  check("FIRST_HALF_SPREAD (no fav/dog split)", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_SPREAD, "first-half spread");
+  check("F5_ML (no fav/dog split)", PICK_CATEGORY_MARKET_NOUN.F5_ML, "first-5 moneyline");
+  check("SPREAD fallback (side unreadable)", PICK_CATEGORY_MARKET_NOUN.SPREAD, "spread");
   check("segment key: FIRST_QUARTER_ML", PICK_CATEGORY_MARKET_NOUN.FIRST_QUARTER_ML, "1st quarter moneyline");
+  check("segment key: SECOND_HALF_SPREAD", PICK_CATEGORY_MARKET_NOUN.SECOND_HALF_SPREAD, "2nd half spread");
+
   // A real row using a fetched noun.
   check(
     "row 1 for a FAV_ML pick reads 'favorite moneyline'",
