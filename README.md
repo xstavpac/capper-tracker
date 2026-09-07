@@ -109,6 +109,20 @@ Add the same `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`
 environment variables in the Vercel project settings, and add your
 production domain to Supabase's allowed redirect URLs.
 
+### Database migrations
+
+The production build command runs `prisma migrate deploy` before `next build`
+(via `scripts/deploy-migrate.mjs`), so any committed migration is applied to
+the production database as part of the same deploy that ships the code needing
+it. The step is **production-only** — it keys off `VERCEL_ENV` and no-ops for
+preview builds (which have no `DATABASE_URL`) and for local `npm run build`. A
+failed migration aborts the build on purpose: shipping code that expects a
+column the database doesn't have is worse than a blocked deploy.
+
+This means a schema change only needs its migration committed alongside the
+code — do **not** apply it to production by hand. (Authoring is still local:
+`npx prisma migrate dev --name <change>`.)
+
 ## Next milestone (3)
 
 - Capper creation/edit UI (with the free-plan 2-capper limit already
