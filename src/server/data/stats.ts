@@ -1182,6 +1182,47 @@ export type CategoryBreakdownItem = {
 export const CATEGORY_RECENT_FORM_MIN_SAMPLE = 100;
 export const CATEGORY_RECENT_FORM_WINDOW = 20;
 
+// The shared "most recent N decided picks" slice, newest-first by gameTime -
+// the one implementation behind every recent-form readout. Feed it whatever
+// slice the caller has already grouped: a single category's picks
+// (computeCategoryBreakdown's per-category `recent`, below), or a capper's
+// ENTIRE cross-category / cross-league history (the /live game card's
+// capper-wide "Last 20 picks" row, via getCapperLeagueRecords -> the gated
+// wrapper). winPct follows the house convention (wins / (wins + losses);
+// pushes land in `count` and the W-L-P string but never the %). No
+// sample-size gate here - the caller owns that decision.
+export function recentRecordColumn(picks: Pick[], window: number): CategoryRecentForm {
+  const lastN = picks
+    .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
+    .sort((a, b) => b.gameTime.getTime() - a.gameTime.getTime())
+    .slice(0, window);
+  const rs = computeStats(lastN);
+  return {
+    wins: rs.wins,
+    losses: rs.losses,
+    pushes: rs.pushes,
+    winPct: rs.winPct,
+    count: rs.wins + rs.losses + rs.pushes,
+  };
+}
+
+// recentRecordColumn plus a minimum-graded-pick gate: the recent-`window`
+// record, but only once `picks` holds at least `minGraded` decided
+// (WIN/LOSS/PUSH) picks - otherwise null, so the caller shows nothing rather
+// than a partial "last N". The /live "Last 20 picks" row passes
+// window === minGraded === LEAGUE_RECORD_LAST_N.
+export function recentPicksRecord(
+  picks: Pick[],
+  window: number,
+  minGraded: number
+): CategoryRecentForm | null {
+  const decided = picks.filter(
+    (p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH"
+  );
+  if (decided.length < minGraded) return null;
+  return recentRecordColumn(decided, window);
+}
+
 // All-time record split by pickCategory (the same favorite/underdog,
 // over/under classifier the Cappers-page filter chips use) - answers "am I
 // better off following favorites or dogs, overs or unders" at a glance.
@@ -1194,8 +1235,9 @@ export const CATEGORY_RECENT_FORM_WINDOW = 20;
 // `recentForm`, when given, additionally attaches item.recent: the record
 // over that category's most recent `window` decided picks (by gameTime desc -
 // the same axis computeMomentum uses for "recent"), but only for categories
-// with >= `minSample` total decided picks. It's one extra computeStats() call
-// on a slice of an already-grouped list, not a second classification pass.
+// with >= `minSample` total decided picks. It's one recentRecordColumn() call
+// on a slice of an already-grouped list, not a second classification pass -
+// the same helper the /live game card's capper-wide "Last 20 picks" row uses.
 export function computeCategoryBreakdown(
   picks: (Pick & { sport: { name: string } })[],
   order: PickCategoryKey[],
@@ -1219,15 +1261,10 @@ export function computeCategoryBreakdown(
 
       let recent: CategoryRecentForm | null | undefined;
       if (recentForm) {
-        recent = null;
-        if (count >= recentForm.minSample) {
-          const lastN = categoryPicks
-            .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
-            .sort((a, b) => b.gameTime.getTime() - a.gameTime.getTime())
-            .slice(0, recentForm.window);
-          const rs = computeStats(lastN);
-          recent = { wins: rs.wins, losses: rs.losses, pushes: rs.pushes, winPct: rs.winPct, count: rs.wins + rs.losses + rs.pushes };
-        }
+        recent =
+          count >= recentForm.minSample
+            ? recentRecordColumn(categoryPicks, recentForm.window)
+            : null;
       }
 
       return {
@@ -1251,10 +1288,9 @@ export function computeCategoryBreakdown(
 }
 
 // The "league-specific record card": for ONE bet-type category, a capper's
-// record shown three ways - Overall (all leagues), the current league only,
-// and their most recent 20 graded picks. All three come from the SAME
-// pipeline as the category tiles (computeCategoryBreakdown -> computeStats),
-// just fed different slices:
+// record shown two ways - Overall (all leagues) and the current league only.
+// Both come from the SAME pipeline as the category tiles
+// (computeCategoryBreakdown -> computeStats), just fed different slices:
 //   - category-scoped to `key`. A segment pick (Q1 / 2nd half / period)
 //     classifies under its own <period>_<side> key, so a full-game key's card
 //     never counts it; whether the segment key itself gets a card depends on
@@ -1264,9 +1300,12 @@ export function computeCategoryBreakdown(
 //   - winPct always derived from that slice's own W-L count, never averaged
 // Overall and League have NO minimum sample - one graded pick is enough (a
 // category with zero graded picks gets no card at all, see
-// computeCategoryBreakdown's count>0 filter). `last20` is populated only once
-// the category has >= LEAGUE_RECORD_LAST_N graded picks; below that it's null
-// and the caller renders "Need 20 picks" (never a partial "last N").
+// computeCategoryBreakdown's count>0 filter).
+//
+// The /live game card's third record row, "over the last 20 picks", is NOT
+// part of this card: it is capper-wide (every category, every league, segment
+// picks included), computed once per capper in getCapperLeagueRecords via
+// recentPicksRecord and gated at LEAGUE_RECORD_LAST_N graded picks.
 export const LEAGUE_RECORD_LAST_N = 20;
 
 export type LeagueRecordColumn = { wins: number; losses: number; pushes: number; winPct: number; count: number };
@@ -1275,7 +1314,6 @@ export type LeagueRecordCard = {
   label: string;
   overall: LeagueRecordColumn;
   league: LeagueRecordColumn;
-  last20: LeagueRecordColumn | null;
 };
 
 const EMPTY_LEAGUE_RECORD_COLUMN: LeagueRecordColumn = { wins: 0, losses: 0, pushes: 0, winPct: 0, count: 0 };
@@ -1299,10 +1337,7 @@ export function computeLeagueRecordCards(
   categories: PickCategoryKey[]
 ): LeagueRecordCard[] {
   const overall = new Map(
-    computeCategoryBreakdown(picks, categories, {
-      window: LEAGUE_RECORD_LAST_N,
-      minSample: LEAGUE_RECORD_LAST_N,
-    }).map((item) => [item.key, item] as const)
+    computeCategoryBreakdown(picks, categories).map((item) => [item.key, item] as const)
   );
   const league = new Map(
     computeCategoryBreakdown(
@@ -1321,7 +1356,6 @@ export function computeLeagueRecordCards(
         label: o.label,
         overall: toLeagueRecordColumn(o),
         league: l ? toLeagueRecordColumn(l) : EMPTY_LEAGUE_RECORD_COLUMN,
-        last20: o.recent ? toLeagueRecordColumn(o.recent) : null,
       };
     });
 }

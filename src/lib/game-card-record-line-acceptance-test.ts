@@ -4,12 +4,12 @@
 // It is a stack of rows now (not the old inline sentence + width guard):
 //
 //   Twins Moneyline
-//   40% (2-3) overall on Underdog Moneyline Picks       <- Overall
-//   55% (11-9) in MLB Underdog Moneyline Picks          <- League (omitted with
-//   67% (14-6) over the last 20 picks                        no league history,
-//   🔥 4 game win streak                                     or if == Overall)
-//                                                       <- Last 20 (>= 20 graded)
-//                                                       <- Streak (only if 2+)
+//   40% (2-3) overall on Underdog Moneyline Picks       <- Overall (category, all-time)
+//   55% (11-9) in MLB Underdog Moneyline Picks          <- League (category+league; omitted
+//                                                          with no league history / if == Overall)
+//   67% (14-6) over the last 20 picks                   <- Last 20 (capper-wide: any type,
+//                                                          any league; >= 20 graded total)
+//   🔥 4 game win streak                                <- Streak (only if 2+)
 //
 // Proven here:
 //  - Title Case on the market/category term ("Underdog Moneyline Picks", not
@@ -22,9 +22,11 @@
 //    the same percentage the League row is dropped (NRFI, an MLB-only market),
 //    and when they differ both rows show - a general value comparison, not a
 //    hardcoded market list.
-//  - The Last 20 row: present once `last20` is populated, omitted (no partial
-//    "last N") when it is null, correct at the threshold boundary, and always
-//    after the League row and before the streak row.
+//  - The Last 20 row: capper-wide now (every category / league, not this
+//    card's category) - it renders from `opts.last20` alone, so it appears
+//    after the League row and before the streak row when populated, on its own
+//    with no Overall/League card at all, is omitted (no partial "last N") when
+//    `opts.last20` is null, and never alters the Overall/League rows.
 //  - The spelled-out streak row + its glyph + its hover tooltip, the below-2
 //    cases (row omitted, no fallback number), and the row-3 glyph still
 //    carrying the pulse animation + reduced-motion classes from PR #34/#35.
@@ -64,16 +66,18 @@ const col = (wins: number, losses: number, pushes = 0) => ({
 });
 
 const rowsFor = (
-  overall: ReturnType<typeof col>,
+  overall: ReturnType<typeof col> | null,
   league: ReturnType<typeof col> | null,
   marketNoun = "underdog moneyline",
   leagueName = "MLB",
   last20: ReturnType<typeof col> | null = null
 ) =>
-  gameCardRecordRows(
-    { overall, league: league ?? col(0, 0), last20 },
-    { leagueName, marketNoun, hasLeagueHistory: league !== null }
-  );
+  gameCardRecordRows(overall ? { overall, league: league ?? col(0, 0) } : null, {
+    leagueName,
+    marketNoun,
+    hasLeagueHistory: league !== null,
+    last20,
+  });
 
 // The full rendered block as an array of lines, in DOM order.
 const blockLines = (rows: ReturnType<typeof rowsFor>, streak?: GameCardStreak | null) => {
@@ -210,7 +214,7 @@ console.log("\n########## FIX 3 - collapse the League row when it equals Overall
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n########## FIX 4 - the Last 20 row, restored ##########");
+console.log("\n########## FIX 4 - the Last 20 row (now capper-wide) ##########");
 {
   check("GAME_CARD_LAST_N mirrors the upstream window", GAME_CARD_LAST_N, 20);
 
@@ -255,11 +259,59 @@ console.log("\n########## FIX 4 - the Last 20 row, restored ##########");
     "🧊 4 game losing streak",
   ]);
 
-  // Last 20 shows even with no league history (it is overall-scoped).
+  // Last 20 shows even with no league history (it is capper-wide, not scoped
+  // to the card at all).
   const l20NoLeague = rowsFor(col(25, 15), null, "over", "MLB", col(13, 7));
   check("Last 20 with no league history", l20NoLeague.map((r) => r.scope), [
     "overall on Over Picks",
     "over the last 20 picks",
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## Last 20 is capper-wide - detached from the category card ##########");
+{
+  // No Overall/League card at all (the capper has no graded pick in this
+  // pick's category, or the pick has no category) - the Last 20 row still
+  // appears on its own, from opts.last20 alone, once the capper has 20+ graded
+  // picks overall.
+  const only20 = gameCardRecordRows(null, {
+    leagueName: "MLB",
+    marketNoun: "",
+    hasLeagueHistory: false,
+    last20: col(13, 7),
+  });
+  check("no card + last20 -> just the Last 20 row", only20.map((r) => r.scope), ["over the last 20 picks"]);
+  check("no card + last20 -> row text", only20.map(gameCardRecordRowText), ["65% (13-7) over the last 20 picks"]);
+  check("no card + last20 -> row kind is last20", only20.map((r) => r.kind), ["last20"]);
+
+  // No card and below the 20-graded threshold -> nothing at all.
+  const nothing = gameCardRecordRows(null, {
+    leagueName: "MLB",
+    marketNoun: "",
+    hasLeagueHistory: false,
+    last20: null,
+  });
+  check("no card + no last20 -> no rows", nothing, []);
+
+  // The Last 20 numbers are whatever the caller passes - they are NOT derived
+  // from (and do NOT alter) the card's Overall / League columns, which stay
+  // category + all-time as before.
+  const cardVsL20 = rowsFor(col(2, 3), col(11, 9), "over", "MLB", col(18, 2));
+  check(
+    "row order unchanged: Overall -> League -> Last 20",
+    cardVsL20.map((r) => r.kind),
+    ["overall", "league", "last20"]
+  );
+  check("Last 20 is its own number, not Overall's", cardVsL20.find((r) => r.kind === "last20")?.record, "18-2");
+  check("Overall row untouched by the Last 20 arg", cardVsL20.find((r) => r.kind === "overall")?.record, "2-3");
+  check("League row untouched by the Last 20 arg", cardVsL20.find((r) => r.kind === "league")?.record, "11-9");
+
+  // Below threshold, an existing category card is entirely unaffected.
+  const cardNoL20 = rowsFor(col(2, 3), col(11, 9), "over", "MLB", null);
+  check("card with last20 null: Overall + League only, no Last 20 row", cardNoL20.map((r) => r.kind), [
+    "overall",
+    "league",
   ]);
 }
 
