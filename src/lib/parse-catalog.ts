@@ -1251,34 +1251,30 @@ export function findTeamNicknames(text: string, sportName: string): string[] {
 // hits the same false default, so the guard is name-shape-based rather than
 // KBO-specific.
 //
-// TODO(follow-up, not urgent): the abbreviation guard above narrows this gap
-// but doesn't close it - a real, currently-tracked team whose bare name is
-// plain Title Case (not a short all-caps abbreviation) still falls all the
-// way through to this ATP default with no warning. Confirmed again during
-// the "sport not tracked" grading-bug investigation: "Fire over 165.5"
-// (Portland Fire, a real WNBA team) mistagged ATP the same way "KT Wiz" once
-// did, purely because "fire" wasn't yet in WNBA_TEAMS - same for "Sparks"/
-// "Tempo" (WNBA) and "Mammoth" (NHL) at the same time. All four are fixed
-// now (see WNBA_TEAMS/NHL_TEAMS above), but the underlying failure mode -
-// any future missing team silently mistagging as a confident ATP pick
-// instead of surfacing as `unresolved` - is still there by design.
+// The phantom-ATP fallback (docs/resolver-team-gap-followups.md #1) - fixed
+// 2026-09. The failure mode: findPlayerPick used to accept ANY 1-4 Title-Case
+// word candidate before a bet keyword as a tennis player, purely because
+// nothing else matched. Real, active data corruption - "Mississippi -6.5"
+// and "Red +1.5" were both stamped as confident ATP picks with the raw bet
+// text dumped into the pick's homeTeam field, ungradeable forever ("Fire
+// over 165.5" / "KT Wiz ML" were earlier instances of the same thing).
 //
-// Proposed fix (real architectural work, not a quick patch, hence not done
-// here): before accepting an ATP match, check the candidate word against the
-// real, currently-tracked team names this app already caches (OddsSnapshot/
-// GameResult) - the same real-data cross-check used to find the four gaps
-// above. If the candidate is a substring of any real, currently-known team
-// name across any tracked sport, refuse the ATP fallback and report the
-// line as unresolved with a pointed reason ("looks like a team name we
-// don't recognize yet") instead of guessing. This must NOT just require 2+
-// capitalized words instead - real ATP picks are commonly typed as a bare
-// surname ("Djokovic ML"), so tightening the name-shape check alone would
-// fix this gap by breaking legitimate tennis picks instead.
-// The real cost: parse-catalog.ts is a pure, synchronous, DB-free module
-// today - this guard needs a "known real team names" set threaded in from
-// whichever caller already has DB access (the bulk-import server action),
-// which is a real signature/architecture change to this file, not a small
-// patch alongside it.
+// The fix: findPlayerPick now requires POSITIVE evidence the line is a
+// tennis pick before accepting it - a name in KNOWN_TENNIS_PLAYERS, or
+// tennis-specific bet vocabulary (TENNIS_BET_CONTEXT), or an explicit
+// "tennis" word. Anything else (a mystery Title-Case token with no tennis
+// signal) returns null and the line routes to `unresolved` - the same safe,
+// visible failure every other unrecognized name already gets. From there
+// the existing recover-unresolved-picks pass (live-team-fallback.ts) still
+// cross-checks it against the real live team names, so a genuine but
+// unlisted team ("Mississippi" = Ole Miss / Miss State) can still be
+// recovered from the schedule; only the silent tennis guess is gone.
+//
+// This deliberately does NOT tighten the NAME SHAPE (real tennis picks are
+// commonly a bare surname - "Djokovic ML", "Sinner ML") and does NOT thread
+// a DB team-name set into this pure module - the recover-unresolved pass
+// already owns that cross-check, and routing here to `unresolved` hands the
+// line straight to it.
 function looksLikeTeamAbbreviation(name: string): boolean {
   return name.split(/\s+/).some((w) => w.length <= 3 && w === w.toUpperCase());
 }
@@ -1334,6 +1330,106 @@ const KNOWN_OUT_OF_SCOPE_SCHOOLS = new Set<string>([
   "merrimack", "albany", "samford", "lindenwood",
 ]);
 
+// US state / region names that a capper might use bare as a college team
+// ("Mississippi -6.5" for Ole Miss). No tennis player is named after a US
+// state, so a bare one hitting findPlayerPick is a team the resolver didn't
+// place - route to `unresolved` (and the recover-unresolved pass then tries
+// it against the live schedule). The pro-franchise states are already in
+// SPORTS_PLACE_NAMES; this covers the rest.
+const US_STATE_NAMES = new Set<string>([
+  "alabama", "alaska", "arkansas", "connecticut", "delaware", "florida",
+  "georgia", "hawaii", "idaho", "illinois", "iowa", "kansas", "kentucky",
+  "louisiana", "maine", "maryland", "massachusetts", "michigan", "mississippi",
+  "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey",
+  "new mexico", "north carolina", "north dakota", "ohio", "oklahoma", "oregon",
+  "rhode island", "south carolina", "south dakota", "texas", "vermont",
+  "virginia", "west virginia", "wisconsin", "wyoming",
+]);
+
+// Positive tennis evidence, signal 1: this line uses tennis-specific betting
+// vocabulary. Deliberately narrow - phrases that a team-sport pick's text
+// essentially never contains. "aces" is only counted as an over/under prop
+// (a bare "Aces" is the WNBA Las Vegas team).
+const TENNIS_BET_CONTEXT = new RegExp(
+  [
+    "\\btennis\\b",
+    "\\bchallenger\\b",
+    "\\bqualifying\\b",
+    "\\b(?:straight|deciding|final|first|second|third|1st|2nd|3rd)\\s+sets?\\b",
+    "\\bwin\\s+(?:a|the|in)\\b[^.]*\\bsets?\\b",
+    "\\btie\\s?-?break(?:er)?\\b",
+    "\\b(?:total\\s+)?games?\\s+won\\b",
+    "\\b(?:over|under)\\s+\\d+(?:\\.\\d+)?\\s+games\\b",
+    "\\bdouble\\s+faults?\\b",
+    "\\bservice\\s+(?:game|break|hold)s?\\b",
+    "\\bbreak\\s+points?\\b",
+    "\\b(?:over|under|[ou])\\s?\\d+(?:\\.\\d+)?\\s+aces\\b",
+  ].join("|"),
+  "i"
+);
+
+// Positive tennis evidence, signal 2: the candidate is a real, recognizable
+// ATP or WTA player. There's no live roster feed for tennis (LIVE_SPORTS is
+// team sports only), so this is a curated list - keyed by surname, lower
+// case, both tours. It does not need to be exhaustive: a pick on a player
+// not listed here, with no tennis vocabulary, simply routes to `unresolved`
+// for manual review (a safe, visible failure), and names get added here the
+// same way SPORTS_PLACE_NAMES / KNOWN_OUT_OF_SCOPE_SCHOOLS grew. Some
+// surnames here are also ordinary words or common surnames ("sinner",
+// "paul", "evans", "harris", "thompson") - kept anyway: they only ever
+// reach this check on a line that already failed every sport-code and
+// team-name test, where "is the surname of a top-100 tennis player" is
+// genuinely the best evidence available.
+const KNOWN_TENNIS_PLAYERS = new Set<string>([
+  // --- ATP ---
+  "sinner", "alcaraz", "djokovic", "zverev", "medvedev", "fritz", "ruud",
+  "rublev", "hurkacz", "de minaur", "deminaur", "dimitrov", "tsitsipas",
+  "rune", "shelton", "paul", "tiafoe", "khachanov", "humbert", "mensik",
+  "machac", "cerundolo", "baez", "jarry", "griekspoor", "musetti", "korda",
+  "struff", "bublik", "fils", "tien", "michelsen", "nakashima", "nishikori",
+  "etcheverry", "navone", "borges", "djere", "munar", "coric", "davidovich",
+  "fokina", "baena", "carballes", "tabilo", "martinez", "thompson",
+  "kecmanovic", "evans", "murray", "wawrinka", "monfils", "gasquet", "cilic",
+  "isner", "opelka", "kokkinakis", "popyrin", "oconnell", "duckworth",
+  "vukic", "walton", "kubler", "halys", "moutet", "rinderknech", "gaston",
+  "muller", "bergs", "blanch", "basavareddy", "shang", "zhang", "wu",
+  "mcdonald", "brooksby", "eubanks", "giron", "wolf", "nava", "altmaier",
+  "hanfmann", "otte", "koepfer", "zandschulp", "brouwer", "huesler",
+  "stricker", "kym", "safiullin", "kotov", "nardi", "darderi", "sonego",
+  "arnaldi", "cobolli", "nagal", "bautista agut", "bautista", "carreno",
+  "goffin", "paire", "fognini", "ramos", "vinolas", "berrettini",
+  "auger-aliassime", "aliassime", "raonic", "pouille", "simon", "verdasco",
+  "kyrgios", "millman", "de jong", "van rijthoven", "mannarino",
+  "shapovalov", "nishioka", "kovacevic", "comesana", "faria", "tirante",
+  "gigante", "boyer", "atmane", "royer", "prizmic", "landaluce", "fonseca",
+  "mochizuki", "kopriva", "krutykh", "cazaux", "bonzi",
+  // --- WTA ---
+  "swiatek", "sabalenka", "gauff", "rybakina", "pegula", "vondrousova",
+  "jabeur", "sakkari", "ostapenko", "collins", "keys", "kasatkina",
+  "samsonova", "haddad", "haddad maia", "krejcikova", "muchova", "azarenka",
+  "badosa", "kostyuk", "svitolina", "andreeva", "shnaider", "navarro",
+  "danilovic", "alexandrova", "mertens", "cocciaretto", "paolini",
+  "bronzetti", "siniakova", "potapova", "kalinskaya", "kalinina",
+  "putintseva", "bouzkova", "linette", "frech", "garcia", "cornet",
+  "kudermetova", "blinkova", "tomljanovic", "boulter", "raducanu",
+  "burrage", "watson", "dart", "fernandez", "townsend", "stephens", "kenin",
+  "bencic", "teichmann", "golubic", "pliskova", "kvitova", "halep", "muguruza",
+  "kontaveit", "bertens", "wozniacki", "williams", "venus", "sharapova",
+  "zheng", "wang", "yuan", "sun", "birrell", "tauson", "noskova", "avanesyan",
+  "parry", "bogdan", "sorribes", "tormo", "zidansek", "juvan", "maria",
+  "niemeier", "korpatsch", "grabher", "lys", "seidel", "friedsam",
+]);
+
+// A bare candidate string that IS a recognized team phrase in any tracked
+// sport (or an AMBIGUOUS_NICKNAMES key) - "Cardinals ML", "Red Sox -1.5".
+// These normally resolve upstream in detectSport; this is defense in depth
+// so one that slips through (an ambiguous key that didn't resolve, say)
+// never gets a phantom tennis tag either.
+const RECOGNIZED_TEAM_PHRASES = new Set<string>([
+  ...TEAM_SPORT_ENTRIES.map(([phrase]) => phrase),
+  ...Object.keys(AMBIGUOUS_NICKNAMES),
+]);
+
 function findPlayerPick(text: string): { playerName: string; playerKey: string } | null {
   const withoutParens = text.replace(/\([^)]*\)/g, "").trim();
   const mlMatch = withoutParens.match(/^(.+?)\s+(?:ML|money\s*line)\b/i);
@@ -1351,12 +1447,33 @@ function findPlayerPick(text: string): { playerName: string; playerKey: string }
   // digits - guards against matching arbitrary unresolved text that just
   // happens to be followed by "ML" or a number (e.g. a typo'd team name).
   if (!/^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/.test(candidate)) return null;
-  if (looksLikeTeamAbbreviation(candidate)) return null;
-  if (SPORTS_PLACE_NAMES.has(candidate.toLowerCase())) return null;
-  if (KNOWN_OUT_OF_SCOPE_SCHOOLS.has(candidate.toLowerCase())) return null;
 
-  const words = candidate.split(/\s+/);
-  return { playerName: candidate, playerKey: words[words.length - 1].toLowerCase() };
+  const lower = candidate.toLowerCase();
+  const words = lower.split(/\s+/);
+  const surname = words[words.length - 1];
+
+  // Negative guards - a candidate that is a known team / place / out-of-scope
+  // school is never a tennis player, no matter what.
+  if (looksLikeTeamAbbreviation(candidate)) return null;
+  if (SPORTS_PLACE_NAMES.has(lower)) return null;
+  if (US_STATE_NAMES.has(lower)) return null;
+  if (KNOWN_OUT_OF_SCOPE_SCHOOLS.has(lower)) return null;
+  if (RECOGNIZED_TEAM_PHRASES.has(lower)) return null;
+
+  // Positive evidence required (see the comment block above
+  // looksLikeTeamAbbreviation): accept an ATP pick ONLY when the line
+  // actually looks like tennis - a recognized player, or tennis-specific
+  // bet vocabulary. Otherwise this is a mystery Title-Case token that
+  // failed every other resolver, and guessing "tennis player" is exactly
+  // the data-corruption bug this guards against - return null and let it
+  // route to `unresolved`.
+  const isTennis =
+    KNOWN_TENNIS_PLAYERS.has(surname) ||
+    KNOWN_TENNIS_PLAYERS.has(lower) ||
+    TENNIS_BET_CONTEXT.test(text);
+  if (!isTennis) return null;
+
+  return { playerName: candidate, playerKey: surname };
 }
 
 // Two-name matchup version of findPlayerPick, for individual-vs-individual
