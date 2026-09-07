@@ -3,12 +3,14 @@
 import { useState } from "react";
 import type { PickStatus } from "@prisma/client";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
-import { getRecordColor, LEAGUE_RECORD_LAST_N, type PickCategoryKey } from "@/server/data/stats";
+import { getRecordColor, PICK_CATEGORY_MARKET_NOUN, type PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import {
-  gameCardRecordSegments,
+  gameCardRecordClauses,
   gameCardStreakSuffix,
+  gameCardStreakTooltip,
   GAME_CARD_NO_HISTORY_TEXT,
+  type GameCardRecordClause,
   type GameCardStreak,
 } from "@/lib/game-card-record-line";
 import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
@@ -96,47 +98,38 @@ export function ChevronIcon({ up }: { up: boolean }) {
   );
 }
 
-// One segment of the condensed record line ("All 12-3 80%", "NCAAF 8-2 80%",
-// "L20 4-1 80%"). Every segment's record + % is green/red by its OWN win
-// rate; the current-league segment additionally gets bold weight (label and
-// numbers) since it's the number the viewer is deciding on. Character content
-// matches gameCardRecordLineText (game-card-record-line.ts), which the width
-// guard tests against.
-function RecordSegment({
-  label,
-  record,
-  pct,
-  winPct,
-  emphasized,
-}: {
-  label: string;
-  record: string;
-  pct: string;
-  winPct: number;
-  emphasized: boolean;
-}) {
+// One clause of the natural-phrasing record line ("58% overall on total picks
+// (21-15-2)", "60% in NCAAF (3-2)"). Each clause's win% and (record) are
+// green/red by that clause's own win rate. `whitespace-nowrap` keeps a clause
+// intact so the line breaks cleanly BETWEEN clauses (to at most two rows on a
+// dense card) rather than mid-phrase. Character content matches
+// gameCardRecordLineText (game-card-record-line.ts), which the width guard
+// tests against.
+function RecordClause({ pct, scope, record, winPct }: GameCardRecordClause) {
   const color =
     getRecordColor(winPct) === "green"
       ? "text-emerald-600 dark:text-emerald-400"
       : "text-red-600 dark:text-red-400";
   return (
     <span className="whitespace-nowrap">
-      <span className={emphasized ? "font-semibold text-muted-foreground" : "text-muted-foreground"}>{label}</span>{" "}
-      <span className={color + (emphasized ? " font-bold" : " font-medium")}>
-        {record} {pct}
-      </span>
+      <span className={color + " font-semibold"}>{pct}</span>{" "}
+      <span className="text-muted-foreground">{scope}</span>{" "}
+      <span className={color}>({record})</span>
     </span>
   );
 }
 
 // The trailing 🔥/🧊 indicator on the record line - the capper's CURRENT
 // OVERALL streak (any sport, any bet type), the same currentStreak() value
-// the Leaderboard/Favorites flame badge uses. Renders nothing below a 2+
-// streak in either direction (gameCardStreakSuffix returns ""), so the line
-// looks exactly as it did before for cappers who aren't on a run. Shown on
-// every pick card - even one with no category record - since the streak is
-// about the capper, not this bet type. Text content ("🔥3") matches what the
-// width-guard tests feed gameCardRecordLineText / gameCardNoHistoryLineText.
+// the Leaderboard/Favorites flame badge uses. It occupies the slot the old
+// "L20" segment used to. Renders nothing below a 2+ streak in either direction
+// (gameCardStreakSuffix returns "") - the slot then falls back to nothing, not
+// to some other number. Shown on every pick card - even one with no category
+// record - since the streak is about the capper, not this bet type. Hovering
+// the glyph shows a plain-text explanation ("Won 4 in a row") via a title
+// attribute; the codebase has no tooltip component. Text content ("🔥3")
+// matches what the width-guard tests feed gameCardRecordLineText /
+// gameCardNoHistoryLineText.
 function StreakIndicator({ streak }: { streak: GameCardStreak | null | undefined }) {
   const suffix = gameCardStreakSuffix(streak);
   if (!suffix) return null;
@@ -144,7 +137,12 @@ function StreakIndicator({ streak }: { streak: GameCardStreak | null | undefined
     streak!.type === "WIN"
       ? "text-orange-600 dark:text-orange-400"
       : "text-sky-600 dark:text-sky-400";
-  return <span className={"whitespace-nowrap font-semibold " + color}> {suffix}</span>;
+  return (
+    <span className={"whitespace-nowrap font-semibold " + color} title={gameCardStreakTooltip(streak)}>
+      {" "}
+      {suffix}
+    </span>
+  );
 }
 
 export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
@@ -183,11 +181,17 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
     const card = p.category ? data?.records[recordKey(p)] : null;
     const streak = data?.streaks[p.capperId] ?? null;
     const hasHistory = Boolean(card && card.overall.count > 0);
-    // "Top performer" highlight keys off the current-league record (the
-    // emphasized number) - "good at this bet type in THIS league", not blended.
+    // "Top performer" highlight keys off the current-league record - "good at
+    // this bet type in THIS league", not blended.
     const isTopPerformer = Boolean(card && card.league.count > 0 && card.league.winPct >= TOP_PERFORMER_THRESHOLD);
-    const segments =
-      card && hasHistory ? gameCardRecordSegments(card, p.leagueName, LEAGUE_RECORD_LAST_N) : [];
+    const clauses =
+      card && hasHistory && p.category
+        ? gameCardRecordClauses(card, {
+            leagueName: p.leagueName,
+            marketNoun: PICK_CATEGORY_MARKET_NOUN[p.category],
+            hasLeagueHistory: card.league.count > 0,
+          })
+        : [];
     return (
       <div
         key={p.pickId}
@@ -229,11 +233,11 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
             <span className="text-[10px] text-muted-foreground"> &middot; Loading record...</span>
           ) : (
             <span className="text-[10px]">
-              {segments.length > 0 ? (
-                segments.map((s, i) => (
-                  <span key={s.label} className="text-muted-foreground/60">
-                    {i === 0 ? " · " : " | "}
-                    <RecordSegment {...s} />
+              {clauses.length > 0 ? (
+                clauses.map((c) => (
+                  <span key={c.scope} className="text-muted-foreground/60">
+                    {" · "}
+                    <RecordClause {...c} />
                   </span>
                 ))
               ) : (
