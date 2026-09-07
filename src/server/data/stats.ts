@@ -729,39 +729,54 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   ...buildSegmentCategoryMap((period, side) => `${SEGMENT_PERIOD_SHORT[period]} ${SEGMENT_SIDE_CHIP[side]}`),
 };
 
-// The market a category belongs to, side dropped, as a noun that slots into
-// "N% overall on ___ picks" - the natural-phrasing form of the /live
-// game-card record line (see game-card-record-line.ts). Favorite/underdog and
-// over/under both collapse here ("moneyline", "total") because the card is
-// already showing the viewer which side this specific pick is on; the record
-// phrase only needs to name the market. Period-scoped keys keep their period
-// prefix so a 1st-half or quarter record is never read as a full-game one.
+// The category a pick belongs to, phrased as a noun that slots into
+// "N% (W-L) overall on ___ picks" - the /live game-card record block (see
+// game-card-record-line.ts).
+//
+// The record shown is that ONE category's record, so the phrase must name the
+// category precisely enough that two categories which are opposite sides of a
+// bet - and which the capper detail page already shows as separate tiles -
+// never read as the same thing. PR #33 introduced this map with a "side
+// dropped" rule that collapsed every such pair onto one noun; that proved
+// genuinely confusing in live use and is undone here:
+//   - favorite vs underdog moneyline  -> "favorite moneyline" / "underdog moneyline"
+//   - favorite vs underdog spread      -> "favorite spread" / "underdog spread"
+//   - over vs under (every period)     -> "over" / "under" (period-prefixed)
+//   - NRFI vs YRFI                     -> "NRFI" / "YRFI" (the bettor-facing terms)
+//
+// Period-scoped keys keep their period prefix so a 1st-half / F5 / quarter
+// record is never read as a full-game one. Keys that are genuinely a single
+// category with no opposite-side sibling get a plain noun: SPREAD (side
+// unreadable), F5_ML / FIRST_HALF_ML / FIRST_HALF_SPREAD / segment *_ML /
+// segment *_SPREAD (no favorite/underdog split in the category system), and
+// TEAM_TOTAL / TD_PROP (one key each - the category itself already blends
+// over/under, independent of this map).
 const SEGMENT_MARKET_NOUN: Record<SegmentCategorySide, string> = {
   ML: "moneyline",
-  OVER: "total",
-  UNDER: "total",
+  OVER: "over",
+  UNDER: "under",
   SPREAD: "spread",
 };
 export const PICK_CATEGORY_MARKET_NOUN: Record<PickCategoryKey, string> = {
-  FAV_ML: "moneyline",
-  DOG_ML: "moneyline",
-  SPREAD_MINUS: "spread",
-  SPREAD_PLUS: "spread",
+  FAV_ML: "favorite moneyline",
+  DOG_ML: "underdog moneyline",
+  SPREAD_MINUS: "favorite spread",
+  SPREAD_PLUS: "underdog spread",
   SPREAD: "spread",
-  OVER: "total",
-  UNDER: "total",
+  OVER: "over",
+  UNDER: "under",
   F5_ML: "first-5 moneyline",
   FIRST_HALF_ML: "first-half moneyline",
-  FIRST_HALF_OVER: "first-half total",
-  FIRST_HALF_UNDER: "first-half total",
+  FIRST_HALF_OVER: "first-half over",
+  FIRST_HALF_UNDER: "first-half under",
   FIRST_HALF_SPREAD: "first-half spread",
   TD_PROP: "touchdown prop",
-  NRFI: "first-inning run",
-  YRFI: "first-inning run",
-  F5_SPREAD_MINUS: "first-5 spread",
-  F5_SPREAD_PLUS: "first-5 spread",
-  F5_OVER: "first-5 total",
-  F5_UNDER: "first-5 total",
+  NRFI: "NRFI",
+  YRFI: "YRFI",
+  F5_SPREAD_MINUS: "first-5 favorite spread",
+  F5_SPREAD_PLUS: "first-5 underdog spread",
+  F5_OVER: "first-5 over",
+  F5_UNDER: "first-5 under",
   TEAM_TOTAL: "team total",
   ...buildSegmentCategoryMap((period, side) => `${SEGMENT_PERIOD_LONG[period]} ${SEGMENT_MARKET_NOUN[side]}`),
 };

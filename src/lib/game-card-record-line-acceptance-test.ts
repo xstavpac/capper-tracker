@@ -1,53 +1,43 @@
-// The natural-phrasing /live game-card record line - run with:
+// The /live game-card capper record block - run with:
 //   npx tsx src/lib/game-card-record-line-acceptance-test.ts
 //
-// Format (per the game-card mockup):
-//   "Team +3.5 · 58% overall on total picks (21-15-2) · 60% in NCAAF (3-2) 🔥4"
-//   - clause 1: all-time record in this pick's MARKET (side dropped -
-//     "total" / "spread" / "moneyline")
-//   - clause 2: record in the GAME'S LEAGUE - dropped entirely when the capper
-//     has no graded pick in that league yet
-//   - "·" before the first clause and between clauses; each clause's win% and
-//     (record) colored by that clause's own win rate (component concern)
-//   - a trailing 🔥/🧊 streak indicator in the slot the old "L20" segment held,
-//     nothing below a 2+ streak - no fallback number
+// It is a stack of rows now (not the old inline sentence + width guard):
 //
-// Proven here: the exact text, the dropped-league-clause case, pushes, the
-// 🔥/🧊 indicator + its hover tooltip (count and direction), the "no category
-// history" line, and the mobile-width behaviour - which now ACCEPTS a wrap to
-// a second row for the plainer wording and only guards against a third.
+//   Team +3.5
+//   40% (2-3) overall on underdog moneyline picks     <- row 1
+//   55% (11-9) in NCAAF                                <- row 2 (omitted if no
+//   🔥 4 game win streak                                    league history)
+//                                                     <- row 3 (only if 2+)
+//
+// Proven here: exact row-1 / row-2 text (win% and record stay together as one
+// "40% (2-3)" unit), row 2 omitted with no league history (never a fake
+// "0% (0-0)"), the category wording naming the exact side so no two
+// opposite-side categories (fav/dog ML & spread, over/under every period,
+// NRFI/YRFI) collapse onto one phrase, the spelled-out streak row + its glyph
+// + its hover tooltip, the below-2 cases (rows omitted, no fallback number),
+// all four with/without-league × with/without-streak combinations, and that
+// the row-3 glyph still carries the pulse animation + reduced-motion classes
+// from PR #34/#35.
 
 import {
-  gameCardRecordClauses,
-  gameCardRecordPortionText,
-  gameCardRecordLineText,
-  gameCardNoHistoryLineText,
-  gameCardStreakSuffix,
+  gameCardRecordRows,
+  gameCardRecordRowText,
+  gameCardStreakGlyph,
+  gameCardStreakRowText,
   gameCardStreakTooltip,
-  estimateGameCardLineWidthPx,
-  GAME_CARD_LINE_MOBILE_BUDGET_PX,
-  GAME_CARD_LINE_MAX_ROWS,
   GAME_CARD_NO_HISTORY_TEXT,
+  GAME_CARD_STREAK_GLYPH_CLASS,
   type GameCardStreak,
 } from "@/lib/game-card-record-line";
+import { PICK_CATEGORY_MARKET_NOUN, type PickCategoryKey } from "@/server/data/stats";
 
 const winStreak = (count: number): GameCardStreak => ({ type: "WIN", count });
 const lossStreak = (count: number): GameCardStreak => ({ type: "LOSS", count });
-
-// At most GAME_CARD_LINE_MAX_ROWS rows: the natural-phrasing line is longer
-// than the compact format it replaced and a second-row wrap is an accepted
-// tradeoff - the guard only stops a third row.
-const MAX_LINE_PX = GAME_CARD_LINE_MOBILE_BUDGET_PX * GAME_CARD_LINE_MAX_ROWS;
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
   const pass = JSON.stringify(actual) === JSON.stringify(expected);
   console.log(`${pass ? "PASS" : "FAIL"}: ${label} -> actual=${JSON.stringify(actual)} expected=${JSON.stringify(expected)}`);
-  if (!pass) failures++;
-}
-function checkLte(label: string, actual: number, limit: number) {
-  const pass = actual <= limit;
-  console.log(`${pass ? "PASS" : "FAIL"}: ${label} -> ${actual} <= ${limit}`);
   if (!pass) failures++;
 }
 function checkTrue(label: string, actual: boolean) {
@@ -62,214 +52,230 @@ const col = (wins: number, losses: number, pushes = 0) => ({
   winPct: wins + losses > 0 ? (wins / (wins + losses)) * 100 : 0,
 });
 
-const clausesFor = (
+const rowsFor = (
   overall: ReturnType<typeof col>,
   league: ReturnType<typeof col> | null,
-  marketNoun = "total",
+  marketNoun = "underdog moneyline",
   leagueName = "NCAAF"
 ) =>
-  gameCardRecordClauses(
+  gameCardRecordRows(
     { overall, league: league ?? col(0, 0) },
     { leagueName, marketNoun, hasLeagueHistory: league !== null }
   );
 
+// The full rendered block as an array of lines, in DOM order.
+const blockLines = (rows: ReturnType<typeof rowsFor>, streak?: GameCardStreak | null) => {
+  const lines = rows.map(gameCardRecordRowText);
+  const streakLine = gameCardStreakRowText(streak);
+  if (streakLine) lines.push(streakLine);
+  return lines;
+};
+
 // ---------------------------------------------------------------------------
-console.log("########## exact natural phrasing ##########");
+console.log("########## row 1 / row 2 text - win% and record stay together ##########");
 {
-  const clauses = clausesFor(col(21, 15, 2), col(3, 2));
-  check("two clauses: overall + league", clauses.map((c) => c.scope), ["overall on total picks", "in NCAAF"]);
-  check("each clause carries a rounded win%", clauses.map((c) => c.pct), ["58%", "60%"]);
-  check("each clause carries its own W-L(-P) record", clauses.map((c) => c.record), ["21-15-2", "3-2"]);
+  const rows = rowsFor(col(2, 3), col(11, 9));
+  check("two rows: overall then league", rows.map((r) => r.scope), [
+    "overall on underdog moneyline picks",
+    "in NCAAF",
+  ]);
   check(
-    "portion text - '·' between clauses, parenthesised records",
-    gameCardRecordPortionText(clauses),
-    "58% overall on total picks (21-15-2) · 60% in NCAAF (3-2)"
+    "row 1: '<pct>% (<record>) overall on <side> <market> picks'",
+    gameCardRecordRowText(rows[0]),
+    "40% (2-3) overall on underdog moneyline picks"
   );
-  check(
-    "full line - '·' before the first clause",
-    gameCardRecordLineText("Team +3.5", clauses),
-    "Team +3.5 · 58% overall on total picks (21-15-2) · 60% in NCAAF (3-2)"
-  );
-}
-{
-  // Side-dropped market nouns: a spread and a moneyline pick.
-  check(
-    "spread pick reads 'on spread picks'",
-    gameCardRecordPortionText(clausesFor(col(12, 5), col(2, 1), "spread")),
-    "71% overall on spread picks (12-5) · 67% in NCAAF (2-1)"
-  );
-  check(
-    "moneyline pick reads 'on moneyline picks'",
-    gameCardRecordPortionText(clausesFor(col(33, 27), col(1, 1), "moneyline")),
-    "55% overall on moneyline picks (33-27) · 50% in NCAAF (1-1)"
-  );
-}
-{
-  // No graded pick in the game's league yet -> the "in <league>" clause is
-  // dropped entirely (never "0% in NCAAF (0-0)").
-  const clauses = clausesFor(col(21, 15, 2), null);
-  check("league clause dropped when the capper has no history in it", clauses.map((c) => c.scope), ["overall on total picks"]);
-  check(
-    "line ends after the overall clause, no trailing '· 0% in NCAAF (0-0)'",
-    gameCardRecordLineText("Team +3.5", clauses),
-    "Team +3.5 · 58% overall on total picks (21-15-2)"
-  );
+  check("row 2: '<pct>% (<record>) in <league>'", gameCardRecordRowText(rows[1]), "55% (11-9) in NCAAF");
+  // The percentage is immediately followed by "(record)" - not separated by
+  // the description the way the old inline sentence had it.
+  checkTrue("row 1: pct and record are adjacent", /^40% \(2-3\) /.test(gameCardRecordRowText(rows[0])));
+  checkTrue("row 2: pct and record are adjacent", /^55% \(11-9\) /.test(gameCardRecordRowText(rows[1])));
 }
 check(
-  "pushes render in both records (21-15-2 / 3-2-1 style)",
-  gameCardRecordPortionText(clausesFor(col(3, 3, 1), col(2, 2, 1), "total", "NBA")),
-  "50% overall on total picks (3-3-1) · 50% in NBA (2-2-1)"
+  "pushes render inside the record (3-3-1 style)",
+  gameCardRecordRowText(rowsFor(col(3, 3, 1), null, "under")[0]),
+  "50% (3-3-1) overall on under picks"
 );
 
 // ---------------------------------------------------------------------------
-console.log("\n##########  trailing 🔥/🧊 streak indicator (the old L20 slot)  ##########");
+console.log("\n########## row 2 omitted when the capper has no league history ##########");
 {
-  // Below 2 in either direction -> nothing. The slot does NOT fall back to any
-  // other number - it simply renders empty.
-  check("no streak: 1 win -> empty suffix", gameCardStreakSuffix(winStreak(1)), "");
-  check("no streak: 1 loss -> empty suffix", gameCardStreakSuffix(lossStreak(1)), "");
-  check("no streak: NONE -> empty suffix", gameCardStreakSuffix({ type: "NONE", count: 0 }), "");
-  check("no streak: null -> empty suffix", gameCardStreakSuffix(null), "");
-  check("no streak: undefined -> empty suffix", gameCardStreakSuffix(undefined), "");
-
-  check("2 win streak -> 🔥2", gameCardStreakSuffix(winStreak(2)), "🔥2");
-  check("4 win streak -> 🔥4", gameCardStreakSuffix(winStreak(4)), "🔥4");
-  check("3 loss streak -> 🧊3", gameCardStreakSuffix(lossStreak(3)), "🧊3");
-  check("double-digit streak keeps the full count -> 🔥12", gameCardStreakSuffix(winStreak(12)), "🔥12");
-
-  const clauses = clausesFor(col(21, 15, 2), col(3, 2));
-  // Below 2 -> portion / line are byte-identical to the no-streak form.
-  check(
-    "portion with a sub-2 streak == portion with no streak",
-    gameCardRecordPortionText(clauses, winStreak(1)),
-    gameCardRecordPortionText(clauses)
-  );
-  check(
-    "line with a sub-2 streak == line with no streak",
-    gameCardRecordLineText("Team +3.5", clauses, lossStreak(1)),
-    gameCardRecordLineText("Team +3.5", clauses)
-  );
-
-  // 2+ -> appended after the last clause, single space, at the very end.
-  check(
-    "win streak appends 🔥4 after the league clause",
-    gameCardRecordPortionText(clauses, winStreak(4)),
-    "58% overall on total picks (21-15-2) · 60% in NCAAF (3-2) 🔥4"
-  );
-  check(
-    "loss streak appends 🧊2 at the end of the full line",
-    gameCardRecordLineText("Team +3.5", clauses, lossStreak(2)),
-    "Team +3.5 · 58% overall on total picks (21-15-2) · 60% in NCAAF (3-2) 🧊2"
-  );
-  // With the league clause dropped the indicator still lands at the very end.
-  check(
-    "indicator appends after the overall clause when the league clause is dropped",
-    gameCardRecordLineText("Team +3.5", clausesFor(col(21, 15, 2), null), winStreak(4)),
-    "Team +3.5 · 58% overall on total picks (21-15-2) 🔥4"
-  );
-
-  // No category history: the streak is overall, not category-scoped, so it
-  // shows on the "no history" line too.
-  check(
-    "streak shows on the no-category-history line",
-    gameCardNoHistoryLineText("Team +3.5", winStreak(3)),
-    "Team +3.5 · " + GAME_CARD_NO_HISTORY_TEXT + " 🔥3"
-  );
-  check(
-    "no-history line without a streak is unchanged",
-    gameCardNoHistoryLineText("Team +3.5", lossStreak(1)),
-    "Team +3.5 · " + GAME_CARD_NO_HISTORY_TEXT
-  );
-  check("empty clauses + streak -> portion is the bare suffix", gameCardRecordPortionText([], winStreak(2)), "🔥2");
+  const rows = rowsFor(col(2, 3), null);
+  check("only row 1 is produced", rows.map((r) => r.scope), ["overall on underdog moneyline picks"]);
+  check("no fake '0% (0-0) in NCAAF' row", blockLines(rows), ["40% (2-3) overall on underdog moneyline picks"]);
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n##########  streak hover tooltip: count + direction  ##########");
+console.log("\n########## category wording names the exact side - no two opposite-side categories collapse ##########");
 {
-  // The tooltip text must name the exact streak count and its direction.
-  for (const n of [2, 3, 4, 7, 12]) {
-    check(`win streak of ${n} -> "Won ${n} in a row"`, gameCardStreakTooltip(winStreak(n)), `Won ${n} in a row`);
-    check(`loss streak of ${n} -> "Lost ${n} in a row"`, gameCardStreakTooltip(lossStreak(n)), `Lost ${n} in a row`);
+  // Every category the record block can show is ONE category's record. Two
+  // categories that are opposite sides of the same bet (and that the capper
+  // detail page shows as separate tiles) must get different phrases here.
+  const opposites: [PickCategoryKey, PickCategoryKey][] = [
+    ["FAV_ML", "DOG_ML"],
+    ["SPREAD_MINUS", "SPREAD_PLUS"],
+    ["F5_SPREAD_MINUS", "F5_SPREAD_PLUS"],
+    ["OVER", "UNDER"],
+    ["FIRST_HALF_OVER", "FIRST_HALF_UNDER"],
+    ["F5_OVER", "F5_UNDER"],
+    ["NRFI", "YRFI"],
+    ["FIRST_QUARTER_OVER", "FIRST_QUARTER_UNDER"],
+    ["THIRD_PERIOD_OVER", "THIRD_PERIOD_UNDER"],
+  ];
+  for (const [a, b] of opposites) {
+    checkTrue(
+      `${a} vs ${b} read differently ("${PICK_CATEGORY_MARKET_NOUN[a]}" vs "${PICK_CATEGORY_MARKET_NOUN[b]}")`,
+      PICK_CATEGORY_MARKET_NOUN[a] !== PICK_CATEGORY_MARKET_NOUN[b]
+    );
   }
-  // Below the 2+ cutoff there's no glyph, so there's no tooltip either.
-  check("1 win -> no tooltip", gameCardStreakTooltip(winStreak(1)), "");
-  check("1 loss -> no tooltip", gameCardStreakTooltip(lossStreak(1)), "");
-  check("NONE -> no tooltip", gameCardStreakTooltip({ type: "NONE", count: 0 }), "");
+
+  // Exact wording.
+  check("FAV_ML", PICK_CATEGORY_MARKET_NOUN.FAV_ML, "favorite moneyline");
+  check("DOG_ML", PICK_CATEGORY_MARKET_NOUN.DOG_ML, "underdog moneyline");
+  check("SPREAD_MINUS", PICK_CATEGORY_MARKET_NOUN.SPREAD_MINUS, "favorite spread");
+  check("SPREAD_PLUS", PICK_CATEGORY_MARKET_NOUN.SPREAD_PLUS, "underdog spread");
+  check("F5_SPREAD_MINUS", PICK_CATEGORY_MARKET_NOUN.F5_SPREAD_MINUS, "first-5 favorite spread");
+  check("F5_SPREAD_PLUS", PICK_CATEGORY_MARKET_NOUN.F5_SPREAD_PLUS, "first-5 underdog spread");
+  check("OVER", PICK_CATEGORY_MARKET_NOUN.OVER, "over");
+  check("UNDER", PICK_CATEGORY_MARKET_NOUN.UNDER, "under");
+  check("FIRST_HALF_OVER", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_OVER, "first-half over");
+  check("FIRST_HALF_UNDER", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_UNDER, "first-half under");
+  check("F5_OVER", PICK_CATEGORY_MARKET_NOUN.F5_OVER, "first-5 over");
+  check("F5_UNDER", PICK_CATEGORY_MARKET_NOUN.F5_UNDER, "first-5 under");
+  check("segment key: FIRST_QUARTER_OVER", PICK_CATEGORY_MARKET_NOUN.FIRST_QUARTER_OVER, "1st quarter over");
+  check("segment key: FIRST_QUARTER_UNDER", PICK_CATEGORY_MARKET_NOUN.FIRST_QUARTER_UNDER, "1st quarter under");
+
+  // YRFI / NRFI specifically (the addendum) - the bettor-facing terms, matching
+  // the capper detail page's separate tiles, not one shared "first-inning run".
+  check("NRFI reads 'NRFI'", PICK_CATEGORY_MARKET_NOUN.NRFI, "NRFI");
+  check("YRFI reads 'YRFI'", PICK_CATEGORY_MARKET_NOUN.YRFI, "YRFI");
+  checkTrue(
+    "neither NRFI nor YRFI still says 'first-inning run'",
+    PICK_CATEGORY_MARKET_NOUN.NRFI !== "first-inning run" && PICK_CATEGORY_MARKET_NOUN.YRFI !== "first-inning run"
+  );
+  check(
+    "row 1 for a YRFI pick reads 'overall on YRFI picks'",
+    gameCardRecordRowText(rowsFor(col(10, 13), null, PICK_CATEGORY_MARKET_NOUN.YRFI)[0]),
+    "43% (10-13) overall on YRFI picks"
+  );
+  check(
+    "row 1 for an NRFI pick reads 'overall on NRFI picks'",
+    gameCardRecordRowText(rowsFor(col(26, 18), null, PICK_CATEGORY_MARKET_NOUN.NRFI)[0]),
+    "59% (26-18) overall on NRFI picks"
+  );
+
+  // Genuinely single categories (no opposite-side sibling in the category
+  // system) keep a plain noun.
+  check("TEAM_TOTAL (one key, over/under already blended)", PICK_CATEGORY_MARKET_NOUN.TEAM_TOTAL, "team total");
+  check("TD_PROP (one key)", PICK_CATEGORY_MARKET_NOUN.TD_PROP, "touchdown prop");
+  check("FIRST_HALF_ML (no fav/dog split)", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_ML, "first-half moneyline");
+  check("FIRST_HALF_SPREAD (no fav/dog split)", PICK_CATEGORY_MARKET_NOUN.FIRST_HALF_SPREAD, "first-half spread");
+  check("F5_ML (no fav/dog split)", PICK_CATEGORY_MARKET_NOUN.F5_ML, "first-5 moneyline");
+  check("SPREAD fallback (side unreadable)", PICK_CATEGORY_MARKET_NOUN.SPREAD, "spread");
+  check("segment key: FIRST_QUARTER_ML", PICK_CATEGORY_MARKET_NOUN.FIRST_QUARTER_ML, "1st quarter moneyline");
+  check("segment key: SECOND_HALF_SPREAD", PICK_CATEGORY_MARKET_NOUN.SECOND_HALF_SPREAD, "2nd half spread");
+
+  // A real row using a fetched noun.
+  check(
+    "row 1 for a FAV_ML pick reads 'favorite moneyline'",
+    gameCardRecordRowText(rowsFor(col(9, 6), null, PICK_CATEGORY_MARKET_NOUN.FAV_ML)[0]),
+    "60% (9-6) overall on favorite moneyline picks"
+  );
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## row 3 - spelled-out streak, only at 2+ ##########");
+{
+  check("2 win streak", gameCardStreakRowText(winStreak(2)), "🔥 2 game win streak");
+  check("4 win streak", gameCardStreakRowText(winStreak(4)), "🔥 4 game win streak");
+  check("5 loss streak", gameCardStreakRowText(lossStreak(5)), "🧊 5 game losing streak");
+  check("12 win streak keeps the full count", gameCardStreakRowText(winStreak(12)), "🔥 12 game win streak");
+  check("glyph alone: win", gameCardStreakGlyph(winStreak(3)), "🔥");
+  check("glyph alone: loss", gameCardStreakGlyph(lossStreak(3)), "🧊");
+
+  // Below 2 in either direction -> row is omitted entirely, no fallback.
+  const below: (GameCardStreak | null | undefined)[] = [
+    winStreak(1),
+    lossStreak(1),
+    { type: "NONE", count: 0 },
+    null,
+    undefined,
+  ];
+  for (const s of below) {
+    check(`below 2 (${JSON.stringify(s)}): row text is empty`, gameCardStreakRowText(s), "");
+    check(`below 2 (${JSON.stringify(s)}): glyph is empty`, gameCardStreakGlyph(s), "");
+  }
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## row 3 hover tooltip - preserved, count + direction ##########");
+{
+  for (const n of [2, 4, 7, 12]) {
+    check(`win ${n} -> "Won ${n} in a row"`, gameCardStreakTooltip(winStreak(n)), `Won ${n} in a row`);
+    check(`loss ${n} -> "Lost ${n} in a row"`, gameCardStreakTooltip(lossStreak(n)), `Lost ${n} in a row`);
+  }
+  check("below 2 -> no tooltip", gameCardStreakTooltip(winStreak(1)), "");
   check("null -> no tooltip", gameCardStreakTooltip(null), "");
 
-  // The tooltip and the glyph always agree about whether they render, and the
-  // count in the tooltip matches the count in the glyph.
-  for (const streak of [winStreak(2), winStreak(9), lossStreak(2), lossStreak(5)]) {
-    const suffix = gameCardStreakSuffix(streak);
-    const tooltip = gameCardStreakTooltip(streak);
-    checkTrue(`glyph "${suffix}" and tooltip "${tooltip}" both present`, suffix !== "" && tooltip !== "");
-    checkTrue(`tooltip "${tooltip}" ends with the glyph's count (${streak.count})`, tooltip.includes(String(streak.count)));
+  // Tooltip and the visible row always agree about whether they show, and the
+  // count/direction line up.
+  for (const s of [winStreak(2), winStreak(9), lossStreak(2), lossStreak(6)]) {
+    const row = gameCardStreakRowText(s);
+    const tip = gameCardStreakTooltip(s);
+    checkTrue(`row "${row}" and tooltip "${tip}" both present`, row !== "" && tip !== "");
+    checkTrue(`tooltip "${tip}" names the same count`, tip.includes(String(s.count)) && row.includes(String(s.count)));
     checkTrue(
-      `tooltip direction matches the glyph (${streak.type})`,
-      streak.type === "WIN" ? tooltip.startsWith("Won") && suffix.startsWith("🔥") : tooltip.startsWith("Lost") && suffix.startsWith("🧊")
+      `tooltip "${tip}" and row "${row}" agree on direction`,
+      s.type === "WIN"
+        ? tip.startsWith("Won") && row.includes("win streak") && row.startsWith("🔥")
+        : tip.startsWith("Lost") && row.includes("losing streak") && row.startsWith("🧊")
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n##########  mobile width: a second-row wrap is accepted, a third is not  ##########");
+console.log("\n########## row 3 glyph keeps the PR #34/#35 pulse + reduced-motion classes ##########");
 {
-  // The canonical example still fits ONE row as a bare portion; a full line
-  // with a normal bet detail wraps to a second row - accepted.
-  const clauses = clausesFor(col(21, 15, 2), col(3, 2));
-  checkLte(
-    "canonical record portion still fits one row on its own",
-    estimateGameCardLineWidthPx(gameCardRecordPortionText(clauses)),
-    GAME_CARD_LINE_MOBILE_BUDGET_PX
+  const classes = GAME_CARD_STREAK_GLYPH_CLASS.split(/\s+/);
+  checkTrue("glyph class carries the pulse animation", classes.includes("animate-streak-pulse"));
+  checkTrue("glyph class carries the reduced-motion guard", classes.includes("motion-reduce:animate-none"));
+  checkTrue(
+    "glyph is inline-block so the pulse transform applies without shifting the text",
+    classes.includes("inline-block")
   );
-  for (const bet of ["Team +3.5", "Over 55.5", "UNLV +7", "Bama ML", "Washington State -7"]) {
-    for (const streak of [null, winStreak(3), lossStreak(2), winStreak(12)] as (GameCardStreak | null)[]) {
-      checkLte(
-        `full line stays within ${GAME_CARD_LINE_MAX_ROWS} rows: "${bet}"${streak ? " + " + gameCardStreakSuffix(streak) : ""}`,
-        estimateGameCardLineWidthPx(gameCardRecordLineText(bet, clauses, streak)),
-        MAX_LINE_PX
-      );
-    }
-  }
-}
-{
-  // Longest realistic market noun (a segment moneyline) + a 3-digit lifetime
-  // record + a long college team name + a loss streak - still at most 2 rows.
-  const clauses = clausesFor(col(142, 38), col(98, 22), "1st quarter moneyline");
-  const line = gameCardRecordLineText("Washington State -7", clauses, lossStreak(6));
-  const px = estimateGameCardLineWidthPx(line);
-  checkLte(`worst-case line ("${line}") stays within ${GAME_CARD_LINE_MAX_ROWS} rows`, px, MAX_LINE_PX);
-}
-{
-  // The no-category-history line + a streak is short - one row.
-  checkLte(
-    'no-history line + "🔥3" fits one row: "Team +3.5"',
-    estimateGameCardLineWidthPx(gameCardNoHistoryLineText("Team +3.5", winStreak(3))),
-    GAME_CARD_LINE_MOBILE_BUDGET_PX
+  check(
+    "exact class string (shared with the component)",
+    GAME_CARD_STREAK_GLYPH_CLASS,
+    "inline-block animate-streak-pulse motion-reduce:animate-none"
   );
 }
 
 // ---------------------------------------------------------------------------
-console.log("\n##########  a dense 9-pick card: every line stays within two rows  ##########");
+console.log("\n########## the four combinations: {league history?} x {2+ streak?} ##########");
 {
-  const above = clausesFor(col(41, 19), col(7, 1), "total");
-  const below = clausesFor(col(12, 8), null, "moneyline");
-  const stacked = [
-    { bet: "UNLV +7", clauses: above, streak: winStreak(3) },
-    { bet: "Over 55.5", clauses: above, streak: lossStreak(2) },
-    { bet: "Under 55.5", clauses: below, streak: winStreak(4) },
-    { bet: "UNLV ML", clauses: below, streak: null },
-    { bet: "Over 27.5 1H", clauses: above, streak: winStreak(2) },
-    { bet: "UNLV 1H +3.5", clauses: below, streak: lossStreak(3) },
-    { bet: "Washington State -7", clauses: above, streak: null },
-    { bet: "Washington State ML", clauses: below, streak: winStreak(5) },
-    { bet: "Bama TT o24.5", clauses: above, streak: lossStreak(2) },
-  ] as { bet: string; clauses: ReturnType<typeof clausesFor>; streak: GameCardStreak | null }[];
-  const overThree = stacked.filter(
-    (p) => estimateGameCardLineWidthPx(gameCardRecordLineText(p.bet, p.clauses, p.streak)) > MAX_LINE_PX
-  );
-  check("no pick's line spills past two rows", overThree.map((p) => p.bet), []);
+  const overall = col(2, 3);
+  const league = col(11, 9);
+
+  check("league history + streak -> 3 rows", blockLines(rowsFor(overall, league), winStreak(4)), [
+    "40% (2-3) overall on underdog moneyline picks",
+    "55% (11-9) in NCAAF",
+    "🔥 4 game win streak",
+  ]);
+  check("league history, no streak -> 2 rows", blockLines(rowsFor(overall, league), winStreak(1)), [
+    "40% (2-3) overall on underdog moneyline picks",
+    "55% (11-9) in NCAAF",
+  ]);
+  check("no league history + streak -> 2 rows (row 2 dropped)", blockLines(rowsFor(overall, null), lossStreak(3)), [
+    "40% (2-3) overall on underdog moneyline picks",
+    "🧊 3 game losing streak",
+  ]);
+  check("no league history, no streak -> 1 row", blockLines(rowsFor(overall, null), null), [
+    "40% (2-3) overall on underdog moneyline picks",
+  ]);
 }
+
+// ---------------------------------------------------------------------------
+console.log("\n########## no-category-history placeholder is unchanged ##########");
+check("placeholder text", GAME_CARD_NO_HISTORY_TEXT, "No history in this category yet");
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);

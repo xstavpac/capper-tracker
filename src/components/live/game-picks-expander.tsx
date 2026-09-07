@@ -6,11 +6,12 @@ import { getLeagueRecordsAction } from "@/server/actions/picks";
 import { getRecordColor, PICK_CATEGORY_MARKET_NOUN, type PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import {
-  gameCardRecordClauses,
-  gameCardStreakSuffix,
+  gameCardRecordRows,
+  gameCardStreakGlyph,
   gameCardStreakTooltip,
   GAME_CARD_NO_HISTORY_TEXT,
-  type GameCardRecordClause,
+  GAME_CARD_STREAK_GLYPH_CLASS,
+  type GameCardRecordRow,
   type GameCardStreak,
 } from "@/lib/game-card-record-line";
 import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
@@ -22,8 +23,8 @@ export type ExpanderPick = {
   capperColorTag: string | null;
   capperIsFavorite: boolean;
   category: PickCategoryKey | null;
-  // The game's league (sport name, e.g. "NCAAF") - the emphasized middle
-  // column of the condensed record line. One per /live page tab.
+  // The game's league (sport name, e.g. "NCAAF") - names row 2 of the record
+  // block ("55% (11-9) in NCAAF"). One per /live page tab.
   leagueName: string;
   betDetail: string;
   odds: number;
@@ -98,60 +99,50 @@ export function ChevronIcon({ up }: { up: boolean }) {
   );
 }
 
-// One clause of the natural-phrasing record line ("58% overall on total picks
-// (21-15-2)", "60% in NCAAF (3-2)"). Each clause's win% and (record) are
-// green/red by that clause's own win rate. `whitespace-nowrap` keeps a clause
-// intact so the line breaks cleanly BETWEEN clauses (to at most two rows on a
-// dense card) rather than mid-phrase. Character content matches
-// gameCardRecordLineText (game-card-record-line.ts), which the width guard
-// tests against.
-function RecordClause({ pct, scope, record, winPct }: GameCardRecordClause) {
+// One record row: "40% (2-3) overall on underdog moneyline picks" or
+// "55% (11-9) in NCAAF". The win% and the parenthesised record render as ONE
+// colored, semibold unit (green/red by that row's own win rate) so they stay
+// visually together; the scope that follows is muted. Text content matches
+// gameCardRecordRowText (game-card-record-line.ts), which the tests check.
+function RecordRow({ pct, record, scope, winPct }: GameCardRecordRow) {
   const color =
     getRecordColor(winPct) === "green"
       ? "text-emerald-600 dark:text-emerald-400"
       : "text-red-600 dark:text-red-400";
   return (
-    <span className="whitespace-nowrap">
-      <span className={color + " font-semibold"}>{pct}</span>{" "}
-      <span className="text-muted-foreground">{scope}</span>{" "}
-      <span className={color}>({record})</span>
-    </span>
+    <div>
+      <span className={color + " font-semibold"}>
+        {pct} ({record})
+      </span>{" "}
+      <span className="text-muted-foreground">{scope}</span>
+    </div>
   );
 }
 
-// The trailing 🔥/🧊 indicator on the record line - the capper's CURRENT
-// OVERALL streak (any sport, any bet type), the same currentStreak() value
-// the Leaderboard/Favorites flame badge uses. It occupies the slot the old
-// "L20" segment used to. Renders nothing below a 2+ streak in either direction
-// (gameCardStreakSuffix returns "") - the slot then falls back to nothing, not
-// to some other number. Shown on every pick card - even one with no category
-// record - since the streak is about the capper, not this bet type. Hovering
-// the indicator shows a plain-text explanation ("Won 4 in a row") via a title
-// attribute; the codebase has no tooltip component. Text content ("🔥3")
-// matches what the width-guard tests feed gameCardRecordLineText /
-// gameCardNoHistoryLineText.
+// Row 3 - the capper's CURRENT OVERALL streak (any sport, any bet type), the
+// same currentStreak() value the Leaderboard/Favorites flame badge uses.
+// Rendered only for a 2+ streak in either direction (gameCardStreakRowText
+// returns "" below that) - the row is omitted entirely otherwise, never
+// replaced by another number. Shown on every pick card, category history or
+// not, since the streak is about the capper, not this bet type.
 //
-// The glyph itself gets a subtle infinite opacity+scale breathe
-// (animate-streak-pulse, tailwind.config.ts) to draw a little attention to a
-// capper on a run. Only the emoji animates, not the count, and it's wrapped
-// in its own inline-block span so the transform applies without nudging the
-// count or the record text beside it. `motion-reduce:animate-none` leaves the
-// glyph completely static for anyone with prefers-reduced-motion set. The
-// title attribute lives on the outer span, untouched by the animation.
-function StreakIndicator({ streak }: { streak: GameCardStreak | null | undefined }) {
-  const suffix = gameCardStreakSuffix(streak);
-  if (!suffix) return null;
-  const glyph = streak!.type === "WIN" ? "🔥" : "🧊";
-  const color =
-    streak!.type === "WIN"
-      ? "text-orange-600 dark:text-orange-400"
-      : "text-sky-600 dark:text-sky-400";
+// The glyph carries the infinite opacity+scale pulse and the reduced-motion
+// guard (GAME_CARD_STREAK_GLYPH_CLASS -> animate-streak-pulse /
+// motion-reduce:animate-none, PR #34/#35); the spelled-out count follows as
+// plain text. Hovering the row shows "Won 4 in a row" / "Lost 4 in a row" via
+// a title attribute (the codebase has no tooltip component).
+function StreakRow({ streak }: { streak: GameCardStreak | null | undefined }) {
+  const glyph = gameCardStreakGlyph(streak);
+  if (!glyph) return null;
+  const isWin = streak!.type === "WIN";
+  const color = isWin
+    ? "text-orange-600 dark:text-orange-400"
+    : "text-sky-600 dark:text-sky-400";
   return (
-    <span className={"whitespace-nowrap font-semibold " + color} title={gameCardStreakTooltip(streak)}>
-      {" "}
-      <span className="inline-block animate-streak-pulse motion-reduce:animate-none">{glyph}</span>
-      {streak!.count}
-    </span>
+    <div className={"font-semibold " + color} title={gameCardStreakTooltip(streak)}>
+      <span className={GAME_CARD_STREAK_GLYPH_CLASS}>{glyph}</span>{" "}
+      {streak!.count} game {isWin ? "win" : "losing"} streak
+    </div>
   );
 }
 
@@ -194,9 +185,9 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
     // "Top performer" highlight keys off the current-league record - "good at
     // this bet type in THIS league", not blended.
     const isTopPerformer = Boolean(card && card.league.count > 0 && card.league.winPct >= TOP_PERFORMER_THRESHOLD);
-    const clauses =
+    const rows =
       card && hasHistory && p.category
-        ? gameCardRecordClauses(card, {
+        ? gameCardRecordRows(card, {
             leagueName: p.leagueName,
             marketNoun: PICK_CATEGORY_MARKET_NOUN[p.category],
             hasLeagueHistory: card.league.count > 0,
@@ -238,23 +229,18 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
           </div>
         </div>
         <div className="mt-0.5 pl-[23px] text-[11px] text-muted-foreground">
-          <span className="text-foreground/90">{p.betDetail}</span>
+          <div className="text-foreground/90">{p.betDetail}</div>
           {loading ? (
-            <span className="text-[10px] text-muted-foreground"> &middot; Loading record...</span>
+            <div className="mt-0.5 text-[10px] text-muted-foreground">Loading record&hellip;</div>
           ) : (
-            <span className="text-[10px]">
-              {clauses.length > 0 ? (
-                clauses.map((c) => (
-                  <span key={c.scope} className="text-muted-foreground/60">
-                    {" · "}
-                    <RecordClause {...c} />
-                  </span>
-                ))
+            <div className="mt-0.5 space-y-0.5 text-[10px] leading-snug">
+              {rows.length > 0 ? (
+                rows.map((r) => <RecordRow key={r.scope} {...r} />)
               ) : (
-                <span className="text-muted-foreground"> &middot; {GAME_CARD_NO_HISTORY_TEXT}</span>
+                <div className="text-muted-foreground">{GAME_CARD_NO_HISTORY_TEXT}</div>
               )}
-              <StreakIndicator streak={streak} />
-            </span>
+              <StreakRow streak={streak} />
+            </div>
           )}
         </div>
       </div>
