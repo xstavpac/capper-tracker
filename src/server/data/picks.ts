@@ -17,6 +17,11 @@ import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { easternDateRange } from "@/lib/dates";
 import { nrfiSide } from "@/lib/bet-line";
 import { findMatchingGameResult, resolveOutcome, resolveTouchdownProp, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
+import {
+  isStuckParlayLeg,
+  computeStuckLegReason,
+  type LegGradeProbe,
+} from "@/server/data/parlay-leg-triage";
 import { FREE_PICK_LIMIT } from "@/lib/entitlements";
 import { getEntitlementsForUser, createPicksWithEntitlementCheck } from "@/server/data/subscriptions";
 
@@ -191,6 +196,108 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
       };
     })
   );
+}
+
+export type StuckParlayLegRow = {
+  legId: string;
+  parlayBetId: string;
+  legIndex: number;
+  legCount: number;
+  parlayUnits: number;
+  capperName: string;
+  homeTeam: string;
+  awayTeam: string;
+  betType: BetType;
+  betDetail: string | null;
+  line: number | null;
+  odds: number;
+  gameTime: Date;
+  ageHours: number;
+  reason: string | null;
+};
+
+// Issue #23 - the parlay-leg counterpart of getPendingPicksForUser. Surfaces
+// legs that are genuinely stuck (leg PENDING, parent parlay still PENDING,
+// game finished long ago) and computes the same class of human-readable
+// reason strings a stuck standalone pick gets, by re-running the exact same
+// pure grading functions (findMatchingGameResult / resolveTouchdownProp /
+// resolveOutcome) per leg. Trailing legs of an already-resolved parlay are
+// filtered out by the parent-still-PENDING check - see parlay-leg-triage.ts
+// for why they must never appear.
+export async function getPendingLegsForUser(userId: string): Promise<StuckParlayLegRow[]> {
+  const legs = await prisma.leg.findMany({
+    where: { status: "PENDING", parlayBet: { userId, status: "PENDING" } },
+    include: {
+      sport: true,
+      parlayBet: { include: { capper: true, _count: { select: { legs: true } } } },
+    },
+    orderBy: { gameTime: "asc" },
+  });
+
+  const now = Date.now();
+
+  const rows = await Promise.all(
+    legs.map(async (leg) => {
+      const ageHours = (now - leg.gameTime.getTime()) / 3600000;
+      if (
+        !isStuckParlayLeg({
+          legStatus: leg.status,
+          parentParlayStatus: leg.parlayBet.status,
+          ageHours,
+        })
+      ) {
+        return null;
+      }
+
+      const sportKey = LIVE_SPORTS.find((s) => s.label === leg.sport.name)?.key;
+      const resolvable = sportKey ? RESOLVABLE_SPORT_KEYS.includes(sportKey) : false;
+
+      // Same probe getPendingPicksForUser runs inline per pending pick, just
+      // gathered into a struct for the pure computeStuckLegReason ladder. A
+      // stuck leg is past STUCK_LEG_MIN_AGE_HOURS by definition here, so the
+      // "game not final yet" early-out getPendingPicksForUser needs doesn't
+      // apply - always probe.
+      const probe: LegGradeProbe = {
+        resolvable,
+        matched: false,
+        isPlayerProp: leg.betType === "PLAYER_PROP",
+        touchdownPropReason: null,
+        outcomeResolved: false,
+      };
+      if (resolvable) {
+        const match = await findMatchingGameResult(sportKey!, leg);
+        if (match) {
+          probe.matched = true;
+          if (leg.betType === "PLAYER_PROP") {
+            const propResult = await resolveTouchdownProp(leg, match.game.externalId, leg.sport.name);
+            probe.touchdownPropReason = propResult.outcome === null ? propResult.reason : null;
+          } else {
+            probe.outcomeResolved = resolveOutcome(leg, match.game) !== null;
+          }
+        }
+      }
+
+      return {
+        legId: leg.id,
+        parlayBetId: leg.parlayBetId,
+        legIndex: leg.legIndex,
+        legCount: leg.parlayBet._count.legs,
+        parlayUnits: leg.parlayBet.units,
+        capperName: leg.parlayBet.capper.name,
+        homeTeam: leg.homeTeam,
+        awayTeam: leg.awayTeam,
+        betType: leg.betType,
+        betDetail: leg.betDetail,
+        line: leg.line,
+        odds: leg.odds,
+        gameTime: leg.gameTime,
+        ageHours,
+        reason: computeStuckLegReason(probe),
+      };
+    })
+  );
+
+  return rows.filter((r): r is StuckParlayLegRow => r !== null);
 }
 
 export async function getPicksForCapper(userId: string, capperId: string) {
