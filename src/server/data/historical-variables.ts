@@ -39,6 +39,7 @@ import { resolveTeamStatFromSnapshot, resolvePitcherStatFromSnapshot } from "@/s
 import { resolveNflTeamStatFromSnapshot } from "@/server/data/providers/nfl-team-stats-provider";
 import { readRate } from "@/server/data/providers/tendency-provider";
 import { resolveCustomMetricVariable } from "@/server/data/custom-metrics";
+import { chartTeamsMatch } from "@/server/data/chart-team-name";
 
 export type VariableTimeSeriesPoint = { date: string; value: number | null };
 
@@ -242,10 +243,19 @@ async function customMetricProvider(variable: ModelVariableDef, sportKey: string
   // one point still travels in `points` (date = periodLabel) so the shared
   // result shape is unchanged; the caller renders it as a bar, not a line,
   // by checking metricKind.
+  //
+  // Team matching goes through chartTeamsMatch, not an exact `where teamName`
+  // clause: a metric imported before team-name canonicalization existed has
+  // rows keyed by the raw CSV abbreviation ("AZ"), while entityId is the
+  // selector's full name ("Arizona Diamondbacks"). The row count is one per
+  // team (<=32), so loading them all and matching in memory is cheap and
+  // makes those older metrics work without rewriting their stored rows.
   if (metric.metricKind === "SNAPSHOT") {
-    const row = await prisma.customMetricPoint.findFirst({
-      where: { customMetricId: metric.id, teamName: entityId },
-    });
+    const allRows = await prisma.customMetricPoint.findMany({ where: { customMetricId: metric.id } });
+    const row =
+      allRows.find((r) => r.teamName === entityId) ??
+      allRows.find((r) => r.teamName !== null && chartTeamsMatch(sportKey, r.teamName, entityId)) ??
+      null;
     const points = row ? [{ date: metric.periodLabel ?? row.snapshotDate, value: row.value }] : [];
     return {
       variableId: variable.id,
@@ -262,6 +272,12 @@ async function customMetricProvider(variable: ModelVariableDef, sportKey: string
     };
   }
 
+  // DAILY metrics keep the exact-match ranged query (a dated series can be
+  // long, so this stays an indexed WHERE rather than a load-all-and-filter).
+  // A daily metric imported with stat-feed team codes has the same latent
+  // mismatch a snapshot did - but a daily CSV needs a date column, which the
+  // team-aggregate exports that use bare codes don't have, so it's not the
+  // reported bug; canonicalizing daily imports too is a follow-up.
   const rows = await prisma.customMetricPoint.findMany({
     where: {
       customMetricId: metric.id,

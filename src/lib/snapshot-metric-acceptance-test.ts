@@ -208,5 +208,15 @@ expect(
   null
 );
 
+// disabled result carries an always-visible short badge + a full hover tooltip
+const singleModeDisabled = pickerDisabledReason(snapM, { mode: "single", plottedKinds: [], plottedVariableIds: [] });
+expect("single-mode snapshot badge is the short inline label", singleModeDisabled?.badge, "Team Comparison only");
+expectTrue("single-mode snapshot tooltip is a fuller sentence", (singleModeDisabled?.tooltip.length ?? 0) > (singleModeDisabled?.badge.length ?? 0));
+expect(
+  "compare-mode daily-blocked-by-snapshot badge",
+  pickerDisabledReason(builtIn, { mode: "compare", plottedKinds: ["snapshot"], plottedVariableIds: ["cm_snap"] })?.badge,
+  "Snapshot active"
+);
+
 console.log(`\n${failures === 0 ? "ALL PASS" : failures + " FAILURE(S)"}`);
 if (failures > 0) process.exit(1);

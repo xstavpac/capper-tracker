@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { CustomMetric } from "@prisma/client";
 import { USER_UPLOAD, type ModelVariableDef, type VariableSport, type VariableUnit } from "@/lib/model-builder";
 import type { ImportRow, SnapshotImportRow } from "@/lib/csv-metric-import";
+import { resolveChartTeamName, sportLabel } from "@/server/data/chart-team-name";
 
 function toModelVariableDef(m: CustomMetric): ModelVariableDef {
   return {
@@ -147,18 +148,39 @@ async function createDailyMetric(userId: string, sportKey: string, spec: DailyMe
 // are per-team by definition. Every point's snapshotDate holds periodLabel
 // verbatim (no real date), so the server dedupe key is the team alone,
 // keeping the LAST row for a repeated team.
+//
+// Team names are canonicalized on the way in (resolveChartTeamName): a CSV
+// keyed by stat-feed abbreviations ("AZ", "ATH") is stored with the same
+// full names the Charts team selector queries with, so the per-team values
+// actually resolve when charted. A code that can't be resolved unambiguously
+// aborts the whole import with the offending values named - storing a row no
+// chart query will match is worse than making the user fix the file.
 async function createSnapshotMetric(userId: string, sportKey: string, spec: SnapshotMetricImportSpec): Promise<ImportedMetricSummary> {
   const periodLabel = spec.periodLabel.trim();
   if (periodLabel === "") throw new Error("A season snapshot needs a period label (e.g. \"2026 Season\").");
 
   const byTeam = new Map<string, SnapshotImportRow>();
-  for (const row of spec.rows) byTeam.set(row.team, row);
+  const unresolved: string[] = [];
+  for (const row of spec.rows) {
+    const canonical = resolveChartTeamName(sportKey, row.team);
+    if (canonical === null) {
+      if (!unresolved.includes(row.team)) unresolved.push(row.team);
+      continue;
+    }
+    byTeam.set(canonical, row); // last row wins for a repeated team
+  }
+  if (unresolved.length > 0) {
+    throw new Error(
+      `These ${sportLabel(sportKey)} team names in the CSV weren't recognized: ${unresolved.join(", ")}. ` +
+        `Use full team names (e.g. "Arizona Diamondbacks") or a standard abbreviation (e.g. "AZ", "ARI").`
+    );
+  }
 
-  const pointsData = [...byTeam.values()]
-    .filter((row) => row.values[spec.valueColumn] !== null && row.values[spec.valueColumn] !== undefined)
-    .map((row) => ({
+  const pointsData = [...byTeam.entries()]
+    .filter(([, row]) => row.values[spec.valueColumn] !== null && row.values[spec.valueColumn] !== undefined)
+    .map(([teamName, row]) => ({
       snapshotDate: periodLabel,
-      teamName: row.team,
+      teamName,
       value: row.values[spec.valueColumn] as number,
     }));
 
