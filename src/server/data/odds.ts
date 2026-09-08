@@ -1087,41 +1087,58 @@ export async function getNflPlayerTdStats(eventId: string): Promise<NflPlayerTdS
 
 // How many Eastern calendar days a candidate game may sit from `referenceTime`
 // (import time, normally) and still be accepted as the game a pick refers to.
-// getLiveScoresForSport's feeds only span ~yesterday..tomorrow, so for a
-// present-time import this rejects nothing they legitimately return - it's an
-// explicit backstop for the case where a team's game today is missing from
-// the feed (an ingestion gap - e.g. an FCS-vs-FCS college game ESPN's FBS
-// scoreboard omits) but a DIFFERENT game for that same team, a week or more
-// out, IS in the feed. Without the check that lone far-off game gets silently
-// attached to the pick; a clean "couldn't match, add manually" is much safer
-// than a wrong-game attach that then grades against the wrong result.
-const MAX_RESOLVE_DATE_DRIFT_DAYS = 2;
+//
+// This has to cover how weekly-sport cappers actually post: an NFL / NCAAF
+// slate goes up 2-4 days before kickoff, often the whole upcoming week at
+// once (Monday post -> that week's Thursday is +3, Sunday +6, Monday +7). A
+// window of 7 does that. It stays a safe guardrail because it is still the
+// FALLBACK odds feed (resolveScheduleGameFromFeeds below) that this bounds -
+// two NFL / NCAAF teams never play twice inside 7 days, so a same-matchup
+// mis-attach is impossible there; for the daily sports the score feed almost
+// always has the near game already (so the odds fallback never runs), and
+// when it does the same-day / closest-by-time preference still picks the
+// soonest of any repeated series. Beyond 7 days a pick is far likelier a
+// typo / wrong game than a genuine advance post, so it routes to "add
+// manually" instead of guessing.
+//
+// Was 2 (added 2026-08-29 as a pure backstop, when import resolution only
+// ever saw getLiveScoresForSport's yesterday..tomorrow feed): that silently
+// dropped ~every pick in an advance-posted weekend slate.
+const MAX_RESOLVE_DATE_DRIFT_DAYS = 7;
 
 function withinResolveWindow(commenceTime: string, referenceTime: Date): boolean {
   return withinDateDriftDays(new Date(commenceTime), referenceTime, MAX_RESOLVE_DATE_DRIFT_DAYS);
 }
 
-// Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw
-// pick text) to the real game it refers to, using the yesterday/today/
-// tomorrow schedule window for the given sport. Same-team matchups repeat
-// every few days in a season (series/back-to-backs), so when a nickname
-// matches more than one game we prefer a game on the same local calendar day
-// as `referenceTime`, and within that, prefer one that hasn't finished yet -
-// falling back to whichever candidate started closest to `referenceTime`.
-// Every candidate is first constrained to MAX_RESOLVE_DATE_DRIFT_DAYS of
-// `referenceTime` (see withinResolveWindow) so a lone far-future game can't
-// be attached to a pick meant for a game that isn't in the feed.
-export async function resolveGameForNickname(
-  sportKey: string,
-  nickname: string,
-  referenceTime: Date = new Date()
-): Promise<ScoreGame | null> {
-  const games = await getLiveScoresForSport(sportKey);
-  const candidates = games.filter(
-    (g) =>
-      (g.homeTeam.toLowerCase().endsWith(nickname) || g.awayTeam.toLowerCase().endsWith(nickname)) &&
-      withinResolveWindow(g.commenceTime, referenceTime)
-  );
+// An OddsGame reshaped as the minimal schedule game the resolver and its
+// callers read (id / teams / commenceTime / status). Odds-cache games are
+// pregame by construction - getOddsForSportUncached drops anything already
+// started before the snapshot was written - and the odds feed is only ever
+// consulted here when nothing in the ~yesterday..tomorrow score feed matched,
+// so "preview" is the correct status: a game far enough out to be odds-only
+// has not kicked off. scores stay null (no live data on the odds side).
+function oddsGameToScheduleGame(g: OddsGame): ScoreGame {
+  return {
+    id: g.id,
+    homeTeam: g.homeTeam,
+    awayTeam: g.awayTeam,
+    status: "preview",
+    scores: null,
+    commenceTime: g.commenceTime,
+    inningHalf: null,
+    inningOrdinal: null,
+    innings: null,
+  };
+}
+
+// The tail of resolveGameForNickname / resolveGameForTeams, extracted so both
+// share it and it can be unit-tested: from >=1 already-team-and-window-matched
+// candidates, prefer one on the same Eastern day as `referenceTime`, then one
+// that hasn't finished, then whichever started closest to `referenceTime`.
+export function pickBestScheduleCandidate(
+  candidates: ScoreGame[],
+  referenceTime: Date
+): ScoreGame | null {
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
 
@@ -1131,6 +1148,81 @@ export async function resolveGameForNickname(
   const finalPool = notFinal.length > 0 ? notFinal : pool;
 
   return closestByTime(finalPool, (g) => new Date(g.commenceTime).getTime(), referenceTime.getTime());
+}
+
+// Pure core of catalog-import game resolution, over two feeds:
+//   - score feed (~yesterday..tomorrow): authoritative for anything happening
+//     now - live status, the ID the grading pipeline keys on, repeated-matchup
+//     handling. A live or not-yet-started match here wins outright.
+//   - odds feed (full posted schedule): fills in when the score feed has no
+//     UPCOMING match - either nothing at all (the normal advance-post case: a
+//     pick dropped days before kickoff), or only a game that has already
+//     finished (the capper means the team's NEXT game, not the one that just
+//     ended). A finished score-feed game is used only as the last resort, so
+//     logging a pick right after its game still works when nothing is ahead.
+// Deliberately a fallback, not a merge: a game happening now is in BOTH feeds
+// with different IDs, and merging would double it in the candidate pool.
+// Exported for the acceptance test; the async wrapper below supplies the feeds.
+export function resolveScheduleGameFromFeeds(
+  scoreGames: ScoreGame[],
+  oddsGames: OddsGame[],
+  teamMatches: (g: { homeTeam: string; awayTeam: string }) => boolean,
+  referenceTime: Date
+): ScoreGame | null {
+  const inWindow = (g: { commenceTime: string }) => withinResolveWindow(g.commenceTime, referenceTime);
+
+  const fromScores = scoreGames.filter((g) => teamMatches(g) && inWindow(g));
+  const scoresUpcoming = fromScores.filter((g) => g.status !== "final");
+  if (scoresUpcoming.length > 0) return pickBestScheduleCandidate(scoresUpcoming, referenceTime);
+
+  const fromOdds = oddsGames.filter((g) => teamMatches(g) && inWindow(g)).map(oddsGameToScheduleGame);
+  if (fromOdds.length > 0) return pickBestScheduleCandidate(fromOdds, referenceTime);
+
+  return pickBestScheduleCandidate(fromScores, referenceTime);
+}
+
+// Async wrapper around resolveScheduleGameFromFeeds. The score feed is fetched
+// first; the odds feed (a memoized OddsSnapshot read - already warm for most
+// import batches, since resolveGameAndOdds reads it again for pricing) is
+// fetched only when the score feed has no UPCOMING match, keeping the common
+// "game is today/tomorrow" path a single fetch. A feed that throws (network
+// blip) is treated as empty so the other one can still answer.
+async function resolveScheduleGame(
+  sportKey: string,
+  teamMatches: (g: { homeTeam: string; awayTeam: string }) => boolean,
+  referenceTime: Date
+): Promise<ScoreGame | null> {
+  const scoreGames = await getLiveScoresForSport(sportKey).catch(() => [] as ScoreGame[]);
+  const scoreHasUpcoming = scoreGames.some(
+    (g) => teamMatches(g) && g.status !== "final" && withinResolveWindow(g.commenceTime, referenceTime)
+  );
+  const oddsGames = scoreHasUpcoming
+    ? []
+    : await getOddsForSport(sportKey).catch(() => [] as OddsGame[]);
+  return resolveScheduleGameFromFeeds(scoreGames, oddsGames, teamMatches, referenceTime);
+}
+
+// Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw
+// pick text) to the real game it refers to. The ~yesterday..tomorrow score
+// feed is checked first; if nothing there matches, the full-schedule odds
+// feed fills in (see resolveScheduleGame / resolveScheduleGameFromFeeds), so
+// a pick posted days ahead of kickoff still resolves. Same-team matchups
+// repeat within a season (series / weekly opponents), so when more than one
+// game matches we prefer one on the same Eastern day as `referenceTime`,
+// then one that hasn't finished, then whichever started closest to it. Every
+// candidate is first constrained to MAX_RESOLVE_DATE_DRIFT_DAYS of
+// `referenceTime` so a far-future game for the same team can't be attached to
+// a pick whose game isn't in either feed.
+export async function resolveGameForNickname(
+  sportKey: string,
+  nickname: string,
+  referenceTime: Date = new Date()
+): Promise<ScoreGame | null> {
+  return resolveScheduleGame(
+    sportKey,
+    (g) => g.homeTeam.toLowerCase().endsWith(nickname) || g.awayTeam.toLowerCase().endsWith(nickname),
+    referenceTime
+  );
 }
 
 // Same idea as resolveGameForNickname, but for picks that name both teams
@@ -1143,24 +1235,18 @@ export async function resolveGameForTeams(
   nicknameB: string,
   referenceTime: Date = new Date()
 ): Promise<ScoreGame | null> {
-  const games = await getLiveScoresForSport(sportKey);
-  const candidates = games.filter((g) => {
-    const home = g.homeTeam.toLowerCase();
-    const away = g.awayTeam.toLowerCase();
-    const teamsMatch =
-      (home.endsWith(nicknameA) && away.endsWith(nicknameB)) ||
-      (home.endsWith(nicknameB) && away.endsWith(nicknameA));
-    return teamsMatch && withinResolveWindow(g.commenceTime, referenceTime);
-  });
-  if (candidates.length === 0) return null;
-  if (candidates.length === 1) return candidates[0];
-
-  const sameDay = candidates.filter((g) => sameEasternDay(new Date(g.commenceTime), referenceTime));
-  const pool = sameDay.length > 0 ? sameDay : candidates;
-  const notFinal = pool.filter((g) => g.status !== "final");
-  const finalPool = notFinal.length > 0 ? notFinal : pool;
-
-  return closestByTime(finalPool, (g) => new Date(g.commenceTime).getTime(), referenceTime.getTime());
+  return resolveScheduleGame(
+    sportKey,
+    (g) => {
+      const home = g.homeTeam.toLowerCase();
+      const away = g.awayTeam.toLowerCase();
+      return (
+        (home.endsWith(nicknameA) && away.endsWith(nicknameB)) ||
+        (home.endsWith(nicknameB) && away.endsWith(nicknameA))
+      );
+    },
+    referenceTime
+  );
 }
 
 // Matches a single odds-listed game to its live/final score by team pair,
