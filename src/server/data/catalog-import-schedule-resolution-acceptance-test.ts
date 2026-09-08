@@ -171,6 +171,20 @@ console.log("\n########## guardrails: window edge + fallback-not-merge #########
   check("nothing upcoming -> the just-finished score game is still resolvable", justEnded?.id, "FINAL_ID");
 
   check("no match in either feed -> null", resolveScheduleGameFromFeeds([], [], endsWith("jets"), MON), null);
+
+  // The catalog-import disambiguation schedule check (checkAmbiguousTeamSchedules)
+  // uses nearTermOnly, which is exactly "pass [] as the odds feed" - it asks
+  // "is playing NOW", so a game only in the odds feed (days out) must not count.
+  const nearTerm = (scoreGames: ScoreGame[], odds: OddsGame[], nick: string) =>
+    resolveScheduleGameFromFeeds(scoreGames, [] /* nearTermOnly drops the odds feed */, endsWith(nick), MON) !== null;
+  checkTrue(
+    "nearTermOnly: a weekly team with a game +6d (odds feed only) does NOT count as playing now",
+    nearTerm([], [odds("Cincinnati Bengals", "Tampa Bay Buccaneers", 6)], "buccaneers") === false
+  );
+  checkTrue(
+    "nearTermOnly: a team with a game today (score feed) DOES count",
+    nearTerm([score("Los Angeles Dodgers", "San Diego Padres", 0)], [], "dodgers") === true
+  );
 }
 
 // ---------------------------------------------------------------------------
