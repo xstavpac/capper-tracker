@@ -47,7 +47,10 @@ function formatDateTick(dateStr: string): string {
   return (MONTH_ABBR[month - 1] ?? parts[1]) + " " + day;
 }
 
-function formatValueForUnit(value: number, unit: VariableUnit): string {
+// Exported so the snapshot bar chart (snapshot-comparison-chart.tsx) formats
+// axis ticks and tooltips exactly the way the line chart does - same unit
+// rules, one implementation.
+export function formatValueForUnit(value: number, unit: VariableUnit): string {
   switch (unit) {
     case "percent":
       return (value * 100).toFixed(1) + "%";

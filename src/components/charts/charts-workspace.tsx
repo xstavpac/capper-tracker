@@ -6,6 +6,7 @@ import { getVariableSeriesAction } from "@/server/actions/charts";
 import type { VariableTimeSeriesResult, DateRange } from "@/server/data/historical-variables";
 import { easternDateKey } from "@/lib/dates";
 import { VariableLibrary } from "@/components/model-builder/variable-library";
+import { pickerDisabledReason } from "@/lib/custom-metric-picker";
 import { HistoricalVariableChart, type ChartSeries } from "@/components/charts/historical-variable-chart";
 import { HistoryNote } from "@/components/charts/history-note";
 import { DateRangePicker } from "@/components/charts/date-range-picker";
@@ -141,6 +142,16 @@ export function ChartsWorkspace({
           onAdd={addSeries}
           categories={CHART_CATEGORIES}
           onCustomMetricDeleted={(variableId) => setSeries((prev) => prev.filter((s) => s.variableId !== variableId))}
+          // Single-team Team Stats is a line-chart tool - a season snapshot
+          // (a two-team bar comparison) has no place here, so it's disabled
+          // with a tooltip pointing to Team Comparison rather than hidden.
+          disabledReason={(v) =>
+            pickerDisabledReason(v, {
+              mode: "single",
+              plottedKinds: [],
+              plottedVariableIds: series.map((s) => s.variableId),
+            })
+          }
         />
       </div>
 

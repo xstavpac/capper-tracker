@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { CustomMetric } from "@prisma/client";
 import { USER_UPLOAD, type ModelVariableDef, type VariableSport, type VariableUnit } from "@/lib/model-builder";
-import type { ImportRow } from "@/lib/csv-metric-import";
+import type { ImportRow, SnapshotImportRow } from "@/lib/csv-metric-import";
 
 function toModelVariableDef(m: CustomMetric): ModelVariableDef {
   return {
@@ -19,11 +19,15 @@ function toModelVariableDef(m: CustomMetric): ModelVariableDef {
     // dispatch.
     scope: "team",
     unit: m.unit as VariableUnit,
-    description: m.hasTeamColumn
-      ? "Custom metric you uploaded, tracked per team."
-      : "Custom metric you uploaded, applies to every team.",
+    description:
+      m.metricKind === "SNAPSHOT"
+        ? `Season snapshot you uploaded${m.periodLabel ? ` (${m.periodLabel})` : ""} — one value per team, compared as bars.`
+        : m.hasTeamColumn
+          ? "Custom metric you uploaded, tracked per team."
+          : "Custom metric you uploaded, applies to every team.",
     sourceId: USER_UPLOAD,
     dataScope: "per_user",
+    metricKind: m.metricKind === "SNAPSHOT" ? "snapshot" : "daily",
   };
 }
 
@@ -54,13 +58,31 @@ export async function resolveCustomMetricVariable(userId: string, metricId: stri
   return metric ? toModelVariableDef(metric) : null;
 }
 
-export type MetricImportSpec = {
+// A daily metric import: dated rows, charted as a line. Unchanged from the
+// original single-shape MetricImportSpec - `kind` is optional so any existing
+// caller/test that omits it still builds a daily metric.
+export type DailyMetricImportSpec = {
+  kind?: "daily";
   name: string;
   unit?: string;
   hasTeamColumn: boolean;
   rows: ImportRow[];
   valueColumn: string;
 };
+
+// A season-snapshot import: one value per team, no dates. periodLabel names
+// the span the numbers cover ("2026 Season") and is stored verbatim in each
+// point's snapshotDate slot (see the schema comment on CustomMetricPoint).
+export type SnapshotMetricImportSpec = {
+  kind: "snapshot";
+  name: string;
+  unit?: string;
+  periodLabel: string;
+  rows: SnapshotImportRow[];
+  valueColumn: string;
+};
+
+export type MetricImportSpec = DailyMetricImportSpec | SnapshotMetricImportSpec;
 
 export type ImportedMetricSummary = { metricId: string; name: string; pointCount: number };
 
@@ -77,39 +99,83 @@ export async function importCustomMetrics(userId: string, sportKey: string, spec
   const results: ImportedMetricSummary[] = [];
 
   for (const spec of specs) {
-    // Server-side duplicate re-check, independent of whatever the client
-    // already resolved - keeps the LAST row for a repeated (date, team) key,
-    // same default the client-side "last" strategy uses, so this is only
-    // ever a no-op safety net for well-behaved input, not a second policy.
-    const byKey = new Map<string, ImportRow>();
-    for (const row of spec.rows) {
-      const key = row.date + "|" + (row.team ?? "");
-      byKey.set(key, row);
-    }
-
-    const pointsData = [...byKey.values()]
-      .filter((row) => row.values[spec.valueColumn] !== null && row.values[spec.valueColumn] !== undefined)
-      .map((row) => ({
-        snapshotDate: row.date,
-        teamName: spec.hasTeamColumn ? row.team : null,
-        value: row.values[spec.valueColumn] as number,
-      }));
-
-    const created = await prisma.customMetric.create({
-      data: {
-        userId,
-        sportKey,
-        name: spec.name,
-        unit: spec.unit ?? "decimal",
-        hasTeamColumn: spec.hasTeamColumn,
-        points: { createMany: { data: pointsData } },
-      },
-    });
-
-    results.push({ metricId: created.id, name: created.name, pointCount: pointsData.length });
+    const created =
+      spec.kind === "snapshot"
+        ? await createSnapshotMetric(userId, sportKey, spec)
+        : await createDailyMetric(userId, sportKey, spec);
+    results.push(created);
   }
 
   return results;
+}
+
+async function createDailyMetric(userId: string, sportKey: string, spec: DailyMetricImportSpec): Promise<ImportedMetricSummary> {
+  // Server-side duplicate re-check, independent of whatever the client
+  // already resolved - keeps the LAST row for a repeated (date, team) key,
+  // same default the client-side "last" strategy uses, so this is only
+  // ever a no-op safety net for well-behaved input, not a second policy.
+  const byKey = new Map<string, ImportRow>();
+  for (const row of spec.rows) {
+    const key = row.date + "|" + (row.team ?? "");
+    byKey.set(key, row);
+  }
+
+  const pointsData = [...byKey.values()]
+    .filter((row) => row.values[spec.valueColumn] !== null && row.values[spec.valueColumn] !== undefined)
+    .map((row) => ({
+      snapshotDate: row.date,
+      teamName: spec.hasTeamColumn ? row.team : null,
+      value: row.values[spec.valueColumn] as number,
+    }));
+
+  const created = await prisma.customMetric.create({
+    data: {
+      userId,
+      sportKey,
+      name: spec.name,
+      unit: spec.unit ?? "decimal",
+      hasTeamColumn: spec.hasTeamColumn,
+      metricKind: "DAILY",
+      points: { createMany: { data: pointsData } },
+    },
+  });
+
+  return { metricId: created.id, name: created.name, pointCount: pointsData.length };
+}
+
+// A snapshot metric is always team-scoped (hasTeamColumn: true) - the values
+// are per-team by definition. Every point's snapshotDate holds periodLabel
+// verbatim (no real date), so the server dedupe key is the team alone,
+// keeping the LAST row for a repeated team.
+async function createSnapshotMetric(userId: string, sportKey: string, spec: SnapshotMetricImportSpec): Promise<ImportedMetricSummary> {
+  const periodLabel = spec.periodLabel.trim();
+  if (periodLabel === "") throw new Error("A season snapshot needs a period label (e.g. \"2026 Season\").");
+
+  const byTeam = new Map<string, SnapshotImportRow>();
+  for (const row of spec.rows) byTeam.set(row.team, row);
+
+  const pointsData = [...byTeam.values()]
+    .filter((row) => row.values[spec.valueColumn] !== null && row.values[spec.valueColumn] !== undefined)
+    .map((row) => ({
+      snapshotDate: periodLabel,
+      teamName: row.team,
+      value: row.values[spec.valueColumn] as number,
+    }));
+
+  const created = await prisma.customMetric.create({
+    data: {
+      userId,
+      sportKey,
+      name: spec.name,
+      unit: spec.unit ?? "decimal",
+      hasTeamColumn: true,
+      metricKind: "SNAPSHOT",
+      periodLabel,
+      points: { createMany: { data: pointsData } },
+    },
+  });
+
+  return { metricId: created.id, name: created.name, pointCount: pointsData.length };
 }
 
 export async function deleteCustomMetric(userId: string, metricId: string): Promise<void> {

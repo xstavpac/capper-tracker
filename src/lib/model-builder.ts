@@ -76,6 +76,12 @@ export type ModelVariableDef = {
   // data source means registering a new provider, not editing this file's type.
   sourceId: string;
   dataScope: DataScope;
+  // Only set on custom_metric entries (built at request time from a
+  // CustomMetric row). "daily" is a dated time series shown as a line chart;
+  // "snapshot" is a season aggregate shown as a bar comparison and never
+  // given time-series messaging. Undefined for every built-in - built-ins are
+  // all daily time series and the Charts UI treats "not set" as daily.
+  metricKind?: "daily" | "snapshot";
 };
 
 // Split into two distinct sourceIds (was one shared "mlb_stats_api" for
