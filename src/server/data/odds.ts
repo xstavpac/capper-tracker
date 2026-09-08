@@ -1181,18 +1181,31 @@ export function resolveScheduleGameFromFeeds(
   return pickBestScheduleCandidate(fromScores, referenceTime);
 }
 
+// `nearTermOnly` skips the odds-feed fallback: it answers "does this team have
+// a game in the ~yesterday..tomorrow score feed" rather than "anywhere in the
+// posted schedule". The catalog-import disambiguation schedule check
+// (checkAmbiguousTeamSchedules) needs the tight question - a daily-sport team
+// with a game 5 days out is not "playing now" and must not out-vote a weekly
+// team by default. Import game-MATCHING wants the wide question and leaves
+// this off.
+export type ResolveGameOpts = { referenceTime?: Date; nearTermOnly?: boolean };
+
 // Async wrapper around resolveScheduleGameFromFeeds. The score feed is fetched
 // first; the odds feed (a memoized OddsSnapshot read - already warm for most
 // import batches, since resolveGameAndOdds reads it again for pricing) is
-// fetched only when the score feed has no UPCOMING match, keeping the common
-// "game is today/tomorrow" path a single fetch. A feed that throws (network
-// blip) is treated as empty so the other one can still answer.
+// fetched only when needed - never for nearTermOnly, and otherwise only when
+// the score feed has no UPCOMING match, keeping the common "game is
+// today/tomorrow" path a single fetch. A feed that throws (network blip) is
+// treated as empty so the other one can still answer.
 async function resolveScheduleGame(
   sportKey: string,
   teamMatches: (g: { homeTeam: string; awayTeam: string }) => boolean,
-  referenceTime: Date
+  { referenceTime = new Date(), nearTermOnly = false }: ResolveGameOpts
 ): Promise<ScoreGame | null> {
   const scoreGames = await getLiveScoresForSport(sportKey).catch(() => [] as ScoreGame[]);
+
+  if (nearTermOnly) return resolveScheduleGameFromFeeds(scoreGames, [], teamMatches, referenceTime);
+
   const scoreHasUpcoming = scoreGames.some(
     (g) => teamMatches(g) && g.status !== "final" && withinResolveWindow(g.commenceTime, referenceTime)
   );
@@ -1216,12 +1229,12 @@ async function resolveScheduleGame(
 export async function resolveGameForNickname(
   sportKey: string,
   nickname: string,
-  referenceTime: Date = new Date()
+  opts: ResolveGameOpts = {}
 ): Promise<ScoreGame | null> {
   return resolveScheduleGame(
     sportKey,
     (g) => g.homeTeam.toLowerCase().endsWith(nickname) || g.awayTeam.toLowerCase().endsWith(nickname),
-    referenceTime
+    opts
   );
 }
 
@@ -1233,7 +1246,7 @@ export async function resolveGameForTeams(
   sportKey: string,
   nicknameA: string,
   nicknameB: string,
-  referenceTime: Date = new Date()
+  opts: ResolveGameOpts = {}
 ): Promise<ScoreGame | null> {
   return resolveScheduleGame(
     sportKey,
@@ -1245,7 +1258,7 @@ export async function resolveGameForTeams(
         (home.endsWith(nicknameB) && away.endsWith(nicknameA))
       );
     },
-    referenceTime
+    opts
   );
 }
 

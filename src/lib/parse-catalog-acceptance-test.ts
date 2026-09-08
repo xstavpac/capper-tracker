@@ -333,36 +333,47 @@ function main() {
     );
   }
 
-  // The specific wrong-guess this round's inferSportFromPickContext fix
-  // prevents: generic baseball wording ("ML") is NOT MLB-exclusive once KBO
-  // is a candidate (KBO uses identical terminology) - before the fix this
-  // returned "MLB" for all three baseball-worded cases below, silently
-  // mis-resolving a real KBO pick. Genuinely sport-specific NFL wording, and
-  // the pre-existing MLB-vs-NFL Cardinals case, are confirmed unaffected.
+  // Generic baseball wording ("ML") is not MLB-exclusive: KBO uses identical
+  // terminology, and so does the NFL. "ML" / "money line" were removed from
+  // the MLB context signals entirely (the "bucs" round) - a bare "ML" pick on
+  // any MLB-ambiguous nickname now stays ambiguous for a one-click choice
+  // instead of silently guessing MLB. Genuinely MLB-only wording (run line,
+  // NRFI, F5) still resolves MLB where MLB is a candidate and there's no KBO;
+  // genuinely NFL-only wording still resolves NFL.
   {
     check(
-      "Context fix: 'Tigers ML' vs [MLB, KBO] no longer guesses MLB",
+      "Context: 'Tigers ML' vs [MLB, KBO] -> ambiguous (not MLB)",
       inferSportFromPickContext("Tigers ML", ["MLB", "KBO"]),
       null
     );
     check(
-      "Context fix: 'Twins run line -1.5' vs [MLB, KBO] no longer guesses MLB",
+      "Context: 'Twins run line -1.5' vs [MLB, KBO] -> ambiguous (KBO uses run line too)",
       inferSportFromPickContext("Twins run line -1.5", ["MLB", "KBO"]),
       null
     );
     check(
-      "Context fix: 'Giants ML' vs [MLB, NFL, KBO] no longer guesses MLB",
+      "Context: 'Giants ML' vs [MLB, NFL, KBO] -> ambiguous",
       inferSportFromPickContext("Giants ML", ["MLB", "NFL", "KBO"]),
       null
     );
     check(
-      "Context fix: genuinely NFL-worded 'Eagles spread -3' vs [NFL, KBO] still resolves NFL",
+      "Context: 'Cardinals ML' vs [MLB, NFL] -> ambiguous ('ML' is not an MLB signal)",
+      inferSportFromPickContext("Cardinals ML", ["MLB", "NFL"]),
+      null
+    );
+    check(
+      "Context: genuinely NFL-worded 'Eagles spread -3' vs [NFL, KBO] still resolves NFL",
       inferSportFromPickContext("Eagles spread -3", ["NFL", "KBO"]),
       "NFL"
     );
     check(
-      "Context fix: pre-existing 'Cardinals ML' vs [MLB, NFL] (no KBO) is unaffected",
-      inferSportFromPickContext("Cardinals ML", ["MLB", "NFL"]),
+      "Context: genuinely MLB-worded 'Cardinals NRFI' vs [MLB, NFL] still resolves MLB",
+      inferSportFromPickContext("Cardinals NRFI", ["MLB", "NFL"]),
+      "MLB"
+    );
+    check(
+      "Context: 'Cardinals F5 -1.5' vs [MLB, NFL] still resolves MLB",
+      inferSportFromPickContext("Cardinals F5 -1.5", ["MLB", "NFL"]),
       "MLB"
     );
   }
@@ -1223,13 +1234,15 @@ NC State +4.5`;
   // through TEAM_NICKNAME_CANONICAL before bulk-picks.ts's endsWith
   // game-resolution.
   //
-  // Explicitly EXCLUDED (asserted below): tokens that double as a common
-  // word or collide across teams - "sox" (Red Sox + White Sox), "red"
-  // (Reds + Red Sox + Red Wings + ...), "mississippi" (Ole Miss + Miss
-  // State + Southern Miss), "bucs" (Buccaneers + Pirates), "canes"
-  // (Hurricanes + Miami), "wings" (Red Wings + Dallas Wings), "bolts"
-  // (Lightning + Chargers), "cards"/"cavs" (already ambiguous / cross-sport),
-  // "boys"/"caps" (common words). The Mississippi/Red picks themselves are a
+  // Explicitly EXCLUDED from PRO_TEAM_ALIASES (asserted below): tokens that
+  // double as a common word or collide across teams - "sox" (Red Sox + White
+  // Sox), "red" (Reds + Red Sox + Red Wings + ...), "mississippi" (Ole Miss +
+  // Miss State + Southern Miss), "canes" (Hurricanes + Miami), "wings" (Red
+  // Wings + Dallas Wings), "bolts" (Lightning + Chargers), "cards"/"cavs"
+  // (already ambiguous / cross-sport), "boys"/"caps" (common words). "bucs"
+  // (Buccaneers + Pirates) is likewise not a direct alias, but is now an
+  // AMBIGUOUS_NICKNAMES key resolved by the schedule/season hierarchy - see
+  // the bucs assertions below. The Mississippi/Red picks themselves are a
   // SEPARATE bug (the ATP phantom-pick fallback silently stamping unresolved
   // lines as confident tennis picks - docs/resolver-team-gap-followups.md
   // #1) and are deliberately untouched here.
@@ -1308,9 +1321,17 @@ NC State +4.5`;
     // "Sox" / "Red" as a bare pick still do not resolve to MLB.
     check("bare 'Sox -1.5' does not resolve to MLB", parseCatalog(`Cap\nSox -1.5`, []).picks[0]?.sportName === "MLB", false);
     check("bare 'Red -1.5' does not resolve to MLB", parseCatalog(`Cap\nRed -1.5`, []).picks[0]?.sportName === "MLB", false);
-    // "bucs" must not resolve to NFL or MLB (Buccaneers/Pirates collision).
-    const bucs = parseCatalog(`Cap\nBucs ML`, []).picks[0]?.sportName;
-    check("bare 'Bucs ML' does not resolve to NFL or MLB", bucs === "NFL" || bucs === "MLB", false);
+    // "bucs" no longer just drops to `unresolved`: it's an AMBIGUOUS_NICKNAMES
+    // key now (Buccaneers NFL / Pirates MLB), resolved by the schedule->season
+    // ->context hierarchy - see the bucs section in ambiguous-hierarchy-
+    // acceptance-test.ts. It still doesn't resolve to a sport directly here.
+    {
+      const p = parseCatalog(`Cap\nBucs ML`, []).picks[0];
+      check("bare 'Bucs ML' -> ambiguous key 'bucs', not a direct sport", { sport: p?.sportName, key: p?.ambiguousKey }, { sport: "", key: "bucs" });
+      check("bare 'Bucs ML' options are Buccaneers/Pirates", p?.ambiguous?.map((o) => o.sport), ["NFL", "MLB"]);
+    }
+    check("'Buccaneers ML' still resolves NFL directly", parseCatalog(`Cap\nBuccaneers ML`, []).picks[0]?.sportName, "NFL");
+    check("'Pirates ML' still resolves MLB directly", parseCatalog(`Cap\nPirates ML`, []).picks[0]?.sportName, "MLB");
     // Full "Red Sox" / "White Sox" still resolve (regression).
     check("'Red Sox -1.5' still resolves MLB", parseCatalog(`Cap\nRed Sox -1.5`, []).picks[0]?.teamNicknames, ["red sox"]);
     check("'White Sox -1.5' still resolves MLB", parseCatalog(`Cap\nWhite Sox -1.5`, []).picks[0]?.teamNicknames, ["white sox"]);

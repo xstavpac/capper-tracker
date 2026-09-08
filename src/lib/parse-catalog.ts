@@ -217,6 +217,22 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "New York Jets (NFL)", sport: "NFL", nickname: "new york jets" },
     { label: "Winnipeg Jets (NHL)", sport: "NHL", nickname: "winnipeg jets" },
   ],
+  // "Bucs" is shared slang for the Tampa Bay Buccaneers (NFL) and the
+  // Pittsburgh Pirates (MLB) - real reported friction: a bare "Bucs ML" was
+  // routing to `unresolved` ("add manually"), forcing the capper to spell out
+  // "Buccaneers". It was deliberately kept OUT of PRO_TEAM_ALIASES for exactly
+  // this collision; the schedule -> season -> pick-context hierarchy handles it
+  // the same way `jets` / `panthers` are. "Pirates" and "Buccaneers" spelled
+  // out still resolve directly (each is unambiguous) - only the shared short
+  // form comes here. The two full team names are the live-schedule spellings
+  // the hierarchy's endsWith check needs. NFL (Sep-Feb) and MLB (Apr-Oct)
+  // overlap Sep/Oct, so the calendar can't settle it in that window - the
+  // schedule check (which of the two actually plays that day) usually can, and
+  // if not it surfaces for a one-click choice.
+  bucs: [
+    { label: "Tampa Bay Buccaneers (NFL)", sport: "NFL", nickname: "tampa bay buccaneers" },
+    { label: "Pittsburgh Pirates (MLB)", sport: "MLB", nickname: "pittsburgh pirates" },
+  ],
   // A city-only reference to a Boston team - three sports, told apart by the
   // schedule -> season -> pick-context hierarchy in ambiguous-hierarchy.ts,
   // same as every entry above. The only bare CITY name in this table (the rest
@@ -1054,10 +1070,16 @@ export function ambiguousOptionsFor(key: string): AmbiguousOption[] {
 // ambiguous between two sports that are both in season with both teams
 // scheduled. Deliberately narrow, high-signal phrases only - generic words
 // that could plausibly appear in any sport's pick text are left out.
+//
+// "ML" / "money line" are NOT here: every sport uses that exact shorthand, so
+// treating them as an MLB signal silently resolved an MLB/NFL ambiguous
+// nickname ("Cardinals ML", "Bucs ML") to MLB whenever the schedule and
+// calendar were both inconclusive - a wrong-guess for a football pick. Bare
+// "ML" with no other discriminator now stays ambiguous and surfaces for a
+// one-click choice. The entries that remain ARE MLB-only (no NFL/NBA/NHL
+// equivalent).
 const SPORT_CONTEXT_SIGNALS: Record<string, RegExp[]> = {
   MLB: [
-    /\bmoney\s*line\b/i,
-    /\bML\b/,
     /\brun\s*line\b/i,
     /\b[NY]RFI\b/i,
     /\b(no|yes)\s+run\s+(?:first|1st)\b/i,

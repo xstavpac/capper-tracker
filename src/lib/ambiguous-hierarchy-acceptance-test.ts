@@ -169,18 +169,85 @@ async function main() {
   }
   {
     // Feed error AND both candidates in season (September) -> the calendar
-    // can't narrow either, and a bare "-3" spread carries no sport-specific
-    // terminology, so it correctly stays ambiguous rather than guessing off a
-    // stale assumption. ("Cardinals ML" would resolve via pick context - "ML"
-    // is an MLB signal - which is why this case uses a bare spread instead.)
-    const res = await runAmbiguousHierarchy([ambiguousPick("Cardinals -3")], {}, {
-      runScheduleCheck: throwingSchedule,
+    // can't narrow either, and neither a bare "-3" spread NOR "ML" carries a
+    // sport-specific signal ("ML" is used identically by MLB and NFL, so it is
+    // no longer an MLB context signal), so both correctly stay ambiguous
+    // rather than guessing off a stale assumption.
+    for (const line of ["Cardinals -3", "Cardinals ML"]) {
+      const res = await runAmbiguousHierarchy([ambiguousPick(line)], {}, {
+        runScheduleCheck: throwingSchedule,
+        now: SEPT,
+      });
+      check(`Cardinals: feed throws, both in season, "${line}" -> stays ambiguous`, {
+        sport: res.picks[0].sportName,
+        stillAmbiguous: res.stillAmbiguous.map((g) => g.key),
+      }, { sport: "", stillAmbiguous: ["cardinals"] });
+    }
+  }
+
+  console.log("\n########## PART B2: Bucs (NFL Tampa Bay vs MLB Pittsburgh Pirates) ##########");
+  {
+    // September - both NFL and MLB in their calendar window, so schedule-first.
+    // Only the Buccaneers (NFL) play today -> NFL via schedule.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Bucs ML")], {}, {
+      runScheduleCheck: fakeSchedule(["tampa bay buccaneers|NFL"]),
       now: SEPT,
     });
-    check("Cardinals: feed throws with both in season -> stays ambiguous", {
+    check("Bucs: only Tampa Bay (NFL) plays today -> NFL via schedule", {
+      sport: res.picks[0].sportName,
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "NFL", nicknames: ["tampa bay buccaneers"], method: "schedule" });
+  }
+  {
+    // Mirror: only the Pirates (MLB) play today -> MLB via schedule.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Bucs -1.5")], {}, {
+      runScheduleCheck: fakeSchedule(["pittsburgh pirates|MLB"]),
+      now: SEPT,
+    });
+    check("Bucs: only Pittsburgh (MLB) plays today -> MLB via schedule", {
+      sport: res.picks[0].sportName,
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "MLB", nicknames: ["pittsburgh pirates"], method: "schedule" });
+  }
+  {
+    // November: MLB's window (ends Nov 5) is over, NFL is not -> NFL via the
+    // calendar, no schedule dependency.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Bucs ML")], {}, {
+      runScheduleCheck: fakeSchedule([]),
+      now: new Date("2026-11-20T18:00:00Z"),
+    });
+    check("Bucs: November -> NFL via calendar (MLB out of season)", {
+      sport: res.picks[0].sportName,
+      method: res.logs[0]?.method,
+    }, { sport: "NFL", method: "season" });
+  }
+  {
+    // The Sept/Oct overlap: both play the same day AND both in season. "Bucs
+    // ML" no longer wrong-guesses MLB (see the SPORT_CONTEXT_SIGNALS change) -
+    // it surfaces for a one-click choice instead of silently logging a
+    // football pick as baseball.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Bucs ML")], {}, {
+      runScheduleCheck: fakeSchedule(["tampa bay buccaneers|NFL", "pittsburgh pirates|MLB"]),
+      now: SEPT,
+    });
+    check("Bucs: both play, both in season, bare 'ML' -> stays ambiguous", {
       sport: res.picks[0].sportName,
       stillAmbiguous: res.stillAmbiguous.map((g) => g.key),
-    }, { sport: "", stillAmbiguous: ["cardinals"] });
+    }, { sport: "", stillAmbiguous: ["bucs"] });
+  }
+  {
+    // ...but a genuinely football-specific pick still resolves NFL via context
+    // even in that window ("spread" is an NFL signal).
+    const res = await runAmbiguousHierarchy([ambiguousPick("Bucs first-half spread -1.5")], {}, {
+      runScheduleCheck: fakeSchedule(["tampa bay buccaneers|NFL", "pittsburgh pirates|MLB"]),
+      now: SEPT,
+    });
+    check("Bucs: 'first-half spread' -> NFL via pick context", {
+      sport: res.picks[0].sportName,
+      method: res.logs[0]?.method,
+    }, { sport: "NFL", method: "pick_context" });
   }
 
   console.log("\n########## PART C: memory + pick-context still win where they should ##########");
