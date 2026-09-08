@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { VARIABLE_CATEGORY_LABELS, type ModelVariableDef, type VariableCategory } from "@/lib/model-builder";
-import { groupCustomMetrics, CUSTOM_METRIC_GROUP_LABELS } from "@/lib/custom-metric-picker";
+import { groupCustomMetrics, CUSTOM_METRIC_GROUP_LABELS, type PickerDisabled } from "@/lib/custom-metric-picker";
 import { CustomMetricDeleteButton } from "@/components/charts/custom-metric-delete-button";
 
 const CATEGORY_ORDER: VariableCategory[] = ["team_tendencies", "team_stats", "pitcher_stats", "odds_market", "custom_metric"];
@@ -23,9 +23,11 @@ const CATEGORY_ORDER: VariableCategory[] = ["team_tendencies", "team_stats", "pi
 // picker yet, and odds_market isn't chartable - see historical-variables.ts).
 //
 // `disabledReason` lets the host workspace mark a variable un-addable in the
-// current context (returns a tooltip string) without removing it from the
-// list - Charts uses this so a season-snapshot metric shows up but can't be
-// dropped into a line-chart context, and vice versa. See custom-metric-picker.ts.
+// current context without removing it from the list - Charts uses this so a
+// season-snapshot metric shows up but can't be dropped into a line-chart
+// context, and vice versa. It returns { tooltip, badge }: the row is greyed,
+// the `badge` shows inline (always visible, for touch/no-hover), and the
+// `tooltip` is the hover title. See custom-metric-picker.ts.
 export function VariableLibrary({
   variables,
   onAdd,
@@ -39,7 +41,7 @@ export function VariableLibrary({
   // Called after a custom metric is deleted from the list, so the parent
   // workspace can drop any series it currently has plotted for that metric.
   onCustomMetricDeleted?: (variableId: string) => void;
-  disabledReason?: (variable: ModelVariableDef) => string | null;
+  disabledReason?: (variable: ModelVariableDef) => PickerDisabled | null;
 }) {
   const [query, setQuery] = useState("");
 
@@ -60,11 +62,16 @@ export function VariableLibrary({
   function renderRow(variable: ModelVariableDef) {
     const disabled = disabledReason?.(variable) ?? null;
     const label = (
-      <span className="flex min-w-0 items-center gap-1.5">
+      <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
         <span className="truncate">{variable.label}</span>
         {variable.category === "custom_metric" && (
           <span className="shrink-0 rounded-full bg-muted px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             Custom
+          </span>
+        )}
+        {disabled && (
+          <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+            {disabled.badge}
           </span>
         )}
       </span>
@@ -86,7 +93,7 @@ export function VariableLibrary({
           <button
             onClick={() => !disabled && onAdd(variable.id)}
             disabled={!!disabled}
-            title={disabled ?? variable.description}
+            title={disabled?.tooltip ?? variable.description}
             className={
               "flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2.5 py-2 text-left transition " +
               (disabled ? "cursor-not-allowed" : "hover:text-brand-700 dark:hover:text-brand-400")
@@ -105,7 +112,7 @@ export function VariableLibrary({
         key={variable.id}
         onClick={() => !disabled && onAdd(variable.id)}
         disabled={!!disabled}
-        title={disabled ?? variable.description}
+        title={disabled?.tooltip ?? variable.description}
         className={
           "flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm text-muted-foreground transition " +
           (disabled

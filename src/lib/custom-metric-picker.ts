@@ -55,30 +55,48 @@ export type PickerContext = {
   plottedVariableIds: string[];
 };
 
-// Returns a human tooltip reason the variable can't be added in this context,
-// or null when it's fine. Only ever restricts custom metrics - a built-in
-// (metricKind undefined -> "daily") in a daily-only context always returns
-// null, so built-in behavior is completely unchanged.
-export function pickerDisabledReason(variable: ModelVariableDef, ctx: PickerContext): string | null {
+// Why a variable can't be added in the current context: `tooltip` is the
+// full explanation (hover title), `badge` is a short always-visible label
+// shown inline on the disabled row so the reason is clear without hovering -
+// which matters on touch devices where there is no hover. null means the
+// variable is fine to add.
+export type PickerDisabled = { tooltip: string; badge: string };
+
+// Only ever restricts custom metrics - a built-in (metricKind undefined ->
+// "daily") in a daily-only context always returns null, so built-in
+// behavior is completely unchanged.
+export function pickerDisabledReason(variable: ModelVariableDef, ctx: PickerContext): PickerDisabled | null {
   const kind = metricKindOf(variable);
   const alreadyPlotted = ctx.plottedVariableIds.includes(variable.id);
   if (alreadyPlotted) return null;
 
   if (kind === "snapshot" && ctx.mode === "single") {
-    return "Season snapshots compare two teams — switch to Team Comparison to plot this.";
+    return {
+      tooltip: "Season snapshots are a two-team comparison — plot this in Team Comparison mode.",
+      badge: "Team Comparison only",
+    };
   }
 
   const hasDaily = ctx.plottedKinds.includes("daily");
   const hasSnapshot = ctx.plottedKinds.includes("snapshot");
 
   if (kind === "snapshot" && hasDaily) {
-    return "Remove the daily metric first — a season snapshot renders as its own bar comparison.";
+    return {
+      tooltip: "Remove the daily metric first — a season snapshot renders as its own bar comparison.",
+      badge: "Remove daily metric first",
+    };
   }
   if (kind === "daily" && hasSnapshot) {
-    return "Remove the season snapshot first — it can't share a chart with a time-series line.";
+    return {
+      tooltip: "Remove the season snapshot first — it can't share a chart with a time-series line.",
+      badge: "Snapshot active",
+    };
   }
   if (kind === "snapshot" && hasSnapshot) {
-    return "Only one season snapshot can be compared at a time.";
+    return {
+      tooltip: "Only one season snapshot can be compared at a time.",
+      badge: "One snapshot at a time",
+    };
   }
   return null;
 }
