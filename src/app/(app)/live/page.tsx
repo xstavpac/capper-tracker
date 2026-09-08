@@ -4,6 +4,7 @@ import { getPicksForGames } from "@/server/data/picks";
 import { pickCategory, betTypeLabel, chipSetForLeague, DEFAULT_CHIP_SET } from "@/server/data/stats";
 import { getSportCategoryPanelData } from "@/server/data/cappers";
 import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
+import { getTeamColor } from "@/lib/team-colors";
 import { formatPickLabel } from "@/lib/bet-line";
 import { type ExpanderPick } from "@/components/live/game-picks-expander";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
@@ -138,6 +139,16 @@ export default async function LivePage({
             : teamGroup === "HOME"
               ? shortTeamName(game.homeTeam, sportLabel)
               : "",
+        // Brand color for the group header's dot - keyed on the game's sport
+        // key + the full schedule team name (getTeamColor). null for OTHER and
+        // any team not in a color table yet; the component renders neutral
+        // gray for both.
+        teamColor:
+          teamGroup === "AWAY"
+            ? getTeamColor(activeSport, game.awayTeam)
+            : teamGroup === "HOME"
+              ? getTeamColor(activeSport, game.homeTeam)
+              : null,
       };
     });
   });

@@ -38,6 +38,11 @@ export type ExpanderPick = {
   // "Totals & other markets" header instead.
   teamGroup: "AWAY" | "HOME" | "OTHER";
   teamLabel: string;
+  // The team's real primary brand color (getTeamColor, computed server-side in
+  // live/page.tsx from the game's sport key + full team name) for this group's
+  // header dot. null for OTHER, and for any team getTeamColor can't map yet -
+  // both render the neutral-gray fallback dot, no special-casing needed.
+  teamColor: string | null;
 };
 
 // Fixed AWAY -> HOME -> OTHER ordering (matches how the game card itself
@@ -268,7 +273,10 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
   const groups = TEAM_GROUP_ORDER.map((teamGroup) => {
     const groupPicks = picks.filter((p) => p.teamGroup === teamGroup);
     const label = teamGroup === "OTHER" ? OTHER_GROUP_LABEL : groupPicks[0]?.teamLabel;
-    return { teamGroup, label, picks: groupPicks };
+    // OTHER isn't a real team - always the neutral-gray dot. A real team uses
+    // its brand color, falling back to the same gray when unmapped.
+    const dotColor = teamGroup === "OTHER" ? null : groupPicks[0]?.teamColor ?? null;
+    return { teamGroup, label, dotColor, picks: groupPicks };
   }).filter((g) => g.picks.length > 0);
 
   return (
@@ -288,9 +296,15 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
         <div className="mt-3 space-y-3">
           {groups.map((group) => (
             <div key={group.teamGroup}>
-              <div className="mb-1.5 flex items-center gap-2 border-l-2 border-brand-300 pl-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {group.label} &mdash; {group.picks.length} pick{group.picks.length === 1 ? "" : "s"}
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15"
+                  style={{ backgroundColor: group.dotColor ?? "rgb(var(--muted-foreground))" }}
+                  aria-hidden="true"
+                />
+                <span className="text-[12px] font-semibold text-foreground">{group.label}</span>
+                <span className="text-[11px] text-muted-foreground">
+                  &mdash; {group.picks.length} pick{group.picks.length === 1 ? "" : "s"}
                 </span>
               </div>
               <div className="space-y-1.5">{group.picks.map((p) => renderPickCard(p))}</div>

@@ -1,12 +1,15 @@
-// Real per-team primary colors, used as a small color bar next to each
-// team's name on the Live scoreboard instead of a logo image - team colors
-// are public brand facts, not copyrighted artwork, unlike the actual logo
-// marks (see the removed team-logos.ts, which pulled real logo images from
-// ESPN's CDN and was dropped for lack of licensing rights to display them).
+// Real per-team primary colors - a small color accent next to a team's name
+// (the Live scoreboard bar, the /live game-card pick-list section headers)
+// instead of a logo image: team colors are public brand facts, not
+// copyrighted artwork, unlike the actual logo marks (see the removed
+// team-logos.ts, which pulled real logo images from ESPN's CDN and was
+// dropped for lack of licensing rights to display them).
 //
-// Matched by nickname suffix against the full "City Nickname" string the
-// odds/schedule sources return (e.g. "Kansas City Chiefs") - same convention
-// findTeamNickname/resolveGameForNickname use elsewhere for this data.
+// Matched by suffix against the full team string the odds/schedule sources
+// return - same convention findTeamNickname/resolveGameForNickname use. The
+// pro leagues key by bare nickname ("chiefs" ends "Kansas City Chiefs"); the
+// NCAAF table keys by the full canonical school name, since bare college
+// mascots collide across schools (see its own comment below).
 
 const MLB_TEAM_COLORS: Record<string, string> = {
   diamondbacks: "#A71930",
@@ -76,13 +79,11 @@ const NFL_TEAM_COLORS: Record<string, string> = {
   commanders: "#5A1414",
 };
 
-// WNBA deliberately has no table here yet - unlike the tables above, several
-// WNBA teams' exact primary hex (Sun, Wings, Storm, and the newer Valkyries
-// especially) weren't confident enough to assert as verified brand fact the
-// same way the well-documented MLB/NFL/NBA colors are. A WNBA game still
-// gets a real accent via the neutral-gray fallback below, same as any other
-// unmapped sport - only the color itself is deferred, not the team/score
-// data. Add a WNBA_TEAM_COLORS table here once the real values are verified.
+// WNBA and NHL deliberately have no table here yet - a properly verified
+// build for those two leagues is a separate follow-up. A game in an unmapped
+// league still gets a real accent via the neutral-gray fallback in
+// getTeamColor, same as any team a mapped league's table doesn't recognize -
+// only the color itself is deferred, never the team/score data.
 const NBA_TEAM_COLORS: Record<string, string> = {
   hawks: "#E03A3E",
   celtics: "#007A33",
@@ -117,6 +118,168 @@ const NBA_TEAM_COLORS: Record<string, string> = {
   wizards: "#002B5C",
 };
 
+// All 138 FBS schools (plus Tennessee State, an FCS money-game opponent) -
+// exactly the canonical school-name set in NCAAF_SCHOOLS / NCAAF_CANONICAL_SUFFIX
+// (parse-catalog.ts). Keyed by the FULL canonical name, not the bare mascot:
+// college mascots collide heavily (five "Tigers", four "Bulldogs", three
+// "Wildcats"...), so only the whole "<School> <Mascot>" string is unambiguous.
+// team-colors-acceptance-test.ts asserts every key here is a real
+// NCAAF_SCHOOLS canonical and that all of them are covered, so the two lists
+// can't drift.
+//
+// Each value is the school's ACTUAL official primary brand color, verified
+// against at least two independent brand sources (the Wikipedia
+// "Module:College color/data" table, which cites each school's official
+// identity guide; teamcolorcodes.com; and, where those disagreed, the
+// school's own athletics/brand page). ESPN's team-color API was used only as
+// an error-check, never as a source - it frequently returns a school's dark UI
+// color rather than its brand primary. Where a school's identity is genuinely
+// "<bright color> and black" the brand-primary value is used (e.g. Bowling
+// Green orange, Miami orange); schools whose football identity really is black
+// keep black (Iowa, Army, Vanderbilt, UCF...). See the PR for per-school
+// source notes and the handful of judgment calls.
+export const NCAAF_TEAM_COLORS: Record<string, string> = {
+  "air force falcons": "#003594",
+  "akron zips": "#041E42",
+  "alabama crimson tide": "#9E1B32",
+  "app state mountaineers": "#222222",
+  "arizona state sun devils": "#8C1D40",
+  "arizona wildcats": "#AB0520",
+  "arkansas razorbacks": "#A41F35",
+  "arkansas state red wolves": "#CC092F",
+  "army black knights": "#000000",
+  "auburn tigers": "#0C2340",
+  "ball state cardinals": "#BA0C2F",
+  "baylor bears": "#154734",
+  "boise state broncos": "#0033A0",
+  "boston college eagles": "#8C2232",
+  "bowling green falcons": "#FE5000",
+  "buffalo bulls": "#005BBB",
+  "byu cougars": "#002E5D",
+  "california golden bears": "#003262",
+  "central michigan chippewas": "#6A0032",
+  "charlotte 49ers": "#005035",
+  "cincinnati bearcats": "#E00122",
+  "clemson tigers": "#F56600",
+  "coastal carolina chanticleers": "#006F71",
+  "colorado buffaloes": "#000000",
+  "colorado state rams": "#1E4D2B",
+  "delaware blue hens": "#00539F",
+  "duke blue devils": "#013088",
+  "east carolina pirates": "#582C83",
+  "eastern michigan eagles": "#046A38",
+  "florida atlantic owls": "#003366",
+  "florida gators": "#0021A5",
+  "florida international panthers": "#081E3F",
+  "florida state seminoles": "#782F40",
+  "fresno state bulldogs": "#C41230",
+  "georgia bulldogs": "#BA0C2F",
+  "georgia southern eagles": "#041E42",
+  "georgia state panthers": "#0039A6",
+  "georgia tech yellow jackets": "#B39051",
+  "hawai'i rainbow warriors": "#024731",
+  "houston cougars": "#C8102E",
+  "illinois fighting illini": "#13294B",
+  "indiana hoosiers": "#990000",
+  "iowa hawkeyes": "#000000",
+  "iowa state cyclones": "#C8102E",
+  "jacksonville state gamecocks": "#CC0000",
+  "james madison dukes": "#450084",
+  "kansas jayhawks": "#0051BA",
+  "kansas state wildcats": "#512888",
+  "kennesaw state owls": "#0B1315",
+  "kent state golden flashes": "#002664",
+  "kentucky wildcats": "#0033A0",
+  "liberty flames": "#0A254E",
+  "louisiana ragin' cajuns": "#CE181E",
+  "louisiana tech bulldogs": "#003087",
+  "louisville cardinals": "#C9001F",
+  "lsu tigers": "#461D7C",
+  "marshall thundering herd": "#00B140",
+  "maryland terrapins": "#E21833",
+  "massachusetts minutemen": "#971B2F",
+  "memphis tigers": "#004991",
+  "miami (oh) redhawks": "#B61E2E",
+  "miami hurricanes": "#F47321",
+  "michigan state spartans": "#173F35",
+  "michigan wolverines": "#00274C",
+  "middle tennessee blue raiders": "#0066CC",
+  "minnesota golden gophers": "#7A0019",
+  "mississippi state bulldogs": "#5D1725",
+  "missouri state bears": "#5E0009",
+  "missouri tigers": "#000000",
+  "navy midshipmen": "#00225B",
+  "nc state wolfpack": "#CC0000",
+  "nebraska cornhuskers": "#E41C38",
+  "nevada wolf pack": "#041E42",
+  "new mexico lobos": "#BA0C2F",
+  "new mexico state aggies": "#7E141B",
+  "north carolina tar heels": "#7BAFD4",
+  "north dakota state bison": "#00583D",
+  "north texas mean green": "#00853E",
+  "northern illinois huskies": "#BA0C2F",
+  "northwestern wildcats": "#4E2A84",
+  "notre dame fighting irish": "#0C2340",
+  "ohio bobcats": "#00694E",
+  "ohio state buckeyes": "#BA0C2F",
+  "oklahoma sooners": "#841617",
+  "oklahoma state cowboys": "#FE5C00",
+  "old dominion monarchs": "#003767",
+  "ole miss rebels": "#14213D",
+  "oregon ducks": "#154733",
+  "oregon state beavers": "#D73F09",
+  "penn state nittany lions": "#001E44",
+  "pittsburgh panthers": "#003594",
+  "purdue boilermakers": "#000000",
+  "rice owls": "#00205B",
+  "rutgers scarlet knights": "#CC0033",
+  "sacramento state hornets": "#043927",
+  "sam houston bearkats": "#F56423",
+  "san diego state aztecs": "#A6192E",
+  "san josé state spartans": "#0038A8",
+  "smu mustangs": "#C8102E",
+  "south alabama jaguars": "#00205B",
+  "south carolina gamecocks": "#73000A",
+  "south florida bulls": "#006747",
+  "southern miss golden eagles": "#000000",
+  "stanford cardinal": "#8C1515",
+  "syracuse orange": "#F76900",
+  "tcu horned frogs": "#4D1979",
+  "temple owls": "#9D2235",
+  "tennessee state tigers": "#171796",
+  "tennessee volunteers": "#FF8200",
+  "texas a&m aggies": "#500000",
+  "texas longhorns": "#BF5700",
+  "texas state bobcats": "#501214",
+  "texas tech red raiders": "#CC0000",
+  "toledo rockets": "#0B2240",
+  "troy trojans": "#862633",
+  "tulane green wave": "#006548",
+  "tulsa golden hurricane": "#003595",
+  "uab blazers": "#1A5632",
+  "ucf knights": "#000000",
+  "ucla bruins": "#2774AE",
+  "uconn huskies": "#000E2F",
+  "ul monroe warhawks": "#860029",
+  "unlv rebels": "#CF0A2C",
+  "usc trojans": "#9D2235",
+  "utah state aggies": "#00263A",
+  "utah utes": "#BE0000",
+  "utep miners": "#041E42",
+  "utsa roadrunners": "#0B2240",
+  "vanderbilt commodores": "#000000",
+  "virginia cavaliers": "#232D4B",
+  "virginia tech hokies": "#861F41",
+  "wake forest demon deacons": "#2C2A29",
+  "washington huskies": "#4B2E83",
+  "washington state cougars": "#981E32",
+  "west virginia mountaineers": "#002855",
+  "western kentucky hilltoppers": "#C60C30",
+  "western michigan broncos": "#532E1F",
+  "wisconsin badgers": "#C5050C",
+  "wyoming cowboys": "#492F24",
+};
+
 export function getTeamColor(sportKey: string, teamName: string): string | null {
   const table =
     sportKey === "baseball_mlb"
@@ -125,7 +288,9 @@ export function getTeamColor(sportKey: string, teamName: string): string | null 
         ? NFL_TEAM_COLORS
         : sportKey === "basketball_nba"
           ? NBA_TEAM_COLORS
-          : null;
+          : sportKey === "americanfootball_ncaaf"
+            ? NCAAF_TEAM_COLORS
+            : null;
   if (!table) return null;
 
   const lower = teamName.toLowerCase();
