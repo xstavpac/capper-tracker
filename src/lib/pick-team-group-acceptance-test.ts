@@ -242,10 +242,12 @@ function main() {
   {
     for (const [sport, name, expected] of [
       ["MLB", "Minnesota Twins", ["twins"]],
-      ["MLB", "Detroit Tigers", ["tigers"]],
+      // "tigs" translates to the full name "detroit tigers" (bare "tigers" is
+      // an AMBIGUOUS key), still picked up by teamGroupAliases' suffix match.
+      ["MLB", "Detroit Tigers", ["tigers", "tigs"]],
       ["NFL", "Chicago Bears", ["bears"]],
       ["NFL", "Philadelphia Eagles", ["eagles", "iggles"]],
-      ["MLB", "San Diego Padres", ["padres"]],
+      ["MLB", "San Diego Padres", ["padres", "pads"]],
       ["NBA", "Sacramento Kings", ["kings"]],
       ["NHL", "Winnipeg Jets", ["jets"]],
       ["WNBA", "Las Vegas Aces", ["aces"]],

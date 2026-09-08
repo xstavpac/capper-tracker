@@ -576,9 +576,22 @@ const NCAAF_TEAMS = NCAAF_SCHOOLS.map(([key]) => key);
 // Curated low-collision only (see the pro-team short-alias proposal): every
 // entry is a token that (a) is not an ordinary word in capper text and (b)
 // maps to exactly one tracked team. Slang that doubles as a common word
-// ("caps", "boys", "wings") or collides across teams ("bucs" = Buccaneers +
-// Pirates, "canes" = Hurricanes + Miami, "sox" = Red Sox + White Sox, "red"
-// = Reds + Red Sox + Red Wings) is deliberately NOT here.
+// ("caps", "boys", "wings", "guards") or collides across teams ("bucs" =
+// Buccaneers + Pirates, "canes" = Hurricanes + Miami, "sox" = Red Sox + White
+// Sox, "red" = Reds + Red Sox + Red Wings, "wiz" = Wizards + KBO's KT Wiz) is
+// deliberately NOT here.
+//
+// The Tier 1 batch 2 (2026-09) additions below were tiered externally and
+// then verified here against the full team lists. Three of the proposed
+// entries were dropped: "wiz" (a hard collision - KBO's KT Wiz is a real
+// tracked team, already in KBO_TEAMS), "guards" (common word - basketball
+// position / "security guards"; same bar as the "boys"/"caps" excludes), and
+// the bare "ms" form (the "MS" state abbreviation - "mississippi" is already
+// an excluded token for the Ole Miss / Miss State collision; "m's" is kept).
+// "sixers" / "niners" were already bare NBA_TEAMS / NFL_TEAMS entries but
+// resolved to the sport only, not to a game ("Philadelphia 76ers" does not
+// end with "sixers"); the alias adds the canonical translation that makes
+// bulk-picks.ts's endsWith match.
 const PRO_TEAM_ALIASES: [string, string, string][] = [
   // MLB
   ["dbacks", "MLB", "diamondbacks"], ["d-backs", "MLB", "diamondbacks"],
@@ -590,19 +603,46 @@ const PRO_TEAM_ALIASES: [string, string, string][] = [
   ["nats", "MLB", "nationals"],
   ["cubbies", "MLB", "cubs"], ["cub", "MLB", "cubs"],
   ["phils", "MLB", "phillies"],
+  ["brew crew", "MLB", "brewers"],
+  ["pads", "MLB", "padres"],
+  ["o's", "MLB", "orioles"], ["os", "MLB", "orioles"],
+  ["jays", "MLB", "blue jays"],
+  // bare "tigers" is an AMBIGUOUS_NICKNAMES key (Detroit MLB / KIA KBO), so
+  // this maps to the FULL name - "tigs" is Detroit-only slang, never KIA.
+  ["tigs", "MLB", "detroit tigers"],
+  ["m's", "MLB", "mariners"],
+  ["bravos", "MLB", "braves"],
+  ["redlegs", "MLB", "reds"],
+  ["rox", "MLB", "rockies"],
   // NBA
   ["mavs", "NBA", "mavericks"],
+  ["cavs", "NBA", "cavaliers"],
+  ["grizz", "NBA", "grizzlies"],
+  ["pels", "NBA", "pelicans"],
+  ["dubs", "NBA", "warriors"],
+  ["nugs", "NBA", "nuggets"],
+  ["sixers", "NBA", "76ers"],
+  ["raps", "NBA", "raptors"],
   // NFL - "iggles" only ever means Philadelphia, so unlike bare "eagles"
   // (which collides with KBO's Hanwha Eagles and routes through the
   // ambiguous hierarchy) it can resolve NFL directly.
   ["iggles", "NFL", "eagles"],
   ["jags", "NFL", "jaguars"],
+  ["niners", "NFL", "49ers"],
+  ["commies", "NFL", "commanders"],
+  ["pats", "NFL", "patriots"],
+  ["vikes", "NFL", "vikings"],
+  ["fins", "NFL", "dolphins"],
+  ["falcs", "NFL", "falcons"],
   // NHL
   ["habs", "NHL", "canadiens"],
   ["preds", "NHL", "predators"],
   ["nucks", "NHL", "canucks"],
   ["yotes", "NHL", "coyotes"],
   ["leafs", "NHL", "maple leafs"],
+  ["avs", "NHL", "avalanche"],
+  ["isles", "NHL", "islanders"],
+  ["sens", "NHL", "senators"],
 ];
 
 export const NCAAF_CANONICAL_SUFFIX: Record<string, string> = Object.fromEntries(NCAAF_SCHOOLS);
@@ -723,10 +763,14 @@ export function teamGroupAliases(teamDisplayName: string, sportName: string): st
   // Pro sports: `primary` is the bare mascot ("cubs"); add any curated
   // short-form aliases that translate to it ("cub", "cubbies") so a pick
   // written with the alias still groups under the right team header on
-  // /live instead of "Totals & other markets".
-  const aliases = PRO_TEAM_ALIASES.filter(([, s, canonical]) => s === sportName && canonical === primary).map(
-    ([alias]) => alias
-  );
+  // /live instead of "Totals & other markets". Most aliases translate to
+  // exactly `primary`; the few whose canonical is the FULL name (e.g. "tigs"
+  // -> "detroit tigers", since bare "tigers" is an AMBIGUOUS_NICKNAMES key)
+  // are matched by that full name being a suffix of the display name.
+  const normDisplay = normalizeForGrouping(teamDisplayName);
+  const aliases = PRO_TEAM_ALIASES.filter(
+    ([, s, canonical]) => s === sportName && (canonical === primary || normDisplay.endsWith(canonical))
+  ).map(([alias]) => alias);
   return [primary, ...aliases];
 }
 

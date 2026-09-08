@@ -1249,46 +1249,100 @@ NC State +4.5`;
   console.log("\n########## PART O: pro-team short-form aliases ##########");
 
   {
-    // [alias, expectedSport, expectedCanonicalMascot]
-    const proAliases: [string, string, string][] = [
-      ["dbacks", "MLB", "diamondbacks"], ["d-backs", "MLB", "diamondbacks"],
-      ["bosox", "MLB", "red sox"], ["sawx", "MLB", "red sox"], ["chisox", "MLB", "white sox"],
-      ["stros", "MLB", "astros"], ["halos", "MLB", "angels"], ["yanks", "MLB", "yankees"],
-      ["nats", "MLB", "nationals"], ["cubbies", "MLB", "cubs"], ["cub", "MLB", "cubs"],
-      ["phils", "MLB", "phillies"],
-      ["mavs", "NBA", "mavericks"],
-      ["iggles", "NFL", "eagles"], ["jags", "NFL", "jaguars"],
-      ["habs", "NHL", "canadiens"], ["preds", "NHL", "predators"], ["nucks", "NHL", "canucks"],
-      ["yotes", "NHL", "coyotes"], ["leafs", "NHL", "maple leafs"],
+    // [alias, expectedSport, expectedCanonicalMascot, realFullScheduleName]
+    // The 4th column is the actual live-schedule team name; the canonical must
+    // be a suffix of it (what bulk-picks.ts's endsWith game-resolution needs).
+    const proAliases: [string, string, string, string][] = [
+      // --- original batch (PR #31) ---
+      ["dbacks", "MLB", "diamondbacks", "Arizona Diamondbacks"], ["d-backs", "MLB", "diamondbacks", "Arizona Diamondbacks"],
+      ["bosox", "MLB", "red sox", "Boston Red Sox"], ["sawx", "MLB", "red sox", "Boston Red Sox"],
+      ["chisox", "MLB", "white sox", "Chicago White Sox"],
+      ["stros", "MLB", "astros", "Houston Astros"], ["halos", "MLB", "angels", "Los Angeles Angels"],
+      ["yanks", "MLB", "yankees", "New York Yankees"], ["nats", "MLB", "nationals", "Washington Nationals"],
+      ["cubbies", "MLB", "cubs", "Chicago Cubs"], ["cub", "MLB", "cubs", "Chicago Cubs"],
+      ["phils", "MLB", "phillies", "Philadelphia Phillies"],
+      ["mavs", "NBA", "mavericks", "Dallas Mavericks"],
+      ["iggles", "NFL", "eagles", "Philadelphia Eagles"], ["jags", "NFL", "jaguars", "Jacksonville Jaguars"],
+      ["habs", "NHL", "canadiens", "Montreal Canadiens"], ["preds", "NHL", "predators", "Nashville Predators"],
+      ["nucks", "NHL", "canucks", "Vancouver Canucks"], ["yotes", "NHL", "coyotes", "Arizona Coyotes"],
+      ["leafs", "NHL", "maple leafs", "Toronto Maple Leafs"],
+      // --- Tier 1 batch 2 (2026-09), verified below ---
+      ["brew crew", "MLB", "brewers", "Milwaukee Brewers"],
+      ["pads", "MLB", "padres", "San Diego Padres"],
+      ["o's", "MLB", "orioles", "Baltimore Orioles"], ["os", "MLB", "orioles", "Baltimore Orioles"],
+      ["jays", "MLB", "blue jays", "Toronto Blue Jays"],
+      ["tigs", "MLB", "detroit tigers", "Detroit Tigers"],
+      ["m's", "MLB", "mariners", "Seattle Mariners"],
+      ["bravos", "MLB", "braves", "Atlanta Braves"],
+      ["redlegs", "MLB", "reds", "Cincinnati Reds"],
+      ["rox", "MLB", "rockies", "Colorado Rockies"],
+      ["cavs", "NBA", "cavaliers", "Cleveland Cavaliers"],
+      ["grizz", "NBA", "grizzlies", "Memphis Grizzlies"],
+      ["pels", "NBA", "pelicans", "New Orleans Pelicans"],
+      ["dubs", "NBA", "warriors", "Golden State Warriors"],
+      ["nugs", "NBA", "nuggets", "Denver Nuggets"],
+      ["sixers", "NBA", "76ers", "Philadelphia 76ers"],
+      ["raps", "NBA", "raptors", "Toronto Raptors"],
+      ["niners", "NFL", "49ers", "San Francisco 49ers"],
+      ["commies", "NFL", "commanders", "Washington Commanders"],
+      ["pats", "NFL", "patriots", "New England Patriots"],
+      ["vikes", "NFL", "vikings", "Minnesota Vikings"],
+      ["fins", "NFL", "dolphins", "Miami Dolphins"],
+      ["falcs", "NFL", "falcons", "Atlanta Falcons"],
+      ["avs", "NHL", "avalanche", "Colorado Avalanche"],
+      ["isles", "NHL", "islanders", "New York Islanders"],
+      ["sens", "NHL", "senators", "Ottawa Senators"],
     ];
-    for (const [alias, sport, canonical] of proAliases) {
+    for (const [alias, sport, canonical, fullName] of proAliases) {
       const pick = parseCatalog(`Cap\n${alias} -1.5`, []).picks[0];
       check(`pro alias '${alias}' -> ${sport}`, pick?.sportName, sport);
       check(`pro alias '${alias}' captures itself as the nickname`, pick?.teamNicknames, [alias]);
-      check(`pro alias '${alias}' translates to the canonical mascot suffix`, TEAM_NICKNAME_CANONICAL[alias], canonical);
+      check(`pro alias '${alias}' translates to '${canonical}'`, TEAM_NICKNAME_CANONICAL[alias], canonical);
+      check(`'${alias}' -> a suffix of "${fullName}"`, fullName.toLowerCase().endsWith(canonical), true);
     }
 
-    // The translation target really is a suffix of a real MLB/NFL/NHL name
-    // (what bulk-picks.ts's endsWith check needs) - spot-check a few.
-    check(`'halos' -> a suffix of "Los Angeles Angels"`, "los angeles angels".endsWith(TEAM_NICKNAME_CANONICAL["halos"]), true);
-    check(`'dbacks' -> a suffix of "Arizona Diamondbacks"`, "arizona diamondbacks".endsWith(TEAM_NICKNAME_CANONICAL["dbacks"]), true);
-    check(`'habs' -> a suffix of "Montreal Canadiens"`, "montreal canadiens".endsWith(TEAM_NICKNAME_CANONICAL["habs"]), true);
-    check(`'leafs' -> a suffix of "Toronto Maple Leafs"`, "toronto maple leafs".endsWith(TEAM_NICKNAME_CANONICAL["leafs"]), true);
+    // Full names still resolve unchanged, and the alias never fires inside the
+    // full name (word boundary) - spot-check across the new batch.
+    const fullNameChecks: [string, string, string[]][] = [
+      ["Cubs ML", "MLB", ["cubs"]],
+      ["Cleveland Cavaliers -3", "NBA", ["cavaliers"]],
+      ["Blue Jays -1.5", "MLB", ["blue jays"]],
+      ["76ers +2.5", "NBA", ["76ers"]],
+      ["49ers -3", "NFL", ["49ers"]],
+      ["Guardians ML", "MLB", ["guardians"]],
+      ["Cincinnati Reds -1.5", "MLB", ["reds"]],
+      ["Colorado Rockies +1.5", "MLB", ["rockies"]],
+    ];
+    for (const [text, sport, nicks] of fullNameChecks) {
+      const p = parseCatalog(`Cap\n${text}`, []).picks[0];
+      check(`'${text}' still resolves ${sport}, nick ${JSON.stringify(nicks)}`, { s: p?.sportName, n: p?.teamNicknames }, { s: sport, n: nicks });
+    }
 
-    // Full names still resolve unchanged - and the alias doesn't fire inside
-    // the full name (word boundary).
-    check("'Cubs ML' still resolves MLB unchanged", parseCatalog(`Cap\nCubs ML`, []).picks[0]?.teamNicknames, ["cubs"]);
-    check("'Diamondbacks -1.5' captures only 'diamondbacks', not 'dbacks'", parseCatalog(`Cap\nDiamondbacks -1.5`, []).picks[0]?.teamNicknames, ["diamondbacks"]);
+    // A short alias must not fire as a substring inside a longer team phrase
+    // or another team's alias.
+    check("'Mavs -3' is 'mavs', not 'avs' (Avalanche)", parseCatalog(`Cap\nMavs -3`, []).picks[0]?.teamNicknames, ["mavs"]);
+    check("'Stros ML' is 'stros', not 'os' (Orioles)", parseCatalog(`Cap\nStros ML`, []).picks[0]?.teamNicknames, ["stros"]);
 
-    // teamGroupAliases (the /live grouping match) now returns the aliases too,
-    // so a pick written "Cubbies ML" groups under the Cubs header.
-    check("teamGroupAliases('Chicago Cubs','MLB') includes the slang forms", teamGroupAliases("Chicago Cubs", "MLB").sort(), ["cub", "cubbies", "cubs"]);
+    // teamGroupAliases (the /live grouping match) returns the new slang forms
+    // too, including "tigs" whose canonical is the full name.
+    check("teamGroupAliases('Chicago Cubs','MLB')", teamGroupAliases("Chicago Cubs", "MLB").sort(), ["cub", "cubbies", "cubs"]);
+    check("teamGroupAliases('Cleveland Cavaliers','NBA')", teamGroupAliases("Cleveland Cavaliers", "NBA").sort(), ["cavaliers", "cavs"]);
+    check("teamGroupAliases('Detroit Tigers','MLB') includes 'tigs' (full-name canonical)", teamGroupAliases("Detroit Tigers", "MLB").sort(), ["tigers", "tigs"]);
+    check("teamGroupAliases('Philadelphia 76ers','NBA')", teamGroupAliases("Philadelphia 76ers", "NBA").sort(), ["76ers", "sixers"]);
     check("teamGroupAliases for a team with no alias is unchanged", teamGroupAliases("New York Mets", "MLB"), ["mets"]);
+
+    // The three verification drops must NOT resolve as a direct pro alias.
+    check("'wiz' stays KBO (KT Wiz), not added as an NBA alias", parseCatalog(`Cap\nWiz -3`, []).picks[0]?.sportName, "KBO");
+    check("'guards' -> unresolved (common word, not added)", parseCatalog(`Cap\nGuards -1.5`, []).picks[0], undefined);
+    check("bare 'ms' -> unresolved (MS/Mississippi abbrev, not added)", parseCatalog(`Cap\nMs -1.5`, []).picks[0], undefined);
+    check("'m's' (apostrophe form) IS added -> MLB Mariners", parseCatalog(`Cap\nM's -1.5`, []).picks[0]?.teamNicknames, ["m's"]);
 
     // Post-translation dedup (bulk-picks.ts): a capper writing both forms
     // must not hand lookupGame a phantom two-team matchup.
-    const both = [...new Set(["diamondbacks", "dbacks"].map((n) => TEAM_NICKNAME_CANONICAL[n] ?? n))];
-    check("full name + alias collapse to one nickname after translation+dedup", both, ["diamondbacks"]);
+    for (const [full, alias] of [["diamondbacks", "dbacks"], ["76ers", "sixers"], ["49ers", "niners"], ["cavaliers", "cavs"]]) {
+      const both = [...new Set([full, alias].map((n) => TEAM_NICKNAME_CANONICAL[n] ?? n))];
+      check(`'${full}' + '${alias}' collapse to one nickname after translation`, both.length, 1);
+    }
   }
 
   {
@@ -1313,10 +1367,23 @@ NC State +4.5`;
   }
 
   {
-    // Excluded tokens: not in the translation table, and a bare pick with one
-    // does NOT newly resolve to a pro team because of this change.
-    for (const token of ["sox", "red", "mississippi", "bucs", "canes", "wings", "bolts", "cards", "cavs", "boys", "caps", "os", "o's"]) {
-      check(`excluded '${token}': absent from TEAM_NICKNAME_CANONICAL`, TEAM_NICKNAME_CANONICAL[token], undefined);
+    // Excluded tokens: not in the alias translation table, so no bare pick
+    // with one newly resolves to a pro team via a Tier 1 alias. Covers the
+    // long-standing common-word / cross-team excludes, the three dropped from
+    // the Tier 1 batch-2 list during verification (wiz -> KT Wiz KBO
+    // collision; guards -> basketball-position common word; bare "ms" -> the
+    // "MS"/Mississippi State abbreviation), and every Tier 2/3 / real-collision
+    // item held out of this pass. (A bare NBA/NFL nickname like "blazers" is
+    // still resolvable as a mascot - this only asserts it was not ADDED as a
+    // canonical-translated alias here.)
+    const excluded = [
+      "sox", "red", "mississippi", "bucs", "canes", "wings", "bolts", "cards", "boys", "caps",
+      "wiz", "guards", "ms",
+      "wolves", "blazers", "clips", "okc", "cs", "c's", "g-men", "gang green", "pack", "da bears",
+      "as", "a's", "fish", "pens", "cats", "rags", "hawks", "jets", "giants", "rangers", "panthers",
+    ];
+    for (const token of excluded) {
+      check(`excluded '${token}': absent from the alias translation table`, TEAM_NICKNAME_CANONICAL[token], undefined);
     }
     // "Sox" / "Red" as a bare pick still do not resolve to MLB.
     check("bare 'Sox -1.5' does not resolve to MLB", parseCatalog(`Cap\nSox -1.5`, []).picks[0]?.sportName === "MLB", false);
