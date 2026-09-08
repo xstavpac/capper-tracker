@@ -79,11 +79,6 @@ const NFL_TEAM_COLORS: Record<string, string> = {
   commanders: "#5A1414",
 };
 
-// WNBA and NHL deliberately have no table here yet - a properly verified
-// build for those two leagues is a separate follow-up. A game in an unmapped
-// league still gets a real accent via the neutral-gray fallback in
-// getTeamColor, same as any team a mapped league's table doesn't recognize -
-// only the color itself is deferred, never the team/score data.
 const NBA_TEAM_COLORS: Record<string, string> = {
   hawks: "#E03A3E",
   celtics: "#007A33",
@@ -116,6 +111,72 @@ const NBA_TEAM_COLORS: Record<string, string> = {
   raptors: "#CE1141",
   jazz: "#002B5C",
   wizards: "#002B5C",
+};
+
+// NHL - keyed by bare nickname like the other pro tables. "coyotes" and
+// "mammoth" are the same franchise (Arizona -> Utah, 2024): "coyotes" keeps
+// the final Arizona brick-red for picks that reference the old name;
+// "mammoth" is the current Utah identity. Verified against teamcolorcodes.com
+// (which lists each team's Pantone from the official style guide), cross-
+// checked with ESPN's core color API; a few not on teamcolorcodes (Kraken,
+// Mammoth, Golden Knights, Capitals) were verified against the team's brand
+// release + a second aggregator. Where a team's official palette lists a dark
+// color first but its identity reads as a brighter one (Wild, Senators,
+// Capitals, Penguins), the PR notes the call.
+export const NHL_TEAM_COLORS: Record<string, string> = {
+  ducks: "#F47A38",
+  coyotes: "#8C2633",
+  bruins: "#FFB81C",
+  sabres: "#003087",
+  flames: "#D2001C",
+  hurricanes: "#CE1126",
+  blackhawks: "#CF0A2C",
+  avalanche: "#6F263D",
+  "blue jackets": "#002654",
+  stars: "#006847",
+  "red wings": "#CE1126",
+  oilers: "#041E42",
+  panthers: "#041E42",
+  kings: "#111111",
+  wild: "#154734",
+  canadiens: "#AF1E2D",
+  predators: "#FFB81C",
+  devils: "#CE1126",
+  islanders: "#00539B",
+  rangers: "#0038A8",
+  senators: "#DA1A32",
+  flyers: "#F74902",
+  penguins: "#000000",
+  sharks: "#006D75",
+  kraken: "#001628",
+  blues: "#002F87",
+  lightning: "#002868",
+  "maple leafs": "#00205B",
+  mammoth: "#000000",
+  canucks: "#00205B",
+  "golden knights": "#B4975A",
+  capitals: "#C8102E",
+  jets: "#041E42",
+};
+
+// WNBA (2026 season). Same verification. Portland Fire and Toronto Tempo -
+// both 2026 expansion - are intentionally absent: neither has published hex
+// values for its brand colors yet, and the team-color test allows that gap
+// explicitly. They fall back to the neutral-gray dot until real values exist.
+export const WNBA_TEAM_COLORS: Record<string, string> = {
+  dream: "#C8102E",
+  sky: "#418FDE",
+  sun: "#DC4405",
+  wings: "#0C2340",
+  valkyries: "#AD96DC",
+  fever: "#C8102E",
+  aces: "#BA0C2F",
+  sparks: "#702F8A",
+  lynx: "#0C2340",
+  liberty: "#6ECEB2",
+  mercury: "#201747",
+  storm: "#2C5234",
+  mystics: "#C8102E",
 };
 
 // All 138 FBS schools (plus Tennessee State, an FCS money-game opponent) -
@@ -290,7 +351,11 @@ export function getTeamColor(sportKey: string, teamName: string): string | null 
           ? NBA_TEAM_COLORS
           : sportKey === "americanfootball_ncaaf"
             ? NCAAF_TEAM_COLORS
-            : null;
+            : sportKey === "icehockey_nhl"
+              ? NHL_TEAM_COLORS
+              : sportKey === "basketball_wnba"
+                ? WNBA_TEAM_COLORS
+                : null;
   if (!table) return null;
 
   const lower = teamName.toLowerCase();
