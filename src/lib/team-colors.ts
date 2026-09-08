@@ -73,7 +73,11 @@ const NFL_TEAM_COLORS: Record<string, string> = {
   eagles: "#004C54",
   steelers: "#FFB612",
   "49ers": "#AA0000",
-  seahawks: "#002244",
+  // "Action Green" (PMS 368 C), not "College Navy" #002244. Navy is listed
+  // first in the Seahawks' official palette, but it is identical to the
+  // Patriots' primary - two headers side by side rendered the same dark blue -
+  // and green is how the team is actually identified.
+  seahawks: "#69BE28",
   buccaneers: "#D50A0A",
   titans: "#4B92DB",
   commanders: "#5A1414",

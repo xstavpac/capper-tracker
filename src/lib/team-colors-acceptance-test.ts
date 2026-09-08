@@ -103,5 +103,55 @@ console.log("\n########## getTeamColor wiring ##########");
   check("unknown sport key -> null", getTeamColor("cricket_ipl", "Whoever"), null);
 }
 
+// ---------------------------------------------------------------------------
+console.log("\n########## NFL: each team its own verified color, no shared/wrong value ##########");
+{
+  const nfl = (name: string) => getTeamColor("americanfootball_nfl", name);
+
+  // The reported bug: Seahawks were #002244 (College Navy) - byte-identical to
+  // the Patriots' primary, so the two headers rendered the same dark blue.
+  // Seahawks now use Action Green (PMS 368 C).
+  check("Seahawks -> Action Green, not College Navy", nfl("Seattle Seahawks"), "#69BE28");
+  check("Patriots unchanged (Nautical Blue)", nfl("New England Patriots"), "#002244");
+  checkTrue("Seahawks and Patriots headers are now different colors", nfl("Seattle Seahawks") !== nfl("New England Patriots"));
+
+  // Spot-check a spread of teams against their verified primaries.
+  const expected: Record<string, string> = {
+    "Seattle Seahawks": "#69BE28",
+    "New England Patriots": "#002244",
+    "Kansas City Chiefs": "#E31837",
+    "Pittsburgh Steelers": "#FFB612",
+    "Green Bay Packers": "#203731",
+    "Miami Dolphins": "#008E97",
+    "Minnesota Vikings": "#4F2683",
+    "Las Vegas Raiders": "#000000",
+    "Baltimore Ravens": "#241773",
+    "Arizona Cardinals": "#97233F",
+  };
+  for (const [team, hex] of Object.entries(expected)) check(`NFL: ${team}`, nfl(team), hex);
+
+  // No two DISTINCT teams should end up mapped to a color they don't both
+  // genuinely share. A handful of real same-hue pairs are allowed (Bengals /
+  // Broncos orange, Cowboys / Rams royal) - everything else being unique is
+  // the guard against another copy-paste slip like the Seahawks one.
+  const ALLOWED_SHARED = new Set(["#FB4F14", "#003594"]);
+  const seen = new Map<string, string>();
+  const collisions: string[] = [];
+  for (const team of [
+    "Arizona Cardinals", "Atlanta Falcons", "Baltimore Ravens", "Buffalo Bills", "Carolina Panthers",
+    "Chicago Bears", "Cincinnati Bengals", "Cleveland Browns", "Dallas Cowboys", "Denver Broncos",
+    "Detroit Lions", "Green Bay Packers", "Houston Texans", "Indianapolis Colts", "Jacksonville Jaguars",
+    "Kansas City Chiefs", "Las Vegas Raiders", "Los Angeles Chargers", "Los Angeles Rams", "Miami Dolphins",
+    "Minnesota Vikings", "New England Patriots", "New Orleans Saints", "New York Giants", "New York Jets",
+    "Philadelphia Eagles", "Pittsburgh Steelers", "San Francisco 49ers", "Seattle Seahawks", "Tampa Bay Buccaneers",
+    "Tennessee Titans", "Washington Commanders",
+  ]) {
+    const c = nfl(team)!;
+    if (seen.has(c) && !ALLOWED_SHARED.has(c)) collisions.push(`${team} == ${seen.get(c)} (${c})`);
+    else if (!seen.has(c)) seen.set(c, team);
+  }
+  check("no unexpected duplicate NFL colors", collisions, []);
+}
+
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);

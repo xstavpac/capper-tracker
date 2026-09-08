@@ -273,8 +273,9 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
   const groups = TEAM_GROUP_ORDER.map((teamGroup) => {
     const groupPicks = picks.filter((p) => p.teamGroup === teamGroup);
     const label = teamGroup === "OTHER" ? OTHER_GROUP_LABEL : groupPicks[0]?.teamLabel;
-    // OTHER isn't a real team - always the neutral-gray dot. A real team uses
-    // its brand color, falling back to the same gray when unmapped.
+    // Drives both the header dot and the row's background tint. OTHER isn't a
+    // real team - always neutral gray. A real team uses its brand color,
+    // falling back to the same gray when unmapped.
     const dotColor = teamGroup === "OTHER" ? null : groupPicks[0]?.teamColor ?? null;
     return { teamGroup, label, dotColor, picks: groupPicks };
   }).filter((g) => g.picks.length > 0);
@@ -296,7 +297,17 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
         <div className="mt-3 space-y-3">
           {groups.map((group) => (
             <div key={group.teamGroup}>
-              <div className="mb-1.5 flex items-center gap-1.5">
+              <div
+                className="mb-1.5 flex items-center gap-1.5 rounded-md px-2 py-1"
+                style={{
+                  // A subtle wash of the team's color across the whole header
+                  // row - the hex plus a low-alpha suffix (~12%). OTHER and any
+                  // unmapped team use the same faint neutral-gray tint.
+                  backgroundColor: group.dotColor
+                    ? group.dotColor + "1F"
+                    : "rgb(var(--muted-foreground) / 0.10)",
+                }}
+              >
                 <span
                   className="h-2 w-2 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15"
                   style={{ backgroundColor: group.dotColor ?? "rgb(var(--muted-foreground))" }}
