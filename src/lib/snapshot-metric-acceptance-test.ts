@@ -191,9 +191,21 @@ expectTrue(
   "daily disabled while a snapshot is plotted (compare)",
   pickerDisabledReason(builtIn, { mode: "compare", plottedKinds: ["snapshot"], plottedVariableIds: ["cm_snap"] }) !== null
 );
-expectTrue(
-  "a second snapshot is disabled while one is plotted",
-  pickerDisabledReason(snapM2, { mode: "compare", plottedKinds: ["snapshot"], plottedVariableIds: ["cm_snap"] }) !== null
+// several snapshots CAN be compared together (small multiples) - a second
+// one is NOT disabled while one is already plotted
+expect(
+  "a second snapshot is allowed while one is plotted (compare)",
+  pickerDisabledReason(snapM2, { mode: "compare", plottedKinds: ["snapshot"], plottedVariableIds: ["cm_snap"] }),
+  null
+);
+expect(
+  "a third snapshot is still allowed with two plotted",
+  pickerDisabledReason(customMetric("cm_snap3", "snapshot"), {
+    mode: "compare",
+    plottedKinds: ["snapshot", "snapshot"],
+    plottedVariableIds: ["cm_snap", "cm_snap2"],
+  }),
+  null
 );
 // the snapshot that IS plotted stays clickable (so it can be removed)
 expect(

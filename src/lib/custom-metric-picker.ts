@@ -92,11 +92,8 @@ export function pickerDisabledReason(variable: ModelVariableDef, ctx: PickerCont
       badge: "Snapshot active",
     };
   }
-  if (kind === "snapshot" && hasSnapshot) {
-    return {
-      tooltip: "Only one season snapshot can be compared at a time.",
-      badge: "One snapshot at a time",
-    };
-  }
+  // Two or more snapshots are fine together: Team Comparison renders them as
+  // small multiples (one bar chart per metric, same two teams), so there's
+  // no shared axis to conflict.
   return null;
 }
