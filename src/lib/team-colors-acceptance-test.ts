@@ -3,18 +3,17 @@
 //
 // No test framework in this repo; this is a persisted pass/fail script.
 //
-// Focus is NCAAF_TEAM_COLORS, the large verified school -> primary-brand-color
-// map added for the /live game-card pick-list section-header dots. The two
-// things that must stay true over time:
+// Covers the verified primary-brand-color tables behind the /live game-card
+// pick-list section-header dots. What must stay true over time:
 //   1. every value is a well-formed #RRGGBB hex
-//   2. the key set is EXACTLY the canonical school list in parse-catalog.ts
+//   2. NCAAF's key set is EXACTLY the canonical school list in parse-catalog.ts
 //      (NCAAF_CANONICAL_SUFFIX's distinct values) - no missing school, no
-//      stray key. If parse-catalog gains/loses/renames an FBS school this
-//      test fails until team-colors.ts is updated to match, so the two lists
-//      can't silently drift apart.
-// Plus a couple of getTeamColor wiring checks for every mapped league.
+//      stray key - so the two lists can't silently drift apart
+//   3. NHL / WNBA cover their full leagues (WNBA minus the two 2026 expansion
+//      teams whose brand hex values are not published yet)
+// Plus getTeamColor wiring checks for every mapped league.
 
-import { getTeamColor, NCAAF_TEAM_COLORS } from "./team-colors";
+import { getTeamColor, NCAAF_TEAM_COLORS, NHL_TEAM_COLORS, WNBA_TEAM_COLORS } from "./team-colors";
 import { NCAAF_CANONICAL_SUFFIX } from "./parse-catalog";
 
 let failures = 0;
@@ -31,11 +30,29 @@ function checkTrue(label: string, actual: boolean) {
 const HEX = /^#[0-9A-F]{6}$/;
 
 // ---------------------------------------------------------------------------
-console.log("########## NCAAF_TEAM_COLORS: every value is a #RRGGBB hex ##########");
+console.log("########## every table value is a #RRGGBB hex ##########");
+for (const [name, table] of [
+  ["NCAAF", NCAAF_TEAM_COLORS],
+  ["NHL", NHL_TEAM_COLORS],
+  ["WNBA", WNBA_TEAM_COLORS],
+] as const) {
+  const bad = Object.entries(table).filter(([, v]) => !HEX.test(v));
+  check(`${name}: no malformed hex values`, bad, []);
+  checkTrue(`${name}: all uppercase (canonical form)`, Object.values(table).every((v) => v === v.toUpperCase()));
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## NHL / WNBA coverage ##########");
 {
-  const bad = Object.entries(NCAAF_TEAM_COLORS).filter(([, v]) => !HEX.test(v));
-  check("no malformed hex values", bad, []);
-  checkTrue("all uppercase (canonical form)", Object.values(NCAAF_TEAM_COLORS).every((v) => v === v.toUpperCase()));
+  // NHL: 32 franchises + the "coyotes" historical alias for the Utah team.
+  check("NHL table has 33 keys (32 franchises + coyotes alias)", Object.keys(NHL_TEAM_COLORS).length, 33);
+  checkTrue("NHL: coyotes and mammoth both present (same franchise, old + current name)", "coyotes" in NHL_TEAM_COLORS && "mammoth" in NHL_TEAM_COLORS);
+
+  // WNBA: 15 teams in the 2026 league, minus Portland Fire ("fire") and
+  // Toronto Tempo ("tempo"), whose brand hex values are not published yet.
+  const wnbaKeys = new Set(Object.keys(WNBA_TEAM_COLORS));
+  check("WNBA table has 13 keys (15 teams minus fire + tempo, pending)", wnbaKeys.size, 13);
+  checkTrue("WNBA: fire + tempo intentionally absent (fall back to gray)", !wnbaKeys.has("fire") && !wnbaKeys.has("tempo"));
 }
 
 // ---------------------------------------------------------------------------
@@ -71,11 +88,18 @@ console.log("\n########## getTeamColor wiring ##########");
     .filter((c) => getTeamColor("americanfootball_ncaaf", c) === null);
   check("every canonical school resolves via getTeamColor", unresolved, []);
 
+  // NHL / WNBA: bare nickname, suffix-matched against the schedule team name.
+  check("NHL: Bruins primary is gold, not ESPN's near-black", getTeamColor("icehockey_nhl", "Boston Bruins"), "#FFB81C");
+  check("NHL: two-word nickname", getTeamColor("icehockey_nhl", "Toronto Maple Leafs"), "#00205B");
+  check("NHL: Utah Mammoth (current name)", getTeamColor("icehockey_nhl", "Utah Mammoth"), "#000000");
+  check("NHL: unknown -> null", getTeamColor("icehockey_nhl", "Springfield Isotopes"), null);
+  check("WNBA: New York Liberty seafoam", getTeamColor("basketball_wnba", "New York Liberty"), "#6ECEB2");
+  check("WNBA: Portland Fire not mapped yet -> null (gray)", getTeamColor("basketball_wnba", "Portland Fire"), null);
+
   // Other leagues still work and are unaffected.
   check("MLB still resolves", getTeamColor("baseball_mlb", "St. Louis Cardinals"), "#C41E3A");
   check("NFL still resolves", getTeamColor("americanfootball_nfl", "Kansas City Chiefs"), "#E31837");
   check("NBA still resolves", getTeamColor("basketball_nba", "Boston Celtics"), "#007A33");
-  check("still-unmapped league -> null", getTeamColor("icehockey_nhl", "Boston Bruins"), null);
   check("unknown sport key -> null", getTeamColor("cricket_ipl", "Whoever"), null);
 }
 
