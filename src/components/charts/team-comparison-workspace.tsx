@@ -6,7 +6,9 @@ import { getVariableSeriesAction } from "@/server/actions/charts";
 import type { VariableTimeSeriesResult, DateRange } from "@/server/data/historical-variables";
 import { easternDateKey } from "@/lib/dates";
 import { VariableLibrary } from "@/components/model-builder/variable-library";
+import { pickerDisabledReason, metricKindOf } from "@/lib/custom-metric-picker";
 import { HistoricalVariableChart, type ChartSeries } from "@/components/charts/historical-variable-chart";
+import { SnapshotComparisonChart, type SnapshotBar } from "@/components/charts/snapshot-comparison-chart";
 import { HistoryNote } from "@/components/charts/history-note";
 import { DateRangePicker } from "@/components/charts/date-range-picker";
 import { useFullscreen, FULLSCREEN_CHART_HEIGHT, FULLSCREEN_SURFACE_CLASS } from "@/components/charts/use-fullscreen";
@@ -161,6 +163,23 @@ export function TeamComparisonWorkspace({
   const entriesB = entries.filter((e) => e.slot === "B");
   const overlaySeries = [...toChartSeries(entriesA, teamA), ...toChartSeries(entriesB, teamB)];
 
+  // Kind of each plotted variable, read off the catalog entry (not the async
+  // result, which may not be back yet) so the picker's daily/snapshot
+  // mutual-exclusion is decided the instant a variable is added.
+  const plottedKinds = variableIds.map((id) => metricKindOf(variables.find((v) => v.id === id) ?? {}));
+
+  // At most one snapshot can be plotted at a time (the picker enforces it),
+  // and it can't coexist with daily variables - so if one is present it's
+  // the only thing plotted, and the whole chart area renders as bars.
+  const snapshotVariableId = variableIds.find((id) => metricKindOf(variables.find((v) => v.id === id) ?? {}) === "snapshot");
+  const snapshotEntryA = snapshotVariableId ? entriesA.find((e) => e.variableId === snapshotVariableId) : undefined;
+  const snapshotEntryB = snapshotVariableId ? entriesB.find((e) => e.variableId === snapshotVariableId) : undefined;
+  const snapshotResult = snapshotEntryA?.result ?? snapshotEntryB?.result ?? null;
+  const snapshotBars: SnapshotBar[] = [
+    { team: teamA, value: snapshotEntryA?.result?.points[0]?.value ?? null, color: TEAM_SLOT_COLOR.A },
+    { team: teamB, value: snapshotEntryB?.result?.points[0]?.value ?? null, color: TEAM_SLOT_COLOR.B },
+  ];
+
   return (
     <div
       ref={fs.ref}
@@ -203,6 +222,12 @@ export function TeamComparisonWorkspace({
           onAdd={addVariable}
           categories={CHART_CATEGORIES}
           onCustomMetricDeleted={removeVariable}
+          // Keep the two custom-metric kinds from mixing on one chart: once a
+          // daily variable is plotted, snapshots are disabled (and vice
+          // versa), each with an explanatory tooltip. See custom-metric-picker.ts.
+          disabledReason={(v) =>
+            pickerDisabledReason(v, { mode: "compare", plottedKinds, plottedVariableIds: variableIds })
+          }
         />
       </div>
 
@@ -211,20 +236,24 @@ export function TeamComparisonWorkspace({
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <DateRangePicker value={dateRange} onChange={handleDateRangeChange} />
             <div className="flex items-center gap-2">
-              <div className="flex gap-1 rounded-full bg-muted p-1">
-                {(["overlay", "split"] as ViewMode[]).map((mode) => (
-                  <button
-                    key={mode}
-                    onClick={() => setView(mode)}
-                    className={
-                      "rounded-full px-3 py-1 text-xs font-medium capitalize transition " +
-                      (view === mode ? "bg-card text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")
-                    }
-                  >
-                    {mode}
-                  </button>
-                ))}
-              </div>
+              {/* overlay/split only means something for line series - a
+                  snapshot is a single side-by-side bar chart either way. */}
+              {!snapshotVariableId && (
+                <div className="flex gap-1 rounded-full bg-muted p-1">
+                  {(["overlay", "split"] as ViewMode[]).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => setView(mode)}
+                      className={
+                        "rounded-full px-3 py-1 text-xs font-medium capitalize transition " +
+                        (view === mode ? "bg-card text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")
+                      }
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              )}
               {fs.supported && <FullscreenButton isFullscreen={fs.isFullscreen} onClick={fs.toggle} />}
             </div>
           </div>
@@ -232,6 +261,16 @@ export function TeamComparisonWorkspace({
           {variableIds.length === 0 ? (
             <div className="flex h-[320px] items-center justify-center rounded-card border border-dashed border-border text-sm text-muted-foreground">
               Pick two teams and a variable to start comparing.
+            </div>
+          ) : snapshotVariableId ? (
+            <div onDoubleClick={fs.supported ? fs.toggle : undefined}>
+              <SnapshotComparisonChart
+                bars={snapshotBars}
+                unit={snapshotResult?.unit ?? "decimal"}
+                label={variables.find((v) => v.id === snapshotVariableId)?.label ?? "Season snapshot"}
+                periodLabel={snapshotResult?.periodLabel}
+                height={fs.isFullscreen ? (fs.chartHeight ?? FULLSCREEN_CHART_HEIGHT) : 320}
+              />
             </div>
           ) : view === "overlay" ? (
             <div onDoubleClick={fs.supported ? fs.toggle : undefined}>

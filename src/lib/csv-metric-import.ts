@@ -154,6 +154,88 @@ export function buildImportRows(parsed: ParsedCsv, mapping: ColumnMapping): Buil
   return { rows, errors };
 }
 
+// ---------------------------------------------------------------------------
+// Season Snapshot import
+//
+// A "snapshot" CSV has one row per team and NO date column - every number in
+// it already represents a whole season/period, so there's nothing to place on
+// a timeline. detectDateColumn returning null is what routes the importer
+// here (see custom-metric-upload.tsx) instead of blocking with "no date
+// column". The period the numbers cover is a free-text label the user types
+// ("2026 Season") - never a fabricated date. A team column IS required (the
+// values are per-team); a snapshot with no team column has nothing to
+// compare and is rejected at the UI layer.
+// ---------------------------------------------------------------------------
+
+export type SnapshotColumnMapping = { teamColumn: string; valueColumns: string[] };
+
+export type SnapshotImportRow = { rowIndex: number; team: string; values: Record<string, number | null> };
+
+export type SnapshotBuildResult = { rows: SnapshotImportRow[]; errors: RowError[] };
+
+// The snapshot counterpart to buildImportRows - same collect-every-error
+// behavior, but keyed on team alone (no date). A blank team cell is a real
+// error here (unlike a blank value, which is a legitimate "not reported for
+// this team"), since a per-team row with no team can't be placed at all.
+export function buildSnapshotRows(parsed: ParsedCsv, mapping: SnapshotColumnMapping): SnapshotBuildResult {
+  const rows: SnapshotImportRow[] = [];
+  const errors: RowError[] = [];
+
+  parsed.rows.forEach((raw, rowIndex) => {
+    const team = (raw[mapping.teamColumn] ?? "").trim();
+    if (team === "") {
+      errors.push({ rowIndex, column: mapping.teamColumn, raw: raw[mapping.teamColumn] ?? "", reason: "invalid_value" });
+      return;
+    }
+
+    const values: Record<string, number | null> = {};
+    let rowHasValueError = false;
+    for (const col of mapping.valueColumns) {
+      const parsedValue = parseNumericValue(raw[col] ?? "");
+      if (parsedValue.kind === "invalid") {
+        errors.push({ rowIndex, column: col, raw: raw[col] ?? "", reason: "invalid_value" });
+        rowHasValueError = true;
+      } else {
+        values[col] = parsedValue.kind === "number" ? parsedValue.value : null;
+      }
+    }
+    if (rowHasValueError) return;
+
+    rows.push({ rowIndex, team, values });
+  });
+
+  return { rows, errors };
+}
+
+export type SnapshotDuplicateGroup = { team: string; rows: SnapshotImportRow[] };
+
+// Teams that appear on more than one row - the snapshot analogue of
+// findDuplicateKeys (which keys on date+team). Same "unique key never
+// included" rule.
+export function findDuplicateTeams(rows: SnapshotImportRow[]): SnapshotDuplicateGroup[] {
+  const groups = new Map<string, SnapshotImportRow[]>();
+  for (const row of rows) {
+    const existing = groups.get(row.team);
+    if (existing) existing.push(row);
+    else groups.set(row.team, [row]);
+  }
+  return [...groups.entries()]
+    .filter(([, groupRows]) => groupRows.length > 1)
+    .map(([team, groupRows]) => ({ team, rows: groupRows }));
+}
+
+// Snapshot analogue of resolveDuplicates - "first" keeps each team's earliest
+// row in file order, "last" the latest; original order otherwise preserved.
+export function resolveDuplicateTeams(rows: SnapshotImportRow[], strategy: "first" | "last"): SnapshotImportRow[] {
+  const seen = new Map<string, SnapshotImportRow>();
+  for (const row of rows) {
+    const existing = seen.get(row.team);
+    if (!existing || strategy === "last") seen.set(row.team, row);
+  }
+  const winners = new Set(seen.values());
+  return rows.filter((r) => winners.has(r));
+}
+
 export type DuplicateGroup = { date: string; team: string | null; rows: ImportRow[] };
 
 // Groups rows sharing the same (date, team) key - "team" collapses to a

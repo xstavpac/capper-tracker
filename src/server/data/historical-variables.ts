@@ -56,10 +56,20 @@ export type VariableTimeSeriesResult = {
   supported: boolean;
   unsupportedReason?: string;
   points: VariableTimeSeriesPoint[];
+  // "snapshot" is a season aggregate drawn as a bar comparison; undefined (or
+  // "daily") is a dated time series drawn as a line, which every built-in and
+  // every pre-existing custom metric is. A caller MUST check for "snapshot"
+  // before rendering - a snapshot's single point per team is not a timeline,
+  // and none of the time-series messaging (HistoryNote's "Building historical
+  // depth" etc.) applies to it.
+  metricKind?: "daily" | "snapshot";
+  // Set only when metricKind === "snapshot" - the human label for the span
+  // the values cover ("2026 Season"), shown in place of a date axis.
+  periodLabel?: string;
   // Count of points with a real (non-null) value - what "Historical data: N
   // days available" should display. Grows automatically as the daily
   // snapshot cron (or a fresh CSV import) adds rows; never a fixed/
-  // precomputed number.
+  // precomputed number. Always the team count for a snapshot.
   daysAvailable: number;
   // Count of snapshot rows found in range, regardless of whether their
   // computed value came out null (e.g. MIN_TENDENCY_SAMPLE not met yet).
@@ -226,6 +236,32 @@ async function customMetricProvider(variable: ModelVariableDef, sportKey: string
   const metric = await prisma.customMetric.findFirst({ where: { id: variable.id, userId, sportKey } });
   if (!metric) return unsupportedResult(variable.id, entityId, side, "This custom metric no longer exists.");
 
+  // A SNAPSHOT metric has no timeline - one point per team, every point's
+  // snapshotDate holding periodLabel verbatim - so the chart date range is
+  // ignored entirely and the single matching team's value is returned. The
+  // one point still travels in `points` (date = periodLabel) so the shared
+  // result shape is unchanged; the caller renders it as a bar, not a line,
+  // by checking metricKind.
+  if (metric.metricKind === "SNAPSHOT") {
+    const row = await prisma.customMetricPoint.findFirst({
+      where: { customMetricId: metric.id, teamName: entityId },
+    });
+    const points = row ? [{ date: metric.periodLabel ?? row.snapshotDate, value: row.value }] : [];
+    return {
+      variableId: variable.id,
+      variableLabel: variable.label,
+      unit: variable.unit,
+      entityId,
+      side,
+      supported: true,
+      metricKind: "snapshot",
+      periodLabel: metric.periodLabel ?? undefined,
+      points,
+      daysAvailable: points.length,
+      totalSnapshotDays: points.length,
+    };
+  }
+
   const rows = await prisma.customMetricPoint.findMany({
     where: {
       customMetricId: metric.id,
@@ -242,6 +278,7 @@ async function customMetricProvider(variable: ModelVariableDef, sportKey: string
     entityId,
     side,
     supported: true,
+    metricKind: "daily",
     points,
     daysAvailable: points.length, // every stored point is a real value - no MIN_SAMPLE-style nulling for a custom metric
     totalSnapshotDays: rows.length,

@@ -392,6 +392,18 @@ enum DataScope {
   PER_USER
 }
 
+// How a CustomMetric (Charts' Custom Metrics feature) is shaped and rendered.
+// DAILY: a time series - one CustomMetricPoint per calendar date, drawn as a
+// line chart, and subject to the "Building historical depth" messaging while
+// it's still filling in. SNAPSHOT: a season-aggregate - one value per team
+// with NO date dimension (the number already represents a whole span, named
+// by CustomMetric.periodLabel), drawn as a bar comparison and never shown
+// any time-series wording. See lib/csv-metric-import.ts for the import side.
+enum MetricKind {
+  DAILY
+  SNAPSHOT
+}
+
 // Precomputed, stored per-team betting tendencies (favorite/underdog win%,
 // over/under rate) - built from a join of GameResult (actual outcomes)
 // against the OddsSnapshot for that same day (pregame favorite/dog + total
@@ -630,6 +642,16 @@ model CustomMetric {
   // is then globally applicable (same team regardless of which team is
   // selected), matching the "no Team column -> global metric" import rule.
   hasTeamColumn Boolean
+  // DAILY (the default, and every metric imported before this column existed)
+  // vs SNAPSHOT - see the MetricKind enum. A DAILY metric's points are dated
+  // and charted as a line; a SNAPSHOT's points are one-per-team, undated, and
+  // charted as a bar comparison.
+  metricKind    MetricKind @default(DAILY)
+  // Human label for the span a SNAPSHOT metric covers ("2026 Season",
+  // "2025-26"). Null for DAILY metrics. Deliberately a free-text label, never
+  // a date - the reason the snapshot kind exists is to stop a season
+  // aggregate being forced into a fake single date.
+  periodLabel   String?
   sourceId      String    @default("user_upload")
   scope         DataScope @default(PER_USER)
   createdAt     DateTime  @default(now())
@@ -642,7 +664,11 @@ model CustomMetric {
 
 // One (date[, team]) -> value point for a CustomMetric, one row per line of
 // the imported CSV (after validation). teamName is null exactly when the
-// owning CustomMetric.hasTeamColumn is false. The unique constraint is a
+// owning CustomMetric.hasTeamColumn is false. For a SNAPSHOT metric there is
+// no real date, so snapshotDate holds the parent's periodLabel verbatim
+// (e.g. "2026 Season") - it keeps the unique key one-row-per-team and is
+// never range-filtered (the snapshot provider ignores the chart date range).
+// The unique constraint is a
 // database-level backstop for the importer's own duplicate-key check (Step 4
 // of the upload flow), NOT the only guard - Postgres treats every NULL
 // teamName as distinct for uniqueness purposes, so this constraint can't
