@@ -53,8 +53,12 @@ await Promise.all( acc.entries().map(upsert TeamTendency row) )
     `TeamTendencySnapshot` row each run (cumulative running totals per day).
   - the model-engine tendency resolver and the Charts `tendencyProvider` read
     those snapshots.
-  - `computeTendencyRates` converts the raw counts to display rates, gating each
-    split on `MIN_TENDENCY_SAMPLE = 20` — a **sample-size floor, not a window**.
+  - `computeTendencyRates` converts the raw counts to display rates. There is
+    **no minimum-sample display floor**: a rate is real at any sample ≥ 1 game
+    and null only for a genuinely empty split (a divide-by-zero guard). The
+    game count is carried alongside the rate as the reliability disclosure. (A
+    prior `MIN_TENDENCY_SAMPLE = 20` floor was removed — it made "Win% as
+    underdog" effectively unreachable for good teams.)
 
 ## 2. Semantic requirement — what the numbers are supposed to mean
 
@@ -69,9 +73,9 @@ trailing-N-days, or a fixed sample.** Evidence:
 3. `snapshotTeamTendencies` snapshots the **cumulative** counts each day; the
    snapshot series is monotonically non-decreasing. A rolling window would make
    the series go down when old games age out — it never does.
-4. `MIN_TENDENCY_SAMPLE = 20` is applied in `computeTendencyRates` as a
-   *minimum* below which a rate is hidden — the opposite of a cap. The comment
-   ties it to the other `*_MIN_SAMPLE` floors in the codebase.
+4. `computeTendencyRates` applies no sample-size floor and no cap — it divides
+   the cumulative counts as-is, guarding only against 0 games. The rate is
+   shown at any sample size with its real game count alongside.
 5. The recompute-from-scratch-every-run design (rather than incremental) is
    justified in the function comment as *"cheap correctness insurance"* because
    `GameResult` / `OddsSnapshot` rows are immutable after creation — it assumes

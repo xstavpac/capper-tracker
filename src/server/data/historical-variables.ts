@@ -37,7 +37,7 @@ import {
 import { computeTendencyRates } from "@/server/data/team-tendencies";
 import { resolveTeamStatFromSnapshot, resolvePitcherStatFromSnapshot } from "@/server/data/providers/mlb-stats-provider";
 import { resolveNflTeamStatFromSnapshot } from "@/server/data/providers/nfl-team-stats-provider";
-import { readRate } from "@/server/data/providers/tendency-provider";
+import { readRate, readTendencySample, type TendencySample } from "@/server/data/providers/tendency-provider";
 import { resolveCustomMetricVariable } from "@/server/data/custom-metrics";
 import { chartTeamsMatch } from "@/server/data/chart-team-name";
 
@@ -73,11 +73,16 @@ export type VariableTimeSeriesResult = {
   // precomputed number. Always the team count for a snapshot.
   daysAvailable: number;
   // Count of snapshot rows found in range, regardless of whether their
-  // computed value came out null (e.g. MIN_TENDENCY_SAMPLE not met yet).
-  // Lets a caller tell "we have no snapshots at all in this range yet" apart
-  // from "we have snapshots, but not enough decided games to compute this
-  // specific rate" - two different honest messages, not the same gap.
+  // computed value came out null. Lets a caller tell "we have no snapshots at
+  // all in this range yet" (totalSnapshotDays 0 -> "Building historical
+  // depth") apart from "we have snapshots" (a real series to plot).
   totalSnapshotDays: number;
+  // Present only for a team-tendency variable (Win% as favorite / underdog,
+  // Over / Under rate). The real role record + game count from the latest
+  // snapshot row in range, so the Charts note can show the rate next to its
+  // actual sample ("50% (6-6) as underdog · 12 games") rather than a
+  // sample-size-gated message. `pct` is null only when `games` is 0.
+  tendencySample?: TendencySample;
 };
 
 export type DateRange = { start: string; end: string }; // "YYYY-MM-DD", Eastern, inclusive
@@ -204,6 +209,10 @@ async function tendencyProvider(variable: ModelVariableDef, sportKey: string, en
     orderBy: { snapshotDate: "asc" },
   });
   const points = rows.map((row) => ({ date: row.snapshotDate, value: readRate(computeTendencyRates(row), variable.id) }));
+  // The snapshots are cumulative and monotonically non-decreasing (see
+  // snapshotTeamTendencies), so the last row in range holds the largest, most
+  // current counts - that is the record the note reports.
+  const lastRow = rows.length > 0 ? rows[rows.length - 1] : null;
   return {
     variableId: variable.id,
     variableLabel: variable.label,
@@ -214,6 +223,7 @@ async function tendencyProvider(variable: ModelVariableDef, sportKey: string, en
     points,
     daysAvailable: points.filter((p) => p.value !== null).length,
     totalSnapshotDays: rows.length,
+    tendencySample: lastRow ? (readTendencySample(lastRow, variable.id) ?? undefined) : undefined,
   };
 }
 

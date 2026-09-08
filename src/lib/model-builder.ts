@@ -113,7 +113,7 @@ export const USER_UPLOAD = "user_upload";
 // time, no single canonical "the batter" for a team). Team-level batting
 // aggregates (avg/OBP/SLG/OPS, below) cover the batting angle for now.
 export const MODEL_VARIABLES: ModelVariableDef[] = [
-  // ---- MLB team tendencies (derived, gated on MIN_TENDENCY_SAMPLE) ----
+  // ---- MLB team tendencies (derived from GameResult + OddsSnapshot) ----
   {
     id: "tendency_fav_win_pct",
     label: "Win% as favorite",
@@ -419,8 +419,8 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
   },
 
   // ---- NFL team tendencies (same derivation as MLB - INTERNAL_TENDENCIES
-  //      provider keys on sportKey - gated on MIN_TENDENCY_SAMPLE, so these
-  //      stay empty until the regular season builds enough decided games) ----
+  //      provider keys on sportKey; a rate appears as soon as the team has
+  //      one game in that role, with its game count shown alongside) ----
   {
     id: "nfl_tendency_fav_win_pct",
     label: "Win% as favorite",

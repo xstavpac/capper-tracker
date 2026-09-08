@@ -95,11 +95,10 @@ async function main() {
   check("(d) team_stats adapter found a row", teamStatResult.found === true, teamStatResult);
   check("(d) team_stats adapter returned a numeric value", typeof teamStatResult.value === "number", teamStatResult);
 
-  // Athletics' real sample sizes are still below MIN_TENDENCY_SAMPLE (20)
-  // this early in the season, so this is expected to resolve found: true
-  // (a real snapshot row exists) with value: null (the rate itself is
-  // correctly gated) - the same honest "not enough decided games yet"
-  // behavior Charts already shows, now proven through this resolver too.
+  // A real snapshot row exists for Athletics at this asOf, so this resolves
+  // found: true. The rate itself has no minimum-sample floor - it is a real
+  // number whenever the split has >= 1 game, null only for a genuinely empty
+  // split - so only `found` is asserted here, not the value.
   const tendencyResult = await resolveVariable("tendency_over_rate", { type: "team", teamName: "Athletics" }, asOfLatest, context);
   console.log("team_tendencies adapter - Athletics, tendency_over_rate, asOf 2026-08-13:", tendencyResult);
   check("(d) team_tendencies adapter found a row", tendencyResult.found === true, tendencyResult);

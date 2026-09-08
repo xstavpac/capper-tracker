@@ -4,10 +4,11 @@ import { historyNoteState } from "@/lib/history-note-state";
 // "How much history backs this series" messaging - shared by ChartsWorkspace
 // (single-team) and TeamComparisonWorkspace (two-team) so both tools report
 // data availability identically rather than each inventing its own wording.
-// Not just cosmetic: daysAvailable vs. totalSnapshotDays tells "no data
-// collected yet at all" apart from "data exists but not enough decided games
-// to compute this reliably yet" - see VariableTimeSeriesResult's own field
-// comments in historical-variables.ts. The branching itself lives in
+// For a team-tendency variable the note shows the real rate next to its
+// actual record and game count ("50% (6-6) as underdog · 12 games") - there
+// is no minimum-sample suppression; the game count itself is the reliability
+// disclosure. For every other variable it reports how many points of history
+// exist, or that the series is still building. The branching itself lives in
 // lib/history-note-state.ts so it can be tested without a DOM.
 //
 // The MLB snapshot tables accumulate one row per calendar day; the NFL
@@ -39,16 +40,22 @@ export function HistoryNote({ result, sport }: { result: VariableTimeSeriesResul
       </span>
     );
   }
-  if (state.kind === "building") {
+  // A team-tendency rate is always shown at its real sample size, with the
+  // actual record and game count as the honest reliability disclosure - no
+  // sample-size floor, no "not enough data" suppression.
+  if (state.kind === "tendency") {
+    return <span className="text-xs text-muted-foreground">{state.label}</span>;
+  }
+  if (state.kind === "tendency-empty") {
     return (
       <span className="text-xs text-amber-600 dark:text-amber-400">
-        Building historical depth — a new point is added after each {noun}.
+        No games {state.phrase} in the selected range.
       </span>
     );
   }
   return (
     <span className="text-xs text-amber-600 dark:text-amber-400">
-      {state.count} {plural(state.count)} of data so far, but not yet enough decided games to calculate this reliably.
+      Building historical depth — a new point is added after each {noun}.
     </span>
   );
 }

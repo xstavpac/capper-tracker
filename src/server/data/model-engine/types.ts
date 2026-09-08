@@ -26,8 +26,8 @@ export type ResolvedValue = {
   // False when no snapshot row exists at or before asOf for this entity -
   // not an error, not a fabricated default. True whenever a qualifying row
   // was located, even if that row's own derived value is null (e.g. a
-  // team_tendencies rate below MIN_TENDENCY_SAMPLE) - found describes
-  // whether point-in-time data existed, not whether the computed value
-  // happened to be non-null.
+  // team_tendencies rate for a role the team has no games in yet) - found
+  // describes whether point-in-time data existed, not whether the computed
+  // value happened to be non-null.
   found: boolean;
 };

@@ -94,7 +94,7 @@ expect(
   historyNoteState({ metricKind: "snapshot", periodLabel: "2026 Season", daysAvailable: 0, totalSnapshotDays: 0 }),
   { kind: "snapshot", periodLabel: "2026 Season" }
 );
-// And with real per-team counts it's still "snapshot", not "has-history" / "insufficient".
+// And with real per-team counts it's still "snapshot", not "has-history" / "building".
 for (const [d, t] of [[2, 2], [0, 5], [30, 30]] as [number, number][]) {
   expect(
     `snapshot stays "snapshot" for daysAvailable=${d} totalSnapshotDays=${t}`,
@@ -115,7 +115,11 @@ expect("daily import unchanged: 3 rows, 0 errors", [dailyBuilt.rows.length, dail
 expect("daily import unchanged: M/D/YYYY still normalized", dailyBuilt.rows[2].date, "2026-04-03");
 
 expect("daily history states unchanged: has-history", historyNoteState({ daysAvailable: 7, totalSnapshotDays: 10 }), { kind: "has-history", count: 7 });
-expect("daily history states unchanged: insufficient", historyNoteState({ daysAvailable: 0, totalSnapshotDays: 4 }), { kind: "insufficient", count: 4 });
+// A non-tendency series with rows but no non-null values (an edge that no
+// real built-in / custom metric actually hits) is just "building" now - the
+// old "insufficient / not enough decided games" wording was tendency-only and
+// showed a snapshot-day count mislabeled as a game count; it was removed.
+expect("no non-null points but rows exist -> building", historyNoteState({ daysAvailable: 0, totalSnapshotDays: 4 }), { kind: "building" });
 
 // metricKind helper: undefined (every built-in, every legacy metric) == daily
 expect("metricKindOf undefined -> daily", metricKindOf({}), "daily");
