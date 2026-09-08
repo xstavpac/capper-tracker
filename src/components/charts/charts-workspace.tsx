@@ -12,13 +12,19 @@ import { HistoryNote } from "@/components/charts/history-note";
 import { DateRangePicker } from "@/components/charts/date-range-picker";
 import { useFullscreen, FULLSCREEN_CHART_HEIGHT, FULLSCREEN_SURFACE_CLASS } from "@/components/charts/use-fullscreen";
 import { FullscreenButton } from "@/components/charts/fullscreen-button";
+import { CHART_SERIES_PALETTE } from "@/lib/chart-colors";
 
 // Team stats/tendencies/custom metrics only - the only entity type with a
 // fixed, known selector today (pitchers have no equivalent static catalog,
 // and market variables aren't chartable yet - see historical-variables.ts).
 const CHART_CATEGORIES: VariableCategory[] = ["team_tendencies", "team_stats", "custom_metric"];
 
-const PALETTE = ["#2563eb", "#dc2626", "#16a34a", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
+// This single-team view can plot the SAME variable for different teams
+// ("Yankees ERA" vs "Red Sox ERA"), so colour here identifies each plotted
+// (team, variable) series, assigned in add-order - not the per-metric mapping
+// Team Comparison uses (see lib/chart-colors.ts), which would collapse those
+// two ERA lines onto one colour with no line-style channel to separate them.
+const PALETTE = CHART_SERIES_PALETTE;
 
 type PlottedSeries = {
   id: string;

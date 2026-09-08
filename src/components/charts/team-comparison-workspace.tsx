@@ -14,24 +14,35 @@ import { HistoryNote } from "@/components/charts/history-note";
 import { DateRangePicker } from "@/components/charts/date-range-picker";
 import { useFullscreen, FULLSCREEN_CHART_HEIGHT, FULLSCREEN_SURFACE_CLASS } from "@/components/charts/use-fullscreen";
 import { FullscreenButton } from "@/components/charts/fullscreen-button";
+import { metricColor, TEAM_LINE_DASH } from "@/lib/chart-colors";
 
 // Same restriction as ChartsWorkspace, same reason.
 const CHART_CATEGORIES: VariableCategory[] = ["team_tendencies", "team_stats", "custom_metric"];
 
-// Color communicates TEAM identity here, not variable identity (unlike
-// ChartsWorkspace's PALETTE, which is per-variable since it only ever shows
-// one team). Keyed by slot ("A"/"B"), not by team name, so it stays constant
-// regardless of which team occupies the slot - same dynamic-by-slot approach
-// as capper-comparison-workspace's PALETTE_A/PALETTE_B.
+// The line-chart encoding (Overlay chart and Split panels alike): a METRIC is a
+// colour (metricColor, shared and stable), a TEAM is a line style
+// (TEAM_LINE_DASH - solid for A, dashed for B). See lib/chart-colors.ts.
+//
+// TEAM_SLOT_COLOR is only for the SNAPSHOT bar chart, a different view: bars are
+// grouped by metric and a bar can't be "dashed", so there teams are told apart
+// by colour. Keyed by slot ("A"/"B") so it's stable regardless of which team
+// occupies the slot - same approach as capper-comparison-workspace.
 const TEAM_SLOT_COLOR: Record<TeamSlot, string> = { A: "#2563eb", B: "#dc2626" };
 
-// Within a team's color, multiple variables are told apart by line style
-// instead of hue - cycles by how many variables were already plotted when a
-// new one is added. Undefined (solid) first so the common one-variable-per-
-// team case still renders a plain line.
-const DASH_PATTERNS: (string | undefined)[] = [undefined, "6 4", "2 3", "10 3 2 3"];
-
 type TeamSlot = "A" | "B";
+
+// A 22px line sample in a metric's colour, solid or dashed - the same two
+// channels the chart itself uses, so the Plotted-variables panel reads as a
+// legend for it. `dashArray` is the Recharts strokeDasharray string (or
+// undefined for solid), passed straight through to keep the dash rhythm
+// identical to the plotted line.
+function LineStyleSwatch({ color, dashArray }: { color: string; dashArray: string | undefined }) {
+  return (
+    <svg width="22" height="8" viewBox="0 0 22 8" className="shrink-0" aria-hidden="true">
+      <line x1="1" y1="4" x2="21" y2="4" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={dashArray} />
+    </svg>
+  );
+}
 
 // One entry per (team slot, variable) - deliberately keyed by slot ("A"/"B")
 // rather than by team name directly, so changing which team occupies a slot
@@ -40,8 +51,9 @@ type TeamSlot = "A" | "B";
 type PlottedEntry = {
   slot: TeamSlot;
   variableId: string;
-  color: string;
-  dash: string | undefined;
+  // colour (per metric) and line style (per team) are derived from
+  // variableId + slot at render time - see toChartSeries - so they can never
+  // drift out of sync with the shared mapping in lib/chart-colors.ts.
   result: VariableTimeSeriesResult | null;
   loading: boolean;
   error: string | null;
@@ -104,12 +116,11 @@ export function TeamComparisonWorkspace({
   function addVariable(variableId: string) {
     if (!teamA || !teamB || variableIds.includes(variableId)) return;
 
-    const dash = DASH_PATTERNS[variableIds.length % DASH_PATTERNS.length];
     setVariableIds((prev) => [...prev, variableId]);
     setEntries((prev) => [
       ...prev,
-      { slot: "A", variableId, color: TEAM_SLOT_COLOR.A, dash, result: null, loading: true, error: null },
-      { slot: "B", variableId, color: TEAM_SLOT_COLOR.B, dash, result: null, loading: true, error: null },
+      { slot: "A", variableId, result: null, loading: true, error: null },
+      { slot: "B", variableId, result: null, loading: true, error: null },
     ]);
 
     fetchIntoSlot("A", teamA, variableId, dateRange);
@@ -154,8 +165,8 @@ export function TeamComparisonWorkspace({
         id: e.slot + "::" + e.variableId,
         label: `${teamId} · ${e.result!.variableLabel}`,
         unit: e.result!.unit,
-        color: e.color,
-        strokeDasharray: e.dash,
+        color: metricColor(e.variableId),
+        strokeDasharray: TEAM_LINE_DASH[e.slot],
         points: e.result!.points,
       }));
   }
@@ -315,16 +326,37 @@ export function TeamComparisonWorkspace({
 
         {variableIds.length > 0 && (
           <div className="rounded-card bg-card p-4 shadow-soft">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Plotted variables</div>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Plotted variables</div>
+              {/* The team channel, stated once: colour is the metric, line
+                  style is the team. */}
+              {!hasSnapshot && (
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <LineStyleSwatch color="currentColor" dashArray={TEAM_LINE_DASH.A} />
+                    {teamA || "Team A"}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <LineStyleSwatch color="currentColor" dashArray={TEAM_LINE_DASH.B} />
+                    {teamB || "Team B"}
+                  </span>
+                </div>
+              )}
+            </div>
             <div className="space-y-3">
               {variableIds.map((variableId) => {
                 const variable = variables.find((v) => v.id === variableId);
                 const a = entriesA.find((e) => e.variableId === variableId);
                 const b = entriesB.find((e) => e.variableId === variableId);
+                const color = metricColor(variableId);
                 return (
                   <div key={variableId} className="rounded-lg bg-muted px-3 py-2 text-sm">
                     <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
+                        {/* Snapshot bars are coloured by team, not metric, so
+                            the metric-colour chip only makes sense for the
+                            line views. */}
+                        {!hasSnapshot && <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />}
                         <span className="font-medium text-foreground">{variable?.label ?? variableId}</span>
                       </div>
                       <button
@@ -337,11 +369,15 @@ export function TeamComparisonWorkspace({
                     </div>
                     <div className="space-y-1 pl-[18px] text-xs">
                       {[
-                        { teamId: teamA, entry: a },
-                        { teamId: teamB, entry: b },
-                      ].map(({ teamId, entry }) => (
+                        { teamId: teamA, entry: a, slot: "A" as TeamSlot },
+                        { teamId: teamB, entry: b, slot: "B" as TeamSlot },
+                      ].map(({ teamId, entry, slot }) => (
                         <div key={teamId} className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
-                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: entry?.color ?? "#999" }} />
+                          {hasSnapshot ? (
+                            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: TEAM_SLOT_COLOR[slot] }} />
+                          ) : (
+                            <LineStyleSwatch color={color} dashArray={TEAM_LINE_DASH[slot]} />
+                          )}
                           <span className="font-medium text-foreground">{teamId}</span>
                           {entry?.loading && <span>Loading…</span>}
                           {entry?.error && <span className="text-red-500 dark:text-red-400">{entry.error}</span>}
