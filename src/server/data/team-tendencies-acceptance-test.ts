@@ -7,9 +7,10 @@
 // change what every downstream fav/dog/over/under rate and every historical
 // TeamTendencySnapshot means.
 //
-// Also locks in the pick'em exclusion, the tie -> push handling, the
-// MIN_TENDENCY_SAMPLE floor, and findOddsGameForResult's closest-by-commence
-// dedupe.
+// Also locks in the pick'em exclusion, the tie -> push handling, the fact that
+// computeTendencyRates has NO minimum-sample display floor (a rate is real at
+// any sample >= 1 game, null only for a genuinely empty split), and
+// findOddsGameForResult's closest-by-commence dedupe.
 //
 // Pure: the prisma singleton's methods are swapped for spies before each call,
 // so no database is touched. Run with:
@@ -20,7 +21,6 @@ import {
   recomputeTeamTendencies,
   findOddsGameForResult,
   computeTendencyRates,
-  MIN_TENDENCY_SAMPLE,
 } from "@/server/data/team-tendencies";
 import type { OddsGame } from "@/server/data/odds";
 
@@ -198,22 +198,43 @@ async function main() {
     expect("tie -> underdog gets a push, not a W or L", { w: bucs.dogWins, l: bucs.dogLosses, p: bucs.dogPushes }, { w: 0, l: 0, p: 1 });
   }
 
-  // ---- 5. computeTendencyRates: MIN_TENDENCY_SAMPLE is a FLOOR, not a window ----
+  // ---- 5. computeTendencyRates: NO minimum-sample display floor ----
   {
-    const nineteen = computeTendencyRates({
-      favWins: 10, favLosses: 9, favPushes: 0, // 19 decided
-      dogWins: 0, dogLosses: 0, dogPushes: 0,
+    // A tiny sample still produces a real rate - the game count, carried
+    // alongside, is the reliability disclosure, not a suppression threshold.
+    const three = computeTendencyRates({
+      favWins: 0, favLosses: 0, favPushes: 0,
+      dogWins: 1, dogLosses: 2, dogPushes: 0, // 3 decided underdog games
       overCount: 0, underCount: 0, totalPushCount: 0,
     });
-    expect("19 decided favorite games -> favWinPct hidden (null)", nineteen.favWinPct, null);
+    expect("3 decided underdog games -> dogWinPct is real, not hidden", three.dogWinPct, 1 / 3);
+    expect("3 decided underdog games -> dogSampleSize carried", three.dogSampleSize, 3);
 
-    const twenty = computeTendencyRates({
-      favWins: 11, favLosses: 9, favPushes: 0, // 20 decided
+    const one = computeTendencyRates({
+      favWins: 1, favLosses: 0, favPushes: 0, // 1 favorite game
       dogWins: 0, dogLosses: 0, dogPushes: 0,
       overCount: 0, underCount: 0, totalPushCount: 0,
     });
-    expect("20 decided favorite games -> favWinPct shown", twenty.favWinPct, 0.55);
-    expect("MIN_TENDENCY_SAMPLE unchanged", MIN_TENDENCY_SAMPLE, 20);
+    expect("1 favorite game -> favWinPct shown (100%)", one.favWinPct, 1);
+
+    // The one case that IS still null: a genuinely empty split (0 games) -
+    // a divide-by-zero guard, not a sample-size opinion.
+    const emptyDog = computeTendencyRates({
+      favWins: 5, favLosses: 5, favPushes: 0,
+      dogWins: 0, dogLosses: 0, dogPushes: 0, // never an underdog
+      overCount: 0, underCount: 0, totalPushCount: 0,
+    });
+    expect("0 underdog games -> dogWinPct null (empty split)", emptyDog.dogWinPct, null);
+    expect("0 underdog games -> favWinPct still real", emptyDog.favWinPct, 0.5);
+
+    // Pushes count toward the split's game total but not toward the win %.
+    const withPush = computeTendencyRates({
+      favWins: 3, favLosses: 1, favPushes: 2, // 6 games, 4 decided
+      dogWins: 0, dogLosses: 0, dogPushes: 0,
+      overCount: 0, underCount: 0, totalPushCount: 0,
+    });
+    expect("favWinPct divides by all games incl. pushes", withPush.favWinPct, 3 / 6);
+    expect("favSampleSize includes pushes", withPush.favSampleSize, 6);
   }
 
   // ---- 6. findOddsGameForResult: closest-by-commence-time collapses re-fetches ----

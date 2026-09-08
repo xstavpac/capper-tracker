@@ -57,6 +57,13 @@ async function resolveTeamTendency(variableId: string, teamName: string, asOf: D
   });
   const row = findLatestAtOrBefore(rows, asOf);
   if (!row) return NOT_FOUND;
+  // computeTendencyRates has no minimum-sample floor: this is a real rate at
+  // any sample >= 1 game, null only for a genuinely empty split. That is
+  // fine here - the only ModelDefinition that resolves these ids
+  // (decayDeltaModel) uses its tendency DataInputs purely for their
+  // favorite/underdog role identity and never reads this number; its actual
+  // rates come from the weighted-accumulation engine (weighted-accumulation.ts),
+  // which does its own zero-observation handling.
   return { value: readRate(computeTendencyRates(row), variableId), timestamp: snapshotDateToTimestamp(row.snapshotDate), found: true };
 }
 

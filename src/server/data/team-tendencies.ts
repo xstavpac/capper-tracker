@@ -4,13 +4,17 @@ import { closestByTime, easternDateKey } from "@/lib/dates";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 
-// Below this many decided (non-push) games in a split, a team's tendency is
-// too small a sample to be meaningful - the model builder's variable library
-// hides/refuses to use a team's fav/dog/over/under rate until this is met.
-// Matches this session's existing minimum-sample convention (RANKING_MIN_SAMPLE
-// = 5 for capper stats, SCORECARD_MIN_SAMPLE = 5 for bet-type scorecards) scaled
-// up for a per-team split, which sees far fewer games than an active capper does.
-export const MIN_TENDENCY_SAMPLE = 20;
+// There is deliberately NO minimum-sample display gate on a team's fav / dog /
+// over / under rate. A tendency rate shows at any sample size >= 1 game, with
+// the real game count carried alongside it (see TeamTendencyRates.*SampleSize
+// and the Charts HistoryNote) as the honest disclosure of how reliable it is -
+// the same "show the real number next to its real count" principle the capper
+// record cards use, rather than hiding a percentage behind a threshold and
+// replacing it with a "not enough data yet" message. A prior version gated each
+// split on a 20-game floor (MIN_TENDENCY_SAMPLE); that floor made "Win% as
+// underdog" effectively unreachable for good teams (rarely underdogs) and was
+// removed. The only non-display consumer, model-engine/resolver.ts, never read
+// the gated value for any calculation (see the comment there).
 
 type TendencyAccumulator = {
   favWins: number;
@@ -289,11 +293,11 @@ export type TeamTendencyRates = {
   totalSampleSize: number;
 };
 
-// Converts a stored TeamTendency's raw counts into display-ready rates,
-// gating each split independently on MIN_TENDENCY_SAMPLE - a team can have
-// enough favorite-role games to show favWinPct while still lacking enough
-// underdog-role games for dogWinPct, since MLB teams are favored/underdog at
-// very different frequencies depending on how good they are.
+// Converts a stored TeamTendency's raw counts into display-ready rates. Each
+// split's rate is real whenever that split has at least one game; it is null
+// only when the split is genuinely empty (0 games in that role), which is a
+// divide-by-zero guard, not a sample-size opinion. Each *SampleSize is always
+// returned so a caller can show the rate next to its real game count.
 export function computeTendencyRates(tendency: {
   favWins: number;
   favLosses: number;
@@ -310,12 +314,12 @@ export function computeTendencyRates(tendency: {
   const totalSampleSize = tendency.overCount + tendency.underCount + tendency.totalPushCount;
 
   return {
-    favWinPct: favSampleSize >= MIN_TENDENCY_SAMPLE ? tendency.favWins / favSampleSize : null,
+    favWinPct: favSampleSize > 0 ? tendency.favWins / favSampleSize : null,
     favSampleSize,
-    dogWinPct: dogSampleSize >= MIN_TENDENCY_SAMPLE ? tendency.dogWins / dogSampleSize : null,
+    dogWinPct: dogSampleSize > 0 ? tendency.dogWins / dogSampleSize : null,
     dogSampleSize,
-    overRate: totalSampleSize >= MIN_TENDENCY_SAMPLE ? tendency.overCount / totalSampleSize : null,
-    underRate: totalSampleSize >= MIN_TENDENCY_SAMPLE ? tendency.underCount / totalSampleSize : null,
+    overRate: totalSampleSize > 0 ? tendency.overCount / totalSampleSize : null,
+    underRate: totalSampleSize > 0 ? tendency.underCount / totalSampleSize : null,
     totalSampleSize,
   };
 }

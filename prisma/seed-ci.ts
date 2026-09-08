@@ -172,8 +172,8 @@ export async function seedModelEngineFixtures(prisma: PrismaClient) {
   });
 
   // ---- acceptance-test.ts (d): team_tendencies adapter - "Athletics" <= 08-13.
-  //      Only found:true is asserted; the rate is correctly null under the
-  //      MIN_TENDENCY_SAMPLE (20) floor with these small counts. ----
+  //      Only found:true is asserted (a real snapshot row exists); the rate
+  //      itself has no minimum-sample floor, so its value isn't asserted. ----
   await prisma.teamTendencySnapshot.upsert({
     where: { sportKey_teamName_snapshotDate: { sportKey: SPORT, teamName: "Athletics", snapshotDate: "2026-08-12" } },
     update: {},

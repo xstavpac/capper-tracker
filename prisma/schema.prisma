@@ -410,9 +410,9 @@ enum MetricKind {
 // line), recomputed by recomputeTeamTendencies (see server/data/team-
 // tendencies.ts), which the refresh-scores cron calls once daily right after
 // persisting that day's final scores. Deliberately raw counts, not a stored
-// percentage - MIN_TENDENCY_SAMPLE-gating and the actual win%/rate math live
-// entirely in application code, so the threshold can be tuned without a
-// migration. This row is overwritten in place every day (current cumulative
+// percentage - the win%/rate math (and the game count shown alongside it)
+// lives entirely in application code (computeTendencyRates), so it can change
+// without a migration. This row is overwritten in place every day (current cumulative
 // totals only) - TeamTendencySnapshot below is the dated history of the same
 // counts, and is what both backtesting and Charts actually read for any
 // point-in-time value; this table remains the always-current source that
