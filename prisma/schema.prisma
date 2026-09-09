@@ -515,10 +515,15 @@ model TeamStatSnapshot {
   @@map("team_stat_snapshots")
 }
 
-// One pitcher's season-to-date stat line on one calendar day - captured for
-// that day's probable starters only (not every pitcher in the league), by
-// capturePitcherStatSnapshots. Joined against GameStarters (below) at
-// backtest time to resolve pitcher_stats conditions for a historical game.
+// One pitcher's season-to-date stat line as it stood on one calendar day.
+// Two things write it: the daily cron (capturePitcherStatSnapshots) captures
+// that day's probable starters going forward, and the one-time historical
+// backfill (scripts/backfill-mlb-game-starters.ts) writes rows dated
+// gameDate-1 for past games' starters, reconstructed from the MLB Stats API
+// byDateRange endpoint. Both produce the same thing - a point-in-time
+// season-to-date line - so they share this table. Joined against
+// GameStarters (below) via GameResult.externalId to resolve a historical
+// game's starting-pitcher matchup as of the day before that game.
 model PitcherStatSnapshot {
   id             String    @id @default(cuid())
   sportKey       String
@@ -541,6 +546,50 @@ model PitcherStatSnapshot {
 
   @@unique([sportKey, pitcherId, snapshotDate])
   @@map("pitcher_stat_snapshots")
+}
+
+// Which pitcher started each side of a game - kept as its own table rather
+// than columns on GameResult on purpose. The daily cron captures the
+// pre-game PROBABLE starters (homeProbablePitcherId / awayProbablePitcherId)
+// roughly a day before the game is final, i.e. before persistFinalScores has
+// created the GameResult row at all - so there is no row to hang columns on
+// at capture time. Once the game is final, reconcileGameStarters (and the
+// historical backfill) fill in the CONFIRMED ACTUAL starter from the
+// boxscore (the first pitcher to appear for each side), which is the ground
+// truth a late scratch can make diverge from the probable.
+//
+// Keyed like GameResult (sportKey + externalId = MLB's gamePk) so a consumer
+// preloads GameResult into a Map by externalId and looks this up with an
+// in-memory .get() - the same shape the old model backtester used, not a
+// query-time join. Readers prefer the *StartingPitcherId (actual) fields and
+// fall back to *ProbablePitcherId when a game has not been reconciled yet.
+model GameStarters {
+  id                      String    @id @default(cuid())
+  sportKey                String
+  externalId              String // MLB gamePk - matches GameResult.externalId
+  homeTeam                String
+  awayTeam                String
+  gameDate                DateTime
+  homeProbablePitcherId   Int? // MLB Stats API numeric person id
+  homeProbablePitcherName String?
+  awayProbablePitcherId   Int?
+  awayProbablePitcherName String?
+  homeStartingPitcherId   Int? // confirmed actual - boxscore, first pitcher to appear
+  homeStartingPitcherName String?
+  awayStartingPitcherId   Int?
+  awayStartingPitcherName String?
+  // Set when the actual starters were confirmed against a final boxscore -
+  // null means only the probable is known so far. Lets the reconcile pass
+  // skip already-confirmed rows without re-fetching every boxscore.
+  startersConfirmedAt     DateTime?
+  sourceId                String    @default("mlb_stats_api")
+  scope                   DataScope @default(GLOBAL)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@unique([sportKey, externalId])
+  @@index([sportKey, gameDate])
+  @@map("game_starters")
 }
 
 // One NFL team's box-score line for one game - the NFL counterpart to

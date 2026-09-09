@@ -1,0 +1,156 @@
+{
+  "teams": {
+    "home": {
+      "team": {
+        "id": 116,
+        "name": "Detroit Tigers"
+      },
+      "pitchers": [
+        663947,
+        687830,
+        695445,
+        676428,
+        676684,
+        669724
+      ],
+      "players": {
+        "ID663947": {
+          "person": {
+            "id": 663947,
+            "fullName": "Tyler Holton"
+          },
+          "stats": {
+            "pitching": {
+              "gamesStarted": 1
+            }
+          }
+        },
+        "ID687830": {
+          "person": {
+            "id": 687830,
+            "fullName": "Sawyer Gipson-Long"
+          },
+          "stats": {
+            "pitching": {
+              "gamesStarted": 0
+            }
+          }
+        },
+        "ID695445": {
+          "person": {
+            "id": 695445,
+            "fullName": "Chase Lee"
+          },
+          "stats": {
+            "pitching": {
+              "gamesStarted": 0
+            }
+          }
+        },
+        "ID676428": {
+          "person": {
+            "id": 676428,
+            "fullName": "Brant Hurter"
+          },
+          "stats": {
+            "pitching": {
+              "gamesStarted": 0
+            }
+          }
+        },
+        "ID676684": {
+          "person": {
+            "id": 676684,
+            "fullName": "Will Vest"
+          },
+          "stats": {
+            "pitching": {
+              "gamesStarted": 0
+            }
+          }
+        },
+        "ID669724": {
+          "person": {
+            "id": 669724,
+            "fullName": "Brenan Hanifee"
+          },
+          "stats": {
+            "pitching": {
+              "gamesStarted": 0
+            }
+          }
+        }
+      }
+    },
+    "away": {
+      "team": {
+        "id": 113,
+        "name": "Cincinnati Reds"
+      },
+      "pitchers": [
+        489119,
+        605130,
+        668933,
+        641941,
+        663574
+      ],
+      "players": {
+        "ID489119": {
+          "person": {
+            "id": 489119,
+            "fullName": "Wade Miley"
+          },
+          "stats": {
+            "pitching": {
+              "gamesStarted": 1
+            }
+          }
+        },
+        "ID605130": {
+          "person": {
+            "id": 605130,
+            "fullName": "Scott Barlow"
+          },
+          "stats": {
+            "pitching": {
+              "gamesStarted": 0
+            }
+          }
+        },
+        "ID668933": {
+          "person": {
+            "id": 668933,
+            "fullName": "Graham Ashcraft"
+          },
+          "stats": {
+            "pitching": {
+              "gamesStarted": 0
+            }
+          }
+        },
+        "ID641941": {
+          "person": {
+            "id": 641941,
+            "fullName": "Emilio Pagán"
+          },
+          "stats": {
+            "pitching": {
+              "gamesStarted": 0
+            }
+          }
+        },
+        "ID663574": {
+          "person": {
+            "id": 663574,
+            "fullName": "Tony Santillan"
+          },
+          "stats": {
+            "pitching": {
+              "gamesStarted": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

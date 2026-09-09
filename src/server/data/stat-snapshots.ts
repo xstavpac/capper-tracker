@@ -9,13 +9,20 @@
 // schedule call, 1 standings call, 2 league-wide team-stats calls, 1 batched
 // multi-pitcher call), via endpoints that return every team/every probable
 // starter in one response instead of one call each. Recording each game's
-// starters (GameStarters) rides the same schedule call already fetched for
-// pitcher snapshots, so it adds zero additional requests.
+// probable starters (GameStarters) rides the same schedule call already
+// fetched for pitcher snapshots, so it adds zero additional requests;
+// reconcileGameStarters then fills in each finished game's CONFIRMED starter
+// from its boxscore (one cheap call per newly-final game).
 import { prisma } from "@/lib/prisma";
 import { easternDateKey } from "@/lib/dates";
 import { currentMlbSeason, mlbTeamNameById } from "@/server/data/mlb-stats";
 import { currentNflSeason } from "@/server/data/nfl-team-stats";
 import { buildNflTeamStatRows } from "@/server/data/nfl-team-stat-snapshots";
+import {
+  fetchMlbScheduleWithProbables,
+  fetchActualStarters,
+  findAggregateSplit,
+} from "@/server/data/mlb-pitcher-history";
 
 const MLB_SPORT_KEY = "baseball_mlb";
 
@@ -148,51 +155,120 @@ type ScheduledGame = {
 
 // Today's MLB schedule with each game's probable starters, one request -
 // hydrate=probablePitcher returns them inline on the schedule response
-// instead of needing a per-game live-feed fetch (getProbablePitcher in
-// mlb-stats.ts does that heavier per-game lookup for the live preview's
-// single-game case; this batch capture needs all of today's games at once,
-// so it uses the cheaper schedule-level hydration instead). gamePk/team
-// names/gameDate come along on the same response - capturing them here for
-// GameStarters is not an additional request, just reading more fields off a
-// call already being made for the pitcher snapshots.
+// instead of needing a per-game live-feed fetch. The fetch+parse itself
+// lives in mlb-pitcher-history.ts (fetchMlbScheduleWithProbables, a
+// date-range call the historical backfill also uses) so there is one
+// schedule parser, not two - this just narrows it to a single day and maps
+// to the local shape the snapshot code already expects.
 async function getTodaysSchedule(date: string): Promise<ScheduledGame[]> {
-  const res = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=probablePitcher`, {
-    cache: "no-store",
-  });
-  if (!res.ok) return [];
-
-  const data = await res.json();
-  const games = data.dates?.[0]?.games ?? [];
-  return games.map((g: any) => {
-    const parsePitcher = (side: "home" | "away"): ProbableStarter | null => {
-      const p = g.teams?.[side]?.probablePitcher;
-      return p?.id && p?.fullName ? { id: p.id, name: p.fullName } : null;
-    };
-    return {
-      gamePk: String(g.gamePk),
-      homeTeam: g.teams?.home?.team?.name ?? "",
-      awayTeam: g.teams?.away?.team?.name ?? "",
-      gameDate: new Date(g.gameDate),
-      homePitcher: parsePitcher("home"),
-      awayPitcher: parsePitcher("away"),
-    };
-  });
+  const games = await fetchMlbScheduleWithProbables(date, date);
+  return games.map((g) => ({
+    gamePk: g.gamePk,
+    homeTeam: g.homeTeamName,
+    awayTeam: g.awayTeamName,
+    gameDate: g.gameDate,
+    homePitcher: g.homeProbable,
+    awayPitcher: g.awayProbable,
+  }));
 }
 
-// The season-total split (not one of the per-team splits a mid-season trade
-// produces) - the entry with no `team` field is MLB's own aggregate across
-// every team played for; falls back to the first split for a player with
-// only one team on record, where no separate no-team aggregate is returned.
-function findAggregateSplit(splits: any[] | undefined): any | undefined {
-  if (!splits || splits.length === 0) return undefined;
-  return splits.find((s) => !s.team) ?? splits[0];
+// Upserts one GameStarters row per game that has a probable starter, keyed
+// like GameResult (sportKey + externalId/gamePk). Written here, pre-game,
+// because that is the only time the probable is known and GameResult does
+// not exist yet (persistFinalScores creates it a day or more later, once the
+// game is final). The confirmed actual starter is filled in afterwards by
+// reconcileGameStarters. Reads only fields already on the schedule response
+// getTodaysSchedule just fetched - zero extra requests.
+async function writeGameStarters(games: ScheduledGame[]): Promise<number> {
+  const rows = games
+    .filter((g) => g.homePitcher || g.awayPitcher)
+    .map((g) => ({
+      sportKey: MLB_SPORT_KEY,
+      externalId: g.gamePk,
+      homeTeam: g.homeTeam,
+      awayTeam: g.awayTeam,
+      gameDate: g.gameDate,
+      homeProbablePitcherId: g.homePitcher?.id ?? null,
+      homeProbablePitcherName: g.homePitcher?.name ?? null,
+      awayProbablePitcherId: g.awayPitcher?.id ?? null,
+      awayProbablePitcherName: g.awayPitcher?.name ?? null,
+    }));
+
+  await Promise.all(
+    rows.map((row) =>
+      prisma.gameStarters.upsert({
+        where: { sportKey_externalId: { sportKey: row.sportKey, externalId: row.externalId } },
+        // Only the probable fields on update - never clobber a confirmed
+        // actual starter a later reconcile pass already wrote.
+        update: {
+          homeTeam: row.homeTeam,
+          awayTeam: row.awayTeam,
+          gameDate: row.gameDate,
+          homeProbablePitcherId: row.homeProbablePitcherId,
+          homeProbablePitcherName: row.homeProbablePitcherName,
+          awayProbablePitcherId: row.awayProbablePitcherId,
+          awayProbablePitcherName: row.awayProbablePitcherName,
+        },
+        create: row,
+      })
+    )
+  );
+
+  return rows.length;
 }
 
-// Same aggregate-preference logic as findAggregateSplit, scoped to one
-// home/away split code - see the multi-team case investigated live before
-// writing this (a traded pitcher's statSplits includes both per-team entries
-// and, when he played that side for more than one team, a no-team aggregate;
-// a single-team season only has the one per-team entry for that code).
+// Fills in the CONFIRMED actual starter (boxscore, first pitcher to appear)
+// for every GameStarters row that has a matching final GameResult but has
+// not been reconciled yet (startersConfirmedAt is null). One boxscore call
+// per such game - normally a handful per daily run, since yesterday's games
+// are the only ones going final between passes. A late scratch is exactly
+// the case this catches: the probable stays on the row untouched, the
+// actual is written alongside it, and readers prefer the actual.
+export async function reconcileGameStarters(
+  sportKey: string = MLB_SPORT_KEY
+): Promise<{ reconciled: number; pending: number }> {
+  const unconfirmed = await prisma.gameStarters.findMany({
+    where: { sportKey, startersConfirmedAt: null },
+    orderBy: { gameDate: "asc" },
+  });
+  if (unconfirmed.length === 0) return { reconciled: 0, pending: 0 };
+
+  const finalIds = new Set(
+    (
+      await prisma.gameResult.findMany({
+        where: { sportKey, externalId: { in: unconfirmed.map((r) => r.externalId) } },
+        select: { externalId: true },
+      })
+    ).map((r) => r.externalId)
+  );
+
+  const due = unconfirmed.filter((r) => finalIds.has(r.externalId));
+  let reconciled = 0;
+  for (const row of due) {
+    const actual = await fetchActualStarters(row.externalId);
+    if (!actual) continue;
+    await prisma.gameStarters.update({
+      where: { id: row.id },
+      data: {
+        homeStartingPitcherId: actual.home?.id ?? null,
+        homeStartingPitcherName: actual.home?.name ?? null,
+        awayStartingPitcherId: actual.away?.id ?? null,
+        awayStartingPitcherName: actual.away?.name ?? null,
+        startersConfirmedAt: new Date(),
+      },
+    });
+    reconciled++;
+  }
+  return { reconciled, pending: unconfirmed.length - reconciled };
+}
+
+// Same aggregate-preference logic as findAggregateSplit (imported from
+// mlb-pitcher-history.ts, where the traded-pitcher case is documented and
+// tested), scoped to one home/away split code - see the multi-team case
+// investigated live before writing this (a traded pitcher's statSplits
+// includes both per-team entries and, when he played that side for more than
+// one team, a no-team aggregate; a single-team season only has the one
+// per-team entry for that code).
 function findSplitByCode(splits: any[] | undefined, code: string): any | undefined {
   if (!splits) return undefined;
   return splits.find((s) => !s.team && s.split?.code === code) ?? splits.find((s) => s.split?.code === code);
@@ -224,7 +300,10 @@ export async function capturePitcherStatSnapshots(
   const games = await getTodaysSchedule(date);
   if (games.length === 0) return { starters: 0, pitcherSnapshots: 0 };
 
-  const starterCount = games.filter((g) => g.homePitcher || g.awayPitcher).length;
+  // Record which pitcher is probable for which side of which game, keyed so
+  // a consumer can later join GameResult -> GameStarters -> point-in-time
+  // pitcher stats. Written from the schedule response already in hand.
+  const starterCount = await writeGameStarters(games);
 
   const starters = dedupePitchers(games);
   if (starters.length === 0) return { starters: starterCount, pitcherSnapshots: 0 };
