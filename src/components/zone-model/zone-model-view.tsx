@@ -70,9 +70,11 @@ export function ZoneModelView({ report }: { report: ZoneModelReport }) {
         <h1 className="text-xl font-semibold">Zone Model</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Bucketed delta calibration - admin-only. Every graded game is placed into a range by its ML or Total
-          delta (each team&apos;s all-time BettingView tendency history, not a point-in-time snapshot), and each
-          range reports its own real record. Ranges are independent: none of this is averaged, smoothed, or an
-          implicit claim that a bigger delta performs better.
+          delta, computed from each team&apos;s BettingView tendency history exactly as it stood the day before
+          that game - never a current or later rate - and each range reports its own real record. Ranges are
+          independent: none of this is averaged, smoothed, or an implicit claim that a bigger delta performs
+          better. Point-in-time history only goes back to 2026-08-10 (when daily tendency snapshots began), so
+          earlier games are not included.
         </p>
       </div>
 

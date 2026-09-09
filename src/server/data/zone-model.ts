@@ -1,13 +1,31 @@
 // Zone Model: an admin-only bucketed delta calibration tool. For every
 // graded historical game, computes two independent deltas from REAL,
-// already-tracked BettingView data - team-tendencies.ts's TeamTendency
-// table, via its own computeTendencyRates (reused directly, not
-// reimplemented):
+// already-tracked BettingView data - team-tendencies.ts's computeTendencyRates
+// (reused directly, not reimplemented), applied to each team's history AS IT
+// STOOD ON THAT GAME'S OWN DATE:
 //
-//   ML Delta    = (favorite team's history win% AS a favorite)
-//                 - (underdog team's history win% AS an underdog)
-//   Total Delta = (this matchup's combined history over-rate)
-//                 - (this matchup's combined history under-rate)
+//   ML Delta    = (favorite team's history win% AS a favorite, as of that date)
+//                 - (underdog team's history win% AS an underdog, as of that date)
+//   Total Delta = (this matchup's combined history over-rate, as of that date)
+//                 - (combined history under-rate, as of that date)
+//
+// Point-in-time, not current/cumulative: this reads TeamTendencySnapshot (the
+// dated daily copy of TeamTendency) via findLatestAtOrBefore, the exact same
+// "as of" mechanism resolver.ts's resolveTeamTendency and Charts'
+// historical-variables.ts tendencyProvider already use for this same table -
+// not a new lookup convention. `asOf` is pinned to the instant just before
+// the game's own Eastern calendar day starts (startOfEasternDay(gameDate) -
+// 1ms), so the snapshot used is strictly BEFORE that day - the game's own
+// result (and anything else from that same day) can never leak into the rate
+// used to bucket it. A game with no snapshot yet as of its date (the team's
+// history hadn't started accumulating, or - see below - snapshotting itself
+// hadn't started yet) is skipped entirely, not defaulted to any rate.
+//
+// Consequence worth knowing: TeamTendencySnapshot only exists from
+// 2026-08-10 onward (migration 20260810072810_add_team_tendency_snapshot).
+// Any game before that date has no prior-day snapshot to look up and is
+// excluded from both deltas - this tool's real usable history starts there,
+// not at the beginning of GameResult history.
 //
 // Each game is bucketed by its delta into one of ten ranges (see
 // ZONE_MODEL_BUCKETS) and contributes a win/loss to that bucket - "win"
@@ -18,23 +36,12 @@
 // blended with its neighbors, and a bucket with zero games is still
 // returned (not dropped) so the caller can render it as an explicit empty
 // state.
-//
-// Deliberate scope, not a bug: this uses each team's CURRENT, all-time-to-
-// date TeamTendency row for every historical game, exactly as
-// computeTendencyRates already exposes it - not a point-in-time snapshot
-// as-of that game's own date. A team's rate for a given game therefore
-// includes that same game's own result (and every game after it). This is
-// a real methodological difference from the separate, leak-free
-// decay-delta-predictions.ts system (which deliberately asOf-bounds its
-// model-engine computation to avoid exactly this look-ahead). Zone Model
-// trades that rigor for simplicity and a direct, literal reuse of
-// computeTendencyRates - it answers "how did games land in each bucket of
-// today's all-time tendency numbers", not "would this have been
-// predictable in real time". See the PR description for the full tradeoff.
 import { prisma } from "@/lib/prisma";
-import { computeTendencyRates, type TeamTendencyRates } from "@/server/data/team-tendencies";
+import { computeTendencyRates } from "@/server/data/team-tendencies";
 import { actualFavWon } from "@/server/data/model-engine/decay-delta-outcome";
 import { deriveWentOver } from "@/server/data/model-engine/decay-delta-predictions";
+import { findLatestAtOrBefore } from "@/server/data/providers/snapshot-utils";
+import { startOfEasternDay } from "@/lib/dates";
 
 export type ZoneModelBucket = {
   id: string;
@@ -97,6 +104,20 @@ type TendencyCounts = {
   underCount: number;
   totalPushCount: number;
 };
+
+// The subset of TeamTendencySnapshot findLatestAtOrBefore needs (a
+// snapshotDate string) plus the raw counts computeTendencyRates itself
+// needs - matches what `prisma.teamTendencySnapshot.findMany` returns.
+type TendencySnapshotRow = TendencyCounts & { teamName: string; snapshotDate: string };
+
+// The last instant of the Eastern calendar day BEFORE `gameDate` - passing
+// this as findLatestAtOrBefore's `asOf` means only a snapshot dated
+// strictly earlier than the game's own day can ever be selected, so the
+// game's own result (and anything else from that same day) can never be
+// part of the rate used to bucket it.
+function dayBefore(gameDate: Date): Date {
+  return new Date(startOfEasternDay(gameDate).getTime() - 1);
+}
 
 // Combines two teams' raw totals-side counts into one synthetic matchup
 // counts row, so their COMBINED over/under history can be run back through
@@ -165,12 +186,13 @@ function finalizeBucketResults(
   });
 }
 
-// Computes both bucket reports fresh from GameResult + TeamTendency on every
-// call - no separate stored/frozen table, so it improves automatically as
-// more games grade, mirroring getDecayDeltaBucketWinRates' own "live query,
-// not a snapshot" approach.
+// Computes both bucket reports fresh from GameResult + TeamTendencySnapshot
+// on every call - no separate stored/frozen table, so it improves
+// automatically as more games grade and more daily snapshots accumulate,
+// mirroring getDecayDeltaBucketWinRates' own "live query, not a snapshot"
+// approach.
 export async function computeZoneModel(sportKey: string): Promise<ZoneModelReport> {
-  const [games, tendencyRows] = await Promise.all([
+  const [games, snapshotRows] = await Promise.all([
     prisma.gameResult.findMany({
       where: { sportKey, OR: [{ favTeam: { not: null } }, { totalLine: { not: null } }] },
       select: {
@@ -184,14 +206,24 @@ export async function computeZoneModel(sportKey: string): Promise<ZoneModelRepor
         gameDate: true,
       },
     }),
-    prisma.teamTendency.findMany({ where: { sportKey } }),
+    // Ascending by snapshotDate, as findLatestAtOrBefore's own contract
+    // requires - same query shape resolver.ts's resolveTeamTendency uses,
+    // fetching each team's full snapshot history once rather than a
+    // per-game/per-date query.
+    prisma.teamTendencySnapshot.findMany({ where: { sportKey }, orderBy: { snapshotDate: "asc" } }) as Promise<TendencySnapshotRow[]>,
   ]);
 
-  const ratesByTeam = new Map<string, TeamTendencyRates>();
-  const countsByTeam = new Map<string, TendencyCounts>();
-  for (const row of tendencyRows) {
-    countsByTeam.set(row.teamName, row);
-    ratesByTeam.set(row.teamName, computeTendencyRates(row));
+  const snapshotsByTeam = new Map<string, TendencySnapshotRow[]>();
+  for (const row of snapshotRows) {
+    let list = snapshotsByTeam.get(row.teamName);
+    if (!list) {
+      list = [];
+      snapshotsByTeam.set(row.teamName, list);
+    }
+    list.push(row);
+  }
+  function asOfSnapshot(teamName: string, asOf: Date): TendencySnapshotRow | undefined {
+    return findLatestAtOrBefore(snapshotsByTeam.get(teamName) ?? [], asOf);
   }
 
   const mlCounts = emptyBucketResults();
@@ -200,10 +232,12 @@ export async function computeZoneModel(sportKey: string): Promise<ZoneModelRepor
   let totalGamesConsidered = 0;
 
   for (const game of games) {
+    const asOf = dayBefore(game.gameDate);
+
     if (game.favTeam !== null) {
       const dogTeam = game.favTeam === game.homeTeam ? game.awayTeam : game.homeTeam;
-      const favRates = ratesByTeam.get(game.favTeam);
-      const dogRates = ratesByTeam.get(dogTeam);
+      const favRow = asOfSnapshot(game.favTeam, asOf);
+      const dogRow = asOfSnapshot(dogTeam, asOf);
       const favWon = actualFavWon({
         id: game.id,
         favTeam: game.favTeam,
@@ -214,26 +248,28 @@ export async function computeZoneModel(sportKey: string): Promise<ZoneModelRepor
         gameDate: game.gameDate,
       });
 
-      if (favRates?.favWinPct !== null && favRates?.favWinPct !== undefined &&
-          dogRates?.dogWinPct !== null && dogRates?.dogWinPct !== undefined &&
-          favWon !== null) {
-        const delta = pct(favRates.favWinPct) - pct(dogRates.dogWinPct);
-        const bucket = bucketForDelta(delta);
-        const entry = mlCounts.get(bucket.id)!;
-        entry.games++;
-        if (favWon) entry.wins++;
-        else entry.losses++;
-        mlGamesConsidered++;
+      if (favRow && dogRow && favWon !== null) {
+        const favWinPct = computeTendencyRates(favRow).favWinPct;
+        const dogWinPct = computeTendencyRates(dogRow).dogWinPct;
+        if (favWinPct !== null && dogWinPct !== null) {
+          const delta = pct(favWinPct) - pct(dogWinPct);
+          const bucket = bucketForDelta(delta);
+          const entry = mlCounts.get(bucket.id)!;
+          entry.games++;
+          if (favWon) entry.wins++;
+          else entry.losses++;
+          mlGamesConsidered++;
+        }
       }
     }
 
     if (game.totalLine !== null) {
-      const homeCounts = countsByTeam.get(game.homeTeam);
-      const awayCounts = countsByTeam.get(game.awayTeam);
+      const homeRow = asOfSnapshot(game.homeTeam, asOf);
+      const awayRow = asOfSnapshot(game.awayTeam, asOf);
       const wentOver = deriveWentOver({ homeScore: game.homeScore, awayScore: game.awayScore, totalLine: game.totalLine });
 
-      if (homeCounts && awayCounts && wentOver !== null) {
-        const combinedRates = computeTendencyRates(combinedTotalsCounts(homeCounts, awayCounts));
+      if (homeRow && awayRow && wentOver !== null) {
+        const combinedRates = computeTendencyRates(combinedTotalsCounts(homeRow, awayRow));
         if (combinedRates.overRate !== null && combinedRates.underRate !== null) {
           const delta = pct(combinedRates.overRate) - pct(combinedRates.underRate);
           const bucket = bucketForDelta(delta);
