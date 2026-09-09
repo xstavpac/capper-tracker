@@ -23,8 +23,10 @@ const MODEL_ID = decayDeltaModel.modelId; // "decay-delta-v1" - read off the fix
 // (Build Step 2.5) - a push or a missing line both collapse to null here,
 // since this table has no separate isPush field (not asked for by this
 // step's spec; wentOver alone is enough to record "did this game's real
-// total result exist and go over/under").
-function deriveWentOver(row: { homeScore: number; awayScore: number; totalLine: number | null }): boolean | null {
+// total result exist and go over/under"). Exported so zone-model.ts can
+// reuse it too, rather than re-deriving the same over/under/push logic a
+// third time.
+export function deriveWentOver(row: { homeScore: number; awayScore: number; totalLine: number | null }): boolean | null {
   if (row.totalLine === null) return null;
   const actualTotal = row.homeScore + row.awayScore;
   if (actualTotal === row.totalLine) return null;

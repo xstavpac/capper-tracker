@@ -3,6 +3,7 @@ import { LiveTicker } from "@/components/marketing/live-ticker";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { getLiveTickerGames } from "@/server/data/live-ticker";
 import { requireUser } from "@/server/auth";
+import { isFeatureEnabledForUser, ZONE_MODEL_FLAG_KEY } from "@/server/data/feature-flags";
 
 // Every route under here needs a live, per-request session - never
 // statically prerender them. Without this, Next's build-time trial-render
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const [user, tickerGames] = await Promise.all([requireUser(), getLiveTickerGames()]);
+  const showZoneModel = await isFeatureEnabledForUser(ZONE_MODEL_FLAG_KEY, user.id);
 
   return (
     <ThemeProvider initialTheme={user.themePreference}>
@@ -21,6 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="flex flex-1 flex-col md:flex-row md:gap-3 md:p-3">
           <AppSidebar
             user={{ name: user.name, email: user.email, profilePictureUrl: user.profilePictureUrl }}
+            showZoneModel={showZoneModel}
           />
           <main className="flex-1 bg-background p-4 md:rounded-xl md:border md:border-border md:bg-card md:p-8 md:shadow-soft">
             {children}

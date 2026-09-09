@@ -117,6 +117,16 @@ function PricingIcon({ className }: { className?: string }) {
   );
 }
 
+function ZoneModelIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <rect x="3.5" y="10.5" width="4" height="10" rx="1" />
+      <rect x="10" y="6" width="4" height="14" rx="1" />
+      <rect x="16.5" y="3" width="4" height="17" rx="1" />
+    </svg>
+  );
+}
+
 type NavItem = {
   href: string;
   label: string;
@@ -135,6 +145,8 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/settings", label: "Settings", icon: SettingsIcon },
   { href: "/live", label: "Live", icon: LiveIcon, accent: "red" },
 ];
+
+const ZONE_MODEL_NAV_ITEM: NavItem = { href: "/zone-model", label: "Zone Model", icon: ZoneModelIcon };
 
 function isActiveHref(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
@@ -302,8 +314,12 @@ function AccountRow({ user }: { user: SidebarUser }) {
 // on the main content card next to it). Below md:, that same content becomes
 // a slide-in drawer opened from a compact top bar - full-bleed on mobile
 // rather than another floating card, since there's no room to spare there.
-export function AppSidebar({ user }: { user: SidebarUser }) {
+export function AppSidebar({ user, showZoneModel = false }: { user: SidebarUser; showZoneModel?: boolean }) {
   const [open, setOpen] = useState(false);
+  // Zone Model is admin-only and server-gated (the page itself 404s
+  // regardless of this) - this only decides whether the link appears, so a
+  // non-admin never sees a nav entry for a route that would just 404 them.
+  const navItems = showZoneModel ? [...BASE_NAV_ITEMS, ZONE_MODEL_NAV_ITEM] : BASE_NAV_ITEMS;
 
   return (
     <>
@@ -322,7 +338,7 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
         <div className="mb-6 px-1">
           <LogoMark />
         </div>
-        <NavLinks items={BASE_NAV_ITEMS} />
+        <NavLinks items={navItems} />
         <SidebarDropCatalog />
         <AccountRow user={user} />
       </aside>
@@ -341,7 +357,7 @@ export function AppSidebar({ user }: { user: SidebarUser }) {
                 <CloseIcon />
               </button>
             </div>
-            <NavLinks items={BASE_NAV_ITEMS} onNavigate={() => setOpen(false)} />
+            <NavLinks items={navItems} onNavigate={() => setOpen(false)} />
             <SidebarDropCatalog onNavigate={() => setOpen(false)} />
             <AccountRow user={user} />
           </aside>

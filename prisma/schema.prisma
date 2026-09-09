@@ -93,6 +93,7 @@ model User {
   subscription            Subscription?
   dismissedDuplicatePairs DismissedDuplicatePair[]
   customMetrics           CustomMetric[]
+  featureFlagOverrides    FeatureFlagUserOverride[]
 
   @@map("users")
 }
@@ -841,4 +842,42 @@ model DecayDeltaPrediction {
   // exact-commenceTime check), not by a DB constraint.
   @@unique([modelId, gameResultId])
   @@map("decay_delta_predictions")
+}
+
+// A small, generic runtime-flippable gate - not tied to Zone Model
+// specifically, so a future admin-only feature can reuse this same table by
+// picking a new `key` rather than a new migration. Two independent knobs per
+// key: `enabled` is the global switch (flip this alone, with zero new code,
+// to roll a feature out to everyone), and FeatureFlagUserOverride grants
+// specific users early/permanent access while `enabled` is still false. A
+// user has access when EITHER is true - the override never needs removing
+// once `enabled` flips on, it just becomes redundant.
+model FeatureFlag {
+  key       String   @id
+  enabled   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userOverrides FeatureFlagUserOverride[]
+
+  @@map("feature_flags")
+}
+
+model FeatureFlagUserOverride {
+  id      String @id @default(cuid())
+  flagKey String
+  flag    FeatureFlag @relation(fields: [flagKey], references: [key], onDelete: Cascade)
+  userId  String
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Not just a marker row - false lets an admin explicitly REVOKE one
+  // person's access without deleting the row (e.g. to keep an audit trail),
+  // same "store the negative, don't just delete" option other toggles in
+  // this app leave open.
+  enabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([flagKey, userId])
+  @@map("feature_flag_user_overrides")
 }
