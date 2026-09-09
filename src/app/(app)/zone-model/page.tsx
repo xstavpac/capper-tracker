@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/server/auth";
 import { isFeatureEnabledForUser, ZONE_MODEL_FLAG_KEY } from "@/server/data/feature-flags";
-import { computeZoneModel } from "@/server/data/zone-model";
+import { computeZoneModel, computePendingZoneGames } from "@/server/data/zone-model";
 import { MLB_SPORT_KEY } from "@/server/data/chart-team-name";
 import { ZoneModelView } from "@/components/zone-model/zone-model-view";
 
@@ -16,6 +16,6 @@ export default async function ZoneModelPage() {
   const enabled = await isFeatureEnabledForUser(ZONE_MODEL_FLAG_KEY, user.id);
   if (!enabled) notFound();
 
-  const report = await computeZoneModel(MLB_SPORT_KEY);
-  return <ZoneModelView report={report} />;
+  const [report, pending] = await Promise.all([computeZoneModel(MLB_SPORT_KEY), computePendingZoneGames(MLB_SPORT_KEY)]);
+  return <ZoneModelView report={report} pending={pending} />;
 }
