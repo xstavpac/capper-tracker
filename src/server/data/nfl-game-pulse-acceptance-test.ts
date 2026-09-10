@@ -37,9 +37,15 @@ function ratesWith(
 const NONE = ratesWith({});
 
 expect(
-  "no historical data for either team: all 5 NFL rows returned, in fixed order, all showData: false",
+  "no historical data for either team: every NFL row returned, in NFL_SITUATIONAL_QUESTIONS order, all showData: false",
   buildNflGamePulsePanelRows(NONE, NONE).map((r) => r.key),
   NFL_SITUATIONAL_QUESTIONS.map((q) => q.key)
+);
+
+expect(
+  "the trailed-at-halftime mirror question is present, right after leading-at-halftime",
+  NFL_SITUATIONAL_QUESTIONS.map((q) => q.key).slice(1, 3),
+  ["leadingAtHalftime", "trailedAtHalftime"]
 );
 
 expect(

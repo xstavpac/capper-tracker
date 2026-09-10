@@ -10,6 +10,7 @@ import {
 const ROW_TITLES: Record<NflSituationalQuestionKey, string> = {
   scoredFirst: "Scored first",
   leadingAtHalftime: "Leading at halftime",
+  trailedAtHalftime: "Trailed at halftime",
   wonTurnoverBattle: "Won the turnover battle",
   ledByDoubleDigits: "Led by double digits",
   trailingEntering4th: "Trailing entering the 4th",

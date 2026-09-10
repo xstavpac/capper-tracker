@@ -515,6 +515,87 @@ model TeamStatSnapshot {
   @@map("team_stat_snapshots")
 }
 
+// One team's win-loss record splits (overall / home / away / last-10 /
+// current streak) as they stood on one calendar day, derived purely from
+// this app's own finished GameResult rows - no external API. The NFL analog
+// of the homeWins/awayWins/last10/streak columns on TeamStatSnapshot, which
+// for MLB come from the MLB Stats API standings endpoint; NFL has no such
+// source, but every input (scores, home/away, dates, final results) is
+// already stored on GameResult. Sport-agnostic by construction; today only
+// captureTeamRecordSnapshots("americanfootball_nfl") writes it (MLB stays on
+// its authoritative standings-sourced columns rather than running a second,
+// possibly-divergent derivation).
+//
+// Point-in-time: computed from GameResult rows with gameDate strictly before
+// the snapshot day and isPreseason = false (the PR #56 flag), so a game
+// never contributes to a record used to score that same game, and preseason
+// never dilutes it. The reader (getTeamRecordAsOf, server/data/team-record.ts)
+// prefers the latest row at/before dayBefore(gameDate) and falls back to
+// computing straight from GameResult when no snapshot exists yet.
+//
+// Ties (NFL only) count toward `ties` and nothing else: not a win, not a
+// loss, excluded from winPct, and they end a streak scan rather than
+// extending or being counted in it.
+model TeamRecordSnapshot {
+  id            String    @id @default(cuid())
+  sportKey      String
+  teamName      String
+  snapshotDate  String // "YYYY-MM-DD", Eastern - same convention as every other snapshot table
+  wins          Int
+  losses        Int
+  ties          Int
+  winPct        Float // wins / (wins + losses); ties excluded from the denominator
+  homeWins      Int
+  homeLosses    Int
+  awayWins      Int
+  awayLosses    Int
+  last10Wins    Int
+  last10Losses  Int
+  streakType    String? // "W" | "L" | null (null when the most recent game was a tie, or there are no games)
+  streakCount   Int
+  gamesInRecord Int // total finished non-preseason games backing this row - the SAMPLE_SIZE_FLOOR number
+  sourceId      String    @default("internal_record")
+  scope         DataScope @default(GLOBAL)
+  createdAt     DateTime  @default(now())
+
+  @@unique([sportKey, teamName, snapshotDate])
+  @@map("team_record_snapshots")
+}
+
+// One team's historical win rate for one situational question ("scored
+// first", "led at halftime", "trailed at halftime", ...) as it stood on one
+// calendar day. The dated-history companion to Game Pulse's on-page-load
+// situational rates (nfl-game-pulse-situations.ts / game-pulse-situations.ts),
+// which had no persisted history and so could not be backtested or fed to a
+// model point-in-time.
+//
+// Narrow/EAV shape - one row per (sport, team, question, day) - on purpose:
+// MLB and NFL have different question sets (and other sports would differ
+// again), so a wide "one column per question" table would be per-sport
+// nullable-column sprawl. Same deliberately-narrow shape as CustomMetricPoint.
+// winPct is always derived at read (wins / total), never stored.
+//
+// Point-in-time and preseason handling identical to TeamRecordSnapshot
+// above. wins/total are the RAW counts from game one - the SAMPLE_SIZE_FLOOR
+// (game-pulse.ts) is a display-time gate applied by the panel builder, not
+// something this capture respects. Reader: getSituationalRatesAsOf in
+// server/data/situational-snapshots.ts.
+model SituationalRateSnapshot {
+  id           String    @id @default(cuid())
+  sportKey     String
+  teamName     String
+  questionKey  String // e.g. "scoredFirst", "leadingAtHalftime", "trailedAtHalftime"
+  snapshotDate String // "YYYY-MM-DD", Eastern
+  wins         Int // games the team held this situation AND won
+  total        Int // games the team held this situation
+  sourceId     String    @default("internal_situational")
+  scope        DataScope @default(GLOBAL)
+  createdAt    DateTime  @default(now())
+
+  @@unique([sportKey, teamName, questionKey, snapshotDate])
+  @@map("situational_rate_snapshots")
+}
+
 // One pitcher's season-to-date stat line as it stood on one calendar day.
 // Two things write it: the daily cron (capturePitcherStatSnapshots) captures
 // that day's probable starters going forward, and the one-time historical
