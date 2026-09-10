@@ -68,8 +68,7 @@ import { prisma } from "@/lib/prisma";
 import { computeTendencyRates, moneylinePrice, totalLine as totalLineOf } from "@/server/data/team-tendencies";
 import { actualFavWon } from "@/server/data/model-engine/decay-delta-outcome";
 import { deriveWentOver } from "@/server/data/model-engine/decay-delta-predictions";
-import { findLatestAtOrBefore } from "@/server/data/providers/snapshot-utils";
-import { startOfEasternDay } from "@/lib/dates";
+import { findLatestAtOrBefore, dayBefore } from "@/server/data/providers/snapshot-utils";
 import type { OddsGame } from "@/server/data/odds";
 
 // ---------------------------------------------------------------------------
@@ -100,15 +99,6 @@ export type ZoneModelReport = {
   sportKey: string;
   dimensions: ZoneModelDimensionReport[];
 };
-
-// The last instant of the Eastern calendar day BEFORE `gameDate` - passing
-// this as findLatestAtOrBefore's `asOf` means only a snapshot dated
-// strictly earlier than the game's own day can ever be selected, so the
-// game's own result (and anything else from that same day) can never be
-// part of the rate used to bucket it. Shared by every dimension below.
-function dayBefore(gameDate: Date): Date {
-  return new Date(startOfEasternDay(gameDate).getTime() - 1);
-}
 
 // ---------------------------------------------------------------------------
 // ML Delta / Total Delta - unchanged from the original implementation

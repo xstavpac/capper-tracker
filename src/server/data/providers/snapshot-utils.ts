@@ -1,4 +1,16 @@
-import { easternDateKey } from "@/lib/dates";
+import { easternDateKey, startOfEasternDay } from "@/lib/dates";
+
+// The last instant of the Eastern calendar day BEFORE `gameDate`. Passed as
+// findLatestAtOrBefore's `asOf`, it means only a snapshot dated strictly
+// earlier than the game's own Eastern day can ever be selected - the game's
+// own result, and anything else from that same day, can never leak into a
+// point-in-time lookup used to score that game. Originally a private helper
+// in zone-model.ts (added with the fix for its look-ahead bug); lifted here
+// so the starting-pitcher point-in-time reader uses the identical cutoff
+// rather than a second copy.
+export function dayBefore(gameDate: Date): Date {
+  return new Date(startOfEasternDay(gameDate).getTime() - 1);
+}
 
 // The most recent snapshot at or before gameDate - `snapshots` must already
 // be sorted ascending by snapshotDate (model-evaluation.ts's backtestModel

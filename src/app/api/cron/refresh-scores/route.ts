@@ -1,7 +1,12 @@
 import { persistFinalScores } from "@/server/data/grading";
 import { RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { recomputeTeamTendencies, snapshotTeamTendencies } from "@/server/data/team-tendencies";
-import { captureTeamStatSnapshots, capturePitcherStatSnapshots, captureNflTeamStatSnapshots } from "@/server/data/stat-snapshots";
+import {
+  captureTeamStatSnapshots,
+  capturePitcherStatSnapshots,
+  captureNflTeamStatSnapshots,
+  reconcileGameStarters,
+} from "@/server/data/stat-snapshots";
 import { syncDecayDeltaPredictions } from "@/server/data/model-engine/decay-delta-predictions";
 
 const MLB_SPORT_KEY = "baseball_mlb";
@@ -87,6 +92,12 @@ export async function GET(req: Request) {
   const teamSnapshots = await captureTeamStatSnapshots();
   const { starters, pitcherSnapshots } = await capturePitcherStatSnapshots();
 
+  // Fill in the confirmed actual starter (boxscore) for any GameStarters row
+  // whose game has since gone final - one cheap call per newly-final game.
+  // Runs after persistFinalScores above, so a game that just landed in
+  // GameResult this same pass is eligible immediately.
+  const gameStarters = await reconcileGameStarters(MLB_SPORT_KEY);
+
   // NFL team-stat snapshots from nflverse's static CSV releases (no API key,
   // no rate limit, no credit cost - nothing to throttle, unlike the Odds
   // API). Same piggyback-the-cron pattern as the MLB snapshots above. Runs
@@ -118,7 +129,12 @@ export async function GET(req: Request) {
   return Response.json({
     ok: true,
     results,
-    statSnapshots: { sport: MLB_SPORT_KEY, teamSnapshots, pitcherSnapshots, gameStarters: starters },
+    statSnapshots: {
+      sport: MLB_SPORT_KEY,
+      teamSnapshots,
+      pitcherSnapshots,
+      gameStarters: { probablesWritten: starters, ...gameStarters },
+    },
     nflTeamSnapshots,
     decayDeltaPredictions,
   });
