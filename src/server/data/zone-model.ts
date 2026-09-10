@@ -42,16 +42,21 @@
 // start date - any game before a dimension's own snapshot history began has
 // no prior-day snapshot to look up and is excluded from that dimension.
 //
-// Each game is bucketed by its delta into one of ten ranges and contributes
-// a win/loss to that bucket - "win" meaning the side the delta's sign
-// favors held (the favorite for ML, the over for Total, the home team for
-// the five team-stat dimensions when their delta is >= 0, otherwise the
-// away team), so every bucket's W-L record answers the same question
-// regardless of whether its delta is positive or negative. Buckets are
-// reported independently: a bucket's win% is never averaged, smoothed, or
-// blended with its neighbors, and a bucket with zero games is still
-// returned (not dropped) so the caller can render it as an explicit empty
-// state. No dimension's numbers are ever blended into any other dimension's.
+// Each game is bucketed TWICE per dimension - once from each side's point of
+// view. The two sides are Favorite/Underdog (ML), Over/Under (Total), or
+// Home/Away (the five team-stat dimensions). Side A's signed delta picks its
+// bucket and side A's own W/L is recorded there; side B's delta is side A's
+// negated, so side B lands in the mirror bucket with side B's own W/L. Every
+// bucket therefore carries TWO independent records (sideA, sideB), each built
+// from a DIFFERENT set of games - neither is ever inverted to imply the
+// other. That is what lets a negative-delta bucket show the underdog's real
+// record in that zone rather than the favorite's record relabelled.
+//
+// Buckets are reported independently: a record is never averaged, smoothed,
+// or blended with a neighbor; there is no minimum-sample floor (a 1-0 shows
+// as 1-0); and a bucket with zero games on BOTH sides is still returned (not
+// dropped) so the caller can render an explicit empty state. No dimension's
+// numbers are ever blended into any other dimension's.
 //
 // Bucket SCALE differs by dimension on purpose: ML/Total deltas are
 // percentage points (0-100 scale, reusing decay-delta.ts's proven 10-tier
@@ -77,12 +82,24 @@ import type { OddsGame } from "@/server/data/odds";
 
 export type BucketDescriptor = { id: string; label: string };
 
-export type ZoneModelBucketResult = {
-  bucket: BucketDescriptor;
+// One side's real W-L within one bucket. winPct is null (never 0) when that
+// side has no games in the bucket, so the caller can tell "0% record" apart
+// from "no games".
+export type ZoneSideRecord = {
   games: number;
   wins: number;
   losses: number;
   winPct: number | null;
+};
+
+// A bucket holds two of these. Each graded game is bucketed once per side
+// (by that side's own signed delta), so sideA and sideB cover different sets
+// of games and can diverge freely - e.g. sideA 1-0 while sideB 3-2 in the
+// same bucket. sideALabel / sideBLabel on the dimension name the two sides.
+export type ZoneModelBucketResult = {
+  bucket: BucketDescriptor;
+  sideA: ZoneSideRecord;
+  sideB: ZoneSideRecord;
 };
 
 export type ZoneDimensionKey = "ml" | "total" | "run_diff" | "era" | "whip" | "ops" | "batting_avg";
@@ -91,6 +108,8 @@ export type ZoneModelDimensionReport = {
   key: ZoneDimensionKey;
   label: string;
   description: string;
+  sideALabel: string;
+  sideBLabel: string;
   buckets: ZoneModelBucketResult[];
   gamesConsidered: number;
 };
@@ -311,7 +330,7 @@ const STAT_METRICS: StatMetricConfig[] = [
   {
     key: "run_diff",
     label: "Run Differential Delta",
-    description: "Home team's season run differential minus the away team's, as of the day before the game.",
+    description: "How much better a team's season run differential was than its opponent's, as of the day before the game. Home and away are each bucketed by their own edge; both records are shown.",
     qualifierLabel: "Run Diff Edge",
     tierWidth: 10,
     decimals: 0,
@@ -322,7 +341,7 @@ const STAT_METRICS: StatMetricConfig[] = [
   {
     key: "era",
     label: "ERA Delta",
-    description: "Away team's season ERA minus the home team's (sign-flipped so positive still favors the home team - lower ERA is better), as of the day before the game.",
+    description: "How much better a team's season ERA was than its opponent's (lower ERA is better), as of the day before the game. Home and away are each bucketed by their own edge; both records are shown.",
     qualifierLabel: "ERA Edge",
     tierWidth: 0.25,
     decimals: 2,
@@ -333,7 +352,7 @@ const STAT_METRICS: StatMetricConfig[] = [
   {
     key: "whip",
     label: "WHIP Delta",
-    description: "Away team's season WHIP minus the home team's (sign-flipped - lower WHIP is better), as of the day before the game.",
+    description: "How much better a team's season WHIP was than its opponent's (lower WHIP is better), as of the day before the game. Home and away are each bucketed by their own edge; both records are shown.",
     qualifierLabel: "WHIP Edge",
     tierWidth: 0.05,
     decimals: 2,
@@ -344,7 +363,7 @@ const STAT_METRICS: StatMetricConfig[] = [
   {
     key: "ops",
     label: "OPS Delta",
-    description: "Home team's season OPS minus the away team's, as of the day before the game.",
+    description: "How much better a team's season OPS was than its opponent's, as of the day before the game. Home and away are each bucketed by their own edge; both records are shown.",
     qualifierLabel: "OPS Edge",
     tierWidth: 0.02,
     decimals: 3,
@@ -355,7 +374,7 @@ const STAT_METRICS: StatMetricConfig[] = [
   {
     key: "batting_avg",
     label: "Batting Average Delta",
-    description: "Home team's season batting average minus the away team's, as of the day before the game.",
+    description: "How much better a team's season batting average was than its opponent's, as of the day before the game. Home and away are each bucketed by their own edge; both records are shown.",
     qualifierLabel: "AVG Edge",
     tierWidth: 0.01,
     decimals: 3,
@@ -380,34 +399,57 @@ function statDelta(metric: StatMetricConfig, homeRow: TeamStatRow, awayRow: Team
 // Historical calibration (point-in-time)
 // ---------------------------------------------------------------------------
 
-function emptyBucketCounts(bucketIds: string[]): Map<string, { games: number; wins: number; losses: number }> {
-  const map = new Map<string, { games: number; wins: number; losses: number }>();
-  for (const id of bucketIds) map.set(id, { games: 0, wins: 0, losses: 0 });
+type SideCount = { games: number; wins: number; losses: number };
+type BucketCount = { a: SideCount; b: SideCount };
+
+function emptyBucketCounts(bucketIds: string[]): Map<string, BucketCount> {
+  const map = new Map<string, BucketCount>();
+  for (const id of bucketIds) {
+    map.set(id, { a: { games: 0, wins: 0, losses: 0 }, b: { games: 0, wins: 0, losses: 0 } });
+  }
   return map;
+}
+
+// Record one side of one game. `bucketId` is the bucket THAT side's own
+// signed delta falls in (side-B callers pass the negated delta's bucket),
+// and `won` is that side's own outcome. Called once per side per game, so a
+// bucket's a/b tallies are always independent game sets.
+function recordSide(counts: Map<string, BucketCount>, bucketId: string, side: "a" | "b", won: boolean) {
+  const entry = counts.get(bucketId)![side];
+  entry.games++;
+  if (won) entry.wins++;
+  else entry.losses++;
+}
+
+function toSideRecord(c: SideCount): ZoneSideRecord {
+  return {
+    games: c.games,
+    wins: c.wins,
+    losses: c.losses,
+    winPct: c.games > 0 ? (c.wins / c.games) * 100 : null,
+  };
 }
 
 function finalizeDimension(
   key: ZoneDimensionKey,
   label: string,
   description: string,
+  sideALabel: string,
+  sideBLabel: string,
   bucketDescriptors: BucketDescriptor[],
-  counts: Map<string, { games: number; wins: number; losses: number }>,
+  counts: Map<string, BucketCount>,
   gamesConsidered: number
 ): ZoneModelDimensionReport {
   return {
     key,
     label,
     description,
+    sideALabel,
+    sideBLabel,
     gamesConsidered,
     buckets: bucketDescriptors.map((bucket) => {
       const c = counts.get(bucket.id)!;
-      return {
-        bucket,
-        games: c.games,
-        wins: c.wins,
-        losses: c.losses,
-        winPct: c.games > 0 ? (c.wins / c.games) * 100 : null,
-      };
+      return { bucket, sideA: toSideRecord(c.a), sideB: toSideRecord(c.b) };
     }),
   };
 }
@@ -469,11 +511,13 @@ export async function computeZoneModel(sportKey: string): Promise<ZoneModelRepor
         const favWinPct = computeTendencyRates(favRow).favWinPct;
         const dogWinPct = computeTendencyRates(dogRow).dogWinPct;
         if (favWinPct !== null && dogWinPct !== null) {
-          const delta = pct(favWinPct) - pct(dogWinPct);
-          const bucket = bucketForDelta(delta);
-          const entry = mlCounts.get(bucket.id)!;
-          entry.games++;
-          if (favWon) entry.wins++; else entry.losses++;
+          // The favorite's delta is its fav-role win% minus the dog's
+          // dog-role win%; the underdog's own delta is exactly the negation.
+          // The ML outcome is complementary (favWon <=> the dog lost), so
+          // each side's real W/L lands in its own bucket.
+          const favDelta = pct(favWinPct) - pct(dogWinPct);
+          recordSide(mlCounts, bucketForDelta(favDelta).id, "a", favWon);
+          recordSide(mlCounts, bucketForDelta(-favDelta).id, "b", !favWon);
           mlGames++;
         }
       }
@@ -487,11 +531,12 @@ export async function computeZoneModel(sportKey: string): Promise<ZoneModelRepor
       if (homeRow && awayRow && wentOver !== null) {
         const combinedRates = computeTendencyRates(combinedTotalsCounts(homeRow, awayRow));
         if (combinedRates.overRate !== null && combinedRates.underRate !== null) {
-          const delta = pct(combinedRates.overRate) - pct(combinedRates.underRate);
-          const bucket = bucketForDelta(delta);
-          const entry = totalCounts.get(bucket.id)!;
-          entry.games++;
-          if (wentOver) entry.wins++; else entry.losses++;
+          // Same two-sided treatment: the over's delta is over-rate minus
+          // under-rate, the under's is the negation, and the outcome is
+          // complementary (wentOver <=> the under lost).
+          const overDelta = pct(combinedRates.overRate) - pct(combinedRates.underRate);
+          recordSide(totalCounts, bucketForDelta(overDelta).id, "a", wentOver);
+          recordSide(totalCounts, bucketForDelta(-overDelta).id, "b", !wentOver);
           totalGames++;
         }
       }
@@ -508,23 +553,50 @@ export async function computeZoneModel(sportKey: string): Promise<ZoneModelRepor
     if (!homeStatRow || !awayStatRow) continue;
 
     for (const metric of STAT_METRICS) {
-      const delta = statDelta(metric, homeStatRow, awayStatRow);
-      const bucket = bucketForMetricValue(delta, metric.buckets);
-      const qualifyingIsHome = delta >= 0;
-      const win = qualifyingIsHome === homeWon;
+      // statDelta is home-minus-away (sign-flipped for ERA/WHIP so positive
+      // always means "this side is better on this stat"); the away side's
+      // delta is the negation. Each side is bucketed by its own delta, and
+      // the game outcome is complementary (no MLB ties - guarded above).
+      const homeDelta = statDelta(metric, homeStatRow, awayStatRow);
       const counts = statCounts.get(metric.key)!;
-      const entry = counts.get(bucket.id)!;
-      entry.games++;
-      if (win) entry.wins++; else entry.losses++;
+      recordSide(counts, bucketForMetricValue(homeDelta, metric.buckets).id, "a", homeWon);
+      recordSide(counts, bucketForMetricValue(-homeDelta, metric.buckets).id, "b", !homeWon);
       statGamesConsidered.set(metric.key, statGamesConsidered.get(metric.key)! + 1);
     }
   }
 
   const dimensions: ZoneModelDimensionReport[] = [
-    finalizeDimension("ml", "ML Delta", "Favorite's history win% as a favorite, minus the underdog's history win% as an underdog. W-L is the favorite's record within that range.", ZONE_MODEL_BUCKETS, mlCounts, mlGames),
-    finalizeDimension("total", "Total Delta", "This matchup's combined history over-rate, minus its combined history under-rate. W-L is the over's record within that range.", ZONE_MODEL_BUCKETS, totalCounts, totalGames),
+    finalizeDimension(
+      "ml",
+      "ML Delta",
+      "Favorite's history win% as a favorite minus the underdog's history win% as an underdog. Favorite and underdog are each bucketed by their own version of that delta; every range shows both real records, from different games, neither inverted from the other.",
+      "Favorite",
+      "Underdog",
+      ZONE_MODEL_BUCKETS,
+      mlCounts,
+      mlGames
+    ),
+    finalizeDimension(
+      "total",
+      "Total Delta",
+      "This matchup's combined history over-rate minus under-rate. The over and the under are each bucketed by their own version of that delta; every range shows both real records.",
+      "Over",
+      "Under",
+      ZONE_MODEL_BUCKETS,
+      totalCounts,
+      totalGames
+    ),
     ...STAT_METRICS.map((metric) =>
-      finalizeDimension(metric.key, metric.label, metric.description, metric.buckets, statCounts.get(metric.key)!, statGamesConsidered.get(metric.key)!)
+      finalizeDimension(
+        metric.key,
+        metric.label,
+        metric.description,
+        "Home",
+        "Away",
+        metric.buckets,
+        statCounts.get(metric.key)!,
+        statGamesConsidered.get(metric.key)!
+      )
     ),
   ];
 
