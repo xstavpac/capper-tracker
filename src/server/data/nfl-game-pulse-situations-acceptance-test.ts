@@ -76,6 +76,39 @@ expect(
   null
 );
 
+// ---- trailedAtHalftime (the mirror question added for the comeback rate) ----
+
+expect(
+  "trailedAtHalftime: no quarters data - null",
+  question("trailedAtHalftime").evaluate(NO_DATA),
+  null
+);
+
+expect(
+  "trailedAtHalftime: only 1 quarter captured - null, can't sum Q1+Q2",
+  question("trailedAtHalftime").evaluate({ ...NO_DATA, quarters: [{ home: 0, away: 7 }] }),
+  null
+);
+
+expect(
+  "trailedAtHalftime: home is behind after Q1+Q2 - home (the side that has to come back)",
+  question("trailedAtHalftime").evaluate({ ...NO_DATA, quarters: [{ home: 0, away: 7 }, { home: 3, away: 3 }] }),
+  "home"
+);
+
+{
+  // The exact inverse of leadingAtHalftime on the same score (home 10, away 14).
+  const q = { ...NO_DATA, quarters: [{ home: 7, away: 0 }, { home: 3, away: 14 }] as { home: number; away: number }[] };
+  expect("trailedAtHalftime inverse check: leadingAtHalftime -> away", question("leadingAtHalftime").evaluate(q), "away");
+  expect("trailedAtHalftime inverse check: trailedAtHalftime -> home", question("trailedAtHalftime").evaluate(q), "home");
+}
+
+expect(
+  "trailedAtHalftime: tied at the half - null (no one trailed)",
+  question("trailedAtHalftime").evaluate({ ...NO_DATA, quarters: [{ home: 7, away: 7 }, { home: 3, away: 3 }] }),
+  null
+);
+
 // ---- trailingEntering4th ----
 
 expect(

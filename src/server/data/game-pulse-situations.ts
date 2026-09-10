@@ -125,6 +125,11 @@ export async function getTeamSituationalRates(team: string): Promise<Situational
   const rows = await prisma.gameResult.findMany({
     where: {
       sportKey: "baseball_mlb",
+      // Preseason exclusion for parity with the NFL situational path (PR #56's
+      // GameResult.isPreseason flag). No effect for MLB today - isPreseasonGame
+      // returns false for it - but keeps the two sports' queries aligned and
+      // future-proofs against MLB spring-training rows ever being persisted.
+      isPreseason: false,
       inningsJson: { not: Prisma.DbNull },
       OR: [{ homeTeam: team }, { awayTeam: team }],
     },

@@ -7,9 +7,12 @@ import {
   captureNflTeamStatSnapshots,
   reconcileGameStarters,
 } from "@/server/data/stat-snapshots";
+import { captureTeamRecordSnapshots } from "@/server/data/team-record";
+import { captureSituationalRateSnapshots } from "@/server/data/situational-snapshots";
 import { syncDecayDeltaPredictions } from "@/server/data/model-engine/decay-delta-predictions";
 
 const MLB_SPORT_KEY = "baseball_mlb";
+const NFL_SPORT_KEY = "americanfootball_nfl";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +109,15 @@ export async function GET(req: Request) {
   // without error in that window rather than needing a season gate here.
   const nflTeamSnapshots = await captureNflTeamStatSnapshots();
 
+  // NFL win-loss record splits (home/away/last-10/streak) and situational
+  // rates (scored first, led/trailed at halftime, ...), both derived purely
+  // from finished GameResult rows - no external API. MLB gets record splits
+  // from the standings endpoint (captureTeamStatSnapshots) and has no
+  // situational snapshot yet, so these are NFL-only. Preseason games are
+  // excluded (GameResult.isPreseason). Same piggyback-the-cron pattern.
+  const nflRecordSnapshots = await captureTeamRecordSnapshots(NFL_SPORT_KEY);
+  const nflSituationalSnapshots = await captureSituationalRateSnapshots();
+
   // Build Step 7 - piggybacked on this same cron run, right after this
   // sport's scores are persisted above, same reasoning as the tendency
   // recompute: a freshly-graded game gets its DecayDeltaPrediction row (or
@@ -136,6 +148,8 @@ export async function GET(req: Request) {
       gameStarters: { probablesWritten: starters, ...gameStarters },
     },
     nflTeamSnapshots,
+    nflRecordSnapshots,
+    nflSituationalSnapshots,
     decayDeltaPredictions,
   });
 }
