@@ -81,6 +81,26 @@ export function isSportInSeason(sportKey: string, referenceDate: Date = new Date
   return today >= window.seasonStart && today <= window.seasonEnd;
 }
 
+// Whether `gameDate` falls in `sportKey`'s configured PRESEASON window - the
+// gap between the widened `seasonStart` (which deliberately reaches back to
+// cover preseason, so preseason games run the same odds/scores/grading
+// pipeline) and the real `regularSeasonStart`. Only a sport with BOTH of
+// those configured has a preseason window; today that is NFL alone (every
+// other sport's `seasonStart` already sits at/after its regular-season
+// opener - see SPORT_SEASON_CONFIG - so this returns false for them).
+//
+// Used by persistFinalScores to stamp GameResult.isPreseason once at create
+// time, which recomputeTeamTendencies then filters on. Evaluated against the
+// CURRENTLY configured window, which is fine because it is only ever asked
+// about a game as that game goes final - within its own season, before the
+// annual config roll-over.
+export function isPreseasonGame(sportKey: string, gameDate: Date): boolean {
+  const window = SPORT_SEASON_CONFIG[sportKey];
+  if (!window?.regularSeasonStart) return false;
+  const key = easternDateKey(gameDate);
+  return key >= window.seasonStart && key < window.regularSeasonStart;
+}
+
 // Which Odds API sport key(s) to actually query for `sportKey` right now, in
 // priority order - element 0 is authoritative. Only ever more than one entry,
 // or different from `sportKey` itself, for a sport with a preseason-specific
