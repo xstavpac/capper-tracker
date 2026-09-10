@@ -24,6 +24,26 @@ import {
 
 const NFL_SPORT_KEY = "americanfootball_nfl";
 
+// Charts variable id -> the SituationalRateSnapshot.questionKey it reads.
+// The Charts adapter (historical-variables.ts) filters the snapshot table to
+// one questionKey and maps each row's wins/total to a win fraction.
+export const SITUATIONAL_VARIABLE_QUESTION: Record<string, NflSituationalQuestionKey> = {
+  nfl_scored_first_win_pct: "scoredFirst",
+  nfl_led_at_half_win_pct: "leadingAtHalftime",
+  nfl_trailed_at_half_win_pct: "trailedAtHalftime",
+  nfl_won_turnover_battle_win_pct: "wonTurnoverBattle",
+  nfl_led_double_digits_win_pct: "ledByDoubleDigits",
+  nfl_trailing_entering_4th_win_pct: "trailingEntering4th",
+};
+
+// wins/total as a 0..1 fraction - what the Charts "percent" unit expects
+// (formatValueForUnit multiplies by 100). Distinct from SituationalRate.winPct,
+// which is 0..100 for the Game Pulse panel's SKEW_FLOOR comparison. null when
+// the team has no games in the situation (a chart gap).
+export function situationalWinFraction(wins: number, total: number): number | null {
+  return total > 0 ? wins / total : null;
+}
+
 // Materialises today's situational rates for every NFL team into
 // SituationalRateSnapshot - one row per (team, question). Raw wins/total,
 // no sample-size floor (that's a display-time gate). DB read-then-write off

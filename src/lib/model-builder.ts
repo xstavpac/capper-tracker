@@ -103,6 +103,18 @@ const ODDS_API = "odds_api";
 // tendencies reuse INTERNAL_TENDENCIES above - that provider already keys
 // its snapshot query on sportKey, so it serves NFL rows unchanged.
 export const NFL_TEAM_STATS_API = "nfl_team_stats_api";
+// NFL win-loss record splits (overall / home / away / last-10 / current
+// streak), derived from GameResult (TeamRecordSnapshot, server/data/
+// team-record.ts) - the NFL analog of MLB's team_home_win_pct etc., which
+// come from the MLB Stats API standings endpoint. Resolved by
+// nflTeamRecordProvider in historical-variables.ts.
+export const NFL_TEAM_RECORD = "nfl_team_record";
+// NFL situational win rates - win% when this team scored first / led at
+// halftime / trailed at halftime / won the turnover battle / led by double
+// digits / trailed entering the 4th. The dated-history form of Game Pulse's
+// on-page-load situational rates (SituationalRateSnapshot). Resolved by
+// nflSituationalProvider in historical-variables.ts.
+export const NFL_SITUATIONAL = "nfl_situational";
 // Custom Metrics (Charts) - one provider handles every user-uploaded
 // metric, dispatched the same way as every built-in source; see
 // getCustomMetricSeries in historical-variables.ts.
@@ -463,6 +475,136 @@ export const MODEL_VARIABLES: ModelVariableDef[] = [
     unit: "percent",
     description: "Share of this team's games that have gone under the total line.",
     sourceId: INTERNAL_TENDENCIES,
+    dataScope: "global",
+  },
+
+  // ---- NFL situational win rates (derived from GameResult - the dated
+  //      history of Game Pulse's situational rates; SituationalRateSnapshot).
+  //      A rate appears once the team has one game in that situation, with
+  //      its game count shown alongside. ----
+  {
+    id: "nfl_scored_first_win_pct",
+    label: "Win% when scored first",
+    category: "team_tendencies",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "This team's historical win rate in games where they scored first.",
+    sourceId: NFL_SITUATIONAL,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_led_at_half_win_pct",
+    label: "Win% when leading at halftime",
+    category: "team_tendencies",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "This team's historical win rate in games where they led at halftime.",
+    sourceId: NFL_SITUATIONAL,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_trailed_at_half_win_pct",
+    label: "Win% when trailing at halftime",
+    category: "team_tendencies",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "This team's historical comeback win rate in games where they trailed at halftime.",
+    sourceId: NFL_SITUATIONAL,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_won_turnover_battle_win_pct",
+    label: "Win% when winning the turnover battle",
+    category: "team_tendencies",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "This team's historical win rate in games where they had fewer turnovers than the opponent.",
+    sourceId: NFL_SITUATIONAL,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_led_double_digits_win_pct",
+    label: "Win% when leading by double digits",
+    category: "team_tendencies",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "This team's historical win rate in games where they were the first side to a 10-point lead.",
+    sourceId: NFL_SITUATIONAL,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_trailing_entering_4th_win_pct",
+    label: "Win% when trailing entering the 4th",
+    category: "team_tendencies",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "This team's historical comeback win rate in games where they trailed entering the 4th quarter.",
+    sourceId: NFL_SITUATIONAL,
+    dataScope: "global",
+  },
+
+  // ---- NFL record splits (derived from GameResult - TeamRecordSnapshot;
+  //      the NFL analog of MLB's team_home_win_pct etc., which come from the
+  //      standings API). Preseason games excluded. ----
+  {
+    id: "nfl_win_pct",
+    label: "Win%",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "Season win percentage (ties excluded from the denominator).",
+    sourceId: NFL_TEAM_RECORD,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_home_win_pct",
+    label: "Home win%",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "Win percentage in home games this season.",
+    sourceId: NFL_TEAM_RECORD,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_away_win_pct",
+    label: "Away win%",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "Win percentage in away games this season.",
+    sourceId: NFL_TEAM_RECORD,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_last10_win_pct",
+    label: "Last-10 win%",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "percent",
+    description: "Win percentage over the team's last 10 games.",
+    sourceId: NFL_TEAM_RECORD,
+    dataScope: "global",
+  },
+  {
+    id: "nfl_streak",
+    label: "Current streak",
+    category: "team_stats",
+    sport: "americanfootball_nfl",
+    scope: "team",
+    unit: "games",
+    description: "Current win/loss streak - positive for a winning streak, negative for a losing streak.",
+    sourceId: NFL_TEAM_RECORD,
     dataScope: "global",
   },
 
