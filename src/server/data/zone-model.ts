@@ -610,6 +610,12 @@ export async function computeZoneModel(sportKey: string): Promise<ZoneModelRepor
 // team's CURRENT TeamTendency row directly and the MOST RECENT
 // TeamStatSnapshot row via the same findLatestAtOrBefore helper called with
 // `asOf = now`, rather than day-before).
+//
+// Bucketing mirrors computeZoneModel's two-sided scheme exactly: every game
+// is filed once per side, by that side's own signed delta, so the pending
+// list under a tile splits into sideA / sideB the same way the record above
+// it does. A game whose favorite has a +30 delta lists under the favorite
+// side of the +30 bucket AND the underdog side of the -30 bucket.
 // ---------------------------------------------------------------------------
 
 export type PendingZoneGame = {
@@ -621,9 +627,21 @@ export type PendingZoneGame = {
   qualifierLabel: string;
 };
 
+// Mirrors ZoneModelBucketResult's two-sided shape. Every pending game is
+// filed once per side, into the bucket THAT side's own signed delta falls in
+// (sideB's delta is sideA's negated) - so one game can land in sideA of one
+// bucket and sideB of another, and a bucket's two lists describe different
+// games, matching the two records shown above them. qualifyingSide stays
+// odds-derived (favorite/over/home for sideA, underdog/under/away for
+// sideB); it is never taken from a record.
+export type PendingZoneBucket = {
+  sideA: PendingZoneGame[];
+  sideB: PendingZoneGame[];
+};
+
 export type PendingZoneDimension = {
   key: ZoneDimensionKey;
-  gamesByBucket: Record<string, PendingZoneGame[]>;
+  gamesByBucket: Record<string, PendingZoneBucket>;
 };
 
 export type PendingZoneReport = {
@@ -632,16 +650,17 @@ export type PendingZoneReport = {
 };
 
 function pushPending(
-  map: Map<ZoneDimensionKey, Map<string, PendingZoneGame[]>>,
+  map: Map<ZoneDimensionKey, Map<string, PendingZoneBucket>>,
   key: ZoneDimensionKey,
   bucketId: string,
+  side: "sideA" | "sideB",
   game: PendingZoneGame
 ) {
   let byBucket = map.get(key);
   if (!byBucket) { byBucket = new Map(); map.set(key, byBucket); }
-  let list = byBucket.get(bucketId);
-  if (!list) { list = []; byBucket.set(bucketId, list); }
-  list.push(game);
+  let entry = byBucket.get(bucketId);
+  if (!entry) { entry = { sideA: [], sideB: [] }; byBucket.set(bucketId, entry); }
+  entry[side].push(game);
 }
 
 export async function computePendingZoneGames(sportKey: string): Promise<PendingZoneReport> {
@@ -650,7 +669,7 @@ export async function computePendingZoneGames(sportKey: string): Promise<Pending
   const snapshot = await prisma.oddsSnapshot.findFirst({ where: { sportKey }, orderBy: { fetchDate: "desc" } });
   const now = new Date();
 
-  const result: Map<ZoneDimensionKey, Map<string, PendingZoneGame[]>> = new Map();
+  const result: Map<ZoneDimensionKey, Map<string, PendingZoneBucket>> = new Map();
   const allKeys: ZoneDimensionKey[] = ["ml", "total", ...STAT_METRICS.map((m) => m.key)];
   for (const key of allKeys) result.set(key, new Map());
 
@@ -689,11 +708,16 @@ export async function computePendingZoneGames(sportKey: string): Promise<Pending
         const favWinPct = computeTendencyRates(favRow).favWinPct;
         const dogWinPct = computeTendencyRates(dogRow).dogWinPct;
         if (favWinPct !== null && dogWinPct !== null) {
-          const delta = pct(favWinPct) - pct(dogWinPct);
-          const bucket = bucketForDelta(delta);
-          pushPending(result, "ml", bucket.id, {
-            awayTeam: g.awayTeam, homeTeam: g.homeTeam, commenceTime: g.commenceTime,
-            deltaDisplay: String(delta), qualifyingSide: favTeam, qualifierLabel: "Fav ML",
+          // Two-sided, mirroring computeZoneModel: the favorite's delta files
+          // it on sideA, the underdog's delta (the negation) on sideB. Both
+          // qualifying sides are odds-derived (favTeam / dogTeam), not a record.
+          const favDelta = pct(favWinPct) - pct(dogWinPct);
+          const base = { awayTeam: g.awayTeam, homeTeam: g.homeTeam, commenceTime: g.commenceTime };
+          pushPending(result, "ml", bucketForDelta(favDelta).id, "sideA", {
+            ...base, deltaDisplay: String(favDelta), qualifyingSide: favTeam, qualifierLabel: "Fav ML",
+          });
+          pushPending(result, "ml", bucketForDelta(-favDelta).id, "sideB", {
+            ...base, deltaDisplay: String(-favDelta), qualifyingSide: dogTeam, qualifierLabel: "Dog ML",
           });
         }
       }
@@ -705,11 +729,13 @@ export async function computePendingZoneGames(sportKey: string): Promise<Pending
       if (homeRow && awayRow) {
         const combinedRates = computeTendencyRates(combinedTotalsCounts(homeRow, awayRow));
         if (combinedRates.overRate !== null && combinedRates.underRate !== null) {
-          const delta = pct(combinedRates.overRate) - pct(combinedRates.underRate);
-          const bucket = bucketForDelta(delta);
-          pushPending(result, "total", bucket.id, {
-            awayTeam: g.awayTeam, homeTeam: g.homeTeam, commenceTime: g.commenceTime,
-            deltaDisplay: String(delta), qualifyingSide: delta >= 0 ? "Over" : "Under", qualifierLabel: "Total",
+          const overDelta = pct(combinedRates.overRate) - pct(combinedRates.underRate);
+          const base = { awayTeam: g.awayTeam, homeTeam: g.homeTeam, commenceTime: g.commenceTime };
+          pushPending(result, "total", bucketForDelta(overDelta).id, "sideA", {
+            ...base, deltaDisplay: String(overDelta), qualifyingSide: "Over", qualifierLabel: "Total",
+          });
+          pushPending(result, "total", bucketForDelta(-overDelta).id, "sideB", {
+            ...base, deltaDisplay: String(-overDelta), qualifyingSide: "Under", qualifierLabel: "Total",
           });
         }
       }
@@ -719,12 +745,13 @@ export async function computePendingZoneGames(sportKey: string): Promise<Pending
     const awayStatRow = currentStat(g.awayTeam);
     if (homeStatRow && awayStatRow) {
       for (const metric of STAT_METRICS) {
-        const delta = statDelta(metric, homeStatRow, awayStatRow);
-        const bucket = bucketForMetricValue(delta, metric.buckets);
-        const qualifyingSide = delta >= 0 ? g.homeTeam : g.awayTeam;
-        pushPending(result, metric.key, bucket.id, {
-          awayTeam: g.awayTeam, homeTeam: g.homeTeam, commenceTime: g.commenceTime,
-          deltaDisplay: formatMetricValue(delta, metric.decimals), qualifyingSide, qualifierLabel: metric.qualifierLabel,
+        const homeDelta = statDelta(metric, homeStatRow, awayStatRow);
+        const base = { awayTeam: g.awayTeam, homeTeam: g.homeTeam, commenceTime: g.commenceTime };
+        pushPending(result, metric.key, bucketForMetricValue(homeDelta, metric.buckets).id, "sideA", {
+          ...base, deltaDisplay: formatMetricValue(homeDelta, metric.decimals), qualifyingSide: g.homeTeam, qualifierLabel: metric.qualifierLabel,
+        });
+        pushPending(result, metric.key, bucketForMetricValue(-homeDelta, metric.buckets).id, "sideB", {
+          ...base, deltaDisplay: formatMetricValue(-homeDelta, metric.decimals), qualifyingSide: g.awayTeam, qualifierLabel: metric.qualifierLabel,
         });
       }
     }

@@ -17,8 +17,11 @@
 //    the same same-day-snapshot-must-not-leak regression shape that caught
 //    the original ML/Total look-ahead bug.
 //  - computePendingZoneGames: today's pending games bucketed by CURRENT
-//    (not point-in-time) data, with the exact per-game display format
-//    (unchanged - still listed from the favorite / over / home side only).
+//    (not point-in-time) data, TWO-SIDED to match the records above - each
+//    game filed once per side by that side's own signed delta, so one game
+//    lands in different buckets per side. Covered: a game in different
+//    buckets per side, a bucket with pending on only one side, a bucket with
+//    pending on neither, and the exact per-row display format.
 //
 // Pure: the prisma singleton's methods are swapped for spies before each
 // call, so no database is touched - same convention as
@@ -36,6 +39,7 @@ import {
   type ZoneDimensionKey,
   type MetricBucket,
   type PendingZoneReport,
+  type PendingZoneBucket,
 } from "@/server/data/zone-model";
 
 let failures = 0;
@@ -415,12 +419,13 @@ async function main() {
     }
   }
 
-  // ---- 4. computePendingZoneGames: TODAY's current data, exact display format ----
+  // ---- 4. computePendingZoneGames: TWO-SIDED, exact display format ----
   {
     const now = new Date();
     const future = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString();
     const past = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
 
+    // game1: TeamX (home, fav -150) vs TeamY (away, dog +130), with a total.
     const pendingGame = {
       id: "pg1", sportKey: SPORT, homeTeam: "TeamX", awayTeam: "TeamY", commenceTime: future,
       bookmakers: [{ key: "book1", title: "Book 1", markets: [
@@ -428,18 +433,32 @@ async function main() {
         { key: "totals", outcomes: [{ name: "Over", price: -110, point: 8.5 }, { name: "Under", price: -110, point: 8.5 }] },
       ] }],
     };
-    // Already-started game in the same snapshot - must be filtered out entirely.
+    // Already-started game in the same snapshot - filtered out entirely.
     const startedGame = {
       id: "pg2", sportKey: SPORT, homeTeam: "TeamX", awayTeam: "TeamY", commenceTime: past,
       bookmakers: [{ key: "book1", title: "Book 1", markets: [
         { key: "h2h", outcomes: [{ name: "TeamX", price: -150 }, { name: "TeamY", price: 130 }] },
       ] }],
     };
+    // game2: TeamP (home, fav -140) vs TeamQ (away, dog +120). ML market only
+    // (no totals) and TeamP/TeamQ have no stat rows, so it touches ONLY the
+    // ML dimension. Its favorite delta is NEGATIVE (favP .30 - dogQ .60 =
+    // -30), so its favorite side files into "neg30_to_neg40" and its
+    // underdog side into "30_to_40" - the mirror of game1. That gives
+    // buckets with pending on BOTH sides, from different games.
+    const pendingGame2 = {
+      id: "pg3", sportKey: SPORT, homeTeam: "TeamP", awayTeam: "TeamQ", commenceTime: future,
+      bookmakers: [{ key: "book1", title: "Book 1", markets: [
+        { key: "h2h", outcomes: [{ name: "TeamP", price: -140 }, { name: "TeamQ", price: 120 }] },
+      ] }],
+    };
 
-    patch("oddsSnapshot.findFirst", async () => ({ data: [pendingGame, startedGame] }));
+    patch("oddsSnapshot.findFirst", async () => ({ data: [pendingGame, startedGame, pendingGame2] }));
     patch("teamTendency.findMany", async () => [
       { teamName: "TeamX", favWins: 7, favLosses: 3, favPushes: 0, dogWins: 0, dogLosses: 0, dogPushes: 0, overCount: 6, underCount: 4, totalPushCount: 0 },
       { teamName: "TeamY", favWins: 0, favLosses: 0, favPushes: 0, dogWins: 4, dogLosses: 6, dogPushes: 0, overCount: 3, underCount: 7, totalPushCount: 0 },
+      { teamName: "TeamP", favWins: 3, favLosses: 7, favPushes: 0, dogWins: 0, dogLosses: 0, dogPushes: 0, overCount: 0, underCount: 0, totalPushCount: 0 },
+      { teamName: "TeamQ", favWins: 0, favLosses: 0, favPushes: 0, dogWins: 12, dogLosses: 8, dogPushes: 0, overCount: 0, underCount: 0, totalPushCount: 0 },
     ]);
     patch("teamStatSnapshot.findMany", async () => [
       { teamName: "TeamX", snapshotDate: "2026-06-10", runDifferential: 25, era: 3.50, whip: 1.10, ops: 0.750, battingAvg: 0.260 },
@@ -448,52 +467,62 @@ async function main() {
 
     const pending: PendingZoneReport = await computePendingZoneGames(SPORT);
 
-    function pendingBucket(key: ZoneDimensionKey, bucketId: string) {
+    function pendingBucket(key: ZoneDimensionKey, bucketId: string): PendingZoneBucket {
       const dim = pending.dimensions.find((d) => d.key === key);
       if (!dim) throw new Error(`pending dimension ${key} missing`);
-      return dim.gamesByBucket[bucketId] ?? [];
+      return dim.gamesByBucket[bucketId] ?? { sideA: [], sideB: [] };
     }
+    const fmt = (b: PendingZoneBucket) => ({
+      a: b.sideA.map((x) => `${x.qualifyingSide}|${x.deltaDisplay}|${x.qualifierLabel}`),
+      b: b.sideB.map((x) => `${x.qualifyingSide}|${x.deltaDisplay}|${x.qualifierLabel}`),
+    });
 
-    // ML: favTeam=TeamX (70%), dog=TeamY (40%) -> delta=30 -> bucket "30_to_40".
-    const mlGames = pendingBucket("ml", "30_to_40");
-    expect("pending ML 30_to_40: exactly the one pending game (started game excluded)", mlGames.length, 1);
-    expect("pending ML: away @ home format", `${mlGames[0]?.awayTeam} @ ${mlGames[0]?.homeTeam}`, "TeamY @ TeamX");
-    expect("pending ML: delta display", mlGames[0]?.deltaDisplay, "30");
-    expect("pending ML: qualifying side is always the favorite", mlGames[0]?.qualifyingSide, "TeamX");
-    expect("pending ML: qualifier label", mlGames[0]?.qualifierLabel, "Fav ML");
+    // --- a game landing in DIFFERENT buckets per side (ML) ---
+    // game1: favTeam=TeamX (70%) vs dog TeamY (40%) -> favDelta +30.
+    //   favorite side -> "30_to_40"; underdog side (delta -30) -> "neg30_to_neg40".
+    // game2: favTeam=TeamP (30%) vs dog TeamQ (60%) -> favDelta -30.
+    //   favorite side -> "neg30_to_neg40"; underdog side (delta +30) -> "30_to_40".
+    const ml30 = pendingBucket("ml", "30_to_40");
+    expect("pending ML 30_to_40 sideA (Favorite): game1's favorite side, TeamX +30", fmt(ml30).a, ["TeamX|30|Fav ML"]);
+    expect("pending ML 30_to_40 sideB (Underdog): game2's underdog side, TeamQ +30 - a DIFFERENT game, surfaced only because the list is two-sided", fmt(ml30).b, ["TeamQ|30|Dog ML"]);
+    expect("pending ML 30_to_40: rows still carry the game's own away @ home", `${ml30.sideB[0]?.awayTeam} @ ${ml30.sideB[0]?.homeTeam}`, "TeamQ @ TeamP");
 
-    // Total: combined over=6+3=9, under=4+7=11, total=20 -> overRate 45%, underRate 55% -> delta=-10 -> "neg10_to_neg20".
-    const totalGames = pendingBucket("total", "neg10_to_neg20");
-    expect("pending Total neg10_to_neg20: the one pending game, using SUMMED counts", totalGames.length, 1);
-    expect("pending Total: qualifying side is Under (delta negative), not a team", totalGames[0]?.qualifyingSide, "Under");
-    expect("pending Total: delta display", totalGames[0]?.deltaDisplay, "-10");
+    const mlNeg30 = pendingBucket("ml", "neg30_to_neg40");
+    expect("pending ML neg30_to_neg40 sideA (Favorite): game2's favorite side, TeamP -30", fmt(mlNeg30).a, ["TeamP|-30|Fav ML"]);
+    expect("pending ML neg30_to_neg40 sideB (Underdog): game1's underdog side, TeamY -30", fmt(mlNeg30).b, ["TeamY|-30|Dog ML"]);
 
-    // run_diff: home(25)-away(5)=20 -> [20,30) "2w_3w".
-    const runDiffGames = pendingBucket("run_diff", "2w_3w");
-    expect("pending run_diff 2w_3w: the one pending game", runDiffGames.length, 1);
-    expect("pending run_diff: qualifying side is the home team", runDiffGames[0]?.qualifyingSide, "TeamX");
-    expect("pending run_diff: qualifier label", runDiffGames[0]?.qualifierLabel, "Run Diff Edge");
-    expect("pending run_diff: delta display (integer, no decimal)", runDiffGames[0]?.deltaDisplay, "20");
+    const mlByBucket = pending.dimensions.find((d) => d.key === "ml")!.gamesByBucket;
+    const mlRows = Object.values(mlByBucket).reduce((n, x) => n + x.sideA.length + x.sideB.length, 0);
+    expect("pending ML: 4 rows total (2 pending games x 2 sides; the started game is excluded)", mlRows, 4);
 
-    // era (away-home, sign-flip): 4.00-3.50=0.50 -> [.50,.75) "2w_3w".
-    const eraGames = pendingBucket("era", "2w_3w");
-    expect("pending era 2w_3w: the one pending game", eraGames.length, 1);
-    expect("pending era: delta display, leading zero stripped (baseball convention)", eraGames[0]?.deltaDisplay, ".50");
+    // --- a bucket with pending games on NEITHER side ---
+    const mlEmpty = pendingBucket("ml", "0_to_10");
+    expect("pending ML 0_to_10: nothing on either side", [mlEmpty.sideA.length, mlEmpty.sideB.length], [0, 0]);
 
-    // whip (away-home): 1.25-1.10=0.15 -> [.15,.20) "3w_4w".
-    const whipGames = pendingBucket("whip", "3w_4w");
-    expect("pending whip 3w_4w: the one pending game", whipGames.length, 1);
-    expect("pending whip: delta display", whipGames[0]?.deltaDisplay, ".15");
+    // --- a bucket with pending games on ONLY ONE side (Total: game1 only) ---
+    // combined over=6+3=9, under=4+7=11 -> overDelta 45-55 = -10.
+    //   over side -> "neg10_to_neg20"; under side (delta +10) -> "10_to_20".
+    const totalNeg10 = pendingBucket("total", "neg10_to_neg20");
+    expect("pending Total neg10_to_neg20 sideA (Over): game1, delta -10", fmt(totalNeg10).a, ["Over|-10|Total"]);
+    expect("pending Total neg10_to_neg20 sideB (Under): empty - one-sided bucket", totalNeg10.sideB.length, 0);
+    const total10 = pendingBucket("total", "10_to_20");
+    expect("pending Total 10_to_20 sideB (Under): game1's under side, delta +10", fmt(total10).b, ["Under|10|Total"]);
+    expect("pending Total 10_to_20 sideA (Over): empty", total10.sideA.length, 0);
 
-    // ops (home-away): .750-.700=.050 -> [.040,.060) "2w_3w".
-    const opsGames = pendingBucket("ops", "2w_3w");
-    expect("pending ops 2w_3w: the one pending game", opsGames.length, 1);
-    expect("pending ops: delta display (3 decimals)", opsGames[0]?.deltaDisplay, ".050");
+    // --- stat dims: each side placed by its own signed delta ---
+    // run_diff: home(25)-away(5)=20 -> sideA "2w_3w" (TeamX); away side -20 -> sideB "neg2w_neg3w" (TeamY).
+    const rd = pendingBucket("run_diff", "2w_3w");
+    expect("pending run_diff 2w_3w sideA (Home): TeamX, delta 20 (integer, no decimal)", fmt(rd).a, ["TeamX|20|Run Diff Edge"]);
+    expect("pending run_diff 2w_3w sideB (Away): empty", rd.sideB.length, 0);
+    expect("pending run_diff neg2w_neg3w sideB (Away): TeamY, delta -20", fmt(pendingBucket("run_diff", "neg2w_neg3w")).b, ["TeamY|-20|Run Diff Edge"]);
 
-    // batting_avg (home-away): .260-.245=.015 -> [.010,.020) "1w_2w".
-    const avgGames = pendingBucket("batting_avg", "1w_2w");
-    expect("pending batting_avg 1w_2w: the one pending game", avgGames.length, 1);
-    expect("pending batting_avg: delta display", avgGames[0]?.deltaDisplay, ".015");
+    // era (away-home): 4.00-3.50 = 0.50 -> sideA "2w_3w"; away side -0.50 -> sideB "neg2w_neg3w".
+    expect("pending era 2w_3w sideA (Home): TeamX, delta .50 (leading zero stripped)", fmt(pendingBucket("era", "2w_3w")).a, ["TeamX|.50|ERA Edge"]);
+    expect("pending era neg2w_neg3w sideB (Away): TeamY, delta -.50", fmt(pendingBucket("era", "neg2w_neg3w")).b, ["TeamY|-.50|ERA Edge"]);
+
+    // batting_avg (home-away): .260-.245 = .015 -> sideA "1w_2w"; away side -.015 -> sideB "neg1w_neg2w".
+    expect("pending batting_avg 1w_2w sideA (Home): TeamX, delta .015", fmt(pendingBucket("batting_avg", "1w_2w")).a, ["TeamX|.015|AVG Edge"]);
+    expect("pending batting_avg neg1w_neg2w sideB (Away): TeamY, delta -.015", fmt(pendingBucket("batting_avg", "neg1w_neg2w")).b, ["TeamY|-.015|AVG Edge"]);
   }
 
   restoreAll();
