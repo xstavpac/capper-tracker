@@ -136,7 +136,11 @@ export function computeTeamRecords(games: RecordGameRow[], asOf: Date): Map<stri
 // Reader
 // ---------------------------------------------------------------------------
 
-function recordFromSnapshot(s: TeamRecordSnapshot): TeamRecord {
+// A stored snapshot row -> the same TeamRecord shape computeTeamRecord
+// produces. Exported so the Charts adapter (historical-variables.ts) maps a
+// ranged set of these rows to a series with the identical logic the
+// point-in-time reader uses for a single row - one derivation, not two.
+export function recordFromSnapshot(s: TeamRecordSnapshot): TeamRecord {
   const decided = s.wins + s.losses;
   return {
     wins: s.wins, losses: s.losses, ties: s.ties,
@@ -148,6 +152,29 @@ function recordFromSnapshot(s: TeamRecordSnapshot): TeamRecord {
     streakCount: s.streakCount,
     gamesInRecord: s.gamesInRecord,
   };
+}
+
+// One Charts variable id -> its value off a TeamRecord, as the 0..1 fraction
+// the "percent" unit expects (formatValueForUnit multiplies by 100), except
+// nfl_streak which is a signed game count (unit "games") - exactly mirroring
+// MLB's resolveTeamStatFromSnapshot for team_home_win_pct / team_streak.
+// null for a split the team has no decided games in (a chart gap).
+export function resolveTeamRecordVariable(record: TeamRecord, variableId: string): number | null {
+  const pct = (w: number, l: number) => (w + l > 0 ? w / (w + l) : null);
+  switch (variableId) {
+    case "nfl_win_pct":
+      return record.winPct;
+    case "nfl_home_win_pct":
+      return pct(record.homeWins, record.homeLosses);
+    case "nfl_away_win_pct":
+      return pct(record.awayWins, record.awayLosses);
+    case "nfl_last10_win_pct":
+      return pct(record.last10Wins, record.last10Losses);
+    case "nfl_streak":
+      return record.streakType === "L" ? -record.streakCount : record.streakType === "W" ? record.streakCount : 0;
+    default:
+      return null;
+  }
 }
 
 export type TeamRecordAsOf = {

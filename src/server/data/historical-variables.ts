@@ -29,6 +29,8 @@ import {
   MLB_PITCHER_STATS_API,
   INTERNAL_TENDENCIES,
   NFL_TEAM_STATS_API,
+  NFL_TEAM_RECORD,
+  NFL_SITUATIONAL,
   USER_UPLOAD,
   type ModelVariableDef,
   type VariableSide,
@@ -37,6 +39,8 @@ import {
 import { computeTendencyRates } from "@/server/data/team-tendencies";
 import { resolveTeamStatFromSnapshot, resolvePitcherStatFromSnapshot } from "@/server/data/providers/mlb-stats-provider";
 import { resolveNflTeamStatFromSnapshot } from "@/server/data/providers/nfl-team-stats-provider";
+import { recordFromSnapshot, resolveTeamRecordVariable } from "@/server/data/team-record";
+import { SITUATIONAL_VARIABLE_QUESTION, situationalWinFraction } from "@/server/data/situational-snapshots";
 import { readRate, readTendencySample, type TendencySample } from "@/server/data/providers/tendency-provider";
 import { resolveCustomMetricVariable } from "@/server/data/custom-metrics";
 import { chartTeamsMatch } from "@/server/data/chart-team-name";
@@ -160,6 +164,60 @@ async function nflTeamStatsProvider(variable: ModelVariableDef, sportKey: string
     orderBy: { gameDate: "asc" },
   });
   const points = rows.map((row) => ({ date: row.gameDate, value: resolveNflTeamStatFromSnapshot(row, variable.id) }));
+  return {
+    variableId: variable.id,
+    variableLabel: variable.label,
+    unit: variable.unit,
+    entityId,
+    side,
+    supported: true,
+    points,
+    daysAvailable: points.filter((p) => p.value !== null).length,
+    totalSnapshotDays: rows.length,
+  };
+}
+
+// NFL win-loss record splits from TeamRecordSnapshot (server/data/
+// team-record.ts, captured daily from GameResult - preseason excluded). One
+// ranged snapshot query, each row mapped through the SAME
+// recordFromSnapshot + resolveTeamRecordVariable the point-in-time reader
+// (getTeamRecordAsOf) uses for a single row - one derivation, not two.
+// `side` is unused (a record split has no favorite/underdog version), same
+// as teamStatsProvider.
+async function nflTeamRecordProvider(variable: ModelVariableDef, sportKey: string, entityId: string, side: VariableSide | undefined, range: DateRange): Promise<VariableTimeSeriesResult> {
+  const rows = await prisma.teamRecordSnapshot.findMany({
+    where: { sportKey, teamName: entityId, snapshotDate: { gte: range.start, lte: range.end } },
+    orderBy: { snapshotDate: "asc" },
+  });
+  const points = rows.map((row) => ({ date: row.snapshotDate, value: resolveTeamRecordVariable(recordFromSnapshot(row), variable.id) }));
+  return {
+    variableId: variable.id,
+    variableLabel: variable.label,
+    unit: variable.unit,
+    entityId,
+    side,
+    supported: true,
+    points,
+    daysAvailable: points.filter((p) => p.value !== null).length,
+    totalSnapshotDays: rows.length,
+  };
+}
+
+// NFL situational win rates from SituationalRateSnapshot. That table is
+// EAV - one row per (team, question, day) - so this filters to the one
+// questionKey the variable maps to and reads each row's wins/total as a
+// 0..1 win fraction (situationalWinFraction, shared with the point-in-time
+// path). A variable id with no question mapping is a catalog/registry drift
+// bug, surfaced rather than silently empty.
+async function nflSituationalProvider(variable: ModelVariableDef, sportKey: string, entityId: string, side: VariableSide | undefined, range: DateRange): Promise<VariableTimeSeriesResult> {
+  const questionKey = SITUATIONAL_VARIABLE_QUESTION[variable.id];
+  if (!questionKey) return unsupportedResult(variable.id, entityId, side, "No situational question is mapped to this variable.");
+
+  const rows = await prisma.situationalRateSnapshot.findMany({
+    where: { sportKey, teamName: entityId, questionKey, snapshotDate: { gte: range.start, lte: range.end } },
+    orderBy: { snapshotDate: "asc" },
+  });
+  const points = rows.map((row) => ({ date: row.snapshotDate, value: situationalWinFraction(row.wins, row.total) }));
   return {
     variableId: variable.id,
     variableLabel: variable.label,
@@ -315,6 +373,8 @@ const PROVIDERS: Record<string, SeriesProvider> = {
   [MLB_TEAM_STATS_API]: teamStatsProvider,
   [MLB_PITCHER_STATS_API]: pitcherStatsProvider,
   [NFL_TEAM_STATS_API]: nflTeamStatsProvider,
+  [NFL_TEAM_RECORD]: nflTeamRecordProvider,
+  [NFL_SITUATIONAL]: nflSituationalProvider,
   [INTERNAL_TENDENCIES]: tendencyProvider,
   [USER_UPLOAD]: customMetricProvider,
   // odds_market variables (sourceId "odds_api") deliberately have no
