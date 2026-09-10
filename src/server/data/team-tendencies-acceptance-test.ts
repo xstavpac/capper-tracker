@@ -35,7 +35,14 @@ const SPORT = "baseball_mlb";
 
 // ---- fixtures -------------------------------------------------------------
 
-type Row = { homeTeam: string; awayTeam: string; homeScore: number; awayScore: number; gameDate: Date };
+type Row = {
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  gameDate: Date;
+  isPreseason: boolean;
+};
 
 function gr(over: Partial<Row> = {}): Row {
   return {
@@ -44,6 +51,7 @@ function gr(over: Partial<Row> = {}): Row {
     homeScore: 5,
     awayScore: 3,
     gameDate: new Date("2026-06-01T23:05:00Z"),
+    isPreseason: false,
     ...over,
   };
 }
@@ -102,7 +110,15 @@ type Counts = {
 };
 
 async function runRecompute(rows: Row[], oddsGames: OddsGame[]) {
-  patch("gameResult.findMany", async () => rows);
+  // The stub honors a `where.isPreseason` filter the way the real DB would,
+  // so a test can prove end-to-end that a preseason row never reaches the
+  // accumulation loop - not just that the query names the flag.
+  let findManyArgs: { where?: { isPreseason?: boolean } } | undefined;
+  patch("gameResult.findMany", async (args: typeof findManyArgs) => {
+    findManyArgs = args;
+    const want = args?.where?.isPreseason;
+    return want === undefined ? rows : rows.filter((r) => r.isPreseason === want);
+  });
   patch("oddsSnapshot.findMany", async () => [{ data: oddsGames }]);
   const upserts: { where: { sportKey_teamName: { teamName: string } }; create: Counts & { teamName: string } }[] = [];
   patch("teamTendency.upsert", async (args: (typeof upserts)[number]) => {
@@ -112,7 +128,7 @@ async function runRecompute(rows: Row[], oddsGames: OddsGame[]) {
   const summary = await recomputeTeamTendencies(SPORT);
   const byTeam = new Map<string, Counts>();
   for (const u of upserts) byTeam.set(u.where.sportKey_teamName.teamName, u.create);
-  return { summary, byTeam };
+  return { summary, byTeam, findManyArgs };
 }
 
 function favDecided(c: Counts) {
@@ -253,6 +269,71 @@ async function main() {
 
     const none = findOddsGameForResult([], { homeTeam: "Yankees", awayTeam: "Red Sox", gameDate });
     expect("no candidates -> null (game contributes nothing)", none, null);
+  }
+
+  // ---- 7. Preseason games are excluded; regular-season games count ----
+  // The NFL fix: recomputeTeamTendencies must never fold a preseason result
+  // into a team's fav/dog/over/under rates, while a real regular-season game
+  // must contribute exactly as before.
+  {
+    const regular = gr({
+      homeTeam: "Eagles",
+      awayTeam: "Cowboys",
+      homeScore: 27,
+      awayScore: 13, // home fav (-150) wins; total 40 > 8.5 -> over
+      gameDate: new Date("2026-09-14T17:00:00Z"),
+      isPreseason: false,
+    });
+    const preseason = gr({
+      homeTeam: "Eagles",
+      awayTeam: "Ravens",
+      homeScore: 10,
+      awayScore: 31, // would be a fav LOSS for the Eagles if it counted
+      gameDate: new Date("2026-08-16T17:00:00Z"),
+      isPreseason: true,
+    });
+
+    const { summary, byTeam, findManyArgs } = await runRecompute(
+      [regular, preseason],
+      [regular, preseason].map((r) => oddsFor(r))
+    );
+
+    expect("the recompute query filters to isPreseason:false", findManyArgs?.where?.isPreseason, false);
+    expect("only the regular-season game is processed", summary.gamesProcessed, 1);
+    expect("instrumentation scan size excludes the preseason row", summary.gameResultRows, 1);
+
+    const eagles = byTeam.get("Eagles")!;
+    expect(
+      "Eagles' record is the regular-season game ONLY: 1 fav win, 0 fav losses",
+      { w: eagles.favWins, l: eagles.favLosses },
+      { w: 1, l: 0 }
+    );
+    expect("Eagles' over/under is the regular-season game only", { o: eagles.overCount, u: eagles.underCount }, { o: 1, u: 0 });
+
+    const cowboys = byTeam.get("Cowboys")!;
+    expect("Cowboys (regular-season dog) recorded a dog loss", { w: cowboys.dogWins, l: cowboys.dogLosses }, { w: 0, l: 1 });
+
+    expect("the preseason-only opponent (Ravens) never gets a tendency row at all", byTeam.has("Ravens"), false);
+  }
+
+  // ---- 8. REGRESSION: the preseason flag is the ONLY thing that filters -
+  //        a preseason game DOES count if (and only if) its row says so ----
+  {
+    // Byte-identical to the game above except isPreseason:false - it must
+    // now contribute, proving #7's exclusion is driven by the flag, not by
+    // the date, the teams, or anything else.
+    const sameGameNotFlagged = gr({
+      homeTeam: "Eagles",
+      awayTeam: "Ravens",
+      homeScore: 10,
+      awayScore: 31,
+      gameDate: new Date("2026-08-16T17:00:00Z"),
+      isPreseason: false,
+    });
+    const { summary, byTeam } = await runRecompute([sameGameNotFlagged], [oddsFor(sameGameNotFlagged)]);
+    expect("an August game NOT flagged preseason is still counted", summary.gamesProcessed, 1);
+    const eagles = byTeam.get("Eagles")!;
+    expect("unflagged -> the Eagles' fav loss IS recorded", { w: eagles.favWins, l: eagles.favLosses }, { w: 0, l: 1 });
   }
 
   restoreAll();

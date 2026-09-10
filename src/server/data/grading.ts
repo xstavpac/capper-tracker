@@ -10,6 +10,7 @@ import {
   type OddsGame,
 } from "@/server/data/odds";
 import { closestByTime, sameEasternDay } from "@/lib/dates";
+import { isPreseasonGame } from "@/lib/sport-seasons";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { extractLine, parseTouchdownProp, nrfiSide, betScope } from "@/lib/bet-line";
 import { findTeamNickname, NCAAF_CANONICAL_SUFFIX } from "@/lib/parse-catalog";
@@ -237,6 +238,10 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
           homeTurnovers,
           awayTurnovers,
           gameDate: new Date(g.commenceTime),
+          // Classified once, here, and never in the `update` branch above -
+          // so flipping an already-counted game to preseason stays a
+          // deliberate one-off, not a silent side effect of the next cron run.
+          isPreseason: isPreseasonGame(sportKey, new Date(g.commenceTime)),
           favTeam: ledger?.favTeam ?? null,
           totalLine: ledger?.totalLine ?? null,
           lineSource: ledgerHasData ? "odds_snapshot" : null,

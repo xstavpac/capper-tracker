@@ -794,6 +794,18 @@ model GameResult {
   gameDate           DateTime
   createdAt          DateTime @default(now())
 
+  // True when this game fell in its sport's configured preseason window at
+  // the time it was persisted (isPreseasonGame in lib/sport-seasons.ts -
+  // only NFL has a preseason window today). Classified once at
+  // persistFinalScores CREATE time and frozen - never rewritten on a later
+  // upsert, and never backfilled onto existing rows by code, so turning it
+  // on for already-counted games stays a deliberate one-off decision.
+  // recomputeTeamTendencies filters these out so preseason results never
+  // dilute the fav/dog/over/under tendency rates a model might consume;
+  // every other GameResult consumer ignores it. Existing rows and every
+  // non-preseason game are false.
+  isPreseason        Boolean  @default(false)
+
   // ---- Team-trend ledger fields (Fav/Dog + Over/Under signal source) ----
   // Populated from the best odds data available around this game's date -
   // NOT a rigorously-captured true closing line. This app only caches odds

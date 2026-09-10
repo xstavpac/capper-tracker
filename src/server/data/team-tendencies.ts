@@ -144,7 +144,16 @@ export async function recomputeTeamTendencies(sportKey: string): Promise<{
 }> {
   const [gameResults, snapshots] = await Promise.all([
     prisma.gameResult.findMany({
-      where: { sportKey },
+      // isPreseason is an explicit per-row flag (isPreseasonGame /
+      // persistFinalScores), NOT a date or recency filter - the full history
+      // is still in scope, exactly as team-tendencies-acceptance-test.ts's
+      // 400-day-old-game regression requires. It only drops games that fell
+      // in their sport's preseason window (NFL only today), whose outcomes
+      // are low-signal and must not dilute the fav/dog/over/under rates.
+      // Games persisted before this flag existed are all false, so existing
+      // tendency counts are unchanged until those rows are deliberately
+      // reclassified.
+      where: { sportKey, isPreseason: false },
       select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true, gameDate: true },
     }),
     prisma.oddsSnapshot.findMany({ where: { sportKey }, select: { data: true } }),

@@ -13,7 +13,7 @@
 // bug). The fix queries BOTH keys for the whole pre-regular-season window and
 // merges, so no SPORT_SEASON_CONFIG date has to line up exactly with the day
 // preseason ends.
-import { oddsApiRequestKeys, isSportInSeason } from "./sport-seasons";
+import { oddsApiRequestKeys, isSportInSeason, isPreseasonGame } from "./sport-seasons";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -66,6 +66,25 @@ check("unknown sport key: passthrough", oddsApiRequestKeys("handball_bundesliga"
 // isSportInSeason is true throughout it (getOddsForSportUncached gates on
 // that before ever calling oddsApiRequestKeys). ---
 check("NFL in season on 2026-09-05 (so the fetch path is actually reached)", isSportInSeason(NFL, d("2026-09-05")), true);
+
+// --- isPreseasonGame: the NFL preseason window [seasonStart, regularSeasonStart) ---
+check("NFL 2026-08-06 (seasonStart / first preseason day): preseason", isPreseasonGame(NFL, d("2026-08-06")), true);
+check("NFL 2026-08-20 (mid-preseason): preseason", isPreseasonGame(NFL, d("2026-08-20")), true);
+check("NFL 2026-09-08 (day before Week 1, still the gap): preseason", isPreseasonGame(NFL, d("2026-09-08")), true);
+check("NFL 2026-09-09 (regularSeasonStart / Week 1): NOT preseason", isPreseasonGame(NFL, d("2026-09-09")), false);
+check("NFL 2026-11-15 (mid regular season): NOT preseason", isPreseasonGame(NFL, d("2026-11-15")), false);
+check("NFL 2027-01-20 (playoffs): NOT preseason", isPreseasonGame(NFL, d("2027-01-20")), false);
+check("NFL 2026-07-01 (deep offseason, before the window opens): NOT preseason", isPreseasonGame(NFL, d("2026-07-01")), false);
+check("NFL 2026-01-10 (LAST season's playoffs, well before this seasonStart): NOT preseason", isPreseasonGame(NFL, d("2026-01-10")), false);
+
+// --- Every other sport has no preseason window configured -> always false,
+//     even on a date that IS that sport's real-world preseason. ---
+check("MLB 2026-03-18 (spring training): NOT flagged - MLB has no regularSeasonStart configured", isPreseasonGame("baseball_mlb", d("2026-03-18")), false);
+check("NBA 2026-10-10 (NBA preseason): NOT flagged", isPreseasonGame("basketball_nba", d("2026-10-10")), false);
+check("NHL 2026-09-25 (NHL preseason): NOT flagged", isPreseasonGame("icehockey_nhl", d("2026-09-25")), false);
+check("WNBA 2026-05-05 (WNBA preseason): NOT flagged", isPreseasonGame("basketball_wnba", d("2026-05-05")), false);
+check("NCAAF 2026-08-26 (has no preseason concept): NOT flagged", isPreseasonGame("americanfootball_ncaaf", d("2026-08-26")), false);
+check("unknown sport: NOT flagged", isPreseasonGame("handball_bundesliga", d("2026-09-05")), false);
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
