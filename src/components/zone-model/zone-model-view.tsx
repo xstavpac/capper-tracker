@@ -2,12 +2,17 @@
 
 import { useState } from "react";
 import { getRecordColor } from "@/server/data/stats";
-import type { ZoneModelBucketResult, ZoneModelReport, PendingZoneReport, PendingZoneGame } from "@/server/data/zone-model";
+import type {
+  ZoneModelBucketResult,
+  ZoneModelReport,
+  ZoneSideRecord,
+  PendingZoneReport,
+  PendingZoneBucket,
+  PendingZoneGame,
+} from "@/server/data/zone-model";
 
-const CARD_CLASSES: Record<"green" | "red", string> = {
-  green: "bg-emerald-100 dark:bg-emerald-500/20",
-  red: "bg-red-100 dark:bg-red-500/20",
-};
+const EMPTY_PENDING: PendingZoneBucket = { sideA: [], sideB: [] };
+
 const TEXT_CLASSES: Record<"green" | "red", string> = {
   green: "text-emerald-700 dark:text-emerald-300",
   red: "text-red-700 dark:text-red-300",
@@ -26,23 +31,78 @@ function PendingGameLine({ game }: { game: PendingZoneGame }) {
   );
 }
 
+// One side's record within a bucket. A side with no games shows an explicit
+// "no games" rather than a misleading 0-0 / 0% - winPct is null there, never
+// a divide-by-zero fallback. Both sides are always shown so a negative-delta
+// range reads directly (the underdog's real record, not the favorite's
+// relabelled).
+function SideRow({ label, record }: { label: string; record: ZoneSideRecord }) {
+  if (record.games === 0) {
+    return (
+      <div className="flex items-baseline justify-between gap-2 text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="text-xs text-muted-foreground">no games</span>
+      </div>
+    );
+  }
+  const color = getRecordColor(record.winPct!);
+  return (
+    <div className="flex items-baseline justify-between gap-2 text-sm tabular-nums">
+      <span className="text-muted-foreground">{label}</span>
+      <span>
+        <span className="font-medium text-foreground">
+          {record.wins}-{record.losses}
+        </span>{" "}
+        <span className={"font-semibold " + TEXT_CLASSES[color]}>{Math.round(record.winPct!)}%</span>{" "}
+        <span className="text-xs font-normal text-muted-foreground">
+          &middot; {record.games}g
+        </span>
+      </span>
+    </div>
+  );
+}
+
+// One side's pending list inside the expander. An empty side is an explicit
+// "None currently", not fabricated content - same rule as the 0-0 / null%
+// record above it.
+function PendingList({ label, games }: { label: string; games: PendingZoneGame[] }) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-muted-foreground">{label} pending</div>
+      {games.length === 0 ? (
+        <p className="mt-0.5 text-sm text-muted-foreground">None currently.</p>
+      ) : (
+        <div className="mt-0.5 divide-y divide-border-subtle">
+          {games.map((game, i) => (
+            <PendingGameLine key={`${game.awayTeam}-${game.homeTeam}-${game.commenceTime}-${i}`} game={game} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // A tile is a real button (not a hover-only affordance) - its expanded/
 // collapsed state and the "N pending" count are always visible, not
-// revealed only on mouseover. A tile with zero games renders as its own
-// explicit, always-visible dimmed state and is not clickable (there is
-// nothing to expand).
+// revealed only on mouseover. A tile with zero games on BOTH sides renders
+// as its own explicit, always-visible dimmed state and is not clickable
+// (there is nothing to expand).
 function BucketTile({
   result,
-  pendingGames,
+  sideALabel,
+  sideBLabel,
+  pending,
   expanded,
   onToggle,
 }: {
   result: ZoneModelBucketResult;
-  pendingGames: PendingZoneGame[];
+  sideALabel: string;
+  sideBLabel: string;
+  pending: PendingZoneBucket;
   expanded: boolean;
   onToggle: () => void;
 }) {
-  if (result.games === 0) {
+  if (result.sideA.games === 0 && result.sideB.games === 0) {
     return (
       <div className="rounded-card border border-dashed border-border-subtle p-3 opacity-60">
         <div className="text-xs font-medium text-muted-foreground">{result.bucket.label}</div>
@@ -51,7 +111,7 @@ function BucketTile({
     );
   }
 
-  const color = getRecordColor(result.winPct!);
+  const pendingCount = pending.sideA.length + pending.sideB.length;
   return (
     <div>
       <button
@@ -59,34 +119,23 @@ function BucketTile({
         onClick={onToggle}
         aria-expanded={expanded}
         className={
-          "w-full rounded-card p-3 text-left transition " +
-          CARD_CLASSES[color] +
-          (expanded ? " ring-2 ring-blue-400 dark:ring-blue-300" : " hover:opacity-90")
+          "w-full rounded-card border border-border-subtle bg-card p-3 text-left transition " +
+          (expanded ? "ring-2 ring-blue-400 dark:ring-blue-300" : "hover:bg-muted/50")
         }
       >
-        <div className={"flex items-center justify-between text-xs font-medium " + TEXT_CLASSES[color]}>
+        <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
           <span>{result.bucket.label}</span>
-          <span className="text-muted-foreground">{pendingGames.length > 0 ? `${pendingGames.length} pending` : ""}</span>
+          <span>{pendingCount > 0 ? `${pendingCount} pending` : ""}</span>
         </div>
-        <div className="mt-1 text-sm font-medium text-foreground">
-          {result.wins}-{result.losses}
-          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-            &middot; {result.games} game{result.games === 1 ? "" : "s"}
-          </span>
+        <div className="mt-1.5 space-y-1">
+          <SideRow label={sideALabel} record={result.sideA} />
+          <SideRow label={sideBLabel} record={result.sideB} />
         </div>
-        <div className={"mt-0.5 text-sm font-semibold " + TEXT_CLASSES[color]}>{Math.round(result.winPct!)}%</div>
       </button>
       {expanded && (
-        <div className="mt-1 rounded-card border border-border-subtle bg-card p-3 shadow-soft">
-          {pendingGames.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No pending games currently fall in this range.</p>
-          ) : (
-            <div className="divide-y divide-border-subtle">
-              {pendingGames.map((game, i) => (
-                <PendingGameLine key={`${game.awayTeam}-${game.homeTeam}-${game.commenceTime}-${i}`} game={game} />
-              ))}
-            </div>
-          )}
+        <div className="mt-1 space-y-3 rounded-card border border-border-subtle bg-card p-3 shadow-soft">
+          <PendingList label={sideALabel} games={pending.sideA} />
+          <PendingList label={sideBLabel} games={pending.sideB} />
         </div>
       )}
     </div>
@@ -98,6 +147,8 @@ function BucketGrid({
   title,
   subtitle,
   results,
+  sideALabel,
+  sideBLabel,
   gamesByBucket,
   expandedTile,
   onToggleTile,
@@ -106,7 +157,9 @@ function BucketGrid({
   title: string;
   subtitle: string;
   results: ZoneModelBucketResult[];
-  gamesByBucket: Record<string, PendingZoneGame[]>;
+  sideALabel: string;
+  sideBLabel: string;
+  gamesByBucket: Record<string, PendingZoneBucket>;
   expandedTile: string | null;
   onToggleTile: (tileKey: string) => void;
 }) {
@@ -121,7 +174,9 @@ function BucketGrid({
             <BucketTile
               key={result.bucket.id}
               result={result}
-              pendingGames={gamesByBucket[result.bucket.id] ?? []}
+              sideALabel={sideALabel}
+              sideBLabel={sideBLabel}
+              pending={gamesByBucket[result.bucket.id] ?? EMPTY_PENDING}
               expanded={expandedTile === tileKey}
               onToggle={() => onToggleTile(tileKey)}
             />
@@ -147,12 +202,16 @@ export function ZoneModelView({ report, pending }: { report: ZoneModelReport; pe
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Zone Model</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Bucketed delta calibration - admin-only. Each dimension below is placed into a range using each
-          team&apos;s BettingView tendency/stat history exactly as it stood the day before that game - never a
-          current or later rate - and each range reports its own real record. Ranges are independent across and
-          within dimensions: none of this is averaged, smoothed, or an implicit claim that a bigger delta
-          performs better. Click any tile to see today&apos;s pending games (current data, no point-in-time
-          restriction - there&apos;s nothing to look ahead of yet) currently in that same range. Point-in-time
+          Bucketed delta calibration - admin-only. Each game is placed into a range using each team&apos;s
+          BettingView tendency/stat history exactly as it stood the day before that game - never a current or
+          later rate. Every range reports <span className="font-medium text-foreground">both</span> sides&apos;
+          real records (favorite and underdog, over and under, or home and away) independently: each game is
+          bucketed once per side by that side&apos;s own version of the delta, so the two records come from
+          different games and neither is inferred by inverting the other. Nothing is averaged, smoothed, or an
+          implicit claim that a bigger delta performs better, and there is no minimum-sample cutoff. Click any
+          tile to see today&apos;s pending games in that range (current data, no point-in-time restriction),
+          split the same two ways - the favorite / over / home list and the underdog / under / away list, each
+          game placed by that side&apos;s own delta, so one game can appear under two different tiles. Point-in-time
           history starts wherever each dimension&apos;s own daily snapshot began, so earlier games are excluded
           from that dimension.
         </p>
@@ -166,6 +225,8 @@ export function ZoneModelView({ report, pending }: { report: ZoneModelReport; pe
             title={dimension.label}
             subtitle={dimension.description}
             results={dimension.buckets}
+            sideALabel={dimension.sideALabel}
+            sideBLabel={dimension.sideBLabel}
             gamesByBucket={pendingByDimension.get(dimension.key) ?? {}}
             expandedTile={expandedTile}
             onToggleTile={toggleTile}
