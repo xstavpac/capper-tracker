@@ -17,6 +17,7 @@ import { nrfiSide, formatPickLabel } from "@/lib/bet-line";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
 import { GamePulsePanel } from "@/components/live/game-pulse-panel";
+import { GameMomentumPanel } from "@/components/live/game-momentum-panel";
 import type { BetType, Period } from "@prisma/client";
 
 function formatOdds(price: number) {
@@ -89,16 +90,25 @@ export default async function GameDetailPage({
   const isLive = score?.status === "live";
   const isFinal = score?.status === "final";
 
+  // MLB gets the live Momentum gauge instead of Game Pulse (Phase 1
+  // investigation: Game Pulse does no live fetching at all, so it couldn't
+  // be extended into this - Momentum needed its own per-game live-state
+  // layer, see live-game-state.ts). Every other sport is unchanged and out
+  // of scope for this round.
+  const isMlb = sportMeta.key === "baseball_mlb";
+
   // Historical situational rates for both teams, independent of this game's
   // own live/final state - unlike the old tile badge this replaces (which
   // only ever evaluated a currently-live game's own innings), the panel
   // shows each team's track record regardless of whether this particular
   // game has started yet. NFL gets its own football-specific question set
-  // (nfl-game-pulse.ts); every other sport still falls through to the MLB
-  // rate lookup, which harmlessly returns all-"not enough data" rows for a
-  // non-MLB team name - unchanged from before this sport branch existed.
-  const pulseRows =
-    sportMeta.key === "americanfootball_nfl"
+  // (nfl-game-pulse.ts); every other non-MLB sport still falls through to
+  // the MLB rate lookup, which harmlessly returns all-"not enough data" rows
+  // for a non-MLB team name - unchanged from before this sport branch
+  // existed. Skipped entirely for MLB, which no longer renders this panel.
+  const pulseRows = isMlb
+    ? null
+    : sportMeta.key === "americanfootball_nfl"
       ? await getNflGamePulsePanelRows(game.homeTeam, game.awayTeam)
       : await getGamePulsePanelRows(game.homeTeam, game.awayTeam);
 
@@ -221,7 +231,18 @@ export default async function GameDetailPage({
         )}
       </div>
 
-      <GamePulsePanel rows={pulseRows} homeTeam={game.homeTeam} awayTeam={game.awayTeam} sportLabel={sportMeta.label} />
+      {isMlb ? (
+        <GameMomentumPanel
+          gamePk={score?.id ?? game.id}
+          homeTeam={game.homeTeam}
+          awayTeam={game.awayTeam}
+          gameDate={game.commenceTime}
+          isLive={isLive}
+          isFinal={isFinal}
+        />
+      ) : (
+        <GamePulsePanel rows={pulseRows!} homeTeam={game.homeTeam} awayTeam={game.awayTeam} sportLabel={sportMeta.label} />
+      )}
 
       <div className="mt-4 rounded-card bg-card shadow-soft">
         <div className="border-b border-border-subtle px-5 py-3 text-sm font-medium text-muted-foreground">
