@@ -1,13 +1,21 @@
 "use client";
 
+import { useId } from "react";
 import { Theme } from "@prisma/client";
 import { useTheme } from "@/components/layout/theme-provider";
+import { getTeamColor } from "@/lib/team-colors";
 import {
   MOMENTUM_STRONG_THRESHOLD,
   MOMENTUM_MIN_DELTAS_FOR_READ,
   type MomentumClassification,
   type MomentumFactor,
 } from "@/server/data/mlb-momentum";
+
+const SPORT_KEY = "baseball_mlb";
+// Fallback for a team getTeamColor can't map yet (none today - both MLB
+// tables are fully covered - but never re-introduce the old bug by falling
+// back to a fixed blue/amber that would still read as position-based bias).
+const NEUTRAL_COLOR = "#9ca3af"; // gray-400
 
 // Same semicircle-dial construction as BoardPulsePanel's Gauge
 // (board-pulse-panel.tsx) - viewBox/radius/stroke chosen to match that
@@ -33,10 +41,18 @@ const CLASSIFICATION_LABEL: Record<MomentumClassification, (home: string, away: 
   STRONG_AWAY: (_home, away) => `Strong ${away} Momentum`,
 };
 
-function needleColorFor(classification: MomentumClassification): string {
-  if (classification === "STRONG_HOME" || classification === "LEAN_HOME") return "#2563eb"; // blue-600 - home lean
-  if (classification === "STRONG_AWAY" || classification === "LEAN_AWAY") return "#d97706"; // amber-600 - away lean
-  return "#9ca3af"; // gray-400 - even
+// Bug fix: this used to be a fixed blue-for-home/amber-for-away mapping,
+// which meant whichever team happened to be listed first (home or away)
+// always read the same color regardless of which team it actually was -
+// two different matchups showed the identical "blue vs amber" look with no
+// connection to either team's real identity. Now colored by each team's OWN
+// verified brand color (getTeamColor) instead, so the gauge is never biased
+// by list position - only by which team the signal actually favors. EVEN
+// still reads neutral gray - momentum hasn't favored either team's color.
+function needleColorFor(classification: MomentumClassification, awayColor: string, homeColor: string): string {
+  if (classification === "STRONG_HOME" || classification === "LEAN_HOME") return homeColor;
+  if (classification === "STRONG_AWAY" || classification === "LEAN_AWAY") return awayColor;
+  return NEUTRAL_COLOR;
 }
 
 // netShift is a signed, effectively-unbounded WP-point sum (see
@@ -44,11 +60,24 @@ function needleColorFor(classification: MomentumClassification): string {
 // clamped magnitude, so it's normalized against the STRONG threshold - a
 // shift at or beyond "strong" always points the needle all the way to that
 // side, rather than needing its own separate scale.
-function Dial({ netShift, classification }: { netShift: number; classification: MomentumClassification }) {
+function Dial({
+  netShift,
+  classification,
+  awayColor,
+  homeColor,
+}: {
+  netShift: number;
+  classification: MomentumClassification;
+  awayColor: string;
+  homeColor: string;
+}) {
   const { theme } = useTheme();
   const isDark = theme === Theme.DARK;
-  const trackColor = isDark ? "#374151" : "#e5e7eb";
-  const needleColor = needleColorFor(classification);
+  const needleColor = needleColorFor(classification, awayColor, homeColor);
+  // Unique per mounted gauge (useId) so two Dials on one page (there aren't
+  // today, but nothing should assume that) never collide on the same <defs>
+  // gradient id.
+  const gradientId = "momentum-gradient-" + useId();
 
   const t = MOMENTUM_STRONG_THRESHOLD > 0 ? Math.max(-1, Math.min(1, netShift / MOMENTUM_STRONG_THRESHOLD)) : 0;
   // t=-1 (full away) -> 180deg (pointing left), t=0 -> 90deg (straight up),
@@ -57,10 +86,25 @@ function Dial({ netShift, classification }: { netShift: number; classification: 
   const needleLen = GAUGE_R - 12;
   const tipX = GAUGE_CX + needleLen * Math.cos(angleRad);
   const tipY = GAUGE_CY - needleLen * Math.sin(angleRad);
+  const dotStroke = isDark ? "#111827" : "#ffffff";
 
   return (
     <svg viewBox={`0 0 ${GAUGE_VIEWBOX_W} ${GAUGE_VIEWBOX_H}`} className="h-[112px] w-[200px]">
-      <path d={ARC_PATH} pathLength={100} fill="none" stroke={trackColor} strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
+      <defs>
+        {/* Horizontal sweep across the arc's own bounding box (left edge to
+            right edge, at the arc's vertical midpoint) - away's color on the
+            left where away sits, home's on the right where home sits, same
+            away-left/home-right convention as the rest of this dial. */}
+        <linearGradient id={gradientId} x1={GAUGE_CX - GAUGE_R} y1={GAUGE_CY} x2={GAUGE_CX + GAUGE_R} y2={GAUGE_CY} gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor={awayColor} />
+          <stop offset="100%" stopColor={homeColor} />
+        </linearGradient>
+      </defs>
+      <path d={ARC_PATH} pathLength={100} fill="none" stroke={`url(#${gradientId})`} strokeWidth={GAUGE_STROKE} strokeLinecap="round" />
+      {/* Team-colored marker dots at each end of the arc, matching the
+          gradient's own endpoints - away on the left, home on the right. */}
+      <circle cx={GAUGE_CX - GAUGE_R} cy={GAUGE_CY} r={7} fill={awayColor} stroke={dotStroke} strokeWidth={2} />
+      <circle cx={GAUGE_CX + GAUGE_R} cy={GAUGE_CY} r={7} fill={homeColor} stroke={dotStroke} strokeWidth={2} />
       <line x1={GAUGE_CX} y1={GAUGE_CY} x2={tipX} y2={tipY} stroke={needleColor} strokeWidth={4} strokeLinecap="round" />
       <circle cx={GAUGE_CX} cy={GAUGE_CY} r={6} fill={needleColor} />
     </svg>
@@ -100,11 +144,13 @@ export function MomentumGauge({
   factors: MomentumFactor[];
 }) {
   const warmingUp = deltasConsidered < MOMENTUM_MIN_DELTAS_FOR_READ;
+  const awayColor = getTeamColor(SPORT_KEY, awayTeam) ?? NEUTRAL_COLOR;
+  const homeColor = getTeamColor(SPORT_KEY, homeTeam) ?? NEUTRAL_COLOR;
 
   return (
     <div>
       <div className="flex flex-col items-center pt-4">
-        <Dial netShift={netShift} classification={classification} />
+        <Dial netShift={netShift} classification={classification} awayColor={awayColor} homeColor={homeColor} />
         <div className="mt-1 flex w-full max-w-[240px] items-center justify-between px-2 text-xs text-muted-foreground">
           <span>{awayTeam}</span>
           <span>{homeTeam}</span>
