@@ -8,18 +8,17 @@ import {
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
 import { persistFinalScores, gradePendingPicks, regradeFuzzyMatchedPicks } from "@/server/data/grading";
-import { getPicksForGame, getCapperScorecard } from "@/server/data/picks";
+import { getPicksForGame } from "@/server/data/picks";
 import { getGamePulsePanelRows } from "@/server/data/game-pulse";
 import { getTeamRecordAsOf, type TeamRecord } from "@/server/data/team-record";
 import { getMlbLiveGameState } from "@/server/data/live-game-state";
 import { getNflLiveGameState } from "@/server/data/nfl-live-game-state";
 import { formatEastern } from "@/lib/dates";
 import { betTypeLabel, pickCategory } from "@/server/data/stats";
-import { nrfiSide, formatPickLabel } from "@/lib/bet-line";
+import { formatPickLabel } from "@/lib/bet-line";
 import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
 import { getTeamColor } from "@/lib/team-colors";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
-import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
 import { GamePulsePanel } from "@/components/live/game-pulse-panel";
 import { GameMomentumPanel } from "@/components/live/game-momentum-panel";
 import { NflGameMomentumPanel } from "@/components/live/nfl-game-momentum-panel";
@@ -27,7 +26,6 @@ import { GamePacePanel } from "@/components/live/game-pace-panel";
 import { NflGamePacePanel } from "@/components/live/nfl-game-pace-panel";
 import { GameHeadToHeadHeader, type HeadToHeadSide } from "@/components/live/game-head-to-head-header";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
-import type { BetType, Period } from "@prisma/client";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -219,38 +217,6 @@ export default async function GameDetailPage({
         })
       : [];
 
-  const recordKeys = new Map<
-    string,
-    { capperId: string; capperName: string; betType: BetType; period: Period; betDetail: string | null }
-  >();
-  for (const pick of matchedPicks) {
-    // NRFI and YRFI share one betType, so the dedup key needs the resolved
-    // side too - otherwise a capper's NRFI pick and YRFI pick on the same
-    // game would collapse into one entry and only ever look up one bucket.
-    const side = pick.betType === "NRFI" ? nrfiSide(pick.betDetail) : null;
-    const key = pick.capperId + "|" + pick.betType + "|" + pick.period + "|" + (side ?? "");
-    if (!recordKeys.has(key)) {
-      recordKeys.set(key, {
-        capperId: pick.capperId,
-        capperName: pick.capper.name,
-        betType: pick.betType,
-        period: pick.period,
-        betDetail: pick.betDetail,
-      });
-    }
-  }
-
-  const capperRecords = await Promise.all(
-    Array.from(recordKeys.values()).map(async (entry) => ({
-      ...entry,
-      buckets: await getCapperScorecard(user.id, entry.capperId, {
-        betType: entry.betType,
-        period: entry.period,
-        betDetail: entry.betDetail,
-      }),
-    }))
-  );
-
   const book = game.bookmakers[0];
   const findMarketAcrossBooks = (key: string) => {
     for (const b of game.bookmakers) {
@@ -440,25 +406,6 @@ export default async function GameDetailPage({
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {capperRecords.length > 0 && (
-        <div className="mt-4 rounded-card bg-card shadow-soft">
-          <div className="border-b border-border-subtle px-5 py-3 text-sm font-medium text-muted-foreground">
-            Capper track record on this bet type
-          </div>
-          <div className="divide-y divide-border-subtle">
-            {capperRecords.map((r) => (
-              <div
-                key={r.capperId + r.betType + r.period}
-                className="flex items-center justify-between px-5 py-3"
-              >
-                <div className="text-sm font-medium">{r.capperName}</div>
-                <CapperScorecard buckets={r.buckets} variant="inline" />
-              </div>
-            ))}
-          </div>
         </div>
       )}
     </div>

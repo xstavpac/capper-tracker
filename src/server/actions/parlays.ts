@@ -79,7 +79,6 @@ export async function createParlayAction(data: {
   }
 
   revalidatePath("/picks");
-  revalidatePath("/reports");
   revalidatePath("/dashboard");
   return { success: true };
 }
@@ -95,15 +94,13 @@ export async function updateLegStatusAction(legId: string, status: PickStatus): 
   }
 
   revalidatePath("/picks");
-  revalidatePath("/reports");
   revalidatePath("/dashboard");
   return { success: true };
 }
 
 // Deletes a whole parlay (legs cascade). No revalidateTag for the
-// dashboard/reports caches here - those read only Pick rows; the parlay
-// numbers on /reports come from getParlayReportsData, which is uncached and
-// picked up by the revalidatePath below.
+// dashboard cache here - it reads only Pick rows, which a parlay deletion
+// never touches.
 export async function deleteParlayAction(parlayBetId: string): Promise<ParlayActionResult> {
   const user = await requireUser();
 
@@ -115,7 +112,6 @@ export async function deleteParlayAction(parlayBetId: string): Promise<ParlayAct
   }
 
   revalidatePath("/picks");
-  revalidatePath("/reports");
   revalidatePath("/dashboard");
   return { success: true };
 }

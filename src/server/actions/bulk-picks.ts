@@ -486,15 +486,13 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
   // Pick row yet.
   const result = await createPicksWithEntitlementCheck(user.id, toInsert);
 
-  // Bust this user's cached Dashboard/Reports aggregations by tag (see
-  // getDashboardSummary / getReportsData) - revalidatePath does not reliably
-  // evict unstable_cache entries.
+  // Bust this user's cached Dashboard aggregations by tag (see
+  // getDashboardSummary) - revalidatePath does not reliably evict
+  // unstable_cache entries.
   revalidateTag(cacheKeys.dashboard(user.id));
-  revalidateTag(cacheKeys.reports(user.id));
   revalidatePath("/picks");
   revalidatePath("/dashboard");
   revalidatePath("/cappers");
-  revalidatePath("/reports");
 
   if (!result.allowed) {
     return {

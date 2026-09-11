@@ -86,13 +86,12 @@ export async function GET(req: Request) {
   );
 
   // Only the users whose pick status actually changed this run get their
-  // Dashboard/Reports caches busted - never a global flush. Leg grading is
-  // deliberately not included: those cached surfaces read only Pick rows
+  // Dashboard cache busted - never a global flush. Leg grading is
+  // deliberately not included: that cached surface reads only Pick rows
   // (parlay stats are a separate uncached query).
   const changedUserIds = new Set<string>(results.flatMap((r) => [...r.changedUserIds]));
   for (const userId of changedUserIds) {
     revalidateTag(cacheKeys.dashboard(userId));
-    revalidateTag(cacheKeys.reports(userId));
   }
 
   // Measurement only (see docs/c4-grading-throughput.md). One line per run so

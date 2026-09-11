@@ -56,18 +56,6 @@ function PicksIcon({ className }: { className?: string }) {
   );
 }
 
-function ReportsIcon({ className }: { className?: string }) {
-  return (
-    <svg {...iconProps(className)}>
-      <path d="M4 20V4" />
-      <path d="M4 20h16" />
-      <rect x="7.5" y="12" width="3" height="6" rx="0.5" />
-      <rect x="12.5" y="8" width="3" height="10" rx="0.5" />
-      <rect x="17.5" y="5" width="3" height="13" rx="0.5" />
-    </svg>
-  );
-}
-
 function SettingsIcon({ className }: { className?: string }) {
   return (
     <svg {...iconProps(className)}>
@@ -139,7 +127,6 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/cappers", label: "Cappers", icon: CappersIcon },
   { href: "/sharp-money", label: "Sharp Money", icon: SharpMoneyIcon },
   { href: "/picks", label: "Picks", icon: PicksIcon },
-  { href: "/reports", label: "Reports", icon: ReportsIcon },
   { href: "/charts", label: "Charts", icon: ChartsIcon },
   { href: "/pricing", label: "Plans & Billing", icon: PricingIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },

@@ -3,17 +3,13 @@ import type { BetType, PickStatus, Period } from "@prisma/client";
 import { findTeamNickname, teamPhraseRegex } from "@/lib/parse-catalog";
 import {
   computeStats,
-  computeScorecard,
   computeCategoryBreakdown,
   computeLeagueRecordCards,
   recentPicksRecord,
   ALL_CATEGORY_KEYS,
   LEAGUE_RECORD_LAST_N,
-  SEGMENT_CATEGORY_PERIODS,
   CATEGORY_RECENT_FORM_MIN_SAMPLE,
   CATEGORY_RECENT_FORM_WINDOW,
-  type ScorecardBucket,
-  type ScorecardBucketKey,
   type CategoryBreakdownItem,
   type LeagueRecordCard,
   type LeagueRecordColumn,
@@ -483,48 +479,13 @@ export async function getPicksForGames(
   });
 }
 
-// A capper's record broken down by bet category (see computeScorecard), or
-// narrowed to a single category when `filter` is given - e.g. "8-3 on
-// Moneyline picks" for context on how much weight to give their pick on a
-// specific game, independent of their overall record across every category.
-export async function getCapperScorecard(
-  userId: string,
-  capperId: string,
-  // betDetail is required whenever betType is NRFI - an NRFI-betType pick's
-  // bucket depends on which side (NRFI vs YRFI) it's on, the same
-  // betDetail-derived split computeScorecard's own bucketKeyForPick uses, so
-  // this lookup can't just cast betType straight to a ScorecardBucketKey the
-  // way every other bet type still can.
-  filter?: { betType: BetType; period: Period; betDetail: string | null }
-): Promise<ScorecardBucket[]> {
-  const picks = await prisma.pick.findMany({ where: { userId, capperId } });
-  const buckets = computeScorecard(picks);
-  if (!filter) return buckets;
-
-  // Mirror bucketKeyForPick's precedence exactly: TEAM_TOTAL is
-  // period-independent and wins over the FIRST_HALF / SEGMENT checks.
-  const key: ScorecardBucketKey =
-    filter.betType === "TEAM_TOTAL"
-      ? "TEAM_TOTAL"
-      : filter.period === "FIRST_HALF"
-        ? "F5"
-        : (SEGMENT_CATEGORY_PERIODS as readonly string[]).includes(filter.period)
-          ? "SEGMENT"
-          : filter.betType === "NRFI"
-            ? nrfiSide(filter.betDetail) === "YES_RUN"
-              ? "YRFI"
-              : "NRFI"
-            : (filter.betType as ScorecardBucketKey);
-  return buckets.filter((b) => b.key === key);
-}
-
 // A capper's all-time record within one specific pickCategory (favorite/
 // underdog moneyline, favorite/underdog spread, over/under, etc - the same
 // finer-grained split the Dashboard's "Record by category" breakdown and the
-// Cappers-page filter chips already use). Narrower than getCapperScorecard,
-// which only splits by raw bet type - "8-2 on underdog moneyline picks" needs
-// to know which SIDE of the moneyline they were on, not just that it was a
-// moneyline pick. Returns null if this capper has no picks in that category.
+// Cappers-page filter chips already use). Splits by SIDE (which way the
+// capper's pick actually leaned), not just raw bet type - "8-2 on underdog
+// moneyline picks" needs to know which side of the moneyline they were on.
+// Returns null if this capper has no picks in that category.
 export async function getCapperCategoryRecord(
   userId: string,
   capperId: string,
