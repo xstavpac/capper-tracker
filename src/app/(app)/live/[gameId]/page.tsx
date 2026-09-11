@@ -10,9 +10,14 @@ import {
 import { persistFinalScores, gradePendingPicks, regradeFuzzyMatchedPicks } from "@/server/data/grading";
 import { getPicksForGame, getCapperScorecard } from "@/server/data/picks";
 import { getGamePulsePanelRows } from "@/server/data/game-pulse";
+import { getTeamRecordAsOf, type TeamRecord } from "@/server/data/team-record";
+import { getMlbLiveGameState } from "@/server/data/live-game-state";
+import { getNflLiveGameState } from "@/server/data/nfl-live-game-state";
 import { formatEastern } from "@/lib/dates";
-import { betTypeLabel } from "@/server/data/stats";
+import { betTypeLabel, pickCategory } from "@/server/data/stats";
 import { nrfiSide, formatPickLabel } from "@/lib/bet-line";
+import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
+import { getTeamColor } from "@/lib/team-colors";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
 import { GamePulsePanel } from "@/components/live/game-pulse-panel";
@@ -20,6 +25,8 @@ import { GameMomentumPanel } from "@/components/live/game-momentum-panel";
 import { NflGameMomentumPanel } from "@/components/live/nfl-game-momentum-panel";
 import { GamePacePanel } from "@/components/live/game-pace-panel";
 import { NflGamePacePanel } from "@/components/live/nfl-game-pace-panel";
+import { GameHeadToHeadHeader, type HeadToHeadSide } from "@/components/live/game-head-to-head-header";
+import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 import type { BetType, Period } from "@prisma/client";
 
 function formatOdds(price: number) {
@@ -28,6 +35,23 @@ function formatOdds(price: number) {
 
 function findMarket(bookmaker: any, key: string) {
   return bookmaker?.markets?.find((m: any) => m.key === key);
+}
+
+// "82-64" / "82-64-1" (ties only shown when non-zero) - null when the team
+// has no games in its record yet, so the header omits the line entirely
+// instead of showing "0-0".
+function formatRecordText(record: TeamRecord): string | null {
+  if (record.gamesInRecord === 0) return null;
+  return record.ties > 0 ? `${record.wins}-${record.losses}-${record.ties}` : `${record.wins}-${record.losses}`;
+}
+
+function ordinalSuffix(n: number): string {
+  const j = n % 10;
+  const k = n % 100;
+  if (j === 1 && k !== 11) return n + "st";
+  if (j === 2 && k !== 12) return n + "nd";
+  if (j === 3 && k !== 13) return n + "rd";
+  return n + "th";
 }
 
 export default async function GameDetailPage({
@@ -111,12 +135,89 @@ export default async function GameDetailPage({
   // render this panel.
   const pulseRows = isMlb || isNfl ? null : await getGamePulsePanelRows(game.homeTeam, game.awayTeam);
 
+  // Head-to-head header data (MLB/NFL only - see the render below). Team
+  // records reuse getTeamRecordAsOf exactly as it already exists elsewhere
+  // (team-record.ts) - its day-before-this-game cutoff already means "this
+  // team's record entering this game", which is exactly what a header needs,
+  // so no new record reader was written for this. The live situation line
+  // reuses the SAME cached live-state fetchers Momentum already polls
+  // (getMlbLiveGameState / getNflLiveGameState) - this adds no new upstream
+  // fetch, just one more (cached) reader of it for the header's SSR render.
+  let awayRecordText: string | null = null;
+  let homeRecordText: string | null = null;
+  let situationText: string | null = null;
+
+  if (isMlb || isNfl) {
+    const gameDate = new Date(game.commenceTime);
+    const [awayRecordAsOf, homeRecordAsOf] = await Promise.all([
+      getTeamRecordAsOf(sportMeta.key, game.awayTeam, gameDate),
+      getTeamRecordAsOf(sportMeta.key, game.homeTeam, gameDate),
+    ]);
+    awayRecordText = formatRecordText(awayRecordAsOf.record);
+    homeRecordText = formatRecordText(homeRecordAsOf.record);
+
+    if (isLive) {
+      const liveId = score?.id ?? game.id;
+      if (isMlb) {
+        const state = await getMlbLiveGameState(liveId);
+        const latest = state.plays[state.plays.length - 1];
+        if (latest && score?.inningHalf && score?.inningOrdinal) {
+          situationText = `${score.inningHalf} ${score.inningOrdinal} · ${latest.outs} out${latest.outs === 1 ? "" : "s"}`;
+        }
+      } else {
+        const state = await getNflLiveGameState(liveId);
+        if (state.situation?.down && state.situation.distance !== null) {
+          situationText = `${ordinalSuffix(state.situation.down)} & ${state.situation.distance}`;
+        }
+      }
+    }
+  }
+
   const matchedPicks = await getPicksForGame(user.id, {
     sportName: sportMeta.label,
     homeTeam: game.homeTeam,
     awayTeam: game.awayTeam,
     commenceTime: new Date(game.commenceTime),
   });
+
+  // MLB/NFL only - the richer picks-list component from the /live tab
+  // (GamePicksExpander), reused directly rather than rebuilt. Mapping logic
+  // here mirrors live/page.tsx's own expanderPicksByGame construction
+  // exactly (classifyPickTeamGroup/shortTeamName/pickCategory/getTeamColor -
+  // all pure, reused as-is), just applied to this one game's already-fetched
+  // matchedPicks instead of a whole slate.
+  const expanderPicks: ExpanderPick[] =
+    isMlb || isNfl
+      ? matchedPicks.map((p) => {
+          const teamGroup = classifyPickTeamGroup(p, game, sportMeta.label);
+          return {
+            pickId: p.id,
+            capperId: p.capperId,
+            capperName: p.capper.name,
+            capperColorTag: p.capper.colorTag,
+            capperIsFavorite: p.capper.isFavorite,
+            category: pickCategory({ ...p, sportName: sportMeta.label }),
+            leagueName: sportMeta.label,
+            betDetail: formatPickLabel(p.betDetail, p.betType, p.line) ?? betTypeLabel(p.betType),
+            odds: p.odds,
+            units: p.units,
+            status: p.status,
+            teamGroup,
+            teamLabel:
+              teamGroup === "AWAY"
+                ? shortTeamName(game.awayTeam, sportMeta.label)
+                : teamGroup === "HOME"
+                  ? shortTeamName(game.homeTeam, sportMeta.label)
+                  : "",
+            teamColor:
+              teamGroup === "AWAY"
+                ? getTeamColor(sportMeta.key, game.awayTeam)
+                : teamGroup === "HOME"
+                  ? getTeamColor(sportMeta.key, game.homeTeam)
+                  : null,
+          };
+        })
+      : [];
 
   const recordKeys = new Map<
     string,
@@ -166,6 +267,25 @@ export default async function GameDetailPage({
   const homeSpread = spreads?.outcomes.find((o: any) => o.name === game.homeTeam);
   const awaySpread = spreads?.outcomes.find((o: any) => o.name === game.awayTeam);
   const over = totals?.outcomes.find((o: any) => o.name === "Over");
+  const overText = over ? `O/U ${over.point} (${formatOdds(over.price)})` : null;
+  const isPregame = !isLive && !isFinal;
+
+  const awaySide: HeadToHeadSide = {
+    fullName: game.awayTeam,
+    shortName: shortTeamName(game.awayTeam, sportMeta.label),
+    sportKey: sportMeta.key,
+    recordText: awayRecordText,
+    oddsText: awayH2h ? "ML " + formatOdds(awayH2h.price) + (awaySpread ? " · " + (awaySpread.point! > 0 ? "+" : "") + awaySpread.point : "") : null,
+    score: score?.scores?.find((s) => s.name === game.awayTeam)?.score ?? null,
+  };
+  const homeSide: HeadToHeadSide = {
+    fullName: game.homeTeam,
+    shortName: shortTeamName(game.homeTeam, sportMeta.label),
+    sportKey: sportMeta.key,
+    recordText: homeRecordText,
+    oddsText: homeH2h ? "ML " + formatOdds(homeH2h.price) + (homeSpread ? " · " + (homeSpread.point! > 0 ? "+" : "") + homeSpread.point : "") : null,
+    score: score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? null,
+  };
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -186,7 +306,12 @@ export default async function GameDetailPage({
           </div>
           {isLive && (
             <span className="flex items-center gap-1.5">
-              {score?.inningHalf && score?.inningOrdinal && (
+              {/* MLB's inning/half badge moves into the head-to-head header's
+                  own center block below (situationText) - suppressed here
+                  only for MLB so it isn't shown twice. Harmless no-op for
+                  every other sport: inningHalf/inningOrdinal only ever
+                  populate for MLB (see odds.ts's ScoreGame comment). */}
+              {!isMlb && score?.inningHalf && score?.inningOrdinal && (
                 <span className="text-xs text-muted-foreground">
                   {score.inningHalf} {score.inningOrdinal}
                 </span>
@@ -199,34 +324,40 @@ export default async function GameDetailPage({
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">{game.awayTeam}</span>
-            <span className="text-xs text-muted-foreground">
-              {score?.scores?.find((s) => s.name === game.awayTeam)?.score ?? ""}
-            </span>
-          </div>
-          <div className="text-right text-xs text-muted-foreground">
-            {awayH2h && "ML " + formatOdds(awayH2h.price)}
-            {awaySpread && " - " + (awaySpread.point! > 0 ? "+" : "") + awaySpread.point}
-          </div>
+        {isMlb || isNfl ? (
+          <GameHeadToHeadHeader away={awaySide} home={homeSide} situationText={situationText} overText={overText} isPregame={isPregame} />
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">{game.awayTeam}</span>
+                <span className="text-xs text-muted-foreground">
+                  {score?.scores?.find((s) => s.name === game.awayTeam)?.score ?? ""}
+                </span>
+              </div>
+              <div className="text-right text-xs text-muted-foreground">
+                {awayH2h && "ML " + formatOdds(awayH2h.price)}
+                {awaySpread && " - " + (awaySpread.point! > 0 ? "+" : "") + awaySpread.point}
+              </div>
 
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">{game.homeTeam}</span>
-            <span className="text-xs text-muted-foreground">
-              {score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? ""}
-            </span>
-          </div>
-          <div className="text-right text-xs text-muted-foreground">
-            {homeH2h && "ML " + formatOdds(homeH2h.price)}
-            {homeSpread && " - " + (homeSpread.point! > 0 ? "+" : "") + homeSpread.point}
-          </div>
-        </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">{game.homeTeam}</span>
+                <span className="text-xs text-muted-foreground">
+                  {score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? ""}
+                </span>
+              </div>
+              <div className="text-right text-xs text-muted-foreground">
+                {homeH2h && "ML " + formatOdds(homeH2h.price)}
+                {homeSpread && " - " + (homeSpread.point! > 0 ? "+" : "") + homeSpread.point}
+              </div>
+            </div>
 
-        {over && (
-          <div className="mt-2 text-xs text-muted-foreground">
-            Total: O/U {over.point} ({formatOdds(over.price)})
-          </div>
+            {over && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                Total: O/U {over.point} ({formatOdds(over.price)})
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -272,30 +403,45 @@ export default async function GameDetailPage({
         <GamePulsePanel rows={pulseRows!} homeTeam={game.homeTeam} awayTeam={game.awayTeam} sportLabel={sportMeta.label} />
       )}
 
-      <div className="mt-4 rounded-card bg-card shadow-soft">
-        <div className="border-b border-border-subtle px-5 py-3 text-sm font-medium text-muted-foreground">
-          Your picks on this game
-        </div>
-        {matchedPicks.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-muted-foreground">No logged picks for this game.</p>
-        ) : (
-          <div className="divide-y divide-border-subtle">
-            {matchedPicks.map((pick) => (
-              <div key={pick.id} className="flex items-center justify-between px-5 py-3">
-                <div>
-                  <div className="text-sm font-medium">{pick.capper.name}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {formatPickLabel(pick.betDetail, pick.betType, pick.line) ?? betTypeLabel(pick.betType)} -{" "}
-                    {pick.odds > 0 ? "+" : ""}
-                    {pick.odds} - {pick.units}u
-                  </div>
-                </div>
-                <PickStatusButtons pickId={pick.id} status={pick.status} />
-              </div>
-            ))}
+      {isMlb || isNfl ? (
+        // Same card shell (rounded-card bg-card shadow-soft p-4) the /live
+        // tab already wraps this component in (live-scoreboard.tsx) - the
+        // component itself supplies its own internal spacing (mt-3 on its
+        // toggle button), so this wrapper only needs to match that card
+        // treatment, not add any layout of its own. GamePicksExpander
+        // itself renders null for zero picks (same as on /live) - guarded
+        // here too, so an empty game never leaves a blank card shell behind.
+        expanderPicks.length > 0 && (
+          <div className="mt-4 rounded-card bg-card p-4 shadow-soft">
+            <GamePicksExpander picks={expanderPicks} />
           </div>
-        )}
-      </div>
+        )
+      ) : (
+        <div className="mt-4 rounded-card bg-card shadow-soft">
+          <div className="border-b border-border-subtle px-5 py-3 text-sm font-medium text-muted-foreground">
+            Your picks on this game
+          </div>
+          {matchedPicks.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-muted-foreground">No logged picks for this game.</p>
+          ) : (
+            <div className="divide-y divide-border-subtle">
+              {matchedPicks.map((pick) => (
+                <div key={pick.id} className="flex items-center justify-between px-5 py-3">
+                  <div>
+                    <div className="text-sm font-medium">{pick.capper.name}</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      {formatPickLabel(pick.betDetail, pick.betType, pick.line) ?? betTypeLabel(pick.betType)} -{" "}
+                      {pick.odds > 0 ? "+" : ""}
+                      {pick.odds} - {pick.units}u
+                    </div>
+                  </div>
+                  <PickStatusButtons pickId={pick.id} status={pick.status} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {capperRecords.length > 0 && (
         <div className="mt-4 rounded-card bg-card shadow-soft">
