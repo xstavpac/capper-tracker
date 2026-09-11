@@ -87,6 +87,27 @@ export type NflSituation = {
   awayTimeouts: number | null;
 };
 
+// Built for Pace's quarter-and-clock-aware trajectory math - the NFL analog
+// of MLB's per-play inning/outs state (live-game-state.ts's
+// MlbWinProbabilityPlay). Not consumed by any Momentum factor. Added here
+// rather than a second per-game fetch because the summary response already
+// carries this on every play (confirmed live - see normalizeGameClockPlay
+// below): one summary fetch already made for win probability/drives/
+// boxscore covers this too, so Pace needs no live poll of its own.
+export type NflGameClockPlay = {
+  playId: string;
+  period: number;
+  // Seconds remaining in the CURRENT period, parsed from the same "MM:SS"
+  // display-string convention as possessionTime above (parseClockToSeconds).
+  // null when it doesn't parse - kept (not dropped) since the play's score/
+  // period are still usable for a fraction-complete estimate without a
+  // clock reading, same graceful-degradation convention as the rest of this
+  // file.
+  clockSeconds: number | null;
+  homeScore: number;
+  awayScore: number;
+};
+
 export type NflLiveGameState = {
   eventId: string;
   // From the same summary fetch's header.competitions[0].competitors -
@@ -111,6 +132,11 @@ export type NflLiveGameState = {
   // null when the situation sub-resource couldn't be fetched/parsed -
   // degrades the situation-dependent factors, never the WP trend itself.
   situation: NflSituation | null;
+  // Chronologically ordered: every previous drive's plays, then the current
+  // (in-progress) drive's plays, if any - see dispatchNflLiveGameState. Used
+  // by Pace only; empty (not null) before kickoff, same "no plays yet"
+  // convention as `wp` above.
+  clockPlays: NflGameClockPlay[];
   fetchedAt: Date;
 };
 
@@ -193,6 +219,25 @@ export function normalizeBoxscore(teamBox: any): NflTeamBoxscore | null {
   };
 }
 
+// Real play shape confirmed live (drives.previous[].plays[] and
+// drives.current.plays[] share this shape): {"id":"4018726573916",
+// "period":{"number":4},"clock":{"displayValue":"0:00"},"homeScore":7,
+// "awayScore":27, ...}. Trimmed to what Pace reads.
+export function normalizeGameClockPlay(raw: any): NflGameClockPlay | null {
+  const idRaw = raw?.id;
+  if (typeof idRaw !== "string" && typeof idRaw !== "number") return null;
+  const period = raw?.period?.number;
+  if (typeof period !== "number") return null;
+  if (typeof raw?.homeScore !== "number" || typeof raw?.awayScore !== "number") return null;
+  return {
+    playId: String(idRaw),
+    period,
+    clockSeconds: parseClockToSeconds(raw?.clock?.displayValue),
+    homeScore: raw.homeScore,
+    awayScore: raw.awayScore,
+  };
+}
+
 export function normalizeSituation(raw: any): NflSituation | null {
   if (!raw || raw.__status) return null;
   return {
@@ -251,6 +296,20 @@ async function dispatchNflLiveGameState(eventId: string): Promise<NflLiveGameSta
   const possessionTeamAbbreviation: string | null =
     typeof summary?.drives?.current?.team?.abbreviation === "string" ? summary.drives.current.team.abbreviation : null;
 
+  // Same summary payload drives/previous and drives/current already fetched
+  // above for the momentum drive-success factor - flattened here in
+  // chronological order (previous drives first, then the in-progress
+  // current drive's own plays, if any) so the LAST entry is always the
+  // game's most current known state (score/period/clock), the same
+  // "latest play = current state" shape live-game-state.ts's MLB plays use.
+  const clockPlayRaws: any[] = [
+    ...(Array.isArray(summary?.drives?.previous) ? summary.drives.previous.flatMap((d: any) => (Array.isArray(d?.plays) ? d.plays : [])) : []),
+    ...(Array.isArray(summary?.drives?.current?.plays) ? summary.drives.current.plays : []),
+  ];
+  const clockPlays: NflGameClockPlay[] = clockPlayRaws
+    .map(normalizeGameClockPlay)
+    .filter((p: NflGameClockPlay | null): p is NflGameClockPlay => p !== null);
+
   const boxscoreTeams = summary?.boxscore?.teams;
   const homeBox = Array.isArray(boxscoreTeams) ? boxscoreTeams.find((t: any) => t?.homeAway === "home") : undefined;
   const awayBox = Array.isArray(boxscoreTeams) ? boxscoreTeams.find((t: any) => t?.homeAway === "away") : undefined;
@@ -269,6 +328,7 @@ async function dispatchNflLiveGameState(eventId: string): Promise<NflLiveGameSta
     homeBoxscore: normalizeBoxscore(homeBox),
     awayBoxscore: normalizeBoxscore(awayBox),
     situation,
+    clockPlays,
     fetchedAt: new Date(),
   };
 }

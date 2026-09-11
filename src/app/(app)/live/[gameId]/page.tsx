@@ -23,6 +23,8 @@ import { CapperScorecard } from "@/components/dashboard/capper-scorecard";
 import { GamePulsePanel } from "@/components/live/game-pulse-panel";
 import { GameMomentumPanel } from "@/components/live/game-momentum-panel";
 import { NflGameMomentumPanel } from "@/components/live/nfl-game-momentum-panel";
+import { GamePacePanel } from "@/components/live/game-pace-panel";
+import { NflGamePacePanel } from "@/components/live/nfl-game-pace-panel";
 import { GameHeadToHeadHeader, type HeadToHeadSide } from "@/components/live/game-head-to-head-header";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 import type { BetType, Period } from "@prisma/client";
@@ -360,23 +362,43 @@ export default async function GameDetailPage({
       </div>
 
       {isMlb ? (
-        <GameMomentumPanel
-          gamePk={score?.id ?? game.id}
-          homeTeam={game.homeTeam}
-          awayTeam={game.awayTeam}
-          gameDate={game.commenceTime}
-          isLive={isLive}
-          isFinal={isFinal}
-        />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <GameMomentumPanel
+            gamePk={score?.id ?? game.id}
+            homeTeam={game.homeTeam}
+            awayTeam={game.awayTeam}
+            gameDate={game.commenceTime}
+            isLive={isLive}
+            isFinal={isFinal}
+          />
+          <GamePacePanel
+            gamePk={score?.id ?? game.id}
+            homeTeam={game.homeTeam}
+            awayTeam={game.awayTeam}
+            gameDate={game.commenceTime}
+            isLive={isLive}
+            isFinal={isFinal}
+          />
+        </div>
       ) : isNfl ? (
-        <NflGameMomentumPanel
-          eventId={score?.id ?? game.id}
-          homeTeam={game.homeTeam}
-          awayTeam={game.awayTeam}
-          gameDate={game.commenceTime}
-          isLive={isLive}
-          isFinal={isFinal}
-        />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <NflGameMomentumPanel
+            eventId={score?.id ?? game.id}
+            homeTeam={game.homeTeam}
+            awayTeam={game.awayTeam}
+            gameDate={game.commenceTime}
+            isLive={isLive}
+            isFinal={isFinal}
+          />
+          <NflGamePacePanel
+            eventId={score?.id ?? game.id}
+            homeTeam={game.homeTeam}
+            awayTeam={game.awayTeam}
+            gameDate={game.commenceTime}
+            isLive={isLive}
+            isFinal={isFinal}
+          />
+        </div>
       ) : (
         <GamePulsePanel rows={pulseRows!} homeTeam={game.homeTeam} awayTeam={game.awayTeam} sportLabel={sportMeta.label} />
       )}
