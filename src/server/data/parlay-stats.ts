@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/prisma";
 import type { ParlayBet, Leg } from "@prisma/client";
 
 // Deliberately its own module, not an addition to stats.ts's computeStats -
@@ -86,21 +85,3 @@ export function computeParlayStats(parlays: (ParlayBet & { legs: Leg[] })[]): Pa
   };
 }
 
-export type ParlayReportsData = {
-  overall: ParlayOverallStats;
-  totalParlays: number;
-  pendingCount: number;
-};
-
-export async function getParlayReportsData(userId: string): Promise<ParlayReportsData> {
-  const parlays = await prisma.parlayBet.findMany({
-    where: { userId },
-    include: { legs: true },
-  });
-
-  return {
-    overall: computeParlayStats(parlays),
-    totalParlays: parlays.length,
-    pendingCount: parlays.filter((p) => p.status === "PENDING").length,
-  };
-}

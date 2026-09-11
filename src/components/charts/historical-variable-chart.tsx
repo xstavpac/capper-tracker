@@ -158,7 +158,7 @@ export function HistoricalVariableChart({
   // sport-aware message (see ChartsWorkspace).
   emptyMessage?: string;
 }) {
-  // Same reasoning as UnitsChart/WinLossPieChart - Recharts sets grid/tick/
+  // Same reasoning as UnitsChart - Recharts sets grid/tick/
   // brush colors via inline SVG props, not Tailwind classes, so this needs
   // to know the live theme itself.
   const { theme } = useTheme();

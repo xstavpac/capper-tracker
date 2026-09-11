@@ -6,12 +6,11 @@ import { createCapper, mergeCappers, renameCapper, deleteCapper, dismissDuplicat
 import { cacheKeys } from "@/lib/cache-keys";
 import type { Source } from "@prisma/client";
 
-// The Dashboard/Reports pick aggregations cache per user and group by capper
+// The Dashboard's pick aggregations cache per user and group by capper
 // name/id, so any capper change that reassigns, removes, or renames picks'
-// capper must bust both by tag (revalidatePath does not evict unstable_cache).
+// capper must bust it by tag (revalidatePath does not evict unstable_cache).
 function revalidatePickStats(userId: string) {
   revalidateTag(cacheKeys.dashboard(userId));
-  revalidateTag(cacheKeys.reports(userId));
 }
 
 export type CreateCapperResult =
@@ -72,7 +71,6 @@ export async function mergeCappersAction(primaryId: string, duplicateId: string)
     revalidatePath("/cappers");
     revalidatePath("/cappers/[capperId]", "page");
     revalidatePath("/dashboard");
-    revalidatePath("/reports");
     return { success: true, ...result };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Something went wrong.";
@@ -97,7 +95,6 @@ export async function renameCapperAction(capperId: string, name: string): Promis
     revalidatePath("/cappers");
     revalidatePath("/cappers/[capperId]", "page");
     revalidatePath("/dashboard");
-    revalidatePath("/reports");
   } catch (err) {
     const message = err instanceof Error ? err.message : "Something went wrong.";
     return { success: false, error: message };
@@ -123,7 +120,6 @@ export async function deleteCapperAction(capperId: string): Promise<DeleteCapper
     revalidatePickStats(user.id);
     revalidatePath("/cappers");
     revalidatePath("/dashboard");
-    revalidatePath("/reports");
     return { success: true, ...result };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Something went wrong.";

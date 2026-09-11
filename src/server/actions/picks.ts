@@ -7,13 +7,12 @@ import type { PickCategoryKey } from "@/server/data/stats";
 import { cacheKeys } from "@/lib/cache-keys";
 import type { BetType, PickStatus, Period } from "@prisma/client";
 
-// The Dashboard and Reports pages cache their pick aggregations per user
-// (see getDashboardSummary / getReportsData). Any action that changes this
-// user's picks must bust both, by tag - revalidatePath alone does not
-// reliably evict unstable_cache entries.
+// The Dashboard page caches its pick aggregations per user (see
+// getDashboardSummary). Any action that changes this user's picks must bust
+// it by tag - revalidatePath alone does not reliably evict unstable_cache
+// entries.
 function revalidatePickStats(userId: string) {
   revalidateTag(cacheKeys.dashboard(userId));
-  revalidateTag(cacheKeys.reports(userId));
 }
 
 export type ActionResult = { success: true } | { success: false; error: string };
@@ -103,7 +102,6 @@ export async function updatePickStatusAction(
   revalidatePath("/picks");
   revalidatePath("/picks/pending");
   revalidatePath("/dashboard");
-  revalidatePath("/reports");
   revalidatePath("/cappers");
   revalidatePath("/cappers/[capperId]", "page");
   revalidatePath("/live/[gameId]", "page");
@@ -127,7 +125,6 @@ export async function deletePickAction(pickId: string): Promise<ActionResult> {
   revalidatePath("/picks");
   revalidatePath("/picks/pending");
   revalidatePath("/dashboard");
-  revalidatePath("/reports");
   revalidatePath("/cappers");
   revalidatePath("/cappers/[capperId]", "page");
   revalidatePath("/live/[gameId]", "page");

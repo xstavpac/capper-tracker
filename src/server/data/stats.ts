@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Pick, PickStatus, PickedSide } from "@prisma/client";
-import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, formatPickLabel, periodLabel, type OddsBucketKey } from "@/lib/bet-line";
+import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, formatPickLabel, type OddsBucketKey } from "@/lib/bet-line";
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
 import { cacheKeys } from "@/lib/cache-keys";
 import { cachedByTag } from "@/server/data/cached";
@@ -1426,69 +1426,6 @@ async function computeDashboardSummary(userId: string) {
       status: p.status,
       units: p.units,
     })),
-  };
-}
-
-export type ReportBreakdownItem = { name: string; stats: OverallStats; count: number };
-
-export async function getReportsData(userId: string) {
-  return cachedByTag(cacheKeys.reports(userId), DASHBOARD_REPORTS_CACHE_TTL_SECONDS, () => computeReportsData(userId));
-}
-
-async function computeReportsData(userId: string) {
-  const picks = await getPickRowsForStats(userId);
-  const overall = computeStats(picks);
-
-  function groupBy<T extends { id: string; name: string }>(
-    getGroupKey: (pick: (typeof picks)[number]) => T | null
-  ): ReportBreakdownItem[] {
-    const map = new Map<string, { name: string; picks: typeof picks }>();
-    for (const pick of picks) {
-      const group = getGroupKey(pick);
-      if (!group) continue;
-      const existing = map.get(group.id);
-      if (existing) {
-        existing.picks.push(pick);
-      } else {
-        map.set(group.id, { name: group.name, picks: [pick] });
-      }
-    }
-    return Array.from(map.values())
-      .map((g) => ({ name: g.name, stats: computeStats(g.picks), count: g.picks.length }))
-      .sort((a, b) => b.stats.roi - a.stats.roi);
-  }
-
-  const byCapper = groupBy((p) => ({ id: p.capperId, name: p.capper.name }));
-  const bySport = groupBy((p) => ({ id: p.sportId, name: p.sport.name }));
-  const byLeague = groupBy((p) => (p.league ? { id: p.league.id, name: p.league.name } : null));
-  const byBetType = groupBy((p) => ({ id: p.betType, name: betTypeLabel(p.betType) }));
-  const byPeriod = groupBy((p) => ({
-    id: p.period,
-    name:
-      p.period === "FIRST_HALF"
-        ? "First half / F5"
-        : p.period === "FULL_GAME"
-          ? "Full game"
-          : periodLabel(p.period).replace(/^./, (c) => c.toUpperCase()),
-  }));
-  const byFavoriteDog = groupBy((p) => {
-    const side = favoriteOrUnderdog(p);
-    return side ? { id: side, name: side === "FAVORITE" ? "Favorite" : "Underdog" } : null;
-  });
-
-  return {
-    overall,
-    byCapper,
-    bySport,
-    byLeague,
-    byBetType,
-    byPeriod,
-    byFavoriteDog,
-    bestCapper: byCapper[0] ?? null,
-    worstCapper: byCapper[byCapper.length - 1] ?? null,
-    bestSport: bySport[0] ?? null,
-    worstSport: bySport[bySport.length - 1] ?? null,
-    bestBetType: byBetType[0] ?? null,
   };
 }
 
