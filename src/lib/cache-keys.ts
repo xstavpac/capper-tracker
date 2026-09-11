@@ -7,4 +7,9 @@ export const cacheKeys = {
   dashboard: (userId: string) => `dashboard:${userId}`,
   odds: (sportKey: string) => `odds:${sportKey}`,
   liveScores: (sportKey: string) => `live-scores:${sportKey}`,
+  // Per-GAME live state (win probability, current base/out, current pitcher -
+  // see live-game-state.ts), distinct from liveScores above which is one
+  // batch call per sport. Keyed by sport + the sport's own game id (MLB:
+  // gamePk) so concurrent games never collide in the cache or the ttl-memo.
+  liveGameState: (sportKey: string, gameId: string) => `live-game-state:${sportKey}:${gameId}`,
 } as const;
