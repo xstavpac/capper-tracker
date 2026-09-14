@@ -1,4 +1,5 @@
 import { seedOddsSnapshot, LIVE_SPORTS } from "@/server/data/odds";
+import { seedNflPropOddsForToday } from "@/server/data/nfl-prop-odds";
 import { classifyRefreshOddsRun } from "@/lib/odds-cron-status";
 
 export const dynamic = "force-dynamic";
@@ -41,5 +42,39 @@ export async function GET(req: Request) {
     })
   );
 
-  return Response.json({ ok, status, creditsRemaining, results: perSport }, { status: httpStatus });
+  // NFL player-prop odds - a follow-up step on the SAME cron run, not a
+  // separate poll cycle. Reads the NFL row the bulk seed above just wrote
+  // (no_snapshot/no_games_to_fetch if there's nothing to attach props to -
+  // off-season, no API key, or the bulk fetch itself failed, all already
+  // reflected in `results` above). Deliberately never affects `ok`/
+  // `httpStatus`: this is the lower-priority market by design (see the
+  // 95% credit gate in nfl-prop-odds.ts) and its own failure/skip modes are
+  // informational, not cron-health signals the way the core game-lines
+  // fetch's are.
+  const nflProps = await seedNflPropOddsForToday();
+  console.log(
+    "[refresh-odds-run] nfl-props",
+    JSON.stringify({
+      status: nflProps.status,
+      eventsFetched: nflProps.eventsFetched,
+      eventsSkippedCreditGate: nflProps.eventsSkippedCreditGate,
+      eventsFailed: nflProps.eventsFailed,
+    })
+  );
+
+  return Response.json(
+    {
+      ok,
+      status,
+      creditsRemaining,
+      results: perSport,
+      nflProps: {
+        status: nflProps.status,
+        eventsFetched: nflProps.eventsFetched,
+        eventsSkippedCreditGate: nflProps.eventsSkippedCreditGate,
+        eventsFailed: nflProps.eventsFailed,
+      },
+    },
+    { status: httpStatus }
+  );
 }

@@ -382,6 +382,40 @@ model OddsSnapshot {
   @@map("odds_snapshots")
 }
 
+// One row per real Odds API HTTP call whose response carried usage headers
+// (x-requests-remaining / -used - see readOddsApiCredits, odds.ts). Was
+// previously read and console.warn-logged on a low-watermark but never
+// persisted - this is the only place "how much of the monthly budget is
+// gone" can be checked without grepping logs, and what
+// getLatestCreditUsageLevel (server/data/odds-api-usage.ts) reads BEFORE
+// spending credits on a lower-priority fetch (NFL event-level player-prop
+// odds), so a 95%+ month never gets pushed higher by props specifically.
+//
+// creditsUsed/creditsRemaining are the Odds API's own account-wide, cross-
+// sport cumulative counters as of THIS call (not a delta) - same numbers
+// readOddsApiCredits already parses. requestsToday/requestsMonth are this
+// app's own count of real Odds API HTTP calls (not API-side credit cost),
+// computed at write time by counting prior rows in the same Eastern day/
+// month - a distinct, cheaper-grained signal from creditsUsed (one bulk
+// call can cost several credits; one event-level call with 5 bundled
+// markets costs 5 - see cost formula in nfl-prop-odds.ts).
+model OddsApiUsageLog {
+  id               String   @id @default(cuid())
+  sportKey         String
+  pollTimestamp    DateTime @default(now())
+  creditsUsed      Int?
+  creditsRemaining Int?
+  requestsToday    Int
+  requestsMonth    Int
+  marketsRequested String // comma-joined market keys requested in this call
+  eventsRequested  Int // events covered by this call/batch (1 for a single event-odds call, game count for a bulk sport-odds call)
+  createdAt        DateTime @default(now())
+
+  @@index([pollTimestamp])
+  @@index([sportKey, pollTimestamp])
+  @@map("odds_api_usage_log")
+}
+
 // A variable/metric's provenance - global (computed once, shared by every
 // user, like every source in this app today) vs per-user (a hypothetical
 // future user-supplied or user-scoped data source). Added now, before any
