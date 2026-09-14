@@ -415,3 +415,30 @@ export function oddsBucket(odds: number): OddsBucketKey {
   if (odds <= 199) return "DOG";
   return "HEAVY_DOG";
 }
+
+export type PlayerPropLineInfo = { line: number; direction: "OVER" | "UNDER" };
+
+// The numeric line + Over/Under side for a PASS_YDS/RUSH_YDS/REC_YDS/
+// RECEPTIONS pick, e.g. "Josh Allen Over 275.5 Passing Yards" -> { line:
+// 275.5, direction: "OVER" }. Unlike propMarket/playerName (Pick columns
+// populated at import since #73), NEITHER of these is ever stored
+// structurally for a PLAYER_PROP pick: extractLine above only recognizes
+// SPREAD/TEAM_TOTAL/TOTAL betTypes (PLAYER_PROP falls through its final
+// `return null`), and the bulk-import flow that lets a client confirm an
+// `inferredLine` only runs for TOTAL. So grading re-derives the line/side
+// from betDetail free text every time, for a propMarket-populated pick
+// exactly the same as for a legacy propMarket-null one - there is no
+// structured path to prefer here the way there is for market/playerName.
+// Same "over/under followed by a number, or the o/u shorthand" shape
+// extractLine's TOTAL branch already matches, reused here for consistency.
+export function parsePlayerPropLine(text: string): PlayerPropLineInfo | null {
+  const afterOverUnder = text.match(/\b(over|under)\s+(\d+(?:\.\d+)?)\b/i);
+  if (afterOverUnder) {
+    return { direction: afterOverUnder[1].toLowerCase() === "over" ? "OVER" : "UNDER", line: parseFloat(afterOverUnder[2]) };
+  }
+  const shorthand = text.match(/\b([ou])(\d+(?:\.\d+)?)\b/i);
+  if (shorthand) {
+    return { direction: shorthand[1].toLowerCase() === "o" ? "OVER" : "UNDER", line: parseFloat(shorthand[2]) };
+  }
+  return null;
+}

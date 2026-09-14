@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { GameResult, Pick, PickedSide } from "@prisma/client";
+import type { GameResult, Pick, PickedSide, PropMarket } from "@prisma/client";
 import {
   getLiveScoresForSport,
   getOddsForSport,
@@ -9,10 +9,20 @@ import {
   getNflPlayerTdStats,
   type OddsGame,
 } from "@/server/data/odds";
+import { fetchNflPasserRows } from "@/server/data/nfl-passer-rows";
+import { fetchNflRushingReceivingRows } from "@/server/data/nfl-rushing-receiving-rows";
 import { closestByTime, sameEasternDay } from "@/lib/dates";
 import { isPreseasonGame } from "@/lib/sport-seasons";
 import { teamNamesMatch } from "@/lib/team-name-match";
-import { extractLine, parseTouchdownProp, nrfiSide, betScope } from "@/lib/bet-line";
+import {
+  extractLine,
+  parseTouchdownProp,
+  parsePlayerProp,
+  parsePlayerPropLine,
+  nrfiSide,
+  betScope,
+  type PlayerPropMarket,
+} from "@/lib/bet-line";
 import { findTeamNickname, NCAAF_CANONICAL_SUFFIX } from "@/lib/parse-catalog";
 import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
 
@@ -741,6 +751,156 @@ export async function gradeTouchdownProp(
   return (await resolveTouchdownProp(pick, eventId, sportName)).outcome;
 }
 
+type PlayerPropPick = {
+  playerName: string | null;
+  propMarket: PropMarket | null;
+  betDetail: string | null;
+  homeTeam: string;
+  awayTeam: string;
+};
+
+// Which of the 5 markets (TD, or one of the 4 new structured ones) a
+// PLAYER_PROP pick is about - structured-with-fallback, the same pattern
+// pickCategory (stats.ts) already uses for this exact propMarket/betDetail
+// pair: propMarket, when set (every pick imported since #73), is trusted
+// directly; when null (every row predating that PR, and any manually-
+// entered PLAYER_PROP pick, which never runs through parsePlayerProp at
+// import) it's re-derived from betDetail via the same shared parser import
+// time itself uses. Returns null only when neither source identifies any of
+// the 5 known markets at all (malformed/manual text) - resolvePlayerProp
+// below treats that the same as a TD prop that failed to parse, matching
+// this app's PLAYER_PROP behavior before this PR existed.
+function resolvedPropMarket(pick: PlayerPropPick): PlayerPropMarket | null {
+  return (pick.propMarket as PlayerPropMarket | null) ?? parsePlayerProp(pick.betDetail ?? "")?.propMarket ?? null;
+}
+
+// Same structured-with-fallback split, for the player's name.
+function resolvedPlayerName(pick: PlayerPropPick): string | null {
+  return pick.playerName ?? parsePlayerProp(pick.betDetail ?? "")?.playerName ?? null;
+}
+
+// Strips a leading/trailing team nickname from an already-extracted player
+// name - a capper's text often includes one (needed for game resolution at
+// import time, e.g. "Bills Josh Allen Over 275.5 Passing Yards"), and
+// neither parsePlayerProp nor the raw playerName column strips it, so it's
+// still there whichever path resolvedPlayerName took above. Deliberately a
+// duplicate of resolveTouchdownProp's own inline stripping loop, not a
+// factored-out shared helper - resolveTouchdownProp's own logic is left
+// completely untouched by this PR.
+function stripTeamNicknames(name: string, homeTeam: string, awayTeam: string): string {
+  let playerName = name;
+  for (const team of [homeTeam, awayTeam]) {
+    const nick = findTeamNickname(team, "NFL");
+    if (nick) playerName = playerName.replace(new RegExp("\\b" + nick.replace(/ /g, "\\s+") + "\\b", "i"), "").trim();
+    const lastWord = team.trim().split(/\s+/).pop();
+    if (lastWord) playerName = playerName.replace(new RegExp("\\b" + lastWord + "\\b", "i"), "").trim();
+  }
+  return playerName.replace(/\s{2,}/g, " ").trim();
+}
+
+// WIN/LOSS/PUSH for a real stat value against a pick's line/direction. PUSH
+// is only reachable when the line is a whole number: real sportsbook
+// player-prop lines are almost always posted as X.5 specifically to prevent
+// a push, but Pick.betDetail is free text a capper typed by hand, so a
+// whole-number line ("Over 46 Rushing Yards") is possible and does need to
+// push when the actual stat lands exactly on it. No separate "is this a
+// .5 line" branch is needed to make that safe: every stat this file compares
+// here (yards, receptions) is always a whole number, so it can never equal a
+// genuine X.5 line in the first place - confirmed by inspection of
+// PasserRow/RushingRow/ReceivingRow (nfl-passer-rows.ts,
+// nfl-rushing-receiving-rows.ts), which store passingYards/rushingYards/
+// receivingYards/receptions as integers.
+function gradeAgainstLine(actual: number, line: number, direction: "OVER" | "UNDER"): "WIN" | "LOSS" | "PUSH" {
+  if (actual === line) return "PUSH";
+  return actual > line === (direction === "OVER") ? "WIN" : "LOSS";
+}
+
+export type PlayerPropResolution =
+  | { outcome: "WIN" | "LOSS" | "PUSH" }
+  | { outcome: null; reason: string };
+
+type YardageOrReceptionsMarket = Exclude<PlayerPropMarket, "TD">;
+
+// Passing/rushing/receiving-yardage and receptions prop grading. Same
+// "matched the game fine, but couldn't confidently grade the bet itself"
+// null+reason shape resolveTouchdownProp uses, but its own resolution type
+// (PlayerPropResolution, not TouchdownPropResolution) since these markets -
+// unlike anytime-TD - have a real, if rare, PUSH outcome (see
+// gradeAgainstLine above).
+async function resolveYardageOrReceptionsProp(
+  pick: PlayerPropPick,
+  eventId: string,
+  sportName: string,
+  market: YardageOrReceptionsMarket
+): Promise<PlayerPropResolution> {
+  // Same NFL-only gate resolveTouchdownProp uses and for the same reason:
+  // these markets are graded from ESPN's NFL box-score endpoint specifically.
+  if (sportName !== "NFL") {
+    return { outcome: null, reason: "player-prop grading is NFL-only; this " + sportName + " pick needs manual grading" };
+  }
+
+  const lineInfo = parsePlayerPropLine(pick.betDetail ?? "");
+  if (!lineInfo) {
+    return { outcome: null, reason: "couldn't find an Over/Under line in this bet text" };
+  }
+
+  const rawName = resolvedPlayerName(pick);
+  const playerName = rawName ? stripTeamNicknames(rawName, pick.homeTeam, pick.awayTeam) : "";
+  if (!playerName) {
+    return { outcome: null, reason: "couldn't identify a player name in the bet text" };
+  }
+
+  let actual: number;
+  if (market === "PASS_YDS") {
+    const rows = await fetchNflPasserRows(eventId);
+    if (!rows) return { outcome: null, reason: "the box score isn't available yet for this game" };
+    const match = rows.find((r) => isLikelyDuplicateName(r.playerName, playerName));
+    if (!match) return { outcome: null, reason: 'couldn\'t find "' + playerName + '" in the box score' };
+    actual = match.passingYards;
+  } else {
+    const rows = await fetchNflRushingReceivingRows(eventId);
+    if (!rows) return { outcome: null, reason: "the box score isn't available yet for this game" };
+    if (market === "RUSH_YDS") {
+      const match = rows.rushing.find((r) => isLikelyDuplicateName(r.playerName, playerName));
+      if (!match) return { outcome: null, reason: 'couldn\'t find "' + playerName + '" in the box score' };
+      actual = match.rushingYards;
+    } else {
+      const match = rows.receiving.find((r) => isLikelyDuplicateName(r.playerName, playerName));
+      if (!match) return { outcome: null, reason: 'couldn\'t find "' + playerName + '" in the box score' };
+      actual = market === "REC_YDS" ? match.receivingYards : match.receptions;
+    }
+  }
+
+  return { outcome: gradeAgainstLine(actual, lineInfo.line, lineInfo.direction) };
+}
+
+// The single dispatcher for every PLAYER_PROP pick, structured or legacy -
+// the source of truth for both the real grader (gradePlayerProp below, used
+// by gradePickPool/regradeFuzzyPool) and, potentially, the pending-picks
+// triage view, same dual-purpose role resolveTouchdownProp itself plays
+// today (picks.ts's triage view still calls resolveTouchdownProp directly -
+// left as-is, out of this PR's scope; see the PR report). TD routes to
+// resolveTouchdownProp completely unchanged, including when no market can be
+// determined at all - that falls through to resolveTouchdownProp's own "not
+// a recognized touchdown prop" text, exactly matching this app's PLAYER_PROP
+// behavior before this PR existed (a malformed/manual PLAYER_PROP pick with
+// no recognizable market already only ever got that message).
+export async function resolvePlayerProp(
+  pick: PlayerPropPick,
+  eventId: string,
+  sportName: string
+): Promise<PlayerPropResolution> {
+  const market = resolvedPropMarket(pick);
+  if (market === null || market === "TD") {
+    return resolveTouchdownProp(pick, eventId, sportName);
+  }
+  return resolveYardageOrReceptionsProp(pick, eventId, sportName, market);
+}
+
+export async function gradePlayerProp(pick: PlayerPropPick, eventId: string, sportName: string): Promise<GradeOutcome> {
+  return (await resolvePlayerProp(pick, eventId, sportName)).outcome;
+}
+
 // Per-user counterpart of gradeAllPendingPicks, run opportunistically when a
 // user loads /picks or /live/[gameId]. Same one-pool-plus-chunked-writes path
 // (gradePickPool) - not a per-pick query loop.
@@ -875,7 +1035,7 @@ export async function gradePickPool(
     }
     const outcome =
       pick.betType === "PLAYER_PROP"
-        ? await gradeTouchdownProp(pick, result.game.externalId, sportName)
+        ? await gradePlayerProp(pick, result.game.externalId, sportName)
         : resolveOutcome(pick, result.game);
     if (!outcome) {
       notMatched++;
@@ -920,7 +1080,7 @@ export async function regradeFuzzyPool(
     if (!result || result.matchType !== "exact") return;
     const outcome =
       pick.betType === "PLAYER_PROP"
-        ? await gradeTouchdownProp(pick, result.game.externalId, sportName)
+        ? await gradePlayerProp(pick, result.game.externalId, sportName)
         : resolveOutcome(pick, result.game);
     if (!outcome) return;
     const changed = outcome !== pick.status;
