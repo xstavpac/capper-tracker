@@ -46,6 +46,23 @@ function propPick(over: { betDetail: string; propMarket?: Pick["propMarket"] }) 
 
 function main() {
   // --- Structured path: propMarket set, trusted directly -----------------
+  //
+  // All 5 checks below assert the SAME output, "TD_PROP" - this is
+  // intentional, not an oversight. Every currently-supported player-prop
+  // market (PASS_YDS/RUSH_YDS/REC_YDS/RECEPTIONS/TD) resolves to the one
+  // pre-existing TD_PROP category for now; market-specific category
+  // distinction is deliberately deferred, not a gap this PR forgot to
+  // close. Splitting these into their own categories requires market-
+  // specific grading (this app's grading only knows how to resolve TD
+  // props today - see resolveTouchdownProp) and matching category/UI
+  // support (new PICK_CATEGORY_LABELS/PICK_CATEGORY_MARKET_NOUN/
+  // SPECIALIST_LABELS/CATEGORY_ICONS entries, chip-set membership, etc.) to
+  // exist FIRST - adding a category tile before its market is gradeable
+  // would just sit permanently PENDING, the same anti-pattern TD_PROP
+  // itself is already kept out of NCAAF/NBA/WNBA's chip sets to avoid (see
+  // NCAAF_CHIP_SET's own comment in stats.ts). This sequencing - grading
+  // and UI touchpoint work landing only once a market is newly-gradeable -
+  // is documented in docs/odds-expansion-reconciled-plan.md §5.
 
   check(
     "propMarket=TD -> TD_PROP",
