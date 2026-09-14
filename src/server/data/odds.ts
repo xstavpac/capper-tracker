@@ -6,6 +6,7 @@ import type { OddsFetchStatus, BackfillStatus } from "@/lib/odds-cron-status";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { cacheKeys } from "@/lib/cache-keys";
 import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
+import { persistOddsApiUsage } from "@/server/data/odds-api-usage";
 
 // Live scores are current-ish data polled every 25s per open /live tab -
 // keep the window tight. Odds change at most every 4h (the backfill cron)
@@ -34,7 +35,22 @@ export type OddsGame = {
     title: string;
     markets: {
       key: string;
-      outcomes: { name: string; price: number; point?: number }[];
+      // Present on every market the Odds API returns (confirmed on real
+      // player_anytime_td data, see nfl-prop-odds.ts) - was never typed
+      // here before because nothing read it; kept optional since old
+      // cached OddsSnapshot rows (written before this field was read)
+      // won't have it.
+      last_update?: string;
+      outcomes: {
+        name: string;
+        price: number;
+        point?: number;
+        // Player-prop-only: the Odds API puts the subject's name here, not
+        // in `name` (which stays "Over"/"Under"/"Yes" for props - see
+        // nfl-prop-odds.ts). Absent for h2h/spreads/totals outcomes, where
+        // `name` alone (a team name) already identifies the outcome.
+        description?: string;
+      }[];
     }[];
   }[];
 };
@@ -77,7 +93,11 @@ export const LIVE_SPORTS = [
   { key: "americanfootball_ncaaf", label: "NCAAF" },
 ];
 
-const BASE_URL = "https://api.the-odds-api.com/v4";
+// Exported for nfl-prop-odds.ts's event-level fetch, which is otherwise the
+// same "hit the Odds API, read the usage headers" pattern as everything
+// else in this file.
+export const ODDS_API_BASE_URL = "https://api.the-odds-api.com/v4";
+const BASE_URL = ODDS_API_BASE_URL;
 
 // Process-local layer over getOddsForSportUncached: the OddsSnapshot row for
 // a sport changes at most every 4h, but /live re-runs this on every render
@@ -106,7 +126,27 @@ export async function seedOddsSnapshot(
   return { sportKey, status, games: games.length, creditsRemaining: credits?.remaining ?? null };
 }
 
-const ODDS_MARKET_PARAMS = "&regions=us&markets=h2h,spreads,totals&oddsFormat=american";
+const BULK_MARKET_KEYS = ["h2h", "spreads", "totals"];
+const ODDS_MARKET_PARAMS = "&regions=us&markets=" + BULK_MARKET_KEYS.join(",") + "&oddsFormat=american";
+
+// persistOddsApiUsage writes to a DB table this file doesn't otherwise touch
+// on this path - a write failure there (a transient DB blip, a migration not
+// yet applied) must never take down the actual odds fetch/cache-write for
+// the sport it's logging usage for. This runs inside the cron's
+// Promise.all(LIVE_SPORTS.map(...)) (see /api/cron/refresh-odds), so an
+// unguarded throw here for one sport would reject that whole Promise.all and
+// 500 the entire cron run, even though every other sport's fetch already
+// succeeded moments earlier. Best-effort: log loudly, swallow, move on.
+async function recordBulkUsage(sportKey: string, eventsRequested: number, credits: OddsApiCredits): Promise<void> {
+  try {
+    await persistOddsApiUsage({ sportKey, marketsRequested: BULK_MARKET_KEYS, eventsRequested, credits });
+  } catch (err) {
+    console.error(
+      "[odds-api-usage] failed to persist usage log - odds fetch continues unaffected",
+      JSON.stringify({ sportKey, error: err instanceof Error ? err.message : String(err) })
+    );
+  }
+}
 
 export type OddsApiCredits = { remaining: number | null; used: number | null; lastCost: number | null };
 
@@ -116,7 +156,7 @@ export type OddsApiCredits = { remaining: number | null; used: number | null; la
 // `[odds-api] credits LOW` (warning level) once `remaining` is under
 // ODDS_API_CREDITS_LOW_WATERMARK. Returns the parsed values so the
 // refresh-odds cron can echo `remaining` in its own response body.
-function readOddsApiCredits(res: Response, ctx: { sportKey: string; requestSportKey: string }): OddsApiCredits {
+export function readOddsApiCredits(res: Response, ctx: { sportKey: string; requestSportKey: string }): OddsApiCredits {
   const num = (header: string) => {
     const raw = res.headers.get(header);
     if (raw === null || raw.trim() === "") return null;
@@ -287,6 +327,9 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsFetchResul
   const { games: mergedRaw, primaryFailed, credits } = await fetchMergedOddsListing(sportKey, requestKeys, apiKey, {
     fetchDate,
   });
+  if (credits) {
+    await recordBulkUsage(sportKey, mergedRaw.length, credits);
+  }
   // Primary (regular-season) key failed -> a real outage, not an empty slate.
   // Return [] WITHOUT writing a row, exactly as the single-key failure path
   // did before, so a later request (or the backfill cron) retries and a real
@@ -421,9 +464,12 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
   // A primary-key failure aborts this additive pass the same way `!res.ok`
   // did before; a preseason-key-only failure is logged and ignored.
   const requestKeys = oddsApiRequestKeys(sportKey);
-  const { games: mergedRaw, primaryFailed } = await fetchMergedOddsListing(sportKey, requestKeys, apiKey, {
+  const { games: mergedRaw, primaryFailed, credits } = await fetchMergedOddsListing(sportKey, requestKeys, apiKey, {
     fetchDate,
   });
+  if (credits) {
+    await recordBulkUsage(sportKey, mergedRaw.length, credits);
+  }
   if (primaryFailed) return { added: 0, status: "fetch_failed" };
 
   const fetchedAt = new Date();

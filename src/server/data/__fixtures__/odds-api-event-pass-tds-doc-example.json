@@ -1,0 +1,24 @@
+{
+  "id": "doc-example-event-id",
+  "sport_key": "americanfootball_nfl",
+  "sport_title": "NFL",
+  "commence_time": "2026-09-20T17:00:00Z",
+  "home_team": "Detroit Lions",
+  "away_team": "Green Bay Packers",
+  "bookmakers": [
+    {
+      "key": "draftkings",
+      "title": "DraftKings",
+      "markets": [
+        {
+          "key": "player_pass_tds",
+          "last_update": "2026-09-14T05:00:00Z",
+          "outcomes": [
+            { "name": "Over", "description": "David Blough", "price": -205, "point": 0.5 },
+            { "name": "Under", "description": "David Blough", "price": 155, "point": 0.5 }
+          ]
+        }
+      ]
+    }
+  ]
+}
