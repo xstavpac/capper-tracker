@@ -1,5 +1,5 @@
 import { normalizeName } from "@/lib/fuzzy-match";
-import { parseTouchdownProp, pickPeriodFromText, type SegmentPeriod } from "@/lib/bet-line";
+import { parsePlayerProp, pickPeriodFromText, type SegmentPeriod } from "@/lib/bet-line";
 
 export type ParsedPick = {
   capperName: string;
@@ -1045,15 +1045,17 @@ function parsePickText(description: string): {
     /\b(no|yes)\s+run\s+(?:first|1st)(?:\s+inning)?\b/i.test(cleanDescription)
   ) {
     betType = "NRFI";
-  } else if (parseTouchdownProp(cleanDescription)) {
+  } else if (parsePlayerProp(cleanDescription)) {
     // Checked before the ML/spread/total keyword branches below - a
-    // touchdown-prop pick ("Puka Nacua Anytime TD") has none of their
-    // keywords and would otherwise silently fall through to the MONEYLINE
-    // default. NFL touchdown props only (rushing/receiving/any) - not a
-    // general player-prop parser; anything parseTouchdownProp doesn't
-    // recognize as TD text still falls through unchanged (stays MONEYLINE
-    // default for a bare player name, same as before - this app doesn't
-    // support non-TD player props today).
+    // player-prop pick ("Puka Nacua Anytime TD", "Josh Allen Over 275.5
+    // Passing Yards") often contains an over/under/number that would
+    // otherwise misclassify it as a TOTAL, or has none of the ML/spread
+    // keywords at all and would silently fall through to the MONEYLINE
+    // default. Recognizes every structured market this app supports
+    // (touchdown, passing/rushing/receiving yards, receptions - see
+    // parsePlayerProp); text matching none of them still falls through
+    // unchanged (stays MONEYLINE default for a bare player name, same as
+    // before).
     betType = "PLAYER_PROP";
   } else if (/\bML\b/i.test(cleanDescription) || /money\s*line/i.test(cleanDescription)) {
     betType = "MONEYLINE";
