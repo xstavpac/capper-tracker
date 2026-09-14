@@ -833,6 +833,66 @@ model NflPasserRow {
   @@map("nfl_passer_rows")
 }
 
+// One player's raw box-score rushing line for one NFL game, straight off
+// ESPN's boxscore.players "rushing" category (see extractRushingRows in
+// server/data/nfl-rushing-receiving-rows.ts). Same "no selection" shape as
+// NflPasserRow, but there is no equivalent of selectQbPasserRow planned for
+// this table: a game has many real rushers (RB1, RB2, a gadget-play carry),
+// not one clear "the rusher" to pick, so every row here is a directly
+// gradable rushing-prop candidate as-is.
+//
+// team/externalId/sourceId/scope follow the same conventions as
+// NflPasserRow. rushingYards and long can both be negative (a player's
+// carries can net a loss).
+model NflRushingRow {
+  id            String    @id @default(cuid())
+  externalId    String
+  team          String
+  espnPlayerId  String?
+  playerName    String
+  carries       Int
+  rushingYards  Int
+  yardsPerCarry Float
+  touchdowns    Int
+  long          Int
+  sourceId      String    @default("espn_nfl_summary")
+  scope         DataScope @default(GLOBAL)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([externalId, team, playerName])
+  @@index([externalId])
+  @@map("nfl_rushing_rows")
+}
+
+// One player's raw box-score receiving line for one NFL game, straight off
+// ESPN's boxscore.players "receiving" category (see extractReceivingRows in
+// server/data/nfl-rushing-receiving-rows.ts). Same conventions as
+// NflRushingRow. targets can exceed receptions (targeted but didn't catch
+// it) and a row can have 0 receptions/0 yards with a nonzero targets count -
+// ESPN still reports that player as a receiving-category row for the game.
+model NflReceivingRow {
+  id                String    @id @default(cuid())
+  externalId        String
+  team              String
+  espnPlayerId      String?
+  playerName        String
+  receptions        Int
+  receivingYards    Int
+  yardsPerReception Float
+  touchdowns        Int
+  long              Int
+  targets           Int
+  sourceId          String    @default("espn_nfl_summary")
+  scope             DataScope @default(GLOBAL)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([externalId, team, playerName])
+  @@index([externalId])
+  @@map("nfl_receiving_rows")
+}
+
 // A user-uploaded metric (Charts' Custom Metrics feature) - the catalog
 // entry (name, whether it's team-scoped, unit) for one imported CSV column.
 // Deliberately narrow/EAV-shaped (CustomMetricPoint below is one row per
