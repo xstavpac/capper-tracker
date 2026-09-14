@@ -23,7 +23,7 @@ import {
   betScope,
   type PlayerPropMarket,
 } from "@/lib/bet-line";
-import { findTeamNickname, NCAAF_CANONICAL_SUFFIX } from "@/lib/parse-catalog";
+import { NCAAF_CANONICAL_SUFFIX, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
 import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
 
 function findMarket(game: OddsGame, key: string) {
@@ -699,24 +699,10 @@ export async function resolveTouchdownProp(
     return { outcome: null, reason: "this bet text isn't a recognized touchdown prop" };
   }
 
-  // Strip a leading/trailing team nickname if the capper included one (it's
-  // usually needed for game resolution at import time, e.g. "Rams Puka
-  // Nacua Anytime TD") - only reliable to do here, not in parseTouchdownProp
-  // itself, since this is the first point the pick's real matched
-  // homeTeam/awayTeam (not just whatever text the capper typed) are known.
-  let playerName = parsed.playerName;
-  for (const team of [pick.homeTeam, pick.awayTeam]) {
-    const nick = findTeamNickname(team, "NFL");
-    if (nick) playerName = playerName.replace(new RegExp("\\b" + nick.replace(/ /g, "\\s+") + "\\b", "i"), "").trim();
-    // findTeamNickname can return a longer disambiguated phrase for a team
-    // shared with another sport (e.g. "carolina panthers", not just
-    // "panthers" - see DISAMBIGUATED_TEAMS) - a capper writing just
-    // "Panthers Haynes King TD" wouldn't match that full phrase, so also
-    // strip the team's own last word (its plain short nickname) directly.
-    const lastWord = team.trim().split(/\s+/).pop();
-    if (lastWord) playerName = playerName.replace(new RegExp("\\b" + lastWord + "\\b", "i"), "").trim();
-  }
-  playerName = playerName.replace(/\s{2,}/g, " ").trim();
+  // Strip a leading/trailing team nickname if the capper included one - see
+  // stripTeamNamesFromPlayerName (parse-catalog.ts), shared with
+  // resolvePropOdds's caller (bulk-picks.ts) for the same reason.
+  const playerName = stripTeamNamesFromPlayerName(parsed.playerName, [pick.homeTeam, pick.awayTeam], "NFL");
   if (!playerName) {
     return { outcome: null, reason: "couldn't identify a player name in the bet text" };
   }
@@ -779,25 +765,6 @@ function resolvedPlayerName(pick: PlayerPropPick): string | null {
   return pick.playerName ?? parsePlayerProp(pick.betDetail ?? "")?.playerName ?? null;
 }
 
-// Strips a leading/trailing team nickname from an already-extracted player
-// name - a capper's text often includes one (needed for game resolution at
-// import time, e.g. "Bills Josh Allen Over 275.5 Passing Yards"), and
-// neither parsePlayerProp nor the raw playerName column strips it, so it's
-// still there whichever path resolvedPlayerName took above. Deliberately a
-// duplicate of resolveTouchdownProp's own inline stripping loop, not a
-// factored-out shared helper - resolveTouchdownProp's own logic is left
-// completely untouched by this PR.
-function stripTeamNicknames(name: string, homeTeam: string, awayTeam: string): string {
-  let playerName = name;
-  for (const team of [homeTeam, awayTeam]) {
-    const nick = findTeamNickname(team, "NFL");
-    if (nick) playerName = playerName.replace(new RegExp("\\b" + nick.replace(/ /g, "\\s+") + "\\b", "i"), "").trim();
-    const lastWord = team.trim().split(/\s+/).pop();
-    if (lastWord) playerName = playerName.replace(new RegExp("\\b" + lastWord + "\\b", "i"), "").trim();
-  }
-  return playerName.replace(/\s{2,}/g, " ").trim();
-}
-
 // WIN/LOSS/PUSH for a real stat value against a pick's line/direction. PUSH
 // is only reachable when the line is a whole number: real sportsbook
 // player-prop lines are almost always posted as X.5 specifically to prevent
@@ -845,7 +812,7 @@ async function resolveYardageOrReceptionsProp(
   }
 
   const rawName = resolvedPlayerName(pick);
-  const playerName = rawName ? stripTeamNicknames(rawName, pick.homeTeam, pick.awayTeam) : "";
+  const playerName = rawName ? stripTeamNamesFromPlayerName(rawName, [pick.homeTeam, pick.awayTeam], "NFL") : "";
   if (!playerName) {
     return { outcome: null, reason: "couldn't identify a player name in the bet text" };
   }

@@ -15,8 +15,9 @@ import {
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
-import { extractLine, parsePlayerProp } from "@/lib/bet-line";
-import { TEAM_NICKNAME_CANONICAL } from "@/lib/parse-catalog";
+import { resolvePropOdds } from "@/server/data/nfl-prop-odds";
+import { extractLine, parsePlayerPropLine, parsePlayerProp } from "@/lib/bet-line";
+import { TEAM_NICKNAME_CANONICAL, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
@@ -168,7 +169,39 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
         mlFavoredSide = await findFavoredSide(liveSportKey, game);
       }
 
-      if (!item.hasExplicitOdds) {
+      if (!item.hasExplicitOdds && item.betType === "PLAYER_PROP") {
+        // Separate from the MONEYLINE/SPREAD/TOTAL path below - a player
+        // prop has no home/away side, so it needs its own parsed identity
+        // (player + market + Over/Under + line) rather than the
+        // nicknames[0]-vs-homeTeam side derivation the other bet types use.
+        // Re-parses item.description (the same text becoming betDetail) the
+        // same way playerProp does further down in bulkImportPicksAction -
+        // never a separate/parallel parse, same "one function, re-read
+        // wherever needed" pattern as parseTouchdownProp/extractLine.
+        const parsedProp = parsePlayerProp(item.description);
+        const parsedLine = parsePlayerPropLine(item.description);
+        if (parsedProp && parsedLine) {
+          // parsePlayerProp leaves a capper-included team nickname in the
+          // player name untouched (e.g. "Chiefs Travis Kelce" from "Chiefs
+          // Travis Kelce Over 42.5 Receiving Yards" - it's needed for game
+          // resolution, done separately before this point). Strip it the
+          // same way resolveTouchdownProp does before fuzzy-matching against
+          // a real name, or "Travis Kelce" in the odds snapshot would never
+          // match "Chiefs Travis Kelce" here.
+          const playerName = stripTeamNamesFromPlayerName(parsedProp.playerName, [game.homeTeam, game.awayTeam], item.sportName);
+          const propPrice = playerName
+            ? await resolvePropOdds(liveSportKey, game, {
+                playerName,
+                propMarket: parsedProp.propMarket,
+                side: parsedLine.direction === "OVER" ? "Over" : "Under",
+                point: parsedLine.line,
+              })
+            : null;
+          if (propPrice !== null) {
+            odds = propPrice;
+          }
+        }
+      } else if (!item.hasExplicitOdds) {
         // Unchanged from before pickedSide existed - always resolves to
         // "home" or "away" for a non-TOTAL bet, same as it always has, for
         // the market-price lookup only. Deliberately NOT reused for
@@ -187,9 +220,9 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
         // No real market exists for team totals in this app's cached odds
         // (getOddsForSport only fetches h2h/spreads/totals) - findMarketPrice
         // has no TEAM_TOTAL case and returns null for it, same as it already
-        // does for PLAYER_PROP/NRFI, so this is a no-op price lookup rather
-        // than a real one; team-total picks keep whatever odds the capper
-        // typed (or the -110 default), same as before this bet type existed.
+        // does for NRFI, so this is a no-op price lookup rather than a real
+        // one; team-total picks keep whatever odds the capper typed (or the
+        // -110 default), same as before this bet type existed.
         const marketPrice =
           side && item.betType !== "TEAM_TOTAL" ? await findMarketPrice(liveSportKey, game, item.betType, side) : null;
         if (marketPrice !== null) {

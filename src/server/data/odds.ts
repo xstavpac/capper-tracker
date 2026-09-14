@@ -1365,12 +1365,15 @@ export function matchScoreToGame(
   return closestByTime(candidates, (s) => new Date(s.commenceTime).getTime(), gameStart);
 }
 
-// Shared by findMarketPrice and findMarketTotalLine - resolves which
-// odds-listed game (by team pair + closest commenceTime) a schedule-sourced
-// game corresponds to, same repeat-matchup handling as matchScoreToGame.
-// teamNamesMatch, not ===: `game` here is schedule/score-source-spelled while
-// oddsGames is odds-source-spelled (see team-name-match.ts).
-async function resolveOddsGame(
+// Shared by findMarketPrice, findMarketTotalLine, and (via nfl-prop-odds.ts)
+// resolvePropOdds - resolves which odds-listed game (by team pair + closest
+// commenceTime) a schedule-sourced game corresponds to, same repeat-matchup
+// handling as matchScoreToGame. teamNamesMatch, not ===: `game` here is
+// schedule/score-source-spelled while oddsGames is odds-source-spelled (see
+// team-name-match.ts). Exported (not module-private) so nfl-prop-odds.ts's
+// resolvePropOdds can match a pick to the same cached OddsGame findMarketPrice
+// would, rather than re-implementing this resolution step.
+export async function resolveOddsGame(
   sportKey: string,
   game: { homeTeam: string; awayTeam: string; commenceTime: string }
 ): Promise<OddsGame | null> {
