@@ -133,10 +133,12 @@ async function main() {
   expect("healthy: one event fetched and merged", { fetched: healthy.eventsFetched, skipped: healthy.eventsSkippedCreditGate, failed: healthy.eventsFailed }, { fetched: 1, skipped: 0, failed: 0 });
   expect("healthy: the merged game now has the player_anytime_td market", healthy.games[0].bookmakers.find((b) => b.key === "draftkings")?.markets.map((m) => m.key), ["h2h", "player_anytime_td"]);
   expect("healthy: usage was persisted for this call", usageWrites.length, 1);
-  expect("healthy: exactly one fetch call, bundling all 5 markets (not 5 separate calls)", fetchCalls.length, 1);
+  expect("healthy: exactly one fetch call, bundling all 8 markets (not 8 separate calls)", fetchCalls.length, 1);
   ok(
-    "healthy: that one call's markets param lists all 5 gradeable markets",
-    fetchCalls[0].includes("markets=player_pass_tds,player_pass_yds,player_pass_attempts,player_pass_completions,player_anytime_td"),
+    "healthy: that one call's markets param lists all 8 ingested markets",
+    fetchCalls[0].includes(
+      "markets=player_pass_tds,player_pass_yds,player_pass_attempts,player_pass_completions,player_anytime_td,player_rush_yds,player_reception_yds,player_receptions"
+    ),
     fetchCalls[0]
   );
   restoreFetch();

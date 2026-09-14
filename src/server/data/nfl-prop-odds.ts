@@ -1,17 +1,23 @@
-// NFL player-prop odds: event-level fetch + normalization for exactly the
-// five markets PR #68's grading extension can actually resolve today
-// (getNflPlayerTdStats / getNflPlayerTdStats's passing fields, plus
-// selectQbPasserRow for which passer a passing-yardage/attempts/completions
-// line even applies to). Deliberately narrower than the Odds API's full NFL
-// player-prop catalog - ingesting a line nothing can grade yet is pure
-// wasted credit spend, per the reconciled plan's own principle.
+// NFL player-prop odds: event-level fetch + normalization, deliberately
+// narrower than the Odds API's full NFL player-prop catalog - every market
+// key here has a confirmed extraction path this codebase can already
+// resolve a real stat line against (passing: getNflPlayerTdStats's passing
+// fields + selectQbPasserRow; rushing/receiving/receptions: extractRushingRows
+// / extractReceivingRows in nfl-rushing-receiving-rows.ts), so ingesting a
+// line is never pure wasted credit spend on something nothing can ever
+// check. Grading itself (turning a stored line + the matching extracted stat
+// into a win/loss) is separate, later work for each market - not done here
+// for rushing/receiving/receptions, same as it wasn't done in the PR that
+// first added the passing markets.
 //
-// Two of the five markets are shaped completely differently, confirmed live
-// (not from docs, not guessed - see the header on PLAYER_ANYTIME_TD_MARKET_KEY
-// below for the exact verification):
+// Two shapes are confirmed live (not from docs, not guessed - see the header
+// on PLAYER_ANYTIME_TD_MARKET_KEY below for the exact verification):
 //   - player_pass_tds / player_pass_yds / player_pass_attempts /
-//     player_pass_completions: two-sided (Over/Under), always carries a
-//     `point` (the line).
+//     player_pass_completions / player_rush_yds / player_reception_yds /
+//     player_receptions: two-sided (Over/Under), always carries a `point`
+//     (the line). The three rushing/receiving markets were confirmed live
+//     2026-09-14 the same way as player_anytime_td - see their own note
+//     below.
 //   - player_anytime_td: ONE-SIDED ("Yes" only - there is no "No" outcome
 //     at all, from any of the 9 bookmakers observed), NEVER carries a
 //     `point`. Also carries two kinds of non-player outcomes that must be
@@ -34,6 +40,9 @@ export const NFL_PROP_MARKET_KEYS = [
   "player_pass_attempts",
   "player_pass_completions",
   "player_anytime_td",
+  "player_rush_yds",
+  "player_reception_yds",
+  "player_receptions",
 ] as const;
 
 export type NflPropMarketKey = (typeof NFL_PROP_MARKET_KEYS)[number];
@@ -51,11 +60,26 @@ export type NflPropMarketKey = (typeof NFL_PROP_MARKET_KEYS)[number];
 // betonlineag, betmgm, bovada, betrivers) returned outcomes shaped
 // `{ name: "Yes", description: "<player or team-defense name>", price }` -
 // no bookmaker sent a "No" outcome or a `point` field anywhere in this
-// market. This is the ONLY market of the five confirmed this way; the other
-// four are two-sided/point-bearing per the Odds API's own published docs
-// example (David Blough, player_pass_tds: Over/Under with point 0.5) - see
-// __fixtures__/odds-api-event-pass-tds-doc-example.json, which is
-// doc-derived, not independently live-verified the way player_anytime_td is.
+// market. This is the only market confirmed one-sided this way; the four
+// passing markets are two-sided/point-bearing per the Odds API's own
+// published docs example (David Blough, player_pass_tds: Over/Under with
+// point 0.5) - see __fixtures__/odds-api-event-pass-tds-doc-example.json,
+// which is doc-derived, not independently live-verified the way
+// player_anytime_td is.
+//
+// player_rush_yds / player_reception_yds / player_receptions were separately
+// confirmed live 2026-09-14 against the same event (Denver Broncos @ Kansas
+// City Chiefs) via one bundled call:
+//   GET /v4/sports/americanfootball_nfl/events/{eventId}/odds
+//     ?regions=us&markets=player_rush_yds,player_reception_yds,player_receptions&oddsFormat=american
+// (confirmed via x-requests-remaining dropping 19980 -> 19977, i.e. exactly 3
+// credits for 3 markets × 1 region - matches the documented cost formula).
+// All 346 outcomes across 6 bookmakers (draftkings, fanatics, fanduel,
+// betonlineag, bovada, betrivers) were two-sided Over/Under, every one
+// carrying a `point`, same shape as the passing markets - no
+// player_anytime_td-style surprises (no one-sided market, no missing
+// `point`, no non-player sentinel outcomes observed). Real response saved
+// verbatim at __fixtures__/odds-api-event-rush-rec-response.json.
 export const PLAYER_ANYTIME_TD_MARKET_KEY: NflPropMarketKey = "player_anytime_td";
 
 // Sentinel non-player outcomes observed on real player_anytime_td responses.
@@ -144,12 +168,12 @@ export function normalizePlayerPropLines(game: OddsGame): PlayerPropLine[] {
   return lines;
 }
 
-// One HTTP request per event, all five markets bundled into one `markets`
+// One HTTP request per event, all eight markets bundled into one `markets`
 // param (the Odds API's own documented pattern for this endpoint - see this
-// file's header) rather than five separate per-market requests. Per the
+// file's header) rather than eight separate per-market requests. Per the
 // Odds API's documented cost formula (cost = markets returned × regions),
-// bundling doesn't reduce credit cost vs. five separate 1-market calls, but
-// it does mean one round-trip instead of five, and matches how the
+// bundling doesn't reduce credit cost vs. eight separate 1-market calls, but
+// it does mean one round-trip instead of eight, and matches how the
 // provider's own docs show this endpoint used.
 const PROP_MARKETS_PARAM = NFL_PROP_MARKET_KEYS.join(",");
 
@@ -236,7 +260,7 @@ export type NflPropFetchSummary = {
 //
 // Cost shape worth knowing operationally: unlike the bulk game-lines fetch
 // (one flat-cost call per sport regardless of game count), this is metered
-// PER EVENT (5 markets × 1 region = 5 credits/event, confirmed live - see
+// PER EVENT (8 markets × 1 region = 8 credits/event, confirmed live - see
 // PLAYER_ANYTIME_TD_MARKET_KEY's header). Because OddsSnapshot locks in a
 // fresh snapshot every day and NFL slates are often posted a full week
 // ahead, a game that hasn't started yet gets its props re-fetched on every
