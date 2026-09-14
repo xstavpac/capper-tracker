@@ -15,7 +15,7 @@ import {
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
-import { extractLine } from "@/lib/bet-line";
+import { extractLine, parsePlayerProp } from "@/lib/bet-line";
 import { TEAM_NICKNAME_CANONICAL } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
@@ -503,6 +503,15 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         continue;
       }
 
+      // Re-reads item.description (the same text becoming betDetail below)
+      // through the same shared parser parsePickText already used to decide
+      // item.betType === "PLAYER_PROP" - never a separate/parallel market
+      // detection, same "one function, re-read wherever the structured
+      // result is needed" pattern as parseTouchdownProp/grading.ts. Only
+      // set on the row being created right now; never used to update any
+      // other row.
+      const playerProp = item.betType === "PLAYER_PROP" ? parsePlayerProp(item.description) : null;
+
       toInsert.push({
         capperId,
         sportId,
@@ -517,6 +526,8 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         gameTime,
         pickedSide,
         mlFavoredSide,
+        playerName: playerProp?.playerName,
+        propMarket: playerProp?.propMarket,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "failed";

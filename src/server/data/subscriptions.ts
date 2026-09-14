@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma, type BetType, type Period, type PickedSide } from "@prisma/client";
+import { Prisma, type BetType, type Period, type PickedSide, type PropMarket } from "@prisma/client";
 import {
   FREE_PICK_LIMIT,
   isEntitledToPaidTier,
@@ -104,6 +104,12 @@ export type PickInsertData = {
   notes?: string;
   pickedSide?: PickedSide | null;
   mlFavoredSide?: PickedSide | null;
+  // Only ever set by bulkImportPicksAction for a newly-created PLAYER_PROP
+  // row (see parsePlayerProp) - every other caller (createPick, the manual
+  // pick form) omits both, leaving them at their column default of null.
+  // Never backfilled onto an existing row.
+  playerName?: string;
+  propMarket?: PropMarket;
 };
 
 export type AtomicCreateResult =

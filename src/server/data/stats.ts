@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Pick, PickStatus, PickedSide } from "@prisma/client";
-import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, formatPickLabel, type OddsBucketKey } from "@/lib/bet-line";
+import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, formatPickLabel, parsePlayerProp, type OddsBucketKey } from "@/lib/bet-line";
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
 import { cacheKeys } from "@/lib/cache-keys";
 import { cachedByTag } from "@/server/data/cached";
@@ -975,6 +975,12 @@ type PickCategoryInput = {
   // partial object by hand simply fall back to the odds-sign heuristic.
   pickedSide?: PickedSide | null;
   mlFavoredSide?: PickedSide | null;
+  // Optional for the same reason - only the PLAYER_PROP branch reads it, and
+  // only real Pick rows created after PR #72's schema migration have it; a
+  // hand-built partial object (e.g. the pre-insert duplicate check in
+  // bulk-picks.ts, checked before any row exists to have a propMarket) omits
+  // it and falls back to re-parsing betDetail, same as a legacy null row.
+  propMarket?: Pick["propMarket"];
 };
 
 export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
@@ -1064,13 +1070,26 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
   }
 
   if (pick.betType === "PLAYER_PROP") {
-    // This app only supports touchdown props today (see parseTouchdownProp's
-    // own comment) - PLAYER_PROP never means anything else yet, so no
-    // per-sport branch is needed here the way TOTAL/MONEYLINE have. Grading
-    // itself stays NFL-only (resolveTouchdownProp), independent of this -
-    // a non-NFL PLAYER_PROP pick still categorizes as TD_PROP, it just never
-    // leaves PENDING since nothing resolves it.
-    return "TD_PROP";
+    // Every structured market this app recognizes (PASS_YDS/RUSH_YDS/
+    // REC_YDS/RECEPTIONS/TD - see the PropMarket enum) still shares this one
+    // TD_PROP tile - there's no per-market leaderboard/tile split yet (that's
+    // future work once grading supports the non-TD markets too; see PR 3).
+    // What changed here is trusting a real signal instead of a blind
+    // "betType === PLAYER_PROP => TD_PROP" assumption: propMarket, when set,
+    // is trusted directly (a plain enum check - no PLAYER_PROP betType ever
+    // implies TD on its own). When it's null (every row predating this PR,
+    // and any manually-entered PLAYER_PROP pick, which never runs through
+    // parsePlayerProp at all), betDetail is re-parsed with the same shared
+    // parser as import time. Confirmed against real cases: legacy TD text
+    // ("Puka Nacua Anytime TD") still resolves TD_PROP exactly as before;
+    // legacy/manual non-TD prop text ("Josh Allen Over 275.5 Passing Yards"
+    // entered by hand before this PR existed) now also resolves TD_PROP,
+    // via the same fallback parse, instead of always doing so unconditionally
+    // regardless of content; and malformed/unparseable PLAYER_PROP text (a
+    // manual entry with no recognizable market in it) returns null - it was
+    // never really a TD prop, so it shouldn't silently count as one.
+    if (pick.propMarket) return "TD_PROP";
+    return parsePlayerProp(pick.betDetail ?? "") ? "TD_PROP" : null;
   }
 
   return null;

@@ -324,6 +324,69 @@ export function parseTouchdownProp(text: string): { playerName: string; propType
   return { playerName, propType };
 }
 
+// The full set of structured player-prop markets this app recognizes -
+// mirrors the PropMarket enum in schema.prisma exactly (kept as a local
+// string-literal union, not a `@prisma/client` import, for the same
+// client-bundle-safety reason ParsedPick/BetTypeLike above re-declare their
+// own unions instead of importing BetType).
+export type PlayerPropMarket = "PASS_YDS" | "RUSH_YDS" | "REC_YDS" | "RECEPTIONS" | "TD";
+
+// Order matters only in that REC_YDS ("Receiving Yards") and RECEPTIONS
+// ("Receptions") must stay distinguishable - "rec(?:eiving)?" requires a
+// following "y(?:ar)?ds?", so it never matches bare "Receptions" text, and
+// "receptions?" never matches "Receiving Yards" text (no "recept" substring
+// in "receiving"). Confirmed against every example in the PR 2 spec table.
+const PLAYER_PROP_STAT_PATTERNS: [Exclude<PlayerPropMarket, "TD">, RegExp][] = [
+  ["PASS_YDS", /\bpass(?:ing)?\s*y(?:ar)?ds?\b/i],
+  ["RUSH_YDS", /\brush(?:ing)?\s*y(?:ar)?ds?\b/i],
+  ["REC_YDS", /\brec(?:eiving)?\s*y(?:ar)?ds?\b/i],
+  ["RECEPTIONS", /\breceptions?\b/i],
+];
+
+// Generalizes parseTouchdownProp to every structured player-prop market this
+// app recognizes (PropMarket in schema.prisma) - passing/rushing/receiving
+// yards, receptions, and touchdowns - so any caller that needs to know WHICH
+// market a pick's free text describes (catalog import, to populate the
+// Pick.playerName/propMarket columns at create time; categorization, as its
+// propMarket-null fallback for legacy or manually-entered rows) has exactly
+// one place to ask. Same "derive from betDetail text every time" pattern as
+// extractLine/parseTouchdownProp above - never stored as its own parse
+// result, always re-read from the same text every caller already has.
+//
+// Checks TD first via parseTouchdownProp itself, completely unchanged - its
+// player-name extraction and RUSHING/RECEIVING/ANY sub-typing (used by
+// resolveTouchdownProp for grading) are untouched by this function's
+// existence. The four new markets don't need that sub-typing - their
+// propMarket value alone already says which stat they're about - so they
+// share one simpler player-name strip (remove the matched stat phrase,
+// over/under, numbers, parens) instead of parseTouchdownProp's own.
+//
+// Returns null when text matches none of the five known markets (a
+// malformed or genuinely non-prop betDetail on a manually-entered
+// PLAYER_PROP pick) - callers treat that the same as "not a recognized
+// player prop", not as a TD prop by default.
+export function parsePlayerProp(text: string): { playerName: string; propMarket: PlayerPropMarket } | null {
+  const td = parseTouchdownProp(text);
+  if (td) return { playerName: td.playerName, propMarket: "TD" };
+
+  const match = PLAYER_PROP_STAT_PATTERNS.find(([, pattern]) => pattern.test(text));
+  if (!match) return null;
+  const [propMarket, statPattern] = match;
+
+  const playerName = text
+    .replace(/\([^)]*\)/g, " ")
+    .replace(statPattern, " ")
+    .replace(/\b(over|under)\b/gi, " ")
+    .replace(/[+-]?\d+(?:\.\d+)?\+?/g, " ")
+    .replace(/[+-]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (!playerName) return null;
+
+  return { playerName, propMarket };
+}
+
 // Coarse, fixed odds bands - no precedent for this anywhere else in the app
 // (odds is a raw Int on Pick), and MLB/NFL/NBA all use roughly the same
 // American-odds shape, so one universal set of bands works across sports.
