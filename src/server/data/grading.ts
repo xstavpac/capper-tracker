@@ -843,10 +843,10 @@ async function resolveYardageOrReceptionsProp(
 
 // The single dispatcher for every PLAYER_PROP pick, structured or legacy -
 // the source of truth for both the real grader (gradePlayerProp below, used
-// by gradePickPool/regradeFuzzyPool) and, potentially, the pending-picks
-// triage view, same dual-purpose role resolveTouchdownProp itself plays
-// today (picks.ts's triage view still calls resolveTouchdownProp directly -
-// left as-is, out of this PR's scope; see the PR report). TD routes to
+// by gradePickPool/regradeFuzzyPool) and the pending-picks/stuck-leg triage
+// views (picks.ts's getPendingPicksForUser/getPendingLegsForUser), same
+// dual-purpose role resolveTouchdownProp itself used to play alone before
+// the 4 structured markets existed. TD routes to
 // resolveTouchdownProp completely unchanged, including when no market can be
 // determined at all - that falls through to resolveTouchdownProp's own "not
 // a recognized touchdown prop" text, exactly matching this app's PLAYER_PROP
