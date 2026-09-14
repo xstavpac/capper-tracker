@@ -1,0 +1,3619 @@
+{
+  "boxscore": {
+    "players": [
+      {
+        "team": {
+          "id": "9",
+          "uid": "s:20~l:28~t:9",
+          "slug": "green-bay-packers",
+          "location": "Green Bay",
+          "name": "Packers",
+          "abbreviation": "GB",
+          "displayName": "Green Bay Packers",
+          "shortDisplayName": "Packers",
+          "color": "204e32",
+          "alternateColor": "ffb612",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/gb.png"
+        },
+        "statistics": [
+          {
+            "name": "passing",
+            "keys": [
+              "completions/passingAttempts",
+              "passingYards",
+              "yardsPerPassAttempt",
+              "passingTouchdowns",
+              "interceptions",
+              "sacks-sackYardsLost",
+              "adjQBR",
+              "QBRating"
+            ],
+            "text": "Green Bay Passing",
+            "labels": [
+              "C/ATT",
+              "YDS",
+              "AVG",
+              "TD",
+              "INT",
+              "SACKS",
+              "QBR",
+              "RTG"
+            ],
+            "descriptions": [
+              "Completions/Attempts",
+              "Yards",
+              "Yards Per Pass Attempt",
+              "Touchdowns",
+              "Interceptions",
+              "Sacks",
+              "Adjusted QBR",
+              "Passer Rating"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4036378",
+                  "uid": "s:20~l:28~a:4036378",
+                  "guid": "f19ea9a5-ca4d-79b9-3e49-543e438cd336",
+                  "firstName": "Jordan",
+                  "lastName": "Love",
+                  "displayName": "Jordan Love",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4036378/jordan-love",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4036378.png",
+                    "alt": "Jordan Love"
+                  },
+                  "jersey": "10"
+                },
+                "stats": [
+                  "21/42",
+                  "387",
+                  "9.2",
+                  "2",
+                  "1",
+                  "4-34",
+                  "54.7",
+                  "88.1"
+                ]
+              }
+            ],
+            "totals": [
+              "21/42",
+              "353",
+              "9.2",
+              "2",
+              "1",
+              "4-34",
+              "--",
+              "88.1"
+            ]
+          },
+          {
+            "name": "rushing",
+            "keys": [
+              "rushingAttempts",
+              "rushingYards",
+              "yardsPerRushAttempt",
+              "rushingTouchdowns",
+              "longRushing"
+            ],
+            "text": "Green Bay Rushing",
+            "labels": [
+              "CAR",
+              "YDS",
+              "AVG",
+              "TD",
+              "LONG"
+            ],
+            "descriptions": [
+              "Rushing Attempts",
+              "Yards",
+              "Yards Per Rushing Attempt",
+              "Touchdowns",
+              "Longest Run"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4429023",
+                  "uid": "s:20~l:28~a:4429023",
+                  "guid": "3b49343f-43c2-3136-8f56-b3963c5a4077",
+                  "firstName": "MarShawn",
+                  "lastName": "Lloyd",
+                  "displayName": "MarShawn Lloyd",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4429023/marshawn-lloyd",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4429023.png",
+                    "alt": "MarShawn Lloyd"
+                  },
+                  "jersey": "32"
+                },
+                "stats": [
+                  "13",
+                  "37",
+                  "2.8",
+                  "0",
+                  "12"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3149687",
+                  "uid": "s:20~l:28~a:3149687",
+                  "guid": "32edc96f-e826-6969-576d-2040ac4890a5",
+                  "firstName": "Chris",
+                  "lastName": "Brooks",
+                  "displayName": "Chris Brooks",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3149687/chris-brooks",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3149687.png",
+                    "alt": "Chris Brooks"
+                  },
+                  "jersey": "30"
+                },
+                "stats": [
+                  "7",
+                  "29",
+                  "4.1",
+                  "0",
+                  "14"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4036378",
+                  "uid": "s:20~l:28~a:4036378",
+                  "guid": "f19ea9a5-ca4d-79b9-3e49-543e438cd336",
+                  "firstName": "Jordan",
+                  "lastName": "Love",
+                  "displayName": "Jordan Love",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4036378/jordan-love",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4036378.png",
+                    "alt": "Jordan Love"
+                  },
+                  "jersey": "10"
+                },
+                "stats": [
+                  "1",
+                  "0",
+                  "0.0",
+                  "0",
+                  "0"
+                ]
+              }
+            ],
+            "totals": [
+              "21",
+              "66",
+              "3.1",
+              "0",
+              "14"
+            ]
+          },
+          {
+            "name": "receiving",
+            "keys": [
+              "receptions",
+              "receivingYards",
+              "yardsPerReception",
+              "receivingTouchdowns",
+              "longReception",
+              "receivingTargets"
+            ],
+            "text": "Green Bay Receiving",
+            "labels": [
+              "REC",
+              "YDS",
+              "AVG",
+              "TD",
+              "LONG",
+              "TGTS"
+            ],
+            "descriptions": [
+              "Receptions",
+              "Yards",
+              "Yards Per Reception",
+              "Touchdowns",
+              "Longest Reception",
+              "Receiving Targets"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4248528",
+                  "uid": "s:20~l:28~a:4248528",
+                  "guid": "8f25b6b0-99c7-1923-dc47-13b3135ba608",
+                  "firstName": "Christian",
+                  "lastName": "Watson",
+                  "displayName": "Christian Watson",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4248528/christian-watson",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4248528.png",
+                    "alt": "Christian Watson"
+                  },
+                  "jersey": "9"
+                },
+                "stats": [
+                  "6",
+                  "147",
+                  "24.5",
+                  "2",
+                  "81",
+                  "8"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4701936",
+                  "uid": "s:20~l:28~a:4701936",
+                  "guid": "c5e38ead-375e-3df1-8989-1d7b334915a7",
+                  "firstName": "Matthew",
+                  "lastName": "Golden",
+                  "displayName": "Matthew Golden",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4701936/matthew-golden",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4701936.png",
+                    "alt": "Matthew Golden"
+                  },
+                  "jersey": "0"
+                },
+                "stats": [
+                  "6",
+                  "95",
+                  "15.8",
+                  "0",
+                  "42",
+                  "12"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4572680",
+                  "uid": "s:20~l:28~a:4572680",
+                  "guid": "c7de446c-056d-5255-ba6e-47b061c83c98",
+                  "firstName": "Tucker",
+                  "lastName": "Kraft",
+                  "displayName": "Tucker Kraft",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4572680/tucker-kraft",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4572680.png",
+                    "alt": "Tucker Kraft"
+                  },
+                  "jersey": "85"
+                },
+                "stats": [
+                  "3",
+                  "65",
+                  "21.7",
+                  "0",
+                  "30",
+                  "6"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3054212",
+                  "uid": "s:20~l:28~a:3054212",
+                  "guid": "58017d3f-d9dd-7db8-4494-a5d6f7d63b9c",
+                  "firstName": "Jonnu",
+                  "lastName": "Smith",
+                  "displayName": "Jonnu Smith",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3054212/jonnu-smith",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3054212.png",
+                    "alt": "Jonnu Smith"
+                  },
+                  "jersey": "18"
+                },
+                "stats": [
+                  "2",
+                  "50",
+                  "25.0",
+                  "0",
+                  "43",
+                  "3"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4362249",
+                  "uid": "s:20~l:28~a:4362249",
+                  "guid": "3e2ffc6d-de98-dfd9-ce4d-bce3b6d9eebe",
+                  "firstName": "Jayden",
+                  "lastName": "Reed",
+                  "displayName": "Jayden Reed",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4362249/jayden-reed",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4362249.png",
+                    "alt": "Jayden Reed"
+                  },
+                  "jersey": "11"
+                },
+                "stats": [
+                  "3",
+                  "20",
+                  "6.7",
+                  "0",
+                  "7",
+                  "7"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4259305",
+                  "uid": "s:20~l:28~a:4259305",
+                  "guid": "dc601a01-e27e-d2fd-eeae-631b3f91fb70",
+                  "firstName": "Bo",
+                  "lastName": "Melton",
+                  "displayName": "Bo Melton",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4259305/bo-melton",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4259305.png",
+                    "alt": "Bo Melton"
+                  },
+                  "jersey": "16"
+                },
+                "stats": [
+                  "1",
+                  "10",
+                  "10.0",
+                  "0",
+                  "10",
+                  "1"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3149687",
+                  "uid": "s:20~l:28~a:3149687",
+                  "guid": "32edc96f-e826-6969-576d-2040ac4890a5",
+                  "firstName": "Chris",
+                  "lastName": "Brooks",
+                  "displayName": "Chris Brooks",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3149687/chris-brooks",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3149687.png",
+                    "alt": "Chris Brooks"
+                  },
+                  "jersey": "30"
+                },
+                "stats": [
+                  "0",
+                  "0",
+                  "0.0",
+                  "0",
+                  "0",
+                  "1"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4429023",
+                  "uid": "s:20~l:28~a:4429023",
+                  "guid": "3b49343f-43c2-3136-8f56-b3963c5a4077",
+                  "firstName": "MarShawn",
+                  "lastName": "Lloyd",
+                  "displayName": "MarShawn Lloyd",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4429023/marshawn-lloyd",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4429023.png",
+                    "alt": "MarShawn Lloyd"
+                  },
+                  "jersey": "32"
+                },
+                "stats": [
+                  "0",
+                  "0",
+                  "0.0",
+                  "0",
+                  "0",
+                  "1"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4430191",
+                  "uid": "s:20~l:28~a:4430191",
+                  "guid": "4f965646-501b-568f-0a1b-e0c54cca0445",
+                  "firstName": "Skyy",
+                  "lastName": "Moore",
+                  "displayName": "Skyy Moore",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4430191/skyy-moore",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4430191.png",
+                    "alt": "Skyy Moore"
+                  },
+                  "jersey": "23"
+                },
+                "stats": [
+                  "0",
+                  "0",
+                  "0.0",
+                  "0",
+                  "0",
+                  "1"
+                ]
+              }
+            ],
+            "totals": [
+              "21",
+              "387",
+              "18.4",
+              "2",
+              "81",
+              "40"
+            ]
+          },
+          {
+            "name": "fumbles",
+            "keys": [
+              "fumbles",
+              "fumblesLost",
+              "fumblesRecovered"
+            ],
+            "text": "Green Bay Fumbles",
+            "labels": [
+              "FUM",
+              "LOST",
+              "REC"
+            ],
+            "descriptions": [
+              "Fumbles",
+              "Fumbles Lost",
+              "Fumbles Recovered"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4036378",
+                  "uid": "s:20~l:28~a:4036378",
+                  "guid": "f19ea9a5-ca4d-79b9-3e49-543e438cd336",
+                  "firstName": "Jordan",
+                  "lastName": "Love",
+                  "displayName": "Jordan Love",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4036378/jordan-love",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4036378.png",
+                    "alt": "Jordan Love"
+                  },
+                  "jersey": "10"
+                },
+                "stats": [
+                  "2",
+                  "1",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4240435",
+                  "uid": "s:20~l:28~a:4240435",
+                  "guid": "ba67ad47-fa39-ed6a-bc34-e119e0be5507",
+                  "firstName": "Zach",
+                  "lastName": "Bako-Bewele",
+                  "displayName": "Zach Bako-Bewele",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4240435/zach-bako-bewele",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4240435.png",
+                    "alt": "Zach Bako-Bewele"
+                  },
+                  "jersey": "50"
+                },
+                "stats": [
+                  "0",
+                  "0",
+                  "1"
+                ]
+              }
+            ],
+            "totals": [
+              "2",
+              "1",
+              "1"
+            ]
+          },
+          {
+            "name": "defensive",
+            "keys": [
+              "totalTackles",
+              "soloTackles",
+              "sacks",
+              "tacklesForLoss",
+              "passesDefended",
+              "QBHits",
+              "defensiveTouchdowns"
+            ],
+            "text": "Green Bay Defense",
+            "labels": [
+              "TOT",
+              "SOLO",
+              "SACKS",
+              "TFL",
+              "PD",
+              "QB HTS",
+              "TD"
+            ],
+            "descriptions": [
+              "Tackles",
+              "Solo Tackles",
+              "Sacks",
+              "Tackles For Loss",
+              "Passes Defended",
+              "Quarterback Hits",
+              "Touchdowns"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4430438",
+                  "uid": "s:20~l:28~a:4430438",
+                  "guid": "5659bd40-eb05-3753-ac61-da32cc4b4894",
+                  "firstName": "Edgerrin",
+                  "lastName": "Cooper",
+                  "displayName": "Edgerrin Cooper",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4430438/edgerrin-cooper",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4430438.png",
+                    "alt": "Edgerrin Cooper"
+                  },
+                  "jersey": "56"
+                },
+                "stats": [
+                  "7",
+                  "6",
+                  "1",
+                  "2",
+                  "0",
+                  "1",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4428863",
+                  "uid": "s:20~l:28~a:4428863",
+                  "guid": "43deba0f-5355-34a4-5bf8-3f2d159f719b",
+                  "firstName": "Evan",
+                  "lastName": "Williams",
+                  "displayName": "Evan Williams",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4428863/evan-williams",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4428863.png",
+                    "alt": "Evan Williams"
+                  },
+                  "jersey": "33"
+                },
+                "stats": [
+                  "7",
+                  "6",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4259493",
+                  "uid": "s:20~l:28~a:4259493",
+                  "guid": "e13dd78f-4dd7-78d4-9570-fe660744962b",
+                  "firstName": "Keisean",
+                  "lastName": "Nixon",
+                  "displayName": "Keisean Nixon",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4259493/keisean-nixon",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4259493.png",
+                    "alt": "Keisean Nixon"
+                  },
+                  "jersey": "25"
+                },
+                "stats": [
+                  "5",
+                  "3",
+                  "0.5",
+                  "1",
+                  "1",
+                  "2",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4686906",
+                  "uid": "s:20~l:28~a:4686906",
+                  "guid": "93ef4f6d-9c7d-3c27-a896-30366b4d4e9d",
+                  "firstName": "Lukas",
+                  "lastName": "Van Ness",
+                  "displayName": "Lukas Van Ness",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4686906/lukas-van-ness",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4686906.png",
+                    "alt": "Lukas Van Ness"
+                  },
+                  "jersey": "90"
+                },
+                "stats": [
+                  "4",
+                  "4",
+                  "1",
+                  "1",
+                  "0",
+                  "1",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4361776",
+                  "uid": "s:20~l:28~a:4361776",
+                  "guid": "44e27fb2-06bf-0951-0563-04247ca3d6e8",
+                  "firstName": "Brenton",
+                  "lastName": "Cox Jr.",
+                  "displayName": "Brenton Cox Jr.",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4361776/brenton-cox-jr",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4361776.png",
+                    "alt": "Brenton Cox Jr."
+                  },
+                  "jersey": "57"
+                },
+                "stats": [
+                  "4",
+                  "4",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4259762",
+                  "uid": "s:20~l:28~a:4259762",
+                  "guid": "537004a0-e73f-2edb-8150-dd4096a89e13",
+                  "firstName": "Jonathan",
+                  "lastName": "Ford",
+                  "displayName": "Jonathan Ford",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4259762/jonathan-ford",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4259762.png",
+                    "alt": "Jonathan Ford"
+                  },
+                  "jersey": "96"
+                },
+                "stats": [
+                  "4",
+                  "3",
+                  "0.5",
+                  "0",
+                  "0",
+                  "1",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3124005",
+                  "uid": "s:20~l:28~a:3124005",
+                  "guid": "f24ad202-b39e-fcce-dcd2-4b5e8765c418",
+                  "firstName": "Zaire",
+                  "lastName": "Franklin",
+                  "displayName": "Zaire Franklin",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3124005/zaire-franklin",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3124005.png",
+                    "alt": "Zaire Franklin"
+                  },
+                  "jersey": "44"
+                },
+                "stats": [
+                  "4",
+                  "2",
+                  "0",
+                  "0",
+                  "0",
+                  "1",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4241470",
+                  "uid": "s:20~l:28~a:4241470",
+                  "guid": "a7764a76-3d05-3784-1714-d4367e541bf0",
+                  "firstName": "Xavier",
+                  "lastName": "McKinney",
+                  "displayName": "Xavier McKinney",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4241470/xavier-mckinney",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4241470.png",
+                    "alt": "Xavier McKinney"
+                  },
+                  "jersey": "29"
+                },
+                "stats": [
+                  "3",
+                  "3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4361791",
+                  "uid": "s:20~l:28~a:4361791",
+                  "guid": "b2bdc524-1395-6e5f-cb53-0ad346d03f35",
+                  "firstName": "Devonte",
+                  "lastName": "Wyatt",
+                  "displayName": "Devonte Wyatt",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4361791/devonte-wyatt",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4361791.png",
+                    "alt": "Devonte Wyatt"
+                  },
+                  "jersey": "95"
+                },
+                "stats": [
+                  "3",
+                  "3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4683643",
+                  "uid": "s:20~l:28~a:4683643",
+                  "guid": "5303f69e-5a91-3323-afc7-0476f31da44a",
+                  "firstName": "Barryn",
+                  "lastName": "Sorrell",
+                  "displayName": "Barryn Sorrell",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4683643/barryn-sorrell",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4683643.png",
+                    "alt": "Barryn Sorrell"
+                  },
+                  "jersey": "99"
+                },
+                "stats": [
+                  "3",
+                  "3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4239947",
+                  "uid": "s:20~l:28~a:4239947",
+                  "guid": "6c1f5d64-cce1-48dc-8fe1-b9f980041280",
+                  "firstName": "Isaiah",
+                  "lastName": "McDuffie",
+                  "displayName": "Isaiah McDuffie",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4239947/isaiah-mcduffie",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4239947.png",
+                    "alt": "Isaiah McDuffie"
+                  },
+                  "jersey": "58"
+                },
+                "stats": [
+                  "2",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4373423",
+                  "uid": "s:20~l:28~a:4373423",
+                  "guid": "305875ab-e41a-e12e-e2f7-7ccad41a2085",
+                  "firstName": "Karl",
+                  "lastName": "Brooks",
+                  "displayName": "Karl Brooks",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4373423/karl-brooks",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4373423.png",
+                    "alt": "Karl Brooks"
+                  },
+                  "jersey": "94"
+                },
+                "stats": [
+                  "2",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "2983055",
+                  "uid": "s:20~l:28~a:2983055",
+                  "guid": "b3b4a21e-8a12-8875-aab4-3c5080dbc5d4",
+                  "firstName": "Javon",
+                  "lastName": "Hargrave",
+                  "displayName": "Javon Hargrave",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/2983055/javon-hargrave",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/2983055.png",
+                    "alt": "Javon Hargrave"
+                  },
+                  "jersey": "98"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4036153",
+                  "uid": "s:20~l:28~a:4036153",
+                  "guid": "652572c0-98bf-0d7a-1096-ecf36f67941c",
+                  "firstName": "Kristian",
+                  "lastName": "Welch",
+                  "displayName": "Kristian Welch",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4036153/kristian-welch",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4036153.png",
+                    "alt": "Kristian Welch"
+                  },
+                  "jersey": "54"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4036378",
+                  "uid": "s:20~l:28~a:4036378",
+                  "guid": "f19ea9a5-ca4d-79b9-3e49-543e438cd336",
+                  "firstName": "Jordan",
+                  "lastName": "Love",
+                  "displayName": "Jordan Love",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4036378/jordan-love",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4036378.png",
+                    "alt": "Jordan Love"
+                  },
+                  "jersey": "10"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4240435",
+                  "uid": "s:20~l:28~a:4240435",
+                  "guid": "ba67ad47-fa39-ed6a-bc34-e119e0be5507",
+                  "firstName": "Zach",
+                  "lastName": "Bako-Bewele",
+                  "displayName": "Zach Bako-Bewele",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4240435/zach-bako-bewele",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4240435.png",
+                    "alt": "Zach Bako-Bewele"
+                  },
+                  "jersey": "50"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4258206",
+                  "uid": "s:20~l:28~a:4258206",
+                  "guid": "c945246a-88fa-2f64-91b3-2b1cd05eaa18",
+                  "firstName": "Benjamin",
+                  "lastName": "St-Juste",
+                  "displayName": "Benjamin St-Juste",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4258206/benjamin-st-juste",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4258206.png",
+                    "alt": "Benjamin St-Juste"
+                  },
+                  "jersey": "21"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4427356",
+                  "uid": "s:20~l:28~a:4427356",
+                  "guid": "3614cc44-533a-d65c-ee67-68a9262d9739",
+                  "firstName": "Kamal",
+                  "lastName": "Hadden",
+                  "displayName": "Kamal Hadden",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4427356/kamal-hadden",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4427356.png",
+                    "alt": "Kamal Hadden"
+                  },
+                  "jersey": "36"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4688930",
+                  "uid": "s:20~l:28~a:4688930",
+                  "guid": "ee3abf6d-652c-3975-9e21-4fa8da2434e8",
+                  "firstName": "Javon",
+                  "lastName": "Bullard",
+                  "displayName": "Javon Bullard",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4688930/javon-bullard",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4688930.png",
+                    "alt": "Javon Bullard"
+                  },
+                  "jersey": "7"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "5076652",
+                  "uid": "s:20~l:28~a:5076652",
+                  "guid": "a6f0f3d2-1d19-38b0-955b-6ff5c631af23",
+                  "firstName": "Brandon",
+                  "lastName": "Cisse",
+                  "displayName": "Brandon Cisse",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/5076652/brandon-cisse",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/5076652.png",
+                    "alt": "Brandon Cisse"
+                  },
+                  "jersey": "2"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "1",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4036141",
+                  "uid": "s:20~l:28~a:4036141",
+                  "guid": "72d6ef5e-6bbc-d999-dc83-445383771637",
+                  "firstName": "Nick",
+                  "lastName": "Niemann",
+                  "displayName": "Nick Niemann",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4036141/nick-niemann",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4036141.png",
+                    "alt": "Nick Niemann"
+                  },
+                  "jersey": "31"
+                },
+                "stats": [
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4685315",
+                  "uid": "s:20~l:28~a:4685315",
+                  "guid": "6ccf88f9-6a81-341b-b811-304d554e7f4d",
+                  "firstName": "Dani",
+                  "lastName": "Dennis-Sutton",
+                  "displayName": "Dani Dennis-Sutton",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4685315/dani-dennis-sutton",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4685315.png",
+                    "alt": "Dani Dennis-Sutton"
+                  },
+                  "jersey": "51"
+                },
+                "stats": [
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4820574",
+                  "uid": "s:20~l:28~a:4820574",
+                  "guid": "e922359a-aa09-3454-820f-7ecf71de4f87",
+                  "firstName": "Chris",
+                  "lastName": "McClellan",
+                  "displayName": "Chris McClellan",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4820574/chris-mcclellan",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4820574.png",
+                    "alt": "Chris McClellan"
+                  },
+                  "jersey": "55"
+                },
+                "stats": [
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              }
+            ],
+            "totals": [
+              "59",
+              "46",
+              "3",
+              "4",
+              "2",
+              "6",
+              "0"
+            ]
+          },
+          {
+            "name": "interceptions",
+            "keys": [
+              "interceptions",
+              "interceptionYards",
+              "interceptionTouchdowns"
+            ],
+            "text": "Green Bay Interceptions",
+            "labels": [
+              "INT",
+              "YDS",
+              "TD"
+            ],
+            "descriptions": [
+              "Interceptions",
+              "Yards",
+              "Touchdowns"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4259493",
+                  "uid": "s:20~l:28~a:4259493",
+                  "guid": "e13dd78f-4dd7-78d4-9570-fe660744962b",
+                  "firstName": "Keisean",
+                  "lastName": "Nixon",
+                  "displayName": "Keisean Nixon",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4259493/keisean-nixon",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4259493.png",
+                    "alt": "Keisean Nixon"
+                  },
+                  "jersey": "25"
+                },
+                "stats": [
+                  "1",
+                  "11",
+                  "0"
+                ]
+              }
+            ],
+            "totals": [
+              "1",
+              "11",
+              "0"
+            ]
+          },
+          {
+            "name": "kickReturns",
+            "keys": [
+              "kickReturns",
+              "kickReturnYards",
+              "yardsPerKickReturn",
+              "longKickReturn",
+              "kickReturnTouchdowns"
+            ],
+            "text": "Green Bay Kick Returns",
+            "labels": [
+              "NO",
+              "YDS",
+              "AVG",
+              "LONG",
+              "TD"
+            ],
+            "descriptions": [
+              "Kick Returns",
+              "Yards",
+              "Yards Per Kick Return",
+              "Longest Kick Return",
+              "Touchdowns"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4259305",
+                  "uid": "s:20~l:28~a:4259305",
+                  "guid": "dc601a01-e27e-d2fd-eeae-631b3f91fb70",
+                  "firstName": "Bo",
+                  "lastName": "Melton",
+                  "displayName": "Bo Melton",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4259305/bo-melton",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4259305.png",
+                    "alt": "Bo Melton"
+                  },
+                  "jersey": "16"
+                },
+                "stats": [
+                  "4",
+                  "124",
+                  "31.0",
+                  "59",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4819231",
+                  "uid": "s:20~l:28~a:4819231",
+                  "guid": "69abf2e0-5e51-3367-a4cf-2eaf9d46ff9b",
+                  "firstName": "Kaleb",
+                  "lastName": "Johnson",
+                  "displayName": "Kaleb Johnson",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4819231/kaleb-johnson",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4819231.png",
+                    "alt": "Kaleb Johnson"
+                  },
+                  "jersey": "26"
+                },
+                "stats": [
+                  "2",
+                  "52",
+                  "26.0",
+                  "27",
+                  "0"
+                ]
+              }
+            ],
+            "totals": [
+              "6",
+              "176",
+              "29.3",
+              "59",
+              "0"
+            ]
+          },
+          {
+            "name": "puntReturns",
+            "keys": [
+              "puntReturns",
+              "puntReturnYards",
+              "yardsPerPuntReturn",
+              "longPuntReturn",
+              "puntReturnTouchdowns"
+            ],
+            "text": "Green Bay Punt Returns",
+            "labels": [
+              "NO",
+              "YDS",
+              "AVG",
+              "LONG",
+              "TD"
+            ],
+            "descriptions": [
+              "Punt Returns",
+              "Yards",
+              "Yards Per Punt Return",
+              "Longest Punt Return",
+              "Touchdowns"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4430191",
+                  "uid": "s:20~l:28~a:4430191",
+                  "guid": "4f965646-501b-568f-0a1b-e0c54cca0445",
+                  "firstName": "Skyy",
+                  "lastName": "Moore",
+                  "displayName": "Skyy Moore",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4430191/skyy-moore",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4430191.png",
+                    "alt": "Skyy Moore"
+                  },
+                  "jersey": "23"
+                },
+                "stats": [
+                  "2",
+                  "17",
+                  "8.5",
+                  "12",
+                  "0"
+                ]
+              }
+            ],
+            "totals": [
+              "2",
+              "17",
+              "8.5",
+              "12",
+              "0"
+            ]
+          },
+          {
+            "name": "kicking",
+            "keys": [
+              "fieldGoalsMade/fieldGoalAttempts",
+              "fieldGoalPct",
+              "longFieldGoalMade",
+              "extraPointsMade/extraPointAttempts",
+              "totalKickingPoints"
+            ],
+            "text": "Green Bay Kicking",
+            "labels": [
+              "FG",
+              "PCT",
+              "LONG",
+              "XP",
+              "PTS"
+            ],
+            "descriptions": [
+              "Field Goals Made/Attempts",
+              "Field Goal Percentage",
+              "Longest Field Goal Made",
+              "Extra Points Made/Attempts",
+              "Kicking Points"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4869461",
+                  "uid": "s:20~l:28~a:4869461",
+                  "guid": "754ac8f6-12c6-3eed-aace-e233e66d5e23",
+                  "firstName": "Trey",
+                  "lastName": "Smack",
+                  "displayName": "Trey Smack",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4869461/trey-smack",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4869461.png",
+                    "alt": "Trey Smack"
+                  },
+                  "jersey": "28"
+                },
+                "stats": [
+                  "3/3",
+                  "100.0",
+                  "59",
+                  "1/2",
+                  "10"
+                ]
+              }
+            ],
+            "totals": [
+              "3/3",
+              "100.0",
+              "59",
+              "1/2",
+              "10"
+            ]
+          },
+          {
+            "name": "punting",
+            "keys": [
+              "punts",
+              "puntYards",
+              "grossAvgPuntYards",
+              "touchbacks",
+              "puntsInside20",
+              "longPunt"
+            ],
+            "text": "Green Bay Punting",
+            "labels": [
+              "NO",
+              "YDS",
+              "AVG",
+              "TB",
+              "In 20",
+              "LONG"
+            ],
+            "descriptions": [
+              "Punts",
+              "Yards",
+              "Average Punt Yards",
+              "Touchbacks",
+              "Punts Inside 20",
+              "Longest Punt"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4248789",
+                  "uid": "s:20~l:28~a:4248789",
+                  "guid": "7ec7e8ab-ab1c-6575-a81e-f3ae6f3a554c",
+                  "firstName": "Daniel",
+                  "lastName": "Whelan",
+                  "displayName": "Daniel Whelan",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4248789/daniel-whelan",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4248789.png",
+                    "alt": "Daniel Whelan"
+                  },
+                  "jersey": "19"
+                },
+                "stats": [
+                  "3",
+                  "116",
+                  "38.7",
+                  "0",
+                  "2",
+                  "49"
+                ]
+              }
+            ],
+            "totals": [
+              "3",
+              "116",
+              "38.7",
+              "0",
+              "2",
+              "49"
+            ]
+          }
+        ],
+        "displayOrder": 1
+      },
+      {
+        "team": {
+          "id": "16",
+          "uid": "s:20~l:28~t:16",
+          "slug": "minnesota-vikings",
+          "location": "Minnesota",
+          "name": "Vikings",
+          "abbreviation": "MIN",
+          "displayName": "Minnesota Vikings",
+          "shortDisplayName": "Vikings",
+          "color": "4f2683",
+          "alternateColor": "ffc62f",
+          "logo": "https://a.espncdn.com/i/teamlogos/nfl/500/min.png"
+        },
+        "statistics": [
+          {
+            "name": "passing",
+            "keys": [
+              "completions/passingAttempts",
+              "passingYards",
+              "yardsPerPassAttempt",
+              "passingTouchdowns",
+              "interceptions",
+              "sacks-sackYardsLost",
+              "adjQBR",
+              "QBRating"
+            ],
+            "text": "Minnesota Passing",
+            "labels": [
+              "C/ATT",
+              "YDS",
+              "AVG",
+              "TD",
+              "INT",
+              "SACKS",
+              "QBR",
+              "RTG"
+            ],
+            "descriptions": [
+              "Completions/Attempts",
+              "Yards",
+              "Yards Per Pass Attempt",
+              "Touchdowns",
+              "Interceptions",
+              "Sacks",
+              "Adjusted QBR",
+              "Passer Rating"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "2573079",
+                  "uid": "s:20~l:28~a:2573079",
+                  "guid": "ed28fa2c-63a1-8258-b6b0-618e79d3e363",
+                  "firstName": "Carson",
+                  "lastName": "Wentz",
+                  "displayName": "Carson Wentz",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/2573079/carson-wentz",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/2573079.png",
+                    "alt": "Carson Wentz"
+                  },
+                  "jersey": "11"
+                },
+                "stats": [
+                  "12/19",
+                  "133",
+                  "7.0",
+                  "3",
+                  "0",
+                  "3-19",
+                  "58.8",
+                  "123.5"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3917315",
+                  "uid": "s:20~l:28~a:3917315",
+                  "guid": "9bef707d-d33f-266b-3020-81900d735915",
+                  "firstName": "Kyler",
+                  "lastName": "Murray",
+                  "displayName": "Kyler Murray",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3917315/kyler-murray",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3917315.png",
+                    "alt": "Kyler Murray"
+                  },
+                  "jersey": "1"
+                },
+                "stats": [
+                  "3/5",
+                  "18",
+                  "3.6",
+                  "0",
+                  "1",
+                  "0-0",
+                  "1.6",
+                  "27.5"
+                ]
+              }
+            ],
+            "totals": [
+              "15/24",
+              "132",
+              "6.3",
+              "3",
+              "1",
+              "3-19",
+              "--",
+              "102.6"
+            ]
+          },
+          {
+            "name": "rushing",
+            "keys": [
+              "rushingAttempts",
+              "rushingYards",
+              "yardsPerRushAttempt",
+              "rushingTouchdowns",
+              "longRushing"
+            ],
+            "text": "Minnesota Rushing",
+            "labels": [
+              "CAR",
+              "YDS",
+              "AVG",
+              "TD",
+              "LONG"
+            ],
+            "descriptions": [
+              "Rushing Attempts",
+              "Yards",
+              "Yards Per Rushing Attempt",
+              "Touchdowns",
+              "Longest Run"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4360569",
+                  "uid": "s:20~l:28~a:4360569",
+                  "guid": "ca688cbe-b781-01a6-69f2-eb87420aec83",
+                  "firstName": "Jordan",
+                  "lastName": "Mason",
+                  "displayName": "Jordan Mason",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4360569/jordan-mason",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4360569.png",
+                    "alt": "Jordan Mason"
+                  },
+                  "jersey": "27"
+                },
+                "stats": [
+                  "15",
+                  "59",
+                  "3.9",
+                  "1",
+                  "28"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3042519",
+                  "uid": "s:20~l:28~a:3042519",
+                  "guid": "6d751aaa-2372-3153-af93-29071487165f",
+                  "firstName": "Aaron",
+                  "lastName": "Jones Sr.",
+                  "displayName": "Aaron Jones Sr.",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3042519/aaron-jones-sr",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3042519.png",
+                    "alt": "Aaron Jones Sr."
+                  },
+                  "jersey": "33"
+                },
+                "stats": [
+                  "12",
+                  "40",
+                  "3.3",
+                  "1",
+                  "8"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3917315",
+                  "uid": "s:20~l:28~a:3917315",
+                  "guid": "9bef707d-d33f-266b-3020-81900d735915",
+                  "firstName": "Kyler",
+                  "lastName": "Murray",
+                  "displayName": "Kyler Murray",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3917315/kyler-murray",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3917315.png",
+                    "alt": "Kyler Murray"
+                  },
+                  "jersey": "1"
+                },
+                "stats": [
+                  "2",
+                  "9",
+                  "4.5",
+                  "0",
+                  "7"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "2573079",
+                  "uid": "s:20~l:28~a:2573079",
+                  "guid": "ed28fa2c-63a1-8258-b6b0-618e79d3e363",
+                  "firstName": "Carson",
+                  "lastName": "Wentz",
+                  "displayName": "Carson Wentz",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/2573079/carson-wentz",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/2573079.png",
+                    "alt": "Carson Wentz"
+                  },
+                  "jersey": "11"
+                },
+                "stats": [
+                  "5",
+                  "-1",
+                  "-0.2",
+                  "0",
+                  "1"
+                ]
+              }
+            ],
+            "totals": [
+              "34",
+              "107",
+              "3.1",
+              "2",
+              "28"
+            ]
+          },
+          {
+            "name": "receiving",
+            "keys": [
+              "receptions",
+              "receivingYards",
+              "yardsPerReception",
+              "receivingTouchdowns",
+              "longReception",
+              "receivingTargets"
+            ],
+            "text": "Minnesota Receiving",
+            "labels": [
+              "REC",
+              "YDS",
+              "AVG",
+              "TD",
+              "LONG",
+              "TGTS"
+            ],
+            "descriptions": [
+              "Receptions",
+              "Yards",
+              "Yards Per Reception",
+              "Touchdowns",
+              "Longest Reception",
+              "Receiving Targets"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4262921",
+                  "uid": "s:20~l:28~a:4262921",
+                  "guid": "c7fb1996-2530-7f98-9f2f-572debf989f4",
+                  "firstName": "Justin",
+                  "lastName": "Jefferson",
+                  "displayName": "Justin Jefferson",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4262921/justin-jefferson",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4262921.png",
+                    "alt": "Justin Jefferson"
+                  },
+                  "jersey": "18"
+                },
+                "stats": [
+                  "8",
+                  "92",
+                  "11.5",
+                  "2",
+                  "39",
+                  "9"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4036133",
+                  "uid": "s:20~l:28~a:4036133",
+                  "guid": "632b52a0-c5f6-fadd-3e6f-a358218982f9",
+                  "firstName": "T.J.",
+                  "lastName": "Hockenson",
+                  "displayName": "T.J. Hockenson",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4036133/tj-hockenson",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4036133.png",
+                    "alt": "T.J. Hockenson"
+                  },
+                  "jersey": "87"
+                },
+                "stats": [
+                  "4",
+                  "36",
+                  "9.0",
+                  "1",
+                  "16",
+                  "5"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3921690",
+                  "uid": "s:20~l:28~a:3921690",
+                  "guid": "a410bc08-05df-c2bd-8245-50b38dc9901d",
+                  "firstName": "Josh",
+                  "lastName": "Oliver",
+                  "displayName": "Josh Oliver",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3921690/josh-oliver",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3921690.png",
+                    "alt": "Josh Oliver"
+                  },
+                  "jersey": "84"
+                },
+                "stats": [
+                  "2",
+                  "22",
+                  "11.0",
+                  "0",
+                  "13",
+                  "4"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4240631",
+                  "uid": "s:20~l:28~a:4240631",
+                  "guid": "38696dea-2280-fbdb-fe54-002219b268c3",
+                  "firstName": "DeeJay",
+                  "lastName": "Dallas",
+                  "displayName": "DeeJay Dallas",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4240631/deejay-dallas",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4240631.png",
+                    "alt": "DeeJay Dallas"
+                  },
+                  "jersey": "31"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "1.0",
+                  "0",
+                  "1",
+                  "1"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3042519",
+                  "uid": "s:20~l:28~a:3042519",
+                  "guid": "6d751aaa-2372-3153-af93-29071487165f",
+                  "firstName": "Aaron",
+                  "lastName": "Jones Sr.",
+                  "displayName": "Aaron Jones Sr.",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3042519/aaron-jones-sr",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3042519.png",
+                    "alt": "Aaron Jones Sr."
+                  },
+                  "jersey": "33"
+                },
+                "stats": [
+                  "0",
+                  "0",
+                  "0.0",
+                  "0",
+                  "0",
+                  "1"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3886598",
+                  "uid": "s:20~l:28~a:3886598",
+                  "guid": "3abf6eac-14c3-1c87-1bbf-346234d9af21",
+                  "firstName": "Jauan",
+                  "lastName": "Jennings",
+                  "displayName": "Jauan Jennings",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3886598/jauan-jennings",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3886598.png",
+                    "alt": "Jauan Jennings"
+                  },
+                  "jersey": "14"
+                },
+                "stats": [
+                  "0",
+                  "0",
+                  "0.0",
+                  "0",
+                  "0",
+                  "1"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4429205",
+                  "uid": "s:20~l:28~a:4429205",
+                  "guid": "7e13f346-0248-31d6-a4e7-8467003d0f8b",
+                  "firstName": "Jordan",
+                  "lastName": "Addison",
+                  "displayName": "Jordan Addison",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4429205/jordan-addison",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4429205.png",
+                    "alt": "Jordan Addison"
+                  },
+                  "jersey": "3"
+                },
+                "stats": [
+                  "0",
+                  "0",
+                  "0.0",
+                  "0",
+                  "0",
+                  "2"
+                ]
+              }
+            ],
+            "totals": [
+              "15",
+              "151",
+              "10.1",
+              "3",
+              "39",
+              "23"
+            ]
+          },
+          {
+            "name": "fumbles",
+            "keys": [
+              "fumbles",
+              "fumblesLost",
+              "fumblesRecovered"
+            ],
+            "text": "Minnesota Fumbles",
+            "labels": [
+              "FUM",
+              "LOST",
+              "REC"
+            ],
+            "descriptions": [
+              "Fumbles",
+              "Fumbles Lost",
+              "Fumbles Recovered"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "3133487",
+                  "uid": "s:20~l:28~a:3133487",
+                  "guid": "0178fa5f-003f-ee54-f7f6-a39070ccaf65",
+                  "firstName": "Andrew",
+                  "lastName": "Van Ginkel",
+                  "displayName": "Andrew Van Ginkel",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3133487/andrew-van-ginkel",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3133487.png",
+                    "alt": "Andrew Van Ginkel"
+                  },
+                  "jersey": "43"
+                },
+                "stats": [
+                  "0",
+                  "0",
+                  "1"
+                ]
+              }
+            ],
+            "totals": [
+              "0",
+              "0",
+              "1"
+            ]
+          },
+          {
+            "name": "defensive",
+            "keys": [
+              "totalTackles",
+              "soloTackles",
+              "sacks",
+              "tacklesForLoss",
+              "passesDefended",
+              "QBHits",
+              "defensiveTouchdowns"
+            ],
+            "text": "Minnesota Defense",
+            "labels": [
+              "TOT",
+              "SOLO",
+              "SACKS",
+              "TFL",
+              "PD",
+              "QB HTS",
+              "TD"
+            ],
+            "descriptions": [
+              "Tackles",
+              "Solo Tackles",
+              "Sacks",
+              "Tackles For Loss",
+              "Passes Defended",
+              "Quarterback Hits",
+              "Touchdowns"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4038999",
+                  "uid": "s:20~l:28~a:4038999",
+                  "guid": "9093fe3c-ade0-5b13-eb93-0b4edbabd049",
+                  "firstName": "Byron",
+                  "lastName": "Murphy Jr.",
+                  "displayName": "Byron Murphy Jr.",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4038999/byron-murphy-jr",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4038999.png",
+                    "alt": "Byron Murphy Jr."
+                  },
+                  "jersey": "7"
+                },
+                "stats": [
+                  "8",
+                  "7",
+                  "0",
+                  "0",
+                  "1",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3728281",
+                  "uid": "s:20~l:28~a:3728281",
+                  "guid": "74a9d1aa-3d92-c6e8-0d49-d5ad07fa1deb",
+                  "firstName": "Blake",
+                  "lastName": "Cashman",
+                  "displayName": "Blake Cashman",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3728281/blake-cashman",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3728281.png",
+                    "alt": "Blake Cashman"
+                  },
+                  "jersey": "51"
+                },
+                "stats": [
+                  "7",
+                  "5",
+                  "0.5",
+                  "2",
+                  "0",
+                  "2",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4259252",
+                  "uid": "s:20~l:28~a:4259252",
+                  "guid": "107c6a5c-bebc-c51f-0fec-99c5c93683cd",
+                  "firstName": "James",
+                  "lastName": "Pierre",
+                  "displayName": "James Pierre",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4259252/james-pierre",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4259252.png",
+                    "alt": "James Pierre"
+                  },
+                  "jersey": "23"
+                },
+                "stats": [
+                  "4",
+                  "4",
+                  "0",
+                  "0",
+                  "2",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4046537",
+                  "uid": "s:20~l:28~a:4046537",
+                  "guid": "32768bda-3889-4fef-c60e-9c45e254d2fa",
+                  "firstName": "Joshua",
+                  "lastName": "Metellus",
+                  "displayName": "Joshua Metellus",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4046537/joshua-metellus",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4046537.png",
+                    "alt": "Joshua Metellus"
+                  },
+                  "jersey": "44"
+                },
+                "stats": [
+                  "4",
+                  "3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4360277",
+                  "uid": "s:20~l:28~a:4360277",
+                  "guid": "f610e93f-da77-33a6-bd99-cbcec7b73026",
+                  "firstName": "Jalen",
+                  "lastName": "Redmond",
+                  "displayName": "Jalen Redmond",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4360277/jalen-redmond",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4360277.png",
+                    "alt": "Jalen Redmond"
+                  },
+                  "jersey": "61"
+                },
+                "stats": [
+                  "4",
+                  "3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4044540",
+                  "uid": "s:20~l:28~a:4044540",
+                  "guid": "13c9e2f8-0c27-42ff-6280-51ec6b96e41c",
+                  "firstName": "Isaiah",
+                  "lastName": "Rodgers",
+                  "displayName": "Isaiah Rodgers",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4044540/isaiah-rodgers",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4044540.png",
+                    "alt": "Isaiah Rodgers"
+                  },
+                  "jersey": "2"
+                },
+                "stats": [
+                  "3",
+                  "3",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4430280",
+                  "uid": "s:20~l:28~a:4430280",
+                  "guid": "986cb205-5787-c5a0-3aa2-7cea0f3a19e0",
+                  "firstName": "Ivan",
+                  "lastName": "Pace Jr.",
+                  "displayName": "Ivan Pace Jr.",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4430280/ivan-pace-jr",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4430280.png",
+                    "alt": "Ivan Pace Jr."
+                  },
+                  "jersey": "0"
+                },
+                "stats": [
+                  "3",
+                  "3",
+                  "0",
+                  "1",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3133487",
+                  "uid": "s:20~l:28~a:3133487",
+                  "guid": "0178fa5f-003f-ee54-f7f6-a39070ccaf65",
+                  "firstName": "Andrew",
+                  "lastName": "Van Ginkel",
+                  "displayName": "Andrew Van Ginkel",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3133487/andrew-van-ginkel",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3133487.png",
+                    "alt": "Andrew Van Ginkel"
+                  },
+                  "jersey": "43"
+                },
+                "stats": [
+                  "3",
+                  "2",
+                  "1.5",
+                  "1",
+                  "0",
+                  "2",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "5093973",
+                  "uid": "s:20~l:28~a:5093973",
+                  "guid": "0c9aeaa9-6ea3-3cf8-b9a8-5119403cf9d8",
+                  "firstName": "Levi Drake",
+                  "lastName": "Rodriguez",
+                  "displayName": "Levi Drake Rodriguez",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/5093973/levi-drake-rodriguez",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/5093973.png",
+                    "alt": "Levi Drake Rodriguez"
+                  },
+                  "jersey": "50"
+                },
+                "stats": [
+                  "3",
+                  "2",
+                  "1",
+                  "1",
+                  "0",
+                  "2",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "3056916",
+                  "uid": "s:20~l:28~a:3056916",
+                  "guid": "33120ee2-e36f-649b-cbd3-2bf0e78fa9b8",
+                  "firstName": "Eric",
+                  "lastName": "Wilson",
+                  "displayName": "Eric Wilson",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/3056916/eric-wilson",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/3056916.png",
+                    "alt": "Eric Wilson"
+                  },
+                  "jersey": "55"
+                },
+                "stats": [
+                  "3",
+                  "2",
+                  "0",
+                  "0",
+                  "0",
+                  "1",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "5082397",
+                  "uid": "s:20~l:28~a:5082397",
+                  "guid": "f49d3a73-1a4e-37d3-8a12-bfd3bbb0c8cd",
+                  "firstName": "Jacob",
+                  "lastName": "Thomas",
+                  "displayName": "Jacob Thomas",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/5082397/jacob-thomas",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/5082397.png",
+                    "alt": "Jacob Thomas"
+                  },
+                  "jersey": "29"
+                },
+                "stats": [
+                  "3",
+                  "2",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4565190",
+                  "uid": "s:20~l:28~a:4565190",
+                  "guid": "ee4eb8c5-cf14-3935-8714-40fdac7f15b5",
+                  "firstName": "Dallas",
+                  "lastName": "Turner",
+                  "displayName": "Dallas Turner",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4565190/dallas-turner",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4565190.png",
+                    "alt": "Dallas Turner"
+                  },
+                  "jersey": "15"
+                },
+                "stats": [
+                  "2",
+                  "2",
+                  "1",
+                  "0",
+                  "0",
+                  "7",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4242436",
+                  "uid": "s:20~l:28~a:4242436",
+                  "guid": "4f79ad45-7854-8205-d47e-94ce8fc5f695",
+                  "firstName": "Theo",
+                  "lastName": "Jackson",
+                  "displayName": "Theo Jackson",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4242436/theo-jackson",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4242436.png",
+                    "alt": "Theo Jackson"
+                  },
+                  "jersey": "26"
+                },
+                "stats": [
+                  "2",
+                  "2",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4698728",
+                  "uid": "s:20~l:28~a:4698728",
+                  "guid": "ed2455ee-d638-362b-ad62-6a9223f1167a",
+                  "firstName": "Domonique",
+                  "lastName": "Orange",
+                  "displayName": "Domonique Orange",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4698728/domonique-orange",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4698728.png",
+                    "alt": "Domonique Orange"
+                  },
+                  "jersey": "97"
+                },
+                "stats": [
+                  "2",
+                  "2",
+                  "0",
+                  "1",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4629149",
+                  "uid": "s:20~l:28~a:4629149",
+                  "guid": "c226854e-9907-3812-9f92-c003c0e2a6d0",
+                  "firstName": "Tyrion",
+                  "lastName": "Ingram-Dawkins",
+                  "displayName": "Tyrion Ingram-Dawkins",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4629149/tyrion-ingram-dawkins",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4629149.png",
+                    "alt": "Tyrion Ingram-Dawkins"
+                  },
+                  "jersey": "90"
+                },
+                "stats": [
+                  "2",
+                  "1",
+                  "0",
+                  "1",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "14945",
+                  "uid": "s:20~l:28~a:14945",
+                  "guid": "db16d7bd-d012-85a3-9ab5-b49cb65b1445",
+                  "firstName": "Harrison",
+                  "lastName": "Smith",
+                  "displayName": "Harrison Smith",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/14945/harrison-smith",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/14945.png",
+                    "alt": "Harrison Smith"
+                  },
+                  "jersey": "22"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "1",
+                  "1",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "16772",
+                  "uid": "s:20~l:28~a:16772",
+                  "guid": "8a28bb7f-d7c4-94d0-a6e2-258deeac6377",
+                  "firstName": "Kyle",
+                  "lastName": "Van Noy",
+                  "displayName": "Kyle Van Noy",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/16772/kyle-van-noy",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/16772.png",
+                    "alt": "Kyle Van Noy"
+                  },
+                  "jersey": "17"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4036133",
+                  "uid": "s:20~l:28~a:4036133",
+                  "guid": "632b52a0-c5f6-fadd-3e6f-a358218982f9",
+                  "firstName": "T.J.",
+                  "lastName": "Hockenson",
+                  "displayName": "T.J. Hockenson",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4036133/tj-hockenson",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4036133.png",
+                    "alt": "T.J. Hockenson"
+                  },
+                  "jersey": "87"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4240631",
+                  "uid": "s:20~l:28~a:4240631",
+                  "guid": "38696dea-2280-fbdb-fe54-002219b268c3",
+                  "firstName": "DeeJay",
+                  "lastName": "Dallas",
+                  "displayName": "DeeJay Dallas",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4240631/deejay-dallas",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4240631.png",
+                    "alt": "DeeJay Dallas"
+                  },
+                  "jersey": "31"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "4877652",
+                  "uid": "s:20~l:28~a:4877652",
+                  "guid": "82c52bc0-099e-3203-8ee4-6bb942c7ffee",
+                  "firstName": "Jake",
+                  "lastName": "Golday",
+                  "displayName": "Jake Golday",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4877652/jake-golday",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4877652.png",
+                    "alt": "Jake Golday"
+                  },
+                  "jersey": "41"
+                },
+                "stats": [
+                  "1",
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              },
+              {
+                "athlete": {
+                  "id": "15726",
+                  "uid": "s:20~l:28~a:15726",
+                  "guid": "93cf2a7b-8b01-081e-7ae0-de67a3d2d9b3",
+                  "firstName": "Andrew",
+                  "lastName": "DePaola",
+                  "displayName": "Andrew DePaola",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/15726/andrew-depaola",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/15726.png",
+                    "alt": "Andrew DePaola"
+                  },
+                  "jersey": "42"
+                },
+                "stats": [
+                  "1",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0",
+                  "0"
+                ]
+              }
+            ],
+            "totals": [
+              "59",
+              "48",
+              "4",
+              "7",
+              "4",
+              "15",
+              "0"
+            ]
+          },
+          {
+            "name": "interceptions",
+            "keys": [
+              "interceptions",
+              "interceptionYards",
+              "interceptionTouchdowns"
+            ],
+            "text": "Minnesota Interceptions",
+            "labels": [
+              "INT",
+              "YDS",
+              "TD"
+            ],
+            "descriptions": [
+              "Interceptions",
+              "Yards",
+              "Touchdowns"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4259252",
+                  "uid": "s:20~l:28~a:4259252",
+                  "guid": "107c6a5c-bebc-c51f-0fec-99c5c93683cd",
+                  "firstName": "James",
+                  "lastName": "Pierre",
+                  "displayName": "James Pierre",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4259252/james-pierre",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4259252.png",
+                    "alt": "James Pierre"
+                  },
+                  "jersey": "23"
+                },
+                "stats": [
+                  "1",
+                  "28",
+                  "0"
+                ]
+              }
+            ],
+            "totals": [
+              "1",
+              "28",
+              "0"
+            ]
+          },
+          {
+            "name": "kickReturns",
+            "keys": [
+              "kickReturns",
+              "kickReturnYards",
+              "yardsPerKickReturn",
+              "longKickReturn",
+              "kickReturnTouchdowns"
+            ],
+            "text": "Minnesota Kick Returns",
+            "labels": [
+              "NO",
+              "YDS",
+              "AVG",
+              "LONG",
+              "TD"
+            ],
+            "descriptions": [
+              "Kick Returns",
+              "Yards",
+              "Yards Per Kick Return",
+              "Longest Kick Return",
+              "Touchdowns"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4430656",
+                  "uid": "s:20~l:28~a:4430656",
+                  "guid": "8e7f35c4-6d07-3338-bddb-0e2c4b523c88",
+                  "firstName": "Myles",
+                  "lastName": "Price",
+                  "displayName": "Myles Price",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4430656/myles-price",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4430656.png",
+                    "alt": "Myles Price"
+                  },
+                  "jersey": "4"
+                },
+                "stats": [
+                  "5",
+                  "179",
+                  "35.8",
+                  "68",
+                  "0"
+                ]
+              }
+            ],
+            "totals": [
+              "5",
+              "179",
+              "35.8",
+              "68",
+              "0"
+            ]
+          },
+          {
+            "name": "puntReturns",
+            "keys": [
+              "puntReturns",
+              "puntReturnYards",
+              "yardsPerPuntReturn",
+              "longPuntReturn",
+              "puntReturnTouchdowns"
+            ],
+            "text": "Minnesota Punt Returns",
+            "labels": [
+              "NO",
+              "YDS",
+              "AVG",
+              "LONG",
+              "TD"
+            ],
+            "descriptions": [
+              "Punt Returns",
+              "Yards",
+              "Yards Per Punt Return",
+              "Longest Punt Return",
+              "Touchdowns"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4430656",
+                  "uid": "s:20~l:28~a:4430656",
+                  "guid": "8e7f35c4-6d07-3338-bddb-0e2c4b523c88",
+                  "firstName": "Myles",
+                  "lastName": "Price",
+                  "displayName": "Myles Price",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4430656/myles-price",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4430656.png",
+                    "alt": "Myles Price"
+                  },
+                  "jersey": "4"
+                },
+                "stats": [
+                  "1",
+                  "13",
+                  "13.0",
+                  "13",
+                  "0"
+                ]
+              }
+            ],
+            "totals": [
+              "1",
+              "13",
+              "13.0",
+              "13",
+              "0"
+            ]
+          },
+          {
+            "name": "kicking",
+            "keys": [
+              "fieldGoalsMade/fieldGoalAttempts",
+              "fieldGoalPct",
+              "longFieldGoalMade",
+              "extraPointsMade/extraPointAttempts",
+              "totalKickingPoints"
+            ],
+            "text": "Minnesota Kicking",
+            "labels": [
+              "FG",
+              "PCT",
+              "LONG",
+              "XP",
+              "PTS"
+            ],
+            "descriptions": [
+              "Field Goals Made/Attempts",
+              "Field Goal Percentage",
+              "Longest Field Goal Made",
+              "Extra Points Made/Attempts",
+              "Kicking Points"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4567104",
+                  "uid": "s:20~l:28~a:4567104",
+                  "guid": "229138f2-77bf-0282-5028-c54609dd6e49",
+                  "firstName": "Will",
+                  "lastName": "Reichard",
+                  "displayName": "Will Reichard",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4567104/will-reichard",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/nfl/players/full/4567104.png",
+                    "alt": "Will Reichard"
+                  },
+                  "jersey": "16"
+                },
+                "stats": [
+                  "1/1",
+                  "100.0",
+                  "38",
+                  "4/4",
+                  "7"
+                ]
+              }
+            ],
+            "totals": [
+              "1/1",
+              "100.0",
+              "38",
+              "4/4",
+              "7"
+            ]
+          },
+          {
+            "name": "punting",
+            "keys": [
+              "punts",
+              "puntYards",
+              "grossAvgPuntYards",
+              "touchbacks",
+              "puntsInside20",
+              "longPunt"
+            ],
+            "text": "Minnesota Punting",
+            "labels": [
+              "NO",
+              "YDS",
+              "AVG",
+              "TB",
+              "In 20",
+              "LONG"
+            ],
+            "descriptions": [
+              "Punts",
+              "Yards",
+              "Average Punt Yards",
+              "Touchbacks",
+              "Punts Inside 20",
+              "Longest Punt"
+            ],
+            "athletes": [
+              {
+                "athlete": {
+                  "id": "4799994",
+                  "uid": "s:20~l:28~a:4799994",
+                  "guid": "95d1bddc-f621-3d4f-85be-bbcd6feb9422",
+                  "firstName": "Brett",
+                  "lastName": "Thorson",
+                  "displayName": "Brett Thorson",
+                  "links": [
+                    {
+                      "rel": [
+                        "playercard",
+                        "desktop",
+                        "athlete"
+                      ],
+                      "href": "https://www.espn.com/nfl/player/_/id/4799994/brett-thorson",
+                      "text": "Player Card"
+                    }
+                  ],
+                  "jersey": "19"
+                },
+                "stats": [
+                  "4",
+                  "161",
+                  "40.3",
+                  "0",
+                  "3",
+                  "48"
+                ]
+              }
+            ],
+            "totals": [
+              "4",
+              "161",
+              "40.3",
+              "0",
+              "3",
+              "48"
+            ]
+          }
+        ],
+        "displayOrder": 2
+      }
+    ]
+  }
+}

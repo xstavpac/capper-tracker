@@ -1037,6 +1037,16 @@ export type NflPlayerTdStats = {
   playerName: string;
   rushTds: number;
   recTds: number;
+  // Passing-category fields, parsed the same way as rushTds/recTds but NOT
+  // yet read by any grading path (PLAYER_PROP still means TD-prop only -
+  // see resolveTouchdownProp in grading.ts). Added to prove the data is
+  // extractable ahead of the passing-prop schema work; 0 for a player with
+  // no passing line at all, same "present with zeros" convention as
+  // rushTds/recTds.
+  passTds: number;
+  passYards: number;
+  passAttempts: number;
+  passCompletions: number;
 };
 
 // Every player who appears anywhere in a finished NFL game's box score, with
@@ -1052,6 +1062,19 @@ export type NflPlayerTdStats = {
 // final game's response shape: each category has its own `labels` array and
 // a `TD` column isn't always at the same index across categories, so the
 // index is looked up per-category rather than hardcoded.
+//
+// The passing category (confirmed against real Week 1 2026 box scores) uses
+// labels ["C/ATT","YDS","AVG","TD","INT","SACKS","QBR","RTG"] - completions
+// and attempts are NOT separate columns, they're one combined "20/29"
+// string under "C/ATT" that has to be split on "/". Every other stat here
+// (YDS, TD) is a plain per-column number same as rushing/receiving.
+// Multi-QB games are common, not an edge case: a backup mopping up, a
+// gadget-play pass from a non-QB, or a punter (seen for real in a Week 1
+// game) can all produce a second passing-category athlete with 0-1
+// attempts. Each such athlete still gets its own map entry keyed by name,
+// same as any other stat category here - nothing about a backup or
+// trick-play passer breaks this parsing, it just means a team can map to
+// more than one passer for a given game.
 export async function getNflPlayerTdStats(eventId: string): Promise<NflPlayerTdStats[] | null> {
   const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=" + eventId, {
     next: { revalidate: 3600 },
@@ -1066,16 +1089,30 @@ export async function getNflPlayerTdStats(eventId: string): Promise<NflPlayerTdS
 
   for (const team of teams) {
     for (const category of team.statistics ?? []) {
-      const tdIndex = (category.labels ?? []).indexOf("TD");
+      const labels: string[] = category.labels ?? [];
+      const tdIndex = labels.indexOf("TD");
+      const passYardsIndex = category.name === "passing" ? labels.indexOf("YDS") : -1;
+      const passCAttIndex = category.name === "passing" ? labels.indexOf("C/ATT") : -1;
       for (const athlete of category.athletes ?? []) {
         const name = athlete.athlete?.displayName;
         if (!name) continue;
 
-        const entry = byPlayer.get(name) ?? { playerName: name, rushTds: 0, recTds: 0 };
+        const entry =
+          byPlayer.get(name) ??
+          { playerName: name, rushTds: 0, recTds: 0, passTds: 0, passYards: 0, passAttempts: 0, passCompletions: 0 };
         if (tdIndex !== -1) {
           const tdCount = parseInt(athlete.stats?.[tdIndex] ?? "0", 10) || 0;
           if (category.name === "rushing") entry.rushTds = tdCount;
           else if (category.name === "receiving") entry.recTds = tdCount;
+          else if (category.name === "passing") entry.passTds = tdCount;
+        }
+        if (category.name === "passing") {
+          if (passYardsIndex !== -1) entry.passYards = parseInt(athlete.stats?.[passYardsIndex] ?? "0", 10) || 0;
+          if (passCAttIndex !== -1) {
+            const [completions, attempts] = String(athlete.stats?.[passCAttIndex] ?? "0/0").split("/");
+            entry.passCompletions = parseInt(completions, 10) || 0;
+            entry.passAttempts = parseInt(attempts, 10) || 0;
+          }
         }
         byPlayer.set(name, entry);
       }
