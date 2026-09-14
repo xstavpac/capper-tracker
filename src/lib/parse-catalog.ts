@@ -551,14 +551,18 @@ const NCAAF_SCHOOLS: [string, string][] = [
   // followups.md #3 is about all-FCS games, which are in NEITHER feed - an
   // FCS-vs-FBS game IS on ESPN's college-football scoreboard (it's the FBS
   // team's game), so the FCS side just needs to be a resolvable name.
-  // Currently only the one confirmed in a real rejected import; the ~30
-  // other FCS money-game opponents on a given Saturday have the same gap
-  // and can be added the same way. NOTE: the canonical (2nd element) must
-  // exactly match ESPN's team.displayName for the live endsWith match to
-  // work - "Tennessee State Tigers" is the expected form but was not
-  // verifiable from the dev environment (ESPN API is IP-blocked here);
-  // worth a real-import spot check.
+  // The ~30 other FCS money-game opponents on a given Saturday have the same
+  // gap and can be added the same way. NOTE: the canonical (2nd element)
+  // must exactly match ESPN's team.displayName for the live endsWith match
+  // to work - "Tennessee State Tigers" is the expected form but was not
+  // verifiable from the dev environment when added (ESPN API was IP-blocked
+  // here at the time); worth a real-import spot check. "Alabama State
+  // Hornets" and "Montana State Bobcats" (below) were confirmed live against
+  // ESPN's own FCS team list (groups=81) - both are on the current roster
+  // verbatim.
   ["tennessee state", "tennessee state tigers"],
+  ["alabama state", "alabama state hornets"],
+  ["montana state", "montana state bobcats"],
 ];
 
 const NCAAF_TEAMS = NCAAF_SCHOOLS.map(([key]) => key);

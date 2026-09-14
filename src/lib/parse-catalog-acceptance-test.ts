@@ -410,7 +410,9 @@ function main() {
     // parse-catalog.ts. Assert the total rather than a school count so a
     // stray dupe or a dropped entry is caught. 167 -> 174: bama, uga, mizzou,
     // tamu, wvu, cuse, pitt added in the pro-team short-alias round (PART O).
-    check("NCAAF list: 174 keys (138 FBS schools + capper-shorthand aliases)", keys.length, 174);
+    // 174 -> 176: alabama state, montana state added as FCS money-game
+    // opponents (PART Q - the Alabama State / Troy schedule-match bug).
+    check("NCAAF list: 176 keys (138 FBS schools + capper-shorthand aliases + FCS money-game opponents)", keys.length, 176);
     check("NCAAF list: no duplicate keys", new Set(keys).size, keys.length);
 
     // (a) Every key resolves to NCAAF from realistic capper text (the key +
@@ -1482,6 +1484,72 @@ NC State +4.5`;
     // never tennis (defense in depth - normally resolved far upstream).
     const cardinals = parseCatalog(`Cap\nCardinals ML`, []).picks[0];
     check("guard: bare 'Cardinals' is the ambiguous prompt, never phantom ATP", { sport: cardinals?.sportName, key: cardinals?.ambiguousKey }, { sport: "", key: "cardinals" });
+  }
+
+  // ==========================================================================
+  // PART Q - Alabama State / Montana State FCS gap (2026-09 3-bug report)
+  // ==========================================================================
+  // Two reported bugs, same root cause: neither school was in NCAAF_SCHOOLS,
+  // even though both are FCS "money game" opponents that DO appear on ESPN's
+  // FBS scoreboard (same shape as Tennessee State, PART L/comment above).
+  // Confirmed live against ESPN's FCS team list (groups=81) before fixing:
+  // both display as "Alabama State Hornets" / "Montana State Bobcats"
+  // verbatim, so the plain school-name key is safe to add the same way.
+  //
+  // Bug 2 ("Ben Burns - Alabama State moneyline" -> "Couldn't match 1 pick to
+  // today's schedule" despite Alabama State @ Troy being live): NOT a
+  // truncation bug, NOT an ambiguity/disambiguation issue, NOT an FBS/FCS
+  // data-source gap - purely a missing list entry. Troy (the FBS side) was
+  // already resolvable; only "alabama state" was absent.
+  //
+  // Bug 3 ("Ben burns" (lowercase) resolved to "Unknown", and the pick landed
+  // under "Totals & other markets" instead of grouped by team): investigation
+  // disproved the task's own case-sensitivity theory (byte-identical output
+  // parsing "Ben Burns" vs "Ben burns" against the same unresolved line) -
+  // capper-name matching is already case-insensitive everywhere it's
+  // compared (normalizeName / .toLowerCase()). The REAL cause: "Montana
+  // State" wasn't in NCAAF_SCHOOLS, so the pick fell into `unresolved` with
+  // no chance to carry its header's capper name forward, and separately
+  // NCAAF_TEAMS/GROUPING_TEAM_NICKNAMES (both derived FROM NCAAF_SCHOOLS)
+  // had no entry either, so team-grouping fell back to "OTHER". One fix -
+  // adding the missing school - closes both symptoms, since GROUPING_TEAM_
+  // NICKNAMES/NCAAF_CANONICAL_SUFFIX/TEAM_NICKNAME_CANONICAL all cascade from
+  // NCAAF_SCHOOLS (see parse-catalog.ts).
+  console.log("\n########## PART Q: Alabama State / Montana State FCS gap ##########");
+  {
+    // --- Bug 2's exact reported text ---
+    const benBurnsAlState = parseCatalog(`Ben Burns\nAlabama State moneyline`, []).picks[0];
+    check("'Ben Burns - Alabama State moneyline' resolves (was 'Couldn't match to schedule')", {
+      sport: benBurnsAlState?.sportName,
+      teams: benBurnsAlState?.teamNicknames,
+      bet: benBurnsAlState?.betType,
+      capper: benBurnsAlState?.capperName,
+      canonical: (benBurnsAlState?.teamNicknames ?? []).map((n) => NCAAF_CANONICAL_SUFFIX[n] ?? n),
+    }, { sport: "NCAAF", teams: ["alabama state"], bet: "MONEYLINE", capper: "Ben Burns", canonical: ["alabama state hornets"] });
+
+    // --- Bug 3's exact reported shape: lowercase header + a Montana State pick ---
+    const benBurnsLowerMtState = parseCatalog(`Ben burns\nMontana State ML`, []).picks[0];
+    check("'Ben burns' (lowercase) + 'Montana State ML' now resolves - capper is 'Ben burns', NOT 'Unknown'", {
+      sport: benBurnsLowerMtState?.sportName,
+      teams: benBurnsLowerMtState?.teamNicknames,
+      bet: benBurnsLowerMtState?.betType,
+      capper: benBurnsLowerMtState?.capperName,
+      canonical: (benBurnsLowerMtState?.teamNicknames ?? []).map((n) => NCAAF_CANONICAL_SUFFIX[n] ?? n),
+    }, { sport: "NCAAF", teams: ["montana state"], bet: "MONEYLINE", capper: "Ben burns", canonical: ["montana state bobcats"] });
+
+    // Case never mattered (the disproven theory) - the properly-capitalized
+    // header resolves identically once the team itself is resolvable.
+    const benBurnsUpperMtState = parseCatalog(`Ben Burns\nMontana State ML`, []).picks[0];
+    check("properly-capitalized 'Ben Burns' + Montana State resolves the same way (case was never the cause)", {
+      capper: benBurnsUpperMtState?.capperName,
+      teams: benBurnsUpperMtState?.teamNicknames,
+    }, { capper: "Ben Burns", teams: ["montana state"] });
+
+    // Both new schools also work as a bet-line target, not just moneyline.
+    const alStateSpread = parseCatalog(`Cap\nAlabama State +6.5`, []).picks[0];
+    check("'Alabama State +6.5' resolves NCAAF spread", { sport: alStateSpread?.sportName, teams: alStateSpread?.teamNicknames, bet: alStateSpread?.betType }, { sport: "NCAAF", teams: ["alabama state"], bet: "SPREAD" });
+    const mtStateTotal = parseCatalog(`Cap\nMontana State over 51.5`, []).picks[0];
+    check("'Montana State over 51.5' resolves NCAAF total", { sport: mtStateTotal?.sportName, teams: mtStateTotal?.teamNicknames, side: mtStateTotal?.totalSide }, { sport: "NCAAF", teams: ["montana state"], side: "over" });
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

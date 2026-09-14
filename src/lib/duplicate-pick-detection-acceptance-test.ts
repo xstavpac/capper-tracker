@@ -10,6 +10,7 @@
 // end-of-import summary's skip predicate, and the button copy.
 import {
   computeDuplicateFlags,
+  dedupCategory,
   isSkippedAsDuplicate,
   importButtonLabel,
   type ResolvedDupCandidate,
@@ -254,6 +255,70 @@ console.log("\n########## DB duplicate: re-pasting an already-imported catalog #
   );
   check("#0 uses the DB message", flags[0]?.message.includes("already has a Clemson +7 pick logged"), true);
   check("#1 still flagged (paste dup of #0)", flags[1]?.message.includes("earlier in this paste"), true);
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## dedupCategory: TEAM_TOTAL false-positive (2026-09 3-bug report, Bug 1) ##########");
+// Reported bug: importing "Auburn team total over 44.5" flagged a duplicate
+// against an existing pick, but no such pick was visible under that game's
+// expander, and "Import anyway" appeared to produce nothing. Root cause:
+// pickCategory (server/data/stats.ts) deliberately collapses EVERY TEAM_TOTAL
+// pick into the single bucket "TEAM_TOTAL" (by design, for one stats tile per
+// sport) - checkDuplicatePicksAction reused that same bucket as its
+// same-bet key, so any two team-total picks on one game matched each other
+// regardless of team/side/over-under. dedupCategory widens the key for
+// TEAM_TOTAL only; every other bet type is a pass-through.
+{
+  check("non-TEAM_TOTAL category passes through unchanged", dedupCategory("FAV_ML", "MONEYLINE", "Auburn ML", "HOME"), "FAV_ML");
+  check(
+    "TEAM_TOTAL: home-side over vs away-side under -> DIFFERENT keys (the false-positive this fixes)",
+    dedupCategory("TEAM_TOTAL", "TEAM_TOTAL", "Auburn Over 44.5", "HOME") ===
+      dedupCategory("TEAM_TOTAL", "TEAM_TOTAL", "Georgia Under 21.5", "AWAY"),
+    false
+  );
+  check(
+    "TEAM_TOTAL: same team/side, same over-under, different line -> SAME key (still a genuine duplicate)",
+    dedupCategory("TEAM_TOTAL", "TEAM_TOTAL", "Auburn Over 44.5", "HOME") ===
+      dedupCategory("TEAM_TOTAL", "TEAM_TOTAL", "Auburn Over 45.5", "HOME"),
+    true
+  );
+  check(
+    "TEAM_TOTAL: same side, opposite over/under -> DIFFERENT keys",
+    dedupCategory("TEAM_TOTAL", "TEAM_TOTAL", "Auburn Over 44.5", "HOME") ===
+      dedupCategory("TEAM_TOTAL", "TEAM_TOTAL", "Auburn Under 44.5", "HOME"),
+    false
+  );
+}
+
+// End-to-end through computeDuplicateFlags: two team-total picks on the same
+// game, opposite teams, pasted together - must NOT flag each other now that
+// `category` carries the dedup-widened key (this is what
+// checkDuplicatePicksAction passes in as ResolvedDupCandidate.category).
+{
+  const auburnOver = dedupCategory("TEAM_TOTAL", "TEAM_TOTAL", "Auburn Over 44.5", "HOME");
+  const opponentUnder = dedupCategory("TEAM_TOTAL", "TEAM_TOTAL", "Georgia Under 21.5", "AWAY");
+  const flags = computeDuplicateFlags(
+    [
+      cand({ index: 0, description: "Auburn Over 44.5", category: auburnOver, homeTeam: "Auburn Tigers", awayTeam: "Georgia Bulldogs" }),
+      cand({ index: 1, description: "Georgia Under 21.5", category: opponentUnder, homeTeam: "Auburn Tigers", awayTeam: "Georgia Bulldogs" }),
+    ],
+    DRIFT
+  );
+  check("Auburn Over 44.5 + Georgia Under 21.5 on one game: NEITHER flagged", Object.keys(flags), []);
+}
+
+// A genuine repeat of the SAME team-total bet is still caught.
+{
+  const auburnOver1 = dedupCategory("TEAM_TOTAL", "TEAM_TOTAL", "Auburn Over 44.5", "HOME");
+  const auburnOver2 = dedupCategory("TEAM_TOTAL", "TEAM_TOTAL", "Auburn Over 45.5", "HOME");
+  const flags = computeDuplicateFlags(
+    [
+      cand({ index: 0, description: "Auburn Over 44.5", category: auburnOver1, homeTeam: "Auburn Tigers", awayTeam: "Georgia Bulldogs" }),
+      cand({ index: 1, description: "Auburn Over 45.5", category: auburnOver2, homeTeam: "Auburn Tigers", awayTeam: "Georgia Bulldogs" }),
+    ],
+    DRIFT
+  );
+  check("two Auburn Over team-totals (different lines) on one game: the second IS flagged", Boolean(flags[1]), true);
 }
 
 // ---------------------------------------------------------------------------

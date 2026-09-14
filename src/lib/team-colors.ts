@@ -207,6 +207,16 @@ export const NCAAF_TEAM_COLORS: Record<string, string> = {
   "air force falcons": "#003594",
   "akron zips": "#041E42",
   "alabama crimson tide": "#9E1B32",
+  // No official Alabama State brand guide exists (confirmed absent from both
+  // Wikipedia's Module:College_color/data, which flags this entry "Digital
+  // Color Meter used; no brand guide available", and teamcolorcodes.com,
+  // whose own page is titled "Primary Crest Color Estimates") - both sources
+  // agree only on the SET {black #000000, old gold #C99700}, not on which is
+  // primary. Resolved the same way this table already resolved Vanderbilt
+  // (also an unambiguous black-and-gold identity, kept black over gold) -
+  // black, not gold, following that existing precedent. Judgment call, not a
+  // verified official value - flagged for review.
+  "alabama state hornets": "#000000",
   "app state mountaineers": "#222222",
   "arizona state sun devils": "#8C1D40",
   "arizona wildcats": "#AB0520",
@@ -273,6 +283,10 @@ export const NCAAF_TEAM_COLORS: Record<string, string> = {
   "mississippi state bulldogs": "#5D1725",
   "missouri state bears": "#5E0009",
   "missouri tigers": "#000000",
+  // Unambiguous: both Wikipedia's Module:College_color/data (cites MSU's own
+  // official Brand Guide) and teamcolorcodes.com independently give the exact
+  // same hex for the primary blue.
+  "montana state bobcats": "#00205B",
   "navy midshipmen": "#00225B",
   "nc state wolfpack": "#CC0000",
   "nebraska cornhuskers": "#E41C38",

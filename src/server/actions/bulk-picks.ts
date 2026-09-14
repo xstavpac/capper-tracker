@@ -20,7 +20,7 @@ import { TEAM_NICKNAME_CANONICAL } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
-import { computeDuplicateFlags, type ResolvedDupCandidate, type DuplicateFlag } from "@/lib/duplicate-pick-detection";
+import { computeDuplicateFlags, dedupCategory, type ResolvedDupCandidate, type DuplicateFlag } from "@/lib/duplicate-pick-detection";
 import type { BetType, Period } from "@prisma/client";
 
 export type BulkImportItem = {
@@ -302,6 +302,25 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
   const existingCappers = await prisma.capper.findMany({ where: { userId: user.id } });
   const capperByNormalizedName = new Map(existingCappers.map((c) => [normalizeName(c.name), c]));
 
+  // Same lazy-cache-by-name shape as bulkImportPicksAction's sportCache
+  // below - a handful of distinct sport names per paste, at most. Needed so
+  // the DB duplicate query can scope by sportId (see below); without it, two
+  // picks that happen to share literal homeTeam/awayTeam strings across
+  // different sports (or a stale/mis-resolved row from an earlier import)
+  // can false-positive as a duplicate here even though getPicksForGame -
+  // which DOES filter by sportId - would never attribute that row to this
+  // game at all, making the flagged "duplicate" invisible under the game's
+  // own expander.
+  const sportIdCache = new Map<string, string | null>();
+  async function resolveSportId(sportName: string): Promise<string | null> {
+    const key = sportName.toLowerCase();
+    if (sportIdCache.has(key)) return sportIdCache.get(key) ?? null;
+    const sport = await prisma.sport.findFirst({ where: { name: { equals: sportName, mode: "insensitive" } } });
+    const id = sport?.id ?? null;
+    sportIdCache.set(key, id);
+    return id;
+  }
+
   const resolved = await Promise.all(
     items.map(async (item, index): Promise<ResolvedDupCandidate | null> => {
       const normalized = normalizeName(item.capperName);
@@ -340,25 +359,49 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
       // Can't determine a comparable side for this bet (e.g. a player prop,
       // or a first-half spread) - don't guess at a match either way.
       if (!category) return null;
+      // TEAM_TOTAL-only widening - see dedupCategory's own comment. A no-op
+      // for every other bet type (pickCategory's output already differs by
+      // side there).
+      const dedupKey = dedupCategory(category, item.betType, item.description, pickedSide);
 
       // A brand-new capper (not yet in this user's list) can't already have
       // a pick logged, by definition - skip the DB read for them.
       let dbDuplicateLabel: string | null = null;
       if (capper) {
-        const windowStart = new Date(gameTime.getTime() - MAX_GAME_TIME_DRIFT_MS);
-        const windowEnd = new Date(gameTime.getTime() + MAX_GAME_TIME_DRIFT_MS);
-        const existingPicks = await prisma.pick.findMany({
-          where: { userId: user.id, capperId: capper.id, homeTeam, awayTeam, gameTime: { gte: windowStart, lte: windowEnd } },
-        });
-        // existingPicks are matched to this exact game, so item.sportName is
-        // correct for all of them too. period is compared explicitly (not
-        // just via pickCategory) - see this function's header comment: a Q1 /
-        // 2nd-half / period pick shares the plain OVER/UNDER/ML/SPREAD
-        // category with its full-game counterpart.
-        const dbDup = existingPicks.find(
-          (p) => p.period === period && pickCategory({ ...p, sportName: item.sportName }) === category
-        );
-        if (dbDup) dbDuplicateLabel = dbDup.betDetail || betTypeLabel(dbDup.betType);
+        const sportId = await resolveSportId(item.sportName);
+        // No Sport row yet for this name means no pick could possibly
+        // reference it - skip the query rather than run it with an
+        // impossible id.
+        if (sportId) {
+          const windowStart = new Date(gameTime.getTime() - MAX_GAME_TIME_DRIFT_MS);
+          const windowEnd = new Date(gameTime.getTime() + MAX_GAME_TIME_DRIFT_MS);
+          const existingPicks = await prisma.pick.findMany({
+            where: {
+              userId: user.id,
+              capperId: capper.id,
+              sportId,
+              homeTeam,
+              awayTeam,
+              gameTime: { gte: windowStart, lte: windowEnd },
+            },
+          });
+          // Scoped to sportId above so "same game" here matches what
+          // getPicksForGame (picks.ts) considers the same game - without
+          // that scope, a same-named team in a different sport (or a stale/
+          // mis-resolved row) could flag a duplicate that the game's own
+          // expander would never actually show, since getPicksForGame always
+          // filters by sportId too. period is compared explicitly (not just
+          // via pickCategory) - see this function's header comment: a Q1 /
+          // 2nd-half / period pick shares the plain OVER/UNDER/ML/SPREAD
+          // category with its full-game counterpart.
+          const dbDup = existingPicks.find((p) => {
+            if (p.period !== period) return false;
+            const pCategory = pickCategory({ ...p, sportName: item.sportName });
+            if (!pCategory) return false;
+            return dedupCategory(pCategory, p.betType, p.betDetail, p.pickedSide) === dedupKey;
+          });
+          if (dbDup) dbDuplicateLabel = dbDup.betDetail || betTypeLabel(dbDup.betType);
+        }
       }
 
       return {
@@ -368,7 +411,7 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
         homeTeam,
         awayTeam,
         gameTimeMs: gameTime.getTime(),
-        category,
+        category: dedupKey,
         period,
         description: item.description,
         dbDuplicateLabel,

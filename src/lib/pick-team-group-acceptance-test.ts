@@ -289,6 +289,25 @@ function main() {
     );
   }
 
+  console.log("\n########## PART G: Montana State (2026-09 3-bug report, Bug 3) ##########");
+
+  // Reported bug: a "Ben burns" (lowercase) Montana State moneyline pick
+  // landed under "Totals & other markets" instead of grouped by team. The
+  // task's own hypothesis was that the lowercase capper name caused this;
+  // investigation disproved that (capper-name matching never reaches this
+  // function - classifyPickTeamGroup only reads betType/betDetail, never
+  // capperName) and found the real cause: "Montana State" was missing from
+  // NCAAF_SCHOOLS, so it was also missing from GROUPING_TEAM_NICKNAMES
+  // (derived from it), and findGroupingNickname returned undefined ->
+  // unconditional OTHER. Fixed by adding the school - this proves the
+  // grouping side of that one fix.
+  {
+    const game = { homeTeam: "Montana State Bobcats", awayTeam: "Northern Arizona Lumberjacks" };
+    check("teamGroupAliases('Montana State Bobcats') now resolves (was [])", teamGroupAliases(game.homeTeam, "NCAAF"), ["montana state"]);
+    check("'Montana State ML' NOW groups HOME (was OTHER)", classifyPickTeamGroup({ betType: "MONEYLINE", betDetail: "Montana State ML" }, game, "NCAAF"), "HOME");
+    check("shortTeamName('Montana State Bobcats') is the short header form", shortTeamName(game.homeTeam, "NCAAF"), "Montana State");
+  }
+
   console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
   process.exitCode = failures === 0 ? 0 : 1;
 }
