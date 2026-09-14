@@ -129,6 +129,25 @@ export async function seedOddsSnapshot(
 const BULK_MARKET_KEYS = ["h2h", "spreads", "totals"];
 const ODDS_MARKET_PARAMS = "&regions=us&markets=" + BULK_MARKET_KEYS.join(",") + "&oddsFormat=american";
 
+// persistOddsApiUsage writes to a DB table this file doesn't otherwise touch
+// on this path - a write failure there (a transient DB blip, a migration not
+// yet applied) must never take down the actual odds fetch/cache-write for
+// the sport it's logging usage for. This runs inside the cron's
+// Promise.all(LIVE_SPORTS.map(...)) (see /api/cron/refresh-odds), so an
+// unguarded throw here for one sport would reject that whole Promise.all and
+// 500 the entire cron run, even though every other sport's fetch already
+// succeeded moments earlier. Best-effort: log loudly, swallow, move on.
+async function recordBulkUsage(sportKey: string, eventsRequested: number, credits: OddsApiCredits): Promise<void> {
+  try {
+    await persistOddsApiUsage({ sportKey, marketsRequested: BULK_MARKET_KEYS, eventsRequested, credits });
+  } catch (err) {
+    console.error(
+      "[odds-api-usage] failed to persist usage log - odds fetch continues unaffected",
+      JSON.stringify({ sportKey, error: err instanceof Error ? err.message : String(err) })
+    );
+  }
+}
+
 export type OddsApiCredits = { remaining: number | null; used: number | null; lastCost: number | null };
 
 // Reads the Odds API usage headers off a response (they're present on error
@@ -309,7 +328,7 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsFetchResul
     fetchDate,
   });
   if (credits) {
-    await persistOddsApiUsage({ sportKey, marketsRequested: BULK_MARKET_KEYS, eventsRequested: mergedRaw.length, credits });
+    await recordBulkUsage(sportKey, mergedRaw.length, credits);
   }
   // Primary (regular-season) key failed -> a real outage, not an empty slate.
   // Return [] WITHOUT writing a row, exactly as the single-key failure path
@@ -449,7 +468,7 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
     fetchDate,
   });
   if (credits) {
-    await persistOddsApiUsage({ sportKey, marketsRequested: BULK_MARKET_KEYS, eventsRequested: mergedRaw.length, credits });
+    await recordBulkUsage(sportKey, mergedRaw.length, credits);
   }
   if (primaryFailed) return { added: 0, status: "fetch_failed" };
 
