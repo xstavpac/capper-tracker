@@ -235,14 +235,12 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
   ],
   // A city-only reference to a Boston team - three sports, told apart by the
   // schedule -> season -> pick-context hierarchy in ambiguous-hierarchy.ts,
-  // same as every entry above. The only bare CITY name in this table (the rest
-  // are shared nicknames): added because "Shark - Boston Over 7.5" (a Red Sox
-  // total) was mistagging as a phantom ATP tennis pick - "boston" is in no
-  // nickname list, so it fell all the way through to findPlayerPick. Boston is
-  // the one metro where this resolves cleanly: one team per sport, and not an
-  // NCAAF school name (unlike Miami/Washington/etc, which detectSport already
-  // claims as NCAAF). Every OTHER bare city routes to `unresolved` instead -
-  // see SPORTS_PLACE_NAMES near findPlayerPick.
+  // same as every entry above. Added because "Shark - Boston Over 7.5" (a Red
+  // Sox total) was mistagging as a phantom ATP tennis pick - "boston" is in
+  // no nickname list, so it fell all the way through to findPlayerPick.
+  // Originally the only bare CITY name in this table; generalized below (see
+  // "Bare CITY names" block after `liberty`) to every other pro-sports city
+  // this app tracks, the same way this entry already worked.
   boston: [
     { label: "Boston Red Sox (MLB)", sport: "MLB", nickname: "red sox" },
     { label: "Boston Celtics (NBA)", sport: "NBA", nickname: "celtics" },
@@ -285,7 +283,257 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "New York Liberty (WNBA)", sport: "WNBA", nickname: "new york liberty" },
     { label: "Liberty Flames (NCAAF)", sport: "NCAAF", nickname: "liberty flames" },
   ],
+
+  // ---- Bare CITY names, generalizing the "boston" entry above ----
+  // Before this, a bare city with no nickname ("Chicago -6.5", "New York
+  // ML") always fell all the way through detectSport with no sport, then hit
+  // the SPORTS_PLACE_NAMES guard in findPlayerPick and landed in
+  // `unresolved` ("add manually") no matter how many real, currently-tracked
+  // franchises that city has. Each city below now runs the exact same
+  // schedule -> season -> pick-context hierarchy as every shared-nickname
+  // entry above (ambiguous-hierarchy.ts): every one of its tracked
+  // franchises across MLB/NBA/NFL/NHL/WNBA/CFL becomes a candidate, and the
+  // hierarchy narrows it the same way it already narrows "Cardinals" or
+  // "Bucs" - never a silent "this city always means team X" shortcut, and
+  // never auto-picked just because a city has one obviously-bigger team. A
+  // city with only one tracked franchise (e.g. "green bay") still goes
+  // through this same pipeline with a single-element candidate list, rather
+  // than being special-cased as an unambiguous nickname.
+  //
+  // Deliberately EXCLUDED from this promotion - still SPORTS_PLACE_NAMES-only
+  // negative guards, unchanged - is any city whose bare name is ALSO an
+  // NCAAF_SCHOOLS key: arizona, buffalo, charlotte, cincinnati, colorado,
+  // houston, indiana, memphis, miami, minnesota, pittsburgh, tennessee,
+  // utah, washington. detectSport's pass 1/2 already resolves a bare one of
+  // those straight to its NCAAF school today (a case that "already
+  // succeeds"), and adding the same bare string as an AMBIGUOUS_NICKNAMES
+  // key would make detectSport's own `if (AMBIGUOUS_NICKNAMES[phrase])
+  // continue` guard (see pass 1 above) skip that NCAAF match entirely -
+  // silently breaking a working case to "fix" one that wasn't broken.
+  // "washington" in particular is a known, NOT-newly-introduced gap: bare
+  // "Washington" already resolves to Washington STATE's Huskies today,
+  // ahead of DC's Commanders/Wizards/Capitals/Nationals/Mystics - real
+  // ambiguity this table can't safely take over without regressing the
+  // school case; flagged as a follow-up, not fixed here.
+  //
+  // Every nickname below is the real, full live-schedule team name (same
+  // convention as every entry above) - including the two cases where that
+  // name does NOT simply prefix with the city that triggers it:
+  // "vegas golden knights" (the franchise dropped "Las" from its own name)
+  // and "indiana pacers"/"indiana fever" (both officially "Indiana", not
+  // "Indianapolis", even though "Indianapolis" is the city a capper types).
+  // "st louis"/"st. louis" and "tampa"/"tampa bay" are listed as separate
+  // keys for the same set of candidates, covering both real spellings
+  // cappers use for one metro.
+  anaheim: [{ label: "Anaheim Ducks (NHL)", sport: "NHL", nickname: "anaheim ducks" }],
+  atlanta: [
+    { label: "Atlanta Braves (MLB)", sport: "MLB", nickname: "atlanta braves" },
+    { label: "Atlanta Falcons (NFL)", sport: "NFL", nickname: "atlanta falcons" },
+    { label: "Atlanta Hawks (NBA)", sport: "NBA", nickname: "atlanta hawks" },
+    { label: "Atlanta Dream (WNBA)", sport: "WNBA", nickname: "atlanta dream" },
+  ],
+  baltimore: [
+    { label: "Baltimore Orioles (MLB)", sport: "MLB", nickname: "baltimore orioles" },
+    { label: "Baltimore Ravens (NFL)", sport: "NFL", nickname: "baltimore ravens" },
+  ],
+  brooklyn: [{ label: "Brooklyn Nets (NBA)", sport: "NBA", nickname: "brooklyn nets" }],
+  calgary: [
+    { label: "Calgary Flames (NHL)", sport: "NHL", nickname: "calgary flames" },
+    { label: "Calgary Stampeders (CFL)", sport: "CFL", nickname: "calgary stampeders" },
+  ],
+  carolina: [
+    { label: "Carolina Panthers (NFL)", sport: "NFL", nickname: "carolina panthers" },
+    { label: "Carolina Hurricanes (NHL)", sport: "NHL", nickname: "carolina hurricanes" },
+  ],
+  chicago: [
+    { label: "Chicago Cubs (MLB)", sport: "MLB", nickname: "chicago cubs" },
+    { label: "Chicago White Sox (MLB)", sport: "MLB", nickname: "chicago white sox" },
+    { label: "Chicago Bears (NFL)", sport: "NFL", nickname: "chicago bears" },
+    { label: "Chicago Bulls (NBA)", sport: "NBA", nickname: "chicago bulls" },
+    { label: "Chicago Blackhawks (NHL)", sport: "NHL", nickname: "chicago blackhawks" },
+    { label: "Chicago Sky (WNBA)", sport: "WNBA", nickname: "chicago sky" },
+  ],
+  cleveland: [
+    { label: "Cleveland Guardians (MLB)", sport: "MLB", nickname: "cleveland guardians" },
+    { label: "Cleveland Browns (NFL)", sport: "NFL", nickname: "cleveland browns" },
+    { label: "Cleveland Cavaliers (NBA)", sport: "NBA", nickname: "cleveland cavaliers" },
+  ],
+  columbus: [{ label: "Columbus Blue Jackets (NHL)", sport: "NHL", nickname: "columbus blue jackets" }],
+  dallas: [
+    { label: "Dallas Cowboys (NFL)", sport: "NFL", nickname: "dallas cowboys" },
+    { label: "Dallas Mavericks (NBA)", sport: "NBA", nickname: "dallas mavericks" },
+    { label: "Dallas Stars (NHL)", sport: "NHL", nickname: "dallas stars" },
+    { label: "Dallas Wings (WNBA)", sport: "WNBA", nickname: "dallas wings" },
+  ],
+  denver: [
+    { label: "Denver Broncos (NFL)", sport: "NFL", nickname: "denver broncos" },
+    { label: "Denver Nuggets (NBA)", sport: "NBA", nickname: "denver nuggets" },
+  ],
+  detroit: [
+    { label: "Detroit Lions (NFL)", sport: "NFL", nickname: "detroit lions" },
+    { label: "Detroit Tigers (MLB)", sport: "MLB", nickname: "detroit tigers" },
+    { label: "Detroit Pistons (NBA)", sport: "NBA", nickname: "detroit pistons" },
+    { label: "Detroit Red Wings (NHL)", sport: "NHL", nickname: "detroit red wings" },
+  ],
+  edmonton: [
+    { label: "Edmonton Oilers (NHL)", sport: "NHL", nickname: "edmonton oilers" },
+    { label: "Edmonton Elks (CFL)", sport: "CFL", nickname: "edmonton elks" },
+  ],
+  "golden state": [
+    { label: "Golden State Warriors (NBA)", sport: "NBA", nickname: "golden state warriors" },
+    { label: "Golden State Valkyries (WNBA)", sport: "WNBA", nickname: "golden state valkyries" },
+  ],
+  "green bay": [{ label: "Green Bay Packers (NFL)", sport: "NFL", nickname: "green bay packers" }],
+  hamilton: [{ label: "Hamilton Tiger-Cats (CFL)", sport: "CFL", nickname: "hamilton tiger-cats" }],
+  indianapolis: [
+    { label: "Indianapolis Colts (NFL)", sport: "NFL", nickname: "indianapolis colts" },
+    { label: "Indiana Pacers (NBA)", sport: "NBA", nickname: "indiana pacers" },
+    { label: "Indiana Fever (WNBA)", sport: "WNBA", nickname: "indiana fever" },
+  ],
+  jacksonville: [{ label: "Jacksonville Jaguars (NFL)", sport: "NFL", nickname: "jacksonville jaguars" }],
+  "kansas city": [
+    { label: "Kansas City Chiefs (NFL)", sport: "NFL", nickname: "kansas city chiefs" },
+    { label: "Kansas City Royals (MLB)", sport: "MLB", nickname: "kansas city royals" },
+  ],
+  "las vegas": [
+    { label: "Las Vegas Raiders (NFL)", sport: "NFL", nickname: "las vegas raiders" },
+    { label: "Vegas Golden Knights (NHL)", sport: "NHL", nickname: "vegas golden knights" },
+    { label: "Las Vegas Aces (WNBA)", sport: "WNBA", nickname: "las vegas aces" },
+  ],
+  vegas: [
+    { label: "Las Vegas Raiders (NFL)", sport: "NFL", nickname: "las vegas raiders" },
+    { label: "Vegas Golden Knights (NHL)", sport: "NHL", nickname: "vegas golden knights" },
+    { label: "Las Vegas Aces (WNBA)", sport: "WNBA", nickname: "las vegas aces" },
+  ],
+  "los angeles": [
+    { label: "Los Angeles Rams (NFL)", sport: "NFL", nickname: "los angeles rams" },
+    { label: "Los Angeles Chargers (NFL)", sport: "NFL", nickname: "los angeles chargers" },
+    { label: "Los Angeles Lakers (NBA)", sport: "NBA", nickname: "los angeles lakers" },
+    { label: "Los Angeles Clippers (NBA)", sport: "NBA", nickname: "los angeles clippers" },
+    { label: "Los Angeles Kings (NHL)", sport: "NHL", nickname: "los angeles kings" },
+    { label: "Los Angeles Dodgers (MLB)", sport: "MLB", nickname: "los angeles dodgers" },
+    { label: "Los Angeles Sparks (WNBA)", sport: "WNBA", nickname: "los angeles sparks" },
+  ],
+  milwaukee: [
+    { label: "Milwaukee Bucks (NBA)", sport: "NBA", nickname: "milwaukee bucks" },
+    { label: "Milwaukee Brewers (MLB)", sport: "MLB", nickname: "milwaukee brewers" },
+  ],
+  montreal: [
+    { label: "Montreal Canadiens (NHL)", sport: "NHL", nickname: "montreal canadiens" },
+    { label: "Montreal Alouettes (CFL)", sport: "CFL", nickname: "montreal alouettes" },
+  ],
+  nashville: [{ label: "Nashville Predators (NHL)", sport: "NHL", nickname: "nashville predators" }],
+  "new england": [{ label: "New England Patriots (NFL)", sport: "NFL", nickname: "new england patriots" }],
+  "new orleans": [
+    { label: "New Orleans Saints (NFL)", sport: "NFL", nickname: "new orleans saints" },
+    { label: "New Orleans Pelicans (NBA)", sport: "NBA", nickname: "new orleans pelicans" },
+  ],
+  nola: [
+    { label: "New Orleans Saints (NFL)", sport: "NFL", nickname: "new orleans saints" },
+    { label: "New Orleans Pelicans (NBA)", sport: "NBA", nickname: "new orleans pelicans" },
+  ],
+  "new york": [
+    { label: "New York Giants (NFL)", sport: "NFL", nickname: "new york giants" },
+    { label: "New York Jets (NFL)", sport: "NFL", nickname: "new york jets" },
+    { label: "New York Yankees (MLB)", sport: "MLB", nickname: "new york yankees" },
+    { label: "New York Mets (MLB)", sport: "MLB", nickname: "new york mets" },
+    { label: "New York Knicks (NBA)", sport: "NBA", nickname: "new york knicks" },
+    { label: "New York Rangers (NHL)", sport: "NHL", nickname: "new york rangers" },
+    { label: "New York Islanders (NHL)", sport: "NHL", nickname: "new york islanders" },
+    { label: "New York Liberty (WNBA)", sport: "WNBA", nickname: "new york liberty" },
+  ],
+  "oklahoma city": [{ label: "Oklahoma City Thunder (NBA)", sport: "NBA", nickname: "oklahoma city thunder" }],
+  orlando: [{ label: "Orlando Magic (NBA)", sport: "NBA", nickname: "orlando magic" }],
+  ottawa: [
+    { label: "Ottawa Senators (NHL)", sport: "NHL", nickname: "ottawa senators" },
+    { label: "Ottawa Redblacks (CFL)", sport: "CFL", nickname: "ottawa redblacks" },
+  ],
+  philadelphia: [
+    { label: "Philadelphia Eagles (NFL)", sport: "NFL", nickname: "philadelphia eagles" },
+    { label: "Philadelphia Phillies (MLB)", sport: "MLB", nickname: "philadelphia phillies" },
+    { label: "Philadelphia 76ers (NBA)", sport: "NBA", nickname: "philadelphia 76ers" },
+    { label: "Philadelphia Flyers (NHL)", sport: "NHL", nickname: "philadelphia flyers" },
+  ],
+  phoenix: [
+    { label: "Phoenix Suns (NBA)", sport: "NBA", nickname: "phoenix suns" },
+    { label: "Phoenix Mercury (WNBA)", sport: "WNBA", nickname: "phoenix mercury" },
+  ],
+  portland: [
+    { label: "Portland Trail Blazers (NBA)", sport: "NBA", nickname: "portland trail blazers" },
+    { label: "Portland Fire (WNBA)", sport: "WNBA", nickname: "portland fire" },
+  ],
+  sacramento: [{ label: "Sacramento Kings (NBA)", sport: "NBA", nickname: "sacramento kings" }],
+  "san antonio": [{ label: "San Antonio Spurs (NBA)", sport: "NBA", nickname: "san antonio spurs" }],
+  "san diego": [{ label: "San Diego Padres (MLB)", sport: "MLB", nickname: "san diego padres" }],
+  "san francisco": [
+    { label: "San Francisco Giants (MLB)", sport: "MLB", nickname: "san francisco giants" },
+    { label: "San Francisco 49ers (NFL)", sport: "NFL", nickname: "san francisco 49ers" },
+  ],
+  "san jose": [{ label: "San Jose Sharks (NHL)", sport: "NHL", nickname: "san jose sharks" }],
+  saskatchewan: [{ label: "Saskatchewan Roughriders (CFL)", sport: "CFL", nickname: "saskatchewan roughriders" }],
+  seattle: [
+    { label: "Seattle Seahawks (NFL)", sport: "NFL", nickname: "seattle seahawks" },
+    { label: "Seattle Mariners (MLB)", sport: "MLB", nickname: "seattle mariners" },
+    { label: "Seattle Kraken (NHL)", sport: "NHL", nickname: "seattle kraken" },
+    { label: "Seattle Storm (WNBA)", sport: "WNBA", nickname: "seattle storm" },
+  ],
+  "st louis": [
+    { label: "St. Louis Cardinals (MLB)", sport: "MLB", nickname: "st. louis cardinals" },
+    { label: "St. Louis Blues (NHL)", sport: "NHL", nickname: "st. louis blues" },
+  ],
+  "st. louis": [
+    { label: "St. Louis Cardinals (MLB)", sport: "MLB", nickname: "st. louis cardinals" },
+    { label: "St. Louis Blues (NHL)", sport: "NHL", nickname: "st. louis blues" },
+  ],
+  tampa: [
+    { label: "Tampa Bay Buccaneers (NFL)", sport: "NFL", nickname: "tampa bay buccaneers" },
+    { label: "Tampa Bay Rays (MLB)", sport: "MLB", nickname: "tampa bay rays" },
+    { label: "Tampa Bay Lightning (NHL)", sport: "NHL", nickname: "tampa bay lightning" },
+  ],
+  "tampa bay": [
+    { label: "Tampa Bay Buccaneers (NFL)", sport: "NFL", nickname: "tampa bay buccaneers" },
+    { label: "Tampa Bay Rays (MLB)", sport: "MLB", nickname: "tampa bay rays" },
+    { label: "Tampa Bay Lightning (NHL)", sport: "NHL", nickname: "tampa bay lightning" },
+  ],
+  toronto: [
+    { label: "Toronto Blue Jays (MLB)", sport: "MLB", nickname: "toronto blue jays" },
+    { label: "Toronto Raptors (NBA)", sport: "NBA", nickname: "toronto raptors" },
+    { label: "Toronto Maple Leafs (NHL)", sport: "NHL", nickname: "toronto maple leafs" },
+    { label: "Toronto Argonauts (CFL)", sport: "CFL", nickname: "toronto argonauts" },
+    { label: "Toronto Tempo (WNBA)", sport: "WNBA", nickname: "toronto tempo" },
+  ],
+  vancouver: [{ label: "Vancouver Canucks (NHL)", sport: "NHL", nickname: "vancouver canucks" }],
+  winnipeg: [
+    { label: "Winnipeg Jets (NHL)", sport: "NHL", nickname: "winnipeg jets" },
+    { label: "Winnipeg Blue Bombers (CFL)", sport: "CFL", nickname: "winnipeg blue bombers" },
+  ],
 };
+
+// Which AMBIGUOUS_NICKNAMES keys are a bare CITY rather than a genuine
+// shared NICKNAME - every key added by the "Bare CITY names" block above,
+// plus "boston" (the original city-only entry that block generalized).
+// GROUPING_TEAM_NICKNAMES below needs this split: it wants the short form a
+// capper actually types for one specific TEAM ("twins", not "Minnesota
+// Twins") to match against betDetail text, and a city name is never that -
+// spreading it in unfiltered made classifyPickTeamGroup treat "Chicago Cubs"
+// betDetail text as matching the bare alias "chicago" instead of "cubs" (or
+// "cub"/"cubbies"), which isn't a team-specific short form at all. Nothing
+// else reads this Set: the import-parsing path (findAmbiguousNickname/
+// ambiguousOptionsFor/runAmbiguousHierarchy) treats every AMBIGUOUS_NICKNAMES
+// key identically, city or nickname - this split exists only for the
+// display-grouping consumer below.
+const AMBIGUOUS_CITY_KEYS = new Set<string>([
+  "boston", "anaheim", "atlanta", "baltimore", "brooklyn", "calgary",
+  "carolina", "chicago", "cleveland", "columbus", "dallas", "denver",
+  "detroit", "edmonton", "golden state", "green bay", "hamilton",
+  "indianapolis", "jacksonville", "kansas city", "las vegas", "vegas",
+  "los angeles", "milwaukee", "montreal", "nashville", "new england",
+  "new orleans", "nola", "new york", "oklahoma city", "orlando", "ottawa",
+  "philadelphia", "phoenix", "portland", "sacramento", "san antonio",
+  "san diego", "san francisco", "san jose", "saskatchewan", "seattle",
+  "st louis", "st. louis", "tampa", "tampa bay", "toronto", "vancouver",
+  "winnipeg",
+]);
 
 const DISAMBIGUATED_TEAMS: TeamEntry[] = [
   ["texas rangers", "MLB"],
@@ -692,13 +940,18 @@ const TEAM_SPORT_ENTRIES: TeamEntry[] = [
 // into "Totals & Other Markets" instead of its own team header.
 //
 // Built from the same bare-nickname lists TEAM_SPORT_ENTRIES uses, plus the
-// bare key of every AMBIGUOUS_NICKNAMES entry (which is exactly the short
-// form a capper types for cardinals/rangers/kings/panthers/giants/bears/
-// twins/lions/eagles/tigers) for each sport it lists - deliberately omitting
-// DISAMBIGUATED_TEAMS (the long, city-qualified forms, wrong shape for
-// matching betDetail). The import-parsing path this must not touch
-// (parseCatalog/detectSport/findTeamNickname/TEAM_SPORT_ENTRIES) is entirely
-// separate from this constant and this function.
+// bare key of every genuine-NICKNAME AMBIGUOUS_NICKNAMES entry (which is
+// exactly the short form a capper types for cardinals/rangers/kings/panthers/
+// giants/bears/twins/lions/eagles/tigers) for each sport it lists -
+// deliberately omitting DISAMBIGUATED_TEAMS (the long, city-qualified forms,
+// wrong shape for matching betDetail) AND every CITY key (AMBIGUOUS_CITY_KEYS
+// above) - a bare city ("chicago") is never the short form of one specific
+// team's betDetail text the way "cardinals" is, so including it here made
+// classifyPickTeamGroup match "Chicago Cubs" betDetail against the alias
+// "chicago" instead of "cubs"/"cub"/"cubbies". The import-parsing path this
+// must not touch (parseCatalog/detectSport/findTeamNickname/
+// TEAM_SPORT_ENTRIES) is entirely separate from this constant and this
+// function.
 const GROUPING_TEAM_NICKNAMES: TeamEntry[] = [
   ...MLB_TEAMS.map((t): TeamEntry => [t, "MLB"]),
   ...NBA_TEAMS.map((t): TeamEntry => [t, "NBA"]),
@@ -709,9 +962,9 @@ const GROUPING_TEAM_NICKNAMES: TeamEntry[] = [
   ...KBO_TEAMS.map((t): TeamEntry => [t, "KBO"]),
   ...NCAAF_TEAMS.map((t): TeamEntry => [t, "NCAAF"]),
   ...PRO_TEAM_ALIASES.map(([alias, sport]): TeamEntry => [alias, sport]),
-  ...Object.entries(AMBIGUOUS_NICKNAMES).flatMap(([bare, options]): TeamEntry[] =>
-    options.map((o): TeamEntry => [bare, o.sport])
-  ),
+  ...Object.entries(AMBIGUOUS_NICKNAMES)
+    .filter(([bare]) => !AMBIGUOUS_CITY_KEYS.has(bare))
+    .flatMap(([bare, options]): TeamEntry[] => options.map((o): TeamEntry => [bare, o.sport])),
 ].sort((a, b) => b[0].length - a[0].length);
 
 // Folds diacritics and drops apostrophes/periods for the pick-grouping match
@@ -1099,11 +1352,14 @@ export function resolveAmbiguousPick(pick: ParsedPick, choice: AmbiguousOption):
   };
 }
 
+// Uses teamPhraseRegex (escapes punctuation, treats internal whitespace
+// flexibly) rather than a bare `\b...\b` template - required now that city
+// keys include punctuation ("st. louis") and multi-word phrases ("kansas
+// city", "new york"); a raw template would either break on the literal "."
+// or fail to match a variant spacing/punctuation of the same city.
 function findAmbiguousNickname(text: string): { key: string; options: AmbiguousOption[] } | undefined {
-  const lower = text.toLowerCase();
   for (const [nickname, options] of Object.entries(AMBIGUOUS_NICKNAMES)) {
-    const re = new RegExp("\\b" + nickname + "\\b", "i");
-    if (re.test(lower)) return { key: nickname, options };
+    if (teamPhraseRegex(nickname).test(text)) return { key: nickname, options };
   }
   return undefined;
 }
@@ -1186,11 +1442,9 @@ export function inferSportFromPickContext(text: string, candidateSports: string[
 }
 
 function findAllAmbiguousNicknames(text: string): string[] {
-  const lower = text.toLowerCase();
   const found: string[] = [];
   for (const nickname of Object.keys(AMBIGUOUS_NICKNAMES)) {
-    const re = new RegExp("\\b" + nickname + "\\b", "i");
-    if (re.test(lower)) found.push(nickname);
+    if (teamPhraseRegex(nickname).test(text)) found.push(nickname);
   }
   return found;
 }
@@ -1351,34 +1605,39 @@ function looksLikeTeamAbbreviation(name: string): boolean {
   return name.split(/\s+/).some((w) => w.length <= 3 && w === w.toUpperCase());
 }
 
-// Place names that are the locality of a tracked pro franchise (MLB / NBA /
-// NFL / NHL / WNBA / CFL). A bare one of these reaching findPlayerPick means a
-// capper wrote a city/state/region with no nickname and nothing above could
-// resolve it - route it to `unresolved` ("add manually") rather than silently
-// inventing a tennis player named after the place. This is the general guard
-// against the phantom-ATP fallback (see the long TODO above and
+// Place names that are the locality of a tracked pro franchise, reaching
+// findPlayerPick with no nickname and nothing else able to resolve them -
+// route to `unresolved` ("add manually") rather than silently inventing a
+// tennis player named after the place. This is the general guard against the
+// phantom-ATP fallback (see the long TODO above and
 // docs/resolver-team-gap-followups.md #1); "Sharp Sheet - Ottawa +7.5" (a CFL
-// pick) and "Shark - Boston Over 7.5" were both hitting it.
+// pick) and "Shark - Boston Over 7.5" were both hitting it before their
+// cities were promoted to real AMBIGUOUS_NICKNAMES entries (below).
 //
-// Short all-caps abbreviations ("LA", "NY", "SF", "KC", "GB") are already
-// rejected by looksLikeTeamAbbreviation, so this only needs spelled-out forms
-// (plus "nola", 4 letters, which slips past that check). Many entries here
-// (arizona, miami, washington, ...) are also NCAAF school keys that detectSport
-// claims first - listing them is redundant-but-safe defense if that list ever
-// changes. "boston" is deliberately ABSENT: it has an AMBIGUOUS_NICKNAMES
-// entry checked earlier, so it never reaches here.
+// Most cities that used to live in this Set as a NEGATIVE-only guard are now
+// POSITIVE identifiers instead - real AMBIGUOUS_NICKNAMES keys that generate
+// that city's tracked franchises as candidates for the schedule/season/
+// pick-context hierarchy (see the "Bare CITY names" block in
+// AMBIGUOUS_NICKNAMES above) - so they were removed from here entirely; a
+// city that resolves to one or more real teams doesn't also need a
+// do-nothing negative guard, and doesn't need one for the negative-guard use
+// either: findPlayerPick's RECOGNIZED_TEAM_PHRASES check already covers every
+// AMBIGUOUS_NICKNAMES key (Object.keys(AMBIGUOUS_NICKNAMES) is spread into
+// it below), so the tennis-phantom protection carries over automatically.
+//
+// What's LEFT here is only the cities that could NOT be promoted: each one's
+// bare name is ALSO an NCAAF_SCHOOLS key, and detectSport's pass 1/2 already
+// resolves it straight to that school today (a case that "already succeeds"
+// and must not be disturbed - see the AMBIGUOUS_NICKNAMES comment for why
+// adding the same string there would silently break it). These stay exactly
+// what this Set has always been: a pure negative guard, nothing more.
+// "boston" is deliberately ABSENT even though it's not one of these 14: it
+// has its own AMBIGUOUS_NICKNAMES entry checked earlier, so it never reaches
+// here, same as every other promoted city.
 const SPORTS_PLACE_NAMES = new Set<string>([
-  "anaheim", "arizona", "atlanta", "baltimore", "brooklyn", "buffalo",
-  "calgary", "carolina", "charlotte", "chicago", "cincinnati", "cleveland",
-  "colorado", "columbus", "dallas", "denver", "detroit", "edmonton",
-  "golden state", "green bay", "hamilton", "houston", "indiana", "indianapolis",
-  "jacksonville", "kansas city", "las vegas", "los angeles", "memphis", "miami",
-  "milwaukee", "minnesota", "montreal", "nashville", "new england",
-  "new orleans", "new york", "oklahoma city", "orlando", "ottawa",
-  "philadelphia", "phoenix", "pittsburgh", "portland", "sacramento",
-  "san antonio", "san diego", "san francisco", "san jose", "saskatchewan",
-  "seattle", "st louis", "st. louis", "tampa", "tampa bay", "tennessee",
-  "toronto", "utah", "vancouver", "vegas", "washington", "winnipeg", "nola",
+  "arizona", "buffalo", "charlotte", "cincinnati", "colorado", "houston",
+  "indiana", "memphis", "miami", "minnesota", "pittsburgh", "tennessee",
+  "utah", "washington",
 ]);
 
 // Real FCS college football schools, confirmed hitting the exact same

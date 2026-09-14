@@ -193,13 +193,23 @@ function main() {
   // Ottawa vs Winnipeg (a81d565) - single-word CITY names, not in CFL_TEAMS
   // (which only has nicknames like "redblacks"/"blue bombers"). The
   // documented fix tightened findMatchupPlayerPick to require 2-4
-  // capitalized words per side, so this correctly stays unresolved instead
-  // of being misread as a two-fighter MMA matchup - and, via the matchup-
-  // shape signal in looksLikePick, does NOT fall through to becoming a fake
-  // capper either.
+  // capitalized words per side, so this is never misread as a two-fighter
+  // MMA matchup - and, via the matchup-shape signal in looksLikePick, does
+  // NOT fall through to becoming a fake capper either. Both cities are now
+  // AMBIGUOUS_NICKNAMES keys (PART I below), so - rather than unresolved -
+  // this surfaces ambiguous: their common sports (NHL + CFL, both cities
+  // have a team in each) don't intersect to exactly one, so
+  // resolveAmbiguousPair can't narrow the pair either, and it falls through
+  // to findAmbiguousNickname picking up "ottawa" (checked first, insertion
+  // order) with its own 2 candidates - a real ambiguity prompt, not a guess.
   {
     const { picks, unresolved } = parseCatalog(`Gridiron Capper\n\nOttawa vs Winnipeg Over 56.5\nBraves ML`, []);
-    check("Ottawa/Winnipeg: stays unresolved (not an MMA fighter match, not a pick)", unresolved, ["Ottawa vs Winnipeg Over 56.5"]);
+    const ottawa = picks.find((p) => p.raw.startsWith("Ottawa"));
+    check(
+      "Ottawa/Winnipeg: surfaces ambiguous ('ottawa', not an MMA fighter match), no unresolved line",
+      { unresolved, key: ottawa?.ambiguousKey, labels: ottawa?.ambiguous?.map((o) => o.label) },
+      { unresolved: [], key: "ottawa", labels: ["Ottawa Senators (NHL)", "Ottawa Redblacks (CFL)"] }
+    );
     const braves = picks.find((p) => p.description.includes("Braves"));
     check("Ottawa/Winnipeg: following real pick still attributed to Gridiron Capper", braves?.capperName, "Gridiron Capper");
   }
@@ -872,24 +882,29 @@ NC State +4.5`;
   }
   {
     // --- Fix 2: SPORTS_PLACE_NAMES guard -> unresolved, not phantom ATP ---
-    const ottawa = parseCatalog(`Sharp Sheet\nOttawa +7.5`, []);
-    check("'Ottawa +7.5': routes to unresolved, no phantom ATP pick", { picks: ottawa.picks.length, unresolved: ottawa.unresolved }, { picks: 0, unresolved: ["Ottawa +7.5"] });
-
-    const denver = parseCatalog(`Cap\nDenver -3.5`, []);
-    check("'Denver -3.5': bare city routes to unresolved", denver.unresolved, ["Denver -3.5"]);
-
-    const ny = parseCatalog(`Cap\nNew York Over 8.5`, []);
-    check("'New York Over 8.5': multi-word city routes to unresolved (not ATP 'york')", ny.unresolved, ["New York Over 8.5"]);
-
-    // The guard must not eat a following real pick.
-    const mixed = parseCatalog(`Cap\nDenver -3.5\nYankees ML`, []);
+    // "Ottawa"/"Denver"/"New York" (the original examples here) are now
+    // AMBIGUOUS_NICKNAMES city keys themselves (Fix 3 below). The 14 cities
+    // still left in SPORTS_PLACE_NAMES (arizona/buffalo/.../washington - see
+    // its own comment) were NEVER actually reachable through this guard in
+    // the first place, before or after this build: every one of them is
+    // ALSO an NCAAF_SCHOOLS bare key, so detectSport's own nickname pass
+    // (which always runs before findAmbiguousNickname/findPlayerPick are
+    // ever tried - see detectSport pass 1) already resolves it to NCAAF
+    // first. SPORTS_PLACE_NAMES's own pre-existing comment already called
+    // this out ("redundant-but-safe defense if that list ever changes") -
+    // this build doesn't change that; it's still true, just now true for
+    // ALL 14 remaining entries instead of most of them. Confirmed below
+    // together with Fix 3's "still resolves NCAAF, not promoted" checks.
+    //
+    // A real, currently-reachable `unresolved` case still needs a place name
+    // that ISN'T an NCAAF school AND wasn't promoted - the state names in
+    // US_STATE_NAMES (a separate guard, untouched by this build) cover that;
+    // "Mississippi -6.5" is exercised in PART... (the phantom-ATP guard
+    // tests) with the same expectation.
     check(
-      "'Denver -3.5' then 'Yankees ML': Denver unresolved, Yankees still resolves MLB for the same capper",
-      {
-        unresolved: mixed.unresolved,
-        yanks: mixed.picks.map((p) => ({ capper: p.capperName, sport: p.sportName, teams: p.teamNicknames })),
-      },
-      { unresolved: ["Denver -3.5"], yanks: [{ capper: "Cap", sport: "MLB", teams: ["yankees"] }] }
+      "'Mississippi -6.5' (US_STATE_NAMES guard, untouched by this build) still routes to unresolved",
+      parseCatalog(`Cap\nMississippi -6.5`, []).unresolved,
+      ["Mississippi -6.5"]
     );
 
     // City + real nickname is still fine - the guard only fires on the bare city.
@@ -904,6 +919,77 @@ NC State +4.5`;
     check("'Tallon Griekspoor ML' still resolves ATP", parseCatalog(`Cap\nTallon Griekspoor ML`, []).picks[0]?.sportName, "ATP");
     check("'Alcaraz Over 22.5' (bare surname) still resolves ATP", parseCatalog(`Cap\nAlcaraz Over 22.5`, []).picks[0]?.sportName, "ATP");
     check("'Sinner ML' (bare surname) still resolves ATP", parseCatalog(`Cap\nSinner ML`, []).picks[0]?.sportName, "ATP");
+  }
+  {
+    // --- Fix 3 (this build): bare CITY names promoted to real
+    // AMBIGUOUS_NICKNAMES candidates, generalizing Fix 1's "boston" to every
+    // other pro-sports city this app tracks (except the NCAAF-collision
+    // cities Fix 2 above still guards). Same hierarchy, same shape of
+    // candidate list as any nickname collision - just sourced from a city
+    // instead of a shared mascot.
+
+    // Single-candidate city ("Green Bay" has exactly one tracked franchise):
+    // still goes through the ambiguous candidate list/hierarchy rather than
+    // being special-cased, but with only one real option to land on.
+    const greenBay = parseCatalog(`Cap\nGreen Bay -6.5`, []).picks[0];
+    check(
+      "'Green Bay -6.5': single-candidate city surfaces its one real option (Packers/NFL)",
+      { sport: greenBay?.sportName, key: greenBay?.ambiguousKey, labels: greenBay?.ambiguous?.map((o) => o.label) },
+      { sport: "", key: "green bay", labels: ["Green Bay Packers (NFL)"] }
+    );
+    check(
+      "calendar fallback: 'green bay' resolves to its one option whenever NFL is in season",
+      ambiguousOptionsFor("green bay").filter((o) => isSportLabelInSeason(o.sport, new Date("2026-11-01T12:00:00Z"))),
+      [{ label: "Green Bay Packers (NFL)", sport: "NFL", nickname: "green bay packers" }]
+    );
+
+    // Genuinely multi-candidate city - Chicago has 6 real, currently-tracked
+    // franchises across 4 sports (2 of them, MLB's Cubs/White Sox, share a
+    // sport) - not just the Detroit-style 1-per-sport case.
+    const chicago = parseCatalog(`Cap\nChicago -6.5`, []).picks[0];
+    check(
+      "'Chicago -6.5': genuinely multi-candidate city (6 franchises, 4 sports)",
+      { sport: chicago?.sportName, key: chicago?.ambiguousKey, labels: chicago?.ambiguous?.map((o) => o.label).sort() },
+      {
+        sport: "",
+        key: "chicago",
+        labels: [
+          "Chicago Bears (NFL)", "Chicago Blackhawks (NHL)", "Chicago Bulls (NBA)",
+          "Chicago Cubs (MLB)", "Chicago Sky (WNBA)", "Chicago White Sox (MLB)",
+        ].sort(),
+      }
+    );
+    // Calendar fallback can't narrow this one on 2026-09-01 either - MLB
+    // (Cubs/White Sox), NFL (Bears), and WNBA (Sky) are all in season
+    // simultaneously in early September, so "exactly one in-season
+    // candidate" never holds for Chicago the way it does for a single-team
+    // city; a real answer here needs the schedule check (see
+    // ambiguous-hierarchy-acceptance-test.ts) or a manual choice.
+    check(
+      "calendar fallback alone can never narrow 'chicago' to one option (multiple sports in season at once)",
+      ambiguousOptionsFor("chicago")
+        .filter((o) => isSportLabelInSeason(o.sport, new Date("2026-09-01T12:00:00Z")))
+        .map((o) => o.sport)
+        .sort(),
+      ["MLB", "MLB", "NFL", "WNBA"]
+    );
+
+    // Full, city-qualified team names are unaffected by the new bare-city key.
+    check(
+      "'Chicago Cubs ML' still resolves straight to MLB (full name unaffected)",
+      parseCatalog(`Cap\nChicago Cubs ML`, []).picks[0]?.sportName,
+      "MLB"
+    );
+    check(
+      "'Chicago Bulls ML' still resolves straight to NBA (full name unaffected)",
+      parseCatalog(`Cap\nChicago Bulls ML`, []).picks[0]?.sportName,
+      "NBA"
+    );
+
+    // NCAAF-collision cities are NOT promoted - detectSport still claims
+    // them for their school directly, unaffected by this build.
+    check("'Houston -6.5' still resolves NCAAF (Cougars, not promoted)", parseCatalog(`Cap\nHouston -6.5`, []).picks[0]?.sportName, "NCAAF");
+    check("'Miami -6.5' still resolves NCAAF (Hurricanes, not promoted)", parseCatalog(`Cap\nMiami -6.5`, []).picks[0]?.sportName, "NCAAF");
   }
 
   // ==========================================================================
@@ -1006,9 +1092,18 @@ NC State +4.5`;
     check("'Ottawa Red Blacks +3' resolves to CFL", parseCatalog(`Cap\nOttawa Red Blacks +3`, []).picks[0]?.sportName, "CFL");
     check("'Ottawa Redblacks +3' (one word) still resolves to CFL", parseCatalog(`Cap\nOttawa Redblacks +3`, []).picks[0]?.sportName, "CFL");
 
-    // Bare "Ottawa" (city, no nickname) still routes to unresolved, not a
-    // phantom ATP pick - unchanged by this build.
-    check("bare 'Ottawa +7.5' still routes to unresolved", parseCatalog(`Cap\nOttawa +7.5`, []).unresolved, ["Ottawa +7.5"]);
+    // Bare "Ottawa" (city, no nickname): never a phantom ATP pick. As of the
+    // city-name promotion (PART I below) it's no longer left `unresolved`
+    // either - it surfaces ambiguous (NHL Senators / CFL Redblacks) through
+    // the same hierarchy every other AMBIGUOUS_NICKNAMES key uses.
+    check(
+      "bare 'Ottawa +7.5' surfaces ambiguous (NHL/CFL), not unresolved and not ATP",
+      (() => {
+        const r = parseCatalog(`Cap\nOttawa +7.5`, []);
+        return { unresolved: r.unresolved, sport: r.picks[0]?.sportName, key: r.picks[0]?.ambiguousKey };
+      })(),
+      { unresolved: [], sport: "", key: "ottawa" }
+    );
 
     // City-qualified forms of the other 8 teams all resolve to CFL.
     const cityQualified = [
