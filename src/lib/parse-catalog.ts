@@ -1591,6 +1591,33 @@ export function findTeamNickname(text: string, sportName: string): string | unde
   return undefined;
 }
 
+// Strips a leading/trailing team nickname the capper included in a
+// player-prop pick's extracted player name (it's usually needed for game
+// resolution at import time, e.g. "Rams Puka Nacua Anytime TD" ->
+// playerName "Rams Puka Nacua") - only reliable to do once the pick's real
+// matched team names (not just whatever text the capper typed) are known, so
+// this takes them as `teams` rather than trying to re-derive them. Shared by
+// resolveTouchdownProp (grading.ts, TD-prop grading) and resolvePropOdds's
+// caller (bulk-picks.ts, live-odds enrichment for the other four player-prop
+// markets) - both need the exact same stripping before fuzzy-matching a
+// player name against a real roster/odds-API name, so this is the one place
+// that logic lives rather than two copies drifting apart.
+export function stripTeamNamesFromPlayerName(playerName: string, teams: string[], sportName: string): string {
+  let stripped = playerName;
+  for (const team of teams) {
+    const nick = findTeamNickname(team, sportName);
+    if (nick) stripped = stripped.replace(new RegExp("\\b" + nick.replace(/ /g, "\\s+") + "\\b", "i"), "").trim();
+    // findTeamNickname can return a longer disambiguated phrase for a team
+    // shared with another sport (e.g. "carolina panthers", not just
+    // "panthers" - see DISAMBIGUATED_TEAMS) - a capper writing just
+    // "Panthers Haynes King TD" wouldn't match that full phrase, so also
+    // strip the team's own last word (its plain short nickname) directly.
+    const lastWord = team.trim().split(/\s+/).pop();
+    if (lastWord) stripped = stripped.replace(new RegExp("\\b" + lastWord + "\\b", "i"), "").trim();
+  }
+  return stripped.replace(/\s{2,}/g, " ").trim();
+}
+
 // A won-loss record shape specifically ("19-0", "12-2", "8-1") - digits
 // flush against both sides of the dash, no sign. Deliberately distinct from
 // the generic signed-number signal in looksLikePick, which also matches a

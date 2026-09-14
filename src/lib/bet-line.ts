@@ -431,14 +431,15 @@ export type PlayerPropLineInfo = { line: number; direction: "OVER" | "UNDER" };
 // structured path to prefer here the way there is for market/playerName.
 // Same "over/under followed by a number, or the o/u shorthand" shape
 // extractLine's TOTAL branch already matches, reused here for consistency.
+// Over and Under are matched independently (not "whichever comes first in
+// the string") so that text naming both sides - each with its own number,
+// e.g. leftover/duplicated text in a manually-entered pick - returns null
+// (can't tell which side this pick actually is) rather than silently
+// grading against whichever side happened to appear first.
 export function parsePlayerPropLine(text: string): PlayerPropLineInfo | null {
-  const afterOverUnder = text.match(/\b(over|under)\s+(\d+(?:\.\d+)?)\b/i);
-  if (afterOverUnder) {
-    return { direction: afterOverUnder[1].toLowerCase() === "over" ? "OVER" : "UNDER", line: parseFloat(afterOverUnder[2]) };
-  }
-  const shorthand = text.match(/\b([ou])(\d+(?:\.\d+)?)\b/i);
-  if (shorthand) {
-    return { direction: shorthand[1].toLowerCase() === "o" ? "OVER" : "UNDER", line: parseFloat(shorthand[2]) };
-  }
+  const overMatch = text.match(/\bover\s+(\d+(?:\.\d+)?)\b/i) ?? text.match(/\bo(\d+(?:\.\d+)?)\b/i);
+  const underMatch = text.match(/\bunder\s+(\d+(?:\.\d+)?)\b/i) ?? text.match(/\bu(\d+(?:\.\d+)?)\b/i);
+  if (overMatch && !underMatch) return { direction: "OVER", line: parseFloat(overMatch[1]) };
+  if (underMatch && !overMatch) return { direction: "UNDER", line: parseFloat(underMatch[1]) };
   return null;
 }

@@ -27,10 +27,12 @@
 //     least one book (Fanatics), a literal "No Scorer" outcome (the price
 //     on nobody scoring a TD in the game at all).
 import type { OddsGame, OddsApiCredits } from "@/server/data/odds";
-import { ODDS_API_BASE_URL, readOddsApiCredits } from "@/server/data/odds";
+import { ODDS_API_BASE_URL, readOddsApiCredits, resolveOddsGame } from "@/server/data/odds";
 import { getLatestCreditUsageLevel, persistOddsApiUsage } from "@/server/data/odds-api-usage";
 import { prisma } from "@/lib/prisma";
 import { easternDateKey } from "@/lib/dates";
+import type { PlayerPropMarket } from "@/lib/bet-line";
+import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
 
 const NFL_SPORT_KEY = "americanfootball_nfl";
 
@@ -215,6 +217,75 @@ async function fetchOneEventPropOdds(
 
   const raw = await res.json();
   return { bookmakers: Array.isArray(raw.bookmakers) ? raw.bookmakers : [], credits, ok: true };
+}
+
+// PlayerPropMarket (bet-line.ts, mirrors schema.prisma's PropMarket enum) ->
+// the Odds API market key that carries its Over/Under+point line. TD
+// deliberately has no entry: player_anytime_td is one-sided ("Yes" only,
+// never a `point` - see this file's header) and has no Over/Under+line
+// concept to match a pick's parsed side/point against, so a TD prop with no
+// explicit odds simply keeps the -110 default, same as before this resolver
+// existed - resolvePropOddsFromGame returns null for it below rather than
+// guessing at a price from a differently-shaped market.
+const PLAYER_PROP_ODDS_MARKET_KEYS: Partial<Record<PlayerPropMarket, NflPropMarketKey>> = {
+  PASS_YDS: "player_pass_yds",
+  RUSH_YDS: "player_rush_yds",
+  REC_YDS: "player_reception_yds",
+  RECEPTIONS: "player_receptions",
+};
+
+export type PlayerPropOddsQuery = {
+  playerName: string;
+  propMarket: PlayerPropMarket;
+  side: "Over" | "Under";
+  point: number;
+};
+
+// Pure - matches a bulk-imported player-prop pick's parsed playerName/
+// propMarket/side/point against an already-fetched/cached OddsGame's prop
+// lines (via normalizePlayerPropLines above), so it's directly testable
+// against real captured fixtures with no DB/network. Same "first bookmaker
+// that has it wins" policy as findMarketPrice (odds.ts): normalizePlayerPropLines
+// iterates game.bookmakers in the game's own array order, so the first line
+// in its output that matches marketKey+side+point+player is exactly the
+// first bookmaker that carries this exact line - no separate sort needed.
+// Player-name matching reuses isLikelyDuplicateName (fuzzy-match.ts), the
+// same fuzzy match resolveTouchdownProp (grading.ts) already uses to pair a
+// capper's typed name against a real box-score/roster name, rather than a
+// new matching strategy. Returns null - same as findMarketPrice - when the
+// market has no Over/Under+point concept (TD), or no bookmaker has this
+// exact player+market+side+point combination (the player isn't offered this
+// market, or every offered line is at a different point than the pick's).
+export function resolvePropOddsFromGame(game: OddsGame, prop: PlayerPropOddsQuery): number | null {
+  const marketKey = PLAYER_PROP_ODDS_MARKET_KEYS[prop.propMarket];
+  if (!marketKey) return null;
+
+  const lines = normalizePlayerPropLines(game);
+  const match = lines.find(
+    (l) =>
+      l.marketKey === marketKey &&
+      l.side === prop.side &&
+      l.point === prop.point &&
+      isLikelyDuplicateName(l.playerName, prop.playerName)
+  );
+  return match ? match.price : null;
+}
+
+// Async wrapper - resolves the schedule-sourced game to its cached OddsGame
+// first (same resolveOddsGame team-pair + closest-commenceTime match
+// findMarketPrice uses, exported from odds.ts for exactly this caller), then
+// delegates to the pure matcher above. Mirrors findFavoredSide/
+// favoredSideFromOddsGame's own resolveOddsGame + pure-function split
+// (odds.ts). The entry point bulk-picks.ts's resolveGameAndOdds calls for a
+// PLAYER_PROP pick with no explicit odds in its text.
+export async function resolvePropOdds(
+  sportKey: string,
+  game: { homeTeam: string; awayTeam: string; commenceTime: string },
+  prop: PlayerPropOddsQuery
+): Promise<number | null> {
+  const oddsGame = await resolveOddsGame(sportKey, game);
+  if (!oddsGame) return null;
+  return resolvePropOddsFromGame(oddsGame, prop);
 }
 
 // Merges freshly-fetched prop-market bookmakers into an existing OddsGame's
