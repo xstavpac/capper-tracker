@@ -182,7 +182,15 @@ async function main() {
   expect("seedNflPropOddsForToday: no ODDS_API_KEY -> no_api_key, no games touched", { status: noKey.status, fetched: noKey.eventsFetched }, { status: "no_api_key", fetched: 0 });
   restorePrisma();
   restoreFetch();
-  if (realApiKey !== undefined) process.env.ODDS_API_KEY = realApiKey;
+
+  // 3b-3d all need a key configured to get past that same no_api_key check -
+  // a fixed test value, not `realApiKey`, which is undefined in CI (no
+  // ODDS_API_KEY secret there) and would otherwise leave the key deleted for
+  // the rest of this section, same as it did before this fix (every one of
+  // 3b/3c/3d silently degenerated to the 3a no_api_key case in CI, invisible
+  // locally wherever a real key happens to be in .env). Never used for a
+  // real call - stubEventOddsFetch throws on any unrouted URL regardless.
+  process.env.ODDS_API_KEY = "test-key";
 
   // 3b. No snapshot row for today yet (bulk seed hasn't run / failed) -> no_snapshot.
   patch("oddsSnapshot.findUnique", async () => null);
@@ -233,6 +241,8 @@ async function main() {
 
   restorePrisma();
   restoreFetch();
+  if (realApiKey === undefined) delete process.env.ODDS_API_KEY;
+  else process.env.ODDS_API_KEY = realApiKey;
 
   console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

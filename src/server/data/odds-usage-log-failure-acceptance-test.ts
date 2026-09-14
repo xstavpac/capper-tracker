@@ -75,6 +75,14 @@ const fetchDate = easternDateKey(new Date());
 const laterToday = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
 
 async function main() {
+  // seedOddsSnapshot/backfillOddsForSport both bail out early with
+  // no_api_key/no_api_key-equivalent statuses when ODDS_API_KEY is unset -
+  // CI sets no such secret for this suite, so a fixed test value is needed
+  // here regardless of what's in the environment (never used for a real
+  // call - stubFetch below only ever returns the stubbed response).
+  const realApiKey = process.env.ODDS_API_KEY;
+  process.env.ODDS_API_KEY = "test-key";
+
   // =====================================================================
   // 1. seedOddsSnapshot (the cron's actual call path via
   //    getOddsForSportUncached) - usage-log write throws, odds fetch must
@@ -156,6 +164,8 @@ async function main() {
 
   restorePrisma();
   restoreFetch();
+  if (realApiKey === undefined) delete process.env.ODDS_API_KEY;
+  else process.env.ODDS_API_KEY = realApiKey;
 
   console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);
