@@ -45,7 +45,7 @@ export function isStuckParlayLeg(input: {
 
 // The outcome of re-running the existing pure grading functions against one
 // stuck leg, reduced to the few facts computeStuckLegReason needs. Built by
-// getPendingLegsForUser from findMatchingGameResult / resolveTouchdownProp /
+// getPendingLegsForUser from findMatchingGameResult / resolvePlayerProp /
 // resolveOutcome - the same calls getPendingPicksForUser makes per pending
 // pick - so the reason strings a stuck leg gets are the same class of
 // human-readable strings a stuck standalone pick already gets.
@@ -56,9 +56,11 @@ export type LegGradeProbe = {
   // findMatchingGameResult returned a game (null otherwise).
   matched: boolean;
   isPlayerProp: boolean;
-  // resolveTouchdownProp's `reason` when it couldn't grade the prop, else
-  // null (prop graded fine, or not a player-prop leg at all).
-  touchdownPropReason: string | null;
+  // resolvePlayerProp's `reason` when it couldn't grade the prop (whichever
+  // of the 5 markets - TD or one of the 4 structured yardage/receptions
+  // markets - it dispatched to), else null (prop graded fine, or not a
+  // player-prop leg at all).
+  playerPropReason: string | null;
   // resolveOutcome produced a WIN/LOSS/PUSH (false when the game matched but
   // the bet text had no gradable number).
   outcomeResolved: boolean;
@@ -72,7 +74,7 @@ export function computeStuckLegReason(probe: LegGradeProbe): string | null {
   if (!probe.resolvable) return "sport not tracked";
   if (!probe.matched) return "no matching game found";
   if (probe.isPlayerProp) {
-    return probe.touchdownPropReason ? "matched game, but " + probe.touchdownPropReason : null;
+    return probe.playerPropReason ? "matched game, but " + probe.playerPropReason : null;
   }
   if (!probe.outcomeResolved) {
     return "matched game, but couldn't parse a gradable number from the bet text";

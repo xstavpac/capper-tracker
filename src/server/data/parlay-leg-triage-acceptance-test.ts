@@ -52,14 +52,14 @@ const NO_MATCH_PROBE: LegGradeProbe = {
   resolvable: true,
   matched: false,
   isPlayerProp: false,
-  touchdownPropReason: null,
+  playerPropReason: null,
   outcomeResolved: false,
 };
 const GRADABLE_PROBE: LegGradeProbe = {
   resolvable: true,
   matched: true,
   isPlayerProp: false,
-  touchdownPropReason: null,
+  playerPropReason: null,
   outcomeResolved: true,
 };
 
@@ -164,7 +164,7 @@ check(
     resolvable: true,
     matched: true,
     isPlayerProp: true,
-    touchdownPropReason: 'couldn\'t find "Puka Nacua" in the box score',
+    playerPropReason: 'couldn\'t find "Puka Nacua" in the box score',
     outcomeResolved: false,
   }),
   'matched game, but couldn\'t find "Puka Nacua" in the box score'

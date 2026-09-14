@@ -19,7 +19,7 @@ import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import type { GameCardStreak } from "@/lib/game-card-record-line";
 import { easternDateRange } from "@/lib/dates";
 import { nrfiSide, betScope, periodLabel } from "@/lib/bet-line";
-import { findMatchingGameResult, resolveOutcome, resolveTouchdownProp, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
+import { findMatchingGameResult, resolveOutcome, resolvePlayerProp, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import {
   isStuckParlayLeg,
   computeStuckLegReason,
@@ -164,11 +164,14 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
         if (!match) {
           unmatchedReason = "no matching game found";
         } else if (p.betType === "PLAYER_PROP") {
-          // Touchdown props resolve differently (player-level box-score data,
+          // Player props resolve differently (player-level box-score data,
           // not resolveOutcome/gradePick's team-score path) - reuses the same
-          // resolveTouchdownProp the real grader calls, so this reason always
-          // reflects the actual reason grading is stuck, not a generic guess.
-          const propResult = await resolveTouchdownProp(p, match.game.externalId, p.sport.name);
+          // resolvePlayerProp dispatcher the real grader calls (which routes
+          // to resolveTouchdownProp for TD props and resolveYardageOrReceptionsProp
+          // for the 4 structured markets), so this reason always reflects the
+          // actual reason grading is stuck for THIS pick's market, not a
+          // stale TD-specific guess.
+          const propResult = await resolvePlayerProp(p, match.game.externalId, p.sport.name);
           if (propResult.outcome === null) {
             unmatchedReason = "matched game, but " + propResult.reason;
           }
@@ -231,7 +234,7 @@ export type StuckParlayLegRow = {
 // legs that are genuinely stuck (leg PENDING, parent parlay still PENDING,
 // game finished long ago) and computes the same class of human-readable
 // reason strings a stuck standalone pick gets, by re-running the exact same
-// pure grading functions (findMatchingGameResult / resolveTouchdownProp /
+// pure grading functions (findMatchingGameResult / resolvePlayerProp /
 // resolveOutcome) per leg. Trailing legs of an already-resolved parlay are
 // filtered out by the parent-still-PENDING check - see parlay-leg-triage.ts
 // for why they must never appear.
@@ -272,7 +275,7 @@ export async function getPendingLegsForUser(userId: string): Promise<StuckParlay
         resolvable,
         matched: false,
         isPlayerProp: leg.betType === "PLAYER_PROP",
-        touchdownPropReason: null,
+        playerPropReason: null,
         outcomeResolved: false,
       };
       if (resolvable) {
@@ -280,8 +283,16 @@ export async function getPendingLegsForUser(userId: string): Promise<StuckParlay
         if (match) {
           probe.matched = true;
           if (leg.betType === "PLAYER_PROP") {
-            const propResult = await resolveTouchdownProp(leg, match.game.externalId, leg.sport.name);
-            probe.touchdownPropReason = propResult.outcome === null ? propResult.reason : null;
+            // Leg has no playerName/propMarket columns (those exist only on
+            // Pick) - passing null for both makes resolvePlayerProp re-derive
+            // the market from betDetail text via its own fallback, same as
+            // any legacy PLAYER_PROP row.
+            const propResult = await resolvePlayerProp(
+              { playerName: null, propMarket: null, betDetail: leg.betDetail, homeTeam: leg.homeTeam, awayTeam: leg.awayTeam },
+              match.game.externalId,
+              leg.sport.name
+            );
+            probe.playerPropReason = propResult.outcome === null ? propResult.reason : null;
           } else {
             probe.outcomeResolved = resolveOutcome(leg, match.game) !== null;
           }
