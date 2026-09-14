@@ -3,6 +3,10 @@
 // React form both transitively pull things - @/server/auth's React cache(),
 // prisma - that can't load in the test runner).
 //
+// @prisma/client is imported type-only below (BetType) - erased at compile
+// time, so it doesn't pull the Prisma client runtime into this file and
+// doesn't break the tsx-loadable guarantee above.
+//
 // Two concerns, both dependency-free:
 //   1. computeDuplicateFlags - the server's "is this pick a duplicate?"
 //      decision: each resolved item is checked against BOTH the user's
@@ -16,7 +20,34 @@
 //      and the button copy that surfaces the skip count instead of burying
 //      it.
 
+import type { BetType } from "@prisma/client";
+
 export type DuplicateFlag = { message: string };
+
+// pickCategory (server/data/stats.ts) deliberately collapses every TEAM_TOTAL
+// pick into one bucket, "TEAM_TOTAL", regardless of which team or which side
+// (over/under) - correct for its own purpose (one stats tile per sport, see
+// its own comment), but not side-aware enough for "is this literally the
+// same bet". checkDuplicatePicksAction reuses pickCategory's output as its
+// same-bet key; without this, a newly-pasted "Auburn Over 44.5" false-
+// positives against an already-logged "Georgia Under 21.5" on the very same
+// game, since both reduce to plain "TEAM_TOTAL". This widens the dup-check
+// key for TEAM_TOTAL only (every other bet type's pickCategory output is
+// already side-aware and passes through unchanged) by folding in pickedSide
+// (the same HOME/AWAY field TEAM_TOTAL grading itself keys off - see
+// schema.prisma's Pick.pickedSide comment) and over/under parsed from the
+// bet's own text.
+export function dedupCategory(
+  category: string,
+  betType: BetType,
+  betDetail: string | null,
+  pickedSide: "HOME" | "AWAY" | null | undefined
+): string {
+  if (betType !== "TEAM_TOTAL") return category;
+  const detail = (betDetail ?? "").toLowerCase();
+  const overUnder = detail.includes("over") ? "OVER" : detail.includes("under") ? "UNDER" : "UNK";
+  return category + ":" + (pickedSide ?? "UNK") + ":" + overUnder;
+}
 
 // A batch item already resolved to a real scheduled game + a comparable
 // side-aware category. Items that couldn't be resolved that far are simply
