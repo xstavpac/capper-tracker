@@ -17,67 +17,37 @@ import { TIER_LABELS } from "@/lib/entitlements";
 import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
 import { DateRangeFilter } from "@/components/picks/date-range-filter";
 import { SportBetTypeFilter } from "@/components/picks/sport-bet-type-filter";
-import { betTypeFilterCategory, BET_TYPE_FILTER_OPTIONS, type BetTypeFilterKey } from "@/lib/bet-type-filter";
+import {
+  betTypeFilterCategory,
+  firstHalfLabelPrefixForChipSet,
+  visibleBetTypeOptionsForChipSet,
+  type BetTypeFilterKey,
+} from "@/lib/bet-type-filter";
 import { formatPickLabel } from "@/lib/bet-line";
 import type { PickStatus } from "@prisma/client";
 
 const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
 
-// Two different sports' vocabulary for the same "first half of the game"
-// period (schema.prisma's Period.FIRST_HALF comment: `"F5" in baseball
-// terms, first half elsewhere`) - split into two lists (rather than the one
-// combined list this used to be) so a label can be chosen per sport, not
-// just a single yes/no "does this sport have first-half categories at all".
-// MLB is the only chip set with the F5_* keys; NFL/NCAAF are the only chip
-// sets with FIRST_HALF_ML/OVER/UNDER (see MLB_CHIP_SET/NFL_CHIP_SET's own
-// comments in stats.ts) - KBO_CHIP_SET has neither, so KBO never reaches
-// either branch and (same as before this split) gets no F5/1H options at
-// all, not "F5" by virtue of also being a baseball-family sport.
-const F5_INNINGS_CATEGORY_KEYS: PickCategoryKey[] = ["F5_ML", "F5_SPREAD_MINUS", "F5_SPREAD_PLUS", "F5_OVER", "F5_UNDER"];
-const FIRST_HALF_PERIOD_CATEGORY_KEYS: PickCategoryKey[] = ["FIRST_HALF_ML", "FIRST_HALF_OVER", "FIRST_HALF_UNDER"];
-const FIRST_HALF_CATEGORY_KEYS: PickCategoryKey[] = [...F5_INNINGS_CATEGORY_KEYS, ...FIRST_HALF_PERIOD_CATEGORY_KEYS];
-
-// Reuses chipSetForLeague (stats.ts) - the same per-sport category mapping
-// that already drives the Sharp Money page and capper detail tiles - as the
-// single source of truth for which bet types are relevant to a sport, rather
-// than a second, hand-maintained per-sport list. Spread/Moneyline/Total are
-// unconditional since every chip set (MLB_CHIP_SET, NFL_CHIP_SET,
-// DEFAULT_CHIP_SET, ...) includes their underlying FAV_ML/DOG_ML/
-// SPREAD_MINUS/SPREAD_PLUS/OVER/UNDER categories.
-function betTypeOptionsForSport(sportName: string | undefined): Set<BetTypeFilterKey> {
-  const always: BetTypeFilterKey[] = ["SPREAD", "MONEYLINE", "TOTAL"];
-  if (!sportName) return new Set(BET_TYPE_FILTER_OPTIONS.map((o) => o.value));
-
-  const chipSet = chipSetForLeague(sportName);
-  const has = (keys: PickCategoryKey[]) => keys.some((k) => chipSet.includes(k));
-
-  const options = [...always];
-  if (has(FIRST_HALF_CATEGORY_KEYS)) options.push("F5_SPREAD", "F5_MONEYLINE", "F5_TOTAL");
-  if (chipSet.includes("TEAM_TOTAL")) options.push("TEAM_TOTAL");
-  if (chipSet.includes("TD_PROP")) options.push("PLAYER_PROP");
-  if (has(["NRFI", "YRFI"])) options.push("NRFI", "YRFI");
-  return new Set(options);
+// betTypeOptionsForChipSet/firstHalfLabelPrefixForChipSet/
+// visibleBetTypeOptionsForChipSet now live in lib/bet-type-filter.ts (moved
+// there so the sport-gating decision - not just the pick classification - is
+// covered by a real, executable test; that file can't call chipSetForLeague
+// itself and stay client-safe, so it takes an already-resolved chip set
+// instead of a sportName). The two thin wrappers below just do that
+// resolution - reused by both the bet-type dropdown below AND the per-row
+// "FIRST_HALF" period badge (both the pick rows and the parlay leg rows),
+// always passing a specific pick/leg's own real sport.name rather than the
+// page's `sportId` filter, so a row's badge is always correct for that ROW's
+// sport even when the sport filter itself is "All sports" and rows from
+// multiple sports are mixed together on the page. `undefined` (the dropdown,
+// when no sportId filter is selected) resolves to `null` - every option is
+// relevant then, and the first-half label stays "F5".
+function chipSetForSport(sportName: string | undefined): PickCategoryKey[] | null {
+  return sportName ? chipSetForLeague(sportName) : null;
 }
 
-// "F5" (baseball's first-5-innings term) is only correct for MLB - a
-// football sport's first-half picks share the same F5_SPREAD/F5_MONEYLINE/
-// F5_TOTAL filter KEYS (see betTypeFilterCategory below, which buckets any
-// sport's period===FIRST_HALF pick the same way) but must never be LABELED
-// "F5" anywhere on this page - the bet-type dropdown options below AND the
-// per-row "FIRST_HALF" period badge (both the pick rows and the parlay leg
-// rows) both call this, always passing a specific pick/leg's own real
-// sport.name rather than the page's `sportId` filter, so a row's badge is
-// always correct for that ROW's sport even when the sport filter itself is
-// "All sports" and rows from multiple sports are mixed together on the page.
-// The one caller that passes `undefined` (the dropdown, when no sportId
-// filter is selected) keeps the original "F5" label there - that case isn't
-// scoped to one sport's vocabulary, and every sport that actually has
-// first-half data reaches this from MLB or NFL/NCAAF (never both at once),
-// so there's no real ambiguity being papered over.
 function firstHalfLabelPrefix(sportName: string | undefined): "F5" | "1H" {
-  if (!sportName) return "F5";
-  const chipSet = chipSetForLeague(sportName);
-  return chipSet.some((k) => F5_INNINGS_CATEGORY_KEYS.includes(k)) ? "F5" : "1H";
+  return firstHalfLabelPrefixForChipSet(chipSetForSport(sportName));
 }
 
 // Short badge text for a pick's period, or null for a plain full-game pick.
@@ -98,20 +68,12 @@ function periodBadgeLabel(period: string, sportName: string | undefined): string
   return PERIOD_BADGE[period] ?? null;
 }
 
-const FIRST_HALF_BET_TYPE_KEYS: BetTypeFilterKey[] = ["F5_SPREAD", "F5_MONEYLINE", "F5_TOTAL"];
-
-// Combines betTypeOptionsForSport (which options are relevant) with
-// firstHalfLabelPrefix (what to call the first-half ones) into the final
-// {value, label}[] a <select> renders for one sport - factored out since
-// SportBetTypeFilter's live client-side update needs this computed for
-// EVERY sport up front (see optionsBySportId below), not just whichever one
-// happens to be selected server-side at render time.
+// Thin resolution wrapper - factored out since SportBetTypeFilter's live
+// client-side update needs this computed for EVERY sport up front (see
+// optionsBySportId below), not just whichever one happens to be selected
+// server-side at render time.
 function computeVisibleBetTypeOptions(sportName: string | undefined): { value: BetTypeFilterKey; label: string }[] {
-  const relevant = betTypeOptionsForSport(sportName);
-  const prefix = firstHalfLabelPrefix(sportName);
-  return BET_TYPE_FILTER_OPTIONS.filter((o) => relevant.has(o.value)).map((o) =>
-    FIRST_HALF_BET_TYPE_KEYS.includes(o.value) ? { ...o, label: o.label.replace(/^F5\b/, prefix) } : o
-  );
+  return visibleBetTypeOptionsForChipSet(chipSetForSport(sportName));
 }
 
 // betTypeFilterCategory now lives in lib/bet-type-filter.ts, reused as-is by
