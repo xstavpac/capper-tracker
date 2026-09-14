@@ -167,7 +167,10 @@ async function main() {
   expect("Josh Allen Over 1.5 Passing TDs: point is 1.5", overAllen.point, 1.5);
 
   // =====================================================================
-  // 4. Markets outside the five gradeable ones are ignored, not normalized.
+  // 4. Markets outside the ingested set are ignored, not normalized.
+  //    (player_rush_attempts is a real Odds API market key - confirmed via
+  //    docs - deliberately NOT in NFL_PROP_MARKET_KEYS yet, unlike
+  //    player_rush_yds which section 5 below proves IS ingested.)
   // =====================================================================
   const ungraded: OddsGame = {
     id: "ungraded-event",
@@ -181,20 +184,89 @@ async function main() {
         title: "DraftKings",
         markets: [
           { key: "h2h", outcomes: [{ name: "Buffalo Bills", price: -150 }] },
-          { key: "player_rush_yds", outcomes: [{ name: "Over", description: "James Cook III", price: -110, point: 65.5 }] },
+          { key: "player_rush_attempts", outcomes: [{ name: "Over", description: "James Cook III", price: -110, point: 12.5 }] },
         ],
       },
     ],
   };
-  expect("h2h and ungraded prop markets (e.g. player_rush_yds) produce zero normalized lines", normalizePlayerPropLines(ungraded), []);
+  expect(
+    "h2h and un-ingested prop markets (e.g. player_rush_attempts) produce zero normalized lines",
+    normalizePlayerPropLines(ungraded),
+    []
+  );
 
-  expect("NFL_PROP_MARKET_KEYS is exactly the 5 gradeable markets", [...NFL_PROP_MARKET_KEYS].sort(), [
+  expect("NFL_PROP_MARKET_KEYS is exactly the 8 ingested markets", [...NFL_PROP_MARKET_KEYS].sort(), [
     "player_anytime_td",
     "player_pass_attempts",
     "player_pass_completions",
     "player_pass_tds",
     "player_pass_yds",
+    "player_reception_yds",
+    "player_receptions",
+    "player_rush_yds",
   ]);
+
+  // =====================================================================
+  // 5. player_rush_yds / player_reception_yds / player_receptions - real
+  //    captured response (see nfl-prop-odds.ts's header on
+  //    PLAYER_ANYTIME_TD_MARKET_KEY for the live-verification details).
+  //    Confirms these three markets normalize as ordinary two-sided
+  //    Over/Under lines, same as the passing markets - no special-casing
+  //    needed the way player_anytime_td required.
+  // =====================================================================
+  const rushRecGame = loadFixture("odds-api-event-rush-rec-response.json");
+  const rushRecLines = normalizePlayerPropLines(rushRecGame);
+
+  ok("real rush/receiving response: produced many lines across 6 bookmakers", rushRecLines.length > 300, rushRecLines.length);
+  ok(
+    "every normalized rush/receiving line's side is Over or Under - confirmed two-sided, no one-sided surprise",
+    rushRecLines.every((l) => l.side === "Over" || l.side === "Under")
+  );
+  ok(
+    "every normalized rush/receiving line carries a non-null point - confirmed no player_anytime_td-style null point here",
+    rushRecLines.every((l) => l.point !== null)
+  );
+  ok(
+    "only the three requested markets appear - no other market key leaked through",
+    rushRecLines.every((l) => l.marketKey === "player_rush_yds" || l.marketKey === "player_reception_yds" || l.marketKey === "player_receptions")
+  );
+
+  const kelceReceivingYds = find(rushRecLines.filter((l) => l.marketKey === "player_reception_yds"), "draftkings", "Travis Kelce");
+  const kelceOver = rushRecLines.find(
+    (l) => l.marketKey === "player_reception_yds" && l.bookmakerKey === "draftkings" && l.playerName === "Travis Kelce" && l.side === "Over"
+  );
+  expect("Travis Kelce (DraftKings) Over receiving yards", kelceOver && { point: kelceOver.point, price: kelceOver.price }, {
+    point: 42.5,
+    price: -110,
+  });
+  ok("Travis Kelce receiving-yards line found via the same find() helper used elsewhere", !!kelceReceivingYds);
+
+  const mahomesRushOver = rushRecLines.find(
+    (l) => l.marketKey === "player_rush_yds" && l.bookmakerKey === "draftkings" && l.playerName === "Patrick Mahomes" && l.side === "Over"
+  );
+  expect("Patrick Mahomes (DraftKings) Over rushing yards - a QB rushing-yards line, not filtered out", mahomesRushOver && {
+    point: mahomesRushOver.point,
+    price: mahomesRushOver.price,
+  }, { point: 15.5, price: -106 });
+
+  const kelceReceptionsUnder = rushRecLines.find(
+    (l) => l.marketKey === "player_receptions" && l.bookmakerKey === "draftkings" && l.playerName === "Travis Kelce" && l.side === "Under"
+  );
+  expect("Travis Kelce (DraftKings) Under receptions", kelceReceptionsUnder && { point: kelceReceptionsUnder.point, price: kelceReceptionsUnder.price }, {
+    point: 4.5,
+    price: -160,
+  });
+
+  // lineKey distinctness: Travis Kelce has lines on three different markets
+  // in this fixture (reception yards, receptions - not rush yards, he's a
+  // TE) - each must be its own distinct line, never colliding just because
+  // the player/bookmaker match.
+  const kelceLines = rushRecLines.filter((l) => l.bookmakerKey === "draftkings" && l.playerName === "Travis Kelce");
+  ok("Travis Kelce (DraftKings): at least 4 distinct lines (Over/Under x 2 markets)", kelceLines.length >= 4, kelceLines.length);
+  ok(
+    "all of Travis Kelce's DraftKings lines have distinct lineKeys",
+    new Set(kelceLines.map((l) => l.lineKey)).size === kelceLines.length
+  );
 
   console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);
