@@ -75,6 +75,21 @@ enum PickedSide {
   AWAY
 }
 
+// The specific stat a PLAYER_PROP pick is about. NFL-specific for now
+// (deliberately not designed to also cover MLB props yet - that's a
+// separate, unscoped decision for whenever MLB prop grading is built). TD
+// covers what parseTouchdownProp/resolveTouchdownProp already grade today
+// (rushing/receiving/anytime, not distinguished further here - propType
+// RUSHING vs RECEIVING vs ANY stays a parseTouchdownProp-internal
+// return value, never persisted, same as before this enum existed).
+enum PropMarket {
+  PASS_YDS
+  RUSH_YDS
+  REC_YDS
+  RECEPTIONS
+  TD
+}
+
 // ---------- Models ----------
 
 model User {
@@ -263,6 +278,19 @@ model Pick {
     // predating this column (no historical backfill - see docs/ml-favorite-classification.md), manually
     // entered picks, and any import where the market couldn't be resolved (off-season, name mismatch, game
     // already started). When null, favoriteOrUnderdog falls back to the odds sign exactly as it does today.
+  playerName String? // the PLAYER_PROP subject's name, captured once at import - schema-only for now (PR 1 of
+    // 3: schema, then parser/categorization, then grading). Nothing reads or writes this column yet; every
+    // existing PLAYER_PROP pick (all touchdown props today) stays null and keeps resolving via
+    // parseTouchdownProp/resolveTouchdownProp's existing betDetail-text re-derivation, untouched by this
+    // column's existence. No historical backfill, same as pickedSide/mlFavoredSide above.
+  propMarket PropMarket? // which specific stat this PLAYER_PROP pick is about (see the PropMarket enum) -
+    // same "schema-only for now, nothing wired yet" status as playerName above. Exists because pickCategory
+    // (stats.ts) collapses every PLAYER_PROP into one "TD_PROP" category today only because touchdown props
+    // are the only sub-type that exists; once passing/rushing/receiving-yards and receptions props are
+    // gradeable, pickCategory needs to tell them apart for every row it touches (leaderboards, category
+    // tiles) without re-running a betDetail text parse per row per query - a plain enum read here does that,
+    // the same way betType already does for every other category branch. null for every pick predating this
+    // column and, until PR 2/3 land, for every pick period.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
