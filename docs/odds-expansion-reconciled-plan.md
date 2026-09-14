@@ -15,6 +15,15 @@ reflect that; everything else in this document — the credit budget, the
 admin-switch design, and the still-open items — is unchanged and still
 accurate. See the callouts inline.
 
+**Correction (same day):** an earlier version of this update incorrectly
+carried forward this document's original claim that `Pick.playerName` was
+missing. It isn't — `playerName` and `propMarket` were both added to `Pick`
+in PR #72 and populated at import in PR #73, which merged *before* this
+document's original PR #74, i.e. before the 2026-09-11 date above. That
+means the original doc's "needs a genuine schema addition" framing (Section
+4) was already stale on the day it was written, independent of #75/#76.
+Section 4 is corrected below.
+
 **Sources reconciled:**
 1. "Odds API Market Expansion & Centralized Polling Specification v1.0" (the
    whitepaper) — full-game/period/prop market expansion across 7 sports,
@@ -144,9 +153,12 @@ See Section 5.
 ## 4. The real hard lift: player-prop schema
 
 Both source documents undersell this. The `PLAYER_PROP` `BetType` value
-exists; as of 2026-09-11 it meant "touchdown prop" exclusively. **As of PRs
-#75 and #76 (2026-09-14) that's no longer the full picture — see the two
-mechanisms below.**
+exists, and — see the correction note at the top of this document — its
+schema/parsing support for markets beyond touchdowns (`playerName`,
+`propMarket`, and non-TD parsing) was already in place by PR #73, before
+this section was originally written. PRs #75 (grading) and #76 (posting-time
+odds enrichment) build on that existing schema rather than adding to it —
+see the two mechanisms below.
 
 **Two distinct mechanisms exist for `PLAYER_PROP` picks today, and they must
 not be conflated:**
@@ -197,19 +209,37 @@ The rest of the original schema-gap finding is unchanged:
   return "TD_PROP"`), not dispatched per-market. This category/UI
   distinction is still deferred, unchanged from the original plan (Section
   5, step 5, still open).
-- **There is now a `propMarket` column on `Pick`** (the `PropMarket` enum:
-  `PASS_YDS | RUSH_YDS | REC_YDS | RECEPTIONS | TD`, mirrored as
-  `PlayerPropMarket` in `src/lib/bet-line.ts`), added as part of PR #75's
-  structured-market work — the schema gap this section originally flagged
-  for those 4 non-TD NFL markets is closed. What's still missing is a
-  `playerName` column: the prop subject still lives only in free-text
-  `betDetail`, matched by fuzzy string comparison (`isLikelyDuplicateName`)
-  rather than a stored identity, both for grading and for the #76 odds match.
-  A dedicated `playerName` column remains unbuilt.
+- **Correction (this line was wrong in an earlier version of this doc):**
+  `Pick` already has both a `playerName` column and a `propMarket` column
+  (the `PropMarket` enum: `PASS_YDS | RUSH_YDS | REC_YDS | RECEPTIONS | TD`,
+  mirrored as `PlayerPropMarket` in `src/lib/bet-line.ts`). Neither is
+  missing. The columns were added schema-only in PR #72, then populated at
+  import time in PR #73 (`bulk-picks.ts` sets both on every newly-imported
+  `PLAYER_PROP` pick from `parsePlayerProp(item.description)`) — both
+  predate PR #75/#76, not part of them. Grading reads them directly:
+  `resolvedPropMarket`/`resolvedPlayerName` (`src/server/data/grading.ts`)
+  trust `pick.propMarket`/`pick.playerName` when set, falling back to a
+  fresh `betDetail` text parse only for picks that predate PR #73 or were
+  entered manually (which never run through `parsePlayerProp` at import).
+  The `resolveTouchdownProp` (TD) path is the one exception — it still
+  re-parses `betDetail` unconditionally rather than reading the stored
+  columns, even for a post-#73 pick, though the result is the same value
+  either way today. The schema addition this section originally described
+  as the "real hard lift" is fully shipped; there is no remaining schema
+  gap for `playerName`/`propMarket`. What both stored columns are still
+  fuzzy-matched against (via `isLikelyDuplicateName`) is external data —
+  ESPN box-score player names for grading, Odds-API bookmaker outcome names
+  for #76's enrichment — which is a real, permanent matching concern, not a
+  schema gap on this app's side.
 
-This — plus the still-collapsed `TD_PROP` category — remains a real gap for
-any sport/market beyond NFL's 5 current markets, regardless of which sport's
-odds get ingested first.
+The still-collapsed `TD_PROP` category (`pickCategory()`, above) is no
+longer a schema problem — the data needed to tell the 5 markets apart is
+already stored and already flows into grading. It's purely UI/category
+dispatch work (Section 5, step 5), same as `bet-type-filter.ts`'s parallel
+collapse below. The remaining real gap for expanding beyond NFL's 5 current
+markets is per-sport parser coverage (`parsePlayerProp`/`parseTouchdownProp`
+are NFL-phrasing-specific) and per-sport box-score/data-source integration
+(Section 5, steps 2, 6, 7) — not schema.
 
 **Still open after #75/#76, not forgotten:**
 - **`bet-type-filter.ts`'s parallel collapsed axis is still undecided, not
@@ -246,16 +276,16 @@ actual data sources, not assumed):
    outs) in the shape documented for that public API. This codebase has
    never fetched or verified that shape live; it's a verification task
    against an endpoint already integrated, not a new integration.
-3. **`playerName` + prop-market sub-type schema addition** (Section 4).
-   **Half-shipped.** The prop-market sub-type half landed as part of PR #75
-   — `Pick.propMarket` (`PropMarket` enum) now exists and is what step 1's
-   grading dispatch and PR #76's posting-time odds-enrichment matching
-   (Section 4) both key off of. The `playerName` column is still unbuilt; the
-   prop subject is still matched by fuzzy string comparison against
-   free-text `betDetail` rather than a stored identity. This remaining half
-   is still a hard prerequisite
-   for any prop beyond NFL's current 5 markets, and before step 6 (NBA) is
-   worth starting at all.
+3. **`playerName` + prop-market sub-type schema addition** (Section 4). **✅
+   Shipped — PR #72 (schema) + PR #73 (populated at import), both before
+   PR #75/#76.** `Pick.playerName` and `Pick.propMarket` (`PropMarket` enum)
+   both exist and are set on every `PLAYER_PROP` pick imported since #73;
+   step 1's grading dispatch and #76's posting-time odds-enrichment matching
+   (Section 4) both read the stored columns directly. Nothing schema-level
+   remains outstanding here. What's still a real prerequisite for any prop
+   beyond NFL's current 5 markets, and for step 6 (NBA) being worth starting,
+   is per-sport parser coverage and a per-sport box-score data source — not
+   schema (see the closing paragraph of Section 4).
 4. **Period-market odds ingestion.** Cheap relative to props — the schema,
    `Period` enum, and catalog period-detection are already built (Section
    2); this step is primarily widening `ODDS_MARKET_PARAMS` / adding
@@ -349,6 +379,6 @@ permission system for this.
 | Whitepaper targets 20,000 credits/month; internal doc recommends $59/100,000 | **20,000/month is locked.** The doc's rejection of that tier assumed a heavier cadence than this plan's leaner centralized-polling design uses; actual consumption under the real cadence is unmeasured, not assumed safe or unsafe. | Whitepaper §3; internal doc §3 (73% peak under hourly-window modeling); this plan §1 |
 | Internal doc: NFL/NBA player props "✅ (today)" | **False as of 2026-09-11** — no event-level odds calls or player-prop market keys existed anywhere in `odds.ts`. **Partially superseded for NFL by PR #76 (2026-09-14)**, which added NFL event-level prop-odds ingestion for posting-time price enrichment only, not grading. Still false for NBA. | Direct grep, 2026-09-11; `nfl-prop-odds.ts`, 2026-09-14; this plan §3 |
 | Whether period markets need new schema | **No — already built and wired.** | `prisma/schema.prisma:60-71`, commit `cdef254`; this plan §2 |
-| Whether `PLAYER_PROP` needs a new enum value | **No** — the value exists. As of PR #75 (2026-09-14), the prop-market discriminator (`Pick.propMarket`, `PropMarket` enum) also now exists — what's still missing is the `playerName` column and the category/filter dispatch logic behind it. | `prisma/schema.prisma:34-41,85`; `parse-catalog.ts`; `bet-line.ts`; `stats.ts`; this plan §4 |
+| Whether `PLAYER_PROP` needs a new enum value | **No** — the value exists. `Pick.playerName` and `Pick.propMarket` (`PropMarket` enum) also both exist and are populated at import (PR #72 schema, PR #73 population — both predate #75/#76). Nothing schema-level remains; what's still missing is the category/filter dispatch logic that reads them (`pickCategory()`/`bet-type-filter.ts` still collapse every market into one bucket) and per-sport parser/data-source coverage beyond NFL. | `prisma/schema.prisma:34-41,85,281,286`; `bulk-picks.ts`; `grading.ts`; `stats.ts`; this plan §4 |
 | NHL grading status | **Already fully built** (full game + P1-P3), inert only pending the 2026-10-07 season window — internal doc's claim here checked out. | `odds.ts:744-757`, `sport-seasons.ts:59` |
 | Whitepaper's NFL prop market list (10 markets incl. separate rushing/receiving TDs) vs. internal doc's locked list (6 markets) | **Not resolved by this document** — re-verify the internal doc's confirmed key names against the live Odds API before finalizing the NFL prop list in step 1 of the build order; do not invent keys per whitepaper §6. | Whitepaper §7-11; internal doc §2b |
