@@ -279,6 +279,71 @@ async function main() {
     }, { sport: "NFL", method: "pick_context" });
   }
 
+  console.log("\n########## PART C: bare CITY names run the SAME hierarchy as nickname collisions ##########");
+  {
+    // Single-candidate city ("green bay" -> only the Packers): the schedule
+    // check still runs (nothing special-cases a 1-element candidate list),
+    // and a real game today resolves it via "schedule" - same method/shape
+    // as any nickname case, not a different code path.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Green Bay -6.5")], {}, {
+      runScheduleCheck: fakeSchedule(["green bay packers|NFL"]),
+      now: SEPT,
+    });
+    check("Green Bay: its one candidate has a game today -> NFL via schedule", {
+      sport: res.picks[0].sportName,
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "NFL", nicknames: ["green bay packers"], method: "schedule" });
+  }
+  {
+    // Genuinely multi-candidate city ("chicago" -> 6 franchises across MLB/
+    // NFL/NBA/NHL/WNBA). Exactly one has a game today (the Cubs) -> resolves
+    // MLB via schedule, the same narrowing "Cardinals"/"Bucs" get above -
+    // never an auto-pick just because MLB or the Bears are "the big team".
+    const res = await runAmbiguousHierarchy([ambiguousPick("Chicago -1.5")], {}, {
+      runScheduleCheck: fakeSchedule(["chicago cubs|MLB"]),
+      now: SEPT,
+    });
+    check("Chicago: only the Cubs have a game today -> MLB via schedule (of 6 real candidates)", {
+      sport: res.picks[0].sportName,
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "MLB", nicknames: ["chicago cubs"], method: "schedule" });
+  }
+  {
+    // Two of Chicago's candidates play the same day (Cubs AND Bears) -
+    // schedule inconclusive. Calendar also can't settle it: MLB (both Cubs
+    // and White Sox), NFL, and WNBA are all in season simultaneously in
+    // September, so more than one sport stays in the running - no pick-
+    // context signal in a bare "-1.5" either. Surfaces for a manual choice,
+    // listing all 6 real candidates - exactly like "Liberty: both playing,
+    // both in season" above, not a narrower or city-specific prompt.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Chicago -1.5")], {}, {
+      runScheduleCheck: fakeSchedule(["chicago cubs|MLB", "chicago bears|NFL"]),
+      now: SEPT,
+    });
+    check("Chicago: two candidates playing, multiple sports in season -> stays ambiguous (no guess)", {
+      sport: res.picks[0].sportName,
+      stillAmbiguousKey: res.stillAmbiguous[0]?.key,
+      candidateCount: res.stillAmbiguous[0]?.options.length,
+    }, { sport: "", stillAmbiguousKey: "chicago", candidateCount: 6 });
+  }
+  {
+    // Calendar fallback in the dead of winter (NFL/MLB/WNBA all out of
+    // season, only NBA/NHL in their window) still can't narrow Chicago to
+    // one - Bulls (NBA) and Blackhawks (NHL) are both in season together -
+    // demonstrating the multi-candidate city genuinely needs the schedule
+    // check or a manual choice even outside the September overlap window.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Chicago ML")], {}, {
+      runScheduleCheck: fakeSchedule([]),
+      now: new Date("2026-12-10T16:00:00Z"),
+    });
+    check("Chicago: mid-December, schedule blank -> still ambiguous (Bulls + Blackhawks both in season)", {
+      sport: res.picks[0].sportName,
+      stillAmbiguousKey: res.stillAmbiguous[0]?.key,
+    }, { sport: "", stillAmbiguousKey: "chicago" });
+  }
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }
