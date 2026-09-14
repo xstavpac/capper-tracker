@@ -753,6 +753,52 @@ model NflTeamStatSnapshot {
   @@map("nfl_team_stat_snapshots")
 }
 
+// One passer's raw box-score passing line for one NFL game, straight off
+// ESPN's boxscore.players "passing" category (see extractPasserRows in
+// server/data/nfl-passer-rows.ts) - deliberately NOT deduplicated down to
+// "the QB". A team can have more than one row per game (backup mop-up reps,
+// an injury replacement, a gadget-play pass, even a punter throwing a
+// trick-play pass - all real, all seen in Week 1 2026 box scores), and every
+// one of them is persisted here. Which row "counts" as the QB for a prop is
+// a separate, later decision - see selectQbPasserRow in the same file - and
+// is never applied before writing these rows; this table is the raw source
+// selection reads from, not its output.
+//
+// team is ESPN's own team displayName (e.g. "Buffalo Bills"), matching the
+// GameResult.homeTeam/awayTeam convention every other NFL table here joins
+// against. externalId matches GameResult.externalId (the ESPN NFL event
+// id). completions/attempts come from ESPN's combined "C/ATT" column (e.g.
+// "20/29") split on "/"; sacks/sackYardsLost likewise come from ESPN's
+// combined "SACKS" column ("2-11"), same split-on-delimiter shape as
+// NflTeamStatSnapshot's split of nflverse's own combined columns. qbr is
+// nullable - ESPN reports "--" instead of a number for a passer with too
+// few plays to compute one (seen for real: a punter's 1-attempt trick play).
+model NflPasserRow {
+  id              String    @id @default(cuid())
+  externalId      String
+  team            String
+  espnPlayerId    String?
+  playerName      String
+  completions     Int
+  attempts        Int
+  passingYards    Int
+  yardsPerAttempt Float
+  touchdowns      Int
+  interceptions   Int
+  sacks           Int
+  sackYardsLost   Int
+  qbr             Float?
+  rating          Float
+  sourceId        String    @default("espn_nfl_summary")
+  scope           DataScope @default(GLOBAL)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([externalId, team, playerName])
+  @@index([externalId])
+  @@map("nfl_passer_rows")
+}
+
 // A user-uploaded metric (Charts' Custom Metrics feature) - the catalog
 // entry (name, whether it's team-scoped, unit) for one imported CSV column.
 // Deliberately narrow/EAV-shaped (CustomMetricPoint below is one row per

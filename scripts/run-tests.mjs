@@ -66,6 +66,7 @@ const PURE_DESPITE_PRISMA_IMPORT = new Set([
   "src/server/data/zone-model-acceptance-test.ts",
   "src/server/data/feature-flags-acceptance-test.ts",
   "src/server/data/mlb-game-starters-acceptance-test.ts",
+  "src/server/data/nfl-passer-rows-acceptance-test.ts",
   "src/server/data/team-record-acceptance-test.ts",
   "src/server/data/situational-snapshot-acceptance-test.ts",
 ]);
