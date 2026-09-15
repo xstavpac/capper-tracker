@@ -1,6 +1,5 @@
 import { revalidateTag } from "next/cache";
 import { persistFinalScores, gradeAllPendingPicks, regradeAllFuzzyMatchedPicks } from "@/server/data/grading";
-import { gradeAllPendingLegs, regradeAllFuzzyMatchedLegs } from "@/server/data/parlay-grading";
 import { RESOLVABLE_SPORT_KEYS, LIVE_SPORTS } from "@/server/data/odds";
 import { cacheKeys } from "@/lib/cache-keys";
 
@@ -19,10 +18,6 @@ export const maxDuration = 60;
 // no one happens to be looking at those two pages. Every sport in
 // RESOLVABLE_SPORT_KEYS gets its scores refreshed and its pending picks
 // (across ALL users, not just whoever's browsing) graded in the same run.
-// Parlay legs are the one exception to the page-load fast path - they have
-// no page-load-triggered grading yet, so this cron is the only place they
-// get graded at all (see parlay-grading.ts). Each leg grade/regrade pass
-// also recomputes any ParlayBet it may have just resolved.
 //
 // Instrumentation: this route emits one structured console.log line tagged
 // "grade-picks-run" per invocation - total wall-clock, per-sport per-phase
@@ -59,36 +54,27 @@ export async function GET(req: Request) {
       const [persisted, persistMs] = await timed(() => persistFinalScores(sportKey));
       const [grading, gradeMs] = await timed(() => gradeAllPendingPicks(sportKey, sportName));
       const [regrading, regradeMs] = await timed(() => regradeAllFuzzyMatchedPicks(sportKey, sportName));
-      const [legGrading, legGradeMs] = await timed(() => gradeAllPendingLegs(sportKey, sportName));
-      const [legRegrading, legRegradeMs] = await timed(() => regradeAllFuzzyMatchedLegs(sportKey, sportName));
 
       return {
         sport: sportKey,
         persisted,
         grading,
         regrading,
-        legGrading,
-        legRegrading,
         changedUserIds: new Set([...grading.changedUserIds, ...regrading.changedUserIds]),
         timing: {
           persistMs,
           gradeMs,
           regradeMs,
-          legGradeMs,
-          legRegradeMs,
           graded: grading.graded,
           notMatched: grading.notMatched,
           remaining: grading.remaining,
-          legRemaining: legGrading.remaining,
         },
       };
     })
   );
 
   // Only the users whose pick status actually changed this run get their
-  // Dashboard cache busted - never a global flush. Leg grading is
-  // deliberately not included: that cached surface reads only Pick rows
-  // (parlay stats are a separate uncached query).
+  // Dashboard cache busted - never a global flush.
   const changedUserIds = new Set<string>(results.flatMap((r) => [...r.changedUserIds]));
   for (const userId of changedUserIds) {
     revalidateTag(cacheKeys.dashboard(userId));

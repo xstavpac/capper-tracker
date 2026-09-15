@@ -1,7 +1,6 @@
 // Structural-validation proof for three NCAAF grading-correctness fixes -
 // run with `npx tsx src/server/data/grading-correctness-acceptance-test.ts`.
-// Not a general test suite (this repo has no test runner configured yet, see
-// parlay-grading-acceptance-test.ts for the same pattern).
+// Not a general test suite (this repo has no test runner configured yet).
 //
 // Part 1: gradePick's same-mascot guard - a same-mascot NCAAF matchup (e.g.
 // Clemson Tigers @ LSU Tigers) can never silently mis-grade off whichever of

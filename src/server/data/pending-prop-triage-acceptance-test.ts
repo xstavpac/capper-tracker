@@ -1,13 +1,12 @@
-// Proof for the pending-pick/stuck-leg PLAYER_PROP triage fix in picks.ts:
-// getPendingPicksForUser and getPendingLegsForUser used to call
-// resolveTouchdownProp directly for every PLAYER_PROP pick/leg, regardless of
-// its actual market, so a still-pending pick in one of the 4 structured
-// markets added since (#75 - PASS_YDS/RUSH_YDS/REC_YDS/RECEPTIONS) showed the
-// stale "this bet text isn't a recognized touchdown prop" reason even though
-// the real grader (resolvePlayerProp) handles that market fine. Both
-// functions now call resolvePlayerProp, the same dispatcher the real grader
-// uses, so the reason text always matches the market the pick is actually
-// in.
+// Proof for the pending-pick PLAYER_PROP triage fix in picks.ts:
+// getPendingPicksForUser used to call resolveTouchdownProp directly for
+// every PLAYER_PROP pick, regardless of its actual market, so a still-pending
+// pick in one of the 4 structured markets added since (#75 -
+// PASS_YDS/RUSH_YDS/REC_YDS/RECEPTIONS) showed the stale "this bet text isn't
+// a recognized touchdown prop" reason even though the real grader
+// (resolvePlayerProp) handles that market fine. It now calls
+// resolvePlayerProp, the same dispatcher the real grader uses, so the reason
+// text always matches the market the pick is actually in.
 //
 // Pure: the prisma singleton's methods are swapped for spies before each
 // case, so no database and no network fetch is touched (each fixture's
@@ -17,8 +16,8 @@
 // grading-idempotency-acceptance-test.ts. Run with:
 //   npx tsx src/server/data/pending-prop-triage-acceptance-test.ts
 import { prisma } from "@/lib/prisma";
-import { getPendingPicksForUser, getPendingLegsForUser } from "@/server/data/picks";
-import type { Pick, Leg, GameResult, Capper, Sport, ParlayBet } from "@prisma/client";
+import { getPendingPicksForUser } from "@/server/data/picks";
+import type { Pick, GameResult, Capper, Sport } from "@prisma/client";
 
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {
@@ -112,41 +111,6 @@ async function main() {
     "malformed legacy PLAYER_PROP pick still falls through to resolveTouchdownProp's own reason (unaffected by this fix)",
     tdPick.unmatchedReason,
     "matched game, but this bet text isn't a recognized touchdown prop"
-  );
-
-  // ---- 3. Stuck parlay leg counterpart, RUSH_YDS market re-derived from
-  //         betDetail (Leg has no propMarket/playerName columns), no O/U line
-  //         -> same market-appropriate reason via getPendingLegsForUser. ----
-  patch("leg.findMany", async () => [
-    {
-      id: "leg-1",
-      parlayBetId: "parlay-1",
-      legIndex: 0,
-      betType: "PLAYER_PROP",
-      betDetail: "Bills James Cook III Rushing Yards", // no Over/Under number
-      line: null,
-      odds: -110,
-      homeTeam: "Buffalo Bills",
-      awayTeam: "Houston Texans",
-      gameTime: GAME_TIME,
-      status: "PENDING",
-      sport,
-      parlayBet: {
-        id: "parlay-1",
-        userId: "user-1",
-        status: "PENDING",
-        units: 1,
-        capper: { id: "capper-1", name: "Test Capper" } as unknown as Capper,
-        _count: { legs: 2 },
-      } as unknown as ParlayBet & { _count: { legs: number } },
-    } as unknown as Leg,
-  ]);
-
-  const [pendingLeg] = await getPendingLegsForUser("user-1");
-  expect(
-    "stuck RUSH_YDS parlay leg shows the real yardage-resolver reason via resolvePlayerProp, not the stale TD text",
-    pendingLeg.reason,
-    "matched game, but couldn't find an Over/Under line in this bet text"
   );
 
   restoreAll();

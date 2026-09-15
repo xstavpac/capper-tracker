@@ -1,12 +1,10 @@
 // Proof for the conditional grading writes (updateMany + PENDING / fuzzy
-// predicate) added to gradePickPool / regradeFuzzyPool / gradeAllPendingLegs
-// / regradeAllFuzzyMatchedLegs. The bug they fix: update({ where: { id } })
-// throws Prisma P2025 if the row was deleted mid-run (the /picks delete
-// feature), and that rejection propagates out of Promise.all and 500s the
-// whole grading cron with no retry.
+// predicate) added to gradePickPool / regradeFuzzyPool. The bug they fix:
+// update({ where: { id } }) throws Prisma P2025 if the row was deleted
+// mid-run (the /picks delete feature), and that rejection propagates out of
+// Promise.all and 500s the whole grading cron with no retry.
 //
-// Covers: duplicate delivery, deletion race, partial batch failure, and that
-// a count-0 leg is excluded from the parent-parlay recompute.
+// Covers: duplicate delivery, deletion race, and partial batch failure.
 //
 // Pure: the prisma singleton's methods are swapped for spies before each
 // call, so no database is touched. Run with:
@@ -14,8 +12,7 @@
 // Exits non-zero on any failed assertion.
 import { prisma } from "@/lib/prisma";
 import { gradePickPool, regradeFuzzyPool } from "@/server/data/grading";
-import { gradeAllPendingLegs } from "@/server/data/parlay-grading";
-import type { Pick, Leg, GameResult } from "@prisma/client";
+import type { Pick, GameResult } from "@prisma/client";
 
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {
@@ -154,52 +151,6 @@ async function main() {
     nextCount = 0; // already upgraded / no longer gradedViaFuzzyMatch
     const second = await regradeFuzzyPool([graded("r1")], SPORT_KEY, SPORT_NAME);
     expect("second regrade upgrades nothing", { upgraded: second.upgraded, users: second.changedUserIds.size }, { upgraded: 0, users: 0 });
-  }
-
-  // ---- 4. Parlay recompute: a count-0 leg is excluded from the parent recompute ----
-  {
-    const legRow = (id: string, parlayBetId: string): Leg =>
-      ({
-        id,
-        parlayBetId,
-        legIndex: 0,
-        sportId: "s1",
-        status: "PENDING",
-        betType: "MONEYLINE",
-        period: "FULL_GAME",
-        betDetail: "Yankees ML",
-        line: null,
-        homeTeam: "Yankees",
-        awayTeam: "Red Sox",
-        gameTime: T,
-      }) as unknown as Leg;
-
-    patch("sport.findUnique", async () => ({ id: "s1", name: SPORT_NAME }));
-    patch("leg.count", async () => 2);
-    patch("gameResult.findMany", async () => [gameResult()]);
-    patch("leg.findMany", async (args: { where?: Record<string, unknown> }) => {
-      // gradeAllPendingLegs' pending-list query vs recomputeParlayBetStatus' per-parlay query
-      if (args.where && args.where.status === "PENDING") return [legRow("legA", "P1"), legRow("legB", "P2")];
-      return [{ status: "WIN" }, { status: "WIN" }];
-    });
-    // legA writes (count 1), legB is already graded / gone (count 0)
-    patch("leg.updateMany", async (args: { where: { id: string } }) => ({ count: args.where.id === "legA" ? 1 : 0 }));
-
-    const recomputeFindUniqueIds: string[] = [];
-    patch("parlayBet.findUnique", async (args: { where: { id: string } }) => {
-      recomputeFindUniqueIds.push(args.where.id);
-      return { status: "PENDING" };
-    });
-    const parlayUpdateManyIds: string[] = [];
-    patch("parlayBet.updateMany", async (args: { where: { id: string } }) => {
-      parlayUpdateManyIds.push(args.where.id);
-      return { count: 1 };
-    });
-
-    const res = await gradeAllPendingLegs(SPORT_KEY, SPORT_NAME);
-    expect("only legA counted as graded (legB matched 0 rows)", res.graded, 1);
-    expect("recompute ran for P1 only, never P2", recomputeFindUniqueIds.sort(), ["P1"]);
-    expect("parent write (CAS) happened for P1 only", parlayUpdateManyIds.sort(), ["P1"]);
   }
 
   restoreAll();
