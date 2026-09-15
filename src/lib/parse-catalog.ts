@@ -1250,7 +1250,14 @@ function isTeamTotalText(text: string): boolean {
   return /\bteam\s*total\b/i.test(text) || /\bTT\b/i.test(text);
 }
 
-function parsePickText(description: string): {
+// Exported for player-roster-fallback.ts's recover-unresolved-picks
+// integration: a roster-resolved bare player-prop line ("Patrick Mahomes
+// Over 225 Passing Yards") needs the exact same betType/odds/units/period
+// derivation a team-prefixed player-prop line already gets here, so it's
+// re-read through this one function rather than a second, parallel
+// implementation - same "one function, re-read wherever needed" pattern as
+// parseTouchdownProp/extractLine elsewhere in this app.
+export function parsePickText(description: string): {
   betType: ParsedPick["betType"];
   odds: number | null;
   units: number;
