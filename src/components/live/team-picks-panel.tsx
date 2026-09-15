@@ -16,24 +16,25 @@ import {
 } from "@/lib/game-card-record-line";
 import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
-import type { AdvancedLiveTeamPanelData } from "@/components/live/advanced-live-team-panel-data";
+import type { AdvancedLiveGamePanelData, AdvancedLiveTeamSideData } from "@/components/live/advanced-live-team-panel-data";
 
-// Advanced Live's fixed detail panel - shows ONE team's picks at a time,
-// unlike GamePicksExpander (which lists AWAY/HOME/OTHER all at once when
-// opened). Deliberately not built on top of GamePicksExpander: that
+// Advanced Live's fixed detail panel - shows BOTH teams' picks at once,
+// stacked in one card, unlike GamePicksExpander (which lists AWAY/HOME/OTHER
+// all at once when opened, but only for one game card at a time inline in
+// the board). Deliberately not built on top of GamePicksExpander: that
 // component's whole shape is "expand to reveal every group", the opposite of
-// what a single-team panel needs. This reuses the same underlying pieces
+// what a fixed side panel needs. This reuses the same underlying pieces
 // GamePicksExpander uses for the pick-card itself (record-fetching action,
-// record-row/streak formatting, Avatar) rather than re-deriving any of that,
-// per the investigation's Step 2 finding - it's a new, purpose-built
-// component around old, unchanged data logic, not a parallel calculation.
+// record-row/streak formatting, Avatar) rather than re-deriving any of that -
+// it's a new, purpose-built component around old, unchanged data logic, not
+// a parallel calculation.
 //
 // A capper's category record is fetched here (not upstream) for the same
 // reason GamePicksExpander defers it to expand-time: it requires each
 // capper's full pick history and would be wasteful to compute for every game
-// on the board just because Advanced Live is open. Re-fetched whenever the
-// active team's pick set changes (game switch or team swap) - see the
-// useEffect key below.
+// on the board just because Advanced Live is open. Each team section fetches
+// its own records independently, re-fetched whenever that team's pick set
+// changes (a game switch) - see the useEffect key below.
 
 const TOP_PERFORMER_THRESHOLD = 60;
 
@@ -146,35 +147,25 @@ function PickCard({ pick, records, loading }: { pick: ExpanderPick; records: Cap
   );
 }
 
-export function TeamPicksPanel({
-  data,
-  otherTeamHref,
-}: {
-  data: AdvancedLiveTeamPanelData;
-  // Link to swap to the game's other team - the panel itself has no opinion
-  // on how the URL is built (query-param shape lives in the caller, per the
-  // app-wide "selection state is a query param" convention).
-  otherTeamHref: string;
-}) {
+// One team's section within the combined panel: header (color dot, name,
+// pick count) plus its pick list or empty-state. Fetches its own capper
+// records independently of the other team's section so one team's picks
+// rendering isn't blocked on the other team's record fetch.
+function TeamPickSection({ teamLabel, teamColor, picks }: AdvancedLiveTeamSideData) {
   const [loading, setLoading] = useState(false);
   const [records, setRecords] = useState<CapperLeagueRecords | null>(null);
 
-  // Re-fetch whenever the active team's pick set changes - a game switch or
-  // a team swap both produce a new `data.picks` identity from the parent
-  // (derived fresh each render from server-provided props), so this key is
-  // enough to detect either without threading gameId/team through as
-  // separate effect deps.
-  const picksKey = data.picks.map((p) => p.pickId).join(",");
+  const picksKey = picks.map((p) => p.pickId).join(",");
 
   useEffect(() => {
     let cancelled = false;
-    if (data.picks.length === 0) {
+    if (picks.length === 0) {
       setRecords(null);
       return;
     }
     setLoading(true);
     setRecords(null);
-    const entries = data.picks.map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category }));
+    const entries = picks.map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category }));
     getLeagueRecordsAction(entries).then((result) => {
       if (cancelled) return;
       setRecords(result);
@@ -183,40 +174,42 @@ export function TeamPicksPanel({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- picksKey stands in for data.picks (array identity changes every render otherwise)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- picksKey stands in for picks (array identity changes every render otherwise)
   }, [picksKey]);
 
   return (
-    <div className="rounded-card bg-card p-4 shadow-soft">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <span
-            className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15"
-            style={{ backgroundColor: data.teamColor ?? "rgb(var(--muted-foreground))" }}
-            aria-hidden="true"
-          />
-          <span className="text-sm font-semibold text-foreground">{data.teamLabel}</span>
-          <span className="text-xs text-muted-foreground">
-            &mdash; {data.picks.length} pick{data.picks.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        <Link
-          href={otherTeamHref}
-          className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-border-subtle"
-        >
-          {data.otherTeamLabel} &rarr;
-        </Link>
+    <div>
+      <div className="mb-2 flex items-center gap-1.5">
+        <span
+          className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15"
+          style={{ backgroundColor: teamColor ?? "rgb(var(--muted-foreground))" }}
+          aria-hidden="true"
+        />
+        <span className="text-sm font-semibold text-foreground">{teamLabel}</span>
+        <span className="text-xs text-muted-foreground">
+          &mdash; {picks.length} pick{picks.length === 1 ? "" : "s"}
+        </span>
       </div>
 
-      {data.picks.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">No logged picks for {data.teamLabel}.</p>
+      {picks.length === 0 ? (
+        <p className="py-4 text-center text-sm text-muted-foreground">No logged picks for {teamLabel}.</p>
       ) : (
         <div className="space-y-1.5">
-          {data.picks.map((pick) => (
+          {picks.map((pick) => (
             <PickCard key={pick.pickId} pick={pick} records={records} loading={loading} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+export function GameDetailPanel({ data }: { data: AdvancedLiveGamePanelData }) {
+  return (
+    <div className="rounded-card bg-card p-4 shadow-soft">
+      <TeamPickSection {...data.away} />
+      <div className="my-4 border-t border-border-subtle" />
+      <TeamPickSection {...data.home} />
     </div>
   );
 }

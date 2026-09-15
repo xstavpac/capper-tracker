@@ -1,43 +1,41 @@
-// Pure data shaping for Advanced Live's single-team picks panel - filters an
+// Pure data shaping for Advanced Live's game-detail panel - filters an
 // already-classified ExpanderPick[] (teamGroup computed upstream in
 // live/page.tsx via classifyPickTeamGroup, exactly as Standard Live already
-// does) down to one side of the matchup, plus the label/color for both that
-// team and the game's other team (for the panel's swap control). No team
-// classification happens here - that would be a second, parallel run of the
-// same classification Standard Live already paid for per pick; this only
-// reads the field that classification already produced.
+// does) into both sides of the matchup at once, plus each side's label/color.
+// No team classification happens here - that would be a second, parallel run
+// of the same classification Standard Live already paid for per pick; this
+// only reads the field that classification already produced.
 import { shortTeamName } from "@/lib/pick-team-group";
 import { getTeamColor } from "@/lib/team-colors";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
-import type { AdvancedLiveTeamSide } from "@/lib/advanced-live-selection";
 
-export type AdvancedLiveTeamPanelData = {
-  team: AdvancedLiveTeamSide;
+export type AdvancedLiveTeamSideData = {
   teamLabel: string;
   teamColor: string | null;
-  otherTeam: AdvancedLiveTeamSide;
-  otherTeamLabel: string;
   picks: ExpanderPick[];
 };
 
-export function buildAdvancedLiveTeamPanelData(
-  team: AdvancedLiveTeamSide,
+export type AdvancedLiveGamePanelData = {
+  away: AdvancedLiveTeamSideData;
+  home: AdvancedLiveTeamSideData;
+};
+
+export function buildAdvancedLiveGamePanelData(
   game: { homeTeam: string; awayTeam: string },
   sportKey: string,
   sportName: string,
   picks: ExpanderPick[]
-): AdvancedLiveTeamPanelData {
-  const otherTeam: AdvancedLiveTeamSide = team === "home" ? "away" : "home";
-  const fullName = team === "home" ? game.homeTeam : game.awayTeam;
-  const otherFullName = otherTeam === "home" ? game.homeTeam : game.awayTeam;
-  const teamGroup = team === "home" ? "HOME" : "AWAY";
-
+): AdvancedLiveGamePanelData {
   return {
-    team,
-    teamLabel: shortTeamName(fullName, sportName),
-    teamColor: getTeamColor(sportKey, fullName),
-    otherTeam,
-    otherTeamLabel: shortTeamName(otherFullName, sportName),
-    picks: picks.filter((p) => p.teamGroup === teamGroup),
+    away: {
+      teamLabel: shortTeamName(game.awayTeam, sportName),
+      teamColor: getTeamColor(sportKey, game.awayTeam),
+      picks: picks.filter((p) => p.teamGroup === "AWAY"),
+    },
+    home: {
+      teamLabel: shortTeamName(game.homeTeam, sportName),
+      teamColor: getTeamColor(sportKey, game.homeTeam),
+      picks: picks.filter((p) => p.teamGroup === "HOME"),
+    },
   };
 }

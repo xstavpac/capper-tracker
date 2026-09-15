@@ -1,14 +1,14 @@
-// Correctness proof for buildAdvancedLiveTeamPanelData
+// Correctness proof for buildAdvancedLiveGamePanelData
 // (advanced-live-team-panel-data.ts) - the data behind Advanced Live's
-// single-team picks panel. Covers: selecting a team returns only that
-// team's picks, selecting the other team swaps to its picks, OTHER-group
-// (totals/non-team) picks never leak into either team's panel, and a team
-// with zero picks still resolves a valid label/color for the empty state.
+// combined game-detail panel. Covers: both teams' picks are split out
+// correctly from one game's full pick list, OTHER-group (totals/non-team)
+// picks never leak into either team's section, and a team with zero picks
+// still resolves a valid label/color for the empty state.
 // Run with:
 //   npx tsx src/components/live/advanced-live-team-panel-data-acceptance-test.ts
 //
 // Exits non-zero if any assertion fails.
-import { buildAdvancedLiveTeamPanelData } from "./advanced-live-team-panel-data";
+import { buildAdvancedLiveGamePanelData } from "./advanced-live-team-panel-data";
 import type { ExpanderPick } from "./game-picks-expander";
 
 let failures = 0;
@@ -46,26 +46,18 @@ const otherPick = pick({ pickId: "other-1", teamGroup: "OTHER" });
 const picks = [homePick, awayPick, otherPick];
 
 {
-  const data = buildAdvancedLiveTeamPanelData("home", game, "baseball_mlb", "MLB", picks);
-  expect("home selection returns only the home team's picks", data.picks.map((p) => p.pickId), ["home-1"]);
-  expect("home selection's teamLabel is the home team's short name", data.teamLabel, "Pirates");
-  expect("home selection's otherTeam is away", data.otherTeam, "away");
-  expect("home selection's otherTeamLabel is the away team's short name", data.otherTeamLabel, "Cubs");
+  const data = buildAdvancedLiveGamePanelData(game, "baseball_mlb", "MLB", picks);
+  expect("home section returns only the home team's picks", data.home.picks.map((p) => p.pickId), ["home-1"]);
+  expect("away section returns only the away team's picks", data.away.picks.map((p) => p.pickId), ["away-1"]);
+  expect("home section's teamLabel is the home team's short name", data.home.teamLabel, "Pirates");
+  expect("away section's teamLabel is the away team's short name", data.away.teamLabel, "Cubs");
+  expect("OTHER-group picks appear in neither section", [...data.home.picks, ...data.away.picks].some((p) => p.pickId === "other-1"), false);
 }
 
 {
-  const data = buildAdvancedLiveTeamPanelData("away", game, "baseball_mlb", "MLB", picks);
-  expect("away selection (the swap) returns only the away team's picks", data.picks.map((p) => p.pickId), [
-    "away-1",
-  ]);
-  expect("away selection's teamLabel is the away team's short name", data.teamLabel, "Cubs");
-  expect("away selection's otherTeam is home", data.otherTeam, "home");
-}
-
-{
-  const data = buildAdvancedLiveTeamPanelData("home", game, "baseball_mlb", "MLB", [otherPick]);
-  expect("a team with zero picks resolves an empty picks list, not an error", data.picks, []);
-  expect("a team with zero picks still resolves its label", data.teamLabel, "Pirates");
+  const data = buildAdvancedLiveGamePanelData(game, "baseball_mlb", "MLB", [otherPick]);
+  expect("a team with zero picks resolves an empty picks list, not an error", data.home.picks, []);
+  expect("a team with zero picks still resolves its label", data.home.teamLabel, "Pirates");
 }
 
 if (failures > 0) {

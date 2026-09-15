@@ -37,7 +37,7 @@ function viewToggleClass(isActive: boolean) {
 export default async function LivePage({
   searchParams,
 }: {
-  searchParams: { sport?: string; view?: string; gameId?: string; team?: string };
+  searchParams: { sport?: string; view?: string; gameId?: string };
 }) {
   // MLB is currently the only league fully wired up with real data - default
   // there instead of LIVE_SPORTS[0] (NFL), which is otherwise empty most of
@@ -201,8 +201,7 @@ export default async function LivePage({
           odds.map((game) => ({ game, score: matchScoreToGame(scores, game) })),
           todayKey
         ).map(({ game }) => game.id),
-        searchParams.gameId ?? null,
-        searchParams.team ?? null
+        searchParams.gameId ?? null
       )
     : null;
 

@@ -1,10 +1,8 @@
-import Link from "next/link";
 import type { OddsGame, ScoreGame } from "@/server/data/odds";
 import { formatEastern } from "@/lib/dates";
 import { getTeamColor } from "@/lib/team-colors";
 import { TeamColorBar } from "@/components/live/team-color-bar";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
-import type { AdvancedLiveTeamSide } from "@/lib/advanced-live-selection";
 
 // The compact, one-row-per-game list Advanced Live shows instead of Standard
 // Live's full accordion cards. Deliberately minimal - just enough to
@@ -14,18 +12,25 @@ import type { AdvancedLiveTeamSide } from "@/lib/advanced-live-selection";
 // (game/gameIndex/score triples from orderBoardGames), so selecting which
 // games appear and in what order is unchanged, shared logic - nothing here
 // re-decides visibility or ordering.
+//
+// Selecting a game is a plain onClick into the parent's client state, NOT a
+// <Link> navigation - a real navigation re-runs live/page.tsx's server data
+// fetch (odds/scores/picks) just to switch to a game whose data the board
+// already has in memory, which was the cause of a flicker + scroll-to-top on
+// every game click. The parent still mirrors the selection into the URL
+// (see advanced-live-board.tsx) so it stays bookmarkable/shareable.
 export function AdvancedLiveGameList({
   sortedGames,
   matchedPicksByGame,
   activeSport,
   selectedGameId,
-  selectedTeam,
+  onSelectGame,
 }: {
   sortedGames: { game: OddsGame; gameIndex: number; score: ScoreGame | undefined }[];
   matchedPicksByGame: ExpanderPick[][];
   activeSport: string;
   selectedGameId: string | null;
-  selectedTeam: AdvancedLiveTeamSide;
+  onSelectGame: (gameId: string) => void;
 }) {
   if (sortedGames.length === 0) {
     return (
@@ -43,11 +48,12 @@ export function AdvancedLiveGameList({
         const pickCount = matchedPicksByGame[gameIndex]?.length ?? 0;
 
         return (
-          <Link
+          <button
             key={game.id}
-            href={"/live?sport=" + activeSport + "&view=advanced&gameId=" + game.id + "&team=" + selectedTeam}
+            type="button"
+            onClick={() => onSelectGame(game.id)}
             className={
-              "block rounded-lg border px-3 py-2 transition-colors " +
+              "block w-full rounded-lg border px-3 py-2 text-left transition-colors " +
               (isSelected
                 ? "border-brand-300 bg-brand-50 dark:border-brand-700 dark:bg-brand-500/10"
                 : "border-border-subtle bg-card hover:bg-muted")
@@ -83,7 +89,7 @@ export function AdvancedLiveGameList({
                 {score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? ""}
               </span>
             </div>
-          </Link>
+          </button>
         );
       })}
     </div>
