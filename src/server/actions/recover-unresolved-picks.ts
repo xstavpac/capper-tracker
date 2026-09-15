@@ -1,20 +1,39 @@
 "use server";
 
 import { requireUser } from "@/server/auth";
-import { parseCatalog, type ParsedPick } from "@/lib/parse-catalog";
+import { parseCatalog, parsePickText, type ParsedPick } from "@/lib/parse-catalog";
 import {
   resolveLineAgainstLiveTeams,
   parseFallbackBetText,
   type LiveTeam,
 } from "@/lib/live-team-fallback";
+import { resolvePlayerPropAgainstRoster } from "@/lib/player-roster-fallback";
+import { parsePlayerProp } from "@/lib/bet-line";
 import { getLiveScoresForSport, getOddsForSport, LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
+import { fetchNflLeagueRoster } from "@/server/data/nfl-roster";
 
 // Last-resort resolver for catalog lines the browser-side parser left in its
-// `unresolved` list (Variant 1 - see live-team-fallback.ts's header). Runs
-// only when there ARE unresolved lines, only server-side, and only against
-// the team names the app already caches for its tracked sports. It never
-// invents a team: a line resolves only on an EXACT-ONE match, everything
-// else stays unresolved.
+// `unresolved` list (Variant 1 - see live-team-fallback.ts's header), plus
+// (2026-09) a second, independent fallback for bare NFL player-prop lines
+// with no team prefix at all ("Patrick Mahomes Over 225 Passing Yards" - see
+// player-roster-fallback.ts). Runs only when there ARE unresolved lines,
+// only server-side, and only against live data (team names / rosters) the
+// app fetches fresh each time. Neither fallback ever invents a team: a line
+// resolves only on an EXACT-ONE match, everything else - including a
+// collision between two or more candidates - stays unresolved.
+//
+// A player-prop-shaped line is routed to the roster fallback ONLY, never
+// the team-name fallback below: a bare player prop was never a team pick to
+// begin with, and resolveLineAgainstLiveTeams matches on live team names/
+// prefixes with no notion that a matched word could be sitting right after a
+// player's own first name - the same class of false-positive collision the
+// #83 fix guards against in parse-catalog.ts's detectSport, but in this
+// separate fallback implementation, which that fix doesn't touch (confirmed
+// live: "Rashee Rice Over 59.5 Receiving Yards" against a live board
+// containing "Rice Owls" resolves via resolveLineAgainstLiveTeams's own
+// "prefix" match today, independent of #83). Excluding player-prop-shaped
+// lines from that path here closes the exposure for exactly the line shape
+// this fallback targets, with no change to live-team-fallback.ts itself.
 export type RecoverUnresolvedResult = {
   recovered: ParsedPick[];
   stillUnresolved: string[];
@@ -69,13 +88,48 @@ export async function recoverUnresolvedPicksAction(
   const { picks, unresolved } = parseCatalog(text, knownCapperNames);
   if (unresolved.length === 0) return { recovered: [], stillUnresolved: [] };
 
-  const liveTeams = await gatherLiveTeamNames();
   const trimmedLines = text.split("\n").map((l) => l.trim());
-
   const recovered: ParsedPick[] = [];
   const stillUnresolved: string[] = [];
 
+  // Partition once, up front, so each live-data source is fetched at most
+  // once (and only when a line that could actually use it exists) while
+  // still processing `unresolved` in its original order below.
+  const isPlayerProp = new Set(unresolved.filter((line) => parsePlayerProp(line) !== null));
+
+  const [liveTeams, roster] = await Promise.all([
+    isPlayerProp.size < unresolved.length ? gatherLiveTeamNames() : Promise.resolve<LiveTeam[]>([]),
+    isPlayerProp.size > 0 ? fetchNflLeagueRoster() : Promise.resolve([]),
+  ]);
+
   for (const line of unresolved) {
+    if (isPlayerProp.has(line)) {
+      const res = resolvePlayerPropAgainstRoster(line, roster);
+      if (res.status !== "resolved") {
+        // "ambiguous" (2+ distinct players matching) is deliberately treated
+        // the same as "unresolved" here, same policy as the team-name
+        // fallback below - never guessed.
+        stillUnresolved.push(line);
+        continue;
+      }
+
+      const parsed = parsePickText(line);
+      recovered.push({
+        capperName: inferCapperFor(line, trimmedLines, picks),
+        sportName: res.sport,
+        description: parsed.cleanDescription,
+        betType: parsed.betType,
+        odds: parsed.odds ?? -110,
+        hasExplicitOdds: parsed.odds !== null,
+        totalSide: parsed.totalSide,
+        units: parsed.units,
+        period: parsed.period,
+        raw: line,
+        teamNicknames: [res.team.toLowerCase()],
+      });
+      continue;
+    }
+
     const res = resolveLineAgainstLiveTeams(line, liveTeams);
     if (res.status !== "resolved") {
       // "ambiguous" is deliberately treated the same as "unresolved" here -
