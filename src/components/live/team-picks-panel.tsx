@@ -16,7 +16,7 @@ import {
 } from "@/lib/game-card-record-line";
 import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
-import type { GridLiveGamePanelData, GridLiveTeamSideData } from "@/components/live/grid-live-team-panel-data";
+import { orderTeamSections, type GridLiveGamePanelData, type GridLiveTeamSideData } from "@/components/live/grid-live-team-panel-data";
 
 // Grid Live's fixed detail panel - shows BOTH teams' picks at once,
 // stacked in one card, unlike GamePicksExpander (which lists AWAY/HOME/OTHER
@@ -213,11 +213,12 @@ function TeamPickSection({ teamLabel, teamColor, picks }: GridLiveTeamSideData) 
 }
 
 export function GameDetailPanel({ data }: { data: GridLiveGamePanelData }) {
+  const [first, second] = orderTeamSections(data.away, data.home);
   return (
     <div className="rounded-card bg-card p-4 shadow-soft">
-      <TeamPickSection {...data.away} />
+      <TeamPickSection {...first} />
       <div className="my-4 border-t border-border-subtle" />
-      <TeamPickSection {...data.home} />
+      <TeamPickSection {...second} />
       <div className="my-4 border-t border-border-subtle" />
       {/* Totals, NRFI, player props, and any team-tied bet betDetail
           couldn't match to a side - same OTHER group GamePicksExpander shows

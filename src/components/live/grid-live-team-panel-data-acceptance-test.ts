@@ -10,7 +10,7 @@
 //   npx tsx src/components/live/grid-live-team-panel-data-acceptance-test.ts
 //
 // Exits non-zero if any assertion fails.
-import { buildGridLiveGamePanelData } from "./grid-live-team-panel-data";
+import { buildGridLiveGamePanelData, orderTeamSections } from "./grid-live-team-panel-data";
 import type { ExpanderPick } from "./game-picks-expander";
 import { OTHER_GROUP_LABEL } from "@/lib/pick-team-group";
 
@@ -69,6 +69,33 @@ const picks = [homePick, awayPick, otherPick];
 {
   const data = buildGridLiveGamePanelData(game, "baseball_mlb", "MLB", [homePick, awayPick]);
   expect("the other section resolves an empty picks list when there are no OTHER-group picks", data.other.picks, []);
+}
+
+{
+  const zeroPicks = { teamLabel: "Cubs", teamColor: null, picks: [] as ExpanderPick[] };
+  const onePick = { teamLabel: "Pirates", teamColor: null, picks: [homePick] };
+  const twoPicks = { teamLabel: "Cubs", teamColor: null, picks: [awayPick, homePick] };
+
+  expect(
+    "away=0/home=1+ puts home first",
+    orderTeamSections(zeroPicks, onePick).map((s) => s.teamLabel),
+    ["Pirates", "Cubs"]
+  );
+  expect(
+    "home=0/away=1+ keeps away/home order",
+    orderTeamSections(onePick, zeroPicks).map((s) => s.teamLabel),
+    ["Pirates", "Cubs"]
+  );
+  expect(
+    "both 0 picks keeps away/home order",
+    orderTeamSections(zeroPicks, { ...zeroPicks, teamLabel: "Pirates" }).map((s) => s.teamLabel),
+    ["Cubs", "Pirates"]
+  );
+  expect(
+    "both have picks keeps away/home order",
+    orderTeamSections(twoPicks, onePick).map((s) => s.teamLabel),
+    ["Cubs", "Pirates"]
+  );
 }
 
 if (failures > 0) {

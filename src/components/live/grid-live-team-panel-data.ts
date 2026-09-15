@@ -51,3 +51,18 @@ export function buildGridLiveGamePanelData(
     },
   };
 }
+
+// Which team section leads in the panel: the team WITH picks should show
+// first rather than a fixed away-then-home order, since an empty section
+// leading into a populated one reads oddly. Only swaps when exactly one
+// side has 0 picks and the other has 1+ - if both have picks, or both are
+// empty, the away/home order is left alone rather than inventing a new rule
+// for a case nobody complained about. The OTHER section is not part of
+// this - GameDetailPanel always renders it after these two.
+export function orderTeamSections(
+  away: GridLiveTeamSideData,
+  home: GridLiveTeamSideData
+): [GridLiveTeamSideData, GridLiveTeamSideData] {
+  if (away.picks.length === 0 && home.picks.length > 0) return [home, away];
+  return [away, home];
+}
