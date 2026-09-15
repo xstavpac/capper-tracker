@@ -2,6 +2,13 @@ import { findGroupingNickname, teamGroupAliases, teamPhraseRegex, normalizeForGr
 
 export type PickTeamGroup = "AWAY" | "HOME" | "OTHER";
 
+// Shared label for the OTHER group (totals, NRFI, player props, and any
+// team-tied bet whose betDetail didn't text-match either side) - both
+// GamePicksExpander (Standard Live) and GameDetailPanel (Grid Live) render
+// this same group under this same label, so it lives here rather than in
+// either view.
+export const OTHER_GROUP_LABEL = "Totals & other markets";
+
 // Only moneyline and spread bets are actually resolved by which team wins/
 // covers - totals, NRFI, and player props are decided by something else
 // entirely, so they never belong to a team group no matter what team name

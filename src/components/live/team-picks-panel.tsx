@@ -218,6 +218,11 @@ export function GameDetailPanel({ data }: { data: GridLiveGamePanelData }) {
       <TeamPickSection {...data.away} />
       <div className="my-4 border-t border-border-subtle" />
       <TeamPickSection {...data.home} />
+      <div className="my-4 border-t border-border-subtle" />
+      {/* Totals, NRFI, player props, and any team-tied bet betDetail
+          couldn't match to a side - same OTHER group GamePicksExpander shows
+          under this label, now surfaced in Grid too. */}
+      <TeamPickSection {...data.other} />
     </div>
   );
 }

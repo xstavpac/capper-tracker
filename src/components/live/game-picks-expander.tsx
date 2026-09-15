@@ -16,6 +16,7 @@ import {
   type GameCardStreak,
 } from "@/lib/game-card-record-line";
 import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
+import { OTHER_GROUP_LABEL } from "@/lib/pick-team-group";
 
 export type ExpanderPick = {
   pickId: string;
@@ -49,7 +50,6 @@ export type ExpanderPick = {
 // always lists away over home) - "OTHER" reuses the same three-group shape
 // with a static label instead of a per-game team name.
 const TEAM_GROUP_ORDER: ExpanderPick["teamGroup"][] = ["AWAY", "HOME", "OTHER"];
-const OTHER_GROUP_LABEL = "Totals & other markets";
 
 // This pick's own outcome, distinct from the capper's rolling category
 // record shown below it - without this badge the two were easy to conflate,

@@ -2,14 +2,17 @@
 // (grid-live-team-panel-data.ts) - the data behind Grid Live's
 // combined game-detail panel. Covers: both teams' picks are split out
 // correctly from one game's full pick list, OTHER-group (totals/non-team)
-// picks never leak into either team's section, and a team with zero picks
-// still resolves a valid label/color for the empty state.
+// picks never leak into either team's section but DO surface in their own
+// "other" section (mirroring GamePicksExpander's AWAY/HOME/OTHER grouping),
+// and a team with zero picks still resolves a valid label/color for the
+// empty state.
 // Run with:
 //   npx tsx src/components/live/grid-live-team-panel-data-acceptance-test.ts
 //
 // Exits non-zero if any assertion fails.
 import { buildGridLiveGamePanelData } from "./grid-live-team-panel-data";
 import type { ExpanderPick } from "./game-picks-expander";
+import { OTHER_GROUP_LABEL } from "@/lib/pick-team-group";
 
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {
@@ -51,13 +54,21 @@ const picks = [homePick, awayPick, otherPick];
   expect("away section returns only the away team's picks", data.away.picks.map((p) => p.pickId), ["away-1"]);
   expect("home section's teamLabel is the home team's short name", data.home.teamLabel, "Pirates");
   expect("away section's teamLabel is the away team's short name", data.away.teamLabel, "Cubs");
-  expect("OTHER-group picks appear in neither section", [...data.home.picks, ...data.away.picks].some((p) => p.pickId === "other-1"), false);
+  expect("OTHER-group picks appear in neither team section", [...data.home.picks, ...data.away.picks].some((p) => p.pickId === "other-1"), false);
+  expect("OTHER-group picks appear in the other section", data.other.picks.map((p) => p.pickId), ["other-1"]);
+  expect("other section's teamLabel is the shared 'Totals & other markets' label", data.other.teamLabel, OTHER_GROUP_LABEL);
+  expect("other section's teamColor is always neutral (null), not a team color", data.other.teamColor, null);
 }
 
 {
   const data = buildGridLiveGamePanelData(game, "baseball_mlb", "MLB", [otherPick]);
   expect("a team with zero picks resolves an empty picks list, not an error", data.home.picks, []);
   expect("a team with zero picks still resolves its label", data.home.teamLabel, "Pirates");
+}
+
+{
+  const data = buildGridLiveGamePanelData(game, "baseball_mlb", "MLB", [homePick, awayPick]);
+  expect("the other section resolves an empty picks list when there are no OTHER-group picks", data.other.picks, []);
 }
 
 if (failures > 0) {
