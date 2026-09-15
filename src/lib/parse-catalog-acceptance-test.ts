@@ -1647,6 +1647,71 @@ NC State +4.5`;
     check("'Montana State over 51.5' resolves NCAAF total", { sport: mtStateTotal?.sportName, teams: mtStateTotal?.teamNicknames, side: mtStateTotal?.totalSide }, { sport: "NCAAF", teams: ["montana state"], side: "over" });
   }
 
+  // ==========================================================================
+  // PART R - surname/school collision guard (2026-09 bulk-import NFL prop
+  // investigation): a bare player-prop line with no team prefix ("Rashee Rice
+  // Over 59.5 Receiving Yards") was silently importing as NCAAF - "Rice" (the
+  // Rice Owls' NCAAF_SCHOOLS key) matched inside the player's own surname,
+  // and nothing about detectSport's team-matching had any notion that the
+  // word right before a matched team key could be a person's first name
+  // rather than a qualifier. This wasn't a "wrong sport" guess so much as a
+  // false-positive team match - a real Rice Owls game genuinely existed on
+  // the live schedule, so the pick "resolved" and imported cleanly, just
+  // tagged to the wrong player's wrong sport entirely.
+  //
+  // The fix (isPlayerPropSurnameCollision in parse-catalog.ts) reuses
+  // parsePlayerProp (bet-line.ts) to check whether the matched single-word
+  // team key is the LAST word of a genuine player-prop name it already
+  // extracted - deliberately narrow: multi-word team phrases are exempt (no
+  // realistic surname collides word-for-word with "west virginia"), and a
+  // team total's "Over N.N Points/Goals" text never triggers it at all since
+  // neither is one of parsePlayerProp's five recognized stat markets. This
+  // guard only stops the FALSE match; it doesn't (and isn't meant to) resolve
+  // these lines to NFL - that requires an actual player->team roster lookup,
+  // a separate, larger gap tracked outside this fix. Un-prefixed player-prop
+  // lines correctly land in `unresolved` here, same as any other pick this
+  // parser has no way to identify a team for - "couldn't match" instead of
+  // "matched to the wrong sport" is the whole point of this guard.
+  console.log("\n########## PART R: surname/school collision guard (Rashee Rice -> NCAAF) ##########");
+  {
+    // --- The exact reported bug: silently mistagged NCAAF, not just wrong. ---
+    const rashee = parseCatalog(`Cap\nRashee Rice Over 59.5 Receiving Yards`, []);
+    check("'Rashee Rice Over 59.5 Receiving Yards' no longer resolves NCAAF (Rice Owls false match)", rashee.picks.length, 0);
+    check("'Rashee Rice Over 59.5 Receiving Yards' routes to unresolved instead of a wrong-sport pick", rashee.unresolved, ["Rashee Rice Over 59.5 Receiving Yards"]);
+
+    // --- Same collision shape, a different real player + supported market. ---
+    const jerry = parseCatalog(`Cap\nJerry Rice Over 2.5 Receptions`, []);
+    check("'Jerry Rice Over 2.5 Receptions' also no longer resolves NCAAF", jerry.picks.length, 0);
+    check("'Jerry Rice Over 2.5 Receptions' routes to unresolved", jerry.unresolved, ["Jerry Rice Over 2.5 Receptions"]);
+
+    // --- Negative controls: the guard must not touch REAL team matches for
+    // the exact same collision-prone school keys the bug report flagged
+    // (Rice, Houston, Duke), bare or team-prefixed, with no preceding surname
+    // in front of them. ---
+    const riceOwls = parseCatalog(`Cap\nRice Owls -3.5`, []).picks[0];
+    check("'Rice Owls -3.5' still resolves NCAAF (Rice Owls, unaffected)", { sport: riceOwls?.sportName, teams: riceOwls?.teamNicknames }, { sport: "NCAAF", teams: ["rice"] });
+
+    const houstonCougars = parseCatalog(`Cap\nHouston Cougars -6.5`, []).picks[0];
+    check("'Houston Cougars -6.5' still resolves NCAAF (unaffected)", { sport: houstonCougars?.sportName, teams: houstonCougars?.teamNicknames }, { sport: "NCAAF", teams: ["houston"] });
+
+    const dukeBlueDevils = parseCatalog(`Cap\nDuke Blue Devils -3.5`, []).picks[0];
+    check("'Duke Blue Devils -3.5' still resolves NCAAF (unaffected)", { sport: dukeBlueDevils?.sportName, teams: dukeBlueDevils?.teamNicknames }, { sport: "NCAAF", teams: ["duke"] });
+
+    // --- Negative control: a real, correctly team-prefixed player-prop line
+    // (the app's documented shape for this feature) must still resolve NFL -
+    // the guard only fires when the matched key is the LAST word of the
+    // extracted name, never the first, so "Chiefs" here is untouched. ---
+    const kelce = parseCatalog(`Cap\nChiefs Travis Kelce Over 42.5 Receiving Yards`, []).picks[0];
+    check("'Chiefs Travis Kelce Over 42.5 Receiving Yards' still resolves NFL (team-prefixed prop, unaffected)", { sport: kelce?.sportName, teams: kelce?.teamNicknames }, { sport: "NFL", teams: ["chiefs"] });
+
+    // --- Negative control: a real team total using a stat word outside
+    // parsePlayerProp's five recognized markets must still resolve normally -
+    // proves the guard can't be fooled into suppressing a genuine team pick
+    // just because "Over N.N" is present. ---
+    const heat = parseCatalog(`Cap\nMiami Heat ML`, []).picks[0];
+    check("'Miami Heat ML' still resolves NBA (unaffected)", { sport: heat?.sportName, teams: heat?.teamNicknames }, { sport: "NBA", teams: ["heat"] });
+  }
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }
