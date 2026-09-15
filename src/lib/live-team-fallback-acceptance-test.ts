@@ -200,5 +200,109 @@ console.log("\n########## parse-catalog.ts is untouched: still pure + synchronou
   check("a real FCS-only line is still unresolved from parseCatalog alone (the fallback is separate)", parseCatalog("Cap\nVMI +21.5", []).unresolved, ["VMI +21.5"]);
 }
 
+console.log("\n########## surname/school collision guard (2026-09 follow-up to #83) ##########");
+// #83 fixed a false-positive team match in parse-catalog.ts's detectSport/
+// findTeamNicknames - a player's surname sitting right before a matched
+// short school/team key ("Rashee Rice" containing NCAAF's "Rice" key)
+// silently resolved to the wrong sport. This file's resolveLineAgainstLive
+// Teams is a separate, independent matching implementation with the exact
+// same exposure - confirmed live before this fix existed (see PR
+// description) - so these tests reuse #83's own Rashee Rice/Jerry Rice
+// cases, plus the same 5 additional collision-prone school keys #83's own
+// investigation flagged (Houston, Temple, Miami, Duke, Tulane), run through
+// THIS path specifically, since #83's own tests only ever exercised
+// parse-catalog.ts.
+{
+  const collisionBoard: LiveTeam[] = [
+    { sport: "NCAAF", name: "Rice Owls" },
+    { sport: "NCAAF", name: "Houston Cougars" },
+    { sport: "NCAAF", name: "Duke Blue Devils" },
+    { sport: "NCAAF", name: "Temple Owls" },
+    { sport: "NCAAF", name: "Tulane Green Wave" },
+    { sport: "NCAAF", name: "Miami Hurricanes" },
+  ];
+
+  // --- The exact #83 case, reproduced through this file's own resolver. ---
+  check(
+    "'Rashee Rice Over 59.5 Receiving Yards' no longer resolves NCAAF (Rice Owls false match) through live-team-fallback",
+    resolveLineAgainstLiveTeams("Rashee Rice Over 59.5 Receiving Yards", collisionBoard),
+    { status: "unresolved" }
+  );
+  check(
+    "'Jerry Rice Over 2.5 Receptions' also no longer resolves NCAAF through live-team-fallback",
+    resolveLineAgainstLiveTeams("Jerry Rice Over 2.5 Receptions", collisionBoard),
+    { status: "unresolved" }
+  );
+
+  // --- The other 4 collision-prone school keys #83 flagged, same shape. ---
+  const collisionCases: [string, string][] = [
+    ["Justin Houston Over 1.5 Receptions", "houston"],
+    ["Marcus Temple Over 45.5 Receiving Yards", "temple"],
+    ["Anthony Duke Over 55.5 Receiving Yards", "duke"],
+    ["Chris Tulane Over 2.5 Receptions", "tulane"],
+  ];
+  for (const [line, key] of collisionCases) {
+    check(
+      `'${line}' (constructed surname/'${key}' collision) stays unresolved, not guessed`,
+      resolveLineAgainstLiveTeams(line, collisionBoard),
+      { status: "unresolved" }
+    );
+  }
+
+  // --- Negative controls: the guard must not touch REAL team matches for
+  // the exact same collision-prone keys, both the full live name and the
+  // bare single-word prefix form, with no preceding surname in front. ---
+  const legitFullName: [string, string][] = [
+    ["Rice Owls -3.5", "Rice Owls"],
+    ["Houston Cougars -6.5", "Houston Cougars"],
+    ["Duke Blue Devils -3.5", "Duke Blue Devils"],
+    ["Temple Owls +6.5", "Temple Owls"],
+    ["Tulane Green Wave -3.5", "Tulane Green Wave"],
+    ["Miami Hurricanes -6.5", "Miami Hurricanes"],
+  ];
+  for (const [line, matchedName] of legitFullName) {
+    const r = resolveLineAgainstLiveTeams(line, collisionBoard);
+    check(`'${line}' still resolves NCAAF via full name (unaffected)`, { status: r.status, matchedName: (r as any).matchedName, via: (r as any).via }, {
+      status: "resolved",
+      matchedName,
+      via: "name",
+    });
+  }
+
+  const legitPrefix: [string, string][] = [
+    ["Rice -3.5", "Rice Owls"],
+    ["Houston -6.5", "Houston Cougars"],
+    ["Duke -3.5", "Duke Blue Devils"],
+    ["Temple +6.5", "Temple Owls"],
+    ["Tulane -3.5", "Tulane Green Wave"],
+  ];
+  for (const [line, matchedName] of legitPrefix) {
+    const r = resolveLineAgainstLiveTeams(line, collisionBoard);
+    check(`'${line}' still resolves NCAAF via the bare single-word prefix (unaffected)`, { status: r.status, matchedName: (r as any).matchedName, via: (r as any).via }, {
+      status: "resolved",
+      matchedName,
+      via: "prefix",
+    });
+  }
+}
+
+console.log("\n########## #84 interaction: no overlap, no conflict ##########");
+{
+  // #84 already routes every player-prop-shaped unresolved line to the new
+  // roster-based fallback exclusively, so resolveLineAgainstLiveTeams is
+  // never actually called with one of these lines by the real pipeline
+  // (recover-unresolved-picks.ts) any more. This fix is independent defense
+  // for this function's own correctness (any other/future caller, and this
+  // file's own guarantees in isolation) - it doesn't depend on #84's routing
+  // to be correct, and confirms the two don't fight: a player-prop line run
+  // through THIS resolver directly still correctly stays unresolved rather
+  // than being claimed by a same-named team, exactly like every other
+  // genuinely-unresolvable line.
+  const r = resolveLineAgainstLiveTeams("Rashee Rice Over 59.5 Receiving Yards", [{ sport: "NCAAF", name: "Rice Owls" }]);
+  check("a player-prop line given directly to resolveLineAgainstLiveTeams (bypassing #84's routing) still doesn't false-match", r, {
+    status: "unresolved",
+  });
+}
+
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
