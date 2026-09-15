@@ -1,36 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { OddsGame, ScoreGame } from "@/server/data/odds";
 import { computeBoardPulse, type BoardPulseGame } from "@/lib/board-pulse";
-import { formatEastern, closestByTime, easternDateKey } from "@/lib/dates";
-import { orderBoardGames } from "@/components/live/live-scoreboard-ordering";
+import { formatEastern, easternDateKey } from "@/lib/dates";
+import { orderBoardGames, matchScoreToGame } from "@/components/live/live-scoreboard-ordering";
 import { getTeamColor } from "@/lib/team-colors";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 import { TeamColorBar } from "@/components/live/team-color-bar";
 import { BoardPulsePanel } from "@/components/live/board-pulse-panel";
-
-// Duplicated from server/data/odds.ts rather than imported - that module has
-// a module-level prisma import, which a "use client" component must never
-// pull in even transitively (odds.ts itself is fine server-side; the risk is
-// only in crossing into the client bundle).
-function matchScoreToGame(
-  scores: ScoreGame[],
-  game: { homeTeam: string; awayTeam: string; commenceTime: string }
-): ScoreGame | undefined {
-  const candidates = scores.filter((s) => s.homeTeam === game.homeTeam && s.awayTeam === game.awayTeam);
-  if (candidates.length === 0) return undefined;
-  if (candidates.length === 1) return candidates[0];
-
-  const gameStart = new Date(game.commenceTime).getTime();
-  return closestByTime(candidates, (s) => new Date(s.commenceTime).getTime(), gameStart);
-}
-
-// Balances "genuinely live" against Vercel function invocations - a game
-// state (score, inning) realistically changes at most every few minutes, so
-// polling faster than this would just be extra cost for no visible benefit.
-const LIVE_POLL_INTERVAL_MS = 25000;
+import { useLiveScores } from "@/components/live/use-live-scores";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -66,35 +45,7 @@ export function LiveScoreboard({
   matchedPicksByGame: ExpanderPick[][];
   showBoardPulse: boolean;
 }) {
-  const [scores, setScores] = useState(initialScores);
-
-  // Odds/matched-picks reset on navigation (sport tab switch, filters) via
-  // the key prop this component is mounted with (see live/page.tsx) - this
-  // just keeps score state in sync with a fresh server-rendered initial
-  // snapshot on that same reset, so switching sports doesn't show the
-  // previous tab's scores for a moment before the first poll lands.
-  useEffect(() => {
-    setScores(initialScores);
-  }, [initialScores]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/live/scores?sport=${encodeURIComponent(activeSport)}`, { cache: "no-store" });
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
-        if (!cancelled && Array.isArray(data.scores)) setScores(data.scores);
-      } catch {
-        // Transient network hiccup - next tick tries again, no need to
-        // surface this as an error for a background refresh.
-      }
-    }, LIVE_POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [activeSport]);
+  const scores = useLiveScores(activeSport, initialScores);
 
   // Recomputed on every render (not memoized) since `scores` is client state
   // that changes on each poll tick - a game that goes live or finishes must
