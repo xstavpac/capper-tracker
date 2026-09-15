@@ -37,9 +37,9 @@ expect(
 // ---- Sport switch: the old gameId isn't in the new sport's slate at all ----
 
 expect(
-  "a requested gameId absent from the new slate (sport switch) falls back to the first game",
+  "a requested gameId absent from the new slate (sport switch) falls back to the first game, and resets team to home too",
   resolveAdvancedLiveSelection(["nfl-game-a", "nfl-game-b"], "mlb-game-x", "away"),
-  { gameId: "nfl-game-a", team: "away" }
+  { gameId: "nfl-game-a", team: "home" }
 );
 
 // ---- Selected game going Final: it simply drops out of sortedGameIds ----
@@ -50,11 +50,24 @@ expect(
   { gameId: "game-2", team: "home" }
 );
 
+// The exact bug this test guards against: the client-side poll re-check
+// (advanced-live-board.tsx) passes its OWN current team selection back in as
+// `requestedTeam` on every tick, using the vanished game's id as
+// `requestedGameId`. If team were resolved independently of whether gameId
+// fell back, "away" from the game that just disappeared would leak onto the
+// fallback game - which is a different game than the one the viewer actually
+// chose "away" for.
+expect(
+  "a selected game going Final resets team to home too, not carrying its 'away' selection onto the fallback game",
+  resolveAdvancedLiveSelection(["game-2", "game-3"], "game-1", "away"),
+  { gameId: "game-2", team: "home" }
+);
+
 // ---- Empty slate ----
 
-expect("an empty slate resolves to no game selected", resolveAdvancedLiveSelection([], "game-1", "away"), {
+expect("an empty slate resolves to no game selected, team reset to home", resolveAdvancedLiveSelection([], "game-1", "away"), {
   gameId: null,
-  team: "away",
+  team: "home",
 });
 
 // ---- Team default is unconditional ----
