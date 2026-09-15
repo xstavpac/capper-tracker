@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OddsGame, ScoreGame } from "@/server/data/odds";
 import { orderBoardGames, matchScoreToGame } from "@/components/live/live-scoreboard-ordering";
@@ -59,6 +59,26 @@ export function GridLiveBoard({
   const scores = useLiveScores(activeSport, initialScores);
   const [selection, setSelection] = useState(initialSelection);
 
+  // Mobile stacks the panel below the game list (see this component's
+  // grid-cols-1/lg:grid-cols-[...] below), so a click there leaves the panel
+  // off-screen until the user manually scrolls. Desktop already shows both
+  // side by side, so it must never scroll here - same counter-triggered
+  // pattern as bulk-import-form.tsx's resultsRef (a plain ref + an effect
+  // gated on `scrollTrigger > 0` so it can't fire on mount), but ALSO gated
+  // on the live lg: breakpoint check so desktop is untouched even though the
+  // counter still bumps there. The counter is only ever bumped from
+  // handleSelectGame - a deliberate click - never from the poll-tick
+  // auto-fallback effect below, so a game auto-finalizing out from under the
+  // viewer can't yank their scroll position.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [scrollTrigger, setScrollTrigger] = useState(0);
+
+  useEffect(() => {
+    if (scrollTrigger === 0) return;
+    if (window.matchMedia("(min-width: 1024px)").matches) return;
+    panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [scrollTrigger]);
+
   // Mirrors LiveScoreboard's own `initialScores` resync: a sport switch
   // remounts this component (see live/page.tsx's key={activeSport}), but the
   // effect also covers a same-mount prop change (e.g. a fresh server
@@ -109,6 +129,7 @@ export function GridLiveBoard({
   function handleSelectGame(gameId: string) {
     setSelection({ gameId });
     router.replace("/live?sport=" + activeSport + "&view=advanced&gameId=" + gameId, { scroll: false });
+    setScrollTrigger((t) => t + 1);
   }
 
   // Double-click only - a real navigation (router.push, not the replace()
@@ -138,13 +159,15 @@ export function GridLiveBoard({
         onSelectGame={handleSelectGame}
         onOpenGame={handleOpenGame}
       />
-      {panelData ? (
-        <GameDetailPanel data={panelData} />
-      ) : (
-        <div className="rounded-card bg-card p-10 text-center shadow-soft">
-          <p className="text-sm text-muted-foreground">No games found for this sport right now.</p>
-        </div>
-      )}
+      <div ref={panelRef}>
+        {panelData ? (
+          <GameDetailPanel data={panelData} />
+        ) : (
+          <div className="rounded-card bg-card p-10 text-center shadow-soft">
+            <p className="text-sm text-muted-foreground">No games found for this sport right now.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
