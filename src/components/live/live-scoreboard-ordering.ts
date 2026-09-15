@@ -37,10 +37,29 @@
 //     Thursday-through-Monday football week, or a full college weekend,
 //     together on one board, and to still show *something* on an off-day
 //     (the anchor is the next game day, not today).
-import { easternDateKey, addDaysToDateKey } from "@/lib/dates";
+import { easternDateKey, addDaysToDateKey, closestByTime } from "@/lib/dates";
 import type { ScoreGame } from "@/server/data/odds";
 
 type OrderableGame = { game: { commenceTime: string }; score?: Pick<ScoreGame, "status"> };
+
+// Client-safe duplicate of server/data/odds.ts's matchScoreToGame - that
+// module has a module-level prisma import, which a "use client" component
+// must never pull in even transitively (odds.ts itself is fine server-side;
+// the risk is only in crossing into the client bundle). Shared here (a pure,
+// client-safe module already) rather than re-duplicated per client component
+// - both live-scoreboard.tsx and the Advanced Live board import this same
+// copy instead of each carrying their own.
+export function matchScoreToGame(
+  scores: ScoreGame[],
+  game: { homeTeam: string; awayTeam: string; commenceTime: string }
+): ScoreGame | undefined {
+  const candidates = scores.filter((s) => s.homeTeam === game.homeTeam && s.awayTeam === game.awayTeam);
+  if (candidates.length === 0) return undefined;
+  if (candidates.length === 1) return candidates[0];
+
+  const gameStart = new Date(game.commenceTime).getTime();
+  return closestByTime(candidates, (s) => new Date(s.commenceTime).getTime(), gameStart);
+}
 
 export const SLATE_LOOKAHEAD_DAYS = 4;
 
