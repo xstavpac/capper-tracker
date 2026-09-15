@@ -1090,6 +1090,36 @@ export function teamPhraseRegex(phrase: string): RegExp {
   return new RegExp("(?<!\\w)" + body + "(?!\\w)", "i");
 }
 
+// Guard against a real player's surname colliding with a short, single-word
+// school/team key that happens to spell the same word - "Rashee Rice Over
+// 59.5 Receiving Yards" contains "rice" (NCAAF_SCHOOLS' Rice Owls key), but
+// the capper meant the Chiefs' Rashee Rice, not a Rice Owls game. Reuses
+// parsePlayerProp (bet-line.ts) rather than inventing a parallel stat-word
+// check: that function already knows precisely which phrasings are genuine
+// player-prop markets (passing/rushing/receiving yards, receptions,
+// touchdowns) and already strips the matched stat phrase, Over/Under, and
+// the number back out to isolate just the name - so a real team total
+// ("Lakers Over 220.5 Points", "Oilers Over 5.5 Goals") never triggers this
+// at all, since neither "Points" nor "Goals" is one of its five recognized
+// markets. Firing only when the matched phrase is the LAST word of that
+// extracted name (never the first) targets exactly the "Firstname Surname"
+// shape and leaves a bare one-word mention ("Rice Over 59.5...", no first
+// name) to resolve as the team it names, same as before this guard existed.
+//
+// Deliberately skipped for any multi-word phrase (a school's full mascot
+// name in detectSport's pass 0, or a multi-word team like "west virginia")
+// - a person's name colliding with a two-word phrase word-for-word isn't a
+// realistic case this bug report surfaced, and staying single-word-only
+// keeps the guard from ever second-guessing a genuine multi-word team match.
+function isPlayerPropSurnameCollision(text: string, phrase: string): boolean {
+  if (phrase.includes(" ")) return false;
+  const prop = parsePlayerProp(text);
+  if (!prop) return false;
+  const nameWords = prop.playerName.toLowerCase().split(/\s+/).filter(Boolean);
+  if (nameWords.length < 2) return false;
+  return nameWords[nameWords.length - 1] === phrase;
+}
+
 // allowNicknameFallback gates the second (fuzzy, team-nickname-only) branch -
 // callers pass false right after a blank line, where a bare nickname match
 // ("Tigers Kitchen") is far more likely to be a capper's name than a pick
@@ -1174,6 +1204,7 @@ function detectSport(text: string, allowNicknameFallback = true): { sportName: s
     if (AMBIGUOUS_NICKNAMES[phrase]) continue;
     const match = teamPhraseRegex(phrase).exec(lower);
     if (!match) continue;
+    if (isPlayerPropSurnameCollision(text, phrase)) continue;
     const after = lower.slice(match.index + match[0].length);
     const followedByAnotherTeam = TEAM_SPORT_ENTRIES.some(
       ([otherPhrase]) => otherPhrase !== phrase && teamPhraseRegex(otherPhrase).test(after)
@@ -1194,6 +1225,7 @@ function detectSport(text: string, allowNicknameFallback = true): { sportName: s
     const sport = entry[1];
     if (AMBIGUOUS_NICKNAMES[phrase]) continue;
     if (teamPhraseRegex(phrase).test(lower)) {
+      if (isPlayerPropSurnameCollision(text, phrase)) continue;
       return { sportName: sport, rest: text };
     }
   }
@@ -1502,6 +1534,7 @@ export function findTeamNicknames(text: string, sportName: string): string[] {
     if (sport !== sportName) continue;
     const m = teamPhraseRegex(phrase).exec(lower);
     if (m && !hits.some((h) => h.phrase === phrase)) {
+      if (isPlayerPropSurnameCollision(text, phrase)) continue;
       hits.push({ phrase, start: m.index, end: m.index + m[0].length });
     }
   }
