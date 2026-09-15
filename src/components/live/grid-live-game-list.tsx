@@ -4,7 +4,7 @@ import { getTeamColor } from "@/lib/team-colors";
 import { TeamColorBar } from "@/components/live/team-color-bar";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 
-// The compact, one-row-per-game list Advanced Live shows instead of Standard
+// The compact, one-row-per-game list Grid Live shows instead of Standard
 // Live's full accordion cards. Deliberately minimal - just enough to
 // identify and select a game (teams, live status/score, pick count) - not
 // the odds/spread/total detail the Standard Live card shows. Consumes the
@@ -18,8 +18,8 @@ import type { ExpanderPick } from "@/components/live/game-picks-expander";
 // fetch (odds/scores/picks) just to switch to a game whose data the board
 // already has in memory, which was the cause of a flicker + scroll-to-top on
 // every game click. The parent still mirrors the selection into the URL
-// (see advanced-live-board.tsx) so it stays bookmarkable/shareable.
-export function AdvancedLiveGameList({
+// (see grid-live-board.tsx) so it stays bookmarkable/shareable.
+export function GridLiveGameList({
   sortedGames,
   matchedPicksByGame,
   activeSport,
@@ -33,7 +33,7 @@ export function AdvancedLiveGameList({
   selectedGameId: string | null;
   onSelectGame: (gameId: string) => void;
   // Double-click only - opens Standard Live's full game-card page (Momentum/
-  // Pace tracking, head-to-head header), which Advanced's own in-panel
+  // Pace tracking, head-to-head header), which Grid's own in-panel
   // GameDetailPanel doesn't have room for and isn't meant to duplicate.
   // Single click stays a plain in-panel selection (onSelectGame above) - see
   // this file's header comment on why that's a client-state update, not a

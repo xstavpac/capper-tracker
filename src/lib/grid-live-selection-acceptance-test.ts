@@ -1,15 +1,15 @@
-// Correctness proof for resolveAdvancedLiveSelection (advanced-live-selection.ts)
-// - the single shared rule behind Advanced Live's game fallback. Covers both
+// Correctness proof for resolveGridLiveSelection (grid-live-selection.ts)
+// - the single shared rule behind Grid Live's game fallback. Covers both
 // trigger cases the spec calls out as "the same rule": initial load with
 // nothing selected, and the selected game dropping off the board (a sport
 // switch invalidating the old gameId is the same "not found in
 // sortedGameIds" case from this function's point of view as the game going
 // Final).
 // Run with:
-//   npx tsx src/lib/advanced-live-selection-acceptance-test.ts
+//   npx tsx src/lib/grid-live-selection-acceptance-test.ts
 //
 // Exits non-zero if any assertion fails.
-import { resolveAdvancedLiveSelection } from "./advanced-live-selection";
+import { resolveGridLiveSelection } from "./grid-live-selection";
 
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {
@@ -22,7 +22,7 @@ function expect(label: string, actual: unknown, expected: unknown) {
 
 expect(
   "no requested gameId falls back to the first sorted game",
-  resolveAdvancedLiveSelection(["game-1", "game-2"], null),
+  resolveGridLiveSelection(["game-1", "game-2"], null),
   { gameId: "game-1" }
 );
 
@@ -30,7 +30,7 @@ expect(
 
 expect(
   "a requested gameId that's still in the sorted list is kept",
-  resolveAdvancedLiveSelection(["game-1", "game-2"], "game-2"),
+  resolveGridLiveSelection(["game-1", "game-2"], "game-2"),
   { gameId: "game-2" }
 );
 
@@ -38,7 +38,7 @@ expect(
 
 expect(
   "a requested gameId absent from the new slate (sport switch) falls back to the first game",
-  resolveAdvancedLiveSelection(["nfl-game-a", "nfl-game-b"], "mlb-game-x"),
+  resolveGridLiveSelection(["nfl-game-a", "nfl-game-b"], "mlb-game-x"),
   { gameId: "nfl-game-a" }
 );
 
@@ -46,13 +46,13 @@ expect(
 
 expect(
   "a requested gameId no longer in the list (game went Final and dropped off) falls back to the first remaining game",
-  resolveAdvancedLiveSelection(["game-2", "game-3"], "game-1"),
+  resolveGridLiveSelection(["game-2", "game-3"], "game-1"),
   { gameId: "game-2" }
 );
 
 // ---- Empty slate ----
 
-expect("an empty slate resolves to no game selected", resolveAdvancedLiveSelection([], "game-1"), {
+expect("an empty slate resolves to no game selected", resolveGridLiveSelection([], "game-1"), {
   gameId: null,
 });
 

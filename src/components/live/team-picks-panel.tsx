@@ -16,9 +16,9 @@ import {
 } from "@/lib/game-card-record-line";
 import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
-import type { AdvancedLiveGamePanelData, AdvancedLiveTeamSideData } from "@/components/live/advanced-live-team-panel-data";
+import type { GridLiveGamePanelData, GridLiveTeamSideData } from "@/components/live/grid-live-team-panel-data";
 
-// Advanced Live's fixed detail panel - shows BOTH teams' picks at once,
+// Grid Live's fixed detail panel - shows BOTH teams' picks at once,
 // stacked in one card, unlike GamePicksExpander (which lists AWAY/HOME/OTHER
 // all at once when opened, but only for one game card at a time inline in
 // the board). Deliberately not built on top of GamePicksExpander: that
@@ -32,7 +32,7 @@ import type { AdvancedLiveGamePanelData, AdvancedLiveTeamSideData } from "@/comp
 // A capper's category record is fetched here (not upstream) for the same
 // reason GamePicksExpander defers it to expand-time: it requires each
 // capper's full pick history and would be wasteful to compute for every game
-// on the board just because Advanced Live is open. Each team section fetches
+// on the board just because Grid Live is open. Each team section fetches
 // its own records independently, re-fetched whenever that team's pick set
 // changes (a game switch) - see the useEffect key below.
 
@@ -151,7 +151,7 @@ function PickCard({ pick, records, loading }: { pick: ExpanderPick; records: Cap
 // pick count) plus its pick list or empty-state. Fetches its own capper
 // records independently of the other team's section so one team's picks
 // rendering isn't blocked on the other team's record fetch.
-function TeamPickSection({ teamLabel, teamColor, picks }: AdvancedLiveTeamSideData) {
+function TeamPickSection({ teamLabel, teamColor, picks }: GridLiveTeamSideData) {
   const [loading, setLoading] = useState(false);
   const [records, setRecords] = useState<CapperLeagueRecords | null>(null);
 
@@ -212,7 +212,7 @@ function TeamPickSection({ teamLabel, teamColor, picks }: AdvancedLiveTeamSideDa
   );
 }
 
-export function GameDetailPanel({ data }: { data: AdvancedLiveGamePanelData }) {
+export function GameDetailPanel({ data }: { data: GridLiveGamePanelData }) {
   return (
     <div className="rounded-card bg-card p-4 shadow-soft">
       <TeamPickSection {...data.away} />

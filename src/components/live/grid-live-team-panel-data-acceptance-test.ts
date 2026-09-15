@@ -1,14 +1,14 @@
-// Correctness proof for buildAdvancedLiveGamePanelData
-// (advanced-live-team-panel-data.ts) - the data behind Advanced Live's
+// Correctness proof for buildGridLiveGamePanelData
+// (grid-live-team-panel-data.ts) - the data behind Grid Live's
 // combined game-detail panel. Covers: both teams' picks are split out
 // correctly from one game's full pick list, OTHER-group (totals/non-team)
 // picks never leak into either team's section, and a team with zero picks
 // still resolves a valid label/color for the empty state.
 // Run with:
-//   npx tsx src/components/live/advanced-live-team-panel-data-acceptance-test.ts
+//   npx tsx src/components/live/grid-live-team-panel-data-acceptance-test.ts
 //
 // Exits non-zero if any assertion fails.
-import { buildAdvancedLiveGamePanelData } from "./advanced-live-team-panel-data";
+import { buildGridLiveGamePanelData } from "./grid-live-team-panel-data";
 import type { ExpanderPick } from "./game-picks-expander";
 
 let failures = 0;
@@ -46,7 +46,7 @@ const otherPick = pick({ pickId: "other-1", teamGroup: "OTHER" });
 const picks = [homePick, awayPick, otherPick];
 
 {
-  const data = buildAdvancedLiveGamePanelData(game, "baseball_mlb", "MLB", picks);
+  const data = buildGridLiveGamePanelData(game, "baseball_mlb", "MLB", picks);
   expect("home section returns only the home team's picks", data.home.picks.map((p) => p.pickId), ["home-1"]);
   expect("away section returns only the away team's picks", data.away.picks.map((p) => p.pickId), ["away-1"]);
   expect("home section's teamLabel is the home team's short name", data.home.teamLabel, "Pirates");
@@ -55,7 +55,7 @@ const picks = [homePick, awayPick, otherPick];
 }
 
 {
-  const data = buildAdvancedLiveGamePanelData(game, "baseball_mlb", "MLB", [otherPick]);
+  const data = buildGridLiveGamePanelData(game, "baseball_mlb", "MLB", [otherPick]);
   expect("a team with zero picks resolves an empty picks list, not an error", data.home.picks, []);
   expect("a team with zero picks still resolves its label", data.home.teamLabel, "Pirates");
 }

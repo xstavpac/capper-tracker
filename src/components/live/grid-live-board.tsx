@@ -6,13 +6,13 @@ import type { OddsGame, ScoreGame } from "@/server/data/odds";
 import { orderBoardGames, matchScoreToGame } from "@/components/live/live-scoreboard-ordering";
 import { easternDateKey } from "@/lib/dates";
 import { useLiveScores } from "@/components/live/use-live-scores";
-import { resolveAdvancedLiveSelection, type AdvancedLiveSelection } from "@/lib/advanced-live-selection";
-import { buildAdvancedLiveGamePanelData } from "@/components/live/advanced-live-team-panel-data";
-import { AdvancedLiveGameList } from "@/components/live/advanced-live-game-list";
+import { resolveGridLiveSelection, type GridLiveSelection } from "@/lib/grid-live-selection";
+import { buildGridLiveGamePanelData } from "@/components/live/grid-live-team-panel-data";
+import { GridLiveGameList } from "@/components/live/grid-live-game-list";
 import { GameDetailPanel } from "@/components/live/team-picks-panel";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 
-// Advanced Live's client shell: a compact game list beside a fixed
+// Grid Live's client shell: a compact game list beside a fixed
 // game-detail picks panel. Data assembly (odds, scores, picks, team-group
 // classification) is entirely server-computed in live/page.tsx and passed
 // down as props here, unchanged from how LiveScoreboard already receives it
@@ -24,8 +24,8 @@ import type { ExpanderPick } from "@/components/live/game-picks-expander";
 // of representing selection as a query param a Server Component can read on
 // refresh/share) but is driven by CLIENT state, not by navigating to a new
 // URL: `initialSelection` seeds that state from what the server resolved on
-// this request's own searchParams via resolveAdvancedLiveSelection, and a
-// game click (AdvancedLiveGameList's onSelectGame) updates the state
+// this request's own searchParams via resolveGridLiveSelection, and a
+// game click (GridLiveGameList's onSelectGame) updates the state
 // directly, then calls router.replace only to keep the address bar in sync -
 // it does NOT wait on or remount from that navigation. Every game's odds/
 // score/picks are already present in this component's props (the whole
@@ -40,7 +40,7 @@ import type { ExpanderPick } from "@/components/live/game-picks-expander";
 // freshly-sorted game list; if the previously-selected game dropped out, it
 // falls back (first game in the new list) and syncs both client state and
 // the URL.
-export function AdvancedLiveBoard({
+export function GridLiveBoard({
   activeSport,
   sportLabel,
   odds,
@@ -53,7 +53,7 @@ export function AdvancedLiveBoard({
   odds: OddsGame[];
   initialScores: ScoreGame[];
   matchedPicksByGame: ExpanderPick[][];
-  initialSelection: AdvancedLiveSelection;
+  initialSelection: GridLiveSelection;
 }) {
   const router = useRouter();
   const scores = useLiveScores(activeSport, initialScores);
@@ -88,10 +88,13 @@ export function AdvancedLiveBoard({
   // during render) specifically to catch the "selected game just went
   // Final and fell out of sortedGameIds" case - see the file header.
   useEffect(() => {
-    const resolved = resolveAdvancedLiveSelection(sortedGameIds, selection.gameId);
+    const resolved = resolveGridLiveSelection(sortedGameIds, selection.gameId);
     if (resolved.gameId === selection.gameId) return;
 
     setSelection(resolved);
+    // `view=advanced` is the query-param value for this toggle, kept
+    // unchanged from before the Grid rename to avoid breaking bookmarked/
+    // shared links - see live/page.tsx's isGrid.
     const params = new URLSearchParams({ sport: activeSport, view: "advanced" });
     if (resolved.gameId) params.set("gameId", resolved.gameId);
     router.replace("/live?" + params.toString(), { scroll: false });
@@ -113,7 +116,7 @@ export function AdvancedLiveBoard({
   // into handleSelectGame: that one exists specifically to AVOID a
   // navigation on every game click (see file header), while this is opening
   // a genuinely different view (Momentum/Pace, head-to-head header) that
-  // Advanced's in-panel GameDetailPanel has no equivalent for.
+  // Grid's in-panel GameDetailPanel has no equivalent for.
   function handleOpenGame(gameId: string) {
     router.push("/live/" + gameId + "?sport=" + activeSport);
   }
@@ -123,11 +126,11 @@ export function AdvancedLiveBoard({
 
   const panelData =
     selectedEntry &&
-    buildAdvancedLiveGamePanelData(selectedEntry.game, activeSport, sportLabel, matchedPicksByGame[selectedEntry.gameIndex] ?? []);
+    buildGridLiveGamePanelData(selectedEntry.game, activeSport, sportLabel, matchedPicksByGame[selectedEntry.gameIndex] ?? []);
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,320px)_1fr]">
-      <AdvancedLiveGameList
+      <GridLiveGameList
         sortedGames={sortedGames}
         matchedPicksByGame={matchedPicksByGame}
         activeSport={activeSport}

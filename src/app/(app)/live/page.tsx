@@ -14,9 +14,9 @@ import { getTeamColor } from "@/lib/team-colors";
 import { formatPickLabel } from "@/lib/bet-line";
 import { type ExpanderPick } from "@/components/live/game-picks-expander";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
-import { AdvancedLiveBoard } from "@/components/live/advanced-live-board";
+import { GridLiveBoard } from "@/components/live/grid-live-board";
 import { slateCutoffKey, orderBoardGames } from "@/components/live/live-scoreboard-ordering";
-import { resolveAdvancedLiveSelection } from "@/lib/advanced-live-selection";
+import { resolveGridLiveSelection } from "@/lib/grid-live-selection";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { easternDateKey } from "@/lib/dates";
 
@@ -178,25 +178,27 @@ export default async function LivePage({
   // same route (?view=advanced) - not client-router state - per the app-wide
   // convention (sport tabs, the Picks page's filters) of representing
   // selection as a URL a Server Component reads, rather than inventing a new
-  // client-only mechanism for this one feature. Sport tab links below carry
-  // `view` forward so switching sport while in Advanced Live doesn't
-  // silently drop back to Standard; they never carry gameId/team forward,
-  // which is what "explicitly clears the old selection" means in practice -
-  // a fresh nav with no gameId/team simply has nothing for
-  // resolveAdvancedLiveSelection to find, so it falls back to the new
-  // sport's first game on its own (see advanced-live-selection.ts).
-  const isAdvanced = searchParams.view === "advanced";
+  // client-only mechanism for this one feature. The param's value stays
+  // "advanced" (not renamed to "grid") even though the view itself is now
+  // labeled/named Grid, so existing bookmarked/shared ?view=advanced links
+  // keep working. Sport tab links below carry `view` forward so switching
+  // sport while in Grid Live doesn't silently drop back to Standard; they
+  // never carry gameId/team forward, which is what "explicitly clears the
+  // old selection" means in practice - a fresh nav with no gameId/team
+  // simply has nothing for resolveGridLiveSelection to find, so it falls
+  // back to the new sport's first game on its own (see grid-live-selection.ts).
+  const isGrid = searchParams.view === "advanced";
 
-  // Initial selection for Advanced Live, resolved server-side from this
+  // Initial selection for Grid Live, resolved server-side from this
   // request's own searchParams against the same board the client will
   // render (same odds, same orderBoardGames, matched against the initial
-  // score snapshot). AdvancedLiveBoard re-runs this exact function
+  // score snapshot). GridLiveBoard re-runs this exact function
   // client-side on every score poll tick to catch a selection that goes
   // stale after this initial render (e.g. the selected game finishing) -
   // see that component for why it can't be resolved once, here, and left
   // alone.
-  const initialSelection = isAdvanced
-    ? resolveAdvancedLiveSelection(
+  const initialSelection = isGrid
+    ? resolveGridLiveSelection(
         orderBoardGames(
           odds.map((game) => ({ game, score: matchScoreToGame(scores, game) })),
           todayKey
@@ -217,7 +219,7 @@ export default async function LivePage({
           {LIVE_SPORTS.map((s) => (
             <a
               key={s.key}
-              href={"/live?sport=" + s.key + (isAdvanced ? "&view=advanced" : "")}
+              href={"/live?sport=" + s.key + (isGrid ? "&view=advanced" : "")}
               className={tabClass(activeSport === s.key)}
             >
               {s.label}
@@ -225,11 +227,11 @@ export default async function LivePage({
           ))}
         </div>
         <div className="flex gap-1.5 rounded-full bg-muted/60 p-1">
-          <a href={"/live?sport=" + activeSport} className={viewToggleClass(!isAdvanced)}>
+          <a href={"/live?sport=" + activeSport} className={viewToggleClass(!isGrid)}>
             Standard
           </a>
-          <a href={"/live?sport=" + activeSport + "&view=advanced"} className={viewToggleClass(isAdvanced)}>
-            Advanced
+          <a href={"/live?sport=" + activeSport + "&view=advanced"} className={viewToggleClass(isGrid)}>
+            Grid
           </a>
         </div>
       </div>
@@ -247,8 +249,8 @@ export default async function LivePage({
         </div>
       )}
 
-      {odds.length > 0 && isAdvanced && initialSelection && (
-        <AdvancedLiveBoard
+      {odds.length > 0 && isGrid && initialSelection && (
+        <GridLiveBoard
           key={activeSport}
           activeSport={activeSport}
           sportLabel={sportLabel}
@@ -259,7 +261,7 @@ export default async function LivePage({
         />
       )}
 
-      {odds.length > 0 && !isAdvanced && (
+      {odds.length > 0 && !isGrid && (
         <LiveScoreboard
           key={activeSport}
           activeSport={activeSport}

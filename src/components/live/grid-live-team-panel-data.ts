@@ -1,4 +1,4 @@
-// Pure data shaping for Advanced Live's game-detail panel - filters an
+// Pure data shaping for Grid Live's game-detail panel - filters an
 // already-classified ExpanderPick[] (teamGroup computed upstream in
 // live/page.tsx via classifyPickTeamGroup, exactly as Standard Live already
 // does) into both sides of the matchup at once, plus each side's label/color.
@@ -9,23 +9,23 @@ import { shortTeamName } from "@/lib/pick-team-group";
 import { getTeamColor } from "@/lib/team-colors";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 
-export type AdvancedLiveTeamSideData = {
+export type GridLiveTeamSideData = {
   teamLabel: string;
   teamColor: string | null;
   picks: ExpanderPick[];
 };
 
-export type AdvancedLiveGamePanelData = {
-  away: AdvancedLiveTeamSideData;
-  home: AdvancedLiveTeamSideData;
+export type GridLiveGamePanelData = {
+  away: GridLiveTeamSideData;
+  home: GridLiveTeamSideData;
 };
 
-export function buildAdvancedLiveGamePanelData(
+export function buildGridLiveGamePanelData(
   game: { homeTeam: string; awayTeam: string },
   sportKey: string,
   sportName: string,
   picks: ExpanderPick[]
-): AdvancedLiveGamePanelData {
+): GridLiveGamePanelData {
   return {
     away: {
       teamLabel: shortTeamName(game.awayTeam, sportName),

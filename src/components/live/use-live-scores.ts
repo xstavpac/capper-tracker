@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import type { ScoreGame } from "@/server/data/odds";
 
 // Extracted from live-scoreboard.tsx as a pure refactor (behavior unchanged)
-// so Advanced Live can poll the exact same scores feed instead of running a
+// so Grid Live can poll the exact same scores feed instead of running a
 // second interval. This is the same hand-rolled setInterval loop that
 // existed inline before the extraction - NOT migrated to useSafePoll
 // (src/lib/use-safe-poll.ts), the app's sanctioned polling hook, since that
 // would add backoff/visibility-pause behavior Standard Live doesn't have
 // today and this extraction is scoped to be a pure lift, not a behavior
-// change. Migrating both Standard and Advanced Live's live-scores poll onto
+// change. Migrating both Standard and Grid Live's live-scores poll onto
 // useSafePoll is a reasonable follow-up, just a separate, deliberate change.
 //
 // The interval itself balances "genuinely live" against Vercel function

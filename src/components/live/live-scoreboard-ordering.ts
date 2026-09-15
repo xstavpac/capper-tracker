@@ -47,7 +47,7 @@ type OrderableGame = { game: { commenceTime: string }; score?: Pick<ScoreGame, "
 // must never pull in even transitively (odds.ts itself is fine server-side;
 // the risk is only in crossing into the client bundle). Shared here (a pure,
 // client-safe module already) rather than re-duplicated per client component
-// - both live-scoreboard.tsx and the Advanced Live board import this same
+// - both live-scoreboard.tsx and the Grid Live board import this same
 // copy instead of each carrying their own.
 export function matchScoreToGame(
   scores: ScoreGame[],
