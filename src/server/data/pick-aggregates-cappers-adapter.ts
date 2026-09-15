@@ -4,11 +4,13 @@
 // (pick-aggregates.ts: getCapperPickDataset + sliceIntoWindows) instead of each
 // function running its own prisma.pick.findMany.
 //
-// Deliberately NOT imported by src/app/(app)/cappers/page.tsx or re-exported
-// from src/server/data/cappers.ts yet - /cappers still runs on the original
-// implementations. This module exists to be registered as the "t3" entry in
-// scripts/t2-harness/capture-output.ts's IMPLEMENTATIONS map and diffed
-// against "old" via the harness before any live call site switches over.
+// Imported by src/app/(app)/cappers/page.tsx as of the T5 cutover - the T2
+// harness diffed this against the original implementations in
+// src/server/data/cappers.ts with zero differences against real anonymized
+// production data before this switch was made. cappers.ts's own
+// getCapperLeaderboardTable/getFavoriteCappersSummary/getSportCategoryPanelData
+// are kept unused-but-intact there for the T5 observation period (7 days AND
+// 500 real page-loads, whichever is longer) before they can be removed (T7).
 // getPlanStatus and getMostActiveThisWeek are untouched by the T3 design
 // (they don't fit the windowed per-capper-pick-history shape) and are
 // re-exported here unchanged so this module still satisfies the harness's

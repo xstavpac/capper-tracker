@@ -2,15 +2,17 @@ import Link from "next/link";
 import { requireUser } from "@/server/auth";
 import {
   getPlanStatus,
-  getCapperLeaderboardTable,
   getMostActiveThisWeek,
-  getSportCategoryPanelData,
   getCappersWithPickCounts,
   findSuspectedDuplicateCappers,
-  getFavoriteCappersSummary,
   type LeaderboardEntry,
   type FavoriteCappersSummary as FavoriteCappersSummaryData,
 } from "@/server/data/cappers";
+import {
+  getCapperLeaderboardTable,
+  getSportCategoryPanelData,
+  getFavoriteCappersSummary,
+} from "@/server/data/pick-aggregates-cappers-adapter";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { PICK_CATEGORY_LABELS, SCORECARD_WINDOWS, type ScorecardWindow } from "@/server/data/stats";
 import { CapperForm } from "@/components/dashboard/capper-form";
