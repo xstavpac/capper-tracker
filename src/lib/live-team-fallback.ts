@@ -23,8 +23,17 @@
 //
 // No fuzzy string distance anywhere - the live names are authoritative and
 // current; the only "derivation" is dropping the mascot and taking initials.
+//
+// A phrase/acronym key match is additionally rejected when it's really a
+// player's surname sitting right in front of it in a player-prop line
+// ("Rashee Rice Over 59.5 Receiving Yards" naming a live "Rice Owls" game) -
+// isPlayerPropSurnameCollision (parse-catalog.ts), reused as-is rather than
+// reimplemented here. This is the same class of false-positive #83 fixed in
+// parse-catalog.ts's detectSport/findTeamNicknames; confirmed live that this
+// separate matching implementation had the identical exposure, since #83
+// never touched this file (2026-09 follow-up).
 
-import { normalizeForGrouping, teamPhraseRegex } from "@/lib/parse-catalog";
+import { normalizeForGrouping, teamPhraseRegex, isPlayerPropSurnameCollision } from "@/lib/parse-catalog";
 
 export type LiveTeam = {
   // The sport LABEL as parse-catalog / LIVE_SPORTS use it ("NCAAF", "NFL", ...).
@@ -141,14 +150,14 @@ export function resolveLineAgainstLiveTeams(line: string, liveTeams: LiveTeam[])
 
     let via: "name" | "prefix" | "acronym" | null = null;
     for (const phrase of phraseKeys) {
-      if (teamPhraseRegex(phrase).test(normalizedLine)) {
+      if (teamPhraseRegex(phrase).test(normalizedLine) && !isPlayerPropSurnameCollision(line, phrase)) {
         via = phrase === nameKey ? "name" : "prefix";
         break;
       }
     }
     if (!via) {
       for (const acr of acronymKeys) {
-        if (upperTokens.has(acr)) {
+        if (upperTokens.has(acr) && !isPlayerPropSurnameCollision(line, acr)) {
           via = "acronym";
           break;
         }

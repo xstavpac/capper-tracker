@@ -1111,7 +1111,16 @@ export function teamPhraseRegex(phrase: string): RegExp {
 // - a person's name colliding with a two-word phrase word-for-word isn't a
 // realistic case this bug report surfaced, and staying single-word-only
 // keeps the guard from ever second-guessing a genuine multi-word team match.
-function isPlayerPropSurnameCollision(text: string, phrase: string): boolean {
+//
+// Exported (2026-09, the live-team-fallback.ts follow-up) - live-team-
+// fallback.ts's resolveLineAgainstLiveTeams has its own, separate team-
+// matching implementation with the exact same exposure ("Rashee Rice Over
+// 59.5 Receiving Yards" resolving to a live "Rice Owls" via its own "prefix"
+// match, confirmed live), so it reuses this exact check rather than a
+// second, slightly-different reimplementation of the same policy. `phrase`
+// there is already lowercase (buildTeamKeys' phraseKeys/acronymKeys), same
+// as every caller here.
+export function isPlayerPropSurnameCollision(text: string, phrase: string): boolean {
   if (phrase.includes(" ")) return false;
   const prop = parsePlayerProp(text);
   if (!prop) return false;
