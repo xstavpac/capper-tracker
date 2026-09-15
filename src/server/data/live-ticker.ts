@@ -1,4 +1,12 @@
-import { getOddsForSport, getLiveScoresForSport, matchScoreToGame, LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
+import {
+  getOddsForSport,
+  getLiveScoresForSport,
+  matchScoreToGame,
+  LIVE_SPORTS,
+  RESOLVABLE_SPORT_KEYS,
+  type OddsGame,
+  type ScoreGame,
+} from "@/server/data/odds";
 import { sameEasternDay } from "@/lib/dates";
 import { shortTeamName } from "@/lib/pick-team-group";
 import { getTeamColor } from "@/lib/team-colors";
@@ -20,6 +28,60 @@ export type TickerGame = {
   accentColor: string;
 };
 
+// The per-sport transform: today's-date filtering + score-matching, pulled
+// out of getLiveTickerGames as its own pure function so it's provable
+// without touching the DB/network (see live-ticker-acceptance-test.ts) - it
+// takes already-fetched odds/scores rather than fetching them itself.
+//
+// Restricts to today's Eastern calendar day only - the ticker's whole point
+// is "what's happening today," not a running feed of everything upcoming.
+// sameEasternDay alone still lets through a not-yet-started later-today game
+// (it compares calendar dates, not time-of-day), so this isn't just
+// "started or later today" - it's "today," full stop. A prior
+// `|| gameDate > now` clause here let ANY future day's games through too
+// (NFL odds are posted for the whole week at once), which is what caused
+// games 2-3 days out to show up in the ticker.
+export function buildTickerGamesForSport(
+  sportKey: string,
+  sportLabel: string,
+  allOdds: OddsGame[],
+  scores: ScoreGame[],
+  now: Date
+): TickerGame[] {
+  const todaysOdds = allOdds.filter((game) => {
+    const gameDate = new Date(game.commenceTime);
+    return sameEasternDay(gameDate, now);
+  });
+
+  return todaysOdds.map((game): TickerGame => {
+    const score = matchScoreToGame(scores, game);
+    return {
+      id: game.id,
+      sportKey,
+      sportLabel,
+      homeTeam: game.homeTeam,
+      awayTeam: game.awayTeam,
+      homeShort: shortTeamName(game.homeTeam, sportLabel),
+      awayShort: shortTeamName(game.awayTeam, sportLabel),
+      commenceTime: game.commenceTime,
+      status: score?.status ?? "preview",
+      homeScore: parseScore(score, game.homeTeam),
+      awayScore: parseScore(score, game.awayTeam),
+      inningHalf: score?.inningHalf ?? null,
+      inningOrdinal: score?.inningOrdinal ?? null,
+      accentColor: getTeamColor(sportKey, game.homeTeam) ?? "#64748B",
+    };
+  });
+}
+
+// Interleaved by commence time (not grouped by sport) so the ticker reads as
+// one continuous "what's happening right now across every sport" feed
+// rather than four separate single-sport blocks back to back. Pure, own
+// function for the same testability reason as buildTickerGamesForSport.
+export function interleaveByCommenceTime(perSport: TickerGame[][]): TickerGame[] {
+  return perSport.flat().sort((a, b) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime());
+}
+
 // Public marketing-page ticker's data source. Deliberately reuses the same
 // getOddsForSport/getLiveScoresForSport the authenticated /live page runs
 // on (see live/page.tsx) rather than a separate fetch path - same
@@ -33,51 +95,16 @@ export type TickerGame = {
 // sport isn't "genuinely live," so it's left out rather than shown as a
 // permanently-blank segment.
 export async function getLiveTickerGames(): Promise<TickerGame[]> {
+  const now = new Date();
   const perSport = await Promise.all(
     RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
       const sportLabel = LIVE_SPORTS.find((s) => s.key === sportKey)?.label ?? sportKey;
       const [allOdds, scores] = await Promise.all([getOddsForSport(sportKey), getLiveScoresForSport(sportKey)]);
-
-      // Restricts to today's Eastern calendar day only - the ticker's whole
-      // point is "what's happening today," not a running feed of everything
-      // upcoming. sameEasternDay alone still lets through a not-yet-started
-      // later-today game (it compares calendar dates, not time-of-day), so
-      // this isn't just "started or later today" - it's "today," full stop.
-      // A prior `|| gameDate > now` clause here let ANY future day's games
-      // through too (NFL odds are posted for the whole week at once), which
-      // is what caused games 2-3 days out to show up in the ticker.
-      const now = new Date();
-      const todaysOdds = allOdds.filter((game) => {
-        const gameDate = new Date(game.commenceTime);
-        return sameEasternDay(gameDate, now);
-      });
-
-      return todaysOdds.map((game): TickerGame => {
-        const score = matchScoreToGame(scores, game);
-        return {
-          id: game.id,
-          sportKey,
-          sportLabel,
-          homeTeam: game.homeTeam,
-          awayTeam: game.awayTeam,
-          homeShort: shortTeamName(game.homeTeam, sportLabel),
-          awayShort: shortTeamName(game.awayTeam, sportLabel),
-          commenceTime: game.commenceTime,
-          status: score?.status ?? "preview",
-          homeScore: parseScore(score, game.homeTeam),
-          awayScore: parseScore(score, game.awayTeam),
-          inningHalf: score?.inningHalf ?? null,
-          inningOrdinal: score?.inningOrdinal ?? null,
-          accentColor: getTeamColor(sportKey, game.homeTeam) ?? "#64748B",
-        };
-      });
+      return buildTickerGamesForSport(sportKey, sportLabel, allOdds, scores, now);
     })
   );
 
-  // Interleaved by commence time (not grouped by sport) so the ticker reads
-  // as one continuous "what's happening right now across every sport" feed
-  // rather than four separate single-sport blocks back to back.
-  return perSport.flat().sort((a, b) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime());
+  return interleaveByCommenceTime(perSport);
 }
 
 function parseScore(score: { scores: { name: string; score: string }[] | null } | undefined, teamName: string): number | null {

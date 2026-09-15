@@ -26,11 +26,13 @@
 //     Defense" - the suffix isn't consistent across books) and, on at
 //     least one book (Fanatics), a literal "No Scorer" outcome (the price
 //     on nobody scoring a TD in the game at all).
+import { revalidateTag } from "next/cache";
 import type { OddsGame, OddsApiCredits } from "@/server/data/odds";
 import { ODDS_API_BASE_URL, readOddsApiCredits, resolveOddsGame } from "@/server/data/odds";
 import { getLatestCreditUsageLevel, persistOddsApiUsage } from "@/server/data/odds-api-usage";
 import { prisma } from "@/lib/prisma";
 import { easternDateKey } from "@/lib/dates";
+import { cacheKeys } from "@/lib/cache-keys";
 import type { PlayerPropMarket } from "@/lib/bet-line";
 import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
 
@@ -394,6 +396,14 @@ export async function fetchAndMergeNflPropOdds(games: OddsGame[], apiKey: string
 
 export type NflPropSeedStatus = "seeded" | "no_api_key" | "no_snapshot" | "no_games_to_fetch";
 
+// True only for the one NflPropSeedStatus where the update below actually
+// ran - "no_api_key"/"no_snapshot"/"no_games_to_fetch" all leave the row
+// untouched, same reasoning as odds.ts's oddsWriteInvalidatesCache /
+// backfillWriteInvalidatesCache for the other two OddsSnapshot write paths.
+export function nflPropWriteInvalidatesCache(status: NflPropSeedStatus): boolean {
+  return status === "seeded";
+}
+
 // The entry point the refresh-odds cron calls, once, right after its
 // existing Promise.all(LIVE_SPORTS.map(seedOddsSnapshot)) bulk seed - same
 // cron invocation, not a new poll cycle (see route.ts). Reads today's
@@ -446,6 +456,27 @@ export async function seedNflPropOddsForToday(): Promise<NflPropFetchSummary & {
     where: { sportKey_fetchDate: { sportKey: NFL_SPORT_KEY, fetchDate } },
     data: { data: merged as any },
   });
+
+  // Independent invalidation, not a reuse of seedOddsSnapshot's - this
+  // function runs right after seedOddsSnapshot in the SAME refresh-odds cron
+  // request (see route.ts) and writes to the SAME NFL row a second time,
+  // enriching it with prop markets. Without this call, any read landing
+  // between the two writes would repopulate the cache from the pre-
+  // enrichment data with nothing left to invalidate it again - the prop-
+  // enriched row would then stay masked until the TTL backstop or the next
+  // day's cron. Same try/catch/log-and-continue treatment as the other two
+  // write paths, and this call's own local fetchDate (already matches the
+  // WHERE clause above), never a second new Date() computation.
+  if (nflPropWriteInvalidatesCache("seeded")) {
+    try {
+      revalidateTag(cacheKeys.odds(NFL_SPORT_KEY, fetchDate));
+    } catch (err) {
+      console.error(
+        "[seedNflPropOddsForToday] revalidateTag failed - odds write succeeded, cache invalidation did not; TTL backstop will catch up",
+        JSON.stringify({ sportKey: NFL_SPORT_KEY, error: err instanceof Error ? err.message : String(err) })
+      );
+    }
+  }
 
   console.log(
     "[nfl-prop-odds] seeded",

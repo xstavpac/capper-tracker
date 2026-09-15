@@ -5,7 +5,15 @@
 // (odds, liveScores - see ttl-memo.ts).
 export const cacheKeys = {
   dashboard: (userId: string) => `dashboard:${userId}`,
-  odds: (sportKey: string) => `odds:${sportKey}`,
+  // Dated: the underlying OddsSnapshot row is itself (sportKey, fetchDate)-
+  // scoped (its own Prisma unique constraint), so the cache key matches that
+  // grain exactly - a day rollover naturally produces a fresh, never-yet-
+  // cached key instead of relying on the TTL to notice the old day's entry
+  // is stale. Every write path (odds.ts's seedOddsSnapshot/
+  // backfillOddsForSport, nfl-prop-odds.ts's seedNflPropOddsForToday) must
+  // pass the SAME fetchDate value it used for its own DB write, not a
+  // separately-computed one - see each write path's own comment.
+  odds: (sportKey: string, fetchDate: string) => `odds:${sportKey}:${fetchDate}`,
   liveScores: (sportKey: string) => `live-scores:${sportKey}`,
   // Per-GAME live state (win probability, current base/out, current pitcher -
   // see live-game-state.ts), distinct from liveScores above which is one

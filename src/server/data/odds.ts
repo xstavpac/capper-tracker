@@ -1,4 +1,4 @@
-import { unstable_cache } from "next/cache";
+import { unstable_cache, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays } from "@/lib/dates";
 import { isSportInSeason, oddsApiRequestKeys } from "@/lib/sport-seasons";
@@ -6,6 +6,7 @@ import type { OddsFetchStatus, BackfillStatus } from "@/lib/odds-cron-status";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { cacheKeys } from "@/lib/cache-keys";
 import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
+import { cachedByTag } from "@/server/data/cached";
 import { persistOddsApiUsage } from "@/server/data/odds-api-usage";
 
 // Live scores are current-ish data polled every 25s per open /live tab -
@@ -99,18 +100,62 @@ export const LIVE_SPORTS = [
 export const ODDS_API_BASE_URL = "https://api.the-odds-api.com/v4";
 const BASE_URL = ODDS_API_BASE_URL;
 
-// Process-local layer over getOddsForSportUncached: the OddsSnapshot row for
-// a sport changes at most every 4h, but /live re-runs this on every render
-// (staleTimes: { dynamic: 0 }), each time re-parsing a JSON blob that can be
-// 100KB-1MB for a full week of games across all bookmakers. The memo makes
-// repeat hits within ODDS_CACHE_TTL_SECONDS reuse the already-parsed array -
-// no DB round-trip, no re-parse. No unstable_cache layer here (unlike live
-// scores): the source is already one indexed row in our own DB.
+// Shared, cross-instance layer over getOddsForSportUncached (cachedByTag ->
+// unstable_cache / Next's Data Cache), keyed by cacheKeys.odds(sportKey,
+// fetchDate). Previously this was a process-local memo (memoizeWithTtl) -
+// fine for collapsing a burst of hits on ONE warm serverless instance, but
+// Vercel scales instances up/down often enough under this app's real,
+// sporadic traffic that most requests land on a different instance and miss
+// the process-local cache entirely, each miss re-paying a full DB round-trip
+// for a JSON blob that can be 100KB-1MB for a full week of games across all
+// bookmakers. unstable_cache's Data Cache is shared platform-level storage,
+// not per-instance memory, so it actually survives that churn.
+//
+// Freshness contract: every OddsSnapshot write path (seedOddsSnapshot,
+// backfillOddsForSport, seedNflPropOddsForToday) calls revalidateTag for its
+// (sportKey, fetchDate) key immediately after a successful write. The next
+// read for that exact key after a successful invalidation gets a fresh
+// fetch, not a stale value. ODDS_CACHE_TTL_SECONDS (below) is a best-effort
+// backstop, not a freshness SLA: it only matters if a write's revalidateTag
+// call itself fails (each write path logs and continues rather than failing
+// the write - see each one's own comment), and in that case this cache
+// offers no hard bound on how stale a read can be, only "eventually, once
+// something reads this key again." Every current consumer of this data
+// (grading's ledger fields, prop-odds resolution, pick recovery) is
+// independently designed to degrade to "missing" rather than "wrong" when
+// that backstop path is the one that fires, so relying on it in the rare
+// case a tag invalidation fails is safe, not silently incorrect.
+//
+// getOddsForSport computes its own fetchDate here (needed to build the cache
+// key before the cached function even runs) rather than reading it back from
+// getOddsForSportUncached's result - a second new Date() call, independent
+// of the one inside getOddsForSportUncached, milliseconds apart in practice.
+// This is NOT the same risk as a write path recomputing its own key: a write
+// path's revalidateTag must match the exact fetchDate it just wrote under,
+// which is why those paths thread the value through instead of recomputing
+// it (see seedOddsSnapshot/backfillOddsForSport/seedNflPropOddsForToday).
+// Here there's no write to match - worst case an extremely rare request
+// exactly at the Eastern midnight boundary builds a key for the wrong day,
+// which self-corrects on the very next request either way.
 export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
-  const result = await memoizeWithTtl(cacheKeys.odds(sportKey), () => getOddsForSportUncached(sportKey), {
-    ttlMs: ODDS_CACHE_TTL_SECONDS * 1000,
-  });
+  const fetchDate = easternDateKey(new Date());
+  const result = await cachedByTag(cacheKeys.odds(sportKey, fetchDate), ODDS_CACHE_TTL_SECONDS, () =>
+    getOddsForSportUncached(sportKey)
+  );
   return result.games;
+}
+
+// True only for a status that means a fresh OddsSnapshot row was actually
+// written - "cached"/"off_season"/"no_api_key"/"fetch_failed" all leave the
+// cache's current contents (or absence) accurate, so invalidating for those
+// would just force an identical re-fetch on the next read. Pure and
+// exported so this decision is provable without a Next.js request context -
+// revalidateTag itself needs one, this doesn't. Mirrored by
+// backfillWriteInvalidatesCache below and nflPropWriteInvalidatesCache
+// (nfl-prop-odds.ts) for the other two OddsSnapshot write paths - every
+// write path gets the identical treatment, no tier of write is exempt.
+export function oddsWriteInvalidatesCache(status: OddsFetchStatus): boolean {
+  return status === "seeded";
 }
 
 // Seed/refresh today's OddsSnapshot for one sport and report what actually
@@ -119,10 +164,32 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
 // API credits remaining) rather than a blanket { ok: true } that hid the
 // free-tier exhaustion outages. Calls the uncached path directly: the cron
 // is the authoritative daily attempt, not a cache consumer.
+//
+// revalidateTag is safe to call here in the real cron Route Handler (unlike
+// inside getOddsForSport's own cache-miss fallback above, which can run
+// during render) - but this function is ALSO exercised directly by
+// odds-usage-log-failure-acceptance-test.ts, a bare tsx process with no
+// Next.js request context at all, where revalidateTag throws
+// unconditionally ("Invariant: static generation store missing"). The
+// upsert has already succeeded by this point regardless, so a failed
+// invalidation must never fail the write it's reporting on - same "log
+// loudly, swallow, move on" rule recordBulkUsage above already applies to a
+// failed usage-log write on this exact path. Worst case on a real miss here
+// is the ODDS_CACHE_TTL_SECONDS backstop, not a wrong result.
 export async function seedOddsSnapshot(
   sportKey: string
 ): Promise<{ sportKey: string; status: OddsFetchStatus; games: number; creditsRemaining: number | null }> {
-  const { games, status, credits } = await getOddsForSportUncached(sportKey);
+  const { games, status, credits, fetchDate } = await getOddsForSportUncached(sportKey);
+  if (oddsWriteInvalidatesCache(status)) {
+    try {
+      revalidateTag(cacheKeys.odds(sportKey, fetchDate));
+    } catch (err) {
+      console.error(
+        "[seedOddsSnapshot] revalidateTag failed - odds write succeeded, cache invalidation did not; TTL backstop will catch up",
+        JSON.stringify({ sportKey, error: err instanceof Error ? err.message : String(err) })
+      );
+    }
+  }
   return { sportKey, status, games: games.length, creditsRemaining: credits?.remaining ?? null };
 }
 
@@ -282,18 +349,27 @@ export async function fetchMergedOddsListing(
 
 // OddsFetchStatus / BackfillStatus live in @/lib/odds-cron-status (pure, so
 // the cron-verdict classification is tsx-testable) and are imported above.
-type OddsFetchResult = { games: OddsGame[]; status: OddsFetchStatus; credits: OddsApiCredits | null };
+// fetchDate is the Eastern-day key this call actually used - every return
+// path carries it (not just the write ones) so every caller, including a
+// cache-hit/off-season/no-key read, can build the SAME cacheKeys.odds(...)
+// key its own write (if any) would have used, without a second, potentially
+// racing new Date() call.
+type OddsFetchResult = { games: OddsGame[]; status: OddsFetchStatus; credits: OddsApiCredits | null; fetchDate: string };
 
 async function getOddsForSportUncached(sportKey: string): Promise<OddsFetchResult> {
+  // Computed first, before the season check - it's a pure local date
+  // computation (no DB/network), so moving it ahead of the "out-of-season
+  // never touches the cache table or the network at all" guarantee below
+  // doesn't weaken that guarantee at all, and every return path needs it.
+  const fetchDate = easternDateKey(new Date());
+
   // Every sport in LIVE_SPORTS used to hit the Odds API bulk endpoint every
   // day year-round, including months of pure off-season - the API charges
   // per markets x regions requested regardless of how many (or how few)
   // games come back, so this was pure waste. Checked first, before any DB
   // read/write, so an out-of-season sport never touches the cache table or
   // the network at all.
-  if (!isSportInSeason(sportKey)) return { games: [], status: "off_season", credits: null };
-
-  const fetchDate = easternDateKey(new Date());
+  if (!isSportInSeason(sportKey)) return { games: [], status: "off_season", credits: null, fetchDate };
 
   const existing = await prisma.oddsSnapshot.findUnique({
     where: { sportKey_fetchDate: { sportKey, fetchDate } },
@@ -309,13 +385,13 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsFetchResul
       "[getOddsForSport] cache hit",
       JSON.stringify({ sportKey, fetchDate, gameCount: cachedGames.length })
     );
-    return { games: cachedGames, status: "cached", credits: null };
+    return { games: cachedGames, status: "cached", credits: null, fetchDate };
   }
 
   const apiKey = process.env.ODDS_API_KEY;
   if (!apiKey) {
     console.error("[getOddsForSport] no ODDS_API_KEY configured", JSON.stringify({ sportKey, fetchDate }));
-    return { games: [], status: "no_api_key", credits: null };
+    return { games: [], status: "no_api_key", credits: null, fetchDate };
   }
 
   // Almost always just [sportKey] - a second entry (the NFL preseason key)
@@ -336,7 +412,7 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsFetchResul
   // API error stays distinguishable in the logs from a legitimately empty
   // day. A supplementary preseason-key failure alone does not land here -
   // fetchMergedOddsListing logged it and carried on with the primary result.
-  if (primaryFailed) return { games: [], status: "fetch_failed", credits };
+  if (primaryFailed) return { games: [], status: "fetch_failed", credits, fetchDate };
 
   const fetchedAt = new Date();
   const games: OddsGame[] = mergedRaw
@@ -389,7 +465,7 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsFetchResul
     })
   );
 
-  return { games, status: "seeded", credits };
+  return { games, status: "seeded", credits, fetchDate };
 }
 
 // Yesterday's cached OddsSnapshot, read-only - never fetches, never writes.
@@ -421,6 +497,18 @@ export async function getYesterdayOddsForSport(sportKey: string): Promise<OddsGa
 // is left byte-for-byte untouched - in particular this must never refresh an
 // already-cached game's price with a current/in-play one, same reason
 // getOddsForSport excludes started games from its own fetch below.
+//
+// True only for the one BackfillStatus where the update below actually ran -
+// every other status ("off_season"/"no_base_row"/"no_api_key"/"all_started"/
+// "fetch_failed"/"nothing_missing") leaves the cache's current contents
+// accurate, same reasoning as oddsWriteInvalidatesCache above. This being a
+// partial/additive write (only appends missing games) rather than a full
+// reseed doesn't change whether to invalidate - it still changed what the
+// row contains, which is the only condition that matters here.
+export function backfillWriteInvalidatesCache(status: BackfillStatus): boolean {
+  return status === "added";
+}
+
 export async function backfillOddsForSport(sportKey: string): Promise<{ added: number; status: BackfillStatus }> {
   if (!isSportInSeason(sportKey)) return { added: 0, status: "off_season" };
 
@@ -498,6 +586,23 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
     where: { sportKey_fetchDate: { sportKey, fetchDate } },
     data: { data: [...existingGames, ...missingGames] as any },
   });
+
+  // Same try/catch/log-and-continue treatment as seedOddsSnapshot - this
+  // runs from the real cron Route Handler in production, where
+  // revalidateTag is safe, but a failed invalidation must never fail the
+  // write it's reporting on regardless. Uses this call's own local
+  // fetchDate (already matches the WHERE clause above), never a second
+  // new Date() computation.
+  if (backfillWriteInvalidatesCache("added")) {
+    try {
+      revalidateTag(cacheKeys.odds(sportKey, fetchDate));
+    } catch (err) {
+      console.error(
+        "[backfillOddsForSport] revalidateTag failed - odds write succeeded, cache invalidation did not; TTL backstop will catch up",
+        JSON.stringify({ sportKey, error: err instanceof Error ? err.message : String(err) })
+      );
+    }
+  }
 
   return { added: missingGames.length, status: "added" };
 }
