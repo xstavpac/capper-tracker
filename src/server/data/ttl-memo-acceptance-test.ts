@@ -1,6 +1,7 @@
 // Proof for memoizeWithTtl (ttl-memo.ts) - the process-local layer behind
-// getLiveScoresForSport and getOddsForSport that stops every /live poll from
-// re-hitting an upstream API or re-parsing the odds blob. Run with:
+// getLiveScoresForSport that stops every /live poll from re-hitting an
+// upstream API. (getOddsForSport used to be a second consumer; it now uses
+// cachedByTag instead - see ttl-memo.ts's own header.) Run with:
 //   npx tsx src/server/data/ttl-memo-acceptance-test.ts
 // Exits non-zero if any assertion fails.
 //

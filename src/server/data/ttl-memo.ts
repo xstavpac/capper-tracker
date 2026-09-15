@@ -1,4 +1,4 @@
-// A tiny process-local promise cache with a per-key TTL. Two consumers today:
+// A tiny process-local promise cache with a per-key TTL. One consumer today:
 //
 //   - getLiveScoresForSport (odds.ts): the INNER layer under an unstable_cache
 //     (shared Next.js Data Cache) wrapper. It collapses a burst of same-sport
@@ -7,18 +7,25 @@
 //     contexts where unstable_cache throws (bare scripts, the tsx acceptance
 //     tests, which have no incremental-cache context).
 //
-//   - getOddsForSport (odds.ts): the ONLY layer. The odds blob already lives
-//     in one indexed OddsSnapshot row, so cross-instance sharing buys little;
-//     the cost this removes is re-parsing a 100KB-1MB JSON blob (and the DB
-//     round-trip) on every /live render.
+// getOddsForSport (odds.ts) used to be the other consumer, as the ONLY
+// layer - reasoned at the time that cross-instance sharing "buys little"
+// since the odds blob already lives in one indexed OddsSnapshot row, so this
+// was only removing the cost of re-parsing a 100KB-1MB JSON blob on every
+// /live render. That reasoning missed that re-fetching the same row is a
+// real Postgres pooler egress cost too, not just a JS re-parse cost - under
+// this app's real, sporadic traffic most requests land on a different
+// Vercel instance and miss a process-local cache entirely, so the "cheap
+// DB round-trip" assumption didn't hold in practice. getOddsForSport now
+// uses cachedByTag (server/data/cached.ts) instead - shared, cross-instance
+// Data Cache, not process-local memory. See that function's own comment.
 //
 // unstable_cache itself cannot be unit-tested (it needs a Next request
 // context), so this layer is what ttl-memo-acceptance-test.ts exercises.
 //
 // Worst-case staleness is ~2xTTL for the layered live-scores path (a request
 // landing just before the inner entry expires, holding a value the outer
-// layer was already about to revalidate); for odds it is just TTL. Both are
-// fine for their data and well under the client poll interval.
+// layer was already about to revalidate). Fine for its data and well under
+// the client poll interval.
 
 type Entry<T> = { at: number; value: Promise<T> };
 const memo = new Map<string, Entry<unknown>>();
