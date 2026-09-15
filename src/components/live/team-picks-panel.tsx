@@ -179,7 +179,15 @@ function TeamPickSection({ teamLabel, teamColor, picks }: AdvancedLiveTeamSideDa
 
   return (
     <div>
-      <div className="mb-2 flex items-center gap-1.5">
+      <div
+        className="mb-2 flex items-center gap-1.5 rounded-md px-2 py-1"
+        style={{
+          // Same wash formula as GamePicksExpander's team-group header
+          // (hex color + a ~12% alpha suffix) - reused as-is so the two
+          // views' team-hue treatment matches exactly.
+          backgroundColor: teamColor ? teamColor + "1F" : "rgb(var(--muted-foreground) / 0.10)",
+        }}
+      >
         <span
           className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15"
           style={{ backgroundColor: teamColor ?? "rgb(var(--muted-foreground))" }}

@@ -108,6 +108,16 @@ export function AdvancedLiveBoard({
     router.replace("/live?sport=" + activeSport + "&view=advanced&gameId=" + gameId, { scroll: false });
   }
 
+  // Double-click only - a real navigation (router.push, not the replace()
+  // above) to Standard Live's own game-card page. Deliberately not folded
+  // into handleSelectGame: that one exists specifically to AVOID a
+  // navigation on every game click (see file header), while this is opening
+  // a genuinely different view (Momentum/Pace, head-to-head header) that
+  // Advanced's in-panel GameDetailPanel has no equivalent for.
+  function handleOpenGame(gameId: string) {
+    router.push("/live/" + gameId + "?sport=" + activeSport);
+  }
+
   const selectedIndex = selection.gameId ? sortedGameIds.indexOf(selection.gameId) : -1;
   const selectedEntry = selectedIndex >= 0 ? sortedGames[selectedIndex] : undefined;
 
@@ -123,6 +133,7 @@ export function AdvancedLiveBoard({
         activeSport={activeSport}
         selectedGameId={selection.gameId}
         onSelectGame={handleSelectGame}
+        onOpenGame={handleOpenGame}
       />
       {panelData ? (
         <GameDetailPanel data={panelData} />

@@ -25,12 +25,20 @@ export function AdvancedLiveGameList({
   activeSport,
   selectedGameId,
   onSelectGame,
+  onOpenGame,
 }: {
   sortedGames: { game: OddsGame; gameIndex: number; score: ScoreGame | undefined }[];
   matchedPicksByGame: ExpanderPick[][];
   activeSport: string;
   selectedGameId: string | null;
   onSelectGame: (gameId: string) => void;
+  // Double-click only - opens Standard Live's full game-card page (Momentum/
+  // Pace tracking, head-to-head header), which Advanced's own in-panel
+  // GameDetailPanel doesn't have room for and isn't meant to duplicate.
+  // Single click stays a plain in-panel selection (onSelectGame above) - see
+  // this file's header comment on why that's a client-state update, not a
+  // navigation.
+  onOpenGame: (gameId: string) => void;
 }) {
   if (sortedGames.length === 0) {
     return (
@@ -52,6 +60,7 @@ export function AdvancedLiveGameList({
             key={game.id}
             type="button"
             onClick={() => onSelectGame(game.id)}
+            onDoubleClick={() => onOpenGame(game.id)}
             className={
               "block w-full rounded-lg border px-3 py-2 text-left transition-colors " +
               (isSelected
