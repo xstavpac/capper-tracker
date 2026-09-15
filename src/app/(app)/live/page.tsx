@@ -1,5 +1,11 @@
 import { requireUser } from "@/server/auth";
-import { getOddsForSport, getYesterdayOddsForSport, getLiveScoresForSport, LIVE_SPORTS } from "@/server/data/odds";
+import {
+  getOddsForSport,
+  getYesterdayOddsForSport,
+  getLiveScoresForSport,
+  matchScoreToGame,
+  LIVE_SPORTS,
+} from "@/server/data/odds";
 import { getPicksForGames } from "@/server/data/picks";
 import { pickCategory, betTypeLabel, chipSetForLeague, DEFAULT_CHIP_SET } from "@/server/data/stats";
 import { getSportCategoryPanelData } from "@/server/data/cappers";
@@ -8,7 +14,9 @@ import { getTeamColor } from "@/lib/team-colors";
 import { formatPickLabel } from "@/lib/bet-line";
 import { type ExpanderPick } from "@/components/live/game-picks-expander";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
-import { slateCutoffKey } from "@/components/live/live-scoreboard-ordering";
+import { AdvancedLiveBoard } from "@/components/live/advanced-live-board";
+import { slateCutoffKey, orderBoardGames } from "@/components/live/live-scoreboard-ordering";
+import { resolveAdvancedLiveSelection } from "@/lib/advanced-live-selection";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { easternDateKey } from "@/lib/dates";
 
@@ -19,10 +27,17 @@ function tabClass(isActive: boolean) {
   );
 }
 
+function viewToggleClass(isActive: boolean) {
+  return (
+    "rounded-full px-3 py-1 text-xs font-medium " +
+    (isActive ? "bg-foreground text-background" : "bg-card text-muted-foreground shadow-soft hover:bg-muted")
+  );
+}
+
 export default async function LivePage({
   searchParams,
 }: {
-  searchParams: { sport?: string };
+  searchParams: { sport?: string; view?: string; gameId?: string; team?: string };
 }) {
   // MLB is currently the only league fully wired up with real data - default
   // there instead of LIVE_SPORTS[0] (NFL), which is otherwise empty most of
@@ -159,6 +174,38 @@ export default async function LivePage({
   // on this page.
   const showBoardPulse = activeSport === "baseball_mlb";
 
+  // The view toggle, like the sport tabs, is a plain query param on this
+  // same route (?view=advanced) - not client-router state - per the app-wide
+  // convention (sport tabs, the Picks page's filters) of representing
+  // selection as a URL a Server Component reads, rather than inventing a new
+  // client-only mechanism for this one feature. Sport tab links below carry
+  // `view` forward so switching sport while in Advanced Live doesn't
+  // silently drop back to Standard; they never carry gameId/team forward,
+  // which is what "explicitly clears the old selection" means in practice -
+  // a fresh nav with no gameId/team simply has nothing for
+  // resolveAdvancedLiveSelection to find, so it falls back to the new
+  // sport's first game on its own (see advanced-live-selection.ts).
+  const isAdvanced = searchParams.view === "advanced";
+
+  // Initial selection for Advanced Live, resolved server-side from this
+  // request's own searchParams against the same board the client will
+  // render (same odds, same orderBoardGames, matched against the initial
+  // score snapshot). AdvancedLiveBoard re-runs this exact function
+  // client-side on every score poll tick to catch a selection that goes
+  // stale after this initial render (e.g. the selected game finishing) -
+  // see that component for why it can't be resolved once, here, and left
+  // alone.
+  const initialSelection = isAdvanced
+    ? resolveAdvancedLiveSelection(
+        orderBoardGames(
+          odds.map((game) => ({ game, score: matchScoreToGame(scores, game) })),
+          todayKey
+        ).map(({ game }) => game.id),
+        searchParams.gameId ?? null,
+        searchParams.team ?? null
+      )
+    : null;
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-6">
@@ -166,10 +213,26 @@ export default async function LivePage({
         <p className="mt-1 text-sm text-muted-foreground">Powered by The Odds API</p>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        {LIVE_SPORTS.map((s) => (
-          <a key={s.key} href={"/live?sport=" + s.key} className={tabClass(activeSport === s.key)}>{s.label}</a>
-        ))}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          {LIVE_SPORTS.map((s) => (
+            <a
+              key={s.key}
+              href={"/live?sport=" + s.key + (isAdvanced ? "&view=advanced" : "")}
+              className={tabClass(activeSport === s.key)}
+            >
+              {s.label}
+            </a>
+          ))}
+        </div>
+        <div className="flex gap-1.5 rounded-full bg-muted/60 p-1">
+          <a href={"/live?sport=" + activeSport} className={viewToggleClass(!isAdvanced)}>
+            Standard
+          </a>
+          <a href={"/live?sport=" + activeSport + "&view=advanced"} className={viewToggleClass(isAdvanced)}>
+            Advanced
+          </a>
+        </div>
       </div>
 
       {sportCategoryBreakdown.length > 0 && (
@@ -185,7 +248,19 @@ export default async function LivePage({
         </div>
       )}
 
-      {odds.length > 0 && (
+      {odds.length > 0 && isAdvanced && initialSelection && (
+        <AdvancedLiveBoard
+          key={activeSport}
+          activeSport={activeSport}
+          sportLabel={sportLabel}
+          odds={odds}
+          initialScores={scores}
+          matchedPicksByGame={expanderPicksByGame}
+          initialSelection={initialSelection}
+        />
+      )}
+
+      {odds.length > 0 && !isAdvanced && (
         <LiveScoreboard
           key={activeSport}
           activeSport={activeSport}
