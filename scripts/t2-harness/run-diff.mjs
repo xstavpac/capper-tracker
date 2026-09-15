@@ -152,7 +152,17 @@ function cliMain() {
   const implNew = typeof args["impl-new"] === "string" ? args["impl-new"] : "old";
   const keepDb = args["keep-db"] === true;
   const userSelector =
-    typeof args["user-id"] === "string" ? [`--user-id=${args["user-id"]}`] : [`--fixture-user=${args["fixture-user"] ?? "A"}`];
+    typeof args["user-id"] === "string"
+      ? [`--user-id=${args["user-id"]}`]
+      : typeof args["fixture-user"] === "string"
+        ? [`--fixture-user=${args["fixture-user"]}`]
+        : source.startsWith("snapshot:")
+          ? // No hand-picked id for a real snapshot: resolve one automatically
+            // inside the disposable run DB itself (capture-output.ts's
+            // --auto-user), rather than a separate manual lookup against the
+            // snapshot.
+            ["--auto-user"]
+          : ["--fixture-user=A"];
 
   const { runId, diffs } = runDiffOnce({ source, implOld, implNew, userSelector, keepDb });
 

@@ -153,6 +153,24 @@ function parseArgs() {
   return args as Record<string, string | true>;
 }
 
+// --auto-user: for a real (anonymized) snapshot, where no fixture id and no
+// hand-picked cuid exist, pick the user with the most picks in THIS
+// disposable run DB - deterministic given fixed data, and returns only a
+// cuid (never a name/email/other PII column) so nothing beyond an opaque id
+// ever leaves this query. Runs inside the same disposable-DB-per-run
+// process that already owns this connection; never a separate DB or query
+// against anything outside it.
+async function resolveAutoUserId(prisma: typeof import("@/lib/prisma").prisma): Promise<string> {
+  const top = await prisma.pick.groupBy({
+    by: ["userId"],
+    _count: { userId: true },
+    orderBy: { _count: { userId: "desc" } },
+    take: 1,
+  });
+  if (!top.length) throw new Error("--auto-user: no user with at least one pick found in this DB");
+  return top[0].userId;
+}
+
 async function resolveUserId(prisma: typeof import("@/lib/prisma").prisma, args: Record<string, string | true>): Promise<string> {
   if (typeof args["user-id"] === "string") return args["user-id"];
   const fixtureUser = args["fixture-user"];
@@ -162,7 +180,8 @@ async function resolveUserId(prisma: typeof import("@/lib/prisma").prisma, args:
     if (!user) throw new Error(`fixture user ${fixtureUser} (${supabaseId}) not found - did fixtures.ts run against this DB?`);
     return user.id;
   }
-  throw new Error("must pass --user-id=<cuid> or --fixture-user=A|B");
+  if (args["auto-user"] === true) return resolveAutoUserId(prisma);
+  throw new Error("must pass --user-id=<cuid>, --fixture-user=A|B, or --auto-user");
 }
 
 async function main() {

@@ -34,7 +34,7 @@
 // Usage:
 //   node scripts/t2-harness/extract-from-dump.mjs --dump-file=<path> --label=<name>
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertNotProd } from "./lib/prod-guard.mjs";
@@ -51,6 +51,25 @@ function pgBin(name) {
 }
 function run(cmd, args) {
   execFileSync(pgBin(cmd), args, { stdio: "inherit" });
+}
+function runCapture(cmd, args) {
+  return execFileSync(pgBin(cmd), args, { encoding: "utf8" });
+}
+
+// A Supabase-hosted dump's TOC always carries a handful of cluster-level
+// objects (CREATE EXTENSION for supabase_vault/pgcrypto/etc., their
+// COMMENT ON EXTENSION, and Supabase's own EVENT TRIGGERs) that reference
+// the `extensions`/`vault` schemas even when --exclude-schema dropped those
+// schemas' tables from the dump. None of that is restorable (or wanted) on
+// a vanilla local Postgres, so it's filtered out of the restore list here
+// rather than passed to pg_restore, which would otherwise error on every
+// one of these entries before ever reaching the 7 tables of actual data.
+function filterRestoreList(rawList) {
+  return rawList
+    .split("\n")
+    .filter((line) => !/;\s*\d+\s+\d+\s+(EXTENSION|EVENT TRIGGER)\b/.test(line))
+    .filter((line) => !/COMMENT - EXTENSION\b/.test(line))
+    .join("\n");
 }
 
 function stagingUrl(dbName) {
@@ -88,11 +107,20 @@ function main() {
   console.log(`[t2-harness] restoring ${dumpFile} into staging DB ${stagingDb}...`);
   run("createdb", ["-h", ADMIN_HOST, "-p", ADMIN_PORT, "-U", ADMIN_USER, stagingDb]);
 
+  const restoreListFile = join(HERE, `.restore-list-${Date.now()}.txt`);
+  const filteredList = filterRestoreList(runCapture("pg_restore", ["-l", dumpFile]));
+  writeFileSync(restoreListFile, filteredList);
+
   try {
-    run("pg_restore", [
-      "-h", ADMIN_HOST, "-p", ADMIN_PORT, "-U", ADMIN_USER,
-      "-d", stagingDb, "--no-owner", "--no-privileges", dumpFile,
-    ]);
+    try {
+      run("pg_restore", [
+        "-h", ADMIN_HOST, "-p", ADMIN_PORT, "-U", ADMIN_USER,
+        "-d", stagingDb, "--no-owner", "--no-privileges",
+        "-L", restoreListFile, dumpFile,
+      ]);
+    } finally {
+      rmSync(restoreListFile, { force: true });
+    }
 
     console.log("[t2-harness] applying anonymize.sql...");
     run("psql", ["-h", ADMIN_HOST, "-p", ADMIN_PORT, "-U", ADMIN_USER, "-d", stagingDb, "-v", "ON_ERROR_STOP=1", "-f", join(HERE, "anonymize.sql")]);
