@@ -1712,6 +1712,63 @@ NC State +4.5`;
     check("'Miami Heat ML' still resolves NBA (unaffected)", { sport: heat?.sportName, teams: heat?.teamNicknames }, { sport: "NBA", teams: ["heat"] });
   }
 
+  // --- "o"/"u" shorthand with a space before the number ("o 8.5", not just
+  // flush "o8.5") is a first-class betting format, not an edge case - real
+  // cappers write both. Confirms the classification actually changes for a
+  // team total (TOTAL/over, not the MONEYLINE default a spaced shorthand
+  // used to silently fall through to), and that flush/spaced/spelled-out
+  // forms are all equivalent. ---
+  {
+    const flushOver = parseCatalog(`Cap\nCubs o8.5`, []).picks[0];
+    check("'Cubs o8.5' (flush shorthand, unaffected) -> TOTAL/over", { betType: flushOver?.betType, totalSide: flushOver?.totalSide }, { betType: "TOTAL", totalSide: "over" });
+
+    const spacedOver = parseCatalog(`Cap\nCubs o 8.5`, []).picks[0];
+    check("'Cubs o 8.5' (spaced shorthand) -> TOTAL/over, same as flush", { betType: spacedOver?.betType, totalSide: spacedOver?.totalSide }, { betType: "TOTAL", totalSide: "over" });
+
+    const flushUnder = parseCatalog(`Cap\nCubs u8.5`, []).picks[0];
+    check("'Cubs u8.5' (flush shorthand, unaffected) -> TOTAL/under", { betType: flushUnder?.betType, totalSide: flushUnder?.totalSide }, { betType: "TOTAL", totalSide: "under" });
+
+    const spacedUnder = parseCatalog(`Cap\nCubs u 8.5`, []).picks[0];
+    check("'Cubs u 8.5' (spaced shorthand) -> TOTAL/under, same as flush", { betType: spacedUnder?.betType, totalSide: spacedUnder?.totalSide }, { betType: "TOTAL", totalSide: "under" });
+
+    // The real reported case: a two-team total with no other bet-type
+    // keyword. Before the fix this fell all the way through parsePickText's
+    // branch chain to the MONEYLINE default - a genuine misclassification,
+    // not just a missed recognition.
+    const lakersWarriors = parseCatalog(`Cap\nLakers Warriors o 221.5`, []).picks[0];
+    check(
+      "'Lakers Warriors o 221.5' classifies as TOTAL/over, not MONEYLINE",
+      { betType: lakersWarriors?.betType, totalSide: lakersWarriors?.totalSide },
+      { betType: "TOTAL", totalSide: "over" }
+    );
+  }
+
+  // --- Bug 1: unresolvedCapperNames stays parallel to `unresolved` and
+  // carries the real capper header, never reconstructed after the fact from
+  // text position. ---
+  {
+    const single = parseCatalog("Godfather\ncaleb williams over 220.5 passing yard", ["Godfather"]);
+    check("single-capper bare prop: still lands in unresolved (picks stays empty)", single.picks.length, 0);
+    check(
+      "single-capper bare prop: unresolvedCapperNames carries 'Godfather', not lost/blank",
+      single.unresolvedCapperNames,
+      ["Godfather"]
+    );
+
+    const multi = parseCatalog(
+      "Capper A\nCubs -1.5\nBare Player Prop A Over 1.5 Passing Yards\n\nCapper B\nBare Player Prop B Over 2.5 Rushing Yards",
+      ["Capper A", "Capper B"]
+    );
+    check(
+      "multi-capper paste: each unresolved line keeps its OWN header capper, in order",
+      multi.unresolvedCapperNames,
+      ["Capper A", "Capper B"]
+    );
+
+    const noHeader = parseCatalog("Bare Player Prop Over 3.5 Rushing Yards", []);
+    check("no header at all -> unresolvedCapperNames is 'Unknown'", noHeader.unresolvedCapperNames, ["Unknown"]);
+  }
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }

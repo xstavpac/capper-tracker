@@ -108,6 +108,58 @@ function main() {
   const plainTotal = parseCatalog(`Capper\nBills Over 45.5`, []).picks[0];
   check("parseCatalog: plain 'Over 45.5' (no prop keyword) -> still TOTAL, not PLAYER_PROP", plainTotal?.betType, "TOTAL");
 
+  // --- PART C: "o"/"u" shorthand is a first-class format, not an edge case
+  // - flush ("o56.5"), spaced ("o 56.5"), and spelled-out ("over 56.5") must
+  // all extract the identical clean playerName. Before this fix, the
+  // over/under strip only matched the literal words, so a standalone "o"/"u"
+  // shorthand token was left attached to the extracted name ("Mike Evans o")
+  // - masked in some cases only by luck (fuzzy name matching downstream
+  // happening to still be within its edit-distance threshold), never a
+  // reliable guarantee. ---
+  check(
+    "parsePlayerProp: flush 'Mike Evans o56.5 rec yards' -> clean playerName, no trailing 'o'",
+    parsePlayerProp("Mike Evans o56.5 rec yards"),
+    { playerName: "Mike Evans", propMarket: "REC_YDS" }
+  );
+  check(
+    "parsePlayerProp: spaced 'Mike Evans o 56.5 rec yards' -> same clean playerName as flush",
+    parsePlayerProp("Mike Evans o 56.5 rec yards"),
+    { playerName: "Mike Evans", propMarket: "REC_YDS" }
+  );
+  check(
+    "parsePlayerProp: spelled-out 'Mike Evans over 56.5 rec yards' -> same clean playerName",
+    parsePlayerProp("Mike Evans over 56.5 rec yards"),
+    { playerName: "Mike Evans", propMarket: "REC_YDS" }
+  );
+  check(
+    "parsePlayerProp: flush 'Mike Evans u56.5 rec yards' -> clean playerName, no trailing 'u'",
+    parsePlayerProp("Mike Evans u56.5 rec yards"),
+    { playerName: "Mike Evans", propMarket: "REC_YDS" }
+  );
+  check(
+    "parsePlayerProp: spaced 'Mike Evans u 56.5 rec yards' -> same clean playerName as flush",
+    parsePlayerProp("Mike Evans u 56.5 rec yards"),
+    { playerName: "Mike Evans", propMarket: "REC_YDS" }
+  );
+  check(
+    "parsePlayerProp: spelled-out 'Mike Evans under 56.5 rec yards' -> same clean playerName",
+    parsePlayerProp("Mike Evans under 56.5 rec yards"),
+    { playerName: "Mike Evans", propMarket: "REC_YDS" }
+  );
+
+  // Negative control, using a REAL player name that could plausibly break a
+  // careless fix: "Bo Nix" (Denver Broncos QB) contains "o" immediately
+  // followed by another letter, not a digit - \b[ou]\s*(?=\d) requires a
+  // word boundary directly before the o/u (there is none between "B" and
+  // "o" in "Bo" - both are word characters) AND a digit immediately after
+  // (optional whitespace only), so this never matches inside "Bo" at all.
+  // The name must come through completely untouched.
+  check(
+    "parsePlayerProp: real name 'Bo Nix' (contains a bare 'o' mid-word) is untouched",
+    parsePlayerProp("Bo Nix Over 225.5 Passing Yards"),
+    { playerName: "Bo Nix", propMarket: "PASS_YDS" }
+  );
+
   console.log(failures === 0 ? `\nAll checks passed.` : `\n${failures} check(s) FAILED.`);
   process.exit(failures === 0 ? 0 : 1);
 }
