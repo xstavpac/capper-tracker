@@ -4,7 +4,7 @@ import { requireUser } from "@/server/auth";
 import { getCapperById, getCappersWithPickCounts } from "@/server/data/cappers";
 import { CapperEditPanel } from "@/components/dashboard/capper-edit-panel";
 import { getPicksForCapper } from "@/server/data/picks";
-import { formatPickLabel } from "@/lib/bet-line";
+import { formatPickLabel, betTypeLabel } from "@/lib/bet-line";
 import {
   computeStats,
   computeCategoryBreakdown,
@@ -419,7 +419,7 @@ export default async function CapperDetailPage({
                     {pick.awayTeam} @ {pick.homeTeam}
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    {formatPickLabel(pick.betDetail, pick.betType, pick.line) ?? pick.betType} -{" "}
+                    {formatPickLabel(pick.betDetail, pick.betType, pick.line) ?? betTypeLabel(pick.betType)} -{" "}
                     {pick.odds > 0 ? "+" : ""}
                     {pick.odds} - {pick.units}u - {formatEastern(pick.gameTime, { month: "short", day: "numeric" })}
                   </div>

@@ -14,6 +14,7 @@ import { recoverUnresolvedPicksAction } from "@/server/actions/recover-unresolve
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
 import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
 import { isSkippedAsDuplicate, importButtonLabel } from "@/lib/duplicate-pick-detection";
+import { betTypeLabel } from "@/lib/bet-line";
 
 // Sentinel stored in capperFuzzyChoices when the user explicitly confirms a
 // name really is a new capper, not a typo of an existing one - distinct from
@@ -628,7 +629,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                         </span>
                       </div>
                       <div className="text-muted-foreground sm:shrink-0">
-                        {p.betType} - {displayOdds > 0 ? "+" : ""}
+                        {betTypeLabel(p.betType)} - {displayOdds > 0 ? "+" : ""}
                         {displayOdds}
                         {realOdds !== undefined && <span className="ml-1 text-emerald-600 dark:text-emerald-400">(real)</span>}
                         {" - " + p.units + "u"}

@@ -1,10 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import type { Pick, PickStatus, PickedSide } from "@prisma/client";
-import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, formatPickLabel, parsePlayerProp, type OddsBucketKey } from "@/lib/bet-line";
+import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, formatPickLabel, parsePlayerProp, betTypeLabel, type OddsBucketKey } from "@/lib/bet-line";
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
 import { cacheKeys } from "@/lib/cache-keys";
 import { cachedByTag } from "@/server/data/cached";
 import { downsampleUnitsChart } from "@/server/data/units-chart-downsample";
+
+// Re-exported for existing importers (betTypeLabel moved to lib/bet-line.ts
+// so client components can use it without pulling in this file's
+// module-level prisma import - see that function's own comment).
+export { betTypeLabel };
 
 export type OverallStats = {
   wins: number;
@@ -1447,24 +1452,6 @@ async function computeDashboardSummary(userId: string) {
     })),
   };
 }
-
-export function betTypeLabel(betType: string) {
-  switch (betType) {
-    case "SPREAD":
-      return "Spread";
-    case "MONEYLINE":
-      return "Moneyline";
-    case "TOTAL":
-      return "Total";
-    case "TEAM_TOTAL":
-      return "Team Total";
-    case "PLAYER_PROP":
-      return "Player Prop";
-    default:
-      return betType;
-  }
-}
-
 
 export type UnitsChartPoint = { date: string; cumulativeUnits: number };
 export type PickNumberChartPoint = { pickNumber: number; cumulativeUnits: number };

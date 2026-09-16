@@ -120,6 +120,31 @@ export function formatPickLabel(
   return `${betDetail} ${suffix}`;
 }
 
+// Human-readable label for a raw BetType enum value, for anywhere one is
+// shown to the user (catalog-import review, Live tab pick cards, etc.) -
+// the enum itself (PLAYER_PROP, MONEYLINE, ...) must never leak into the UI
+// as-is. Client-safe (no prisma import) so client components can call it
+// directly instead of pulling in server/data/stats.ts's module-level prisma
+// import just for this.
+export function betTypeLabel(betType: string): string {
+  switch (betType) {
+    case "SPREAD":
+      return "Spread";
+    case "MONEYLINE":
+      return "Moneyline";
+    case "TOTAL":
+      return "Total";
+    case "TEAM_TOTAL":
+      return "Team Total";
+    case "PLAYER_PROP":
+      return "Player Prop";
+    case "NRFI":
+      return "NRFI";
+    default:
+      return betType;
+  }
+}
+
 export type NrfiSide = "NO_RUN" | "YES_RUN";
 
 // The NRFI/YRFI side of an NRFI-betType pick, derived from betDetail free

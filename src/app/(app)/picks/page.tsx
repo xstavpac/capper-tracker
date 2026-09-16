@@ -20,7 +20,7 @@ import {
   visibleBetTypeOptionsForChipSet,
   type BetTypeFilterKey,
 } from "@/lib/bet-type-filter";
-import { formatPickLabel } from "@/lib/bet-line";
+import { formatPickLabel, betTypeLabel } from "@/lib/bet-line";
 import type { PickStatus } from "@prisma/client";
 
 const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
@@ -298,7 +298,7 @@ export default async function PicksPage({
                     </span>
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    {pick.capper.name} - {formatPickLabel(pick.betDetail, pick.betType, pick.line) ?? pick.betType} -{" "}
+                    {pick.capper.name} - {formatPickLabel(pick.betDetail, pick.betType, pick.line) ?? betTypeLabel(pick.betType)} -{" "}
                     {pick.odds > 0 ? "+" : ""}
                     {pick.odds} - {pick.units}u
                   </div>
