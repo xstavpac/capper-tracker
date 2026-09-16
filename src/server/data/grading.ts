@@ -699,6 +699,15 @@ export async function resolveTouchdownProp(
     return { outcome: null, reason: "this bet text isn't a recognized touchdown prop" };
   }
 
+  // First-TD/multi-TD text is recognized (see parseTouchdownProp) but not
+  // gradeable by the box-score-only "did they score at least once" logic
+  // below - decline before any box-score fetch or match attempt, so a
+  // first/multi-TD pick can never be silently graded as if it were the
+  // anytime-TD market it isn't.
+  if (parsed.unsupported) {
+    return { outcome: null, reason: parsed.unsupported };
+  }
+
   // Strip a leading/trailing team nickname if the capper included one - see
   // stripTeamNamesFromPlayerName (parse-catalog.ts), shared with
   // resolvePropOdds's caller (bulk-picks.ts) for the same reason.

@@ -300,8 +300,32 @@ export type TdPropType = "RUSHING" | "RECEIVING" | "ANY";
 // before fuzzy-matching against a real roster; this function has no team
 // knowledge of its own; unresolved names beyond a Levenshtein tolerance
 // safely fail to match rather than grading incorrectly.
-export function parseTouchdownProp(text: string): { playerName: string; propType: TdPropType } | null {
-  if (!/\btouchdowns?\b/i.test(text) && !/\btds?\b/i.test(text)) return null;
+export function parseTouchdownProp(
+  text: string
+): { playerName: string; propType: TdPropType; unsupported?: string } | null {
+  if (!/\btouchdowns?\b/i.test(text) && !/\btds?\b/i.test(text) && !/\batd\b/i.test(text)) return null;
+
+  // First-TD ("who scores first in the game") and multi-TD ("2+ TDs") are a
+  // different bet shape than the anytime-TD market this app actually grades
+  // (resolveTouchdownProp only ever asks "did this player score at least
+  // once") - first-TD needs scoring-play sequence data this app doesn't
+  // fetch, and multi-TD needs a count threshold this app doesn't store
+  // anywhere. Still matched here (not left to fall through to null) so
+  // catalog import classifies these as PLAYER_PROP same as any other TD
+  // pick, not the wrong MONEYLINE/TOTAL default a `null` return would risk
+  // - but `unsupported` tells resolveTouchdownProp (grading.ts) to decline
+  // grading instead of silently computing anytime-TD's WIN/LOSS for a bet
+  // that isn't actually anytime-TD. Matched narrowly (the qualifier must sit
+  // directly next to the TD word) so it can't misfire on unrelated text that
+  // happens to contain "first"/"1st" elsewhere, e.g. a first-half-scoped
+  // anytime-TD pick ("Anytime TD 1st Half").
+  const isFirstTd = /\b(?:first|1st)\s+(?:touchdown|td)s?\b/i.test(text);
+  const isMultiTd = /\d\s*\+\s*(?:touchdown|td)s?\b/i.test(text);
+  const unsupported = isFirstTd
+    ? "this bet is a first-touchdown prop, which this app doesn't grade automatically yet - needs manual grading"
+    : isMultiTd
+      ? "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading"
+      : undefined;
 
   const isRushing = /\brush(?:ing|er)?\b/i.test(text);
   const isReceiving = /\b(receiving|reception|receptions|receiver|catches|catch|rec)\b/i.test(text);
@@ -310,7 +334,9 @@ export function parseTouchdownProp(text: string): { playerName: string; propType
   const playerName = text
     .replace(/\([^)]*\)/g, " ")
     .replace(/\bany\s*time\b/gi, " ")
+    .replace(/\batd\b/gi, " ")
     .replace(/\bor\s+more\b/gi, " ")
+    .replace(/\b(?:first|1st)\b/gi, " ")
     .replace(/\b\d+\+?/g, " ")
     .replace(/\b(rushing|rusher|rush|receiving|reception|receptions|rec|receiver|catches|catch|scorer|anytime)\b/gi, " ")
     .replace(/\btouchdowns?\b/gi, " ")
@@ -321,7 +347,7 @@ export function parseTouchdownProp(text: string): { playerName: string; propType
 
   if (!playerName) return null;
 
-  return { playerName, propType };
+  return { playerName, propType, unsupported };
 }
 
 // The full set of structured player-prop markets this app recognizes -
