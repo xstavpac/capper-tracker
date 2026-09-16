@@ -382,16 +382,36 @@ export function parseTouchdownProp(
 // own unions instead of importing BetType).
 export type PlayerPropMarket = "PASS_YDS" | "RUSH_YDS" | "REC_YDS" | "RECEPTIONS" | "TD";
 
-// Order matters only in that REC_YDS ("Receiving Yards") and RECEPTIONS
-// ("Receptions") must stay distinguishable - "rec(?:eiving)?" requires a
-// following "y(?:ar)?ds?", so it never matches bare "Receptions" text, and
-// "receptions?" never matches "Receiving Yards" text (no "recept" substring
-// in "receiving"). Confirmed against every example in the PR 2 spec table.
+// The stat-category word ALONE is enough to identify PASS_YDS/RUSH_YDS - "65.5
+// rushing", "245.5 passing" - a real capper catalog import gap found testing
+// against the actual UI: requiring the "yards"/"yard" qualifier too rejected
+// text that was otherwise completely unambiguous (neither "passing" nor
+// "rushing" means anything else in a player-prop line). The yards qualifier,
+// when present, is still matched and stripped as part of the same phrase (so
+// playerName extraction below removes "Rushing Yards" as one unit, not just
+// "Rushing" leaving "Yards" stuck to the name) - it's just no longer
+// *required* for the market to be recognized. "y(?:ar|r)?ds?" tolerates every
+// common spelling/abbreviation of "yards" seen in real pasted text: yard,
+// yards, yd, yds, yrd, yrds (the old pattern only recognized yds/yards/yard).
+//
+// REC_YDS ("Receiving Yards") vs RECEPTIONS ("Receptions") still must stay
+// distinguishable, same as before, but "rec" alone is now ambiguous between
+// them without a qualifier - resolved by treating bare "rec" as the
+// RECEPTIONS count (the real-world convention: a stat sheet's "REC" column is
+// receptions, not yards), and only promoting it to REC_YDS when a yards
+// qualifier is actually attached ("rec yds", "rec yards"). "receiving" (the
+// adjective form) has no such ambiguity - it's never used as receptions
+// shorthand - so it resolves to REC_YDS bare, same as "rushing"/"passing"
+// above. Order matters: REC_YDS is checked before RECEPTIONS so "rec" +
+// yards is claimed there first, leaving bare "rec" (no yards) to fall through
+// to RECEPTIONS; "receptions?" itself never matches inside REC_YDS's patterns
+// (no "rec"+yards or "receiving" substring in "receptions").
+const YARDS_UNIT = /y(?:ar|r)?ds?/.source;
 const PLAYER_PROP_STAT_PATTERNS: [Exclude<PlayerPropMarket, "TD">, RegExp][] = [
-  ["PASS_YDS", /\bpass(?:ing)?\s*y(?:ar)?ds?\b/i],
-  ["RUSH_YDS", /\brush(?:ing)?\s*y(?:ar)?ds?\b/i],
-  ["REC_YDS", /\brec(?:eiving)?\s*y(?:ar)?ds?\b/i],
-  ["RECEPTIONS", /\breceptions?\b/i],
+  ["PASS_YDS", new RegExp(`\\bpass(?:ing)?\\b(?:\\s*${YARDS_UNIT}\\b)?`, "i")],
+  ["RUSH_YDS", new RegExp(`\\brush(?:ing)?\\b(?:\\s*${YARDS_UNIT}\\b)?`, "i")],
+  ["REC_YDS", new RegExp(`\\brec\\s*${YARDS_UNIT}\\b|\\breceiving\\b(?:\\s*${YARDS_UNIT}\\b)?`, "i")],
+  ["RECEPTIONS", /\breceptions?\b|\brec\b/i],
 ];
 
 // Generalizes parseTouchdownProp to every structured player-prop market this
