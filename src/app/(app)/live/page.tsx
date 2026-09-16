@@ -175,19 +175,25 @@ export default async function LivePage({
   const showBoardPulse = activeSport === "baseball_mlb";
 
   // The view toggle, like the sport tabs, is a plain query param on this
-  // same route (?view=advanced) - not client-router state - per the app-wide
-  // convention (sport tabs, the Picks page's filters) of representing
-  // selection as a URL a Server Component reads, rather than inventing a new
-  // client-only mechanism for this one feature. The param's value stays
-  // "advanced" (not renamed to "grid") even though the view itself is now
-  // labeled/named Grid, so existing bookmarked/shared ?view=advanced links
-  // keep working. Sport tab links below carry `view` forward so switching
-  // sport while in Grid Live doesn't silently drop back to Standard; they
-  // never carry gameId/team forward, which is what "explicitly clears the
-  // old selection" means in practice - a fresh nav with no gameId/team
-  // simply has nothing for resolveGridLiveSelection to find, so it falls
-  // back to the new sport's first game on its own (see grid-live-selection.ts).
-  const isGrid = searchParams.view === "advanced";
+  // same route - not client-router state, and not localStorage/cookie
+  // persisted anywhere - per the app-wide convention (sport tabs, the Picks
+  // page's filters) of representing selection as a URL a Server Component
+  // reads, rather than inventing a new client-only mechanism for this one
+  // feature. That also means there's no stored "standard" preference from
+  // before this rename to migrate: the old default view was simply the
+  // absence of a `view` param, never an explicit value written anywhere.
+  // Grid is now the default for a request with no `view` param at all;
+  // "advanced" is kept as an explicit alias for Grid (unchanged from
+  // before the rename) so existing bookmarked/shared ?view=advanced links
+  // keep resolving to Grid, and "feed" is the explicit value for the
+  // renamed Standard-now-Feed view. Sport tab links below carry `view`
+  // forward so switching sport while on Feed doesn't silently drop back to
+  // Grid's new default; they never carry gameId/team forward, which is
+  // what "explicitly clears the old selection" means in practice - a fresh
+  // nav with no gameId/team simply has nothing for resolveGridLiveSelection
+  // to find, so it falls back to the new sport's first game on its own
+  // (see grid-live-selection.ts).
+  const isGrid = searchParams.view !== "feed";
 
   // Initial selection for Grid Live, resolved server-side from this
   // request's own searchParams against the same board the client will
@@ -219,7 +225,7 @@ export default async function LivePage({
           {LIVE_SPORTS.map((s) => (
             <a
               key={s.key}
-              href={"/live?sport=" + s.key + (isGrid ? "&view=advanced" : "")}
+              href={"/live?sport=" + s.key + (isGrid ? "&view=advanced" : "&view=feed")}
               className={tabClass(activeSport === s.key)}
             >
               {s.label}
@@ -227,8 +233,8 @@ export default async function LivePage({
           ))}
         </div>
         <div className="flex gap-1.5 rounded-full bg-muted/60 p-1">
-          <a href={"/live?sport=" + activeSport} className={viewToggleClass(!isGrid)}>
-            Standard
+          <a href={"/live?sport=" + activeSport + "&view=feed"} className={viewToggleClass(!isGrid)}>
+            Feed
           </a>
           <a href={"/live?sport=" + activeSport + "&view=advanced"} className={viewToggleClass(isGrid)}>
             Grid
