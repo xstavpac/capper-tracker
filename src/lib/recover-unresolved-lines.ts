@@ -49,7 +49,14 @@ export function recoverUnresolvedLines(
     const capperName = unresolvedCapperNames[i] ?? "Unknown";
 
     if (isPlayerProp.has(line)) {
-      const res = resolvePlayerPropAgainstRoster(line, roster);
+      // Only ever narrows a bare-surname collision - never affects the
+      // exact/fuzzy full-name tiers. Empty (no live teams fetched this pass,
+      // e.g. a catalog made entirely of player-prop lines - see
+      // recover-unresolved-picks.ts) just means the surname tier can't break
+      // a tie via the slate and falls back to reporting `ambiguous`, same as
+      // before this existed - no new network call is made to populate it.
+      const relevantNflTeams = liveTeams.filter((t) => t.sport === "NFL").map((t) => t.name);
+      const res = resolvePlayerPropAgainstRoster(line, roster, relevantNflTeams);
       if (res.status !== "resolved") {
         // "ambiguous" (2+ distinct players matching) is deliberately treated
         // the same as "unresolved" here, same policy as the team-name

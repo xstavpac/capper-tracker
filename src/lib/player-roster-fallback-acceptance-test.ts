@@ -23,6 +23,16 @@
 // distinct players sharing an identical full name on two different teams -
 // exercises the ambiguity mechanism itself, which a real current-NFL exact
 // duplicate name isn't needed to prove.
+//
+// PART D (2026-09, later) is the bare-surname tier added for the "Gibbs over
+// 65.5 rushing yards" investigation - a capper-typed line with no first name
+// and no team at all. D1/D2 reproduce the real reported line and the
+// existing full-name case side by side against the real KC/DEN/DET rosters;
+// D3 is a constructed multi-candidate collision (same shape as PART C, but
+// for the new surname tier) proving a second same-surname player anywhere on
+// the roster keeps the line unresolved rather than guessed; D4 confirms
+// resolving never requires a network call (roster here is 100% fixture
+// data, same as PART A-C).
 import { extractRosterPlayers } from "@/server/data/nfl-roster";
 import { resolvePlayerPropAgainstRoster } from "./player-roster-fallback";
 import { readFileSync } from "node:fs";
@@ -43,7 +53,9 @@ function loadFixture(name: string): unknown {
 
 const kc = extractRosterPlayers("Kansas City Chiefs", loadFixture("nfl-roster-kc.json"));
 const den = extractRosterPlayers("Denver Broncos", loadFixture("nfl-roster-den.json"));
-const roster: RosterPlayer[] = [...kc, ...den];
+const det = extractRosterPlayers("Detroit Lions", loadFixture("nfl-roster-det.json"));
+const ind = extractRosterPlayers("Indianapolis Colts", loadFixture("nfl-roster-ind.json"));
+const roster: RosterPlayer[] = [...kc, ...den, ...det, ...ind];
 
 console.log("\n########## PART A: the real rejected lines (8 of 10 - supported markets only) ##########");
 {
@@ -103,8 +115,8 @@ console.log("\n########## PART C: intentional same-name ambiguity - never guesse
   // instead of parse-catalog.ts's team-name matching.
   const ambiguousRoster: RosterPlayer[] = [
     ...roster,
-    { playerName: "Marcus Johnson", team: "Kansas City Chiefs", espnPlayerId: "9000001" },
-    { playerName: "Marcus Johnson", team: "Denver Broncos", espnPlayerId: "9000002" },
+    { playerName: "Marcus Johnson", firstName: "Marcus", lastName: "Johnson", team: "Kansas City Chiefs", position: "WR", espnPlayerId: "9000001" },
+    { playerName: "Marcus Johnson", firstName: "Marcus", lastName: "Johnson", team: "Denver Broncos", position: "WR", espnPlayerId: "9000002" },
   ];
   const r = resolvePlayerPropAgainstRoster("Marcus Johnson Over 45.5 Receiving Yards", ambiguousRoster);
   check("a name matching two distinct players on two different teams stays 'ambiguous', not guessed", r, {
@@ -114,6 +126,82 @@ console.log("\n########## PART C: intentional same-name ambiguity - never guesse
       { playerName: "Marcus Johnson", team: "Denver Broncos" },
     ],
   });
+}
+
+console.log("\n########## PART D: bare-surname tier ('Gibbs over 65.5 rushing yards') ##########");
+{
+  const r1 = resolvePlayerPropAgainstRoster("Gibbs over 65.5 rushing yards", roster);
+  check("D1: a bare surname with no first name and no team resolves via the roster's real, current NFL/Detroit Lions Jahmyr Gibbs", r1, {
+    status: "resolved",
+    sport: "NFL",
+    team: "Detroit Lions",
+    playerName: "Jahmyr Gibbs",
+    via: "surname",
+  });
+
+  const r2 = resolvePlayerPropAgainstRoster("Jonathan Taylor over 65.5 rushing yards", roster);
+  check("D2: existing full-name resolution is unaffected by the new surname tier - still resolves via 'exact'", r2, {
+    status: "resolved",
+    sport: "NFL",
+    team: "Indianapolis Colts",
+    playerName: "Jonathan Taylor",
+    via: "exact",
+  });
+
+  // Constructed (not a real second NFL Gibbs) - proves the surname tier
+  // never loosens into "one token is always enough": a second, distinct
+  // player sharing the same surname anywhere on the roster keeps the line
+  // 'ambiguous', exactly the same never-guess policy PART C already proved
+  // for the full-name tiers.
+  const twoGibbsRoster: RosterPlayer[] = [
+    ...roster,
+    { playerName: "Marcus Gibbs", firstName: "Marcus", lastName: "Gibbs", team: "Denver Broncos", position: "WR", espnPlayerId: "9000003" },
+  ];
+  const r3 = resolvePlayerPropAgainstRoster("Gibbs over 65.5 rushing yards", twoGibbsRoster);
+  check("D3: two distinct players sharing a surname stays 'ambiguous', not guessed", r3, {
+    status: "ambiguous",
+    matches: [
+      { playerName: "Jahmyr Gibbs", team: "Detroit Lions" },
+      { playerName: "Marcus Gibbs", team: "Denver Broncos" },
+    ],
+  });
+
+  // Same collision as D3, but now with slate context available (the Lions
+  // are on the live board this week and the Broncos aren't) - the tie
+  // breaks via relevantTeams instead of staying ambiguous, per the
+  // "restrict to relevant/current slate teams when possible" behavior.
+  const r4 = resolvePlayerPropAgainstRoster("Gibbs over 65.5 rushing yards", twoGibbsRoster, ["Detroit Lions"]);
+  check("D3b: the same collision resolves when slate context narrows it to exactly one team", r4, {
+    status: "resolved",
+    sport: "NFL",
+    team: "Detroit Lions",
+    playerName: "Jahmyr Gibbs",
+    via: "surname",
+  });
+
+  // A single typed word still isn't "always enough" on its own - a
+  // multi-word typed name that fails both full-name tiers is a real miss
+  // (wrong spelling / not on this roster), never re-tried as a surname.
+  const r5 = resolvePlayerPropAgainstRoster("Jahmyr Nobody Over 65.5 Rushing Yards", roster);
+  check("D4: a two-word typed name that matches no one stays 'unresolved' - never falls back to matching just the first word as a surname", r5, {
+    status: "unresolved",
+  });
+
+  // Cached-data-only: resolvePlayerPropAgainstRoster takes a plain
+  // RosterPlayer[] and makes no network call of its own - confirmed by
+  // making any global fetch call throw for the duration of this check, then
+  // re-running the exact D1 resolution above to prove it still succeeds
+  // with zero network access.
+  const realFetch = globalThis.fetch;
+  (globalThis as { fetch?: typeof fetch }).fetch = () => {
+    throw new Error("resolvePlayerPropAgainstRoster must never make a network request");
+  };
+  try {
+    const r6 = resolvePlayerPropAgainstRoster("Gibbs over 65.5 rushing yards", roster);
+    check("D5: resolution succeeds identically with fetch disabled - matching never touches the network", r6, r1);
+  } finally {
+    (globalThis as { fetch?: typeof fetch }).fetch = realFetch;
+  }
 }
 
 console.log("\n########## Negative controls ##########");

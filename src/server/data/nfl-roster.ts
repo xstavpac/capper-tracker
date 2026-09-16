@@ -1,9 +1,11 @@
-// NFL current-roster lookup: given a bare player name with no team prefix
-// ("Patrick Mahomes Over 225 Passing Yards" - no "Chiefs" in the text),
-// resolve which team they're currently on, so a bulk-import line like that
-// can resolve at all instead of landing in `unresolved`. See
-// player-roster-fallback.ts for the actual name-matching logic this feeds -
-// this file is fetch + extraction only.
+// NFL roster fetch + extraction (live ESPN call), used by ONE caller today:
+// scripts/load-nfl-roster.ts, run by hand to (re)populate the
+// nfl_roster_players cache table. Nothing in the request path (catalog
+// import/recovery) calls fetchNflTeamRoster/fetchNflLeagueRoster directly
+// any more - see server/data/nfl-roster-cache.ts's getCachedNflRoster, which
+// reads that cache instead, so a bulk-import paste never makes a live
+// roster request. See player-roster-fallback.ts for the actual name-matching
+// logic the cached data feeds - this file is fetch + extraction only.
 //
 // Uses ESPN's team roster endpoint (site.api.espn.com/.../teams/{id}/roster)
 // - the same "site API" domain nfl-passer-rows.ts/nfl-rushing-receiving-
@@ -20,8 +22,25 @@
 // path, so those tables are unpopulated in practice (confirmed by grep
 // during the 2026-09 bulk-import roster investigation). Even if they were
 // populated, they only gain a player after a graded game - too late for a
-// pre-kickoff pick. Hence this new, separate fetch instead of reusing them.
-export type RosterPlayer = { playerName: string; team: string; espnPlayerId: string };
+// pre-kickoff pick. Hence this separate fetch (feeding its own
+// NflRosterPlayer cache table) instead of reusing them.
+export type RosterPlayer = {
+  playerName: string;
+  firstName: string;
+  lastName: string;
+  team: string;
+  position: string;
+  espnPlayerId: string;
+};
+
+// The only positions this app's player-prop markets cover today (passing/
+// rushing/receiving yards, receptions, TD - see bet-line.ts's
+// PLAYER_PROP_STAT_PATTERNS). Restricting extraction to these up front, not
+// just at match time, is what keeps the cached table small and keeps a bare
+// surname's candidate pool limited to players a prop could actually be
+// about - a defensive player or kicker sharing a skill-position player's
+// surname should never be a match candidate in the first place.
+const RELEVANT_POSITIONS = new Set(["QB", "RB", "WR", "TE"]);
 
 // All 32 current NFL franchises' ESPN numeric team id + canonical full name.
 // The canonical name matches GameResult.homeTeam/awayTeam's spelling exactly
@@ -72,24 +91,44 @@ export const NFL_ESPN_TEAM_IDS: [espnTeamId: string, teamName: string][] = [
   ["28", "Washington Commanders"],
 ];
 
-// Pure - flattens ESPN's position-grouped roster response
-// (athletes[].items[], each an athlete with displayName/id) into one flat
-// list for `team`. displayName is used as-is, including any generational
-// suffix ESPN includes ("Kenneth Walker III" - confirmed live) -
+// Flattens ESPN's position-grouped roster response (athletes[].items[],
+// each an athlete with displayName/firstName/lastName/id/position) into one
+// flat list for `team`, keeping only RELEVANT_POSITIONS - unlike
+// extractPasserRows/extractRushingRows/extractReceivingRows this is NOT a
+// faithful "keep everything" extraction: a roster carries all ~90 players
+// including defense/special-teams/practice-squad, and this app's player-prop
+// markets only ever concern QB/RB/WR/TE, so filtering here (once, at
+// ingestion) rather than at match time keeps the cached table small and
+// keeps a bare-surname match's candidate pool free of players who could
+// never actually be the subject of a supported prop.
+// displayName/firstName/lastName are used as ESPN reports them, including
+// any generational suffix ("Kenneth Walker III" - confirmed live) -
 // player-roster-fallback.ts strips that before comparing against a capper's
-// typed name, not this function; this stays a faithful, unopinionated
-// extraction, same "no selection/filtering here" convention as
-// extractPasserRows/extractRushingRows/extractReceivingRows.
+// typed name, not this function.
 export function extractRosterPlayers(team: string, espnRosterResponse: unknown): RosterPlayer[] {
-  const groups = (espnRosterResponse as { athletes?: { items?: { id?: string; displayName?: string }[] }[] } | null)
-    ?.athletes;
+  const groups = (
+    espnRosterResponse as {
+      athletes?: {
+        items?: { id?: string; displayName?: string; firstName?: string; lastName?: string; position?: { abbreviation?: string } }[];
+      }[];
+    } | null
+  )?.athletes;
   if (!Array.isArray(groups)) return [];
 
   const out: RosterPlayer[] = [];
   for (const group of groups) {
     for (const item of group.items ?? []) {
-      if (!item.displayName || !item.id) continue;
-      out.push({ playerName: item.displayName, team, espnPlayerId: item.id });
+      const position = item.position?.abbreviation;
+      if (!item.displayName || !item.id || !item.firstName || !item.lastName || !position) continue;
+      if (!RELEVANT_POSITIONS.has(position)) continue;
+      out.push({
+        playerName: item.displayName,
+        firstName: item.firstName,
+        lastName: item.lastName,
+        team,
+        position,
+        espnPlayerId: item.id,
+      });
     }
   }
   return out;

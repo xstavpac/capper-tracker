@@ -27,9 +27,9 @@ function check(label: string, actual: unknown, expected: unknown) {
 }
 
 const roster: RosterPlayer[] = [
-  { playerName: "Mike Evans", team: "Tampa Bay Buccaneers", espnPlayerId: "1" },
-  { playerName: "Caleb Williams", team: "Chicago Bears", espnPlayerId: "2" },
-  { playerName: "Bijan Robinson", team: "Atlanta Falcons", espnPlayerId: "3" },
+  { playerName: "Mike Evans", firstName: "Mike", lastName: "Evans", team: "Tampa Bay Buccaneers", position: "WR", espnPlayerId: "1" },
+  { playerName: "Caleb Williams", firstName: "Caleb", lastName: "Williams", team: "Chicago Bears", position: "QB", espnPlayerId: "2" },
+  { playerName: "Bijan Robinson", firstName: "Bijan", lastName: "Robinson", team: "Atlanta Falcons", position: "RB", espnPlayerId: "3" },
 ];
 const liveTeams: LiveTeam[] = [];
 
@@ -96,6 +96,30 @@ function main() {
     const { recovered, stillUnresolved } = recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, roster);
     check("case5: unmatched player -> nothing recovered", recovered.length, 0);
     check("case5: unmatched player -> stays in stillUnresolved", stillUnresolved, ["nobody realname over 10.5 rushing yards"]);
+  }
+
+  // Case 6 (2026-09, later, separate investigation): a bare surname with no
+  // first name and no team ("Gibbs over 65.5 rushing yards") resolves
+  // through this exact same real pipeline - parseCatalog leaves it
+  // unresolved (same as any other team-less player prop), then
+  // recoverUnresolvedLines's roster fallback resolves it via the new
+  // bare-surname tier (player-roster-fallback.ts) - proving the fix isn't
+  // just correct in isolation but actually reachable from a real catalog
+  // paste, with capper attribution intact.
+  {
+    const bijanGibbsRoster: RosterPlayer[] = [
+      ...roster,
+      { playerName: "Jahmyr Gibbs", firstName: "Jahmyr", lastName: "Gibbs", team: "Detroit Lions", position: "RB", espnPlayerId: "4" },
+    ];
+    const { unresolved, unresolvedCapperNames } = parseCatalog(
+      "godfather\nGibbs over 65.5 rushing yards",
+      ["godfather"]
+    );
+    const { recovered, stillUnresolved } = recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, bijanGibbsRoster);
+    check("case6: bare surname recovers exactly one pick", recovered.length, 1);
+    check("case6: capperName is 'godfather', not 'Unknown'", recovered[0]?.capperName, "godfather");
+    check("case6: resolves to Jahmyr Gibbs's team (Detroit Lions)", recovered[0]?.teamNicknames, ["detroit lions"]);
+    check("case6: nothing left in stillUnresolved", stillUnresolved, []);
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

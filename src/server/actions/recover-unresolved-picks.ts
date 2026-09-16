@@ -6,17 +6,22 @@ import type { LiveTeam } from "@/lib/live-team-fallback";
 import { recoverUnresolvedLines, type RecoverUnresolvedResult } from "@/lib/recover-unresolved-lines";
 import { parsePlayerProp } from "@/lib/bet-line";
 import { getLiveScoresForSport, getOddsForSport, LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
-import { fetchNflLeagueRoster } from "@/server/data/nfl-roster";
+import { getCachedNflRoster } from "@/server/data/nfl-roster-cache";
 
 // Last-resort resolver for catalog lines the browser-side parser left in its
 // `unresolved` list (Variant 1 - see live-team-fallback.ts's header), plus
 // (2026-09) a second, independent fallback for bare NFL player-prop lines
-// with no team prefix at all ("Patrick Mahomes Over 225 Passing Yards" - see
+// with no team prefix at all ("Patrick Mahomes Over 225 Passing Yards", or
+// (2026-09, later) just "Gibbs Over 65.5 Rushing Yards" - see
 // player-roster-fallback.ts). Runs only when there ARE unresolved lines,
-// only server-side, and only against live data (team names / rosters) the
-// app fetches fresh each time. Neither fallback ever invents a team: a line
-// resolves only on an EXACT-ONE match, everything else - including a
-// collision between two or more candidates - stays unresolved.
+// only server-side. The team-name fallback matches against live data (team
+// names) the app fetches fresh each time; the roster fallback matches
+// against getCachedNflRoster's cached table instead (see
+// server/data/nfl-roster-cache.ts and scripts/load-nfl-roster.ts) - a
+// bulk-import paste never triggers a live ESPN roster request. Neither
+// fallback ever invents a team or player: a line resolves only on an
+// EXACT-ONE match, everything else - including a collision between two or
+// more candidates - stays unresolved.
 //
 // A player-prop-shaped line is routed to the roster fallback ONLY, never
 // the team-name fallback below: a bare player prop was never a team pick to
@@ -33,8 +38,9 @@ import { fetchNflLeagueRoster } from "@/server/data/nfl-roster";
 //
 // The actual per-line resolution + capper-attribution loop lives in
 // lib/recover-unresolved-lines.ts (a plain module, no "use server"/auth
-// dependency) - this file's job is only to fetch the live data that pure
-// function needs and delegate to it.
+// dependency) - this file's job is only to fetch the live team data (and
+// read the cached roster table) that pure function needs and delegate to
+// it.
 export type { RecoverUnresolvedResult };
 
 // Every distinct team name currently on the live schedule (ESPN) or the
@@ -77,7 +83,7 @@ export async function recoverUnresolvedPicksAction(
 
   const [liveTeams, roster] = await Promise.all([
     isPlayerProp.size < unresolved.length ? gatherLiveTeamNames() : Promise.resolve<LiveTeam[]>([]),
-    isPlayerProp.size > 0 ? fetchNflLeagueRoster() : Promise.resolve([]),
+    isPlayerProp.size > 0 ? getCachedNflRoster() : Promise.resolve([]),
   ]);
 
   return recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, roster);

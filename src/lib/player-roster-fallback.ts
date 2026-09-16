@@ -2,36 +2,57 @@
 // prefix ("Patrick Mahomes Over 225 Passing Yards" - no "Chiefs") - the
 // player-name analog of live-team-fallback.ts's team-name resolution, same
 // split: this file is pure/sync (no fetch, no prisma - safe to unit test
-// with a fixture-built roster and no network), the actual ESPN fetch lives
-// in server/data/nfl-roster.ts and is done once by the caller
-// (recover-unresolved-picks.ts) before this is invoked, same "fetch once,
-// resolve many lines against it" shape as gatherLiveTeamNames /
-// resolveLineAgainstLiveTeams.
+// with a fixture-built roster and no network); the roster it matches against
+// comes from server/data/nfl-roster-cache.ts's getCachedNflRoster (a cached
+// table read, not a live fetch), passed in once by the caller
+// (recover-unresolved-picks.ts), same "fetch once, resolve many lines
+// against it" shape as gatherLiveTeamNames / resolveLineAgainstLiveTeams.
 //
 // Conservative by construction, same policy as resolveLineAgainstLiveTeams:
 //   - resolves only when EXACTLY ONE distinct player (by espnPlayerId)
-//     matches. An exact (normalized) name match is always preferred; the
-//     fuzzy matcher (isLikelyDuplicateName, already used by grading.ts for
-//     box-score names) is tried ONLY when no exact match exists at all, and
-//     only counts as resolved if it too narrows to exactly one distinct
-//     player.
-//   - two or more distinct players matching - a genuine same-name collision
-//     across teams, or a fuzzy match too loose to trust - reports
-//     `ambiguous`, which the caller treats exactly the same as unresolved.
-//     This mirrors recoverUnresolvedPicksAction's own existing policy for
-//     team-name collisions ("a collision is exactly the case where we must
-//     NOT guess") - never guessed here either.
+//     matches. An exact (normalized) full-name match is always preferred;
+//     the fuzzy matcher (isLikelyDuplicateName, already used by grading.ts
+//     for box-score names) is tried next, ONLY when no exact match exists at
+//     all; a bare-surname match (see below) is tried last, ONLY when the
+//     typed text is a single word - each tier only counts as resolved if it
+//     narrows to exactly one distinct player.
+//   - two or more distinct players matching at any tier - a genuine
+//     same-name (or same-surname) collision across teams, or a fuzzy match
+//     too loose to trust - reports `ambiguous`, which the caller treats
+//     exactly the same as unresolved. This mirrors
+//     recoverUnresolvedPicksAction's own existing policy for team-name
+//     collisions ("a collision is exactly the case where we must NOT
+//     guess") - never guessed here either, and a single typed token is
+//     never treated as "close enough" on its own merit: it still has to
+//     land on exactly one roster player (optionally narrowed by
+//     `relevantTeams`, see below) or it stays ambiguous/unresolved.
 //   - this is only ever invoked for a line parsePlayerProp already
 //     recognizes as one of the app's supported player-prop markets
 //     (passing/rushing/receiving yards, receptions, TD) - a line with none
 //     of those shapes returns `unresolved` immediately, without ever
 //     touching the roster.
+//
+// Bare-surname tier (2026-09, the "Gibbs over 65.5 rushing yards" case): a
+// capper often types just a last name, with no first name and no team.
+// Tried only when the typed name has no space - a multi-word name that
+// already failed exact + fuzzy matching is a real miss (wrong spelling, not
+// on this roster, etc.), not a surname to go re-guess from. Matched against
+// RosterPlayer.lastName (normalized), which is only meaningful because
+// nfl-roster.ts's extraction already restricts the cached roster to
+// QB/RB/WR/TE - without that restriction "Gibbs" could just as easily land
+// on a linebacker or long-snapper who could never actually be the subject of
+// a supported prop, inflating collisions that don't reflect real ambiguity.
+// `relevantTeams`, when the caller has it (e.g. the live NFL schedule/odds
+// board already fetched for the team-name fallback in the same recovery
+// pass), is used ONLY to break a genuine multi-surname tie - not to
+// pre-filter the roster before matching - so a team on a bye week (absent
+// from that list) never loses an otherwise-unambiguous match.
 import { parsePlayerProp } from "@/lib/bet-line";
 import { normalizeName, isLikelyDuplicateName } from "@/lib/fuzzy-match";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 
 export type PlayerPropResolution =
-  | { status: "resolved"; sport: "NFL"; team: string; playerName: string; via: "exact" | "fuzzy" }
+  | { status: "resolved"; sport: "NFL"; team: string; playerName: string; via: "exact" | "fuzzy" | "surname" }
   | { status: "ambiguous"; matches: { playerName: string; team: string }[] }
   | { status: "unresolved" };
 
@@ -57,7 +78,11 @@ function distinctPlayers(matches: RosterPlayer[]): RosterPlayer[] {
   return [...byId.values()];
 }
 
-export function resolvePlayerPropAgainstRoster(line: string, roster: RosterPlayer[]): PlayerPropResolution {
+export function resolvePlayerPropAgainstRoster(
+  line: string,
+  roster: RosterPlayer[],
+  relevantTeams?: string[]
+): PlayerPropResolution {
   const prop = parsePlayerProp(line);
   if (!prop) return { status: "unresolved" };
 
@@ -78,6 +103,29 @@ export function resolvePlayerPropAgainstRoster(line: string, roster: RosterPlaye
   }
   if (fuzzy.length > 1) {
     return { status: "ambiguous", matches: fuzzy.map((p) => ({ playerName: p.playerName, team: p.team })) };
+  }
+
+  // Bare-surname tier - only for a single typed token, and only after both
+  // full-name tiers above found nothing at all (see header comment for why
+  // this never loosens into "one token is always enough").
+  if (!/\s/.test(typedName)) {
+    // stripNameSuffix again here: ESPN's own `lastName` field can carry the
+    // generational suffix itself (confirmed live - Kenneth Walker III's
+    // lastName is literally "Walker III", not "Walker"), so a bare "Walker"
+    // needs the same stripping applied on this side of the comparison too.
+    const bySurname = distinctPlayers(roster.filter((p) => normalizeName(stripNameSuffix(p.lastName)) === normalizedTyped));
+    if (bySurname.length === 1) {
+      return { status: "resolved", sport: "NFL", team: bySurname[0].team, playerName: bySurname[0].playerName, via: "surname" };
+    }
+    if (bySurname.length > 1) {
+      if (relevantTeams && relevantTeams.length > 0) {
+        const narrowed = bySurname.filter((p) => relevantTeams.includes(p.team));
+        if (narrowed.length === 1) {
+          return { status: "resolved", sport: "NFL", team: narrowed[0].team, playerName: narrowed[0].playerName, via: "surname" };
+        }
+      }
+      return { status: "ambiguous", matches: bySurname.map((p) => ({ playerName: p.playerName, team: p.team })) };
+    }
   }
 
   return { status: "unresolved" };

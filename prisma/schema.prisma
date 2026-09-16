@@ -921,6 +921,32 @@ model NflReceivingRow {
   @@map("nfl_receiving_rows")
 }
 
+// Cached NFL active-roster snapshot, restricted to the four positions this
+// app's player-prop markets cover (QB/RB/WR/TE) - see
+// server/data/nfl-roster.ts's extractRosterPlayers for the filter. Loaded by
+// scripts/load-nfl-roster.ts, which fetches ESPN's live roster endpoint once
+// per team and upserts every row here; catalog-import recovery
+// (server/data/nfl-roster-cache.ts's getCachedNflRoster) reads this table
+// instead of ever hitting ESPN during a bulk-import paste. Deliberately no
+// scheduled refresh: a roster only goes stale on a trade/cut/practice-squad
+// move, not on a weekly basis, so re-running the load script by hand when
+// needed is enough - see that script's header for why a cron wasn't built.
+model NflRosterPlayer {
+  id           String   @id @default(cuid())
+  espnPlayerId String   @unique
+  fullName     String
+  firstName    String
+  lastName     String
+  team         String
+  position     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([team])
+  @@index([lastName])
+  @@map("nfl_roster_players")
+}
+
 // A user-uploaded metric (Charts' Custom Metrics feature) - the catalog
 // entry (name, whether it's team-scoped, unit) for one imported CSV column.
 // Deliberately narrow/EAV-shaped (CustomMetricPoint below is one row per

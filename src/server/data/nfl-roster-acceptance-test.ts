@@ -7,12 +7,14 @@
 // fetchNflTeamRoster/fetchNflLeagueRoster do a live network call and are
 // deliberately left untested here, same as fetchNflPasserRows.
 //
-// Fixtures (__fixtures__/nfl-roster-kc.json, nfl-roster-den.json) are the
-// real, complete ESPN responses from
-//   GET site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{kc,den}/roster
-// captured live 2026-09-15 during the bulk-import roster investigation -
-// the same two teams the original bug report's rejected lines belong to
-// (Mahomes/Kelce/Rice -> Chiefs; Waddle/Sutton/Engram -> Broncos).
+// Fixtures (__fixtures__/nfl-roster-kc.json, nfl-roster-den.json,
+// nfl-roster-det.json) are the real, complete ESPN responses from
+//   GET site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{kc,den,det}/roster
+// captured live 2026-09-15/16 during the bulk-import roster investigation -
+// KC/DEN are the two teams the original full-name bug report's rejected
+// lines belong to (Mahomes/Kelce/Rice -> Chiefs; Waddle/Sutton/Engram ->
+// Broncos); DET was added for the follow-up bare-surname case ("Gibbs" ->
+// Jahmyr Gibbs).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractRosterPlayers, NFL_ESPN_TEAM_IDS, type RosterPlayer } from "@/server/data/nfl-roster";
@@ -40,47 +42,88 @@ function find(rows: RosterPlayer[], name: string): RosterPlayer | undefined {
 console.log("\n########## extractRosterPlayers: Kansas City Chiefs ##########");
 {
   const kc = extractRosterPlayers("Kansas City Chiefs", loadFixture("nfl-roster-kc.json"));
-  ok("extracts a full-size roster (50+ players)", kc.length >= 50, kc.length);
-  expect("Patrick Mahomes -> Kansas City Chiefs, correct espnPlayerId", find(kc, "Patrick Mahomes"), {
+  ok("extracts only QB/RB/WR/TE (well under the ~75-player full roster)", kc.length > 0 && kc.length < 40, kc.length);
+  ok("every extracted player is QB/RB/WR/TE", kc.every((p) => ["QB", "RB", "WR", "TE"].includes(p.position)));
+  expect("Patrick Mahomes -> Kansas City Chiefs QB, correct espnPlayerId", find(kc, "Patrick Mahomes"), {
     playerName: "Patrick Mahomes",
+    firstName: "Patrick",
+    lastName: "Mahomes",
     team: "Kansas City Chiefs",
+    position: "QB",
     espnPlayerId: "3139477",
   });
-  expect("Travis Kelce -> Kansas City Chiefs, correct espnPlayerId", find(kc, "Travis Kelce"), {
+  expect("Travis Kelce -> Kansas City Chiefs TE, correct espnPlayerId", find(kc, "Travis Kelce"), {
     playerName: "Travis Kelce",
+    firstName: "Travis",
+    lastName: "Kelce",
     team: "Kansas City Chiefs",
+    position: "TE",
     espnPlayerId: "15847",
   });
-  expect("Rashee Rice -> Kansas City Chiefs, correct espnPlayerId", find(kc, "Rashee Rice"), {
+  expect("Rashee Rice -> Kansas City Chiefs WR, correct espnPlayerId", find(kc, "Rashee Rice"), {
     playerName: "Rashee Rice",
+    firstName: "Rashee",
+    lastName: "Rice",
     team: "Kansas City Chiefs",
+    position: "WR",
     espnPlayerId: "4428331",
   });
   expect(
-    "Kenneth Walker III (real generational suffix) -> Kansas City Chiefs",
+    "Kenneth Walker III (real generational suffix, including in ESPN's own lastName field) -> Kansas City Chiefs RB",
     find(kc, "Kenneth Walker III"),
-    { playerName: "Kenneth Walker III", team: "Kansas City Chiefs", espnPlayerId: "4567048" }
+    {
+      playerName: "Kenneth Walker III",
+      firstName: "Kenneth",
+      lastName: "Walker III",
+      team: "Kansas City Chiefs",
+      position: "RB",
+      espnPlayerId: "4567048",
+    }
   );
 }
 
 console.log("\n########## extractRosterPlayers: Denver Broncos ##########");
 {
   const den = extractRosterPlayers("Denver Broncos", loadFixture("nfl-roster-den.json"));
-  ok("extracts a full-size roster (50+ players)", den.length >= 50, den.length);
-  expect("Jaylen Waddle -> Denver Broncos, correct espnPlayerId", find(den, "Jaylen Waddle"), {
+  ok("extracts only QB/RB/WR/TE (well under the ~75-player full roster)", den.length > 0 && den.length < 40, den.length);
+  ok("every extracted player is QB/RB/WR/TE", den.every((p) => ["QB", "RB", "WR", "TE"].includes(p.position)));
+  expect("Jaylen Waddle -> Denver Broncos WR, correct espnPlayerId", find(den, "Jaylen Waddle"), {
     playerName: "Jaylen Waddle",
+    firstName: "Jaylen",
+    lastName: "Waddle",
     team: "Denver Broncos",
+    position: "WR",
     espnPlayerId: "4372016",
   });
-  expect("Courtland Sutton -> Denver Broncos, correct espnPlayerId", find(den, "Courtland Sutton"), {
+  expect("Courtland Sutton -> Denver Broncos WR, correct espnPlayerId", find(den, "Courtland Sutton"), {
     playerName: "Courtland Sutton",
+    firstName: "Courtland",
+    lastName: "Sutton",
     team: "Denver Broncos",
+    position: "WR",
     espnPlayerId: "3128429",
   });
-  expect("Evan Engram -> Denver Broncos, correct espnPlayerId", find(den, "Evan Engram"), {
+  expect("Evan Engram -> Denver Broncos TE, correct espnPlayerId", find(den, "Evan Engram"), {
     playerName: "Evan Engram",
+    firstName: "Evan",
+    lastName: "Engram",
     team: "Denver Broncos",
+    position: "TE",
     espnPlayerId: "3051876",
+  });
+}
+
+console.log("\n########## extractRosterPlayers: Detroit Lions (bare-surname case) ##########");
+{
+  const det = extractRosterPlayers("Detroit Lions", loadFixture("nfl-roster-det.json"));
+  ok("extracts only QB/RB/WR/TE (well under the ~78-player full roster)", det.length > 0 && det.length < 40, det.length);
+  expect("Jahmyr Gibbs -> Detroit Lions RB, correct espnPlayerId", find(det, "Jahmyr Gibbs"), {
+    playerName: "Jahmyr Gibbs",
+    firstName: "Jahmyr",
+    lastName: "Gibbs",
+    team: "Detroit Lions",
+    position: "RB",
+    espnPlayerId: "4429795",
   });
 }
 
@@ -90,8 +133,21 @@ console.log("\n########## extractRosterPlayers: defensive shapes ##########");
   expect("missing athletes field -> []", extractRosterPlayers("Test Team", {}), []);
   expect("athletes not an array -> []", extractRosterPlayers("Test Team", { athletes: "nope" }), []);
   expect(
-    "an athlete with no displayName/id is skipped, not crashed on",
+    "an athlete with no displayName/id/firstName/lastName/position is skipped, not crashed on",
     extractRosterPlayers("Test Team", { athletes: [{ items: [{ id: "1" }, { displayName: "No Id" }] }] }),
+    []
+  );
+  expect(
+    "an athlete outside QB/RB/WR/TE (e.g. a linebacker) is excluded",
+    extractRosterPlayers("Test Team", {
+      athletes: [
+        {
+          items: [
+            { id: "1", displayName: "Some LB", firstName: "Some", lastName: "LB", position: { abbreviation: "LB" } },
+          ],
+        },
+      ],
+    }),
     []
   );
 }
