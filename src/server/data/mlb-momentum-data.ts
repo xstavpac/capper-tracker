@@ -11,11 +11,12 @@
 // resolver - so nothing from the game's own day (let alone the game itself)
 // can leak into a "historical" input.
 import { prisma } from "@/lib/prisma";
-import { startOfEasternDay } from "@/lib/dates";
+import { startOfEasternDay, easternDateKey } from "@/lib/dates";
 import { dayBefore } from "@/server/data/providers/snapshot-utils";
 import { resolveVariable } from "@/server/data/model-engine/resolver";
 import { getHistoricalStartingMatchup } from "@/server/data/mlb-pitcher-history";
 import { getMlbLiveGameState, type MlbWinProbabilityPlay } from "@/server/data/live-game-state";
+import { cachedHistoricalInput } from "@/server/data/historical-input-cache";
 import {
   computeMomentumTrend,
   currentPitcherForTeam,
@@ -47,16 +48,25 @@ export type MlbMomentumPayload = {
   fetchedAt: string; // ISO
 };
 
+// Invariant for the life of a game (asOf is dayBefore(gameDate), fixed once
+// per game-day) - cached at team+date grain, not per-game, so a doubleheader
+// shares one entry across both games rather than duplicating it. Return
+// shape is already the compact derived TeamFormInput, not the raw
+// TeamStatSnapshot rows resolveVariable reads internally - nothing wider
+// than that ever reaches the cache.
 async function teamFormInput(teamName: string, asOf: Date): Promise<TeamFormInput> {
-  const [last10, streak] = await Promise.all([
-    resolveVariable("team_last10_win_pct", { type: "team", teamName }, asOf, { sportKey: MLB_SPORT_KEY }),
-    resolveVariable("team_streak", { type: "team", teamName }, asOf, { sportKey: MLB_SPORT_KEY }),
-  ]);
-  return {
-    teamName,
-    last10WinPct: last10.found ? last10.value : null,
-    streak: streak.found ? streak.value : null,
-  };
+  const key = `mlb-team-form:${teamName}:${easternDateKey(asOf)}`;
+  return cachedHistoricalInput(key, async () => {
+    const [last10, streak] = await Promise.all([
+      resolveVariable("team_last10_win_pct", { type: "team", teamName }, asOf, { sportKey: MLB_SPORT_KEY }),
+      resolveVariable("team_streak", { type: "team", teamName }, asOf, { sportKey: MLB_SPORT_KEY }),
+    ]);
+    return {
+      teamName,
+      last10WinPct: last10.found ? last10.value : null,
+      streak: streak.found ? streak.value : null,
+    };
+  });
 }
 
 // Nothing existing computes a rolling "recent runs scored" figure
@@ -66,20 +76,38 @@ async function teamFormInput(teamName: string, asOf: Date): Promise<TeamFormInpu
 // upper bound - pass startOfEasternDay(gameDate) so today's own game (and
 // anything else dated today) can never be one of the "recent" games.
 async function recentRunsForTeam(teamName: string, before: Date): Promise<RecentScoringInput> {
-  const games = await prisma.gameResult.findMany({
-    where: {
-      sportKey: MLB_SPORT_KEY,
-      isPreseason: false,
-      gameDate: { lt: before },
-      OR: [{ homeTeam: teamName }, { awayTeam: teamName }],
-    },
-    orderBy: { gameDate: "desc" },
-    take: RECENT_SCORING_GAME_COUNT,
-    select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true },
+  const key = `mlb-recent-runs:${teamName}:${easternDateKey(before)}`;
+  return cachedHistoricalInput(key, async () => {
+    const games = await prisma.gameResult.findMany({
+      where: {
+        sportKey: MLB_SPORT_KEY,
+        isPreseason: false,
+        gameDate: { lt: before },
+        OR: [{ homeTeam: teamName }, { awayTeam: teamName }],
+      },
+      orderBy: { gameDate: "desc" },
+      take: RECENT_SCORING_GAME_COUNT,
+      select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true },
+    });
+    if (games.length === 0) return { teamName, avgRunsLastN: null, gamesConsidered: 0 };
+    const totalRuns = games.reduce((sum, g) => sum + (g.homeTeam === teamName ? g.homeScore : g.awayScore), 0);
+    return { teamName, avgRunsLastN: totalRuns / games.length, gamesConsidered: games.length };
   });
-  if (games.length === 0) return { teamName, avgRunsLastN: null, gamesConsidered: 0 };
-  const totalRuns = games.reduce((sum, g) => sum + (g.homeTeam === teamName ? g.homeScore : g.awayScore), 0);
-  return { teamName, avgRunsLastN: totalRuns / games.length, gamesConsidered: games.length };
+}
+
+// Cached at the poll call site, not inside getHistoricalStartingMatchup
+// itself (mlb-pitcher-history.ts) - that function is also exercised directly
+// by mlb-game-starters-acceptance-test.ts, which intentionally calls it twice
+// for the SAME externalId with different mocked DB states to prove its
+// point-in-time (look-ahead) correctness; caching inside the function itself
+// would make that test's second call silently return the first call's stale
+// result instead of re-deriving from the (deliberately changed) mock. Keyed
+// by gamePk alone since getHistoricalStartingMatchup is already scoped to
+// one game (its own GameStarters row) - there's no separate team+date grain
+// to key by the way the other five functions have.
+async function cachedStartingMatchup(gamePk: string) {
+  const key = `mlb-starting-matchup:${gamePk}`;
+  return cachedHistoricalInput(key, () => getHistoricalStartingMatchup(MLB_SPORT_KEY, gamePk));
 }
 
 function latestPlayState(plays: MlbWinProbabilityPlay[]) {
@@ -108,7 +136,7 @@ export async function getMlbMomentum(params: {
     teamFormInput(params.awayTeam, asOf),
     recentRunsForTeam(params.homeTeam, recentScoringCutoff),
     recentRunsForTeam(params.awayTeam, recentScoringCutoff),
-    getHistoricalStartingMatchup(MLB_SPORT_KEY, params.gamePk),
+    cachedStartingMatchup(params.gamePk),
   ]);
 
   const plays = state.plays;
@@ -146,6 +174,6 @@ export async function getMlbMomentum(params: {
     trend,
     factors,
     playsSoFar: plays.length,
-    fetchedAt: state.fetchedAt.toISOString(),
+    fetchedAt: state.fetchedAt,
   };
 }

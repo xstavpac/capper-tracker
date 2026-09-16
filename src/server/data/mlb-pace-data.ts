@@ -11,12 +11,13 @@
 // therefore share one cached live fetch (see live-game-state.ts's own
 // caching layer), not two independent polls.
 import { prisma } from "@/lib/prisma";
-import { startOfEasternDay } from "@/lib/dates";
+import { startOfEasternDay, easternDateKey } from "@/lib/dates";
 import { SPORT_SEASON_CONFIG } from "@/lib/sport-seasons";
 import { getMlbLiveGameState } from "@/server/data/live-game-state";
-import { computeTeamBaseline, isPaceEligible, type BaselineGameRow } from "@/server/data/pace";
+import { computeTeamBaseline, isPaceEligible, type BaselineGameRow, type PaceBaseline } from "@/server/data/pace";
 import { computeMlbPaceTrend, type MlbGameProgress } from "@/server/data/mlb-pace";
 import type { PaceTrend } from "@/server/data/pace";
+import { cachedHistoricalInput } from "@/server/data/historical-input-cache";
 
 const MLB_SPORT_KEY = "baseball_mlb";
 
@@ -50,6 +51,23 @@ async function seasonGamesForTeam(teamName: string, seasonStart: Date, before: D
   });
 }
 
+// Cached at the compact, already-aggregated PaceBaseline shape - not the raw
+// BaselineGameRow[] seasonGamesForTeam fetches (which, with no `take` limit,
+// only grows every day the season runs). computeTeamBaseline itself (pace.ts)
+// is untouched and still the only place the point-in-time window is enforced;
+// this just moves WHERE it's called from (into the cached wrapper instead of
+// getMlbPace's body) so what actually sits in the cache is the small
+// {teamName, avgPerGame, gamesConsidered} result, not the row list behind it.
+// Keyed at team+date grain (not per-gamePk) so two games the same team plays
+// with the same historical cutoff share one entry.
+async function cachedTeamBaseline(teamName: string, seasonStart: Date, before: Date): Promise<PaceBaseline> {
+  const key = `mlb-pace-baseline:${teamName}:${easternDateKey(before)}`;
+  return cachedHistoricalInput(key, async () => {
+    const games = await seasonGamesForTeam(teamName, seasonStart, before);
+    return computeTeamBaseline(games, teamName, { seasonStart, before });
+  });
+}
+
 function latestProgress(plays: { inning: number; isTopInning: boolean; outs: number; homeScore: number; awayScore: number }[]) {
   if (plays.length === 0) return null;
   return plays[plays.length - 1];
@@ -64,14 +82,12 @@ export async function getMlbPace(params: { gamePk: string; homeTeam: string; awa
   const before = startOfEasternDay(params.gameDate);
   const seasonStart = new Date(SPORT_SEASON_CONFIG[MLB_SPORT_KEY].seasonStart + "T00:00:00.000Z");
 
-  const [homeGames, awayGames, state] = await Promise.all([
-    seasonGamesForTeam(params.homeTeam, seasonStart, before),
-    seasonGamesForTeam(params.awayTeam, seasonStart, before),
+  const [homeBaseline, awayBaseline, state] = await Promise.all([
+    cachedTeamBaseline(params.homeTeam, seasonStart, before),
+    cachedTeamBaseline(params.awayTeam, seasonStart, before),
     getMlbLiveGameState(params.gamePk),
   ]);
 
-  const homeBaseline = computeTeamBaseline(homeGames, params.homeTeam, { seasonStart, before });
-  const awayBaseline = computeTeamBaseline(awayGames, params.awayTeam, { seasonStart, before });
   if (!isPaceEligible(homeBaseline, awayBaseline)) return { eligible: false };
 
   const latest = latestProgress(state.plays);
@@ -94,6 +110,6 @@ export async function getMlbPace(params: { gamePk: string; homeTeam: string; awa
     awayBaselineRunsPerGame: awayBaseline.avgPerGame!,
     homeGamesConsidered: homeBaseline.gamesConsidered,
     awayGamesConsidered: awayBaseline.gamesConsidered,
-    fetchedAt: state.fetchedAt.toISOString(),
+    fetchedAt: state.fetchedAt,
   };
 }

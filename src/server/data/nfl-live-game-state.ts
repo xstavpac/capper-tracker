@@ -137,7 +137,14 @@ export type NflLiveGameState = {
   // by Pace only; empty (not null) before kickoff, same "no plays yet"
   // convention as `wp` above.
   clockPlays: NflGameClockPlay[];
-  fetchedAt: Date;
+  // ISO string, not a Date - same fix as live-game-state.ts's MLB
+  // counterpart, and for the identical reason: this value crosses an
+  // unstable_cache boundary (dataCachedNflLiveGameState below), which
+  // JSON-serializes cache entries, silently turning a Date into a plain
+  // string on every cache HIT. Confirmed nfl-momentum-data.ts and
+  // nfl-pace-data.ts had the exact same `.toISOString()`-on-a-cached-value
+  // bug as their MLB counterparts, not just a structurally similar one.
+  fetchedAt: string;
 };
 
 function nflSummaryUrl(eventId: string): string {
@@ -329,7 +336,7 @@ async function dispatchNflLiveGameState(eventId: string): Promise<NflLiveGameSta
     awayBoxscore: normalizeBoxscore(awayBox),
     situation,
     clockPlays,
-    fetchedAt: new Date(),
+    fetchedAt: new Date().toISOString(),
   };
 }
 

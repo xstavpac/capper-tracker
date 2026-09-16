@@ -15,12 +15,13 @@
 // a 17-week season's matchups won't have that until Sunday's slate starts
 // finishing - expected and correct, not a bug (see PR description).
 import { prisma } from "@/lib/prisma";
-import { startOfEasternDay } from "@/lib/dates";
+import { startOfEasternDay, easternDateKey } from "@/lib/dates";
 import { SPORT_SEASON_CONFIG } from "@/lib/sport-seasons";
 import { getNflLiveGameState } from "@/server/data/nfl-live-game-state";
-import { computeTeamBaseline, isPaceEligible, type BaselineGameRow } from "@/server/data/pace";
+import { computeTeamBaseline, isPaceEligible, type BaselineGameRow, type PaceBaseline } from "@/server/data/pace";
 import { computeNflPaceTrend, type NflGameProgress } from "@/server/data/nfl-pace";
 import type { PaceTrend } from "@/server/data/pace";
+import { cachedHistoricalInput } from "@/server/data/historical-input-cache";
 
 const NFL_SPORT_KEY = "americanfootball_nfl";
 
@@ -59,6 +60,18 @@ async function seasonGamesForTeam(teamName: string, seasonStart: Date, before: D
   });
 }
 
+// Cached at the compact PaceBaseline shape, not the raw row list - same
+// reasoning as mlb-pace-data.ts's cachedTeamBaseline (independent
+// implementation, not shared, per this file's own header). computeTeamBaseline
+// (pace.ts) is untouched; only the call site moves.
+async function cachedTeamBaseline(teamName: string, seasonStart: Date, before: Date): Promise<PaceBaseline> {
+  const key = `nfl-pace-baseline:${teamName}:${easternDateKey(before)}`;
+  return cachedHistoricalInput(key, async () => {
+    const games = await seasonGamesForTeam(teamName, seasonStart, before);
+    return computeTeamBaseline(games, teamName, { seasonStart, before });
+  });
+}
+
 function latestProgress(plays: { period: number; clockSeconds: number | null; homeScore: number; awayScore: number }[]) {
   if (plays.length === 0) return null;
   return plays[plays.length - 1];
@@ -71,14 +84,12 @@ export async function getNflPace(params: { eventId: string; homeTeam: string; aw
   const regularSeasonStart = SPORT_SEASON_CONFIG[NFL_SPORT_KEY].regularSeasonStart;
   const seasonStart = new Date((regularSeasonStart ?? SPORT_SEASON_CONFIG[NFL_SPORT_KEY].seasonStart) + "T00:00:00.000Z");
 
-  const [homeGames, awayGames, state] = await Promise.all([
-    seasonGamesForTeam(params.homeTeam, seasonStart, before),
-    seasonGamesForTeam(params.awayTeam, seasonStart, before),
+  const [homeBaseline, awayBaseline, state] = await Promise.all([
+    cachedTeamBaseline(params.homeTeam, seasonStart, before),
+    cachedTeamBaseline(params.awayTeam, seasonStart, before),
     getNflLiveGameState(params.eventId),
   ]);
 
-  const homeBaseline = computeTeamBaseline(homeGames, params.homeTeam, { seasonStart, before });
-  const awayBaseline = computeTeamBaseline(awayGames, params.awayTeam, { seasonStart, before });
   if (!isPaceEligible(homeBaseline, awayBaseline)) return { eligible: false };
 
   const latest = latestProgress(state.clockPlays);
@@ -101,6 +112,6 @@ export async function getNflPace(params: { eventId: string; homeTeam: string; aw
     awayBaselinePointsPerGame: awayBaseline.avgPerGame!,
     homeGamesConsidered: homeBaseline.gamesConsidered,
     awayGamesConsidered: awayBaseline.gamesConsidered,
-    fetchedAt: state.fetchedAt.toISOString(),
+    fetchedAt: state.fetchedAt,
   };
 }

@@ -69,7 +69,16 @@ export type MlbLiveGameState = {
   // wobbly upstream response - "no plays yet" and "couldn't parse the plays
   // we got" are both meaningfully "no live state available", never a crash.
   plays: MlbWinProbabilityPlay[];
-  fetchedAt: Date;
+  // ISO string, not a Date - this value crosses an unstable_cache boundary
+  // (see dataCachedMlbLiveGameState below), which JSON-serializes cache
+  // entries. A Date survives the FIRST (cache-MISS) call untouched but comes
+  // back as a plain string on every subsequent cache HIT, which is exactly
+  // what caused every consumer's `.toISOString()` call to throw in
+  // production. Storing the string form here, once, at the source, means
+  // every caller always gets the same shape regardless of whether this
+  // particular call was a cache hit or miss - no caller should reach for
+  // `new Date(fetchedAt)` unless it actually needs Date arithmetic.
+  fetchedAt: string;
 };
 
 function mlbWinProbabilityUrl(gamePk: string): string {
@@ -136,7 +145,7 @@ const mlbWinProbabilityBreaker = new CircuitBreaker({
 async function dispatchMlbLiveGameState(gamePk: string): Promise<MlbLiveGameState> {
   const raw = await mlbWinProbabilityBreaker.run(() => fetchMlbWinProbabilityRaw(gamePk));
   const plays = raw.map(normalizePlay).filter((p): p is MlbWinProbabilityPlay => p !== null);
-  return { gamePk, plays, fetchedAt: new Date() };
+  return { gamePk, plays, fetchedAt: new Date().toISOString() };
 }
 
 // Live game state moves fast (a new play every 20-40s of real time) and this

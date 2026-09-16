@@ -10,8 +10,9 @@
 // team-record.ts / mlb-momentum-data.ts use - so nothing from the game's
 // own day can leak into a "recent" figure.
 import { prisma } from "@/lib/prisma";
-import { startOfEasternDay } from "@/lib/dates";
+import { startOfEasternDay, easternDateKey } from "@/lib/dates";
 import { getNflLiveGameState } from "@/server/data/nfl-live-game-state";
+import { cachedHistoricalInput } from "@/server/data/historical-input-cache";
 import {
   computeNflMomentumTrend,
   recentScoringFactor,
@@ -48,20 +49,23 @@ export type NflMomentumPayload = {
 // writing this), so this reads GameResult directly, same shape as MLB's
 // equivalent. `before` is an exclusive upper bound.
 async function recentPointsForTeam(teamName: string, before: Date): Promise<NflRecentScoringInput> {
-  const games = await prisma.gameResult.findMany({
-    where: {
-      sportKey: NFL_SPORT_KEY,
-      isPreseason: false,
-      gameDate: { lt: before },
-      OR: [{ homeTeam: teamName }, { awayTeam: teamName }],
-    },
-    orderBy: { gameDate: "desc" },
-    take: RECENT_SCORING_GAME_COUNT,
-    select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true },
+  const key = `nfl-recent-points:${teamName}:${easternDateKey(before)}`;
+  return cachedHistoricalInput(key, async () => {
+    const games = await prisma.gameResult.findMany({
+      where: {
+        sportKey: NFL_SPORT_KEY,
+        isPreseason: false,
+        gameDate: { lt: before },
+        OR: [{ homeTeam: teamName }, { awayTeam: teamName }],
+      },
+      orderBy: { gameDate: "desc" },
+      take: RECENT_SCORING_GAME_COUNT,
+      select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true },
+    });
+    if (games.length === 0) return { teamName, avgPointsLastN: null, gamesConsidered: 0 };
+    const totalPoints = games.reduce((sum, g) => sum + (g.homeTeam === teamName ? g.homeScore : g.awayScore), 0);
+    return { teamName, avgPointsLastN: totalPoints / games.length, gamesConsidered: games.length };
   });
-  if (games.length === 0) return { teamName, avgPointsLastN: null, gamesConsidered: 0 };
-  const totalPoints = games.reduce((sum, g) => sum + (g.homeTeam === teamName ? g.homeScore : g.awayScore), 0);
-  return { teamName, avgPointsLastN: totalPoints / games.length, gamesConsidered: games.length };
 }
 
 // The game detail page's data entry point for NFL Momentum. `eventId` is
@@ -145,7 +149,7 @@ export async function getNflMomentum(params: {
     trend,
     factors,
     playsSoFar: state.wp.length,
-    fetchedAt: state.fetchedAt.toISOString(),
+    fetchedAt: state.fetchedAt,
   };
 }
 
