@@ -199,8 +199,8 @@ export function parseFallbackBetText(line: string): BetTextParts {
   const lower = line.toLowerCase();
 
   let totalSide: "over" | "under" | undefined;
-  if (/\bover\b|\bo\d/.test(lower)) totalSide = "over";
-  else if (/\bunder\b|\bu\d/.test(lower)) totalSide = "under";
+  if (/\bover\b|\bo\s*\d/.test(lower)) totalSide = "over";
+  else if (/\bunder\b|\bu\s*\d/.test(lower)) totalSide = "under";
 
   let betType: BetTextParts["betType"];
   if (totalSide) betType = "TOTAL";

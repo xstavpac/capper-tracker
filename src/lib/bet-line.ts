@@ -377,6 +377,18 @@ export function parsePlayerProp(text: string): { playerName: string; propMarket:
     .replace(/\([^)]*\)/g, " ")
     .replace(statPattern, " ")
     .replace(/\b(over|under)\b/gi, " ")
+    // The "o"/"u" shorthand for over/under ("Mike Evans o56.5", "...o 56.5")
+    // is a first-class format alongside the spelled-out word above, not an
+    // edge case - stripped the same way, but ONLY when it's actually acting
+    // as that shorthand: a standalone "o"/"u" token sitting directly in
+    // front of a number (optional whitespace between them, matching the
+    // same o/u-shorthand recognized elsewhere - see looksLikePick/
+    // parsePickText in parse-catalog.ts and parsePlayerPropLine below). The
+    // digit itself isn't consumed here (lookahead only) - the next replace
+    // strips it. Never touches a bare "o"/"u" anywhere else in the name
+    // (an initial, a name fragment before a non-numeric word), so a real
+    // name is never corrupted by this.
+    .replace(/\b[ou]\s*(?=\d)/gi, " ")
     .replace(/[+-]?\d+(?:\.\d+)?\+?/g, " ")
     .replace(/[+-]/g, " ")
     .replace(/\s{2,}/g, " ")
@@ -437,8 +449,8 @@ export type PlayerPropLineInfo = { line: number; direction: "OVER" | "UNDER" };
 // (can't tell which side this pick actually is) rather than silently
 // grading against whichever side happened to appear first.
 export function parsePlayerPropLine(text: string): PlayerPropLineInfo | null {
-  const overMatch = text.match(/\bover\s+(\d+(?:\.\d+)?)\b/i) ?? text.match(/\bo(\d+(?:\.\d+)?)\b/i);
-  const underMatch = text.match(/\bunder\s+(\d+(?:\.\d+)?)\b/i) ?? text.match(/\bu(\d+(?:\.\d+)?)\b/i);
+  const overMatch = text.match(/\bover\s+(\d+(?:\.\d+)?)\b/i) ?? text.match(/\bo\s*(\d+(?:\.\d+)?)\b/i);
+  const underMatch = text.match(/\bunder\s+(\d+(?:\.\d+)?)\b/i) ?? text.match(/\bu\s*(\d+(?:\.\d+)?)\b/i);
   if (overMatch && !underMatch) return { direction: "OVER", line: parseFloat(overMatch[1]) };
   if (underMatch && !overMatch) return { direction: "UNDER", line: parseFloat(underMatch[1]) };
   return null;

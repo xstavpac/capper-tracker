@@ -1,13 +1,9 @@
 "use server";
 
 import { requireUser } from "@/server/auth";
-import { parseCatalog, parsePickText, type ParsedPick } from "@/lib/parse-catalog";
-import {
-  resolveLineAgainstLiveTeams,
-  parseFallbackBetText,
-  type LiveTeam,
-} from "@/lib/live-team-fallback";
-import { resolvePlayerPropAgainstRoster } from "@/lib/player-roster-fallback";
+import { parseCatalog } from "@/lib/parse-catalog";
+import type { LiveTeam } from "@/lib/live-team-fallback";
+import { recoverUnresolvedLines, type RecoverUnresolvedResult } from "@/lib/recover-unresolved-lines";
 import { parsePlayerProp } from "@/lib/bet-line";
 import { getLiveScoresForSport, getOddsForSport, LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { fetchNflLeagueRoster } from "@/server/data/nfl-roster";
@@ -34,10 +30,12 @@ import { fetchNflLeagueRoster } from "@/server/data/nfl-roster";
 // "prefix" match today, independent of #83). Excluding player-prop-shaped
 // lines from that path here closes the exposure for exactly the line shape
 // this fallback targets, with no change to live-team-fallback.ts itself.
-export type RecoverUnresolvedResult = {
-  recovered: ParsedPick[];
-  stillUnresolved: string[];
-};
+//
+// The actual per-line resolution + capper-attribution loop lives in
+// lib/recover-unresolved-lines.ts (a plain module, no "use server"/auth
+// dependency) - this file's job is only to fetch the live data that pure
+// function needs and delegate to it.
+export type { RecoverUnresolvedResult };
 
 // Every distinct team name currently on the live schedule (ESPN) or the
 // pregame odds board (Odds API snapshot) for a resolvable sport - the same
@@ -64,37 +62,17 @@ async function gatherLiveTeamNames(): Promise<LiveTeam[]> {
   return out;
 }
 
-// Attribute a recovered line to a capper using parseCatalog's OWN output as
-// the source of truth: the capper of the last resolved pick whose text
-// appears before this line. No re-implementation of the header heuristics.
-function inferCapperFor(line: string, trimmedLines: string[], picks: ParsedPick[]): string {
-  const lineIdx = trimmedLines.findIndex((l) => l === line || l.includes(line));
-  if (lineIdx === -1) return picks[0]?.capperName ?? "Unknown";
-
-  let capper = picks[0]?.capperName ?? "Unknown";
-  for (const pick of picks) {
-    const pickIdx = trimmedLines.findIndex((l) => l.includes(pick.raw));
-    if (pickIdx !== -1 && pickIdx <= lineIdx) capper = pick.capperName;
-  }
-  return capper;
-}
-
 export async function recoverUnresolvedPicksAction(
   text: string,
   knownCapperNames: string[] = []
 ): Promise<RecoverUnresolvedResult> {
   await requireUser();
 
-  const { picks, unresolved } = parseCatalog(text, knownCapperNames);
+  const { unresolved, unresolvedCapperNames } = parseCatalog(text, knownCapperNames);
   if (unresolved.length === 0) return { recovered: [], stillUnresolved: [] };
 
-  const trimmedLines = text.split("\n").map((l) => l.trim());
-  const recovered: ParsedPick[] = [];
-  const stillUnresolved: string[] = [];
-
   // Partition once, up front, so each live-data source is fetched at most
-  // once (and only when a line that could actually use it exists) while
-  // still processing `unresolved` in its original order below.
+  // once (and only when a line that could actually use it exists).
   const isPlayerProp = new Set(unresolved.filter((line) => parsePlayerProp(line) !== null));
 
   const [liveTeams, roster] = await Promise.all([
@@ -102,57 +80,5 @@ export async function recoverUnresolvedPicksAction(
     isPlayerProp.size > 0 ? fetchNflLeagueRoster() : Promise.resolve([]),
   ]);
 
-  for (const line of unresolved) {
-    if (isPlayerProp.has(line)) {
-      const res = resolvePlayerPropAgainstRoster(line, roster);
-      if (res.status !== "resolved") {
-        // "ambiguous" (2+ distinct players matching) is deliberately treated
-        // the same as "unresolved" here, same policy as the team-name
-        // fallback below - never guessed.
-        stillUnresolved.push(line);
-        continue;
-      }
-
-      const parsed = parsePickText(line);
-      recovered.push({
-        capperName: inferCapperFor(line, trimmedLines, picks),
-        sportName: res.sport,
-        description: parsed.cleanDescription,
-        betType: parsed.betType,
-        odds: parsed.odds ?? -110,
-        hasExplicitOdds: parsed.odds !== null,
-        totalSide: parsed.totalSide,
-        units: parsed.units,
-        period: parsed.period,
-        raw: line,
-        teamNicknames: [res.team.toLowerCase()],
-      });
-      continue;
-    }
-
-    const res = resolveLineAgainstLiveTeams(line, liveTeams);
-    if (res.status !== "resolved") {
-      // "ambiguous" is deliberately treated the same as "unresolved" here -
-      // a collision is exactly the case where we must NOT guess.
-      stillUnresolved.push(line);
-      continue;
-    }
-
-    const bet = parseFallbackBetText(line);
-    recovered.push({
-      capperName: inferCapperFor(line, trimmedLines, picks),
-      sportName: res.sport,
-      description: line,
-      betType: bet.betType,
-      odds: bet.odds,
-      hasExplicitOdds: bet.hasExplicitOdds,
-      totalSide: bet.totalSide,
-      units: bet.units,
-      period: "FULL_GAME",
-      raw: line,
-      teamNicknames: [res.nickname],
-    });
-  }
-
-  return { recovered, stillUnresolved };
+  return recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, roster);
 }

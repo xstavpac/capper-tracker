@@ -1058,8 +1058,8 @@ function looksLikePick(text: string): boolean {
     // touching the digit (no space) is what makes this a safe signal; a
     // stray "o" or "u" elsewhere in ordinary text never sits flush against a
     // number like this.
-    /\bo\d+(\.\d+)?\b/i.test(text) ||
-    /\bu\d+(\.\d+)?\b/i.test(text) ||
+    /\bo\s*\d+(\.\d+)?\b/i.test(text) ||
+    /\bu\s*\d+(\.\d+)?\b/i.test(text) ||
     /\b[NY]RFI\b/i.test(text) ||
     // A "Team vs Team" / "Team @ Team" matchup shape, even with no bet-type
     // keyword on the same line (e.g. the number is stated on a following
@@ -1360,10 +1360,10 @@ export function parsePickText(description: string): {
     betType = "PLAYER_PROP";
   } else if (/\bML\b/i.test(cleanDescription) || /money\s*line/i.test(cleanDescription)) {
     betType = "MONEYLINE";
-  } else if (/\bover\b/i.test(cleanDescription) || /\bo\d+(\.\d+)?\b/i.test(cleanDescription)) {
+  } else if (/\bover\b/i.test(cleanDescription) || /\bo\s*\d+(\.\d+)?\b/i.test(cleanDescription)) {
     betType = isTeamTotalText(cleanDescription) ? "TEAM_TOTAL" : "TOTAL";
     totalSide = "over";
-  } else if (/\bunder\b/i.test(cleanDescription) || /\bu\d+(\.\d+)?\b/i.test(cleanDescription)) {
+  } else if (/\bunder\b/i.test(cleanDescription) || /\bu\s*\d+(\.\d+)?\b/i.test(cleanDescription)) {
     betType = isTeamTotalText(cleanDescription) ? "TEAM_TOTAL" : "TOTAL";
     totalSide = "under";
   } else if (/\btotal\b/i.test(cleanDescription)) {
@@ -1818,7 +1818,7 @@ function findPlayerPick(text: string): { playerName: string; playerKey: string }
   // Same "o3.5"/"u45.5" shorthand looksLikePick and parsePickText's betType
   // detection recognize - checked only as a fallback so the spelled-out form
   // above still wins when both are somehow present.
-  const totalShorthandMatch = withoutParens.match(/^(.+?)\s+[ou]\d+(?:\.\d+)?\b/i);
+  const totalShorthandMatch = withoutParens.match(/^(.+?)\s+[ou]\s*\d+(?:\.\d+)?\b/i);
   const nameMatch = mlMatch ?? spreadMatch ?? totalMatch ?? totalShorthandMatch;
   if (!nameMatch) return null;
 
@@ -1988,7 +1988,7 @@ function extractCapperNameFromTagline(text: string): string | null {
 export function parseCatalog(
   text: string,
   knownCapperNames: string[] = []
-): { picks: ParsedPick[]; unresolved: string[] } {
+): { picks: ParsedPick[]; unresolved: string[]; unresolvedCapperNames: string[] } {
   const sortedNames = [...knownCapperNames].sort((a, b) => b.length - a.length);
   const rawLines = text.split("\n").map((l) => l.trim());
 
@@ -2000,6 +2000,18 @@ export function parseCatalog(
   // paste. Surfaced separately so the caller can show them for manual
   // review instead of either losing them or corrupting attribution.
   const unresolved: string[] = [];
+  // The capper header active at the moment each `unresolved` line was
+  // pushed - parallel to `unresolved` (same index, same length). This is the
+  // ONLY place that association is ever known: a line in `unresolved` is
+  // plain text with no capper of its own, and a caller resolving it later
+  // (recoverUnresolvedPicksAction) has no reliable way to reconstruct it
+  // after the fact - re-deriving it by scanning already-resolved `picks`
+  // breaks whenever the recovered line is the only (or first) pick under its
+  // header, or when a header's picks ALL need later recovery (confirmed: the
+  // capper name matched correctly right here, but the resulting pick still
+  // showed "Unknown" because there was no earlier resolved pick to infer
+  // from). Recorded directly here instead.
+  const unresolvedCapperNames: string[] = [];
   let currentCapper = "";
   // Treated like "start of catalog" - a blank line before a name is the
   // strongest signal that what follows is a new capper's header, not a pick.
@@ -2293,6 +2305,7 @@ export function parseCatalog(
         }
 
         unresolved.push(strippedText);
+        unresolvedCapperNames.push(currentCapper || "Unknown");
         continue;
       }
     }
@@ -2305,5 +2318,5 @@ export function parseCatalog(
     }
   }
 
-  return { picks: results, unresolved };
+  return { picks: results, unresolved, unresolvedCapperNames };
 }
