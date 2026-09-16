@@ -138,8 +138,11 @@ export function GridLiveBoard({
   // navigation on every game click (see file header), while this is opening
   // a genuinely different view (Momentum/Pace, head-to-head header) that
   // Grid's in-panel GameDetailPanel has no equivalent for.
+  // Carries an explicit view=advanced so the detail page's "Back to Live"
+  // link can mirror it back out and land the user on Grid again, rather
+  // than relying on Grid merely being live/page.tsx's current default.
   function handleOpenGame(gameId: string) {
-    router.push("/live/" + gameId + "?sport=" + activeSport);
+    router.push("/live/" + gameId + "?sport=" + activeSport + "&view=advanced");
   }
 
   const selectedIndex = selection.gameId ? sortedGameIds.indexOf(selection.gameId) : -1;

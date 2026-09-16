@@ -52,12 +52,27 @@ function ordinalSuffix(n: number): string {
   return n + "th";
 }
 
+// The Live board's game cards (both Feed's LiveScoreboard and Grid's
+// double-click) link in here carrying their current ?sport=/?view=, so
+// "Back to Live" can round-trip the user to the same sport and view they
+// came from instead of falling through to live/page.tsx's own defaults
+// (MLB, Grid). A page reached with no view - e.g. a bookmarked/shared
+// detail-page link - has nothing to round-trip and correctly falls back to
+// Grid, same as live/page.tsx itself does for a bare /live visit.
+function backToLiveHref(sport: string | undefined, view: string | undefined): string {
+  const params = new URLSearchParams();
+  if (sport) params.set("sport", sport);
+  if (view) params.set("view", view);
+  const qs = params.toString();
+  return "/live" + (qs ? "?" + qs : "");
+}
+
 export default async function GameDetailPage({
   params,
   searchParams,
 }: {
   params: { gameId: string };
-  searchParams: { sport?: string };
+  searchParams: { sport?: string; view?: string };
 }) {
   const user = await requireUser();
   const sportMeta = LIVE_SPORTS.find((s) => s.key === searchParams.sport);
@@ -65,7 +80,7 @@ export default async function GameDetailPage({
   if (!sportMeta) {
     return (
       <div className="mx-auto max-w-2xl">
-        <Link href="/live" className="text-sm text-brand-600">
+        <Link href={backToLiveHref(undefined, searchParams.view)} className="text-sm text-brand-600">
           &larr; Back to Live
         </Link>
         <div className="mt-4 rounded-card bg-card p-10 text-center shadow-soft">
@@ -96,7 +111,7 @@ export default async function GameDetailPage({
   if (!game) {
     return (
       <div className="mx-auto max-w-2xl">
-        <Link href={"/live?sport=" + sportMeta.key} className="text-sm text-brand-600">
+        <Link href={backToLiveHref(sportMeta.key, searchParams.view)} className="text-sm text-brand-600">
           &larr; Back to Live
         </Link>
         <div className="mt-4 rounded-card bg-card p-10 text-center shadow-soft">
@@ -255,7 +270,7 @@ export default async function GameDetailPage({
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link href={"/live?sport=" + sportMeta.key} className="text-sm text-brand-600">
+      <Link href={backToLiveHref(sportMeta.key, searchParams.view)} className="text-sm text-brand-600">
         &larr; Back to Live
       </Link>
 

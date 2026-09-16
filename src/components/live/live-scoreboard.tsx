@@ -114,7 +114,12 @@ export function LiveScoreboard({
 
           return (
             <div key={game.id} className="rounded-card bg-card p-4 shadow-soft transition-shadow hover:shadow-md">
-              <Link href={"/live/" + game.id + "?sport=" + activeSport} className="block">
+              {/* LiveScoreboard only ever renders in Feed mode (live/page.tsx
+                  gates it on !isGrid), so this link always carries an
+                  explicit view=feed - the detail page's own "Back to Live"
+                  link mirrors it back out so returning from a game doesn't
+                  silently land on Grid's default. */}
+              <Link href={"/live/" + game.id + "?sport=" + activeSport + "&view=feed"} className="block">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="text-xs text-muted-foreground">
                     <LocalGameTime
