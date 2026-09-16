@@ -71,6 +71,18 @@ export function PickForm({ cappers, sports, atLimit }: { cappers: Capper[]; spor
     setError(null);
     setSubmitting(true);
 
+    // The datetime-local input's value (e.g. "2026-09-20T13:00") has no
+    // timezone info - it's the browser's own local wall-clock time. Convert
+    // it to a real UTC instant here, on the client, using the browser's own
+    // Date constructor (which correctly treats it as local time). The Server
+    // Action must not do this conversion itself: on the server (UTC on
+    // Vercel), the same string would be misread as UTC instead of the
+    // submitter's local time.
+    const gameTimeRaw = formData.get("gameTime");
+    if (typeof gameTimeRaw === "string" && gameTimeRaw) {
+      formData.set("gameTime", new Date(gameTimeRaw).toISOString());
+    }
+
     const result = await createPickAction(formData);
     setSubmitting(false);
 
