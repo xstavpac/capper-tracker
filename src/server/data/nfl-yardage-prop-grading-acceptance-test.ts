@@ -387,6 +387,40 @@ async function main() {
     { outcome: "WIN" }
   );
 
+  // =====================================================================
+  // ATD / first-TD / multi-TD fix (against real box-score data, HOU_BUF -
+  // Josh Allen actually scored 2 rushing TDs in this game).
+  // =====================================================================
+
+  // "ATD" is the shorthand fix: it must resolve exactly like "Anytime TD"
+  // above, not fall through to "not a recognized touchdown prop".
+  await expectAsync(
+    "ATD shorthand resolves identically to 'Anytime TD': Josh Allen ATD -> WIN (real 2 rushing TDs)",
+    resolvePlayerProp(legacyPick("Bills Josh Allen ATD", "Buffalo Bills", "Houston Texans"), HOU_BUF, "NFL"),
+    { outcome: "WIN" }
+  );
+
+  // Strongest possible proof first-TD/multi-TD text never reaches the
+  // anytime-TD grading path: Josh Allen DID score (2 rushing TDs), so if
+  // this text were silently treated as plain anytime-TD, it would
+  // incorrectly resolve WIN. It must instead decline.
+  await expectAsync(
+    "First-TD text never reaches anytime-TD grading, even for a player who scored: Josh Allen First TD -> declined, not WIN",
+    resolvePlayerProp(legacyPick("Bills Josh Allen First TD", "Buffalo Bills", "Houston Texans"), HOU_BUF, "NFL"),
+    {
+      outcome: null,
+      reason: "this bet is a first-touchdown prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  await expectAsync(
+    "Multi-TD text never reaches anytime-TD grading, even for a player who scored: Josh Allen 2+ TDs -> declined, not WIN",
+    resolvePlayerProp(legacyPick("Bills Josh Allen 2+ TDs", "Buffalo Bills", "Houston Texans"), HOU_BUF, "NFL"),
+    {
+      outcome: null,
+      reason: "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }

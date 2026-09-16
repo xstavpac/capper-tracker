@@ -16,7 +16,7 @@
 // trigger), and the stored description/betDetail text is untouched by this
 // change - same raw text in, same raw text out, only betType classification
 // differs from before.
-import { parsePlayerProp } from "@/lib/bet-line";
+import { parsePlayerProp, parseTouchdownProp } from "@/lib/bet-line";
 import { parseCatalog } from "@/lib/parse-catalog";
 
 let failures = 0;
@@ -159,6 +159,107 @@ function main() {
     parsePlayerProp("Bo Nix Over 225.5 Passing Yards"),
     { playerName: "Bo Nix", propMarket: "PASS_YDS" }
   );
+
+  // --- PART D: ATD recognized as anytime-TD; first/multi-TD recognized as
+  // PLAYER_PROP (so they never fall through to the wrong MONEYLINE/TOTAL
+  // default) but not silently treated as the anytime-TD market they aren't.
+  // See parseTouchdownProp (bet-line.ts) and resolveTouchdownProp
+  // (grading.ts) for the grading-time half of this fix. ---
+
+  check("parsePlayerProp: 'Gibbs TD' -> TD", parsePlayerProp("Gibbs TD"), { playerName: "Gibbs", propMarket: "TD" });
+  check(
+    "parsePlayerProp: 'Gibbs touchdown' -> TD",
+    parsePlayerProp("Gibbs touchdown"),
+    { playerName: "Gibbs", propMarket: "TD" }
+  );
+  check(
+    "parsePlayerProp: 'Gibbs anytime TD' -> TD",
+    parsePlayerProp("Gibbs anytime TD"),
+    { playerName: "Gibbs", propMarket: "TD" }
+  );
+  check(
+    "parsePlayerProp: 'Gibbs anytime touchdown' -> TD",
+    parsePlayerProp("Gibbs anytime touchdown"),
+    { playerName: "Gibbs", propMarket: "TD" }
+  );
+  check(
+    "parsePlayerProp: 'Gibbs ATD' -> TD, same as the spelled-out forms above (previously fell through to null)",
+    parsePlayerProp("Gibbs ATD"),
+    { playerName: "Gibbs", propMarket: "TD" }
+  );
+
+  check(
+    "parseTouchdownProp: 'Gibbs first TD' -> parses as a TD-shaped prop, but flagged unsupported (not plain anytime-TD)",
+    parseTouchdownProp("Gibbs first TD"),
+    {
+      playerName: "Gibbs",
+      propType: "ANY",
+      unsupported: "this bet is a first-touchdown prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  check(
+    "parseTouchdownProp: 'Gibbs first touchdown' -> same first-TD flag",
+    parseTouchdownProp("Gibbs first touchdown"),
+    {
+      playerName: "Gibbs",
+      propType: "ANY",
+      unsupported: "this bet is a first-touchdown prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  check(
+    "parseTouchdownProp: 'Gibbs 1st TD' -> same first-TD flag",
+    parseTouchdownProp("Gibbs 1st TD"),
+    {
+      playerName: "Gibbs",
+      propType: "ANY",
+      unsupported: "this bet is a first-touchdown prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  check(
+    "parseTouchdownProp: 'Gibbs 1st touchdown' -> same first-TD flag",
+    parseTouchdownProp("Gibbs 1st touchdown"),
+    {
+      playerName: "Gibbs",
+      propType: "ANY",
+      unsupported: "this bet is a first-touchdown prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  check(
+    "parseTouchdownProp: 'Gibbs 2+ TDs' -> parses as a TD-shaped prop, but flagged unsupported (multi-TD)",
+    parseTouchdownProp("Gibbs 2+ TDs"),
+    {
+      playerName: "Gibbs",
+      propType: "ANY",
+      unsupported: "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  check(
+    "parseTouchdownProp: 'Gibbs 2+ touchdowns' -> same multi-TD flag",
+    parseTouchdownProp("Gibbs 2+ touchdowns"),
+    {
+      playerName: "Gibbs",
+      propType: "ANY",
+      unsupported: "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  check(
+    "parseTouchdownProp: 'Gibbs 3+ TDs' -> same multi-TD flag",
+    parseTouchdownProp("Gibbs 3+ TDs"),
+    {
+      playerName: "Gibbs",
+      propType: "ANY",
+      unsupported: "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+
+  // First/multi-TD still classify as PLAYER_PROP at import (not the wrong
+  // MONEYLINE default a `null` parseTouchdownProp return would produce) -
+  // this is what keeps them routed to resolvePlayerProp/resolveTouchdownProp
+  // at grading time instead of being graded as a team-moneyline bet.
+  const firstTdPick = parseCatalog(`Capper\nBills Gibbs first TD`, []).picks[0];
+  check("parseCatalog: first-TD pick -> betType PLAYER_PROP, not MONEYLINE", firstTdPick?.betType, "PLAYER_PROP");
+  const multiTdPick = parseCatalog(`Capper\nBills Gibbs 2+ TDs`, []).picks[0];
+  check("parseCatalog: multi-TD pick -> betType PLAYER_PROP, not MONEYLINE", multiTdPick?.betType, "PLAYER_PROP");
 
   console.log(failures === 0 ? `\nAll checks passed.` : `\n${failures} check(s) FAILED.`);
   process.exit(failures === 0 ? 0 : 1);

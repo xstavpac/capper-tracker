@@ -227,6 +227,60 @@ async function main() {
     { outcome: null, reason: "this bet text isn't a recognized touchdown prop" }
   );
 
+  // ---- First-TD/multi-TD safety fix: these must decline before ever
+  // reaching the box-score fetch/match/scored-computation that anytime-TD
+  // grading uses below. Proven the same way the sport guard above is proven
+  // - an obviously-fake eventId that would hang/fail on a real fetch if the
+  // unsupported check didn't fire first. ----
+  await expectAsync(
+    "First-TD text declines before any box-score fetch, not silently graded as anytime-TD",
+    resolveTouchdownProp(
+      { betDetail: "Gibbs first TD", homeTeam: "Detroit Lions", awayTeam: "Green Bay Packers" },
+      "fake-event-id",
+      "NFL"
+    ),
+    {
+      outcome: null,
+      reason: "this bet is a first-touchdown prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  await expectAsync(
+    "'1st touchdown' phrasing: same first-TD decline",
+    resolveTouchdownProp(
+      { betDetail: "Gibbs 1st touchdown", homeTeam: "Detroit Lions", awayTeam: "Green Bay Packers" },
+      "fake-event-id",
+      "NFL"
+    ),
+    {
+      outcome: null,
+      reason: "this bet is a first-touchdown prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  await expectAsync(
+    "Multi-TD text ('2+ TDs') declines before any box-score fetch, not silently graded as anytime-TD",
+    resolveTouchdownProp(
+      { betDetail: "Gibbs 2+ TDs", homeTeam: "Detroit Lions", awayTeam: "Green Bay Packers" },
+      "fake-event-id",
+      "NFL"
+    ),
+    {
+      outcome: null,
+      reason: "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  await expectAsync(
+    "'3+ touchdowns' phrasing: same multi-TD decline",
+    resolveTouchdownProp(
+      { betDetail: "Gibbs 3+ touchdowns", homeTeam: "Detroit Lions", awayTeam: "Green Bay Packers" },
+      "fake-event-id",
+      "NFL"
+    ),
+    {
+      outcome: null,
+      reason: "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }

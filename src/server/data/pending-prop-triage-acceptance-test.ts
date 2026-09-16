@@ -113,6 +113,35 @@ async function main() {
     "matched game, but this bet text isn't a recognized touchdown prop"
   );
 
+  // ---- 3. First-TD prop: routes to manual review with the specific
+  //         first-TD reason, not silently graded as anytime-TD. No stats
+  //         mock needed - resolveTouchdownProp declines before any
+  //         box-score fetch, same as case 1 above declines before its own
+  //         fetch on a missing Over/Under line. ----
+  patch("pick.findMany", async () => [
+    {
+      id: "pick-3",
+      betType: "PLAYER_PROP",
+      betDetail: "Lions Jahmyr Gibbs first TD",
+      propMarket: "TD",
+      playerName: "Lions Jahmyr Gibbs",
+      line: null,
+      odds: -110,
+      units: 1,
+      homeTeam: "Buffalo Bills",
+      awayTeam: "Houston Texans",
+      gameTime: GAME_TIME,
+      capper: { id: "capper-1", name: "Test Capper" } as unknown as Capper,
+      sport,
+    } as unknown as Pick,
+  ]);
+  const [firstTdPick] = await getPendingPicksForUser("user-1");
+  expect(
+    "pending first-TD pick routes to manual review with the specific reason, not graded as anytime-TD",
+    firstTdPick.unmatchedReason,
+    "matched game, but this bet is a first-touchdown prop, which this app doesn't grade automatically yet - needs manual grading"
+  );
+
   restoreAll();
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
