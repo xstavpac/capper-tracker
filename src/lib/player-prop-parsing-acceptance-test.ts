@@ -18,6 +18,8 @@
 // differs from before.
 import { parsePlayerProp, parseTouchdownProp } from "@/lib/bet-line";
 import { parseCatalog } from "@/lib/parse-catalog";
+import { recoverUnresolvedLines } from "@/lib/recover-unresolved-lines";
+import type { RosterPlayer } from "@/server/data/nfl-roster";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -260,6 +262,150 @@ function main() {
   check("parseCatalog: first-TD pick -> betType PLAYER_PROP, not MONEYLINE", firstTdPick?.betType, "PLAYER_PROP");
   const multiTdPick = parseCatalog(`Capper\nBills Gibbs 2+ TDs`, []).picks[0];
   check("parseCatalog: multi-TD pick -> betType PLAYER_PROP, not MONEYLINE", multiTdPick?.betType, "PLAYER_PROP");
+
+  // --- PART E (bare stat-category words, real catalog-import gap): the
+  // stat-category word alone ("rushing", "passing", "rec") must resolve the
+  // same market as when "yards"/"receptions" is spelled out, and "yds"/"yrd"
+  // abbreviations of "yards" must be treated equivalently. "rec" alone (no
+  // yards qualifier) resolves RECEPTIONS, matching the real-world convention
+  // that a bare "REC" column means receptions count, not yards - only
+  // promoted to REC_YDS when a yards qualifier is actually attached. ---
+
+  check(
+    "parsePlayerProp: bare 'Gibbs over 65.5 rushing' (no 'yards') -> RUSH_YDS",
+    parsePlayerProp("Gibbs over 65.5 rushing"),
+    { playerName: "Gibbs", propMarket: "RUSH_YDS" }
+  );
+  check(
+    "parsePlayerProp: bare 'Gibbs u 1.5 pass' (no 'yards') -> PASS_YDS",
+    parsePlayerProp("Gibbs u 1.5 pass"),
+    { playerName: "Gibbs", propMarket: "PASS_YDS" }
+  );
+  check(
+    "parsePlayerProp: bare 'Gibbs over 4.5 rec' (no 'yards'/'receptions') -> RECEPTIONS",
+    parsePlayerProp("Gibbs over 4.5 rec"),
+    { playerName: "Gibbs", propMarket: "RECEPTIONS" }
+  );
+  check(
+    "parsePlayerProp: bare 'Goff o 245.5 passing' (no 'yards') -> PASS_YDS",
+    parsePlayerProp("Goff o 245.5 passing"),
+    { playerName: "Goff", propMarket: "PASS_YDS" }
+  );
+  check(
+    "parsePlayerProp: 'rush yds' abbreviation still works (regression)",
+    parsePlayerProp("Gibbs over 65.5 rush yds"),
+    { playerName: "Gibbs", propMarket: "RUSH_YDS" }
+  );
+  check(
+    "parsePlayerProp: 'rushing yrd' - the 'yrd' abbreviation of yards, previously unrecognized -> RUSH_YDS",
+    parsePlayerProp("Gibbs over 65.5 rushing yrd"),
+    { playerName: "Gibbs", propMarket: "RUSH_YDS" }
+  );
+  check(
+    "parsePlayerProp: 'rushing yrds' (plural yrd abbreviation) -> RUSH_YDS",
+    parsePlayerProp("Gibbs over 65.5 rushing yrds"),
+    { playerName: "Gibbs", propMarket: "RUSH_YDS" }
+  );
+  // Previously-working, yards-qualified forms must still resolve to the
+  // exact same market/playerName as before this fix (no regression from
+  // making the yards qualifier optional).
+  check(
+    "parsePlayerProp: 'Gibbs over 65.5 rushing yards' (already worked) -> RUSH_YDS, unchanged",
+    parsePlayerProp("Gibbs over 65.5 rushing yards"),
+    { playerName: "Gibbs", propMarket: "RUSH_YDS" }
+  );
+  check(
+    "parsePlayerProp: 'Gibbs over 4.5 receptions' (already worked) -> RECEPTIONS, unchanged",
+    parsePlayerProp("Gibbs over 4.5 receptions"),
+    { playerName: "Gibbs", propMarket: "RECEPTIONS" }
+  );
+  check(
+    "parsePlayerProp: 'Goff over 245.5 passing yards' (already worked) -> PASS_YDS, unchanged",
+    parsePlayerProp("Goff over 245.5 passing yards"),
+    { playerName: "Goff", propMarket: "PASS_YDS" }
+  );
+
+  const bareRushPick = parseCatalog(`Capper\nBills Gibbs over 65.5 rushing`, []).picks[0];
+  check("parseCatalog: bare 'rushing' (team-prefixed) pick -> betType PLAYER_PROP", bareRushPick?.betType, "PLAYER_PROP");
+
+  // --- PART F (Part B: bare team-less TD-market lines no longer vanish) -
+  // looksLikePick now recognizes touchdown/td/atd directly, so these route
+  // to the unresolved bucket (same graceful-decline path as an unresolved
+  // player-prop line) instead of being silently misread as a new
+  // capper-name header. Verified through the FULL parseCatalog entry point,
+  // not parseTouchdownProp/parsePlayerProp called directly - the earlier
+  // TD-parsing correctness fix never exercised this path at all. ---
+
+  const bareTdLines = [
+    "Gibbs touchdown",
+    "Gibbs TD",
+    "Gibbs anytime touchdown",
+    "Gibbs anytime TD",
+    "Gibbs ATD",
+    "Gibbs first touchdown",
+    "Gibbs first TD",
+    "Gibbs 1st TD",
+    "Gibbs 2+ TDs",
+    "Gibbs 2+ touchdowns",
+  ];
+  for (const line of bareTdLines) {
+    const result = parseCatalog(`godfather\n${line}`, []);
+    check(`parseCatalog: bare TD line '${line}' -> 0 picks, lands in unresolved (not silently swallowed)`, {
+      picks: result.picks.length,
+      unresolved: result.unresolved,
+    }, { picks: 0, unresolved: [line] });
+    check(`parseCatalog: bare TD line '${line}' -> capper attribution preserved ("godfather"), not overwritten`, result.unresolvedCapperNames, [
+      "godfather",
+    ]);
+  }
+
+  // A multi-line paste mixing a Part A bare-form line and a Part B bare-TD
+  // line under the same capper must not corrupt either line or the capper
+  // attribution of a real, unrelated pick that follows.
+  const mixed = parseCatalog(`godfather\nGibbs over 65.5 rushing\nGibbs touchdown\nLions -3.5`, []);
+  check("parseCatalog: mixed paste -> the resolvable 'Lions -3.5' pick still comes through", mixed.picks.length, 1);
+  check("parseCatalog: mixed paste -> that pick keeps the correct capper attribution", mixed.picks[0]?.capperName, "godfather");
+  check("parseCatalog: mixed paste -> both bare-form lines land in unresolved, in order, neither corrupting the other", mixed.unresolved, [
+    "Gibbs over 65.5 rushing",
+    "Gibbs touchdown",
+  ]);
+  check("parseCatalog: mixed paste -> both unresolved lines keep the correct capper attribution", mixed.unresolvedCapperNames, [
+    "godfather",
+    "godfather",
+  ]);
+
+  // End-to-end: once routed to unresolved (not swallowed), the existing
+  // roster-fallback recovery pass (added for Part A's "Gibbs over 65.5
+  // rushing yards" case) resolves BOTH a Part A bare-form line and a Part B
+  // bare TD line into real PLAYER_PROP picks, purely from a bare surname
+  // matched against the cached NFL roster - proving the fix isn't just
+  // "stops vanishing" but actually completes the import.
+  const fixtureRoster: RosterPlayer[] = [
+    {
+      playerName: "Jahmyr Gibbs",
+      firstName: "Jahmyr",
+      lastName: "Gibbs",
+      team: "Detroit Lions",
+      position: "RB",
+      espnPlayerId: "1",
+    },
+  ];
+  const { unresolved, unresolvedCapperNames } = parseCatalog(
+    `godfather\nGibbs over 65.5 rushing\nGibbs touchdown`,
+    []
+  );
+  const recovery = recoverUnresolvedLines(unresolved, unresolvedCapperNames, [], fixtureRoster);
+  check("recoverUnresolvedLines: both bare-form lines fully recover, none left unresolved", recovery.stillUnresolved, []);
+  check(
+    "recoverUnresolvedLines: bare 'rushing' line recovers as an NFL PLAYER_PROP pick for the right capper",
+    { sportName: recovery.recovered[0]?.sportName, betType: recovery.recovered[0]?.betType, capperName: recovery.recovered[0]?.capperName },
+    { sportName: "NFL", betType: "PLAYER_PROP", capperName: "godfather" }
+  );
+  check(
+    "recoverUnresolvedLines: bare TD line recovers as an NFL PLAYER_PROP pick for the right capper",
+    { sportName: recovery.recovered[1]?.sportName, betType: recovery.recovered[1]?.betType, capperName: recovery.recovered[1]?.capperName },
+    { sportName: "NFL", betType: "PLAYER_PROP", capperName: "godfather" }
+  );
 
   console.log(failures === 0 ? `\nAll checks passed.` : `\n${failures} check(s) FAILED.`);
   process.exit(failures === 0 ? 0 : 1);
