@@ -426,17 +426,42 @@ function main() {
     check("NCAAF list: no duplicate keys", new Set(keys).size, keys.length);
 
     // (a) Every key resolves to NCAAF from realistic capper text (the key +
-    // a bet keyword) - no mascot needed. "liberty" is the one deliberate
+    // a bet keyword) - no mascot needed. "liberty" is a deliberate
     // exception: it's shared with WNBA's New York Liberty, so a bare
     // "Liberty" is now routed to the schedule-first ambiguous hierarchy
     // (see PART N) rather than resolving to either sport directly. "Liberty
     // Flames" and two-team lines still resolve NCAAF (covered in PART H).
+    //
+    // The 16 keys below are the SAME exception for the SAME reason - each is
+    // ALSO a real, currently-tracked pro franchise's own brand name (Texas
+    // Rangers, Pittsburgh Pirates/Steelers/Penguins, Florida Panthers,
+    // Washington's five DC teams, etc. - see PART S, the Texas/Pittsburgh
+    // mis-import fix). A bare pick with one of these words alone is
+    // genuinely ambiguous and must NOT resolve to NCAAF with no signal;
+    // each school's own full mascot name ("Texas Longhorns", "Pittsburgh
+    // Panthers") still resolves NCAAF directly, exactly like "Liberty
+    // Flames" does for "liberty".
+    const AMBIGUOUS_CITY_SCHOOL_KEYS = new Set([
+      "liberty", "arizona", "buffalo", "charlotte", "cincinnati", "colorado",
+      "houston", "indiana", "memphis", "miami", "minnesota", "pittsburgh",
+      "tennessee", "texas", "utah", "washington", "florida",
+    ]);
     const misresolved = keys.filter((key) => {
-      if (key === "liberty") return false;
+      if (AMBIGUOUS_CITY_SCHOOL_KEYS.has(key)) return false;
       const pick = parseCatalog(`Capper\n${key} ML`, []).picks[0];
       return pick?.sportName !== "NCAAF";
     });
-    check("NCAAF list: every key (except bare 'liberty') resolves to NCAAF from a bare pick", misresolved, []);
+    check("NCAAF list: every key (except the 17 pro-franchise-collision cities) resolves to NCAAF from a bare pick", misresolved, []);
+
+    // (a2) ...and each of those 17 IS genuinely ambiguous from a bare pick
+    // (not silently dropped or misresolved some OTHER way) - it surfaces
+    // with the school itself as one of the real candidates.
+    const notAmbiguous = Array.from(AMBIGUOUS_CITY_SCHOOL_KEYS).filter((key) => {
+      const pick = parseCatalog(`Capper\n${key} ML`, []).picks[0];
+      const canonical = NCAAF_CANONICAL_SUFFIX[key];
+      return !(pick?.ambiguousKey === key && pick.ambiguous?.some((o) => o.nickname === canonical));
+    });
+    check("every pro-franchise-collision city surfaces ambiguous with its NCAAF school as a candidate", notAmbiguous, []);
 
     const liberty = parseCatalog(`Capper\nLiberty ML`, []).picks[0];
     check("bare 'Liberty' surfaces the ambiguous prompt (WNBA + NCAAF), not a direct resolve", {
@@ -539,8 +564,14 @@ function main() {
     const huskies = parseCatalog(`Capper\nWashington Huskies ML`, []).picks[0];
     check("real NCAAF 'Washington Huskies' still resolves NCAAF", huskies?.sportName, "NCAAF");
 
+    // Bare "Washington" (no mascot) USED to resolve straight to the Huskies
+    // (NCAAF) - a real, known gap flagged when this fix originally shipped
+    // (see the AMBIGUOUS_NICKNAMES comment in parse-catalog.ts) and closed
+    // together with the Texas/Pittsburgh mis-import fix in PART S: DC's five
+    // pro franchises are just as real a reading of bare "Washington" as the
+    // Huskies, so it now surfaces ambiguous instead of silently guessing.
     const bareWashington = parseCatalog(`Capper\nWashington ML`, []).picks[0];
-    check("bare 'Washington' (no mascot) still resolves NCAAF", bareWashington?.sportName, "NCAAF");
+    check("bare 'Washington' (no mascot) is now ambiguous, not a silent NCAAF guess", { sport: bareWashington?.sportName, key: bareWashington?.ambiguousKey }, { sport: "", key: "washington" });
 
     const bareMystics = parseCatalog(`Capper\nMystics ML`, []).picks[0];
     check("bare 'Mystics' (no city) still resolves WNBA, unaffected", bareMystics?.sportName, "WNBA");
@@ -778,7 +809,14 @@ Mystics +4.5 (1u)`;
       parseCatalog(`Cap\nMiami (OH) RedHawks -3`, []).picks[0]?.sportName,
       "NCAAF"
     );
-    check("bare 'Miami -3' still resolves NCAAF as Miami FL (Hurricanes)", parseCatalog(`Cap\nMiami -3`, []).picks[0]?.teamNicknames, ["miami"]);
+    // Bare "Miami -3" (no "OH"/mascot) is genuinely ambiguous among the
+    // Dolphins/Heat/Marlins/Hurricanes - see PART S below (the
+    // Texas/Pittsburgh mis-import fix) for why this no longer silently
+    // guesses NCAAF the way it used to.
+    {
+      const bareMiami = parseCatalog(`Cap\nMiami -3`, []).picks[0];
+      check("bare 'Miami -3' is now ambiguous, not a silent NCAAF guess", { sport: bareMiami?.sportName, key: bareMiami?.ambiguousKey }, { sport: "", key: "miami" });
+    }
 
     // Liberty (see PART D) - the NCAAF entry still covers the non-bare forms.
     check("'Liberty Flames -7' resolves NCAAF", parseCatalog(`Cap\nLiberty Flames -7`, []).picks[0]?.sportName, "NCAAF");
@@ -883,18 +921,14 @@ NC State +4.5`;
   {
     // --- Fix 2: SPORTS_PLACE_NAMES guard -> unresolved, not phantom ATP ---
     // "Ottawa"/"Denver"/"New York" (the original examples here) are now
-    // AMBIGUOUS_NICKNAMES city keys themselves (Fix 3 below). The 14 cities
-    // still left in SPORTS_PLACE_NAMES (arizona/buffalo/.../washington - see
-    // its own comment) were NEVER actually reachable through this guard in
-    // the first place, before or after this build: every one of them is
-    // ALSO an NCAAF_SCHOOLS bare key, so detectSport's own nickname pass
-    // (which always runs before findAmbiguousNickname/findPlayerPick are
-    // ever tried - see detectSport pass 1) already resolves it to NCAAF
-    // first. SPORTS_PLACE_NAMES's own pre-existing comment already called
-    // this out ("redundant-but-safe defense if that list ever changes") -
-    // this build doesn't change that; it's still true, just now true for
-    // ALL 14 remaining entries instead of most of them. Confirmed below
-    // together with Fix 3's "still resolves NCAAF, not promoted" checks.
+    // AMBIGUOUS_NICKNAMES city keys themselves (Fix 3 below). SPORTS_PLACE_NAMES
+    // itself is now empty (see its own comment): the 14 cities that used to
+    // live there as NCAAF-collision negative guards (arizona/buffalo/.../
+    // washington), plus "texas"/"florida" which were misfiled in
+    // US_STATE_NAMES, are ALL promoted to real AMBIGUOUS_NICKNAMES keys now
+    // (PART S, the Texas/Pittsburgh mis-import fix) - closing the exact gap
+    // this comment used to describe as "already succeeds" and therefore
+    // untouched.
     //
     // A real, currently-reachable `unresolved` case still needs a place name
     // that ISN'T an NCAAF school AND wasn't promoted - the state names in
@@ -986,10 +1020,15 @@ NC State +4.5`;
       "NBA"
     );
 
-    // NCAAF-collision cities are NOT promoted - detectSport still claims
-    // them for their school directly, unaffected by this build.
-    check("'Houston -6.5' still resolves NCAAF (Cougars, not promoted)", parseCatalog(`Cap\nHouston -6.5`, []).picks[0]?.sportName, "NCAAF");
-    check("'Miami -6.5' still resolves NCAAF (Hurricanes, not promoted)", parseCatalog(`Cap\nMiami -6.5`, []).picks[0]?.sportName, "NCAAF");
+    // NCAAF-collision cities ARE now promoted too (PART S, the Texas/
+    // Pittsburgh mis-import fix) - detectSport no longer claims them for
+    // their school with no signal; each surfaces ambiguous instead.
+    {
+      const houston = parseCatalog(`Cap\nHouston -6.5`, []).picks[0];
+      check("'Houston -6.5' is now ambiguous, not a silent NCAAF guess (Cougars is one candidate)", { sport: houston?.sportName, key: houston?.ambiguousKey }, { sport: "", key: "houston" });
+      const miami = parseCatalog(`Cap\nMiami -6.5`, []).picks[0];
+      check("'Miami -6.5' is now ambiguous, not a silent NCAAF guess (Hurricanes is one candidate)", { sport: miami?.sportName, key: miami?.ambiguousKey }, { sport: "", key: "miami" });
+    }
   }
 
   // ==========================================================================
@@ -1286,8 +1325,13 @@ NC State +4.5`;
       bet: miamiVsPitt?.betType,
       side: miamiVsPitt?.totalSide,
     }, { sport: "NCAAF", teams: ["miami (oh) redhawks", "pittsburgh panthers"], bet: "TOTAL", side: "under" });
-    // The bare "Miami -3" (no state) is still Miami FL (Hurricanes), untouched.
-    check("bare 'Miami -3' still Miami FL, not shadowed by the comma alias", parseCatalog(`Cap\nMiami -3`, []).picks[0]?.teamNicknames, ["miami"]);
+    // The bare "Miami -3" (no state) is unaffected by the comma alias either
+    // way - it's ambiguous among the Dolphins/Heat/Marlins/Hurricanes now
+    // (PART S), same as the other bare 'Miami -3' check above.
+    {
+      const bareMiami2 = parseCatalog(`Cap\nMiami -3`, []).picks[0];
+      check("bare 'Miami -3' is ambiguous, not shadowed by the comma alias", { sport: bareMiami2?.sportName, key: bareMiami2?.ambiguousKey }, { sport: "", key: "miami" });
+    }
 
     // --- Item 4: trailing-token guard on "State" and institutional suffixes ---
     const tnState = parseCatalog(`BEEZOWINS\nTennessee State +47.5`, []).picks[0];
@@ -1767,6 +1811,90 @@ NC State +4.5`;
 
     const noHeader = parseCatalog("Bare Player Prop Over 3.5 Rushing Yards", []);
     check("no header at all -> unresolvedCapperNames is 'Unknown'", noHeader.unresolvedCapperNames, ["Unknown"]);
+  }
+
+  // ==========================================================================
+  // PART S - Texas/Pittsburgh mis-import fix (2026-09): two real reported
+  // cases where a bare city/state-name pick silently attached to the WRONG
+  // game entirely and imported cleanly, with no warning and no ambiguity
+  // flag - the same shape of bug the AMBIGUOUS_NICKNAMES table exists to
+  // prevent for shared NICKNAMES (Cardinals, Bucs, Jets...), but that a
+  // hardcoded "these 14 cities collide with an NCAAF school, leave them
+  // alone" exclusion list (plus "texas"/"florida" separately misfiled as
+  // non-pro-franchise states) had accidentally carved out entirely:
+  //   1. "Frankie Diamonds - Texas Moneyline" (meant the MLB Texas Rangers,
+  //      a game from the day before) silently attached to a Texas Longhorns
+  //      (NCAAF) game days in the future.
+  //   2. "TIGERS KITCHEN - Pittsburgh Moneyline" (meant the MLB Pittsburgh
+  //      Pirates, a game from days before) silently attached to a
+  //      Pittsburgh Panthers (NCAAF) game days in the future.
+  // Root cause: detectSport's pass 1 resolves a bare word straight to
+  // whichever TEAM_SPORT_ENTRIES phrase matches it with total confidence,
+  // and "texas"/"pittsburgh" (and 14 similar cities) were NCAAF_SCHOOLS
+  // keys but were never also AMBIGUOUS_NICKNAMES keys - so pass 1 found
+  // exactly one candidate (the NCAAF school) and returned immediately,
+  // never reaching findAmbiguousNickname/the schedule-first hierarchy at
+  // all. The fix promotes all 16 affected cities (see the AMBIGUOUS_NICKNAMES
+  // "Bare CITY names" comment in parse-catalog.ts) into real
+  // AMBIGUOUS_NICKNAMES keys, so they run the exact same
+  // schedule -> season -> pick-context hierarchy every other ambiguous
+  // nickname already does - never a silent guess.
+  // ==========================================================================
+  console.log("\n########## PART S: Texas/Pittsburgh mis-import fix (bare city/state collides with an NCAAF school) ##########");
+  {
+    // --- The exact two reported cases: bare city/state name is now flagged
+    // ambiguous (not silently resolved), and the real, live-schedule name of
+    // the intended pro team AND the NCAAF school it was wrongly attaching to
+    // are both present as real candidates. ---
+    const texasPick = parseCatalog(`Frankie Diamonds\nTexas Moneyline`, []).picks[0];
+    check(
+      "'Texas Moneyline' is flagged ambiguous, not silently attached to the Longhorns",
+      { sport: texasPick?.sportName, key: texasPick?.ambiguousKey, labels: texasPick?.ambiguous?.map((o) => o.label).sort() },
+      { sport: "", key: "texas", labels: ["Texas Longhorns (NCAAF)", "Texas Rangers (MLB)"].sort() }
+    );
+
+    const pittsburghPick = parseCatalog(`Tigers Kitchen\nPittsburgh Moneyline`, []).picks[0];
+    check(
+      "'Pittsburgh Moneyline' is flagged ambiguous, not silently attached to the Panthers",
+      { sport: pittsburghPick?.sportName, key: pittsburghPick?.ambiguousKey, labels: pittsburghPick?.ambiguous?.map((o) => o.label).sort() },
+      {
+        sport: "",
+        key: "pittsburgh",
+        labels: [
+          "Pittsburgh Pirates (MLB)", "Pittsburgh Steelers (NFL)",
+          "Pittsburgh Penguins (NHL)", "Pittsburgh Panthers (NCAAF)",
+        ].sort(),
+      }
+    );
+
+    // --- Negative controls: an explicit, unambiguous nickname for either
+    // side of each collision still resolves immediately, exactly as before -
+    // this fix is scoped to the bare city/state word only. ---
+    const rangersExplicit = parseCatalog(`Cap\nTexas Rangers Moneyline`, []).picks[0];
+    check("'Texas Rangers Moneyline' (explicit MLB nickname) still resolves MLB immediately", { sport: rangersExplicit?.sportName, teams: rangersExplicit?.teamNicknames }, { sport: "MLB", teams: ["texas rangers"] });
+
+    const longhornsExplicit = parseCatalog(`Cap\nTexas Longhorns Moneyline`, []).picks[0];
+    check("'Texas Longhorns Moneyline' (explicit NCAAF school) still resolves NCAAF immediately", longhornsExplicit?.sportName, "NCAAF");
+
+    const piratesExplicit = parseCatalog(`Cap\nPittsburgh Pirates Moneyline`, []).picks[0];
+    check("'Pittsburgh Pirates Moneyline' (explicit MLB nickname) still resolves MLB immediately", { sport: piratesExplicit?.sportName, teams: piratesExplicit?.teamNicknames }, { sport: "MLB", teams: ["pirates"] });
+
+    const steelersExplicit = parseCatalog(`Cap\nPittsburgh Steelers Moneyline`, []).picks[0];
+    check("'Pittsburgh Steelers Moneyline' (explicit NFL nickname) still resolves NFL immediately", { sport: steelersExplicit?.sportName, teams: steelersExplicit?.teamNicknames }, { sport: "NFL", teams: ["steelers"] });
+
+    const panthersExplicit = parseCatalog(`Cap\nPittsburgh Panthers Moneyline`, []).picks[0];
+    check("'Pittsburgh Panthers Moneyline' (explicit NCAAF school) still resolves NCAAF immediately", panthersExplicit?.sportName, "NCAAF");
+
+    // --- A third real ambiguous city/state name found while scoping this
+    // bug (Florida: NHL's Florida Panthers vs NCAAF's Florida Gators, same
+    // shape as Texas/Pittsburgh - was misfiled in US_STATE_NAMES on the
+    // wrong assumption Florida had no state-branded pro franchise). ---
+    const floridaPick = parseCatalog(`Cap\nFlorida Moneyline`, []).picks[0];
+    check(
+      "'Florida Moneyline' is flagged ambiguous (Panthers vs Gators), not silently attached to the Gators",
+      { sport: floridaPick?.sportName, key: floridaPick?.ambiguousKey, labels: floridaPick?.ambiguous?.map((o) => o.label).sort() },
+      { sport: "", key: "florida", labels: ["Florida Gators (NCAAF)", "Florida Panthers (NHL)"].sort() }
+    );
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

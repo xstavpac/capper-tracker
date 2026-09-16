@@ -300,21 +300,40 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
   // through this same pipeline with a single-element candidate list, rather
   // than being special-cased as an unambiguous nickname.
   //
-  // Deliberately EXCLUDED from this promotion - still SPORTS_PLACE_NAMES-only
-  // negative guards, unchanged - is any city whose bare name is ALSO an
-  // NCAAF_SCHOOLS key: arizona, buffalo, charlotte, cincinnati, colorado,
-  // houston, indiana, memphis, miami, minnesota, pittsburgh, tennessee,
-  // utah, washington. detectSport's pass 1/2 already resolves a bare one of
-  // those straight to its NCAAF school today (a case that "already
-  // succeeds"), and adding the same bare string as an AMBIGUOUS_NICKNAMES
-  // key would make detectSport's own `if (AMBIGUOUS_NICKNAMES[phrase])
-  // continue` guard (see pass 1 above) skip that NCAAF match entirely -
-  // silently breaking a working case to "fix" one that wasn't broken.
-  // "washington" in particular is a known, NOT-newly-introduced gap: bare
-  // "Washington" already resolves to Washington STATE's Huskies today,
-  // ahead of DC's Commanders/Wizards/Capitals/Nationals/Mystics - real
-  // ambiguity this table can't safely take over without regressing the
-  // school case; flagged as a follow-up, not fixed here.
+  // A city whose bare name is ALSO an NCAAF_SCHOOLS key (arizona, buffalo,
+  // charlotte, cincinnati, colorado, houston, indiana, memphis, miami,
+  // minnesota, pittsburgh, tennessee, texas, utah, washington, florida) used
+  // to be deliberately EXCLUDED from this promotion, on the theory that
+  // detectSport's pass 1/2 already resolves a bare one of those straight to
+  // its NCAAF school (a case that "already succeeds") and adding the same
+  // bare string as an AMBIGUOUS_NICKNAMES key would make detectSport's own
+  // `if (AMBIGUOUS_NICKNAMES[phrase]) continue` guard (see pass 1 above) skip
+  // that NCAAF match entirely - "fixing" a case that wasn't broken.
+  //
+  // That reasoning had a real hole: "already succeeds" only meant detectSport
+  // returned SOME sport with total confidence - it never checked whether the
+  // bare word was ALSO a real, currently-tracked pro franchise's own brand
+  // name, which every one of these is (Pittsburgh Pirates/Steelers/Penguins,
+  // Texas Rangers, Miami Dolphins/Heat/Marlins, Florida Panthers, Washington
+  // Commanders/Wizards/Capitals/Nationals/Mystics, and so on). Two real
+  // reported mis-imports proved this out: "Texas Moneyline" (a Rangers pick,
+  // days-old and already played) silently attached to a future NCAAF
+  // Longhorns game, and "Pittsburgh Moneyline" (a Pirates pick) silently
+  // attached to a future NCAAF Panthers game - both graded against the wrong
+  // outcome with no warning, no clarification question, and no
+  // unresolved/manual-review flag. "washington" was already flagged here as
+  // this exact gap before the fix (bare "Washington" resolving to the
+  // Huskies ahead of DC's five pro franchises); the other 15 have the
+  // identical shape and are fixed the same way. Every one of these 16 is now
+  // a real AMBIGUOUS_NICKNAMES key below, its NCAAF school included as one
+  // candidate alongside every pro franchise that is genuinely branded with
+  // that bare word (NOT every pro franchise merely located in that city - a
+  // team branded by its own city, like Detroit's Lions/Tigers/Pistons/Red
+  // Wings, isn't a candidate for a DIFFERENT city/state's bare-word key).
+  // This is exactly the mechanism a genuinely ambiguous nickname
+  // (Cardinals/Bucs/Jets) already uses - no new inference, just the same
+  // promotion Chicago/Boston/Atlanta/etc. already got, extended to the
+  // cities an incomplete exclusion list had left out.
   //
   // Every nickname below is the real, full live-schedule team name (same
   // convention as every entry above) - including the two cases where that
@@ -326,6 +345,14 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
   // keys for the same set of candidates, covering both real spellings
   // cappers use for one metro.
   anaheim: [{ label: "Anaheim Ducks (NHL)", sport: "NHL", nickname: "anaheim ducks" }],
+  // Phoenix Suns/Mercury and the (relocated) NHL side are branded by their
+  // own city (Phoenix) or now Utah - only the Diamondbacks/Cardinals are
+  // actually branded "Arizona", alongside the NCAAF school.
+  arizona: [
+    { label: "Arizona Diamondbacks (MLB)", sport: "MLB", nickname: "arizona diamondbacks" },
+    { label: "Arizona Cardinals (NFL)", sport: "NFL", nickname: "arizona cardinals" },
+    { label: "Arizona Wildcats (NCAAF)", sport: "NCAAF", nickname: "arizona wildcats" },
+  ],
   atlanta: [
     { label: "Atlanta Braves (MLB)", sport: "MLB", nickname: "atlanta braves" },
     { label: "Atlanta Falcons (NFL)", sport: "NFL", nickname: "atlanta falcons" },
@@ -337,6 +364,11 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "Baltimore Ravens (NFL)", sport: "NFL", nickname: "baltimore ravens" },
   ],
   brooklyn: [{ label: "Brooklyn Nets (NBA)", sport: "NBA", nickname: "brooklyn nets" }],
+  buffalo: [
+    { label: "Buffalo Bills (NFL)", sport: "NFL", nickname: "buffalo bills" },
+    { label: "Buffalo Sabres (NHL)", sport: "NHL", nickname: "buffalo sabres" },
+    { label: "Buffalo Bulls (NCAAF)", sport: "NCAAF", nickname: "buffalo bulls" },
+  ],
   calgary: [
     { label: "Calgary Flames (NHL)", sport: "NHL", nickname: "calgary flames" },
     { label: "Calgary Stampeders (CFL)", sport: "CFL", nickname: "calgary stampeders" },
@@ -344,6 +376,10 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
   carolina: [
     { label: "Carolina Panthers (NFL)", sport: "NFL", nickname: "carolina panthers" },
     { label: "Carolina Hurricanes (NHL)", sport: "NHL", nickname: "carolina hurricanes" },
+  ],
+  charlotte: [
+    { label: "Charlotte Hornets (NBA)", sport: "NBA", nickname: "charlotte hornets" },
+    { label: "Charlotte 49ers (NCAAF)", sport: "NCAAF", nickname: "charlotte 49ers" },
   ],
   chicago: [
     { label: "Chicago Cubs (MLB)", sport: "MLB", nickname: "chicago cubs" },
@@ -353,10 +389,22 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "Chicago Blackhawks (NHL)", sport: "NHL", nickname: "chicago blackhawks" },
     { label: "Chicago Sky (WNBA)", sport: "WNBA", nickname: "chicago sky" },
   ],
+  cincinnati: [
+    { label: "Cincinnati Reds (MLB)", sport: "MLB", nickname: "cincinnati reds" },
+    { label: "Cincinnati Bengals (NFL)", sport: "NFL", nickname: "cincinnati bengals" },
+    { label: "Cincinnati Bearcats (NCAAF)", sport: "NCAAF", nickname: "cincinnati bearcats" },
+  ],
   cleveland: [
     { label: "Cleveland Guardians (MLB)", sport: "MLB", nickname: "cleveland guardians" },
     { label: "Cleveland Browns (NFL)", sport: "NFL", nickname: "cleveland browns" },
     { label: "Cleveland Cavaliers (NBA)", sport: "NBA", nickname: "cleveland cavaliers" },
+  ],
+  // Denver's NBA/NFL teams are branded by the city, not the state - only the
+  // Rockies/Avalanche/Buffaloes use "Colorado" as their own name.
+  colorado: [
+    { label: "Colorado Rockies (MLB)", sport: "MLB", nickname: "colorado rockies" },
+    { label: "Colorado Avalanche (NHL)", sport: "NHL", nickname: "colorado avalanche" },
+    { label: "Colorado Buffaloes (NCAAF)", sport: "NCAAF", nickname: "colorado buffaloes" },
   ],
   columbus: [{ label: "Columbus Blue Jackets (NHL)", sport: "NHL", nickname: "columbus blue jackets" }],
   dallas: [
@@ -379,12 +427,35 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "Edmonton Oilers (NHL)", sport: "NHL", nickname: "edmonton oilers" },
     { label: "Edmonton Elks (CFL)", sport: "CFL", nickname: "edmonton elks" },
   ],
+  // Miami/Tampa Bay/Orlando's teams are branded by their own city - only the
+  // NHL's Panthers use "Florida" as their own name, alongside the NCAAF
+  // school. Previously misfiled in US_STATE_NAMES on the wrong assumption no
+  // Florida pro franchise used the bare state name.
+  florida: [
+    { label: "Florida Panthers (NHL)", sport: "NHL", nickname: "florida panthers" },
+    { label: "Florida Gators (NCAAF)", sport: "NCAAF", nickname: "florida gators" },
+  ],
   "golden state": [
     { label: "Golden State Warriors (NBA)", sport: "NBA", nickname: "golden state warriors" },
     { label: "Golden State Valkyries (WNBA)", sport: "WNBA", nickname: "golden state valkyries" },
   ],
   "green bay": [{ label: "Green Bay Packers (NFL)", sport: "NFL", nickname: "green bay packers" }],
   hamilton: [{ label: "Hamilton Tiger-Cats (CFL)", sport: "CFL", nickname: "hamilton tiger-cats" }],
+  houston: [
+    { label: "Houston Astros (MLB)", sport: "MLB", nickname: "houston astros" },
+    { label: "Houston Rockets (NBA)", sport: "NBA", nickname: "houston rockets" },
+    { label: "Houston Texans (NFL)", sport: "NFL", nickname: "houston texans" },
+    { label: "Houston Cougars (NCAAF)", sport: "NCAAF", nickname: "houston cougars" },
+  ],
+  // The Colts are Indianapolis-branded (their own key below); the Pacers and
+  // Fever are officially "Indiana" (see the header comment), which is also
+  // the bare NCAAF_SCHOOLS key for the Hoosiers - a genuinely different
+  // ambiguity from "indianapolis" below, not a duplicate of it.
+  indiana: [
+    { label: "Indiana Pacers (NBA)", sport: "NBA", nickname: "indiana pacers" },
+    { label: "Indiana Fever (WNBA)", sport: "WNBA", nickname: "indiana fever" },
+    { label: "Indiana Hoosiers (NCAAF)", sport: "NCAAF", nickname: "indiana hoosiers" },
+  ],
   indianapolis: [
     { label: "Indianapolis Colts (NFL)", sport: "NFL", nickname: "indianapolis colts" },
     { label: "Indiana Pacers (NBA)", sport: "NBA", nickname: "indiana pacers" },
@@ -414,9 +485,34 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "Los Angeles Dodgers (MLB)", sport: "MLB", nickname: "los angeles dodgers" },
     { label: "Los Angeles Sparks (WNBA)", sport: "WNBA", nickname: "los angeles sparks" },
   ],
+  memphis: [
+    { label: "Memphis Grizzlies (NBA)", sport: "NBA", nickname: "memphis grizzlies" },
+    { label: "Memphis Tigers (NCAAF)", sport: "NCAAF", nickname: "memphis tigers" },
+  ],
+  // Miami's own real mascot appearing after "Miami" ("Miami Heat/Dolphins")
+  // already resolves directly via that team's own unambiguous nickname
+  // before this key is ever reached - this only fires on the truly bare
+  // "Miami", which is genuinely ambiguous among all four.
+  miami: [
+    { label: "Miami Dolphins (NFL)", sport: "NFL", nickname: "miami dolphins" },
+    { label: "Miami Heat (NBA)", sport: "NBA", nickname: "miami heat" },
+    { label: "Miami Marlins (MLB)", sport: "MLB", nickname: "miami marlins" },
+    { label: "Miami Hurricanes (NCAAF)", sport: "NCAAF", nickname: "miami hurricanes" },
+  ],
   milwaukee: [
     { label: "Milwaukee Bucks (NBA)", sport: "NBA", nickname: "milwaukee bucks" },
     { label: "Milwaukee Brewers (MLB)", sport: "MLB", nickname: "milwaukee brewers" },
+  ],
+  // Every one of Minnesota's five pro franchises is branded with the state
+  // name itself (not a city), the most heavily-collided bare word in this
+  // table alongside Washington.
+  minnesota: [
+    { label: "Minnesota Twins (MLB)", sport: "MLB", nickname: "minnesota twins" },
+    { label: "Minnesota Vikings (NFL)", sport: "NFL", nickname: "minnesota vikings" },
+    { label: "Minnesota Timberwolves (NBA)", sport: "NBA", nickname: "minnesota timberwolves" },
+    { label: "Minnesota Wild (NHL)", sport: "NHL", nickname: "minnesota wild" },
+    { label: "Minnesota Lynx (WNBA)", sport: "WNBA", nickname: "minnesota lynx" },
+    { label: "Minnesota Golden Gophers (NCAAF)", sport: "NCAAF", nickname: "minnesota golden gophers" },
   ],
   montreal: [
     { label: "Montreal Canadiens (NHL)", sport: "NHL", nickname: "montreal canadiens" },
@@ -458,6 +554,17 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "Phoenix Suns (NBA)", sport: "NBA", nickname: "phoenix suns" },
     { label: "Phoenix Mercury (WNBA)", sport: "WNBA", nickname: "phoenix mercury" },
   ],
+  // The real reported mis-import that prompted this fix: a bare "Pittsburgh
+  // Moneyline" pick (meant as the Pirates) was silently attaching to a
+  // future NCAAF Panthers game with no warning - detectSport's pass 1 had
+  // resolved "pittsburgh" straight to the school (see the AMBIGUOUS_NICKNAMES
+  // header comment) because it was never in this table at all.
+  pittsburgh: [
+    { label: "Pittsburgh Pirates (MLB)", sport: "MLB", nickname: "pittsburgh pirates" },
+    { label: "Pittsburgh Steelers (NFL)", sport: "NFL", nickname: "pittsburgh steelers" },
+    { label: "Pittsburgh Penguins (NHL)", sport: "NHL", nickname: "pittsburgh penguins" },
+    { label: "Pittsburgh Panthers (NCAAF)", sport: "NCAAF", nickname: "pittsburgh panthers" },
+  ],
   portland: [
     { label: "Portland Trail Blazers (NBA)", sport: "NBA", nickname: "portland trail blazers" },
     { label: "Portland Fire (WNBA)", sport: "WNBA", nickname: "portland fire" },
@@ -495,6 +602,23 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "Tampa Bay Rays (MLB)", sport: "MLB", nickname: "tampa bay rays" },
     { label: "Tampa Bay Lightning (NHL)", sport: "NHL", nickname: "tampa bay lightning" },
   ],
+  // Nashville's NHL team is city-branded, not state-branded - only the
+  // Titans use "Tennessee" as their own name, alongside the NCAAF school.
+  tennessee: [
+    { label: "Tennessee Titans (NFL)", sport: "NFL", nickname: "tennessee titans" },
+    { label: "Tennessee Volunteers (NCAAF)", sport: "NCAAF", nickname: "tennessee volunteers" },
+  ],
+  // The real reported mis-import that prompted this fix: a bare "Texas
+  // Moneyline" pick (meant as the Rangers) was silently attaching to a
+  // future NCAAF Longhorns game with no warning - "texas" used to sit in
+  // US_STATE_NAMES on the wrong assumption Texas had no state-branded pro
+  // franchise; the Rangers are branded "Texas", not "Arlington"/"Dallas".
+  // Dallas's own Cowboys/Mavericks/Stars are city-branded, not "Texas", so
+  // they are deliberately NOT candidates here.
+  texas: [
+    { label: "Texas Rangers (MLB)", sport: "MLB", nickname: "texas rangers" },
+    { label: "Texas Longhorns (NCAAF)", sport: "NCAAF", nickname: "texas longhorns" },
+  ],
   toronto: [
     { label: "Toronto Blue Jays (MLB)", sport: "MLB", nickname: "toronto blue jays" },
     { label: "Toronto Raptors (NBA)", sport: "NBA", nickname: "toronto raptors" },
@@ -502,7 +626,29 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "Toronto Argonauts (CFL)", sport: "CFL", nickname: "toronto argonauts" },
     { label: "Toronto Tempo (WNBA)", sport: "WNBA", nickname: "toronto tempo" },
   ],
+  // The Jazz's own bare mascot ("Jazz ML") and the Mammoth's ("Mammoth ML")
+  // are each already unambiguous NBA/NHL nicknames on their own; this key
+  // only fires on the truly bare "Utah", genuinely ambiguous among all
+  // three.
+  utah: [
+    { label: "Utah Jazz (NBA)", sport: "NBA", nickname: "utah jazz" },
+    { label: "Utah Mammoth (NHL)", sport: "NHL", nickname: "utah mammoth" },
+    { label: "Utah Utes (NCAAF)", sport: "NCAAF", nickname: "utah utes" },
+  ],
   vancouver: [{ label: "Vancouver Canucks (NHL)", sport: "NHL", nickname: "vancouver canucks" }],
+  // A known, previously-flagged gap fixed by this same promotion: bare
+  // "Washington" used to resolve straight to Washington STATE's Huskies
+  // (NCAAF), ahead of DC's five real pro franchises, because it was never in
+  // this table. Now runs the same schedule -> season -> pick-context
+  // hierarchy as every other multi-candidate city.
+  washington: [
+    { label: "Washington Commanders (NFL)", sport: "NFL", nickname: "washington commanders" },
+    { label: "Washington Wizards (NBA)", sport: "NBA", nickname: "washington wizards" },
+    { label: "Washington Capitals (NHL)", sport: "NHL", nickname: "washington capitals" },
+    { label: "Washington Nationals (MLB)", sport: "MLB", nickname: "washington nationals" },
+    { label: "Washington Mystics (WNBA)", sport: "WNBA", nickname: "washington mystics" },
+    { label: "Washington Huskies (NCAAF)", sport: "NCAAF", nickname: "washington huskies" },
+  ],
   winnipeg: [
     { label: "Winnipeg Jets (NHL)", sport: "NHL", nickname: "winnipeg jets" },
     { label: "Winnipeg Blue Bombers (CFL)", sport: "CFL", nickname: "winnipeg blue bombers" },
@@ -523,16 +669,18 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
 // key identically, city or nickname - this split exists only for the
 // display-grouping consumer below.
 const AMBIGUOUS_CITY_KEYS = new Set<string>([
-  "boston", "anaheim", "atlanta", "baltimore", "brooklyn", "calgary",
-  "carolina", "chicago", "cleveland", "columbus", "dallas", "denver",
-  "detroit", "edmonton", "golden state", "green bay", "hamilton",
-  "indianapolis", "jacksonville", "kansas city", "las vegas", "vegas",
-  "los angeles", "milwaukee", "montreal", "nashville", "new england",
-  "new orleans", "nola", "new york", "oklahoma city", "orlando", "ottawa",
-  "philadelphia", "phoenix", "portland", "sacramento", "san antonio",
-  "san diego", "san francisco", "san jose", "saskatchewan", "seattle",
-  "st louis", "st. louis", "tampa", "tampa bay", "toronto", "vancouver",
-  "winnipeg",
+  "boston", "anaheim", "arizona", "atlanta", "baltimore", "brooklyn",
+  "buffalo", "calgary", "carolina", "charlotte", "chicago", "cincinnati",
+  "cleveland", "colorado", "columbus", "dallas", "denver", "detroit",
+  "edmonton", "florida", "golden state", "green bay", "hamilton", "houston",
+  "indiana", "indianapolis", "jacksonville", "kansas city", "las vegas",
+  "vegas", "los angeles", "memphis", "miami", "milwaukee", "minnesota",
+  "montreal", "nashville", "new england", "new orleans", "nola", "new york",
+  "oklahoma city", "orlando", "ottawa", "philadelphia", "phoenix",
+  "pittsburgh", "portland", "sacramento", "san antonio", "san diego",
+  "san francisco", "san jose", "saskatchewan", "seattle", "st louis",
+  "st. louis", "tampa", "tampa bay", "tennessee", "texas", "toronto", "utah",
+  "vancouver", "washington", "winnipeg",
 ]);
 
 const DISAMBIGUATED_TEAMS: TeamEntry[] = [
@@ -1689,8 +1837,8 @@ function looksLikeTeamAbbreviation(name: string): boolean {
 // pick) and "Shark - Boston Over 7.5" were both hitting it before their
 // cities were promoted to real AMBIGUOUS_NICKNAMES entries (below).
 //
-// Most cities that used to live in this Set as a NEGATIVE-only guard are now
-// POSITIVE identifiers instead - real AMBIGUOUS_NICKNAMES keys that generate
+// Every city that used to live in this Set as a NEGATIVE-only guard is now a
+// POSITIVE identifier instead - a real AMBIGUOUS_NICKNAMES key that generates
 // that city's tracked franchises as candidates for the schedule/season/
 // pick-context hierarchy (see the "Bare CITY names" block in
 // AMBIGUOUS_NICKNAMES above) - so they were removed from here entirely; a
@@ -1700,20 +1848,30 @@ function looksLikeTeamAbbreviation(name: string): boolean {
 // AMBIGUOUS_NICKNAMES key (Object.keys(AMBIGUOUS_NICKNAMES) is spread into
 // it below), so the tennis-phantom protection carries over automatically.
 //
-// What's LEFT here is only the cities that could NOT be promoted: each one's
-// bare name is ALSO an NCAAF_SCHOOLS key, and detectSport's pass 1/2 already
-// resolves it straight to that school today (a case that "already succeeds"
-// and must not be disturbed - see the AMBIGUOUS_NICKNAMES comment for why
-// adding the same string there would silently break it). These stay exactly
-// what this Set has always been: a pure negative guard, nothing more.
-// "boston" is deliberately ABSENT even though it's not one of these 14: it
-// has its own AMBIGUOUS_NICKNAMES entry checked earlier, so it never reaches
-// here, same as every other promoted city.
-const SPORTS_PLACE_NAMES = new Set<string>([
-  "arizona", "buffalo", "charlotte", "cincinnati", "colorado", "houston",
-  "indiana", "memphis", "miami", "minnesota", "pittsburgh", "tennessee",
-  "utah", "washington",
-]);
+// This Set used to also hold 14 cities deliberately EXCLUDED from that
+// promotion - arizona, buffalo, charlotte, cincinnati, colorado, houston,
+// indiana, memphis, miami, minnesota, pittsburgh, tennessee, utah,
+// washington - on the theory that each one's bare name is ALSO an
+// NCAAF_SCHOOLS key, and detectSport's pass 1/2 already resolves it straight
+// to that school (a case that "already succeeds" and must not be disturbed).
+// That theory was wrong: "already succeeds" was true only in the sense that
+// detectSport returns SOME sport confidently - it never checked whether the
+// bare word was also a real pro franchise's own name, which every one of
+// these 14 is (Texas Rangers-style branding aside, e.g. Pittsburgh
+// Pirates/Steelers/Penguins, Miami Dolphins/Heat/Marlins, Washington
+// Commanders/Wizards/Capitals/Nationals/Mystics). Two real reported
+// mis-imports ("Texas Moneyline" and "Pittsburgh Moneyline" silently
+// attaching to the wrong sport's game, with no warning) confirmed this is a
+// live bug, not a hypothetical - the exact same shape the "washington"
+// comment below already flagged as a known, not-yet-fixed gap. All 14 are
+// now promoted to AMBIGUOUS_NICKNAMES city keys, same treatment as every
+// other bare city, and this Set is empty pending a genuinely NCAAF-only
+// collision being found (kept, rather than deleted, since it's still the
+// established place such a case would go - see the header comment above and
+// the promotion-exclusion writeup on the AMBIGUOUS_NICKNAMES "Bare CITY
+// names" block for the reasoning that no longer applies to any current
+// entry).
+const SPORTS_PLACE_NAMES = new Set<string>([]);
 
 // Real FCS college football schools, confirmed hitting the exact same
 // phantom-ATP fallback as SPORTS_PLACE_NAMES guards against above (a bare
@@ -1740,15 +1898,23 @@ const KNOWN_OUT_OF_SCOPE_SCHOOLS = new Set<string>([
 // ("Mississippi -6.5" for Ole Miss). No tennis player is named after a US
 // state, so a bare one hitting findPlayerPick is a team the resolver didn't
 // place - route to `unresolved` (and the recover-unresolved pass then tries
-// it against the live schedule). The pro-franchise states are already in
-// SPORTS_PLACE_NAMES; this covers the rest.
+// it against the live schedule). The pro-franchise states are meant to be
+// covered by SPORTS_PLACE_NAMES/AMBIGUOUS_NICKNAMES instead; this covers the
+// rest. "texas" and "florida" USED to live here on the (wrong) assumption
+// neither had a real state-branded pro franchise - a real reported
+// mis-import ("Texas Moneyline" silently attaching to the NCAAF Longhorns
+// instead of the MLB Rangers, whose own brand name IS "Texas") showed that
+// was false for Texas, and Florida has the identical shape (the NHL's
+// Florida Panthers use the state name too) - both are promoted to
+// AMBIGUOUS_NICKNAMES city keys now, same as the SPORTS_PLACE_NAMES cities
+// below.
 const US_STATE_NAMES = new Set<string>([
-  "alabama", "alaska", "arkansas", "connecticut", "delaware", "florida",
+  "alabama", "alaska", "arkansas", "connecticut", "delaware",
   "georgia", "hawaii", "idaho", "illinois", "iowa", "kansas", "kentucky",
   "louisiana", "maine", "maryland", "massachusetts", "michigan", "mississippi",
   "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey",
   "new mexico", "north carolina", "north dakota", "ohio", "oklahoma", "oregon",
-  "rhode island", "south carolina", "south dakota", "texas", "vermont",
+  "rhode island", "south carolina", "south dakota", "vermont",
   "virginia", "west virginia", "wisconsin", "wyoming",
 ]);
 

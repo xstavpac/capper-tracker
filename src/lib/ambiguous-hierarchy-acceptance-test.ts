@@ -344,6 +344,91 @@ async function main() {
     }, { sport: "", stillAmbiguousKey: "chicago" });
   }
 
+  console.log("\n########## PART D: Texas/Pittsburgh mis-import fix - real reported cases run the full hierarchy ##########");
+  {
+    // The exact "Texas Moneyline" case: only the Rangers (MLB) have a game
+    // today -> resolves MLB via schedule, never silently guessing NCAAF.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Texas Moneyline")], {}, {
+      runScheduleCheck: fakeSchedule(["texas rangers|MLB"]),
+      now: SEPT,
+    });
+    check("Texas: only the Rangers (MLB) play today -> MLB via schedule, not a silent NCAAF guess", {
+      sport: res.picks[0].sportName,
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "MLB", nicknames: ["texas rangers"], method: "schedule" });
+  }
+  {
+    // Mirror: only the Longhorns (NCAAF) play today -> resolves NCAAF via
+    // schedule too - a genuinely unambiguous case (per the live schedule)
+    // should still resolve immediately, not get needlessly flagged.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Texas Moneyline")], {}, {
+      runScheduleCheck: fakeSchedule(["texas longhorns|NCAAF"]),
+      now: SEPT,
+    });
+    check("Texas: only the Longhorns (NCAAF) play today -> NCAAF via schedule", {
+      sport: res.picks[0].sportName,
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "NCAAF", nicknames: ["texas longhorns"], method: "schedule" });
+  }
+  {
+    // Both playing the same day (both in season, both scheduled) -> the
+    // schedule and calendar can't settle it, and neither "Moneyline" nor
+    // "ML" carries sport-specific terminology -> stays ambiguous rather than
+    // guessing, exactly the behavior the real mis-import needed.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Texas Moneyline")], {}, {
+      runScheduleCheck: fakeSchedule(["texas rangers|MLB", "texas longhorns|NCAAF"]),
+      now: SEPT,
+    });
+    check("Texas: both play today, both in season -> stays ambiguous (no guess)", {
+      sport: res.picks[0].sportName,
+      stillAmbiguous: res.stillAmbiguous.map((g) => g.key),
+    }, { sport: "", stillAmbiguous: ["texas"] });
+  }
+  {
+    // The exact "Pittsburgh Moneyline" case: only the Pirates (MLB) have a
+    // game today -> resolves MLB via schedule, never silently guessing NCAAF.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Pittsburgh Moneyline")], {}, {
+      runScheduleCheck: fakeSchedule(["pittsburgh pirates|MLB"]),
+      now: SEPT,
+    });
+    check("Pittsburgh: only the Pirates (MLB) play today -> MLB via schedule, not a silent NCAAF guess", {
+      sport: res.picks[0].sportName,
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "MLB", nicknames: ["pittsburgh pirates"], method: "schedule" });
+  }
+  {
+    // Mirror: only the Panthers (NCAAF) play today -> resolves NCAAF via
+    // schedule, same as any genuinely unambiguous (per the live schedule)
+    // case.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Pittsburgh Moneyline")], {}, {
+      runScheduleCheck: fakeSchedule(["pittsburgh panthers|NCAAF"]),
+      now: SEPT,
+    });
+    check("Pittsburgh: only the Panthers (NCAAF) play today -> NCAAF via schedule", {
+      sport: res.picks[0].sportName,
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "NCAAF", nicknames: ["pittsburgh panthers"], method: "schedule" });
+  }
+  {
+    // Four real candidates (Pirates/Steelers/Penguins/Panthers), none playing
+    // today, none of the calendar-only sports narrowed by the September
+    // window either -> stays ambiguous with all 4 real options listed,
+    // never an auto-pick just because one franchise is "the big team".
+    const res = await runAmbiguousHierarchy([ambiguousPick("Pittsburgh Moneyline")], {}, {
+      runScheduleCheck: fakeSchedule([]),
+      now: SEPT,
+    });
+    check("Pittsburgh: nobody playing today, multiple sports in season -> stays ambiguous with all 4 real candidates", {
+      sport: res.picks[0].sportName,
+      stillAmbiguousKey: res.stillAmbiguous[0]?.key,
+      candidateCount: res.stillAmbiguous[0]?.options.length,
+    }, { sport: "", stillAmbiguousKey: "pittsburgh", candidateCount: 4 });
+  }
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }
