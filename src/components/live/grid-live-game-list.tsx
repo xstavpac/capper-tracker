@@ -1,5 +1,5 @@
 import type { OddsGame, ScoreGame } from "@/server/data/odds";
-import { formatEastern } from "@/lib/dates";
+import { LocalGameTime } from "@/components/local-game-time";
 import { getTeamColor } from "@/lib/team-colors";
 import { TeamColorBar } from "@/components/live/team-color-bar";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
@@ -70,7 +70,10 @@ export function GridLiveGameList({
           >
             <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
               <span>
-                {formatEastern(new Date(game.commenceTime), { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                <LocalGameTime
+                  date={game.commenceTime}
+                  options={{ month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }}
+                />
               </span>
               {isLive ? (
                 <span className="rounded-full bg-red-100 px-1.5 py-0 text-[10px] font-medium text-red-600 dark:bg-red-500/15 dark:text-red-400">

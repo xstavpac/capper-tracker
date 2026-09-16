@@ -105,6 +105,21 @@ export function formatEastern(date: Date, options: Intl.DateTimeFormatOptions): 
   return date.toLocaleString("en-US", { ...options, timeZone: APP_TIME_ZONE });
 }
 
+// Formats `date` in an explicit IANA zone (unlike formatEastern, never
+// hardcoded to APP_TIME_ZONE) with the abbreviated zone name appended (e.g.
+// "CDT") by default, so a viewer-local game time is unambiguous rather than
+// silently implying Eastern. Used by LocalGameTime (components/shared/
+// local-game-time.tsx) to render game start times in the viewer's own OS
+// timezone instead of the app's fixed Eastern zone used for scheduling/
+// bucketing logic elsewhere in this file.
+export function formatInZone(date: Date, timeZone: string, options: Intl.DateTimeFormatOptions): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZoneName: "short",
+    ...options,
+    timeZone,
+  }).format(date);
+}
+
 // Picks the item in `items` whose getTime() is nearest to `referenceTime` (ms).
 // Shared by every "same two teams, which of these games is this" match -
 // live scores to odds, resolved nicknames to a schedule game, picks to game results.

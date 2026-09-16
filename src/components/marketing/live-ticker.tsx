@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { TickerGame } from "@/server/data/live-ticker";
-import { formatEastern, closestByTime } from "@/lib/dates";
+import { closestByTime } from "@/lib/dates";
+import { LocalGameTime } from "@/components/local-game-time";
 
 // Deliberately lighter than the authenticated live page's 25s poll
 // (LIVE_POLL_INTERVAL_MS in live-scoreboard.tsx) - a game's score
@@ -47,15 +48,19 @@ function parseScore(update: ScoreUpdate | undefined, teamName: string): number |
   return Number.isNaN(n) ? null : n;
 }
 
-function gameState(game: TickerGame): string {
+function GameState({ game }: { game: TickerGame }) {
   if (game.status === "preview") {
-    return formatEastern(new Date(game.commenceTime), { hour: "numeric", minute: "2-digit" });
+    return <LocalGameTime date={game.commenceTime} options={{ hour: "numeric", minute: "2-digit" }} />;
   }
-  if (game.status === "final") return "Final";
+  if (game.status === "final") return <>Final</>;
   if (game.sportLabel === "MLB" && game.inningHalf && game.inningOrdinal) {
-    return game.inningHalf + " " + game.inningOrdinal;
+    return (
+      <>
+        {game.inningHalf} {game.inningOrdinal}
+      </>
+    );
   }
-  return "Live";
+  return <>Live</>;
 }
 
 function Segment({ game }: { game: TickerGame }) {
@@ -77,7 +82,7 @@ function Segment({ game }: { game: TickerGame }) {
       </div>
       <span className="flex items-center gap-1.5 text-xs text-blue-200">
         {isLive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500 animate-pulse" aria-hidden="true" />}
-        {gameState(game)}
+        <GameState game={game} />
       </span>
     </div>
   );

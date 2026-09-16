@@ -3,7 +3,8 @@
 import Link from "next/link";
 import type { OddsGame, ScoreGame } from "@/server/data/odds";
 import { computeBoardPulse, type BoardPulseGame } from "@/lib/board-pulse";
-import { formatEastern, easternDateKey } from "@/lib/dates";
+import { easternDateKey } from "@/lib/dates";
+import { LocalGameTime } from "@/components/local-game-time";
 import { orderBoardGames, matchScoreToGame } from "@/components/live/live-scoreboard-ordering";
 import { getTeamColor } from "@/lib/team-colors";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
@@ -116,12 +117,10 @@ export function LiveScoreboard({
               <Link href={"/live/" + game.id + "?sport=" + activeSport} className="block">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="text-xs text-muted-foreground">
-                    {formatEastern(new Date(game.commenceTime), {
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
+                    <LocalGameTime
+                      date={game.commenceTime}
+                      options={{ month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }}
+                    />
                     {book && " - " + book.title}
                   </div>
                   {isLive && (

@@ -13,7 +13,7 @@ import { getGamePulsePanelRows } from "@/server/data/game-pulse";
 import { getTeamRecordAsOf, type TeamRecord } from "@/server/data/team-record";
 import { getMlbLiveGameState } from "@/server/data/live-game-state";
 import { getNflLiveGameState } from "@/server/data/nfl-live-game-state";
-import { formatEastern } from "@/lib/dates";
+import { LocalGameTime } from "@/components/local-game-time";
 import { betTypeLabel, pickCategory } from "@/server/data/stats";
 import { formatPickLabel } from "@/lib/bet-line";
 import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
@@ -262,12 +262,10 @@ export default async function GameDetailPage({
       <div className="mt-3 rounded-card bg-card p-5 shadow-soft">
         <div className="mb-3 flex items-center justify-between">
           <div className="text-xs text-muted-foreground">
-            {formatEastern(new Date(game.commenceTime), {
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
+            <LocalGameTime
+              date={game.commenceTime}
+              options={{ month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }}
+            />
             {book && " - " + book.title}
           </div>
           {isLive && (

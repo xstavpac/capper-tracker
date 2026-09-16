@@ -9,6 +9,7 @@ import { RowDeleteButton } from "@/components/dashboard/row-delete-button";
 import { deletePickAction } from "@/server/actions/picks";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
+import { LocalGameTime } from "@/components/local-game-time";
 import { TIER_LABELS } from "@/lib/entitlements";
 import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
 import { DateRangeFilter } from "@/components/picks/date-range-filter";
@@ -290,12 +291,10 @@ export default async function PicksPage({
                       </span>
                     )}
                     <span className="ml-2 font-normal text-muted-foreground">
-                      {formatEastern(pick.gameTime, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
+                      <LocalGameTime
+                        date={pick.gameTime}
+                        options={{ month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }}
+                      />
                     </span>
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
