@@ -1061,6 +1061,32 @@ function looksLikePick(text: string): boolean {
     /\bo\s*\d+(\.\d+)?\b/i.test(text) ||
     /\bu\s*\d+(\.\d+)?\b/i.test(text) ||
     /\b[NY]RFI\b/i.test(text) ||
+    // A bare, team-less TD-market pick ("Gibbs touchdown", "Gibbs TD",
+    // "Gibbs ATD", "Gibbs 2+ TDs") has no digit and no team name - the two
+    // signals every other branch here leans on - so without this it fell
+    // through every check above, then detectSport/findPlayerPick/etc. all
+    // failed too (no sport code, no team, no ATP player), landing back at
+    // the bottom of the parseCatalog loop where it was silently misread as a
+    // brand-new capper-name header, overwriting currentCapper and producing
+    // zero picks AND zero unresolved entries - worse than Part A's "lands in
+    // the unresolved bucket" failure, since there was no trace at all.
+    // "touchdown(s)"/"td(s)" alone already covers every qualified form too
+    // (first/1st/anytime/2+ all sit directly next to one of these words -
+    // see parseTouchdownProp), so no separate qualifier pattern is needed
+    // here. "atd" needs its own check since it doesn't contain "td" at a
+    // word boundary (the "t" is preceded by "a", a word character).
+    //
+    // A capper whose real display name IS a bare TD keyword ("TD") is
+    // already handled safely without any extra guard here: parseCatalog
+    // checks a line against knownCapperNames (see the "standalone line that
+    // matches a SAVED capper's name" check near the top of the loop) BEFORE
+    // ever reaching looksLikePick, so an already-known capper's header still
+    // wins. A brand-new, not-yet-saved capper named "TD" has the same
+    // "*Name" escape hatch every other keyword-colliding name already
+    // relies on (ML, NRFI, ...) - not a new exposure this change introduces.
+    /\btouchdowns?\b/i.test(text) ||
+    /\btds?\b/i.test(text) ||
+    /\batd\b/i.test(text) ||
     // A "Team vs Team" / "Team @ Team" matchup shape, even with no bet-type
     // keyword on the same line (e.g. the number is stated on a following
     // line) - two things named as opposing sides is itself a strong "this is
