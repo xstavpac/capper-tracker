@@ -17,7 +17,7 @@ import type { ExpanderPick } from "@/components/live/game-picks-expander";
 // classification) is entirely server-computed in live/page.tsx and passed
 // down as props here, unchanged from how LiveScoreboard already receives it
 // - this component adds no second data-fetching path, only the live-score
-// poll (shared via useLiveScores, the same hook Standard Live now uses) and
+// poll (shared via useLiveScores, the same hook Feed Live now uses) and
 // the selection/fallback logic below.
 //
 // Selection (`gameId`) is mirrored into the URL (per the app-wide convention
@@ -133,7 +133,7 @@ export function GridLiveBoard({
   }
 
   // Double-click only - a real navigation (router.push, not the replace()
-  // above) to Standard Live's own game-card page. Deliberately not folded
+  // above) to Feed Live's own game-card page. Deliberately not folded
   // into handleSelectGame: that one exists specifically to AVOID a
   // navigation on every game click (see file header), while this is opening
   // a genuinely different view (Momentum/Pace, head-to-head header) that

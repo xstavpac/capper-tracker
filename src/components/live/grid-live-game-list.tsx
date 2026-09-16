@@ -4,10 +4,10 @@ import { getTeamColor } from "@/lib/team-colors";
 import { TeamColorBar } from "@/components/live/team-color-bar";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 
-// The compact, one-row-per-game list Grid Live shows instead of Standard
+// The compact, one-row-per-game list Grid Live shows instead of Feed
 // Live's full accordion cards. Deliberately minimal - just enough to
 // identify and select a game (teams, live status/score, pick count) - not
-// the odds/spread/total detail the Standard Live card shows. Consumes the
+// the odds/spread/total detail the Feed Live card shows. Consumes the
 // exact same `sortedGames` shape live-scoreboard.tsx already derives
 // (game/gameIndex/score triples from orderBoardGames), so selecting which
 // games appear and in what order is unchanged, shared logic - nothing here
@@ -32,7 +32,7 @@ export function GridLiveGameList({
   activeSport: string;
   selectedGameId: string | null;
   onSelectGame: (gameId: string) => void;
-  // Double-click only - opens Standard Live's full game-card page (Momentum/
+  // Double-click only - opens Feed Live's full game-card page (Momentum/
   // Pace tracking, head-to-head header), which Grid's own in-panel
   // GameDetailPanel doesn't have room for and isn't meant to duplicate.
   // Single click stays a plain in-panel selection (onSelectGame above) - see
