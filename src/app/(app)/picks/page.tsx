@@ -2,11 +2,14 @@ import { requireUser } from "@/server/auth";
 import { getFilteredPicksForUser, getSportsWithLeagues, getPickPlanStatus } from "@/server/data/picks";
 import { getCappersForUser } from "@/server/data/cappers";
 import { persistFinalScores, gradePendingPicks, regradeFuzzyMatchedPicks } from "@/server/data/grading";
+import { getParlaysForUser } from "@/server/data/parlays";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { PickForm } from "@/components/dashboard/pick-form";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
+import { LegStatusButtons } from "@/components/dashboard/leg-status-buttons";
 import { RowDeleteButton } from "@/components/dashboard/row-delete-button";
 import { deletePickAction } from "@/server/actions/picks";
+import { deleteParlayAction } from "@/server/actions/parlays";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
 import { LocalGameTime } from "@/components/local-game-time";
@@ -150,11 +153,12 @@ export default async function PicksPage({
     endDateKey,
   };
 
-  const [allPicks, cappers, sports, planStatus] = await Promise.all([
+  const [allPicks, cappers, sports, planStatus, parlays] = await Promise.all([
     getFilteredPicksForUser(user.id, filters),
     getCappersForUser(user.id),
     getSportsWithLeagues(),
     getPickPlanStatus(user.id),
+    getParlaysForUser(user.id),
   ]);
 
   // Bet type is derived (betDetail text for NRFI/YRFI), not a stored column,
@@ -309,6 +313,59 @@ export default async function PicksPage({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {parlays.length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-lg font-semibold">Parlays</h2>
+          <div className="space-y-3">
+            {parlays.map((parlay) => {
+              const statusColor =
+                parlay.status === "WIN"
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : parlay.status === "LOSS"
+                    ? "text-red-600 dark:text-red-400"
+                    : parlay.status === "PENDING"
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-muted-foreground";
+              return (
+                <div key={parlay.id} className="rounded-card bg-card shadow-soft">
+                  <div className="flex items-center justify-between border-b border-border-subtle px-5 py-3">
+                    <div className="text-sm font-medium">
+                      {parlay.capper.name} - {parlay.legs.length}-leg parlay - {parlay.units}u
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={"text-sm font-medium " + statusColor}>{parlay.status}</span>
+                      <RowDeleteButton onConfirm={deleteParlayAction.bind(null, parlay.id)} itemLabel="parlay" />
+                    </div>
+                  </div>
+                  <div className="divide-y divide-border-subtle">
+                    {parlay.legs.map((leg) => (
+                      <div key={leg.id} className="flex items-center justify-between px-5 py-2.5">
+                        <div>
+                          <div className="text-xs font-medium text-foreground">
+                            {leg.awayTeam} @ {leg.homeTeam}
+                            {periodBadgeLabel(leg.period, leg.sport.name) && (
+                              <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:bg-purple-500/15 dark:text-purple-400">
+                                {periodBadgeLabel(leg.period, leg.sport.name)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">
+                            {formatPickLabel(leg.betDetail, leg.betType, leg.line) ?? leg.betType} -{" "}
+                            {leg.odds > 0 ? "+" : ""}
+                            {leg.odds}
+                          </div>
+                        </div>
+                        <LegStatusButtons legId={leg.id} status={leg.status} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

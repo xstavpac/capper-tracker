@@ -29,6 +29,95 @@ export type ParsedPick = {
   teamNicknames: string[];
 };
 
+// One leg of a parsed MLP (moneyline-parlay) line - same shape as the
+// fields ParsedPick uses to identify a game/market, minus capperName/units
+// (those belong to the whole parlay, not a single leg - see ParsedParlay).
+// `raw` is that leg's own fragment of the original line, kept for the
+// unresolved/unmatched-games reporting path if this leg's game can't be
+// resolved later.
+export type ParsedParlayLeg = {
+  sportName: string;
+  description: string;
+  betType: ParsedPick["betType"];
+  odds: number | null;
+  totalSide?: "over" | "under";
+  period: SegmentPeriod;
+  teamNicknames: string[];
+  raw: string;
+};
+
+// Two independently-resolvable picks coupled into one heads-up bet with
+// combined odds (e.g. "Lions +12.5 + Lions/Bills o47 mlp"). The numbers
+// written in the raw text next to each leg are leg labels/shorthand, not
+// gradable truth - each leg's real line/odds gets resolved live off the
+// schedule/odds sources at import time, the same way a normal single pick
+// is resolved (see bulk-picks.ts's resolveLegAndOdds), never trusted from
+// this parse. Both legs share one sportName - detected once for the whole
+// line, same as any other pick line - and one units stake for the whole
+// coupled bet.
+export type ParsedParlay = {
+  capperName: string;
+  sportName: string;
+  legs: [ParsedParlayLeg, ParsedParlayLeg];
+  units: number;
+  raw: string;
+};
+
+// Matches a trailing "mlp" keyword marking a line as a moneyline parlay,
+// optionally followed by the whole bet's own unit annotation ("mlp 2u",
+// "mlp (2u)", "mlp 2 units") - checked before any leg-splitting. The units
+// group is captured here (not left to each leg's own parsePickText) because
+// it sits AFTER the keyword, outside either leg's own fragment once split.
+const MLP_TRAILING_KEYWORD = /\s+mlp(?:\s*\(?(\d+(?:\.\d+)?)\s*u(?:nits?)?\)?)?\.?$/i;
+
+// Splits an MLP-shaped line's rest-text (after sport detection/stripping)
+// into its two leg fragments. Requires the "mlp" keyword AND exactly two
+// fragments joined by " + " (whitespace on BOTH sides of the +) - critically
+// NOT the same as a bare "+", which also appears attached to a spread number
+// with no trailing space ("+12.5"). That distinction is what keeps "Lions
+// +12.5 + Lions/Bills o47" from being mis-split on the spread's own sign.
+// Returns null (falls through to normal single-pick parsing) for anything
+// that doesn't cleanly match - a line that merely contains a stray "mlp"
+// word or an unrelated "+" is never guessed at as a parlay.
+function splitMlpLegs(text: string): { legs: [string, string]; explicitUnits: number | null } | null {
+  const match = text.match(MLP_TRAILING_KEYWORD);
+  if (!match) return null;
+  const withoutKeyword = text.slice(0, match.index).trim();
+  const parts = withoutKeyword.split(/\s+\+\s+/).map((p) => p.trim());
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  return { legs: [parts[0], parts[1]], explicitUnits: match[1] ? parseFloat(match[1]) : null };
+}
+
+// Resolves one MLP leg fragment to its own bet-type/odds/period/nicknames,
+// given the sportName already detected for the whole line. Mirrors exactly
+// what parseCatalog's own per-line branches do with parsePickText +
+// findTeamNicknames for a normal single pick - never a looser/parallel parse
+// for a leg.
+function parseMlpLeg(fragment: string, sportName: string): { leg: ParsedParlayLeg; units: number } {
+  const parsed = parsePickText(fragment);
+  return {
+    leg: {
+      sportName,
+      description: parsed.cleanDescription,
+      betType: parsed.betType,
+      odds: parsed.odds,
+      totalSide: parsed.totalSide,
+      period: parsed.period,
+      teamNicknames: findTeamNicknames(fragment, sportName),
+      raw: fragment,
+    },
+    units: parsed.units,
+  };
+}
+
+// Whichever leg fragment actually had an explicit unit token wins the whole
+// parlay's stake; parsePickText can't tell "found 1u because that's the
+// default" from "found 1u because the text said so", so the first leg's
+// parsed units is preferred only when it's not the bare default.
+function mlpUnits(unitsA: number, unitsB: number): number {
+  return unitsA !== 1 ? unitsA : unitsB;
+}
+
 type TeamEntry = [string, string];
 
 // One resolvable possibility for an ambiguous nickname - `nickname` is the
@@ -2180,11 +2269,12 @@ function extractCapperNameFromTagline(text: string): string | null {
 export function parseCatalog(
   text: string,
   knownCapperNames: string[] = []
-): { picks: ParsedPick[]; unresolved: string[]; unresolvedCapperNames: string[] } {
+): { picks: ParsedPick[]; parlays: ParsedParlay[]; unresolved: string[]; unresolvedCapperNames: string[] } {
   const sortedNames = [...knownCapperNames].sort((a, b) => b.length - a.length);
   const rawLines = text.split("\n").map((l) => l.trim());
 
   const results: ParsedPick[] = [];
+  const parlays: ParsedParlay[] = [];
   // Lines that look pick-shaped (looksLikePick) but couldn't be resolved to
   // any sport/team/player - these must NOT fall through to being read as a
   // capper name (see the final fallback below), since a misread name then
@@ -2340,6 +2430,21 @@ export function parseCatalog(
         }
         continue;
       }
+      const inlineMlp = splitMlpLegs(detected.rest);
+      if (inlineMlp) {
+        const [fragA, fragB] = inlineMlp.legs;
+        const a = parseMlpLeg(fragA, detected.sportName);
+        const b = parseMlpLeg(fragB, detected.sportName);
+        parlays.push({
+          capperName: inlineMatch,
+          sportName: detected.sportName,
+          legs: [a.leg, b.leg],
+          units: inlineMlp.explicitUnits ?? mlpUnits(a.units, b.units),
+          raw: line,
+        });
+        continue;
+      }
+
       const parsed = parsePickText(detected.rest);
       results.push({
         capperName: inlineMatch,
@@ -2381,6 +2486,21 @@ export function parseCatalog(
     }
 
     if (detected.sportName) {
+      const mlp = splitMlpLegs(detected.rest);
+      if (mlp) {
+        const [fragA, fragB] = mlp.legs;
+        const a = parseMlpLeg(fragA, detected.sportName);
+        const b = parseMlpLeg(fragB, detected.sportName);
+        parlays.push({
+          capperName: currentCapper || "Unknown",
+          sportName: detected.sportName,
+          legs: [a.leg, b.leg],
+          units: mlp.explicitUnits ?? mlpUnits(a.units, b.units),
+          raw: strippedText,
+        });
+        continue;
+      }
+
       const parsed = parsePickText(detected.rest);
       results.push({
         capperName: currentCapper || "Unknown",
@@ -2510,5 +2630,5 @@ export function parseCatalog(
     }
   }
 
-  return { picks: results, unresolved, unresolvedCapperNames };
+  return { picks: results, parlays, unresolved, unresolvedCapperNames };
 }
