@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "PropMarket" ADD VALUE 'RUSH_REC_YDS';
+ALTER TYPE "PropMarket" ADD VALUE 'PASS_RUSH_YDS';

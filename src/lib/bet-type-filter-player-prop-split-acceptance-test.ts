@@ -71,6 +71,16 @@ function main() {
     propPick({ betDetail: "Justin Jefferson Over 5.5 Receptions", propMarket: "RECEPTIONS" }),
     "RECEPTIONS"
   );
+  check(
+    "propMarket=RUSH_REC_YDS -> RUSH_REC_YDS",
+    propPick({ betDetail: "Jahmyr Gibbs Over 99.5 Rushing and Receiving Yards", propMarket: "RUSH_REC_YDS" }),
+    "RUSH_REC_YDS"
+  );
+  check(
+    "propMarket=PASS_RUSH_YDS -> PASS_RUSH_YDS",
+    propPick({ betDetail: "Josh Allen Over 290.5 Passing and Rushing Yards", propMarket: "PASS_RUSH_YDS" }),
+    "PASS_RUSH_YDS"
+  );
 
   // A structured propMarket is trusted even if betDetail looks nothing like
   // a prop - it's the real signal, not a re-derived guess.
@@ -107,11 +117,21 @@ function main() {
     propPick({ betDetail: "Justin Jefferson Over 5.5 Receptions" }),
     "RECEPTIONS"
   );
+  check(
+    "fallback (propMarket null): Rushing and Receiving Yards text -> RUSH_REC_YDS",
+    propPick({ betDetail: "Jahmyr Gibbs Over 99.5 Rushing and Receiving Yards" }),
+    "RUSH_REC_YDS"
+  );
+  check(
+    "fallback (propMarket null): Passing and Rushing Yards text -> PASS_RUSH_YDS",
+    propPick({ betDetail: "Josh Allen Over 290.5 Passing and Rushing Yards" }),
+    "PASS_RUSH_YDS"
+  );
 
-  // --- Unresolvable market: matches none of the 5 new keys ----------------
+  // --- Unresolvable market: matches none of the concrete prop keys --------
 
   check(
-    "fallback (propMarket null): malformed/unparseable prop text -> null, not any of the 5 keys",
+    "fallback (propMarket null): malformed/unparseable prop text -> null, not any of the concrete prop keys",
     propPick({ betDetail: "Player Prop" }),
     null
   );
@@ -127,25 +147,25 @@ function main() {
     false
   );
   check(
-    "BET_TYPE_FILTER_OPTIONS exposes all 5 concrete markets",
-    ["TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS"].every((k) => optionValues.includes(k as BetTypeFilterKey)),
+    "BET_TYPE_FILTER_OPTIONS exposes all 7 concrete markets",
+    ["TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "RUSH_REC_YDS", "PASS_RUSH_YDS"].every((k) => optionValues.includes(k as BetTypeFilterKey)),
     true
   );
 
-  // --- Chip-set gating: NFL exposes all 5, a non-prop sport exposes none --
+  // --- Chip-set gating: NFL exposes all 7, a non-prop sport exposes none --
 
   const nflOptions = betTypeOptionsForChipSet(NFL_CHIP_SET);
   check(
-    "NFL chip set (has TD_PROP) exposes all 5 concrete prop markets",
-    ["TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS"].every((k) => nflOptions.has(k as BetTypeFilterKey)),
+    "NFL chip set (has TD_PROP) exposes all 7 concrete prop markets",
+    ["TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "RUSH_REC_YDS", "PASS_RUSH_YDS"].every((k) => nflOptions.has(k as BetTypeFilterKey)),
     true
   );
   check("NFL chip set does not expose the removed generic PLAYER_PROP key", nflOptions.has("PLAYER_PROP" as BetTypeFilterKey), false);
 
   const mlbOptions = betTypeOptionsForChipSet(MLB_CHIP_SET);
   check(
-    "MLB chip set (no TD_PROP) exposes none of the 5 concrete prop markets",
-    ["TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS"].some((k) => mlbOptions.has(k as BetTypeFilterKey)),
+    "MLB chip set (no TD_PROP) exposes none of the 7 concrete prop markets",
+    ["TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "RUSH_REC_YDS", "PASS_RUSH_YDS"].some((k) => mlbOptions.has(k as BetTypeFilterKey)),
     false
   );
 

@@ -195,14 +195,16 @@ async function main() {
     []
   );
 
-  expect("NFL_PROP_MARKET_KEYS is exactly the 8 ingested markets", [...NFL_PROP_MARKET_KEYS].sort(), [
+  expect("NFL_PROP_MARKET_KEYS is exactly the 10 ingested markets", [...NFL_PROP_MARKET_KEYS].sort(), [
     "player_anytime_td",
     "player_pass_attempts",
     "player_pass_completions",
+    "player_pass_rush_yds",
     "player_pass_tds",
     "player_pass_yds",
     "player_reception_yds",
     "player_receptions",
+    "player_rush_reception_yds",
     "player_rush_yds",
   ]);
 

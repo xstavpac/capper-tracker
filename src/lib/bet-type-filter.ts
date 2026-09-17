@@ -24,6 +24,9 @@ import type { PickCategoryKey } from "@/server/data/stats";
 // instead of only "Player Prop" as a whole. Deliberately NOT kept alongside
 // the 5 as a 6th "any prop" option - if that's wanted later it should be a
 // separate, explicitly-named concept, not a preserved ambiguous legacy key.
+// RUSH_REC_YDS/PASS_RUSH_YDS (2026-09) extended this same split to the
+// combined-category markets added alongside them in PropMarket - same
+// structured-with-fallback resolution below, no new pattern needed.
 export type BetTypeFilterKey =
   | "SPREAD"
   | "F5_SPREAD"
@@ -37,6 +40,8 @@ export type BetTypeFilterKey =
   | "RUSH_YDS"
   | "REC_YDS"
   | "RECEPTIONS"
+  | "RUSH_REC_YDS"
+  | "PASS_RUSH_YDS"
   | "NRFI"
   | "YRFI";
 
@@ -53,6 +58,8 @@ export const BET_TYPE_FILTER_OPTIONS: { value: BetTypeFilterKey; label: string }
   { value: "RUSH_YDS", label: "Rushing Yards" },
   { value: "REC_YDS", label: "Receiving Yards" },
   { value: "RECEPTIONS", label: "Receptions" },
+  { value: "RUSH_REC_YDS", label: "Rush + Rec Yards" },
+  { value: "PASS_RUSH_YDS", label: "Pass + Rush Yards" },
   { value: "NRFI", label: "NRFI" },
   { value: "YRFI", label: "YRFI" },
 ];
@@ -136,7 +143,8 @@ export function betTypeOptionsForChipSet(chipSet: PickCategoryKey[] | null): Set
   const options = [...always];
   if (has(FIRST_HALF_CATEGORY_KEYS)) options.push("F5_SPREAD", "F5_MONEYLINE", "F5_TOTAL");
   if (chipSet.includes("TEAM_TOTAL")) options.push("TEAM_TOTAL");
-  if (chipSet.includes("TD_PROP")) options.push("TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS");
+  if (chipSet.includes("TD_PROP"))
+    options.push("TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "RUSH_REC_YDS", "PASS_RUSH_YDS");
   if (has(["NRFI", "YRFI"])) options.push("NRFI", "YRFI");
   return new Set(options);
 }
