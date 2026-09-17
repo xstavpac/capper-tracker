@@ -380,7 +380,14 @@ export function parseTouchdownProp(
 // string-literal union, not a `@prisma/client` import, for the same
 // client-bundle-safety reason ParsedPick/BetTypeLike above re-declare their
 // own unions instead of importing BetType).
-export type PlayerPropMarket = "PASS_YDS" | "RUSH_YDS" | "REC_YDS" | "RECEPTIONS" | "TD";
+export type PlayerPropMarket =
+  | "PASS_YDS"
+  | "RUSH_YDS"
+  | "REC_YDS"
+  | "RECEPTIONS"
+  | "TD"
+  | "RUSH_REC_YDS"
+  | "PASS_RUSH_YDS";
 
 // The stat-category word ALONE is enough to identify PASS_YDS/RUSH_YDS - "65.5
 // rushing", "245.5 passing" - a real capper catalog import gap found testing
@@ -407,7 +414,42 @@ export type PlayerPropMarket = "PASS_YDS" | "RUSH_YDS" | "REC_YDS" | "RECEPTIONS
 // to RECEPTIONS; "receptions?" itself never matches inside REC_YDS's patterns
 // (no "rec"+yards or "receiving" substring in "receptions").
 const YARDS_UNIT = /y(?:ar|r)?ds?/.source;
+
+// Combined-category markets (2026-09, RUSH_REC_YDS/PASS_RUSH_YDS - see
+// PropMarket's own comment in schema.prisma for the upstream-market
+// confirmation these are built against). Each is two single-category stat
+// words joined by a connector ("and", "&", "+", or "/", in either order -
+// "rush and rec", "rec + rush" are both real capper phrasings) - matched and
+// checked BEFORE the plain single-category patterns below, since e.g. bare
+// "rushing" would otherwise claim "rushing and receiving yards" for RUSH_YDS
+// first, stripping only "rushing" and leaving "and receiving yards" stuck in
+// the extracted player name.
+//
+// PASS_RUSH_YDS's pattern also matches "passing" + connector + "rec(eiving)"
+// - NOT a typo for a real combined market (there is no such market, at this
+// or seemingly any provider - see PropMarket's comment), but a known typo
+// FOR "passing and rushing" that real capper text uses. Folded directly into
+// this one pattern rather than a separate PASS_REC_YDS market/code path,
+// since the corrected meaning (pass+rush) is exactly what this pattern
+// already produces - no player-position/roster lookup needed to make this
+// call: "passing and receiving" cannot be a genuine distinct market for
+// ANY player, QB or otherwise, so the typo-correction is safe unconditionally.
+const PROP_MARKET_CONNECTOR = /\s*(?:and|&|\+|\/)\s*/.source;
 const PLAYER_PROP_STAT_PATTERNS: [Exclude<PlayerPropMarket, "TD">, RegExp][] = [
+  [
+    "RUSH_REC_YDS",
+    new RegExp(
+      `\\b(?:rush(?:ing)?${PROP_MARKET_CONNECTOR}rec(?:eiving)?|rec(?:eiving)?${PROP_MARKET_CONNECTOR}rush(?:ing)?)\\b(?:\\s*${YARDS_UNIT}\\b)?`,
+      "i"
+    ),
+  ],
+  [
+    "PASS_RUSH_YDS",
+    new RegExp(
+      `\\b(?:pass(?:ing)?${PROP_MARKET_CONNECTOR}(?:rush(?:ing)?|rec(?:eiving)?)|(?:rush(?:ing)?|rec(?:eiving)?)${PROP_MARKET_CONNECTOR}pass(?:ing)?)\\b(?:\\s*${YARDS_UNIT}\\b)?`,
+      "i"
+    ),
+  ],
   ["PASS_YDS", new RegExp(`\\bpass(?:ing)?\\b(?:\\s*${YARDS_UNIT}\\b)?`, "i")],
   ["RUSH_YDS", new RegExp(`\\brush(?:ing)?\\b(?:\\s*${YARDS_UNIT}\\b)?`, "i")],
   ["REC_YDS", new RegExp(`\\brec\\s*${YARDS_UNIT}\\b|\\breceiving\\b(?:\\s*${YARDS_UNIT}\\b)?`, "i")],

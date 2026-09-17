@@ -785,7 +785,9 @@ function resolvedPlayerName(pick: PlayerPropPick): string | null {
 // genuine X.5 line in the first place - confirmed by inspection of
 // PasserRow/RushingRow/ReceivingRow (nfl-passer-rows.ts,
 // nfl-rushing-receiving-rows.ts), which store passingYards/rushingYards/
-// receivingYards/receptions as integers.
+// receivingYards/receptions as integers. RUSH_REC_YDS/PASS_RUSH_YDS actual
+// values are a sum of two of these integers, still always a whole number, so
+// the same reasoning holds without a separate check.
 function gradeAgainstLine(actual: number, line: number, direction: "OVER" | "UNDER"): "WIN" | "LOSS" | "PUSH" {
   if (actual === line) return "PUSH";
   return actual > line === (direction === "OVER") ? "WIN" : "LOSS";
@@ -826,24 +828,51 @@ async function resolveYardageOrReceptionsProp(
     return { outcome: null, reason: "couldn't identify a player name in the bet text" };
   }
 
+  const notFound = { outcome: null, reason: 'couldn\'t find "' + playerName + '" in the box score' } as const;
+  const noBoxScore = { outcome: null, reason: "the box score isn't available yet for this game" } as const;
+
   let actual: number;
-  if (market === "PASS_YDS") {
-    const rows = await fetchNflPasserRows(eventId);
-    if (!rows) return { outcome: null, reason: "the box score isn't available yet for this game" };
-    const match = rows.find((r) => isLikelyDuplicateName(r.playerName, playerName));
-    if (!match) return { outcome: null, reason: 'couldn\'t find "' + playerName + '" in the box score' };
-    actual = match.passingYards;
+  if (market === "PASS_YDS" || market === "PASS_RUSH_YDS") {
+    const passerRows = await fetchNflPasserRows(eventId);
+    if (!passerRows) return noBoxScore;
+    const passMatch = passerRows.find((r) => isLikelyDuplicateName(r.playerName, playerName));
+
+    if (market === "PASS_YDS") {
+      if (!passMatch) return notFound;
+      actual = passMatch.passingYards;
+    } else {
+      // PASS_RUSH_YDS: sum passingYards + rushingYards for the same player.
+      // A player can legitimately appear in only one of the two row sets
+      // (a QB with zero carries never shows up in extractRushingRows at
+      // all, same as a non-passer never shows up in fetchNflPasserRows) -
+      // that's a real 0 for the missing side, not a "couldn't find" error.
+      // Only missing from BOTH means this player genuinely isn't in this
+      // game's box score at all.
+      const rushRecRows = await fetchNflRushingReceivingRows(eventId);
+      if (!rushRecRows) return noBoxScore;
+      const rushMatch = rushRecRows.rushing.find((r) => isLikelyDuplicateName(r.playerName, playerName));
+      if (!passMatch && !rushMatch) return notFound;
+      actual = (passMatch?.passingYards ?? 0) + (rushMatch?.rushingYards ?? 0);
+    }
   } else {
     const rows = await fetchNflRushingReceivingRows(eventId);
-    if (!rows) return { outcome: null, reason: "the box score isn't available yet for this game" };
+    if (!rows) return noBoxScore;
     if (market === "RUSH_YDS") {
       const match = rows.rushing.find((r) => isLikelyDuplicateName(r.playerName, playerName));
-      if (!match) return { outcome: null, reason: 'couldn\'t find "' + playerName + '" in the box score' };
+      if (!match) return notFound;
       actual = match.rushingYards;
-    } else {
+    } else if (market === "REC_YDS" || market === "RECEPTIONS") {
       const match = rows.receiving.find((r) => isLikelyDuplicateName(r.playerName, playerName));
-      if (!match) return { outcome: null, reason: 'couldn\'t find "' + playerName + '" in the box score' };
+      if (!match) return notFound;
       actual = market === "REC_YDS" ? match.receivingYards : match.receptions;
+    } else {
+      // RUSH_REC_YDS: same "missing from one side is a real 0, missing from
+      // both is a real miss" split as PASS_RUSH_YDS above, both rows read
+      // from the one already-fetched rushing/receiving response.
+      const rushMatch = rows.rushing.find((r) => isLikelyDuplicateName(r.playerName, playerName));
+      const recMatch = rows.receiving.find((r) => isLikelyDuplicateName(r.playerName, playerName));
+      if (!rushMatch && !recMatch) return notFound;
+      actual = (rushMatch?.rushingYards ?? 0) + (recMatch?.receivingYards ?? 0);
     }
   }
 

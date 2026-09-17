@@ -88,6 +88,24 @@ enum PropMarket {
   REC_YDS
   RECEPTIONS
   TD
+  // Combined-category markets (2026-09, NFL only) - a single Over/Under line
+  // on the SUM of two stat categories, the bookmaker-standard "PRA-style"
+  // shape (NBA's points+rebounds+assists is the closest analog). Both
+  // confirmed live against a real Odds API event response before this enum
+  // was extended, not from docs alone - see the header on
+  // NFL_PROP_MARKET_KEYS in nfl-prop-odds.ts for the exact verification.
+  // Grading sums the same per-category box-score extraction this app already
+  // has (extractRushingRows/extractReceivingRows/fetchNflPasserRows) rather
+  // than needing a new stat source. There is deliberately no PASS_REC_YDS
+  // (passing+receiving) value: that combination isn't a real market for any
+  // player at this provider, live or documented - "passing and receiving" in
+  // a capper's pick text is treated as a typo for "passing and rushing" and
+  // parsed straight to PASS_RUSH_YDS (see bet-line.ts's
+  // PLAYER_PROP_STAT_PATTERNS). A 3-way PASS_RUSH_REC_YDS value is also
+  // deliberately withheld - seen live once but on a non-passer, not
+  // confirmed live on an actual QB - hold for a future pass.
+  RUSH_REC_YDS
+  PASS_RUSH_YDS
 }
 
 // ---------- Models ----------

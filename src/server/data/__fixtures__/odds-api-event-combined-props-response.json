@@ -1,0 +1,232 @@
+{
+  "id": "56e8897681915f7ec92baeee952bb1ae",
+  "sport_key": "americanfootball_nfl",
+  "sport_title": "NFL",
+  "commence_time": "2026-09-18T00:15:00Z",
+  "home_team": "Buffalo Bills",
+  "away_team": "Detroit Lions",
+  "bookmakers": [
+    {
+      "key": "draftkings",
+      "title": "DraftKings",
+      "markets": [
+        {
+          "key": "player_pass_rush_yds",
+          "last_update": "2026-09-17T19:19:56Z",
+          "outcomes": [
+            {
+              "name": "Over",
+              "description": "Josh Allen",
+              "price": -112,
+              "point": 291.5
+            },
+            {
+              "name": "Under",
+              "description": "Josh Allen",
+              "price": -113,
+              "point": 291.5
+            }
+          ]
+        },
+        {
+          "key": "player_rush_reception_yds",
+          "last_update": "2026-09-17T19:19:56Z",
+          "outcomes": [
+            {
+              "name": "Over",
+              "description": "Jahmyr Gibbs",
+              "price": -112,
+              "point": 124.5
+            },
+            {
+              "name": "Under",
+              "description": "Jahmyr Gibbs",
+              "price": -114,
+              "point": 124.5
+            },
+            {
+              "name": "Over",
+              "description": "James Cook",
+              "price": -114,
+              "point": 102.5
+            },
+            {
+              "name": "Under",
+              "description": "James Cook",
+              "price": -111,
+              "point": 102.5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "fanduel",
+      "title": "FanDuel",
+      "markets": [
+        {
+          "key": "player_rush_reception_yds",
+          "last_update": "2026-09-17T19:20:34Z",
+          "outcomes": [
+            {
+              "name": "Over",
+              "description": "Jahmyr Gibbs",
+              "price": -113,
+              "point": 123.5
+            },
+            {
+              "name": "Under",
+              "description": "Jahmyr Gibbs",
+              "price": -113,
+              "point": 123.5
+            },
+            {
+              "name": "Over",
+              "description": "James Cook",
+              "price": -113,
+              "point": 100.5
+            },
+            {
+              "name": "Under",
+              "description": "James Cook",
+              "price": -113,
+              "point": 100.5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "betmgm",
+      "title": "BetMGM",
+      "markets": [
+        {
+          "key": "player_pass_rush_yds",
+          "last_update": "2026-09-17T19:20:06Z",
+          "outcomes": [
+            {
+              "name": "Over",
+              "description": "Josh Allen",
+              "price": -115,
+              "point": 290.5
+            },
+            {
+              "name": "Under",
+              "description": "Josh Allen",
+              "price": -115,
+              "point": 290.5
+            }
+          ]
+        },
+        {
+          "key": "player_rush_reception_yds",
+          "last_update": "2026-09-17T19:20:06Z",
+          "outcomes": [
+            {
+              "name": "Over",
+              "description": "Jahmyr Gibbs",
+              "price": -115,
+              "point": 123.5
+            },
+            {
+              "name": "Under",
+              "description": "Jahmyr Gibbs",
+              "price": -115,
+              "point": 123.5
+            },
+            {
+              "name": "Over",
+              "description": "James Cook",
+              "price": -115,
+              "point": 103.5
+            },
+            {
+              "name": "Under",
+              "description": "James Cook",
+              "price": -115,
+              "point": 103.5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "betrivers",
+      "title": "BetRivers",
+      "markets": [
+        {
+          "key": "player_pass_rush_yds",
+          "last_update": "2026-09-17T19:20:24Z",
+          "outcomes": [
+            {
+              "name": "Over",
+              "description": "Josh Allen",
+              "price": -114,
+              "point": 290.5
+            },
+            {
+              "name": "Under",
+              "description": "Josh Allen",
+              "price": -117,
+              "point": 290.5
+            }
+          ]
+        },
+        {
+          "key": "player_rush_reception_yds",
+          "last_update": "2026-09-17T19:20:24Z",
+          "outcomes": [
+            {
+              "name": "Over",
+              "description": "Jahmyr Gibbs",
+              "price": -118,
+              "point": 123.5
+            },
+            {
+              "name": "Under",
+              "description": "Jahmyr Gibbs",
+              "price": -113,
+              "point": 123.5
+            },
+            {
+              "name": "Over",
+              "description": "James Cook",
+              "price": -118,
+              "point": 99.5
+            },
+            {
+              "name": "Under",
+              "description": "James Cook",
+              "price": -113,
+              "point": 99.5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "fanatics",
+      "title": "Fanatics",
+      "markets": [
+        {
+          "key": "player_pass_rush_reception_yds",
+          "last_update": "2026-09-17T19:20:35Z",
+          "outcomes": [
+            {
+              "name": "Over",
+              "description": "Jahmyr Gibbs",
+              "price": -120,
+              "point": 120.5
+            },
+            {
+              "name": "Under",
+              "description": "Jahmyr Gibbs",
+              "price": -110,
+              "point": 120.5
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

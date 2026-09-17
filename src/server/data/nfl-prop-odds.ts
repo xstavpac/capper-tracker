@@ -47,6 +47,8 @@ export const NFL_PROP_MARKET_KEYS = [
   "player_rush_yds",
   "player_reception_yds",
   "player_receptions",
+  "player_rush_reception_yds",
+  "player_pass_rush_yds",
 ] as const;
 
 export type NflPropMarketKey = (typeof NFL_PROP_MARKET_KEYS)[number];
@@ -84,6 +86,39 @@ export type NflPropMarketKey = (typeof NFL_PROP_MARKET_KEYS)[number];
 // player_anytime_td-style surprises (no one-sided market, no missing
 // `point`, no non-player sentinel outcomes observed). Real response saved
 // verbatim at __fixtures__/odds-api-event-rush-rec-response.json.
+//
+// player_rush_reception_yds / player_pass_rush_yds (combined-category
+// markets - a single Over/Under line on the SUM of two stat categories, the
+// NFL analog of NBA's points+rebounds+assists) were separately confirmed
+// live 2026-09-17 against a real, current NFL event (Detroit Lions @ Buffalo
+// Bills, commence_time 2026-09-18T00:15:00Z) via:
+//   GET /v4/sports/americanfootball_nfl/events/{eventId}/odds
+//     ?regions=us&markets=player_rush_reception_yds,player_pass_rush_yds,player_pass_rush_reception_yds,player_rush_reception_tds,player_pass_rush_reception_tds&oddsFormat=american
+// (confirmed via x-requests-remaining dropping 19395 -> 19392, i.e. 3
+// credits - only 3 of the 5 requested markets were actually returned by any
+// bookmaker for this game/date, matching the documented "cost = markets
+// RETURNED × regions" formula, not markets requested). Both confirmed
+// markets were two-sided Over/Under with a `point`, same shape as every
+// other market in this file:
+//   - player_rush_reception_yds: Jahmyr Gibbs (DET) Over/Under 123.5-124.5,
+//     James Cook (BUF) 99.5-103.5, on draftkings/fanduel/betmgm/betrivers.
+//   - player_pass_rush_yds: Josh Allen (BUF) Over/Under 290.5-291.5, on
+//     draftkings/betmgm/betrivers.
+// Real response saved verbatim at
+// __fixtures__/odds-api-event-combined-props-response.json.
+//
+// Two markets requested in the same call were NOT added to
+// NFL_PROP_MARKET_KEYS above, deliberately withheld pending stronger
+// confirmation:
+//   - player_pass_rush_reception_yds (the 3-way pass+rush+rec combo, the
+//     true PRA equivalent): DID come back, but only on Fanatics and only for
+//     Gibbs (a non-passer) at 120.5 - suspiciously close to his rush+rec
+//     line, not proof this market behaves sensibly when offered on an actual
+//     QB. Hold until confirmed live on a real passer.
+//   - player_rush_reception_tds / player_pass_rush_reception_tds (combined
+//     TD variants): documented by the provider (see betting-markets.html)
+//     but NOT returned by any bookmaker in this call at all - unconfirmed
+//     live, same bar every other market in this file had to clear.
 export const PLAYER_ANYTIME_TD_MARKET_KEY: NflPropMarketKey = "player_anytime_td";
 
 // Sentinel non-player outcomes observed on real player_anytime_td responses.
@@ -234,6 +269,8 @@ const PLAYER_PROP_ODDS_MARKET_KEYS: Partial<Record<PlayerPropMarket, NflPropMark
   RUSH_YDS: "player_rush_yds",
   REC_YDS: "player_reception_yds",
   RECEPTIONS: "player_receptions",
+  RUSH_REC_YDS: "player_rush_reception_yds",
+  PASS_RUSH_YDS: "player_pass_rush_yds",
 };
 
 export type PlayerPropOddsQuery = {
@@ -333,8 +370,12 @@ export type NflPropFetchSummary = {
 //
 // Cost shape worth knowing operationally: unlike the bulk game-lines fetch
 // (one flat-cost call per sport regardless of game count), this is metered
-// PER EVENT (8 markets × 1 region = 8 credits/event, confirmed live - see
-// PLAYER_ANYTIME_TD_MARKET_KEY's header). Because OddsSnapshot locks in a
+// PER EVENT, up to 10 markets × 1 region = up to 10 credits/event - actual
+// cost is markets RETURNED, not requested (confirmed live both for the
+// original 8-market bundle and again for the 2 combined-category markets
+// added 2026-09-17 - see PLAYER_ANYTIME_TD_MARKET_KEY's header), so a game
+// where a bookmaker hasn't posted every one of these 10 markets costs less
+// than the ceiling. Because OddsSnapshot locks in a
 // fresh snapshot every day and NFL slates are often posted a full week
 // ahead, a game that hasn't started yet gets its props re-fetched on every
 // day's run until kickoff - there is no cross-day "already fetched props
