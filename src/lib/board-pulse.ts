@@ -14,8 +14,10 @@ export const MLB_UNDERDOG_WIN_RATE = 0.427;
 // A total line rarely covers extra innings the way the pregame number was
 // set for 9 - pace projection past inning 9 gets unreliable fast, so this is
 // a soft ceiling on how far the "completed innings" denominator counts, not
-// a hard cutoff on which games are included.
-const REGULATION_INNINGS = 9;
+// a hard cutoff on which games are included. Also the regulation-length
+// denominator live-game-progress.ts divides completedInnings by to turn "how
+// many innings are in the books" into a 0-100% bar for MLB.
+export const REGULATION_INNINGS = 9;
 
 // Below this many completed innings, a pace projection is dominated by noise
 // (a single 1st-inning run projects to an absurd full-game pace) - games
@@ -101,8 +103,10 @@ export type BoardPulseStats = {
 // only inningHalf values the MLB Stats API ever sends (see getMlbLiveScores).
 // Middle and Bottom both mean "the top half is fully done" - without
 // out-by-out data there's no finer signal available than that to tell them
-// apart, so they're treated the same here.
-function completedInnings(inningHalf: string | null, inningOrdinal: string | null): number | null {
+// apart, so they're treated the same here. Exported for live-game-progress.ts,
+// which reuses this exact fractional-innings calc (not a parallel one) as the
+// numerator for the MLB progress bar's percentage.
+export function completedInnings(inningHalf: string | null, inningOrdinal: string | null): number | null {
   if (!inningOrdinal) return null;
   const n = parseInt(inningOrdinal, 10);
   if (Number.isNaN(n)) return null;

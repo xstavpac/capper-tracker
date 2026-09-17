@@ -3,6 +3,8 @@ import { LocalGameTime } from "@/components/local-game-time";
 import { getTeamColor } from "@/lib/team-colors";
 import { TeamColorBar } from "@/components/live/team-color-bar";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
+import { getLiveGameProgress } from "@/lib/live-game-progress";
+import { LiveProgressBar, LiveProgressLabel } from "@/components/live/live-progress-bar";
 
 // The compact, one-row-per-game list Grid Live shows instead of Feed
 // Live's full accordion cards. Deliberately minimal - just enough to
@@ -54,6 +56,13 @@ export function GridLiveGameList({
         const isSelected = game.id === selectedGameId;
         const isLive = score?.status === "live";
         const pickCount = matchedPicksByGame[gameIndex]?.length ?? 0;
+        // Desktop-only (see the `lg:` gates below) - mobile's collapsed list
+        // rows stay pixel-identical whether or not a game is live or
+        // selected, per this component's file header on why selecting a
+        // game must never move mobile's scroll position; the tapped card's
+        // own row is no exception. Mobile's only progress display is inside
+        // GameDetailPanel, once a game is tapped (see team-picks-panel.tsx).
+        const progress = isLive ? getLiveGameProgress(activeSport, score) : null;
 
         return (
           <button
@@ -76,8 +85,15 @@ export function GridLiveGameList({
                 />
               </span>
               {isLive ? (
-                <span className="rounded-full bg-red-100 px-1.5 py-0 text-[10px] font-medium text-red-600 dark:bg-red-500/15 dark:text-red-400">
-                  LIVE
+                <span className="flex items-center gap-1.5">
+                  {progress && !isSelected && (
+                    <span className="hidden lg:inline">
+                      <LiveProgressLabel label={progress.label} />
+                    </span>
+                  )}
+                  <span className="rounded-full bg-red-100 px-1.5 py-0 text-[10px] font-medium text-red-600 dark:bg-red-500/15 dark:text-red-400">
+                    LIVE
+                  </span>
                 </span>
               ) : (
                 pickCount > 0 && <span>{pickCount} pick{pickCount === 1 ? "" : "s"}</span>
@@ -101,6 +117,11 @@ export function GridLiveGameList({
                 {score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? ""}
               </span>
             </div>
+            {isSelected && progress && (
+              <div className="hidden lg:block">
+                <LiveProgressBar pct={progress.pct} label={progress.label} />
+              </div>
+            )}
           </button>
         );
       })}

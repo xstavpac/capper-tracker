@@ -17,6 +17,8 @@ import {
 import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { orderTeamSections, type GridLiveGamePanelData, type GridLiveTeamSideData } from "@/components/live/grid-live-team-panel-data";
+import { LiveProgressBar } from "@/components/live/live-progress-bar";
+import type { LiveGameProgress } from "@/lib/live-game-progress";
 
 // Grid Live's fixed detail panel - shows BOTH teams' picks at once,
 // stacked in one card, unlike GamePicksExpander (which lists AWAY/HOME/OTHER
@@ -212,10 +214,22 @@ function TeamPickSection({ teamLabel, teamColor, picks }: GridLiveTeamSideData) 
   );
 }
 
-export function GameDetailPanel({ data }: { data: GridLiveGamePanelData }) {
+// `progress` is this panel's own copy of the selected game's live-progress
+// read (see lib/live-game-progress.ts) - null whenever the game isn't live
+// or the sport/state isn't covered yet, in which case nothing renders here.
+// This is the ONLY place mobile ever shows live progress - GridLiveGameList
+// deliberately withholds it from the collapsed list rows below `lg:` (see
+// that file), so on mobile this panel (which only appears once a game is
+// tapped - the "clicked/expanded state") is where it has to live.
+export function GameDetailPanel({ data, progress }: { data: GridLiveGamePanelData; progress?: LiveGameProgress | null }) {
   const [first, second] = orderTeamSections(data.away, data.home);
   return (
     <div className="rounded-card bg-card p-4 shadow-soft">
+      {progress && (
+        <div className="mb-4">
+          <LiveProgressBar pct={progress.pct} label={progress.label} />
+        </div>
+      )}
       <TeamPickSection {...first} />
       <div className="my-4 border-t border-border-subtle" />
       <TeamPickSection {...second} />
