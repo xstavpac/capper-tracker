@@ -122,6 +122,105 @@ function main() {
     check("case6: nothing left in stillUnresolved", stillUnresolved, []);
   }
 
+  // Case 7 (2026-09, later - "Allen anytime touchdown"/"Moore over 62.5
+  // receiving yards" investigation): a genuine bare-surname collision
+  // (multiple distinct roster players sharing a surname) that used to stay
+  // unresolved no matter what now resolves when another pick in the SAME
+  // paste already established a team that narrows it to exactly one of the
+  // colliding players - see player-roster-fallback.ts's pasteTeamMentions
+  // param. Reproduces the real Josh Allen (Buffalo Bills) vs Keenan Allen
+  // (Indianapolis Colts) collision end-to-end through the real pipeline
+  // (parseCatalog -> recoverUnresolvedLines), verified separately against
+  // the live-DB-backed roster (747 real players, including this exact real
+  // 2-way collision) before being written here as a fixture-based regression
+  // test.
+  {
+    const allenRoster: RosterPlayer[] = [
+      ...roster,
+      { playerName: "Josh Allen", firstName: "Josh", lastName: "Allen", team: "Buffalo Bills", position: "QB", espnPlayerId: "5" },
+      { playerName: "Keenan Allen", firstName: "Keenan", lastName: "Allen", team: "Indianapolis Colts", position: "WR", espnPlayerId: "6" },
+    ];
+
+    // 7a: no other context in the paste at all -> stays unresolved, same as
+    // before this fix (the collision alone is never "close enough").
+    {
+      const { picks, unresolved, unresolvedCapperNames } = parseCatalog("Godfather\nAllen anytime touchdown", ["Godfather"]);
+      const { recovered, stillUnresolved } = recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, allenRoster, picks);
+      check("case7a: no paste context -> nothing recovered", recovered.length, 0);
+      check("case7a: no paste context -> stays unresolved", stillUnresolved, ["Allen anytime touchdown"]);
+    }
+
+    // 7b: an earlier pick in the SAME paste (same capper block) already
+    // resolved the Colts directly (a real ParsedPick.teamNicknames entry,
+    // not live-schedule data - liveTeams is still empty here) - narrows the
+    // collision to exactly one player and resolves it.
+    {
+      const { picks, unresolved, unresolvedCapperNames } = parseCatalog(
+        "Godfather\nColts -3\nAllen anytime touchdown",
+        ["Godfather"]
+      );
+      const { recovered, stillUnresolved } = recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, allenRoster, picks);
+      check("case7b: recovers exactly one pick using paste-local context", recovered.length, 1);
+      check("case7b: resolves to Keenan Allen's team (Indianapolis Colts)", recovered[0]?.teamNicknames, ["indianapolis colts"]);
+      check("case7b: capper attribution intact", recovered[0]?.capperName, "Godfather");
+      check("case7b: nothing left in stillUnresolved", stillUnresolved, []);
+    }
+
+    // 7c: the narrowing context comes from a line THIS SAME recovery pass
+    // resolves (not an already-resolved `picks` entry, unlike 7b/7d) - both
+    // lines start out unresolved, and the team line only resolves via the
+    // live-team fallback (a fictitious "Springfield Isotopes" team with no
+    // static NFL nickname at all, standing in for Keenan Allen's team here
+    // specifically so this case is decoupled from real NFL nickname
+    // coverage, which already resolves almost every real team name directly
+    // via the static list - see 7b/7d for that path). Proves
+    // nonPlayerPropResolutions, not just resolvedPicks, feeds
+    // pasteTeamMentions.
+    {
+      const springfieldAllenRoster: RosterPlayer[] = [
+        ...roster,
+        { playerName: "Josh Allen", firstName: "Josh", lastName: "Allen", team: "Buffalo Bills", position: "QB", espnPlayerId: "5" },
+        { playerName: "Keenan Allen", firstName: "Keenan", lastName: "Allen", team: "Springfield Isotopes", position: "WR", espnPlayerId: "6" },
+      ];
+      const { picks, unresolved, unresolvedCapperNames } = parseCatalog(
+        "Godfather\nAllen anytime touchdown\nSpringfield ML",
+        ["Godfather"]
+      );
+      check("case7c sanity: both lines start out unresolved (no static or already-resolved context)", unresolved.length, 2);
+      const { recovered, stillUnresolved } = recoverUnresolvedLines(
+        unresolved,
+        unresolvedCapperNames,
+        [{ sport: "NFL", name: "Springfield Isotopes" }],
+        springfieldAllenRoster,
+        picks
+      );
+      check("case7c: both lines recover", recovered.length, 2);
+      check(
+        "case7c: the Allen collision resolves to Keenan Allen's team, narrowed by the OTHER line's same-pass resolution",
+        recovered.find((p) => p.description === "Allen anytime touchdown")?.teamNicknames,
+        ["springfield isotopes"]
+      );
+      check("case7c: nothing left in stillUnresolved", stillUnresolved, []);
+    }
+
+    // 7d: context that narrows the field but NOT down to exactly one player
+    // still stays unresolved - proves this never loosens into "any context
+    // is enough," only "context that lands on exactly one player" is.
+    {
+      const twoOnSameTeamRoster: RosterPlayer[] = [
+        ...allenRoster,
+        { playerName: "Kyle Allen", firstName: "Kyle", lastName: "Allen", team: "Buffalo Bills", position: "QB", espnPlayerId: "7" },
+      ];
+      const { picks, unresolved, unresolvedCapperNames } = parseCatalog(
+        "Godfather\nBills -3\nAllen anytime touchdown",
+        ["Godfather"]
+      );
+      const { recovered, stillUnresolved } = recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, twoOnSameTeamRoster, picks);
+      check("case7d: paste context that still leaves 2 candidates (Josh Allen AND Kyle Allen, both Bills) stays unresolved, not guessed", recovered.length, 0);
+      check("case7d: stays in stillUnresolved", stillUnresolved, ["Allen anytime touchdown"]);
+    }
+  }
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }
