@@ -23,7 +23,7 @@
 // entered the resolved-picks list either, so every one of them was
 // attributed to whichever earlier capper's pick happened to appear first.
 import { parsePickText, type ParsedPick } from "@/lib/parse-catalog";
-import { resolveLineAgainstLiveTeams, parseFallbackBetText, type LiveTeam } from "@/lib/live-team-fallback";
+import { resolveLineAgainstLiveTeams, parseFallbackBetText, type LiveTeam, type LineResolution } from "@/lib/live-team-fallback";
 import { resolvePlayerPropAgainstRoster } from "@/lib/player-roster-fallback";
 import { parsePlayerProp } from "@/lib/bet-line";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
@@ -37,12 +37,41 @@ export function recoverUnresolvedLines(
   unresolved: string[],
   unresolvedCapperNames: string[],
   liveTeams: LiveTeam[],
-  roster: RosterPlayer[]
+  roster: RosterPlayer[],
+  resolvedPicks: ParsedPick[] = []
 ): RecoverUnresolvedResult {
   const recovered: ParsedPick[] = [];
   const stillUnresolved: string[] = [];
 
   const isPlayerProp = new Set(unresolved.filter((line) => parsePlayerProp(line) !== null));
+
+  // Every non-player-prop unresolved line's own team-fallback resolution,
+  // computed up front (once, and reused below in the main loop) so that a
+  // team pick appearing AFTER a player-prop line in the raw paste still
+  // counts as paste context for it - see pasteTeamMentions just below. Pure
+  // and cheap (no network call - resolveLineAgainstLiveTeams only matches
+  // against the liveTeams already fetched), so resolving each of these lines
+  // twice costs nothing beyond this function's own runtime.
+  const nonPlayerPropResolutions = new Map<string, LineResolution>();
+  for (const line of unresolved) {
+    if (isPlayerProp.has(line)) continue;
+    nonPlayerPropResolutions.set(line, resolveLineAgainstLiveTeams(line, liveTeams));
+  }
+
+  // Paste-local disambiguation context for the roster fallback's bare-
+  // surname tier only (see player-roster-fallback.ts's `pasteTeamMentions`
+  // param) - NFL team names/nicknames already established elsewhere in THIS
+  // SAME paste: from a pick parseCatalog resolved outright on its first pass
+  // (`resolvedPicks`), or from another line this same recovery pass resolves
+  // (`nonPlayerPropResolutions` above). Independent of `relevantNflTeams`
+  // below, which comes from the live schedule/odds board instead - a
+  // genuinely different source, so both are tried.
+  const pasteTeamMentions = [
+    ...resolvedPicks.filter((p) => p.sportName === "NFL").flatMap((p) => p.teamNicknames),
+    ...[...nonPlayerPropResolutions.values()]
+      .filter((r) => r.status === "resolved" && r.sport === "NFL")
+      .map((r) => (r as Extract<LineResolution, { status: "resolved" }>).nickname),
+  ];
 
   for (let i = 0; i < unresolved.length; i++) {
     const line = unresolved[i];
@@ -56,7 +85,7 @@ export function recoverUnresolvedLines(
       // a tie via the slate and falls back to reporting `ambiguous`, same as
       // before this existed - no new network call is made to populate it.
       const relevantNflTeams = liveTeams.filter((t) => t.sport === "NFL").map((t) => t.name);
-      const res = resolvePlayerPropAgainstRoster(line, roster, relevantNflTeams);
+      const res = resolvePlayerPropAgainstRoster(line, roster, relevantNflTeams, pasteTeamMentions);
       if (res.status !== "resolved") {
         // "ambiguous" (2+ distinct players matching) is deliberately treated
         // the same as "unresolved" here, same policy as the team-name
@@ -82,7 +111,7 @@ export function recoverUnresolvedLines(
       continue;
     }
 
-    const res = resolveLineAgainstLiveTeams(line, liveTeams);
+    const res = nonPlayerPropResolutions.get(line)!;
     if (res.status !== "resolved") {
       // "ambiguous" is deliberately treated the same as "unresolved" here -
       // a collision is exactly the case where we must NOT guess.

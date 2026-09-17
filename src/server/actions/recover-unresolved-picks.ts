@@ -74,7 +74,7 @@ export async function recoverUnresolvedPicksAction(
 ): Promise<RecoverUnresolvedResult> {
   await requireUser();
 
-  const { unresolved, unresolvedCapperNames } = parseCatalog(text, knownCapperNames);
+  const { picks, unresolved, unresolvedCapperNames } = parseCatalog(text, knownCapperNames);
   if (unresolved.length === 0) return { recovered: [], stillUnresolved: [] };
 
   // Partition once, up front, so each live-data source is fetched at most
@@ -86,5 +86,11 @@ export async function recoverUnresolvedPicksAction(
     isPlayerProp.size > 0 ? getCachedNflRoster() : Promise.resolve([]),
   ]);
 
-  return recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, roster);
+  // `picks` - the lines parseCatalog already resolved outright on its first
+  // pass over this same paste - is passed through as paste-local
+  // disambiguation context for a bare-surname player-prop collision (see
+  // recover-unresolved-lines.ts's pasteTeamMentions and player-roster-
+  // fallback.ts's header comment). Only ever consulted when isPlayerProp is
+  // non-empty; harmless to pass otherwise.
+  return recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, roster, picks);
 }

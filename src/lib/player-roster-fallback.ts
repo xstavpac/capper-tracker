@@ -47,6 +47,21 @@
 // pass), is used ONLY to break a genuine multi-surname tie - not to
 // pre-filter the roster before matching - so a team on a bye week (absent
 // from that list) never loses an otherwise-unambiguous match.
+//
+// `pasteTeamMentions` (2026-09, later - the "Allen anytime touchdown"/"Moore
+// over 62.5 receiving yards" case) is a second, independent narrowing source
+// tried only after `relevantTeams` fails to narrow the tie: team names (or
+// nicknames - "chiefs", not just "Kansas City Chiefs") already established
+// elsewhere in the SAME PASTE the capper typed this line in - either from a
+// pick parseCatalog resolved outright on its first pass, or from another
+// line this same recovery pass itself resolves. A capper who already named
+// the Bills somewhere in this paste has effectively already told us which
+// Allen they mean, even with no live-schedule data at all. Matched with
+// `endsWith` (a live team's full name always ends with its bare nickname -
+// "kansas city chiefs".endsWith("chiefs")) rather than exact equality, since
+// paste mentions can be either form. Same guarantee as `relevantTeams`:
+// narrows only when it lands on exactly one distinct player, otherwise the
+// collision stays `ambiguous` exactly as before this existed.
 import { parsePlayerProp } from "@/lib/bet-line";
 import { normalizeName, isLikelyDuplicateName } from "@/lib/fuzzy-match";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
@@ -81,7 +96,8 @@ function distinctPlayers(matches: RosterPlayer[]): RosterPlayer[] {
 export function resolvePlayerPropAgainstRoster(
   line: string,
   roster: RosterPlayer[],
-  relevantTeams?: string[]
+  relevantTeams?: string[],
+  pasteTeamMentions?: string[]
 ): PlayerPropResolution {
   const prop = parsePlayerProp(line);
   if (!prop) return { status: "unresolved" };
@@ -122,6 +138,14 @@ export function resolvePlayerPropAgainstRoster(
         const narrowed = bySurname.filter((p) => relevantTeams.includes(p.team));
         if (narrowed.length === 1) {
           return { status: "resolved", sport: "NFL", team: narrowed[0].team, playerName: narrowed[0].playerName, via: "surname" };
+        }
+      }
+      if (pasteTeamMentions && pasteTeamMentions.length > 0) {
+        const narrowedByPaste = bySurname.filter((p) =>
+          pasteTeamMentions.some((mention) => p.team.toLowerCase().endsWith(mention.toLowerCase()))
+        );
+        if (narrowedByPaste.length === 1) {
+          return { status: "resolved", sport: "NFL", team: narrowedByPaste[0].team, playerName: narrowedByPaste[0].playerName, via: "surname" };
         }
       }
       return { status: "ambiguous", matches: bySurname.map((p) => ({ playerName: p.playerName, team: p.team })) };
