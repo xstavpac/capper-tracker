@@ -10,6 +10,7 @@ import {
   resolveGameForNickname,
   resolveGameForTeams,
   findMarketPrice,
+  findMarketSpreadLine,
   findMarketTotalLine,
   findFavoredSide,
   LIVE_SPORTS,
@@ -22,6 +23,7 @@ import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { computeDuplicateFlags, dedupCategory, type ResolvedDupCandidate, type DuplicateFlag } from "@/lib/duplicate-pick-detection";
+import { createParlayBet, type LegCreateInput } from "@/server/data/parlays";
 import type { BetType, Period } from "@prisma/client";
 
 export type BulkImportItem = {
@@ -459,6 +461,49 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
   );
 }
 
+type CapperRef = { id: string; name: string };
+
+// Shared by bulkImportPicksAction and bulkImportParlaysAction - both do the
+// exact same "find by normalized name, else create" resolution and must stay
+// in sync, or a capper created via one import path within the same paste
+// could fail to match the other's cache lookup.
+async function resolveOrCreateCapperId(
+  userId: string,
+  capperName: string,
+  existingCappers: CapperRef[],
+  cache: Map<string, string>
+): Promise<string> {
+  const normalizedName = normalizeName(capperName);
+  let capperId = cache.get(normalizedName);
+  if (!capperId) {
+    const existing = existingCappers.find((c) => normalizeName(c.name) === normalizedName);
+    if (existing) {
+      capperId = existing.id;
+    } else {
+      const created = await createCapper(userId, { name: capperName, source: "OTHER", customSource: "Catalog import" });
+      capperId = created.id;
+      existingCappers.push(created);
+    }
+    cache.set(normalizedName, capperId);
+  }
+  return capperId;
+}
+
+// Shared by bulkImportPicksAction and bulkImportParlaysAction.
+async function resolveOrCreateSportId(sportName: string, cache: Map<string, string>): Promise<string> {
+  const key = sportName.toLowerCase();
+  let sportId = cache.get(key);
+  if (!sportId) {
+    let sport = await prisma.sport.findFirst({ where: { name: { equals: sportName, mode: "insensitive" } } });
+    if (!sport) {
+      sport = await prisma.sport.create({ data: { name: sportName } });
+    }
+    sportId = sport.id;
+    cache.set(key, sportId);
+  }
+  return sportId;
+}
+
 export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<BulkImportResult> {
   const user = await requireUser();
 
@@ -480,37 +525,8 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
 
   for (const item of items) {
     try {
-      const normalizedName = normalizeName(item.capperName);
-      let capperId = capperCache.get(normalizedName);
-
-      if (!capperId) {
-        const existing = existingCappers.find((c) => normalizeName(c.name) === normalizedName);
-        if (existing) {
-          capperId = existing.id;
-        } else {
-          const created = await createCapper(user.id, {
-            name: item.capperName,
-            source: "OTHER",
-            customSource: "Catalog import",
-          });
-          capperId = created.id;
-          existingCappers.push(created);
-        }
-        capperCache.set(normalizedName, capperId);
-      }
-
-      const sportKey = item.sportName.toLowerCase();
-      let sportId = sportCache.get(sportKey);
-      if (!sportId) {
-        let sport = await prisma.sport.findFirst({
-          where: { name: { equals: item.sportName, mode: "insensitive" } },
-        });
-        if (!sport) {
-          sport = await prisma.sport.create({ data: { name: item.sportName } });
-        }
-        sportId = sport.id;
-        sportCache.set(sportKey, sportId);
-      }
+      const capperId = await resolveOrCreateCapperId(user.id, item.capperName, existingCappers, capperCache);
+      const sportId = await resolveOrCreateSportId(item.sportName, sportCache);
 
       const { homeTeam, awayTeam, gameTime, odds, resolvable, matched, pickedSide, mlFavoredSide } =
         await resolveGameAndOdds(item);
@@ -599,4 +615,148 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
     errors,
     unmatchedGames,
   };
+}
+
+// ---- MLP (moneyline parlay) import ----
+//
+// Two independently-resolvable picks coupled into one heads-up bet (e.g.
+// "Lions +12.5 + Lions/Bills o47 mlp") - each leg is resolved to a real
+// scheduled game exactly the way a normal single pick is (resolveGameAndOdds,
+// unchanged), and persisted as a ParlayBet + 2 Legs (see
+// server/data/parlays.ts) instead of 2 separate Picks. The parlay's combined
+// price is intentionally never stored here - see the Leg model's own comment
+// in schema.prisma - it's computed live from surviving (non-PUSH) legs'
+// individual Leg.odds at grading/display time.
+
+export type BulkImportParlayLegItem = ResolvableItem & { period: Period };
+
+export type BulkImportParlayItem = {
+  capperName: string;
+  units: number;
+  legs: [BulkImportParlayLegItem, BulkImportParlayLegItem];
+};
+
+export type BulkImportParlaysResult =
+  | { success: true; imported: number; skipped: number; errors: string[]; unmatchedParlays: string[] }
+  | { success: false; error: string };
+
+// The one deliberate divergence from resolveGameAndOdds: for a SPREAD/TOTAL
+// leg, the number written next to it in the paste is a leg label pointing at
+// a real pick, NOT gradable truth (see ParsedParlay's own comment in
+// parse-catalog.ts - a capper's "Lions +12.5" can really mean the live
+// "Lions +4.5"). So the persisted `line` for those two bet types always
+// comes from today's live market point, via the same findMarketSpreadLine/
+// findMarketTotalLine lookups used elsewhere for a missing/garbled number -
+// applied here unconditionally, never gated on the text having no number at
+// all. `lineUnresolved` tells the caller when that live lookup itself came
+// up empty (no market for this exact game/side yet) - the whole parlay must
+// be rejected then, never falling back to trusting the leg's own written
+// number instead (see the "bad data worse than unresolved" project rule).
+//
+// MONEYLINE/TEAM_TOTAL/PLAYER_PROP/NRFI legs have no live line to force (a
+// TEAM_TOTAL leg has no real market source at all, same limitation as a
+// normal single TEAM_TOTAL pick) - line stays null here, and the caller
+// falls back to extractLine(betType, description) same as a normal pick.
+async function resolveLegAndOdds(item: ResolvableItem): Promise<{
+  homeTeam: string;
+  awayTeam: string;
+  gameTime: Date;
+  odds: number;
+  line: number | null;
+  resolvable: boolean;
+  matched: boolean;
+  pickedSide: "HOME" | "AWAY" | null;
+  mlFavoredSide: "HOME" | "AWAY" | null;
+  lineUnresolved: boolean;
+}> {
+  const base = await resolveGameAndOdds(item);
+  if (!base.matched || (item.betType !== "SPREAD" && item.betType !== "TOTAL")) {
+    return { ...base, line: null, lineUnresolved: false };
+  }
+
+  const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())!.key;
+  const game = { homeTeam: base.homeTeam, awayTeam: base.awayTeam, commenceTime: base.gameTime.toISOString() };
+
+  let line: number | null;
+  if (item.betType === "SPREAD") {
+    // pickedSide can be null for a same-mascot matchup - same "don't guess"
+    // rule resolveGameAndOdds itself already follows; without a determined
+    // side there's no live spread line to look up for it.
+    const side = base.pickedSide === "HOME" ? "home" : base.pickedSide === "AWAY" ? "away" : null;
+    line = side ? await findMarketSpreadLine(liveSportKey, game, side) : null;
+  } else {
+    line = item.totalSide ? await findMarketTotalLine(liveSportKey, game, item.totalSide) : null;
+  }
+
+  return { ...base, line, lineUnresolved: line === null };
+}
+
+export async function bulkImportParlaysAction(items: BulkImportParlayItem[]): Promise<BulkImportParlaysResult> {
+  const user = await requireUser();
+
+  const existingCappers = await prisma.capper.findMany({ where: { userId: user.id } });
+  const capperCache = new Map<string, string>();
+  const sportCache = new Map<string, string>();
+  const errors: string[] = [];
+  const unmatchedParlays: string[] = [];
+  let imported = 0;
+
+  for (const item of items) {
+    try {
+      const capperId = await resolveOrCreateCapperId(user.id, item.capperName, existingCappers, capperCache);
+
+      const legsData: LegCreateInput[] = [];
+      let rejected = false;
+
+      for (const legItem of item.legs) {
+        const resolved = await resolveLegAndOdds(legItem);
+        if ((resolved.resolvable && !resolved.matched) || resolved.lineUnresolved) {
+          rejected = true;
+          break;
+        }
+
+        const sportId = await resolveOrCreateSportId(legItem.sportName, sportCache);
+        // resolved.line only carries a real value when a live lookup was
+        // actually attempted (resolved.matched - see resolveLegAndOdds).
+        // For a sport with no live score source at all (resolvable: false,
+        // never matched, never rejected above), there's nothing to look up
+        // against, so this falls back to the leg's own written number, same
+        // as a normal single pick in an unresolvable sport already does -
+        // never silently drops a real number just because MLP normally
+        // distrusts it.
+        const line =
+          resolved.matched && (legItem.betType === "SPREAD" || legItem.betType === "TOTAL")
+            ? resolved.line
+            : extractLine(legItem.betType, legItem.description);
+
+        legsData.push({
+          sportId,
+          homeTeam: resolved.homeTeam,
+          awayTeam: resolved.awayTeam,
+          betType: legItem.betType,
+          betDetail: legItem.description,
+          odds: resolved.odds,
+          line,
+          period: legItem.period,
+          gameTime: resolved.gameTime,
+        });
+      }
+
+      if (rejected || legsData.length !== item.legs.length) {
+        unmatchedParlays.push(item.capperName + " - " + item.legs.map((l) => l.description).join(" + "));
+        continue;
+      }
+
+      await createParlayBet(user.id, { capperId, units: item.units, legs: legsData });
+      imported++;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "failed";
+      errors.push(item.capperName + ": " + message);
+    }
+  }
+
+  revalidatePath("/picks");
+  revalidatePath("/dashboard");
+
+  return { success: true, imported, skipped: items.length - imported, errors, unmatchedParlays };
 }

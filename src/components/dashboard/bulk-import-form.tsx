@@ -1,14 +1,16 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { parseCatalog, resolveAmbiguousPick, type AmbiguousOption, type ParsedPick } from "@/lib/parse-catalog";
+import { parseCatalog, resolveAmbiguousPick, type AmbiguousOption, type ParsedPick, type ParsedParlay } from "@/lib/parse-catalog";
 import { autoResolveAmbiguousPicks } from "@/lib/resolve-ambiguous-catalog";
 import {
   bulkImportPicksAction,
+  bulkImportParlaysAction,
   previewBulkImportOdds,
   checkDuplicatePicksAction,
   previewMissingTotalLines,
   type MissingTotalLineResult,
+  type BulkImportParlayLegItem,
 } from "@/server/actions/bulk-picks";
 import { recoverUnresolvedPicksAction } from "@/server/actions/recover-unresolved-picks";
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
@@ -37,6 +39,15 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const [showTips, setShowTips] = useState(false);
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<ParsedPick[] | null>(null);
+  // MLP (moneyline parlay) lines parseCatalog split into 2 legs - kept
+  // separate from `parsed` rather than folded into ParsedPick, since a
+  // parlay has no single sportName/betType/odds of its own (see
+  // ParsedParlay's own comment). No preview enrichment (odds/duplicate/
+  // missing-total-line) for these in v1 - each leg is fully resolved against
+  // live data at import time regardless (see bulkImportParlaysAction), the
+  // same way it would be for a normal pick; only the up-front preview number
+  // is skipped here.
+  const [parlays, setParlays] = useState<ParsedParlay[]>([]);
   // Lines that looked pick-shaped but couldn't be resolved to any sport/team/
   // player (see parseCatalog's `unresolved` return value) - shown so the user
   // can add them manually instead of them either vanishing or, worse, being
@@ -63,6 +74,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     // unmatchedGames does for schedule misses.
     skippedDuplicates: string[];
     pickLimitBlocked?: { message: string; remaining: number };
+    parlaysImported: number;
+    unmatchedParlays: string[];
+    parlayErrors: string[];
   } | null>(null);
   // Keyed by the raw capper name as it appears in the pasted text - value is
   // either an existing capper's name (user confirmed "yes, same as") or
@@ -141,7 +155,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setTotalLineFlags({});
     setTotalLineChoices({});
     setResolving(true);
-    const { picks: items, unresolved } = parseCatalog(text, existingCapperNames);
+    const { picks: items, parlays: parlayItems, unresolved } = parseCatalog(text, existingCapperNames);
+    setParlays(parlayItems);
     // Last-resort pass: hand the lines parseCatalog couldn't place to the
     // server, which checks them against the real team names on today's live
     // schedule + odds board (see recoverUnresolvedPicksAction). Only an
@@ -373,12 +388,19 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     // Runs even at 0 included picks as long as there's something to report -
     // re-pasting an already-imported catalog leaves nothing to import but
     // still needs the "all N skipped as duplicates" outcome shown.
-    if (includedPicks.length === 0 && skippedDuplicateEntries.length === 0) return;
+    if (includedPicks.length === 0 && skippedDuplicateEntries.length === 0 && parlays.length === 0) return;
     // Snapshot before the request - the preview (and this list) is cleared on
     // success, and these picks were never sent to the server so it can't
     // report them back.
     const skippedDuplicates = skippedDuplicateEntries.map((e) => dedupeLabel(e.p));
     setImporting(true);
+    // Sequential, not Promise.all: both actions independently do "find this
+    // capper by normalized name, else create" against their own snapshot of
+    // existingCappers - running them concurrently could let a brand-new
+    // capper who appears ONLY via an MLP parlay in this same paste (or in
+    // both a pick and a parlay) get created twice before either write
+    // commits. Awaiting the picks import first means the parlay import's own
+    // capper lookup always sees it.
     const res = await bulkImportPicksAction(
       includedEntries.map(({ p, idx }) => ({
         capperName: resolvedCapperName(p.capperName),
@@ -394,6 +416,25 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         inferredLine: totalLineChoices[idx] === "confirm" ? totalLineFlags[idx]?.inferredLine : undefined,
       }))
     );
+    const parlayRes =
+      parlays.length > 0
+        ? await bulkImportParlaysAction(
+            parlays.map((parlay) => ({
+              capperName: resolvedCapperName(parlay.capperName),
+              units: parlay.units,
+              legs: parlay.legs.map((leg) => ({
+                sportName: leg.sportName,
+                description: leg.description,
+                betType: leg.betType,
+                odds: leg.odds ?? -110,
+                hasExplicitOdds: leg.odds !== null,
+                totalSide: leg.totalSide,
+                teamNicknames: leg.teamNicknames,
+                period: leg.period,
+              })) as [BulkImportParlayLegItem, BulkImportParlayLegItem], // ParsedParlay.legs is already a 2-tuple
+            }))
+          )
+        : null;
     setImporting(false);
     if (res.success) {
       setResult({
@@ -403,12 +444,16 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         unmatchedGames: res.unmatchedGames,
         skippedDuplicates,
         pickLimitBlocked: res.pickLimitBlocked,
+        parlaysImported: parlayRes?.success ? parlayRes.imported : 0,
+        unmatchedParlays: parlayRes?.success ? parlayRes.unmatchedParlays : [],
+        parlayErrors: parlayRes && !parlayRes.success ? [parlayRes.error] : parlayRes?.success ? parlayRes.errors : [],
       });
       // Blocked by the pick limit means nothing was imported - keep the
       // pasted text and preview in place so upgrading and retrying doesn't
       // require re-pasting the whole catalog.
       if (!res.pickLimitBlocked) {
         setParsed(null);
+        setParlays([]);
         setUnresolvedLines([]);
         setText("");
       }
@@ -484,6 +529,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         <div ref={resultsRef} className="mt-4">
           <div className="mb-2 text-sm font-medium text-muted-foreground">
             {validPicks.length} pick{validPicks.length === 1 ? "" : "s"} found
+            {parlays.length > 0 && " - " + parlays.length + " parlay" + (parlays.length === 1 ? "" : "s") + " (mlp)"}
             {ambiguousPicks.length > 0 &&
               " - " + ambiguousPicks.length + " need clarification"}
             {unresolvedDuplicateCount > 0 &&
@@ -741,12 +787,45 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
             </div>
           </div>
 
+          {parlays.length > 0 && (
+            <div className="mt-3 max-h-60 overflow-y-auto rounded-lg border border-border-subtle">
+              {parlays.map((parlay, i) => {
+                const resolvedName = resolvedCapperName(parlay.capperName);
+                return (
+                  <div
+                    key={"parlay-" + i}
+                    className="border-b border-b-border-subtle px-3 py-2 text-xs last:border-b-0"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{resolvedName}</span>
+                      <span className="text-muted-foreground">
+                        {parlay.sportName} - MLP - {parlay.units}u
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-muted-foreground">
+                      {parlay.legs[0].description} + {parlay.legs[1].description}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      Real line/odds for each leg are resolved from today&apos;s schedule at import - not
+                      the numbers above.
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <button
             onClick={handleImport}
-            disabled={importing || (includedPicks.length === 0 && skippedDuplicateEntries.length === 0)}
+            disabled={
+              importing || (includedPicks.length === 0 && skippedDuplicateEntries.length === 0 && parlays.length === 0)
+            }
             className="mt-3 rounded-full bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700 disabled:opacity-50"
           >
-            {importing ? "Importing..." : importButtonLabel(includedPicks.length, skippedDuplicateEntries.length)}
+            {importing
+              ? "Importing..."
+              : importButtonLabel(includedPicks.length, skippedDuplicateEntries.length) +
+                (parlays.length > 0 ? " + " + parlays.length + " parlay" + (parlays.length === 1 ? "" : "s") : "")}
           </button>
         </div>
       )}
@@ -766,7 +845,10 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
 
       {result && !result.pickLimitBlocked && (
         <div className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-          Imported {result.imported} pick{result.imported === 1 ? "" : "s"}.
+          Imported {result.imported} pick{result.imported === 1 ? "" : "s"}
+          {result.parlaysImported > 0 &&
+            " and " + result.parlaysImported + " parlay" + (result.parlaysImported === 1 ? "" : "s")}
+          .
           {result.skipped + result.skippedDuplicates.length > 0 &&
             " " + (result.skipped + result.skippedDuplicates.length) + " skipped."}
           {result.errors.length > 0 && (
@@ -799,6 +881,25 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                 ))}
               </ul>
             </div>
+          )}
+          {result.unmatchedParlays.length > 0 && (
+            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+              Couldn&apos;t match {result.unmatchedParlays.length} parlay
+              {result.unmatchedParlays.length === 1 ? "" : "s"} - one or both legs couldn&apos;t be
+              resolved to today&apos;s schedule/odds. They were NOT imported:
+              <ul className="mt-1 list-disc pl-4">
+                {result.unmatchedParlays.map((g, i) => (
+                  <li key={i}>{g}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result.parlayErrors.length > 0 && (
+            <ul className="mt-1 list-disc pl-4 text-xs text-red-600 dark:text-red-400">
+              {result.parlayErrors.map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+            </ul>
           )}
         </div>
       )}

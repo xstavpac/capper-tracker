@@ -1,9 +1,9 @@
-// Proof that deletePick / deleteCustomMetric scope their delete by id +
-// userId ONLY - never a name or any other text match. This is the standing
-// project rule after a text-`where` deleteMany once ran against production
-// (see the delete-queries-must-filter-by-id-only note). Also checks
-// deletePick's not-found path throws rather than silently succeeding
-// (deleteCustomMetric deliberately does not - see below).
+// Proof that deletePick / deleteParlayBet / deleteCustomMetric scope their
+// delete by id + userId ONLY - never a name or any other text match. This is
+// the standing project rule after a text-`where` deleteMany once ran against
+// production (see the delete-queries-must-filter-by-id-only note). Also checks
+// deletePick/deleteParlayBet's not-found path throws rather than silently
+// succeeding (deleteCustomMetric deliberately does not - see below).
 //
 // Pure: the prisma singleton's deleteMany is swapped for a spy before the
 // call, so no database is touched. Run with:
@@ -11,6 +11,7 @@
 // Exits non-zero on any failed assertion.
 import { prisma } from "@/lib/prisma";
 import { deletePick } from "@/server/data/picks";
+import { deleteParlayBet } from "@/server/data/parlays";
 import { deleteCustomMetric } from "@/server/data/custom-metrics";
 
 let failures = 0;
@@ -56,6 +57,30 @@ async function main() {
     expect("deletePick throws when nothing matched (count 0)", threw, "Pick not found.");
   }
 
+  // ---- deleteParlayBet ----
+  {
+    const spy = spyOn(prisma.parlayBet as unknown as { deleteMany: (a: unknown) => Promise<{ count: number }> });
+
+    await deleteParlayBet("user-9", "parlay-xyz");
+    expect("deleteParlayBet issues exactly one deleteMany", spy.calls.length, 1);
+    expect(
+      "deleteParlayBet where clause is id + userId only",
+      spy.calls[0],
+      { where: { id: "parlay-xyz", userId: "user-9" } }
+    );
+    const keys = Object.keys((spy.calls[0] as { where: Record<string, unknown> }).where).sort();
+    expect("deleteParlayBet where has no other keys", keys, ["id", "userId"]);
+
+    spy.result = { count: 0 };
+    let threw: string | null = null;
+    try {
+      await deleteParlayBet("user-9", "missing");
+    } catch (e) {
+      threw = e instanceof Error ? e.message : String(e);
+    }
+    expect("deleteParlayBet throws when nothing matched (count 0)", threw, "Parlay not found.");
+  }
+
   // ---- deleteCustomMetric ----
   {
     const spy = spyOn(prisma.customMetric as unknown as { deleteMany: (a: unknown) => Promise<{ count: number }> });
@@ -70,7 +95,7 @@ async function main() {
     const keys = Object.keys((spy.calls[0] as { where: Record<string, unknown> }).where).sort();
     expect("deleteCustomMetric where has no other keys (no name/text match)", keys, ["id", "userId"]);
 
-    // Unlike deletePick, a no-match delete here is a silent
+    // Unlike deletePick/deleteParlayBet, a no-match delete here is a silent
     // no-op by design - deleting a metric you don't own (or a stale id after
     // a double-click) shouldn't surface an error to the user, and the caller
     // (deleteCustomMetricAction) revalidates + refreshes regardless.

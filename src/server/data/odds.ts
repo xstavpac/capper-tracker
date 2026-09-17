@@ -1563,6 +1563,32 @@ export async function findMarketPrice(
 // today's real line proposed for the user's confirmation instead of staying
 // permanently ungradeable. Never used to override a number the capper
 // actually specified - see previewMissingTotalLines, the only caller.
+// Looks up the real market SPREAD LINE (the point number, e.g. -4.5 - not
+// the price) for a resolved game. Unlike findMarketTotalLine, this is not
+// gated on the capper's own text being missing/garbled - it exists for MLP
+// (moneyline-parlay) legs, where the number written next to a leg is a
+// label/shorthand pointing at a real pick, not the real line, so the actual
+// current line must always be looked up live rather than trusted from text
+// (see bulk-picks.ts's resolveLegAndOdds, the only caller).
+export async function findMarketSpreadLine(
+  sportKey: string,
+  game: { homeTeam: string; awayTeam: string; commenceTime: string },
+  side: "home" | "away"
+): Promise<number | null> {
+  const oddsGame = await resolveOddsGame(sportKey, game);
+  if (!oddsGame) return null;
+
+  const outcomeName = side === "home" ? oddsGame.homeTeam : oddsGame.awayTeam;
+
+  for (const bookmaker of oddsGame.bookmakers) {
+    const market = bookmaker.markets.find((m) => m.key === "spreads");
+    const outcome = market?.outcomes.find((o) => o.name === outcomeName);
+    if (outcome?.point !== undefined) return outcome.point;
+  }
+
+  return null;
+}
+
 export async function findMarketTotalLine(
   sportKey: string,
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
