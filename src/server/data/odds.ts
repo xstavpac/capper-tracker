@@ -83,6 +83,17 @@ export type ScoreGame = {
   // populated for live and final games, null for preview and for every
   // ESPN-backed sport.
   innings: ScoreGameInning[] | null;
+  // ESPN-backed sports only (NBA/WNBA/NFL/NCAAF/NHL, via getEspnScores'
+  // shared mapping) - the scoreboard's own `status.period` (quarter/period
+  // number, 1-based, >4/>3 in OT) and `status.displayClock` ("12:34" mm:ss
+  // remaining in that period). Populated for live games only; null for
+  // preview/final and for every non-ESPN sport (MLB, CFL). Optional (not
+  // just nullable) so the many existing ScoreGame literals elsewhere
+  // (tests, live-ticker.ts, oddsGameToScheduleGame) don't all need updating
+  // just to add "period: null, clock: null" - undefined and null both mean
+  // "no live-progress data" to every reader.
+  period?: number | null;
+  clock?: string | null;
 };
 
 export const LIVE_SPORTS = [
@@ -736,6 +747,8 @@ async function getEspnScores(sportPath: string, options: { groups?: string } = {
       inningHalf: null,
       inningOrdinal: null,
       innings: null,
+      period: status === "live" ? (e.status?.period ?? null) : null,
+      clock: status === "live" ? (e.status?.displayClock ?? null) : null,
     };
   });
 }

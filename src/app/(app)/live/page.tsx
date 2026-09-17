@@ -214,71 +214,86 @@ export default async function LivePage({
     : null;
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold">Live odds and scores</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Powered by The Odds API</p>
-      </div>
-
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-2">
-          {LIVE_SPORTS.map((s) => (
-            <a
-              key={s.key}
-              href={"/live?sport=" + s.key + (isGrid ? "&view=advanced" : "&view=feed")}
-              className={tabClass(activeSport === s.key)}
-            >
-              {s.label}
-            </a>
-          ))}
-        </div>
-        <div className="flex gap-1.5 rounded-full bg-muted/60 p-1">
-          <a href={"/live?sport=" + activeSport + "&view=feed"} className={viewToggleClass(!isGrid)}>
-            Feed
-          </a>
-          <a href={"/live?sport=" + activeSport + "&view=advanced"} className={viewToggleClass(isGrid)}>
-            Grid
-          </a>
-        </div>
-      </div>
-
-      {sportCategoryBreakdown.length > 0 && (
+    <>
+      <div className="mx-auto max-w-5xl">
         <div className="mb-6">
-          <h2 className="mb-2 text-sm font-semibold text-foreground">{sportLabel} record by category</h2>
-          <CategoryBreakdown items={sportCategoryBreakdown} leaderboards={sportCategoryLeaderboards} />
+          <h1 className="text-xl font-semibold">Live odds and scores</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Powered by The Odds API</p>
         </div>
-      )}
 
-      {odds.length === 0 && hasApiKey && (
-        <div className="rounded-card bg-card p-10 text-center shadow-soft">
-          <p className="text-sm text-muted-foreground">No games found for this sport right now.</p>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
+            {LIVE_SPORTS.map((s) => (
+              <a
+                key={s.key}
+                href={"/live?sport=" + s.key + (isGrid ? "&view=advanced" : "&view=feed")}
+                className={tabClass(activeSport === s.key)}
+              >
+                {s.label}
+              </a>
+            ))}
+          </div>
+          <div className="flex gap-1.5 rounded-full bg-muted/60 p-1">
+            <a href={"/live?sport=" + activeSport + "&view=feed"} className={viewToggleClass(!isGrid)}>
+              Feed
+            </a>
+            <a href={"/live?sport=" + activeSport + "&view=advanced"} className={viewToggleClass(isGrid)}>
+              Grid
+            </a>
+          </div>
         </div>
-      )}
 
+        {sportCategoryBreakdown.length > 0 && (
+          <div className="mb-6">
+            <h2 className="mb-2 text-sm font-semibold text-foreground">{sportLabel} record by category</h2>
+            <CategoryBreakdown items={sportCategoryBreakdown} leaderboards={sportCategoryLeaderboards} />
+          </div>
+        )}
+
+        {odds.length === 0 && hasApiKey && (
+          <div className="rounded-card bg-card p-10 text-center shadow-soft">
+            <p className="text-sm text-muted-foreground">No games found for this sport right now.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Grid Live's board gets its own, wider container instead of living
+          inside the max-w-5xl div above - the header/tabs/category panel
+          stay put, but the board is the one thing on this page with genuine
+          unused margin next to it on larger screens (its game-card list
+          column was a fixed, cramped 320px regardless of viewport). Only
+          grows past max-w-5xl at xl/2xl - untouched at the in-between
+          desktop widths (1024-1279px) where that margin doesn't exist yet.
+          Feed's LiveScoreboard is deliberately NOT touched by this - it gets
+          its own unchanged max-w-5xl wrapper below. */}
       {odds.length > 0 && isGrid && initialSelection && (
-        <GridLiveBoard
-          key={activeSport}
-          activeSport={activeSport}
-          sportLabel={sportLabel}
-          odds={odds}
-          initialScores={scores}
-          matchedPicksByGame={expanderPicksByGame}
-          initialSelection={initialSelection}
-        />
+        <div className="mx-auto max-w-5xl xl:max-w-6xl 2xl:max-w-7xl">
+          <GridLiveBoard
+            key={activeSport}
+            activeSport={activeSport}
+            sportLabel={sportLabel}
+            odds={odds}
+            initialScores={scores}
+            matchedPicksByGame={expanderPicksByGame}
+            initialSelection={initialSelection}
+          />
+        </div>
       )}
 
       {odds.length > 0 && !isGrid && (
-        <LiveScoreboard
-          key={activeSport}
-          activeSport={activeSport}
-          odds={odds}
-          boardPulseOdds={boardPulseOdds}
-          initialScores={scores}
-          matchedPicksByGame={expanderPicksByGame}
-          showBoardPulse={showBoardPulse}
-        />
+        <div className="mx-auto max-w-5xl">
+          <LiveScoreboard
+            key={activeSport}
+            activeSport={activeSport}
+            odds={odds}
+            boardPulseOdds={boardPulseOdds}
+            initialScores={scores}
+            matchedPicksByGame={expanderPicksByGame}
+            showBoardPulse={showBoardPulse}
+          />
+        </div>
       )}
-    </div>
+    </>
   );
 }
 

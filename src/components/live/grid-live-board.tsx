@@ -11,6 +11,7 @@ import { buildGridLiveGamePanelData } from "@/components/live/grid-live-team-pan
 import { GridLiveGameList } from "@/components/live/grid-live-game-list";
 import { GameDetailPanel } from "@/components/live/team-picks-panel";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
+import { getLiveGameProgress } from "@/lib/live-game-progress";
 
 // Grid Live's client shell: a compact game list beside a fixed
 // game-detail picks panel. Data assembly (odds, scores, picks, team-group
@@ -152,8 +153,16 @@ export function GridLiveBoard({
     selectedEntry &&
     buildGridLiveGamePanelData(selectedEntry.game, activeSport, sportLabel, matchedPicksByGame[selectedEntry.gameIndex] ?? []);
 
+  // Selected game's live progress (see lib/live-game-progress.ts) - null for
+  // a preview/final game or a sport/state this doesn't cover yet. Computed
+  // once here (not inside GameDetailPanel) since it needs the same
+  // score/activeSport GridLiveGameList already derives its own per-card
+  // progress from, and both places should read the identical value for the
+  // identical game rather than each deriving it independently.
+  const selectedProgress = selectedEntry ? getLiveGameProgress(activeSport, selectedEntry.score) : null;
+
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,320px)_1fr]">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,320px)_1fr] xl:grid-cols-[minmax(0,380px)_1fr] 2xl:grid-cols-[minmax(0,420px)_1fr]">
       <GridLiveGameList
         sortedGames={sortedGames}
         matchedPicksByGame={matchedPicksByGame}
@@ -164,7 +173,7 @@ export function GridLiveBoard({
       />
       <div ref={panelRef}>
         {panelData ? (
-          <GameDetailPanel data={panelData} />
+          <GameDetailPanel data={panelData} progress={selectedProgress} />
         ) : (
           <div className="rounded-card bg-card p-10 text-center shadow-soft">
             <p className="text-sm text-muted-foreground">No games found for this sport right now.</p>
