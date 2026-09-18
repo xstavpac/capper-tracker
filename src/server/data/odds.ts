@@ -671,6 +671,71 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
   });
 }
 
+// Maps one ESPN scoreboard event to our ScoreGame shape - shared by every
+// per-date fetch getEspnScores fans out (see below).
+function espnEventToScoreGame(e: any): ScoreGame {
+  const competitors = e.competitions?.[0]?.competitors ?? [];
+  const home = competitors.find((c: any) => c.homeAway === "home");
+  const away = competitors.find((c: any) => c.homeAway === "away");
+  const state = e.status?.type?.state;
+  const status: "preview" | "live" | "final" = state === "post" ? "final" : state === "in" ? "live" : "preview";
+
+  return {
+    id: String(e.id),
+    homeTeam: home?.team?.displayName ?? "",
+    awayTeam: away?.team?.displayName ?? "",
+    status,
+    scores:
+      status === "preview"
+        ? null
+        : [
+            { name: home?.team?.displayName ?? "", score: String(home?.score ?? 0) },
+            { name: away?.team?.displayName ?? "", score: String(away?.score ?? 0) },
+          ],
+    commenceTime: e.date,
+    inningHalf: null,
+    inningOrdinal: null,
+    innings: null,
+    period: status === "live" ? (e.status?.period ?? null) : null,
+    clock: status === "live" ? (e.status?.displayClock ?? null) : null,
+  } as ScoreGame;
+}
+
+// Fetches one day's scoreboard. ESPN's `dates` param used to accept a
+// YYYYMMDD-YYYYMMDD range (see getEspnScores below for why that no longer
+// works) but a single YYYYMMDD date has always been - and still is -
+// accepted, so this is the unit getEspnScores fans out over the window with.
+// A non-ok response is logged (sportPath, dateKey, status) and treated as
+// "no events for this date" rather than failing the whole window - one bad
+// date (a transient blip, an ESPN-side hiccup) shouldn't blank out the two
+// good ones alongside it.
+async function getEspnScoresForDate(
+  sportPath: string,
+  dateKey: string,
+  options: { groups?: string } = {}
+): Promise<any[]> {
+  // See getEspnScores' note on `limit` - same reasoning, per date now instead
+  // of per 3-day window.
+  const params = new URLSearchParams({ dates: dateKey, limit: "1000" });
+  if (options.groups) params.set("groups", options.groups);
+  const url =
+    "https://site.api.espn.com/apis/site/v2/sports/" + sportPath + "/scoreboard?" + params.toString();
+
+  // Same as getMlbLiveScores: no per-fetch cache directive here - caching is
+  // owned by getLiveScoresForSport's short-TTL wrapper (ttl-memo.ts).
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.error(
+      "[getEspnScoresForDate] non-ok response - treating as no events for this date",
+      JSON.stringify({ sportPath, dateKey, groups: options.groups ?? null, url, status: res.status })
+    );
+    return [];
+  }
+
+  const data = await res.json();
+  return data.events ?? [];
+}
+
 // Shared by every ESPN-backed score source (NBA, WNBA, ...) - ESPN's free
 // public scoreboard endpoint (no key required, same "free/unauthenticated"
 // pattern as MLB Stats API) has an identical response shape across sports,
@@ -679,37 +744,27 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
 // grading - first-half and touchdown-prop grading need the heavier
 // per-event summary endpoint instead (see getNflGameFacts and
 // getNflPlayerTdStats below, NFL-only for now).
+//
+// One request PER DATE across yesterday..tomorrow, not a single
+// dates=YYYYMMDD-YYYYMMDD range request: ESPN's scoreboard now rejects the
+// range form outright (HTTP 400 "Failed to get events endpoint.", confirmed
+// live against football/nfl, football/college-football, and basketball/wnba
+// - a single date on the same endpoint returns 200 fine). The old range call
+// silently swallowed that 400 into an empty score feed for every ESPN sport,
+// which was invisible for upcoming games (the odds-feed fallback in
+// resolveScheduleGameFromFeeds still had them) but broke catalog-import
+// matching and grading for every completed game, since a finished game has
+// no odds-feed fallback to hide behind.
 async function getEspnScores(sportPath: string, options: { groups?: string } = {}): Promise<ScoreGame[]> {
   const fmt = (d: Date) => easternDateKey(d).replace(/-/g, "");
-  const yesterday = fmt(new Date(Date.now() - 86400000));
-  const tomorrow = fmt(new Date(Date.now() + 86400000));
-  // `limit` is REQUIRED for a correct response, not an optimization. ESPN's
-  // scoreboard endpoint defaults to a small page (~25 events) - fine for
-  // NBA/WNBA/NFL/NHL (a full day is <=16 games, and a 3-day range never
-  // approaches 25) but silently truncating for college-football, where a
-  // single Saturday is 60-90 FBS games and the 3-day range spans Fri+Sat+Sun.
-  // A dropped event means every pick for that game fails to resolve against
-  // the live schedule with no error, just an unexplained "couldn't match".
-  // 1000 is ESPN's own documented ceiling and clears any real slate.
-  //
-  // `groups` narrows college sports to one division: "80" is FBS (I-A),
-  // matching NCAAF_SCHOOLS (FBS-only) and the Odds API's own NCAAF coverage.
-  // Without it the CFB scoreboard also returns FCS/DII/DIII/NAIA games, which
-  // both pad the event count toward the limit and add name collisions
-  // (multiple "Bulldogs"/"Tigers" across divisions). An FCS-vs-FBS "money
-  // game" still appears under groups=80 - it's the FBS team's game.
-  const params = new URLSearchParams({ dates: yesterday + "-" + tomorrow, limit: "1000" });
-  if (options.groups) params.set("groups", options.groups);
-  const url =
-    "https://site.api.espn.com/apis/site/v2/sports/" + sportPath + "/scoreboard?" + params.toString();
+  const dateKeys = [
+    fmt(new Date(Date.now() - 86400000)),
+    fmt(new Date()),
+    fmt(new Date(Date.now() + 86400000)),
+  ];
 
-  // Same as getMlbLiveScores: no per-fetch cache directive here - caching is
-  // owned by getLiveScoresForSport's short-TTL wrapper (ttl-memo.ts).
-  const res = await fetch(url);
-  if (!res.ok) return [];
-
-  const data = await res.json();
-  const events = data.events ?? [];
+  const perDateEvents = await Promise.all(dateKeys.map((dateKey) => getEspnScoresForDate(sportPath, dateKey, options)));
+  const events = perDateEvents.flat();
 
   // Lightweight completeness signal: if ESPN ever caps a response despite the
   // explicit limit, the count here would sit suspiciously flat against a busy
@@ -717,40 +772,25 @@ async function getEspnScores(sportPath: string, options: { groups?: string } = {
   console.log(
     "[getEspnScores]",
     sportPath,
-    "dates=" + yesterday + "-" + tomorrow,
+    "dates=" + dateKeys.join(","),
     options.groups ? "groups=" + options.groups : "",
     "->",
     events.length,
     "events"
   );
 
-  return events.map((e: any) => {
-    const competitors = e.competitions?.[0]?.competitors ?? [];
-    const home = competitors.find((c: any) => c.homeAway === "home");
-    const away = competitors.find((c: any) => c.homeAway === "away");
-    const state = e.status?.type?.state;
-    const status: "preview" | "live" | "final" = state === "post" ? "final" : state === "in" ? "live" : "preview";
-
-    return {
-      id: String(e.id),
-      homeTeam: home?.team?.displayName ?? "",
-      awayTeam: away?.team?.displayName ?? "",
-      status,
-      scores:
-        status === "preview"
-          ? null
-          : [
-              { name: home?.team?.displayName ?? "", score: String(home?.score ?? 0) },
-              { name: away?.team?.displayName ?? "", score: String(away?.score ?? 0) },
-            ],
-      commenceTime: e.date,
-      inningHalf: null,
-      inningOrdinal: null,
-      innings: null,
-      period: status === "live" ? (e.status?.period ?? null) : null,
-      clock: status === "live" ? (e.status?.displayClock ?? null) : null,
-    };
-  });
+  // Dedupe by event id: each per-date request is its own independent window,
+  // so an event ESPN buckets oddly close to a day boundary could in theory
+  // show up under two adjacent date keys.
+  const seen = new Set<string>();
+  const games: ScoreGame[] = [];
+  for (const e of events) {
+    const id = String(e.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    games.push(espnEventToScoreGame(e));
+  }
+  return games;
 }
 
 export function getNbaLiveScores(): Promise<ScoreGame[]> {
