@@ -10,11 +10,22 @@
 // TRUNCATED response on a busy Saturday (60-90 FBS games across Fri+Sat+Sun,
 // against ESPN's ~25-event default page), and a dropped event means every
 // pick for that game fails to resolve with no error. This stubs global fetch
-// and asserts the request now carries the two params that prevent that:
+// and asserts each request carries the two params that prevent that:
 //   - limit=1000  (clears any real slate; harmless for the <=16-game sports)
 //   - groups=80   (FBS only - matches NCAAF_SCHOOLS and the Odds API's NCAAF
 //                  coverage; keeps FCS/DII/DIII games out of the count and
 //                  out of name-collision range)
+//
+// A follow-up 2026-09 investigation found ESPN's scoreboard now rejects a
+// `dates=YYYYMMDD-YYYYMMDD` RANGE outright (HTTP 400), which had been
+// silently swallowed into an empty score feed for every ESPN-backed sport -
+// invisible for upcoming games (the odds-feed fallback still had them) but
+// breaking catalog-import matching and grading for every completed game,
+// since a finished game has no odds-feed fallback to hide behind.
+// getEspnScores now fans out ONE request per date across yesterday/today/
+// tomorrow instead, so this also asserts exactly 3 requests go out, each
+// carrying a single `dates=YYYYMMDD` (never a range).
+//
 // plus a basic parse check (post/in/pre -> final/live/preview, displayName
 // and date passthrough) and a check that an FCS-vs-FBS "money game" present
 // in the response is still parsed (it rides in as the FBS team's game).
@@ -76,21 +87,28 @@ const FIXTURE = {
 
 async function main() {
   const realFetch = globalThis.fetch;
-  let calledUrl = "";
+  const calledUrls: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    calledUrl = String(input);
+    calledUrls.push(String(input));
     return { ok: true, json: async () => FIXTURE } as Response;
   }) as typeof fetch;
 
   try {
     const games = await getNcaafLiveScores();
 
-    check("fetch hit ESPN's football/college-football scoreboard path", calledUrl.includes("/sports/football/college-football/scoreboard"), true);
-    check("request carries limit=1000 (prevents the busy-Saturday truncation)", /[?&]limit=1000(&|$)/.test(calledUrl), true);
-    check("request carries groups=80 (FBS only)", /[?&]groups=80(&|$)/.test(calledUrl), true);
-    check("request still spans the 3-day range", /[?&]dates=\d{8}-\d{8}(&|$)/.test(calledUrl), true);
+    check("fetches exactly 3 dates (yesterday/today/tomorrow), not one range request", calledUrls.length, 3);
+    for (const url of calledUrls) {
+      check(`fetch hit ESPN's football/college-football scoreboard path (${url})`, url.includes("/sports/football/college-football/scoreboard"), true);
+      check(`request carries limit=1000 (${url})`, /[?&]limit=1000(&|$)/.test(url), true);
+      check(`request carries groups=80 (${url})`, /[?&]groups=80(&|$)/.test(url), true);
+      check(`request carries a SINGLE date, never a range - ESPN 400s on dates=YYYYMMDD-YYYYMMDD (${url})`, /[?&]dates=\d{8}(&|$)/.test(url), true);
+    }
 
-    check("parsed all 3 events", games.length, 3);
+    // Each fetch call returns the same 3-event fixture (a stub can't tell
+    // dates apart) - real distinct per-date responses obviously wouldn't
+    // repeat the same ids, but the dedupe-by-id in getEspnScores means this
+    // stub still exercises the "parsed all 3 events" shape correctly.
+    check("parsed all 3 events (deduped across the 3 per-date fetches)", games.length, 3);
 
     const jmu = games.find((g) => g.id === "401752700")!;
     check("in-progress game: status is live", jmu.status, "live");
