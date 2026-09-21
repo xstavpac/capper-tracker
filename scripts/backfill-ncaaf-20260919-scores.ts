@@ -37,9 +37,14 @@
 const FAKE_NOW = new Date("2026-09-20T12:00:00Z").getTime();
 const RealDate = Date;
 class FakeDate extends RealDate {
-  constructor(...args: ConstructorParameters<typeof Date>) {
+  // `any[]`, not ConstructorParameters<typeof Date> - that resolves to just
+  // ONE of Date's overload signatures (a fixed-length tuple), which made
+  // `args.length === 0` a TS error ("types '1' and '0' have no overlap")
+  // since it narrowed length to a single literal instead of the real 0-7
+  // range every Date constructor call can pass.
+  constructor(...args: any[]) {
     if (args.length === 0) super(FAKE_NOW);
-    else super(...(args as []));
+    else super(...(args as ConstructorParameters<typeof Date>));
   }
   static now() {
     return FAKE_NOW;
