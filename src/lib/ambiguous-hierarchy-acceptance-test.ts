@@ -37,10 +37,40 @@ function fakeSchedule(playing: string[]): ScheduleChecker {
   };
 }
 
+// A fake WIDE-schedule checker (the tiebreaker's runWideScheduleCheck):
+// `hasGame` is the set of `${nickname}|${sport}` keys with a real game
+// SOMEWHERE on the schedule (not just today) - everything else has nothing on
+// the calendar at all. Defaults to empty, matching every existing scenario
+// below where the "losing" near-term candidate genuinely has no game coming
+// up, so the schedule step's original one-candidate-wins behavior is
+// unaffected unless a test opts into a runner-up game with this.
+function fakeWideSchedule(hasGame: string[] = []): ScheduleChecker {
+  const set = new Set(hasGame);
+  return async (queries: ScheduleCheckQuery[]) => {
+    const out: Record<string, boolean> = {};
+    for (const q of queries) out[q.nickname + "|" + q.sport] = set.has(q.nickname + "|" + q.sport);
+    return out;
+  };
+}
+
+// Bundles a near-term + wide fake pair for the common case, so call sites
+// read the same as before the tiebreaker existed: `deps(playing)` behaves
+// exactly like the old `runScheduleCheck: fakeSchedule(playing)`, with no
+// runner-up game on the wide check. `wideExtra` adds keys that DO have a real
+// game on the wide check without also being "playing today" - used by the
+// tiebreaker-specific tests below.
+function deps(playing: string[], wideExtra: string[] = []) {
+  return {
+    runScheduleCheck: fakeSchedule(playing),
+    runWideScheduleCheck: fakeWideSchedule(wideExtra),
+  };
+}
+
 // A checker that always rejects - simulates an ESPN feed outage.
 const throwingSchedule: ScheduleChecker = async () => {
   throw new Error("ESPN scoreboard 503");
 };
+const throwingDeps = { runScheduleCheck: throwingSchedule, runWideScheduleCheck: fakeWideSchedule() };
 
 function ambiguousPick(line: string): ParsedPick {
   const pick = parseCatalog(`Capper\n${line}`, []).picks[0];
@@ -65,7 +95,7 @@ async function main() {
     // The headline case: NY Liberty idle, Liberty Flames playing today ->
     // resolves NCAAF via the schedule, NOT via any calendar reasoning.
     const res = await runAmbiguousHierarchy([ambiguousPick("Liberty ML")], {}, {
-      runScheduleCheck: fakeSchedule(["liberty flames|NCAAF"]),
+      ...deps(["liberty flames|NCAAF"]),
       now: SEPT,
     });
     check("Liberty: only the Flames have a game today -> NCAAF via schedule", {
@@ -77,7 +107,7 @@ async function main() {
   {
     // Mirror: NY Liberty playing, Flames idle -> WNBA via schedule.
     const res = await runAmbiguousHierarchy([ambiguousPick("Liberty +6.5")], {}, {
-      runScheduleCheck: fakeSchedule(["new york liberty|WNBA"]),
+      ...deps(["new york liberty|WNBA"]),
       now: SEPT,
     });
     check("Liberty: only NY Liberty has a game today -> WNBA via schedule", {
@@ -91,7 +121,7 @@ async function main() {
     // season can't settle it, no NCAAF/WNBA terminology in "ML" -> surfaces
     // for a manual choice rather than guessing.
     const res = await runAmbiguousHierarchy([ambiguousPick("Liberty ML")], {}, {
-      runScheduleCheck: fakeSchedule(["liberty flames|NCAAF", "new york liberty|WNBA"]),
+      ...deps(["liberty flames|NCAAF", "new york liberty|WNBA"]),
       now: SEPT,
     });
     check("Liberty: both playing, both in season -> stays ambiguous (no guess)", {
@@ -104,7 +134,7 @@ async function main() {
     // (nobody "playing" in the fake) - only NCAAF is still in its season
     // window (WNBA ended Oct 20), so the calendar resolves it to NCAAF.
     const res = await runAmbiguousHierarchy([ambiguousPick("Liberty -3")], {}, {
-      runScheduleCheck: fakeSchedule([]),
+      ...deps([]),
       now: new Date("2026-11-15T16:00:00Z"),
     });
     check("Liberty: schedule blank in November -> NCAAF via calendar fallback", {
@@ -118,7 +148,7 @@ async function main() {
     // September: both MLB and NFL in season, so the calendar is no help.
     // Schedule says only the NFL Cardinals play today -> NFL via schedule.
     const res = await runAmbiguousHierarchy([ambiguousPick("Cardinals -3")], {}, {
-      runScheduleCheck: fakeSchedule(["arizona cardinals|NFL"]),
+      ...deps(["arizona cardinals|NFL"]),
       now: SEPT,
     });
     check("Cardinals: only Arizona (NFL) plays today -> NFL via schedule", {
@@ -131,7 +161,7 @@ async function main() {
     // Mirror: only St. Louis (MLB) plays today -> MLB via schedule, even
     // though NFL is also in season.
     const res = await runAmbiguousHierarchy([ambiguousPick("Cardinals ML")], {}, {
-      runScheduleCheck: fakeSchedule(["st. louis cardinals|MLB"]),
+      ...deps(["st. louis cardinals|MLB"]),
       now: SEPT,
     });
     check("Cardinals: only St. Louis (MLB) plays today -> MLB via schedule", {
@@ -145,7 +175,7 @@ async function main() {
     // fake "playing" set. NFL's window starts Aug 6, so on July 1 only MLB is
     // in season -> MLB via the calendar.
     const res = await runAmbiguousHierarchy([ambiguousPick("Cardinals ML")], {}, {
-      runScheduleCheck: fakeSchedule([]),
+      ...deps([]),
       now: new Date("2026-07-01T16:00:00Z"),
     });
     check("Cardinals: blank July schedule -> MLB via calendar fallback", {
@@ -158,7 +188,7 @@ async function main() {
     // date, so the calendar still narrows to MLB, and the reason notes the
     // feed was unavailable.
     const res = await runAmbiguousHierarchy([ambiguousPick("Cardinals ML")], {}, {
-      runScheduleCheck: throwingSchedule,
+      ...throwingDeps,
       now: new Date("2026-07-01T16:00:00Z"),
     });
     check("Cardinals: schedule feed throws in July -> MLB via calendar fallback", {
@@ -175,7 +205,7 @@ async function main() {
     // rather than guessing off a stale assumption.
     for (const line of ["Cardinals -3", "Cardinals ML"]) {
       const res = await runAmbiguousHierarchy([ambiguousPick(line)], {}, {
-        runScheduleCheck: throwingSchedule,
+        ...throwingDeps,
         now: SEPT,
       });
       check(`Cardinals: feed throws, both in season, "${line}" -> stays ambiguous`, {
@@ -190,7 +220,7 @@ async function main() {
     // September - both NFL and MLB in their calendar window, so schedule-first.
     // Only the Buccaneers (NFL) play today -> NFL via schedule.
     const res = await runAmbiguousHierarchy([ambiguousPick("Bucs ML")], {}, {
-      runScheduleCheck: fakeSchedule(["tampa bay buccaneers|NFL"]),
+      ...deps(["tampa bay buccaneers|NFL"]),
       now: SEPT,
     });
     check("Bucs: only Tampa Bay (NFL) plays today -> NFL via schedule", {
@@ -202,7 +232,7 @@ async function main() {
   {
     // Mirror: only the Pirates (MLB) play today -> MLB via schedule.
     const res = await runAmbiguousHierarchy([ambiguousPick("Bucs -1.5")], {}, {
-      runScheduleCheck: fakeSchedule(["pittsburgh pirates|MLB"]),
+      ...deps(["pittsburgh pirates|MLB"]),
       now: SEPT,
     });
     check("Bucs: only Pittsburgh (MLB) plays today -> MLB via schedule", {
@@ -215,7 +245,7 @@ async function main() {
     // November: MLB's window (ends Nov 5) is over, NFL is not -> NFL via the
     // calendar, no schedule dependency.
     const res = await runAmbiguousHierarchy([ambiguousPick("Bucs ML")], {}, {
-      runScheduleCheck: fakeSchedule([]),
+      ...deps([]),
       now: new Date("2026-11-20T18:00:00Z"),
     });
     check("Bucs: November -> NFL via calendar (MLB out of season)", {
@@ -229,7 +259,7 @@ async function main() {
     // it surfaces for a one-click choice instead of silently logging a
     // football pick as baseball.
     const res = await runAmbiguousHierarchy([ambiguousPick("Bucs ML")], {}, {
-      runScheduleCheck: fakeSchedule(["tampa bay buccaneers|NFL", "pittsburgh pirates|MLB"]),
+      ...deps(["tampa bay buccaneers|NFL", "pittsburgh pirates|MLB"]),
       now: SEPT,
     });
     check("Bucs: both play, both in season, bare 'ML' -> stays ambiguous", {
@@ -241,7 +271,7 @@ async function main() {
     // ...but a genuinely football-specific pick still resolves NFL via context
     // even in that window ("spread" is an NFL signal).
     const res = await runAmbiguousHierarchy([ambiguousPick("Bucs first-half spread -1.5")], {}, {
-      runScheduleCheck: fakeSchedule(["tampa bay buccaneers|NFL", "pittsburgh pirates|MLB"]),
+      ...deps(["tampa bay buccaneers|NFL", "pittsburgh pirates|MLB"]),
       now: SEPT,
     });
     check("Bucs: 'first-half spread' -> NFL via pick context", {
@@ -257,6 +287,7 @@ async function main() {
     let called = false;
     const res = await runAmbiguousHierarchy([ambiguousPick("Cardinals -3")], { cardinals: { label: "St. Louis Cardinals (MLB)", sport: "MLB", nickname: "st. louis cardinals" } }, {
       runScheduleCheck: async (q) => { called = true; return fakeSchedule(["arizona cardinals|NFL"])(q); },
+      runWideScheduleCheck: fakeWideSchedule(),
       now: SEPT,
     });
     check("Cardinals: same-import memory resolves it (MLB) without a schedule call", {
@@ -270,7 +301,7 @@ async function main() {
     // the pick text carries an NFL-specific term ("first-half spread") -> the
     // context step resolves it NFL.
     const res = await runAmbiguousHierarchy([ambiguousPick("Cardinals first-half spread -1.5")], {}, {
-      runScheduleCheck: fakeSchedule(["arizona cardinals|NFL", "st. louis cardinals|MLB"]),
+      ...deps(["arizona cardinals|NFL", "st. louis cardinals|MLB"]),
       now: SEPT,
     });
     check("Cardinals: both playing but text is NFL-specific -> NFL via pick context", {
@@ -286,7 +317,7 @@ async function main() {
     // and a real game today resolves it via "schedule" - same method/shape
     // as any nickname case, not a different code path.
     const res = await runAmbiguousHierarchy([ambiguousPick("Green Bay -6.5")], {}, {
-      runScheduleCheck: fakeSchedule(["green bay packers|NFL"]),
+      ...deps(["green bay packers|NFL"]),
       now: SEPT,
     });
     check("Green Bay: its one candidate has a game today -> NFL via schedule", {
@@ -301,7 +332,7 @@ async function main() {
     // MLB via schedule, the same narrowing "Cardinals"/"Bucs" get above -
     // never an auto-pick just because MLB or the Bears are "the big team".
     const res = await runAmbiguousHierarchy([ambiguousPick("Chicago -1.5")], {}, {
-      runScheduleCheck: fakeSchedule(["chicago cubs|MLB"]),
+      ...deps(["chicago cubs|MLB"]),
       now: SEPT,
     });
     check("Chicago: only the Cubs have a game today -> MLB via schedule (of 6 real candidates)", {
@@ -319,7 +350,7 @@ async function main() {
     // listing all 6 real candidates - exactly like "Liberty: both playing,
     // both in season" above, not a narrower or city-specific prompt.
     const res = await runAmbiguousHierarchy([ambiguousPick("Chicago -1.5")], {}, {
-      runScheduleCheck: fakeSchedule(["chicago cubs|MLB", "chicago bears|NFL"]),
+      ...deps(["chicago cubs|MLB", "chicago bears|NFL"]),
       now: SEPT,
     });
     check("Chicago: two candidates playing, multiple sports in season -> stays ambiguous (no guess)", {
@@ -335,7 +366,7 @@ async function main() {
     // demonstrating the multi-candidate city genuinely needs the schedule
     // check or a manual choice even outside the September overlap window.
     const res = await runAmbiguousHierarchy([ambiguousPick("Chicago ML")], {}, {
-      runScheduleCheck: fakeSchedule([]),
+      ...deps([]),
       now: new Date("2026-12-10T16:00:00Z"),
     });
     check("Chicago: mid-December, schedule blank -> still ambiguous (Bulls + Blackhawks both in season)", {
@@ -349,7 +380,7 @@ async function main() {
     // The exact "Texas Moneyline" case: only the Rangers (MLB) have a game
     // today -> resolves MLB via schedule, never silently guessing NCAAF.
     const res = await runAmbiguousHierarchy([ambiguousPick("Texas Moneyline")], {}, {
-      runScheduleCheck: fakeSchedule(["texas rangers|MLB"]),
+      ...deps(["texas rangers|MLB"]),
       now: SEPT,
     });
     check("Texas: only the Rangers (MLB) play today -> MLB via schedule, not a silent NCAAF guess", {
@@ -363,7 +394,7 @@ async function main() {
     // schedule too - a genuinely unambiguous case (per the live schedule)
     // should still resolve immediately, not get needlessly flagged.
     const res = await runAmbiguousHierarchy([ambiguousPick("Texas Moneyline")], {}, {
-      runScheduleCheck: fakeSchedule(["texas longhorns|NCAAF"]),
+      ...deps(["texas longhorns|NCAAF"]),
       now: SEPT,
     });
     check("Texas: only the Longhorns (NCAAF) play today -> NCAAF via schedule", {
@@ -378,7 +409,7 @@ async function main() {
     // "ML" carries sport-specific terminology -> stays ambiguous rather than
     // guessing, exactly the behavior the real mis-import needed.
     const res = await runAmbiguousHierarchy([ambiguousPick("Texas Moneyline")], {}, {
-      runScheduleCheck: fakeSchedule(["texas rangers|MLB", "texas longhorns|NCAAF"]),
+      ...deps(["texas rangers|MLB", "texas longhorns|NCAAF"]),
       now: SEPT,
     });
     check("Texas: both play today, both in season -> stays ambiguous (no guess)", {
@@ -390,7 +421,7 @@ async function main() {
     // The exact "Pittsburgh Moneyline" case: only the Pirates (MLB) have a
     // game today -> resolves MLB via schedule, never silently guessing NCAAF.
     const res = await runAmbiguousHierarchy([ambiguousPick("Pittsburgh Moneyline")], {}, {
-      runScheduleCheck: fakeSchedule(["pittsburgh pirates|MLB"]),
+      ...deps(["pittsburgh pirates|MLB"]),
       now: SEPT,
     });
     check("Pittsburgh: only the Pirates (MLB) play today -> MLB via schedule, not a silent NCAAF guess", {
@@ -404,7 +435,7 @@ async function main() {
     // schedule, same as any genuinely unambiguous (per the live schedule)
     // case.
     const res = await runAmbiguousHierarchy([ambiguousPick("Pittsburgh Moneyline")], {}, {
-      runScheduleCheck: fakeSchedule(["pittsburgh panthers|NCAAF"]),
+      ...deps(["pittsburgh panthers|NCAAF"]),
       now: SEPT,
     });
     check("Pittsburgh: only the Panthers (NCAAF) play today -> NCAAF via schedule", {
@@ -419,7 +450,7 @@ async function main() {
     // window either -> stays ambiguous with all 4 real options listed,
     // never an auto-pick just because one franchise is "the big team".
     const res = await runAmbiguousHierarchy([ambiguousPick("Pittsburgh Moneyline")], {}, {
-      runScheduleCheck: fakeSchedule([]),
+      ...deps([]),
       now: SEPT,
     });
     check("Pittsburgh: nobody playing today, multiple sports in season -> stays ambiguous with all 4 real candidates", {
@@ -427,6 +458,83 @@ async function main() {
       stillAmbiguousKey: res.stillAmbiguous[0]?.key,
       candidateCount: res.stillAmbiguous[0]?.options.length,
     }, { sport: "", stillAmbiguousKey: "pittsburgh", candidateCount: 4 });
+  }
+
+  console.log("\n########## PART E: Indiana (WNBA Fever vs NCAAF Hoosiers vs NBA Pacers) - schedule tiebreaker + plausibility floor ##########");
+  {
+    // The reported bug: only the Fever (WNBA) have a game in the near-term
+    // window, but the Hoosiers (NCAAF) have a real game later in the week -
+    // the tiebreaker must NOT let the near-term match win outright. Falls
+    // through to season, which also can't settle it (WNBA and NCAAF are both
+    // in season in September - NBA isn't, tip-off is Oct 20), so it correctly
+    // surfaces for a manual choice instead of silently guessing WNBA.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Indiana -6")], {}, {
+      ...deps(["indiana fever|WNBA"], ["indiana hoosiers|NCAAF"]),
+      now: SEPT,
+    });
+    check("Indiana: only the Fever play near-term, but the Hoosiers have a real game later -> does not auto-resolve WNBA, falls through", {
+      sport: res.picks[0].sportName,
+      method: res.logs[0]?.method,
+      stillAmbiguous: res.stillAmbiguous.map((g) => g.key),
+    }, { sport: "", method: undefined, stillAmbiguous: ["indiana"] });
+  }
+  {
+    // Regression guard: when the OTHER candidate genuinely has nothing on the
+    // calendar at all (not just outside the near-term window), the
+    // genuinely-unambiguous case must still resolve via schedule exactly as
+    // before the tiebreaker existed.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Indiana -6")], {}, {
+      ...deps(["indiana fever|WNBA"]),
+      now: SEPT,
+    });
+    check("Indiana: only the Fever have any game at all -> still resolves WNBA via schedule (no regression)", {
+      sport: res.picks[0].sportName,
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "WNBA", nicknames: ["indiana fever"], method: "schedule" });
+  }
+  {
+    // Plausibility floor: the schedule check alone would resolve this WNBA
+    // (Fever playing, nothing else on the calendar for the other
+    // candidates), but a -44 spread is essentially impossible in WNBA - the
+    // resolution must not be silently finalized. It's routed to manual
+    // review (stillAmbiguous) instead, and nothing is logged as auto-resolved.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Indiana -44")], {}, {
+      ...deps(["indiana fever|WNBA"]),
+      now: SEPT,
+    });
+    check("Indiana: WNBA-resolved pick with an implausible -44 spread -> not finalized, routed to manual review", {
+      sport: res.picks[0].sportName,
+      logs: res.logs,
+      stillAmbiguous: res.stillAmbiguous.map((g) => g.key),
+    }, { sport: "", logs: [], stillAmbiguous: ["indiana"] });
+  }
+  {
+    // Same schedule signal, but a plausible -6 spread -> resolves normally,
+    // completely unaffected by the plausibility floor.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Indiana -6")], {}, {
+      ...deps(["indiana fever|WNBA"]),
+      now: SEPT,
+    });
+    check("Indiana: WNBA-resolved pick with a plausible -6 spread -> resolves normally", {
+      sport: res.picks[0].sportName,
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "WNBA", nicknames: ["indiana fever"], method: "schedule" });
+  }
+  {
+    // NCAAF-resolved pick with a large but entirely realistic +38 spread
+    // (FBS blowouts routinely reach this) -> must NOT be incorrectly flagged
+    // as implausible just because the magnitude is large.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Indiana +38")], {}, {
+      ...deps(["indiana hoosiers|NCAAF"]),
+      now: SEPT,
+    });
+    check("Indiana: NCAAF-resolved pick with a large but realistic +38 spread -> resolves normally, not flagged", {
+      sport: res.picks[0].sportName,
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "NCAAF", nicknames: ["indiana hoosiers"], method: "schedule" });
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

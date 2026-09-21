@@ -6,6 +6,8 @@ import {
   resolveAmbiguousPick,
 } from "@/lib/parse-catalog";
 import { isSportLabelInSeason } from "@/lib/sport-seasons";
+import { extractLine } from "@/lib/bet-line";
+import { checkResolutionPlausibility } from "@/lib/disambiguation-plausibility";
 
 // Pure decision core for the catalog-import ambiguous-nickname hierarchy.
 //
@@ -24,12 +26,24 @@ import { isSportLabelInSeason } from "@/lib/sport-seasons";
 // overlap for ~5 months every year, so the calendar can't tell them apart at
 // all during that window. The hierarchy is now:
 //   1. memory      - already answered earlier in this same import
-//   2. schedule    - exactly one candidate has a game today (primary signal)
+//   2. schedule    - exactly one candidate has a game today (primary signal),
+//                    UNLESS another candidate also has a real game just
+//                    outside today's window (see the tiebreaker note on step
+//                    2 below) - a daily-cadence league (e.g. WNBA) shouldn't
+//                    out-vote a weekly one (e.g. NCAAF) just by playing more
+//                    often.
 //   3. season      - calendar fallback: exactly one candidate is in season
 //                    (used only when the schedule check was inconclusive or
 //                    the feed errored out)
 //   4. pick_context- pick text matched one candidate's terminology
 //   5. still ambiguous - surface for a manual choice
+//
+// Whatever step decides a key, the decision is also run through a
+// plausibility floor (disambiguation-plausibility.ts) before it's actually
+// applied to a given pick: if that pick's own bet line is unrealistic for
+// the resolved league (a double-digit-plus spread resolved to WNBA), the
+// pick is NOT silently finalized - it's left unresolved and falls into
+// stillAmbiguous instead, same as if nothing had decided it.
 
 export type ResolutionMethod = "schedule" | "season" | "pick_context" | "remembered" | "user";
 
@@ -43,6 +57,18 @@ export type ScheduleChecker = (queries: ScheduleCheckQuery[]) => Promise<Record<
 
 export type HierarchyDeps = {
   runScheduleCheck: ScheduleChecker;
+  // Tiebreaker for step 2 (schedule check): answers "does this candidate have
+  // a real game ANYWHERE on the posted schedule" (not just today/tomorrow),
+  // i.e. the same question runScheduleCheck answers but without nearTermOnly.
+  // Only ever called for the "losing" candidate(s) of a key that
+  // runScheduleCheck already narrowed to exactly one near-term match - if
+  // that runner-up also has a real game (just not today), a lone near-term
+  // match is no longer decisive on its own, and the key falls through to the
+  // season/pick-context steps instead. A checker rejection is treated as
+  // "can't confirm the runner-up has anything" - inconclusive, not a
+  // reason to block the near-term decision, so it resolves via schedule as
+  // it would have before this tiebreaker existed.
+  runWideScheduleCheck: ScheduleChecker;
   // Overridable reference date for the season (calendar) fallback - defaults
   // to now. Tests pin it so the calendar-fallback path is deterministic.
   now?: Date;
@@ -95,10 +121,6 @@ export async function runAmbiguousHierarchy(
     .filter((e): e is { p: ParsedPick; idx: number } => Boolean(e.p.ambiguous && e.p.ambiguousKey));
 
   const uniqueKeys = Array.from(new Set(ambiguousEntries.map((e) => e.p.ambiguousKey!)));
-  const countByKey = new Map<string, number>();
-  for (const { p } of ambiguousEntries) {
-    countByKey.set(p.ambiguousKey!, (countByKey.get(p.ambiguousKey!) ?? 0) + 1);
-  }
 
   const decided = new Map<string, Decision>();
 
@@ -139,18 +161,69 @@ export async function runAmbiguousHierarchy(
       );
     }
 
+    // A lone near-term match per key is only TENTATIVE until the tiebreaker
+    // below confirms none of that key's other candidates has a real game
+    // just outside the window - collected first, rather than decided
+    // immediately, so the tiebreaker's wide check can be batched into one
+    // round-trip instead of one per key.
+    const tentativeWinners = new Map<string, AmbiguousOption>();
     for (const key of keysNeedingResolution) {
       const options = ambiguousOptionsFor(key);
       const withGameToday = options.filter((o) => scheduleResults[o.nickname + "|" + o.sport]);
       if (withGameToday.length === 1) {
-        decided.set(key, {
-          choice: withGameToday[0],
-          method: "schedule",
-          reason: "only " + withGameToday[0].sport + " has a game scheduled today",
-        });
+        tentativeWinners.set(key, withGameToday[0]);
       }
       // 0 or 2+ matches - schedule inconclusive, falls through to the
       // calendar step below.
+    }
+
+    // Tiebreaker: a lone near-term match doesn't win outright if another
+    // candidate for the same key also has a real, scheduled game - just not
+    // today/tomorrow. Without this, a daily-cadence league (WNBA) out-votes a
+    // weekly one (NCAAF) purely because it happens to play more often, not
+    // because the pick's own signal actually points that way. Checked only
+    // for the runner-up candidates of keys the near-term check tentatively
+    // settled - not a wider window, the same nearTermOnly:false question
+    // asked of a narrower set of teams.
+    if (tentativeWinners.size > 0) {
+      const runnerUpQueries: ScheduleCheckQuery[] = [];
+      for (const [key, winner] of tentativeWinners) {
+        for (const o of ambiguousOptionsFor(key)) {
+          if (o.sport === winner.sport && o.nickname === winner.nickname) continue;
+          runnerUpQueries.push({ nickname: o.nickname, sport: o.sport });
+        }
+      }
+      let wideResults: Record<string, boolean> = {};
+      try {
+        wideResults = runnerUpQueries.length > 0 ? await deps.runWideScheduleCheck(runnerUpQueries) : {};
+      } catch (err) {
+        // Feed outage on the wide check - can't confirm the runner-up has a
+        // real game, so don't block the near-term decision over it.
+        // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+        console.log(
+          "[catalog-disambiguation] wide schedule tiebreaker check failed, trusting the near-term match:",
+          err instanceof Error ? err.message : err
+        );
+      }
+
+      for (const [key, winner] of tentativeWinners) {
+        const runnerUpHasRealGame = ambiguousOptionsFor(key).some(
+          (o) => !(o.sport === winner.sport && o.nickname === winner.nickname) && wideResults[o.nickname + "|" + o.sport]
+        );
+        if (runnerUpHasRealGame) {
+          // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+          console.log(
+            "[catalog-disambiguation] schedule tiebreaker: runner-up has a real game outside the window, falling through:",
+            key
+          );
+          continue;
+        }
+        decided.set(key, {
+          choice: winner,
+          method: "schedule",
+          reason: "only " + winner.sport + " has a game scheduled today",
+        });
+      }
     }
   }
 
@@ -198,43 +271,86 @@ export async function runAmbiguousHierarchy(
     }
   }
 
-  // Apply every decision to its picks, and build one log line per key (not
-  // per pick - a Cardinals decision that applied to 12 picks is one log
-  // entry with pickCount: 12, not 12 near-identical lines).
+  // Apply every decision to its picks - but gated by a plausibility floor
+  // (disambiguation-plausibility.ts): a decision resolves the KEY, but each
+  // pick sharing that key is checked individually against its own bet line
+  // before the resolution actually lands on it. A pick whose line is
+  // unrealistic for the resolved league (e.g. a -44 "spread" landing on
+  // WNBA) is left unresolved rather than silently finalized - it falls into
+  // stillAmbiguous below exactly as if its key had never been decided, even
+  // though other picks sharing that same key may resolve normally. This
+  // matters regardless of which step produced the decision - a remembered
+  // answer from an earlier, differently-lined pick in the same import is no
+  // more trustworthy here than a fresh schedule/season/context decision.
+  const implausible: { key: string; raw: string; sport: string; reason: string }[] = [];
+  for (const { p, idx } of ambiguousEntries) {
+    const decision = decided.get(p.ambiguousKey!);
+    if (!decision) continue;
+    const resolved = resolveAmbiguousPick(p, decision.choice);
+    const line = extractLine(resolved.betType, resolved.description);
+    const plausibility = checkResolutionPlausibility(resolved.sportName, resolved.betType, line);
+    if (!plausibility.plausible) {
+      implausible.push({ key: p.ambiguousKey!, raw: p.raw, sport: resolved.sportName, reason: plausibility.reason });
+      continue;
+    }
+    picks[idx] = resolved;
+  }
+  if (implausible.length > 0) {
+    // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+    console.log("[catalog-disambiguation] resolution failed plausibility floor, routed to manual review:", implausible);
+  }
+
+  // One log line per key (not per pick - a Cardinals decision that applied
+  // to 12 picks is one log entry with pickCount: 12, not 12 near-identical
+  // lines), counting only the picks actually resolved - a key every one of
+  // whose picks got held back by the plausibility floor above logs nothing,
+  // since nothing was actually auto-resolved.
   const logs: ResolutionLog[] = [];
   for (const key of uniqueKeys) {
     const decision = decided.get(key);
     if (!decision) continue;
+    const resolvedCount = ambiguousEntries.filter((e) => e.p.ambiguousKey === key && !picks[e.idx].ambiguous).length;
+    if (resolvedCount === 0) continue;
     logs.push({
       ambiguousName: key,
       resolvedSport: decision.choice.sport,
       method: decision.method,
       reason: decision.reason,
-      pickCount: countByKey.get(key) ?? 0,
+      pickCount: resolvedCount,
     });
   }
   // eslint-disable-next-line no-console -- deliberate, user-requested audit trail for auto-resolutions
   console.log("[catalog-disambiguation] auto-resolved:", logs);
 
-  for (const { p, idx } of ambiguousEntries) {
-    const decision = decided.get(p.ambiguousKey!);
-    if (decision) picks[idx] = resolveAmbiguousPick(p, decision.choice);
-  }
-
+  // Still ambiguous: a key nothing decided, OR one or more of its individual
+  // picks were held back by the plausibility floor above - determined by
+  // whether the pick itself still carries `ambiguous` after the apply loop,
+  // not by whether its key is in `decided`, so a key can legitimately
+  // contribute both a log entry (its plausible picks) and a stillAmbiguous
+  // entry (its flagged ones).
   const stillAmbiguous: StillAmbiguousGroup[] = uniqueKeys
-    .filter((key) => !decided.has(key))
     .map((key) => {
-      const entries = ambiguousEntries.filter((e) => e.p.ambiguousKey === key);
+      const entries = ambiguousEntries.filter((e) => e.p.ambiguousKey === key && Boolean(picks[e.idx].ambiguous));
+      if (entries.length === 0) return null;
       return {
         key,
         options: ambiguousOptionsFor(key),
         sampleRaw: entries[0].p.raw,
         count: entries.length,
       };
-    });
+    })
+    .filter((g): g is StillAmbiguousGroup => g !== null);
 
+  // Same plausibility gate applies to what gets remembered: a decision that
+  // never actually resolved any pick (every one of its picks was held back
+  // above) isn't carried into the caller's same-import memory either, so a
+  // later pick sharing that key still gets a fresh run through the hierarchy
+  // instead of inheriting a decision nothing ever confirmed.
   const decisions: Record<string, AmbiguousOption> = {};
-  for (const [key, decision] of decided.entries()) decisions[key] = decision.choice;
+  for (const [key, decision] of decided.entries()) {
+    const resolvedCount = ambiguousEntries.filter((e) => e.p.ambiguousKey === key && !picks[e.idx].ambiguous).length;
+    if (resolvedCount > 0) decisions[key] = decision.choice;
+  }
 
   return { picks, logs, stillAmbiguous, decisions };
 }
