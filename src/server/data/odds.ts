@@ -709,14 +709,31 @@ function espnEventToScoreGame(e: any): ScoreGame {
 // "no events for this date" rather than failing the whole window - one bad
 // date (a transient blip, an ESPN-side hiccup) shouldn't blank out the two
 // good ones alongside it.
+//
+// Deliberately NO `limit` param (see getEspnScores' note above `groups=80` -
+// this used to carry `limit=1000` to defend against the OLD range-request's
+// ~25-event default-page truncation). A 2026-09-21 investigation into 63
+// stuck NCAAF picks found `limit` on THIS per-date endpoint is now actively
+// harmful, not just unnecessary: ESPN caps the response at exactly 25 events
+// whenever `limit` is set above ~500 (confirmed live: limit=500 -> 71 events
+// on a real 71-game Saturday, limit=600/1000/2000 -> 25 events, same day,
+// repeated 5x, 100% consistent), and `limit` below that threshold behaves
+// erratically too (limit=25 -> 50 events, limit=26 -> 52 events - NOT a
+// simple page size). `page` is a no-op (page=1 and page=2 return byte-
+// identical event lists), so there is no real pagination to fall back to
+// either. Omitting `limit` entirely was verified live across 4 different
+// high-volume Saturdays (2026-08-29: 8 events, 09-05: 68, 09-12: 80,
+// 09-19: 71 - each stable across repeat calls) and reliably returns the
+// FULL slate every time. The per-date fetch this function makes (vs. the
+// old 3-day range) already solves the original truncation concern on its
+// own - a single day's real event count never approaches whatever ESPN's
+// actual unparameterized default page size is.
 async function getEspnScoresForDate(
   sportPath: string,
   dateKey: string,
   options: { groups?: string } = {}
 ): Promise<any[]> {
-  // See getEspnScores' note on `limit` - same reasoning, per date now instead
-  // of per 3-day window.
-  const params = new URLSearchParams({ dates: dateKey, limit: "1000" });
+  const params = new URLSearchParams({ dates: dateKey });
   if (options.groups) params.set("groups", options.groups);
   const url =
     "https://site.api.espn.com/apis/site/v2/sports/" + sportPath + "/scoreboard?" + params.toString();
@@ -766,9 +783,14 @@ async function getEspnScores(sportPath: string, options: { groups?: string } = {
   const perDateEvents = await Promise.all(dateKeys.map((dateKey) => getEspnScoresForDate(sportPath, dateKey, options)));
   const events = perDateEvents.flat();
 
-  // Lightweight completeness signal: if ESPN ever caps a response despite the
-  // explicit limit, the count here would sit suspiciously flat against a busy
-  // slate. Cheap to leave in - one line per sport per TTL window (~15s).
+  // Lightweight completeness signal: this is a plain visibility line, not a
+  // truncation detector - see getEspnScoresForDate's note on why `limit` was
+  // removed entirely (ESPN's truncation there was a hard-coded ~25-event cap
+  // unrelated to the requested limit value, not a page-size match, so an
+  // "actual === requested" check would never have fired for it and isn't
+  // implemented here). Cheap to leave in regardless - one line per sport per
+  // TTL window (~15s) - so a suspiciously low count is still visible in logs
+  // for a human to notice.
   console.log(
     "[getEspnScores]",
     sportPath,
