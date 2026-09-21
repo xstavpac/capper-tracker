@@ -9,12 +9,7 @@
 // 3-day `dates=` range with NO `limit` and NO `groups` - risks a silently
 // TRUNCATED response on a busy Saturday (60-90 FBS games across Fri+Sat+Sun,
 // against ESPN's ~25-event default page), and a dropped event means every
-// pick for that game fails to resolve with no error. This stubs global fetch
-// and asserts each request carries the two params that prevent that:
-//   - limit=1000  (clears any real slate; harmless for the <=16-game sports)
-//   - groups=80   (FBS only - matches NCAAF_SCHOOLS and the Odds API's NCAAF
-//                  coverage; keeps FCS/DII/DIII games out of the count and
-//                  out of name-collision range)
+// pick for that game fails to resolve with no error.
 //
 // A follow-up 2026-09 investigation found ESPN's scoreboard now rejects a
 // `dates=YYYYMMDD-YYYYMMDD` RANGE outright (HTTP 400), which had been
@@ -25,6 +20,15 @@
 // getEspnScores now fans out ONE request per date across yesterday/today/
 // tomorrow instead, so this also asserts exactly 3 requests go out, each
 // carrying a single `dates=YYYYMMDD` (never a range).
+//
+// A third 2026-09-21 investigation (63 stuck NCAAF picks) found the
+// `limit=1000` param added to defend against the original truncation is now
+// itself the truncator: ESPN caps the per-date response at exactly 25 events
+// whenever `limit` is set above ~500, confirmed live against real Saturdays
+// with 68-80 actual games. `limit` was removed entirely - the per-date fetch
+// this file already exercises doesn't need it (verified live: omitting it
+// reliably returns the full slate across 4 different high-volume dates) - so
+// this now asserts `limit` is ABSENT from every request instead of present.
 //
 // plus a basic parse check (post/in/pre -> final/live/preview, displayName
 // and date passthrough) and a check that an FCS-vs-FBS "money game" present
@@ -99,7 +103,7 @@ async function main() {
     check("fetches exactly 3 dates (yesterday/today/tomorrow), not one range request", calledUrls.length, 3);
     for (const url of calledUrls) {
       check(`fetch hit ESPN's football/college-football scoreboard path (${url})`, url.includes("/sports/football/college-football/scoreboard"), true);
-      check(`request carries limit=1000 (${url})`, /[?&]limit=1000(&|$)/.test(url), true);
+      check(`request carries NO limit param - ESPN caps busy-Saturday responses at 25 events whenever limit is set above ~500 (${url})`, /[?&]limit=/.test(url), false);
       check(`request carries groups=80 (${url})`, /[?&]groups=80(&|$)/.test(url), true);
       check(`request carries a SINGLE date, never a range - ESPN 400s on dates=YYYYMMDD-YYYYMMDD (${url})`, /[?&]dates=\d{8}(&|$)/.test(url), true);
     }
