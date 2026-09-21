@@ -49,6 +49,7 @@ import {
   teamGroupAliases,
   ambiguousOptionsFor,
   resolveAmbiguousPick,
+  findTeamNicknames,
 } from "./parse-catalog";
 import { isSportLabelInSeason } from "./sport-seasons";
 
@@ -422,7 +423,9 @@ function main() {
     // tamu, wvu, cuse, pitt added in the pro-team short-alias round (PART O).
     // 174 -> 176: alabama state, montana state added as FCS money-game
     // opponents (PART Q - the Alabama State / Troy schedule-match bug).
-    check("NCAAF list: 176 keys (138 FBS schools + capper-shorthand aliases + FCS money-game opponents)", keys.length, 176);
+    // 176 -> 178: "n texas"/"n. texas" added as North Texas abbreviations
+    // (PART T - the N. Texas mis-resolving-to-Longhorns bug).
+    check("NCAAF list: 178 keys (138 FBS schools + capper-shorthand aliases + FCS money-game opponents)", keys.length, 178);
     check("NCAAF list: no duplicate keys", new Set(keys).size, keys.length);
 
     // (a) Every key resolves to NCAAF from realistic capper text (the key +
@@ -1894,6 +1897,75 @@ NC State +4.5`;
       "'Florida Moneyline' is flagged ambiguous (Panthers vs Gators), not silently attached to the Gators",
       { sport: floridaPick?.sportName, key: floridaPick?.ambiguousKey, labels: floridaPick?.ambiguous?.map((o) => o.label).sort() },
       { sport: "", key: "florida", labels: ["Florida Gators (NCAAF)", "Florida Panthers (NHL)"].sort() }
+    );
+  }
+
+  // ==========================================================================
+  // PART T - N. Texas mis-resolving to Texas Longhorns (2026-09 3-bug report,
+  // catalog-import investigation).
+  // ==========================================================================
+  // Reported bug: "N. Texas versus Texas State over 62.5" didn't resolve to
+  // North Texas at all - "n. texas" / "n texas" weren't recognized NCAAF_
+  // SCHOOLS keys (only the spelled-out "north texas" was), so findTeamNicknames
+  // fell through PAST a safe "no match" and instead matched the bare "texas"
+  // substring embedded inside "N. Texas", silently resolving the pick to the
+  // Texas Longhorns instead of the North Texas Mean Green - a confident WRONG
+  // match, not the safe "lands unmatched" failure this class of gap normally
+  // produces (contrast PART L's EMU/CMU/WMU/ECU gaps, which were genuinely
+  // collision-free and just missing). Fixed the same way PART L did: added
+  // "n texas" and "n. texas" as NCAAF_SCHOOLS keys pointing at the same
+  // canonical ("north texas mean green") as "north texas" already does.
+  //
+  // Systemic-gap check done alongside this fix (not auto-applied): North
+  // Carolina and South Carolina share the same "directional-word, no
+  // abbreviated form" shape and are real risk candidates for a future pass,
+  // but weren't touched here - no confirmed real-capper-text evidence for
+  // them yet, and this fix is scoped to the one confirmed report. South
+  // Florida/East Carolina/West Virginia/etc. already have their most-common
+  // abbreviation covered (usf/ecu/wvu), so they're lower risk and also left
+  // alone.
+  console.log("\n########## PART T: N. Texas abbreviation fix (mis-resolved to Texas Longhorns) ##########");
+  {
+    // --- The exact reported case: North Texas's own nickname is captured,
+    // not the bare "texas" substring embedded inside "N. Texas". ---
+    const reported = parseCatalog(`Cap\nN. Texas versus Texas State over 62.5`, []).picks[0];
+    check(
+      "'N. Texas versus Texas State over 62.5' resolves NCAAF with North Texas's own key (not 'texas')",
+      { sport: reported?.sportName, teams: reported?.teamNicknames?.slice().sort() },
+      { sport: "NCAAF", teams: ["n. texas", "texas state"].sort() }
+    );
+
+    // --- Both abbreviation spellings resolve directly, same as PART L's
+    // EMU/CMU/WMU/ECU additions. ---
+    for (const [text, nick] of [["N. Texas -3", "n. texas"], ["N Texas -3", "n texas"]] as const) {
+      const pick = parseCatalog(`Cap\n${text}`, []).picks[0];
+      check(`'${text}' resolves to NCAAF`, pick?.sportName, "NCAAF");
+      check(`'${text}' captures North Texas's own key, not bare 'texas'`, pick?.teamNicknames, [nick]);
+      check(`'${nick}' canonical is North Texas's exact ESPN displayName`, NCAAF_CANONICAL_SUFFIX[nick], "north texas mean green");
+    }
+
+    // --- Negative control: the spelled-out form and the bare Longhorns
+    // nickname are both untouched by this fix. ---
+    const spelledOut = findTeamNicknames("North Texas -3", "NCAAF");
+    check("'North Texas -3' (spelled out, unchanged) still resolves via 'north texas'", spelledOut, ["north texas"]);
+    const longhorns = findTeamNicknames("Texas -3", "NCAAF");
+    check("bare 'Texas -3' (unchanged) still resolves via 'texas', not affected by the N. Texas fix", longhorns, ["texas"]);
+
+    // --- Regression: the FCS "no match" safety guard (PART M/Q's Portland
+    // State / Northern Iowa class) is untouched - a merged/no-separator
+    // matchup naming an untracked FCS school still comes back with NO team
+    // nicknames captured, rather than this fix's canonical-suffix lookup
+    // somehow making it guess a wrong school the way the pre-fix "texas"
+    // substring match used to. ---
+    check(
+      "FCS guard still fires: 'Oregon Portland State -14.5' captures no team (Portland State is FCS, untracked)",
+      findTeamNicknames("Oregon Portland State -14.5", "NCAAF"),
+      []
+    );
+    check(
+      "FCS guard still fires: 'Iowa Northern Iowa over 49.45' captures no team (Northern Iowa is FCS, untracked)",
+      findTeamNicknames("Iowa Northern Iowa over 49.45", "NCAAF"),
+      []
     );
   }
 
