@@ -308,6 +308,101 @@ function main() {
     check("shortTeamName('Montana State Bobcats') is the short header form", shortTeamName(game.homeTeam, "NCAAF"), "Montana State");
   }
 
+  console.log("\n########## PART H: pickedSide preferred over betDetail text re-derivation ##########");
+
+  // Root cause of the follow-up investigation: classifyPickTeamGroup only
+  // ever looked at betDetail text against teamGroupAliases' narrow, curated
+  // vocabulary - a completely separate system from whatever actually
+  // resolved the pick to its game at import time (resolveGameAndOdds /
+  // matchPicksToGame, which can succeed via live-team-fallback.ts's
+  // dynamically-generated prefix keys off the pick's already-resolved
+  // homeTeam/awayTeam, never needing betDetail text to match anything).
+  // Pick.pickedSide is captured once at that import time specifically so
+  // downstream logic doesn't have to re-derive team side from text - this
+  // now prefers it when set.
+  {
+    // "Tampa Bay ML" (city name, no mascot) against a Rays game: the text
+    // heuristic alone resolves to OTHER (teamGroupAliases only recognizes
+    // the mascot form, "Tampa Bay Rays"), but with pickedSide set it must
+    // group correctly regardless of the text.
+    const raysGame = { homeTeam: "Tampa Bay Rays", awayTeam: "New York Yankees" };
+    check(
+      "'Tampa Bay ML' with no pickedSide still groups OTHER (text heuristic alone can't resolve a bare city name)",
+      classifyPickTeamGroup({ betType: "MONEYLINE", betDetail: "Tampa Bay ML" }, raysGame, "MLB"),
+      "OTHER"
+    );
+    check(
+      "'Tampa Bay ML' with pickedSide: HOME NOW groups HOME (was OTHER)",
+      classifyPickTeamGroup({ betType: "MONEYLINE", betDetail: "Tampa Bay ML", pickedSide: "HOME" }, raysGame, "MLB"),
+      "HOME"
+    );
+    check(
+      "'Tampa Bay ML' with pickedSide: AWAY groups AWAY when the Rays are the away team instead",
+      classifyPickTeamGroup(
+        { betType: "MONEYLINE", betDetail: "Tampa Bay ML", pickedSide: "AWAY" },
+        { homeTeam: "New York Yankees", awayTeam: "Tampa Bay Rays" },
+        "MLB"
+      ),
+      "AWAY"
+    );
+
+    // "Kent +52.5" against Kent State: teamGroupAliases for Kent State is
+    // only ["kent state"] (no bare "kent"), so the text heuristic alone
+    // resolves to OTHER even though this exact pick correctly resolved to
+    // the right game at import time via matchPicksToGame off homeTeam/
+    // awayTeam, never needing betDetail text to match.
+    const kentGame = { homeTeam: "Kent State Golden Flashes", awayTeam: "Ohio Bobcats" };
+    check(
+      "'Kent +52.5' with no pickedSide still groups OTHER (teamGroupAliases has no bare 'kent' key)",
+      classifyPickTeamGroup({ betType: "SPREAD", betDetail: "Kent +52.5" }, kentGame, "NCAAF"),
+      "OTHER"
+    );
+    check(
+      "'Kent +52.5' with pickedSide: HOME NOW groups HOME (was OTHER)",
+      classifyPickTeamGroup({ betType: "SPREAD", betDetail: "Kent +52.5", pickedSide: "HOME" }, kentGame, "NCAAF"),
+      "HOME"
+    );
+
+    // pickedSide: null (or omitted) falls back to the existing text-
+    // heuristic behavior, unchanged - same-mascot NCAAF matchups where side
+    // genuinely can't be determined from the pick alone, or picks that never
+    // went through resolveGameAndOdds.
+    check(
+      "pickedSide: null falls back to the text heuristic (bare 'Panthers +14.5' still groups OTHER for NCAAF)",
+      classifyPickTeamGroup(
+        { betType: "SPREAD", betDetail: "Panthers +14.5", pickedSide: null },
+        { homeTeam: "South Florida Bulls", awayTeam: "Florida International Panthers" },
+        "NCAAF"
+      ),
+      "OTHER"
+    );
+    check(
+      "pickedSide: null still lets 'FIU +14.5' resolve via the text heuristic",
+      classifyPickTeamGroup(
+        { betType: "SPREAD", betDetail: "FIU +14.5", pickedSide: null },
+        { homeTeam: "South Florida Bulls", awayTeam: "Florida International Panthers" },
+        "NCAAF"
+      ),
+      "AWAY"
+    );
+
+    // Existing passing case (mascot form) still passes unchanged when
+    // pickedSide isn't passed at all - the parameter is optional.
+    check(
+      "'Tampa Bay Rays ML' (mascot form) with no pickedSide argument at all still groups HOME unchanged",
+      classifyPickTeamGroup({ betType: "MONEYLINE", betDetail: "Tampa Bay Rays ML" }, raysGame, "MLB"),
+      "HOME"
+    );
+
+    // A non-team-tied bet type still short-circuits to OTHER even with
+    // pickedSide set - pickedSide only ever applies to MONEYLINE/SPREAD.
+    check(
+      "a TOTAL with pickedSide set still groups OTHER (bet type gate runs first)",
+      classifyPickTeamGroup({ betType: "TOTAL", betDetail: "Rays Yankees Over 8.5", pickedSide: "HOME" }, raysGame, "MLB"),
+      "OTHER"
+    );
+  }
+
   console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
   process.exitCode = failures === 0 ? 0 : 1;
 }
