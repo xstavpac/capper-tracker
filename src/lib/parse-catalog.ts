@@ -960,7 +960,7 @@ const NCAAF_SCHOOLS: [string, string][] = [
   ["florida atlantic", "florida atlantic owls"], ["fau", "florida atlantic owls"],
   ["memphis", "memphis tigers"],
   ["navy", "navy midshipmen"],
-  ["north texas", "north texas mean green"],
+  ["north texas", "north texas mean green"], ["n texas", "north texas mean green"], ["n. texas", "north texas mean green"],
   ["rice", "rice owls"],
   ["south florida", "south florida bulls"], ["usf", "south florida bulls"],
   ["temple", "temple owls"],
