@@ -1398,17 +1398,26 @@ export function isPlayerPropSurnameCollision(text: string, phrase: string): bool
 // with no explicit sport code - UNLESS the line also looks unmistakably like
 // a pick (see looksLikePick), in which case it's trusted even right after a
 // blank. The explicit-code branch always stays on.
-function detectSport(text: string, allowNicknameFallback = true): { sportName: string; rest: string } {
+// `leadingText` is only ever populated by the explicit-code loop just below
+// (an actual league code like "NFL"/"NCAAF" is a hard, unambiguous anchor to
+// slice on) - every nickname-fallback pass beneath it returns the ORIGINAL
+// text as `rest` with no slicing at all, so there is no well-defined "text
+// before the match" for those to report, and leaving it empty there means a
+// caller that acts on `leadingText` can never misfire off a fuzzy nickname
+// match (see the afterBlank/new-capper-name handling in parseCatalog's main
+// loop, the reason this field exists).
+function detectSport(text: string, allowNicknameFallback = true): { sportName: string; rest: string; leadingText: string } {
   for (const code of KNOWN_SPORTS) {
     const re = new RegExp("\\b" + code.replace(/ /g, "\\s+") + "\\b", "i");
     const match = text.match(re);
     if (match && match.index !== undefined) {
       const rest = text.slice(match.index + match[0].length).replace(/^[:\s]+/, "");
-      return { sportName: code, rest };
+      const leadingText = text.slice(0, match.index);
+      return { sportName: code, rest, leadingText };
     }
   }
 
-  if (!allowNicknameFallback) return { sportName: "", rest: text };
+  if (!allowNicknameFallback) return { sportName: "", rest: text, leadingText: "" };
 
   const lower = text.toLowerCase();
 
@@ -1444,7 +1453,7 @@ function detectSport(text: string, allowNicknameFallback = true): { sportName: s
     });
     if (shadowedByLongerSchool) continue;
 
-    return { sportName: "NCAAF", rest: text };
+    return { sportName: "NCAAF", rest: text, leadingText: "" };
   }
 
   // Pass 1 (exact): a match only counts here if nothing immediately after
@@ -1482,7 +1491,7 @@ function detectSport(text: string, allowNicknameFallback = true): { sportName: s
       ([otherPhrase]) => otherPhrase !== phrase && teamPhraseRegex(otherPhrase).test(after)
     );
     if (!followedByAnotherTeam) {
-      return { sportName: sport, rest: text };
+      return { sportName: sport, rest: text, leadingText: "" };
     }
   }
 
@@ -1498,11 +1507,11 @@ function detectSport(text: string, allowNicknameFallback = true): { sportName: s
     if (AMBIGUOUS_NICKNAMES[phrase]) continue;
     if (teamPhraseRegex(phrase).test(lower)) {
       if (isPlayerPropSurnameCollision(text, phrase)) continue;
-      return { sportName: sport, rest: text };
+      return { sportName: sport, rest: text, leadingText: "" };
     }
   }
 
-  return { sportName: "", rest: text };
+  return { sportName: "", rest: text, leadingText: "" };
 }
 
 // Explicit, safe-only signals that a total is about ONE team's own score
@@ -2472,6 +2481,50 @@ export function parseCatalog(
 
     const detected = detectSport(strippedText, !afterBlank || looksLikePick(strippedText));
 
+    // A brand-new capper's first-ever line, written as "Name - pick" with an
+    // explicit trailing/inline league code ("BAMBINO - Juwan Johnson
+    // touchdown NFL") - the same inline shorthand the KNOWN-capper
+    // `inlineMatch` branch above already handles, just for a name this app
+    // has never saved before, so `sortedNames.find` above couldn't match it.
+    // Without this, detectSport's explicit-code loop keeps only the text
+    // AFTER the code match and silently discards everything before it
+    // (`detected.leadingText`) - so the name is lost outright and the
+    // resulting pick attaches to whatever capper was active from an earlier
+    // block, or "Unknown", with no error and no skip-list entry (see the
+    // BAMBINO/NFL investigation).
+    //
+    // Gated to `afterBlank` (this line opens a new block) for the same
+    // reason every other fallback below already requires it: once a header
+    // line is processed, the NEXT line always has `afterBlank === false` (it
+    // reset the flag), so this can only ever fire on the FIRST line of a
+    // block - an established capper's own later pick lines (no name prefix)
+    // are never affected. Splits on the first " - " or ":" in the leading
+    // text; a name-shaped part before it (not itself pick-shaped - guards a
+    // line like "Kent +52.5 - anytime TD NFL" from being misread as a
+    // capper named "Kent +52.5") is registered as `currentCapper` the exact
+    // same way the `*Name` hatch and the final name-fallback below do
+    // (known-name lookup first, else the literal text) - not a separate
+    // "create a capper" step, since parseCatalog is DB-free; this is what
+    // makes bulkImportPicksAction's resolveOrCreateCapperId actually create
+    // a new Capper row for it downstream, and what makes any LATER
+    // unresolved line in this same block correctly carry "Bambino" (not the
+    // prior capper, not "Unknown") in `unresolvedCapperNames`.
+    let effectiveRest = detected.rest;
+    if (afterBlank && detected.sportName && detected.leadingText) {
+      const sep = detected.leadingText.match(/\s-\s|:\s*/);
+      if (sep && sep.index !== undefined) {
+        const namePart = detected.leadingText.slice(0, sep.index).trim();
+        if (namePart && !looksLikePick(namePart)) {
+          const pickPart = detected.leadingText.slice(sep.index + sep[0].length).trim();
+          const normalized = normalizeName(namePart);
+          const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
+          currentCapper = existingMatch ?? namePart;
+          const restClean = detected.rest.replace(/^[\s:.-]+/, "").trim();
+          effectiveRest = [pickPart, restClean].filter(Boolean).join(" ").trim();
+        }
+      }
+    }
+
     // A bare sport/league code with nothing else on the line ("KBO" as its
     // own sub-header under a capper's name) - detectSport found a code but
     // there's no team/bet-type info left in `rest` to build a real pick
@@ -2480,13 +2533,15 @@ export function parseCatalog(
     // fall through and get misread as a fake capper name - confirmed against
     // a real "Porter Picks" / "KBO" / "Doosan Bears ML" catalog, where the
     // bare "KBO" sub-header wrongly overwrote "Porter Picks" as the active
-    // capper before this check existed.
-    if (detected.sportName && !detected.rest.trim()) {
+    // capper before this check existed. Also covers a new-capper header
+    // with nothing but a league code ("BAMBINO - NFL") once the block above
+    // has already registered the capper - nothing left to build a pick from.
+    if (detected.sportName && !effectiveRest.trim()) {
       continue;
     }
 
     if (detected.sportName) {
-      const mlp = splitMlpLegs(detected.rest);
+      const mlp = splitMlpLegs(effectiveRest);
       if (mlp) {
         const [fragA, fragB] = mlp.legs;
         const a = parseMlpLeg(fragA, detected.sportName);
@@ -2501,7 +2556,7 @@ export function parseCatalog(
         continue;
       }
 
-      const parsed = parsePickText(detected.rest);
+      const parsed = parsePickText(effectiveRest);
       results.push({
         capperName: currentCapper || "Unknown",
         sportName: detected.sportName,
@@ -2513,7 +2568,7 @@ export function parseCatalog(
         units: parsed.units,
         period: parsed.period,
         raw: strippedText,
-        teamNicknames: findTeamNicknames(detected.rest, detected.sportName),
+        teamNicknames: findTeamNicknames(effectiveRest, detected.sportName),
       });
       continue;
     }

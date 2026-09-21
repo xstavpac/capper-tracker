@@ -1897,6 +1897,119 @@ NC State +4.5`;
     );
   }
 
+  // ==========================================================================
+  // PART U - BAMBINO/NFL mis-import fix (2026-09 3-bug catalog-import report):
+  // a brand-new capper's first-ever line, written "Name - pick" with an
+  // explicit inline/trailing league code ("BAMBINO - Juwan Johnson touchdown
+  // NFL"), silently lost the capper's name entirely.
+  // ==========================================================================
+  // Root cause: the inline "CapperName - pick" shorthand only resolves via
+  // the `inlineMatch` branch, gated on the name already being in
+  // knownCapperNames - a capper who has never had a pick imported before
+  // never matches it. The line then fell through to detectSport, whose
+  // explicit-code loop keeps only the text AFTER the matched code and
+  // discards everything before it with no attempt to read it as a name - so
+  // the resulting pick silently attached to whatever capper was active from
+  // an earlier block (or "Unknown"), with no error and no skip-list entry.
+  // From the user's perspective this looked exactly like "silently failed to
+  // import"; it had actually "succeeded" under someone else's name.
+  //
+  // Fix: detectSport now also reports `leadingText` (the text before an
+  // explicit-code match, only ever populated by that one loop - never by the
+  // fuzzy nickname passes, so this can't misfire off a team-nickname-only
+  // header). parseCatalog's main loop, gated to `afterBlank` (a line can
+  // only open a new block right after a blank - the exact same signal every
+  // other risky fallback in this file already requires), splits that leading
+  // text on its first " - "/":" separator; a name-shaped part before it (not
+  // itself pick-shaped, via looksLikePick - guards against a real pick like
+  // "Kent +52.5 - anytime TD NFL" being misread as a capper named "Kent
+  // +52.5") is registered as `currentCapper` through the SAME known-name
+  // lookup every other capper-name branch already uses (not a new/parallel
+  // path), and the remaining pick text is recombined so the touchdown pick
+  // itself is never lost either.
+  console.log("\n########## PART U: BAMBINO/NFL mis-import fix (new capper's inline name lost to a trailing league code) ##########");
+  {
+    // --- The exact reported case: a brand-new capper's first-ever line
+    // creates/attributes the pick to a NEW "BAMBINO" capper, not "Unknown". ---
+    const fresh = parseCatalog("BAMBINO - Juwan Johnson touchdown NFL", []);
+    check("'BAMBINO - Juwan Johnson touchdown NFL' (brand-new capper) creates 1 pick, not silently dropped", fresh.picks.length, 1);
+    check(
+      "the pick is attributed to a new 'BAMBINO' capper, not 'Unknown'",
+      { capper: fresh.picks[0]?.capperName, sport: fresh.picks[0]?.sportName },
+      { capper: "BAMBINO", sport: "NFL" }
+    );
+    check(
+      "the description has no stray leading dash and keeps the real pick text",
+      fresh.picks[0]?.description,
+      "Juwan Johnson touchdown"
+    );
+    check("no unresolved lines and no unresolvedCapperNames entries", { unresolved: fresh.unresolved, names: fresh.unresolvedCapperNames }, { unresolved: [], names: [] });
+
+    // --- Same case, but with a DIFFERENT capper already active from an
+    // earlier block in the same paste (separated by a blank line, same as
+    // every other multi-capper example in this file) - must still create
+    // the new capper, not silently fall back to the prior one. ---
+    const withPriorCapper = parseCatalog("Some Capper\nCubs ML\n\nBAMBINO - Juwan Johnson touchdown NFL", ["Some Capper"]);
+    check("prior-capper case: 2 picks (the prior capper's + the new one)", withPriorCapper.picks.length, 2);
+    check(
+      "prior-capper case: first pick still belongs to 'Some Capper'",
+      withPriorCapper.picks[0]?.capperName,
+      "Some Capper"
+    );
+    check(
+      "prior-capper case: BAMBINO's pick is NOT misattributed to 'Some Capper'",
+      { capper: withPriorCapper.picks[1]?.capperName, sport: withPriorCapper.picks[1]?.sportName, description: withPriorCapper.picks[1]?.description },
+      { capper: "BAMBINO", sport: "NFL", description: "Juwan Johnson touchdown" }
+    );
+
+    // --- Guard: a real pick whose leading text (before the separator) is
+    // itself pick-shaped ("Kent +52.5") must NOT be misread as a brand-new
+    // capper's name - verified via a follow-up unresolved line in the same
+    // (still-"Unknown") block, since currentCapper would otherwise have been
+    // corrupted to "Kent +52.5" for it. ---
+    const guarded = parseCatalog("Kent +52.5 - anytime TD NFL\n\nBare Player Prop Over 3.5 Rushing Yards", []);
+    check(
+      "a pick-shaped leading phrase ('Kent +52.5') is never registered as a capper name",
+      guarded.unresolvedCapperNames,
+      ["Unknown"]
+    );
+
+    // --- Negative control: the KNOWN-capper inline shorthand (`inlineMatch`)
+    // is completely unaffected - still resolves the same way it always has. ---
+    const known = parseCatalog("ANDERSPICKS - Cubs ML", ["ANDERSPICKS"]).picks[0];
+    check(
+      "known-capper inline shorthand ('ANDERSPICKS - Cubs ML') is unaffected",
+      { capper: known?.capperName, sport: known?.sportName, description: known?.description },
+      { capper: "ANDERSPICKS", sport: "MLB", description: "Cubs ML" }
+    );
+
+    // --- Negative control: the `*Name` escape hatch is completely
+    // unaffected. ---
+    const starName = parseCatalog("*Tigers Kitchen\nCubs ML", []).picks[0];
+    check(
+      "'*Name' escape hatch ('*Tigers Kitchen') is unaffected",
+      { capper: starName?.capperName, sport: starName?.sportName },
+      { capper: "Tigers Kitchen", sport: "MLB" }
+    );
+
+    // --- Interaction check with the unresolvedCapperNames/"godfather" fix
+    // (PART R's Bug 1): a newly-registered capper from THIS fix correctly
+    // flows into unresolvedCapperNames for a LATER unresolved line in the
+    // SAME block, exactly like any other header-established capper does -
+    // this fix registers the name through the same `currentCapper` variable,
+    // not a separate/parallel mechanism, so the existing parallel-array
+    // handoff just works. ---
+    const recoveryHandoff = parseCatalog(
+      "BAMBINO - Juwan Johnson touchdown NFL\nBare Player Prop Over 3.5 Rushing Yards",
+      []
+    );
+    check(
+      "a later unresolved line in BAMBINO's own block carries 'BAMBINO', not 'Unknown'",
+      recoveryHandoff.unresolvedCapperNames,
+      ["BAMBINO"]
+    );
+  }
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }
