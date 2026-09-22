@@ -21,8 +21,17 @@
 //      it.
 
 import type { BetType } from "@prisma/client";
+import { parsePlayerProp, type PlayerPropMarket } from "@/lib/bet-line";
 
 export type DuplicateFlag = { message: string };
+
+// Already-known player-prop identity, when the caller has it on hand without
+// re-parsing (a real Pick row's own propMarket/playerName columns - see
+// dedupCategory's PLAYER_PROP branch below). When the caller doesn't have
+// this (a freshly-parsed batch item that was never a Pick row, or a legacy
+// row predating those columns), pass null/undefined and dedupCategory falls
+// back to extracting it itself from betDetail.
+export type KnownPlayerProp = { propMarket: PlayerPropMarket; playerName: string };
 
 // pickCategory (server/data/stats.ts) deliberately collapses every TEAM_TOTAL
 // pick into one bucket, "TEAM_TOTAL", regardless of which team or which side
@@ -32,21 +41,43 @@ export type DuplicateFlag = { message: string };
 // same-bet key; without this, a newly-pasted "Auburn Over 44.5" false-
 // positives against an already-logged "Georgia Under 21.5" on the very same
 // game, since both reduce to plain "TEAM_TOTAL". This widens the dup-check
-// key for TEAM_TOTAL only (every other bet type's pickCategory output is
-// already side-aware and passes through unchanged) by folding in pickedSide
-// (the same HOME/AWAY field TEAM_TOTAL grading itself keys off - see
-// schema.prisma's Pick.pickedSide comment) and over/under parsed from the
-// bet's own text.
+// key for TEAM_TOTAL (folding in pickedSide - the same HOME/AWAY field
+// TEAM_TOTAL grading itself keys off, see schema.prisma's Pick.pickedSide
+// comment - and over/under parsed from the bet's own text) and, the same
+// way, for PLAYER_PROP (folding in propMarket + the player's name - see
+// below). Every other bet type's pickCategory output is already side-aware
+// and passes through unchanged.
 export function dedupCategory(
   category: string,
   betType: BetType,
   betDetail: string | null,
-  pickedSide: "HOME" | "AWAY" | null | undefined
+  pickedSide: "HOME" | "AWAY" | null | undefined,
+  knownPlayerProp?: KnownPlayerProp | null
 ): string {
-  if (betType !== "TEAM_TOTAL") return category;
-  const detail = (betDetail ?? "").toLowerCase();
-  const overUnder = detail.includes("over") ? "OVER" : detail.includes("under") ? "UNDER" : "UNK";
-  return category + ":" + (pickedSide ?? "UNK") + ":" + overUnder;
+  if (betType === "TEAM_TOTAL") {
+    const detail = (betDetail ?? "").toLowerCase();
+    const overUnder = detail.includes("over") ? "OVER" : detail.includes("under") ? "UNDER" : "UNK";
+    return category + ":" + (pickedSide ?? "UNK") + ":" + overUnder;
+  }
+  if (betType === "PLAYER_PROP") {
+    // pickCategory deliberately collapses EVERY player-prop market into one
+    // "TD_PROP" bucket (see its own comment - a documented tradeoff for
+    // stats/leaderboard tiles, untouched here) - so without this, a bare
+    // "TD_PROP" category alone false-positives ANY two player props on the
+    // same game against each other regardless of player or market (the
+    // "Cam Skattebo TD" / "Darnell Mooney receiving yards" / "Isaiah Likely
+    // receptions" report - three different players, three different markets,
+    // one collapsed category). Prefers the caller's already-known
+    // propMarket/playerName (a real Pick row's own stored columns - no need
+    // to re-derive what's already there) and falls back to the same shared
+    // parsePlayerProp extractor used at import time when the caller doesn't
+    // have it (a freshly-parsed batch item, or a legacy row predating those
+    // columns) - never a new, separate extraction.
+    const known = knownPlayerProp ?? parsePlayerProp(betDetail ?? "") ?? undefined;
+    if (!known) return category; // unparseable prop text - no worse than the old behavior
+    return category + ":" + known.propMarket + ":" + known.playerName.trim().toLowerCase();
+  }
+  return category;
 }
 
 // A batch item already resolved to a real scheduled game + a comparable

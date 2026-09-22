@@ -322,6 +322,133 @@ console.log("\n########## dedupCategory: TEAM_TOTAL false-positive (2026-09 3-bu
 }
 
 // ---------------------------------------------------------------------------
+console.log("\n########## dedupCategory: PLAYER_PROP false-positive (2026-09 Skattebo/Mooney/Likely report) ##########");
+// Reported bug: three distinct, legitimate player props from three different
+// cappers - "Cam Skattebo touchdown" (NFL), "Darnell Mooney over 11.5
+// receiving yards" (NFL), "Isaiah Likely over 4.5 receptions" (NFL) - were
+// each wrongly flagged as a duplicate and dropped. Root cause: pickCategory
+// (server/data/stats.ts) deliberately collapses EVERY player-prop market
+// (TD/REC_YDS/RECEPTIONS/PASS_YDS/RUSH_YDS) into one bucket, "TD_PROP",
+// regardless of player or market (a documented, correct tradeoff for
+// stats/leaderboard tiles - untouched by this fix) - checkDuplicatePicksAction
+// reused that same bucket as its same-bet key with no widening for
+// PLAYER_PROP (unlike TEAM_TOTAL above), so ANY two player props on one game
+// for the same capper collided regardless of who the pick was actually about.
+// dedupCategory now folds in propMarket + the player's name (extracted via
+// the same parsePlayerProp used at import time - see bulk-picks.ts) for
+// PLAYER_PROP, the same way it already widens TEAM_TOTAL.
+{
+  const skattebo = dedupCategory("TD_PROP", "PLAYER_PROP", "Cam Skattebo Anytime TD", null);
+  const mooney = dedupCategory("TD_PROP", "PLAYER_PROP", "Darnell Mooney Over 11.5 Receiving Yards", null);
+  const likely = dedupCategory("TD_PROP", "PLAYER_PROP", "Isaiah Likely Over 4.5 Receptions", null);
+  const nabers = dedupCategory("TD_PROP", "PLAYER_PROP", "Malik Nabers Over 5.5 Receptions", null);
+  check(
+    "Skattebo TD / Mooney rec-yds / Likely receptions / Nabers receptions -> four DIFFERENT keys, not one shared TD_PROP bucket",
+    new Set([skattebo, mooney, likely, nabers]).size,
+    4
+  );
+}
+{
+  // Each of the three exact confirmed repros, paired against an UNRELATED
+  // pre-existing player-prop pick for the same capper/game (the actual shape
+  // of the report: a capper who already had some other player's prop logged
+  // for that game) - none should collide with it.
+  const flags = computeDuplicateFlags(
+    [
+      cand({
+        index: 0,
+        capperKey: "capper-cheese",
+        capperName: "CHEESE",
+        description: "Cam Skattebo Anytime TD",
+        category: dedupCategory("TD_PROP", "PLAYER_PROP", "Cam Skattebo Anytime TD", null),
+      }),
+      cand({
+        index: 1,
+        capperKey: "capper-cheese",
+        capperName: "CHEESE",
+        description: "Malik Nabers Anytime TD", // unrelated player, already logged for this game
+        category: dedupCategory("TD_PROP", "PLAYER_PROP", "Malik Nabers Anytime TD", null),
+      }),
+      cand({
+        index: 2,
+        capperKey: "capper-shark",
+        capperName: "Shark",
+        description: "Darnell Mooney Over 11.5 Receiving Yards",
+        category: dedupCategory("TD_PROP", "PLAYER_PROP", "Darnell Mooney Over 11.5 Receiving Yards", null),
+      }),
+      cand({
+        index: 3,
+        capperKey: "capper-shark",
+        capperName: "Shark",
+        description: "Christian Watson Over 45.5 Receiving Yards", // unrelated player, same market even
+        category: dedupCategory("TD_PROP", "PLAYER_PROP", "Christian Watson Over 45.5 Receiving Yards", null),
+      }),
+      cand({
+        index: 4,
+        capperKey: "capper-thisgirlbetz",
+        capperName: "This Girl BETZ",
+        description: "Isaiah Likely Over 4.5 Receptions",
+        category: dedupCategory("TD_PROP", "PLAYER_PROP", "Isaiah Likely Over 4.5 Receptions", null),
+      }),
+      cand({
+        index: 5,
+        capperKey: "capper-thisgirlbetz",
+        capperName: "This Girl BETZ",
+        description: "Cam Skattebo Anytime TD", // unrelated player+market, same game
+        category: dedupCategory("TD_PROP", "PLAYER_PROP", "Cam Skattebo Anytime TD", null),
+      }),
+    ],
+    DRIFT
+  );
+  check(
+    "Skattebo TD, Mooney rec-yds, Likely receptions: none collide with an unrelated player prop for the same capper/game",
+    Object.keys(flags),
+    []
+  );
+}
+{
+  // A genuine duplicate must still be caught: same player, same market, same
+  // game, same capper, submitted twice - the widened key must not let real
+  // dupes through.
+  const flags = computeDuplicateFlags(
+    [
+      cand({
+        index: 0,
+        description: "Cam Skattebo Anytime TD",
+        category: dedupCategory("TD_PROP", "PLAYER_PROP", "Cam Skattebo Anytime TD", null),
+      }),
+      cand({
+        index: 1,
+        description: "Cam Skattebo Anytime Touchdown", // same player+market, reworded
+        category: dedupCategory("TD_PROP", "PLAYER_PROP", "Cam Skattebo Anytime Touchdown", null),
+      }),
+    ],
+    DRIFT
+  );
+  check("two Cam Skattebo Anytime TD entries, same game/capper: the second IS flagged as a real duplicate", Boolean(flags[1]), true);
+}
+{
+  // A real Pick row's OWN stored propMarket/playerName columns (passed as
+  // dedupCategory's 5th arg) are used directly rather than re-derived - and
+  // still produce the SAME key as a fresh re-parse of the identical text
+  // would, so the DB-duplicate-check call site (bulk-picks.ts) and the
+  // fresh-item call site never disagree about what "the same prop" means.
+  const fromStoredColumns = dedupCategory("TD_PROP", "PLAYER_PROP", "Cam Skattebo Anytime TD", null, {
+    propMarket: "TD",
+    playerName: "Cam Skattebo",
+  });
+  const fromFreshParse = dedupCategory("TD_PROP", "PLAYER_PROP", "Cam Skattebo Anytime TD", null);
+  check("stored propMarket/playerName columns and a fresh re-parse of the same text agree", fromStoredColumns === fromFreshParse, true);
+}
+{
+  // Unparseable player-prop text (a malformed/manual entry with no
+  // recognizable market) falls back to the plain category, unchanged from
+  // before this fix - no worse than the old behavior, never a crash.
+  const key = dedupCategory("TD_PROP", "PLAYER_PROP", "some garbled prop text with no market", null);
+  check("unparseable PLAYER_PROP betDetail: falls back to the bare category", key, "TD_PROP");
+}
+
+// ---------------------------------------------------------------------------
 console.log("\n########## end-of-import skip predicate (isSkippedAsDuplicate) ##########");
 check("no flag, no choice -> not skipped", isSkippedAsDuplicate(false, undefined), false);
 check("flagged, never answered -> SKIPPED by default (the un-scrolled prompt case)", isSkippedAsDuplicate(true, undefined), true);

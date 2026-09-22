@@ -433,7 +433,13 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
             if (p.period !== period) return false;
             const pCategory = pickCategory({ ...p, sportName: item.sportName });
             if (!pCategory) return false;
-            return dedupCategory(pCategory, p.betType, p.betDetail, p.pickedSide) === dedupKey;
+            // p.propMarket/p.playerName are the row's own stored columns
+            // (set at import time - see bulkImportPicksAction below) - pass
+            // them through directly so dedupCategory doesn't need to
+            // re-derive them from betDetail; null for any row predating
+            // those columns, which dedupCategory falls back to re-parsing.
+            const knownPlayerProp = p.propMarket && p.playerName ? { propMarket: p.propMarket, playerName: p.playerName } : null;
+            return dedupCategory(pCategory, p.betType, p.betDetail, p.pickedSide, knownPlayerProp) === dedupKey;
           });
           if (dbDup) dbDuplicateLabel = dbDup.betDetail || betTypeLabel(dbDup.betType);
         }
