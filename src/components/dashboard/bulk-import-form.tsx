@@ -16,6 +16,11 @@ import { recoverUnresolvedPicksAction } from "@/server/actions/recover-unresolve
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
 import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
 import { isSkippedAsDuplicate, importButtonLabel } from "@/lib/duplicate-pick-detection";
+import {
+  isPendingOrRejectedTotalLine as isPendingOrRejectedTotalLineShared,
+  partitionReviewEntries,
+  totalSkipped,
+} from "@/lib/bulk-import-summary";
 import { betTypeLabel } from "@/lib/bet-line";
 
 // Sentinel stored in capperFuzzyChoices when the user explicitly confirms a
@@ -64,7 +69,14 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{
     imported: number;
+    // Raw server-reported skip count (items submitted that bounced) - kept
+    // as its own field since it's also what unmatchedGames/errors describe.
+    // The toast headline uses `totalSkipped` instead (see below), which
+    // folds this in along with every pre-submit skip category.
     skipped: number;
+    // The unified count shown in the toast headline - see
+    // lib/bulk-import-summary.ts. Sum of every category below plus `skipped`.
+    totalSkipped: number;
     errors: string[];
     unmatchedGames: string[];
     // Picks left out because they matched an existing/earlier pick and the
@@ -73,6 +85,16 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     // the preview is cleared so the outcome names them, the same way
     // unmatchedGames does for schedule misses.
     skippedDuplicates: string[];
+    // Lines the client parser never turned into a pick at all - captured
+    // client-side the same way skippedDuplicates is, since the pre-submit
+    // "couldn't be identified" section disappears once `parsed` is cleared.
+    skippedUnresolvedLines: string[];
+    // Ambiguous-team picks still awaiting a manual choice ("Cardinals?")
+    // at the moment Import was clicked.
+    skippedAmbiguous: string[];
+    // TOTAL picks whose market-line suggestion was left unconfirmed or
+    // explicitly rejected at submit time.
+    skippedTotalLinePending: string[];
     pickLimitBlocked?: { message: string; remaining: number };
     parlaysImported: number;
     unmatchedParlays: string[];
@@ -333,9 +355,11 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   }
   // Same default-excluded-until-confirmed shape as duplicates - a flagged
   // auto-filled total line never imports until the user explicitly confirms
-  // it (or explicitly skips the pick instead).
+  // it (or explicitly skips the pick instead). Delegates to the shared pure
+  // predicate (lib/bulk-import-summary.ts) so the toast's category
+  // partitioning (see handleImport) uses the exact same rule.
   function isPendingOrRejectedTotalLine(idx: number): boolean {
-    return Boolean(totalLineFlags[idx]) && totalLineChoices[idx] !== "confirm";
+    return isPendingOrRejectedTotalLineShared(Boolean(totalLineFlags[idx]), totalLineChoices[idx]);
   }
   const includedEntries = validEntries.filter(
     (e) => !isPendingOrSkippedDuplicate(e.idx) && !isPendingOrRejectedTotalLine(e.idx)
@@ -389,10 +413,34 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     // re-pasting an already-imported catalog leaves nothing to import but
     // still needs the "all N skipped as duplicates" outcome shown.
     if (includedPicks.length === 0 && skippedDuplicateEntries.length === 0 && parlays.length === 0) return;
-    // Snapshot before the request - the preview (and this list) is cleared on
-    // success, and these picks were never sent to the server so it can't
-    // report them back.
+    // Snapshot before the request - the preview (and these lists) are
+    // cleared on success, and none of these picks are ever sent to the
+    // server so it can't report them back. Covers every pre-submit skip
+    // category still outstanding right now, at the moment Import is
+    // clicked - a pick the user already resolved via a prompt (e.g. picked
+    // "San Francisco Giants (MLB)" for an ambiguous Giants pick) is by this
+    // point back in `validEntries`/`includedEntries` and correctly absent
+    // from all of these.
     const skippedDuplicates = skippedDuplicateEntries.map((e) => dedupeLabel(e.p));
+    const skippedAmbiguous = ambiguousEntries.map((e) => e.p.capperName + ' - "' + e.p.raw + '"');
+    const skippedUnresolvedLines = unresolvedLines;
+    // totalLinePendingIdx deliberately excludes anything already counted in
+    // skippedDuplicateEntries (see partitionReviewEntries) - a pick flagged
+    // for both reasons at once must land in exactly one category, or the
+    // toast total would double-count it.
+    const { totalLinePendingIdx } = partitionReviewEntries(
+      validEntries.map((e) => ({
+        idx: e.idx,
+        hasDuplicateFlag: Boolean(duplicateFlags[e.idx]),
+        duplicateChoice: duplicateChoices[e.idx],
+        hasTotalLineFlag: Boolean(totalLineFlags[e.idx]),
+        totalLineChoice: totalLineChoices[e.idx],
+      }))
+    );
+    const totalLinePendingIdxSet = new Set(totalLinePendingIdx);
+    const skippedTotalLinePending = validEntries
+      .filter((e) => totalLinePendingIdxSet.has(e.idx))
+      .map((e) => dedupeLabel(e.p));
     setImporting(true);
     // Sequential, not Promise.all: both actions independently do "find this
     // capper by normalized name, else create" against their own snapshot of
@@ -440,9 +488,19 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       setResult({
         imported: res.imported,
         skipped: res.skipped,
+        totalSkipped: totalSkipped({
+          unresolvedLines: skippedUnresolvedLines,
+          ambiguousUnanswered: skippedAmbiguous,
+          totalLinePending: skippedTotalLinePending,
+          duplicates: skippedDuplicates,
+          serverSkipped: res.skipped,
+        }),
         errors: res.errors,
         unmatchedGames: res.unmatchedGames,
         skippedDuplicates,
+        skippedUnresolvedLines,
+        skippedAmbiguous,
+        skippedTotalLinePending,
         pickLimitBlocked: res.pickLimitBlocked,
         parlaysImported: parlayRes?.success ? parlayRes.imported : 0,
         unmatchedParlays: parlayRes?.success ? parlayRes.unmatchedParlays : [],
@@ -849,8 +907,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
           {result.parlaysImported > 0 &&
             " and " + result.parlaysImported + " parlay" + (result.parlaysImported === 1 ? "" : "s")}
           .
-          {result.skipped + result.skippedDuplicates.length > 0 &&
-            " " + (result.skipped + result.skippedDuplicates.length) + " skipped."}
+          {result.totalSkipped > 0 && " " + result.totalSkipped + " skipped."}
           {result.errors.length > 0 && (
             <ul className="mt-1 list-disc pl-4 text-xs text-red-600 dark:text-red-400">
               {result.errors.map((e, i) => (
@@ -878,6 +935,42 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
               <ul className="mt-1 list-disc pl-4">
                 {result.skippedDuplicates.map((d, i) => (
                   <li key={i}>{d}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result.skippedAmbiguous.length > 0 && (
+            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+              Skipped {result.skippedAmbiguous.length} pick
+              {result.skippedAmbiguous.length === 1 ? "" : "s"} with an ambiguous team name - they
+              were NOT imported (the &quot;which team?&quot; prompt was left unanswered):
+              <ul className="mt-1 list-disc pl-4">
+                {result.skippedAmbiguous.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result.skippedTotalLinePending.length > 0 && (
+            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+              Skipped {result.skippedTotalLinePending.length} pick
+              {result.skippedTotalLinePending.length === 1 ? "" : "s"} missing a total number - they
+              were NOT imported (the suggested market line was left unconfirmed or rejected):
+              <ul className="mt-1 list-disc pl-4">
+                {result.skippedTotalLinePending.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result.skippedUnresolvedLines.length > 0 && (
+            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+              {result.skippedUnresolvedLines.length} line
+              {result.skippedUnresolvedLines.length === 1 ? "" : "s"} couldn&apos;t be matched to a
+              sport or team - not imported and not attributed to any capper:
+              <ul className="mt-1 list-disc pl-4">
+                {result.skippedUnresolvedLines.map((l, i) => (
+                  <li key={i}>{l}</li>
                 ))}
               </ul>
             </div>
