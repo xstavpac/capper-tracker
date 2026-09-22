@@ -32,6 +32,8 @@ function pick(overrides: Partial<ExpanderPick>): ExpanderPick {
     capperIsFavorite: false,
     category: null,
     leagueName: "MLB",
+    gameId: "game-1",
+    gameLabel: "Cubs @ Pirates",
     betDetail: "ML",
     odds: -110,
     units: 1,

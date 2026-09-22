@@ -1,23 +1,14 @@
 import { requireUser } from "@/server/auth";
-import {
-  getOddsForSport,
-  getYesterdayOddsForSport,
-  getLiveScoresForSport,
-  matchScoreToGame,
-  LIVE_SPORTS,
-} from "@/server/data/odds";
-import { getPicksForGames } from "@/server/data/picks";
-import { pickCategory, betTypeLabel, chipSetForLeague, DEFAULT_CHIP_SET } from "@/server/data/stats";
+import { matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
+import { chipSetForLeague, DEFAULT_CHIP_SET } from "@/server/data/stats";
 import { getSportCategoryPanelData } from "@/server/data/cappers";
-import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
-import { getTeamColor } from "@/lib/team-colors";
-import { formatPickLabel } from "@/lib/bet-line";
-import { type ExpanderPick } from "@/components/live/game-picks-expander";
+import { getLiveBoardData } from "@/server/data/live-board-picks";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
 import { GridLiveBoard } from "@/components/live/grid-live-board";
-import { slateCutoffKey, orderBoardGames } from "@/components/live/live-scoreboard-ordering";
+import { orderBoardGames } from "@/components/live/live-scoreboard-ordering";
 import { resolveGridLiveSelection } from "@/lib/grid-live-selection";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
+import { ParlaySlipButton } from "@/components/parlay/parlay-slip-button";
 import { easternDateKey } from "@/lib/dates";
 
 function tabClass(isActive: boolean) {
@@ -54,40 +45,12 @@ export default async function LivePage({
   // to show, so skip the extra query entirely.
   const hasSportSpecificCategories = chipSetForLeague(sportLabel).length > DEFAULT_CHIP_SET.length;
 
-  const [allOdds, yesterdayOdds, scores, sportCategoryPanel] = await Promise.all([
-    getOddsForSport(activeSport),
-    getYesterdayOddsForSport(activeSport),
-    getLiveScoresForSport(activeSport),
+  const [{ odds, scores, expanderPicksByGame }, sportCategoryPanel] = await Promise.all([
+    getLiveBoardData(user.id, activeSport, sportLabel),
     hasSportSpecificCategories ? getSportCategoryPanelData(user.id, sportLabel) : Promise.resolve(null),
   ]);
   const sportCategoryBreakdown = sportCategoryPanel?.breakdown ?? [];
   const sportCategoryLeaderboards = sportCategoryPanel?.leaderboards ?? {};
-
-  // This is the odds BOARD, not the ticker - it shows the next SLATE, not
-  // just today (a strict same-day filter briefly lived here, copied from
-  // getLiveTickerGames' narrower "what's happening today" purpose, and
-  // pruned the board to nothing on any day the active sport had no game -
-  // most days for NFL/WNBA). getOddsForSport has no upper date bound and the
-  // Odds API posts NFL/NCAAF lines a full week (marquee matchups months)
-  // ahead, so the board is capped to slateCutoffKey - the next game day plus
-  // a few, see live-scoreboard-ordering.ts. Scoping it here too (not just in
-  // orderBoardGames on the client) keeps getPicksForGames below from
-  // matching picks against a game weeks out that the board won't even show.
-  //
-  // Plus any game from last night's snapshot that isn't already in today's -
-  // getOddsForSport is keyed to today's Eastern date, so a game that started
-  // yesterday evening drops out of its result at midnight even while still
-  // in progress. LiveScoreboard keeps a carried-over game only while its
-  // score status is "live" and drops it (like any game) the moment it goes
-  // Final, so this can't pile stale games onto the board.
-  const todayKey = easternDateKey(new Date());
-  const cutoffKey = slateCutoffKey(
-    allOdds.map((g) => g.commenceTime),
-    todayKey
-  );
-  const boardOdds = allOdds.filter((g) => easternDateKey(new Date(g.commenceTime)) <= cutoffKey);
-  const boardGameIds = new Set(boardOdds.map((g) => g.id));
-  const odds = [...boardOdds, ...yesterdayOdds.filter((g) => !boardGameIds.has(g.id))];
 
   // Board Pulse's slate is FIXED for the day: every game scheduled for today's
   // Eastern date, whether it's already Final (and thus hidden from the board by
@@ -97,6 +60,7 @@ export default async function LivePage({
   // finalized (see board-pulse.ts and the note in live-scoreboard-ordering.ts).
   // Carried-over still-live games from last night are a different slate and are
   // excluded by the date match.
+  const todayKey = easternDateKey(new Date());
   const boardPulseOdds = odds.filter((g) => easternDateKey(new Date(g.commenceTime)) === todayKey);
 
   // Only ever used to pick which empty-state message to show, never on its
@@ -105,68 +69,6 @@ export default async function LivePage({
   // and cache hits never touch the key at all), so gating the "not
   // configured" banner on this alone showed it right alongside real games.
   const hasApiKey = process.env.ODDS_API_KEY ? true : false;
-
-  // The matched-picks list itself is cheap (one indexed query per game,
-  // already used on the game-detail page) - fetch it eagerly for every game
-  // so the "N picks on this game" badge and its count are accurate on load.
-  // The expensive part - each capper's historical record for their specific
-  // pick's category - is NOT computed here; that's deferred to expand-time
-  // (see GamePicksExpander), since it requires pulling a capper's full pick
-  // history and would be wasteful to do for every capper on every game.
-  const matchedPicksByGame = await getPicksForGames(
-    user.id,
-    sportLabel,
-    odds.map((game) => ({
-      homeTeam: game.homeTeam,
-      awayTeam: game.awayTeam,
-      commenceTime: new Date(game.commenceTime),
-    }))
-  );
-
-  // pickCategory/betTypeLabel touch server/data/stats.ts, which has a
-  // module-level prisma import - mapped here (Server Component) rather than
-  // inside LiveScoreboard (client) so that import never has to cross into
-  // the client bundle at all. teamGroup/teamLabel are computed here for the
-  // same reason - classifyPickTeamGroup/shortTeamName are pure and client-
-  // safe on their own, but doing the mapping here keeps every game's
-  // homeTeam/awayTeam (needed to classify each pick) in one place instead of
-  // threading it down through LiveScoreboard as well.
-  const expanderPicksByGame: ExpanderPick[][] = matchedPicksByGame.map((matchedPicks, gameIndex) => {
-    const game = odds[gameIndex];
-    return matchedPicks.map((p) => {
-      const teamGroup = classifyPickTeamGroup(p, game, sportLabel);
-      return {
-        pickId: p.id,
-        capperId: p.capperId,
-        capperName: p.capper.name,
-        capperColorTag: p.capper.colorTag,
-        capperIsFavorite: p.capper.isFavorite,
-        category: pickCategory({ ...p, sportName: sportLabel }),
-        leagueName: sportLabel,
-        betDetail: formatPickLabel(p.betDetail, p.betType, p.line) ?? betTypeLabel(p.betType),
-        odds: p.odds,
-        units: p.units,
-        status: p.status,
-        teamGroup,
-        teamLabel:
-          teamGroup === "AWAY"
-            ? shortTeamName(game.awayTeam, sportLabel)
-            : teamGroup === "HOME"
-              ? shortTeamName(game.homeTeam, sportLabel)
-              : "",
-        // Brand color for the group header's dot - keyed on the game's sport
-        // key + the full schedule team name (getTeamColor). null for OTHER and
-        // any team not in a color table yet; the component renders neutral
-        // gray for both.
-        teamColor:
-          teamGroup === "AWAY"
-            ? getTeamColor(activeSport, game.awayTeam)
-            : teamGroup === "HOME"
-              ? getTeamColor(activeSport, game.homeTeam)
-              : null,
-      };
-    });
-  });
 
   // MLB is currently the only sport with pregame odds detailed enough
   // (moneyline favorite + a totals line on every game) for Board Pulse to
@@ -216,9 +118,12 @@ export default async function LivePage({
   return (
     <>
       <div className="mx-auto max-w-5xl">
-        <div className="mb-6">
-          <h1 className="text-xl font-semibold">Live odds and scores</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Powered by The Odds API</p>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold">Live odds and scores</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Powered by The Odds API</p>
+          </div>
+          <ParlaySlipButton />
         </div>
 
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">

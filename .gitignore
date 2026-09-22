@@ -31,3 +31,4 @@ supabase/.temp/
 # extract-from-dump.mjs for how these are produced and consumed locally.
 scripts/t2-harness/.snapshots/
 *.dump
+capper_tracker_7table.dump
