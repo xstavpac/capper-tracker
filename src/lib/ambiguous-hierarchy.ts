@@ -30,7 +30,15 @@ import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
 //   3. season      - calendar fallback: exactly one candidate is in season
 //                    (used only when the schedule check was inconclusive or
 //                    the feed errored out)
-//   4. pick_context- pick text matched one candidate's terminology
+//   4. pick_context- pick text matched one candidate's terminology. Scoped
+//                    to the CAPPER whose own pick produced the match: the
+//                    first pick from that capper to conclusively match
+//                    establishes it for the rest of that same capper's picks
+//                    sharing the key (the "Cardinals sticks as MLB for the
+//                    rest of this capper's picks" convenience), but never
+//                    carries over to a different capper's pick sharing the
+//                    same bare nickname with no context signal of its own -
+//                    see "pick_context scoping" below.
 //   5. line plausibility - evaluated PER PICK (not per key, since two picks
 //                    sharing a bare nickname can have different lines): the
 //                    pick's own parsed spread/total is compared against each
@@ -44,6 +52,24 @@ import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
 //                    never auto-resolved; it's surfaced with the implausible
 //                    option(s) already dropped.
 //   6. still ambiguous - surface for a manual choice
+//
+// pick_context scoping (step 4, fixed 2026-09): pick text is specific to the
+// pick that produced it, not to every pick sharing a bare nickname across the
+// whole batch. Before this fix, one capper's football-specific pick (e.g.
+// "Giants touchdown scorer Barkley") could establish an NFL resolution for
+// the "giants" key that then silently applied to a completely unrelated
+// capper's plain "Giants Moneyline" pick with zero football signal of its
+// own - confirmed directly by running a two-capper batch through this
+// module. The fix scopes each pick_context decision to `${key}::${capperName}`
+// instead of just `${key}`: it still lets one capper's later, contextless
+// mentions of the same nickname inherit that capper's own earlier
+// established meaning (same convenience the "first pick establishes it"
+// comment above describes, and the same one the "Cardinals" case relies on -
+// no existing behavior depended on anything narrower, like paste-block
+// adjacency, since a capper's picks were never previously scoped at all), but
+// a different capper's pick with no context signal of its own now correctly
+// falls through to plausibility (step 5) or the manual prompt instead of
+// silently inheriting a decision that was never actually about it.
 //
 // Cross-check (step 5): steps 2-4 only ever fully DECIDE a key when they
 // narrow to exactly one candidate on their own - anything less (0, or 2+
@@ -100,13 +126,15 @@ export type AutoResolveResult = {
   // Every key this pass decided (by any method, including ones carried in
   // via priorChoices) - the caller merges this into its own same-import
   // memory so a re-parse of edited text still honors earlier answers.
-  // Deliberately does NOT include plausibility-only resolutions (step 5):
-  // those are decided per PICK from that pick's own line, not per key, so
-  // memoizing one onto the whole key would wrongly apply one pick's
-  // line-specific reasoning to a different pick sharing the same bare
-  // nickname but a different line - exactly the kind of batch-wide
-  // over-generalization the pick_context step (a separate, already-known
-  // issue) has today.
+  // Deliberately does NOT include plausibility-only resolutions (step 5) or
+  // pick_context resolutions (step 4): both are decided per PICK (line
+  // plausibility from that pick's own line; pick_context scoped to that
+  // pick's own capper - see "pick_context scoping" above), not per key, so
+  // memoizing either onto the whole key would wrongly carry one pick's (or
+  // one capper's) pick-specific reasoning over to a different pick/capper
+  // sharing the same bare nickname with no such signal of its own - including
+  // on a later re-parse of edited text within the same import, since this
+  // record is exactly what step 1 (memory) applies unconditionally next time.
   decisions: Record<string, AmbiguousOption>;
 };
 
@@ -263,17 +291,23 @@ export async function runAmbiguousHierarchy(
   }
 
   // ---- Step 4: pick context, evaluated per pick (context is pick-specific)
-  // but the first pick to resolve a given key establishes it for the rest,
-  // same as a user answer would.
+  // and scoped to `${key}::${capperName}` - the first pick FROM THAT CAPPER
+  // to conclusively match establishes it for the rest of that capper's picks
+  // sharing the key, same as a user answer would, but never for a different
+  // capper's pick sharing the same key (see "pick_context scoping" in this
+  // module's header comment).
   // Per-pick raw match evidence, captured even when inconclusive - step 5's
   // cross-check needs it. `consideredSports` is the exact candidate subset
   // this pick's own check ran against (season-narrowed when available, same
   // as the decision logic below), since that's what "narrower than the full
   // set" needs to be measured against for this step specifically.
   const contextSignalByPickIdx = new Map<number, { matched: string[]; consideredSports: string[] }>();
+  const contextDecided = new Map<string, Decision>(); // keyed by `${ambiguousKey}::${capperName}`
   for (const { p, idx } of ambiguousEntries) {
     const key = p.ambiguousKey!;
     if (decided.has(key)) continue;
+    const scopeKey = key + "::" + p.capperName;
+    if (contextDecided.has(scopeKey)) continue; // this capper's key already established by an earlier pick of theirs
     const options = ambiguousOptionsFor(key);
     const inSeason = options.filter((o) => isSportLabelInSeason(o.sport, now));
     const candidates = inSeason.length > 0 ? inSeason : options;
@@ -282,7 +316,7 @@ export async function runAmbiguousHierarchy(
     contextSignalByPickIdx.set(idx, { matched, consideredSports });
     if (matched.length === 1) {
       const chosen = options.find((o) => o.sport === matched[0])!;
-      decided.set(key, {
+      contextDecided.set(scopeKey, {
         choice: chosen,
         method: "pick_context",
         reason: "pick text matched " + matched[0] + "-specific terminology",
@@ -290,21 +324,38 @@ export async function runAmbiguousHierarchy(
     }
   }
 
-  // Apply every KEY-level decision (steps 1-4) to its picks. Step 5 (line
-  // plausibility) runs next, per pick, only on whatever's left ambiguous
-  // after this.
+  // Apply every decision - steps 1-3's KEY-level decisions to every pick
+  // sharing that key, step 4's pick_context decisions only to picks from the
+  // same capper that earned them. Step 5 (line plausibility) runs next, per
+  // pick, only on whatever's left ambiguous after this.
+  const contextLog = new Map<string, { key: string; sport: string; count: number }>();
   for (const { p, idx } of ambiguousEntries) {
-    const decision = decided.get(p.ambiguousKey!);
-    if (decision) picks[idx] = resolveAmbiguousPick(p, decision.choice);
+    const key = p.ambiguousKey!;
+    const globalDecision = decided.get(key);
+    if (globalDecision) {
+      picks[idx] = resolveAmbiguousPick(p, globalDecision.choice);
+      continue;
+    }
+    const contextDecision = contextDecided.get(key + "::" + p.capperName);
+    if (contextDecision) {
+      picks[idx] = resolveAmbiguousPick(p, contextDecision.choice);
+      const logKey = key + "::" + contextDecision.choice.sport;
+      const existing = contextLog.get(logKey);
+      if (existing) existing.count += 1;
+      else contextLog.set(logKey, { key, sport: contextDecision.choice.sport, count: 1 });
+    }
   }
 
   // ---- Step 5: line plausibility, evaluated per pick (not per key - see
-  // this module's header comment for why). Only considers picks whose key
-  // steps 1-4 left undecided.
+  // this module's header comment for why). Only considers picks steps 1-4
+  // left undecided - checked via `picks[idx].ambiguous` rather than
+  // `decided.has(key)` because step 4's pick_context decisions are no longer
+  // key-level (they're `${key}::${capperName}`-scoped), so a pick can be
+  // resolved by step 4 without its bare key ever landing in `decided`.
   const plausibilityLog = new Map<string, { key: string; sport: string; count: number; relationship: SignalRelationship }>();
   for (const { p, idx } of ambiguousEntries) {
     const key = p.ambiguousKey!;
-    if (decided.has(key)) continue; // already resolved above
+    if (!picks[idx].ambiguous) continue; // already resolved above
 
     const options = ambiguousOptionsFor(key);
     const plausible = filterPlausibleCandidates(options, p.ambiguousBetType, p.ambiguousLine);
@@ -351,8 +402,11 @@ export async function runAmbiguousHierarchy(
 
   // One log line per key (not per pick - a Cardinals decision that applied
   // to 12 picks is one log entry with pickCount: 12, not 12 near-identical
-  // lines) for steps 1-4's key-level decisions, plus one per (key, sport)
-  // pair for step 5's per-pick plausibility resolutions.
+  // lines) for steps 1-3's key-level decisions, plus one per (key, sport)
+  // pair for step 4's per-capper pick_context resolutions and step 5's
+  // per-pick plausibility resolutions - pickCount here is the real number of
+  // picks that decision actually applied to (per capper for pick_context),
+  // not the key's full batch-wide count.
   const logs: ResolutionLog[] = [];
   for (const key of uniqueKeys) {
     const decision = decided.get(key);
@@ -363,6 +417,15 @@ export async function runAmbiguousHierarchy(
       method: decision.method,
       reason: decision.reason,
       pickCount: countByKey.get(key) ?? 0,
+    });
+  }
+  for (const { key, sport, count } of contextLog.values()) {
+    logs.push({
+      ambiguousName: key,
+      resolvedSport: sport,
+      method: "pick_context",
+      reason: "pick text matched " + sport + "-specific terminology (scoped to the capper whose own pick produced the match)",
+      pickCount: count,
     });
   }
   for (const { key, sport, count, relationship } of plausibilityLog.values()) {
