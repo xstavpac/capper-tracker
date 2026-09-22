@@ -48,6 +48,14 @@ function ambiguousPick(line: string): ParsedPick {
   return pick;
 }
 
+// Multi-capper batch, exactly like a real bulk-import paste ("leave a blank
+// line between different cappers' picks") - used for PART G's pick_context
+// scoping tests, where the whole point is that more than one capper's picks
+// go through runAmbiguousHierarchy in the same call.
+function ambiguousBatch(text: string): ParsedPick[] {
+  return parseCatalog(text, []).picks;
+}
+
 async function main() {
   // A mid-September date: WNBA (May 15 - Oct 20), NCAAF (Aug 25 - Feb 1), MLB
   // (Mar 15 - Nov 5) and NFL (Aug 6 - Feb 15) are ALL in their calendar
@@ -528,9 +536,9 @@ async function main() {
     // Moneyline has no numeric line to filter on - the plausibility filter
     // is a no-op, existing behavior is completely unchanged (still shows
     // all 3 registered candidates). The separate silent-wrong-resolution
-    // issue with moneyline picks (Bug 7, in the pick_context step) is
-    // deliberately NOT touched by this fix - this only proves plausibility
-    // itself does nothing for a lineless pick.
+    // issue with moneyline picks (Bug 7, in the pick_context step - fixed
+    // below in PART G) is deliberately NOT touched by this fix - this only
+    // proves plausibility itself does nothing for a lineless pick.
     const res = await runAmbiguousHierarchy([ambiguousPick("Giants Moneyline")], {}, {
       runScheduleCheck: fakeSchedule([]),
       now: SEPT,
@@ -539,6 +547,92 @@ async function main() {
       sport: res.picks[0].sportName,
       optionSports: res.picks[0].ambiguous?.map((o) => o.sport).sort(),
     }, { sport: "", optionSports: ["KBO", "MLB", "NFL"] });
+  }
+
+  console.log("\n########## PART G: pick_context scoped to the capper that earned it (Bug 7 fix) ##########");
+  {
+    // The exact confirmed repro: "Giants touchdown scorer Barkley" (a
+    // football-specific player prop, from one capper) and "Giants
+    // Moneyline" (zero football/baseball signal of its own, from a
+    // DIFFERENT capper) share the "giants" key in the same batch. Before the
+    // fix, the first pick's NFL resolution silently applied to the second
+    // pick too, batch-wide. Now it must not - Capper B's pick falls through
+    // to the manual prompt instead of inheriting Capper A's resolution.
+    const picks = ambiguousBatch(
+      "Capper A\nGiants touchdown scorer Barkley\n\nCapper B\nGiants Moneyline"
+    );
+    const res = await runAmbiguousHierarchy(picks, {}, {
+      runScheduleCheck: fakeSchedule([]),
+      now: SEPT,
+    });
+    check("Giants: capper A's football-specific pick resolves NFL via pick context", {
+      sport: res.picks[0].sportName,
+      method: res.logs.find((l) => l.method === "pick_context")?.method,
+    }, { sport: "NFL", method: "pick_context" });
+    check("Giants: capper B's unrelated Moneyline pick does NOT inherit capper A's NFL resolution - stays ambiguous", {
+      sport: res.picks[1].sportName,
+      stillAmbiguous: res.stillAmbiguous.map((g) => g.key),
+    }, { sport: "", stillAmbiguous: ["giants"] });
+    check("Giants: pick_context log's pickCount reflects only the 1 pick it actually applied to, not the whole batch", {
+      pickCount: res.logs.find((l) => l.method === "pick_context")?.pickCount,
+    }, { pickCount: 1 });
+    check("Giants: pick_context decision is NOT memoized into cross-parse memory (capper-scoped, not key-scoped)", {
+      decisions: res.decisions,
+    }, { decisions: {} });
+  }
+  {
+    // Same repro, but both picks now come from the SAME capper - the
+    // intended "sticks for the rest of this capper's picks" convenience
+    // (same one the "Cardinals" case relies on) must still work: capper B's
+    // pick above only fell through because it belonged to a different
+    // capper, not because same-key inheritance is broken outright.
+    const picks = ambiguousBatch(
+      "Capper A\nGiants touchdown scorer Barkley\nGiants Moneyline"
+    );
+    const res = await runAmbiguousHierarchy(picks, {}, {
+      runScheduleCheck: fakeSchedule([]),
+      now: SEPT,
+    });
+    check("Giants: same capper's second (contextless) pick DOES inherit their own earlier NFL resolution", {
+      sports: res.picks.map((p) => p.sportName),
+      stillAmbiguous: res.stillAmbiguous.map((g) => g.key),
+    }, { sports: ["NFL", "NFL"], stillAmbiguous: [] });
+    check("Giants: same-capper pick_context log reports the true pickCount (2), not per-pick duplicate lines", {
+      pickCount: res.logs.find((l) => l.method === "pick_context")?.pickCount,
+      logCount: res.logs.filter((l) => l.method === "pick_context").length,
+    }, { pickCount: 2, logCount: 1 });
+  }
+  {
+    // The "Giants +6.5" variant from the investigation: a spread pick with
+    // no football-specific text of its own (just a number), paired with an
+    // unrelated capper's clearly-NFL pick. Same fix applies - no schedule
+    // signal either, so nothing else could rescue this one via cross-check.
+    const picks = ambiguousBatch(
+      "Capper A\nGiants touchdown scorer Barkley\n\nCapper B\nGiants +6.5"
+    );
+    const res = await runAmbiguousHierarchy(picks, {}, {
+      runScheduleCheck: fakeSchedule([]),
+      now: SEPT,
+    });
+    check("Giants +6.5: capper A resolves NFL, capper B's spread pick is untouched by it", {
+      capperASport: res.picks[0].sportName,
+      capperBResolvedByPickContext: res.picks[1].sportName === "NFL" && res.logs.some((l) => l.method === "pick_context" && l.pickCount > 1),
+    }, { capperASport: "NFL", capperBResolvedByPickContext: false });
+  }
+  {
+    // Existing pick_context-reliant coverage (PART C's "Cardinals: both
+    // playing but text is NFL-specific -> NFL via pick context", a
+    // single-pick/single-capper case) still passes unchanged under the new
+    // per-capper scoping - re-asserted here for visibility alongside the
+    // new multi-capper cases.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Cardinals first-half spread -1.5")], {}, {
+      runScheduleCheck: fakeSchedule(["arizona cardinals|NFL", "st. louis cardinals|MLB"]),
+      now: SEPT,
+    });
+    check("Cardinals: single-capper pick-context case is unaffected by the per-capper scoping fix", {
+      sport: res.picks[0].sportName,
+      method: res.logs[0]?.method,
+    }, { sport: "NFL", method: "pick_context" });
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
