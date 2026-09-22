@@ -1,5 +1,5 @@
 import { normalizeName } from "@/lib/fuzzy-match";
-import { parsePlayerProp, pickPeriodFromText, type SegmentPeriod } from "@/lib/bet-line";
+import { parsePlayerProp, pickPeriodFromText, extractLine, type SegmentPeriod } from "@/lib/bet-line";
 
 export type ParsedPick = {
   capperName: string;
@@ -22,6 +22,18 @@ export type ParsedPick = {
   // ambiguous team across one catalog paste, so resolving one resolves all
   // of them instead of asking about the same name repeatedly.
   ambiguousKey?: string;
+  // The bet type/line inferred from the pick's OWN text, independent of
+  // which league it resolves to - computed once here (via the same
+  // parsePickText/extractLine parseCatalog already uses for every resolved
+  // pick, not a second parser) so the disambiguation-line-plausibility
+  // filter can compare a real line against each candidate's realistic range
+  // without re-parsing raw text itself. Only set (non-undefined) alongside
+  // `ambiguous`; ambiguousLine is null when the bet type has no numeric line
+  // (moneyline, player prop) or none could be parsed - the plausibility
+  // filter treats that as "nothing to check" and passes every candidate
+  // through unfiltered.
+  ambiguousBetType?: ParsedPick["betType"];
+  ambiguousLine?: number | null;
   // Team nicknames found in the raw text, e.g. from "Over 9.5 (Angels/Orioles)"
   // or "Cardinals vs Panthers". Captured before parens/odds get stripped out of
   // `description`, so game resolution still has both teams even for bets (like
@@ -1638,6 +1650,18 @@ export function parsePickText(description: string): {
   return { betType, odds, units: units ?? 1, period, cleanDescription, totalSide };
 }
 
+// Computes the ambiguousBetType/ambiguousLine pair an ambiguous ParsedPick
+// carries (see ParsedPick's own comment) - reuses parsePickText + bet-line's
+// extractLine exactly as every resolved pick already does, so the
+// disambiguation-line-plausibility filter consumes a real parsed value
+// instead of re-parsing raw text itself. Called at the two ambiguous-branch
+// push sites below; sport-independent, so it doesn't need to wait for the
+// pick to actually resolve to a league.
+function lineForPlausibility(text: string): { betType: ParsedPick["betType"]; line: number | null } {
+  const { betType } = parsePickText(text);
+  return { betType, line: extractLine(betType, text) };
+}
+
 // Re-parses an ambiguous pick's original text now that the user has picked a
 // specific team off the button row - reruns the same bet-type/odds/units
 // extraction the unambiguous path already does (the ambiguous branch skips
@@ -1725,14 +1749,14 @@ function hasMlbTotalRangeSignal(text: string): boolean {
   return /\b(over|under)\s*(6|7|8|9|10|11)\.5\b/i.test(text);
 }
 
-// The pick-context step of the disambiguation hierarchy (see
-// ambiguous-hierarchy.ts), reached only after the schedule and calendar
-// steps both come back inconclusive - supporting evidence only. Returns a
-// single sport only when exactly one
-// candidate's terminology matches and none of the others also match -
-// conflicting or absent signals return null so the caller falls through to
-// asking the user instead of guessing.
-export function inferSportFromPickContext(text: string, candidateSports: string[]): string | null {
+// The raw candidate-sports whose terminology matched the pick's text, before
+// inferSportFromPickContext collapses that down to "exactly one or null".
+// Exported separately so the disambiguation-hierarchy's cross-check (see
+// ambiguous-hierarchy.ts) can inspect a genuinely INCONCLUSIVE match too - a
+// 2-of-3 match is still real, checked evidence (it positively excludes the
+// third candidate) even though it isn't decisive enough for
+// inferSportFromPickContext's own single-sport return value.
+export function matchingSportsForPickContext(text: string, candidateSports: string[]): string[] {
   let matches = candidateSports.filter((sport) => {
     const patterns = SPORT_CONTEXT_SIGNALS[sport] ?? [];
     if (patterns.some((re) => re.test(text))) return true;
@@ -1749,6 +1773,18 @@ export function inferSportFromPickContext(text: string, candidateSports: string[
   if (matches.includes("MLB") && candidateSports.includes("KBO")) {
     matches = matches.filter((s) => s !== "MLB");
   }
+  return matches;
+}
+
+// The pick-context step of the disambiguation hierarchy (see
+// ambiguous-hierarchy.ts), reached only after the schedule and calendar
+// steps both come back inconclusive - supporting evidence only. Returns a
+// single sport only when exactly one
+// candidate's terminology matches and none of the others also match -
+// conflicting or absent signals return null so the caller falls through to
+// asking the user instead of guessing.
+export function inferSportFromPickContext(text: string, candidateSports: string[]): string | null {
+  const matches = matchingSportsForPickContext(text, candidateSports);
   return matches.length === 1 ? matches[0] : null;
 }
 
@@ -2375,6 +2411,7 @@ export function parseCatalog(
 
         const found = findAmbiguousNickname(remainder);
         if (found) {
+          const forPlausibility = lineForPlausibility(remainder);
           results.push({
             capperName: inlineMatch,
             sportName: "",
@@ -2387,6 +2424,8 @@ export function parseCatalog(
             raw: line,
             ambiguous: found.options,
             ambiguousKey: found.key,
+            ambiguousBetType: forPlausibility.betType,
+            ambiguousLine: forPlausibility.line,
             teamNicknames: [],
           });
           continue;
@@ -2544,6 +2583,7 @@ export function parseCatalog(
 
       const found = findAmbiguousNickname(strippedText);
       if (found) {
+        const forPlausibility = lineForPlausibility(strippedText);
         results.push({
           capperName: currentCapper || "Unknown",
           sportName: "",
@@ -2556,6 +2596,8 @@ export function parseCatalog(
           raw: strippedText,
           ambiguous: found.options,
           ambiguousKey: found.key,
+          ambiguousBetType: forPlausibility.betType,
+          ambiguousLine: forPlausibility.line,
           teamNicknames: [],
         });
         continue;
