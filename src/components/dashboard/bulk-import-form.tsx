@@ -563,7 +563,13 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                   <div className="font-medium">
                     "{sampleRaw}"{count > 1 && " (+" + (count - 1) + " more " + key + " pick" + (count - 1 === 1 ? "" : "s") + " in this paste)"}
                   </div>
-                  <div className="mt-0.5">Ambiguous team - could mean {options.map((o) => o.label).join(" or ")}.</div>
+                  <div className="mt-0.5">
+                    {options.length === 1
+                      ? "Line plausibility narrowed this to " +
+                        options[0].label +
+                        ", but another signal disagreed - confirm below."
+                      : "Ambiguous team - could mean " + options.map((o) => o.label).join(" or ") + "."}
+                  </div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {options.map((opt) => (
                       <button

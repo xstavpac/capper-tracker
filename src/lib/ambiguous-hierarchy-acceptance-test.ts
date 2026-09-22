@@ -169,20 +169,33 @@ async function main() {
   }
   {
     // Feed error AND both candidates in season (September) -> the calendar
-    // can't narrow either, and neither a bare "-3" spread NOR "ML" carries a
-    // sport-specific signal ("ML" is used identically by MLB and NFL, so it is
-    // no longer an MLB context signal), so both correctly stay ambiguous
-    // rather than guessing off a stale assumption.
-    for (const line of ["Cardinals -3", "Cardinals ML"]) {
-      const res = await runAmbiguousHierarchy([ambiguousPick(line)], {}, {
-        runScheduleCheck: throwingSchedule,
-        now: SEPT,
-      });
-      check(`Cardinals: feed throws, both in season, "${line}" -> stays ambiguous`, {
-        sport: res.picks[0].sportName,
-        stillAmbiguous: res.stillAmbiguous.map((g) => g.key),
-      }, { sport: "", stillAmbiguous: ["cardinals"] });
-    }
+    // can't narrow either, and "ML" carries no sport-specific signal ("ML" is
+    // used identically by MLB and NFL, so it is no longer an MLB context
+    // signal) - stays ambiguous rather than guessing off a stale assumption.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Cardinals ML")], {}, {
+      runScheduleCheck: throwingSchedule,
+      now: SEPT,
+    });
+    check('Cardinals: feed throws, both in season, "Cardinals ML" -> stays ambiguous', {
+      sport: res.picks[0].sportName,
+      stillAmbiguous: res.stillAmbiguous.map((g) => g.key),
+    }, { sport: "", stillAmbiguous: ["cardinals"] });
+  }
+  {
+    // Same feed-error/both-in-season deadlock, but "-3" IS a real signal now
+    // that line plausibility exists (see PART F below): a -3 spread exceeds
+    // MLB's run-line bound, so it resolves NFL via plausibility instead of
+    // staying ambiguous - schedule/season/context all produced no signal
+    // either way here (feed threw, both in season, no context match), so
+    // nothing conflicts with it.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Cardinals -3")], {}, {
+      runScheduleCheck: throwingSchedule,
+      now: SEPT,
+    });
+    check('Cardinals: feed throws, both in season, "Cardinals -3" -> NFL via plausibility (NO_SIGNAL elsewhere)', {
+      sport: res.picks[0].sportName,
+      method: res.logs[0]?.method,
+    }, { sport: "NFL", method: "plausibility" });
   }
 
   console.log("\n########## PART B2: Bucs (NFL Tampa Bay vs MLB Pittsburgh Pirates) ##########");
@@ -427,6 +440,105 @@ async function main() {
       stillAmbiguousKey: res.stillAmbiguous[0]?.key,
       candidateCount: res.stillAmbiguous[0]?.options.length,
     }, { sport: "", stillAmbiguousKey: "pittsburgh", candidateCount: 4 });
+  }
+
+  console.log("\n########## PART F: line plausibility + cross-check (Giants: MLB SF / NFL NY / KBO Lotte) ##########");
+  // All three candidates are in their calendar season window in September
+  // (MLB/NFL/KBO all show in-season - see sport-seasons.ts), so the season
+  // step is NO_SIGNAL (full 3-candidate set) throughout this section unless
+  // otherwise noted - isolates whatever the schedule step is doing in each
+  // case.
+  {
+    // NO_SIGNAL: nothing playing today (schedule inconclusive/empty), no
+    // pick-context match either - plausibility alone narrows +6.5 down to
+    // NFL (a +6.5 spread exceeds MLB/KBO's run-line bound), and nothing else
+    // disagrees, so it auto-resolves with no prompt.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Giants +6.5")], {}, {
+      runScheduleCheck: fakeSchedule([]),
+      now: SEPT,
+    });
+    check("Giants +6.5, no other signal fires (NO_SIGNAL) -> auto-resolves NFL via plausibility, no prompt", {
+      sport: res.picks[0].sportName,
+      ambiguous: res.picks[0].ambiguous,
+      method: res.logs[0]?.method,
+    }, { sport: "NFL", ambiguous: undefined, method: "plausibility" });
+  }
+  {
+    // CONFLICTS: schedule finds the two BASEBALL candidates (MLB + KBO)
+    // playing today, NOT the NFL Giants - real, checked evidence against the
+    // plausibility winner (NFL). Plausibility still narrows to NFL alone,
+    // but the schedule signal actively disagrees, so this does NOT
+    // auto-resolve - it falls through to the (single-option, narrowed)
+    // prompt instead of guessing between two disagreeing signals.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Giants +6.5")], {}, {
+      runScheduleCheck: fakeSchedule(["san francisco giants|MLB", "lotte giants|KBO"]),
+      now: SEPT,
+    });
+    check("Giants +6.5, schedule leans MLB/KBO (CONFLICTS) -> does not auto-resolve, narrowed prompt", {
+      sport: res.picks[0].sportName,
+      narrowedOptions: res.picks[0].ambiguous?.map((o) => o.sport),
+    }, { sport: "", narrowedOptions: ["NFL"] });
+  }
+  {
+    // AGREES: schedule finds NFL + KBO playing today (not MLB) - an
+    // inconclusive 2-of-3 schedule result on its own, but it DOES include
+    // the plausibility winner (NFL), so it counts as independent agreement
+    // rather than silence. Auto-resolves, no prompt.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Giants +6.5")], {}, {
+      runScheduleCheck: fakeSchedule(["new york giants|NFL", "lotte giants|KBO"]),
+      now: SEPT,
+    });
+    check("Giants +6.5, schedule leans NFL/KBO, includes NFL (AGREES) -> auto-resolves NFL via plausibility, no prompt", {
+      sport: res.picks[0].sportName,
+      ambiguous: res.picks[0].ambiguous,
+      method: res.logs[0]?.method,
+      reasonMentionsAgreement: res.logs[0]?.reason.includes("independently agreed"),
+    }, { sport: "NFL", ambiguous: undefined, method: "plausibility", reasonMentionsAgreement: true });
+  }
+  {
+    // Threshold boundary: a real MLB run line (+/-1.5) is comfortably inside
+    // the bound for BOTH MLB and KBO, and NFL has no bound at all - nothing
+    // gets dropped, all 3 candidates remain exactly as parseCatalog produced
+    // them. Confirms the filter isn't overly aggressive on a normal,
+    // realistic line.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Giants +1.5")], {}, {
+      runScheduleCheck: fakeSchedule([]),
+      now: SEPT,
+    });
+    check("Giants +1.5 (real MLB run line) -> nothing dropped, all 3 candidates remain, still ambiguous", {
+      sport: res.picks[0].sportName,
+      optionSports: res.picks[0].ambiguous?.map((o) => o.sport).sort(),
+    }, { sport: "", optionSports: ["KBO", "MLB", "NFL"] });
+  }
+  {
+    // Threshold boundary: a real (if large) NFL spread stays plausible for
+    // NFL - the bound table has no NFL entry at all, so it's never excluded
+    // regardless of magnitude. Also doubles as a second NO_SIGNAL
+    // auto-resolve case at a different line value than the first test above.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Giants -9.5")], {}, {
+      runScheduleCheck: fakeSchedule([]),
+      now: SEPT,
+    });
+    check("Giants -9.5 (real NFL spread) -> NFL candidate remains plausible, auto-resolves", {
+      sport: res.picks[0].sportName,
+      method: res.logs[0]?.method,
+    }, { sport: "NFL", method: "plausibility" });
+  }
+  {
+    // Moneyline has no numeric line to filter on - the plausibility filter
+    // is a no-op, existing behavior is completely unchanged (still shows
+    // all 3 registered candidates). The separate silent-wrong-resolution
+    // issue with moneyline picks (Bug 7, in the pick_context step) is
+    // deliberately NOT touched by this fix - this only proves plausibility
+    // itself does nothing for a lineless pick.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Giants Moneyline")], {}, {
+      runScheduleCheck: fakeSchedule([]),
+      now: SEPT,
+    });
+    check("Giants Moneyline (no line) -> plausibility filter is a no-op, all 3 candidates still shown", {
+      sport: res.picks[0].sportName,
+      optionSports: res.picks[0].ambiguous?.map((o) => o.sport).sort(),
+    }, { sport: "", optionSports: ["KBO", "MLB", "NFL"] });
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
