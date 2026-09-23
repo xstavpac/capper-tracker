@@ -1,6 +1,6 @@
 import { unstable_cache, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays } from "@/lib/dates";
+import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays, APP_TIME_ZONE } from "@/lib/dates";
 import { isSportInSeason, oddsApiRequestKeys } from "@/lib/sport-seasons";
 import type { OddsFetchStatus, BackfillStatus } from "@/lib/odds-cron-status";
 import { teamNamesMatch } from "@/lib/team-name-match";
@@ -1373,6 +1373,47 @@ function withinResolveWindow(commenceTime: string, referenceTime: Date): boolean
   return withinDateDriftDays(new Date(commenceTime), referenceTime, MAX_RESOLVE_DATE_DRIFT_DAYS);
 }
 
+// Sports "gameday" boundary for game-RESOLUTION's same-slate-day comparisons
+// only (not dates.ts's general Eastern-calendar-day helpers, which
+// intentionally stay on the literal midnight boundary for display/report/
+// bucketing elsewhere in the app). The latest first pitch/tipoff among the
+// resolvable sports is ~10:30pm ET (West Coast MLB/NBA night games), and
+// those games routinely run past midnight ET - importing a pick for one
+// right after it ends, or importing ANY late-night pick from a Central-time
+// (or further west) capper session, can land at 12:01am-5:59am ET: past
+// Eastern midnight by the wall clock, but still unambiguously "tonight's
+// slate" to the person typing it in. Without this, sameSlateDay below would
+// stop matching a just-finished game the instant the clock ticks past
+// midnight ET, and the resolver would fall through to whatever's next for
+// that team - the exact wrong-game bug this file exists to prevent, just
+// triggered by the clock instead of by a multi-day score-feed window.
+// Rolling the slate-day boundary to 6am ET instead of midnight keeps
+// sameSlateDay agreeing with what a Central (or Pacific) -time user means by
+// "today" for any import that happens before they'd plausibly be asleep.
+const SLATE_DAY_ROLLOVER_HOUR_ET = 6;
+
+// en-US + hour12:false can format midnight as "24" instead of "00"
+// depending on the ICU/Node build - `% 24` normalizes either back to 0.
+function easternHour(date: Date): number {
+  const raw = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIME_ZONE,
+    hour: "2-digit",
+    hour12: false,
+  }).format(date);
+  return Number(raw) % 24;
+}
+
+// A timestamp between midnight and SLATE_DAY_ROLLOVER_HOUR_ET ET still
+// belongs to the PREVIOUS slate day - step it back 24h so sameEasternDay's
+// calendar-day comparison lands there instead of rolling over early.
+function slateDayAnchor(date: Date): Date {
+  return easternHour(date) < SLATE_DAY_ROLLOVER_HOUR_ET ? new Date(date.getTime() - 24 * 3600000) : date;
+}
+
+function sameSlateDay(a: Date, b: Date): boolean {
+  return sameEasternDay(slateDayAnchor(a), slateDayAnchor(b));
+}
+
 // An OddsGame reshaped as the minimal schedule game the resolver and its
 // callers read (id / teams / commenceTime / status). Odds-cache games are
 // pregame by construction - getOddsForSportUncached drops anything already
@@ -1396,8 +1437,20 @@ function oddsGameToScheduleGame(g: OddsGame): ScoreGame {
 
 // The tail of resolveGameForNickname / resolveGameForTeams, extracted so both
 // share it and it can be unit-tested: from >=1 already-team-and-window-matched
-// candidates, prefer one on the same Eastern day as `referenceTime`, then one
-// that hasn't finished, then whichever started closest to `referenceTime`.
+// candidates, prefer one on the same slate day as `referenceTime` (see
+// sameSlateDay above), then one that hasn't finished, then whichever started
+// closest to `referenceTime`.
+//
+// Doubleheader guard: when the same-slate-day pool has 2+ candidates for this
+// one matchup with a mix of finished/not-finished, a bare pick can't say
+// which game it means, and a late import is routinely about the game that
+// already finished (game 1), not "whichever one is still upcoming" - so
+// this refuses to guess (returns null) instead of applying the not-final-
+// over-final tiebreak, and the caller treats it as unresolved (surfaced on
+// the import review screen) rather than silently attaching to the wrong leg.
+// Only fires on a genuine same-day final/non-final split - a doubleheader
+// imported before either game starts (both preview) or after both are final
+// still falls through to the ordinary closest-by-time tiebreak below.
 export function pickBestScheduleCandidate(
   candidates: ScoreGame[],
   referenceTime: Date
@@ -1405,8 +1458,15 @@ export function pickBestScheduleCandidate(
   if (candidates.length === 0) return null;
   if (candidates.length === 1) return candidates[0];
 
-  const sameDay = candidates.filter((g) => sameEasternDay(new Date(g.commenceTime), referenceTime));
+  const sameDay = candidates.filter((g) => sameSlateDay(new Date(g.commenceTime), referenceTime));
   const pool = sameDay.length > 0 ? sameDay : candidates;
+
+  if (pool.length > 1) {
+    const hasFinal = pool.some((g) => g.status === "final");
+    const hasNonFinal = pool.some((g) => g.status !== "final");
+    if (hasFinal && hasNonFinal) return null;
+  }
+
   const notFinal = pool.filter((g) => g.status !== "final");
   const finalPool = notFinal.length > 0 ? notFinal : pool;
 
@@ -1416,13 +1476,21 @@ export function pickBestScheduleCandidate(
 // Pure core of catalog-import game resolution, over two feeds:
 //   - score feed (~yesterday..tomorrow): authoritative for anything happening
 //     now - live status, the ID the grading pipeline keys on, repeated-matchup
-//     handling. A live or not-yet-started match here wins outright.
-//   - odds feed (full posted schedule): fills in when the score feed has no
-//     UPCOMING match - either nothing at all (the normal advance-post case: a
-//     pick dropped days before kickoff), or only a game that has already
-//     finished (the capper means the team's NEXT game, not the one that just
-//     ended). A finished score-feed game is used only as the last resort, so
-//     logging a pick right after its game still works when nothing is ahead.
+//     handling. A same-slate-day match here wins outright, INCLUDING one
+//     that's already final - see sameSlateDay above. This is what keeps a
+//     late import for an already-finished game attached to THAT game instead
+//     of the next game in a series/back-to-back that also happens to be
+//     sitting in the score feed's yesterday..tomorrow window (confirmed via
+//     the acceptance test below - was previously excluded outright by a
+//     finals-only prefilter, see git history of this comment for the bug).
+//   - odds feed (full posted schedule): fills in only when the score feed has
+//     no SAME-SLATE-DAY match at all AND no other UPCOMING match either -
+//     either nothing at all (the normal advance-post case: a pick dropped
+//     days before kickoff), or only a game that finished on some earlier day
+//     with nothing upcoming near it (the capper means the team's NEXT game,
+//     not the one that already ended). A finished score-feed game from an
+//     earlier day is used only as the very last resort, so logging a pick
+//     right after its game still works when nothing else is ahead.
 // Deliberately a fallback, not a merge: a game happening now is in BOTH feeds
 // with different IDs, and merging would double it in the candidate pool.
 // Exported for the acceptance test; the async wrapper below supplies the feeds.
@@ -1435,6 +1503,10 @@ export function resolveScheduleGameFromFeeds(
   const inWindow = (g: { commenceTime: string }) => withinResolveWindow(g.commenceTime, referenceTime);
 
   const fromScores = scoreGames.filter((g) => teamMatches(g) && inWindow(g));
+
+  const sameDayScores = fromScores.filter((g) => sameSlateDay(new Date(g.commenceTime), referenceTime));
+  if (sameDayScores.length > 0) return pickBestScheduleCandidate(sameDayScores, referenceTime);
+
   const scoresUpcoming = fromScores.filter((g) => g.status !== "final");
   if (scoresUpcoming.length > 0) return pickBestScheduleCandidate(scoresUpcoming, referenceTime);
 
