@@ -223,7 +223,7 @@ Coverage rises as point-in-time history builds up. Auto Hedge went from 4% of pa
 
 The generator must never explode into one parlay per possible swap combination. Output is bounded by a ranking rule and a hard cap:
 
-**Step 1 — Score every qualifying candidate swap, with a concrete formula.** "Win% weighted by sample size" is too vague to implement and risks rewarding raw volume over real signal. Proposed starting point: a **Wilson score interval lower bound** (or equivalent empirical-Bayes shrinkage toward that market's baseline win rate) on each candidate's record, so equal raw win rates receive different confidence-adjusted scores when their sample sizes differ. Confirm this formula before implementation starts; it's a statistical decision, not something to leave for Claude Code to invent mid-build.
+**Step 1 — Score every qualifying candidate swap with the Wilson lower bound (decided Sept 23, 2026).** z = 1.96 on the candidate capper's point-in-time, market-specific record; p = wins/decided, n = decided (pushes excluded, as in computeStats). LB = (p + z²/2n − z·√(p(1−p)/n + z²/4n²)) / (1 + z²/n). Wilson only orders candidates that already passed the 55% gate; it never replaces or adjusts the gate.
 
 **Step 2 — Rank candidates by score, not by leg position.** The strongest qualifying swaps get applied first, regardless of which leg number they belong to.
 
@@ -235,7 +235,7 @@ The generator must never explode into one parlay per possible swap combination. 
 
 No 4th parlay is generated, and no combinatorial sweep of every possible swap set is run. The substitution count (0/1/2) must be shown prominently in the UI for each generated parlay, not buried — the product's trust story depends on the user always being able to see exactly how far a given parlay has drifted from their own thesis.
 
-**Step 4 — Generation floor, defined in the same terms as the ranking score.** Three distinct thresholds, not two: the **qualification gate** (raw market-specific win rate ≥55%, Section 3) decides eligibility; the **ranking score** (Wilson lower bound, Step 1) orders eligible candidates; the **generation floor** is the minimum Wilson lower bound a candidate must clear for BettingView to bother generating a parlay around it. The generation floor's exact value isn't set yet — it should come out of the real-data coverage investigation (Section 6), not be picked in advance. Until then: if the #1-ranked candidate doesn't clear that floor, Parlay B isn't generated at all — the user sees Primary only, with a note that no strong alternate was found. Each subsequent tier (B, C) only appears if its swap clears the same floor.
+**Step 4 — No generation floor in v1 (decided Sept 23, 2026).** Parlay B is generated whenever a qualifying swap exists, and Parlay C whenever a second non-conflicting one does. The qualification gate (≥55%, Section 3) decides eligibility; the Wilson score orders eligible candidates. They stay strictly separate.
 
 This applies identically to Auto Hedge and Contrarian — each mode runs its own scoring/ranking pass over its own candidate pool (Independent swaps for Hedge, Opposing swaps for Contrarian), each capped at 3 parlays.
 
