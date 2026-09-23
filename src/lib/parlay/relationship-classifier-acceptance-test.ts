@@ -160,15 +160,43 @@ check(
   { status: "OK", reason: null, family: "TOTAL", period: "FULL_GAME", level: "TEAM", direction: "OVER", line: 4.5, teamTarget: null }
 );
 
-// Two DIFFERENT teams' totals that both fail to resolve a team target (both
-// null) trivially compare equal (null === null) in sameTotalTarget, same as
-// the harness - a known, accepted latent imprecision inherited from the
-// reference implementation, not something this PR's scope widens or fixes.
+// Two team totals that both fail to resolve a team target (both null) must
+// NOT be treated as the same total just because both are unknown - null
+// never equals null for a team target, even when the two picks' text is
+// identical. Distinct UNCLASSIFIED reason from "different total target"
+// (which requires both sides to have actually resolved to different teams).
 checkSymmetric(
-  "two unresolved-alias TEAM_TOTALs, same scope, same direction, different line -> R1 (trivially 'same total')",
+  "two unresolved-alias TEAM_TOTALs, same scope, same direction -> UNCLASSIFIED, team target unresolved",
   pick({ betType: "TEAM_TOTAL", betDetail: "USC Over 4.5", line: 4.5 }),
   pick({ betType: "TEAM_TOTAL", betDetail: "USC Over 5.5", line: 5.5 }),
-  { outcome: "RULE", rule: "R1", category: "CORRELATED", mode: "NEITHER" }
+  { outcome: "UNCLASSIFIED", reason: "team target unresolved" }
+);
+
+checkSymmetric(
+  "two unresolved-alias TEAM_TOTALs, same scope, opposite direction -> UNCLASSIFIED, team target unresolved",
+  pick({ betType: "TEAM_TOTAL", betDetail: "USC Over 4.5", line: 4.5 }),
+  pick({ betType: "TEAM_TOTAL", betDetail: "USC Under 4.5", line: 4.5 }),
+  { outcome: "UNCLASSIFIED", reason: "team target unresolved" }
+);
+
+// One side resolved, one side unresolved - still unresolved overall, never
+// guessed as a match OR a mismatch.
+checkSymmetric(
+  "one resolved + one unresolved-alias TEAM_TOTAL, same scope -> UNCLASSIFIED, team target unresolved",
+  pick({ betType: "TEAM_TOTAL", betDetail: "Yankees Over 4.5", line: 4.5 }),
+  pick({ betType: "TEAM_TOTAL", betDetail: "USC Over 4.5", line: 4.5 }),
+  { outcome: "UNCLASSIFIED", reason: "team target unresolved" }
+);
+
+// An unresolved-target TEAM_TOTAL must never register as an EXACT_DUPLICATE
+// of another unresolved-target TEAM_TOTAL either, even with identical
+// betDetail/line/direction - same "null never equals null" rule applies to
+// the duplicate check as to the same-total check.
+checkSymmetric(
+  "two unresolved-alias TEAM_TOTALs, identical text/line -> UNCLASSIFIED, not EXACT_DUPLICATE",
+  pick({ betType: "TEAM_TOTAL", betDetail: "USC Over 4.5", line: 4.5 }),
+  pick({ betType: "TEAM_TOTAL", betDetail: "USC Over 4.5", line: 4.5 }),
+  { outcome: "UNCLASSIFIED", reason: "team target unresolved" }
 );
 
 // ============================================================================

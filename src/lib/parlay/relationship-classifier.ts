@@ -125,8 +125,9 @@ export function describePick(pick: PickInput, game: GameInput): PickDescription 
   // derivability dimensions (family/scope/direction), so an unresolved
   // target (e.g. an alias not in parse-catalog's nickname tables) does NOT
   // make the whole pick UNDERIVABLE; direction (Over/Under) is derived
-  // independently of it. teamTarget only feeds the narrower sameTotalTarget
-  // comparison classifyPair uses for TOTAL-vs-TOTAL same-scope pairs.
+  // independently of it. teamTarget only feeds the narrower target-matching
+  // checks classifyPair uses for TOTAL-vs-TOTAL same-scope pairs - an
+  // unresolved target there is never guessed as a match.
   const teamTarget: string | null = pick.betType === "TEAM_TOTAL" ? deriveTeamTotalTarget(pick, game, game.sportName) : null;
 
   let direction: string | null;
@@ -191,11 +192,16 @@ function sameScope(a: PickDescription, b: PickDescription): boolean {
   return scopeKey(a) === scopeKey(b);
 }
 
-// "The same total": trivially true for a game-level total or NRFI/YRFI (only
-// one per game per scope, teamTarget is null on both sides); for a
-// team-level total, requires the SAME specific team's total.
-function sameTotalTarget(a: PickDescription, b: PickDescription): boolean {
-  return a.teamTarget === b.teamTarget;
+// Whether two TOTAL-family picks' teamTarget can be trusted to compare as
+// equal for the EXACT_DUPLICATE check. Trivially true for a game-level total
+// or NRFI/YRFI (only one per game per scope - level isn't "TEAM", teamTarget
+// is null on both sides and irrelevant). For a team-level total, an
+// unresolved target (null) on EITHER side must never be treated as equal to
+// anything, including another null - two team totals whose team we couldn't
+// resolve are NOT known to be the same bet just because both are unknown.
+function teamTargetsMatchForDuplicate(a: PickDescription, b: PickDescription): boolean {
+  if (a.level !== "TEAM") return true;
+  return a.teamTarget !== null && a.teamTarget === b.teamTarget;
 }
 
 // Classifies a same-game pair of picks per Section 4's R1-R6 rule set.
@@ -226,11 +232,12 @@ export function classifyPair(a: ParlayCandidate, b: ParlayCandidate): PairOutcom
   const sameBetType = a.pick.betType === b.pick.betType;
 
   // teamTarget is null for every non-TEAM_TOTAL betType (both sides trivially
-  // equal there), and required equal for TEAM_TOTAL - otherwise "Yankees
-  // Over 4.5" and "Red Sox Over 4.5" (same line/direction, different team)
-  // would wrongly register as duplicates instead of falling through to the
-  // different-total-target UNCLASSIFIED check below.
-  if (sameBetType && descA.period === descB.period && sameDirection && sameLine && descA.teamTarget === descB.teamTarget) {
+  // equal there), and required equal (and resolved) for TEAM_TOTAL -
+  // otherwise "Yankees Over 4.5" and "Red Sox Over 4.5" (same line/direction,
+  // different team) would wrongly register as duplicates, and two team
+  // totals with an unresolved target would wrongly register as duplicates of
+  // each other, instead of falling through to the UNCLASSIFIED checks below.
+  if (sameBetType && descA.period === descB.period && sameDirection && sameLine && teamTargetsMatchForDuplicate(descA, descB)) {
     return { outcome: "EXACT_DUPLICATE" };
   }
 
@@ -242,9 +249,18 @@ export function classifyPair(a: ParlayCandidate, b: ParlayCandidate): PairOutcom
     if (descA.family === "SIDE") {
       return sameDirection ? ruleOutcome("R1") : ruleOutcome("R2");
     }
-    // TOTAL family, same scope.
-    if (!sameTotalTarget(descA, descB)) {
-      return { outcome: "UNCLASSIFIED", reason: "same scope, different total target (e.g. opposing team's team total)" };
+    // TOTAL family, same scope. A team-level total's target must be
+    // resolved on BOTH sides before comparing - null never equals null here
+    // (two team totals we each couldn't identify are not known to be the
+    // same bet), so that gets its own distinct reason from "resolved but
+    // different teams".
+    if (descA.level === "TEAM") {
+      if (descA.teamTarget === null || descB.teamTarget === null) {
+        return { outcome: "UNCLASSIFIED", reason: "team target unresolved" };
+      }
+      if (descA.teamTarget !== descB.teamTarget) {
+        return { outcome: "UNCLASSIFIED", reason: "same scope, different total target (e.g. opposing team's team total)" };
+      }
     }
     return sameDirection ? ruleOutcome("R1") : ruleOutcome("R3");
   }
