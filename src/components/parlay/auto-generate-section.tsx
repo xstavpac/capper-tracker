@@ -13,7 +13,7 @@ import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PICK_CATEGORY_MARKET_NOUN } from "@/server/data/stats";
 import { PickCard } from "@/components/live/pick-card";
 import { ScopeToggle, LegStepper } from "@/components/parlay/parlay-controls";
-import { formatRecord } from "@/lib/parlay/pick-record";
+import { rankBasisLabel, swapRecordLabel } from "@/lib/parlay/pick-record";
 import { AUTO_GENERATE_MAX_LEGS } from "@/lib/parlay/auto-generate-config";
 import type { AutoLeg, RankedPick, SwapLeg, SwapParlay } from "@/lib/parlay/auto-generate";
 
@@ -28,14 +28,15 @@ function formatGameTime(iso: string): string {
 }
 
 // The exact record a leg was ranked on, always shown - including a thin
-// sample, and including when the capper has no history at all.
+// sample, and including when the capper has no history at all. The basis
+// suffix (rankBasisLabel) is what keeps this readable next to a Hedge/
+// Contrarian swap's record, which is always all-leagues-only - without it
+// the two look directly comparable when they aren't (see pick-record.ts).
 function RankBasis({ ranked }: { ranked: RankedPick }) {
   const { record, pick } = ranked;
-  let text: string;
-  if (!record) text = "No record yet - ranked last";
-  else if (record.source === "LEAGUE") text = `${formatRecord(record)} on ${pick.leagueName} ${marketNoun(pick.category)}`;
-  else if (record.source === "OVERALL") text = `${formatRecord(record)} on ${marketNoun(pick.category)} (all leagues)`;
-  else text = `${formatRecord(record)} last 20 picks (no ${marketNoun(pick.category)} history)`;
+  const text = record
+    ? rankBasisLabel(record, { leagueName: pick.leagueName, marketNoun: marketNoun(pick.category) })
+    : "No record yet - ranked last";
   return (
     <p className="pl-1 text-[11px] text-muted-foreground">
       Ranked on <span className="font-medium text-foreground">{text}</span>
@@ -105,7 +106,7 @@ function SwapLegView({ leg, mode, records }: { leg: SwapLeg; mode: SwapParlay["m
       <p className="pl-1 text-[11px] text-foreground">
         <span className="text-muted-foreground line-through">{leg.original.pick.betDetail}</span> &rarr;{" "}
         <span className="font-semibold">{swap.pick.betDetail}</span> &middot; {swap.pick.capperName}{" "}
-        <span className="font-semibold">{formatRecord(swap.record)}</span> on {marketNoun(swap.pick.category)}
+        <span className="font-semibold">{swapRecordLabel(swap.record, marketNoun(swap.pick.category))}</span>
       </p>
       <PickCard pick={swap.pick} records={records} loading={false} />
     </div>

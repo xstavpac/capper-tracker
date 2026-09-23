@@ -43,3 +43,33 @@ export function bestAvailableRecord(pick: RecordInput, records: CapperLeagueReco
 export function formatRecord(r: { wins: number; losses: number; winPct: number }): string {
   return `${Math.round(r.winPct)}% (${r.wins}–${r.losses})`;
 }
+
+// Compact "<record> · <basis>" label for a bestAvailableRecord result - the
+// same three-way fallback (league+category, then all-leagues category, then
+// capper-wide last 20) Parlay A and its "next picks" rank by. Pure text, no
+// React, so it's unit-testable without rendering: "68% (21–10) · MLB
+// favorite moneyline" / "59% (44–31) · all leagues favorite moneyline" /
+// "55% (11–9) · last 20, all markets". The LAST20 case never names a market -
+// that record is the capper's most recent picks across every league and
+// category (getCapperLeagueRecords.last20), never scoped to this pick's own
+// market, so labeling it with one would misstate what it measures.
+export function rankBasisLabel(record: RankRecord, opts: { leagueName: string; marketNoun: string }): string {
+  const base = formatRecord(record);
+  if (record.source === "LEAGUE") return `${base} · ${opts.leagueName} ${opts.marketNoun}`;
+  if (record.source === "OVERALL") return `${base} · all leagues ${opts.marketNoun}`;
+  return `${base} · last 20, all markets`;
+}
+
+// Compact "<record> · <basis>" label for a Hedge/Contrarian swap candidate's
+// record. rankCandidates (qualification-ranking.ts) qualifies and ranks
+// candidates ONLY on getCapperCategoryRecords - the all-leagues, category-
+// scoped record - never league-scoped and never falling back to last 20 the
+// way bestAvailableRecord does; an unqualified candidate is dropped outright,
+// not backfilled with a weaker basis. So this label has exactly one form,
+// always "all leagues <market>", making it explicitly NOT directly
+// comparable to a Parlay A leg's rankBasisLabel when that leg's basis is
+// LEAGUE-sourced (a league-specific record next to an all-leagues one look
+// alike without this).
+export function swapRecordLabel(record: { wins: number; losses: number; winPct: number }, marketNoun: string): string {
+  return `${formatRecord(record)} · all leagues ${marketNoun}`;
+}
