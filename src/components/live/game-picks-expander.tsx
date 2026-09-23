@@ -28,6 +28,20 @@ export type ExpanderPick = {
   odds: number;
   units: number;
   status: PickStatus;
+  // Raw classification fields (Section 4 - src/lib/parlay/relationship-
+  // classifier.ts), separate from the display-formatted betDetail above:
+  // Build My Picks' conflict validation needs the pick's own betType/period/
+  // line/betDetail plus its game's homeTeam/awayTeam/gameTime to call
+  // describePick/classifyPair the same way the acceptance harness does.
+  // gameTime is an ISO string (not a Date) so ExpanderPick stays a plain,
+  // JSON-serializable object crossing the server/client boundary.
+  betType: string;
+  period: string;
+  rawBetDetail: string | null;
+  line: number | null;
+  homeTeam: string;
+  awayTeam: string;
+  gameTime: string;
   // Which side of the matchup this pick is tied to, precomputed server-side
   // (see live/page.tsx) since classifying it needs the game's homeTeam/
   // awayTeam alongside betDetail. teamLabel is the short display name for

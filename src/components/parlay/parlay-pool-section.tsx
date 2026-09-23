@@ -11,6 +11,12 @@ import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PickCard } from "@/components/live/pick-card";
 import { useParlayPool, type PooledPick } from "@/components/parlay/parlay-pool-context";
+import {
+  selectConflictFreeLegs,
+  type BuildCandidate,
+  type SkippedPick,
+  type UnverifiedPair,
+} from "@/lib/parlay/build-my-picks";
 
 // Ranks a pooled pick by the same win% already shown on its own card
 // (PickCard/getLeagueRecordsAction) - the capper's record for this bet
@@ -88,7 +94,54 @@ function LegCountStepper() {
   );
 }
 
-type BuiltParlay = { legs: PooledPick[] };
+// Turns a pooled pick into the classifier's plain input shape - rawBetDetail
+// (not the display-formatted betDetail) plus the game fields describePick/
+// classifyPair need. label is what shows up in a skip/uncertainty note, so it
+// needs to read on its own without the rest of the pick card around it.
+function toBuildCandidate(p: PooledPick): BuildCandidate {
+  return {
+    pickId: p.pickId,
+    label: `${p.capperName} — ${p.betDetail}`,
+    betType: p.betType,
+    period: p.period,
+    betDetail: p.rawBetDetail,
+    line: p.line,
+    homeTeam: p.homeTeam,
+    awayTeam: p.awayTeam,
+    gameTime: new Date(p.gameTime),
+    sportName: p.leagueName,
+  };
+}
+
+type BuiltParlay = {
+  legs: PooledPick[];
+  skipped: SkippedPick[];
+  unverified: UnverifiedPair[];
+  requested: number;
+  shortfall: number;
+};
+
+// Skipped/uncertainty notes are always rendered as plain visible text, never
+// behind a hover-only affordance - the trust story here is the same one the
+// white paper's Section 9 explanation layer describes for swaps: a skip is
+// exactly as visible as the leg it produced.
+function BuildNotes({ skipped, unverified }: { skipped: SkippedPick[]; unverified: UnverifiedPair[] }) {
+  if (skipped.length === 0 && unverified.length === 0) return null;
+  return (
+    <div className="mt-3 space-y-1 border-t border-border-subtle pt-3">
+      {skipped.map((s) => (
+        <p key={s.pickId} className="text-[12px] text-muted-foreground">
+          {s.note}
+        </p>
+      ))}
+      {unverified.map((u) => (
+        <p key={`${u.pickId}-${u.withPickId}`} className="text-[12px] text-amber-700 dark:text-amber-400">
+          {u.note}
+        </p>
+      ))}
+    </div>
+  );
+}
 
 function BuildMyPicksResult({ result }: { result: BuiltParlay }) {
   return (
@@ -112,6 +165,31 @@ function BuildMyPicksResult({ result }: { result: BuiltParlay }) {
           </div>
         ))}
       </div>
+      <BuildNotes skipped={result.skipped} unverified={result.unverified} />
+    </div>
+  );
+}
+
+// Shown instead of BuildMyPicksResult when fewer conflict-free legs exist
+// than requested - never silently builds the smaller parlay. The skip notes
+// explain WHY it's short; "Build with K legs" is the user's explicit choice
+// to proceed, not an automatic fallback.
+function ShortfallNotice({ result, onBuildAnyway }: { result: BuiltParlay; onBuildAnyway: () => void }) {
+  return (
+    <div className="mt-4 rounded-card border border-amber-300 bg-amber-50/60 p-4 dark:border-amber-800 dark:bg-amber-500/10">
+      <h3 className="text-sm font-semibold text-foreground">
+        Only {result.legs.length} of {result.requested} legs available without conflicts
+      </h3>
+      <BuildNotes skipped={result.skipped} unverified={result.unverified} />
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onBuildAnyway}
+          className="rounded-full bg-brand-600 px-4 py-1.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700"
+        >
+          Build with {result.legs.length} leg{result.legs.length === 1 ? "" : "s"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -121,7 +199,12 @@ export function ParlayPoolSection() {
   const [records, setRecords] = useState<CapperLeagueRecords | null>(null);
   const [loadingRecords, setLoadingRecords] = useState(false);
   const [building, setBuilding] = useState(false);
-  const [builtParlay, setBuiltParlay] = useState<BuiltParlay | null>(null);
+  const [buildResult, setBuildResult] = useState<BuiltParlay | null>(null);
+  // Section 9: a shortfall (fewer conflict-free legs than requested) is never
+  // silently built - the user must explicitly confirm building the smaller
+  // parlay via ShortfallNotice's "Build with K legs" action before it renders
+  // as a built parlay.
+  const [shortfallConfirmed, setShortfallConfirmed] = useState(false);
 
   const poolKey = pool.map((p) => p.pickId).join(",");
 
@@ -150,7 +233,8 @@ export function ParlayPoolSection() {
   // whenever a league scope toggle changes the in-scope pick count, so it
   // stands in for scope here without threading the raw scope map through.
   useEffect(() => {
-    setBuiltParlay(null);
+    setBuildResult(null);
+    setShortfallConfirmed(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- poolKey stands in for pool membership
   }, [poolKey, legCount, maxLegCount]);
 
@@ -160,8 +244,21 @@ export function ParlayPoolSection() {
     setBuilding(true);
     const entries = inScope.map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category }));
     const freshRecords = await getLeagueRecordsAction(entries);
+    // The ranking itself is untouched by conflict validation - only which
+    // ranked picks get selected changes (Section 9). byId maps the
+    // classifier's minimal candidates back to their full pooled pick for
+    // rendering (odds, gameLabel, etc.).
     const ranked = [...inScope].sort((a, b) => bestAvailableWinPct(b, freshRecords) - bestAvailableWinPct(a, freshRecords));
-    setBuiltParlay({ legs: ranked.slice(0, legCount) });
+    const byId = new Map(ranked.map((p) => [p.pickId, p]));
+    const selection = selectConflictFreeLegs(ranked.map(toBuildCandidate), legCount);
+    setBuildResult({
+      legs: selection.legs.map((c) => byId.get(c.pickId)!),
+      skipped: selection.skipped,
+      unverified: selection.unverified,
+      requested: selection.requested,
+      shortfall: selection.shortfall,
+    });
+    setShortfallConfirmed(false);
     setBuilding(false);
   }
 
@@ -216,7 +313,10 @@ export function ParlayPoolSection() {
             Every pooled league is excluded from scope - toggle at least one on above to build a parlay.
           </p>
         )}
-        {builtParlay && <BuildMyPicksResult result={builtParlay} />}
+        {buildResult && buildResult.shortfall > 0 && !shortfallConfirmed && (
+          <ShortfallNotice result={buildResult} onBuildAnyway={() => setShortfallConfirmed(true)} />
+        )}
+        {buildResult && (buildResult.shortfall === 0 || shortfallConfirmed) && <BuildMyPicksResult result={buildResult} />}
       </div>
     </div>
   );

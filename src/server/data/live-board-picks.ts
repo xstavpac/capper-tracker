@@ -89,6 +89,13 @@ export async function getLiveBoardData(
         odds: p.odds,
         units: p.units,
         status: p.status,
+        betType: p.betType,
+        period: p.period,
+        rawBetDetail: p.betDetail,
+        line: p.line,
+        homeTeam: game.homeTeam,
+        awayTeam: game.awayTeam,
+        gameTime: game.commenceTime,
         teamGroup,
         teamLabel:
           teamGroup === "AWAY"
