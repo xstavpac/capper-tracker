@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { GameResult, Pick, PickedSide, PropMarket } from "@prisma/client";
+import type { GameResult, Pick, PickedSide, PropMarket, Prisma } from "@prisma/client";
 import {
   getLiveScoresForSport,
   getOddsForSport,
@@ -477,7 +477,7 @@ function closestByDate<T extends { gameDate: Date }>(items: T[], reference: Date
   return closestByTime(items, (item) => item.gameDate.getTime(), reference.getTime());
 }
 
-type GameMatch = { game: GameResult; matchType: "exact" | "fuzzy" };
+type GameMatch<T> = { game: T; matchType: "exact" | "fuzzy" };
 
 // How close a GameResult's actual gameDate must be to a pick's own gameTime
 // to be treated as the SAME game, not just the same two teams. The same
@@ -504,15 +504,15 @@ function withinDrift<T extends { gameDate: Date }>(candidates: T[], reference: D
 // either way, just filtered from a wider in-memory array instead of a per-pick
 // query, so a bulk grading run can't silently match differently than a single
 // page-load grade would have.
-export function matchGameResult(
-  candidates: GameResult[],
+export function matchGameResult<T extends { gameDate: Date; homeTeam: string; awayTeam: string }>(
+  candidates: T[],
   pick: {
     gameTime: Date;
     homeTeam: string;
     awayTeam: string;
     betDetail: string | null;
   }
-): GameMatch | null {
+): GameMatch<T> | null {
   const windowStart = pick.gameTime.getTime() - 2 * 86400000;
   const windowEnd = pick.gameTime.getTime() + 2 * 86400000;
   const inWindow = candidates.filter((c) => {
@@ -558,7 +558,7 @@ export async function findMatchingGameResult(
     awayTeam: string;
     betDetail: string | null;
   }
-): Promise<GameMatch | null> {
+): Promise<GameMatch<GameResult> | null> {
   const windowStart = new Date(pick.gameTime.getTime() - 2 * 86400000);
   const windowEnd = new Date(pick.gameTime.getTime() + 2 * 86400000);
 
@@ -579,7 +579,28 @@ type SegmentScore = { home: number; away: number };
 // before; SECOND_HALF is derived (final minus first half, so it includes OT
 // the way books grade a 2nd-half bet); quarters and hockey periods read the
 // per-segment linescoreJson array persistFinalScores captures.
-function segmentScore(period: string, game: GameResult): SegmentScore | null {
+// The exact GameResult fields resolveOutcome/segmentScore/gradePick ever read
+// - deliberately narrower than the full GameResult model so the bulk cron
+// grading path (fetchCandidatePool below) can select only these columns
+// instead of transferring every row in full, including the Game-Pulse-only
+// JSON blobs (inningsJson/quartersJson/scoringPlaysJson) and turnover/ledger
+// fields those functions never touch. Structurally compatible with a full
+// GameResult, so every other caller (findMatchingGameResult, picks.ts,
+// parlay-grading.ts, the acceptance tests) keeps passing a real GameResult
+// here unchanged.
+type GradableGameResult = {
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  firstFiveHomeScore: number | null;
+  firstFiveAwayScore: number | null;
+  firstInningHomeScore: number | null;
+  firstInningAwayScore: number | null;
+  linescoreJson: GameResult["linescoreJson"];
+};
+
+function segmentScore(period: string, game: GradableGameResult): SegmentScore | null {
   const firstHalf =
     game.firstFiveHomeScore !== null && game.firstFiveAwayScore !== null
       ? { home: game.firstFiveHomeScore, away: game.firstFiveAwayScore }
@@ -628,7 +649,7 @@ export function resolveOutcome(
     line: number | null;
     pickedSide?: PickedSide | null;
   },
-  game: GameResult
+  game: GradableGameResult
 ): GradeOutcome {
   const runGrade = (home: number, away: number): GradeOutcome =>
     gradePick(pick.betType, pick.betDetail ?? pick.homeTeam, pick.line, game.homeTeam, game.awayTeam, home, away, pick.pickedSide);
@@ -1003,12 +1024,44 @@ export function regradeLookbackCutoff(now: Date = new Date()): Date {
 // ignore it (revalidateTag is illegal during render - they rely on the cache
 // TTL instead).
 
-async function fetchCandidatePool(picks: { gameTime: Date }[], sportKey: string): Promise<GameResult[]> {
+// Exactly the GameResult columns matchGameResult/resolveOutcome/gradePlayerProp
+// read for a pick or leg in this pool-based path (see GradableGameResult above
+// and matchGameResult's own field use: gameDate/homeTeam/awayTeam). externalId
+// is the one field neither of those needs directly - it's read separately, as
+// result.game.externalId, to pass as the eventId for PLAYER_PROP grading
+// (gradePlayerProp/gradeTouchdownProp fetch their own box-score data by id;
+// they never receive the GameResult row itself). Deliberately excludes the
+// Game-Pulse-only JSON blobs (inningsJson/quartersJson/scoringPlaysJson) and
+// turnover/isPreseason/ledger fields - confirmed by tracing every consumer
+// reachable from gradePickPool/regradeFuzzyPool that none of this file's
+// grading logic ever reads them; they're written by persistFinalScores and
+// read only by the separate Game Pulse / team-tendencies queries.
+const CANDIDATE_GAME_RESULT_SELECT = {
+  gameDate: true,
+  homeTeam: true,
+  awayTeam: true,
+  externalId: true,
+  homeScore: true,
+  awayScore: true,
+  firstFiveHomeScore: true,
+  firstFiveAwayScore: true,
+  firstInningHomeScore: true,
+  firstInningAwayScore: true,
+  linescoreJson: true,
+} satisfies Prisma.GameResultSelect;
+
+type CandidateGameResult = Prisma.GameResultGetPayload<{ select: typeof CANDIDATE_GAME_RESULT_SELECT }>;
+
+async function fetchCandidatePool(
+  picks: { gameTime: Date }[],
+  sportKey: string
+): Promise<CandidateGameResult[]> {
   const times = picks.map((p) => p.gameTime.getTime());
   const min = Math.min(...times) - 2 * 86400000;
   const max = Math.max(...times) + 2 * 86400000;
   return prisma.gameResult.findMany({
     where: { sportKey, gameDate: { gte: new Date(min), lt: new Date(max) } },
+    select: CANDIDATE_GAME_RESULT_SELECT,
   });
 }
 
