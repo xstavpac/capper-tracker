@@ -109,6 +109,7 @@ export async function getLiveBoardData(
             : teamGroup === "HOME"
               ? getTeamColor(activeSport, game.homeTeam)
               : null,
+        datePosted: p.datePosted.toISOString(),
       };
     });
   });

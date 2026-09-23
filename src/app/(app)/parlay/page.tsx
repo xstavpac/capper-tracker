@@ -4,6 +4,7 @@ import { getLiveBoardData } from "@/server/data/live-board-picks";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
 import { ParlaySlipButton } from "@/components/parlay/parlay-slip-button";
 import { ParlayPoolSection } from "@/components/parlay/parlay-pool-section";
+import { AutoGenerateSection } from "@/components/parlay/auto-generate-section";
 
 function tabClass(isActive: boolean) {
   return (
@@ -12,7 +13,9 @@ function tabClass(isActive: boolean) {
   );
 }
 
-// The Parlay Generator's My Picks mode: build a parlay from exactly the
+// The Parlay Generator. Auto-Generate (AutoGenerateSection) builds Parlay A
+// and its Hedge/Contrarian variants from today's games. My Picks mode builds
+// a parlay from exactly the
 // picks the user has pooled (via the Parlay slip button, here or on Live),
 // scoped by which leagues are toggled on, up to a requested leg count. No
 // substitutions/alternates/hedge logic - the pool + scope + leg count is the
@@ -35,11 +38,24 @@ export default async function ParlayPage({ searchParams }: { searchParams: { spo
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Parlay Generator</h1>
-          <p className="mt-1 text-sm text-muted-foreground">My Picks - build a parlay from your pooled picks.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Auto-Generate a parlay from today&apos;s games, or build one from your pooled picks.
+          </p>
         </div>
         <ParlaySlipButton />
       </div>
 
+      <div className="mb-3">
+        <h2 className="text-sm font-semibold text-foreground">Auto-Generate</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          One leg per game from today&apos;s unstarted games, using only your tracked cappers&apos; picks.
+        </p>
+      </div>
+      <AutoGenerateSection leagues={LIVE_SPORTS.map((s) => s.label)} />
+
+      <div className="mb-3 mt-8">
+        <h2 className="text-sm font-semibold text-foreground">My Picks</h2>
+      </div>
       <ParlayPoolSection />
 
       <div className="mb-4 mt-8">
