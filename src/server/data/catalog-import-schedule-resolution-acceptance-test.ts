@@ -14,6 +14,24 @@
 // no upcoming match. This exercises the pure core directly; the async wrapper
 // resolveScheduleGame just supplies real getLiveScoresForSport / getOddsForSport.
 //
+// A second bug (investigated 2026-09-23): resolveScheduleGameFromFeeds used
+// to strip every FINAL game out of the score feed up front, before its
+// same-slate-day preference ever ran, as long as any non-final game for that
+// team existed anywhere in the ~yesterday..tomorrow window. For an MLB
+// series (or any back-to-back), that meant a pick imported after today's
+// game ended silently attached to tomorrow's game instead - it sat Pending
+// waiting for a game the capper never picked, then graded against the wrong
+// date/line/result. The fix: a same-slate-day score-feed match now wins
+// outright, finished or not, before the finals-are-excluded fallback logic
+// ever runs (see "the newly reported bug" below). Two follow-ups landed with
+// it: a doubleheader guard (pickBestScheduleCandidate refuses to guess, and
+// the pick surfaces on the import review screen instead, when the same-day
+// pool for one matchup has both a finished and an unfinished game) and a
+// slate-day boundary that rolls over at 6am ET instead of literal midnight,
+// so a late-night import (Central time or later) or a West-Coast game ending
+// after midnight ET still counts as "today" (see "slate-day boundary"
+// below).
+//
 // No test framework in this repo (see odds-preseason-merge-acceptance-test.ts).
 import { resolveScheduleGameFromFeeds, pickBestScheduleCandidate } from "./odds";
 import type { OddsGame, ScoreGame } from "./odds";
@@ -188,6 +206,123 @@ console.log("\n########## guardrails: window edge + fallback-not-merge #########
 }
 
 // ---------------------------------------------------------------------------
+console.log("\n########## the newly reported bug: MLB series, today's game already final ##########");
+{
+  // Importing Monday night, after Monday's game ended. Tuesday's game (next
+  // in the series) is already sitting in the score feed too, not final.
+  // Before the fix: the finals-prefilter dropped Monday's game before the
+  // same-day preference ever saw it, so this resolved to Tuesday's game
+  // instead - exactly the reported symptom (late pick attaches to the NEXT
+  // game, sits Pending, grades against the wrong date/line).
+  const scores = [
+    score("St. Louis Cardinals", "Chicago Cubs", 0, "final", "MON_FINAL"),
+    score("St. Louis Cardinals", "Chicago Cubs", 1, "preview", "TUE_PREVIEW"),
+  ];
+  const resolved = resolveScheduleGameFromFeeds(scores, [], endsWith("cardinals"), MON);
+  check("a late pick attaches to TODAY's finished game, not tomorrow's", resolved?.id, "MON_FINAL");
+
+  // Same shape, but nothing upcoming is in the feed at all (single game,
+  // no series) - unchanged, still resolves to the just-finished game.
+  const single = resolveScheduleGameFromFeeds(
+    [score("St. Louis Cardinals", "Chicago Cubs", 0, "final", "MON_FINAL")],
+    [],
+    endsWith("cardinals"),
+    MON
+  );
+  check("no next game at all -> still the finished one", single?.id, "MON_FINAL");
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## doubleheader: don't guess, flag instead ##########");
+{
+  // Two games, same matchup, same slate day - game 1 already final, game 2
+  // still upcoming. A bare pick can't say which one it means, and a late
+  // import is routinely about game 1. Must come back null (unresolved),
+  // which bulk-picks.ts's existing unmatchedGames path already surfaces on
+  // the import review screen - not a guess in either direction.
+  const doubleheader = resolveScheduleGameFromFeeds(
+    [
+      score("New York Yankees", "Boston Red Sox", 0, "final", "GAME_1"),
+      score("New York Yankees", "Boston Red Sox", 0, "preview", "GAME_2"),
+    ],
+    [],
+    endsWith("yankees"),
+    MON
+  );
+  check("doubleheader with a final + an upcoming leg -> unresolved, not guessed", doubleheader, null);
+
+  // Both legs already final (import happens after the whole doubleheader) -
+  // no final/non-final split to be ambiguous about, ordinary closest-by-time
+  // tiebreak still applies.
+  const bothFinal = resolveScheduleGameFromFeeds(
+    [
+      score("New York Yankees", "Boston Red Sox", 0, "final", "GAME_1"),
+      { ...score("New York Yankees", "Boston Red Sox", 0, "final", "GAME_2"), commenceTime: dayISO(0, 23) },
+    ],
+    [],
+    endsWith("yankees"),
+    MON
+  );
+  checkTrue("both legs final (no split) -> still resolves (doesn't over-flag)", bothFinal !== null);
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## slate-day boundary: late-night imports around midnight ET ##########");
+{
+  // Central-time capper session, 11:15pm CT Monday = 12:15am ET Tuesday -
+  // past Eastern midnight by the wall clock, but still "tonight" to the
+  // person importing. Monday's game already ended; Tuesday's (next in the
+  // series) is already in the feed too. Without the slate-day rollover,
+  // referenceTime's literal Eastern day is already Tuesday, so this
+  // reproduces the same wrong-game bug via the clock instead of the
+  // multi-day window.
+  const lateImport = new Date("2026-09-08T04:15:00Z"); // 12:15am ET Tue / 11:15pm CT Mon
+  const scores = [
+    score("San Diego Padres", "Colorado Rockies", 0, "final", "MON_FINAL"),
+    score("San Diego Padres", "Colorado Rockies", 1, "preview", "TUE_PREVIEW"),
+  ];
+  const resolved = resolveScheduleGameFromFeeds(scores, [], endsWith("padres"), lateImport);
+  check(
+    "12:15am ET import still attaches to Monday's finished game, not Tuesday's",
+    resolved?.id,
+    "MON_FINAL"
+  );
+
+  // A West Coast night game that starts before midnight ET but runs past it -
+  // commenceTime 10:10pm ET Monday, import right after it ends at 2:00am ET
+  // Tuesday. The game's OWN slate day is anchored to its start time (Monday)
+  // regardless of when it actually finished; the import instant needs the
+  // same rollover to still agree it's "Monday's game".
+  const westCoastGame: ScoreGame = {
+    ...score("Los Angeles Dodgers", "San Francisco Giants", 0, "final", "MON_NIGHT_FINAL"),
+    commenceTime: "2026-09-08T02:10:00Z", // 10:10pm ET Monday
+  };
+  const postGameImport = new Date("2026-09-08T06:00:00Z"); // 2:00am ET Tuesday
+  const wcResolved = resolveScheduleGameFromFeeds([westCoastGame], [], endsWith("dodgers"), postGameImport);
+  check(
+    "2am ET import still attaches to the West Coast game that ended after midnight",
+    wcResolved?.id,
+    "MON_NIGHT_FINAL"
+  );
+
+  // Guardrail: 7am ET the same Tuesday is past the rollover - Monday's game
+  // is genuinely a day old by then, so if Tuesday's game is also up it wins
+  // (unchanged fallback-to-odds-feed / next-game behavior, not a regression
+  // from the rollover swallowing every future import all day).
+  const nextMorning = new Date("2026-09-08T11:00:00Z"); // 7:00am ET Tuesday
+  const morningResolved = resolveScheduleGameFromFeeds(
+    [
+      score("San Diego Padres", "Colorado Rockies", 0, "final", "MON_FINAL"),
+      score("San Diego Padres", "Colorado Rockies", 1, "preview", "TUE_PREVIEW"),
+    ],
+    [],
+    endsWith("padres"),
+    nextMorning
+  );
+  check("7am ET (past the rollover) -> Tuesday's game, not Monday's", morningResolved?.id, "TUE_PREVIEW");
+}
+
+// ---------------------------------------------------------------------------
 console.log("\n########## pickBestScheduleCandidate: same-day > not-final > closest ##########");
 {
   const g = (day: number, status: ScoreGame["status"], id: string) => score("H", "A", day, status, id);
@@ -198,9 +333,14 @@ console.log("\n########## pickBestScheduleCandidate: same-day > not-final > clos
     "sameday"
   );
   check(
-    "within the day, a not-final game beats a final one",
-    pickBestScheduleCandidate([g(0, "final", "done"), g(0, "preview", "upcoming")], MON)?.id,
-    "upcoming"
+    // Changed 2026-09-23: was "not-final beats final" - a bare pick can't
+    // actually tell which same-day game it means when one's a final and the
+    // other's still upcoming (doubleheader shape), so this is now the
+    // doubleheader guard's job to refuse instead of guess. See "doubleheader:
+    // don't guess, flag instead" above for the end-to-end version.
+    "within the day, a final + a not-final -> unresolved (doubleheader guard), not a guess",
+    pickBestScheduleCandidate([g(0, "final", "done"), g(0, "preview", "upcoming")], MON),
+    null
   );
   check("empty -> null", pickBestScheduleCandidate([], MON), null);
 }
