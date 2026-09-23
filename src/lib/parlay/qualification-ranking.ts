@@ -99,19 +99,17 @@ export function qualifies(record: CategoryBreakdownItem | null): boolean {
 // UNDER vs OVER in describePick's direction vocabulary). "Tracked as of that
 // date" = datePosted no later than the primary's own gameTime - a same-day
 // headcount, not a point-in-time win-rate lookup (that cutoff lives in the
-// caller's win-rate data, not here). This cutoff applies uniformly,
-// INCLUDING to the primary itself: a primary whose own datePosted lands
-// after its game's gameTime (a real, fairly common pattern in imported
-// data - a backfilled/corrected posting time) does not get an automatic
-// pass for its own side, matching the spec's plain "posted before this game
-// started" wording, which states no exemption for the primary. Callers
-// should include the primary itself in `sameGamePicks` if they want it to
-// have a chance to count - it's simply one more entry subject to the same
-// filters as every other pick; this function also checks it directly, so
-// including it twice is harmless (Set-deduped). Exact duplicates of the
-// primary count toward its side the same way - same market/scope/direction,
-// no special-casing needed. Primary's side must be STRICTLY larger than the
-// opposing side; a tie (including 1-vs-1, or 0-vs-0) fails.
+// caller's win-rate data, not here). This cutoff gates every OTHER same-
+// game pick's visibility as of the primary's own moment in time, but it
+// does NOT gate the primary itself: the primary is definitionally a member
+// of its own side regardless of when it happened to be logged, so a primary
+// whose own datePosted lands after its game's gameTime (a real, fairly
+// common pattern in imported data - a backfilled/corrected posting time)
+// still counts toward its own side unconditionally. Exact duplicates of the
+// primary count toward its side the same way as any other same-direction
+// pick - no special-casing needed beyond the primary's own unconditional
+// membership. Primary's side must be STRICTLY larger than the opposing
+// side; a tie (including 1-vs-1) fails.
 // ---------------------------------------------------------------------------
 export function contrarianHeadcountPasses(primary: ParlayLeg, sameGamePicks: ParlayLeg[]): boolean {
   const primaryGame: GameInput = { homeTeam: primary.homeTeam, awayTeam: primary.awayTeam, gameTime: primary.gameTime, sportName: primary.sportName };
@@ -128,17 +126,18 @@ export function contrarianHeadcountPasses(primary: ParlayLeg, sameGamePicks: Par
         : primary.homeTeam
       : oppositeDirection;
 
-  const primarySide = new Set<string>();
+  // The primary always counts toward its own side - unconditionally, not
+  // subject to its own datePosted check (see header comment above).
+  const primarySide = new Set<string>([primary.capperId]);
   const opposingSide = new Set<string>();
 
-  // The primary itself goes through the exact same filter as every other
-  // same-game pick - see the header comment above for why it gets no
-  // exemption from its own datePosted check.
-  for (const gp of [primary, ...sameGamePicks]) {
+  // Every OTHER same-game pick still needs to have been posted before the
+  // primary's own gameTime to count toward either side.
+  for (const gp of sameGamePicks) {
     if (gp.betType !== primary.betType || gp.period !== primary.period) continue;
     if (gp.datePosted.getTime() > primary.gameTime.getTime()) continue;
 
-    const gpDesc = gp === primary ? primaryDesc : describePick({ betType: gp.betType, period: gp.period, betDetail: gp.betDetail, line: gp.line }, primaryGame);
+    const gpDesc = describePick({ betType: gp.betType, period: gp.period, betDetail: gp.betDetail, line: gp.line }, primaryGame);
     if (gpDesc.status !== "OK") continue;
 
     // TEAM_TOTAL: only the same team's total counts toward either side of

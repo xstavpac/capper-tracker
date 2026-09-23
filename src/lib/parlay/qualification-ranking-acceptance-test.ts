@@ -120,11 +120,11 @@ function record(wins: number, losses: number, opts: Partial<CategoryBreakdownIte
   const twoNrfi = [...oneYrfi, mkLeg({ pickId: "nrfi2", capperId: "nrfiCapper2", betType: "NRFI", betDetail: "Yankees/Red Sox NRFI", period: "FULL_GAME", line: null })];
   checkTrue("headcount NRFI: 2 NRFI vs 1 YRFI passes", contrarianHeadcountPasses(nrfiPrimary, twoNrfi));
 
-  // "Tracked as of that date" applies uniformly, INCLUDING to the primary -
-  // a primary posted AFTER its own game started (a real, fairly common
-  // pattern in imported data) gets no automatic pass for its own side. With
-  // no other same-game picks at all, that means 0-vs-0, which fails (not a
-  // vacuous pass).
+  // The primary counts toward its own side UNCONDITIONALLY - it is not
+  // subject to its own "tracked as of that date" datePosted check, even
+  // when it was posted AFTER its own game started (a real, fairly common
+  // pattern in imported data - a backfilled/corrected posting time). Other
+  // same-game picks still ARE subject to that filter.
   const latePrimary = mkLeg({
     pickId: "latePrimary",
     capperId: "lateCapper",
@@ -132,7 +132,21 @@ function record(wins: number, losses: number, opts: Partial<CategoryBreakdownIte
     betDetail: "Yankees ML",
     datePosted: new Date("2026-09-02T00:05:00Z"), // after GAME_TIME (2026-09-01T23:00:00Z)
   });
-  checkFalse("headcount: primary posted after its own gameTime doesn't get an automatic pass (0 vs 0)", contrarianHeadcountPasses(latePrimary, []));
+  // No other same-game picks at all: without the primary counting this
+  // would be 0-vs-0 (fail); with the primary's unconditional membership
+  // it's 1-vs-0, which passes.
+  checkTrue("headcount: late-posted primary still counts toward its own side (1 vs 0, not 0 vs 0)", contrarianHeadcountPasses(latePrimary, []));
+
+  // A same-side capper (posted on time) plus one opposing capper (posted on
+  // time): without the primary counting this is 1-vs-1 (tie, fails); with
+  // the primary's unconditional membership it's 2-vs-1, which passes - the
+  // exact "would otherwise be a tie, now correctly passes" case.
+  const oneSameSideOnTime = mkLeg({ pickId: "sameSideOnTime", capperId: "sameSideCapper", betType: "MONEYLINE", betDetail: "Yankees ML", datePosted: new Date("2026-09-01T20:00:00Z") });
+  const oneOpposingOnTime = mkLeg({ pickId: "oppOnTime", capperId: "oppCapper", betType: "MONEYLINE", betDetail: "Red Sox ML", datePosted: new Date("2026-09-01T20:00:00Z") });
+  checkTrue(
+    "headcount: late-posted primary tips a would-be 1-vs-1 tie (without it) into a 2-vs-1 pass (with it)",
+    contrarianHeadcountPasses(latePrimary, [oneSameSideOnTime, oneOpposingOnTime])
+  );
 }
 
 // ============================================================================

@@ -18,37 +18,26 @@
 //
 // Per Section 7 Step 4 (no generation floor in v1): a parlay gets "Parlay B"
 // for a mode iff ANY leg has at least one conflict-filtered qualifying
-// candidate for that mode. Original target (from the Wilson sweep, same
-// snapshot, same production classifier): Auto Hedge 54.78% (556/1015),
-// Contrarian 7.09% (72/1015) - this run instead produces 60.59% (615/1015)
-// and 22.66% (230/1015). Both diffs are fully root-caused, NOT a bug in
-// rankCandidates/contrarianHeadcountPasses:
+// candidate for that mode.
 //
-//   1. point-in-time.ts's PitPick type was missing odds/line (a pre-existing
-//      typecheck error in this file, fixed in this same PR since it's now a
-//      committed dependency) - pickCategory's FAV_ML/DOG_ML split needs
-//      `odds`, so every MONEYLINE point-in-time lookup silently returned no
-//      category (and thus never qualified) in the run that produced the
-//      original target. Feeding real odds/line (as this file now does)
-//      finds real qualifying MONEYLINE candidates the original run could
-//      never see - confirmed by re-running with odds/line stubbed back to
-//      undefined, which reproduces 556/1015 for Auto Hedge exactly.
-//   2. The original Wilson-sweep headcount logic (Section 5(b)) let the
-//      primary's own capperId count toward its own side unconditionally,
-//      bypassing the "posted before this game started" datePosted filter it
-//      applied to every other same-game pick. ~22% of picks in this
-//      snapshot have datePosted slightly after their own gameTime (an
-//      import-timing artifact), so that exemption was doing real work.
-//      contrarianHeadcountPasses applies the filter uniformly instead,
-//      matching the spec's literal wording (no stated primary exemption) -
-//      confirmed by a leg-by-leg diff against the original inline logic
-//      (0 mismatches once fixed) and by re-running with BOTH the odds/line
-//      stub AND this fix, which reproduces 72/1015 for Contrarian exactly.
-//
-// Both new numbers are higher than the original target because both fixes
-// let MORE real candidates qualify than the original (silently buggy) run
-// ever considered - not because this new code is more permissive than the
-// spec intends.
+// TARGET (current baseline, established after two fixes - see git history
+// on this file/on contrarianHeadcountPasses for the prior, since-corrected
+// numbers): Auto Hedge 60.59% (615/1015), Contrarian 33.10% (336/1015).
+// This baseline reflects:
+//   1. point-in-time.ts's PitPick carrying real odds/line, so pickCategory's
+//      FAV_ML/DOG_ML split (which needs `odds`) can actually categorize
+//      MONEYLINE picks - previously a missing-field bug silently zeroed out
+//      every MONEYLINE point-in-time lookup.
+//   2. contrarianHeadcountPasses (Section 5(b)) counting the primary's own
+//      capperId toward its own side unconditionally - the primary is
+//      definitionally a member of its own side regardless of when it was
+//      logged; only OTHER same-game picks are gated by the "posted before
+//      this game started" datePosted filter.
+// This script asserts an EXACT match against that baseline below (TARGET),
+// not just informational numbers - a future change to rankCandidates,
+// contrarianHeadcountPasses, or the classifier that shifts these counts
+// should fail this check loudly, the same way any other acceptance test
+// would, rather than silently drifting.
 //
 // Usage (DATABASE_URL must already point at the disposable run DB):
 //   node --import tsx scripts/t2-harness/qualification-ranking-acceptance-check.ts
@@ -225,21 +214,27 @@ async function main() {
     }
   }
 
+  // Current baseline (see header comment) - exact match required.
+  const TARGET = { autoHedge: { b: 615, n: 1015 }, contrarian: { b: 336, n: 1015 } };
+
+  const autoHedge = { b: bCount.AUTO_HEDGE, n: totalParlays, pct: (bCount.AUTO_HEDGE / totalParlays) * 100 };
+  const contrarian = { b: bCount.CONTRARIAN, n: totalParlays, pct: (bCount.CONTRARIAN / totalParlays) * 100 };
+  const autoHedgeMatch = autoHedge.b === TARGET.autoHedge.b && autoHedge.n === TARGET.autoHedge.n;
+  const contrarianMatch = contrarian.b === TARGET.contrarian.b && contrarian.n === TARGET.contrarian.n;
+
   const report = {
     totalParlays,
-    autoHedge: { b: bCount.AUTO_HEDGE, n: totalParlays, pct: (bCount.AUTO_HEDGE / totalParlays) * 100 },
-    contrarian: { b: bCount.CONTRARIAN, n: totalParlays, pct: (bCount.CONTRARIAN / totalParlays) * 100 },
-    originalTarget: { autoHedge: { b: 556, n: 1015, pct: 54.78 }, contrarian: { b: 72, n: 1015, pct: 7.09 } },
-    diffExplanation:
-      "See this file's header comment: both diffs from originalTarget are root-caused (a pre-existing " +
-      "point-in-time.ts odds/line gap, and an unintentional primary-datePosted exemption in the original " +
-      "Wilson-sweep headcount logic) and confirmed by direct A/B reruns, not bugs in rankCandidates/" +
-      "contrarianHeadcountPasses. Both are fixed here, so this run finds MORE real qualifying candidates " +
-      "than the original target reflects.",
+    autoHedge,
+    contrarian,
+    target: TARGET,
+    autoHedgeMatch,
+    contrarianMatch,
+    allMatch: autoHedgeMatch && contrarianMatch,
   };
 
   console.log(JSON.stringify(report));
   await prisma.$disconnect();
+  if (!report.allMatch) process.exit(1);
 }
 
 main().catch((err) => {
