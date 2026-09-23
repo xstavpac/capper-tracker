@@ -8,6 +8,11 @@
 // Covers: duplicate delivery, deletion race, partial batch failure, and that
 // a count-0 leg is excluded from the parent-parlay recompute.
 //
+// Section 5 covers a separate concern - the fetchCandidatePool egress fix
+// (narrowed `select`, the date bound it derives from the actual picks being
+// graded, and skipping the query entirely for an empty pool) - via the same
+// gameResult.findMany-patching approach.
+//
 // Pure: the prisma singleton's methods are swapped for spies before each
 // call, so no database is touched. Run with:
 //   npx tsx src/server/data/grading-idempotency-acceptance-test.ts
@@ -200,6 +205,207 @@ async function main() {
     expect("only legA counted as graded (legB matched 0 rows)", res.graded, 1);
     expect("recompute ran for P1 only, never P2", recomputeFindUniqueIds.sort(), ["P1"]);
     expect("parent write (CAS) happened for P1 only", parlayUpdateManyIds.sort(), ["P1"]);
+  }
+
+  // ---- 5. fetchCandidatePool egress fix: narrowed select, pick-derived date
+  // bound, and skip-when-empty. All exercised through gradePickPool/
+  // regradeFuzzyPool (not fetchCandidatePool directly - it isn't exported),
+  // the same way the rest of this file proves grading.ts's internals. ----
+
+  const CANDIDATE_SELECT_SHAPE = {
+    gameDate: true,
+    homeTeam: true,
+    awayTeam: true,
+    externalId: true,
+    homeScore: true,
+    awayScore: true,
+    firstFiveHomeScore: true,
+    firstFiveAwayScore: true,
+    firstInningHomeScore: true,
+    firstInningAwayScore: true,
+    linescoreJson: true,
+  };
+
+  // 5a. Only the columns grading actually reads are selected - no JSON blobs
+  // beyond linescoreJson (which resolveOutcome's segmentScore does read, for
+  // quarter/period bets), no turnover/ledger/isPreseason fields.
+  {
+    const findManyCalls: { select?: unknown }[] = [];
+    patch("gameResult.findMany", async (args: { select?: unknown }) => {
+      findManyCalls.push(args);
+      return [gameResult()];
+    });
+    patch("pick.updateMany", async () => ({ count: 1 }));
+
+    await gradePickPool([pendingPick("sel-a")], SPORT_KEY, SPORT_NAME);
+
+    expect("candidate query selects exactly the columns grading reads", findManyCalls[0].select, CANDIDATE_SELECT_SHAPE);
+  }
+
+  // 5b. The date range is derived from the actual picks being graded (the
+  // earliest/latest gameTime in THIS call, +/-2d), never a hardcoded window.
+  {
+    const findManyCalls: { where?: { gameDate?: { gte: Date; lt: Date } } }[] = [];
+    patch("gameResult.findMany", async (args: { where?: { gameDate?: { gte: Date; lt: Date } } }) => {
+      findManyCalls.push(args);
+      return [];
+    });
+    patch("pick.updateMany", async () => ({ count: 0 }));
+
+    const DAY = 86400000;
+    const earliest = new Date("2026-06-01T00:00:00Z");
+    const latest = new Date("2026-06-10T00:00:00Z");
+    await gradePickPool(
+      [pendingPick("d1", { gameTime: earliest }), pendingPick("d2", { gameTime: latest })],
+      SPORT_KEY,
+      SPORT_NAME
+    );
+
+    const where = findManyCalls[0].where!.gameDate!;
+    expect("candidate window starts 2 days before the EARLIEST pick's own gameTime", where.gte.getTime(), earliest.getTime() - 2 * DAY);
+    expect("candidate window ends 2 days after the LATEST pick's own gameTime", where.lt.getTime(), latest.getTime() + 2 * DAY);
+  }
+
+  // 5c. No pending/fuzzy picks -> no GameResult query at all.
+  {
+    let findManyCalled = false;
+    patch("gameResult.findMany", async () => {
+      findManyCalled = true;
+      return [];
+    });
+
+    const graded = await gradePickPool([], SPORT_KEY, SPORT_NAME);
+    expect("gradePickPool with an empty pick list issues no GameResult query", findManyCalled, false);
+    expect("gradePickPool with an empty pick list returns a clean zero result", { graded: graded.graded, notMatched: graded.notMatched, users: graded.changedUserIds.size }, { graded: 0, notMatched: 0, users: 0 });
+
+    findManyCalled = false;
+    const regraded = await regradeFuzzyPool([], SPORT_KEY, SPORT_NAME);
+    expect("regradeFuzzyPool with an empty pick list issues no GameResult query", findManyCalled, false);
+    expect(
+      "regradeFuzzyPool with an empty pick list returns a clean zero result",
+      { checked: regraded.checked, upgraded: regraded.upgraded, users: regraded.changedUserIds.size },
+      { checked: 0, upgraded: 0, users: 0 }
+    );
+  }
+
+  // A GameResult row shaped EXACTLY like the narrowed select - no extra
+  // fields - proving grading never silently relied on one of the dropped
+  // columns (if it did, that field would be `undefined` here and the outcome
+  // below would come out wrong instead of matching pre-fix behavior).
+  const selectShapedGame = (over: Record<string, unknown> = {}) =>
+    ({
+      gameDate: T,
+      homeTeam: "Yankees",
+      awayTeam: "Red Sox",
+      externalId: "ext-1",
+      homeScore: 5,
+      awayScore: 3,
+      firstFiveHomeScore: null,
+      firstFiveAwayScore: null,
+      firstInningHomeScore: null,
+      firstInningAwayScore: null,
+      linescoreJson: null,
+      ...over,
+    }) as unknown as GameResult;
+
+  // 5d. Identical grading result (moneyline) off a select-shaped row.
+  {
+    patch("gameResult.findMany", async () => [selectShapedGame()]);
+    const updates: { data: { status: string } }[] = [];
+    patch("pick.updateMany", async (args: { data: { status: string } }) => {
+      updates.push(args);
+      return { count: 1 };
+    });
+
+    await gradePickPool([pendingPick("shape-ml", { pickedSide: "HOME" })], SPORT_KEY, SPORT_NAME);
+    expect("moneyline grades correctly off a row containing only the selected columns", updates[0].data.status, "WIN");
+  }
+
+  // 5d(ii). Same, for a quarter bet - proves linescoreJson (the one JSON
+  // column still selected) is still read correctly.
+  {
+    const quarterGame = selectShapedGame({ linescoreJson: [{ home: 4, away: 3 }] });
+    patch("gameResult.findMany", async () => [quarterGame]);
+    const updates: { data: { status: string } }[] = [];
+    patch("pick.updateMany", async (args: { data: { status: string } }) => {
+      updates.push(args);
+      return { count: 1 };
+    });
+
+    const quarterPick = pendingPick("shape-q1", {
+      betType: "TOTAL",
+      period: "FIRST_QUARTER",
+      betDetail: "Over 6.5 1st Quarter",
+      line: 6.5,
+      pickedSide: null,
+    });
+    await gradePickPool([quarterPick], SPORT_KEY, SPORT_NAME);
+    expect("1st-quarter total (Q1 combined = 7) grades WIN off the select-shaped row's linescoreJson", updates[0].data.status, "WIN");
+  }
+
+  // 5d(iii). Same, for NRFI - proves the firstInning* columns still work.
+  {
+    const nrfiGame = selectShapedGame({ firstInningHomeScore: 0, firstInningAwayScore: 0 });
+    patch("gameResult.findMany", async () => [nrfiGame]);
+    const updates: { data: { status: string } }[] = [];
+    patch("pick.updateMany", async (args: { data: { status: string } }) => {
+      updates.push(args);
+      return { count: 1 };
+    });
+
+    const nrfiPick = pendingPick("shape-nrfi", { betType: "NRFI", betDetail: "NRFI", pickedSide: null });
+    await gradePickPool([nrfiPick], SPORT_KEY, SPORT_NAME);
+    expect("NRFI (scoreless 1st) grades WIN off the select-shaped row's firstInning columns", updates[0].data.status, "WIN");
+  }
+
+  // 5e. Rescheduled/late game: the actual gameDate lands a few hours after
+  // the pick's scheduled gameTime (a rain delay, a late start) - still within
+  // MAX_GAME_TIME_DRIFT_MS (6h), so it's still an exact match and still
+  // grades, off the select-shaped row.
+  {
+    const delayedGame = selectShapedGame({ gameDate: new Date(T.getTime() + 3 * 3600000) });
+    patch("gameResult.findMany", async () => [delayedGame]);
+    const updates: { data: { status: string } }[] = [];
+    patch("pick.updateMany", async (args: { data: { status: string } }) => {
+      updates.push(args);
+      return { count: 1 };
+    });
+
+    await gradePickPool([pendingPick("delayed", { pickedSide: "HOME" })], SPORT_KEY, SPORT_NAME);
+    expect("a game that started 3h late (within the 6h drift tolerance) still exact-matches and grades", updates[0].data.status, "WIN");
+  }
+
+  // 5f. Wide batch: a pick's own game sits right at the edge of the shared
+  // multi-pick pool window (fetchCandidatePool spans the earliest pick's
+  // gameTime-2d through the latest pick's gameTime+2d) - still matches, since
+  // its game is always within 6h of ITS OWN pick's gameTime regardless of how
+  // wide the batch is.
+  {
+    const earlyPickTime = new Date("2026-06-01T12:00:00Z");
+    const latePickTime = new Date("2026-06-09T12:00:00Z"); // 8 days later - a wide batch
+    const earlyGame = selectShapedGame({ gameDate: earlyPickTime, externalId: "ext-early" });
+    const lateGame = selectShapedGame({ gameDate: latePickTime, externalId: "ext-late" });
+    patch("gameResult.findMany", async () => [earlyGame, lateGame]);
+    const updates: { data: { status: string } }[] = [];
+    patch("pick.updateMany", async (args: { data: { status: string } }) => {
+      updates.push(args);
+      return { count: 1 };
+    });
+
+    await gradePickPool(
+      [
+        pendingPick("wide-early", { gameTime: earlyPickTime, pickedSide: "HOME" }),
+        pendingPick("wide-late", { gameTime: latePickTime, pickedSide: "HOME" }),
+      ],
+      SPORT_KEY,
+      SPORT_NAME
+    );
+    expect("both the early and late pick in a wide batch grade correctly off the one shared, narrowed-select query", updates.length, 2);
+    expect(
+      "the pick near the edge of the shared window still grades (not silently dropped by the shared query)",
+      updates.every((u) => u.data.status === "WIN"),
+      true
+    );
   }
 
   restoreAll();
