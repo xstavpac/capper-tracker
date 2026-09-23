@@ -54,9 +54,24 @@ export const SPORT_SEASON_CONFIG: Record<string, SportSeasonWindow> = {
   // 2026 Opening Day ~late March; seasonEnd covers through the World Series
   // (early Nov 2026).
   baseball_mlb: { seasonStart: "2026-03-15", seasonEnd: "2026-11-05" },
-  // 2026-27 puck-drop ~early Oct 2026; seasonEnd covers through the Stanley
-  // Cup Final (mid-to-late June 2027).
-  icehockey_nhl: { seasonStart: "2026-10-07", seasonEnd: "2027-06-20" },
+  // seasonStart is ESPN's own preseason start for 2026-27 (confirmed live
+  // against their scoreboard: league season.startDate = 2026-09-15T07:00Z,
+  // 4 days ahead of the first actual preseason game on 2026-09-19), not the
+  // regular-season opener - same NFL pattern above, deliberately widened to
+  // cover preseason too. regularSeasonStart is confirmed live against ESPN's
+  // scoreboard as the first date carrying event.season.slug ===
+  // "regular-season" (2026-09-29: FLA @ CAR, MTL @ TOR, NYR @ BOS, VAN @ EDM,
+  // CHI @ VGK) - NOT "early Oct" as this entry previously guessed (and not
+  // 2026-10-07, which was floated before this was checked live); that guess
+  // was off by more than a week; games from 9/29 on are real regular-season
+  // games, not preseason, and would be wrongly flagged isPreseason: true by
+  // isPreseasonGame() below if regularSeasonStart were left at a later date.
+  // seasonEnd covers through the Stanley Cup Final (mid-to-late June 2027).
+  icehockey_nhl: {
+    seasonStart: "2026-09-15",
+    seasonEnd: "2027-06-20",
+    regularSeasonStart: "2026-09-29",
+  },
   // 2026 season tips off mid-May; seasonEnd covers through the WNBA Finals
   // (mid-to-late Oct 2026).
   basketball_wnba: { seasonStart: "2026-05-15", seasonEnd: "2026-10-20" },
@@ -85,7 +100,7 @@ export function isSportInSeason(sportKey: string, referenceDate: Date = new Date
 // gap between the widened `seasonStart` (which deliberately reaches back to
 // cover preseason, so preseason games run the same odds/scores/grading
 // pipeline) and the real `regularSeasonStart`. Only a sport with BOTH of
-// those configured has a preseason window; today that is NFL alone (every
+// those configured has a preseason window; today that is NFL and NHL (every
 // other sport's `seasonStart` already sits at/after its regular-season
 // opener - see SPORT_SEASON_CONFIG - so this returns false for them).
 //
