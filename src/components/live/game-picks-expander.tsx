@@ -54,6 +54,12 @@ export type ExpanderPick = {
   // header dot. null for OTHER, and for any team getTeamColor can't map yet -
   // both render the neutral-gray fallback dot, no special-casing needed.
   teamColor: string | null;
+  // When the capper posted this pick (ISO string, same reason as gameTime).
+  // Only the Parlay Generator's Contrarian headcount reads it (a same-game
+  // pick counts only if posted before the primary's game - see
+  // contrarianHeadcountPasses). Optional because pooled picks persisted to
+  // localStorage before this field existed won't carry it.
+  datePosted?: string;
 };
 
 // Fixed AWAY -> HOME -> OTHER ordering (matches how the game card itself

@@ -11,6 +11,8 @@ import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PickCard } from "@/components/live/pick-card";
 import { useParlayPool, type PooledPick } from "@/components/parlay/parlay-pool-context";
+import { ScopeToggle, LegStepper } from "@/components/parlay/parlay-controls";
+import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import {
   selectConflictFreeLegs,
   type BuildCandidate,
@@ -18,79 +20,34 @@ import {
   type UnverifiedPair,
 } from "@/lib/parlay/build-my-picks";
 
-// Ranks a pooled pick by the same win% already shown on its own card
-// (PickCard/getLeagueRecordsAction) - the capper's record for this bet
-// category in this league, falling back to their all-time record, then
-// their last-20-picks record, in the same "best available" order the card
-// itself falls back through. No new scoring model: this is the number
-// already on screen for every pick in the pool.
+// Ranks a pooled pick by the same win% already shown on its own card - see
+// bestAvailableRecord (shared with Auto-Generate). No new scoring model:
+// this is the number already on screen for every pick in the pool.
 function bestAvailableWinPct(pick: PooledPick, records: CapperLeagueRecords): number {
-  const key = pick.capperId + "|" + pick.leagueName + "|" + pick.category;
-  const card = pick.category ? records.records[key] : null;
-  if (card && card.league.count > 0) return card.league.winPct;
-  if (card && card.overall.count > 0) return card.overall.winPct;
-  const last20 = records.last20[pick.capperId];
-  if (last20 && last20.count > 0) return last20.winPct;
-  return -1;
+  return bestAvailableRecord(pick, records)?.winPct ?? -1;
 }
 
 function LeagueToggle({ league }: { league: string }) {
   const { isLeagueInScope, toggleLeague } = useParlayPool();
   const inScope = isLeagueInScope(league);
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={inScope}
-      aria-label={(inScope ? "Remove " : "Include ") + league + " picks from the leg-count build"}
-      onClick={() => toggleLeague(league)}
-      className="flex items-center gap-2 rounded-full bg-muted/60 py-1 pl-1 pr-2.5"
-    >
-      <span
-        className={
-          "relative h-5 w-9 shrink-0 rounded-full transition " + (inScope ? "bg-brand-600" : "bg-muted-foreground/30")
-        }
-      >
-        <span
-          className={
-            "absolute top-0.5 h-4 w-4 rounded-full bg-card shadow-soft transition " +
-            (inScope ? "left-[18px]" : "left-0.5")
-          }
-        />
-      </span>
-      <span className="text-xs font-medium text-foreground">{inScope ? "In scope" : "Excluded"}</span>
-    </button>
+    <ScopeToggle
+      inScope={inScope}
+      onToggle={() => toggleLeague(league)}
+      ariaLabel={(inScope ? "Remove " : "Include ") + league + " picks from the leg-count build"}
+    />
   );
 }
 
 function LegCountStepper() {
   const { legCount, setLegCount, maxLegCount } = useParlayPool();
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-sm font-medium text-foreground">Legs</span>
-      <div className="flex items-center gap-1 rounded-full border border-border-subtle">
-        <button
-          type="button"
-          onClick={() => setLegCount(legCount - 1)}
-          disabled={legCount <= 1}
-          aria-label="Fewer legs"
-          className="flex h-7 w-7 items-center justify-center text-foreground disabled:opacity-30"
-        >
-          &minus;
-        </button>
-        <span className="w-6 text-center text-sm font-semibold text-foreground">{legCount}</span>
-        <button
-          type="button"
-          onClick={() => setLegCount(legCount + 1)}
-          disabled={legCount >= maxLegCount}
-          aria-label="More legs"
-          className="flex h-7 w-7 items-center justify-center text-foreground disabled:opacity-30"
-        >
-          +
-        </button>
-      </div>
-      <span className="text-xs text-muted-foreground">of {maxLegCount} in-scope pick{maxLegCount === 1 ? "" : "s"}</span>
-    </div>
+    <LegStepper
+      value={legCount}
+      max={maxLegCount}
+      onChange={setLegCount}
+      note={`of ${maxLegCount} in-scope pick${maxLegCount === 1 ? "" : "s"}`}
+    />
   );
 }
 
