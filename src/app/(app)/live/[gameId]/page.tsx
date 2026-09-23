@@ -199,6 +199,7 @@ export default async function GameDetailPage({
   // exactly (classifyPickTeamGroup/shortTeamName/pickCategory/getTeamColor -
   // all pure, reused as-is), just applied to this one game's already-fetched
   // matchedPicks instead of a whole slate.
+  const gameLabel = shortTeamName(game.awayTeam, sportMeta.label) + " @ " + shortTeamName(game.homeTeam, sportMeta.label);
   const expanderPicks: ExpanderPick[] =
     isMlb || isNfl
       ? matchedPicks.map((p) => {
@@ -211,10 +212,19 @@ export default async function GameDetailPage({
             capperIsFavorite: p.capper.isFavorite,
             category: pickCategory({ ...p, sportName: sportMeta.label }),
             leagueName: sportMeta.label,
+            gameId: game.id,
+            gameLabel,
             betDetail: formatPickLabel(p.betDetail, p.betType, p.line) ?? betTypeLabel(p.betType),
             odds: p.odds,
             units: p.units,
             status: p.status,
+            betType: p.betType,
+            period: p.period,
+            rawBetDetail: p.betDetail,
+            line: p.line,
+            homeTeam: game.homeTeam,
+            awayTeam: game.awayTeam,
+            gameTime: game.commenceTime,
             teamGroup,
             teamLabel:
               teamGroup === "AWAY"

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { dropCatalogButtonBaseClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
+import { useParlayPool } from "@/components/parlay/parlay-pool-context";
 
 type SidebarUser = { name: string | null; email: string; profilePictureUrl: string | null };
 
@@ -77,6 +78,16 @@ function LiveIcon({ className }: { className?: string }) {
   );
 }
 
+function ParlayIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <path d="M4 6.5l6 5.5l-6 5.5" />
+      <path d="M11 6.5h9" />
+      <path d="M11 17.5h9" />
+    </svg>
+  );
+}
+
 function SharpMoneyIcon({ className }: { className?: string }) {
   return (
     <svg {...iconProps(className)}>
@@ -120,6 +131,10 @@ type NavItem = {
   label: string;
   icon: (props: { className?: string }) => JSX.Element;
   accent?: "red";
+  // Live count of pooled Parlay Generator picks (Parlay's nav item only) -
+  // set at render time in AppSidebar, not baked into the static list below,
+  // since it comes from client state (ParlayPoolProvider).
+  badgeCount?: number;
 };
 
 const BASE_NAV_ITEMS: NavItem[] = [
@@ -131,6 +146,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/pricing", label: "Plans & Billing", icon: PricingIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
   { href: "/live", label: "Live", icon: LiveIcon, accent: "red" },
+  { href: "/parlay", label: "Parlay", icon: ParlayIcon },
 ];
 
 const ZONE_MODEL_NAV_ITEM: NavItem = { href: "/zone-model", label: "Zone Model", icon: ZoneModelIcon };
@@ -195,7 +211,12 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
       }
     >
       <Icon className="h-5 w-5 shrink-0" />
-      {item.label}
+      <span className="flex-1">{item.label}</span>
+      {Boolean(item.badgeCount) && (
+        <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-brand-500 px-1.5 text-[11px] font-semibold text-white">
+          {item.badgeCount}
+        </span>
+      )}
     </Link>
   );
 }
@@ -303,10 +324,13 @@ function AccountRow({ user }: { user: SidebarUser }) {
 // rather than another floating card, since there's no room to spare there.
 export function AppSidebar({ user, showZoneModel = false }: { user: SidebarUser; showZoneModel?: boolean }) {
   const [open, setOpen] = useState(false);
+  const { pool } = useParlayPool();
   // Zone Model is admin-only and server-gated (the page itself 404s
   // regardless of this) - this only decides whether the link appears, so a
   // non-admin never sees a nav entry for a route that would just 404 them.
-  const navItems = showZoneModel ? [...BASE_NAV_ITEMS, ZONE_MODEL_NAV_ITEM] : BASE_NAV_ITEMS;
+  const navItems = (showZoneModel ? [...BASE_NAV_ITEMS, ZONE_MODEL_NAV_ITEM] : BASE_NAV_ITEMS).map((item) =>
+    item.href === "/parlay" ? { ...item, badgeCount: pool.length } : item
+  );
 
   return (
     <>
