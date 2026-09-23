@@ -25,3 +25,9 @@ supabase/.temp/
 
 .vercel
 .env*
+
+# T2 harness snapshot dumps - real (anonymized or not) database dumps must
+# never be committed, only referenced by local path. See prod-guard.mjs /
+# extract-from-dump.mjs for how these are produced and consumed locally.
+scripts/t2-harness/.snapshots/
+*.dump
