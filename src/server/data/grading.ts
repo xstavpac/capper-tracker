@@ -20,6 +20,7 @@ import {
   parsePlayerProp,
   parsePlayerPropLine,
   nrfiSide,
+  totalSideFromText,
   betScope,
   type PlayerPropMarket,
 } from "@/lib/bet-line";
@@ -412,8 +413,9 @@ export function gradePick(
     const totalLine = line ?? extractLine("TOTAL", detail);
     if (totalLine === null) return null;
     const actual = homeScore + awayScore;
-    const isOver = detail.includes("over");
-    const isUnder = detail.includes("under");
+    const side = totalSideFromText(detail);
+    const isOver = side === "OVER";
+    const isUnder = side === "UNDER";
 
     if (isOver) {
       if (actual > totalLine) return "WIN";
@@ -442,8 +444,9 @@ export function gradePick(
     if (totalLine === null) return null;
     const teamScore = pickedHome ? homeScore : pickedAway ? awayScore : null;
     if (teamScore === null) return null;
-    const isOver = detail.includes("over");
-    const isUnder = detail.includes("under");
+    const side = totalSideFromText(detail);
+    const isOver = side === "OVER";
+    const isUnder = side === "UNDER";
 
     if (isOver) {
       if (teamScore > totalLine) return "WIN";
