@@ -18,6 +18,7 @@ import {
 } from "@/server/data/odds";
 import { resolvePropOdds } from "@/server/data/nfl-prop-odds";
 import { extractLine, parsePlayerPropLine, parsePlayerProp } from "@/lib/bet-line";
+import { isInvalidOdds } from "@/lib/pick-validation";
 import { TEAM_NICKNAME_CANONICAL, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
@@ -544,6 +545,16 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         // Surfacing it in unmatchedGames instead lets the user notice and
         // re-paste/add it correctly rather than it silently going stuck.
         unmatchedGames.push(item.capperName + " - " + item.description);
+        continue;
+      }
+
+      if (isInvalidOdds(odds)) {
+        // Same rule createPickAction enforces for manual entry (picks.ts),
+        // via the shared isInvalidOdds check. odds here is the fully-resolved
+        // value (explicit text, real market price, or the -110 default), so
+        // this also catches the vanishingly-unlikely case of a market/prop-
+        // price lookup itself resolving to 0.
+        errors.push(item.capperName + " - " + item.description + ": Odds must be a valid non-zero number.");
         continue;
       }
 
