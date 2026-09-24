@@ -1,5 +1,6 @@
 import { normalizeName } from "@/lib/fuzzy-match";
 import { parsePlayerProp, pickPeriodFromText, extractLine, type SegmentPeriod } from "@/lib/bet-line";
+import { isKnownFullPlayerName } from "@/lib/player-roster-fallback";
 
 export type ParsedPick = {
   capperName: string;
@@ -1735,7 +1736,51 @@ export function resolveAmbiguousPick(pick: ParsedPick, choice: AmbiguousOption):
 // keys include punctuation ("st. louis") and multi-word phrases ("kansas
 // city", "new york"); a raw template would either break on the literal "."
 // or fail to match a variant spacing/punctuation of the same city.
-function findAmbiguousNickname(text: string): { key: string; options: AmbiguousOption[] } | undefined {
+//
+// Player-prop guard (2026-09, the "Parker Washington Over 4.5 Receptions"
+// investigation): a bare AMBIGUOUS_NICKNAMES key ("washington", "dallas", ...
+// - see that table's own comment for why these bare city/state words are
+// promoted here rather than living in TEAM_SPORT_ENTRIES) can also be part of
+// a real player's full name - a surname ("Parker Washington") or a first name
+// ("Dallas Goedert"). The two shapes are textually indistinguishable from a
+// legitimate team-prefixed player prop ("Giants touchdown scorer Barkley" -
+// see ambiguous-hierarchy-acceptance-test.ts's PART G "Bug 7" coverage, which
+// relies on exactly this shape still resolving via the ambiguous-team/
+// pick_context hierarchy): both are `[team/city word] [name word]`, so
+// position within the extracted name (first/last/only) can't be the
+// discriminator the way it is for isPlayerPropSurnameCollision above. What
+// actually distinguishes them is whether the extracted name belongs to a
+// REAL roster player - "Parker Washington" and "Dallas Goedert" are real
+// current NFL players in their own right (the city/state word IS part of
+// their name); "Giants Barkley" and "Washington McLaurin" are not (the
+// city/state word is a capper's team-prefix in front of a different name) -
+// so `rosterFullNames`, when the caller has it, is checked via
+// isKnownFullPlayerName (player-roster-fallback.ts - the SAME exact/fuzzy
+// full-name logic that file's own resolution tiers use, not a second
+// matcher) before falling back to today's unconditional behavior.
+// Deliberately excludes the bare-surname tier: a single collided word
+// ("Washington" alone, no first name) must never suppress the ambiguous-team
+// prompt on its own - 6 different current players share that one surname
+// (confirmed live), so "is this exact bare word someone's surname" is never
+// evidence enough on its own; a bare surname collision is a known,
+// unchanged limitation (still shows the ambiguous-team prompt) rather than a
+// case this guard attempts to fix.
+//
+// `rosterFullNames` is optional and, when omitted, this function is
+// byte-for-byte the pre-investigation implementation - parseCatalog itself
+// stays a pure/sync function with no roster dependency of its own; callers
+// that have roster data available (recover-unresolved-picks.ts server-side,
+// a prefetched name list client-side) opt in by passing it, and a caller
+// that can't (or whose fetch hasn't resolved yet) gets identical behavior to
+// before this guard existed, never a broken or partial suppression.
+function findAmbiguousNickname(
+  text: string,
+  rosterFullNames?: Iterable<string>
+): { key: string; options: AmbiguousOption[] } | undefined {
+  if (rosterFullNames) {
+    const prop = parsePlayerProp(text);
+    if (prop && isKnownFullPlayerName(prop.playerName, rosterFullNames)) return undefined;
+  }
   for (const [nickname, options] of Object.entries(AMBIGUOUS_NICKNAMES)) {
     if (teamPhraseRegex(nickname).test(text)) return { key: nickname, options };
   }
@@ -2347,7 +2392,13 @@ function extractCapperNameFromTagline(text: string): string | null {
 
 export function parseCatalog(
   text: string,
-  knownCapperNames: string[] = []
+  knownCapperNames: string[] = [],
+  // Optional pre-fetched NFL roster full names, threaded straight into
+  // findAmbiguousNickname's player-prop guard (see its own comment) - this
+  // function stays sync/pure either way; omitting it (the default) reproduces
+  // this function's exact pre-guard behavior for every caller that has no
+  // roster data available (or whose fetch hasn't resolved yet).
+  rosterFullNames?: Iterable<string>
 ): { picks: ParsedPick[]; parlays: ParsedParlay[]; unresolved: string[]; unresolvedCapperNames: string[] } {
   const sortedNames = [...knownCapperNames].sort((a, b) => b.length - a.length);
   const rawLines = text.split("\n").map((l) => l.trim());
@@ -2452,7 +2503,7 @@ export function parseCatalog(
           continue;
         }
 
-        const found = findAmbiguousNickname(remainder);
+        const found = findAmbiguousNickname(remainder, rosterFullNames);
         if (found) {
           const forPlausibility = lineForPlausibility(remainder);
           results.push({
@@ -2624,7 +2675,7 @@ export function parseCatalog(
         continue;
       }
 
-      const found = findAmbiguousNickname(strippedText);
+      const found = findAmbiguousNickname(strippedText, rosterFullNames);
       if (found) {
         const forPlausibility = lineForPlausibility(strippedText);
         results.push({

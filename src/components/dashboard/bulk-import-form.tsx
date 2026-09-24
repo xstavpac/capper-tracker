@@ -13,6 +13,7 @@ import {
   type BulkImportParlayLegItem,
 } from "@/server/actions/bulk-picks";
 import { recoverUnresolvedPicksAction } from "@/server/actions/recover-unresolved-picks";
+import { getNflRosterFullNamesAction } from "@/server/actions/get-nfl-roster-names";
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
 import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
 import { isSkippedAsDuplicate, importButtonLabel } from "@/lib/duplicate-pick-detection";
@@ -125,6 +126,29 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     }
   }, [scrollTrigger]);
 
+  // Roster full names for parseCatalog's findAmbiguousNickname player-prop
+  // guard (see that function's own comment in parse-catalog.ts) - fetched
+  // once (a ref, not state, so a re-render never restarts it) and reused
+  // across every re-parse in this session, same "fetch once per import
+  // session" shape existingCapperNames itself already has as a prop. Kicked
+  // off eagerly on mount, below, so it's likely already settled by the time
+  // the user pastes text and clicks Parse, rather than adding to that click's
+  // latency. A failed fetch resolves to `undefined`, NOT an empty array -
+  // parseCatalog treats `undefined` as "no roster data available, behave
+  // exactly as if this guard didn't exist", so a fallback failure here can
+  // only ever widen back to today's behavior, never partially suppress
+  // anything on incomplete data.
+  const rosterFullNamesRef = useRef<Promise<string[] | undefined> | null>(null);
+  function getRosterFullNames(): Promise<string[] | undefined> {
+    if (!rosterFullNamesRef.current) {
+      rosterFullNamesRef.current = getNflRosterFullNamesAction().catch(() => undefined);
+    }
+    return rosterFullNamesRef.current;
+  }
+  useEffect(() => {
+    getRosterFullNames();
+  }, []);
+
   const existingLower = existingCapperNames.map((n) => n.toLowerCase());
 
   function fuzzySuggestionFor(rawCapperName: string): string | null {
@@ -155,7 +179,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setTotalLineFlags({});
     setTotalLineChoices({});
     setResolving(true);
-    const { picks: items, parlays: parlayItems, unresolved } = parseCatalog(text, existingCapperNames);
+    const rosterFullNames = await getRosterFullNames();
+    const { picks: items, parlays: parlayItems, unresolved } = parseCatalog(text, existingCapperNames, rosterFullNames);
     setParlays(parlayItems);
     // Last-resort pass: hand the lines parseCatalog couldn't place to the
     // server, which checks them against the real team names on today's live

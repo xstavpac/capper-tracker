@@ -93,6 +93,39 @@ function distinctPlayers(matches: RosterPlayer[]): RosterPlayer[] {
   return [...byId.values()];
 }
 
+// Shared with parse-catalog.ts's findAmbiguousNickname (2026-09, the "Parker
+// Washington"/"Dallas Goedert" investigation) - a bare AMBIGUOUS_NICKNAMES
+// key (a city/state word like "washington"/"dallas") can also be part of a
+// real player's full name, and findAmbiguousNickname needs exactly the same
+// "is this a real player" answer this file's own exact/fuzzy tiers give,
+// just without the team-resolution part: findAmbiguousNickname only needs a
+// yes/no, to decide whether to skip the ambiguous-team prompt - the actual
+// team still gets resolved the normal way afterward, once the line falls
+// through to `unresolved` and reaches resolvePlayerPropAgainstRoster below.
+// One implementation of "exact-or-fuzzy full-name match" - not a second
+// fuzzy matcher - built from the exact same stripNameSuffix/normalizeName/
+// isLikelyDuplicateName primitives the tiers below use. Deliberately takes
+// just a name list (no team/position data): findAmbiguousNickname has no use
+// for which team a match belongs to, only whether one exists at all.
+//
+// Deliberately has no bare-surname tier, unlike resolvePlayerPropAgainstRoster
+// below - a single collided word ("Washington" alone, no first name) must
+// never suppress the ambiguous-team prompt on its own, since 6 different
+// current players share that one surname (see the "never guess" policy this
+// file's own bare-surname tier already follows) - only an exact or fuzzy
+// FULL name match counts here.
+export function isKnownFullPlayerName(name: string, knownFullNames: Iterable<string>): boolean {
+  const typed = stripNameSuffix(name);
+  const normalizedTyped = normalizeName(typed);
+  for (const full of knownFullNames) {
+    if (normalizeName(stripNameSuffix(full)) === normalizedTyped) return true;
+  }
+  for (const full of knownFullNames) {
+    if (isLikelyDuplicateName(stripNameSuffix(full), typed)) return true;
+  }
+  return false;
+}
+
 export function resolvePlayerPropAgainstRoster(
   line: string,
   roster: RosterPlayer[],

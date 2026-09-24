@@ -51,6 +51,8 @@ import {
   resolveAmbiguousPick,
 } from "./parse-catalog";
 import { isSportLabelInSeason } from "./sport-seasons";
+import { resolvePlayerPropAgainstRoster } from "./player-roster-fallback";
+import type { RosterPlayer } from "@/server/data/nfl-roster";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -1978,6 +1980,185 @@ NC State +4.5`;
     // tennis, not get hijacked into an NHL Canucks guess.
     const vanRijthoven = parseCatalog(`Cap\nVan Rijthoven ML`, []).picks[0];
     check("'Van Rijthoven ML' still resolves ATP (not hijacked by an NHL 'van' alias)", { sport: vanRijthoven?.sportName, key: vanRijthoven?.teamNicknames?.[0] }, { sport: "ATP", key: "rijthoven" });
+  }
+
+  // ==========================================================================
+  // PART U - findAmbiguousNickname player-prop guard (2026-09, the "Parker
+  // Washington Over 4.5 Receptions" investigation): a bare AMBIGUOUS_NICKNAMES
+  // key ("washington", "dallas", ...) that collides with a real player's full
+  // name was winning the ambiguous-team prompt before parsePickText/
+  // parsePlayerProp ever got a chance to classify the line as PLAYER_PROP.
+  // Worse than a wrong prompt: an `ambiguous` pick also feeds
+  // runAmbiguousHierarchy's auto-resolve pipeline (schedule/season/
+  // pick-context) BEFORE the user ever sees a choice, so a live game today
+  // for one of the candidates could have silently produced a wrong-sport,
+  // wrong-bet-type (SPREAD), wrong-subject pick with no warning.
+  //
+  // The discriminator is NOT position in the text (an earlier version of this
+  // fix tried "last word only", reusing PART R's isPlayerPropSurnameCollision,
+  // then "any position, unconditionally" - both wrong, see below) - it's
+  // whether the extracted name is a REAL roster player. "Parker Washington"/
+  // "Dallas Goedert" are real current NFL players in their own right,
+  // textually indistinguishable ([team/city word] [name word]) from a
+  // legitimate team-prefixed player prop like "Giants touchdown scorer
+  // Barkley" or "Washington McLaurin over 4.5 rec" (a capper's team-prefix in
+  // front of a DIFFERENT real player's different name) - suppressing
+  // unconditionally on any parsePlayerProp match broke
+  // ambiguous-hierarchy-acceptance-test.ts's PART G "Bug 7" fix, which
+  // depends on "Giants touchdown scorer Barkley" still resolving through the
+  // ambiguous-team/pick_context hierarchy. So findAmbiguousNickname takes an
+  // optional `rosterFullNames` and only suppresses when the extracted name is
+  // an exact-or-fuzzy match for one of them (isKnownFullPlayerName,
+  // player-roster-fallback.ts - the same matcher that file's own resolution
+  // tiers use, not a second one). Omitted (as every call in
+  // ambiguous-hierarchy-acceptance-test.ts does), this function - and
+  // parseCatalog as a whole - is byte-for-byte what it was before this guard
+  // existed; PART G is untouched by this fix and still passes unmodified.
+  console.log("\n########## PART U: findAmbiguousNickname player-prop guard (Parker Washington) ##########");
+  {
+    const nflRosterNames = [
+      "Parker Washington",
+      "Casey Washington",
+      "Malik Washington",
+      "Darnell Washington",
+      "Dallas Goedert",
+      "Saquon Barkley",
+      "Terry McLaurin",
+    ];
+
+    // --- With no roster data at all (the default, 2-arg call every existing
+    // caller in this file and ambiguous-hierarchy-acceptance-test.ts already
+    // uses): identical to this function's behavior before the guard existed -
+    // the reported bug, unfixed, because there's nothing to check it against.
+    // This is the fail-safe contract itself, not just a baseline: a caller
+    // with no roster data (or whose fetch hasn't resolved yet) must never see
+    // a partially-applied or broken version of this guard.
+    const noRosterArg = parseCatalog(`Cap\nParker Washington Over 4.5 Receptions`, []);
+    check(
+      "'Parker Washington...' with NO rosterFullNames arg -> unchanged pre-fix behavior (still ambiguous)",
+      { key: noRosterArg.picks[0]?.ambiguousKey, ambiguousBetType: noRosterArg.picks[0]?.ambiguousBetType },
+      { key: "washington", ambiguousBetType: "PLAYER_PROP" }
+    );
+
+    // --- The exact reported bug, WITH roster data available: full name,
+    // surname collides with a key. ---
+    const parkerWashington = parseCatalog(`Cap\nParker Washington Over 4.5 Receptions`, [], nflRosterNames);
+    check("'Parker Washington Over 4.5 Receptions' no longer ambiguous", parkerWashington.picks[0]?.ambiguous, undefined);
+    check("'Parker Washington Over 4.5 Receptions' produces no picks (not misrouted as a team pick)", parkerWashington.picks.length, 0);
+    check("'Parker Washington Over 4.5 Receptions' routes to unresolved for roster recovery", parkerWashington.unresolved, ["Parker Washington Over 4.5 Receptions"]);
+
+    // --- First-name collision ("Dallas Goedert"), WITH roster data. ---
+    const dallasGoedert = parseCatalog(`Cap\nDallas Goedert Over 4.5 Receptions`, [], nflRosterNames);
+    check("'Dallas Goedert Over 4.5 Receptions' (first-name collision) no longer ambiguous", dallasGoedert.picks[0]?.ambiguous, undefined);
+    check("'Dallas Goedert Over 4.5 Receptions' routes to unresolved", dallasGoedert.unresolved, ["Dallas Goedert Over 4.5 Receptions"]);
+
+    // --- Bare surname, no first name, WITH roster data - a single collided
+    // word must never suppress on its own (no bare-surname tier in the
+    // guard): "Washington" alone doesn't exact-or-fuzzy match any full
+    // multi-word roster name, so this stays ambiguous - a known, unchanged
+    // limitation, not a case this guard attempts to fix. ---
+    const bareWashington = parseCatalog(`Cap\nWashington Over 4.5 Receptions`, [], nflRosterNames);
+    check(
+      "'Washington Over 4.5 Receptions' (bare surname) still ambiguous even with roster data (known limitation)",
+      { key: bareWashington.picks[0]?.ambiguousKey, isAmbiguous: Boolean(bareWashington.picks[0]?.ambiguous) },
+      { key: "washington", isAmbiguous: true }
+    );
+    // The roster surname tier itself (a DIFFERENT mechanism, downstream in
+    // player-roster-fallback.ts, only ever reached via `unresolved`) must
+    // still refuse to guess across a real multi-player surname collision -
+    // same "never guess" policy PART D of player-roster-fallback-acceptance-
+    // test.ts already proves; asserted again here only for context, since
+    // this line never actually reaches `unresolved` today (it stays
+    // ambiguous, per the check above).
+    {
+      const bareSurnameRoster: RosterPlayer[] = [
+        { playerName: "Casey Washington", firstName: "Casey", lastName: "Washington", team: "Carolina Panthers", position: "WR", espnPlayerId: "1" },
+        { playerName: "Parker Washington", firstName: "Parker", lastName: "Washington", team: "Jacksonville Jaguars", position: "WR", espnPlayerId: "2" },
+        { playerName: "Malik Washington", firstName: "Malik", lastName: "Washington", team: "Miami Dolphins", position: "WR", espnPlayerId: "3" },
+        { playerName: "Darnell Washington", firstName: "Darnell", lastName: "Washington", team: "Pittsburgh Steelers", position: "TE", espnPlayerId: "4" },
+      ];
+      const surnameResolution = resolvePlayerPropAgainstRoster("Washington Over 4.5 Receptions", bareSurnameRoster);
+      check("bare 'Washington' surname tier (if ever reached) stays ambiguous across a real multi-player collision (no guessing)", surnameResolution.status, "ambiguous");
+    }
+
+    // --- The "Giants touchdown scorer Barkley" / "Bug 7" shape, WITH roster
+    // data that includes the REAL player ("Saquon Barkley") this capper-style
+    // team-prefixed text is actually about: the extracted name is "Giants
+    // Barkley" (the team-prefix stays in, see parseTouchdownProp), which is
+    // neither an exact nor a fuzzy match for "Saquon Barkley" - so this MUST
+    // still resolve as ambiguous, proving the guard's roster check doesn't
+    // just accidentally never fire, but genuinely discriminates the two
+    // shapes even when both are present in the same roster list. ---
+    const giantsBarkley = parseCatalog(`Cap\nGiants touchdown scorer Barkley`, [], nflRosterNames);
+    check(
+      "'Giants touchdown scorer Barkley' still ambiguous WITH roster data (team-prefix, not a roster full-name match)",
+      { key: giantsBarkley.picks[0]?.ambiguousKey, isAmbiguous: Boolean(giantsBarkley.picks[0]?.ambiguous) },
+      { key: "giants", isAmbiguous: true }
+    );
+    // Same shape, the instruction's own example: a team-prefix in front of a
+    // DIFFERENT real player's surname ("Washington" the team, "McLaurin" the
+    // Commanders WR) - "Washington McLaurin" is neither an exact nor fuzzy
+    // match for the real "Terry McLaurin" in the roster list, so this also
+    // must stay ambiguous rather than dead-ending in `unresolved`.
+    const washingtonMclaurin = parseCatalog(`Cap\nWashington McLaurin over 4.5 rec`, [], nflRosterNames);
+    check(
+      "'Washington McLaurin over 4.5 rec' (team-prefix + real player's surname) still ambiguous",
+      { key: washingtonMclaurin.picks[0]?.ambiguousKey, isAmbiguous: Boolean(washingtonMclaurin.picks[0]?.ambiguous) },
+      { key: "washington", isAmbiguous: true }
+    );
+
+    // --- Regression guards: real team-shaped picks on the exact same keys
+    // must still show the full ambiguous option list, unaffected - WITH
+    // roster data present, to prove the guard correctly declines to fire at
+    // all when parsePlayerProp finds no market term (not just when the name
+    // doesn't match the roster). ---
+    const washTotal = parseCatalog(`Cap\nWashington Over 24.5`, [], nflRosterNames).picks[0];
+    check(
+      "'Washington Over 24.5' (team total, no player market) still ambiguous, full option list",
+      { key: washTotal?.ambiguousKey, sports: washTotal?.ambiguous?.map((o) => o.sport).sort() },
+      { key: "washington", sports: ["MLB", "NBA", "NCAAF", "NFL", "NHL", "WNBA"] }
+    );
+    const washSpread = parseCatalog(`Cap\nWashington -3.5`, [], nflRosterNames).picks[0];
+    check(
+      "'Washington -3.5' still ambiguous, full option list",
+      { key: washSpread?.ambiguousKey, sports: washSpread?.ambiguous?.map((o) => o.sport).sort() },
+      { key: "washington", sports: ["MLB", "NBA", "NCAAF", "NFL", "NHL", "WNBA"] }
+    );
+    const washMl = parseCatalog(`Cap\nWashington ML`, [], nflRosterNames).picks[0];
+    check(
+      "'Washington ML' still ambiguous, full option list",
+      { key: washMl?.ambiguousKey, sports: washMl?.ambiguous?.map((o) => o.sport).sort() },
+      { key: "washington", sports: ["MLB", "NBA", "NCAAF", "NFL", "NHL", "WNBA"] }
+    );
+    const dallasMl = parseCatalog(`Cap\nDallas ML`, [], nflRosterNames).picks[0];
+    check(
+      "'Dallas ML' still ambiguous, full option list",
+      { key: dallasMl?.ambiguousKey, sports: dallasMl?.ambiguous?.map((o) => o.sport).sort() },
+      { key: "dallas", sports: ["NBA", "NFL", "NHL", "WNBA"] }
+    );
+
+    // --- Real team total using a team's OWN unambiguous nickname (not an
+    // AMBIGUOUS_NICKNAMES key at all) - unaffected either way, resolves
+    // directly same as before this fix. ---
+    const commandersTeamTotal = parseCatalog(`Cap\nCommanders team total over 21.5`, [], nflRosterNames).picks[0];
+    check(
+      "'Commanders team total over 21.5' unchanged - resolves NFL/TEAM_TOTAL directly",
+      { sport: commandersTeamTotal?.sportName, betType: commandersTeamTotal?.betType },
+      { sport: "NFL", betType: "TEAM_TOTAL" }
+    );
+
+    // --- Confirms these lines can no longer reach the ambiguous-hierarchy
+    // auto-resolve pipeline at all: runAmbiguousHierarchy (ambiguous-
+    // hierarchy.ts) only ever looks at picks where `.ambiguous` is truthy -
+    // every case above already asserts `.ambiguous` is undefined for the
+    // roster-confirmed player-prop lines, which is exactly what keeps them
+    // out of that pipeline; asserted once more explicitly here as the direct
+    // claim. ---
+    check(
+      "none of the roster-confirmed player-prop picks carry an `ambiguous` field (unreachable by runAmbiguousHierarchy)",
+      [parkerWashington, dallasGoedert].every((r) => r.picks.every((p) => !p.ambiguous)),
+      true
+    );
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

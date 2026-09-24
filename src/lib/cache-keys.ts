@@ -20,4 +20,12 @@ export const cacheKeys = {
   // batch call per sport. Keyed by sport + the sport's own game id (MLB:
   // gamePk) so concurrent games never collide in the cache or the ttl-memo.
   liveGameState: (sportKey: string, gameId: string) => `live-game-state:${sportKey}:${gameId}`,
+  // The NflRosterPlayer table's full names only (no team/position/espnId) -
+  // what the client-side bulk-import parser fetches to give parseCatalog's
+  // findAmbiguousNickname player-prop guard roster data without shipping the
+  // whole roster's other columns over the wire. No mutation path writes this
+  // table at request time (see scripts/load-nfl-roster.ts's own comment - a
+  // manual/one-time rerun, never triggered by parsing), so there's no
+  // revalidateTag call for this key; it relies on the TTL alone.
+  nflRosterFullNames: () => "nfl-roster-full-names",
 } as const;
