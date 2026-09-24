@@ -1,16 +1,18 @@
-// Shared odds+picks assembly for any page that needs the /live board's game
-// list paired with its matched, classified picks (ExpanderPick[] per game) -
-// currently live/page.tsx (Feed/Grid) and the Parlay tab's "browse and add"
-// section. Split out of live/page.tsx rather than duplicated: both callers
-// need the exact same cutoff-scoped odds slate, the same carried-over
-// still-live-from-yesterday games, and the same per-pick team-group/color
-// classification, and drift between two copies of that logic would show up
-// as picks appearing on one tab but not the other for the same game.
+// Shared odds+picks assembly for any caller that needs the /live board's
+// game list paired with its matched, classified picks (ExpanderPick[] per
+// game) - currently live/page.tsx (Feed/Grid), the Auto-Generate parlay
+// action (parlay-generator.ts), and the pool Auto Hedge/Contrarian action
+// (parlay-pool-generator.ts). Split out of live/page.tsx rather than
+// duplicated: every caller needs the exact same cutoff-scoped odds slate,
+// the same carried-over still-live-from-yesterday games, and the same
+// per-pick team-group/color classification, and drift between copies of
+// that logic would show up as picks appearing for one caller but not
+// another for the same game.
 //
 // Deliberately excludes anything page-specific: Board Pulse's fixed
 // today-only slate, the sport-category breakdown panel, and Grid's
-// selection resolution all stay in live/page.tsx, since the Parlay tab has
-// no equivalent for any of them.
+// selection resolution all stay in live/page.tsx, since the other callers
+// have no equivalent for any of them.
 import {
   getOddsForSport,
   getYesterdayOddsForSport,
