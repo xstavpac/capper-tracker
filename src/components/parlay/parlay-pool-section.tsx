@@ -12,6 +12,7 @@ import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PickCard } from "@/components/live/pick-card";
 import { useParlayPool, type PooledPick } from "@/components/parlay/parlay-pool-context";
 import { ScopeToggle, LegStepper } from "@/components/parlay/parlay-controls";
+import { SwapColumn } from "@/components/parlay/swap-result";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import {
   selectConflictFreeLegs,
@@ -19,6 +20,8 @@ import {
   type SkippedPick,
   type UnverifiedPair,
 } from "@/lib/parlay/build-my-picks";
+import type { SwapMode } from "@/lib/parlay/auto-generate";
+import { generatePoolSwapAction, type PoolSwapResult } from "@/server/actions/parlay-pool-generator";
 
 // Ranks a pooled pick by the same win% already shown on its own card - see
 // bestAvailableRecord (shared with Auto-Generate). No new scoring model:
@@ -130,8 +133,12 @@ function BuildMyPicksResult({ result }: { result: BuiltParlay }) {
 // Shown instead of BuildMyPicksResult when fewer conflict-free legs exist
 // than requested - never silently builds the smaller parlay. The skip notes
 // explain WHY it's short; "Build with K legs" is the user's explicit choice
-// to proceed, not an automatic fallback.
-function ShortfallNotice({ result, onBuildAnyway }: { result: BuiltParlay; onBuildAnyway: () => void }) {
+// to proceed, not an automatic fallback. `legs` is typed loosely (only
+// .length is read) so both My Picks' own BuiltParlay and a pool-driven
+// Hedge/Contrarian result's primary (PoolSwapResult.parlayA.legs, a
+// different shape) can share this one notice.
+type ShortfallLike = { legs: unknown[]; skipped: SkippedPick[]; unverified: UnverifiedPair[]; requested: number };
+function ShortfallNotice({ result, onBuildAnyway }: { result: ShortfallLike; onBuildAnyway: () => void }) {
   return (
     <div className="mt-4 rounded-card border border-amber-300 bg-amber-50/60 p-4 dark:border-amber-800 dark:bg-amber-500/10">
       <h3 className="text-sm font-semibold text-foreground">
@@ -151,6 +158,82 @@ function ShortfallNotice({ result, onBuildAnyway }: { result: BuiltParlay; onBui
   );
 }
 
+const SWAP_MODE_LABEL: Record<SwapMode, string> = { AUTO_HEDGE: "Auto Hedge", CONTRARIAN: "Contrarian" };
+
+// Auto Hedge / Contrarian over the pool: reuses the exact primary
+// construction My Picks uses server-side (buildPoolPrimary in
+// lib/parlay/pool-swap.ts - same ranking, same selectConflictFreeLegs
+// conflict validation) and then searches each of those legs' own game for a
+// qualifying alternate via buildSwapParlay - the same engine Auto-Generate
+// uses (lib/parlay/auto-generate.ts). One state slice per mode so pressing
+// "Auto Hedge" doesn't clobber an already-built "Contrarian" result.
+function useSwapBuild(mode: SwapMode) {
+  const { pool, isLeagueInScope, legCount } = useParlayPool();
+  const [building, setBuilding] = useState(false);
+  const [result, setResult] = useState<PoolSwapResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [shortfallConfirmed, setShortfallConfirmed] = useState(false);
+
+  const inScopeKey = pool
+    .filter((p) => isLeagueInScope(p.leagueName))
+    .map((p) => p.pickId)
+    .join(",");
+
+  // A stale result (built before the in-scope pool or leg count changed) is
+  // worse than no result - same rule as My Picks' own staleness effect.
+  useEffect(() => {
+    setResult(null);
+    setError(null);
+    setShortfallConfirmed(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- inScopeKey stands in for in-scope pool membership
+  }, [inScopeKey, legCount]);
+
+  async function build() {
+    const inScope = pool.filter((p) => isLeagueInScope(p.leagueName));
+    if (inScope.length === 0) return;
+    setBuilding(true);
+    setError(null);
+    try {
+      const next = await generatePoolSwapAction(inScope, legCount, mode);
+      setResult(next);
+      setShortfallConfirmed(false);
+    } catch {
+      setError("Couldn't build this parlay right now - try again.");
+    } finally {
+      setBuilding(false);
+    }
+  }
+
+  return { building, result, error, shortfallConfirmed, setShortfallConfirmed, build };
+}
+
+function SwapModeResult({ mode, swap }: { mode: SwapMode; swap: ReturnType<typeof useSwapBuild> }) {
+  const { result, error, shortfallConfirmed, setShortfallConfirmed } = swap;
+  if (error) return <p className="mt-4 text-xs text-red-600 dark:text-red-400">{error}</p>;
+  if (!result) return null;
+  const isShort = result.shortfall > 0;
+  if (result.parlayA.legs.length === 0) {
+    return (
+      <p className="mt-4 text-sm text-muted-foreground">
+        No conflict-free {SWAP_MODE_LABEL[mode]} picks available from your in-scope pool.
+      </p>
+    );
+  }
+  if (isShort && !shortfallConfirmed) {
+    return (
+      <ShortfallNotice
+        result={{ legs: result.parlayA.legs, skipped: result.skipped, unverified: result.unverified, requested: result.requested }}
+        onBuildAnyway={() => setShortfallConfirmed(true)}
+      />
+    );
+  }
+  return (
+    <div className="mt-4">
+      <SwapColumn parlay={result.swap} records={result.records} />
+    </div>
+  );
+}
+
 export function ParlayPoolSection() {
   const { pool, leaguesInPool, isLeagueInScope, removeFromPool, legCount, maxLegCount } = useParlayPool();
   const [records, setRecords] = useState<CapperLeagueRecords | null>(null);
@@ -162,6 +245,8 @@ export function ParlayPoolSection() {
   // parlay via ShortfallNotice's "Build with K legs" action before it renders
   // as a built parlay.
   const [shortfallConfirmed, setShortfallConfirmed] = useState(false);
+  const hedge = useSwapBuild("AUTO_HEDGE");
+  const contrarian = useSwapBuild("CONTRARIAN");
 
   const poolKey = pool.map((p) => p.pickId).join(",");
 
@@ -256,14 +341,32 @@ export function ParlayPoolSection() {
       <div className="rounded-card bg-card p-4 shadow-soft">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <LegCountStepper />
-          <button
-            type="button"
-            onClick={buildMyPicks}
-            disabled={maxLegCount === 0 || building}
-            className="rounded-full bg-brand-600 px-4 py-1.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700 disabled:opacity-50"
-          >
-            {building ? "Building…" : "Build My Picks"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={buildMyPicks}
+              disabled={maxLegCount === 0 || building}
+              className="rounded-full bg-brand-600 px-4 py-1.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700 disabled:opacity-50"
+            >
+              {building ? "Building…" : "Build My Picks"}
+            </button>
+            <button
+              type="button"
+              onClick={hedge.build}
+              disabled={maxLegCount === 0 || hedge.building}
+              className="rounded-full bg-muted px-4 py-1.5 text-sm font-medium text-foreground shadow-soft hover:bg-muted/70 disabled:opacity-50"
+            >
+              {hedge.building ? "Building…" : "Auto Hedge"}
+            </button>
+            <button
+              type="button"
+              onClick={contrarian.build}
+              disabled={maxLegCount === 0 || contrarian.building}
+              className="rounded-full bg-muted px-4 py-1.5 text-sm font-medium text-foreground shadow-soft hover:bg-muted/70 disabled:opacity-50"
+            >
+              {contrarian.building ? "Building…" : "Contrarian"}
+            </button>
+          </div>
         </div>
         {maxLegCount === 0 && (
           <p className="mt-2 text-xs text-muted-foreground">
@@ -274,6 +377,8 @@ export function ParlayPoolSection() {
           <ShortfallNotice result={buildResult} onBuildAnyway={() => setShortfallConfirmed(true)} />
         )}
         {buildResult && (buildResult.shortfall === 0 || shortfallConfirmed) && <BuildMyPicksResult result={buildResult} />}
+        <SwapModeResult mode="AUTO_HEDGE" swap={hedge} />
+        <SwapModeResult mode="CONTRARIAN" swap={contrarian} />
       </div>
     </div>
   );
