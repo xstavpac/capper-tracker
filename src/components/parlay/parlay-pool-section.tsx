@@ -204,7 +204,13 @@ function useSwapBuild(mode: SwapMode) {
     }
   }
 
-  return { building, result, error, shortfallConfirmed, setShortfallConfirmed, build };
+  function clear() {
+    setResult(null);
+    setError(null);
+    setShortfallConfirmed(false);
+  }
+
+  return { building, result, error, shortfallConfirmed, setShortfallConfirmed, build, clear };
 }
 
 function SwapModeResult({ mode, swap }: { mode: SwapMode; swap: ReturnType<typeof useSwapBuild> }) {
@@ -304,6 +310,15 @@ export function ParlayPoolSection() {
     setBuilding(false);
   }
 
+  function clearBuilt() {
+    setBuildResult(null);
+    setShortfallConfirmed(false);
+    hedge.clear();
+    contrarian.clear();
+  }
+
+  const hasBuiltResult = buildResult !== null || hedge.result !== null || contrarian.result !== null;
+
   if (pool.length === 0) {
     return (
       <div className="rounded-card bg-card p-6 text-center shadow-soft">
@@ -365,6 +380,14 @@ export function ParlayPoolSection() {
               className="rounded-full bg-muted px-4 py-1.5 text-sm font-medium text-foreground shadow-soft hover:bg-muted/70 disabled:opacity-50"
             >
               {contrarian.building ? "Building…" : "Contrarian"}
+            </button>
+            <button
+              type="button"
+              onClick={clearBuilt}
+              disabled={!hasBuiltResult}
+              className="rounded-full bg-muted px-4 py-1.5 text-sm font-medium text-foreground shadow-soft hover:bg-muted/70 disabled:opacity-50"
+            >
+              Clear
             </button>
           </div>
         </div>

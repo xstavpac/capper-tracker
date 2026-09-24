@@ -146,7 +146,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/pricing", label: "Plans & Billing", icon: PricingIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
   { href: "/live", label: "Live", icon: LiveIcon, accent: "red" },
-  { href: "/parlay", label: "Parlay", icon: ParlayIcon },
+  { href: "/parlay", label: "Parlay Generator", icon: ParlayIcon },
 ];
 
 const ZONE_MODEL_NAV_ITEM: NavItem = { href: "/zone-model", label: "Zone Model", icon: ZoneModelIcon };
