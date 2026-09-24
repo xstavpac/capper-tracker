@@ -6,6 +6,7 @@ import { createPick, updatePickStatus, deletePick, getCapperLeagueRecords, type 
 import type { PickCategoryKey } from "@/server/data/stats";
 import { cacheKeys } from "@/lib/cache-keys";
 import type { BetType, PickStatus, Period } from "@prisma/client";
+import { isInvalidOdds } from "@/lib/pick-validation";
 
 // The Dashboard page caches its pick aggregations per user (see
 // getDashboardSummary). Any action that changes this user's picks must bust
@@ -43,7 +44,7 @@ export async function createPickAction(formData: FormData): Promise<ActionResult
   const units = parseFloat(unitsRaw);
   const line = lineRaw.trim() ? parseFloat(lineRaw) : null;
 
-  if (isNaN(odds) || odds === 0) {
+  if (isNaN(odds) || isInvalidOdds(odds)) {
     return { success: false, error: "Odds must be a valid number, e.g. -110 or +150." };
   }
   if (isNaN(units) || units <= 0) {
