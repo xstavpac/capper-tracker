@@ -15,14 +15,15 @@ export type SportSeasonWindow = {
   // Only set for a sport whose Odds API listing splits its preseason into a
   // wholly separate sport key from its regular-season one (confirmed live:
   // NFL preseason odds live under "americanfootball_nfl_preseason", not
-  // "americanfootball_nfl", even though this app treats the two as one
-  // continuous NFL season everywhere else - one entry in LIVE_SPORTS, one
-  // seasonStart/seasonEnd window, one set of grading rules). Before
-  // regularSeasonStart, getOddsForSport (odds.ts) also queries
-  // oddsApiPreseasonKey and merges it in; on/after it, only the sport's own
-  // key is used, exactly as it always has been. No other sport needs these
-  // two fields today - they're absent, so oddsApiRequestKeys below returns a
-  // plain [sportKey] for them.
+  // "americanfootball_nfl", and NHL preseason odds live under
+  // "icehockey_nhl_preseason", not "icehockey_nhl" - same split, confirmed
+  // the same way, both still treated as one continuous season everywhere
+  // else in this app - one entry in LIVE_SPORTS, one seasonStart/seasonEnd
+  // window, one set of grading rules). Before regularSeasonStart,
+  // getOddsForSport (odds.ts) also queries oddsApiPreseasonKey and merges it
+  // in; on/after it, only the sport's own key is used, exactly as it always
+  // has been. Every other sport has neither field - they're absent, so
+  // oddsApiRequestKeys below returns a plain [sportKey] for them.
   regularSeasonStart?: string;
   oddsApiPreseasonKey?: string;
 };
@@ -67,10 +68,18 @@ export const SPORT_SEASON_CONFIG: Record<string, SportSeasonWindow> = {
   // games, not preseason, and would be wrongly flagged isPreseason: true by
   // isPreseasonGame() below if regularSeasonStart were left at a later date.
   // seasonEnd covers through the Stanley Cup Final (mid-to-late June 2027).
+  // oddsApiPreseasonKey mirrors NFL exactly: confirmed live against the free
+  // /v4/sports listing that "icehockey_nhl_preseason" exists as its own
+  // active Odds API sport key, separate from "icehockey_nhl" - same split as
+  // NFL's americanfootball_nfl/americanfootball_nfl_preseason. Without this,
+  // oddsApiRequestKeys would only ever query the regular-season key during
+  // NHL's preseason window, which (per that same NFL precedent) is likely to
+  // come back empty.
   icehockey_nhl: {
     seasonStart: "2026-09-15",
     seasonEnd: "2027-06-20",
     regularSeasonStart: "2026-09-29",
+    oddsApiPreseasonKey: "icehockey_nhl_preseason",
   },
   // 2026 season tips off mid-May; seasonEnd covers through the WNBA Finals
   // (mid-to-late Oct 2026).
@@ -119,8 +128,9 @@ export function isPreseasonGame(sportKey: string, gameDate: Date): boolean {
 // Which Odds API sport key(s) to actually query for `sportKey` right now, in
 // priority order - element 0 is authoritative. Only ever more than one entry,
 // or different from `sportKey` itself, for a sport with a preseason-specific
-// Odds API key configured (NFL today): NFL preseason odds live under
-// "americanfootball_nfl_preseason", separate from the regular-season key.
+// Odds API key configured (NFL and NHL today): their preseason odds live
+// under "americanfootball_nfl_preseason"/"icehockey_nhl_preseason",
+// separate from each sport's regular-season key.
 //
 // Between the last preseason game and the Week 1 opener - roughly the first
 // ~10 days of September - the preseason key is already empty while the
