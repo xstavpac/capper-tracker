@@ -2161,6 +2161,107 @@ NC State +4.5`;
     );
   }
 
+  // PART V (2026-09, later - "Christian Watson Over 4.5 Receptions" catalog-
+  // import bug): findPlayerPick's ATP/tennis fallback used to accept ANY
+  // 1-4-word Title-Case name whose LAST word happened to be on
+  // KNOWN_TENNIS_PLAYERS, with zero awareness of the text that came after
+  // the matched number - so a real NFL player-prop line ("... Receptions",
+  // "... Receiving Yards", "... Rushing Yards", "... Passing Yards", a
+  // combined-yardage prop) whose surname coincides with an ATP/WTA player
+  // (Christian Watson's Packers surname collides with WTA's Heather Watson;
+  // see the other real collisions below) got silently stamped as a
+  // confident ATP pick - which also meant it never reached `unresolved`, so
+  // the NFL-roster recovery pass (recover-unresolved-picks.ts,
+  // player-roster-fallback.ts) never even got a chance to resolve it
+  // correctly, even though rosterFullNames (threaded into parseCatalog by
+  // PR #119) already had the real player in it.
+  //
+  // The fix (findPlayerPick, this file): two NFL-specific signals now gate
+  // the tennis guess, both checked BEFORE the surname-list lookup -
+  // (1) parsePlayerProp recognizing ANY of this app's supported NFL
+  // player-prop markets is unconditional negative evidence for tennis (none
+  // of those markets exist in tennis), independent of whether roster data is
+  // available; (2) when rosterFullNames IS available, an exact/fuzzy match
+  // against it is also unconditional negative evidence, covering a shorthand
+  // phrasing parsePlayerProp doesn't recognize. Either guard routes the line
+  // to `unresolved` instead of guessing ATP, where the real roster-based
+  // recovery pipeline (exercised end-to-end in
+  // recover-unresolved-lines-acceptance-test.ts) resolves it to NFL for
+  // real - this function's job is only to stop guessing tennis, never to
+  // resolve NFL itself.
+  console.log("\n########## PART V: findPlayerPick NFL-market vs tennis-surname collision (Christian Watson) ##########");
+  {
+    const nflRosterNames = ["Christian Watson", "Mike Evans", "Kyler Murray", "Derek Korda", "Marcus Paul", "Xavier Fritz"];
+
+    // --- The exact reported repro, verbatim (capper header on its own
+    // line, then the pick) - with NO roster data at all. The market
+    // keyword ("Receptions") alone must be enough: this is the shape a
+    // client whose roster fetch hasn't resolved yet would hit. ---
+    {
+      const r = parseCatalog("Todd Fuhrman\nChristian Watson Over 4.5 Receptions", []);
+      check("repro (no roster): 'Christian Watson Over 4.5 Receptions' is never tagged ATP", r.picks.some((p) => p.sportName === "ATP"), false);
+      check("repro (no roster): produces no picks (not misrouted as a phantom pick)", r.picks.length, 0);
+      check(
+        "repro (no roster): routes to unresolved for roster recovery",
+        r.unresolved,
+        ["Christian Watson Over 4.5 Receptions"]
+      );
+    }
+
+    // --- Same repro, WITH roster data available. parseCatalog itself still
+    // doesn't resolve NFL directly for a bare player-prop line with no team
+    // prefix (that's recoverUnresolvedLines/resolvePlayerPropAgainstRoster's
+    // job) - the point here is only that it's STILL never ATP. ---
+    {
+      const r = parseCatalog("Todd Fuhrman\nChristian Watson Over 4.5 Receptions", [], nflRosterNames);
+      check("repro (with roster): still never tagged ATP", r.picks.some((p) => p.sportName === "ATP"), false);
+      check("repro (with roster): still routes to unresolved", r.unresolved, ["Christian Watson Over 4.5 Receptions"]);
+    }
+
+    // --- The "o 4.5 rec" shorthand form of the same line - the market
+    // check runs against the FULL line text, not just a spelled-out
+    // "Receptions" word, so the shorthand form is caught identically. ---
+    {
+      const r = parseCatalog("Todd Fuhrman\nChristian Watson o 4.5 rec", []);
+      check("shorthand 'Christian Watson o 4.5 rec' is never tagged ATP", r.picks.some((p) => p.sportName === "ATP"), false);
+      check("shorthand 'Christian Watson o 4.5 rec' routes to unresolved", r.unresolved, ["Christian Watson o 4.5 rec"]);
+    }
+
+    // --- Every other supported NFL prop market, each paired with a player
+    // whose real surname is a real, currently-listed KNOWN_TENNIS_PLAYERS
+    // entry - confirmed real collisions, not constructed ones: "evans" (Dan
+    // Evans, ATP), "murray" (Andy Murray, ATP), "korda" (Sebastian Korda,
+    // ATP), "paul" (Tommy Paul, ATP), "fritz" (Taylor Fritz, ATP). None of
+    // these may become a phantom ATP pick either. (The ATD case here was
+    // already unreachable via findPlayerPick's own name-shape regexes even
+    // before this fix - "Anytime TD" has no ML/spread-number/over-under
+    // token for those regexes to anchor on - kept as a regression guard
+    // anyway, and verified to resolve NFL for real in
+    // recover-unresolved-lines-acceptance-test.ts alongside the others.) ---
+    const marketCollisions = [
+      "Mike Evans Over 76.5 Receiving Yards",
+      "Kyler Murray Over 35.5 Rushing Yards",
+      "Derek Korda Over 245.5 Passing Yards",
+      "Marcus Paul Anytime TD",
+      "Xavier Fritz Over 95.5 Rush + Rec Yards",
+    ];
+    for (const text of marketCollisions) {
+      const r = parseCatalog(`Todd Fuhrman\n${text}`, [], nflRosterNames);
+      check(`'${text}': never a phantom ATP pick`, r.picks.some((p) => p.sportName === "ATP"), false);
+      check(`'${text}': routes to unresolved for roster recovery`, r.unresolved, [text]);
+    }
+
+    // --- A legitimate ATP/tennis pick, with roster data present and no
+    // recognized NFL market keyword, must still resolve as ATP - these
+    // guards are additive, not a regression for real tennis picks. ---
+    const tennis = parseCatalog("Cap\nTallon Griekspoor ML", [], nflRosterNames).picks[0];
+    check(
+      "legitimate tennis pick 'Tallon Griekspoor ML' still resolves ATP (roster present, no NFL market match)",
+      tennis?.sportName,
+      "ATP"
+    );
+  }
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }
