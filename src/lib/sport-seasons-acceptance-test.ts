@@ -77,11 +77,23 @@ check("NFL 2027-01-20 (playoffs): NOT preseason", isPreseasonGame(NFL, d("2027-0
 check("NFL 2026-07-01 (deep offseason, before the window opens): NOT preseason", isPreseasonGame(NFL, d("2026-07-01")), false);
 check("NFL 2026-01-10 (LAST season's playoffs, well before this seasonStart): NOT preseason", isPreseasonGame(NFL, d("2026-01-10")), false);
 
+// --- NHL: the second sport (after NFL) with a real preseason window -
+// [seasonStart 2026-09-15, regularSeasonStart 2026-09-29). No Odds-API
+// preseason key configured for NHL (unlike NFL), so this only affects
+// isSportInSeason/isPreseasonGame, never oddsApiRequestKeys - see the
+// single-key check for icehockey_nhl above. ---
+check("NHL 2026-09-15 (seasonStart / first preseason day): preseason", isPreseasonGame("icehockey_nhl", d("2026-09-15")), true);
+check("NHL 2026-09-25 (mid-preseason): preseason", isPreseasonGame("icehockey_nhl", d("2026-09-25")), true);
+check("NHL 2026-09-28 (day before puck-drop, still preseason): preseason", isPreseasonGame("icehockey_nhl", d("2026-09-28")), true);
+check("NHL 2026-09-29 (regularSeasonStart / puck-drop): NOT preseason", isPreseasonGame("icehockey_nhl", d("2026-09-29")), false);
+check("NHL 2027-01-20 (mid regular season): NOT preseason", isPreseasonGame("icehockey_nhl", d("2027-01-20")), false);
+check("NHL 2026-07-01 (deep offseason, before the window opens): NOT preseason", isPreseasonGame("icehockey_nhl", d("2026-07-01")), false);
+check("NHL in season on 2026-09-20 (so the fetch path is actually reached)", isSportInSeason("icehockey_nhl", d("2026-09-20")), true);
+
 // --- Every other sport has no preseason window configured -> always false,
 //     even on a date that IS that sport's real-world preseason. ---
 check("MLB 2026-03-18 (spring training): NOT flagged - MLB has no regularSeasonStart configured", isPreseasonGame("baseball_mlb", d("2026-03-18")), false);
 check("NBA 2026-10-10 (NBA preseason): NOT flagged", isPreseasonGame("basketball_nba", d("2026-10-10")), false);
-check("NHL 2026-09-25 (NHL preseason): NOT flagged", isPreseasonGame("icehockey_nhl", d("2026-09-25")), false);
 check("WNBA 2026-05-05 (WNBA preseason): NOT flagged", isPreseasonGame("basketball_wnba", d("2026-05-05")), false);
 check("NCAAF 2026-08-26 (has no preseason concept): NOT flagged", isPreseasonGame("americanfootball_ncaaf", d("2026-08-26")), false);
 check("unknown sport: NOT flagged", isPreseasonGame("handball_bundesliga", d("2026-09-05")), false);
