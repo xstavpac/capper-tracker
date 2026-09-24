@@ -163,6 +163,24 @@ export function nrfiSide(betDetail: string | null): NrfiSide | null {
   return null;
 }
 
+export type TotalSide = "OVER" | "UNDER";
+
+// The Over/Under side of a TOTAL or TEAM_TOTAL pick, derived from betDetail
+// free text - same "never stored, always re-read" pattern as nrfiSide above.
+// Extracted out of gradePick (grading.ts), which previously inlined this same
+// detail.includes("over")/detail.includes("under") check independently at
+// its TOTAL and TEAM_TOTAL branches - one shared function means grading and
+// any other caller (e.g. the pick display-label generator) can never
+// disagree on which side a pick's text names. "Over" wins when text somehow
+// names both (matches the original inline behavior, where the TOTAL/
+// TEAM_TOTAL branches checked isOver before isUnder and returned early).
+export function totalSideFromText(betDetail: string | null): TotalSide | null {
+  const detail = (betDetail ?? "").toLowerCase();
+  if (detail.includes("over")) return "OVER";
+  if (detail.includes("under")) return "UNDER";
+  return null;
+}
+
 // Which slice of a game a pick's free text scopes it to, re-derived from
 // betDetail every time - the same "never stored, always re-read from
 // betDetail" pattern this file already uses for TOTAL's over/under side and
