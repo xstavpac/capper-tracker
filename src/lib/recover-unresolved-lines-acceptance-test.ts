@@ -16,6 +16,7 @@
 // all-recovered-picks paste.
 import { parseCatalog } from "@/lib/parse-catalog";
 import { recoverUnresolvedLines } from "@/lib/recover-unresolved-lines";
+import { parsePlayerProp } from "@/lib/bet-line";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 import type { LiveTeam } from "@/lib/live-team-fallback";
 
@@ -218,6 +219,73 @@ function main() {
       const { recovered, stillUnresolved } = recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, twoOnSameTeamRoster, picks);
       check("case7d: paste context that still leaves 2 candidates (Josh Allen AND Kyle Allen, both Bills) stays unresolved, not guessed", recovered.length, 0);
       check("case7d: stays in stillUnresolved", stillUnresolved, ["Allen anytime touchdown"]);
+    }
+  }
+
+  // Case 8 (2026-09, later - "Christian Watson Over 4.5 Receptions" catalog-
+  // import bug): a bare NFL player-prop line whose surname collides with a
+  // KNOWN_TENNIS_PLAYERS entry (parse-catalog.ts) used to get silently
+  // stamped as a confident ATP pick and never even reach `unresolved`, so
+  // this recovery pipeline never got a chance to run on it at all - see
+  // parse-catalog-acceptance-test.ts's PART V for the findPlayerPick-level
+  // fix. This proves the fix is reachable end-to-end from a real catalog
+  // paste: the line now DOES reach `unresolved`, and this real roster-based
+  // pipeline resolves it to a genuine NFL pick - reproducing the exact
+  // repro (Christian Watson, Packers WR) plus every other supported prop
+  // market, each paired with a player whose surname is a real
+  // KNOWN_TENNIS_PLAYERS collision. `derivedFields` mirrors exactly what
+  // bulk-picks.ts's createPicksAction does at save time (parsePlayerProp on
+  // a PLAYER_PROP pick's description, populating the Pick.playerName/
+  // propMarket columns) - not a second, parallel derivation - so this
+  // proves the actual saved-row shape, not just this file's own
+  // ParsedPick/sportName/betType fields.
+  {
+    const watsonRoster: RosterPlayer[] = [
+      ...roster,
+      { playerName: "Christian Watson", firstName: "Christian", lastName: "Watson", team: "Green Bay Packers", position: "WR", espnPlayerId: "10" },
+      { playerName: "Kyler Murray", firstName: "Kyler", lastName: "Murray", team: "Arizona Cardinals", position: "QB", espnPlayerId: "11" },
+      { playerName: "Derek Korda", firstName: "Derek", lastName: "Korda", team: "Springfield Isotopes", position: "QB", espnPlayerId: "12" },
+      { playerName: "Marcus Paul", firstName: "Marcus", lastName: "Paul", team: "Springfield Isotopes", position: "RB", espnPlayerId: "13" },
+      { playerName: "Xavier Fritz", firstName: "Xavier", lastName: "Fritz", team: "Springfield Isotopes", position: "RB", espnPlayerId: "14" },
+      // "Mike Evans" is already in the base `roster` fixture (Tampa Bay Buccaneers).
+    ];
+
+    function derivedFields(description: string, betType: string) {
+      const playerProp = betType === "PLAYER_PROP" ? parsePlayerProp(description) : null;
+      return { playerName: playerProp?.playerName, propMarket: playerProp?.propMarket };
+    }
+
+    const cases: [string, string, string][] = [
+      ["Christian Watson Over 4.5 Receptions", "Christian Watson", "RECEPTIONS"],
+      ["Mike Evans Over 76.5 Receiving Yards", "Mike Evans", "REC_YDS"],
+      ["Kyler Murray Over 35.5 Rushing Yards", "Kyler Murray", "RUSH_YDS"],
+      ["Derek Korda Over 245.5 Passing Yards", "Derek Korda", "PASS_YDS"],
+      ["Marcus Paul Anytime TD", "Marcus Paul", "TD"],
+      ["Xavier Fritz Over 95.5 Rush + Rec Yards", "Xavier Fritz", "RUSH_REC_YDS"],
+    ];
+    for (const [text, expectedPlayerName, expectedMarket] of cases) {
+      const { picks, unresolved, unresolvedCapperNames } = parseCatalog(`Todd Fuhrman\n${text}`, [], [
+        "Christian Watson",
+        "Mike Evans",
+        "Kyler Murray",
+        "Derek Korda",
+        "Marcus Paul",
+        "Xavier Fritz",
+      ]);
+      check(`'${text}': never resolved directly as a phantom ATP pick`, picks.length, 0);
+      check(`'${text}': reaches unresolved`, unresolved, [text]);
+
+      const { recovered, stillUnresolved } = recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, watsonRoster);
+      check(`'${text}': recovers exactly one pick`, recovered.length, 1);
+      check(`'${text}': resolves NFL, not ATP`, recovered[0]?.sportName, "NFL");
+      check(`'${text}': betType is PLAYER_PROP`, recovered[0]?.betType, "PLAYER_PROP");
+      check(`'${text}': capper attribution intact`, recovered[0]?.capperName, "Todd Fuhrman");
+      check(
+        `'${text}': saved playerName/propMarket match the real Pick-row derivation`,
+        derivedFields(recovered[0]?.description ?? "", recovered[0]?.betType ?? ""),
+        { playerName: expectedPlayerName, propMarket: expectedMarket }
+      );
+      check(`'${text}': nothing left in stillUnresolved`, stillUnresolved, []);
     }
   }
 

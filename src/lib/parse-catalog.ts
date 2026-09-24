@@ -2215,7 +2215,34 @@ const RECOGNIZED_TEAM_PHRASES = new Set<string>([
   ...Object.keys(AMBIGUOUS_NICKNAMES),
 ]);
 
-function findPlayerPick(text: string): { playerName: string; playerKey: string } | null {
+// `rosterFullNames`, when the caller has it, is the same optional NFL-roster
+// full-name list threaded through findAmbiguousNickname (see its own header
+// comment) - not a second roster fetch. Two NFL-specific signals gate the
+// tennis guess here, both checked BEFORE the surname-list lookup so a real
+// NFL prop can never lose to a coincidental tennis-surname collision (the
+// "Christian Watson Over 4.5 Receptions" bug - Heather Watson (WTA) shares
+// Christian Watson's (Packers WR) surname):
+//   1. Market exclusivity - parsePlayerProp (bet-line.ts) recognizes only
+//      this app's supported NFL player-prop markets (passing/rushing/
+//      receiving yards, receptions, combined yardage, touchdowns). None of
+//      those markets exist in tennis, so a line parsePlayerProp matches is
+//      never a tennis pick, full stop - checked unconditionally, even with
+//      no roster data available, since the market vocabulary alone is
+//      sport-exclusive evidence.
+//   2. Roster precedence - even without a recognized market keyword (a
+//      shorthand phrasing parsePlayerProp doesn't cover), a candidate that
+//      is a real NFL roster player's full name (exact or fuzzy, via
+//      isKnownFullPlayerName - the SAME check findAmbiguousNickname uses,
+//      not a second matcher) outranks a bare surname collision on the
+//      tennis list.
+// Either guard returning null routes the line to `unresolved`, where the
+// server-side roster/team recovery pass (recover-unresolved-picks.ts) then
+// resolves it for real - this function's job is only to stop guessing
+// tennis, never to resolve NFL itself.
+function findPlayerPick(
+  text: string,
+  rosterFullNames?: Iterable<string>
+): { playerName: string; playerKey: string } | null {
   const withoutParens = text.replace(/\([^)]*\)/g, "").trim();
   const mlMatch = withoutParens.match(/^(.+?)\s+(?:ML|money\s*line)\b/i);
   const spreadMatch = withoutParens.match(/^(.+?)\s+[+-]\d+(?:\.\d+)?\b/);
@@ -2233,6 +2260,11 @@ function findPlayerPick(text: string): { playerName: string; playerKey: string }
   // happens to be followed by "ML" or a number (e.g. a typo'd team name).
   if (!/^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/.test(candidate)) return null;
 
+  // NFL market exclusivity (signal 1 above) - checked against the FULL line
+  // text (not just `candidate`), since the market phrase sits after the
+  // number/keyword the name regexes above stopped at.
+  if (parsePlayerProp(text)) return null;
+
   const lower = candidate.toLowerCase();
   const words = lower.split(/\s+/);
   const surname = words[words.length - 1];
@@ -2244,6 +2276,9 @@ function findPlayerPick(text: string): { playerName: string; playerKey: string }
   if (US_STATE_NAMES.has(lower)) return null;
   if (KNOWN_OUT_OF_SCOPE_SCHOOLS.has(lower)) return null;
   if (RECOGNIZED_TEAM_PHRASES.has(lower)) return null;
+
+  // NFL roster precedence (signal 2 above).
+  if (rosterFullNames && isKnownFullPlayerName(candidate, rosterFullNames)) return null;
 
   // Positive evidence required (see the comment block above
   // looksLikeTeamAbbreviation): accept an ATP pick ONLY when the line
@@ -2544,7 +2579,7 @@ export function parseCatalog(
           continue;
         }
 
-        const playerPick = findPlayerPick(remainder);
+        const playerPick = findPlayerPick(remainder, rosterFullNames);
         if (playerPick) {
           const parsed = parsePickText(remainder);
           results.push({
@@ -2716,7 +2751,7 @@ export function parseCatalog(
         continue;
       }
 
-      const playerPick = findPlayerPick(strippedText);
+      const playerPick = findPlayerPick(strippedText, rosterFullNames);
       if (playerPick) {
         const parsed = parsePickText(strippedText);
         results.push({
