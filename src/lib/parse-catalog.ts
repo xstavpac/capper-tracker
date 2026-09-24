@@ -1144,6 +1144,49 @@ const PRO_TEAM_ALIASES: [string, string, string][] = [
   ["avs", "NHL", "avalanche"],
   ["isles", "NHL", "islanders"],
   ["sens", "NHL", "senators"],
+  // NHL 3-letter team abbreviations (2026-09, NHL PR 2) - cappers commonly
+  // write "CBJ Moneyline" / "TBL -1.5" instead of the mascot, but
+  // looksLikeTeamAbbreviation (below) exists specifically to REJECT bare
+  // 3-letter all-caps tokens as tennis-player surnames, so these were
+  // dropping straight to `unresolved` with no path to a real match. Only
+  // codes confirmed collision-free against every other tracked league's
+  // team names/aliases/abbreviations (NFL, MLB, NBA, WNBA, NCAAF, CFL) and
+  // ESPN's own abbreviations for them are here - see the exclusions noted
+  // below for the ones that aren't.
+  //
+  // rangers/kings are AMBIGUOUS_NICKNAMES keys (Texas Rangers MLB / NY
+  // Rangers NHL, Sacramento Kings NBA / LA Kings NHL), so - same "tigs" ->
+  // "detroit tigers" pattern as the MLB block above - nyr/lak map to the
+  // FULL team name rather than the bare mascot.
+  ["cbj", "NHL", "blue jackets"],
+  ["tbl", "NHL", "lightning"],
+  ["vgk", "NHL", "golden knights"],
+  ["njd", "NHL", "devils"],
+  ["nyr", "NHL", "new york rangers"],
+  ["nyi", "NHL", "islanders"],
+  ["lak", "NHL", "los angeles kings"],
+  ["sjs", "NHL", "sharks"],
+  ["nsh", "NHL", "predators"],
+  ["ana", "NHL", "ducks"],
+  // Deliberately EXCLUDED from the abbreviation batch above, despite being
+  // on the original candidate list:
+  // - "cgy"/"edm"/"mtl"/"ott"/"wpg": each is also the real ESPN CFL
+  //   abbreviation for a currently-tracked CFL franchise (Calgary
+  //   Stampeders, Edmonton Elks, Montreal Alouettes, Ottawa Redblacks,
+  //   Winnipeg Blue Bombers - see CFL_TEAMS above), and the bare city name
+  //   is already a live AMBIGUOUS_NICKNAMES entry modeling exactly this
+  //   NHL/CFL ambiguity (calgary/edmonton/montreal/ottawa/winnipeg below).
+  //   Adding these as unconditional NHL aliases would bypass that
+  //   disambiguation entirely and silently misresolve a real CFL pick
+  //   ("CGY -3.5") to the wrong sport's team.
+  // - "van": collides with a real ATP player already in
+  //   KNOWN_TENNIS_PLAYERS ("van rijthoven" - see below), so adding it
+  //   would break resolution of a genuine "Van Rijthoven ML" tennis pick.
+  //   It's also a live risk for any two-word surname beginning with "Van"
+  //   (e.g. NFL's Kyle Van Noy) - isPlayerPropSurnameCollision only guards
+  //   the LAST word of a player-prop name against a team-key collision, not
+  //   the first/middle word, so "Van" would still win before that guard is
+  //   ever consulted.
 ];
 
 export const NCAAF_CANONICAL_SUFFIX: Record<string, string> = Object.fromEntries(NCAAF_SCHOOLS);
