@@ -89,6 +89,17 @@ async function main() {
     check("overlapping id: deduped to one", out.games.length, 1);
     check("overlapping id: primary key's copy wins", { home: out.games[0].homeTeam }, { home: "Bills" });
 
+    // 3b. Same two-key merge, but NHL's keys - proves fetchMergedOddsListing
+    // has no NFL-specific hardcoding; it merges under "icehockey_nhl" and
+    // "icehockey_nhl_preseason" exactly the same way it does for NFL's pair.
+    globalThis.fetch = stubFetchByKey({
+      icehockey_nhl: { ok: true, body: [game("nhl-reg", "Maple Leafs", "Canadiens", "icehockey_nhl")] },
+      icehockey_nhl_preseason: { ok: true, body: [game("nhl-pre", "Rangers", "Islanders", "icehockey_nhl_preseason")] },
+    });
+    out = await fetchMergedOddsListing("icehockey_nhl", ["icehockey_nhl", "icehockey_nhl_preseason"], "k", CTX);
+    check("NHL two keys disjoint: both slates merged", out.games.map((g) => g.id).sort(), ["nhl-pre", "nhl-reg"]);
+    check("NHL two keys disjoint: not primaryFailed", out.primaryFailed, false);
+
     // 4. Primary key fails -> primaryFailed true (caller aborts, no cache).
     globalThis.fetch = stubFetchByKey({
       americanfootball_nfl: { ok: false, status: 429, body: { message: "OUT_OF_USAGE_CREDITS" } },
