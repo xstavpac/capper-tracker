@@ -16,7 +16,7 @@
 // back to its own existing betDetail/betTypeLabel display, exactly as today.
 import { shortTeamName } from "@/lib/pick-team-group";
 import { stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
-import { totalSideFromText, parsePlayerPropLine, nrfiSide } from "@/lib/bet-line";
+import { totalSideFromText, parsePlayerPropLine, nrfiSide, parseTouchdownProp } from "@/lib/bet-line";
 
 export type PickDisplayLabelInput = {
   betType: string; // Prisma BetType enum value, typed loosely like betTypeLabel/formatPickLabel already are
@@ -35,12 +35,15 @@ export type PickDisplayLabelInput = {
 };
 
 // One phrase per PropMarket enum value (schema.prisma) - the exact set of 7
-// confirmed there, not guessed. TD is deliberately absent: every TD-market
-// pick this app imports is the anytime-scorer market (see parseTouchdownProp
-// in bet-line.ts - "this app only grades the anytime-TD market", no
-// over/under number involved), so TD gets its own "{player} Anytime TD"
-// format below instead of slotting into the Over/Under/line template the
-// other six markets share.
+// confirmed there, not guessed. TD is deliberately absent: a TD-market pick
+// is usually the anytime-scorer market this app actually grades (see
+// resolveTouchdownProp, grading.ts - "did this player score at least once"),
+// so TD gets its own "{player} Anytime TD" format below instead of slotting
+// into the Over/Under/line template the other six markets share. But not
+// every TD pick IS anytime-scorer text - "2+ TDs", "Over 1.5 TDs" etc name a
+// count above one, a different bet than anytime TD - so that format only
+// applies when the betDetail text doesn't say otherwise (see the TD case
+// below).
 const PROP_MARKET_PHRASES: Record<string, string> = {
   PASS_YDS: "Pass Yds",
   RUSH_YDS: "Rush Yds",
@@ -104,6 +107,16 @@ export function buildPickDisplayLabel(input: PickDisplayLabelInput): string | nu
       if (!cleanedName) return null;
 
       if (input.propMarket === "TD") {
+        // Reuses the same two parsers grading already reads TD betDetail
+        // with (resolveTouchdownProp, grading.ts): parseTouchdownProp's
+        // `unsupported` flag catches explicit multi-TD text ("2+ TDs"), and
+        // parsePlayerPropLine catches an Over/Under-shaped count ("Over 1.5
+        // TDs") - either signals a bet that isn't the plain anytime-scorer
+        // market, so the label falls back to raw betDetail rather than
+        // mislabeling it "Anytime TD".
+        const detail = input.betDetail ?? "";
+        if (parseTouchdownProp(detail)?.unsupported) return null;
+        if (parsePlayerPropLine(detail)) return null;
         return `${cleanedName} Anytime TD`;
       }
 

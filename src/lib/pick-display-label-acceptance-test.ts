@@ -225,6 +225,21 @@ check(
   buildPickDisplayLabel({ ...PROP_BASE, propMarket: "TD", playerName: "Chiefs Travis Kelce", betDetail: "Chiefs Travis Kelce Anytime TD" }),
   "Travis Kelce Anytime TD"
 );
+check(
+  "PropMarket TD, betDetail 'Kelce TD' (no 'Anytime') -> still Anytime TD",
+  buildPickDisplayLabel({ ...PROP_BASE, propMarket: "TD", playerName: "Chiefs Travis Kelce", betDetail: "Kelce TD" }),
+  "Travis Kelce Anytime TD"
+);
+check(
+  "null: PropMarket TD, betDetail names an explicit count ('Kelce 2+ TDs') -> not anytime, null",
+  buildPickDisplayLabel({ ...PROP_BASE, propMarket: "TD", playerName: "Chiefs Travis Kelce", betDetail: "Kelce 2+ TDs" }),
+  null
+);
+check(
+  "null: PropMarket TD, betDetail is Over/Under-shaped ('Kelce Over 1.5 TDs') -> not anytime, null",
+  buildPickDisplayLabel({ ...PROP_BASE, propMarket: "TD", playerName: "Chiefs Travis Kelce", betDetail: "Kelce Over 1.5 TDs" }),
+  null
+);
 
 // ---- 7. Null cases ----
 check(
