@@ -74,17 +74,29 @@ export async function recoverUnresolvedPicksAction(
 ): Promise<RecoverUnresolvedResult> {
   await requireUser();
 
-  const { picks, unresolved, unresolvedCapperNames } = parseCatalog(text, knownCapperNames);
+  // Fetched BEFORE parseCatalog (unlike before this function threaded roster
+  // data into parseCatalog itself) - findAmbiguousNickname's player-prop
+  // guard (parse-catalog.ts) needs the roster's full names available at
+  // parse time, not just afterward for the unresolved-line fallback below.
+  // getCachedNflRoster is a plain indexed table read (no live fetch), so
+  // fetching it unconditionally here - rather than only when a player-prop
+  // line was already known to be unresolved, the old gate - costs one extra
+  // always-on Postgres read per import in exchange for the ambiguous-team
+  // guard actually working; no separate names-only query is issued, since
+  // the full RosterPlayer rows this function already needs for its own
+  // roster-fallback pass below carry playerName too.
+  const roster = await getCachedNflRoster();
+  const rosterFullNames = roster.map((p) => p.playerName);
+
+  const { picks, unresolved, unresolvedCapperNames } = parseCatalog(text, knownCapperNames, rosterFullNames);
   if (unresolved.length === 0) return { recovered: [], stillUnresolved: [] };
 
-  // Partition once, up front, so each live-data source is fetched at most
-  // once (and only when a line that could actually use it exists).
+  // Partition once, up front, so live-team data is fetched at most once (and
+  // only when a line that could actually use it exists) - the roster is
+  // already in hand from the fetch above.
   const isPlayerProp = new Set(unresolved.filter((line) => parsePlayerProp(line) !== null));
 
-  const [liveTeams, roster] = await Promise.all([
-    isPlayerProp.size < unresolved.length ? gatherLiveTeamNames() : Promise.resolve<LiveTeam[]>([]),
-    isPlayerProp.size > 0 ? getCachedNflRoster() : Promise.resolve([]),
-  ]);
+  const liveTeams = isPlayerProp.size < unresolved.length ? await gatherLiveTeamNames() : [];
 
   // `picks` - the lines parseCatalog already resolved outright on its first
   // pass over this same paste - is passed through as paste-local
