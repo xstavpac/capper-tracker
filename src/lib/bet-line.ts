@@ -364,11 +364,21 @@ export function parseTouchdownProp(
   // anytime-TD pick ("Anytime TD 1st Half").
   const isFirstTd = /\b(?:first|1st)\s+(?:touchdown|td)s?\b/i.test(text);
   const isMultiTd = /\d\s*\+\s*(?:touchdown|td)s?\b/i.test(text);
+  // Over/Under N.5 TDs ("Kelce Over 1.5 TDs") is a TD-count threshold market,
+  // not the anytime-TD ("scored at least once") market resolveTouchdownProp
+  // actually grades - same reason multi-TD above is declined rather than
+  // graded wrong. Detected via parsePlayerPropLine's own over/under-plus-number
+  // shape (reused, not reimplemented) rather than a bespoke regex here; gated
+  // behind isFirstTd/isMultiTd being false so those two keep their own,
+  // more specific unsupported reasons.
+  const isOverUnderTd = !isFirstTd && !isMultiTd && parsePlayerPropLine(text) !== null;
   const unsupported = isFirstTd
     ? "this bet is a first-touchdown prop, which this app doesn't grade automatically yet - needs manual grading"
     : isMultiTd
       ? "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading"
-      : undefined;
+      : isOverUnderTd
+        ? "this bet is an Over/Under touchdown-count prop, which this app doesn't grade automatically yet - needs manual grading"
+        : undefined;
 
   const isRushing = /\brush(?:ing|er)?\b/i.test(text);
   const isReceiving = /\b(receiving|reception|receptions|receiver|catches|catch|rec)\b/i.test(text);

@@ -281,6 +281,36 @@ async function main() {
     }
   );
 
+  // ---- Over/Under TD-count safety fix (found live during PR #112 review):
+  // isMultiTd's "N+" regex didn't catch this Over/Under-shaped text, so
+  // "Kelce Over 1.5 TDs" fell through to plain anytime-TD and would have
+  // graded WIN off a single TD, which is wrong for an Over 1.5 line. Must
+  // decline before any box-score fetch, same as first/multi-TD above. ----
+  await expectAsync(
+    "Over/Under TD text ('Over 1.5 TDs') declines before any box-score fetch, not silently graded as anytime-TD",
+    resolveTouchdownProp(
+      { betDetail: "Kelce Over 1.5 TDs", homeTeam: "Kansas City Chiefs", awayTeam: "Denver Broncos" },
+      "fake-event-id",
+      "NFL"
+    ),
+    {
+      outcome: null,
+      reason: "this bet is an Over/Under touchdown-count prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  await expectAsync(
+    "'Under 0.5 TDs' phrasing: same Over/Under decline",
+    resolveTouchdownProp(
+      { betDetail: "Kelce Under 0.5 TDs", homeTeam: "Kansas City Chiefs", awayTeam: "Denver Broncos" },
+      "fake-event-id",
+      "NFL"
+    ),
+    {
+      outcome: null,
+      reason: "this bet is an Over/Under touchdown-count prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }

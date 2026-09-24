@@ -263,6 +263,54 @@ function main() {
   const multiTdPick = parseCatalog(`Capper\nBills Gibbs 2+ TDs`, []).picks[0];
   check("parseCatalog: multi-TD pick -> betType PLAYER_PROP, not MONEYLINE", multiTdPick?.betType, "PLAYER_PROP");
 
+  // Over/Under N.5 TDs ("Kelce Over 1.5 TDs") is a TD-count threshold market,
+  // not the anytime-TD ("scored at least once") market resolveTouchdownProp
+  // grades - found live during PR #112 review (isMultiTd's "N+" regex didn't
+  // catch this Over/Under-shaped text, so it fell through to plain anytime-TD
+  // and would have graded a Kelce Over 1.5 TDs pick WIN off a single TD).
+  // Must decline the same way first/multi-TD do above, not grade wrong.
+  check(
+    "parseTouchdownProp: 'Kelce Over 1.5 TDs' -> parses as a TD-shaped prop, but flagged unsupported (Over/Under)",
+    parseTouchdownProp("Kelce Over 1.5 TDs"),
+    {
+      playerName: "Kelce Over .",
+      propType: "ANY",
+      unsupported: "this bet is an Over/Under touchdown-count prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  check(
+    "parseTouchdownProp: 'Kelce Over 0.5 TDs' -> same Over/Under flag",
+    parseTouchdownProp("Kelce Over 0.5 TDs"),
+    {
+      playerName: "Kelce Over .",
+      propType: "ANY",
+      unsupported: "this bet is an Over/Under touchdown-count prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  check(
+    "parseTouchdownProp: 'Kelce Under 0.5 TDs' -> same Over/Under flag",
+    parseTouchdownProp("Kelce Under 0.5 TDs"),
+    {
+      playerName: "Kelce Under .",
+      propType: "ANY",
+      unsupported: "this bet is an Over/Under touchdown-count prop, which this app doesn't grade automatically yet - needs manual grading",
+    }
+  );
+  const overUnderTdPick = parseCatalog(`Capper\nChiefs Kelce Over 1.5 TDs`, []).picks[0];
+  check("parseCatalog: Over/Under TD pick -> betType PLAYER_PROP, not TOTAL", overUnderTdPick?.betType, "PLAYER_PROP");
+
+  // Plain anytime-TD picks must grade exactly as before - unaffected by the
+  // new Over/Under detection above (no "over"/"under" + number in the text).
+  check("parseTouchdownProp: 'Gibbs TD' -> unchanged, still plain anytime-TD", parseTouchdownProp("Gibbs TD"), {
+    playerName: "Gibbs",
+    propType: "ANY",
+  });
+  check(
+    "parseTouchdownProp: 'Gibbs Anytime TD' -> unchanged, still plain anytime-TD",
+    parseTouchdownProp("Gibbs Anytime TD"),
+    { playerName: "Gibbs", propType: "ANY" }
+  );
+
   // --- PART E (bare stat-category words, real catalog-import gap): the
   // stat-category word alone ("rushing", "passing", "rec") must resolve the
   // same market as when "yards"/"receptions" is spelled out, and "yds"/"yrd"
