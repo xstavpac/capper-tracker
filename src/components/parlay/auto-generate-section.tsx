@@ -102,6 +102,14 @@ export function AutoGenerateSection({ leagues }: { leagues: string[] }) {
     }
   }
 
+  function clear() {
+    setResult(null);
+    setError(null);
+    setShortfallConfirmed(false);
+    setShowHedge(false);
+    setShowContrarian(false);
+  }
+
   const parlayA = result?.parlayA ?? null;
   const isShort = parlayA !== null && parlayA.available < parlayA.requested;
   const showParlays = parlayA !== null && parlayA.legs.length > 0 && (!isShort || shortfallConfirmed);
@@ -128,14 +136,24 @@ export function AutoGenerateSection({ leagues }: { leagues: string[] }) {
           onChange={(n) => setLegCountState(Math.max(1, Math.min(n, AUTO_GENERATE_MAX_LEGS)))}
           note={`one per game · up to ${AUTO_GENERATE_MAX_LEGS}`}
         />
-        <button
-          type="button"
-          onClick={generate}
-          disabled={inScopeLeagues.length === 0 || building}
-          className="rounded-full bg-brand-600 px-4 py-1.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700 disabled:opacity-50"
-        >
-          {building ? "Generating…" : "Auto-Generate"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={generate}
+            disabled={inScopeLeagues.length === 0 || building}
+            className="rounded-full bg-brand-600 px-4 py-1.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700 disabled:opacity-50"
+          >
+            {building ? "Generating…" : "Auto-Generate"}
+          </button>
+          <button
+            type="button"
+            onClick={clear}
+            disabled={!result}
+            className="rounded-full bg-muted px-4 py-1.5 text-sm font-medium text-foreground shadow-soft hover:bg-muted/70 disabled:opacity-50"
+          >
+            Clear
+          </button>
+        </div>
       </div>
       {inScopeLeagues.length === 0 && (
         <p className="mt-2 text-xs text-muted-foreground">Toggle at least one league on to generate a parlay.</p>
