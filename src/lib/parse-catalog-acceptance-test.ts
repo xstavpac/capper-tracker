@@ -1897,6 +1897,89 @@ NC State +4.5`;
     );
   }
 
+  // ==========================================================================
+  // PART T - NHL 3-letter team abbreviations (2026-09, NHL PR 2). The NHL
+  // audit found "CBJ Moneyline" dropping straight to `unresolved`:
+  // looksLikeTeamAbbreviation (a NEGATIVE guard inside findPlayerPick that
+  // blocks a bare <=3-letter all-caps token from being misread as a tennis
+  // surname) had no positive counterpart - PRO_TEAM_ALIASES had zero
+  // abbreviation entries, so nothing upstream of that guard ever resolved
+  // one. This adds 10, and explicitly excludes 6 more the original
+  // candidate list included but that collide with real data already in this
+  // file - see the exclusion comment on PRO_TEAM_ALIASES in parse-catalog.ts.
+  // ==========================================================================
+  console.log("\n########## PART T: NHL 3-letter team abbreviations ##########");
+
+  {
+    // [abbrev, canonical mascot/full-name, real live-schedule full name]
+    const nhlAbbrevs: [string, string, string][] = [
+      ["cbj", "blue jackets", "Columbus Blue Jackets"],
+      ["tbl", "lightning", "Tampa Bay Lightning"],
+      ["vgk", "golden knights", "Vegas Golden Knights"],
+      ["njd", "devils", "New Jersey Devils"],
+      ["nyr", "new york rangers", "New York Rangers"],
+      ["nyi", "islanders", "New York Islanders"],
+      ["lak", "los angeles kings", "Los Angeles Kings"],
+      ["sjs", "sharks", "San Jose Sharks"],
+      ["nsh", "predators", "Nashville Predators"],
+      ["ana", "ducks", "Anaheim Ducks"],
+    ];
+    for (const [abbrev, canonical, fullName] of nhlAbbrevs) {
+      const pick = parseCatalog(`Cap\n${abbrev} Moneyline`, []).picks[0];
+      check(`NHL abbrev '${abbrev} Moneyline' -> NHL`, pick?.sportName, "NHL");
+      check(`NHL abbrev '${abbrev}' captured as the nickname`, pick?.teamNicknames, [abbrev]);
+      check(`NHL abbrev '${abbrev}' translates to '${canonical}'`, TEAM_NICKNAME_CANONICAL[abbrev], canonical);
+      check(`'${abbrev}' -> a suffix of "${fullName}"`, fullName.toLowerCase().endsWith(canonical), true);
+
+      // Lowercase + tight spacing form a capper actually types.
+      const lower = parseCatalog(`Cap\n${abbrev} ml`, []).picks[0];
+      check(`NHL abbrev '${abbrev} ml' (lowercase) -> NHL`, lower?.sportName, "NHL");
+    }
+
+    // A couple of spot checks with spread/total qualifiers, per the PR spec.
+    check(
+      "'TBL -1.5' -> NHL Lightning",
+      { sport: parseCatalog(`Cap\nTBL -1.5`, []).picks[0]?.sportName, teams: parseCatalog(`Cap\nTBL -1.5`, []).picks[0]?.teamNicknames },
+      { sport: "NHL", teams: ["tbl"] }
+    );
+    check(
+      "'VGK Over 5.5' -> NHL Golden Knights",
+      { sport: parseCatalog(`Cap\nVGK Over 5.5`, []).picks[0]?.sportName, teams: parseCatalog(`Cap\nVGK Over 5.5`, []).picks[0]?.teamNicknames },
+      { sport: "NHL", teams: ["vgk"] }
+    );
+    const njdPeriod = parseCatalog(`Cap\nNJD 1P ML`, []).picks[0];
+    check("'NJD 1P ML' -> NHL Devils, period captured", { sport: njdPeriod?.sportName, teams: njdPeriod?.teamNicknames }, { sport: "NHL", teams: ["njd"] });
+
+    // Whole-token only: must not fire inside a longer word or a player name.
+    check("'Anabelle Moneyline' does not resolve as 'ana' (Ducks)", parseCatalog(`Cap\nAnabelle Moneyline`, []).picks[0]?.sportName === "NHL", false);
+    check("'Anaheimer ML' does not resolve as 'ana' (Ducks)", parseCatalog(`Cap\nAnaheimer ML`, []).picks[0]?.sportName === "NHL", false);
+    check("'Lakland ML' does not resolve as 'lak' (Kings)", parseCatalog(`Cap\nLakland ML`, []).picks[0]?.sportName === "NHL", false);
+
+    // Unchanged: pre-existing shared-city-code exclusions still behave
+    // exactly as before this PR - "BUF"/"DAL" are not in PRO_TEAM_ALIASES.
+    check("'BUF ML' unchanged (not a resolvable abbrev before or after this PR)", parseCatalog(`Cap\nBUF ML`, []).picks[0], undefined);
+    check("'DAL ML' unchanged (not a resolvable abbrev before or after this PR)", parseCatalog(`Cap\nDAL ML`, []).picks[0], undefined);
+
+    // Explicitly excluded codes: collide with real, already-tracked data in
+    // this file and must NOT be in the alias translation table.
+    const excludedAbbrevs = ["cgy", "edm", "mtl", "ott", "wpg", "van"];
+    for (const token of excludedAbbrevs) {
+      check(`excluded NHL abbrev '${token}': absent from the alias translation table`, TEAM_NICKNAME_CANONICAL[token], undefined);
+    }
+    // cgy/edm/mtl/ott/wpg: the bare city name is still resolved via the
+    // existing NHL/CFL AMBIGUOUS_NICKNAMES hierarchy, unaffected by this PR.
+    const calgaryPick = parseCatalog(`Cap\nCalgary Moneyline`, []).picks[0];
+    check(
+      "'Calgary Moneyline' still ambiguous NHL/CFL (unaffected by excluding 'cgy')",
+      { key: calgaryPick?.ambiguousKey, labels: calgaryPick?.ambiguous?.map((o) => o.sport).sort() },
+      { key: "calgary", labels: ["CFL", "NHL"] }
+    );
+    // van: a real ATP pick with this exact surname must still resolve as
+    // tennis, not get hijacked into an NHL Canucks guess.
+    const vanRijthoven = parseCatalog(`Cap\nVan Rijthoven ML`, []).picks[0];
+    check("'Van Rijthoven ML' still resolves ATP (not hijacked by an NHL 'van' alias)", { sport: vanRijthoven?.sportName, key: vanRijthoven?.teamNicknames?.[0] }, { sport: "ATP", key: "rijthoven" });
+  }
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }
