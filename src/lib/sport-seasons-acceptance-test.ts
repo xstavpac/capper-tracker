@@ -12,7 +12,12 @@
 // gap to the empty preseason key (the "NFL odds board blank early September"
 // bug). The fix queries BOTH keys for the whole pre-regular-season window and
 // merges, so no SPORT_SEASON_CONFIG date has to line up exactly with the day
-// preseason ends.
+// preseason ends. NHL was wired up the same way after PR #108 confirmed
+// "icehockey_nhl_preseason" is also a real, separate, active Odds API key -
+// see the NHL section below, which mirrors every NFL check above it against
+// NHL's own dates (no NFL-style "bug boundary" gap for NHL since its
+// regularSeasonStart was set from ESPN's actual confirmed puck-drop date,
+// not carried over from a stale guess).
 import { oddsApiRequestKeys, isSportInSeason, isPreseasonGame } from "./sport-seasons";
 
 let failures = 0;
@@ -26,6 +31,8 @@ const d = (iso: string) => new Date(iso + "T16:00:00Z"); // mid-day UTC -> unamb
 
 const NFL = "americanfootball_nfl";
 const NFL_PRE = "americanfootball_nfl_preseason";
+const NHL = "icehockey_nhl";
+const NHL_PRE = "icehockey_nhl_preseason";
 
 // --- NFL: deep offseason, before the preseason window even opens ---
 check("2026-07-01 (offseason): NFL -> regular key only", oddsApiRequestKeys(NFL, d("2026-07-01")), [NFL]);
@@ -52,12 +59,14 @@ check("during the merge window, element 0 is the real sportKey (authoritative)",
 for (const [key, date] of [
   ["baseball_mlb", "2026-07-01"],
   ["basketball_nba", "2026-11-01"],
-  ["icehockey_nhl", "2026-11-01"],
   ["basketball_wnba", "2026-07-01"],
   ["americanfootball_ncaaf", "2026-09-05"],
 ] as [string, string][]) {
   check(`${key} on ${date}: single key, no preseason handling`, oddsApiRequestKeys(key, d(date)), [key]);
 }
+// icehockey_nhl is NOT in this list anymore - see the dedicated NHL section
+// below, which now has a preseason-specific key just like NFL.
+check("icehockey_nhl on 2027-01-20 (well past regularSeasonStart): single key, no preseason handling", oddsApiRequestKeys(NHL, d("2027-01-20")), [NHL]);
 
 // An unknown sportKey is returned untouched as its own single element.
 check("unknown sport key: passthrough", oddsApiRequestKeys("handball_bundesliga", d("2026-09-05")), ["handball_bundesliga"]);
@@ -77,11 +86,20 @@ check("NFL 2027-01-20 (playoffs): NOT preseason", isPreseasonGame(NFL, d("2027-0
 check("NFL 2026-07-01 (deep offseason, before the window opens): NOT preseason", isPreseasonGame(NFL, d("2026-07-01")), false);
 check("NFL 2026-01-10 (LAST season's playoffs, well before this seasonStart): NOT preseason", isPreseasonGame(NFL, d("2026-01-10")), false);
 
-// --- NHL: the second sport (after NFL) with a real preseason window -
-// [seasonStart 2026-09-15, regularSeasonStart 2026-09-29). No Odds-API
-// preseason key configured for NHL (unlike NFL), so this only affects
-// isSportInSeason/isPreseasonGame, never oddsApiRequestKeys - see the
-// single-key check for icehockey_nhl above. ---
+// --- NHL: the second sport (after NFL) with BOTH a real preseason window -
+// [seasonStart 2026-09-15, regularSeasonStart 2026-09-29) - AND its own
+// Odds-API preseason key ("icehockey_nhl_preseason"), wired up the same way
+// as NFL's. Mirrors every NFL oddsApiRequestKeys check above, on NHL's own
+// dates. ---
+check("2026-07-01 (offseason): NHL -> regular key only", oddsApiRequestKeys(NHL, d("2026-07-01")), [NHL]);
+check("2026-09-15 (seasonStart, first day of window): both keys", oddsApiRequestKeys(NHL, d("2026-09-15")), [NHL, NHL_PRE]);
+check("2026-09-20 (mid-preseason): NHL -> [regular, preseason] merged", oddsApiRequestKeys(NHL, d("2026-09-20")), [NHL, NHL_PRE]);
+check("2026-09-28 (day before puck-drop, still preseason): both keys", oddsApiRequestKeys(NHL, d("2026-09-28")), [NHL, NHL_PRE]);
+check("2026-09-29 (regularSeasonStart, puck-drop): regular key only - preseason key stops being requested", oddsApiRequestKeys(NHL, d("2026-09-29")), [NHL]);
+check("2026-11-15 (mid-season): regular key only", oddsApiRequestKeys(NHL, d("2026-11-15")), [NHL]);
+check("2027-01-20 (well into the season): regular key only", oddsApiRequestKeys(NHL, d("2027-01-20")), [NHL]);
+check("during NHL's merge window, element 0 is the real sportKey (authoritative)", oddsApiRequestKeys(NHL, d("2026-09-20"))[0], NHL);
+
 check("NHL 2026-09-15 (seasonStart / first preseason day): preseason", isPreseasonGame("icehockey_nhl", d("2026-09-15")), true);
 check("NHL 2026-09-25 (mid-preseason): preseason", isPreseasonGame("icehockey_nhl", d("2026-09-25")), true);
 check("NHL 2026-09-28 (day before puck-drop, still preseason): preseason", isPreseasonGame("icehockey_nhl", d("2026-09-28")), true);
