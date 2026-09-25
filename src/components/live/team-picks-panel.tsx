@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Ref } from "react";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PickCard } from "@/components/live/pick-card";
@@ -29,7 +29,12 @@ import type { LiveGameProgress } from "@/lib/live-game-progress";
 // pick count) plus its pick list or empty-state. Fetches its own capper
 // records independently of the other team's section so one team's picks
 // rendering isn't blocked on the other team's record fetch.
-function TeamPickSection({ teamLabel, teamColor, picks }: GridLiveTeamSideData) {
+function TeamPickSection({
+  teamLabel,
+  teamColor,
+  picks,
+  headerRef,
+}: GridLiveTeamSideData & { headerRef?: Ref<HTMLDivElement> }) {
   const [loading, setLoading] = useState(false);
   const [records, setRecords] = useState<CapperLeagueRecords | null>(null);
 
@@ -58,7 +63,17 @@ function TeamPickSection({ teamLabel, teamColor, picks }: GridLiveTeamSideData) 
   return (
     <div>
       <div
-        className="mb-2 flex items-center gap-1.5 rounded-md px-2 py-1"
+        ref={headerRef}
+        // -1 so this is never in the tab sequence itself but IS a valid
+        // target for the .focus() call GridLiveBoard's desktop auto-scroll
+        // makes after scrolling the leading section's header into view
+        // (only the leading section is ever passed a headerRef - see
+        // GameDetailPanel below). outline-none + focus-visible: rather than
+        // focus: means a mouse-click-triggered focus (the common case,
+        // since selecting a game is a click) shows no ring, while a
+        // keyboard-triggered selection still gets one.
+        tabIndex={-1}
+        className="mb-2 flex scroll-mt-4 items-center gap-1.5 rounded-md px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         style={{
           // Same wash formula as GamePicksExpander's team-group header
           // (hex color + a ~12% alpha suffix) - reused as-is so the two
@@ -97,7 +112,21 @@ function TeamPickSection({ teamLabel, teamColor, picks }: GridLiveTeamSideData) 
 // deliberately withholds it from the collapsed list rows below `lg:` (see
 // that file), so on mobile this panel (which only appears once a game is
 // tapped - the "clicked/expanded state") is where it has to live.
-export function GameDetailPanel({ data, progress }: { data: GridLiveGamePanelData; progress?: LiveGameProgress | null }) {
+export function GameDetailPanel({
+  data,
+  progress,
+  firstHeaderRef,
+}: {
+  data: GridLiveGamePanelData;
+  progress?: LiveGameProgress | null;
+  // Desktop's auto-scroll-to-picks target (see grid-live-board.tsx) - the
+  // leading team section's header, whichever team that is per
+  // orderTeamSections, since that's the first thing under the progress bar a
+  // clicked-in-from-far-down-the-list user should land on. Only wired up on
+  // desktop; mobile already has its own scroll-to-panel behavior and doesn't
+  // pass this.
+  firstHeaderRef?: Ref<HTMLDivElement>;
+}) {
   const [first, second] = orderTeamSections(data.away, data.home);
   return (
     <div className="rounded-card bg-card p-4 shadow-soft">
@@ -106,7 +135,7 @@ export function GameDetailPanel({ data, progress }: { data: GridLiveGamePanelDat
           <LiveProgressBar pct={progress.pct} label={progress.label} />
         </div>
       )}
-      <TeamPickSection {...first} />
+      <TeamPickSection {...first} headerRef={firstHeaderRef} />
       <div className="my-4 border-t border-border-subtle" />
       <TeamPickSection {...second} />
       <div className="my-4 border-t border-border-subtle" />
