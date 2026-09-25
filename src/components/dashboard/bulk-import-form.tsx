@@ -242,6 +242,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         totalSide: e.p.totalSide,
         teamNicknames: e.p.teamNicknames,
         description: e.p.description,
+        gameNumber: e.p.gameNumber,
       }))
     )
       .then((odds) => {
@@ -278,6 +279,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         teamNicknames: e.p.teamNicknames,
         description: e.p.description,
         period: e.p.period,
+        gameNumber: e.p.gameNumber,
       }))
     ).then((flags) => {
       setDuplicateFlags((prev) => {
@@ -307,6 +309,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         totalSide: e.p.totalSide,
         teamNicknames: e.p.teamNicknames,
         description: e.p.description,
+        gameNumber: e.p.gameNumber,
       }))
     ).then((flags) => {
       setTotalLineFlags((prev) => {
@@ -439,6 +442,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         units: p.units,
         period: p.period,
         inferredLine: totalLineChoices[idx] === "confirm" ? totalLineFlags[idx]?.inferredLine : undefined,
+        gameNumber: p.gameNumber,
       }))
     );
     const parlayRes =
@@ -456,6 +460,12 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                 totalSide: leg.totalSide,
                 teamNicknames: leg.teamNicknames,
                 period: leg.period,
+                // Never parsed for parlay legs (see ParsedParlayLeg) - a leg
+                // whose game turns out to be a real MLB doubleheader is
+                // flagged (unresolved) rather than guessed at, the same
+                // "no gameNumber signal -> refuse to guess" rule a bare
+                // single pick gets. See pickBestScheduleCandidate.
+                gameNumber: null,
               })) as [BulkImportParlayLegItem, BulkImportParlayLegItem], // ParsedParlay.legs is already a 2-tuple
             }))
           )

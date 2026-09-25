@@ -248,6 +248,10 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
           scoringPlaysJson,
           homeTurnovers,
           awayTurnovers,
+          // MLB only (see ScoreGame's own comment) - captured once at CREATE
+          // time, same "immutable, never backfilled onto an existing row"
+          // treatment as isPreseason below, not the update branch above.
+          gameNumber: g.gameNumber ?? null,
           gameDate: new Date(g.commenceTime),
           // Classified once, here, and never in the `update` branch above -
           // so flipping an already-counted game to preseason stays a
@@ -507,13 +511,26 @@ function withinDrift<T extends { gameDate: Date }>(candidates: T[], reference: D
 // either way, just filtered from a wider in-memory array instead of a per-pick
 // query, so a bulk grading run can't silently match differently than a single
 // page-load grade would have.
-export function matchGameResult<T extends { gameDate: Date; homeTeam: string; awayTeam: string }>(
+export function matchGameResult<
+  T extends { gameDate: Date; homeTeam: string; awayTeam: string; gameNumber?: number | null }
+>(
   candidates: T[],
   pick: {
     gameTime: Date;
     homeTeam: string;
     awayTeam: string;
     betDetail: string | null;
+    // Set only for a pick whose game was actually resolved as a leg of a real
+    // MLB doubleheader (see schema.prisma's Pick.gameNumber comment). When
+    // set, both the exact and fuzzy pools below are additionally filtered to
+    // GameResult rows sharing this same gameNumber, BEFORE the closest-date
+    // tiebreak runs - a traditional ("Y") doubleheader's two games can start
+    // minutes apart, well inside MAX_GAME_TIME_DRIFT_MS, so without this a
+    // pick could grade against its own doubleheader's OTHER leg. No match
+    // with the right gameNumber (a GameResult row predating this column, or
+    // genuinely the wrong pool) returns null - stays PENDING rather than
+    // falling back to the closest-time guess this field exists to prevent.
+    gameNumber?: number | null;
   }
 ): GameMatch<T> | null {
   const windowStart = pick.gameTime.getTime() - 2 * 86400000;
@@ -524,12 +541,15 @@ export function matchGameResult<T extends { gameDate: Date; homeTeam: string; aw
   });
   if (inWindow.length === 0) return null;
 
+  const byGameNumber = (pool: T[]) =>
+    pick.gameNumber != null ? pool.filter((c) => c.gameNumber === pick.gameNumber) : pool;
+
   // Picks resolved to a real game on import (see resolveGameForNickname) carry the
   // exact team names, so prefer an exact match over the fuzzy text search below.
   // Also requires the matched game to actually be THIS game, not just the same
   // two teams on some other day within the window - see MAX_GAME_TIME_DRIFT_MS.
   const exact = withinDrift(
-    inWindow.filter((c) => c.homeTeam === pick.homeTeam && c.awayTeam === pick.awayTeam),
+    byGameNumber(inWindow.filter((c) => c.homeTeam === pick.homeTeam && c.awayTeam === pick.awayTeam)),
     pick.gameTime
   );
   if (exact.length > 0) return { game: closestByDate(exact, pick.gameTime), matchType: "exact" };
@@ -544,8 +564,10 @@ export function matchGameResult<T extends { gameDate: Date; homeTeam: string; aw
   // scoped to "this exact matchup, just spelled differently" the way it was intended.
   const searchText = ((pick.betDetail ?? "") + " " + pick.homeTeam + " " + pick.awayTeam).toLowerCase();
   const fuzzy = withinDrift(
-    inWindow.filter(
-      (c) => searchText.includes(teamNickname(c.homeTeam)) && searchText.includes(teamNickname(c.awayTeam))
+    byGameNumber(
+      inWindow.filter(
+        (c) => searchText.includes(teamNickname(c.homeTeam)) && searchText.includes(teamNickname(c.awayTeam))
+      )
     ),
     pick.gameTime
   );
@@ -560,6 +582,7 @@ export async function findMatchingGameResult(
     homeTeam: string;
     awayTeam: string;
     betDetail: string | null;
+    gameNumber?: number | null;
   }
 ): Promise<GameMatch<GameResult> | null> {
   const windowStart = new Date(pick.gameTime.getTime() - 2 * 86400000);
@@ -1051,6 +1074,7 @@ const CANDIDATE_GAME_RESULT_SELECT = {
   firstInningHomeScore: true,
   firstInningAwayScore: true,
   linescoreJson: true,
+  gameNumber: true,
 } satisfies Prisma.GameResultSelect;
 
 type CandidateGameResult = Prisma.GameResultGetPayload<{ select: typeof CANDIDATE_GAME_RESULT_SELECT }>;

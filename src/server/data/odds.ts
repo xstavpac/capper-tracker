@@ -94,6 +94,17 @@ export type ScoreGame = {
   // "no live-progress data" to every reader.
   period?: number | null;
   clock?: string | null;
+  // MLB only - the MLB Stats API schedule's own doubleheader metadata
+  // (already present in the `hydrate=linescore` response getMlbLiveScores
+  // fetches, previously read but not captured here). gameNumber is 1 or 2
+  // for a leg of a doubleheader, null for a single game. doubleHeaderStatus
+  // is the raw API flag: "Y" (traditional doubleheader, two full 9-inning
+  // games), "S" (split doubleheader, separate admissions/times), or "N" (not
+  // a doubleheader). Both null/undefined for every non-MLB sport. This is
+  // the authoritative signal pickBestScheduleCandidate trusts over its own
+  // start-time-order fallback - see that function's own comment.
+  gameNumber?: number | null;
+  doubleHeaderStatus?: "Y" | "S" | "N" | null;
 };
 
 export const LIVE_SPORTS = [
@@ -659,6 +670,12 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
       commenceTime: g.gameDate,
       inningHalf: status === "live" ? (g.linescore?.inningState ?? null) : null,
       inningOrdinal: status === "live" ? (g.linescore?.currentInningOrdinal ?? null) : null,
+      // Already present on every game in this same response (confirmed live,
+      // 2026-09-25) - was simply never read before. gameNumber is 1 for a
+      // single game (not just for game 1 of a doubleheader), so it's only
+      // meaningful together with doubleHeaderStatus.
+      gameNumber: typeof g.gameNumber === "number" ? g.gameNumber : null,
+      doubleHeaderStatus: g.doubleHeader ?? null,
       innings:
         status === "live" || status === "final"
           ? (g.linescore?.innings ?? []).map((i: any) => ({
@@ -1442,26 +1459,84 @@ function oddsGameToScheduleGame(g: OddsGame): ScoreGame {
 // closest to `referenceTime`.
 //
 // Doubleheader guard: when the same-slate-day pool has 2+ candidates for this
-// one matchup with a mix of finished/not-finished, a bare pick can't say
-// which game it means, and a late import is routinely about the game that
-// already finished (game 1), not "whichever one is still upcoming" - so
-// this refuses to guess (returns null) instead of applying the not-final-
-// over-final tiebreak, and the caller treats it as unresolved (surfaced on
-// the import review screen) rather than silently attaching to the wrong leg.
-// Only fires on a genuine same-day final/non-final split - a doubleheader
-// imported before either game starts (both preview) or after both are final
-// still falls through to the ordinary closest-by-time tiebreak below.
+// one matchup, a bare pick can't say which game it means - so this refuses to
+// guess (returns null) instead of applying a tiebreak, and the caller treats
+// it as unresolved (surfaced on the import review screen) rather than
+// silently attaching to the wrong leg. `gameNumber` (from the pick's own
+// "Game 2"/"G2"/... text, or a user's choice on a previously-flagged pick)
+// resolves this without guessing:
+//   - MLB's own gameNumber metadata (see ScoreGame's doubleHeaderStatus/
+//     gameNumber comment) is trusted outright when present, even when it
+//     disagrees with start-time order - expected and correct for a "Y"
+//     (traditional) doubleheader, where the second game's listed start time
+//     is often just a placeholder a few minutes after the first.
+//   - Only when that metadata is absent (a non-MLB sport, or a row from
+//     before this shipped) does this fall back to start-time order: sort the
+//     pool ascending, take index gameNumber-1. Missing (gameNumber=2 but only
+//     one game in the pool) returns null - never falls back to game 1.
+// With no gameNumber at all: a pool MLB's own feed marks as a doubleheader
+// (any candidate's doubleHeaderStatus is "Y" or "S") is always flagged,
+// whether every leg is preview, finished, or a mix - a same-day repeat
+// fixture that ISN'T flagged as a doubleheader (doubleHeaderStatus "N", or no
+// metadata for a non-MLB sport) keeps the original narrower behavior: flagged
+// only on a genuine finished/not-finished split, since a same-day pool that's
+// entirely preview or entirely final for those sports is ambiguous same-team-
+// rematch scheduling, not a doubleheader, and still needs a tiebreak.
+// A lone candidate (no second leg to compare against) is confirmed missing
+// its doubleheader partner - by MLB's own metadata - only when it's itself
+// tagged as one leg of a real doubleheader and that leg isn't the one asked
+// for. A candidate with no doubleheader metadata at all (non-MLB sport, or
+// truly just one game on the slate) can't be told apart from "this matchup
+// only has one game today" - that residual ambiguity is inherent without an
+// authoritative signal, and falls through to "ignore gameNumber, resolve
+// normally" as Step 2's spec calls for.
+function isConfirmedMissingPartnerLeg(only: ScoreGame, gameNumber: 1 | 2 | null): boolean {
+  return (
+    gameNumber !== null &&
+    (only.doubleHeaderStatus === "Y" || only.doubleHeaderStatus === "S") &&
+    only.gameNumber != null &&
+    only.gameNumber !== gameNumber
+  );
+}
+
 export function pickBestScheduleCandidate(
   candidates: ScoreGame[],
-  referenceTime: Date
+  referenceTime: Date,
+  gameNumber: 1 | 2 | null = null
 ): ScoreGame | null {
   if (candidates.length === 0) return null;
-  if (candidates.length === 1) return candidates[0];
+  if (candidates.length === 1) {
+    return isConfirmedMissingPartnerLeg(candidates[0], gameNumber) ? null : candidates[0];
+  }
 
   const sameDay = candidates.filter((g) => sameSlateDay(new Date(g.commenceTime), referenceTime));
   const pool = sameDay.length > 0 ? sameDay : candidates;
 
+  if (pool.length === 1) {
+    // The wider `candidates` array had 2+ entries, but only one survived the
+    // same-slate-day filter - same "confirmed missing partner leg" check as
+    // the single-candidate case above, since gameNumber/doubleheader status
+    // are never otherwise consulted for a pool this small.
+    return isConfirmedMissingPartnerLeg(pool[0], gameNumber) ? null : pool[0];
+  }
+
   if (pool.length > 1) {
+    if (gameNumber !== null) {
+      const byMlbGameNumber = pool.find((g) => g.gameNumber === gameNumber);
+      if (byMlbGameNumber) return byMlbGameNumber;
+
+      // No authoritative MLB gameNumber on any candidate - fall back to
+      // start-time order. A missing index (Game 2 asked for but not present
+      // in the pool - postponed, not yet loaded) is null, never game 1.
+      const sorted = [...pool].sort(
+        (a, b) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime()
+      );
+      return sorted[gameNumber - 1] ?? null;
+    }
+
+    const doubleheaderFlagged = pool.some((g) => g.doubleHeaderStatus === "Y" || g.doubleHeaderStatus === "S");
+    if (doubleheaderFlagged) return null;
+
     const hasFinal = pool.some((g) => g.status === "final");
     const hasNonFinal = pool.some((g) => g.status !== "final");
     if (hasFinal && hasNonFinal) return null;
@@ -1498,22 +1573,23 @@ export function resolveScheduleGameFromFeeds(
   scoreGames: ScoreGame[],
   oddsGames: OddsGame[],
   teamMatches: (g: { homeTeam: string; awayTeam: string }) => boolean,
-  referenceTime: Date
+  referenceTime: Date,
+  gameNumber: 1 | 2 | null = null
 ): ScoreGame | null {
   const inWindow = (g: { commenceTime: string }) => withinResolveWindow(g.commenceTime, referenceTime);
 
   const fromScores = scoreGames.filter((g) => teamMatches(g) && inWindow(g));
 
   const sameDayScores = fromScores.filter((g) => sameSlateDay(new Date(g.commenceTime), referenceTime));
-  if (sameDayScores.length > 0) return pickBestScheduleCandidate(sameDayScores, referenceTime);
+  if (sameDayScores.length > 0) return pickBestScheduleCandidate(sameDayScores, referenceTime, gameNumber);
 
   const scoresUpcoming = fromScores.filter((g) => g.status !== "final");
-  if (scoresUpcoming.length > 0) return pickBestScheduleCandidate(scoresUpcoming, referenceTime);
+  if (scoresUpcoming.length > 0) return pickBestScheduleCandidate(scoresUpcoming, referenceTime, gameNumber);
 
   const fromOdds = oddsGames.filter((g) => teamMatches(g) && inWindow(g)).map(oddsGameToScheduleGame);
-  if (fromOdds.length > 0) return pickBestScheduleCandidate(fromOdds, referenceTime);
+  if (fromOdds.length > 0) return pickBestScheduleCandidate(fromOdds, referenceTime, gameNumber);
 
-  return pickBestScheduleCandidate(fromScores, referenceTime);
+  return pickBestScheduleCandidate(fromScores, referenceTime, gameNumber);
 }
 
 // `nearTermOnly` skips the odds-feed fallback: it answers "does this team have
@@ -1523,7 +1599,14 @@ export function resolveScheduleGameFromFeeds(
 // with a game 5 days out is not "playing now" and must not out-vote a weekly
 // team by default. Import game-MATCHING wants the wide question and leaves
 // this off.
-export type ResolveGameOpts = { referenceTime?: Date; nearTermOnly?: boolean };
+export type ResolveGameOpts = {
+  referenceTime?: Date;
+  nearTermOnly?: boolean;
+  // From the pick's own "Game 2"/"G2"/... text, or a user's choice on a
+  // previously-flagged doubleheader pick - see pickBestScheduleCandidate's
+  // own comment for how this is used (and when it's ignored).
+  gameNumber?: 1 | 2 | null;
+};
 
 // Async wrapper around resolveScheduleGameFromFeeds. The score feed is fetched
 // first; the odds feed (a memoized OddsSnapshot read - already warm for most
@@ -1535,11 +1618,11 @@ export type ResolveGameOpts = { referenceTime?: Date; nearTermOnly?: boolean };
 async function resolveScheduleGame(
   sportKey: string,
   teamMatches: (g: { homeTeam: string; awayTeam: string }) => boolean,
-  { referenceTime = new Date(), nearTermOnly = false }: ResolveGameOpts
+  { referenceTime = new Date(), nearTermOnly = false, gameNumber = null }: ResolveGameOpts
 ): Promise<ScoreGame | null> {
   const scoreGames = await getLiveScoresForSport(sportKey).catch(() => [] as ScoreGame[]);
 
-  if (nearTermOnly) return resolveScheduleGameFromFeeds(scoreGames, [], teamMatches, referenceTime);
+  if (nearTermOnly) return resolveScheduleGameFromFeeds(scoreGames, [], teamMatches, referenceTime, gameNumber);
 
   const scoreHasUpcoming = scoreGames.some(
     (g) => teamMatches(g) && g.status !== "final" && withinResolveWindow(g.commenceTime, referenceTime)
@@ -1547,7 +1630,7 @@ async function resolveScheduleGame(
   const oddsGames = scoreHasUpcoming
     ? []
     : await getOddsForSport(sportKey).catch(() => [] as OddsGame[]);
-  return resolveScheduleGameFromFeeds(scoreGames, oddsGames, teamMatches, referenceTime);
+  return resolveScheduleGameFromFeeds(scoreGames, oddsGames, teamMatches, referenceTime, gameNumber);
 }
 
 // Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw

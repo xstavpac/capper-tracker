@@ -20,7 +20,7 @@ function expect(label: string, actual: unknown, expected: unknown) {
 }
 
 const DAY = 86400000;
-const g = (id: string, iso: string, home: string, away: string): GameResult =>
+const g = (id: string, iso: string, home: string, away: string, gameNumber: number | null = null): GameResult =>
   ({
     id,
     sportKey: "baseball_mlb",
@@ -30,13 +30,15 @@ const g = (id: string, iso: string, home: string, away: string): GameResult =>
     homeScore: 0,
     awayScore: 0,
     gameDate: new Date(iso),
+    gameNumber,
   }) as unknown as GameResult;
 
-const pick = (iso: string, home: string, away: string) => ({
+const pick = (iso: string, home: string, away: string, gameNumber: number | null = null) => ({
   gameTime: new Date(iso),
   homeTeam: home,
   awayTeam: away,
   betDetail: null as string | null,
+  gameNumber,
 });
 
 // One shared pool covering a whole week of the same matchup on different days
@@ -79,6 +81,61 @@ expect(
   matchGameResult(pool, pick("2026-06-04T23:00:00Z", "Yankees", "Red Sox"))?.game.id,
   "thu"
 );
+
+// ---------------------------------------------------------------------------
+console.log("\n########## doubleheader: pick.gameNumber requires a GameResult gameNumber match ##########");
+{
+  // A type-Y (traditional) doubleheader: two real games 5 minutes apart -
+  // well inside MAX_GAME_TIME_DRIFT_MS (6h), so without the gameNumber guard
+  // the plain exact-match/closest-date tiebreak below would grade a Game 2
+  // pick against Game 1's result (or vice versa) whenever they're closer to
+  // each other than either is to the pick's own stamped gameTime.
+  const dh = [
+    g("g1", "2026-09-25T20:05:00Z", "New York Yankees", "Baltimore Orioles", 1),
+    g("g2", "2026-09-25T20:10:00Z", "New York Yankees", "Baltimore Orioles", 2),
+  ];
+
+  expect(
+    "Game 1 pick (gameTime stamped from g1) -> grades against g1, not the 5-min-closer g2",
+    matchGameResult(dh, pick("2026-09-25T20:05:00Z", "New York Yankees", "Baltimore Orioles", 1))?.game.id,
+    "g1"
+  );
+  expect(
+    "Game 2 pick (gameTime stamped from g2) -> grades against g2, not g1",
+    matchGameResult(dh, pick("2026-09-25T20:10:00Z", "New York Yankees", "Baltimore Orioles", 2))?.game.id,
+    "g2"
+  );
+  // A pick's gameTime can drift slightly from its own game's real start (odds
+  // snapshot timing, etc) - proves the gameNumber filter, not just gameTime
+  // proximity, is what picks the right leg: this pick's OWN gameTime is
+  // actually closer to g1, but gameNumber=2 must still win g2.
+  expect(
+    "gameNumber wins over closest-gameTime tiebreak",
+    matchGameResult(dh, pick("2026-09-25T20:06:00Z", "New York Yankees", "Baltimore Orioles", 2))?.game.id,
+    "g2"
+  );
+
+  // gameNumber set but no GameResult row carries a matching gameNumber (a row
+  // from before this column existed) - never falls back to a closest-time
+  // guess among the doubleheader legs; stays unmatched (PENDING).
+  const dhNoMetadata = [
+    g("g1", "2026-09-25T20:05:00Z", "New York Yankees", "Baltimore Orioles", null),
+    g("g2", "2026-09-25T20:10:00Z", "New York Yankees", "Baltimore Orioles", null),
+  ];
+  expect(
+    "gameNumber set, no GameResult carries it -> unmatched, not a time guess",
+    matchGameResult(dhNoMetadata, pick("2026-09-25T20:10:00Z", "New York Yankees", "Baltimore Orioles", 2)),
+    null
+  );
+
+  // A normal (non-doubleheader) pick with gameNumber null is completely
+  // unaffected by GameResult rows that happen to carry a gameNumber.
+  expect(
+    "gameNumber null on the pick -> unaffected by GameResult.gameNumber, matches normally",
+    matchGameResult(dh, pick("2026-09-25T20:05:00Z", "New York Yankees", "Baltimore Orioles", null))?.game.id,
+    "g1"
+  );
+}
 
 console.log(`\n${failures === 0 ? "ALL PASS" : failures + " FAILURE(S)"}`);
 if (failures > 0) process.exit(1);

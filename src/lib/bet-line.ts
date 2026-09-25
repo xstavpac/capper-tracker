@@ -35,10 +35,20 @@ function extractSpelledOutNumber(text: string): number | null {
   return match ? NUMBER_WORDS[match[1].toLowerCase()] : null;
 }
 
+// Strips a trailing "(G1)"/"(G2)" doubleheader marker (see parse-catalog.ts's
+// withGameNumberSuffix) before any number extraction runs below - otherwise
+// TOTAL's bare-number fallback would misread the "2" in "Cubs Total (G2)" as
+// the total line itself. Every other extractLine caller passes text with no
+// such suffix, so this is a no-op for them.
+function stripGameNumberSuffix(text: string): string {
+  return text.replace(/\s*\(G[12]\)\s*$/i, "");
+}
+
 // Pulls the spread/total number out of free text, e.g. "Diamondbacks -1.5" -> -1.5,
 // "Over 8.5" -> 8.5. Shared by the catalog parser (to store a real `line` at import
 // time) and grading (as a fallback for older picks that predate the `line` column).
-export function extractLine(betType: BetTypeLike, text: string): number | null {
+export function extractLine(betType: BetTypeLike, rawText: string): number | null {
+  const text = stripGameNumberSuffix(rawText);
   if (betType === "SPREAD") {
     const match = text.match(/([+-]\d+(\.\d+)?)/);
     return match ? parseFloat(match[1]) : null;

@@ -44,6 +44,11 @@ export type BulkImportItem = {
   // never trusted server-side unless the pick's own text genuinely has no
   // parseable number (see bulkImportPicksAction).
   inferredLine?: number;
+  // 1 or 2, from the pick's own "Game 2"/"G2"/... text (see parse-catalog.ts's
+  // gameNumber extraction), or a user's choice on a previously-flagged
+  // doubleheader pick. Null for every pick with no such signal - resolution
+  // then falls back to PR #105's existing doubleheader flag (never guesses).
+  gameNumber: 1 | 2 | null;
 };
 
 export type BulkImportResult =
@@ -69,11 +74,12 @@ type ResolvableItem = {
   totalSide?: "over" | "under";
   teamNicknames: string[];
   description: string;
+  gameNumber: 1 | 2 | null;
 };
 
-function lookupGame(liveSportKey: string, nicknames: string[]) {
-  if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1]);
-  if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0]);
+function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2 | null) {
+  if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1], { gameNumber });
+  if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0], { gameNumber });
   return Promise.resolve(null);
 }
 
@@ -115,6 +121,13 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
   // null for every non-MONEYLINE pick and whenever the game couldn't be matched
   // to a live odds row with a usable h2h market.
   mlFavoredSide: "HOME" | "AWAY" | null;
+  // item.gameNumber, but only when resolution actually needed it to pick
+  // between two real MLB doubleheader legs (game.doubleHeaderStatus is "Y"
+  // or "S") - null whenever item.gameNumber was unset, or was set but the
+  // resolved game turned out not to be part of a doubleheader at all (a
+  // single game on the slate; see the ignored-gameNumber review-note log
+  // below). Written to Pick.gameNumber as-is by the caller.
+  resolvedGameNumber: 1 | 2 | null;
 }> {
   let homeTeam = item.description;
   let awayTeam = "-";
@@ -123,6 +136,7 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
   let matched = false;
   let pickedSide: "HOME" | "AWAY" | null = null;
   let mlFavoredSide: "HOME" | "AWAY" | null = null;
+  let resolvedGameNumber: 1 | 2 | null = null;
 
   const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
   const resolvable = Boolean(liveSportKey && RESOLVABLE_SPORT_KEYS.includes(liveSportKey));
@@ -141,18 +155,34 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
     // otherwise hand lookupGame two nicknames that both resolve to the same
     // team, which it reads as a two-team matchup and fails.
     const nicknames = [...new Set(item.teamNicknames.map((n) => TEAM_NICKNAME_CANONICAL[n] ?? n))];
-    let game = await lookupGame(liveSportKey, nicknames);
+    let game = await lookupGame(liveSportKey, nicknames, item.gameNumber);
     // One retry before giving up - covers a transient miss/blip against the
     // live schedule source rather than treating it as a genuine non-match.
     if (!game) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      game = await lookupGame(liveSportKey, nicknames);
+      game = await lookupGame(liveSportKey, nicknames, item.gameNumber);
     }
     if (game) {
       matched = true;
       homeTeam = game.homeTeam;
       awayTeam = game.awayTeam;
       gameTime = new Date(game.commenceTime);
+
+      if (item.gameNumber !== null) {
+        if (game.doubleHeaderStatus === "Y" || game.doubleHeaderStatus === "S") {
+          resolvedGameNumber = item.gameNumber;
+        } else {
+          // The pick's text specified a game number, but the resolved game
+          // isn't actually part of a doubleheader (single game on the slate -
+          // see pickBestScheduleCandidate's early "one candidate" return,
+          // which never even looks at gameNumber). Non-blocking: resolved
+          // normally, gameNumber just isn't stamped on the row.
+          console.log(
+            "[resolveGameAndOdds] pick specified a game number but only one game was found for this matchup on the slate - resolved normally, gameNumber not stamped",
+            JSON.stringify({ description: item.description, gameNumber: item.gameNumber, homeTeam, awayTeam, gameTime })
+          );
+        }
+      }
 
       if (
         (item.betType === "MONEYLINE" || item.betType === "SPREAD" || item.betType === "TEAM_TOTAL") &&
@@ -235,7 +265,7 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
     }
   }
 
-  return { homeTeam, awayTeam, gameTime, odds, resolvable, matched, pickedSide, mlFavoredSide };
+  return { homeTeam, awayTeam, gameTime, odds, resolvable, matched, pickedSide, mlFavoredSide, resolvedGameNumber };
 }
 
 // Read-only preview enrichment: the client-side catalog parser has no access
@@ -535,7 +565,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
       const capperId = await resolveOrCreateCapperId(user.id, item.capperName, existingCappers, capperCache);
       const sportId = await resolveOrCreateSportId(item.sportName, sportCache);
 
-      const { homeTeam, awayTeam, gameTime, odds, resolvable, matched, pickedSide, mlFavoredSide } =
+      const { homeTeam, awayTeam, gameTime, odds, resolvable, matched, pickedSide, mlFavoredSide, resolvedGameNumber } =
         await resolveGameAndOdds(item);
       if (resolvable && !matched) {
         // Don't persist this item at all - homeTeam/awayTeam/gameTime from
@@ -594,6 +624,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         mlFavoredSide,
         playerName: playerProp?.playerName,
         propMarket: playerProp?.propMarket,
+        gameNumber: resolvedGameNumber,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "failed";
