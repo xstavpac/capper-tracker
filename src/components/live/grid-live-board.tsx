@@ -80,6 +80,45 @@ export function GridLiveBoard({
     panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [scrollTrigger]);
 
+  // Desktop's scroll targets: the leading team section's header inside
+  // GameDetailPanel (the common case), or this empty-state div when no game
+  // is resolved at all (selection.gameId doesn't match any game - see
+  // panelData below). No sticky/fixed nav exists anywhere in this app (this
+  // was checked, not assumed), so there's no covering header to clear -
+  // scroll-mt-4 on the header (team-picks-panel.tsx) is just breathing room,
+  // not a clearance offset.
+  const firstHeaderRef = useRef<HTMLDivElement>(null);
+  const emptyStateRef = useRef<HTMLDivElement>(null);
+
+  // Desktop's side-by-side layout (see the grid-cols-1/lg:grid-cols-[...]
+  // below) never needed the mobile effect above - both columns are already
+  // on screen together - EXCEPT that the page itself scrolls independently
+  // of either column, so on a long slate (the game list is taller than the
+  // panel) a click on a game near the bottom of the list leaves the panel's
+  // content changed but still scrolled out of view above the fold. This
+  // scrolls the PAGE, not either column, to bring the newly-selected game's
+  // first team header into view - not the panel's top edge, since that would
+  // also drag the score/progress-bar area into view for no reason when the
+  // header itself is the useful landing spot. Same scrollTrigger counter as
+  // the mobile effect (deliberate click only, never the poll-tick
+  // auto-fallback effect below - see this file's header comment). Skips the
+  // scroll entirely when the target is already fully on screen, so clicking
+  // a game near the top of the list never causes a pointless jump.
+  useEffect(() => {
+    if (scrollTrigger === 0) return;
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
+    const target = firstHeaderRef.current ?? emptyStateRef.current;
+    if (!target) return;
+
+    const rect = target.getBoundingClientRect();
+    const alreadyVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+    if (alreadyVisible) return;
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    target.focus({ preventScroll: true });
+  }, [scrollTrigger]);
+
   // Mirrors LiveScoreboard's own `initialScores` resync: a sport switch
   // remounts this component (see live/page.tsx's key={activeSport}), but the
   // effect also covers a same-mount prop change (e.g. a fresh server
@@ -173,9 +212,13 @@ export function GridLiveBoard({
       />
       <div ref={panelRef}>
         {panelData ? (
-          <GameDetailPanel data={panelData} progress={selectedProgress} />
+          <GameDetailPanel data={panelData} progress={selectedProgress} firstHeaderRef={firstHeaderRef} />
         ) : (
-          <div className="rounded-card bg-card p-10 text-center shadow-soft">
+          <div
+            ref={emptyStateRef}
+            tabIndex={-1}
+            className="scroll-mt-4 rounded-card bg-card p-10 text-center shadow-soft outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          >
             <p className="text-sm text-muted-foreground">No games found for this sport right now.</p>
           </div>
         )}
