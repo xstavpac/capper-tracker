@@ -40,6 +40,15 @@ export type ParsedPick = {
   // `description`, so game resolution still has both teams even for bets (like
   // Totals) whose team info lives only inside that annotation.
   teamNicknames: string[];
+  // 1 or 2, extracted from an explicit doubleheader marker in the pick's own
+  // text ("Game Two", "G2", "nightcap", ...- see extractGameNumber) and
+  // stripped out of `description` before any other parsing runs, so it can
+  // never be misread as a spread/total/prop number. Null for every pick with
+  // no such marker - resolution then falls back to PR #105's existing
+  // doubleheader flag (refuses to guess) rather than trusting a start-time
+  // guess. See resolveGameAndOdds (bulk-picks.ts) and pickBestScheduleCandidate
+  // (server/data/odds.ts) for how this is actually used to resolve a game.
+  gameNumber: 1 | 2 | null;
 };
 
 // One leg of a parsed MLP (moneyline-parlay) line - same shape as the
@@ -1578,6 +1587,73 @@ function isTeamTotalText(text: string): boolean {
   return /\bteam\s*total\b/i.test(text) || /\bTT\b/i.test(text);
 }
 
+// Doubleheader game-number markers a capper writes inline with the pick
+// itself ("Cubs Game Two Moneyline", "Yankees G2 ML", "Red Sox nightcap ML",
+// "Cubs 2nd game -1.5"). Every pattern is anchored to an explicit
+// game-number keyword ("game"/"g"/"gm"/"nightcap") - never a bare/generic
+// number - so this can never collide with a spread/total/player-prop line,
+// or with the period-scope tokens bet-line.ts's BET_SCOPE_RULES matches
+// ("1st 5"/"F5"/"first five"/"1H"/"1st half"/"2H"/"2nd half"/quarters/
+// periods/a bare inning ordinal): every one of those is keyed on
+// half/quarter/period/inning/q/p, never on "game", so the two pattern sets
+// share no text shape. First match wins; order doesn't affect correctness
+// here since the patterns are mutually exclusive by construction (see the
+// comment on each), but longer/more specific phrasings are listed first for
+// clarity.
+const GAME_NUMBER_RULES: [RegExp, 1 | 2][] = [
+  [/\bgame\s*#?\s*(?:one|1)\b/i, 1],
+  [/\bgame\s*#?\s*(?:two|2)\b/i, 2],
+  [/\b(?:1st|first)\s+game\b/i, 1],
+  [/\b(?:2nd|second)\s+game\b/i, 2],
+  // Bare "g1"/"g2" and "gm1"/"gm2"/"gm 1"/"gm 2" - "g\s*1" can't accidentally
+  // match inside "gm1"/"game 1" (both have a non-whitespace character
+  // between "g" and the digit), so these never double-count a game/gm match.
+  [/\bgm\s*1\b/i, 1],
+  [/\bgm\s*2\b/i, 2],
+  [/\bg\s*1\b/i, 1],
+  [/\bg\s*2\b/i, 2],
+  [/\bnightcap\b/i, 2],
+];
+
+// Extracts the doubleheader game number from free pick text and returns the
+// text with that token removed, so every downstream parser (parsePickText,
+// findTeamNicknames, extractLine via bet-line.ts) never sees it - critical
+// for TOTAL bets, whose extractLine falls back to "first bare number
+// anywhere in the text" when no over/under keyword is present: "Cubs 2nd
+// game total 9" must extract line 9, not the 2 from "2nd game".
+export function extractGameNumber(text: string): { gameNumber: 1 | 2 | null; rest: string } {
+  for (const [pattern, gameNumber] of GAME_NUMBER_RULES) {
+    const match = text.match(pattern);
+    if (match && match.index !== undefined) {
+      const rest = (text.slice(0, match.index) + text.slice(match.index + match[0].length))
+        .replace(/\s{2,}/g, " ")
+        .trim()
+        // A colon/comma cappers used to separate the token from the rest
+        // ("Game 2: Cubs ML") is orphaned once the token itself is gone -
+        // strip it from whichever end it ended up on, or it survives into
+        // the stored description as a stray leading/trailing separator.
+        // Deliberately NOT a dash: a leading "-" is very likely a real
+        // negative spread/total value ("Cubs G2 -1.5" must stay "-1.5", not
+        // become "1.5").
+        .replace(/^[:,]\s*/, "")
+        .replace(/\s*[:,]$/, "");
+      return { gameNumber, rest };
+    }
+  }
+  return { gameNumber: null, rest: text };
+}
+
+// Appends the "(G1)"/"(G2)" display marker a doubleheader pick's stored
+// description carries from import onward (see the "bake the label into
+// betDetail" decision - formatPickLabel has no separate gameNumber param,
+// and there's no existing suffix convention to hook into instead). Safe by
+// construction against being misread as a line/total/spread number later:
+// extractLine (bet-line.ts) strips this exact trailing "(G1)"/"(G2)" token
+// before it does any number extraction - see that function's own comment.
+export function withGameNumberSuffix(description: string, gameNumber: 1 | 2 | null): string {
+  return gameNumber === null ? description : `${description} (G${gameNumber})`;
+}
+
 // Exported for player-roster-fallback.ts's recover-unresolved-picks
 // integration: a roster-resolved bare player-prop line ("Patrick Mahomes
 // Over 225 Passing Yards") needs the exact same betType/odds/units/period
@@ -1714,11 +1790,16 @@ function lineForPlausibility(text: string): { betType: ParsedPick["betType"]; li
 // rather than re-deriving it via regex, since the user just told us exactly
 // which team they meant.
 export function resolveAmbiguousPick(pick: ParsedPick, choice: AmbiguousOption): ParsedPick {
+  // pick.description may already carry a "(G1)"/"(G2)" suffix from the
+  // original ambiguous push (see withGameNumberSuffix) - parsePickText
+  // strips every parenthetical unconditionally, so it's removed here along
+  // with any other parens, then re-appended below from pick.gameNumber
+  // (untouched by the ...pick spread) rather than trusted to survive in text.
   const parsed = parsePickText(pick.description);
   return {
     ...pick,
     sportName: choice.sport,
-    description: parsed.cleanDescription,
+    description: withGameNumberSuffix(parsed.cleanDescription, pick.gameNumber),
     betType: parsed.betType,
     odds: parsed.odds ?? -110,
     hasExplicitOdds: parsed.odds !== null,
@@ -2512,7 +2593,8 @@ export function parseCatalog(
     });
 
     if (inlineMatch) {
-      const remainder = line.slice(inlineMatch.length).replace(/^[\s:.-]+/, "").trim();
+      const rawRemainder = line.slice(inlineMatch.length).replace(/^[\s:.-]+/, "").trim();
+      const { gameNumber: inlineGameNumber, rest: remainder } = extractGameNumber(rawRemainder);
       if (!remainder) {
         currentCapper = inlineMatch;
         continue;
@@ -2525,7 +2607,7 @@ export function parseCatalog(
           results.push({
             capperName: inlineMatch,
             sportName: pairResolved.sportName,
-            description: parsed.cleanDescription,
+            description: withGameNumberSuffix(parsed.cleanDescription, inlineGameNumber),
             betType: parsed.betType,
             odds: parsed.odds ?? -110,
             hasExplicitOdds: parsed.odds !== null,
@@ -2534,6 +2616,7 @@ export function parseCatalog(
             period: parsed.period,
             raw: line,
             teamNicknames: pairResolved.teamNicknames,
+            gameNumber: inlineGameNumber,
           });
           continue;
         }
@@ -2544,7 +2627,7 @@ export function parseCatalog(
           results.push({
             capperName: inlineMatch,
             sportName: "",
-            description: remainder,
+            description: withGameNumberSuffix(remainder, inlineGameNumber),
             betType: "SPREAD",
             odds: -110,
             hasExplicitOdds: false,
@@ -2556,6 +2639,7 @@ export function parseCatalog(
             ambiguousBetType: forPlausibility.betType,
             ambiguousLine: forPlausibility.line,
             teamNicknames: [],
+            gameNumber: inlineGameNumber,
           });
           continue;
         }
@@ -2566,7 +2650,7 @@ export function parseCatalog(
           results.push({
             capperName: inlineMatch,
             sportName: "MMA",
-            description: parsed.cleanDescription,
+            description: withGameNumberSuffix(parsed.cleanDescription, inlineGameNumber),
             betType: parsed.betType,
             odds: parsed.odds ?? -110,
             hasExplicitOdds: parsed.odds !== null,
@@ -2575,6 +2659,7 @@ export function parseCatalog(
             period: parsed.period,
             raw: line,
             teamNicknames: matchupPick.playerKeys,
+            gameNumber: inlineGameNumber,
           });
           continue;
         }
@@ -2585,7 +2670,7 @@ export function parseCatalog(
           results.push({
             capperName: inlineMatch,
             sportName: "ATP",
-            description: parsed.cleanDescription,
+            description: withGameNumberSuffix(parsed.cleanDescription, inlineGameNumber),
             betType: parsed.betType,
             odds: parsed.odds ?? -110,
             hasExplicitOdds: parsed.odds !== null,
@@ -2594,6 +2679,7 @@ export function parseCatalog(
             period: parsed.period,
             raw: line,
             teamNicknames: [playerPick.playerKey],
+            gameNumber: inlineGameNumber,
           });
         }
         continue;
@@ -2617,7 +2703,7 @@ export function parseCatalog(
       results.push({
         capperName: inlineMatch,
         sportName: detected.sportName,
-        description: parsed.cleanDescription,
+        description: withGameNumberSuffix(parsed.cleanDescription, inlineGameNumber),
         betType: parsed.betType,
         odds: parsed.odds ?? -110,
         hasExplicitOdds: parsed.odds !== null,
@@ -2626,6 +2712,7 @@ export function parseCatalog(
         period: parsed.period,
         raw: line,
         teamNicknames: findTeamNicknames(detected.rest, detected.sportName),
+        gameNumber: inlineGameNumber,
       });
       continue;
     }
@@ -2638,7 +2725,12 @@ export function parseCatalog(
       continue;
     }
 
-    const detected = detectSport(strippedText, !afterBlank || looksLikePick(strippedText));
+    // Extracted from strippedText (before sport detection), so `raw` below
+    // keeps the pick's full original text while every parsing call
+    // (detectSport, parsePickText, findTeamNicknames, ...) only ever sees
+    // pickText - the game-number token removed.
+    const { gameNumber: headerGameNumber, rest: pickText } = extractGameNumber(strippedText);
+    const detected = detectSport(pickText, !afterBlank || looksLikePick(pickText));
 
     // A bare sport/league code with nothing else on the line ("KBO" as its
     // own sub-header under a capper's name) - detectSport found a code but
@@ -2673,7 +2765,7 @@ export function parseCatalog(
       results.push({
         capperName: currentCapper || "Unknown",
         sportName: detected.sportName,
-        description: parsed.cleanDescription,
+        description: withGameNumberSuffix(parsed.cleanDescription, headerGameNumber),
         betType: parsed.betType,
         odds: parsed.odds ?? -110,
         hasExplicitOdds: parsed.odds !== null,
@@ -2682,6 +2774,7 @@ export function parseCatalog(
         period: parsed.period,
         raw: strippedText,
         teamNicknames: findTeamNicknames(detected.rest, detected.sportName),
+        gameNumber: headerGameNumber,
       });
       continue;
     }
@@ -2690,14 +2783,14 @@ export function parseCatalog(
     // nickname-driven too, so a header right after a blank line skips them
     // entirely rather than risk misreading it as a pick, unless the line
     // unmistakably looks like a pick anyway (looksLikePick).
-    if (!afterBlank || looksLikePick(strippedText)) {
-      const pairResolved = resolveAmbiguousPair(strippedText);
+    if (!afterBlank || looksLikePick(pickText)) {
+      const pairResolved = resolveAmbiguousPair(pickText);
       if (pairResolved) {
-        const parsed = parsePickText(strippedText);
+        const parsed = parsePickText(pickText);
         results.push({
           capperName: currentCapper || "Unknown",
           sportName: pairResolved.sportName,
-          description: parsed.cleanDescription,
+          description: withGameNumberSuffix(parsed.cleanDescription, headerGameNumber),
           betType: parsed.betType,
           odds: parsed.odds ?? -110,
           hasExplicitOdds: parsed.odds !== null,
@@ -2706,17 +2799,18 @@ export function parseCatalog(
           period: parsed.period,
           raw: strippedText,
           teamNicknames: pairResolved.teamNicknames,
+          gameNumber: headerGameNumber,
         });
         continue;
       }
 
-      const found = findAmbiguousNickname(strippedText, rosterFullNames);
+      const found = findAmbiguousNickname(pickText, rosterFullNames);
       if (found) {
-        const forPlausibility = lineForPlausibility(strippedText);
+        const forPlausibility = lineForPlausibility(pickText);
         results.push({
           capperName: currentCapper || "Unknown",
           sportName: "",
-          description: strippedText,
+          description: withGameNumberSuffix(pickText, headerGameNumber),
           betType: "SPREAD",
           odds: -110,
           hasExplicitOdds: false,
@@ -2728,17 +2822,18 @@ export function parseCatalog(
           ambiguousBetType: forPlausibility.betType,
           ambiguousLine: forPlausibility.line,
           teamNicknames: [],
+          gameNumber: headerGameNumber,
         });
         continue;
       }
 
-      const matchupPick = findMatchupPlayerPick(strippedText);
+      const matchupPick = findMatchupPlayerPick(pickText);
       if (matchupPick) {
-        const parsed = parsePickText(strippedText);
+        const parsed = parsePickText(pickText);
         results.push({
           capperName: currentCapper || "Unknown",
           sportName: "MMA",
-          description: parsed.cleanDescription,
+          description: withGameNumberSuffix(parsed.cleanDescription, headerGameNumber),
           betType: parsed.betType,
           odds: parsed.odds ?? -110,
           hasExplicitOdds: parsed.odds !== null,
@@ -2747,17 +2842,18 @@ export function parseCatalog(
           period: parsed.period,
           raw: strippedText,
           teamNicknames: matchupPick.playerKeys,
+          gameNumber: headerGameNumber,
         });
         continue;
       }
 
-      const playerPick = findPlayerPick(strippedText, rosterFullNames);
+      const playerPick = findPlayerPick(pickText, rosterFullNames);
       if (playerPick) {
-        const parsed = parsePickText(strippedText);
+        const parsed = parsePickText(pickText);
         results.push({
           capperName: currentCapper || "Unknown",
           sportName: "ATP",
-          description: parsed.cleanDescription,
+          description: withGameNumberSuffix(parsed.cleanDescription, headerGameNumber),
           betType: parsed.betType,
           odds: parsed.odds ?? -110,
           hasExplicitOdds: parsed.odds !== null,
@@ -2766,6 +2862,7 @@ export function parseCatalog(
           period: parsed.period,
           raw: strippedText,
           teamNicknames: [playerPick.playerKey],
+          gameNumber: headerGameNumber,
         });
         continue;
       }

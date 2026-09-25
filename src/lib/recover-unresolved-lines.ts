@@ -22,7 +22,7 @@
 // capper whose picks ALL needed recovery - none of their own lines ever
 // entered the resolved-picks list either, so every one of them was
 // attributed to whichever earlier capper's pick happened to appear first.
-import { parsePickText, type ParsedPick } from "@/lib/parse-catalog";
+import { parsePickText, extractGameNumber, withGameNumberSuffix, type ParsedPick } from "@/lib/parse-catalog";
 import { resolveLineAgainstLiveTeams, parseFallbackBetText, type LiveTeam, type LineResolution } from "@/lib/live-team-fallback";
 import { resolvePlayerPropAgainstRoster } from "@/lib/player-roster-fallback";
 import { parsePlayerProp } from "@/lib/bet-line";
@@ -76,6 +76,13 @@ export function recoverUnresolvedLines(
   for (let i = 0; i < unresolved.length; i++) {
     const line = unresolved[i];
     const capperName = unresolvedCapperNames[i] ?? "Unknown";
+    // Same "Game 2"/"G2"/... extraction parseCatalog's own picks already get
+    // (see parse-catalog.ts's extractGameNumber) - a recovered line never
+    // went through that extraction the first time, since it only failed to
+    // resolve. Computed from `line`, not used to change it: isPlayerProp/
+    // nonPlayerPropResolutions below are keyed by the exact original `line`
+    // string from the lookups built above.
+    const { gameNumber, rest: lineForParsing } = extractGameNumber(line);
 
     if (isPlayerProp.has(line)) {
       // Only ever narrows a bare-surname collision - never affects the
@@ -94,11 +101,11 @@ export function recoverUnresolvedLines(
         continue;
       }
 
-      const parsed = parsePickText(line);
+      const parsed = parsePickText(lineForParsing);
       recovered.push({
         capperName,
         sportName: res.sport,
-        description: parsed.cleanDescription,
+        description: withGameNumberSuffix(parsed.cleanDescription, gameNumber),
         betType: parsed.betType,
         odds: parsed.odds ?? -110,
         hasExplicitOdds: parsed.odds !== null,
@@ -107,6 +114,7 @@ export function recoverUnresolvedLines(
         period: parsed.period,
         raw: line,
         teamNicknames: [res.team.toLowerCase()],
+        gameNumber,
       });
       continue;
     }
@@ -119,11 +127,11 @@ export function recoverUnresolvedLines(
       continue;
     }
 
-    const bet = parseFallbackBetText(line);
+    const bet = parseFallbackBetText(lineForParsing);
     recovered.push({
       capperName,
       sportName: res.sport,
-      description: line,
+      description: withGameNumberSuffix(lineForParsing, gameNumber),
       betType: bet.betType,
       odds: bet.odds,
       hasExplicitOdds: bet.hasExplicitOdds,
@@ -132,6 +140,7 @@ export function recoverUnresolvedLines(
       period: "FULL_GAME",
       raw: line,
       teamNicknames: [res.nickname],
+      gameNumber,
     });
   }
 

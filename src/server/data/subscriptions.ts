@@ -110,6 +110,11 @@ export type PickInsertData = {
   // Never backfilled onto an existing row.
   playerName?: string;
   propMarket?: PropMarket;
+  // Only ever set by bulkImportPicksAction, and only when resolution actually
+  // used a doubleheader game number to pick this pick's game (see
+  // resolveGameAndOdds' resolvedGameNumber). Omitted (column default null)
+  // for every other caller and every non-doubleheader pick.
+  gameNumber?: number | null;
 };
 
 export type AtomicCreateResult =

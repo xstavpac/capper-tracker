@@ -33,8 +33,22 @@
 // below).
 //
 // No test framework in this repo (see odds-preseason-merge-acceptance-test.ts).
-import { resolveScheduleGameFromFeeds, pickBestScheduleCandidate } from "./odds";
+import { resolveScheduleGameFromFeeds as resolveScheduleGameFromFeedsRaw, pickBestScheduleCandidate as pickBestScheduleCandidateRaw } from "./odds";
 import type { OddsGame, ScoreGame } from "./odds";
+
+// Thin wrappers used by every pre-existing assertion below, which only ever
+// cared about the resolved game itself - unwraps ScheduleCandidateResult's
+// `.game` so every existing `result?.id`/`result?.homeTeam`/etc check below
+// keeps working unchanged. The doubleheaderBothLegsFinal-specific tests use
+// the raw functions directly (see the "both legs final" section).
+function resolveScheduleGameFromFeeds(
+  ...args: Parameters<typeof resolveScheduleGameFromFeedsRaw>
+): ScoreGame | null {
+  return resolveScheduleGameFromFeedsRaw(...args).game;
+}
+function pickBestScheduleCandidate(...args: Parameters<typeof pickBestScheduleCandidateRaw>): ScoreGame | null {
+  return pickBestScheduleCandidateRaw(...args).game;
+}
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -69,6 +83,33 @@ const score = (
   inningHalf: null,
   inningOrdinal: null,
   innings: null,
+});
+
+// MLB-only fields (see ScoreGame's own comment) - a separate builder rather
+// than adding params to score() above, since every existing call site in
+// this file represents a non-MLB or non-doubleheader game and must keep
+// getting gameNumber/doubleHeaderStatus undefined (the "no metadata"
+// default), not silently start carrying null.
+const mlbGame = (
+  home: string,
+  away: string,
+  hourUtc: number,
+  gameNumber: 1 | 2,
+  doubleHeaderStatus: "Y" | "S",
+  status: ScoreGame["status"] = "preview",
+  id = `${home}-${away}-g${gameNumber}`
+): ScoreGame => ({
+  id,
+  homeTeam: home,
+  awayTeam: away,
+  status,
+  scores: status === "preview" ? null : [{ name: home, score: "0" }, { name: away, score: "0" }],
+  commenceTime: dayISO(0, hourUtc),
+  inningHalf: null,
+  inningOrdinal: null,
+  innings: null,
+  gameNumber,
+  doubleHeaderStatus,
 });
 
 const odds = (home: string, away: string, etDay: number, id = `odds-${home}-${away}-${etDay}`): OddsGame => ({
@@ -343,6 +384,145 @@ console.log("\n########## pickBestScheduleCandidate: same-day > not-final > clos
     null
   );
   check("empty -> null", pickBestScheduleCandidate([], MON), null);
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## MLB gameNumber: authoritative over start-time order, closes the flag gap ##########");
+{
+  // Type-Y (traditional) doubleheader, modeled on the real 2026-09-25
+  // Orioles/Yankees slate: two real games 5 minutes apart, BOTH still
+  // preview (imported before either starts) - the exact shape PR #105's
+  // original guard did NOT flag (no final/non-final split), which is the gap
+  // this closes.
+  const bothPreview = [
+    mlbGame("New York Yankees", "Baltimore Orioles", 20, 1, "Y", "preview"),
+    mlbGame("New York Yankees", "Baltimore Orioles", 20, 2, "Y", "preview", "yankees-orioles-g2"),
+  ];
+
+  check(
+    "gameNumber=1 -> resolves g1 by MLB's own metadata, not start-time order",
+    pickBestScheduleCandidate(bothPreview, MON, 1)?.id,
+    "New York Yankees-Baltimore Orioles-g1"
+  );
+  check(
+    "gameNumber=2 -> resolves g2 by MLB's own metadata",
+    pickBestScheduleCandidate(bothPreview, MON, 2)?.id,
+    "yankees-orioles-g2"
+  );
+
+  // Split doubleheader ("S"), modeled on the real Cubs/Red Sox slate: start
+  // times hours apart, ONE already final and the other still preview - a mix
+  // PR #105's original guard WOULD already have flagged, but gameNumber must
+  // still resolve it directly rather than falling through to that check.
+  const splitMixed = [
+    mlbGame("Boston Red Sox", "Chicago Cubs", 17, 1, "S", "final", "cubs-g1"),
+    mlbGame("Boston Red Sox", "Chicago Cubs", 21, 2, "S", "preview", "cubs-g2"),
+  ];
+  check("split doubleheader, mixed status: gameNumber=1 -> the final leg", pickBestScheduleCandidate(splitMixed, MON, 1)?.id, "cubs-g1");
+  check("split doubleheader, mixed status: gameNumber=2 -> the preview leg", pickBestScheduleCandidate(splitMixed, MON, 2)?.id, "cubs-g2");
+
+  // No gameNumber signal at all on a real doubleheader (MLB flags it Y/S) -
+  // defaults to the earliest leg that ISN'T final yet, instead of refusing to
+  // guess outright. Closes the original flag gap differently than before:
+  // "Cubs ML" on an all-preview doubleheader day now actively resolves
+  // (to Game 1), rather than sitting unmatched.
+  check(
+    "no gameNumber, both preview -> defaults to the earliest leg (Game 1)",
+    pickBestScheduleCandidate(bothPreview, MON, null)?.id,
+    "New York Yankees-Baltimore Orioles-g1"
+  );
+  check(
+    "no gameNumber, G1 final + G2 not final -> defaults to G2 (the not-final leg)",
+    pickBestScheduleCandidate(splitMixed, MON, null)?.id,
+    "cubs-g2"
+  );
+  {
+    // Defensive/unrealistic shape (G2 final, G1 not - never happens for a
+    // real doubleheader, where G1 always starts first) - still just "the
+    // earliest leg that isn't final", not hardcoded to a specific gameNumber.
+    const reversedFinal = [
+      mlbGame("New York Yankees", "Baltimore Orioles", 20, 1, "Y", "preview", "reversed-g1"),
+      mlbGame("New York Yankees", "Baltimore Orioles", 21, 2, "Y", "final", "reversed-g2"),
+    ];
+    check(
+      "no gameNumber, G2 final + G1 not -> defaults to G1 (still 'earliest not-final', not a hardcoded leg)",
+      pickBestScheduleCandidate(reversedFinal, MON, null)?.id,
+      "reversed-g1"
+    );
+  }
+  check(
+    "no gameNumber, both final -> nothing left to default to, flagged (the ONE remaining flag case)",
+    pickBestScheduleCandidateRaw(
+      [
+        mlbGame("New York Yankees", "Baltimore Orioles", 20, 1, "Y", "final"),
+        mlbGame("New York Yankees", "Baltimore Orioles", 20, 2, "Y", "final", "yankees-orioles-g2"),
+      ],
+      MON,
+      null
+    ),
+    { game: null, doubleheaderBothLegsFinal: true }
+  );
+  // Explicit gameNumber text still wins over the default, even when the
+  // default would have picked the other leg.
+  check(
+    "explicit gameNumber=1 still wins over the 'earliest not-final' default (which would pick g2 here)",
+    pickBestScheduleCandidate(splitMixed, MON, 1)?.id,
+    "cubs-g1"
+  );
+
+  // gameNumber present but this matchup ISN'T actually a doubleheader at all
+  // (no MLB doubleheader metadata on the one candidate) - ignore gameNumber,
+  // resolve normally. This is the single-game slate case from Step 2's
+  // original spec.
+  const singleGameNoDoubleheader = [score("New York Yankees", "Baltimore Orioles", 0, "preview", "just-one-game")];
+  check(
+    "gameNumber present, matchup isn't a doubleheader -> ignored, resolves normally (not flagged)",
+    pickBestScheduleCandidate(singleGameNoDoubleheader, MON, 2)?.id,
+    "just-one-game"
+  );
+
+  // gameNumber=2 but Game 2 is missing from the feed entirely (postponed /
+  // not yet loaded) - the ONE candidate that IS in the feed is confirmed by
+  // MLB's own metadata to be Game 1 of a real doubleheader, so this can tell
+  // the two cases apart: never falls back to Game 1.
+  const onlyGame1OfARealDoubleheader = [mlbGame("New York Yankees", "Baltimore Orioles", 20, 1, "Y", "preview")];
+  check(
+    "gameNumber=2 asked for, only Game 1 of a REAL doubleheader is in the feed -> null, never falls back to game 1",
+    pickBestScheduleCandidate(onlyGame1OfARealDoubleheader, MON, 2),
+    null
+  );
+
+  // Non-MLB sport (or an MLB row from before this shipped): no gameNumber/
+  // doubleHeaderStatus metadata at all. gameNumber falls back to start-time
+  // order instead of being ignored.
+  const noMetadata = [
+    score("Team A", "Team B", 0, "preview", "early"),
+    { ...score("Team A", "Team B", 0, "preview", "late"), commenceTime: dayISO(0, 22) },
+  ];
+  check(
+    "no MLB metadata: gameNumber=1 falls back to start-time order (earliest)",
+    pickBestScheduleCandidate(noMetadata, MON, 1)?.id,
+    "early"
+  );
+  check(
+    "no MLB metadata: gameNumber=2 falls back to start-time order (latest)",
+    pickBestScheduleCandidate(noMetadata, MON, 2)?.id,
+    "late"
+  );
+  // With no doubleheader metadata at all, a lone same-day candidate can't be
+  // told apart from "this matchup just has one game today" - that residual
+  // ambiguity is inherent without MLB's authoritative fields (see
+  // isConfirmedMissingPartnerLeg's own comment), so this falls through to
+  // "ignore gameNumber, resolve normally" rather than flagging.
+  check(
+    "no MLB metadata: gameNumber=2, only one game in the same-day pool -> resolved normally, not flagged",
+    pickBestScheduleCandidate(
+      [score("Team A", "Team B", 0, "preview", "only-one-in-pool"), score("Team A", "Team B", 3, "preview", "far")],
+      MON,
+      2
+    )?.id,
+    "only-one-in-pool"
+  );
 }
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

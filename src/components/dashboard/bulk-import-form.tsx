@@ -68,6 +68,12 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     skipped: number;
     errors: string[];
     unmatchedGames: string[];
+    // A confirmed doubleheader (MLB's own feed) whose every leg was already
+    // final when this pick was resolved - the earliest-not-final default had
+    // nothing left to fall back to. Shown with its own message, never lumped
+    // into unmatchedGames's "couldn't match to today's schedule" wording,
+    // which would wrongly imply the schedule lookup itself failed.
+    doubleheaderBothFinal: string[];
     // Picks left out because they matched an existing/earlier pick and the
     // user either chose "Skip" or never answered the prompt (the default is
     // to skip - see isPendingOrSkippedDuplicate). Captured client-side before
@@ -242,6 +248,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         totalSide: e.p.totalSide,
         teamNicknames: e.p.teamNicknames,
         description: e.p.description,
+        gameNumber: e.p.gameNumber,
       }))
     )
       .then((odds) => {
@@ -278,6 +285,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         teamNicknames: e.p.teamNicknames,
         description: e.p.description,
         period: e.p.period,
+        gameNumber: e.p.gameNumber,
       }))
     ).then((flags) => {
       setDuplicateFlags((prev) => {
@@ -307,6 +315,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         totalSide: e.p.totalSide,
         teamNicknames: e.p.teamNicknames,
         description: e.p.description,
+        gameNumber: e.p.gameNumber,
       }))
     ).then((flags) => {
       setTotalLineFlags((prev) => {
@@ -439,6 +448,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         units: p.units,
         period: p.period,
         inferredLine: totalLineChoices[idx] === "confirm" ? totalLineFlags[idx]?.inferredLine : undefined,
+        gameNumber: p.gameNumber,
       }))
     );
     const parlayRes =
@@ -456,6 +466,12 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                 totalSide: leg.totalSide,
                 teamNicknames: leg.teamNicknames,
                 period: leg.period,
+                // Never parsed for parlay legs (see ParsedParlayLeg) - a leg
+                // whose game turns out to be a real MLB doubleheader is
+                // flagged (unresolved) rather than guessed at, the same
+                // "no gameNumber signal -> refuse to guess" rule a bare
+                // single pick gets. See pickBestScheduleCandidate.
+                gameNumber: null,
               })) as [BulkImportParlayLegItem, BulkImportParlayLegItem], // ParsedParlay.legs is already a 2-tuple
             }))
           )
@@ -467,6 +483,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         skipped: res.skipped,
         errors: res.errors,
         unmatchedGames: res.unmatchedGames,
+        doubleheaderBothFinal: res.doubleheaderBothFinal,
         skippedDuplicates,
         pickLimitBlocked: res.pickLimitBlocked,
         parlaysImported: parlayRes?.success ? parlayRes.imported : 0,
@@ -896,6 +913,17 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
               were NOT imported. Double-check the matchup and add them manually:
               <ul className="mt-1 list-disc pl-4">
                 {result.unmatchedGames.map((g, i) => (
+                  <li key={i}>{g}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result.doubleheaderBothFinal.length > 0 && (
+            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+              Doubleheader — both games final, add manually ({result.doubleheaderBothFinal.length} pick
+              {result.doubleheaderBothFinal.length === 1 ? "" : "s"}):
+              <ul className="mt-1 list-disc pl-4">
+                {result.doubleheaderBothFinal.map((g, i) => (
                   <li key={i}>{g}</li>
                 ))}
               </ul>

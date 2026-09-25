@@ -309,6 +309,13 @@ model Pick {
     // tiles) without re-running a betDetail text parse per row per query - a plain enum read here does that,
     // the same way betType already does for every other category branch. null for every pick predating this
     // column and, until PR 2/3 land, for every pick period.
+  gameNumber Int? // 1 or 2 - stamped at import ONLY when resolution actually used a doubleheader game number to
+    // pick between two MLB games for the same matchup on the same slate (from the pick's own "Game 2"/"G2"/...
+    // text, or from a user's choice on a flagged doubleheader pick) - see parse-catalog.ts's gameNumber
+    // extraction and resolveGameAndOdds in bulk-picks.ts. Null for every non-doubleheader pick, every non-MLB
+    // pick, and every pick predating this column (no backfill). matchGameResult (grading.ts) requires an exact
+    // GameResult.gameNumber match when this is set, instead of its normal closest-start-time tiebreak, so two
+    // legs of a traditional doubleheader (which can start minutes apart) can never grade against each other.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1084,6 +1091,13 @@ model GameResult {
   // question.
   homeTurnovers      Int?
   awayTurnovers      Int?
+  // MLB only - the MLB Stats API schedule's own `gameNumber` (1 or 2) for a
+  // doubleheader leg, captured once at persistFinalScores CREATE time from
+  // the same schedule fetch getMlbLiveScores already makes (no extra call).
+  // Null for every non-doubleheader game, every non-MLB sport, and every row
+  // persisted before this field existed (no backfill) - matchGameResult only
+  // filters on this when the pick it's matching also carries a gameNumber.
+  gameNumber         Int?
   gameDate           DateTime
   createdAt          DateTime @default(now())
 

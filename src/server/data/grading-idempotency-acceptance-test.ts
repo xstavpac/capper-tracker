@@ -224,11 +224,14 @@ async function main() {
     firstInningHomeScore: true,
     firstInningAwayScore: true,
     linescoreJson: true,
+    gameNumber: true,
   };
 
   // 5a. Only the columns grading actually reads are selected - no JSON blobs
   // beyond linescoreJson (which resolveOutcome's segmentScore does read, for
-  // quarter/period bets), no turnover/ledger/isPreseason fields.
+  // quarter/period bets), no turnover/ledger/isPreseason fields. gameNumber IS
+  // included - matchGameResult requires it to disambiguate two doubleheader
+  // legs (see its own comment).
   {
     const findManyCalls: { select?: unknown }[] = [];
     patch("gameResult.findMany", async (args: { select?: unknown }) => {
