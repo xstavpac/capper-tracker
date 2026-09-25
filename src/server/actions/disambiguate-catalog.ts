@@ -32,7 +32,7 @@ export async function checkAmbiguousTeamSchedules(queries: ScheduleCheckQuery[])
         result[mapKey] = false;
         return;
       }
-      const game = await resolveGameForNickname(sportKey, nickname, { nearTermOnly: true });
+      const { game } = await resolveGameForNickname(sportKey, nickname, { nearTermOnly: true });
       result[mapKey] = game !== null;
       console.log(
         "[catalog-disambiguation] schedule check:",

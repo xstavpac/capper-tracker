@@ -1627,7 +1627,16 @@ export function extractGameNumber(text: string): { gameNumber: 1 | 2 | null; res
     if (match && match.index !== undefined) {
       const rest = (text.slice(0, match.index) + text.slice(match.index + match[0].length))
         .replace(/\s{2,}/g, " ")
-        .trim();
+        .trim()
+        // A colon/comma cappers used to separate the token from the rest
+        // ("Game 2: Cubs ML") is orphaned once the token itself is gone -
+        // strip it from whichever end it ended up on, or it survives into
+        // the stored description as a stray leading/trailing separator.
+        // Deliberately NOT a dash: a leading "-" is very likely a real
+        // negative spread/total value ("Cubs G2 -1.5" must stay "-1.5", not
+        // become "1.5").
+        .replace(/^[:,]\s*/, "")
+        .replace(/\s*[:,]$/, "");
       return { gameNumber, rest };
     }
   }

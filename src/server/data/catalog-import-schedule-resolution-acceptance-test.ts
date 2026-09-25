@@ -33,8 +33,22 @@
 // below).
 //
 // No test framework in this repo (see odds-preseason-merge-acceptance-test.ts).
-import { resolveScheduleGameFromFeeds, pickBestScheduleCandidate } from "./odds";
+import { resolveScheduleGameFromFeeds as resolveScheduleGameFromFeedsRaw, pickBestScheduleCandidate as pickBestScheduleCandidateRaw } from "./odds";
 import type { OddsGame, ScoreGame } from "./odds";
+
+// Thin wrappers used by every pre-existing assertion below, which only ever
+// cared about the resolved game itself - unwraps ScheduleCandidateResult's
+// `.game` so every existing `result?.id`/`result?.homeTeam`/etc check below
+// keeps working unchanged. The doubleheaderBothLegsFinal-specific tests use
+// the raw functions directly (see the "both legs final" section).
+function resolveScheduleGameFromFeeds(
+  ...args: Parameters<typeof resolveScheduleGameFromFeedsRaw>
+): ScoreGame | null {
+  return resolveScheduleGameFromFeedsRaw(...args).game;
+}
+function pickBestScheduleCandidate(...args: Parameters<typeof pickBestScheduleCandidateRaw>): ScoreGame | null {
+  return pickBestScheduleCandidateRaw(...args).game;
+}
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -408,17 +422,37 @@ console.log("\n########## MLB gameNumber: authoritative over start-time order, c
   check("split doubleheader, mixed status: gameNumber=2 -> the preview leg", pickBestScheduleCandidate(splitMixed, MON, 2)?.id, "cubs-g2");
 
   // No gameNumber signal at all on a real doubleheader (MLB flags it Y/S) -
-  // ALWAYS flagged now, regardless of status mix. Closes the gap: before this
-  // change, an all-preview doubleheader pool fell through to the ordinary
-  // closest-by-time tiebreak instead of refusing to guess.
+  // defaults to the earliest leg that ISN'T final yet, instead of refusing to
+  // guess outright. Closes the original flag gap differently than before:
+  // "Cubs ML" on an all-preview doubleheader day now actively resolves
+  // (to Game 1), rather than sitting unmatched.
   check(
-    "no gameNumber, both preview, MLB flags it a doubleheader -> flagged (the gap this closes)",
-    pickBestScheduleCandidate(bothPreview, MON, null),
-    null
+    "no gameNumber, both preview -> defaults to the earliest leg (Game 1)",
+    pickBestScheduleCandidate(bothPreview, MON, null)?.id,
+    "New York Yankees-Baltimore Orioles-g1"
   );
   check(
-    "no gameNumber, both final, MLB flags it a doubleheader -> still flagged",
-    pickBestScheduleCandidate(
+    "no gameNumber, G1 final + G2 not final -> defaults to G2 (the not-final leg)",
+    pickBestScheduleCandidate(splitMixed, MON, null)?.id,
+    "cubs-g2"
+  );
+  {
+    // Defensive/unrealistic shape (G2 final, G1 not - never happens for a
+    // real doubleheader, where G1 always starts first) - still just "the
+    // earliest leg that isn't final", not hardcoded to a specific gameNumber.
+    const reversedFinal = [
+      mlbGame("New York Yankees", "Baltimore Orioles", 20, 1, "Y", "preview", "reversed-g1"),
+      mlbGame("New York Yankees", "Baltimore Orioles", 21, 2, "Y", "final", "reversed-g2"),
+    ];
+    check(
+      "no gameNumber, G2 final + G1 not -> defaults to G1 (still 'earliest not-final', not a hardcoded leg)",
+      pickBestScheduleCandidate(reversedFinal, MON, null)?.id,
+      "reversed-g1"
+    );
+  }
+  check(
+    "no gameNumber, both final -> nothing left to default to, flagged (the ONE remaining flag case)",
+    pickBestScheduleCandidateRaw(
       [
         mlbGame("New York Yankees", "Baltimore Orioles", 20, 1, "Y", "final"),
         mlbGame("New York Yankees", "Baltimore Orioles", 20, 2, "Y", "final", "yankees-orioles-g2"),
@@ -426,7 +460,14 @@ console.log("\n########## MLB gameNumber: authoritative over start-time order, c
       MON,
       null
     ),
-    null
+    { game: null, doubleheaderBothLegsFinal: true }
+  );
+  // Explicit gameNumber text still wins over the default, even when the
+  // default would have picked the other leg.
+  check(
+    "explicit gameNumber=1 still wins over the 'earliest not-final' default (which would pick g2 here)",
+    pickBestScheduleCandidate(splitMixed, MON, 1)?.id,
+    "cubs-g1"
   );
 
   // gameNumber present but this matchup ISN'T actually a doubleheader at all

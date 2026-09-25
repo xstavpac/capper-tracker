@@ -157,5 +157,94 @@ console.log("\n########## end-to-end through parseCatalog: label format + gameNu
   check("'Cubs First 5 ML' -> period still FIRST_HALF (F5/1H mapping unaffected)", first5Picks[0]?.period, "FIRST_HALF");
 }
 
+// ---------------------------------------------------------------------------
+console.log("\n########## token position: every variant resolves identically ##########");
+{
+  // Real repro shape: Cubs doubleheader, G1 final, G2 upcoming. Every one of
+  // these must resolve to the same market/gameNumber/label/stripped-betDetail,
+  // regardless of where the token sits in the line.
+  const variants = [
+    "Cubs G2 Moneyline",
+    "Cubs Moneyline G2",
+    "Cubs Moneyline (G2)",
+    "Gm 2 Cubs Moneyline",
+    "Gm2 Cubs ML",
+    "Cubs Moneyline Gm 2",
+    "Cubs ML gm2",
+    "G2 Cubs ML",
+    "Game 2 Cubs Moneyline",
+    "Game 2: Cubs ML",
+    "Cubs Game Two Moneyline",
+    "Cubs moneyline game 2",
+  ];
+  for (const line of variants) {
+    const { gameNumber, rest } = extractGameNumber(line);
+    check(`'${line}' -> gameNumber 2`, gameNumber, 2);
+    const parsed = parsePickText(rest);
+    check(`'${line}' -> betType MONEYLINE`, parsed.betType, "MONEYLINE");
+    // The capper's own wording for the bet type (ML / Moneyline / moneyline)
+    // is preserved verbatim in cleanDescription - this app never normalizes
+    // that (same "betDetail is the capper's own text" rule formatPickLabel
+    // documents) - only the game-number token itself is stripped, and only
+    // that token's removal is what every variant must have in common.
+    check(`'${line}' -> token stripped from betDetail (no residual G2/Gm2/Game 2)`, /\b(g2|gm\s*2|game\s*2)\b/i.test(parsed.cleanDescription), false);
+    check(`'${line}' -> label is '${parsed.cleanDescription} (G2)'`, withGameNumberSuffix(parsed.cleanDescription, gameNumber), `${parsed.cleanDescription} (G2)`);
+  }
+  // The exact literal example given: "Cubs G2 Moneyline" -> "Cubs Moneyline (G2)".
+  {
+    const { gameNumber, rest } = extractGameNumber("Cubs G2 Moneyline");
+    check("'Cubs G2 Moneyline' -> exact label 'Cubs Moneyline (G2)'", withGameNumberSuffix(parsePickText(rest).cleanDescription, gameNumber), "Cubs Moneyline (G2)");
+  }
+
+  // Line/total value must never be corrupted by the token, in either order.
+  {
+    const { gameNumber, rest } = extractGameNumber("Cubs -1.5 Gm 2");
+    check("'Cubs -1.5 Gm 2' -> gameNumber 2", gameNumber, 2);
+    const parsed = parsePickText(rest);
+    check("'Cubs -1.5 Gm 2' -> betType SPREAD", parsed.betType, "SPREAD");
+    check("'Cubs -1.5 Gm 2' -> run line -1.5, not corrupted by the '2'", extractLine("SPREAD", rest), -1.5);
+  }
+  {
+    const { gameNumber, rest } = extractGameNumber("Cubs over 6.5 gm2");
+    check("'Cubs over 6.5 gm2' -> gameNumber 2", gameNumber, 2);
+    const parsed = parsePickText(rest);
+    check("'Cubs over 6.5 gm2' -> betType TOTAL", parsed.betType, "TOTAL");
+    check("'Cubs over 6.5 gm2' -> total 6.5, not corrupted by the '2'", extractLine("TOTAL", rest), 6.5);
+  }
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## leading token in a multi-capper paste doesn't break capper/team detection ##########");
+{
+  const paste = "Ac Sniper\nGm 2 Cubs Moneyline";
+  const { picks, unresolved } = parseCatalog(paste);
+  check("no lines fall through to unresolved", unresolved, []);
+  check("exactly one pick resolved", picks.length, 1);
+  if (picks.length === 1) {
+    check("capper is 'Ac Sniper', NOT swallowed by the leading 'Gm 2' token", picks[0].capperName, "Ac Sniper");
+    check("sport resolves MLB (team detection wasn't blocked by the leading token)", picks[0].sportName, "MLB");
+    check("gameNumber extracted despite leading position", picks[0].gameNumber, 2);
+    check("label", picks[0].description, "Cubs Moneyline (G2)");
+  }
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## requirement 3 repro: 'Ac Sniper - Cubs G2 over 6.5' ##########");
+{
+  const paste = "Ac Sniper - Cubs G2 over 6.5";
+  const { picks, unresolved } = parseCatalog(paste, ["Ac Sniper"]);
+  check("no lines fall through to unresolved", unresolved, []);
+  check("exactly one pick resolved", picks.length, 1);
+  if (picks.length === 1) {
+    check("capper is 'Ac Sniper'", picks[0].capperName, "Ac Sniper");
+    check("sport resolves MLB", picks[0].sportName, "MLB");
+    check("betType TOTAL", picks[0].betType, "TOTAL");
+    check("totalSide over", picks[0].totalSide, "over");
+    check("gameNumber 2", picks[0].gameNumber, 2);
+    check("label", picks[0].description, "Cubs over 6.5 (G2)");
+    check("teamNicknames includes cubs", picks[0].teamNicknames, ["cubs"]);
+  }
+}
+
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
