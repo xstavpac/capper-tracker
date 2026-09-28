@@ -1,7 +1,7 @@
 import { requireUser } from "@/server/auth";
 import { matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
 import { chipSetForLeague, DEFAULT_CHIP_SET } from "@/server/data/stats";
-import { getSportCategoryPanelData } from "@/server/data/cappers";
+import { getSportCategoryPanelData } from "@/server/data/pick-aggregates-cappers-adapter";
 import { getLiveBoardData } from "@/server/data/live-board-picks";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
 import { GridLiveBoard } from "@/components/live/grid-live-board";

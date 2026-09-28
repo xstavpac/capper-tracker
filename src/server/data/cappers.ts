@@ -278,6 +278,12 @@ export type SportCategoryPanelData = {
 const CATEGORY_LEADERBOARD_MIN_PICKS = 3;
 const CATEGORY_LEADERBOARD_LIMIT = 5;
 
+// NOT called by any page: /cappers and /live both use the SQL version in
+// pick-aggregates-cappers-adapter.ts (same name, same return shape). This raw-
+// pick original is kept only as the reference the parity test
+// (capper-list-aggregates-acceptance-test.ts) and the T2 harness's `old`
+// implementation compare against - delete it together with those.
+//
 // Powers the Live page's category breakdown tiles AND their expandable "top
 // cappers in this category" leaderboards, both off one picks query - a tile
 // grid with N categories would otherwise mean either N separate queries or
