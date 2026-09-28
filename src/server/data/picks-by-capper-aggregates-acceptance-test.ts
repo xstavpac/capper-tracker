@@ -73,6 +73,25 @@ function same(label: string, actual: unknown, expected: unknown) {
   check(label, d === null, d ?? "");
 }
 
+// item.recent is dropped from the SQL path (design doc Q3 - nothing reads
+// it) but the legacy reference (frozen, unmodified from the pre-migration
+// path) still computes it. Every legacy-vs-sql comparison over
+// getCapperCategoryRecords' output strips it first, so that ONE
+// intentional, permanent divergence doesn't fail the parity check for every
+// other field - it's asserted directly, once, further down instead.
+function stripRecent(records: Record<string, ({ recent?: unknown } & Record<string, unknown>) | null>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(records)) {
+    if (item === null) {
+      out[key] = null;
+      continue;
+    }
+    const { recent: _recent, ...rest } = item;
+    out[key] = rest;
+  }
+  return out;
+}
+
 // ---- fixture plumbing -------------------------------------------------------
 
 const PREFIX = "__ParityPicksByCapper__";
@@ -397,12 +416,23 @@ async function main() {
     const pairs = scenario1Cappers.flatMap((capperId) => allCategoryPairs(capperId));
     const legacy = await getCapperCategoryRecordsLegacy(U, pairs);
     const sql = (await newPath(U, [], pairs)).categoryRecords;
-    same("getCapperCategoryRecords parity: every (capper, category)", sql, legacy);
-    // recent field must actually have been exercised (not just vacuously equal-because-absent).
+    same("getCapperCategoryRecords parity: every (capper, category), excluding item.recent (dropped - Q3)", stripRecent(sql), stripRecent(legacy));
+
+    // item.recent itself: legacy (frozen, unmodified) still computes it;
+    // SQL does not at all (key absent, not just null) - design doc Q3, nothing
+    // reads it. Documented divergence, not a parity bug - stripRecent() above
+    // is why the blanket comparison still passes despite this field differing.
     const recentKey = categoryRecordKey(capRecent, "FAV_ML");
-    check("recent field was actually populated on the FAV_ML (>=100 decided) item", sql[recentKey]?.recent !== null && sql[recentKey]?.recent !== undefined, JSON.stringify(sql[recentKey]));
-    const sparseKey = categoryRecordKey(capRecent, "SPREAD_MINUS");
-    check("recent field stays null under the 100-decided-pick gate", sql[sparseKey]?.recent === null, JSON.stringify(sql[sparseKey]));
+    check(
+      "legacy still populates recent on a >=100-decided item (unmodified pre-migration behavior)",
+      legacy[recentKey]?.recent !== null && legacy[recentKey]?.recent !== undefined,
+      JSON.stringify(legacy[recentKey])
+    );
+    check(
+      "SQL no longer computes recent at all - key absent, not just null",
+      sql[recentKey] !== null && !("recent" in (sql[recentKey] ?? {})),
+      JSON.stringify(sql[recentKey])
+    );
   }
 
   // Scenario 4 (a stand-in for "replayed slates"): each pick's own stored
@@ -432,7 +462,11 @@ async function main() {
     const legacyLeague = await getCapperLeagueRecordsLegacy(U, entries);
     const legacyCategory = await getCapperCategoryRecordsLegacy(U, pairs);
     same("combined bundle call: leagueRecords half matches single-purpose call", combined.leagueRecords, legacyLeague);
-    same("combined bundle call: categoryRecords half matches single-purpose call", combined.categoryRecords, legacyCategory);
+    same(
+      "combined bundle call: categoryRecords half matches single-purpose call, excluding item.recent",
+      stripRecent(combined.categoryRecords),
+      stripRecent(legacyCategory)
+    );
   }
 
   // A requested category outside ALL_CATEGORY_KEYS -> null on both paths.

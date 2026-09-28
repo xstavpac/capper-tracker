@@ -21,7 +21,7 @@ import { join } from "node:path";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { pickCategory, PICK_CATEGORY_VERSION } from "@/server/data/stats";
-import * as legacy from "@/server/data/cappers";
+import * as legacy from "@/server/data/sport-category-panel-legacy"; // getSportCategoryPanelData moved out of cappers.ts (#128 made it unused by any page) - see that file's header.
 import * as adapter from "@/server/data/pick-aggregates-cappers-adapter";
 
 function hostOf(url: string | undefined): string {

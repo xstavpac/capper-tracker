@@ -5,9 +5,13 @@
 //   - "cards": per requested (capperId, leagueSport, category) triple, the Overall and
 //     League win/loss/push counts (getCapperLeagueRecords' `records`).
 //   - "catrec": per requested (capperId, category) pair, the all-time win/loss/push
-//     counts AND the same pair's most-recent-CATEGORY_RECENT_FORM_WINDOW counts
-//     (getCapperCategoryRecords' item.recent - still read by callers until the
-//     removal PR drops it per Q3, so this PR must still compute it for exact parity).
+//     counts (getCapperCategoryRecords). item.recent (the same pair's most-recent-
+//     CATEGORY_RECENT_FORM_WINDOW counts) is NOT computed here - design doc Q3:
+//     nothing reads it (confirmed by a full grep of src/ for a production reader -
+//     see the removal commit), so it's dropped rather than carried for parity's sake.
+//     picks-by-capper-legacy.ts (the frozen JS reference) still computes it, since
+//     it's unmodified from the pre-migration path - the acceptance test excludes
+//     `.recent` from its legacy-vs-sql comparison for exactly this reason.
 //   - "streaks": per capper, the current overall WIN/LOSS streak (gaps-and-islands,
 //     same shape as queryCurrentStreaks in capper-list-aggregates.ts, window = ALL).
 //   - "last20": per capper, the record over their most recent LEAGUE_RECORD_LAST_N
@@ -48,9 +52,6 @@ export type CategoryTotalsRow = {
   wins: number;
   losses: number;
   pushes: number;
-  recentWins: number;
-  recentLosses: number;
-  recentPushes: number;
 };
 
 export type StreakTotalsRow = { cid: string; type: "WIN" | "LOSS"; count: number };
@@ -72,7 +73,6 @@ export type CapperRecordBundleParams = {
   cardReq: CardRequest[]; // deduped by the caller
   catReq: CategoryRequest[]; // deduped by the caller
   last20Window: number; // LEAGUE_RECORD_LAST_N
-  recentWindow: number; // CATEGORY_RECENT_FORM_WINDOW
 };
 
 // The query itself, factored out so a caller can wrap it in EXPLAIN (see
@@ -135,24 +135,13 @@ function buildBundleQuery(params: CapperRecordBundleParams): Prisma.Sql {
       ),
 
       "catReq"(cid, cat) AS (${catReqRows}),
-      -- Per (capperId, category), the newest-first rank among that pair's OWN
-      -- decided picks - the partition item.recent needs (NOT the capper-wide
-      -- last20 partition below).
-      catBase AS (
-        SELECT p."capperId" AS "capperId", p.category, p.status,
-          row_number() OVER (PARTITION BY p."capperId", p.category ORDER BY ${ORDER_DESC}) AS rn
-        FROM base p
-      ),
       catrec AS (
         SELECT q.cid, q.cat,
-          (count(*) FILTER (WHERE b.status = 'WIN'))::int                                    AS wins,
-          (count(*) FILTER (WHERE b.status = 'LOSS'))::int                                    AS losses,
-          (count(*) FILTER (WHERE b.status = 'PUSH'))::int                                    AS pushes,
-          (count(*) FILTER (WHERE b.status = 'WIN'  AND b.rn <= ${params.recentWindow}))::int AS "recentWins",
-          (count(*) FILTER (WHERE b.status = 'LOSS' AND b.rn <= ${params.recentWindow}))::int AS "recentLosses",
-          (count(*) FILTER (WHERE b.status = 'PUSH' AND b.rn <= ${params.recentWindow}))::int AS "recentPushes"
+          (count(*) FILTER (WHERE b.status = 'WIN'))::int  AS wins,
+          (count(*) FILTER (WHERE b.status = 'LOSS'))::int AS losses,
+          (count(*) FILTER (WHERE b.status = 'PUSH'))::int AS pushes
         FROM "catReq" q
-        LEFT JOIN catBase b ON b."capperId" = q.cid AND b.category = q.cat
+        LEFT JOIN base b ON b."capperId" = q.cid AND b.category = q.cat
         GROUP BY q.cid, q.cat
       ),
 

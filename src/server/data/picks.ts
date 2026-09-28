@@ -5,8 +5,6 @@ import {
   winPctOf,
   ALL_CATEGORY_KEYS,
   LEAGUE_RECORD_LAST_N,
-  CATEGORY_RECENT_FORM_WINDOW,
-  CATEGORY_RECENT_FORM_MIN_SAMPLE,
   PICK_CATEGORY_LABELS,
   type CategoryBreakdownItem,
   type LeagueRecordCard,
@@ -502,7 +500,6 @@ export async function getCapperRecordBundle(userId: string, req: CapperRecordBun
     cardReq,
     catReq,
     last20Window: LEAGUE_RECORD_LAST_N,
-    recentWindow: CATEGORY_RECENT_FORM_WINDOW,
   });
 
   // Cards -> LeagueRecordCard | null, keyed leagueRecordKey (matches the
@@ -522,9 +519,11 @@ export async function getCapperRecordBundle(userId: string, req: CapperRecordBun
   }
 
   // Category records -> CategoryBreakdownItem | null, keyed categoryRecordKey.
-  // item.recent is still populated here (Q3: dropped only in the removal PR,
-  // once the SQL path has had an observation period) - see the recentWins/
-  // recentLosses/recentPushes columns in picks-by-capper-aggregates.ts.
+  // item.recent is NOT populated (design doc Q3 - removed; nothing reads it,
+  // confirmed by a full grep of src/ for a production reader before this
+  // change shipped). `recent` stays undefined, matching CategoryBreakdownItem's
+  // own type (optional, present only when a caller asks computeCategoryBreakdown
+  // for it - this bundle never does).
   const catRowByKey = new Map(sql.catrec.map((c) => [categoryRecordKey(c.cid, c.cat as PickCategoryKey), c]));
   const categoryRecords: Record<string, CategoryBreakdownItem | null> = {};
   for (const [key, { category }] of catOutputKeys) {
@@ -533,24 +532,10 @@ export async function getCapperRecordBundle(userId: string, req: CapperRecordBun
     const losses = row?.losses ?? 0;
     const pushes = row?.pushes ?? 0;
     const count = wins + losses + pushes;
-    if (count === 0) {
-      categoryRecords[key] = null;
-      continue;
-    }
-    const recent =
-      count >= CATEGORY_RECENT_FORM_MIN_SAMPLE
-        ? toLeagueRecordColumn(row?.recentWins ?? 0, row?.recentLosses ?? 0, row?.recentPushes ?? 0)
+    categoryRecords[key] =
+      count > 0
+        ? { key: category, label: PICK_CATEGORY_LABELS[category], wins, losses, pushes, winPct: winPctOf(wins, losses), count }
         : null;
-    categoryRecords[key] = {
-      key: category,
-      label: PICK_CATEGORY_LABELS[category],
-      wins,
-      losses,
-      pushes,
-      winPct: winPctOf(wins, losses),
-      count,
-      recent,
-    };
   }
 
   // Streaks / last20, restricted to leagueEntries' cappers (see the comment

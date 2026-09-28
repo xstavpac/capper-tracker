@@ -31,14 +31,22 @@ type CappersImpl = {
   getSportCategoryPanelData: (userId: string, sportName: string) => Promise<unknown>;
 };
 
+// cappers.ts no longer exports getSportCategoryPanelData (moved to
+// sport-category-panel-legacy.ts - it's unused by any page since #128, kept
+// only as this harness's and the parity tests' reference). Every loader that
+// treats a plain `@/server/data/cappers` import as a full CappersImpl needs
+// this composition instead of that bare import.
+async function loadRealCappersImpl(): Promise<CappersImpl> {
+  const cappers = await import("@/server/data/cappers");
+  const { getSportCategoryPanelData } = await import("@/server/data/sport-category-panel-legacy");
+  return { ...cappers, getSportCategoryPanelData } as unknown as CappersImpl;
+}
+
 // The plug-in registry. Each entry is a loader (not an eager import) so that
 // registering a broken/experimental implementation here never breaks
 // loading the "old" one.
 const IMPLEMENTATIONS: Record<string, () => Promise<CappersImpl>> = {
-  old: async () => {
-    const mod = await import("@/server/data/cappers");
-    return mod as unknown as CappersImpl;
-  },
+  old: loadRealCappersImpl,
   t3: async () => {
     const mod = await import("@/server/data/pick-aggregates-cappers-adapter");
     return mod as unknown as CappersImpl;
@@ -55,7 +63,7 @@ const IMPLEMENTATIONS: Record<string, () => Promise<CappersImpl>> = {
   // `include: { capper: true }}`, so the per-category leaderboard can't read
   // the real name and falls back to a placeholder.
   "broken-capper-name": async () => {
-    const real = (await import("@/server/data/cappers")) as unknown as CappersImpl;
+    const real = await loadRealCappersImpl();
     const stats = await import("@/server/data/stats");
     const { prisma } = await import("@/lib/prisma");
     const CATEGORY_LEADERBOARD_MIN_PICKS = 3; // mirrors cappers.ts's private constant
@@ -96,7 +104,7 @@ const IMPLEMENTATIONS: Record<string, () => Promise<CappersImpl>> = {
   // never appears - even in the ALL window, where the real implementation
   // explicitly keeps them.
   "broken-zero-pick": async () => {
-    const real = (await import("@/server/data/cappers")) as unknown as CappersImpl;
+    const real = await loadRealCappersImpl();
     const stats = await import("@/server/data/stats");
     const { prisma } = await import("@/lib/prisma");
     return {

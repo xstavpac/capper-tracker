@@ -23,6 +23,26 @@ type Impl = {
   getCapperCategoryRecords: (userId: string, pairs: CategoryPair[]) => Promise<unknown>;
 };
 
+// item.recent is dropped from the SQL path (design doc Q3 - nothing reads
+// it) but "legacy" (picks-by-capper-legacy.ts, frozen/unmodified) still
+// computes it - the one field this harness deliberately excludes from its
+// legacy-vs-sql diff, same reasoning and same strip as the acceptance test's
+// own stripRecent(). Without this, every categoryRecords.* run would report
+// a "difference" that isn't a bug, just this documented, permanent divergence.
+function stripRecent(out: unknown): unknown {
+  if (out === null || typeof out !== "object") return out;
+  const result: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(out as Record<string, unknown>)) {
+    if (item && typeof item === "object" && "recent" in item) {
+      const { recent: _recent, ...rest } = item as Record<string, unknown>;
+      result[key] = rest;
+    } else {
+      result[key] = item;
+    }
+  }
+  return result;
+}
+
 // The plug-in registry (README.md's convention): "legacy" is the frozen
 // pre-migration raw-pick JS path, "sql" is the new database-side aggregation.
 // Loaders, not eager imports, so a broken one never breaks the other.
@@ -106,7 +126,7 @@ async function main() {
 
   // Scenario 3: every (capper, category) pair, including pairs with no picks.
   const allPairs: CategoryPair[] = capperIds.flatMap((capperId) => ALL_CATEGORY_KEYS.map((category) => ({ capperId, category })));
-  out["categoryRecords.everyPair"] = await impl.getCapperCategoryRecords(userId, allPairs);
+  out["categoryRecords.everyPair"] = stripRecent(await impl.getCapperCategoryRecords(userId, allPairs));
 
   // Scenario 4 (replayed slate): each decided pick's own stored category, one
   // entry per pick - what a live board actually sends.
@@ -116,7 +136,7 @@ async function main() {
 
   // Scenario 5: empty inputs.
   out["leagueRecords.empty"] = await impl.getCapperLeagueRecords(userId, []);
-  out["categoryRecords.empty"] = await impl.getCapperCategoryRecords(userId, []);
+  out["categoryRecords.empty"] = stripRecent(await impl.getCapperCategoryRecords(userId, []));
 
   await prisma.$disconnect();
   // The ONLY thing printed to stdout - stderr is free for logging.
