@@ -91,7 +91,10 @@ export type WindowScope = {
 };
 
 const ORDER = Prisma.sql`p."gameTime", p."createdAt", p.id COLLATE "C"`;
-const ORDER_DESC = Prisma.sql`p."gameTime" DESC, p."createdAt" DESC, p.id COLLATE "C" DESC`;
+// Exported: the canonical chronological tie-break (gameTime, createdAt, id) agreed
+// in #123, reused as-is by picks-by-capper-aggregates.ts (docs/design/picks-by-capper-egress.md
+// §4.1) for its own row_number() windows - one implementation of the tie-break, not two.
+export const ORDER_DESC = Prisma.sql`p."gameTime" DESC, p."createdAt" DESC, p.id COLLATE "C" DESC`;
 
 // The window bounds as a VALUES table: (win, wstart, wend), NULL bounds for ALL.
 // Instants travel as ISO strings cast to `timestamp` (no zone), which reads the

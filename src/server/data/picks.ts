@@ -2,19 +2,18 @@
 import type { BetType, PickStatus, Period } from "@prisma/client";
 import { findTeamNickname, teamPhraseRegex } from "@/lib/parse-catalog";
 import {
-  computeStats,
-  computeCategoryBreakdown,
-  computeLeagueRecordCards,
-  recentPicksRecord,
+  winPctOf,
   ALL_CATEGORY_KEYS,
   LEAGUE_RECORD_LAST_N,
-  CATEGORY_RECENT_FORM_MIN_SAMPLE,
   CATEGORY_RECENT_FORM_WINDOW,
+  CATEGORY_RECENT_FORM_MIN_SAMPLE,
+  PICK_CATEGORY_LABELS,
   type CategoryBreakdownItem,
   type LeagueRecordCard,
   type LeagueRecordColumn,
   type PickCategoryKey,
 } from "@/server/data/stats";
+import { queryCapperRecordBundle, type CardRequest, type CategoryRequest } from "@/server/data/picks-by-capper-aggregates";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import type { GameCardStreak } from "@/lib/game-card-record-line";
 import { easternDateRange } from "@/lib/dates";
@@ -395,66 +394,6 @@ export function categoryRecordKey(capperId: string, category: PickCategoryKey): 
   return capperId + "|" + category;
 }
 
-// Batched form of getCapperCategoryRecord for callers that need many
-// (capper, category) records at once - the Sharp Money board and the /live
-// game-card expander. Instead of one "load this capper's whole history"
-// query per pair (the same capper's picks reloaded once per category, and a
-// full round-trip per pair), this issues ONE query for every capper
-// involved and runs computeCategoryBreakdown ONCE per capper (it already
-// computes every category in a single pass). N queries + N breakdowns
-// collapse to 1 query + (distinct capper count) breakdowns.
-//
-// ALL_CATEGORY_KEYS, not a sport-scoped set - each pair's `category` is
-// whatever that pick's own category is (F5 ML, 1st Half ML, NRFI...),
-// independent of any sport the caller is looking at. Safe to query every
-// sport's picks together since pickCategory splits F5_ML (MLB) from
-// FIRST_HALF_ML.
-// Shared by getCapperCategoryRecords and getCapperLeagueRecords: ONE query
-// for every capper involved, grouped by capperId. Each capper's full pick
-// history (with sport.name, the only relation the breakdowns group by).
-async function fetchPicksByCapper(userId: string, capperIds: string[]) {
-  const picks = await prisma.pick.findMany({
-    where: { userId, capperId: { in: capperIds } },
-    include: { sport: { select: { name: true } } },
-  });
-  const byCapper = new Map<string, typeof picks>();
-  for (const pick of picks) {
-    const list = byCapper.get(pick.capperId);
-    if (list) list.push(pick);
-    else byCapper.set(pick.capperId, [pick]);
-  }
-  return byCapper;
-}
-
-export async function getCapperCategoryRecords(
-  userId: string,
-  pairs: { capperId: string; category: PickCategoryKey }[]
-): Promise<Record<string, CategoryBreakdownItem | null>> {
-  const capperIds = Array.from(new Set(pairs.map((p) => p.capperId)));
-  if (capperIds.length === 0) return {};
-
-  const byCapper = await fetchPicksByCapper(userId, capperIds);
-
-  // One breakdown per capper (every category in one pass), indexed for O(1)
-  // lookup. recentForm attaches item.recent (last-20 record by gameTime) for
-  // any category with >= 100 decided picks - the /live game-card expander is
-  // the one surface that renders it (see game-picks-expander.tsx).
-  const breakdownByCapper = new Map<string, Map<PickCategoryKey, CategoryBreakdownItem>>();
-  for (const capperId of capperIds) {
-    const items = computeCategoryBreakdown(byCapper.get(capperId) ?? [], ALL_CATEGORY_KEYS, {
-      window: CATEGORY_RECENT_FORM_WINDOW,
-      minSample: CATEGORY_RECENT_FORM_MIN_SAMPLE,
-    });
-    breakdownByCapper.set(capperId, new Map(items.map((i) => [i.key, i])));
-  }
-
-  const out: Record<string, CategoryBreakdownItem | null> = {};
-  for (const { capperId, category } of pairs) {
-    out[categoryRecordKey(capperId, category)] = breakdownByCapper.get(capperId)?.get(category) ?? null;
-  }
-  return out;
-}
-
 export function leagueRecordKey(capperId: string, leagueSport: string, category: PickCategoryKey): string {
   return capperId + "|" + leagueSport + "|" + category;
 }
@@ -477,16 +416,183 @@ export type CapperLeagueRecords = {
   last20: Record<string, LeagueRecordColumn | null>;
 };
 
+function toLeagueRecordColumn(wins: number, losses: number, pushes: number): LeagueRecordColumn {
+  return { wins, losses, pushes, winPct: winPctOf(wins, losses), count: wins + losses + pushes };
+}
+
+export type CapperRecordBundleRequest = {
+  // Every pick on a card (or set of cards) - see getCapperLeagueRecords. A
+  // null-category entry still puts its capper in the streak/last20 maps but
+  // requests no card.
+  leagueEntries: { capperId: string; leagueSport: string; category: PickCategoryKey | null }[];
+  // Every (capper, category) pair getCapperCategoryRecords needs a record for.
+  categoryPairs: { capperId: string; category: PickCategoryKey }[];
+};
+
+export type CapperRecordBundle = {
+  leagueRecords: CapperLeagueRecords;
+  categoryRecords: Record<string, CategoryBreakdownItem | null>;
+};
+
+const EMPTY_BUNDLE: CapperRecordBundle = { leagueRecords: { records: {}, streaks: {}, last20: {} }, categoryRecords: {} };
+
+// The one query behind getCapperLeagueRecords / getCapperCategoryRecords (see
+// docs/design/picks-by-capper-egress.md) - a single database round trip (via
+// queryCapperRecordBundle) scans every requested capper's decided picks ONCE
+// and returns only the small aggregated result, instead of fetching each
+// capper's entire pick history into the app to summarize in JS (the old
+// fetchPicksByCapper path, kept only as picks-by-capper-legacy.ts's parity
+// reference). Both card requests and category-pair requests can be sent in
+// one call (parlay-pool-generator's Hedge/Contrarian build does exactly this,
+// collapsing 2 of its 3 sequential calls into 1 - design doc §6); a caller
+// that only needs one shape passes [] for the other.
+//
+// winPct / label / the "count > 0 -> card, else null" collapse are applied
+// here in JS with the SAME shared functions the old path used (winPctOf,
+// PICK_CATEGORY_LABELS), so there is one implementation of each rule - the
+// SQL layer (picks-by-capper-aggregates.ts) returns only raw win/loss/push
+// totals.
+export async function getCapperRecordBundle(userId: string, req: CapperRecordBundleRequest): Promise<CapperRecordBundle> {
+  // streaks/last20 are keyed by leagueEntries' cappers only (matching the old
+  // getCapperLeagueRecords, which never saw categoryPairs-only cappers) - a
+  // categoryPairs-only capper still gets scanned (it's in the SQL `ids` set
+  // below) but never appears in the exposed streaks/last20 maps.
+  const leagueCapperIds = Array.from(new Set(req.leagueEntries.map((e) => e.capperId)));
+  const capperIds = Array.from(new Set([...leagueCapperIds, ...req.categoryPairs.map((p) => p.capperId)]));
+  if (capperIds.length === 0) return EMPTY_BUNDLE;
+
+  // Output keys: every non-null-category leagueEntries triple / every
+  // categoryPairs pair, deduped - matching the old wrapper, which always set
+  // records[key] / categoryRecords[key] (falling back to null) for every
+  // entry it was given, INCLUDING a category outside ALL_CATEGORY_KEYS (the
+  // old computeLeagueRecordCards/computeCategoryBreakdown simply never
+  // produced a card for it, so the final `?? null` fallback still ran - it
+  // did not drop the key). A null-category leagueEntries item gets no output
+  // key at all, same as before (it only contributes its capperId to the
+  // streak/last20 maps).
+  const cardOutputKeys = new Map<string, { capperId: string; leagueSport: string; category: PickCategoryKey }>();
+  for (const e of req.leagueEntries) {
+    if (e.category === null) continue;
+    cardOutputKeys.set(leagueRecordKey(e.capperId, e.leagueSport, e.category), {
+      capperId: e.capperId,
+      leagueSport: e.leagueSport,
+      category: e.category,
+    });
+  }
+  const catOutputKeys = new Map<string, { capperId: string; category: PickCategoryKey }>();
+  for (const p of req.categoryPairs) {
+    catOutputKeys.set(categoryRecordKey(p.capperId, p.category), { capperId: p.capperId, category: p.category });
+  }
+
+  // SQL request: the same triples/pairs, restricted to real categories
+  // (ALL_CATEGORY_KEYS) - an unrecognized category can never have a card
+  // (nothing is ever stamped with it), so it's resolved to null in JS below
+  // without a wasted SQL round trip, exactly like the old `order` filter did.
+  const allCategoryKeySet = new Set<string>(ALL_CATEGORY_KEYS);
+  const cardReq: CardRequest[] = Array.from(cardOutputKeys.values())
+    .filter((c) => allCategoryKeySet.has(c.category))
+    .map((c) => ({ capperId: c.capperId, leagueSport: c.leagueSport, category: c.category }));
+  const catReq: CategoryRequest[] = Array.from(catOutputKeys.values())
+    .filter((c) => allCategoryKeySet.has(c.category))
+    .map((c) => ({ capperId: c.capperId, category: c.category }));
+
+  const sql = await queryCapperRecordBundle({
+    userId,
+    capperIds,
+    cardReq,
+    catReq,
+    last20Window: LEAGUE_RECORD_LAST_N,
+    recentWindow: CATEGORY_RECENT_FORM_WINDOW,
+  });
+
+  // Cards -> LeagueRecordCard | null, keyed leagueRecordKey (matches the
+  // caller-facing `records` map). A card exists iff the overall count > 0
+  // (design doc §4.2); the SQL LEFT JOIN always returns a zero row for a
+  // requested triple with no decided picks, so a missing row here only ever
+  // means "category outside ALL_CATEGORY_KEYS, never sent to SQL".
+  const cardRowByKey = new Map(sql.cards.map((c) => [leagueRecordKey(c.cid, c.sport, c.cat as PickCategoryKey), c]));
+  const records: Record<string, LeagueRecordCard | null> = {};
+  for (const [key, { category }] of cardOutputKeys) {
+    const row = cardRowByKey.get(key);
+    const overall = toLeagueRecordColumn(row?.oWins ?? 0, row?.oLosses ?? 0, row?.oPushes ?? 0);
+    records[key] =
+      overall.count > 0
+        ? { category, label: PICK_CATEGORY_LABELS[category], overall, league: toLeagueRecordColumn(row?.lWins ?? 0, row?.lLosses ?? 0, row?.lPushes ?? 0) }
+        : null;
+  }
+
+  // Category records -> CategoryBreakdownItem | null, keyed categoryRecordKey.
+  // item.recent is still populated here (Q3: dropped only in the removal PR,
+  // once the SQL path has had an observation period) - see the recentWins/
+  // recentLosses/recentPushes columns in picks-by-capper-aggregates.ts.
+  const catRowByKey = new Map(sql.catrec.map((c) => [categoryRecordKey(c.cid, c.cat as PickCategoryKey), c]));
+  const categoryRecords: Record<string, CategoryBreakdownItem | null> = {};
+  for (const [key, { category }] of catOutputKeys) {
+    const row = catRowByKey.get(key);
+    const wins = row?.wins ?? 0;
+    const losses = row?.losses ?? 0;
+    const pushes = row?.pushes ?? 0;
+    const count = wins + losses + pushes;
+    if (count === 0) {
+      categoryRecords[key] = null;
+      continue;
+    }
+    const recent =
+      count >= CATEGORY_RECENT_FORM_MIN_SAMPLE
+        ? toLeagueRecordColumn(row?.recentWins ?? 0, row?.recentLosses ?? 0, row?.recentPushes ?? 0)
+        : null;
+    categoryRecords[key] = {
+      key: category,
+      label: PICK_CATEGORY_LABELS[category],
+      wins,
+      losses,
+      pushes,
+      winPct: winPctOf(wins, losses),
+      count,
+      recent,
+    };
+  }
+
+  // Streaks / last20, restricted to leagueEntries' cappers (see the comment
+  // above capperIds).
+  const streakRowByCid = new Map(sql.streaks.map((s) => [s.cid, s]));
+  const last20RowByCid = new Map(sql.last20.map((l) => [l.cid, l]));
+  const streaks: Record<string, GameCardStreak> = {};
+  const last20: Record<string, LeagueRecordColumn | null> = {};
+  for (const capperId of leagueCapperIds) {
+    const s = streakRowByCid.get(capperId);
+    streaks[capperId] = s ? { type: s.type, count: s.count } : { type: "NONE", count: 0 };
+
+    const l = last20RowByCid.get(capperId);
+    last20[capperId] = l && l.decided >= LEAGUE_RECORD_LAST_N ? toLeagueRecordColumn(l.wins, l.losses, l.pushes) : null;
+  }
+
+  return { leagueRecords: { records, streaks, last20 }, categoryRecords };
+}
+
+// Batched form of getCapperCategoryRecord for callers that need many
+// (capper, category) records at once - the Sharp Money board and the /live
+// game-card expander. Thin wrapper over getCapperRecordBundle (Q6).
+//
+// ALL_CATEGORY_KEYS, not a sport-scoped set - each pair's `category` is
+// whatever that pick's own category is (F5 ML, 1st Half ML, NRFI...),
+// independent of any sport the caller is looking at. Safe to query every
+// sport's picks together since pickCategory splits F5_ML (MLB) from
+// FIRST_HALF_ML.
+export async function getCapperCategoryRecords(
+  userId: string,
+  pairs: { capperId: string; category: PickCategoryKey }[]
+): Promise<Record<string, CategoryBreakdownItem | null>> {
+  const { categoryRecords } = await getCapperRecordBundle(userId, { leagueEntries: [], categoryPairs: pairs });
+  return categoryRecords;
+}
+
 // The game-card record block's data: per (capper, category) the Overall /
-// League columns (getCapperCategoryRecords, scoped to the card's category),
-// plus two capper-wide values keyed by capperId alone - the current overall
-// streak for the trailing 🔥/🧊 indicator, and `last20`, the record over the
-// capper's most recent LEAGUE_RECORD_LAST_N graded picks across every category
-// and league. Same one-query-per-batch, one-computation-per-capper shape;
-// reuses computeLeagueRecordCards, computeStats and recentPicksRecord (see
-// stats.ts) - no new aggregation, no extra query (streak and last20 both come
-// from the full pick history fetchPicksByCapper already loads). `leagueSport`
-// is the game's sport (the /live page has one per tab).
+// League columns, plus two capper-wide values keyed by capperId alone - the
+// current overall streak for the trailing 🔥/🧊 indicator, and `last20`, the
+// record over the capper's most recent LEAGUE_RECORD_LAST_N graded picks
+// across every category and league. `leagueSport` is the game's sport (the
+// /live page has one per tab). Thin wrapper over getCapperRecordBundle (Q6).
 //
 // `entries` is every pick on the card. A null-category entry still puts its
 // capper in the streak map (the indicator shows on every pick card) but gets
@@ -496,55 +602,6 @@ export async function getCapperLeagueRecords(
   userId: string,
   entries: { capperId: string; leagueSport: string; category: PickCategoryKey | null }[]
 ): Promise<CapperLeagueRecords> {
-  const capperIds = Array.from(new Set(entries.map((e) => e.capperId)));
-  if (capperIds.length === 0) return { records: {}, streaks: {}, last20: {} };
-
-  const pairs = entries.filter(
-    (e): e is { capperId: string; leagueSport: string; category: PickCategoryKey } => e.category !== null
-  );
-
-  const byCapper = await fetchPicksByCapper(userId, capperIds);
-
-  // One computeLeagueRecordCards pass per (capper, leagueSport) - it already
-  // produces every category's card in that pass. ALL_CATEGORY_KEYS so a
-  // segment-scoped pick on the board still resolves to its own segment
-  // category (PR #22); a full-game category's card still excludes segment
-  // picks, since they classify under a different key.
-  const cardsByCapperLeague = new Map<string, Map<PickCategoryKey, LeagueRecordCard>>();
-  const seen = new Set<string>();
-  for (const { capperId, leagueSport } of pairs) {
-    const k = capperId + "|" + leagueSport;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    const cards = computeLeagueRecordCards(byCapper.get(capperId) ?? [], leagueSport, ALL_CATEGORY_KEYS);
-    cardsByCapperLeague.set(k, new Map(cards.map((c) => [c.category, c])));
-  }
-
-  // Current overall streak per capper - computeStats over the capper's whole
-  // history (every sport / bet type), identical to how getCapperLeaderboardTable
-  // derives the flame badge's value.
-  const streaks: Record<string, GameCardStreak> = {};
-  for (const capperId of capperIds) {
-    streaks[capperId] = computeStats(byCapper.get(capperId) ?? []).currentStreak;
-  }
-
-  // The /live card's "Last 20 Picks" row - capper-wide, NOT scoped to
-  // any card's category or league (unlike the All-Time / League rows). Drawn
-  // from the same full per-capper history the streak uses; recentPicksRecord
-  // applies the 20-graded-pick minimum below which the row is omitted.
-  const last20: Record<string, LeagueRecordColumn | null> = {};
-  for (const capperId of capperIds) {
-    last20[capperId] = recentPicksRecord(
-      byCapper.get(capperId) ?? [],
-      LEAGUE_RECORD_LAST_N,
-      LEAGUE_RECORD_LAST_N
-    );
-  }
-
-  const records: Record<string, LeagueRecordCard | null> = {};
-  for (const { capperId, leagueSport, category } of pairs) {
-    records[leagueRecordKey(capperId, leagueSport, category)] =
-      cardsByCapperLeague.get(capperId + "|" + leagueSport)?.get(category) ?? null;
-  }
-  return { records, streaks, last20 };
+  const { leagueRecords } = await getCapperRecordBundle(userId, { leagueEntries: entries, categoryPairs: [] });
+  return leagueRecords;
 }
