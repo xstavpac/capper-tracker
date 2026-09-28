@@ -9,6 +9,7 @@ import {
   type FeatureKey,
   type SubscriptionState,
 } from "@/lib/entitlements";
+import { pickCategory, PICK_CATEGORY_VERSION } from "@/server/data/stats";
 
 function toSubscriptionState(
   sub: { plan: string; status: string; currentPeriodEnd: Date | null; cancelAtPeriodEnd: boolean } | null
@@ -177,8 +178,43 @@ export async function createPicksWithEntitlementCheck(userId: string, rows: Pick
       }
     }
 
+    // Every pick is stamped with its pickCategory here, once, at insert - this
+    // is the only place a Pick row is created (createPick and bulk import both
+    // land here), and nothing afterwards changes a category input (grading only
+    // touches status/gradedAt/gradedViaFuzzyMatch), so the stored value stays
+    // exact. Lets the /cappers aggregates GROUP BY category in SQL instead of
+    // re-deriving it per pick in JS (see capper-list-aggregates.ts). One sport
+    // lookup per batch, inside the same transaction.
+    const sports = await tx.sport.findMany({
+      where: { id: { in: Array.from(new Set(rows.map((r) => r.sportId))) } },
+      select: { id: true, name: true },
+    });
+    const sportNameById = new Map(sports.map((s) => [s.id, s.name]));
+
     const created = await Promise.all(
-      rows.map((row) => tx.pick.create({ data: { ...row, userId, status: "PENDING" }, select: { id: true } }))
+      rows.map((row) => {
+        const sportName = sportNameById.get(row.sportId);
+        // A sportId with no matching sport can't be stamped (and the insert
+        // below will fail its foreign key anyway) - leave it at the unstamped
+        // default rather than guess a sport for the category.
+        const stamp = sportName
+          ? {
+              category: pickCategory({
+                betType: row.betType,
+                period: row.period ?? "FULL_GAME",
+                betDetail: row.betDetail ?? null,
+                odds: row.odds,
+                line: row.line ?? null,
+                sportName,
+                pickedSide: row.pickedSide ?? null,
+                mlFavoredSide: row.mlFavoredSide ?? null,
+                propMarket: row.propMarket ?? null,
+              }),
+              categoryVersion: PICK_CATEGORY_VERSION,
+            }
+          : {};
+        return tx.pick.create({ data: { ...row, userId, status: "PENDING", ...stamp }, select: { id: true } });
+      })
     );
     return { allowed: true, created };
   });

@@ -6,13 +6,24 @@
 // iterating the roster array, never dataset.byCapperId.keys() (which has no
 // entry for a capper with zero picks).
 //
+// These two guarantees were written against the raw-pick JS path, which is now the
+// FALLBACK (legacyCapperLeaderboardTable / legacySportCategoryPanelData - used for
+// a category filter or a user with unstamped picks). This file therefore targets
+// those functions. The same guarantees for the primary SQL path are asserted
+// against a real database in capper-list-aggregates-acceptance-test.ts (zero-pick
+// capper present in ALL / absent from LAST_7; capper names in the category panel,
+// compared to the original implementation).
+//
 // Pure: prisma.pick.findMany / prisma.capper.findMany are swapped for spies
 // backed by an in-memory fixture before each call, so no database is
 // touched. Run with:
 //   npx tsx src/server/data/pick-aggregates-cappers-adapter-acceptance-test.ts
 // Exits non-zero on any failed assertion.
 import { prisma } from "@/lib/prisma";
-import { getCapperLeaderboardTable, getSportCategoryPanelData } from "@/server/data/pick-aggregates-cappers-adapter";
+import {
+  legacyCapperLeaderboardTable as getCapperLeaderboardTable,
+  legacySportCategoryPanelData as getSportCategoryPanelData,
+} from "@/server/data/pick-aggregates-cappers-adapter";
 
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {
@@ -52,6 +63,8 @@ function makePick(overrides: Partial<FakePick> & { capperId: string }): FakePick
     sportsbook: null,
     units: 1,
     datePosted: new Date("2026-01-01T00:00:00Z"),
+    // Real rows always have createdAt; getCapperPickDataset sorts by (createdAt, id).
+    createdAt: new Date(Date.UTC(2026, 0, 1) + pickBase * 1000),
     gameTime: new Date("2026-01-01T00:00:00Z"),
     notes: null,
     status: "WIN",

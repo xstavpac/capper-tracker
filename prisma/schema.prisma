@@ -317,6 +317,15 @@ model Pick {
     // GameResult.gameNumber match when this is set, instead of its normal closest-start-time tiebreak, so two
     // legs of a traditional doubleheader (which can start minutes apart) can never grade against each other.
 
+  category        String? // pickCategory() (stats.ts) result, stamped once at insert by createPicksWithEntitlementCheck
+    // so the /cappers aggregates can GROUP BY it in SQL instead of re-deriving it per pick in JS. TEXT, not an enum:
+    // PickCategoryKey includes generated segment keys, and an enum would need a migration per new key. null is a
+    // legitimate pickCategory result (e.g. a TOTAL with no over/under text), so null does NOT mean "not stamped" -
+    // categoryVersion does.
+  categoryVersion Int     @default(0) // PICK_CATEGORY_VERSION at the time `category` was stamped; 0 = never stamped
+    // (every pick predating this column until scripts/backfill-pick-category.ts runs). Readers fall back to the JS
+    // path for any user with a row below the current version.
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
