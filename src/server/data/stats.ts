@@ -1271,6 +1271,32 @@ export type CategoryBreakdownItem = {
   recent?: CategoryRecentForm | null;
 };
 
+// The /live and /cappers "category panel" shape: a per-sport breakdown plus
+// each category's top-cappers leaderboard. Shared between
+// pick-aggregates-cappers-adapter.ts's SQL getSportCategoryPanelData
+// (production) and sport-category-panel-legacy.ts's raw-pick original (the
+// parity-test/T2-harness-only reference it's compared against) - both
+// deliberately produce this exact shape, so the type lives here rather than
+// in either implementation, letting production code depend on the shape
+// without depending on the legacy reference module itself.
+export type CategoryLeaderboardEntry = {
+  capperId: string;
+  name: string;
+  wins: number;
+  losses: number;
+  pushes: number;
+  winPct: number;
+};
+
+export type SportCategoryPanelData = {
+  breakdown: CategoryBreakdownItem[];
+  // Keyed by PickCategoryKey, but sparse (a category with zero cappers past
+  // the leaderboard's minimum-picks threshold just won't have an entry) -
+  // Partial is the honest type for that rather than claiming every key is
+  // always present.
+  leaderboards: Partial<Record<PickCategoryKey, CategoryLeaderboardEntry[]>>;
+};
+
 // The two thresholds the /live game-card expander uses for the recent-form
 // indicator (see game-picks-expander.tsx): only surface "last 20" once a
 // capper has enough category volume for all-time to plausibly be stale.
@@ -1498,8 +1524,9 @@ async function computeDashboardSummary(userId: string) {
     totalPicks: picks.length,
     // DEFAULT_CHIP_SET, not chipSetForLeague - this mixes every sport
     // together, and F5 ML/NRFI only mean anything within MLB (see
-    // getSportCategoryPanelData in server/data/cappers.ts for the per-sport
-    // equivalent, which also powers that panel's per-category leaderboards).
+    // getSportCategoryPanelData in server/data/pick-aggregates-cappers-adapter.ts
+    // for the per-sport equivalent, which also powers that panel's per-category
+    // leaderboards).
     categoryBreakdown: computeCategoryBreakdown(picks, DEFAULT_CHIP_SET),
     // Derived here, once, from the array already in hand - the page must not
     // re-fetch the history to build its own chart. Downsampled for the

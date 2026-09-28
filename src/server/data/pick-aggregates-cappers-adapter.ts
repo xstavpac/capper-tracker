@@ -47,6 +47,8 @@ import {
   type RecordStats,
   type ScorecardWindow,
   type SpecialistTag,
+  type SportCategoryPanelData,
+  type CategoryLeaderboardEntry,
 } from "@/server/data/stats";
 import { getCapperPickDataset, sliceIntoWindows } from "@/server/data/pick-aggregates";
 import {
@@ -64,10 +66,14 @@ import {
   type CapperLeagueFilter,
   type LeaderboardEntry,
   type FavoriteCappersSummary,
-  type SportCategoryPanelData,
-  type CategoryLeaderboardEntry,
   type ActivityEntry,
 } from "@/server/data/cappers";
+// SportCategoryPanelData / CategoryLeaderboardEntry come from stats.ts, not
+// from sport-category-panel-legacy.ts - that file is a parity-test/T2-harness-
+// only reference (its getSportCategoryPanelData is unused by any page since
+// #128) and production code must not import it. This adapter's own
+// getSportCategoryPanelData below reuses the same shared type on purpose
+// ("same name, same return shape" is the point of the migration).
 
 export { getPlanStatus } from "@/server/data/cappers";
 

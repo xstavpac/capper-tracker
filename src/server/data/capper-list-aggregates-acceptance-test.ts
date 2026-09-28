@@ -33,6 +33,9 @@ import {
   type ScorecardWindow,
 } from "@/server/data/stats";
 import * as legacy from "@/server/data/cappers";
+// getSportCategoryPanelData moved out of cappers.ts (unused by any page since
+// #128) into its own test-only reference file - see that file's header.
+import * as legacyPanel from "@/server/data/sport-category-panel-legacy";
 import * as adapter from "@/server/data/pick-aggregates-cappers-adapter";
 import { queryWindowTotals, queryCurrentStreaks } from "@/server/data/capper-list-aggregates";
 import { getCapperPickDataset } from "@/server/data/pick-aggregates";
@@ -227,11 +230,11 @@ const stripCollective = (s: { collectiveStats: Record<string, unknown>; entries:
 // Production no longer has this path - the panel reads the stored category in SQL - so
 // this is what the SQL result is compared to wherever ties make the original
 // cappers.ts implementation (unspecified order) an unreliable comparator.
-async function referencePanel(userId: string, sportName: string): Promise<legacy.SportCategoryPanelData> {
+async function referencePanel(userId: string, sportName: string): Promise<legacyPanel.SportCategoryPanelData> {
   const [dataset, roster] = await Promise.all([getCapperPickDataset(userId, { sportName }), legacy.getCappersForUser(userId)]);
   const nameByCapperId = new Map(roster.map((c) => [c.id, c.name]));
   const breakdown = computeCategoryBreakdown(dataset.all, chipSetForLeague(sportName));
-  const leaderboards: legacy.SportCategoryPanelData["leaderboards"] = {};
+  const leaderboards: legacyPanel.SportCategoryPanelData["leaderboards"] = {};
   for (const item of breakdown) {
     const scoped = dataset.all.filter((p) => pickCategory({ ...p, sportName }) === item.key);
     const byCapper = new Map<string, typeof scoped>();
@@ -422,7 +425,7 @@ async function main() {
   for (const sport of ["MLB", "NFL", "NBA"]) {
     const viaSql = await adapter.getSportCategoryPanelData(U1, sport);
     same(`category panel [${sport}] == ordered raw-pick path`, viaSql, await referencePanel(U1, sport));
-    const orig = await legacy.getSportCategoryPanelData(U1, sport);
+    const orig = await legacyPanel.getSportCategoryPanelData(U1, sport);
     same(`category panel [${sport}] breakdown == original cappers.ts`, viaSql.breakdown, orig.breakdown);
   }
 
@@ -507,7 +510,7 @@ async function main() {
   add("V", 6, 2, { sport: "NFL", odds: -140 });
   await addPicks(U3, panelSpecs);
   const panelNew = await adapter.getSportCategoryPanelData(U3, "MLB");
-  const panelOld = await legacy.getSportCategoryPanelData(U3, "MLB");
+  const panelOld = await legacyPanel.getSportCategoryPanelData(U3, "MLB");
   same("tie-free category panel [MLB] == original cappers.ts (breakdown + leaderboards)", panelNew, panelOld);
   check("panel: FAV_ML leaderboard capped at 5 and led by Val (90%)", (panelNew.leaderboards.FAV_ML ?? []).length === 5 && panelNew.leaderboards.FAV_ML![0].name === "Val");
   check("panel: pending-only UNDER category absent from breakdown", !panelNew.breakdown.some((b) => b.key === "UNDER"));
@@ -598,7 +601,7 @@ async function main() {
   put8("i", 2, 0, 0, { betType: "TOTAL", betDetail: "Over 8" });
   await addPicks(U8, rec8);
   const panel8 = await adapter.getSportCategoryPanelData(U8, "MLB");
-  same("panel edges: == original cappers.ts (breakdown + leaderboards)", panel8, await legacy.getSportCategoryPanelData(U8, "MLB"));
+  same("panel edges: == original cappers.ts (breakdown + leaderboards)", panel8, await legacyPanel.getSportCategoryPanelData(U8, "MLB"));
   same("panel edges: FAV_ML top 5 is a..e (f cut by top-5; g/h under the 3-decided minimum)", panel8.leaderboards.FAV_ML!.map((e) => e.name), ["Cap a", "Cap b", "Cap c", "Cap d", "Cap e"]);
   same("panel edges: DOG_ML tile exists with an empty leaderboard", [panel8.breakdown.some((b) => b.key === "DOG_ML"), panel8.leaderboards.DOG_ML], [true, []]);
   same("panel edges: OVER lists its 4 eligible cappers (i has only 2 decided)", panel8.leaderboards.OVER!.map((e) => e.name), ["Cap d", "Cap e", "Cap f", "Cap g"]);
