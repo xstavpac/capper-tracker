@@ -12,9 +12,8 @@ export type PickAggregateDataset = {
 export type PickAggregateFilter = { sportName?: string; capperIds?: string[] };
 
 // Layer 1 (acquisition): the raw-pick fetch behind the /cappers legacy JS path
-// (see pick-aggregates-cappers-adapter.ts - now only the fallback for a user with
-// unstamped picks / a category filter; the page's normal path aggregates in SQL
-// and never calls this). Always full history - no take/limit, no window - so
+// (see pick-aggregates-cappers-adapter.ts - now only used for a category filter;
+// the page's normal path aggregates in SQL and never calls this). Always full history - no take/limit, no window - so
 // every caller windows/filters this SAME in-memory dataset rather than
 // re-querying the DB with its own narrower scope. `byCapperId` is a grouping
 // convenience over `all`, not a second query.

@@ -1026,10 +1026,12 @@ type PickCategoryInput = {
 
 // Stamped next to every stored Pick.category (see createPicksWithEntitlementCheck
 // and scripts/backfill-pick-category.ts). Bump it whenever pickCategory's output
-// can change for an existing input, then re-run the backfill - readers treat any
-// row with a lower categoryVersion as "not stamped" and fall back to computing
-// the category in JS. pick-category-version-acceptance-test.ts pins pickCategory's
-// outputs so changing them without bumping this fails a test.
+// can change for an existing input, then re-run the backfill to restamp existing
+// picks (it selects rows below this version). Nothing falls back to computing the
+// category in JS - the /cappers specialist tags and category panel read the stored
+// value - so until that backfill runs they reflect the old classification.
+// pick-category-version-acceptance-test.ts pins pickCategory's outputs so changing
+// them without bumping this fails a test.
 export const PICK_CATEGORY_VERSION = 1;
 
 export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {

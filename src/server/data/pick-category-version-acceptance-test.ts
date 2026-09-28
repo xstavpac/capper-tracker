@@ -4,9 +4,9 @@
 //
 // If this test fails you changed what pickCategory returns for an existing
 // input. Every already-stored category is now out of date for that input, so:
-//   1. bump PICK_CATEGORY_VERSION in stats.ts (readers treat rows below the
-//      current version as unstamped and fall back to computing in JS),
-//   2. re-run scripts/backfill-pick-category.ts to restamp existing picks,
+//   1. bump PICK_CATEGORY_VERSION in stats.ts,
+//   2. re-run scripts/backfill-pick-category.ts to restamp existing picks (it
+//      selects rows below the current version),
 //   3. only then update the expected values below.
 //
 // Pure (no database). Run with:

@@ -323,8 +323,8 @@ model Pick {
     // legitimate pickCategory result (e.g. a TOTAL with no over/under text), so null does NOT mean "not stamped" -
     // categoryVersion does.
   categoryVersion Int     @default(0) // PICK_CATEGORY_VERSION at the time `category` was stamped; 0 = never stamped
-    // (every pick predating this column until scripts/backfill-pick-category.ts runs). Readers fall back to the JS
-    // path for any user with a row below the current version.
+    // (every pick predating this column until scripts/backfill-pick-category.ts runs). The backfill selects rows
+    // below the current version, so bumping PICK_CATEGORY_VERSION and re-running it restamps everything.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
