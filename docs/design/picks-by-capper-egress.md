@@ -78,8 +78,8 @@ TOP_PERFORMER_THRESHOLD` and `card.overall.count > 0`.
 `recent` to any category with ≥100 decided picks, but a repo-wide grep for
 `.recent` finds no consumer (its own comment names `game-picks-expander.tsx` as
 the reader, which now uses `getLeagueRecordsAction` and never sees this type).
-`label` and `key` are also unread by these two consumers. Recommendation and
-open question Q3: **drop `recent`** from the new path.
+`label` and `key` are also unread by these two consumers. **DECIDED (Q3):
+drop `recent`**, in the removal PR.
 
 ### 2.3 The exact logic being reproduced
 
@@ -178,12 +178,12 @@ Plan: `GROUP BY` / `WHERE p.category = …` on the stored column, exactly as
   produces `categoryVersion = 0`, and the new SQL would then silently omit that
   pick from every category/league card (silently wrong beats unresolved in
   severity — see the project's bad-data-vs-unresolved rule). #125 deliberately
-  removed the equivalent fallback for `/cappers`; this doc does **not** propose
-  bringing back a JS fallback. It proposes a **detection-only tripwire** that
-  costs no round trip: the shared CTE also computes
-  `count(*) FILTER (WHERE "categoryVersion" < $current)` over the requested
-  cappers' decided rows, and the wrapper `console.error`s (→ log drain) when it
-  is `> 0`. See Q2.
+  removed the equivalent fallback for `/cappers`, and this doc does not bring
+  back a JS fallback. **DECIDED (Q2): no runtime tripwire.** Instead, a static
+  guard test fails if any `prisma.pick.create` / `createMany` (or `tx.pick.*`)
+  appears in `src/` outside the stamped path
+  (`createPicksWithEntitlementCheck`), so a new unstamped creator fails CI
+  before it can ship. The SQL below therefore carries no `unstamped` output.
 
 ### 3.3 Sub-case: `NULL` category
 
@@ -245,7 +245,7 @@ WITH
   ids(cid) AS (VALUES ($cid1), ($cid2), …),           -- every capper in the request
   base AS MATERIALIZED (                              -- scan picks ONCE
     SELECT p."capperId" AS cid, s.name AS sport, p.category,
-           p.status, p."categoryVersion" AS cv,
+           p.status,
            p."gameTime" AS gt, p."createdAt" AS ca, p.id
     FROM picks p
     JOIN sports s ON s.id = p."sportId"
@@ -312,8 +312,7 @@ SELECT jsonb_build_object(
   'cards',    COALESCE((SELECT jsonb_agg(to_jsonb(cards))  FROM cards),  '[]'),
   'catrec',   COALESCE((SELECT jsonb_agg(to_jsonb(catrec)) FROM catrec), '[]'),
   'streaks',  COALESCE((SELECT jsonb_agg(to_jsonb(streaks)) FROM streaks), '[]'),
-  'last20',   COALESCE((SELECT jsonb_agg(to_jsonb(last20)) FROM last20), '[]'),
-  'unstamped', (SELECT count(*) FROM base WHERE cv < $currentVersion)
+  'last20',   COALESCE((SELECT jsonb_agg(to_jsonb(last20)) FROM last20), '[]')
 ) AS out;
 ```
 
@@ -328,7 +327,6 @@ implementation of each rule:
 - streak: no row → `{ type: "NONE", count: 0 }`.
 - last20: `decided < LEAGUE_RECORD_LAST_N` (or no row) → `null`; else
   `{wins, losses, pushes, winPct: winPctOf(w, l), count: w+l+p}`.
-- `unstamped > 0` → `console.error` tripwire (§3.2 G4). No fallback.
 
 Details worth stating:
 
@@ -545,7 +543,7 @@ whose picks are all `PENDING` → `null`; `CANCELLED` ignored; `PUSH` counted in
 `gameTime` tie at the cutoff; streak tie at the edge; `NULL`-category rows
 still count toward streak and last-20; sport-name case sensitivity for the
 league column; a capper with zero picks (`NONE`, `null`); unstamped rows
-trigger the tripwire and are absent from cards; a requested category outside
+(`categoryVersion = 0`) are absent from cards (documenting why the static guard matters); a requested category outside
 `ALL_CATEGORY_KEYS` → `null`; a category with ≥ 100 decided picks (only if `recent`
 is retained, Q3).
 
@@ -589,11 +587,12 @@ last-20 sort; the new path does none of that in JS.
 2. **Verification groundwork** (no behavior change): `--verify` mode on
    `backfill-pick-category`; the exhaustive `pickCategory` matrix test (G2);
    the `ALL_CATEGORY_KEYS` completeness test (G3); harness support (stamp step,
-   `capture-picks-by-capper.ts`, `legacy` copy). Gate: user runs `--verify`
+   `capture-picks-by-capper.ts`, `legacy` copy) and the static guard test
+   (Q2). Gate: user runs `--verify`
    against production and reports zero mismatches.
 3. **SQL implementation behind the existing function signatures**:
    `getCapperCategoryRecords`, `getCapperLeagueRecords` (+ the bundle
-   function), export of `ORDER` / the streak fragment, tripwire, synthetic
+   function), export of `ORDER` / the streak fragment, `EXPLAIN` check (Q7), synthetic
    acceptance tests, T2 parity run attached to the PR. **Ships as a PR for
    manual review, not auto-merged** — it feeds the parlay ranking
    (Auto-Generate / Hedge / Contrarian) and Sharp Money's qualification gate,
@@ -601,43 +600,34 @@ last-20 sort; the new path does none of that in JS.
 4. **Call-site collapse**: `parlay-pool-generator.ts` 3 → 2 and
    `parlay-generator.ts` 2 → 1 using the bundle; separately, optional client
    PRs for the Grid Live single-call panel and `buildMyPicks` record reuse
-   (Q4, Q5).
-5. **Removal**: delete `fetchPicksByCapper` and the `legacy` copy after an
+   (Q4, Q5) — both **deferred**, not part of this migration.
+5. **Removal**: delete `fetchPicksByCapper`, `item.recent` (Q3) and the `legacy` copy after an
    observation period, same convention as step 2.
 
-**Open questions**
+**Open questions and decisions**
 
-- **Q1 — Tie-break behavior change (§4.1).** Approve `gameTime, createdAt, id`
-  for both the streak and the last-20 cutoff, knowing the last-20 cut may
-  select different tied picks than today's typical (heap-order) result, and
-  that same-`gameTime` ties are common? Alternative: preserve today's *typical*
-  last-20 behavior with `gameTime DESC, createdAt ASC, id ASC` at the cost of
-  two inconsistent definitions of "most recent".
-- **Q2 — Tripwire for unstamped rows (G4).** OK to add the zero-round-trip,
-  detection-only `categoryVersion < current` count and `console.error`, given
-  #125 intentionally removed the fallback? Or do you want a hard failure /
-  nothing?
-- **Q3 — Drop `item.recent`?** No consumer reads it (§2.2). Dropping it removes
-  a per-category `row_number` partition and the ≥ 100-decided gate. Confirm no
-  out-of-tree reader (e.g. a planned surface) before removal.
-- **Q4 — Grid Live: one panel-level call instead of three?** It saves 2 of the
-  3 round trips and 2 server-action invocations per game switch, but it
-  reverses the deliberate "each team section fetches independently so one
-  team's picks aren't blocked on the other's records" design
-  (`team-picks-panel.tsx` header comment). I have **not** verified how Next
-  schedules concurrent server actions from one client (I believe they are
-  queued one at a time; **[UNVERIFIED]**) — that determines whether the 3
-  calls are effectively serial today.
-- **Q5 — Client-side dedupe in the Parlay Pool** (`buildMyPicks` reuse of the
-  effect's `records`): in scope for this effort or a separate change?
-- **Q6 — Output shape for the bundle.** A single `getCapperRecordBundle`
-  returning `{ leagueRecords, categoryRecords }`, with the two existing
-  exported functions kept as thin wrappers (so `sharp-money.ts` and the actions
-  don't change signatures), is my proposal. Agreed?
-- **Q7 — Index.** The statement filters `(userId, capperId)` then `status`.
-  Existing indexes: `(userId, capperId)`, `(userId, status)`. I don't expect a
-  new index to be needed at current volume; confirm with `EXPLAIN` in PR 2
-  rather than adding one now.
-- **Q8 — Doc location.** Written to `docs/picks-by-capper-egress.md` as
-  requested; the step-2 reference lives at `docs/design/cappers-egress-step2.md`.
-  Move under `docs/design/` if you want them together.
+- **Q1 — Tie-break behavior change (§4.1). DECIDED: APPROVED.** `gameTime,
+  createdAt, id` for both the streak and the last-20 cutoff, as a deliberate
+  stabilization. The last-20 cut may select different tied picks than today's
+  typical (heap-order) result; same-`gameTime` ties are common; the parity plan
+  (§8) characterizes every such diff.
+- **Q2 — Unstamped-row detection (G4). DECIDED: no runtime tripwire.**
+  Replaced by a static guard test that fails if any `prisma.pick.create` /
+  `createMany` outside the stamped path (`createPicksWithEntitlementCheck`)
+  appears in `src/`. Lands in the verification-groundwork PR.
+- **Q3 — `item.recent`. DECIDED: DROP**, in the removal PR (not the SQL
+  implementation PR, so the swap is a pure equivalence change first).
+- **Q4 — Grid Live single panel-level call. DECIDED: DEFERRED.** Grid Live keeps
+  its 3 section calls; out of scope for this migration. (Whether Next queues
+  concurrent server actions from one client remains **[UNVERIFIED]**.)
+- **Q5 — Client-side Parlay Pool dedupe. DECIDED: DEFERRED** to a separate
+  change.
+- **Q6 — Bundle shape. DECIDED: APPROVED.** `getCapperRecordBundle` returning
+  `{ leagueRecords, categoryRecords }`, with `getCapperLeagueRecords` and
+  `getCapperCategoryRecords` kept as thin wrappers so `sharp-money.ts` and the
+  actions don't change signatures.
+- **Q7 — Index. DECIDED:** settled by `EXPLAIN (ANALYZE, BUFFERS)` on the
+  harness DB **in the implementation PR**. Existing indexes are `(userId,
+  capperId)` and `(userId, status)`; no new index is added on speculation.
+- **Q8 — Doc location. Resolved:** moved to `docs/design/` alongside
+  `cappers-egress-step2.md`.
