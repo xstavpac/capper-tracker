@@ -9,6 +9,10 @@
 // so re-running just refreshes the fake data.
 import { PrismaClient } from "@prisma/client";
 import { seedModelEngineFixtures } from "./seed-ci";
+// pickCategory / PICK_CATEGORY_VERSION: every Pick is stamped at creation (see the write path,
+// createPicksWithEntitlementCheck), and the /cappers aggregates read the stored value - a seeded
+// pick left unstamped would be invisible to specialist tags and the category panel.
+import { pickCategory, PICK_CATEGORY_VERSION } from "../src/server/data/stats";
 
 const prisma = new PrismaClient();
 
@@ -122,6 +126,18 @@ async function main() {
         gradedAt: p.status === "PENDING" ? null : p.gameTime,
         datePosted: new Date(p.gameTime.getTime() - 3_600_000),
         gameTime: p.gameTime,
+        category: pickCategory({
+          betType: p.betType,
+          period: "FULL_GAME",
+          betDetail: p.betDetail,
+          odds: p.odds,
+          line: p.line,
+          sportName: p.sport,
+          pickedSide: null,
+          mlFavoredSide: null,
+          propMarket: null,
+        }),
+        categoryVersion: PICK_CATEGORY_VERSION,
       },
     });
   }

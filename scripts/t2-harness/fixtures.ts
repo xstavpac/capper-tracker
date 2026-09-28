@@ -24,6 +24,10 @@
 import { PrismaClient } from "@prisma/client";
 import { assertNotProd } from "./lib/prod-guard.mjs";
 import { startOfEasternDay } from "../../src/lib/dates";
+// Fixture picks are stamped at creation exactly like production picks (see
+// createPicksWithEntitlementCheck): the SQL aggregation paths read the STORED category, so an
+// unstamped fixture pick would be invisible to them and the harness would diff nothing real.
+import { pickCategory, PICK_CATEGORY_VERSION } from "../../src/server/data/stats";
 import { FIXTURE_USER_A_SUPABASE_ID, FIXTURE_USER_B_SUPABASE_ID } from "./fixture-user-ids.mjs";
 
 export { FIXTURE_USER_A_SUPABASE_ID, FIXTURE_USER_B_SUPABASE_ID };
@@ -194,6 +198,18 @@ async function main() {
         gradedAt: p.status === "PENDING" ? null : p.gameTime,
         datePosted: new Date(p.gameTime.getTime() - 3_600_000),
         gameTime: p.gameTime,
+        category: pickCategory({
+          betType: p.betType,
+          period: "FULL_GAME",
+          betDetail: null,
+          odds: p.odds,
+          line: p.line,
+          sportName: p.sport,
+          pickedSide: null,
+          mlFavoredSide: null,
+          propMarket: null,
+        }),
+        categoryVersion: PICK_CATEGORY_VERSION,
       },
     });
   }
