@@ -23,6 +23,8 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import {
   computeStats,
+  computeCategoryBreakdown,
+  chipSetForLeague,
   pickCategory,
   recordStatsFromTotals,
   scorecardWindowRange,
@@ -32,7 +34,8 @@ import {
 } from "@/server/data/stats";
 import * as legacy from "@/server/data/cappers";
 import * as adapter from "@/server/data/pick-aggregates-cappers-adapter";
-import { queryWindowTotals, queryCurrentStreaks, queryCategoryPanel, querySpecialistCandidates } from "@/server/data/capper-list-aggregates";
+import { queryWindowTotals, queryCurrentStreaks } from "@/server/data/capper-list-aggregates";
+import { getCapperPickDataset } from "@/server/data/pick-aggregates";
 import { createPicksWithEntitlementCheck } from "@/server/data/subscriptions";
 
 function hostOf(url: string | undefined): string {
@@ -152,7 +155,6 @@ type PickSpec = {
   pickedSide?: "HOME" | "AWAY" | null;
   mlFavoredSide?: "HOME" | "AWAY" | null;
   propMarket?: Prisma.PickUncheckedCreateInput["propMarket"];
-  unstamped?: boolean;
 };
 
 let pickSeq = 0;
@@ -198,8 +200,8 @@ function pickRow(userId: string, s: PickSpec): Prisma.PickCreateManyInput {
     pickedSide: s.pickedSide ?? null,
     mlFavoredSide: s.mlFavoredSide ?? null,
     propMarket: s.propMarket ?? null,
-    category: s.unstamped ? null : category,
-    categoryVersion: s.unstamped ? 0 : PICK_CATEGORY_VERSION,
+    category,
+    categoryVersion: PICK_CATEGORY_VERSION,
   };
 }
 async function addPicks(userId: string, specs: PickSpec[]) {
@@ -218,6 +220,37 @@ const stripCollective = (s: { collectiveStats: Record<string, unknown>; entries:
   const { currentStreak: _c, longestWinStreak: _w, longestLossStreak: _l, ...collectiveStats } = s.collectiveStats;
   return { collectiveStats, entries: stripEntries(s.entries) };
 };
+
+// The raw-pick reference for the category panel: the original per-pick JS computation
+// (computeCategoryBreakdown / pickCategory / computeStats over the user's picks), with
+// the picks ordered by createdAt, id (getCapperPickDataset) so ties follow the D2 rule.
+// Production no longer has this path - the panel reads the stored category in SQL - so
+// this is what the SQL result is compared to wherever ties make the original
+// cappers.ts implementation (unspecified order) an unreliable comparator.
+async function referencePanel(userId: string, sportName: string): Promise<legacy.SportCategoryPanelData> {
+  const [dataset, roster] = await Promise.all([getCapperPickDataset(userId, { sportName }), legacy.getCappersForUser(userId)]);
+  const nameByCapperId = new Map(roster.map((c) => [c.id, c.name]));
+  const breakdown = computeCategoryBreakdown(dataset.all, chipSetForLeague(sportName));
+  const leaderboards: legacy.SportCategoryPanelData["leaderboards"] = {};
+  for (const item of breakdown) {
+    const scoped = dataset.all.filter((p) => pickCategory({ ...p, sportName }) === item.key);
+    const byCapper = new Map<string, typeof scoped>();
+    for (const pick of scoped) {
+      const list = byCapper.get(pick.capperId);
+      if (list) list.push(pick);
+      else byCapper.set(pick.capperId, [pick]);
+    }
+    leaderboards[item.key] = Array.from(byCapper.entries())
+      .map(([capperId, picks]) => {
+        const s = computeStats(picks);
+        return { capperId, name: nameByCapperId.get(capperId) ?? "Unknown capper", wins: s.wins, losses: s.losses, pushes: s.pushes, winPct: s.winPct };
+      })
+      .filter((e) => e.wins + e.losses + e.pushes >= 3)
+      .sort((a, b) => b.winPct - a.winPct)
+      .slice(0, 5);
+  }
+  return { breakdown, leaderboards };
+}
 
 // ---- main -------------------------------------------------------------------
 
@@ -384,11 +417,11 @@ async function main() {
   same("favorites per-window wrapper == batched (TODAY)", await adapter.getFavoriteCappersSummary(U1, "TODAY"), favBatched!.TODAY);
   same("favorites: collective currentStreak is the documented placeholder", favBatched!.ALL.collectiveStats.currentStreak, { type: "NONE", count: 0 });
 
-  // Category panel vs the original (ties in this random fixture are compared against the ordered
-  // fallback, which implements the createdAt,id rule; the tie-free fixture below is compared to the original).
+  // Category panel vs the original (ties in this random fixture are compared against referencePanel, a
+  // raw-pick reference that implements the createdAt,id rule; the tie-free fixtures below are compared to the original).
   for (const sport of ["MLB", "NFL", "NBA"]) {
     const viaSql = await adapter.getSportCategoryPanelData(U1, sport);
-    same(`category panel [${sport}] == ordered raw-pick path`, viaSql, await adapter.legacySportCategoryPanelData(U1, sport));
+    same(`category panel [${sport}] == ordered raw-pick path`, viaSql, await referencePanel(U1, sport));
     const orig = await legacy.getSportCategoryPanelData(U1, sport);
     same(`category panel [${sport}] breakdown == original cappers.ts`, viaSql.breakdown, orig.breakdown);
   }
@@ -585,22 +618,22 @@ async function main() {
   await addPicks(U9, rec9);
   const panel9 = await adapter.getSportCategoryPanelData(U9, "MLB");
   same("tied cut: five earliest-first-pick cappers, in that order", panel9.leaderboards.FAV_ML!.map((e) => e.name), ["Tie 4", "Tie 2", "Tie 6", "Tie 1", "Tie 5"]);
-  same("tied cut: == ordered raw-pick path", panel9, await adapter.legacySportCategoryPanelData(U9, "MLB"));
+  same("tied cut: == ordered raw-pick path", panel9, await referencePanel(U9, "MLB"));
 
-  // ---------------- Unstamped picks fall back to the raw-pick path ----------------
-  const U4 = await makeUser("unstamped");
-  const c4 = await makeCappers(U4, [{ key: "W", name: "Whiskey" }, { key: "X", name: "Xray" }]);
-  const unstampedSpecs: PickSpec[] = [];
-  for (let i = 0; i < 14; i++) {
-    unstampedSpecs.push({ capperId: c4.W, status: i < 10 ? "WIN" : "LOSS", odds: -130, gameTime: ago(i * 700 + 15), unstamped: i % 2 === 0 });
-    unstampedSpecs.push({ capperId: c4.X, status: i < 5 ? "WIN" : "LOSS", odds: 140, gameTime: ago(i * 700 + 25), unstamped: i % 2 === 0 });
-  }
-  await addPicks(U4, unstampedSpecs);
-  check("unstamped picks are detected by the panel query", (await queryCategoryPanel({ userId: U4, sportName: "MLB", minPicks: 3, limit: 5 })).unstamped > 0);
-  check("unstamped picks are detected by the specialist query", (await querySpecialistCandidates({ userId: U4, minShare: 0.5, minSample: 5 })).unstamped > 0);
-  same("unstamped user: category panel == original", await adapter.getSportCategoryPanelData(U4, "MLB"), await legacy.getSportCategoryPanelData(U4, "MLB"));
-  same("unstamped user: leaderboard (specialist via fallback) == original", stripEntries(await adapter.getCapperLeaderboardTable(U4, "ALL")), stripEntries(await legacy.getCapperLeaderboardTable(U4, "ALL")));
-  check("unstamped user: specialist actually resolved via the fallback", (await adapter.getCapperLeaderboardTable(U4, "ALL")).some((e) => e.specialist !== null));
+  // ---------------- The stored category is authoritative (no raw-pick fallback) ----------------
+  // Specialist tags and the panel read Pick.category. Restamping the column changes the result,
+  // proving nothing recomputes the category from the pick's fields behind it.
+  const U4 = await makeUser("stored");
+  const c4 = await makeCappers(U4, [{ key: "W", name: "Whiskey" }]);
+  const storedSpecs: PickSpec[] = [];
+  for (let i = 0; i < 6; i++) storedSpecs.push({ capperId: c4.W, status: "WIN", ...FAV, gameTime: ago(i * 700 + 15) }); // stamped FAV_ML
+  await addPicks(U4, storedSpecs);
+  const tag4 = async () => (await adapter.getCapperLeaderboardTable(U4, "ALL")).find((e) => e.capperId === c4.W)!.specialist?.category ?? null;
+  same("stored category: specialist reads FAV_ML as stamped", await tag4(), "FAV_ML");
+  await prisma.pick.updateMany({ where: { userId: U4 }, data: { category: "DOG_ML" } }); // pick fields still say favorite
+  same("stored category: restamped to DOG_ML -> specialist follows the stored value", await tag4(), "DOG_ML");
+  const panel4 = await adapter.getSportCategoryPanelData(U4, "MLB");
+  same("stored category: panel follows the stored value too", [panel4.breakdown.map((b) => b.key), panel4.leaderboards.FAV_ML], [["DOG_ML"], undefined]);
 
   // ---------------- D2 tie-break tests: createdAt, id ----------------
   const U5 = await makeUser("ties");
@@ -627,11 +660,11 @@ async function main() {
   await addPicks(U5, [tieBase("L1", 0, 90000), tieBase("L1", 1, 80000), tieBase("L1", 2, 70000), tieBase("L2", 0, 60000), tieBase("L2", 1, 50000), tieBase("L2", 2, 40000)]);
   let panel = await adapter.getSportCategoryPanelData(U5, "MLB");
   same("tie: 100% win% tie -> earlier first pick (Leader one) ranks first", panel.leaderboards.FAV_ML!.map((e) => e.name), ["Leader one", "Leader two"]);
-  same("tie: leaderboard order agrees with the ordered raw-pick path", panel, await adapter.legacySportCategoryPanelData(U5, "MLB"));
+  same("tie: leaderboard order agrees with the ordered raw-pick path", panel, await referencePanel(U5, "MLB"));
   await prisma.pick.updateMany({ where: { userId: U5, capperId: c5.L2, category: "FAV_ML" }, data: { createdAt: new Date(T0 - 999000) } });
   panel = await adapter.getSportCategoryPanelData(U5, "MLB");
   same("tie: make Leader two's picks older -> they rank first", panel.leaderboards.FAV_ML!.map((e) => e.name), ["Leader two", "Leader one"]);
-  same("tie: swapped order agrees with the ordered raw-pick path", panel, await adapter.legacySportCategoryPanelData(U5, "MLB"));
+  same("tie: swapped order agrees with the ordered raw-pick path", panel, await referencePanel(U5, "MLB"));
 
   // Specialist exact-50% tie: 5 FAV_ML wins and 5 DOG_ML wins; the category whose first decided pick is earlier wins.
   const spec = (i: number, odds: number, createdMs: number): PickSpec => ({ capperId: c5.SP, status: "WIN", odds, gameTime: ago(2000 + i * 100 + (odds > 0 ? 3 : 0)), createdAt: new Date(T0 - createdMs) });

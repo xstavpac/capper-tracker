@@ -27,7 +27,7 @@
 //     fallback dataset.
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { SCORECARD_WINDOWS, scorecardWindowRange, PICK_CATEGORY_VERSION, type ScorecardWindow } from "@/server/data/stats";
+import { SCORECARD_WINDOWS, scorecardWindowRange, type ScorecardWindow } from "@/server/data/stats";
 
 export type WindowTotals = {
   // null on the pooled (favorites-collective) variant, which has no per-capper grouping.
@@ -218,17 +218,16 @@ const KEY = Prisma.sql`(lpad(round(extract(epoch FROM p."createdAt") * 1000)::bi
 // stats.ts, never re-declared here) - at most two per capper - each carrying the
 // capper's decided totals. stats.ts's specialistFromCategoryTotals still makes
 // the actual decision (including the win% comparison); this is only a prefilter
-// so the database doesn't send a row per capper x category. `unstamped` counts
-// decided picks whose stored category isn't at the current PICK_CATEGORY_VERSION;
-// callers fall back to the raw-pick path when it is above 0.
+// so the database doesn't send a row per capper x category. Reads the stored
+// Pick.category.
 export async function querySpecialistCandidates(scope: {
   userId: string;
   sportName?: string;
   minShare: number;
   minSample: number;
-}): Promise<{ rows: SpecialistCandidateRow[]; unstamped: number }> {
+}): Promise<SpecialistCandidateRow[]> {
   const sport = scope.sportName ? Prisma.sql`AND p."sportId" IN (SELECT id FROM sports WHERE name = ${scope.sportName})` : Prisma.empty;
-  const rows = await prisma.$queryRaw<(SpecialistCandidateRow & { isMeta: boolean; unstamped: number })[]>(Prisma.sql`
+  return prisma.$queryRaw<SpecialistCandidateRow[]>(Prisma.sql`
     WITH g AS (
       SELECT
         p."capperId" AS cid,
@@ -236,8 +235,7 @@ export async function querySpecialistCandidates(scope: {
         (count(*) FILTER (WHERE p.status = 'WIN'))::int AS w,
         (count(*) FILTER (WHERE p.status = 'LOSS'))::int AS l,
         (count(*) FILTER (WHERE p.status = 'PUSH'))::int AS pu,
-        min(${KEY}) AS k,
-        (count(*) FILTER (WHERE p."categoryVersion" < ${PICK_CATEGORY_VERSION}))::int AS unst
+        min(${KEY}) AS k
       FROM picks p
       WHERE p."userId" = ${scope.userId} AND p.status IN ('WIN', 'LOSS', 'PUSH') ${sport}
       GROUP BY p."capperId", p.category
@@ -250,14 +248,10 @@ export async function querySpecialistCandidates(scope: {
       FROM g
     )
     SELECT cid AS "capperId", cat AS "category", w AS "wins", l AS "losses", pu AS "pushes", k AS "firstDecidedKey",
-           total AS "decidedTotal", tw AS "totalWins", tl AS "totalLosses", false AS "isMeta", 0 AS "unstamped"
+           total AS "decidedTotal", tw AS "totalWins", tl AS "totalLosses"
     FROM t
     WHERE cat IS NOT NULL AND (w + l + pu) >= ${scope.minSample} AND (w + l + pu)::float8 / total::float8 >= ${scope.minShare}::float8
-    UNION ALL
-    SELECT NULL, NULL, 0, 0, 0, NULL, 0, 0, 0, true, COALESCE((SELECT sum(unst) FROM g), 0)::int
   `);
-  const meta = rows.find((r) => r.isMeta);
-  return { rows: rows.filter((r) => !r.isMeta), unstamped: meta?.unstamped ?? 0 };
 }
 
 // The "best at" panel's data for one sport: per category, the pooled record and
@@ -266,15 +260,14 @@ export async function querySpecialistCandidates(scope: {
 // sample, size, ordering) is applied again in the adapter; this only keeps the
 // database from sending every capper x category. Ineligible cappers are ranked
 // last, so a category with fewer than `limit` eligible cappers still returns a
-// row carrying its pooled totals. `unstamped` counts the sport's picks (any
-// status) whose stored category isn't at the current version.
+// row carrying its pooled totals. Reads the stored Pick.category.
 export async function queryCategoryPanel(scope: {
   userId: string;
   sportName: string;
   minPicks: number;
   limit: number;
-}): Promise<{ rows: CategoryPanelRow[]; unstamped: number }> {
-  const rows = await prisma.$queryRaw<(CategoryPanelRow & { isMeta: boolean; unstamped: number })[]>(Prisma.sql`
+}): Promise<CategoryPanelRow[]> {
+  return prisma.$queryRaw<CategoryPanelRow[]>(Prisma.sql`
     WITH g AS (
       SELECT
         p."capperId" AS cid,
@@ -302,15 +295,7 @@ export async function queryCategoryPanel(scope: {
       FROM g
     )
     SELECT cid AS "capperId", cat AS "category", w AS "wins", l AS "losses", pu AS "pushes", k AS "firstAnyKey",
-           cw AS "categoryWins", cl AS "categoryLosses", cpu AS "categoryPushes", false AS "isMeta", 0 AS "unstamped"
+           cw AS "categoryWins", cl AS "categoryLosses", cpu AS "categoryPushes"
     FROM r WHERE rk <= ${scope.limit}
-    UNION ALL
-    SELECT NULL, NULL, 0, 0, 0, NULL, 0, 0, 0, true,
-      (SELECT (count(*) FILTER (WHERE p."categoryVersion" < ${PICK_CATEGORY_VERSION}))::int
-         FROM picks p
-        WHERE p."userId" = ${scope.userId}
-          AND p."sportId" IN (SELECT id FROM sports WHERE name = ${scope.sportName}))
   `);
-  const meta = rows.find((r) => r.isMeta);
-  return { rows: rows.filter((r) => !r.isMeta), unstamped: meta?.unstamped ?? 0 };
 }

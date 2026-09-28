@@ -17,19 +17,19 @@
 //     wrappers over the batched code for the requested window, kept so existing
 //     callers (the T2 harness registry, tests) keep their signatures.
 //
-// Fallbacks to the original raw-pick JS path (the `legacy*` functions, unchanged
-// in behavior from before the aggregation change):
-//   - filter.category (no route sets it today) - not worth a SQL variant.
-//   - Any user with a pick whose stored category isn't at the current
-//     PICK_CATEGORY_VERSION (pre-backfill picks, seed/fixture rows): the
-//     category-dependent parts (specialist tag, category panel) recompute from
-//     raw picks so output is correct before, during and after the backfill.
-//     Remove once the production backfill has run.
+// The specialist tags and the category panel read the STORED Pick.category
+// (stamped at insert, backfilled once for older picks - see
+// scripts/backfill-pick-category.ts); there is no raw-pick fallback for them. If
+// PICK_CATEGORY_VERSION is ever bumped, run the backfill so stored categories
+// are restamped - until then they reflect the old version's classification.
+//
+// The one remaining raw-pick JS path is legacyCapperLeaderboardTable /
+// legacyMostActiveThisWeek, used only for filter.category (no route sets it
+// today) - not worth a SQL variant.
 import { prisma } from "@/lib/prisma";
 import {
   computeStats,
   computeSpecialistTag,
-  computeCategoryBreakdown,
   pickCategory,
   chipSetForLeague,
   weightedRoiScore,
@@ -182,13 +182,12 @@ export async function getCapperLeaderboardTable(
 // sends only the categories that could qualify (see querySpecialistCandidates);
 // the decision is stats.ts's specialistFromCategoryTotals.
 async function loadSpecialists(userId: string, sportName: string | undefined): Promise<Map<string, SpecialistTag | null>> {
-  const { rows, unstamped } = await querySpecialistCandidates({
+  const rows = await querySpecialistCandidates({
     userId,
     sportName,
     minShare: SPECIALIST_CONCENTRATION_THRESHOLD,
     minSample: RANKING_MIN_SAMPLE,
   });
-  if (unstamped > 0) return specialistsFromRawPicks(userId, sportName);
 
   const byCapper = new Map<string, { decidedTotal: number; overall: { wins: number; losses: number }; candidates: typeof rows }>();
   for (const r of rows) {
@@ -208,11 +207,6 @@ async function loadSpecialists(userId: string, sportName: string | undefined): P
     out.set(capperId, specialistFromCategoryTotals(g.decidedTotal, g.overall, ordered));
   }
   return out;
-}
-
-async function specialistsFromRawPicks(userId: string, sportName: string | undefined): Promise<Map<string, SpecialistTag | null>> {
-  const dataset = await getCapperPickDataset(userId, { sportName });
-  return new Map(Array.from(dataset.byCapperId.entries()).map(([capperId, picks]) => [capperId, computeSpecialistTag(picks)]));
 }
 
 // ---------------------------------------------------------------------------
@@ -270,11 +264,10 @@ async function buildFavoriteSummaries(
 // ---------------------------------------------------------------------------
 
 export async function getSportCategoryPanelData(userId: string, sportName: string): Promise<SportCategoryPanelData> {
-  const [{ rows, unstamped }, roster] = await Promise.all([
+  const [rows, roster] = await Promise.all([
     queryCategoryPanel({ userId, sportName, minPicks: CATEGORY_LEADERBOARD_MIN_PICKS, limit: CATEGORY_LEADERBOARD_LIMIT }),
     getCappersForUser(userId),
   ]);
-  if (unstamped > 0) return legacySportCategoryPanelData(userId, sportName);
 
   // The aggregates carry only the capperId, so the per-category leaderboard
   // must explicitly join it against this separately-fetched roster to recover
@@ -415,60 +408,4 @@ export async function legacyCapperLeaderboardTable(
         isFavorite: capper.isFavorite,
       };
     });
-}
-
-export async function legacyFavoriteCappersSummary(userId: string, window: ScorecardWindow): Promise<FavoriteCappersSummary | null> {
-  const favoriteCappers = await prisma.capper.findMany({
-    where: { userId, isFavorite: true },
-    select: { id: true },
-  });
-  if (favoriteCappers.length === 0) return null;
-  const favoriteIds = new Set(favoriteCappers.map((c) => c.id));
-
-  const [allEntries, favoriteDataset] = await Promise.all([
-    legacyCapperLeaderboardTable(userId, window),
-    getCapperPickDataset(userId, { capperIds: Array.from(favoriteIds) }),
-  ]);
-
-  return {
-    collectiveStats: computeStats(sliceIntoWindows(favoriteDataset.all, [window])[window]),
-    entries: allEntries.filter((e) => favoriteIds.has(e.capperId)),
-  };
-}
-
-export async function legacySportCategoryPanelData(userId: string, sportName: string): Promise<SportCategoryPanelData> {
-  // The dataset carries only the capperId scalar (no capper relation), so the
-  // per-category leaderboard below must explicitly join capperId against this
-  // separately-fetched roster to recover capper.name - never left implicit.
-  const [dataset, roster] = await Promise.all([
-    getCapperPickDataset(userId, { sportName }),
-    getCappersForUser(userId),
-  ]);
-  const nameByCapperId = new Map(roster.map((c) => [c.id, c.name]));
-
-  const breakdown = computeCategoryBreakdown(dataset.all, chipSetForLeague(sportName));
-
-  const leaderboards: Partial<Record<PickCategoryKey, CategoryLeaderboardEntry[]>> = {};
-  for (const item of breakdown) {
-    const scoped = dataset.all.filter((p) => pickCategory({ ...p, sportName }) === item.key);
-
-    const byCapper = new Map<string, typeof scoped>();
-    for (const pick of scoped) {
-      const list = byCapper.get(pick.capperId);
-      if (list) list.push(pick);
-      else byCapper.set(pick.capperId, [pick]);
-    }
-
-    leaderboards[item.key] = Array.from(byCapper.entries())
-      .map(([capperId, picks]) => {
-        const stats = computeStats(picks);
-        const name = nameByCapperId.get(capperId) ?? "Unknown capper";
-        return { capperId, name, wins: stats.wins, losses: stats.losses, pushes: stats.pushes, winPct: stats.winPct };
-      })
-      .filter((e) => e.wins + e.losses + e.pushes >= CATEGORY_LEADERBOARD_MIN_PICKS)
-      .sort((a, b) => b.winPct - a.winPct)
-      .slice(0, CATEGORY_LEADERBOARD_LIMIT);
-  }
-
-  return { breakdown, leaderboards };
 }

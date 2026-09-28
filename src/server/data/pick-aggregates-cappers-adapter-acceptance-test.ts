@@ -6,13 +6,14 @@
 // iterating the roster array, never dataset.byCapperId.keys() (which has no
 // entry for a capper with zero picks).
 //
-// These two guarantees were written against the raw-pick JS path, which is now the
-// FALLBACK (legacyCapperLeaderboardTable / legacySportCategoryPanelData - used for
-// a category filter or a user with unstamped picks). This file therefore targets
-// those functions. The same guarantees for the primary SQL path are asserted
-// against a real database in capper-list-aggregates-acceptance-test.ts (zero-pick
-// capper present in ALL / absent from LAST_7; capper names in the category panel,
-// compared to the original implementation).
+// Both guarantees were written against the raw-pick JS path. What remains of it is
+// legacyCapperLeaderboardTable, used only for a category filter, so guarantee (b)
+// (zero-pick capper stays in ALL) is still exercised here against that function.
+// Guarantee (a) (the category panel's roster join for capper.name) lived in the
+// raw-pick panel, which no longer exists: the panel is SQL now, and its names are
+// asserted against the original implementation's output (which includes
+// capper.name) in capper-list-aggregates-acceptance-test.ts, which also asserts (b)
+// for the primary SQL path (zero-pick capper present in ALL, absent from LAST_7).
 //
 // Pure: prisma.pick.findMany / prisma.capper.findMany are swapped for spies
 // backed by an in-memory fixture before each call, so no database is
@@ -20,10 +21,7 @@
 //   npx tsx src/server/data/pick-aggregates-cappers-adapter-acceptance-test.ts
 // Exits non-zero on any failed assertion.
 import { prisma } from "@/lib/prisma";
-import {
-  legacyCapperLeaderboardTable as getCapperLeaderboardTable,
-  legacySportCategoryPanelData as getSportCategoryPanelData,
-} from "@/server/data/pick-aggregates-cappers-adapter";
+import { legacyCapperLeaderboardTable as getCapperLeaderboardTable } from "@/server/data/pick-aggregates-cappers-adapter";
 
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {
@@ -122,30 +120,8 @@ async function testZeroPickCapperShowsInAllWindow() {
   expect("active capper is also present", entries.some((e) => e.capperId === "cap-active"), true);
 }
 
-async function testCategoryPanelJoinsRosterForCapperName() {
-  const roster: FakeCapper[] = [{ id: "cap-1", userId: USER_ID, name: "Real Roster Name", colorTag: null, isFavorite: false }];
-  // 3 decided MONEYLINE-favorite picks clears CATEGORY_LEADERBOARD_MIN_PICKS
-  // (3) so cap-1 actually shows up in the FAV_ML leaderboard.
-  const picks: FakePick[] = [
-    makePick({ capperId: "cap-1", status: "WIN", sport: { name: "MLB" } }),
-    makePick({ capperId: "cap-1", status: "WIN", sport: { name: "MLB" } }),
-    makePick({ capperId: "cap-1", status: "LOSS", sport: { name: "MLB" } }),
-  ];
-  installPrismaSpies(roster, picks);
-
-  const panel = await getSportCategoryPanelData(USER_ID, "MLB");
-  const favMlEntry = panel.leaderboards.FAV_ML?.find((e) => e.capperId === "cap-1");
-  expect("FAV_ML leaderboard has an entry for cap-1", Boolean(favMlEntry), true);
-  expect(
-    "cap-1's name is resolved via the roster join, not a placeholder",
-    favMlEntry?.name,
-    "Real Roster Name"
-  );
-}
-
 async function main() {
   await testZeroPickCapperShowsInAllWindow();
-  await testCategoryPanelJoinsRosterForCapperName();
 
   console.log(`\n${failures === 0 ? "PASS" : "FAIL"}: ${failures} failure(s)`);
   process.exit(failures > 0 ? 1 : 0);
