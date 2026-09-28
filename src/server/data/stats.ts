@@ -82,22 +82,55 @@ export function computeStats(picks: Pick[]): OverallStats {
     }
   }
 
-  const decided = wins + losses;
-  const netUnits = unitsWon - unitsLost;
-
   return {
-    wins,
-    losses,
-    pushes,
-    winPct: decided > 0 ? (wins / decided) * 100 : 0,
-    unitsWon: round2(unitsWon),
-    unitsLost: round2(unitsLost),
-    netUnits: round2(netUnits),
-    roi: unitsRisked > 0 ? round2((netUnits / unitsRisked) * 100) : 0,
+    ...recordStatsFromTotals({ wins, losses, pushes, unitsWon, unitsLost, unitsRisked }),
     currentStreak: currentStreak(sorted),
     longestWinStreak,
     longestLossStreak,
   };
+}
+
+// The order-independent half of OverallStats - everything except the longest-
+// streak fields, which need the picks' full chronological sequence. The
+// /cappers list page (which never reads longestWinStreak/longestLossStreak) is
+// typed against this instead of the full OverallStats.
+export type RecordStats = Omit<OverallStats, "longestWinStreak" | "longestLossStreak">;
+
+export type RecordTotals = {
+  wins: number;
+  losses: number;
+  pushes: number;
+  unitsWon: number;
+  unitsLost: number;
+  // Units staked on every decided pick - WIN, LOSS *and* PUSH (computeStats
+  // adds a pick's units here for anything but PENDING/CANCELLED). ROI's
+  // denominator, so a push counts here even though it never moves netUnits.
+  unitsRisked: number;
+};
+
+// The single place raw totals become the rounded/derived record fields. Shared
+// by computeStats (which accumulates the totals from picks in JS) and by the
+// /cappers SQL aggregation path (which receives the totals already summed by
+// the database), so winPct/ROI/round2 and their zero-denominator handling can
+// never drift between the two.
+export function recordStatsFromTotals(t: RecordTotals): Omit<RecordStats, "currentStreak"> {
+  const netUnits = t.unitsWon - t.unitsLost;
+  return {
+    wins: t.wins,
+    losses: t.losses,
+    pushes: t.pushes,
+    winPct: winPctOf(t.wins, t.losses),
+    unitsWon: round2(t.unitsWon),
+    unitsLost: round2(t.unitsLost),
+    netUnits: round2(netUnits),
+    roi: t.unitsRisked > 0 ? round2((netUnits / t.unitsRisked) * 100) : 0,
+  };
+}
+
+// wins / (wins + losses) as a percentage - pushes never enter the denominator.
+export function winPctOf(wins: number, losses: number): number {
+  const decided = wins + losses;
+  return decided > 0 ? (wins / decided) * 100 : 0;
 }
 
 // Exported (not just used internally by computeStats) so computeMomentum
@@ -238,7 +271,7 @@ const RANKING_SHRINKAGE_K = 10;
 // so a small hot streak can't outrank a large real sample. The raw record/
 // ROI is still shown alongside this for transparency; this only changes
 // sort order, never displayed numbers.
-export function weightedRoiScore(stats: OverallStats): number {
+export function weightedRoiScore(stats: { wins: number; losses: number; pushes: number; roi: number }): number {
   const n = stats.wins + stats.losses + stats.pushes;
   if (n === 0) return 0;
   return round2((stats.roi * n) / (n + RANKING_SHRINKAGE_K));
@@ -529,23 +562,26 @@ export function filterPicksByGameWindow<T extends { gameTime: Date; gradedAt: Da
   picks: T[],
   window: ScorecardWindow
 ): T[] {
-  if (window === "ALL") return picks;
-
-  const now = new Date();
-  const startOfToday = startOfEasternDay(now);
-
-  let start: Date;
-  let end: Date = now;
-  if (window === "TODAY") {
-    start = startOfToday;
-  } else if (window === "YESTERDAY") {
-    start = new Date(startOfToday.getTime() - 86400000);
-    end = startOfToday;
-  } else {
-    start = new Date(now.getTime() - WINDOW_DAYS_BACK[window]! * 86400000);
-  }
-
+  const range = scorecardWindowRange(window, new Date());
+  if (!range) return picks;
+  const { start, end } = range;
   return picks.filter((p) => p.gradedAt && p.gameTime >= start && p.gameTime < end);
+}
+
+// The [start, end) gameTime range of a window, or null for ALL (no bound and,
+// deliberately, no gradedAt gate either - see filterPicksByGameWindow). The one
+// definition of the window boundaries: filterPicksByGameWindow above filters
+// in JS with it, and the /cappers SQL aggregation binds the very same instants
+// as query parameters, so the two can't disagree on what "Last 7 days" or
+// "Yesterday" (Eastern day boundaries, dates.ts) means. `now` is passed in so
+// a caller building several windows uses one instant for all of them.
+export function scorecardWindowRange(window: ScorecardWindow, now: Date): { start: Date; end: Date } | null {
+  if (window === "ALL") return null;
+
+  const startOfToday = startOfEasternDay(now);
+  if (window === "TODAY") return { start: startOfToday, end: now };
+  if (window === "YESTERDAY") return { start: new Date(startOfToday.getTime() - 86400000), end: startOfToday };
+  return { start: new Date(now.getTime() - WINDOW_DAYS_BACK[window]! * 86400000), end: now };
 }
 
 // The capper detail page's "Recent picks" list is always scoped to whatever
@@ -988,6 +1024,14 @@ type PickCategoryInput = {
   propMarket?: Pick["propMarket"];
 };
 
+// Stamped next to every stored Pick.category (see createPicksWithEntitlementCheck
+// and scripts/backfill-pick-category.ts). Bump it whenever pickCategory's output
+// can change for an existing input, then re-run the backfill - readers treat any
+// row with a lower categoryVersion as "not stamped" and fall back to computing
+// the category in JS. pick-category-version-acceptance-test.ts pins pickCategory's
+// outputs so changing them without bumping this fails a test.
+export const PICK_CATEGORY_VERSION = 1;
+
 export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
   if (pick.betType === "NRFI") {
     // NRFI and YRFI share one BetType (see nrfiSide's own comment for why -
@@ -1140,7 +1184,7 @@ const SPECIALIST_LABELS: Record<PickCategoryKey, string> = {
 // A category holding at least this share of a capper's decided volume is a
 // real concentration, not incidental - confirmed with the user alongside
 // the win%-floor and RANKING_MIN_SAMPLE sample-floor below.
-const SPECIALIST_CONCENTRATION_THRESHOLD = 0.5;
+export const SPECIALIST_CONCENTRATION_THRESHOLD = 0.5;
 
 export type SpecialistTag = { category: PickCategoryKey; label: string };
 
@@ -1154,24 +1198,49 @@ export function computeSpecialistTag(picks: (Pick & { sport: { name: string } })
   const decided = picks.filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH");
   if (decided.length === 0) return null;
 
-  const overall = computeStats(decided);
-
-  const byCategory = new Map<PickCategoryKey, Pick[]>();
+  const overall = { wins: 0, losses: 0 };
+  const byCategory = new Map<PickCategoryKey, CategoryDecidedTotals>();
   for (const pick of decided) {
+    if (pick.status === "WIN") overall.wins++;
+    else if (pick.status === "LOSS") overall.losses++;
+
     const category = pickCategory({ ...pick, sportName: pick.sport.name });
     if (!category) continue;
-    const list = byCategory.get(category);
-    if (list) list.push(pick);
-    else byCategory.set(category, [pick]);
+    const totals = byCategory.get(category) ?? { wins: 0, losses: 0, pushes: 0 };
+    if (pick.status === "WIN") totals.wins++;
+    else if (pick.status === "LOSS") totals.losses++;
+    else totals.pushes++;
+    byCategory.set(category, totals);
   }
 
+  return specialistFromCategoryTotals(decided.length, overall, byCategory);
+}
+
+export type CategoryDecidedTotals = { wins: number; losses: number; pushes: number };
+
+// The specialist decision itself, over per-category decided totals instead of
+// the picks - so the /cappers SQL path (which gets those totals from a GROUP BY)
+// and computeSpecialistTag above share one implementation. `decidedTotal` counts
+// every decided (W/L/P) pick including ones whose category is null, and
+// `overall` is those same picks' wins/losses. `byCategory` must iterate in
+// tie-break order (the category whose first decided pick is earlier by
+// createdAt, id comes first): two categories can each hold exactly 50%, and the
+// earlier one wins that tie.
+export function specialistFromCategoryTotals(
+  decidedTotal: number,
+  overall: { wins: number; losses: number },
+  byCategory: Iterable<[PickCategoryKey, CategoryDecidedTotals]>
+): SpecialistTag | null {
+  if (decidedTotal === 0) return null;
+  const overallWinPct = winPctOf(overall.wins, overall.losses);
+
   let best: { category: PickCategoryKey; share: number } | null = null;
-  for (const [category, categoryPicks] of byCategory) {
-    const share = categoryPicks.length / decided.length;
+  for (const [category, totals] of byCategory) {
+    const n = totals.wins + totals.losses + totals.pushes;
+    const share = n / decidedTotal;
     if (share < SPECIALIST_CONCENTRATION_THRESHOLD) continue;
-    if (categoryPicks.length < RANKING_MIN_SAMPLE) continue;
-    const categoryStats = computeStats(categoryPicks);
-    if (categoryStats.winPct < overall.winPct) continue;
+    if (n < RANKING_MIN_SAMPLE) continue;
+    if (winPctOf(totals.wins, totals.losses) < overallWinPct) continue;
     if (!best || share > best.share) best = { category, share };
   }
 

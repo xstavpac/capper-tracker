@@ -11,7 +11,7 @@ import {
   filterPicksByGameWindow,
   ALL_TIME_WINDOW,
   RANKING_MIN_SAMPLE,
-  type OverallStats,
+  type RecordStats,
   type PickCategoryKey,
   type CategoryBreakdownItem,
   type SpecialistTag,
@@ -73,7 +73,7 @@ export type LeaderboardEntry = {
   capperId: string;
   name: string;
   colorTag: string | null;
-  stats: OverallStats;
+  stats: RecordStats;
   weightedScore: number;
   specialist: SpecialistTag | null;
   isFavorite: boolean;
@@ -170,7 +170,7 @@ export type FavoriteCappersSummary = {
   // comment where this is actually computed (getFavoriteCappersSummary
   // below) for why. The type is shared with every other single-capper stats
   // object, but this particular value must never be read as one.
-  collectiveStats: OverallStats;
+  collectiveStats: RecordStats;
   entries: LeaderboardEntry[];
 };
 

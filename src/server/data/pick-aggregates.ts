@@ -11,12 +11,18 @@ export type PickAggregateDataset = {
 
 export type PickAggregateFilter = { sportName?: string; capperIds?: string[] };
 
-// Layer 1 (acquisition): the one query every Cappers-page data function that
-// needs a user's picks now goes through, instead of each hand-rolling its own
-// prisma.pick.findMany. Always full history - no take/limit, no window - so
+// Layer 1 (acquisition): the raw-pick fetch behind the /cappers legacy JS path
+// (see pick-aggregates-cappers-adapter.ts - now only the fallback for a user with
+// unstamped picks / a category filter; the page's normal path aggregates in SQL
+// and never calls this). Always full history - no take/limit, no window - so
 // every caller windows/filters this SAME in-memory dataset rather than
 // re-querying the DB with its own narrower scope. `byCapperId` is a grouping
 // convenience over `all`, not a second query.
+//
+// Returned sorted by (createdAt, id): findMany without an orderBy has no
+// defined order, and stable sorts downstream (computeStats' gameTime sort,
+// Map-insertion-ordered ties) inherit it. Fixing it here makes createdAt, id the
+// tie-break everywhere order matters, matching the SQL path.
 export async function getCapperPickDataset(userId: string, filter?: PickAggregateFilter): Promise<PickAggregateDataset> {
   const all = await prisma.pick.findMany({
     where: {
@@ -26,6 +32,7 @@ export async function getCapperPickDataset(userId: string, filter?: PickAggregat
     },
     include: { sport: true },
   });
+  all.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
   const byCapperId = new Map<string, PickWithSport[]>();
   for (const pick of all) {
