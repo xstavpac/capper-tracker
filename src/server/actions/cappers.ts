@@ -131,15 +131,18 @@ export type ToggleFavoriteCapperResult =
   | { success: true; isFavorite: boolean }
   | { success: false; error: string };
 
-// Toggles Capper.isFavorite - no confirmation, meant to feel instant. Only
-// revalidates /cappers (the Favorites section and the star's own state both
-// live there); the capper detail page doesn't show favorite status, so no
-// need to revalidate it too.
+// Toggles Capper.isFavorite - no confirmation, meant to feel instant. Revalidates
+// /cappers (the Favorites section and the star's own state both live there);
+// the capper detail page doesn't show favorite status, so no need to revalidate
+// it too. Also busts the dashboard tag: the cached capper panels are built in
+// roster order (favorites first), which breaks ties between equally-ranked
+// cappers, so a toggle can reorder them.
 export async function toggleFavoriteCapperAction(capperId: string): Promise<ToggleFavoriteCapperResult> {
   const user = await requireUser();
 
   try {
     const isFavorite = await toggleFavoriteCapper(user.id, capperId);
+    revalidatePickStats(user.id);
     revalidatePath("/cappers");
     return { success: true, isFavorite };
   } catch (err) {
