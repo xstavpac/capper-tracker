@@ -2,22 +2,31 @@
 
 ## What is cached
 
-One per-user read surface is wrapped in `unstable_cache` (via
-`cachedByTag` in `src/server/data/cached.ts`), keyed **and tagged** by a
-single string from `src/lib/cache-keys.ts`:
+Two per-user read surfaces are wrapped in `unstable_cache` (via
+`cachedByTag` in `src/server/data/cached.ts`). Both are **invalidated by the
+same tag**, `cacheKeys.dashboard(userId)` from `src/lib/cache-keys.ts`:
 
-| Surface | Function | Tag | TTL |
-|---|---|---|---|
-| Dashboard | `getDashboardSummary(userId)` (`stats.ts`) | `cacheKeys.dashboard(userId)` | 60 s |
+| Surface | Function | Cache key | Tag | TTL |
+|---|---|---|---|---|
+| Dashboard summary | `getDashboardSummary(userId)` (`stats.ts`) | `cacheKeys.dashboard(userId)` | `cacheKeys.dashboard(userId)` | 60 s |
+| Dashboard capper panels | `getCapperPanels(userId, filter?)` (`capper-panels.ts`) | `capperPanelsCacheKey(userId, filter)` (per user **and** per filter) | `cacheKeys.dashboard(userId)` | 60 s |
 
-It computes **only from `prisma.pick` rows** for that user (overall stats,
-category breakdown, units chart, counts, recent picks). It contains **no
-parlay/leg data** - `/picks` renders parlays as a plain list
-(`getParlaysForUser`), uncached and outside this contract entirely.
+Both compute **only from `prisma.pick` rows** for that user, plus the capper
+roster for `getCapperPanels` (name, colorTag, and `isFavorite`, which orders
+ties). They contain **no parlay/leg data** - `/picks` renders parlays as a
+plain list (`getParlaysForUser`), uncached and outside this contract entirely.
 
-(There used to be a second surface here, Reports/`getReportsData` - removed
-along with the `/reports` page. If this table ever grows a second row again,
-give it its own tag rather than reusing `dashboard`.)
+`cachedByTag` identifies a cache entry by its `key` string (Next also keys on
+the callback's source text, which is identical for every user/filter), so
+anything that changes the result - user, sport filter, category filter - must
+be in the key. `getCapperPanels` therefore uses its own per-filter key and
+attaches the shared dashboard tag through `cachedByTag`'s `tags` argument. Its
+only real caller (`/dashboard`) passes no filter.
+
+(There used to be another surface here, Reports/`getReportsData` - removed
+along with the `/reports` page. Any new surface that is invalidated by exactly
+the same mutations can join the `dashboard` tag as `getCapperPanels` does;
+one with different invalidation triggers needs its own tag.)
 
 ## The rule
 
@@ -44,7 +53,8 @@ the string the cache registers are the same `cacheKeys.*(userId)` call.
 | P2 | `bulkImportPicksAction` → `createPicksWithEntitlementCheck` (`tx.pick.create` ×N) | N picks | ✅ inline `revalidateTag` for both, after the create |
 | P3 | `updatePickStatusAction` → `updatePickStatus` (`pick.update`) — manual grade / any status edit; there is no field-level pick edit | 1 pick | ✅ `revalidatePickStats(user.id)` in the action |
 | P4 | `mergeCappersAction` → `mergeCappers` (`pick.updateMany`, reassign `capperId`) | N picks | ✅ `revalidatePickStats(user.id)` in the action |
-| P5 | `renameCapperAction` → `renameCapper` (`capper.name`) | 0 picks (capper row) | ✅ `revalidatePickStats(user.id)` — the name shows in the dashboard recent-picks list |
+| P5 | `renameCapperAction` → `renameCapper` (`capper.name`) | 0 picks (capper row) | ✅ `revalidatePickStats(user.id)` — the name shows in the dashboard recent-picks list and the capper panels |
+| P5b | `toggleFavoriteCapperAction` → `toggleFavoriteCapper` (`capper.isFavorite`) | 0 picks (capper row) | ✅ `revalidatePickStats(user.id)` — favorites sort first in the roster, which breaks ties between equally-ranked cappers in the capper panels |
 | P6 | `deleteCapperAction` → `deleteCapper` (`capper.delete` → `Pick.onDelete: Cascade`) | N picks deleted | ✅ `revalidatePickStats(user.id)` in the action |
 | **P7** | **`deletePickAction` → `deletePick` (`pick.deleteMany { id, userId }`)** | **1 pick deleted** | **✅ `revalidatePickStats(user.id)` in the action** |
 | P8 | Cron `GET /api/cron/grade-picks` → `gradeAllPendingPicks` + `regradeAllFuzzyMatchedPicks` (`pick.update` ×N, all users) | N picks | ✅ per-`changedUserId` `revalidateTag` loop in the route — only users whose pick status actually changed, never a global flush |
@@ -54,8 +64,8 @@ the string the cache registers are the same `cacheKeys.*(userId)` call.
 
 ## Leg / ParlayBet mutation paths
 
-`getDashboardSummary` reads only `Pick` rows, so **none of these need
-`revalidateTag`**. They use `revalidatePath("/picks", "/dashboard")` to
+Neither `getDashboardSummary` nor `getCapperPanels` reads Leg/ParlayBet rows,
+so **none of these need `revalidateTag`**. They use `revalidatePath("/picks", "/dashboard")` to
 refresh the parlay list itself, which is uncached.
 
 | # | Path | Write | Notes |

@@ -6,9 +6,12 @@ import {
   round2,
   RANKING_MIN_SAMPLE,
   SCORECARD_WIN_THRESHOLD,
+  DASHBOARD_REPORTS_CACHE_TTL_SECONDS,
   type OverallStats,
 } from "@/server/data/stats";
 import { getCappersForUser, type CapperLeagueFilter } from "@/server/data/cappers";
+import { cachedByTag } from "@/server/data/cached";
+import { cacheKeys } from "@/lib/cache-keys";
 
 // Cappers with no picks logged (datePosted) in this window drop off every
 // panel below, and reappear the moment they log a new one - confirmed with
@@ -116,21 +119,44 @@ const EMPTY_PANELS: CapperPanels = {
   worstLast20: [],
 };
 
+// The cache slot is chosen by this string alone (cachedByTag's callback text is
+// identical for every user/filter), so every input that changes the result must
+// appear here. Distinct from cacheKeys.dashboard - that one is only the shared
+// invalidation tag.
+export function capperPanelsCacheKey(userId: string, filter?: CapperLeagueFilter): string {
+  return `capper-panels:${userId}:${filter?.sportName ?? ""}:${filter?.category ?? ""}`;
+}
+
+// Reads only Pick rows (plus the roster), so it shares getDashboardSummary's
+// invalidation tag and TTL: every pick mutation already calls
+// revalidateTag(cacheKeys.dashboard(userId)) (docs/cache-invalidation-contract.md).
 export async function getCapperPanels(userId: string, filter?: CapperLeagueFilter): Promise<CapperPanels> {
+  return cachedByTag(
+    capperPanelsCacheKey(userId, filter),
+    DASHBOARD_REPORTS_CACHE_TTL_SECONDS,
+    () => computeCapperPanels(userId, filter),
+    [cacheKeys.dashboard(userId)]
+  );
+}
+
+async function computeCapperPanels(userId: string, filter?: CapperLeagueFilter): Promise<CapperPanels> {
   const cappers = await getCappersForUser(userId, filter);
   if (cappers.length === 0) return EMPTY_PANELS;
 
-  const picks = await prisma.pick.findMany({
-    where: {
-      userId,
-      capperId: { in: cappers.map((c) => c.id) },
-      ...(filter?.sportName ? { sport: { name: filter.sportName } } : {}),
-    },
-    include: { sport: true },
-  });
+  const where = {
+    userId,
+    capperId: { in: cappers.map((c) => c.id) },
+    // Applied here, in the WHERE - the sport relation is not needed for this.
+    ...(filter?.sportName ? { sport: { name: filter.sportName } } : {}),
+  };
+  // sport.name is read in exactly one place: pickCategory needs it to evaluate
+  // filter.category. The unfiltered /dashboard call never touches it, so the
+  // relation is only joined (name alone) when a category filter is active.
   const scoped = filter?.category
-    ? picks.filter((p) => pickCategory({ ...p, sportName: p.sport.name }) === filter.category)
-    : picks;
+    ? (await prisma.pick.findMany({ where, include: { sport: { select: { name: true } } } })).filter(
+        (p) => pickCategory({ ...p, sportName: p.sport.name }) === filter.category
+      )
+    : await prisma.pick.findMany({ where });
 
   const byCapper = new Map<string, typeof scoped>();
   for (const pick of scoped) {

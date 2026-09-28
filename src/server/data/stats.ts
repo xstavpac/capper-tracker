@@ -1479,7 +1479,7 @@ async function getPickRowsForStats(userId: string) {
 // pick/capper server actions and the grade-picks cron). revalidate is the
 // backstop for the one path that can't tag - opportunistic page-load grading,
 // which runs during render where revalidateTag is illegal.
-const DASHBOARD_REPORTS_CACHE_TTL_SECONDS = 60;
+export const DASHBOARD_REPORTS_CACHE_TTL_SECONDS = 60;
 const STALE_PENDING_HOURS = 24;
 
 /** Dashboard summary - fully derived; callers never re-process a pick array. */
