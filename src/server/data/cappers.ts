@@ -302,7 +302,9 @@ export type CapperSummary = { id: string; name: string; pickCount: number };
 export async function getCappersWithPickCounts(userId: string): Promise<CapperSummary[]> {
   const cappers = await prisma.capper.findMany({
     where: { userId },
-    include: { _count: { select: { picks: true } } },
+    // Only what CapperSummary carries: the full capper row (photo, notes, source, ...) was
+    // fetched for the whole roster on every capper-detail load and discarded.
+    select: { id: true, name: true, _count: { select: { picks: true } } },
     orderBy: { name: "asc" },
   });
   return cappers.map((c) => ({ id: c.id, name: c.name, pickCount: c._count.picks }));

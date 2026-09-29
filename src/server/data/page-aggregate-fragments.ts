@@ -511,6 +511,30 @@ export function narrowSeriesFromRows(rows: unknown[]): NarrowSeriesPick[] {
   }));
 }
 
+export type CapperPickMeta = { count: number; trackedSinceMs: number | null; lastPickMs: number | null };
+
+// Design doc §4.2: tracked-since / last-pick / pick count over ALL of the capper's picks (every
+// status - the decided series cannot supply these). One row always (an aggregate with no GROUP BY);
+// count = associatedPickCount, min/max are datePosted as epoch ms (NULL when the capper has no picks).
+export function capperPickMetaSelect(scope: { userId: string; capperId: string }): Prisma.Sql {
+  return Prisma.sql`
+    SELECT count(*)::int AS "count",
+           round(extract(epoch FROM min(p."datePosted")) * 1000)::bigint AS "trackedSince",
+           round(extract(epoch FROM max(p."datePosted")) * 1000)::bigint AS "lastPick"
+    FROM picks p
+    WHERE p."userId" = ${scope.userId} AND p."capperId" = ${scope.capperId}
+  `;
+}
+
+export function capperPickMetaFromBundle(rows: unknown[]): CapperPickMeta {
+  const r = (rows[0] ?? {}) as Record<string, unknown>;
+  return {
+    count: Number(r.count ?? 0),
+    trackedSinceMs: r.trackedSince === null || r.trackedSince === undefined ? null : Number(r.trackedSince),
+    lastPickMs: r.lastPick === null || r.lastPick === undefined ? null : Number(r.lastPick),
+  };
+}
+
 export async function queryDecidedSeries(scope: { userId: string; capperId: string }): Promise<NarrowSeriesPick[]> {
   return narrowSeriesFromRows(await prisma.$queryRaw<NarrowSeriesRow[]>(decidedSeriesSelect(scope)));
 }
