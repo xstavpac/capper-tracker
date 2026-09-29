@@ -1,10 +1,10 @@
 import {
-  getOddsForSport,
+  getTickerOddsForSport,
   getLiveScoresForSport,
   matchScoreToGame,
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
-  type OddsGame,
+  type TickerOddsGame,
   type ScoreGame,
 } from "@/server/data/odds";
 import { sameEasternDay } from "@/lib/dates";
@@ -44,7 +44,7 @@ export type TickerGame = {
 export function buildTickerGamesForSport(
   sportKey: string,
   sportLabel: string,
-  allOdds: OddsGame[],
+  allOdds: TickerOddsGame[],
   scores: ScoreGame[],
   now: Date
 ): TickerGame[] {
@@ -82,11 +82,12 @@ export function interleaveByCommenceTime(perSport: TickerGame[][]): TickerGame[]
   return perSport.flat().sort((a, b) => new Date(a.commenceTime).getTime() - new Date(b.commenceTime).getTime());
 }
 
-// Public marketing-page ticker's data source. Deliberately reuses the same
-// getOddsForSport/getLiveScoresForSport the authenticated /live page runs
-// on (see live/page.tsx) rather than a separate fetch path - same
-// OddsSnapshot cache, same live score sources, same season gating, so this
-// never drifts from what the real product shows.
+// Public marketing-page ticker's data source. Reads the same OddsSnapshot
+// (same day key, same season gating, same write-path invalidation) and the
+// same getLiveScoresForSport the authenticated /live page runs on (see
+// live/page.tsx), so this never drifts from what the real product shows - but
+// the odds side is the slim getTickerOddsForSport slice, since the ticker only
+// renders teams/start times and this runs on every document load.
 //
 // Scoped to RESOLVABLE_SPORT_KEYS, not the full LIVE_SPORTS list - NHL is
 // in LIVE_SPORTS (odds display only) but has no real live-score source
@@ -99,7 +100,7 @@ export async function getLiveTickerGames(): Promise<TickerGame[]> {
   const perSport = await Promise.all(
     RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
       const sportLabel = LIVE_SPORTS.find((s) => s.key === sportKey)?.label ?? sportKey;
-      const [allOdds, scores] = await Promise.all([getOddsForSport(sportKey), getLiveScoresForSport(sportKey)]);
+      const [allOdds, scores] = await Promise.all([getTickerOddsForSport(sportKey), getLiveScoresForSport(sportKey)]);
       return buildTickerGamesForSport(sportKey, sportLabel, allOdds, scores, now);
     })
   );

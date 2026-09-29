@@ -1,5 +1,6 @@
 import { unstable_cache, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays, APP_TIME_ZONE } from "@/lib/dates";
 import { isSportInSeason, oddsApiRequestKeys } from "@/lib/sport-seasons";
 import type { OddsFetchStatus, BackfillStatus } from "@/lib/odds-cron-status";
@@ -165,6 +166,85 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
     getOddsForSportUncached(sportKey)
   );
   return result.games;
+}
+
+// What the layout ticker renders from the odds side: which games are on
+// today's slate (id, teams, start time - matchScoreToGame's inputs). It never
+// looks at a bookmaker or a price.
+export type TickerOddsGame = Pick<OddsGame, "id" | "homeTeam" | "awayTeam" | "commenceTime">;
+
+// How long a slim ticker entry may live before a read re-checks the DB. The
+// fields it holds (which games exist today, their teams and start times) only
+// change when an OddsSnapshot write path runs - the 4am seed, the every-4h
+// backfill adding a late game, an NFL prop enrichment - and every one of those
+// calls revalidateTag on the tag this entry carries, so it is invalidated the
+// moment the data can have changed. The TTL is therefore only the backstop for
+// a failed invalidation (each write path logs and continues), not a freshness
+// mechanism. 10 minutes bounds that failure to a short, unnoticeable window
+// (the backfill itself only runs every 4h) while cutting misses from one per
+// minute per sport to one per ten. Deliberately NOT ODDS_CACHE_TTL_SECONDS:
+// that one is clamped to <= 300s and sized for the full blob's write-path
+// enrichment; live SCORES (the part of the ticker that does change by the
+// second) are not cached here at all - see getLiveTickerGames.
+const TICKER_ODDS_CACHE_TTL_SECONDS = 600;
+
+// Pure so the key/tag/TTL contract is provable without a Next request context.
+export function tickerOddsCacheParams(sportKey: string, fetchDate: string) {
+  return {
+    key: cacheKeys.tickerOdds(sportKey, fetchDate),
+    // The tag every OddsSnapshot write path already revalidates for this
+    // (sportKey, fetchDate) - so no write path needed to change.
+    tags: [cacheKeys.odds(sportKey, fetchDate)],
+    ttlSeconds: TICKER_ODDS_CACHE_TTL_SECONDS,
+  };
+}
+
+async function getTickerOddsUncached(sportKey: string, fetchDate: string): Promise<TickerOddsGame[]> {
+  // Same out-of-season guarantee as getOddsForSportUncached: never touch the
+  // table (or the network) for a sport that isn't playing.
+  if (!isSportInSeason(sportKey)) return [];
+
+  // Projection inside Postgres - the bookmaker/market payload (the bulk of a
+  // snapshot) never leaves the database. WITH ORDINALITY + ORDER BY keeps the
+  // stored array order, which the ticker's stable sort by start time relies on
+  // to order simultaneous games exactly as before.
+  const rows = await prisma.$queryRaw<{ games: TickerOddsGame[] }[]>(Prisma.sql`
+    SELECT COALESCE(
+             (SELECT jsonb_agg(
+                       jsonb_build_object(
+                         'id', g.elem->>'id',
+                         'homeTeam', g.elem->>'homeTeam',
+                         'awayTeam', g.elem->>'awayTeam',
+                         'commenceTime', g.elem->>'commenceTime')
+                       ORDER BY g.ord)
+                FROM jsonb_array_elements(CASE WHEN jsonb_typeof(s.data) = 'array' THEN s.data ELSE '[]'::jsonb END)
+                     WITH ORDINALITY AS g(elem, ord)),
+             '[]'::jsonb
+           ) AS games
+    FROM odds_snapshots s
+    WHERE s."sportKey" = ${sportKey} AND s."fetchDate" = ${fetchDate}
+  `);
+  if (rows.length > 0) return rows[0].games;
+
+  // No snapshot for today yet: identical to what the ticker always did - the
+  // full path, which may fetch from the Odds API and seed today's row (that is
+  // the pre-existing "a page load that beats the cron" behavior, and it only
+  // happens on this first-of-the-day read).
+  const { games } = await getOddsForSportUncached(sportKey);
+  return games.map((g) => ({ id: g.id, homeTeam: g.homeTeam, awayTeam: g.awayTeam, commenceTime: g.commenceTime }));
+}
+
+// The layout ticker's odds read (every authenticated document load, 5-6
+// sports). Same cached-per-(sport, day) grain and same invalidation as
+// getOddsForSport, but caches and reads only the ticker-shaped slice - see
+// TickerOddsGame. Trade-off: the ticker no longer warms getOddsForSport's own
+// full-blob entry, so callers that genuinely need the whole blob (live pages,
+// grading) fill it themselves; it is still at most one blob read per 60s per
+// sport, only when something actually needs it.
+export async function getTickerOddsForSport(sportKey: string): Promise<TickerOddsGame[]> {
+  const fetchDate = easternDateKey(new Date());
+  const p = tickerOddsCacheParams(sportKey, fetchDate);
+  return cachedByTag(p.key, p.ttlSeconds, () => getTickerOddsUncached(sportKey, fetchDate), p.tags);
 }
 
 // True only for a status that means a fresh OddsSnapshot row was actually
