@@ -12,6 +12,17 @@ import { comparePicksChronological, comparePicksChronologicalDesc } from "@/lib/
 // module-level prisma import - see that function's own comment).
 export { betTypeLabel };
 
+// The columns the pure pick-series functions below (computeStats, currentStreak,
+// computeMomentum, computeConsistency, computeBestOddsRange, computeUnitsChartData /
+// computeCumulativeUnitsSeries) actually read - the sort key (gameTime, createdAt,
+// id), the window gate (gradedAt) and the money inputs (status, units, odds). They
+// are typed against this instead of the full Prisma Pick so the narrow decided-pick
+// series (server/data/page-aggregate-fragments.ts) can feed the very same functions.
+// Types only: every full Pick already satisfies it and no function's logic changed.
+// (`Pick` here is the Prisma model imported above, which shadows TypeScript's utility
+// type, hence the mapped type.)
+export type SeriesPick = { [K in "id" | "createdAt" | "gameTime" | "gradedAt" | "status" | "units" | "odds"]: Pick[K] };
+
 export type OverallStats = {
   wins: number;
   losses: number;
@@ -41,7 +52,7 @@ export function unitsWonOnBet(units: number, odds: number): number {
  * This is called with all of a user's picks (dashboard) or a single
  * capper's picks (capper page) — same math, different scope.
  */
-export function computeStats(picks: Pick[]): OverallStats {
+export function computeStats(picks: SeriesPick[]): OverallStats {
   // Streaks depend on chronological order, so sort oldest -> newest first.
   const sorted = [...picks].sort(comparePicksChronological);
 
@@ -137,7 +148,7 @@ export function winPctOf(wins: number, losses: number): number {
 // prefixes of a capper's picks, rather than re-deriving streak logic of its
 // own - see computeMomentum's comment for why that matters here specifically.
 export function currentStreak(
-  sortedOldestFirst: Pick[]
+  sortedOldestFirst: SeriesPick[]
 ): { type: "WIN" | "LOSS" | "NONE"; count: number } {
   const decided = sortedOldestFirst.filter(
     (p) => p.status === "WIN" || p.status === "LOSS"
@@ -198,7 +209,7 @@ function momentumBucketKey(count: number): MomentumStreakLength {
 // capper's decided picks, which is trivial at realistic volumes (low
 // hundreds at most) and far simpler/safer than a second streak
 // implementation that could quietly drift from the displayed current streak.
-export function computeMomentum(picks: Pick[]): MomentumBreakdown {
+export function computeMomentum(picks: SeriesPick[]): MomentumBreakdown {
   const decided = [...picks]
     .filter((p) => p.status === "WIN" || p.status === "LOSS")
     .sort(comparePicksChronological);
@@ -296,8 +307,8 @@ const ODDS_RANGE_MIN_SAMPLE = 3;
 // enough of a sample to trust. Ties (equal win%) break toward whichever
 // bucket has more decided picks - more evidence behind the same number beats
 // less.
-export function computeBestOddsRange(picks: Pick[]): OddsRangeStat | null {
-  const byBucket = new Map<OddsBucketKey, Pick[]>();
+export function computeBestOddsRange(picks: SeriesPick[]): OddsRangeStat | null {
+  const byBucket = new Map<OddsBucketKey, SeriesPick[]>();
   for (const pick of picks) {
     if (pick.status !== "WIN" && pick.status !== "LOSS" && pick.status !== "PUSH") continue;
     const bucket = oddsBucket(pick.odds);
@@ -352,7 +363,7 @@ function standardDeviation(values: number[]): number {
 // wagered is 0 (can't compute a coefficient of variation against a zero
 // denominator - shouldn't happen in practice since units > 0 is required at
 // pick-creation time, but stay defensive rather than divide by zero).
-export function computeConsistency(picks: Pick[]): { label: ConsistencyLabel; cv: number } | null {
+export function computeConsistency(picks: SeriesPick[]): { label: ConsistencyLabel; cv: number } | null {
   const decided = picks.filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH");
   if (decided.length < CONSISTENCY_MIN_SAMPLE) return null;
 
@@ -1372,30 +1383,56 @@ export function computeCategoryBreakdown(
     else byCategory.set(key, [pick]);
   }
 
-  return order
+  const counts = order
     .filter((key) => byCategory.has(key))
     .map((key) => {
-      const categoryPicks = byCategory.get(key)!;
-      const stats = computeStats(categoryPicks);
-      const count = stats.wins + stats.losses + stats.pushes;
+      const stats = computeStats(byCategory.get(key)!);
+      return { category: key, wins: stats.wins, losses: stats.losses, pushes: stats.pushes };
+    });
+  const items = categoryBreakdownFromCounts(counts, order);
+  if (!recentForm) return items;
+  return items.map((item) => ({
+    ...item,
+    recent:
+      item.count >= recentForm.minSample
+        ? recentRecordColumn(byCategory.get(item.key)!, recentForm.window)
+        : null,
+  }));
+}
 
-      let recent: CategoryRecentForm | null | undefined;
-      if (recentForm) {
-        recent =
-          count >= recentForm.minSample
-            ? recentRecordColumn(categoryPicks, recentForm.window)
-            : null;
-      }
-
+// The single place per-category win/loss/push counts become tiles: label, winPct
+// (pushes never enter the denominator), decided count, the caller's `order`, and
+// the drop of any category with no decided pick. Shared by computeCategoryBreakdown
+// (counts accumulated from picks in JS) and the SQL tile fragment
+// (page-aggregate-fragments.ts categoryTilesSelect, counts grouped by the database),
+// so legacy and SQL share one mapping. Rows for the same category are summed (the
+// capper page sums a category's per-sport rows), keys outside `order` are ignored,
+// and tiles carry no money field.
+export function categoryBreakdownFromCounts(
+  rows: { category: string; wins: number; losses: number; pushes: number }[],
+  order: PickCategoryKey[]
+): CategoryBreakdownItem[] {
+  const byKey = new Map<string, { wins: number; losses: number; pushes: number }>();
+  for (const r of rows) {
+    const t = byKey.get(r.category);
+    if (t) {
+      t.wins += r.wins;
+      t.losses += r.losses;
+      t.pushes += r.pushes;
+    } else byKey.set(r.category, { wins: r.wins, losses: r.losses, pushes: r.pushes });
+  }
+  return order
+    .filter((key) => byKey.has(key))
+    .map((key) => {
+      const t = byKey.get(key)!;
       return {
         key,
         label: PICK_CATEGORY_LABELS[key],
-        wins: stats.wins,
-        losses: stats.losses,
-        pushes: stats.pushes,
-        winPct: stats.winPct,
-        count,
-        ...(recent !== undefined ? { recent } : {}),
+        wins: t.wins,
+        losses: t.losses,
+        pushes: t.pushes,
+        winPct: winPctOf(t.wins, t.losses),
+        count: t.wins + t.losses + t.pushes,
       };
     })
     // A category the capper has placed picks in but has no graded pick in yet
@@ -1553,7 +1590,7 @@ async function computeDashboardSummary(userId: string) {
 export type UnitsChartPoint = { date: string; cumulativeUnits: number };
 export type PickNumberChartPoint = { pickNumber: number; cumulativeUnits: number };
 
-type CumulativeUnitsPoint = { pick: Pick; cumulativeUnits: number };
+type CumulativeUnitsPoint<T extends SeriesPick = SeriesPick> = { pick: T; cumulativeUnits: number };
 
 // The actual profit-curve math, shared by every consumer that needs a
 // running cumulative-units total in chronological order - computeUnitsChartData
@@ -1563,7 +1600,9 @@ type CumulativeUnitsPoint = { pick: Pick; cumulativeUnits: number };
 // days). One accumulation pass, two label projections - a date and a pick
 // count are just two different names for the same position in this same
 // series, not two different calculations.
-function computeCumulativeUnitsSeries(picks: Pick[]): CumulativeUnitsPoint[] {
+// Exported only so units-series-parity.ts can check the dashboard's SQL series
+// against it; generic so the parity check can carry extra fields through. Types only.
+export function computeCumulativeUnitsSeries<T extends SeriesPick>(picks: T[]): CumulativeUnitsPoint<T>[] {
   const settled = [...picks]
     .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
     .sort(comparePicksChronological);
@@ -1579,7 +1618,7 @@ function computeCumulativeUnitsSeries(picks: Pick[]): CumulativeUnitsPoint[] {
   });
 }
 
-export function computeUnitsChartData(picks: Pick[]): UnitsChartPoint[] {
+export function computeUnitsChartData(picks: SeriesPick[]): UnitsChartPoint[] {
   return computeCumulativeUnitsSeries(picks).map((p) => ({
     date: formatEastern(p.pick.gameTime, { month: "short", day: "numeric" }),
     cumulativeUnits: p.cumulativeUnits,
