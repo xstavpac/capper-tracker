@@ -21,6 +21,9 @@ export const cacheKeys = {
   // revalidates - see tickerOddsCacheParams (odds.ts).
   tickerOdds: (sportKey: string, fetchDate: string) => `ticker-odds:${sportKey}:${fetchDate}`,
   liveScores: (sportKey: string) => `live-scores:${sportKey}`,
+  // Page-load persistFinalScores throttle (see page-grading.ts): the memo key
+  // per sport, and - with a time bucket appended - the window-claim entry.
+  pageGradingPersist: (sportKey: string) => `page-grading-persist:${sportKey}`,
   // Per-GAME live state (win probability, current base/out, current pitcher -
   // see live-game-state.ts), distinct from liveScores above which is one
   // batch call per sport. Keyed by sport + the sport's own game id (MLB:

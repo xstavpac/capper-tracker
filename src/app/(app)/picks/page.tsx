@@ -1,7 +1,7 @@
 import { requireUser } from "@/server/auth";
 import { getFilteredPicksForUser, getSportsWithLeagues, getPickPlanStatus } from "@/server/data/picks";
 import { getCappersForUser } from "@/server/data/cappers";
-import { persistFinalScores, gradePendingPicks, regradeFuzzyMatchedPicks } from "@/server/data/grading";
+import { gradeUserPagePicks } from "@/server/data/page-grading";
 import { getParlaysForUser } from "@/server/data/parlays";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { PickForm } from "@/components/dashboard/pick-form";
@@ -124,23 +124,9 @@ export default async function PicksPage({
 }) {
   const user = await requireUser();
 
-  // Each sport's own persist-then-grade sequence is independent of the
-  // others, so run them in parallel - with 3+ sports now (was just MLB),
-  // doing this sequentially made every Picks page load wait on the sum of
-  // every sport's fetch time instead of just the slowest one.
-  await Promise.all(
-    RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
-      const sportName = LIVE_SPORTS.find((s) => s.key === sportKey)?.label;
-      if (!sportName) return;
-      try {
-        await persistFinalScores(sportKey);
-        await gradePendingPicks(user.id, sportName, sportKey);
-        await regradeFuzzyMatchedPicks(user.id, sportName, sportKey);
-      } catch {
-        // Live score sources are best-effort - don't block the page on a fetch failure.
-      }
-    })
-  );
+  // Grades this user's due pending picks before render - only sports where they
+  // have one, with the score persist throttled fleet-wide (see page-grading.ts).
+  await gradeUserPagePicks(user.id);
 
   const betTypeFilter = (searchParams.betType as BetTypeFilterKey) || undefined;
   const { startDateKey, endDateKey, isRange } = resolveDateFilter(searchParams);
