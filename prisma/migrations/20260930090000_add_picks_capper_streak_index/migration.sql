@@ -7,6 +7,11 @@
 -- so this is NOT declared in schema.prisma (see docs/partial-indexes.md - do not accept a
 -- migrate-diff DROP of it).
 --
+-- INCLUDE (status, units, odds) makes it a covering index. Without it the planner prices the ordered
+-- scan's random heap fetches above "read the capper's rows via picks_capperId_idx, then sort them"
+-- and picks that (measured: the heaviest capper's whole history was sorted per lookup); with it the
+-- lookup is an index-only scan that stops after n rows.
+--
 -- Plain CREATE INDEX (Prisma runs the migration in a transaction, so no CONCURRENTLY): it takes a
 -- brief write lock on picks while it builds, which at this table size is well under a second.
-CREATE INDEX "picks_user_capper_streak_idx" ON "picks" ("userId", "capperId", "gameTime" DESC, "createdAt" DESC, ("id" COLLATE "C") DESC);
+CREATE INDEX "picks_user_capper_streak_idx" ON "picks" ("userId", "capperId", "gameTime" DESC, "createdAt" DESC, ("id" COLLATE "C") DESC) INCLUDE ("status", "units", "odds");
