@@ -1,32 +1,44 @@
 import { requireUser } from "@/server/auth";
 import { getFilteredPicksForUser, getSportsWithLeagues, getPickPlanStatus } from "@/server/data/picks";
+import {
+  getPicksSummary,
+  summarizeLoadedPicks,
+  getCapperAllTimeRecords,
+  getSportIdsWithPicks,
+  getFinalScoresForPicks,
+} from "@/server/data/picks-summary";
 import { getCappersForUser } from "@/server/data/cappers";
 import { gradeUserPagePicks } from "@/server/data/page-grading";
 import { getParlaysForUser } from "@/server/data/parlays";
-import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { PickForm } from "@/components/dashboard/pick-form";
-import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { LegStatusButtons } from "@/components/dashboard/leg-status-buttons";
 import { RowDeleteButton } from "@/components/dashboard/row-delete-button";
-import { deletePickAction } from "@/server/actions/picks";
 import { deleteParlayAction } from "@/server/actions/parlays";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
-import { LocalGameTime } from "@/components/local-game-time";
-import { TIER_LABELS } from "@/lib/entitlements";
 import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
-import { DateRangeFilter } from "@/components/picks/date-range-filter";
-import { SportBetTypeFilter } from "@/components/picks/sport-bet-type-filter";
+import { PicksFilterBar } from "@/components/picks/picks-filter-bar";
+import { PickLedger, type LedgerRow } from "@/components/picks/pick-ledger";
+import { PicksSummaryStrip } from "@/components/picks/picks-summary-strip";
 import {
   betTypeFilterCategory,
   firstHalfLabelPrefixForChipSet,
   visibleBetTypeOptionsForChipSet,
   type BetTypeFilterKey,
 } from "@/lib/bet-type-filter";
-import { formatPickLabel, betTypeLabel } from "@/lib/bet-line";
+import {
+  buildPickLabel,
+  marketTag,
+  splitIntoSections,
+  isLiveNow,
+  consensusHints,
+  capperInitials,
+  formatOdds,
+  winUnits,
+  type LedgerPickInput,
+} from "@/lib/pick-display";
+import { formatPickLabel } from "@/lib/bet-line";
 import type { PickStatus } from "@prisma/client";
-
-const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
 
 // betTypeOptionsForChipSet/firstHalfLabelPrefixForChipSet/
 // visibleBetTypeOptionsForChipSet now live in lib/bet-type-filter.ts (moved
@@ -34,14 +46,8 @@ const STATUS_OPTIONS = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
 // covered by a real, executable test; that file can't call chipSetForLeague
 // itself and stay client-safe, so it takes an already-resolved chip set
 // instead of a sportName). The two thin wrappers below just do that
-// resolution - reused by both the bet-type dropdown below AND the per-row
-// "FIRST_HALF" period badge, always passing a specific pick's own real
-// sport.name rather than the page's `sportId` filter, so a row's badge is
-// always correct for that ROW's
-// sport even when the sport filter itself is "All sports" and rows from
-// multiple sports are mixed together on the page. `undefined` (the dropdown,
-// when no sportId filter is selected) resolves to `null` - every option is
-// relevant then, and the first-half label stays "F5".
+// resolution. `undefined` (no sportId filter selected) resolves to `null` -
+// every option is relevant then, and the first-half label stays "F5".
 function chipSetForSport(sportName: string | undefined): PickCategoryKey[] | null {
   return sportName ? chipSetForLeague(sportName) : null;
 }
@@ -50,9 +56,10 @@ function firstHalfLabelPrefix(sportName: string | undefined): "F5" | "1H" {
   return firstHalfLabelPrefixForChipSet(chipSetForSport(sportName));
 }
 
-// Short badge text for a pick's period, or null for a plain full-game pick.
-// FIRST_HALF keeps the sport-aware F5/1H split; the rest are the standard
-// quarter / hockey-period / 2nd-half shorthands.
+// Short badge text for a leg's period (parlay legs below still use this), or
+// null for a plain full-game pick. FIRST_HALF keeps the sport-aware F5/1H
+// split; the rest are the standard quarter / hockey-period / 2nd-half
+// shorthands.
 const PERIOD_BADGE: Record<string, string> = {
   SECOND_HALF: "2H",
   FIRST_QUARTER: "Q1",
@@ -68,18 +75,12 @@ function periodBadgeLabel(period: string, sportName: string | undefined): string
   return PERIOD_BADGE[period] ?? null;
 }
 
-// Thin resolution wrapper - factored out since SportBetTypeFilter's live
-// client-side update needs this computed for EVERY sport up front (see
-// optionsBySportId below), not just whichever one happens to be selected
-// server-side at render time.
+// Thin resolution wrapper - the filter bar's live client-side update needs
+// this computed for EVERY sport up front (see optionsBySportId below), not
+// just whichever one happens to be selected server-side at render time.
 function computeVisibleBetTypeOptions(sportName: string | undefined): { value: BetTypeFilterKey; label: string }[] {
   return visibleBetTypeOptionsForChipSet(chipSetForSport(sportName));
 }
-
-// betTypeFilterCategory now lives in lib/bet-type-filter.ts, reused as-is by
-// the capper comparison tool - see that file's own comment for why it's a
-// deliberately different (coarser, cross-sport) classification than
-// stats.ts's pickCategory.
 
 // Resolves the page's three date searchParams (`date` for single-day mode,
 // `startDate`/`endDate` for range mode) down to one definite Eastern-
@@ -107,6 +108,30 @@ function resolveDateFilter(searchParams: { date?: string; startDate?: string; en
     [startDateKey, endDateKey] = [endDateKey, startDateKey];
   }
   return { startDateKey, endDateKey, isRange: true };
+}
+
+function TicketIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path d="M15 5v2" />
+      <path d="M15 11v2" />
+      <path d="M15 17v2" />
+      <path d="M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-3a2 2 0 0 0 0 -4v-3a2 2 0 0 1 2 -2" />
+    </svg>
+  );
+}
+
+function fmtUnits(n: number): string {
+  return String(Math.round(n * 100) / 100);
 }
 
 export default async function PicksPage({
@@ -139,21 +164,43 @@ export default async function PicksPage({
     endDateKey,
   };
 
-  const [allPicks, cappers, sports, planStatus, parlays] = await Promise.all([
+  const [allPicks, cappers, sports, planStatus, parlays, sportIdsWithPicks, sqlSummary] = await Promise.all([
     getFilteredPicksForUser(user.id, filters),
     getCappersForUser(user.id),
     getSportsWithLeagues(),
     getPickPlanStatus(user.id),
     getParlaysForUser(user.id),
+    getSportIdsWithPicks(user.id),
+    // Bet type is derived in JS, so with that chip on the summary is computed
+    // from the already-loaded rows instead (see summarizeLoadedPicks).
+    betTypeFilter ? Promise.resolve(null) : getPicksSummary(user.id, filters),
   ]);
 
   // Bet type is derived (betDetail text for NRFI/YRFI), not a stored column,
   // so it's filtered here rather than in the DB query.
   const picks = allPicks.filter((p) => !betTypeFilter || betTypeFilterCategory(p) === betTypeFilter);
+  const summary = sqlSummary ?? summarizeLoadedPicks(picks);
 
-  // Precomputed for every sport (plus "" for "All sports") so
-  // SportBetTypeFilter can update the bet-type options live, client-side, as
-  // soon as the sport selection changes - no full page reload required.
+  const loadedCapperIds = Array.from(new Set(picks.map((p) => p.capperId)));
+  const [capperRecords, finalScores] = await Promise.all([
+    getCapperAllTimeRecords(user.id, loadedCapperIds),
+    getFinalScoresForPicks(
+      picks.map((p) => ({
+        id: p.id,
+        sportName: p.sport.name,
+        status: p.status,
+        gameTime: p.gameTime,
+        homeTeam: p.homeTeam,
+        awayTeam: p.awayTeam,
+        betDetail: p.betDetail,
+        gameNumber: p.gameNumber,
+      }))
+    ),
+  ]);
+
+  // Precomputed for every sport (plus "" for "All sports") so the filter bar
+  // can update the bet-type options live, client-side, as soon as the sport
+  // selection changes - no full page reload required.
   const optionsBySportId: Record<string, { value: BetTypeFilterKey; label: string }[]> = {
     "": computeVisibleBetTypeOptions(undefined),
   };
@@ -161,37 +208,94 @@ export default async function PicksPage({
     optionsBySportId[s.id] = computeVisibleBetTypeOptions(s.name);
   }
 
-  // Deliberately excludes startDateKey/endDateKey - those are always set
-  // (defaulting to today), so including them here would make this true on
-  // every load and permanently show "Clear"/the match-count line even with
-  // no filter the user actually chose. `dateFilterActive` below tracks the
-  // date scope separately, since it's "active" only once the user has
-  // navigated away from the implicit today default.
   const otherFiltersActive =
     Boolean(filters.capperId) || Boolean(filters.sportId) || Boolean(filters.status) || Boolean(betTypeFilter);
   const dateFilterActive = Boolean(searchParams.date) || isRange;
   const hasActiveFilters = otherFiltersActive || dateFilterActive;
 
-  const dateRangeLabel = isRange
-    ? formatEastern(easternDayStart(startDateKey), { month: "short", day: "numeric" }) +
+  const now = new Date();
+  const todayKey = easternDateKey(now);
+  const dayFmt = (key: string, opts: Intl.DateTimeFormatOptions) => formatEastern(easternDayStart(key), opts);
+
+  const subtitleDate = isRange
+    ? dayFmt(startDateKey, { month: "short", day: "numeric" }) +
       " - " +
-      formatEastern(easternDayStart(endDateKey), { month: "short", day: "numeric", year: "numeric" })
-    : formatEastern(easternDayStart(startDateKey), { month: "short", day: "numeric", year: "numeric" });
+      dayFmt(endDateKey, { month: "short", day: "numeric", year: "numeric" })
+    : dayFmt(startDateKey, { weekday: "long", month: "short", day: "numeric" });
+
+  const dateChipLabel = isRange
+    ? dayFmt(startDateKey, { month: "short", day: "numeric" }) + " - " + dayFmt(endDateKey, { month: "short", day: "numeric" })
+    : startDateKey === todayKey
+      ? "Today"
+      : dayFmt(startDateKey, { month: "short", day: "numeric" });
+  // "Default" means the chip reads Today with nothing to clear.
+  const dateIsDefault = !isRange && startDateKey === todayKey;
+
+  const ledgerPicks: (LedgerPickInput & { source: (typeof picks)[number] })[] = picks.map((p) => ({
+    id: p.id,
+    capperId: p.capperId,
+    sportName: p.sport.name,
+    homeTeam: p.homeTeam,
+    awayTeam: p.awayTeam,
+    betType: p.betType,
+    betDetail: p.betDetail,
+    line: p.line,
+    period: p.period,
+    pickedSide: p.pickedSide,
+    odds: p.odds,
+    status: p.status,
+    gameTime: p.gameTime,
+    source: p,
+  }));
+  const hints = consensusHints(ledgerPicks);
+
+  const sections = splitIntoSections(ledgerPicks, now).map((section) => ({
+    key: section.key,
+    rows: section.picks.map((lp): LedgerRow => {
+      const p = lp.source;
+      const rec = capperRecords.get(p.capperId);
+      const score = finalScores.get(p.id);
+      const decidedUnits =
+        p.status === "WIN"
+          ? "+" + fmtUnits(winUnits(p.units, p.odds)) + "u"
+          : p.status === "LOSS"
+            ? "-" + fmtUnits(p.units) + "u"
+            : null;
+      return {
+        id: p.id,
+        sportName: p.sport.name,
+        gameTimeIso: p.gameTime.toISOString(),
+        label: buildPickLabel(lp),
+        tag: marketTag({ betType: p.betType, period: p.period, sportName: p.sport.name, betDetail: p.betDetail }),
+        capperName: p.capper.name,
+        capperInitials: capperInitials(p.capper.name),
+        capperRecord: rec ? rec.wins + "-" + rec.losses : null,
+        matchup: score
+          ? p.awayTeam + " " + score.away + " @ " + p.homeTeam + " " + score.home + " (Final)"
+          : p.awayTeam + " @ " + p.homeTeam,
+        oddsText: formatOdds(p.odds),
+        unitsText: fmtUnits(p.units) + "u",
+        status: p.status,
+        isLive: isLiveNow(p, now),
+        resultUnitsText: decidedUnits,
+        consensus: hints.get(p.id) ?? null,
+      };
+    }),
+  }));
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Picks</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {picks.length + " pick" + (picks.length === 1 ? "" : "s") + " - " + dateRangeLabel}
-            {otherFiltersActive ? " (filtered)" : ""}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {planStatus.unlimited
-              ? TIER_LABELS[planStatus.tier] + " plan"
-              : planStatus.pickCount + " of " + planStatus.pickLimit + " picks logged (Free plan)"}
-          </p>
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
+            <TicketIcon />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold leading-tight">Picks</h1>
+            <p className="text-sm text-muted-foreground">
+              {subtitleDate + " · " + picks.length + " pick" + (picks.length === 1 ? "" : "s")}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <DropCatalogLink href="/picks/import" />
@@ -199,65 +303,19 @@ export default async function PicksPage({
         </div>
       </div>
 
-      <form
-        method="get"
-        className="mb-4 grid grid-cols-2 gap-2 rounded-card bg-card p-3 shadow-soft sm:flex sm:flex-wrap sm:items-center"
-      >
-        <DateRangeFilter
-          initialDate={startDateKey}
-          initialStartDate={startDateKey}
-          initialEndDate={endDateKey}
-          initialIsRange={isRange}
-        />
+      <PicksSummaryStrip summary={summary} />
 
-        <select
-          name="capperId"
-          defaultValue={filters.capperId ?? ""}
-          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
-        >
-          <option value="">All cappers</option>
-          {cappers.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-
-        <SportBetTypeFilter
-          sports={sports}
-          optionsBySportId={optionsBySportId}
-          initialSportId={filters.sportId ?? ""}
-          initialBetType={betTypeFilter ?? ""}
-        />
-
-        <select
-          name="status"
-          defaultValue={filters.status ?? ""}
-          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground sm:w-auto"
-        >
-          <option value="">All results</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-
-        <div className="col-span-2 flex items-center gap-3 sm:col-span-1 sm:contents">
-          <button
-            type="submit"
-            className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-          >
-            Filter
-          </button>
-
-          {hasActiveFilters && (
-            <a href="/picks" className="text-sm text-muted-foreground hover:text-foreground">
-              Clear
-            </a>
-          )}
-        </div>
-      </form>
+      <PicksFilterBar
+        cappers={cappers.map((c) => ({ value: c.id, label: c.name }))}
+        sports={sports.filter((s) => sportIdsWithPicks.includes(s.id)).map((s) => ({ value: s.id, label: s.name }))}
+        betTypeOptionsBySportId={optionsBySportId}
+        todayKey={todayKey}
+        dateLabel={dateChipLabel}
+        dateIsDefault={dateIsDefault}
+        dateStart={startDateKey}
+        dateEnd={endDateKey}
+        isRange={isRange}
+      />
 
       {picks.length === 0 ? (
         <div className="rounded-card bg-card p-10 text-center shadow-soft">
@@ -268,39 +326,7 @@ export default async function PicksPage({
           </p>
         </div>
       ) : (
-        <div className="rounded-card bg-card shadow-soft">
-          <div className="divide-y divide-border-subtle">
-            {picks.map((pick) => (
-              <div key={pick.id} className="flex items-center justify-between px-5 py-3">
-                <div>
-                  <div className="text-sm font-medium">
-                    {pick.awayTeam} @ {pick.homeTeam}
-                    {periodBadgeLabel(pick.period, pick.sport.name) && (
-                      <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:bg-purple-500/15 dark:text-purple-400">
-                        {periodBadgeLabel(pick.period, pick.sport.name)}
-                      </span>
-                    )}
-                    <span className="ml-2 font-normal text-muted-foreground">
-                      <LocalGameTime
-                        date={pick.gameTime}
-                        options={{ month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }}
-                      />
-                    </span>
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {pick.capper.name} - {formatPickLabel(pick.betDetail, pick.betType, pick.line) ?? betTypeLabel(pick.betType)} -{" "}
-                    {pick.odds > 0 ? "+" : ""}
-                    {pick.odds} - {pick.units}u
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <PickStatusButtons pickId={pick.id} status={pick.status} />
-                  <RowDeleteButton onConfirm={deletePickAction.bind(null, pick.id)} itemLabel="pick" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <PickLedger sections={sections} showDate={isRange} />
       )}
 
       {parlays.length > 0 && (
