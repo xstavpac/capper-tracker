@@ -222,6 +222,11 @@ model Capper {
   dismissedPairsAsA DismissedDuplicatePair[] @relation("DismissedDuplicatePairCapperA")
   dismissedPairsAsB DismissedDuplicatePair[] @relation("DismissedDuplicatePairCapperB")
 
+  // NOT EXPRESSIBLE HERE: UNIQUE INDEX cappers_user_lower_name_key
+  // ("userId", lower(btrim(name))) - one capper name per user, case-insensitive.
+  // Created by raw SQL migration 20260929120000_add_capper_unique_name_index; do
+  // not accept a `migrate dev` suggestion to drop it. See docs/partial-indexes.md.
+  // Insert cappers only via findOrCreateCapper (server/data/capper-find-or-create.ts).
   @@index([userId])
   @@map("cappers")
 }

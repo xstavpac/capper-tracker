@@ -7,6 +7,7 @@ by a hand-written SQL migration and is **not** declared in `schema.prisma`.
 | Index | Table | Migration | Serves |
 |---|---|---|---|
 | `picks_fuzzy_regrade_idx` `("sportId", "gameTime") WHERE "gradedViaFuzzyMatch" = true` | `picks` | `20260929090000_add_pick_capper_and_fuzzy_regrade_indexes` | `regradeAllFuzzyMatchedPicks` (`grading.ts`): `WHERE sportId = ? AND status IN (WIN,LOSS,PUSH) AND gradedViaFuzzyMatch = true AND gameTime >= ? ORDER BY gameTime DESC LIMIT ?` |
+| `cappers_user_lower_name_key` UNIQUE `("userId", lower(btrim(name)))` (an expression index, not partial) | `cappers` | `20260929120000_add_capper_unique_name_index` | Race backstop for `findOrCreateCapper` (`capper-find-or-create.ts`): one capper name per user, case-insensitive, edge spaces ignored. `CREATE UNIQUE INDEX` **fails, and so does the deploy, if a user already has colliding names** - run `SELECT "userId", lower(btrim(name)) AS n, count(*) FROM cappers GROUP BY 1, 2 HAVING count(*) > 1;` first (must return 0 rows). A violation surfaces as Prisma `P2002` with `meta.target = ["userId", "lower(btrim(name))"]` (the expression text, not an index name). |
 
 ## Drift behaviour (checked with Prisma 5.22)
 
