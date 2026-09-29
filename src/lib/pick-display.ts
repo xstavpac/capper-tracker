@@ -188,6 +188,12 @@ export function matchFeedGame<G extends { homeTeam: string; awayTeam: string; co
   return best;
 }
 
+// How many picks read Pending (game not started) - the summary strip's Pending
+// card and the Upcoming section are both this same set.
+export function pendingCount(picks: { phase: PickPhase }[]): number {
+  return picks.filter((p) => p.phase === "pending").length;
+}
+
 // Live/Upcoming/Settled in that order, empty ones dropped. Upcoming and Live
 // ascending by game time, Settled descending.
 export function splitIntoSections<T extends { phase: PickPhase; gameTime: Date }>(

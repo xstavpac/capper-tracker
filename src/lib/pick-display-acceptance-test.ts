@@ -8,6 +8,7 @@ import {
   marketTag,
   splitIntoSections,
   pickPhase,
+  pendingCount,
   matchFeedGame,
   type PickPhase,
   capperInitials,
@@ -118,6 +119,27 @@ check("only live phase in Live", secs[0].picks.map((p) => p.id), ["l1"]);
 check("only pending in Upcoming, ascending", secs[1].picks.map((p) => p.id), ["u1", "u2"]);
 check("settled holds graded + grading + awaiting, descending", secs[2].picks.map((p) => p.id), ["g1", "s1", "s2", "a1"]);
 check("empty sections hidden", splitIntoSections([mk("u1", "pending", 2)]).map((s) => s.key), ["upcoming"]);
+
+// Summary strip's Pending card == Upcoming section: both are the phase "pending"
+// (game not started). Live, Grading, Awaiting result and graded picks are excluded.
+{
+  const mixed = [
+    { id: "m1", status: "PENDING", gameTime: hrs(2), hasFinalResult: false, feedStatus: null }, // pending
+    { id: "m2", status: "PENDING", gameTime: hrs(5), hasFinalResult: false, feedStatus: "preview" as const }, // pending
+    { id: "m3", status: "PENDING", gameTime: hrs(-1), hasFinalResult: false, feedStatus: null }, // live (time fallback)
+    { id: "m4", status: "PENDING", gameTime: hrs(-1), hasFinalResult: false, feedStatus: "live" as const }, // live (feed)
+    { id: "m5", status: "PENDING", gameTime: hrs(-4), hasFinalResult: true, feedStatus: null }, // grading
+    { id: "m6", status: "PENDING", gameTime: hrs(-12), hasFinalResult: false, feedStatus: null }, // awaiting
+    { id: "m7", status: "WIN", gameTime: hrs(-6), hasFinalResult: true, feedStatus: null },
+    { id: "m8", status: "LOSS", gameTime: hrs(-6), hasFinalResult: true, feedStatus: null },
+    { id: "m9", status: "CANCELLED", gameTime: hrs(-6), hasFinalResult: false, feedStatus: null },
+  ].map((p) => ({ ...p, phase: pickPhase({ ...p, now }) }));
+  const upcoming = splitIntoSections(mixed).find((s) => s.key === "upcoming");
+  check("Pending card equals Upcoming section count on a mixed set", pendingCount(mixed), upcoming?.picks.length ?? 0);
+  check("...and that count is the two not-started picks", pendingCount(mixed), 2);
+  check("...never the ungraded-but-started ones", mixed.filter((p) => p.status === "PENDING").length - pendingCount(mixed), 4);
+  check("no pending phase -> card 0 and no Upcoming section", [pendingCount([{ phase: "live" as const }, { phase: "grading" as const }]), splitIntoSections([mk("g", "grading", -3)]).some((s) => s.key === "upcoming")], [0, false]);
+}
 
 // Feed matching: exact team names, nearest start time within drift.
 const feed = [

@@ -18,7 +18,8 @@ function Card({ label, value, valueClass }: { label: string; value: string; valu
 }
 
 // Four metric cards for the current filter set: 4-up on desktop, 2x2 on phones.
-export function PicksSummaryStrip({ summary }: { summary: PicksSummary }) {
+// `pending` is the Upcoming section's count (see pendingCount): game not started.
+export function PicksSummaryStrip({ summary, pending }: { summary: PicksSummary; pending: number }) {
   const decided = summary.wins + summary.losses + summary.pushes;
   return (
     <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -29,7 +30,7 @@ export function PicksSummaryStrip({ summary }: { summary: PicksSummary }) {
         value={decided > 0 ? (summary.roi > 0 ? "+" : "") + summary.roi.toFixed(1) + "%" : "-"}
         valueClass={decided > 0 ? tone(summary.roi) : undefined}
       />
-      <Card label="Pending" value={String(summary.pending)} />
+      <Card label="Pending" value={String(pending)} />
     </div>
   );
 }

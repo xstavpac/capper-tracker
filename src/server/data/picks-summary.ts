@@ -23,14 +23,13 @@ export type PicksSummary = {
   wins: number;
   losses: number;
   pushes: number;
-  pending: number;
   netUnits: number;
   roi: number;
 };
 
-function toSummary(t: RecordTotals, pending: number): PicksSummary {
+function toSummary(t: RecordTotals): PicksSummary {
   const s = recordStatsFromTotals(t);
-  return { wins: s.wins, losses: s.losses, pushes: s.pushes, pending, netUnits: s.netUnits, roi: s.roi };
+  return { wins: s.wins, losses: s.losses, pushes: s.pushes, netUnits: s.netUnits, roi: s.roi };
 }
 
 // One grouped query over the same filter set the list uses (minus bet type,
@@ -44,7 +43,6 @@ export async function getPicksSummary(userId: string, f: PicksSummaryFilters): P
       wins: number;
       losses: number;
       pushes: number;
-      pending: number;
       unitsWon: number;
       unitsLost: number;
       unitsRisked: number;
@@ -54,7 +52,6 @@ export async function getPicksSummary(userId: string, f: PicksSummaryFilters): P
       (count(*) FILTER (WHERE p.status = 'WIN'))::int AS wins,
       (count(*) FILTER (WHERE p.status = 'LOSS'))::int AS losses,
       (count(*) FILTER (WHERE p.status = 'PUSH'))::int AS pushes,
-      (count(*) FILTER (WHERE p.status = 'PENDING'))::int AS pending,
       COALESCE(sum(${WIN_UNITS}) FILTER (WHERE p.status = 'WIN' AND p.odds <> 0), 0)::float8 AS "unitsWon",
       COALESCE(sum(p.units) FILTER (WHERE p.status = 'LOSS'), 0)::float8 AS "unitsLost",
       COALESCE(sum(p.units) FILTER (WHERE p.status IN ('WIN', 'LOSS', 'PUSH')), 0)::float8 AS "unitsRisked"
@@ -66,8 +63,8 @@ export async function getPicksSummary(userId: string, f: PicksSummaryFilters): P
       ${f.status ? Prisma.sql`AND p.status = ${f.status}::"PickStatus"` : Prisma.empty}
   `);
   const r = rows[0];
-  if (!r) return { wins: 0, losses: 0, pushes: 0, pending: 0, netUnits: 0, roi: 0 };
-  return toSummary(r, r.pending);
+  if (!r) return { wins: 0, losses: 0, pushes: 0, netUnits: 0, roi: 0 };
+  return toSummary(r);
 }
 
 // Same totals computed from rows the page already loaded. Used only when the
@@ -78,10 +75,8 @@ export function summarizeLoadedPicks(
   picks: { status: string; units: number; odds: number }[]
 ): PicksSummary {
   const t: RecordTotals = { wins: 0, losses: 0, pushes: 0, unitsWon: 0, unitsLost: 0, unitsRisked: 0 };
-  let pending = 0;
   for (const p of picks) {
-    if (p.status === "PENDING") pending++;
-    else if (p.status === "WIN") {
+    if (p.status === "WIN") {
       t.wins++;
       t.unitsRisked += p.units;
       if (p.odds !== 0) t.unitsWon += unitsWonOnBet(p.units, p.odds);
@@ -94,7 +89,7 @@ export function summarizeLoadedPicks(
       t.unitsRisked += p.units;
     }
   }
-  return toSummary(t, pending);
+  return toSummary(t);
 }
 
 // All-time W-L for the cappers on the page, one grouped query.

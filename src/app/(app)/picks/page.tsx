@@ -31,6 +31,7 @@ import {
   buildPickLabel,
   marketTag,
   splitIntoSections,
+  pendingCount,
   pickPhase,
   consensusHints,
   capperInitials,
@@ -323,7 +324,7 @@ export default async function PicksPage({
         </div>
       </div>
 
-      <PicksSummaryStrip summary={summary} />
+      <PicksSummaryStrip summary={summary} pending={pendingCount(ledgerPicks)} />
 
       <PicksFilterBar
         cappers={cappers.map((c) => ({ value: c.id, label: c.name }))}
