@@ -1,8 +1,21 @@
 import { normalizeName } from "@/lib/fuzzy-match";
+<<<<<<< HEAD
 import { looksPickLikeHeader } from "@/lib/market-hint";
 import { parsePlayerProp, pickPeriodFromText, extractLine, type SegmentPeriod } from "@/lib/bet-line";
+=======
+import {
+  parsePlayerProp,
+  pickPeriodFromText,
+  extractLine,
+  normalizeNPlusPlayerProp,
+  type SegmentPeriod,
+} from "@/lib/bet-line";
 import { isKnownFullPlayerName } from "@/lib/player-roster-fallback";
-import { detectUnsupportedProp, type UnsupportedPropInfo } from "@/lib/unsupported-prop-vocab";
+import {
+  detectUnsupportedProp,
+  detectUnsupportedNflNPlus,
+  type UnsupportedPropInfo,
+} from "@/lib/unsupported-prop-vocab";
 
 export type ParsedPick = {
   capperName: string;
@@ -1401,7 +1414,12 @@ function looksLikePick(text: string): boolean {
     // "Chris Sale o5.5 K") - no signed number or over/under word for the
     // signals above to catch, so they used to fall through to the capper-name
     // fallback and vanish. See unsupported-prop-vocab.ts.
-    detectUnsupportedPropLine(text) !== null
+    detectUnsupportedPropLine(text) !== null ||
+    // "Zach Ertz 3+ receptions" - a SUPPORTED NFL market in N+ form. No signed
+    // number / over-under word here either, so it was read as a capper name
+    // (and the next pick got credited to that fake capper). parsePickText
+    // rewrites it to "Over 2.5 receptions".
+    normalizeNPlusPlayerProp(text) !== text
   );
 }
 
@@ -1412,6 +1430,11 @@ function looksLikePick(text: string): boolean {
 // number), so game/team totals ("Yankees over 4.5 runs", "NBA LeBron James
 // over 25.5 points") keep flowing to their normal resolvers.
 export function detectUnsupportedPropLine(text: string): UnsupportedPropInfo | null {
+  // NFL stats with no grader ("3+ sacks", "2+ passing completions") are checked
+  // first: parsePlayerProp would otherwise claim "passing completions" as
+  // PASS_YDS and let it import as a yardage pick.
+  const nflUnsupported = detectUnsupportedNflNPlus(text);
+  if (nflUnsupported) return nflUnsupported;
   if (parsePlayerProp(text)) return null;
   return detectUnsupportedProp(
     text,
@@ -1699,6 +1722,10 @@ export function parsePickText(description: string): {
   cleanDescription: string;
   totalSide?: "over" | "under";
 } {
+  // "Zach Ertz 3+ receptions" -> "Zach Ertz Over 2.5 receptions" (supported NFL
+  // markets only - see normalizeNPlusPlayerProp), so the stored betDetail
+  // carries the over/under line that grading and odds lookup read.
+  description = normalizeNPlusPlayerProp(description);
   let odds: number | null = null;
   let units: number | null = null;
   const parens = [...description.matchAll(/\(([^)]+)\)/g)];

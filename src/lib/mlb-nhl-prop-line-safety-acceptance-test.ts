@@ -14,6 +14,8 @@
 // untouched.
 import { parseCatalog, detectUnsupportedPropLine } from "@/lib/parse-catalog";
 import { UNSUPPORTED_PROP_REASONS } from "@/lib/unsupported-prop-vocab";
+import { recoverUnresolvedLines } from "@/lib/recover-unresolved-lines";
+import { parsePlayerProp, parsePlayerPropLine, parseTouchdownProp, normalizeNPlusPlayerProp } from "@/lib/bet-line";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -151,7 +153,10 @@ function main() {
     ["NHL Oilers vs Flames over 6.5", "NHL", "TOTAL"],
     ["NHL Oilers over 3.5 goals", "NHL", "TOTAL"], // pre-existing classification, unchanged
     ["NBA Lakers over 220.5 points", "NBA", "TOTAL"],
-    ["NBA LeBron James over 25.5 points", "NBA", "TOTAL"], // pre-existing behavior, deliberately unchanged
+    ["NBA Lakers vs Nuggets over 220.5 pts", "NBA", "TOTAL"],
+    ["NBA Lakers team total over 112.5", "NBA", "TEAM_TOTAL"],
+    ["Lakers over 220.5 points", "NBA", "TOTAL"],
+    ["Lakers team total over 112.5", "NBA", "TEAM_TOTAL"],
   ];
   for (const [line, sport, betType] of teamBets) {
     const r = parseCatalog("Krash\n" + line);
@@ -166,6 +171,96 @@ function main() {
     check("tennis 'Sinner ML' still ATP", t.picks.map((p) => [p.sportName, p.betType]), [["ATP", "MONEYLINE"]]);
     check("NFL prop is not flagged by the MLB/NHL detector", detectUnsupportedPropLine("Puka Nacua Anytime TD"), null);
     check("NFL prop is not flagged by the MLB/NHL detector (yards)", detectUnsupportedPropLine("Josh Allen Over 275.5 Passing Yards"), null);
+  }
+
+  // --- A. NBA / WNBA player props ---------------------------------------------
+  // Before: "NBA LeBron James over 25.5 points" imported as a game TOTAL (wrong
+  // data). Now unresolved, never TOTAL. Sport is named only when a code says so.
+  expectUnsupported("NBA LeBron James over 25.5 points", UNSUPPORTED_PROP_REASONS.NBA);
+  expectUnsupported("WNBA A'ja Wilson over 9.5 rebounds", UNSUPPORTED_PROP_REASONS.WNBA);
+  expectUnsupported("A'ja Wilson over 9.5 rebounds", UNSUPPORTED_PROP_REASONS.GENERIC);
+  expectUnsupported("NBA Nikola Jokic over 10.5 assists", UNSUPPORTED_PROP_REASONS.NBA);
+  expectUnsupported("NBA Stephen Curry over 4.5 threes", UNSUPPORTED_PROP_REASONS.NBA);
+  expectUnsupported("Jalen Brunson over 40.5 PRA", UNSUPPORTED_PROP_REASONS.GENERIC);
+  expectUnsupported("Nikola Jokic over 45.5 pts+reb+ast", UNSUPPORTED_PROP_REASONS.GENERIC);
+  expectUnsupported("NBA Victor Wembanyama over 3.5 blocks", UNSUPPORTED_PROP_REASONS.NBA);
+  expectUnsupported("NBA Shai Gilgeous-Alexander over 1.5 steals", UNSUPPORTED_PROP_REASONS.NBA);
+  expectUnsupported("WNBA Caitlin Clark 25+ points", UNSUPPORTED_PROP_REASONS.WNBA);
+  {
+    const r = parseCatalog("Krash\nNBA LeBron James over 25.5 points");
+    check("NBA prop is never a TOTAL (no picks at all)", r.picks.map((p) => p.betType), []);
+    // A team REBOUNDS total is a team stat: subject is a team, so untouched.
+    check("team-subject 'Lakers over 45.5 rebounds' not flagged", detectUnsupportedPropLine("Lakers over 45.5 rebounds"), null);
+  }
+
+  // --- B. NFL N+ props ----------------------------------------------------------
+  // The exact production block: "Zach Ertz 3+ receptions" was eaten as a capper
+  // name and the next pick credited to that fake capper.
+  {
+    const rosterFixture = [
+      { playerName: "DeVonta Smith", firstName: "DeVonta", lastName: "Smith", team: "Philadelphia Eagles", position: "WR", espnPlayerId: "1" },
+      { playerName: "Zach Ertz", firstName: "Zach", lastName: "Ertz", team: "Washington Commanders", position: "TE", espnPlayerId: "2" },
+      { playerName: "Rome Odunze", firstName: "Rome", lastName: "Odunze", team: "Chicago Bears", position: "WR", espnPlayerId: "3" },
+    ];
+    const block = ["CHEESE", "DeVonta Smith Over 4.5 receptions", "Zach Ertz 3+ receptions", "Rome Odunze Anytime Touchdown"].join("\n");
+    const parsed = parseCatalog(block, []);
+    check("CHEESE block: no fake capper (no picks credited to a player name)", parsed.picks.map((p) => p.capperName), []);
+    check("CHEESE block: all three lines reach unresolved, all under CHEESE", parsed.unresolvedCapperNames, ["CHEESE", "CHEESE", "CHEESE"]);
+    const rec = recoverUnresolvedLines(parsed.unresolved, parsed.unresolvedCapperNames, [], rosterFixture);
+    check("CHEESE block: nothing left unresolved after roster recovery", rec.stillUnresolved, []);
+    check(
+      "CHEESE block: all three picks attributed to CHEESE",
+      rec.recovered.map((p) => p.capperName),
+      ["CHEESE", "CHEESE", "CHEESE"]
+    );
+    check(
+      "CHEESE block: all three are NFL PLAYER_PROP",
+      rec.recovered.map((p) => [p.sportName, p.betType]),
+      [["NFL", "PLAYER_PROP"], ["NFL", "PLAYER_PROP"], ["NFL", "PLAYER_PROP"]]
+    );
+    const ertz = rec.recovered.find((p) => /Ertz/.test(p.description));
+    check("'Zach Ertz 3+ receptions' stored as over 2.5 receptions", ertz?.description, "Zach Ertz Over 2.5 receptions");
+    check("  ...and its line reads back as OVER 2.5", parsePlayerPropLine(ertz?.description ?? ""), { direction: "OVER", line: 2.5 });
+    check("  ...and its market is RECEPTIONS for player Zach Ertz", parsePlayerProp(ertz?.description ?? ""), {
+      playerName: "Zach Ertz",
+      propMarket: "RECEPTIONS",
+    });
+  }
+  // N+ conversion per supported market: N+ == over (N - 0.5).
+  const nPlus: [string, string, string][] = [
+    ["Zach Ertz 3+ receptions", "Zach Ertz Over 2.5 receptions", "RECEPTIONS"],
+    ["Saquon Barkley 80+ rushing yards", "Saquon Barkley Over 79.5 rushing yards", "RUSH_YDS"],
+    ["A.J. Brown 100+ receiving yards", "A.J. Brown Over 99.5 receiving yards", "REC_YDS"],
+    ["Josh Allen 250+ passing yards", "Josh Allen Over 249.5 passing yards", "PASS_YDS"],
+    ["Jahmyr Gibbs 100+ rush and rec yards", "Jahmyr Gibbs Over 99.5 rush and rec yards", "RUSH_REC_YDS"],
+    ["Josh Allen 300+ pass and rush yards", "Josh Allen Over 299.5 pass and rush yards", "PASS_RUSH_YDS"],
+  ];
+  for (const [line, expectedDescription, market] of nPlus) {
+    const r = parseCatalog("Krash\nNFL " + line);
+    check(`N+ imports: "${line}"`, r.picks.map((p) => [p.sportName, p.betType, p.description]), [["NFL", "PLAYER_PROP", expectedDescription]]);
+    check(`  market ${market}`, parsePlayerProp(expectedDescription)?.propMarket, market);
+    check(`  not flagged unsupported: "${line}"`, detectUnsupportedPropLine(line), null);
+  }
+  // TD N+ keeps its existing multi-TD "unsupported" handling (still a PLAYER_PROP
+  // that grading declines) - not rewritten to an over/under line.
+  {
+    const r = parseCatalog("Krash\nNFL Puka Nacua 2+ TDs");
+    check("TD N+ text untouched", r.picks.map((p) => [p.betType, p.description]), [["PLAYER_PROP", "Puka Nacua 2+ TDs"]]);
+    check("TD N+ still flagged multi-TD unsupported by parseTouchdownProp", !!parseTouchdownProp("Puka Nacua 2+ TDs")?.unsupported, true);
+  }
+  // Unsupported NFL stats in N+ form route to unresolved (never yardage picks -
+  // parsePlayerProp alone would read "passing completions" as PASS_YDS).
+  for (const line of ["Patrick Mahomes 25+ passing completions", "NFL T.J. Watt 1+ sacks", "Micah Parsons 5+ tackles", "Derrick Henry 20+ rushing attempts"]) {
+    const r = parseCatalog("Krash\n" + line);
+    check(`unsupported NFL N+ -> unresolved: "${line}"`, [r.picks.length, r.unresolved.length], [0, 1]);
+    check(`  reason: "${line}"`, detectUnsupportedPropLine(line)?.reason, UNSUPPORTED_PROP_REASONS.NFL);
+  }
+  // An over/under line already present is never rewritten; headers with "3+" stay headers.
+  check("explicit over/under text is left alone", normalizeNPlusPlayerProp("Zach Ertz Over 2.5 receptions"), "Zach Ertz Over 2.5 receptions");
+  check("odds like +150 are not N+", normalizeNPlusPlayerProp("Zach Ertz Over 2.5 receptions +150"), "Zach Ertz Over 2.5 receptions +150");
+  {
+    const r = parseCatalog("Sharp Sam 3+ units\nNFL Chiefs ML");
+    check("'3+ units' style header line unaffected", r.picks.map((p) => p.sportName), ["NFL"]);
   }
 
   if (failures > 0) {

@@ -39,7 +39,38 @@ const STRONG_WORDS = [
 
 // Words that are ALSO ordinary game/team-total vocabulary - only a prop when
 // the subject before the number is a person, not a team.
-const AMBIGUOUS_WORDS = [String.raw`runs?`, String.raw`points?`, String.raw`pts`, String.raw`assists?`].join("|");
+// Basketball stats (points/rebounds/assists/threes/PRA/steals/blocks) are here
+// too: "Lakers over 45.5 rebounds" is a team stat, so they need a person
+// subject exactly like "runs" does.
+const AMBIGUOUS_WORDS = [
+  String.raw`pts\s*\+\s*reb\s*\+\s*ast`,
+  String.raw`runs?`,
+  String.raw`points?`,
+  String.raw`pts`,
+  String.raw`rebounds?`,
+  String.raw`rebs?`,
+  String.raw`assists?`,
+  String.raw`threes`,
+  String.raw`3-?pointers?`,
+  String.raw`pra`,
+  String.raw`steals?`,
+  String.raw`blocks?`,
+].join("|");
+
+// NFL stats that only exist as N+ props this app can't grade. Deliberately
+// excludes the supported yardage/receptions markets and TDs - those are
+// handled by normalizeNPlusPlayerProp / parseTouchdownProp (bet-line.ts).
+const NFL_UNSUPPORTED_WORDS = [
+  String.raw`(?:(?:pass(?:ing)?|rush(?:ing)?|rec(?:eiving)?)\s+)?(?:completions?|attempts?|carries|targets?)`,
+  String.raw`sacks?`,
+  String.raw`(?:solo\s+)?tackles?`,
+  String.raw`interceptions?`,
+  String.raw`ints?`,
+  String.raw`field\s+goals?`,
+  String.raw`fgs?`,
+  String.raw`extra\s+points?`,
+].join("|");
+const NFL_N_PLUS_UNSUPPORTED = new RegExp(`(?<![\\w.-])\\d+\\+\\s*(?:${NFL_UNSUPPORTED_WORDS})\\b`, "i");
 
 const ANY_WORDS = STRONG_WORDS + "|" + AMBIGUOUS_WORDS;
 
@@ -75,10 +106,13 @@ const MLB_WORDS = /\b(?:strike\s?outs?|ks?|outs|total\s+bases|stolen\s+bases|rbi
 export const UNSUPPORTED_PROP_REASONS = {
   MLB: "MLB player props aren't supported yet",
   NHL: "NHL player props aren't supported yet",
+  NBA: "NBA player props aren't supported yet",
+  WNBA: "WNBA player props aren't supported yet",
+  NFL: "This NFL prop market isn't supported yet",
   GENERIC: "Player prop not supported yet",
 } as const;
 
-export type UnsupportedPropInfo = { sport: "MLB" | "NHL" | null; reason: string };
+export type UnsupportedPropInfo = { sport: "MLB" | "NHL" | "NBA" | "WNBA" | "NFL" | null; reason: string };
 
 // Everything before `index`, with sport codes / parentheticals / a leading
 // emoji removed - what's left is the "who is this bet on" text.
@@ -87,24 +121,34 @@ function subjectBefore(text: string, index: number): string {
     .slice(0, index)
     .replace(/\([^)]*\)/g, " ")
     .replace(/^[^\w]+/, "")
-    .replace(/\b(?:MLB|NHL)\b/gi, " ")
+    .replace(/\b(?:MLB|NHL|NBA|WNBA)\b/gi, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
 
 function reasonFor(text: string, matchedWord: string): UnsupportedPropInfo {
-  const hasMlb = /\bMLB\b/i.test(text);
-  const hasNhl = /\bNHL\b/i.test(text);
-  let sport: "MLB" | "NHL" | null = null;
-  if (hasMlb && !hasNhl) sport = "MLB";
-  else if (hasNhl && !hasMlb) sport = "NHL";
-  else if (!hasMlb && !hasNhl) {
+  // An explicit sport code wins - but only when exactly one of the four is
+  // present (two on one line is ambiguous, so it falls back to vocabulary).
+  const codes = (["MLB", "NHL", "NBA", "WNBA"] as const).filter((c) => new RegExp("\\b" + c + "\\b", "i").test(text));
+  let sport: "MLB" | "NHL" | "NBA" | "WNBA" | null = codes.length === 1 ? codes[0] : null;
+  if (codes.length === 0) {
     // No explicit code: infer from the stat vocabulary. "points"/"assists"
-    // alone stay unknown (NBA/WNBA use them too).
+    // and the basketball-only words stay unknown (NBA and WNBA share them,
+    // NHL uses points/assists) - the generic reason is honest there.
     if (NHL_WORDS.test(matchedWord) || NHL_WORDS.test(text)) sport = "NHL";
     else if (MLB_WORDS.test(matchedWord)) sport = "MLB";
   }
   return { sport, reason: sport ? UNSUPPORTED_PROP_REASONS[sport] : UNSUPPORTED_PROP_REASONS.GENERIC };
+}
+
+// "3+ sacks" / "2+ passing completions": an NFL prop in N+ form for a stat
+// this app doesn't grade. Separate from detectUnsupportedProp because the
+// caller must check it BEFORE its "an NFL prop parsePlayerProp recognizes is
+// never flagged" early return - parsePlayerProp reads "passing completions"
+// as PASS_YDS (bare "passing" matches), which would otherwise import it as a
+// yardage pick.
+export function detectUnsupportedNflNPlus(text: string): UnsupportedPropInfo | null {
+  return NFL_N_PLUS_UNSUPPORTED.test(text) ? { sport: "NFL", reason: UNSUPPORTED_PROP_REASONS.NFL } : null;
 }
 
 // Returns non-null when `text` is an MLB/NHL-style player-prop line this app
