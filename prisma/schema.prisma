@@ -340,6 +340,16 @@ model Pick {
   // has a userId to lead with. gameTime is in the index so the ordering /
   // range filter is served by it, not a post-scan sort.
   @@index([sportId, status, gameTime])
+  // FK support: the picks -> cappers ON DELETE CASCADE (capper delete, and the
+  // merge tool's delete of the duplicate) looks picks up by capperId ALONE, and
+  // every other index above leads with userId or sportId.
+  @@index([capperId])
+  // NOT EXPRESSIBLE HERE: a partial index
+  //   picks_fuzzy_regrade_idx ON picks (sportId, gameTime) WHERE gradedViaFuzzyMatch = true
+  // exists in the database (migration 20260929090000_add_pick_capper_and_fuzzy_regrade_indexes,
+  // raw SQL) for regradeAllFuzzyMatchedPicks. Prisma 5 has no schema syntax for
+  // partial indexes, so `prisma migrate dev` / `migrate diff` will report it as
+  // drift and try to DROP it - do not accept that. See docs/partial-indexes.md.
   @@map("picks")
 }
 
