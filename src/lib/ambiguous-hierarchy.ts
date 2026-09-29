@@ -99,6 +99,19 @@ export type ScheduleChecker = (queries: ScheduleCheckQuery[]) => Promise<Record<
 
 export type HierarchyDeps = {
   runScheduleCheck: ScheduleChecker;
+  // Tiebreaker for step 2 (schedule check): answers "does this candidate have
+  // a real game ANYWHERE on the posted schedule" (not just today/tomorrow),
+  // i.e. runScheduleCheck's question without nearTermOnly. Only ever called
+  // for the runner-up candidate(s) of a key runScheduleCheck already narrowed
+  // to exactly one near-term match - if a runner-up also has a real game
+  // (just not today), a lone near-term match is no longer decisive on its
+  // own and the key falls through to the season/pick-context/plausibility
+  // steps instead (the Indiana Fever vs Hoosiers case: a daily-cadence
+  // league must not out-vote a weekly one just by playing more often). A
+  // checker rejection is "can't confirm the runner-up has anything" -
+  // inconclusive, so the near-term decision stands as it did before this
+  // tiebreaker existed.
+  runWideScheduleCheck: ScheduleChecker;
   // Overridable reference date for the season (calendar) fallback - defaults
   // to now. Tests pin it so the calendar-fallback path is deterministic.
   now?: Date;
@@ -251,19 +264,57 @@ export async function runAmbiguousHierarchy(
       );
     }
 
+    // A lone near-term match per key is only TENTATIVE until the tiebreaker
+    // below confirms none of that key's other candidates has a real game just
+    // outside the window - collected first so the wide check batches into one
+    // round-trip instead of one per key.
+    const tentativeWinners = new Map<string, AmbiguousOption>();
     for (const key of keysNeedingResolution) {
       const options = ambiguousOptionsFor(key);
       const withGameToday = options.filter((o) => scheduleResults[o.nickname + "|" + o.sport]);
       if (!scheduleCheckFailed) scheduleSignalByKey.set(key, withGameToday);
-      if (withGameToday.length === 1) {
-        decided.set(key, {
-          choice: withGameToday[0],
-          method: "schedule",
-          reason: "only " + withGameToday[0].sport + " has a game scheduled today",
-        });
-      }
+      if (withGameToday.length === 1) tentativeWinners.set(key, withGameToday[0]);
       // 0 or 2+ matches - schedule inconclusive, falls through to the
       // calendar step below.
+    }
+
+    if (tentativeWinners.size > 0) {
+      const runnerUpQueries: ScheduleCheckQuery[] = [];
+      for (const [key, winner] of tentativeWinners) {
+        for (const o of ambiguousOptionsFor(key)) {
+          if (o.sport === winner.sport && o.nickname === winner.nickname) continue;
+          runnerUpQueries.push({ nickname: o.nickname, sport: o.sport });
+        }
+      }
+      let wideResults: Record<string, boolean> = {};
+      try {
+        wideResults = runnerUpQueries.length > 0 ? await deps.runWideScheduleCheck(runnerUpQueries) : {};
+      } catch (err) {
+        // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+        console.log(
+          "[catalog-disambiguation] wide schedule tiebreaker check failed, trusting the near-term match:",
+          err instanceof Error ? err.message : err
+        );
+      }
+
+      for (const [key, winner] of tentativeWinners) {
+        const runnerUpHasRealGame = ambiguousOptionsFor(key).some(
+          (o) => !(o.sport === winner.sport && o.nickname === winner.nickname) && wideResults[o.nickname + "|" + o.sport]
+        );
+        if (runnerUpHasRealGame) {
+          // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+          console.log(
+            "[catalog-disambiguation] schedule tiebreaker: runner-up has a real game outside the window, falling through:",
+            key
+          );
+          continue; // scheduleSignalByKey keeps the near-term subset for step 5's cross-check
+        }
+        decided.set(key, {
+          choice: winner,
+          method: "schedule",
+          reason: "only " + winner.sport + " has a game scheduled today",
+        });
+      }
     }
   }
 
@@ -328,12 +379,36 @@ export async function runAmbiguousHierarchy(
   // sharing that key, step 4's pick_context decisions only to picks from the
   // same capper that earned them. Step 5 (line plausibility) runs next, per
   // pick, only on whatever's left ambiguous after this.
+  //
+  // Plausibility also gates SCHEDULE-based decisions (near-term or
+  // tiebreaker): a key-level schedule decision is applied per pick, and a
+  // pick whose own line is unrealistic for the chosen league (Fever-only
+  // schedule + "Indiana -44") is NOT auto-resolved by it - it's left
+  // ambiguous and falls to step 5 below, where that same bound has already
+  // removed the implausible candidate from its candidate list. Only the
+  // "schedule" method is gated: remembered answers (which include user
+  // answers) and season/pick_context decisions always apply as before.
+  const appliedCountByKey = new Map<string, number>();
   const contextLog = new Map<string, { key: string; sport: string; count: number }>();
   for (const { p, idx } of ambiguousEntries) {
     const key = p.ambiguousKey!;
     const globalDecision = decided.get(key);
     if (globalDecision) {
+      if (
+        globalDecision.method === "schedule" &&
+        filterPlausibleCandidates([globalDecision.choice], p.ambiguousBetType, p.ambiguousLine).length === 0
+      ) {
+        // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+        console.log(
+          "[catalog-disambiguation] schedule decision rejected by line plausibility, falling through:",
+          key,
+          globalDecision.choice.sport,
+          p.ambiguousLine
+        );
+        continue;
+      }
       picks[idx] = resolveAmbiguousPick(p, globalDecision.choice);
+      appliedCountByKey.set(key, (appliedCountByKey.get(key) ?? 0) + 1);
       continue;
     }
     const contextDecision = contextDecided.get(key + "::" + p.capperName);
@@ -411,12 +486,14 @@ export async function runAmbiguousHierarchy(
   for (const key of uniqueKeys) {
     const decision = decided.get(key);
     if (!decision) continue;
+    const applied = appliedCountByKey.get(key) ?? 0;
+    if (applied === 0) continue; // every pick was gated out (schedule vs. line plausibility)
     logs.push({
       ambiguousName: key,
       resolvedSport: decision.choice.sport,
       method: decision.method,
       reason: decision.reason,
-      pickCount: countByKey.get(key) ?? 0,
+      pickCount: applied,
     });
   }
   for (const { key, sport, count } of contextLog.values()) {
@@ -465,7 +542,14 @@ export async function runAmbiguousHierarchy(
     .filter((g): g is StillAmbiguousGroup => g !== null);
 
   const decisions: Record<string, AmbiguousOption> = {};
-  for (const [key, decision] of decided.entries()) decisions[key] = decision.choice;
+  // A key whose decision applied to no pick (every one gated out by line
+  // plausibility) is not memoized: step 1 applies memory unconditionally, so
+  // remembering it would let a rejected schedule guess become a "user answer"
+  // on the next re-parse.
+  for (const [key, decision] of decided.entries()) {
+    if (decision.method !== "remembered" && (appliedCountByKey.get(key) ?? 0) === 0) continue;
+    decisions[key] = decision.choice;
+  }
 
   return { picks, logs, stillAmbiguous, decisions };
 }
