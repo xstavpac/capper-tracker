@@ -228,6 +228,54 @@ function main() {
     UNSUPPORTED_PROP_REASONS.NBA
   );
 
+  // --- Matchup ("X vs Y" / "X @ Y") + non-scoring stat --------------------------
+  // Game stat totals: never TOTAL, "Game stat totals aren't supported yet".
+  const GAME_STAT = UNSUPPORTED_PROP_REASONS.GAME_STAT;
+  for (const line of [
+    "Yankees vs Red Sox over 20.5 hits",
+    "MLB Yankees vs Red Sox over 20.5 hits",
+    "Yankees @ Red Sox over 20.5 hits",
+    "NBA Lakers vs Nuggets over 90.5 rebounds",
+    "NBA Lakers @ Nuggets over 90.5 rebounds",
+    "Lakers vs Nuggets over 45.5 assists",
+    "Lakers vs Nuggets over 25.5 threes",
+    "Lakers vs Nuggets over 15.5 steals",
+    "Lakers vs Nuggets over 10.5 blocks",
+    "Lakers vs Nuggets over 30.5 turnovers",
+    "Lakers vs Nuggets over 40.5 fouls",
+    "Oilers vs Flames over 60.5 shots on goal",
+    "Los Angeles Lakers vs Boston Celtics over 90.5 rebounds",
+  ]) {
+    const r = parseCatalog("Krash\n" + line);
+    check(`matchup stat -> unresolved, never TOTAL: "${line}"`, [r.picks.length, r.parlays.length, r.unresolved], [0, 0, [line]]);
+    check(`  reason: "${line}"`, detectUnsupportedPropLine(line)?.reason, GAME_STAT);
+  }
+  // A player's name after the matchup keeps the PLAYER-prop reason.
+  check(
+    "matchup + pitcher name keeps MLB player-prop reason (Schlittler)",
+    detectUnsupportedPropLine("MLB Yankees vs Red Sox Schlittler over 17.5 outs")?.reason,
+    UNSUPPORTED_PROP_REASONS.MLB
+  );
+  check(
+    "matchup + player name + ambiguous word keeps NBA player-prop reason",
+    detectUnsupportedPropLine("NBA Lakers vs Nuggets LeBron James over 25.5 rebounds")?.reason,
+    UNSUPPORTED_PROP_REASONS.NBA
+  );
+  // Matchup lines with scoring words stay ordinary totals, still importing as before.
+  for (const [line, sport] of [
+    ["Yankees vs Red Sox over 8.5 runs", "MLB"],
+    ["Lakers vs Nuggets over 220.5 points", "NBA"],
+    ["Lakers vs Nuggets over 220.5 pts", "NBA"],
+    ["NBA Lakers vs Nuggets over 220.5", "NBA"],
+    ["Oilers vs Flames over 6.5 goals", "NHL"],
+    ["MLB Yankees @ Red Sox total over 8.5 runs", "MLB"],
+  ] as [string, string][]) {
+    check(`matchup scoring total untouched: "${line}"`, detectUnsupportedPropLine(line), null);
+    const r = parseCatalog("Krash\n" + line);
+    check(`  still imports as a TOTAL pick: "${line}"`, [r.picks.length, r.picks[0]?.betType, r.unresolved.length], [1, "TOTAL", 0]);
+    void sport;
+  }
+
   // --- B. NFL N+ props ----------------------------------------------------------
   // The exact production block: "Zach Ertz 3+ receptions" was eaten as a capper
   // name and the next pick credited to that fake capper.

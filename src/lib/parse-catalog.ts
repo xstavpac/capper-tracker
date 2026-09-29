@@ -1438,8 +1438,33 @@ export function detectUnsupportedPropLine(text: string): UnsupportedPropInfo | n
   if (parsePlayerProp(text)) return null;
   return detectUnsupportedProp(
     text,
-    (subject) => detectSport(subject, true).sportName !== "" || RECOGNIZED_TEAM_PHRASES.has(subject.toLowerCase())
+    (subject) => detectSport(subject, true).sportName !== "" || RECOGNIZED_TEAM_PHRASES.has(subject.toLowerCase()),
+    classifyTeamSide
   );
+}
+
+// One side of an "X vs Y" matchup: purely a team, a team plus extra words (a
+// player's name after the matchup: "Yankees vs Red Sox Schlittler"), or
+// unrecognized. The longest known team phrase is stripped; leftover words that
+// are themselves words of some team phrase ("los angeles" left over from
+// "Los Angeles Lakers") still count as part of the team name. Built lazily -
+// RECOGNIZED_TEAM_PHRASES is declared further down this module.
+let teamPhrasesLongestFirst: string[] | null = null;
+let teamPhraseWords: Set<string> | null = null;
+function classifyTeamSide(side: string): "team" | "team+extra" | "none" {
+  if (!teamPhrasesLongestFirst || !teamPhraseWords) {
+    teamPhrasesLongestFirst = [...RECOGNIZED_TEAM_PHRASES].sort((a, b) => b.length - a.length);
+    teamPhraseWords = new Set(teamPhrasesLongestFirst.flatMap((p) => p.split(/\s+/)));
+  }
+  const lower = side.toLowerCase().trim();
+  if (RECOGNIZED_TEAM_PHRASES.has(lower)) return "team";
+  for (const phrase of teamPhrasesLongestFirst) {
+    const re = teamPhraseRegex(phrase);
+    if (!re.test(lower)) continue;
+    const leftover = lower.replace(re, " ").split(/\s+/).filter(Boolean);
+    return leftover.every((w) => teamPhraseWords!.has(w)) ? "team" : "team+extra";
+  }
+  return "none";
 }
 
 // Builds the word-boundary regex a multi-word team phrase ("red sox", "blue

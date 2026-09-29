@@ -112,6 +112,9 @@ const PHRASES: RegExp[] = [
   /\b(?:anytime|any\s*time|first|1st|last)\s+(?:home\s?run|hr)\b/i,
 ];
 
+// A trailing "over 30.5" / "30+" left on a subject sliced off just before a stat phrase.
+const TRAILING_NUMBER = new RegExp(String.raw`\s*(?:(?:over|under|o|u)\s*)?${NUM}\+?\s*$`, "i");
+
 // A subject that reads like a person's name: 1-4 capitalized words, no digits.
 const PERSON_SHAPE = /^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/;
 
@@ -125,6 +128,7 @@ export const UNSUPPORTED_PROP_REASONS = {
   WNBA: "WNBA player props aren't supported yet",
   NFL: "This NFL prop market isn't supported yet",
   TEAM_STAT: "Team stat totals aren't supported yet",
+  GAME_STAT: "Game stat totals aren't supported yet",
   GENERIC: "Player prop not supported yet",
 } as const;
 
@@ -167,22 +171,59 @@ export function detectUnsupportedNflStat(text: string): UnsupportedPropInfo | nu
   return NFL_UNSUPPORTED_STAT.test(text) ? { sport: "NFL", reason: UNSUPPORTED_PROP_REASONS.NFL } : null;
 }
 
-// Returns non-null when `text` is an MLB/NHL-style player-prop line this app
-// can't import. `isTeamSubject(subject)` must return true when the text
-// before the stat number names a team/sport (so "Yankees over 4.5 runs" and
-// "NBA LeBron James over 25.5 points" are left to the normal resolvers).
+// How a "who is this bet on" subject reads. "matchup-game": both sides of an
+// "X vs Y" / "X @ Y" are nothing but teams. "matchup-player": the second side
+// is a recognized team PLUS extra words (a pitcher/skater's name after the
+// matchup: "Yankees vs Red Sox Schlittler"). "matchup-unknown": a matchup shape
+// whose sides the team lists can't classify.
+type SubjectKind = "team" | "person" | "matchup-game" | "matchup-player" | "matchup-unknown" | "other";
+
+// `classifyTeamSide(side)`: "team" when the whole side is a team name, "team+extra" when
+// it contains a team name and other words, "none" when it has no recognized team.
+export type TeamSideClass = "team" | "team+extra" | "none";
+
+function subjectKind(
+  subject: string,
+  isTeamSubject: (s: string) => boolean,
+  classifyTeamSide: (side: string) => TeamSideClass
+): SubjectKind {
+  if (!subject) return "other";
+  const matchup = /^(.+?)\s+(?:vs\.?|@)\s+(.+)$/i.exec(subject);
+  if (matchup) {
+    const a = classifyTeamSide(matchup[1]);
+    const b = classifyTeamSide(matchup[2]);
+    if (a === "team" && b === "team") return "matchup-game";
+    if (b === "team+extra") return "matchup-player";
+    return "matchup-unknown";
+  }
+  if (!PERSON_SHAPE.test(subject)) return "other";
+  return isTeamSubject(subject) ? "team" : "person";
+}
+
+// Returns non-null when `text` is an MLB/NHL/NBA-style player-prop (or
+// team/game stat total) line this app can't import. `isTeamSubject(subject)`
+// must return true when the text before the stat number names a team/sport
+// (so "Yankees over 4.5 runs" and "NBA Lakers over 220.5 points" are left to
+// the normal resolvers); `classifyTeamSide` does the same for each side of an
+// "X vs Y" matchup.
 export function detectUnsupportedProp(
   text: string,
-  isTeamSubject: (subject: string) => boolean = () => false
+  isTeamSubject: (subject: string) => boolean = () => false,
+  classifyTeamSide: (side: string) => TeamSideClass = () => "none"
 ): UnsupportedPropInfo | null {
+  const teamStat = { sport: null, reason: UNSUPPORTED_PROP_REASONS.TEAM_STAT } as const;
+  const gameStat = { sport: null, reason: UNSUPPORTED_PROP_REASONS.GAME_STAT } as const;
+
   for (const phrase of PHRASES) {
     const m = phrase.exec(text);
     if (!m) continue;
-    // "Oilers over 30.5 shots on goal" - a whole team's shots total, not a
-    // skater's prop.
-    const subject = subjectBefore(text, m.index).replace(new RegExp(`\\s*(?:(?:over|under|o|u)\\s*)?${NUM}\\+?\\s*$`, "i"), "");
-    if (/shots?\s+on\s+goal/i.test(m[0]) && subject && PERSON_SHAPE.test(subject) && isTeamSubject(subject)) {
-      return { sport: null, reason: UNSUPPORTED_PROP_REASONS.TEAM_STAT };
+    // "Oilers over 30.5 shots on goal" / "Oilers vs Flames over 60.5 shots on
+    // goal" - a team's or a game's shots total, not a skater's prop.
+    if (/shots?\s+on\s+goal/i.test(m[0])) {
+      const subject = subjectBefore(text, m.index).replace(TRAILING_NUMBER, "");
+      const kind = subjectKind(subject, isTeamSubject, classifyTeamSide);
+      if (kind === "team") return teamStat;
+      if (kind === "matchup-game") return gameStat;
     }
     return reasonFor(text, m[0]);
   }
@@ -192,18 +233,26 @@ export function detectUnsupportedProp(
     if (!m) continue;
     const word = m[1];
     const strong = new RegExp(`^(?:${STRONG_WORDS})$`, "i").test(word);
-    const subject = subjectBefore(text, m.index);
-    const teamSubject = !!subject && PERSON_SHAPE.test(subject) && isTeamSubject(subject);
-    if (teamSubject && !SCORING_WORDS.test(word)) {
-      // "Lakers over 45.5 rebounds", "Yankees over 8.5 hits": a stat total
-      // for a whole team - not a scoring total (left untouched below) and not
-      // a player prop either. Never a TOTAL.
-      return { sport: null, reason: UNSUPPORTED_PROP_REASONS.TEAM_STAT };
+    const nonScoring = !SCORING_WORDS.test(word);
+    const kind = subjectKind(subjectBefore(text, m.index), isTeamSubject, classifyTeamSide);
+
+    if (nonScoring) {
+      // A stat total for a whole team / a whole game ("Lakers over 45.5
+      // rebounds", "Yankees vs Red Sox over 20.5 hits") - not a scoring total
+      // (left untouched) and not a player prop. Never a TOTAL.
+      if (kind === "team") return teamStat;
+      if (kind === "matchup-game") return gameStat;
+      // A matchup we can't classify + a word that is only a stat in some
+      // sports: treat as a game stat total. (A strong word keeps the
+      // player-prop reason below, as before.)
+      if (kind === "matchup-unknown" && !strong) return gameStat;
     }
     if (!strong) {
-      // Ambiguous word (runs/points/assists): a prop only when the subject is
-      // a person. An empty subject ("Over 8.5 runs") or a team is a game total.
-      if (!subject || !PERSON_SHAPE.test(subject) || teamSubject) continue;
+      // Ambiguous word: a prop only for a person subject - or, for a
+      // non-scoring stat, a matchup followed by the player's name. Scoring
+      // words (runs/points/pts) on a matchup or team stay ordinary totals.
+      const personLike = kind === "person" || (nonScoring && kind === "matchup-player");
+      if (!personLike) continue;
     }
     return reasonFor(text, word);
   }
