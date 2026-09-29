@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import type { GameResult, Pick, PickedSide, PropMarket, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { GameResult, Pick, PickedSide, PropMarket } from "@prisma/client";
 import {
   getLiveScoresForSport,
   getOddsForSport,
@@ -84,6 +85,48 @@ function deriveLedgerFields(
   return { favTeam, totalLine };
 }
 
+// What persistFinalScores needs to know about a game's already-persisted
+// GameResult row - only the columns its "still missing?" gates read. The
+// JSON columns are only ever null-checked, so they come back as booleans
+// (see fetchExistingResultState) instead of being transferred whole.
+type ExistingResultState = {
+  externalId: string;
+  firstFiveHomeScore: number | null;
+  firstInningHomeScore: number | null;
+  homeTurnovers: number | null;
+  favTeam: string | null;
+  linescoreMissing: boolean;
+  quartersMissing: boolean;
+  scoringPlaysMissing: boolean;
+};
+
+// One batched read for every final in the run (was one full-row findUnique
+// per final, each dragging inningsJson / linescoreJson / quartersJson /
+// scoringPlaysJson across the wire only to test them against null).
+// "Missing" is `IS NULL OR = 'null'::jsonb` so it matches Prisma's own
+// reading of a Json? column (SQL NULL and a stored JSON null both surface as
+// null), keeping the gates below exactly as they were. Exported for
+// persist-final-scores-lazy-odds-acceptance-test.ts.
+export async function fetchExistingResultState(
+  sportKey: string,
+  externalIds: string[]
+): Promise<Map<string, ExistingResultState>> {
+  if (externalIds.length === 0) return new Map();
+  const rows = await prisma.$queryRaw<ExistingResultState[]>(Prisma.sql`
+    SELECT "externalId",
+           "firstFiveHomeScore",
+           "firstInningHomeScore",
+           "homeTurnovers",
+           "favTeam",
+           ("linescoreJson" IS NULL OR "linescoreJson" = 'null'::jsonb) AS "linescoreMissing",
+           ("quartersJson" IS NULL OR "quartersJson" = 'null'::jsonb) AS "quartersMissing",
+           ("scoringPlaysJson" IS NULL OR "scoringPlaysJson" = 'null'::jsonb) AS "scoringPlaysMissing"
+    FROM game_results
+    WHERE "sportKey" = ${sportKey} AND "externalId" = ANY(${externalIds}::text[])
+  `);
+  return new Map(rows.map((r) => [r.externalId, r]));
+}
+
 // Persists final scores for a sport's finished games into GameResult, so
 // gradePendingPicks has something to grade against. Segment scores are only
 // captured for sports with a free box-score source wired up:
@@ -111,11 +154,29 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
   // getEspnGameSegments / getNflGameFacts).
   const supportsLinescore = supportsFirstHalf || sportKey === "icehockey_nhl";
 
-  // Same daily cache getOddsForSport always serves elsewhere - fetched once
-  // for this whole batch (not per-game) to derive the team-trend ledger
-  // fields below. A cache hit costs nothing extra; a miss just means no
+  const finalScores = (g: (typeof finals)[number]) => {
+    const homeScore = g.scores!.find((s) => s.name === g.homeTeam)?.score;
+    const awayScore = g.scores!.find((s) => s.name === g.awayTeam)?.score;
+    return homeScore === undefined || awayScore === undefined ? null : { homeScore, awayScore };
+  };
+  const scoredFinals = finals.filter((g) => finalScores(g) !== null);
+  const existingById = await fetchExistingResultState(
+    sportKey,
+    scoredFinals.map((g) => g.id)
+  );
+
+  // Same daily cache getOddsForSport always serves elsewhere - fetched at
+  // most once for this whole batch (not per-game) to derive the team-trend
+  // ledger fields below, and ONLY when some final actually needs them (a row
+  // that already has favTeam never consults the snapshot). A run with no
+  // finals, or whose finals are all already ledgered, never reads the odds
+  // blob at all. A cache hit costs nothing extra; a miss just means no
   // ledger fields for this batch, same as any other day the fetch failed.
-  const oddsGames = await getOddsForSport(sportKey);
+  const anyNeedsLedger = scoredFinals.some((g) => {
+    const ex = existingById.get(g.id);
+    return !ex || ex.favTeam === null;
+  });
+  const oddsGames = anyNeedsLedger ? await getOddsForSport(sportKey) : [];
 
   // Each game's persist is independent - was previously a sequential for-loop,
   // which meant a day with many newly-final games (each potentially needing a
@@ -123,13 +184,11 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
   // Picks page load wait on the sum of all of them instead of the slowest one.
   const results = await Promise.all(
     finals.map(async (g) => {
-      const homeScore = g.scores!.find((s) => s.name === g.homeTeam)?.score;
-      const awayScore = g.scores!.find((s) => s.name === g.awayTeam)?.score;
-      if (homeScore === undefined || awayScore === undefined) return false;
+      const scores = finalScores(g);
+      if (!scores) return false;
+      const { homeScore, awayScore } = scores;
 
-      const existing = await prisma.gameResult.findUnique({
-        where: { sportKey_externalId: { sportKey, externalId: g.id } },
-      });
+      const existing = existingById.get(g.id);
 
       // Early-inning scores are immutable once captured, and fetching them hits the
       // heavier live-feed endpoint - only fetch what's still missing. Checking both
@@ -150,7 +209,7 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
       const needsSegments =
         supportsLinescore &&
         (!existing ||
-          existing.linescoreJson === null ||
+          existing.linescoreMissing ||
           (supportsFirstHalf && existing.firstFiveHomeScore === null));
 
       // NFL Game Pulse fields (see nfl-game-pulse-situations.ts) - gated
@@ -160,7 +219,7 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
       // bundle - "any still missing" justifies the one fetch.
       const needsNflGamePulseFacts =
         sportKey === "americanfootball_nfl" &&
-        (!existing || existing.quartersJson === null || existing.scoringPlaysJson === null || existing.homeTurnovers === null);
+        (!existing || existing.quartersMissing || existing.scoringPlaysMissing || existing.homeTurnovers === null);
 
       // NFL keeps its own getNflGameFacts (one fetch also pulls Game Pulse
       // data); every other sport uses the shared getEspnGameSegments. Both
