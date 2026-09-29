@@ -12,6 +12,7 @@ import {
 import { favoriteOrUnderdog } from "@/lib/bet-line";
 import { betTypeFilterCategory, type BetTypeFilterKey } from "@/lib/bet-type-filter";
 import { easternDateRange } from "@/lib/dates";
+import { comparePicksChronological } from "@/lib/pick-order";
 
 // Everything the capper comparison tool's shared filter bar can narrow by.
 // Applied entirely in-memory (see applyComparisonFilters below), the same
@@ -58,7 +59,7 @@ export const EMPTY_COMPARISON_FILTERS: ComparisonFilters = {
 function precedingStreakByPickId(picks: Pick[]): Map<string, { type: "WIN" | "LOSS"; count: number }> {
   const decided = [...picks]
     .filter((p) => p.status === "WIN" || p.status === "LOSS")
-    .sort((a, b) => a.gameTime.getTime() - b.gameTime.getTime());
+    .sort(comparePicksChronological);
 
   const byId = new Map<string, { type: "WIN" | "LOSS"; count: number }>();
   for (let i = 1; i < decided.length; i++) {

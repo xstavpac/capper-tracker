@@ -93,7 +93,14 @@ export async function updatePickStatus(userId: string, pickId: string, status: P
 
   return prisma.pick.update({
     where: { id: pickId },
-    data: { status, ...(wasPending && status !== "PENDING" ? { gradedAt: new Date() } : {}) },
+    data: {
+      status,
+      // A manual grade is the user's authoritative answer: clear the fuzzy-match
+      // flag so regradeAllFuzzyMatchedPicks (which re-grades every row still
+      // flagged true once an exact GameResult appears) can never overwrite it.
+      gradedViaFuzzyMatch: false,
+      ...(wasPending && status !== "PENDING" ? { gradedAt: new Date() } : {}),
+    },
   });
 }
 
@@ -208,7 +215,10 @@ export async function getPicksForCapper(userId: string, capperId: string) {
   return prisma.pick.findMany({
     where: { userId, capperId },
     include: { capper: true, sport: true, league: true },
-    orderBy: { gameTime: "asc" },
+    // (gameTime, createdAt, id): the canonical chronological tie-break, so this
+    // order matches comparePicksChronological and the SQL aggregates -
+    // selectCapperRecentPicks takes its "most recent" straight from it.
+    orderBy: [{ gameTime: "asc" }, { createdAt: "asc" }, { id: "asc" }],
   });
 }
 
