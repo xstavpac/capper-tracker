@@ -567,9 +567,12 @@ export const ALL_TIME_WINDOW: ScorecardWindow = "ALL";
 // gradedAt to be the window's date anchor, just a non-null gate.
 export function filterPicksByGameWindow<T extends { gameTime: Date; gradedAt: Date | null }>(
   picks: T[],
-  window: ScorecardWindow
+  window: ScorecardWindow,
+  // Defaults to the current instant. Passed explicitly by the capper-detail page (so its SQL
+  // windows and these JS filters use ONE instant) and by the parity harness (pinned instants).
+  now: Date = new Date()
 ): T[] {
-  const range = scorecardWindowRange(window, new Date());
+  const range = scorecardWindowRange(window, now);
   if (!range) return picks;
   const { start, end } = range;
   return picks.filter((p) => p.gradedAt && p.gameTime >= start && p.gameTime < end);

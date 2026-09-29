@@ -3,23 +3,9 @@ import Link from "next/link";
 import { requireUser } from "@/server/auth";
 import { getCapperById, getCappersWithPickCounts } from "@/server/data/cappers";
 import { CapperEditPanel } from "@/components/dashboard/capper-edit-panel";
-import { getPicksForCapper } from "@/server/data/picks";
+import { getCapperDetailData } from "@/server/data/capper-detail";
 import { formatPickLabel, betTypeLabel } from "@/lib/bet-line";
-import {
-  computeStats,
-  computeCategoryBreakdown,
-  computeBestOddsRange,
-  computeConsistency,
-  computeUnitsChartData,
-  computeMomentum,
-  filterPicksByGameWindow,
-  selectCapperRecentPicks,
-  chipSetForLeague,
-  DEFAULT_CHIP_SET,
-  SCORECARD_WINDOWS,
-  SCORECARD_WINDOW_LABELS,
-  type ScorecardWindow,
-} from "@/server/data/stats";
+import { SCORECARD_WINDOWS, SCORECARD_WINDOW_LABELS, type ScorecardWindow } from "@/server/data/stats";
 import { UnitsChart } from "@/components/dashboard/units-chart";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
@@ -101,107 +87,41 @@ export default async function CapperDetailPage({
     ? (searchParams.categoryWindow as ScorecardWindow)
     : "ALL";
 
-  const [picks, allCappers] = await Promise.all([
-    getPicksForCapper(user.id, params.capperId),
+  // ONE statement for everything below the header (getCapperDetailData): window totals, category
+  // tiles, the sport tabs, the recent picks and a narrow decided-pick series that the existing
+  // streak / momentum / consistency / odds-range / chart functions run over. The page no longer
+  // loads the capper's pick history. The three params are independent (window scopes the bet-type
+  // scorecard and hero, categoryWindow the per-sport section, categorySport which sport that is);
+  // every one of them re-renders this server component, and none of it is cached (design doc Q8).
+  const [detail, allCappers] = await Promise.all([
+    getCapperDetailData(user.id, params.capperId, { window, categoryWindow, categorySport: searchParams.categorySport }),
     getCappersWithPickCounts(user.id),
   ]);
   const otherCappers = allCappers.filter((c) => c.id !== capper.id);
-  // Record/ROI/Net units should reflect whichever window is selected, same as
-  // the scorecard below - but currentStreak deliberately always comes from
-  // the unfiltered, all-time computeStats call instead: a streak is a count
-  // of consecutive results in true chronological order, and filtering the
-  // input to a window would truncate a real ongoing streak into a smaller,
-  // misleading number rather than produce a meaningful "windowed" streak.
-  const stats = computeStats(filterPicksByGameWindow(picks, window));
-  const allTimeStats = computeStats(picks);
-  // The top "record by bet type" section is the six markets every sport shares
-  // (DEFAULT_CHIP_SET) - a Fav ML / Dog ML / Spread +/- / Over / Under split
-  // across ALL sports at once. Sport-specific markets (F5, quarters/periods,
-  // Team Total, Player Prop, NRFI/YRFI) are deliberately excluded here - they
-  // only make sense per league and live in the per-sport section below.
-  // computeCategoryBreakdown with DEFAULT_CHIP_SET drops every non-universal
-  // key exactly the way the Dashboard's all-sports breakdown does.
-  const allTimeUniversalBreakdown = computeCategoryBreakdown(picks, DEFAULT_CHIP_SET);
-  // Always all-time, same as allTimeStats.currentStreak above and for the
-  // same reason - a streak (and what history says about it) is a
-  // chronological, not-windowed concept, and this is the full historical
-  // picture across every streak length, not scoped to any one window.
-  const momentum = computeMomentum(picks);
-  const universalBreakdown = computeCategoryBreakdown(filterPicksByGameWindow(picks, window), DEFAULT_CHIP_SET);
-
-  // "Record by category" (favorite/dog, over/under, and the sport's specialty
-  // markets - F5/NRFI for MLB, quarters/2nd-half for football & basketball,
-  // periods for hockey, Team Total, ...) only makes sense within one sport at
-  // a time: chipSetForLeague's categories vary per sport, and blending two
-  // sports' decided picks into one tile would produce a number that doesn't
-  // describe either sport's actual record. Computed once per sport this capper
-  // has picks in (not hardcoded to MLB) so a WNBA or NFL capper - or an MLB
-  // capper who also has WNBA/NFL picks - gets a real breakdown instead of
-  // silently having no "by category" view for anything outside MLB.
-  const categoryBreakdownsBySport = Array.from(new Set(picks.map((p) => p.sport.name)))
-    .map((sportName) => {
-      const sportPicks = picks.filter((p) => p.sport.name === sportName);
-      return {
-        sportName,
-        sportPicks,
-        // All-time, deliberately NOT filtered by categoryWindow - this
-        // determines which sports get a tab at all and which one is the
-        // default, and that structural presence shouldn't flicker in and out
-        // as someone changes the section's own window filter. The actual
-        // displayed breakdown/stats/chart for whichever sport is SELECTED
-        // are computed further down, windowed by categoryWindow.
-        breakdown: computeCategoryBreakdown(sportPicks, chipSetForLeague(sportName)),
-      };
-    })
-    .filter((s) => s.breakdown.length > 0)
-    // Most decided category-eligible picks first, so the default tab (no
-    // categorySport param yet) is whichever sport this capper is primarily
-    // tracked for, not an arbitrary/alphabetical one.
-    .sort(
-      (a, b) =>
-        b.breakdown.reduce((sum, item) => sum + item.count, 0) -
-        a.breakdown.reduce((sum, item) => sum + item.count, 0)
-    );
-
-  const selectedCategorySport =
-    categoryBreakdownsBySport.find((s) => s.sportName === searchParams.categorySport)?.sportName ??
-    categoryBreakdownsBySport[0]?.sportName;
-  const activeSportPicks =
-    categoryBreakdownsBySport.find((s) => s.sportName === selectedCategorySport)?.sportPicks ?? [];
-
-  // The per-sport section's own independent window, applied only here - see
-  // categoryWindow's own comment above. Everything the section actually
-  // displays (summary strip, category tiles, units chart) is derived from
-  // this one windowed array, so the three can never drift out of sync with
-  // each other or with the selected window.
-  const activeSportPicksInWindow = filterPicksByGameWindow(activeSportPicks, categoryWindow);
-  const activeCategoryBreakdown = computeCategoryBreakdown(
-    activeSportPicksInWindow,
-    chipSetForLeague(selectedCategorySport ?? "")
-  );
-  const activeSportStats = activeSportPicksInWindow.length > 0 ? computeStats(activeSportPicksInWindow) : null;
-  const activeSportChartData = computeUnitsChartData(activeSportPicksInWindow);
-
-  // Same window as the hero stats/scorecard above, so this chart's cumulative
-  // line actually matches whichever period (Today/Last 7 days/...) they're
-  // currently showing, instead of always plotting all-time regardless of the
-  // window toggle.
-  const chartData = computeUnitsChartData(filterPicksByGameWindow(picks, window));
-
-  // "Recent picks" is always scoped to whatever sport the "record by category"
-  // section is currently showing (selectedCategorySport, including its default
-  // on first load) so the two sections never disagree - see
-  // selectCapperRecentPicks. All-sport only when this capper has no category
-  // section at all.
-  const { picks: recentPicks, scopedSport: recentPicksSport } = selectCapperRecentPicks(
-    picks,
-    selectedCategorySport
-  );
-
-  const trackedSinceMs = picks.length > 0 ? Math.min(...picks.map((p) => p.datePosted.getTime())) : null;
-  const lastPickMs = picks.length > 0 ? Math.max(...picks.map((p) => p.datePosted.getTime())) : null;
-  const bestOddsRange = computeBestOddsRange(picks);
-  const consistency = computeConsistency(picks);
+  // Record/ROI/Net units reflect whichever window is selected, same as the scorecard below - but
+  // currentStreak deliberately always comes from the unfiltered, all-time series: a streak is a
+  // count of consecutive results in true chronological order, and filtering the input to a window
+  // would truncate a real ongoing streak into a smaller, misleading number.
+  const {
+    stats,
+    currentStreak,
+    momentum,
+    allTimeUniversalBreakdown,
+    universalBreakdown,
+    chartData,
+    sportTabs,
+    selectedCategorySport,
+    activeCategoryBreakdown,
+    activeSportStats,
+    activeSportChartData,
+    recentPicks,
+    recentPicksSport,
+    trackedSinceMs,
+    lastPickMs,
+    bestOddsRange,
+    consistency,
+    associatedPickCount,
+  } = detail;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -227,7 +147,7 @@ export default async function CapperDetailPage({
           capperId={capper.id}
           currentName={capper.name}
           otherCappers={otherCappers}
-          associatedPickCount={picks.length}
+          associatedPickCount={associatedPickCount}
         />
       </div>
 
@@ -239,7 +159,7 @@ export default async function CapperDetailPage({
               {" · "}
               Last pick {formatRelativeTime(new Date(lastPickMs), Date.now())}
             </p>
-            <StreakBadge streak={allTimeStats.currentStreak} />
+            <StreakBadge streak={currentStreak} />
           </div>
           <div className="mt-3 flex flex-wrap gap-8">
             <div>
@@ -282,21 +202,21 @@ export default async function CapperDetailPage({
         <StatCard
           label="Current streak"
           value={
-            allTimeStats.currentStreak.type === "NONE"
+            currentStreak.type === "NONE"
               ? "-"
-              : allTimeStats.currentStreak.count + " " + allTimeStats.currentStreak.type
+              : currentStreak.count + " " + currentStreak.type
           }
           tone={
-            allTimeStats.currentStreak.type === "WIN"
+            currentStreak.type === "WIN"
               ? "up"
-              : allTimeStats.currentStreak.type === "LOSS"
+              : currentStreak.type === "LOSS"
                 ? "down"
                 : undefined
           }
         />
       </div>
 
-      <MomentumPanel breakdown={momentum} currentStreak={allTimeStats.currentStreak} />
+      <MomentumPanel breakdown={momentum} currentStreak={currentStreak} />
 
       {allTimeUniversalBreakdown.length > 0 && (
         <div className="mt-4">
@@ -330,20 +250,20 @@ export default async function CapperDetailPage({
         <UnitsChart data={chartData} />
       </div>
 
-      {categoryBreakdownsBySport.length > 0 && (
+      {sportTabs.length > 0 && (
         <div className="mt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="text-sm font-medium text-muted-foreground">{selectedCategorySport} record by category</div>
-            {categoryBreakdownsBySport.length > 1 && (
+            {sportTabs.length > 1 && (
               <div className="flex flex-wrap gap-2">
-                {categoryBreakdownsBySport.map((s) => (
+                {sportTabs.map((sportName) => (
                   <Link
-                    key={s.sportName}
-                    href={pageHref({ window, categorySport: s.sportName, categoryWindow })}
+                    key={sportName}
+                    href={pageHref({ window, categorySport: sportName, categoryWindow })}
                     scroll={false}
-                    className={chipClass(s.sportName === selectedCategorySport)}
+                    className={chipClass(sportName === selectedCategorySport)}
                   >
-                    {s.sportName}
+                    {sportName}
                   </Link>
                 ))}
               </div>
