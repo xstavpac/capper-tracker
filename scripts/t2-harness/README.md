@@ -160,3 +160,4 @@ every subsequent diff run untrustworthy.
 | `run-diff.mjs` | Orchestrator: disposable DB → load data → capture both impls → diff → drop DB. Also the CLI entry point. |
 | `validate-old-vs-old.mjs` | Item-4 validation: old vs old across both fixture users, asserts zero diffs AND that each scenario was meaningfully exercised. |
 | `self-test-failure-modes.mjs` | Item-3 validation: old vs two broken variants, asserts the diff DOES flag them. |
+| `units-series-parity.ts` | Egress PR "shared building blocks", Q10 gate: bit-exact parity of the dashboard SQL running-sum + downsample vs `computeCumulativeUnitsSeries` + `downsampleUnitsChart` on a restored snapshot (heaviest user, every user, each capper of the heaviest user). Read-only; exit 1 on any displayed-value diff. See `docs/design/dashboard-capper-detail-egress.md` §8. |
