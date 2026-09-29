@@ -1066,8 +1066,8 @@ const BULK_GRADE_CONCURRENCY = 50;
 //
 // The regrade pass only exists to upgrade a fuzzy-matched grade to an exact
 // one once a better GameResult row appears. Exact rows are persisted by
-// persistFinalScores, which runs on every /picks and /live/[gameId] load for
-// a resolvable sport plus the daily refresh-scores cron - so the correct
+// persistFinalScores, which the grade-picks cron runs every 15 minutes (plus the
+// daily refresh-scores cron and the throttled page-load path) - so the correct
 // exact result for a finished game almost always lands within 24-48h. A pick
 // still fuzzy after two weeks either already got upgraded on an earlier pass
 // or never will (a team-name mismatch that won't resolve), so re-scanning it

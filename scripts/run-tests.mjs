@@ -62,6 +62,7 @@ const PURE_DESPITE_PRISMA_IMPORT = new Set([
   "src/server/data/delete-scoping-acceptance-test.ts",
   "src/server/data/pick-aggregates-cappers-adapter-acceptance-test.ts",
   "src/server/data/grading-idempotency-acceptance-test.ts",
+  "src/server/data/page-grading-acceptance-test.ts",
   "src/server/data/pending-prop-triage-acceptance-test.ts",
   "src/server/data/team-tendencies-acceptance-test.ts",
   "src/server/data/stripe-webhook-acceptance-test.ts",
