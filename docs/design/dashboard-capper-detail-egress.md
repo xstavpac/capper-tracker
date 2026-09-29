@@ -12,6 +12,16 @@ Epistemic tags: **Verified** (read in the repo at `1659b23`), **[ESTIMATE]**
 
 ## Decided inputs (not re-litigated here)
 
+Recorded from the review of PR #135 (full list with evidence in §11): Q1 panels out
+of scope; **Q2 no SQL twins — momentum/consistency/odds-range run the existing JS
+on a narrow raw series**; Q3 one statement for the capper page; Q4 drop unread
+dashboard `overall` fields (grep evidence in §11); Q5 narrow
+`getCappersWithPickCounts` now; Q6 no `CHECK`, keep zero-odds flag paths; Q7
+capper chart stays full fidelity; Q8/Q9 no capper-page cache; PR order blocks →
+dashboard → capper detail.
+
+From the original brief:
+
 - Every section keeps **full-history semantics**. Displayed numbers must not
   change; the fix is computing in the database, not bounding the history.
   "Recent picks" is naturally bounded (take N of the ordered rows).
@@ -52,7 +62,7 @@ PR can claim:** `getCapperPanels` → `computeCapperPanels`
 (`capper-panels.ts:142`) also reads **full pick history** (`pick.findMany({ where
 })`, all columns, all the user's cappers) on every cold miss. Migrating
 `getDashboardSummary` alone does not stop `/dashboard` from reading full
-history; see Q1.
+history; **out of scope (Q1, DECIDED)** — the dashboard PR must not claim otherwise.
 
 ### 1.2 `/cappers/[capperId]`
 
@@ -269,7 +279,7 @@ adapter). The SQL downsample is defined only on finite series; if the scope-leve
 flag is non-zero the fragment returns the un-downsampled `(idx, gt, run, flags)`
 rows and JS `downsampleUnitsChart` runs on them. That path is unreachable while
 `odds = 0` rows number zero; a `CHECK (odds <> 0)` would make that structural
-(Q6). (2) **jsonb round-trip of `float8`** must be shortest-round-trip (PG ≥ 12
+(Q6, DECIDED: not added; the flag path stays). (2) **jsonb round-trip of `float8`** must be shortest-round-trip (PG ≥ 12
 `extra_float_digits` default) — **[UNVERIFIED]**, settled by `SHOW server_version`
 and the 10⁶-random-doubles test in §8.
 
@@ -283,17 +293,15 @@ divergence shows up; it is a strict subset of the SQL path (same CTE, no
 bucketing stage).
 
 - **Dashboard:** scope `{userId}`, no window, downsample **on**.
-- **Capper detail:** downsample **off** (the page plots full fidelity today —
-  keeping it is a "displayed numbers must not change" requirement). Two series
-  in the one statement: `window` all-sports (`PARTITION` none) and
-  `categoryWindow` **partitioned by sport** (`sum() OVER (PARTITION BY sport …)`,
-  every sport, since the selected one is not known yet). Together they are ≤ 2×
-  the capper's decided count.
+- **Capper detail: not used.** DECIDED (Q2/Q7): the capper page's charts are
+  computed from the narrow raw series of §4 by the existing
+  `computeUnitsChartData`, at full fidelity. This SQL series (and its
+  running-flag/bucketing machinery) is **dashboard-only**.
 - **Labels:** the fragment returns `gameTime` as epoch ms; the mapper builds
   `date: formatEastern(new Date(t), { month: "short", day: "numeric" })` in JS —
   no `to_char`/ICU locale parity risk, and the same function as today.
 
-Output shape: `Array<{ t: number; run: number; flags?: number }>` →
+Output shape (dashboard): `Array<{ t: number; run: number; flags?: number }>` →
 `UnitsChartPoint[]` (`{ date, cumulativeUnits: round2(run) }`).
 
 ### 3.d Recent N picks
@@ -320,57 +328,103 @@ capper has few sports, so this is ≤ ~3 × 10 rows [ESTIMATE].
 `staleCutoff = now − 24 h` is bound from the same `now` the JS uses. Dashboard
 only; can ride in the totals statement (`(userId, status)` index exists).
 
-## 4. Capper-detail-only sections
+## 4. Capper-detail-only sections — one narrow raw series, existing JS
 
-All are SQL-able with small outputs; none *requires* an ordered raw series. The
-raw fallback is named per section. Ordering: every `row_number()` uses `ORDER`
-(`gameTime, createdAt, id COLLATE "C"`) over the capper's picks.
+**DECIDED (Q2): no SQL twins.** Momentum, consistency and best odds range are
+computed by the *existing* JS functions (`computeMomentum`, `computeConsistency`,
+`computeBestOddsRange`) over a narrow, ordered raw series the capper statement
+returns — one implementation of each algorithm. Two consequences follow from the
+same rule and are recorded here rather than left implicit: the capper page's
+**units charts** and its **all-time current streak** are also derived from that
+series by the existing `computeUnitsChartData` / `currentStreak`, so the
+capper-page SQL series and the streak fragment proposed in the first draft are
+gone (the SQL cumulative series of §3.c is now dashboard-only). Q11 asks for
+confirmation of the streak change.
 
-| Section | SQL | Returns | Raw fallback (min columns) |
-|---|---|---|---|
-| **Tracked since / last pick / pick count** | `min("datePosted")`, `max("datePosted")`, `count(*)` over **all statuses**, as epoch-ms `bigint` via the existing `round(extract(epoch FROM …) * 1000)` construction. `count(*)` = `associatedPickCount` and the `ALL`-window `nPicks`. | 3 numbers | n/a |
-| **Current streak** (all-time) | the `queryCurrentStreaks` gaps-and-islands, `windows: ["ALL"]`, `capperIds` scope — exported as a **fragment** (its function takes no `capperIds` and is its own statement, same finding as #130 §4.3) | `{type, count}` or none → `{NONE, 0}` | `(status)` of decided W/L, ordered |
-| **Momentum** | gaps-and-islands with the run length *ending at each row*: `d` = W/L rows with `rn`; `g = rn − row_number() OVER (PARTITION BY status ORDER BY rn)`; `run = row_number() OVER (PARTITION BY status, g ORDER BY rn)`; `pst = lag(status)`, `prun = lag(run)`; then `GROUP BY pst, least(prun, 4)` with `count(*) FILTER (status='WIN')`, `FILTER (LOSS)`, `sum(CASE WHEN WIN THEN <WIN_UNITS> ELSE -p.units END ORDER BY rn)`. `PUSH` is excluded up front (JS filters it before the scan — invisible to streaks). The first row has no `pst` and is skipped, as the JS loop starts at `i = 1`. O(n log n), replaces the O(n²) prefix scan. | ≤ 8 rows `(after, len, w, l, net)` → JS `round2(net)`, `winPctOf`, the fixed 4-row shape (`toRows` keeps the "4+" bucket and zero-fill) | `(status, units, odds)` of decided W/L, `ORDER` — 3 columns, ≈ 15 B/row; JS `computeMomentum` unchanged (only its parameter type narrows to `Pick<…, "status"\|"gameTime"\|"units"\|"odds">`) |
-| **Best odds range** | `GROUP BY p.odds` over decided rows: `w, l, pu` and `min(rn)` (first-appearance rank among decided). **Grouped by the raw odds value, not by bucket**, so the bucket thresholds are not re-declared in SQL — JS folds values into buckets with the existing `oddsBucket()`. | ≤ ~60 rows (distinct odds values) | `(odds, status)` of decided, `ORDER` — 2 columns |
-| **Consistency** | two ordered passes: `n`, `sum_r = sum(r ORDER BY rn)`, `sum_u = sum(units ORDER BY rn)` with `r = CASE WIN → <WIN_UNITS> WHEN LOSS → -units ELSE 0 END`; then `sum_sq = sum((r − sum_r/n) * (r − sum_r/n) ORDER BY rn)`. JS finalizer `consistencyFromTotals({n, sum_u, sum_sq})`: null if `n < 5` or `avgUnits === 0`; `sd = Math.sqrt(sum_sq / n)`; `cv = sd / (sum_u / n)`; label by the **unrounded** `cv >= 1.5`. | 3 numbers | `(status, units, odds)` of decided, `ORDER` — 3 columns; JS `computeConsistency` unchanged |
+### 4.1 The series
 
-Notes:
+The capper's **decided** picks (`WIN`/`LOSS`/`PUSH`), whole history, no relations
+(the sport name comes from a `JOIN sports`, one column), ordered by `ORDER`
+(`gameTime, createdAt, id COLLATE "C"`), scoped `userId = $u AND capperId = $c`
+(existing `(userId, capperId)` index). Minimum column set and who reads each:
 
-- **Best odds range tie rule.** `computeBestOddsRange` keeps the first bucket
-  (Map insertion order = first-appearance in the ordered picks) on an exact
-  `(winPct, count)` tie. Hence the `min(rn)` column; the JS finalizer
-  `bestOddsRangeFromRows(rows)` sorts the folded buckets by it before running the
-  existing comparator. Sample gate is `bucketPicks.length >= 3` over decided rows.
-- **Consistency `**2`.** The JS variance term is `(v − mean) ** 2`; the SQL twin
-  writes `d * d`. V8's `**` is `Math.pow`, and `pow(x, 2)` is not *guaranteed*
-  bit-equal to `x*x`. This is checked directly, not assumed: §8's first
-  micro-test compares `d ** 2` to `d * d` over 10⁷ random doubles on the project's
-  Node version. If any pair differs, the SQL uses `power(d, 2)` if *that* matches
-  (glibc `pow`), else consistency ships on its raw-series fallback. The observable
-  effect of a 1-ULP difference is only a label flip when `cv` is within ~10⁻¹⁵ of
-  1.5, so the risk is real but tiny; the test removes it.
-- **Momentum / consistency / odds-range are new SQL twins of existing JS
-  algorithms.** That is the point of this section, and it is also what the
-  project's "extend, don't write a parallel calculation" rule cautions against;
-  see Q2. The narrow-series fallback is the alternative that keeps the JS
-  algorithms as the only implementations.
+| Column | Read by |
+|---|---|
+| `id`, `createdAt` | the canonical tie-break inside the JS sorts (the assumed-merged `stats.ts` PR sorts on `gameTime, createdAt, id`); rows arrive already ordered, but the comparator must see the fields, so they ride along rather than making the existing sorts conditional |
+| `gameTime` | every sort, `filterPicksByGameWindow`, the chart's `date` label |
+| `gradedAt` | `filterPicksByGameWindow`'s non-`ALL` gate (only whether it is set matters, but the function takes the `Date`) |
+| `status` | every consumer |
+| `units`, `odds` | `unitsWonOnBet`, consistency returns, `oddsBucket`, momentum `netUnits`, chart |
+| `sport` (name) | the sport-scoped chart (`categoryWindow` × selected sport) |
+
+Times travel as epoch-ms `bigint` (the existing `round(extract(epoch FROM …) * 1000)`
+construction; exact for `timestamp(3)`) and become `new Date(ms)`; `gradedAt` is
+`null` or ms. Everything else a JS function reads off `Pick` is *not* fetched:
+no `betDetail`, `homeTeam`, notes, `pickedSide`, category, etc. **Excluded rows:**
+`PENDING`/`CANCELLED` (no consumer below reads them; recents come from §3.d,
+"is the windowed set non-empty" from `nPicks` in §3.a).
+
+The JS functions take `Pick[]` today; their parameter types narrow to a
+structural row type (`Pick<PrismaPick, "id"|"createdAt"|"gameTime"|"gradedAt"|"status"|"units"|"odds"> & { sport: { name: string } }`
+for `computeStats`, `currentStreak`, `computeMomentum`, `computeConsistency`,
+`computeBestOddsRange`, `computeUnitsChartData`). **Types only; no logic
+change.**
+
+### 4.2 Sections and their source
+
+| Section | Source | Notes |
+|---|---|---|
+| **Tracked since / last pick / pick count** | SQL aggregates over **all statuses**: `min("datePosted")`, `max("datePosted")`, `count(*)` (epoch-ms as above). `count(*)` = `associatedPickCount` = the `ALL`-window `nPicks` | the series is decided-only, so it cannot supply these |
+| **Current streak** (all-time) | `currentStreak()` over the series (it filters to W/L itself) | replaces `queryCurrentStreaks` for this page |
+| **Momentum** | `computeMomentum(series)` | unchanged algorithm, including its O(n²) prefix scan — see below |
+| **Best odds range** | `computeBestOddsRange(series)` | tie-by-first-appearance rule is inherited, not re-derived |
+| **Consistency** | `computeConsistency(series)` | label only is rendered; `cv` unchanged |
+| **Units chart, `window`** | `filterPicksByGameWindow(series, window)` → `computeUnitsChartData` | full fidelity, no downsampling (Q7) |
+| **Sport chart, `categoryWindow`** | series filtered to the selected sport → `filterPicksByGameWindow(…, categoryWindow)` → `computeUnitsChartData` | selected sport is known in JS after the tiles are read |
+| Hero stat cards, sport strip | totals, §3.a | SQL sums, as #123 |
+| Category tiles, sport tabs | §3.b | SQL grouped counts on the stored `category` |
+| Recents | §3.d | needs all statuses and the newest-N per sport, so not derivable from the decided series |
+
+**Momentum's O(n²) stays.** Not fixing it is the price of one implementation. At
+the heaviest snapshot capper (≤ 4,291 decided) the prefix scan is ~10⁷ element
+operations, tens of milliseconds on the app server **[ESTIMATE]**. A future change
+to the JS algorithm itself (still a single implementation) is possible and
+independent of this migration.
+
+### 4.3 Consequences for parity and payload
+
+- **Parity is by construction for these sections.** The same functions run on
+  the same per-pick values; SQL does no float math for them. What has to be
+  tested is the *narrowing*: right rows, right order, exact `Date` round trip,
+  `gradedAt` null-ness, `units`/`odds` through `jsonb` (§5, §8).
+- **Zero-odds needs no SQL flag on this page.** The JS functions reproduce their
+  own `Infinity`/`NaN` on a `WIN` at `odds = 0` natively (Q6: flag paths stay,
+  but only totals and the dashboard series need them).
+- **One series serves six consumers** (streak, momentum, odds range, consistency,
+  both charts), instead of two SQL series plus three SQL twins. The payload is
+  the series: ≈ 120 B per decided row as JSON objects **[ESTIMATE]** (three
+  epoch-ms numbers, a 25-char id, status, units, odds, sport name); array
+  encoding would roughly halve it if it ever matters.
 
 ## 5. Money parity
 
 Money-bearing outputs: dashboard `overall.roi / netUnits`, recent-pick `units`
 (pass-through of a `Float`), chart `cumulativeUnits`; capper page `roi / netUnits`
 (hero + sport strip), chart, momentum `netUnits`, consistency `cv`, recent-pick
-`odds/units`.
+`odds/units`. **Per Q2, on the capper page only the totals (§3.a) involve SQL float
+math**; chart, momentum, consistency and odds range are the existing JS over raw
+`units`/`odds`, so their float behavior (summation order, rounding, `-0`,
+zero-odds) is the current JS behavior, unchanged.
 
 | Concern | Position |
 |---|---|
 | **Per-pick value** | `units * (odds/100)` / `units * (100/abs(odds))` in `float8` via `WIN_UNITS` — the same IEEE double as `unitsWonOnBet`. Never `/ 100.0` (numeric division). Reused verbatim (exported). |
-| **Summation order** | JS adds in `gameTime, createdAt, id` order (assuming the tie-break PR). SQL uses `sum(x ORDER BY <ORDER>)` for aggregates and `ROWS UNBOUNDED PRECEDING` running windows — sequential, **not** the planner's arbitrary/parallel partial-aggregate order, which is exactly why #123 uses ordered aggregates. The `FILTER` reproduces JS's per-status accumulators (`unitsWon` over WINs only, `unitsLost` over LOSSes, `unitsRisked` over W/L/P). Momentum's running bucket sum mixes `+ win` and `− stake` in one sequence in both implementations. |
+| **Summation order** | JS adds in `gameTime, createdAt, id` order (assuming the tie-break PR). SQL uses `sum(x ORDER BY <ORDER>)` for aggregates and `ROWS UNBOUNDED PRECEDING` running windows — sequential, **not** the planner's arbitrary/parallel partial-aggregate order, which is exactly why #123 uses ordered aggregates. The `FILTER` reproduces JS's per-status accumulators (`unitsWon` over WINs only, `unitsLost` over LOSSes, `unitsRisked` over W/L/P). |
 | **Rounding** | All rounding stays in JS `round2` (`recordStatsFromTotals`, `toRows`, the chart mapper) applied to unrounded SQL totals. The single SQL rounding is the half-up expression in §3.c, used only for downsample comparisons. `round(float8)` (half-even) / `round(numeric)` (half away from zero) are both **wrong** for `Math.round`'s ties-toward-+∞ and must not appear. |
 | **`-0`** | `sum` of a lone `-units` with `units = 0` or `Math.round(-0.3)` yield `-0`; `+ 0.0` normalizes on the SQL side. Displays are unaffected (`(-0 >= 0 ? "+" : "") + -0` → `"+0"` both sides) but the parity comparator must treat `-0` and `+0` as equal (or normalize), not fail on `Object.is`. |
-| **`odds = 0`** | Cannot be created (both creators reject it). If a row exists: `float8` division by zero errors in Postgres, so the `NULLIF` guard stays; totals reproduce JS poison via `zeroOddsWinFlags` + `zeroOddsWinUnitsWon` (existing); the series carries a running flag (§3.c); momentum/consistency use the same scope-level flag — **reproduced, not fixed** — but do note this is the one place I would rather add `CHECK (odds <> 0)` (Q6) than carry three flag paths for an unreachable state. Prod count of `odds = 0` rows must be re-checked when the harness runs (the step-2 snapshot had zero). |
+| **`odds = 0`** | Cannot be created (both creators reject it). If a row exists: `float8` division by zero errors in Postgres, so the `NULLIF` guard stays; totals reproduce JS poison via `zeroOddsWinFlags` + `zeroOddsWinUnitsWon` (existing); the dashboard series carries a running flag (§3.c); the capper page's JS functions reproduce it natively — **reproduced, not fixed**. **DECIDED (Q6): no `CHECK (odds <> 0)` for now; the flag paths stay.** Prod count of `odds = 0` rows must be re-checked when the harness runs (the step-2 snapshot had zero). |
 | **`float8` → JS** | `$queryRaw` returns `float8` as a JS number (exact). Through `jsonb` it goes `float8out → numeric → JSON text → JSON.parse`; exact iff Postgres emits the shortest round-trip form (PG ≥ 12). Verified by test, not assumed (§8). |
-| **How exact can the parity test be?** | **Bit-exact is the target for every number**, because both sides perform the same IEEE operations in the same order on the same per-pick doubles. Gate: every *displayed* value (everything after `round2`/`winPctOf`, every label, every count, every ordering) is `===`-equal (zero diffs). Reported but **non-gating**: any ULP difference in an *unrounded* intermediate (raw `unitsWon` sums, `sum_sq`, `cv`) that does not change a rounded value or label — each one is printed and reviewed, because it would indicate an ordering or operation mismatch worth understanding. No display-rounding tolerance is applied silently (unlike step 2's 2-decimal tolerance); a diff in a displayed value is a bug. |
+| **How exact can the parity test be?** | **Bit-exact is the target for every number**, because both sides perform the same IEEE operations in the same order on the same per-pick doubles. Gate: every *displayed* value (everything after `round2`/`winPctOf`, every label, every count, every ordering) is `===`-equal (zero diffs). Reported but **non-gating**: any ULP difference in an *unrounded* intermediate (raw `unitsWon` sums, the dashboard series' unrounded `run`) that does not change a rounded value or label — each one is printed and reviewed, because it would indicate an ordering or operation mismatch worth understanding. No display-rounding tolerance is applied silently (unlike step 2's 2-decimal tolerance); a diff in a displayed value is a bug. |
 
 ## 6. Round trips per page load, before and after
 
@@ -380,30 +434,30 @@ assume the Prisma 5 `query` strategy (**[UNVERIFIED]**, settled by the same
 
 | Page / state | Today | After |
 |---|---|---|
-| `/dashboard`, summary **cold** | user 1 + summary **4** + panels **2** (`capper` + `pick`, by `getCapperPanels`) + plan **2** = **9** | user 1 + summary **1** + panels 2 + plan 2 = **6** (panels unchanged, Q1) |
+| `/dashboard`, summary **cold** | user 1 + summary **4** + panels **2** (`capper` + `pick`, by `getCapperPanels`) + plan **2** = **9** | user 1 + summary **1** + panels 2 + plan 2 = **6** (panels out of scope, Q1) |
 | `/dashboard`, summary **warm** (60 s TTL) | user 1 + plan 2 = **3** | unchanged **3** — the win is the cold miss, which recurs after every `revalidateTag` (each grade/mutation for that user) |
-| `/cappers/[id]`, every load | user 1 + capper 1 + picks **4** + capper list 1 = **7** | user 1 + capper 1 + **bundle 1** + capper list 1 = **4** |
-| `/cappers/[id]`, capper list deferred (below) | — | **3** |
+| `/cappers/[id]`, every load | user 1 + capper 1 + picks **4** + capper list 1 = **7** | user 1 + capper 1 + **bundle 1** + narrowed capper list 1 = **4** |
 
-- **One statement for the capper page** (rather than "tabs first, then selected
-  sport") is deliberate. The dependency (selected sport ← all-time tab list) is
-  resolved in JS by returning the selection-dependent pieces — per-sport totals,
-  per-sport `categoryWindow` series, per-sport recent 10 — for **every** sport
-  the capper has. The overhead versus a two-statement version is only the
-  non-selected sports' series/recents (a capper's picks partition by sport, so
-  it is bounded by the capper's own decided count), and it saves a serialized
-  round trip and keeps tab list and content from one snapshot (two statements
-  could straddle a grading write). If EXPLAIN shows the single statement is slow
-  for tail cappers, splitting at the selection boundary is the fallback.
-- **`getCappersWithPickCounts`** loads full `capper` rows for the whole roster
-  only for `otherCappers` (the merge dialog in `CapperEditPanel`). Two options,
-  neither required for the egress goal: (a) narrow it to
-  `select { id, name, _count }` (same RT, roughly an order of magnitude less payload [ESTIMATE]), or (b) load the
-  list on demand when the merge dialog opens via a server action (removes the RT
-  from every page load). (b) is a UI change → Q5.
-- **Latency is not guaranteed lower for a tiny capper** (one long statement with
-  window functions vs four short ones; same caveat #130 §5 made). The plan and
-  wall time are measured, not asserted (§8).
+- **DECIDED (Q3): one statement for the capper page.** The dependency (selected
+  sport ← all-time tab list) is resolved in JS by returning the
+  selection-dependent parts for **every** sport the capper has: per-sport
+  `categoryWindow` totals (§3.a `groupBySport`), per-sport recents (§3.d), and the
+  decided series (§4), which is sport-tagged and already covers every sport. The
+  overhead versus a two-statement version is only the non-selected sports'
+  totals/recents rows; the series is needed in full either way. It saves a
+  serialized round trip and keeps tab list and content from one snapshot (two
+  statements could straddle a grading write). If EXPLAIN shows the single
+  statement is slow for tail cappers, splitting at the selection boundary is the
+  fallback.
+- **DECIDED (Q5): `getCappersWithPickCounts` is narrowed now** to
+  `select { id, name, _count: { select: { picks } } }` — same one statement,
+  roughly an order of magnitude less payload than full `capper` rows for the
+  whole roster **[ESTIMATE]**, no UI change. Loading the list on demand when the
+  merge dialog opens (which would remove the statement from every page load) is
+  **deferred**; it is a UI change and is not part of this migration.
+- **Latency is not guaranteed lower for a tiny capper** (one statement with
+  several CTEs vs four short ones; same caveat #130 §5 made). The plan and wall
+  time are measured, not asserted (§8).
 
 ## 7. Caching
 
@@ -417,42 +471,31 @@ Nothing changes except that the cached value shrinks (it already excludes the ra
 array; the chart is ≤ 2,000 points). Invalidation coverage is the existing
 contract (`docs/cache-invalidation-contract.md`, P1–P8 tagged, P9 TTL-only).
 
-### Capper detail — **no cache in the first capper PR; a follow-up only if logs justify it**
+### Capper detail — **DECIDED (Q8): no cache in the first capper PR**
 
-Shape if added: `cachedByTag(key, 60, fn, [cacheKeys.dashboard(userId)])` —
-`cachedByTag` **already takes a separate `tags` argument** (the #130 doc's
-"one string as both key and tag" note is out of date; `getCapperPanels` uses it),
-so no helper change and the entry is invalidated by the existing
-`revalidateTag(cacheKeys.dashboard(userId))` from every mutation path.
+After the migration a miss costs one statement and ~10–20 KB (larger for heavy
+cappers), so the absolute saving from a hit is small and the key space is large.
+Recorded for a possible later follow-up, only if post-migration logs show repeat
+loads matter:
 
-- **Key cardinality.** The brief's `(userId, capperId, window, categorySport)`
-  omits **`categoryWindow`**, an independent param with its own default
-  (`page.tsx:70`); leaving it out would serve one `categoryWindow`'s numbers for
-  another — a silent wrong-number bug. The correct key is
+- **Any future key must include `categoryWindow`.** The page has three
+  independent params — `window`, `categoryWindow`, `categorySport`
+  (`page.tsx:57-70, 78`). A key of `(userId, capperId, window, categorySport)`
+  would serve one `categoryWindow`'s numbers for another, a silent
+  wrong-number bug. The full key is
   `(userId, capperId, window[6], categoryWindow[6], categorySport[≈ sports + unset])`
-  ≈ up to 36 × 3–4 ≈ **110–140 entries per (user, capper)** [ESTIMATE]; across
-  a 110-capper roster the space is ~10⁴ entries of ~8 KB, almost all single-use.
-  A component split (all-time block keyed `(user, capper)`; `window` block keyed
-  by window; sport block keyed `(categoryWindow, sport)`) cuts that to ≈ 25 per
-  capper but turns one cold-navigation into up to three statements, worse than
-  today's single-statement miss. Neither is attractive.
-- **Hit pattern.** Repeat visit to the same capper with default params within 60 s
-  hits; every first click on a window/sport chip misses; no cross-capper reuse.
-  **Low–moderate [ESTIMATE]**, no measured data.
-- **Invalidation coverage.** Tag is per **user**, not per capper, so any pick
-  mutation on any capper evicts all of that user's capper-page entries
-  (over-invalidation; harmless). A per-capper tag would need every mutation path
-  to know the capper id — the cron (P8) only tracks `changedUserId`, so it is not
-  free. Coverage: P1–P8 ✅ tagged. P9 (page-load grading) runs on `/picks` and
-  `/live/[gameId]`, not on this page, and is bounded by the 60 s TTL. Time-relative
-  windows (`TODAY`, `LAST_7`, …) use `now` at compute time, so a hit is up to 60 s
-  stale on the boundary — the same tolerance the dashboard has.
-- **What must stay out of the cached value:** anything from the `capper` row
-  (name, colour, source). Those are read live by `getCapperById`; `renameCapperAction`
-  tags, but colour/source edits (if any exist) would not, and the payload has no
-  need for them.
-- **Cost.** A cached-payload change also needs a new row in the contract doc's
-  surface table and a mutation-path audit, per that doc's own rule.
+  ≈ 110–140 entries per (user, capper) **[ESTIMATE]**, mostly single-use.
+- **Mechanics if it is ever added.** `cachedByTag(key, 60, fn, [cacheKeys.dashboard(userId)])`
+  — `cachedByTag` already takes a separate `tags` argument (`getCapperPanels`
+  uses it; #130's "one string as both key and tag" note is out of date), so the
+  existing `revalidateTag(cacheKeys.dashboard(userId))` from P1–P8 covers it;
+  P9 is bounded by the 60 s TTL. The tag is per user, so any pick mutation evicts
+  all of that user's capper entries (harmless over-invalidation; a per-capper tag
+  would need the cron, which only tracks `changedUserId`, to learn capper ids).
+  The cached value must contain no `capper`-row fields, and the contract doc's
+  surface table and mutation audit must get a row first.
+- Because nothing is cached, `now` is taken per request and the question of
+  freezing `now` for 60 s does not arise (Q9, moot).
 
 ## 8. Parity test plan
 
@@ -476,17 +519,19 @@ extends the T2 harness (`scripts/t2-harness/`: `capture-output.ts`,
   would be empty at the real `now`. The harness runs each scenario at several
   instants inside the data range (snapshot date, −1 d, −7 d, −30 d, −60 d) and
   passes the same instant to both sides.
-- **Micro-tests before any of that** (no DB, seconds): (1) `d ** 2 === d * d`
-  over 10⁷ random doubles on the project's Node; (2) `float8` → `jsonb` →
+- **Micro-tests before any of that** (no DB, seconds): (1) `float8` → `jsonb` →
   `JSON.parse` round-trip is the identity over 10⁶ random doubles including
   subnormals and 1e±300, against the Supabase-equivalent Postgres major version
-  (`SHOW server_version`); (3) the SQL round-half-up expression equals
+  (`SHOW server_version`); (2) the SQL round-half-up expression equals
   `Math.round(x*100)/100` over 10⁶ random and all exact-`.5` cases;
-  (4) `downsampleUnitsChart` vs the SQL bucketer on synthetic monotonic,
-  oscillating, all-equal, `n = 2000 / 2001 / 2002`, and `n = 20,000` series.
+  (3) `downsampleUnitsChart` vs the SQL bucketer on synthetic monotonic,
+  oscillating, all-equal, `n = 2000 / 2001 / 2002`, and `n = 20,000` series;
+  (4) the narrow-series row round trip: `bigint` epoch-ms → `new Date` equals the
+  original `timestamp(3)` value, `gradedAt` null stays null. (The earlier
+  `d ** 2` vs `d * d` micro-test is dropped with the SQL consistency twin.)
 
 **Dashboard scenarios** (per snapshot user): the full summary object, deep-equal
-except `currentStreak/longest*` (unread, dropped from the shape — Q4). Includes
+except `currentStreak/longest*/winPct/unitsWon/unitsLost` of `overall` (unread, dropped from the shape — Q4, evidence in §11). Includes
 the heaviest account (4,291 picks — **[UNVERIFIED]** that it has > 2,000 *decided*
 picks; if not, the > 2,000 branch is covered by the synthetic 5k/20k user), a user
 with zero picks, a user with only `PENDING`, and one with `CANCELLED`-with-`gradedAt`.
@@ -498,9 +543,11 @@ the **full matrix** for the 10 heaviest cappers plus a stratified random 20, and
 the diagonal (`window = categoryWindow`, default and each sport) for all the rest,
 at every pinned `now`. Also: a capper with zero picks, only `PENDING`, only
 `PUSH`, exactly 4/5/6 decided (consistency gate 5, odds-range gate 3), one sport
-only, two sports tied on tile total (tie-break via `firstKey`), and the two hardest
-momentum inputs (alternating W/L, and a 12-long run so the `"4+"` bucket and
-run-boundary are exercised).
+only, two sports tied on tile total (tie-break via `firstKey`), and momentum inputs
+alternating W/L and a 12-long run (`"4+"` bucket). Momentum, consistency, odds
+range, streak and the charts run the same JS on both sides, so the capper
+comparison for them verifies the **narrowing** (row set, order, dates, nulls),
+not the math.
 
 **Comparison rules**
 
@@ -538,7 +585,7 @@ to `sports`; the investigation's ~550 B/row for `include {capper, sport, league}
 distinct capper/sport/league, not per pick). Raw column size is a lower bound on
 wire bytes. Tail = 3× mean.
 
-**Dashboard (cold miss)**
+**Dashboard (cold miss)** — unchanged by the review decisions
 
 | Account | Before | After |
 |---|---|---|
@@ -546,22 +593,30 @@ wire bytes. Tail = 3× mean.
 | Heaviest snapshot, 4,291 picks | ≈ **1.2 MB** | series capped at ≤ 2,000 × ~26 B ≈ 52 KB + ~4 KB ≈ **56 KB** (~95 % less) |
 | Power user, 20,000 picks | ≈ **5.5 MB** | ≈ **56 KB** (~99 %) — and only because the bucketing runs in the DB; the raw-series fallback would be ≈ 520 KB |
 
-**Capper detail (every load)**
+**Capper detail (every load)** — revised for the narrow raw series (§4). Model:
+series ≈ 120 B × decided rows (all sports, one copy serving every consumer) +
+~6 KB fixed (totals ~0.4 KB, tiles ~2 KB, per-sport recents ~2.5 KB, meta, narrowed
+capper list for a small roster) **[ESTIMATE]**.
 
 | Capper | Before (rows × ~550 B) | After |
 |---|---|---|
-| Mean, 39 picks (~30 decided) | ≈ **21 KB** | totals ~0.4 KB + tiles ~2 KB + series 2 × 30 × 26 B ≈ 1.6 KB + recents ~2.5 KB + momentum/odds/consistency/meta ~2 KB ≈ **8–9 KB** (~60 % less) |
-| Tail, ~120 picks | ≈ **66 KB** | ≈ **14 KB** (~80 %) |
-| Heaviest, 4,291 picks | ≈ **2.4 MB** | series 2 × 4,291 × 26 B ≈ 220 KB + ~10 KB ≈ **230 KB** (~90 %) |
+| Mean, 39 picks (~30 decided) | ≈ **21 KB** | 30 × 120 B ≈ 3.6 KB + ~6 KB ≈ **~10 KB** (~55 % less) |
+| Tail, ~120 picks (~90 decided) | ≈ **66 KB** | ≈ 10.8 KB + ~6 KB ≈ **~17 KB** (~75 % less) |
+| Heaviest, 4,291 picks | ≈ **2.4 MB** | ≈ 4,291 × 120 B ≈ 515 KB + ~6 KB ≈ **~520 KB** (~78 % less; ~300 KB with array encoding) |
 
-Honest reading: for a *typical* capper the byte saving is modest and the RT saving
-(7 → 4) matters more; the byte win is concentrated in heavy cappers and heavy
-accounts. The floor on the capper page is the full-fidelity chart series (kept for
-numbers-must-not-change). If that is the remaining lump, Q7 is the lever.
+Honest reading, changed by Q2/Q7: the earlier draft's SQL series were narrower
+(~26 B/point, ~90 % reduction on the heaviest capper). Choosing one
+implementation of each algorithm and full-fidelity charts from raw rows makes the
+**series the floor** — the byte win on heavy cappers is real but smaller, the win
+on a typical capper is modest, and the round-trip saving (7 → 4) matters as much
+as the bytes. Trimming the row (array encoding, dropping `id` if the JS sorts are
+made tie-break-tolerant of presorted input) is the lever if the heaviest-capper
+number ever matters; it is not proposed now.
 
-**Statement count** is in §6. **App-server CPU** also drops: no `pickCategory` over
-the full history (called once per pick, several times per render today), no
-O(n²) momentum, no per-window array filters.
+**Statement count** is in §6. **App-server CPU** also drops: no `pickCategory`
+over the full history (called once per pick, several times per render today) and
+no per-window array filters over hundreds of full `Pick` objects; momentum's
+O(n²) remains (§4.2).
 
 ## 10. Proposed PR split
 
@@ -570,79 +625,96 @@ statistics → ships as a PR for manual review, never auto-merged.
 
 1. **Docs** — this document.
 2. **Shared building blocks + verification harness (no behavior change) [MR]**
-   — the fragments and row mappers of §3–§4 (nothing wired to a page); the
-   `capper-list-aggregates.ts` refactor of `queryWindowTotals` into a fragment plus
-   its `groupBySport` option (its existing acceptance test is the guard); the
-   JS finalizers extracted from `stats.ts` (`categoryBreakdownFromCounts`,
-   `bestOddsRangeFromRows`, `consistencyFromTotals`, and parameter-type narrowing
-   of `computeMomentum`/`computeUnitsChartData` — *no logic change*, but it edits
-   `stats.ts`, hence [MR]); the §8 micro-tests; the `legacy` copies and harness
-   capture entry points; synthetic acceptance tests. Gate: micro-tests pass and, if
-   #130's G1 `--verify` has not been run against production, that too.
+   — the fragments and row mappers of §3 (nothing wired to a page): totals
+   fragment with `groupBySport` (a refactor of `queryWindowTotals` into a fragment
+   plus a thin wrapper; its existing acceptance test is the guard), tiles, the
+   dashboard's downsampled SQL series, recents, pending counts, and the **decided
+   narrow series** fragment of §4.1; the `categoryBreakdownFromCounts` finalizer
+   (`computeCategoryBreakdown`'s tail refactored to call it); the structural
+   parameter-type narrowing of §4.1 — *types only, no logic change*, but it edits
+   `stats.ts`, hence [MR]; the §8 micro-tests; the `legacy` copies and harness
+   capture entry points; synthetic acceptance tests. **Not in this PR (by
+   decision): any SQL momentum/consistency/odds-range/streak implementation.**
+   Gate: micro-tests pass and, if #130's G1 `--verify` has not been run against
+   production, that too.
 3. **Dashboard [MR]** — `computeDashboardSummary` on one statement; `overall`
-   narrowed to the fields the page reads (Q4); the harness diff attached; the
-   cache and page unchanged. If Q1 is answered "yes", the panels migration is its
-   own later PR, not folded in.
+   narrowed to the fields the page reads (Q4, evidence in §11); the harness diff
+   attached; the cache and page unchanged. `getCapperPanels` is not touched
+   (Q1).
 4. **Capper detail [MR]** — `getCapperDetailData` bundle (one statement), the page
-   rewired to consume it, `getPicksForCapper` un-called from the page (it stays for
-   `capper-comparison.ts`), `getCappersWithPickCounts` narrowed. Atomic per page:
-   the egress win only exists once **every** section moved, because any one
-   remaining consumer of the raw array keeps the full fetch, so this cannot be
-   usefully split section by section.
-5. **Optional: capper-detail cache** — only if post-migration logs show repeat
-   loads matter; adds the contract-doc row (§7).
-6. **Removal** — delete the legacy copies and (once nothing else calls them)
-   any dead JS helpers, after an observation period, per #123/#130 convention.
+   rewired to consume it (existing JS functions over the narrow series), 
+   `getPicksForCapper` un-called from the page (it stays for
+   `capper-comparison.ts`), `getCappersWithPickCounts` narrowed to
+   `id, name, count` (Q5). Atomic per page: the egress win only exists once
+   **every** section moved, because any one remaining consumer of the raw array
+   keeps the full fetch.
+5. **Removal** — delete the legacy copies and any dead helpers, after an
+   observation period, per #123/#130 convention. (The optional capper-detail cache
+   PR of the first draft is dropped: Q8.)
 
-**Order.** Blocks → dashboard → capper detail, as proposed, is right *for risk*:
-the dashboard has one scope (all-time, all sports, no windows, no per-sport
-selection, no momentum) but still exercises the hardest shared primitive — the
-downsampled series — so bit-exactness is proven on a smaller surface before the
-capper page adds the window × sport dimension. The counter-argument is egress:
-the capper page is uncached and refetches on every chip click, so per unit of
-work it is the larger offender, and dashboard is already 60 s-cached. If egress
-priority outweighs risk, swap 3 and 4; PR 2 does not change. I would not
-reorder unless the logs say the capper page dominates.
+**Order — DECIDED: blocks → dashboard → capper detail.** Reasoning kept: the
+dashboard has one scope (all-time, all sports, no windows, no per-sport
+selection) yet exercises the hardest shared primitive — the downsampled series —
+so bit-exactness is proven on the smaller surface before the capper page adds the
+window × sport dimension. The capper page is the larger per-load offender
+(uncached, refetched on every chip click); that is accepted.
 
-## 11. Open questions
+## 11. Decisions and open questions
 
-- **Q1 — `getCapperPanels` also reads full history** (`capper-panels.ts:142-159`,
-  unbounded `pick.findMany`, uncached on the first hit per 60 s per user). Is it
-  in scope? As written this design migrates only `getDashboardSummary`; without
-  panels, `/dashboard` still reads full history on a cold miss and its payload
-  claim halves. Recommendation: separate design + PR (its windows — last 5/8/10/20
-  decided, 14-day activity, lifetime — are a different set of ordered-window
-  problems), tracked now so the dashboard PR does not overclaim.
-- **Q2 — SQL twins of momentum / consistency / best-odds-range.** These are new
-  SQL implementations of existing JS algorithms; the project convention is to
-  extend rather than parallel (§4). Recommendation: SQL for all three (O(n²)
-  momentum goes away, output ≤ ~1 KB, parity is exact-checkable, and the JS side
-  shares its finalizers), with each raw-series fallback documented and ready.
-  Confirm, or choose the narrow-series route (`(status, units, odds)` ordered, JS
-  unchanged) for any of them.
-- **Q3 — one statement vs "tabs first".** §6 recommends one statement returning
-  per-sport selection-dependent parts. Confirm, or prefer two statements for
-  smaller payload on multi-sport cappers.
-- **Q4 — drop the unread `overall` fields.** The dashboard page reads only
-  `wins, losses, pushes, roi, netUnits` of `overall`; `currentStreak`,
-  `longest*Streak`, `winPct`, `unitsWon`, `unitsLost` are computed and never
-  rendered (nor by any other `getDashboardSummary` caller — the page is the only
-  one). Dropping them removes a streak query from the dashboard. OK to narrow the
-  cached shape?
-- **Q5 — merge dialog's capper list.** Narrow `getCappersWithPickCounts` (same RT)
-  or defer it to on-open via a server action (−1 RT per page load, small UI
-  change)?
-- **Q6 — `CHECK (odds <> 0)`.** Both creators reject it and the step-2 snapshot had
-  zero such rows, but it is not structural. A migration (validated after a prod
-  `count(*) WHERE odds = 0` = 0) would delete the poison-reproduction paths from
-  the series/momentum/consistency work. Worth a separate tiny PR before PR 2, or
-  keep carrying the flag paths?
-- **Q7 — capper-page chart fidelity.** Full fidelity is kept (numbers must not
-  change). If a 4,000-point capper chart is acceptable to bucket like the
-  dashboard's, the series payload on tail cappers drops ~90 % more — an explicit
-  product decision, not part of this migration.
-- **Q8 — caching the capper page.** Recommendation: not in the first PR (§7).
-  Confirm, and confirm `categoryWindow` belongs in any future key.
-- **Q9 — `now` semantics.** Windows use one `now` per request today. A cached
-  entry freezes it for ≤ 60 s. Acceptable on the capper page as it is on the
-  dashboard?
+Recorded from the review of PR #135. **DECIDED** items are not re-litigated.
+
+- **Q1 — `getCapperPanels`. DECIDED: OUT of scope.** It also reads full history
+  (`capper-panels.ts:142-159`); it gets its own design and PR later. Consequence:
+  the dashboard PR must not claim `/dashboard` stops reading full history — only
+  `getDashboardSummary` does; the panels read is called out in §1.1 and §6.
+- **Q2 — SQL twins. DECIDED: NO twins** for momentum, consistency, best odds
+  range. They use the narrow raw series of §4 fed to the existing JS functions
+  (minimum columns, no relations, canonical tie-break order). Building blocks
+  (§3, §4), round trips (§6), payload (§9) and PR split (§10) are updated.
+- **Q3 — one statement for the capper page. DECIDED** (§6).
+- **Q4 — unread dashboard `overall` fields. DECIDED: drop them, but only because
+  the grep below confirms nothing reads them.** Evidence (run at `1659b23`+,
+  repo `src/`, `scripts/`):
+  - `grep -rn "getDashboardSummary\|computeDashboardSummary" src scripts` →
+    the only **call** site is `src/app/(app)/dashboard/page.tsx:37`; every other
+    hit is a comment (`bulk-picks.ts:691`, `actions/picks.ts:12`,
+    `capper-panels.ts:130`, `units-chart-downsample.ts:9,39`) or its own
+    definition in `stats.ts`. No test or script references it.
+  - `grep -rn "DashboardSummary\|ReturnType<typeof getDashboardSummary"` finds
+    no type alias that re-exports the shape.
+  - In that page the summary is destructured as
+    `{ overall, chartData, stalePendingCount }` and read only as
+    `overall.wins`, `overall.losses`, `overall.pushes` (line 69),
+    `overall.roi` (75, 79), `overall.netUnits` (87, 91), `summary.totalPicks`
+    (56), `summary.pendingCount` (95), `summary.categoryBreakdown` (113, 116),
+    `summary.recentPicks` (130, 135), plus `chartData` / `stalePendingCount`.
+    `overall.currentStreak`, `longestWinStreak`, `longestLossStreak`, `winPct`,
+    `unitsWon` and `unitsLost` are never read. (The `entry.stats.currentStreak`
+    hits in `cappers-leaderboard-table.tsx` / `favorite-cappers-summary.tsx` are
+    leaderboard/favorites data, not the dashboard summary.)
+  - **The PR must re-run these greps and paste the result** before removing the
+    fields; if any new reader has appeared, the field stays.
+- **Q5 — `getCappersWithPickCounts`. DECIDED: narrow to `id, name, count` now.**
+  On-demand loading for the merge dialog is **deferred** (§6).
+- **Q6 — `CHECK (odds <> 0)`. DECIDED: none for now.** The zero-odds flag paths
+  stay (totals via `zeroOddsWinFlags`; the dashboard series via its running
+  flag). The capper page needs no flag path (§4.3).
+- **Q7 — capper-page chart fidelity. DECIDED: stays full fidelity**, now
+  computed from the narrow series by the existing `computeUnitsChartData` (§4).
+- **Q8 — caching the capper page. DECIDED: no cache in the first PR.** Any
+  future key must include `categoryWindow` (§7).
+- **Q9 — `now` freezing under a cache. DECIDED: moot** (no cache).
+- **PR order. DECIDED:** blocks → dashboard → capper detail (§10).
+
+**Still open (introduced by these decisions):**
+
+- **Q10 — the dashboard's SQL series is the one remaining SQL twin.** Q2 named
+  the capper-only sections; the dashboard's running-sum + bucketing SQL (§3.c) is
+  a SQL implementation of `computeCumulativeUnitsSeries` +
+  `downsampleUnitsChart`. It stays as designed — the alternative is shipping every
+  settled row (≈ 520 KB at 20k picks) — with the §3.c raw-series fallback if the
+  bit-exact parity gate fails. Confirm that Q2's "no twins" does not extend to it.
+- **Q11 — capper-page current streak from the series.** Applying Q2's rule, the
+  all-time streak now comes from `currentStreak()` over the narrow series rather
+  than the gaps-and-islands SQL (`queryCurrentStreaks`, which keeps serving
+  `/cappers`). Confirm, or keep a SQL streak for this page.
