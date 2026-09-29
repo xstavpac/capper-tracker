@@ -45,6 +45,9 @@ const SPREAD_MAGNITUDE_BOUND: Partial<Record<string, number>> = {
   // misresolution of an Indiana Hoosiers pick to the Fever) is essentially
   // impossible. DOMAIN ESTIMATE, not backtested - same caveat as above.
   WNBA: 20,
+  // NBA spreads top out in the low-to-mid 20s; 30 leaves headroom. Covers
+  // the third Indiana candidate (Pacers) so a -44 can narrow to NCAAF alone.
+  NBA: 30,
   // NCAAF regularly sees 30-40+ point spreads (FBS-vs-FCS, ranked-vs-
   // unranked); past this is already an extreme outlier. Bounded so the
   // WNBA-vs-NCAAF "Indiana" collision can narrow in either direction.
@@ -60,6 +63,8 @@ const TOTAL_LINE_BOUND: Partial<Record<string, { min: number; max: number }>> = 
   // WNBA full-game totals cluster roughly 150-175; NCAAF roughly 40-65 with
   // rare shootouts higher. Estimates, set well outside the normal range.
   WNBA: { min: 120, max: 200 },
+  // NBA full-game totals cluster roughly 200-245.
+  NBA: { min: 180, max: 280 },
   NCAAF: { min: 20, max: 100 },
 };
 

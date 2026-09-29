@@ -709,31 +709,86 @@ async function main() {
     }, { sport: "WNBA", method: "schedule" });
   }
   {
-    // Tiebreaker falls through, then step 5: a -44 spread is implausible for
-    // WNBA, so WNBA is dropped from the prompt. Indiana has a THIRD candidate
-    // (NBA Pacers) with no bound in the table, so the field narrows to
-    // NBA + NCAAF - still 2, never auto-resolved. Never resolves to WNBA.
+    // Tiebreaker falls through (Hoosiers have a later game), then step 5:
+    // -44 is implausible for WNBA (20) AND NBA (30), so the field narrows to
+    // NCAAF alone - but the near-term schedule signal (Fever) CONFLICTS with
+    // it, so it is not auto-resolved: single-option prompt. Never WNBA.
     const res = await runAmbiguousHierarchy([ambiguousPick("Indiana -44")], {}, {
       ...deps(["indiana fever|WNBA"], ["indiana hoosiers|NCAAF"]),
       now: SEPT,
     });
-    check("Indiana -44: tiebreaker falls through, plausibility drops WNBA -> not resolved, WNBA not offered", {
+    check("Indiana -44: tiebreaker falls through, narrows to NCAAF alone but schedule conflicts -> single-option prompt, not WNBA", {
       sport: res.picks[0].sportName,
       logs: res.logs.map((l) => l.method),
-      stillAmbiguous: res.stillAmbiguous.map((g) => ({ key: g.key, options: g.options.map((o) => o.sport).sort() })),
-    }, { sport: "", logs: [], stillAmbiguous: [{ key: "indiana", options: ["NBA", "NCAAF"] }] });
+      stillAmbiguous: res.stillAmbiguous.map((g) => ({ key: g.key, options: g.options.map((o) => o.sport) })),
+    }, { sport: "", logs: [], stillAmbiguous: [{ key: "indiana", options: ["NCAAF"] }] });
   }
   {
-    // Same with no schedule signal at all: still narrowed to NBA + NCAAF (no
-    // NBA bound exists, so it can't be narrowed to one), WNBA excluded.
+    // No schedule signal at all: -44 narrows Fever/Hoosiers/Pacers to NCAAF
+    // alone, nothing conflicts -> auto-resolves NCAAF via plausibility.
     const res = await runAmbiguousHierarchy([ambiguousPick("Indiana -44")], {}, {
       ...deps([]),
       now: SEPT,
     });
-    check("Indiana -44: no schedule signal -> WNBA dropped from the prompt, not auto-resolved", {
+    check("Indiana -44: no schedule signal -> narrows to NCAAF alone and auto-resolves NCAAF", {
       sport: res.picks[0].sportName,
-      options: res.picks[0].ambiguous?.map((o) => o.sport).sort(),
-    }, { sport: "", options: ["NBA", "NCAAF"] });
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "NCAAF", nicknames: ["indiana hoosiers"], method: "plausibility" });
+  }
+  {
+    // Another signal AGREES with the narrowed winner (Hoosiers playing
+    // near-term - the only one) -> resolves NCAAF (via schedule, which the
+    // plausible NCAAF passes the gate).
+    const res = await runAmbiguousHierarchy([ambiguousPick("Indiana -44")], {}, {
+      ...deps(["indiana hoosiers|NCAAF"]),
+      now: SEPT,
+    });
+    check("Indiana -44: only the Hoosiers play -> resolves NCAAF", {
+      sport: res.picks[0].sportName,
+      method: res.logs[0]?.method,
+    }, { sport: "NCAAF", method: "schedule" });
+  }
+  {
+    // Schedule gate: Fever-only schedule (nothing else on the calendar) would
+    // resolve WNBA, but -44 is impossible for WNBA -> the schedule decision
+    // does NOT auto-resolve; falls to step 5 (NCAAF alone) whose cross-check
+    // sees the schedule pointing at the Fever -> single-option prompt.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Indiana -44")], {}, {
+      ...deps(["indiana fever|WNBA"]),
+      now: SEPT,
+    });
+    check("Indiana -44: only the Fever have a game -> schedule decision rejected by plausibility, does NOT resolve WNBA", {
+      sport: res.picks[0].sportName,
+      logs: res.logs,
+      stillAmbiguous: res.stillAmbiguous.map((g) => ({ key: g.key, options: g.options.map((o) => o.sport) })),
+      memoized: res.decisions,
+    }, { sport: "", logs: [], stillAmbiguous: [{ key: "indiana", options: ["NCAAF"] }], memoized: {} });
+  }
+  {
+    // Per-pick gating: the SAME key, one plausible pick and one not - the
+    // plausible one still resolves via schedule, the -44 one does not, and the
+    // key's decision is memoized (it applied to a pick).
+    const res = await runAmbiguousHierarchy([ambiguousPick("Indiana -6.5"), ambiguousPick("Indiana -44")], {}, {
+      ...deps(["indiana fever|WNBA"]),
+      now: SEPT,
+    });
+    check("Indiana: -6.5 resolves WNBA via schedule while -44 in the same batch does not", {
+      sports: res.picks.map((p) => p.sportName),
+      methods: res.logs.map((l) => [l.method, l.pickCount]),
+      memoized: Object.keys(res.decisions),
+    }, { sports: ["WNBA", ""], methods: [["schedule", 1]], memoized: ["indiana"] });
+  }
+  {
+    // Fever-only schedule with a plausible -6.5 still resolves WNBA.
+    const res = await runAmbiguousHierarchy([ambiguousPick("Indiana -6.5")], {}, {
+      ...deps(["indiana fever|WNBA"]),
+      now: SEPT,
+    });
+    check("Indiana -6.5: Fever-only schedule still resolves WNBA", {
+      sport: res.picks[0].sportName,
+      method: res.logs[0]?.method,
+    }, { sport: "WNBA", method: "schedule" });
   }
   {
     // WNBA-vs-NCAAF only (a key with no NBA candidate): the -44 narrowing
