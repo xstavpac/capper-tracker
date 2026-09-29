@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DateRangeFilter } from "@/components/picks/date-range-filter";
 import type { BetTypeFilterKey } from "@/lib/bet-type-filter";
-import { sportIcon } from "@/lib/sport-icon";
+import { SportIcon } from "@/components/picks/sport-icon";
 import type { SportChip } from "@/lib/picks-header";
 
 type Option = { value: string; label: string };
@@ -198,7 +198,7 @@ export function PicksFilterBar({
           onClick={() => setSport(s.id)}
           className={chipBase + " " + (sportId === s.id ? chipActive : chipIdle)}
         >
-          <span aria-hidden="true">{sportIcon(s.name)}</span>
+          <SportIcon name={s.name} />
           {s.name}
           <span className="text-xs opacity-70">{s.count}</span>
         </button>
@@ -220,7 +220,7 @@ export function PicksFilterBar({
                   }}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
                 >
-                  <span aria-hidden="true">{sportIcon(s.name)}</span>
+                  <SportIcon name={s.name} />
                   <span className="flex-1">{s.name}</span>
                   <span className="text-xs text-muted-foreground">{s.count}</span>
                 </button>

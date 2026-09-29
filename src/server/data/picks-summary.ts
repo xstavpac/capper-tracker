@@ -122,12 +122,6 @@ export async function getCapperAllTimeRecords(
   return out;
 }
 
-// Sports the user has at least one pick in (for the sport chips).
-export async function getSportIdsWithPicks(userId: string): Promise<string[]> {
-  const rows = await prisma.pick.groupBy({ by: ["sportId"], where: { userId } });
-  return rows.map((r) => r.sportId);
-}
-
 // Final scores for graded picks AND for ungraded picks whose game has started
 // (a match there means the game is final - the ledger shows "Grading"), matched with the same matcher grading uses
 // (matchGameResult) so the score shown is always the game the pick graded
