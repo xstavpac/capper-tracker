@@ -7,7 +7,7 @@ export function MostActivePanel({ entries }: { entries: ActivityEntry[] }) {
   const max = entries[0]?.pickCount ?? 0;
 
   return (
-    <div className="rounded-card bg-card p-5 shadow-soft">
+    <div className="h-full rounded-card bg-card p-5 shadow-soft">
       <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-foreground">
         <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 text-orange-500" aria-hidden="true">
           <path d="M12 2c1 3-2 4-2 7a3 3 0 1 0 6 0c1 1 2 2.5 2 4.5A6.5 6.5 0 0 1 5 13.5C5 8 12 6 12 2Z" />

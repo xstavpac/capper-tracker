@@ -49,6 +49,9 @@ export const SPARKLINE_MIN_PICKS = 3;
 export const HOT_STREAK_MIN = 5;
 export const TOP_CAPPERS_COUNT = 4;
 export const MOST_ACTIVE_COUNT = 5;
+export const HOTTEST_COUNT = 5;
+// Graded picks a capper needs in the week to be eligible for Hottest (one lucky bet can't top it).
+export const HOTTEST_MIN_GRADED = 5;
 const DAY_MS = 86400000;
 
 export type CapperSparkline = {
@@ -65,6 +68,8 @@ export function sparklineTone(s: CapperSparkline | undefined): SparklineTone {
   if (!s || s.n < SPARKLINE_MIN_PICKS || s.netUnits === 0) return "flat";
   return s.netUnits > 0 ? "up" : "down";
 }
+
+export type HottestEntry = { capperId: string; name: string; colorTag: string | null; netUnits: number };
 
 export type OverviewStats = {
   activeCappers: number;
@@ -101,6 +106,7 @@ export type CappersPageData = {
   top: LeaderboardEntry[];
   sparklines: Map<string, CapperSparkline>;
   mostActive: ActivityEntry[];
+  hottest: HottestEntry[];
   favSummary: FavoriteCappersSummary | null;
 };
 
@@ -109,6 +115,19 @@ export type CappersPageData = {
 // ---------------------------------------------------------------------------
 
 const ts = (d: Date) => Prisma.sql`${d.toISOString()}::timestamp`;
+
+// The unitsWon the page DISPLAYS (statsFromRows -> zeroOddsWinUnitsWon): a WIN at odds = 0 makes
+// it Infinity / -Infinity / NaN, and ROI and net units with it. The sort keys use exactly this,
+// so "Sort by ROI" can never disagree with the ROI column. Shared with the Hottest card so a
+// capper's units there are the same number as everywhere else.
+const uwEffSql = (a: string) => {
+  const flags = Prisma.raw(`${a}."zeroOddsWinFlags"`);
+  const uw = Prisma.raw(`${a}."unitsWon"`);
+  return Prisma.sql`CASE WHEN ${flags} = 0 THEN ${uw}
+                   WHEN (${flags} & 4) <> 0 OR (${flags} & 3) = 3 THEN 'NaN'::float8
+                   WHEN (${flags} & 1) <> 0 THEN 'Infinity'::float8
+                   ELSE '-Infinity'::float8 END`;
+};
 
 // Per-capper entries for one totals source: the roster joined to its window totals, then the sort
 // keys. Same inclusion rules as buildLeaderboards: every window but ALL lists only cappers with a
@@ -142,13 +161,7 @@ function entryCtes(name: string, totals: string, sportRoster: boolean, window: S
             CASE WHEN e.wins + e.losses > 0 THEN e.wins::float8 / (e.wins + e.losses)::float8 * 100::float8 ELSE 0::float8 END AS win_pct
           FROM (
             SELECT e0.*,
-              -- The unitsWon the page DISPLAYS (statsFromRows -> zeroOddsWinUnitsWon): a WIN at odds = 0 makes
-              -- it Infinity / -Infinity / NaN, and ROI and net units with it. The sort keys use exactly this,
-              -- so "Sort by ROI" can never disagree with the ROI column.
-              CASE WHEN e0."zeroOddsWinFlags" = 0 THEN e0."unitsWon"
-                   WHEN (e0."zeroOddsWinFlags" & 4) <> 0 OR (e0."zeroOddsWinFlags" & 3) = 3 THEN 'NaN'::float8
-                   WHEN (e0."zeroOddsWinFlags" & 1) <> 0 THEN 'Infinity'::float8
-                   ELSE '-Infinity'::float8 END AS uw_eff
+              ${uwEffSql("e0")} AS uw_eff
             FROM ${Prisma.raw(name)} e0
           ) e
         ) x
@@ -257,6 +270,39 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
     `
   );
 
+  // Hottest this week: net units over the same 7-day datePosted window as Most active, graded picks
+  // only (pending/cancelled excluded, a push adds 0), at least HOTTEST_MIN_GRADED graded picks, net
+  // units > 0. Units are the page's own expression (WIN_UNITS / unitsLost / uw_eff, rounded like the
+  // sort keys) and ties use the page's tie order (TIE_BREAK). A non-finite value (odds = 0 win) has
+  // no bar or label to draw, so it is left out.
+  add(
+    "hot",
+    Prisma.sql`
+      SELECT h.cid AS "capperId", h.name, h."colorTag", h.net_r AS "netUnits"
+      FROM (
+        SELECT g.cid, r.name, r."colorTag", ${round2HalfUpSql(Prisma.sql`g.net_raw`)} AS net_r
+        FROM (
+          SELECT a.cid, ${uwEffSql("a")} - a."unitsLost" AS net_raw
+          FROM (
+            SELECT p."capperId" AS cid,
+              (count(*) FILTER (WHERE p.status IN ('WIN', 'LOSS', 'PUSH')))::int AS graded,
+              COALESCE(sum(${WIN_UNITS}) FILTER (WHERE p.status = 'WIN' AND p.odds <> 0), 0)::float8 AS "unitsWon",
+              COALESCE(sum(p.units) FILTER (WHERE p.status = 'LOSS'), 0)::float8 AS "unitsLost",
+              COALESCE(bit_or(CASE WHEN p.units > 0 THEN 1 WHEN p.units < 0 THEN 2 ELSE 4 END) FILTER (WHERE p.status = 'WIN' AND p.odds = 0), 0)::int AS "zeroOddsWinFlags"
+            FROM picks p
+            WHERE p."userId" = ${q.userId} AND p."datePosted" >= ${ts(weekStart)}
+            GROUP BY p."capperId"
+          ) a
+          WHERE a.graded >= ${HOTTEST_MIN_GRADED}
+        ) g
+        JOIN roster r ON r.id = g.cid
+      ) h
+      WHERE h.net_r > 0 AND h.net_r < 'Infinity'::float8
+      ORDER BY h.net_r DESC, lower(h.name) COLLATE "C", h.name COLLATE "C", h.cid COLLATE "C"
+      LIMIT ${HOTTEST_COUNT}
+    `
+  );
+
   // Overview: counts by datePosted (activity), pooled money totals from the per-capper totals.
   const curFilter = range ? Prisma.sql`p."datePosted" >= ${ts(range.start)} AND p."datePosted" < ${ts(range.end)}` : Prisma.sql`true`;
   const prevFilter = previous ? Prisma.sql`p."datePosted" >= ${ts(previous.start)} AND p."datePosted" < ${ts(previous.end)}` : Prisma.sql`false`;
@@ -285,7 +331,7 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
   );
   if (q.fav) add("fs", windowTotalsSelect({ userId: q.userId, favoritesOnly: true, pooled: true }));
 
-  const outputs = ["ov", "pg", "top", "st", "sp", "sl", "ma", ...(q.fav ? ["fs"] : [])];
+  const outputs = ["ov", "pg", "top", "st", "sp", "sl", "ma", "hot", ...(q.fav ? ["fs"] : [])];
   return Prisma.sql`
     WITH ${windowsCte([q.window], now)},
     ${Prisma.join(
@@ -379,6 +425,7 @@ export async function getCappersPageData(q: CappersPageQuery): Promise<CappersPa
     top: ((out.top ?? []) as EntryRow[]).map((r) => entryOf(r, q.window, undefined, null)),
     sparklines,
     mostActive: (out.ma ?? []).map((m: ActivityEntry) => ({ capperId: m.capperId, name: m.name, colorTag: m.colorTag, pickCount: Number(m.pickCount) })),
+    hottest: (out.hot ?? []).map((h: HottestEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, netUnits: Number(h.netUnits) })),
     favSummary,
   };
 }

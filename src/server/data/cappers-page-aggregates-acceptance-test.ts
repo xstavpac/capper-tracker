@@ -446,6 +446,145 @@ async function main() {
   const topShown = top3.top.map((e) => e.stats.roi);
   check("odds 0: top cappers follow the displayed ROI", topShown.every((v, i) => i === 0 || cmpDesc(topShown[i - 1], v) <= 0) && topShown[0] === Infinity, JSON.stringify(topShown));
 
+  // ============ Hottest this week ============
+  // Independent reference straight from the raw picks: datePosted in the last 7 days (Most active's
+  // window), graded (WIN/LOSS/PUSH) only, >= 5 graded, net units = sum(win units) - sum(loss units)
+  // with a push at 0, rounded to 2dp, > 0; ordered units desc, then the page's tie order.
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  async function referenceHottest(userId: string) {
+    const since = Date.now() - 7 * 86400000;
+    const picks = await prisma.pick.findMany({ where: { userId, datePosted: { gte: new Date(since) }, status: { in: ["WIN", "LOSS", "PUSH"] } }, include: { capper: true } });
+    const by = new Map<string, { name: string; n: number; net: number }>();
+    for (const p of picks) {
+      const e = by.get(p.capperId) ?? by.set(p.capperId, { name: p.capper.name, n: 0, net: 0 }).get(p.capperId)!;
+      e.n++;
+      e.net += p.status === "WIN" ? p.units * (p.odds > 0 ? p.odds / 100 : 100 / Math.abs(p.odds)) : p.status === "LOSS" ? -p.units : 0;
+    }
+    return [...by.entries()]
+      .map(([capperId, e]) => ({ capperId, name: e.name, n: e.n, netUnits: r2(e.net) }))
+      .filter((e) => e.n >= 5 && e.netUnits > 0)
+      .sort((a, b) => b.netUnits - a.netUnits || cmpStr(a.name.toLowerCase(), b.name.toLowerCase()) || cmpStr(a.name, b.name) || cmpStr(a.capperId, b.capperId))
+      .slice(0, 5)
+      .map(({ capperId, name, netUnits }) => ({ capperId, name, colorTag: null as string | null, netUnits }));
+  }
+  const hottestOf = async (userId: string, o: { window?: ScorecardWindow; league?: string } = {}) =>
+    (await getCappersPageData({ userId, window: o.window ?? "ALL", league: o.league, min: 0, sort: "roi", fav: false, q: "", page: 1 })).hottest;
+  // One pick per status, posted `startMin`, `startMin`+60, ... minutes ago.
+  const seq = (capperId: string, statuses: PickSpec["status"][], o: { odds?: number; units?: number; startMin?: number; sport?: string } = {}): PickSpec[] =>
+    statuses.map((status, i) => ({ capperId, status, odds: o.odds ?? 100, units: o.units ?? 1, sport: o.sport, gameTime: ago((o.startMin ?? 60) + i * 60) }));
+  const W = "WIN" as const;
+  const L = "LOSS" as const;
+  const P = "PUSH" as const;
+
+  // Fixture A: eight qualifiers (only the top 5 are returned), ties, and every exclusion rule.
+  const UH = await makeUser("hot");
+  const h: Record<string, string> = {};
+  const hotNames: Record<string, string> = {
+    a: "Hot A", b: "Hot B", c: "Hot C", d: "Hot D", tieB: "Bravo tie", tieA: "alpha tie", pushy: "Pushy",
+    lucky: "Lucky", pending: "Pending", stale: "Stale", cold: "Cold", zero: "Zero", posted: "Posted late", cancelled: "Cancelled", fav: "Fav ignored",
+  };
+  for (const [k, name] of Object.entries(hotNames)) h[k] = await makeCapper(UH, k, name, k === "fav");
+  await addPicks(UH, [
+    ...seq(h.a, [W, W, W, L, L, L], { units: 2, odds: 150 }), // 3*3 - 3*2 = +3.0
+    ...seq(h.b, [W, W, W, W, L], { odds: -110 }), // 4*0.909.. - 1 = +2.636.. -> 2.64
+    ...seq(h.c, [W, W, W, W, W, L], { odds: 100 }), // +4.0
+    ...seq(h.d, [W, W, W, L, L], { odds: 200, units: 0.5 }), // 3*1 - 1 = +2.0
+    ...seq(h.tieB, [W, L, L, W, W], { odds: 100 }), // +1.0
+    ...seq(h.tieA, [W, L, L, W, W], { odds: 100 }), // +1.0 (same as Bravo tie: name order decides)
+    ...seq(h.pushy, [W, W, W, P, P], { odds: 100 }), // pushes count toward the 5 and add 0: +3.0
+    ...seq(h.lucky, [W, W, W, W], { odds: 1000, units: 5 }), // +200 but only 4 graded -> excluded
+    ...seq(h.pending, [W, W, W, W, "PENDING", "PENDING", "PENDING"], { odds: 100 }), // 4 graded + pending -> excluded
+    ...seq(h.cancelled, [W, W, W, W, "CANCELLED", "CANCELLED"], { odds: 100 }), // 4 graded + cancelled -> excluded
+    ...seq(h.stale, [W, W, W, W, W, W], { odds: 100, startMin: 8 * DAY + 60 }), // posted 8+ days ago -> outside the window
+    ...seq(h.cold, [W, L, L, L, L], { odds: 100 }), // negative
+    ...seq(h.zero, [W, L, W, L, P], { odds: 100 }), // exactly 0
+    // datePosted (not gameTime) decides the window: game just now, posted 9 days ago -> not counted.
+    ...[W, W, W, W, W].map((status, i): PickSpec => ({ capperId: h.posted, status, odds: 100, gameTime: ago(60 + i * 60), datePosted: ago(9 * DAY + i) })),
+    ...seq(h.fav, [W, W, W, W, W], { odds: 100 }), // +5.0: favorites get no special treatment
+    // Old winners must not rescue "Cold", and an old loss must not touch "Lucky".
+    ...seq(h.cold, [W, W, W, W, W, W, W, W], { odds: 100, startMin: 10 * DAY }),
+    ...seq(h.lucky, [L], { odds: 100, startMin: 12 * DAY }),
+  ]);
+
+  const gotH = await hottestOf(UH);
+  same("hottest: equals the raw-pick reference (top 5, ordered by units, page tie order)", gotH, await referenceHottest(UH));
+  check("hottest: exactly 5 rows although 7 cappers qualify", gotH.length === 5, String(gotH.length));
+  check(
+    "hottest: ordered by net units, ties by name (Fav 5.0, Hot C 4.0, then Hot A / Pushy at 3.0, Hot B 2.64)",
+    gotH.map((e) => e.name).join("|") === "Fav ignored|Hot C|Hot A|Pushy|Hot B",
+    gotH.map((e) => e.name + " " + e.netUnits).join("|")
+  );
+  same("hottest: units values (exact, 2dp)", gotH.map((e) => e.netUnits), [5, 4, 3, 3, 2.64]);
+  const nameSet = new Set(gotH.map((e) => e.name));
+  for (const [why, name] of [
+    ["min 5 graded picks", "Lucky"],
+    ["pending picks are not graded", "Pending"],
+    ["cancelled picks are not graded", "Cancelled"],
+    ["picks posted before the 7-day window", "Stale"],
+    ["datePosted (not gameTime) decides the window", "Posted late"],
+    ["net units < 0", "Cold"],
+    ["net units = 0", "Zero"],
+  ] as const)
+    check(`hottest: "${name}" excluded (${why})`, !nameSet.has(name));
+  check("hottest: a push adds 0 units and counts as a graded pick (3 wins + 2 pushes = +3.0, eligible)", gotH.find((e) => e.name === "Pushy")?.netUnits === 3);
+
+  // Tie rule at the cut: three cappers on exactly +1.0 compete for the one remaining slot.
+  const UT = await makeUser("hottie");
+  const tt: Record<string, string> = {};
+  for (const [k, name] of Object.entries({ z1: "Top 1", z2: "Top 2", z3: "Top 3", z4: "Top 4", b: "Bravo tie", a: "alpha tie", c: "charlie tie" })) tt[k] = await makeCapper(UT, k, name);
+  await addPicks(UT, [
+    ...seq(tt.z1, [W, W, W, W, W, W], { units: 4 }),
+    ...seq(tt.z2, [W, W, W, W, W, W], { units: 3 }),
+    ...seq(tt.z3, [W, W, W, W, W, W], { units: 2 }),
+    ...seq(tt.z4, [W, W, W, W, W, W], { units: 1.5 }),
+    ...seq(tt.b, [W, L, L, W, W]),
+    ...seq(tt.a, [W, L, L, W, W]),
+    ...seq(tt.c, [W, L, L, W, W]),
+  ]);
+  const gotT = await hottestOf(UT);
+  same("hottest tie rule: equal units -> lower(name) (names are unique per user, case-insensitively) (matches reference)", gotT, await referenceHottest(UT));
+  check("hottest tie rule: 'alpha tie' < 'Bravo tie' < 'charlie tie' by lower(name) (raw byte order would pick 'Bravo tie') -> the last slot goes to 'alpha tie'", gotT.length === 5 && gotT[4].name === "alpha tie", gotT.map((e) => e.name).join("|"));
+
+  // Fewer than 5 qualify -> fewer rows; none qualify -> empty list (the panel shows its muted empty state).
+  const UF = await makeUser("hotfew");
+  const ff: Record<string, string> = {};
+  for (const k of ["a", "b", "loser", "few"]) ff[k] = await makeCapper(UF, k, "Few " + k);
+  await addPicks(UF, [
+    ...seq(ff.a, [W, W, W, W, W]),
+    ...seq(ff.b, [W, W, W, W, L]),
+    ...seq(ff.loser, [L, L, L, L, L]),
+    ...seq(ff.few, [W, W]), // too few picks
+  ]);
+  const gotF = await hottestOf(UF);
+  same("hottest: fewer than 5 qualify -> only those rows", gotF, await referenceHottest(UF));
+  check("hottest: fewer-than-5 case returns exactly the 2 winners, best first", gotF.map((e) => e.name + " " + e.netUnits).join("|") === "Few a 5|Few b 3", gotF.map((e) => e.name + " " + e.netUnits).join("|"));
+
+  const UN = await makeUser("hotnone");
+  const nn = await makeCapper(UN, "n1", "Nobody wins");
+  const nn2 = await makeCapper(UN, "n2", "Lucky small");
+  await addPicks(UN, [...seq(nn, [L, L, L, L, L, W]), ...seq(nn2, [W, W, W, W])]);
+  check("hottest: no winning capper -> empty list", (await hottestOf(UN)).length === 0);
+  check("hottest: a user with no picks at all -> empty list", (await hottestOf(await makeUser("hotempty"))).length === 0);
+
+  // The card ignores the time tabs and the league select: same list for every window and league.
+  for (const window of SCORECARD_WINDOWS as ScorecardWindow[])
+    for (const league of [undefined, "MLB", "NFL"]) same(`hottest ignores window/league [${window} ${league ?? "all"}]`, await hottestOf(UH, { window, league }), gotH);
+
+  // Same units as elsewhere: these cappers have all their picks inside the week, so the ALL-time
+  // leaderboard's displayed net units (the number every other card shows) must equal the Hottest value.
+  const allTime = new Map((await adapter.getCapperLeaderboardTable(UH, "ALL")).map((e) => [e.capperId, e.stats.netUnits]));
+  for (const e of gotH) check(`hottest units == leaderboard units (${e.name})`, allTime.get(e.capperId) === e.netUnits, `${e.netUnits} vs ${allTime.get(e.capperId)}`);
+
+  // An odds = 0 win poisons the displayed units (Infinity / NaN); such a value has no bar or "+X.Xu", so it is left out.
+  const U0 = await makeUser("hotodds0");
+  const o0 = await makeCapper(U0, "o", "Odds zero");
+  const o1 = await makeCapper(U0, "p", "Odds normal");
+  await addPicks(U0, [...seq(o0, [W, W, W, W, L], { odds: 0 }), ...seq(o1, [W, W, W, W, L], { odds: 100 })]);
+  same("hottest: non-finite (odds = 0 win) units are left out, normal capper still listed", (await hottestOf(U0)).map((e) => e.name), ["Odds normal"]);
+
+  // Scoped to the user: every returned capper belongs to that user's fixture.
+  check("hottest: scoped to the user (no cross-user rows)", gotH.every((e) => e.capperId.startsWith(PREFIX + "user-hot-")) && gotT.every((e) => e.capperId.startsWith(PREFIX + "user-hottie-")));
+
   console.log(`\n${assertions} assertions, ${failures} failed.`);
 }
 

@@ -8,6 +8,7 @@ import { MergeCappersPanel } from "@/components/dashboard/merge-cappers-panel";
 import { CappersTimeTabs } from "@/components/dashboard/cappers-time-tabs";
 import { CappersStatCards } from "@/components/dashboard/cappers-stat-cards";
 import { MostActivePanel } from "@/components/dashboard/most-active-panel";
+import { HottestPanel } from "@/components/dashboard/hottest-panel";
 import { TopCappers } from "@/components/dashboard/top-cappers";
 import { CappersLeaderboardCard } from "@/components/dashboard/cappers-leaderboard-card";
 
@@ -55,7 +56,10 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
         <>
           <CappersTimeTabs params={params} />
           <CappersStatCards stats={data.overview} range={params.range} />
-          <MostActivePanel entries={data.mostActive} />
+          <div className="grid grid-cols-1 items-stretch gap-6 min-[769px]:grid-cols-2">
+            <MostActivePanel entries={data.mostActive} />
+            <HottestPanel entries={data.hottest} />
+          </div>
           <TopCappers entries={data.top} sparklines={data.sparklines} />
           <CappersLeaderboardCard
             rows={data.rows}
