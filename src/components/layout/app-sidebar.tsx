@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { dropCatalogButtonBaseClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
-import { useParlayPool } from "@/components/parlay/parlay-pool-context";
+import { clearParlaySlips, useParlayPool } from "@/components/parlay/parlay-pool-context";
 
 type SidebarUser = { name: string | null; email: string; profilePictureUrl: string | null };
 
@@ -289,6 +289,7 @@ function AccountRow({ user }: { user: SidebarUser }) {
   const initials = label.slice(0, 2).toUpperCase();
 
   async function handleSignOut() {
+    clearParlaySlips();
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
     router.push("/");
