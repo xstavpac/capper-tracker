@@ -340,7 +340,16 @@ async function main() {
   await mk("needs-away", G_NEEDS, "AWAY");
   await mk("has-away", G_HAS, "AWAY");
   await mk("noodds-home", G_NOODDS, "HOME");
-  const gradedRes = await gradeAllPendingPicks(SPORT, "MLB");
+  // gradeAllPendingPicks skips picks older than the regrade lookback; the
+  // fixture games are pinned to 2026-06-15, so freeze "now" at T0 (as run()
+  // does for persistFinalScores) or these picks age out of the auto-grade window.
+  freezeClock();
+  let gradedRes: Awaited<ReturnType<typeof gradeAllPendingPicks>>;
+  try {
+    gradedRes = await gradeAllPendingPicks(SPORT, "MLB");
+  } finally {
+    unfreezeClock();
+  }
   const picks = await prisma.pick.findMany({ where: { notes: { startsWith: PREFIX } }, orderBy: { notes: "asc" } });
   const statuses = picks.map((p) => [p.notes, p.status]);
   expect("pick statuses identical to pre-change output", statuses, EXPECTED_STATUSES);

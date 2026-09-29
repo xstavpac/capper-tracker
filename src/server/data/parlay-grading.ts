@@ -130,11 +130,14 @@ export async function gradeAllPendingLegs(
   const sport = await prisma.sport.findUnique({ where: { name: sportName } });
   if (!sport) return { graded: 0, notMatched: 0, remaining: 0 };
 
-  const totalPending = await prisma.leg.count({ where: { sportId: sport.id, status: "PENDING" } });
+  // Same stale-pending exclusion as gradeAllPendingPicks: legs older than the
+  // lookback stay PENDING but no longer take slots or widen the candidate window.
+  const gradeable = { sportId: sport.id, status: "PENDING" as const, gameTime: { gte: regradeLookbackCutoff() } };
+  const totalPending = await prisma.leg.count({ where: gradeable });
   if (totalPending === 0) return { graded: 0, notMatched: 0, remaining: 0 };
 
   const toProcess = await prisma.leg.findMany({
-    where: { sportId: sport.id, status: "PENDING" },
+    where: gradeable,
     orderBy: { gameTime: "asc" },
     take: maxLegs,
   });
