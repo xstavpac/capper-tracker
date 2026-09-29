@@ -8,6 +8,11 @@ import { prisma } from "@/lib/prisma";
 // with zero new code.
 export const ZONE_MODEL_FLAG_KEY = "zone_model";
 
+// Admin report over the import skipped-line log (see /admin/import-skipped-lines).
+// Seeded OFF with overrides for the admins in migration
+// 20260930120000_add_import_skipped_lines.
+export const IMPORT_SKIPPED_LINES_FLAG_KEY = "import_skipped_lines";
+
 // A user has access to `key` when EITHER the flag's global `enabled` is
 // true (the eventual "everyone" rollout - a single DB value flip, no code
 // change) OR they have a FeatureFlagUserOverride row for it with

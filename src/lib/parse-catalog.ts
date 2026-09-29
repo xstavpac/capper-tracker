@@ -1,4 +1,5 @@
 import { normalizeName } from "@/lib/fuzzy-match";
+import { looksPickLikeHeader } from "@/lib/market-hint";
 import { parsePlayerProp, pickPeriodFromText, extractLine, type SegmentPeriod } from "@/lib/bet-line";
 import { isKnownFullPlayerName } from "@/lib/player-roster-fallback";
 
@@ -2506,6 +2507,11 @@ function extractCapperNameFromTagline(text: string): string | null {
   return null;
 }
 
+// A line parseCatalog consumed without producing a pick or surfacing it in
+// `unresolved` - see parseCatalog's droppedAsHeaders / droppedInline. Feeds
+// the import skipped-line log only; never affects parse results.
+export type DroppedLine = { text: string; capperName: string };
+
 export function parseCatalog(
   text: string,
   knownCapperNames: string[] = [],
@@ -2515,7 +2521,21 @@ export function parseCatalog(
   // this function's exact pre-guard behavior for every caller that has no
   // roster data available (or whose fetch hasn't resolved yet).
   rosterFullNames?: Iterable<string>
-): { picks: ParsedPick[]; parlays: ParsedParlay[]; unresolved: string[]; unresolvedCapperNames: string[] } {
+): {
+  picks: ParsedPick[];
+  parlays: ParsedParlay[];
+  unresolved: string[];
+  unresolvedCapperNames: string[];
+  // Lines that were read as capper names (the final fallback below) but look
+  // pick-like - a digit, "+", or known market vocabulary. They still become
+  // the active header exactly as before; this is a side list for logging.
+  // capperName is the last header NOT itself in this list. Expect false
+  // positives ("KRASH 12-2").
+  droppedAsHeaders: DroppedLine[];
+  // Lines that began with a saved capper's name, resolved to no sport/team/
+  // player, and were discarded without a trace.
+  droppedInline: DroppedLine[];
+} {
   const sortedNames = [...knownCapperNames].sort((a, b) => b.length - a.length);
   const rawLines = text.split("\n").map((l) => l.trim());
 
@@ -2541,6 +2561,14 @@ export function parseCatalog(
   // from). Recorded directly here instead.
   const unresolvedCapperNames: string[] = [];
   let currentCapper = "";
+  const droppedAsHeaders: DroppedLine[] = [];
+  const droppedInline: DroppedLine[] = [];
+  // Attribution for droppedAsHeaders: the last capper header that wasn't
+  // itself a dropped pick-like line. A dropped line still overwrites
+  // currentCapper (behavior unchanged), so without this a run of dropped
+  // lines would each be attributed to the previous dropped line.
+  let trustedCapper = "";
+  let droppedHeaderValue: string | null = null;
   // Treated like "start of catalog" - a blank line before a name is the
   // strongest signal that what follows is a new capper's header, not a pick.
   // Gates the fuzzy nickname-only branches below (see detectSport's
@@ -2549,6 +2577,7 @@ export function parseCatalog(
   let precededByBlank = true;
 
   for (const line of rawLines) {
+    if (currentCapper !== droppedHeaderValue) trustedCapper = currentCapper;
     if (!line) {
       precededByBlank = true;
       continue;
@@ -2681,6 +2710,8 @@ export function parseCatalog(
             teamNicknames: [playerPick.playerKey],
             gameNumber: inlineGameNumber,
           });
+        } else {
+          droppedInline.push({ text: line, capperName: inlineMatch });
         }
         continue;
       }
@@ -2895,8 +2926,12 @@ export function parseCatalog(
       const normalized = normalizeName(name);
       const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
       currentCapper = existingMatch ?? name;
+      if (!existingMatch && looksPickLikeHeader(line)) {
+        droppedAsHeaders.push({ text: line, capperName: trustedCapper || "Unknown" });
+        droppedHeaderValue = currentCapper;
+      }
     }
   }
 
-  return { picks: results, parlays, unresolved, unresolvedCapperNames };
+  return { picks: results, parlays, unresolved, unresolvedCapperNames, droppedAsHeaders, droppedInline };
 }

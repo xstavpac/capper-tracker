@@ -150,6 +150,7 @@ const BASE_NAV_ITEMS: NavItem[] = [
 ];
 
 const ZONE_MODEL_NAV_ITEM: NavItem = { href: "/zone-model", label: "Zone Model", icon: ZoneModelIcon };
+const IMPORT_SKIPPED_LINES_NAV_ITEM: NavItem = { href: "/admin/import-skipped-lines", label: "Skipped Lines", icon: SettingsIcon };
 
 function isActiveHref(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
@@ -323,13 +324,26 @@ function AccountRow({ user }: { user: SidebarUser }) {
 // on the main content card next to it). Below md:, that same content becomes
 // a slide-in drawer opened from a compact top bar - full-bleed on mobile
 // rather than another floating card, since there's no room to spare there.
-export function AppSidebar({ user, showZoneModel = false }: { user: SidebarUser; showZoneModel?: boolean }) {
+export function AppSidebar({
+  user,
+  showZoneModel = false,
+  showImportSkippedLines = false,
+}: {
+  user: SidebarUser;
+  showZoneModel?: boolean;
+  showImportSkippedLines?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const { pool } = useParlayPool();
   // Zone Model is admin-only and server-gated (the page itself 404s
   // regardless of this) - this only decides whether the link appears, so a
   // non-admin never sees a nav entry for a route that would just 404 them.
-  const navItems = (showZoneModel ? [...BASE_NAV_ITEMS, ZONE_MODEL_NAV_ITEM] : BASE_NAV_ITEMS).map((item) =>
+  // Same for the import skipped-line report.
+  const navItems = [
+    ...BASE_NAV_ITEMS,
+    ...(showZoneModel ? [ZONE_MODEL_NAV_ITEM] : []),
+    ...(showImportSkippedLines ? [IMPORT_SKIPPED_LINES_NAV_ITEM] : []),
+  ].map((item) =>
     item.href === "/parlay" ? { ...item, badgeCount: pool.length } : item
   );
 
