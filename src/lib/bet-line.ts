@@ -453,6 +453,16 @@ export type PlayerPropMarket =
 // (no "rec"+yards or "receiving" substring in "receptions").
 const YARDS_UNIT = /y(?:ar|r)?ds?/.source;
 
+// Word-order tolerance (2026-09): "yards passing" / "yards rushing" / "yards
+// receiving" are as common in real capper text as "passing yards" etc. The
+// stat word alone already identified the market either way - the gap was that
+// only a TRAILING yards qualifier was consumed by the strip, so the reversed
+// order left "yards" stuck to the extracted player name ("Williams yards"),
+// which then failed every roster/box-score name match. An optional LEADING
+// qualifier is consumed the same way (never required), and is applied to
+// every yards-bearing pattern below, combined-category ones included.
+const LEADING_YARDS = `(?:\\b${YARDS_UNIT}\\s+)?`;
+
 // Combined-category markets (2026-09, RUSH_REC_YDS/PASS_RUSH_YDS - see
 // PropMarket's own comment in schema.prisma for the upstream-market
 // confirmation these are built against). Each is two single-category stat
@@ -477,20 +487,20 @@ const PLAYER_PROP_STAT_PATTERNS: [Exclude<PlayerPropMarket, "TD">, RegExp][] = [
   [
     "RUSH_REC_YDS",
     new RegExp(
-      `\\b(?:rush(?:ing)?${PROP_MARKET_CONNECTOR}rec(?:eiving)?|rec(?:eiving)?${PROP_MARKET_CONNECTOR}rush(?:ing)?)\\b(?:\\s*${YARDS_UNIT}\\b)?`,
+      `${LEADING_YARDS}\\b(?:rush(?:ing)?${PROP_MARKET_CONNECTOR}rec(?:eiving)?|rec(?:eiving)?${PROP_MARKET_CONNECTOR}rush(?:ing)?)\\b(?:\\s*${YARDS_UNIT}\\b)?`,
       "i"
     ),
   ],
   [
     "PASS_RUSH_YDS",
     new RegExp(
-      `\\b(?:pass(?:ing)?${PROP_MARKET_CONNECTOR}(?:rush(?:ing)?|rec(?:eiving)?)|(?:rush(?:ing)?|rec(?:eiving)?)${PROP_MARKET_CONNECTOR}pass(?:ing)?)\\b(?:\\s*${YARDS_UNIT}\\b)?`,
+      `${LEADING_YARDS}\\b(?:pass(?:ing)?${PROP_MARKET_CONNECTOR}(?:rush(?:ing)?|rec(?:eiving)?)|(?:rush(?:ing)?|rec(?:eiving)?)${PROP_MARKET_CONNECTOR}pass(?:ing)?)\\b(?:\\s*${YARDS_UNIT}\\b)?`,
       "i"
     ),
   ],
-  ["PASS_YDS", new RegExp(`\\bpass(?:ing)?\\b(?:\\s*${YARDS_UNIT}\\b)?`, "i")],
-  ["RUSH_YDS", new RegExp(`\\brush(?:ing)?\\b(?:\\s*${YARDS_UNIT}\\b)?`, "i")],
-  ["REC_YDS", new RegExp(`\\brec\\s*${YARDS_UNIT}\\b|\\breceiving\\b(?:\\s*${YARDS_UNIT}\\b)?`, "i")],
+  ["PASS_YDS", new RegExp(`${LEADING_YARDS}\\bpass(?:ing)?\\b(?:\\s*${YARDS_UNIT}\\b)?`, "i")],
+  ["RUSH_YDS", new RegExp(`${LEADING_YARDS}\\brush(?:ing)?\\b(?:\\s*${YARDS_UNIT}\\b)?`, "i")],
+  ["REC_YDS", new RegExp(`\\brec\\s*${YARDS_UNIT}\\b|${LEADING_YARDS}\\breceiving\\b(?:\\s*${YARDS_UNIT}\\b)?`, "i")],
   ["RECEPTIONS", /\breceptions?\b|\brec\b/i],
 ];
 
