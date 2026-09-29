@@ -118,6 +118,22 @@ export type PickInsertData = {
   gameNumber?: number | null;
 };
 
+// Explicit interactive-transaction bounds for the entitlement + insert transaction
+// (Prisma's defaults are maxWait 2 s / timeout 5 s).
+//  - timeout 15 s: the transaction is now ~4 statements (row lock, count, sport
+//    lookup, ONE batch insert). A 1,000-row batch measures ~0.13 s against a
+//    local database (bulk-import-batch-insert-acceptance-test.ts); production
+//    adds a few network round trips, so ~1-2 s is the expected ceiling at 1,000
+//    rows and less at the 500-row import cap (import-limits.ts). 15 s is 7x+
+//    headroom over that, and still short enough that a wedged transaction does
+//    not hold the user's subscription row lock - or the instance's single
+//    connection (connection_limit=1) - for long. The old per-row inserts took
+//    N round trips inside the default 5 s and could not finish a large import.
+//  - maxWait 10 s: with connection_limit=1 a transaction waits for the one
+//    connection while other work on the instance finishes; the 2 s default is
+//    shorter than the pool's own 10 s wait.
+const ENTITLEMENT_TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
+
 export type AtomicCreateResult =
   | { allowed: true; created: { id: string }[] }
   | { allowed: false; tier: Tier; pickCount: number; limit: number; remaining: number; message: string };
@@ -191,33 +207,40 @@ export async function createPicksWithEntitlementCheck(userId: string, rows: Pick
     });
     const sportNameById = new Map(sports.map((s) => [s.id, s.name]));
 
-    const created = await Promise.all(
-      rows.map((row) => {
-        const sportName = sportNameById.get(row.sportId);
-        // A sportId with no matching sport can't be stamped (and the insert
-        // below will fail its foreign key anyway) - leave it at the unstamped
-        // default rather than guess a sport for the category.
-        const stamp = sportName
-          ? {
-              category: pickCategory({
-                betType: row.betType,
-                period: row.period ?? "FULL_GAME",
-                betDetail: row.betDetail ?? null,
-                odds: row.odds,
-                line: row.line ?? null,
-                sportName,
-                pickedSide: row.pickedSide ?? null,
-                mlFavoredSide: row.mlFavoredSide ?? null,
-                propMarket: row.propMarket ?? null,
-              }),
-              categoryVersion: PICK_CATEGORY_VERSION,
-            }
-          : {};
-        return tx.pick.create({ data: { ...row, userId, status: "PENDING", ...stamp }, select: { id: true } });
-      })
-    );
+    // A sportId with no matching sport can't be stamped (and the insert below
+    // will fail its foreign key anyway) - leave it at the unstamped default
+    // rather than guess a sport for the category.
+    const stamp = (row: PickInsertData) => {
+      const sportName = sportNameById.get(row.sportId);
+      return sportName
+        ? {
+            category: pickCategory({
+              betType: row.betType,
+              period: row.period ?? "FULL_GAME",
+              betDetail: row.betDetail ?? null,
+              odds: row.odds,
+              line: row.line ?? null,
+              sportName,
+              pickedSide: row.pickedSide ?? null,
+              mlFavoredSide: row.mlFavoredSide ?? null,
+              propMarket: row.propMarket ?? null,
+            }),
+            categoryVersion: PICK_CATEGORY_VERSION,
+          }
+        : {};
+    };
+    // ONE INSERT ... RETURNING for the whole batch (Prisma >= 5.14), instead of
+    // one statement per row. The per-row version issued N statements through the
+    // transaction's single connection (connection_limit=1 in production), so a
+    // large import held the subscription row lock for N round trips and could
+    // outlive Prisma's default 5 s interactive-transaction timeout. Rows come
+    // back in input order. The stamp is still spread into every row.
+    const created = await tx.pick.createManyAndReturn({
+      data: rows.map((row) => ({ ...row, userId, status: "PENDING" as const, ...stamp(row) })),
+      select: { id: true },
+    });
     return { allowed: true, created };
-  });
+  }, ENTITLEMENT_TX_OPTIONS);
 }
 
 // --- Stripe-facing helpers (used by the webhook handler and checkout action) ---

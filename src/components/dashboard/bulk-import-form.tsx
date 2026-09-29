@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { parseCatalog, resolveAmbiguousPick, type AmbiguousOption, type ParsedPick, type ParsedParlay } from "@/lib/parse-catalog";
 import { autoResolveAmbiguousPicks } from "@/lib/resolve-ambiguous-catalog";
+import { importRowCapError } from "@/lib/import-limits";
 import {
   bulkImportPicksAction,
   bulkImportParlaysAction,
@@ -63,6 +64,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const [enrichedOdds, setEnrichedOdds] = useState<Record<number, number>>({});
   const [loadingOdds, setLoadingOdds] = useState(false);
   const [importing, setImporting] = useState(false);
+  // A whole-import refusal (over the per-import row cap) - distinct from `result`,
+  // which reports a run that went through. Nothing was written when this is set.
+  const [importError, setImportError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     imported: number;
     skipped: number;
@@ -427,6 +431,14 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     // success, and these picks were never sent to the server so it can't
     // report them back.
     const skippedDuplicates = skippedDuplicateEntries.map((e) => dedupeLabel(e.p));
+    setImportError(null);
+    // Same check the server makes (bulkImportPicksAction), run first so an
+    // oversized paste is refused instantly and never sends the whole payload.
+    const capError = importRowCapError(includedEntries.length);
+    if (capError) {
+      setImportError(capError);
+      return;
+    }
     setImporting(true);
     // Sequential, not Promise.all: both actions independently do "find this
     // capper by normalized name, else create" against their own snapshot of
@@ -451,6 +463,12 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         gameNumber: p.gameNumber,
       }))
     );
+    // A refused picks import must not let the parlay import run on its own.
+    if (!res.success) {
+      setImporting(false);
+      setImportError(res.error);
+      return;
+    }
     const parlayRes =
       parlays.length > 0
         ? await bulkImportParlaysAction(
@@ -875,6 +893,13 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
               : importButtonLabel(includedPicks.length, skippedDuplicateEntries.length) +
                 (parlays.length > 0 ? " + " + parlays.length + " parlay" + (parlays.length === 1 ? "" : "s") : "")}
           </button>
+        </div>
+      )}
+
+      {importError && (
+        <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800 dark:bg-red-500/10 dark:text-red-300">
+          <div className="font-medium">Import not started</div>
+          <p className="mt-1">{importError}</p>
         </div>
       )}
 

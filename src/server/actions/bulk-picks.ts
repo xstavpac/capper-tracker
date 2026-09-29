@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { requireUser } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
 import { cacheKeys } from "@/lib/cache-keys";
+import { importRowCapError } from "@/lib/import-limits";
 import { createCapper } from "@/server/data/cappers";
 import { createPicksWithEntitlementCheck, type PickInsertData } from "@/server/data/subscriptions";
 import {
@@ -576,6 +577,12 @@ async function resolveOrCreateSportId(sportName: string, cache: Map<string, stri
 
 export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<BulkImportResult> {
   const user = await requireUser();
+
+  // Before ANY write: the loop below find-or-creates cappers and sports as it
+  // resolves items, so an over-cap import must be refused up front to leave
+  // nothing behind. See import-limits.ts for the number and its reasoning.
+  const capError = importRowCapError(items.length);
+  if (capError) return { success: false, error: capError };
 
   const existingCappers = await prisma.capper.findMany({ where: { userId: user.id } });
 
