@@ -2,6 +2,7 @@ import { normalizeName } from "@/lib/fuzzy-match";
 import { looksPickLikeHeader } from "@/lib/market-hint";
 import { parsePlayerProp, pickPeriodFromText, extractLine, type SegmentPeriod } from "@/lib/bet-line";
 import { isKnownFullPlayerName } from "@/lib/player-roster-fallback";
+import { detectUnsupportedProp, type UnsupportedPropInfo } from "@/lib/unsupported-prop-vocab";
 
 export type ParsedPick = {
   capperName: string;
@@ -1395,7 +1396,26 @@ function looksLikePick(text: string): boolean {
     // line) - two things named as opposing sides is itself a strong "this is
     // describing a game, not a person's name" signal, independent of whether
     // either side is a team this app actually has a nickname list for.
-    /\b\w[\w'.-]*\s+(?:vs\.?|@)\s+\w/i.test(text)
+    /\b\w[\w'.-]*\s+(?:vs\.?|@)\s+\w/i.test(text) ||
+    // MLB/NHL player-prop shapes ("2+ shots on goal", "anytime goal scorer",
+    // "Chris Sale o5.5 K") - no signed number or over/under word for the
+    // signals above to catch, so they used to fall through to the capper-name
+    // fallback and vanish. See unsupported-prop-vocab.ts.
+    detectUnsupportedPropLine(text) !== null
+  );
+}
+
+// MLB/NHL (and other not-yet-supported) player-prop vocabulary - see
+// unsupported-prop-vocab.ts. An NFL prop parsePlayerProp already recognizes is
+// never reported here, so NFL prop behavior is untouched. The team-subject
+// check reuses detectSport (explicit sport code or a team nickname before the
+// number), so game/team totals ("Yankees over 4.5 runs", "NBA LeBron James
+// over 25.5 points") keep flowing to their normal resolvers.
+export function detectUnsupportedPropLine(text: string): UnsupportedPropInfo | null {
+  if (parsePlayerProp(text)) return null;
+  return detectUnsupportedProp(
+    text,
+    (subject) => detectSport(subject, true).sportName !== "" || RECOGNIZED_TEAM_PHRASES.has(subject.toLowerCase())
   );
 }
 
@@ -1751,7 +1771,10 @@ export function parsePickText(description: string): {
     /\b(no|yes)\s+run\s+(?:first|1st)(?:\s+inning)?\b/i.test(cleanDescription)
   ) {
     betType = "NRFI";
-  } else if (parsePlayerProp(cleanDescription)) {
+  } else if (parsePlayerProp(cleanDescription) || detectUnsupportedPropLine(cleanDescription)?.sport) {
+    // (detectUnsupportedPropLine(...).sport is only set for a confidently MLB/
+    // NHL prop - a generic "points"/"assists" line, which NBA uses too, keeps
+    // its existing classification.)
     // Checked before the ML/spread/total keyword branches below - a
     // player-prop pick ("Puka Nacua Anytime TD", "Josh Allen Over 275.5
     // Passing Yards") often contains an over/under/number that would
@@ -2355,6 +2378,9 @@ function findPlayerPick(
   // text (not just `candidate`), since the market phrase sits after the
   // number/keyword the name regexes above stopped at.
   if (parsePlayerProp(text)) return null;
+  // Same exclusivity for MLB/NHL prop vocabulary (Heliot Ramos, Dustin Wolf and
+  // Nick Paul all share a surname with a KNOWN_TENNIS_PLAYERS entry).
+  if (detectUnsupportedPropLine(text)) return null;
 
   const lower = candidate.toLowerCase();
   const words = lower.split(/\s+/);
@@ -2637,6 +2663,13 @@ export function parseCatalog(
         currentCapper = inlineMatch;
         continue;
       }
+      // An MLB/NHL player-prop line can't be imported yet - surface it instead
+      // of letting it be classified as a game total/moneyline or dropped.
+      if (detectUnsupportedPropLine(remainder)) {
+        unresolved.push(line);
+        unresolvedCapperNames.push(inlineMatch);
+        continue;
+      }
       const detected = detectSport(remainder);
       if (!detected.sportName) {
         const pairResolved = resolveAmbiguousPair(remainder);
@@ -2770,6 +2803,16 @@ export function parseCatalog(
     // (detectSport, parsePickText, findTeamNicknames, ...) only ever sees
     // pickText - the game-number token removed.
     const { gameNumber: headerGameNumber, rest: pickText } = extractGameNumber(strippedText);
+
+    // MLB/NHL player-prop lines (with or without a sport prefix / matchup) are
+    // not importable yet. Routed straight to `unresolved` BEFORE any sport/
+    // team/tennis resolution so they can't become a game TOTAL/MONEYLINE, an
+    // ATP pick, or a capper-name header. See unsupported-prop-vocab.ts.
+    if (detectUnsupportedPropLine(pickText)) {
+      unresolved.push(strippedText);
+      unresolvedCapperNames.push(currentCapper || "Unknown");
+      continue;
+    }
     const detected = detectSport(pickText, !afterBlank || looksLikePick(pickText));
 
     // A brand-new capper's first-ever line, written as "Name - pick" with an

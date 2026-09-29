@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { parseCatalog, resolveAmbiguousPick, type AmbiguousOption, type ParsedPick, type ParsedParlay } from "@/lib/parse-catalog";
+import { parseCatalog, resolveAmbiguousPick, detectUnsupportedPropLine, type AmbiguousOption, type ParsedPick, type ParsedParlay } from "@/lib/parse-catalog";
 import { autoResolveAmbiguousPicks } from "@/lib/resolve-ambiguous-catalog";
 import { importRowCapError } from "@/lib/import-limits";
 import {
@@ -701,9 +701,19 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                 sport or team - not imported and not attributed to any capper. Add these manually:
               </div>
               <ul className="mt-1 list-disc pl-4">
-                {unresolvedLines.map((l, i) => (
-                  <li key={i}>{l}</li>
-                ))}
+                {unresolvedLines.map((l, i) => {
+                  const unsupportedProp = detectUnsupportedPropLine(l);
+                  return (
+                    <li key={i}>
+                      {l}
+                      {unsupportedProp && (
+                        <span className="ml-1 font-medium text-amber-700 dark:text-amber-400">
+                          - {unsupportedProp.reason}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
