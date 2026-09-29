@@ -20,9 +20,9 @@ export type LedgerPickInput = {
   gameTime: Date;
 };
 
-// How long after first pitch/tip a pending pick is still shown as "Live". Past
-// this it is just an ungraded pick, so it reads "Pending" instead of implying
-// a game is still in progress.
+// How long after first pitch/tip a game is presumed possibly still in progress
+// when no feed status exists. Past this with no final result and no grade, a
+// pick reads "Awaiting result" rather than Pending or Live.
 export const LIVE_WINDOW_MS = 8 * 60 * 60 * 1000;
 
 const PERIOD_TAG: Record<string, string> = {
@@ -124,25 +124,77 @@ export function marketTag(p: { betType: string; period: string; sportName: strin
 
 export type LedgerSection = "live" | "upcoming" | "settled";
 
-export function sectionFor(p: { status: string; gameTime: Date }, now: Date): LedgerSection {
-  if (p.status !== "PENDING") return "settled";
-  return p.gameTime.getTime() <= now.getTime() ? "live" : "upcoming";
+// What a pick's pill says. "pending" means ONLY that the game has not started.
+export type PickPhase =
+  | "pending" // game hasn't started
+  | "live" // started, not final
+  | "grading" // game is final, pick not graded yet
+  | "awaiting" // started > LIVE_WINDOW_MS ago, no final result, no grade
+  | "won"
+  | "lost"
+  | "push"
+  | "cancelled";
+
+// The game's own status from a live-score feed (ScoreGame.status), or null
+// when no feed game could be matched.
+export type GameFeedStatus = "preview" | "live" | "final" | null;
+
+export function pickPhase(p: {
+  status: string;
+  gameTime: Date;
+  now: Date;
+  // A game_results row exists for this pick's game (i.e. the game is final).
+  hasFinalResult: boolean;
+  feedStatus: GameFeedStatus;
+}): PickPhase {
+  if (p.status === "WIN") return "won";
+  if (p.status === "LOSS") return "lost";
+  if (p.status === "PUSH") return "push";
+  if (p.status === "CANCELLED") return "cancelled";
+  // Ungraded from here on.
+  if (p.hasFinalResult || p.feedStatus === "final") return "grading";
+  if (p.feedStatus === "live") return "live";
+  const sinceStart = p.now.getTime() - p.gameTime.getTime();
+  if (sinceStart < 0) return "pending";
+  if (sinceStart > LIVE_WINDOW_MS) return "awaiting";
+  // Started within the window: a feed that says "preview" (delayed start)
+  // keeps it Pending; with no feed status at all, the time window decides.
+  return p.feedStatus === "preview" ? "pending" : "live";
 }
 
-// True only while a pending pick's game is plausibly still in progress.
-export function isLiveNow(p: { status: string; gameTime: Date }, now: Date): boolean {
-  const started = now.getTime() - p.gameTime.getTime();
-  return p.status === "PENDING" && started >= 0 && started <= LIVE_WINDOW_MS;
+export function sectionForPhase(phase: PickPhase): LedgerSection {
+  if (phase === "live") return "live";
+  if (phase === "pending") return "upcoming";
+  return "settled"; // graded, plus grading/awaiting: the game is over or overdue
 }
 
-// Live/Upcoming/Settled in that order, empty ones dropped. Upcoming ascending
-// by game time, Live ascending (earliest start first), Settled descending.
-export function splitIntoSections<T extends { status: string; gameTime: Date }>(
-  picks: T[],
-  now: Date
+// Matches a pick to a live-score feed game: same home/away names and a start
+// time within maxDriftMs (a series repeats the same matchup on other days).
+export function matchFeedGame<G extends { homeTeam: string; awayTeam: string; commenceTime: string }>(
+  games: G[],
+  pick: { homeTeam: string; awayTeam: string; gameTime: Date },
+  maxDriftMs: number
+): G | null {
+  let best: G | null = null;
+  let bestDrift = Infinity;
+  for (const g of games) {
+    if (g.homeTeam !== pick.homeTeam || g.awayTeam !== pick.awayTeam) continue;
+    const drift = Math.abs(new Date(g.commenceTime).getTime() - pick.gameTime.getTime());
+    if (drift <= maxDriftMs && drift < bestDrift) {
+      best = g;
+      bestDrift = drift;
+    }
+  }
+  return best;
+}
+
+// Live/Upcoming/Settled in that order, empty ones dropped. Upcoming and Live
+// ascending by game time, Settled descending.
+export function splitIntoSections<T extends { phase: PickPhase; gameTime: Date }>(
+  picks: T[]
 ): { key: LedgerSection; picks: T[] }[] {
   const buckets: Record<LedgerSection, T[]> = { live: [], upcoming: [], settled: [] };
-  for (const p of picks) buckets[sectionFor(p, now)].push(p);
+  for (const p of picks) buckets[sectionForPhase(p.phase)].push(p);
   const asc = (a: T, b: T) => a.gameTime.getTime() - b.gameTime.getTime();
   buckets.live.sort(asc);
   buckets.upcoming.sort(asc);

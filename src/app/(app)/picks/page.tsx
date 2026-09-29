@@ -6,6 +6,7 @@ import {
   getCapperAllTimeRecords,
   getSportIdsWithPicks,
   getFinalScoresForPicks,
+  getFeedStatusesForPicks,
 } from "@/server/data/picks-summary";
 import { getCappersForUser } from "@/server/data/cappers";
 import { gradeUserPagePicks } from "@/server/data/page-grading";
@@ -30,12 +31,13 @@ import {
   buildPickLabel,
   marketTag,
   splitIntoSections,
-  isLiveNow,
+  pickPhase,
   consensusHints,
   capperInitials,
   formatOdds,
   winUnits,
   type LedgerPickInput,
+  type PickPhase,
 } from "@/lib/pick-display";
 import { formatPickLabel } from "@/lib/bet-line";
 import type { PickStatus } from "@prisma/client";
@@ -181,6 +183,7 @@ export default async function PicksPage({
   const picks = allPicks.filter((p) => !betTypeFilter || betTypeFilterCategory(p) === betTypeFilter);
   const summary = sqlSummary ?? summarizeLoadedPicks(picks);
 
+  const now = new Date();
   const loadedCapperIds = Array.from(new Set(picks.map((p) => p.capperId)));
   const [capperRecords, finalScores] = await Promise.all([
     getCapperAllTimeRecords(user.id, loadedCapperIds),
@@ -194,9 +197,18 @@ export default async function PicksPage({
         awayTeam: p.awayTeam,
         betDetail: p.betDetail,
         gameNumber: p.gameNumber,
-      }))
+      })),
+      now
     ),
   ]);
+
+  // Live status only for started, ungraded picks with no final result yet.
+  const feedStatuses = await getFeedStatusesForPicks(
+    picks
+      .filter((p) => p.status === "PENDING" && !finalScores.has(p.id))
+      .map((p) => ({ id: p.id, sportName: p.sport.name, homeTeam: p.homeTeam, awayTeam: p.awayTeam, gameTime: p.gameTime })),
+    now
+  );
 
   // Precomputed for every sport (plus "" for "All sports") so the filter bar
   // can update the bet-type options live, client-side, as soon as the sport
@@ -213,7 +225,6 @@ export default async function PicksPage({
   const dateFilterActive = Boolean(searchParams.date) || isRange;
   const hasActiveFilters = otherFiltersActive || dateFilterActive;
 
-  const now = new Date();
   const todayKey = easternDateKey(now);
   const dayFmt = (key: string, opts: Intl.DateTimeFormatOptions) => formatEastern(easternDayStart(key), opts);
 
@@ -231,7 +242,7 @@ export default async function PicksPage({
   // "Default" means the chip reads Today with nothing to clear.
   const dateIsDefault = !isRange && startDateKey === todayKey;
 
-  const ledgerPicks: (LedgerPickInput & { source: (typeof picks)[number] })[] = picks.map((p) => ({
+  const ledgerPicks: (LedgerPickInput & { source: (typeof picks)[number]; phase: PickPhase })[] = picks.map((p) => ({
     id: p.id,
     capperId: p.capperId,
     sportName: p.sport.name,
@@ -245,16 +256,24 @@ export default async function PicksPage({
     odds: p.odds,
     status: p.status,
     gameTime: p.gameTime,
+    phase: pickPhase({
+      status: p.status,
+      gameTime: p.gameTime,
+      now,
+      hasFinalResult: finalScores.has(p.id),
+      feedStatus: feedStatuses.get(p.id)?.status ?? null,
+    }),
     source: p,
   }));
   const hints = consensusHints(ledgerPicks);
 
-  const sections = splitIntoSections(ledgerPicks, now).map((section) => ({
+  const sections = splitIntoSections(ledgerPicks).map((section) => ({
     key: section.key,
     rows: section.picks.map((lp): LedgerRow => {
       const p = lp.source;
       const rec = capperRecords.get(p.capperId);
       const score = finalScores.get(p.id);
+      const liveScore = feedStatuses.get(p.id)?.score ?? null;
       const decidedUnits =
         p.status === "WIN"
           ? "+" + fmtUnits(winUnits(p.units, p.odds)) + "u"
@@ -275,8 +294,9 @@ export default async function PicksPage({
           : p.awayTeam + " @ " + p.homeTeam,
         oddsText: formatOdds(p.odds),
         unitsText: fmtUnits(p.units) + "u",
-        status: p.status,
-        isLive: isLiveNow(p, now),
+        phase: lp.phase,
+        currentStatus: p.status,
+        liveScore: liveScore ? liveScore.away + "-" + liveScore.home : null,
         resultUnitsText: decidedUnits,
         consensus: hints.get(p.id) ?? null,
       };

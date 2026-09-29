@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LocalGameTime } from "@/components/local-game-time";
 import { updatePickStatusAction, deletePickAction } from "@/server/actions/picks";
-import type { LedgerSection } from "@/lib/pick-display";
+import type { LedgerSection, PickPhase } from "@/lib/pick-display";
 
 // Serializable row model built on the server (page.tsx) - all display strings
 // are precomputed there via lib/pick-display so this file is layout only.
@@ -20,8 +20,9 @@ export type LedgerRow = {
   matchup: string; // "Away @ Home" or the final score for settled picks
   oddsText: string;
   unitsText: string;
-  status: "PENDING" | "WIN" | "LOSS" | "PUSH" | "CANCELLED";
-  isLive: boolean;
+  phase: PickPhase;
+  currentStatus: string; // stored PickStatus, for the menu's (current) marker
+  liveScore: string | null; // "away-home" from the live feed, when matched
   resultUnitsText: string | null; // "+0.91u" / "-1u" for WIN/LOSS
   consensus: string | null;
 };
@@ -36,25 +37,37 @@ const SECTION_LABEL: Record<LedgerSection, string> = {
 
 function StatusPill({ row }: { row: LedgerRow }) {
   const base = "inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium";
-  if (row.status === "WIN")
-    return (
-      <span className={base + " bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"}>
-        Won {row.resultUnitsText}
-      </span>
-    );
-  if (row.status === "LOSS")
-    return (
-      <span className={base + " bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400"}>
-        Lost {row.resultUnitsText}
-      </span>
-    );
-  if (row.status === "PUSH") return <span className={base + " bg-muted text-muted-foreground"}>Push</span>;
-  if (row.status === "CANCELLED") return <span className={base + " bg-muted text-muted-foreground"}>Cancelled</span>;
-  if (row.isLive)
-    return (
-      <span className={base + " bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"}>Live</span>
-    );
-  return <span className={base + " bg-muted text-muted-foreground"}>Pending</span>;
+  const neutral = base + " bg-muted text-muted-foreground";
+  switch (row.phase) {
+    case "won":
+      return (
+        <span className={base + " bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"}>
+          Won {row.resultUnitsText}
+        </span>
+      );
+    case "lost":
+      return (
+        <span className={base + " bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-400"}>
+          Lost {row.resultUnitsText}
+        </span>
+      );
+    case "push":
+      return <span className={neutral}>Push</span>;
+    case "cancelled":
+      return <span className={neutral}>Cancelled</span>;
+    case "grading":
+      return <span className={neutral}>Grading</span>;
+    case "awaiting":
+      return <span className={neutral}>Awaiting result</span>;
+    case "live":
+      return (
+        <span className={base + " bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"}>
+          Live{row.liveScore ? " " + row.liveScore : ""}
+        </span>
+      );
+    default:
+      return <span className={neutral}>Pending</span>;
+  }
 }
 
 // The "..." menu: manual Win/Loss/Push override plus Delete (with an inline
@@ -132,12 +145,12 @@ function RowMenu({ row }: { row: LedgerRow }) {
                 <button
                   key={s}
                   role="menuitem"
-                  disabled={busy || row.status === s}
+                  disabled={busy || row.currentStatus === s}
                   onClick={() => run(() => updatePickStatusAction(row.id, s))}
                   className={itemClass}
                 >
                   {s === "WIN" ? "Win" : s === "LOSS" ? "Loss" : "Push"}
-                  {row.status === s ? " (current)" : ""}
+                  {row.currentStatus === s ? " (current)" : ""}
                 </button>
               ))}
               <div className="my-1 border-t border-border-subtle" />

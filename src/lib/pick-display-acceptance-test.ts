@@ -7,7 +7,9 @@ import {
   consensusHints,
   marketTag,
   splitIntoSections,
-  isLiveNow,
+  pickPhase,
+  matchFeedGame,
+  type PickPhase,
   capperInitials,
   type LedgerPickInput,
 } from "./pick-display";
@@ -75,21 +77,58 @@ check("nfl 1h total", marketTag(pick({ betType: "TOTAL", period: "FIRST_HALF", s
 check("team total", marketTag(pick({ betType: "TEAM_TOTAL" })), "Team total");
 check("nrfi tag", marketTag(pick({ betType: "NRFI", betDetail: "YRFI" })), "YRFI");
 
-// Sections.
+// Phases: "Pending" means ONLY that the game hasn't started.
 const now = new Date("2026-09-29T20:00:00Z");
-const mk = (id: string, status: string, hoursFromNow: number) =>
-  pick({ id, status, gameTime: new Date(now.getTime() + hoursFromNow * 3600000) });
-const secs = splitIntoSections(
-  [mk("s1", "WIN", -5), mk("u2", "PENDING", 4), mk("l1", "PENDING", -1), mk("u1", "PENDING", 2), mk("s2", "LOSS", -8)],
-  now
-);
+const hrs = (h: number) => new Date(now.getTime() + h * 3600000);
+const ph = (over: Partial<Parameters<typeof pickPhase>[0]>) =>
+  pickPhase({ status: "PENDING", gameTime: hrs(2), now, hasFinalResult: false, feedStatus: null, ...over });
+
+check("before game time -> pending", ph({ gameTime: hrs(2) }), "pending");
+check("before game time, feed says preview -> pending", ph({ gameTime: hrs(2), feedStatus: "preview" }), "pending");
+check("started 1h ago, no feed status -> live (time window fallback)", ph({ gameTime: hrs(-1) }), "live");
+check("started 1h ago, feed live -> live", ph({ gameTime: hrs(-1), feedStatus: "live" }), "live");
+check("feed live before scheduled time (early start) -> live", ph({ gameTime: hrs(0.1), feedStatus: "live" }), "live");
+check("feed live even past the 8h window -> live", ph({ gameTime: hrs(-9), feedStatus: "live" }), "live");
+check("started 1h ago, feed says preview (delay) -> pending", ph({ gameTime: hrs(-1), feedStatus: "preview" }), "pending");
+check("final result row, ungraded -> grading", ph({ gameTime: hrs(-4), hasFinalResult: true }), "grading");
+check("feed final, ungraded, no result row yet -> grading", ph({ gameTime: hrs(-4), feedStatus: "final" }), "grading");
+check("final beats the 8h window -> grading", ph({ gameTime: hrs(-30), hasFinalResult: true }), "grading");
+check("started 9h ago, no result, no grade -> awaiting", ph({ gameTime: hrs(-9) }), "awaiting");
+check("started 9h ago, feed preview -> awaiting", ph({ gameTime: hrs(-9), feedStatus: "preview" }), "awaiting");
+check("exactly at the 8h edge is still live", ph({ gameTime: hrs(-8) }), "live");
+check("graded win", ph({ status: "WIN", gameTime: hrs(-3), hasFinalResult: true }), "won");
+check("graded loss", ph({ status: "LOSS", gameTime: hrs(-3) }), "lost");
+check("graded push", ph({ status: "PUSH", gameTime: hrs(-3) }), "push");
+check("graded wins even if feed says live", ph({ status: "WIN", feedStatus: "live" }), "won");
+check("cancelled", ph({ status: "CANCELLED", gameTime: hrs(-3) }), "cancelled");
+
+// Sections follow phase.
+const mk = (id: string, phase: PickPhase, hoursFromNow: number) => ({ id, phase, gameTime: hrs(hoursFromNow) });
+const secs = splitIntoSections([
+  mk("s1", "won", -5),
+  mk("u2", "pending", 4),
+  mk("l1", "live", -1),
+  mk("g1", "grading", -3),
+  mk("a1", "awaiting", -12),
+  mk("u1", "pending", 2),
+  mk("s2", "lost", -8),
+]);
 check("section order", secs.map((s) => s.key), ["live", "upcoming", "settled"]);
-check("upcoming ascending", secs[1].picks.map((p) => p.id), ["u1", "u2"]);
-check("settled descending", secs[2].picks.map((p) => p.id), ["s1", "s2"]);
-check("empty sections hidden", splitIntoSections([mk("u1", "PENDING", 2)], now).map((s) => s.key), ["upcoming"]);
-check("live within window", isLiveNow(mk("x", "PENDING", -1), now), true);
-check("stale pending is not 'live'", isLiveNow(mk("x", "PENDING", -30), now), false);
-check("settled is not live", isLiveNow(mk("x", "WIN", -1), now), false);
+check("only live phase in Live", secs[0].picks.map((p) => p.id), ["l1"]);
+check("only pending in Upcoming, ascending", secs[1].picks.map((p) => p.id), ["u1", "u2"]);
+check("settled holds graded + grading + awaiting, descending", secs[2].picks.map((p) => p.id), ["g1", "s1", "s2", "a1"]);
+check("empty sections hidden", splitIntoSections([mk("u1", "pending", 2)]).map((s) => s.key), ["upcoming"]);
+
+// Feed matching: exact team names, nearest start time within drift.
+const feed = [
+  { homeTeam: "New York Yankees", awayTeam: "Boston Red Sox", commenceTime: "2026-09-28T23:00:00Z", tag: "yesterday" },
+  { homeTeam: "New York Yankees", awayTeam: "Boston Red Sox", commenceTime: "2026-09-29T23:05:00Z", tag: "today" },
+  { homeTeam: "Chicago Cubs", awayTeam: "St. Louis Cardinals", commenceTime: "2026-09-29T23:05:00Z", tag: "other" },
+];
+const yank = { homeTeam: "New York Yankees", awayTeam: "Boston Red Sox", gameTime: new Date("2026-09-29T23:00:00Z") };
+check("feed match picks today's game in a series", matchFeedGame(feed, yank, 6 * 3600000)?.tag, "today");
+check("feed match: unknown teams -> null", matchFeedGame(feed, { ...yank, homeTeam: "Nope" }, 6 * 3600000), null);
+check("feed match: outside drift -> null", matchFeedGame(feed, { ...yank, gameTime: new Date("2026-10-05T23:00:00Z") }, 6 * 3600000), null);
 
 // Consensus.
 const hints = consensusHints([

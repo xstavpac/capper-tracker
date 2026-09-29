@@ -6,8 +6,9 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { easternDateRange } from "@/lib/dates";
 import { WIN_UNITS } from "@/server/data/capper-list-aggregates";
-import { LIVE_SPORTS } from "@/server/data/odds";
-import { matchGameResult } from "@/server/data/grading";
+import { LIVE_SPORTS, getLiveScoresForSport } from "@/server/data/odds";
+import { matchFeedGame, type GameFeedStatus } from "@/lib/pick-display";
+import { matchGameResult, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { recordStatsFromTotals, unitsWonOnBet, type RecordTotals } from "@/server/data/stats";
 
 export type PicksSummaryFilters = {
@@ -123,7 +124,8 @@ export async function getSportIdsWithPicks(userId: string): Promise<string[]> {
   return rows.map((r) => r.sportId);
 }
 
-// Final scores for settled picks, matched with the same matcher grading uses
+// Final scores for graded picks AND for ungraded picks whose game has started
+// (a match there means the game is final - the ledger shows "Grading"), matched with the same matcher grading uses
 // (matchGameResult) so the score shown is always the game the pick graded
 // against. One query for the whole page: game_results rows in the picks'
 // date span for the sports involved, narrow columns only. Picks with no match
@@ -138,10 +140,13 @@ export async function getFinalScoresForPicks(
     awayTeam: string;
     betDetail: string | null;
     gameNumber: number | null;
-  }[]
+  }[],
+  now: Date
 ): Promise<Map<string, { home: number; away: number }>> {
   const out = new Map<string, { home: number; away: number }>();
-  const settled = picks.filter((p) => p.status !== "PENDING" && p.status !== "CANCELLED");
+  const settled = picks.filter(
+    (p) => p.status !== "CANCELLED" && (p.status !== "PENDING" || p.gameTime.getTime() <= now.getTime())
+  );
   const keyByName = new Map(LIVE_SPORTS.map((s) => [s.label, s.key]));
   const sportKeys = Array.from(new Set(settled.map((p) => keyByName.get(p.sportName)).filter((k): k is string => !!k)));
   if (settled.length === 0 || sportKeys.length === 0) return out;
@@ -163,5 +168,43 @@ export async function getFinalScoresForPicks(
     );
     if (match) out.set(p.id, { home: match.game.homeScore, away: match.game.awayScore });
   }
+  return out;
+}
+
+// The game's own status (preview/live/final) for started, ungraded picks that
+// have no final result yet, from the shared live-score cache
+// (getLiveScoresForSport: one upstream fetch per sport per ~15s across the
+// fleet, no database reads). Only sports that actually have such picks are
+// asked. Any feed failure just leaves those picks without a status, so the
+// ledger falls back to the time window.
+export async function getFeedStatusesForPicks(
+  picks: { id: string; sportName: string; homeTeam: string; awayTeam: string; gameTime: Date }[],
+  now: Date
+): Promise<Map<string, { status: GameFeedStatus; score: { home: string; away: string } | null }>> {
+  const out = new Map<string, { status: GameFeedStatus; score: { home: string; away: string } | null }>();
+  const keyByName = new Map(LIVE_SPORTS.map((s) => [s.label, s.key]));
+  const bySport = new Map<string, typeof picks>();
+  for (const p of picks) {
+    if (p.gameTime.getTime() > now.getTime()) continue;
+    const key = keyByName.get(p.sportName);
+    if (!key) continue;
+    bySport.set(key, [...(bySport.get(key) ?? []), p]);
+  }
+  await Promise.all(
+    Array.from(bySport.entries()).map(async ([key, group]) => {
+      try {
+        const games = await getLiveScoresForSport(key);
+        for (const p of group) {
+          const g = matchFeedGame(games, p, MAX_GAME_TIME_DRIFT_MS);
+          if (!g) continue;
+          const home = g.scores?.find((x) => x.name === g.homeTeam)?.score;
+          const away = g.scores?.find((x) => x.name === g.awayTeam)?.score;
+          out.set(p.id, { status: g.status, score: home !== undefined && away !== undefined ? { home, away } : null });
+        }
+      } catch (err) {
+        console.error("[picks-ledger] live status unavailable for", key, err);
+      }
+    })
+  );
   return out;
 }
