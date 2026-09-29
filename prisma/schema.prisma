@@ -355,6 +355,9 @@ model Pick {
   // raw SQL) for regradeAllFuzzyMatchedPicks. Prisma 5 has no schema syntax for
   // partial indexes, so `prisma migrate dev` / `migrate diff` will report it as
   // drift and try to DROP it - do not accept that. See docs/partial-indexes.md.
+  // Likewise NOT EXPRESSIBLE HERE: picks_user_capper_streak_idx ON picks
+  //   (userId, capperId, gameTime DESC, createdAt DESC, (id COLLATE "C") DESC) INCLUDE (status, units, odds)
+  // (migration 20260930090000_add_picks_capper_streak_index) - the /cappers Hottest/Coldest streak lookup.
   @@map("picks")
 }
 

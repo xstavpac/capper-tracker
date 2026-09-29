@@ -7,8 +7,8 @@ import { CapperForm } from "@/components/dashboard/capper-form";
 import { MergeCappersPanel } from "@/components/dashboard/merge-cappers-panel";
 import { CappersTimeTabs } from "@/components/dashboard/cappers-time-tabs";
 import { CappersStatCards } from "@/components/dashboard/cappers-stat-cards";
-import { MostActivePanel } from "@/components/dashboard/most-active-panel";
-import { HottestPanel } from "@/components/dashboard/hottest-panel";
+import { CapperPanel } from "@/components/dashboard/capper-panel";
+import { FlameIcon, SnowflakeIcon, TrendingUpIcon, UsersIcon, ActivityIcon } from "@/components/dashboard/cappers-icons";
 import { TopCappers } from "@/components/dashboard/top-cappers";
 import { CappersLeaderboardCard } from "@/components/dashboard/cappers-leaderboard-card";
 
@@ -39,10 +39,10 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Cappers</h1>
-          <p className="mt-1 text-xs text-muted-foreground">{data.capperCount + " tracked capper" + (data.capperCount === 1 ? "" : "s")}</p>
-        </div>
+        <h1 className="flex items-center gap-2.5 text-xl font-semibold">
+          <UsersIcon className="h-6 w-6 text-brand-600" />
+          Cappers
+        </h1>
         <CapperForm atLimit={false} />
       </div>
 
@@ -55,10 +55,12 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
       ) : (
         <>
           <CappersTimeTabs params={params} />
-          <CappersStatCards stats={data.overview} range={params.range} />
-          <div className="grid grid-cols-1 items-stretch gap-6 min-[769px]:grid-cols-2">
-            <MostActivePanel entries={data.mostActive} />
-            <HottestPanel entries={data.hottest} />
+          <CappersStatCards stats={data.overview} capperCount={data.capperCount} range={params.range} />
+          <div className="grid grid-cols-1 items-stretch gap-4 min-[769px]:grid-cols-2 sm:gap-6">
+            <CapperPanel panel="active" icon={<ActivityIcon />} initial={data.mostActive} />
+            <CapperPanel panel="hottest" icon={<FlameIcon />} initial={data.hottest} />
+            <CapperPanel panel="winners" icon={<TrendingUpIcon />} initial={data.winners} />
+            <CapperPanel panel="coldest" icon={<SnowflakeIcon />} initial={data.coldest} />
           </div>
           <TopCappers entries={data.top} sparklines={data.sparklines} />
           <CappersLeaderboardCard
