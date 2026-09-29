@@ -14,6 +14,12 @@ export const cacheKeys = {
   // pass the SAME fetchDate value it used for its own DB write, not a
   // separately-computed one - see each write path's own comment.
   odds: (sportKey: string, fetchDate: string) => `odds:${sportKey}:${fetchDate}`,
+  // The ticker's slim view of the same (sportKey, fetchDate) snapshot - only
+  // id/teams/commenceTime per game, never the bookmaker blob. Its OWN key (so
+  // it can't collide with the full-blob entry above) but it is TAGGED with
+  // odds(sportKey, fetchDate), which is what every OddsSnapshot write path
+  // revalidates - see tickerOddsCacheParams (odds.ts).
+  tickerOdds: (sportKey: string, fetchDate: string) => `ticker-odds:${sportKey}:${fetchDate}`,
   liveScores: (sportKey: string) => `live-scores:${sportKey}`,
   // Per-GAME live state (win probability, current base/out, current pitcher -
   // see live-game-state.ts), distinct from liveScores above which is one
