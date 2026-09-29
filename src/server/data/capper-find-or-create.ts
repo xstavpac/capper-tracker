@@ -21,7 +21,6 @@
 // (@updatedAt). isFavorite and createdAt have database defaults and are left to
 // them. capper-find-or-create-acceptance-test.ts checks this list against
 // Prisma's DMMF so a newly added required column fails CI.
-import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient, type Source, type Capper } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { normalizeName } from "@/lib/fuzzy-match";
@@ -80,7 +79,7 @@ export async function findOrCreateCapper(
   }
 
   const values: Record<InsertColumn, unknown> = {
-    id: randomUUID(),
+    id: globalThis.crypto.randomUUID(),
     userId,
     name: trimmed,
     photoUrl: data.photoUrl ?? null,
