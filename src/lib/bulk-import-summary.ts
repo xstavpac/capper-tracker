@@ -18,6 +18,7 @@
 // covered by a plain tsx acceptance test.
 
 import { isSkippedAsDuplicate, type DuplicateChoice } from "./duplicate-pick-detection";
+import { detectUnsupportedPropLine } from "./parse-catalog";
 
 // A TOTAL pick whose own text had no parseable number, flagged with a
 // suggested market line - same default-excluded-until-confirmed shape as a
@@ -97,4 +98,35 @@ export function totalSkipped(categories: SkippedPickCategories): number {
     categories.duplicates.length +
     categories.serverSkipped
   );
+}
+
+// ---------------------------------------------------------------------------
+// Reason labels + counts for the "couldn't be identified" list.
+//
+// A line in `unresolvedLines` is either a genuine "couldn't match a sport or
+// team" miss (no reason - the list's own header explains it) or a
+// player-prop / stat-total shape this app can't import yet (MLB/NHL/NBA/WNBA
+// player props, unsupported NFL markets, team or game stat totals - see
+// unsupported-prop-vocab.ts), which gets its own honest reason. Both the
+// on-screen list and the import-skipped-line log derive it from the same
+// detector, so the label a user sees is the reason recorded for it.
+// ---------------------------------------------------------------------------
+
+export type UnresolvedLineEntry = { text: string; reason: string | null };
+
+export function describeUnresolvedLines(lines: string[]): UnresolvedLineEntry[] {
+  return lines.map((text) => ({ text, reason: detectUnsupportedPropLine(text)?.reason ?? null }));
+}
+
+// How many unresolved lines carry an "isn't supported yet" reason, grouped by
+// that reason, most common first. Lines with no reason are not counted here -
+// they're still in the list's overall count (totalSkipped).
+export function unresolvedReasonBreakdown(entries: UnresolvedLineEntry[]): { reason: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const e of entries) {
+    if (e.reason) counts.set(e.reason, (counts.get(e.reason) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
 }

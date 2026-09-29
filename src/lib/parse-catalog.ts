@@ -1,7 +1,18 @@
 import { normalizeName } from "@/lib/fuzzy-match";
 import { looksPickLikeHeader } from "@/lib/market-hint";
-import { parsePlayerProp, pickPeriodFromText, extractLine, type SegmentPeriod } from "@/lib/bet-line";
+import {
+  parsePlayerProp,
+  pickPeriodFromText,
+  extractLine,
+  normalizeNPlusPlayerProp,
+  type SegmentPeriod,
+} from "@/lib/bet-line";
 import { isKnownFullPlayerName } from "@/lib/player-roster-fallback";
+import {
+  detectUnsupportedProp,
+  detectUnsupportedNflStat,
+  type UnsupportedPropInfo,
+} from "@/lib/unsupported-prop-vocab";
 
 export type ParsedPick = {
   capperName: string;
@@ -1395,8 +1406,62 @@ function looksLikePick(text: string): boolean {
     // line) - two things named as opposing sides is itself a strong "this is
     // describing a game, not a person's name" signal, independent of whether
     // either side is a team this app actually has a nickname list for.
-    /\b\w[\w'.-]*\s+(?:vs\.?|@)\s+\w/i.test(text)
+    /\b\w[\w'.-]*\s+(?:vs\.?|@)\s+\w/i.test(text) ||
+    // MLB/NHL player-prop shapes ("2+ shots on goal", "anytime goal scorer",
+    // "Chris Sale o5.5 K") - no signed number or over/under word for the
+    // signals above to catch, so they used to fall through to the capper-name
+    // fallback and vanish. See unsupported-prop-vocab.ts.
+    detectUnsupportedPropLine(text) !== null ||
+    // "Zach Ertz 3+ receptions" - a SUPPORTED NFL market in N+ form. No signed
+    // number / over-under word here either, so it was read as a capper name
+    // (and the next pick got credited to that fake capper). parsePickText
+    // rewrites it to "Over 2.5 receptions".
+    normalizeNPlusPlayerProp(text) !== text
   );
+}
+
+// MLB/NHL (and other not-yet-supported) player-prop vocabulary - see
+// unsupported-prop-vocab.ts. An NFL prop parsePlayerProp already recognizes is
+// never reported here, so NFL prop behavior is untouched. The team-subject
+// check reuses detectSport (explicit sport code or a team nickname before the
+// number), so game/team totals ("Yankees over 4.5 runs", "NBA LeBron James
+// over 25.5 points") keep flowing to their normal resolvers.
+export function detectUnsupportedPropLine(text: string): UnsupportedPropInfo | null {
+  // NFL stats with no grader ("3+ sacks", "2+ passing completions") are checked
+  // first: parsePlayerProp would otherwise claim "passing completions" as
+  // PASS_YDS and let it import as a yardage pick.
+  const nflUnsupported = detectUnsupportedNflStat(text);
+  if (nflUnsupported) return nflUnsupported;
+  if (parsePlayerProp(text)) return null;
+  return detectUnsupportedProp(
+    text,
+    (subject) => detectSport(subject, true).sportName !== "" || RECOGNIZED_TEAM_PHRASES.has(subject.toLowerCase()),
+    classifyTeamSide
+  );
+}
+
+// One side of an "X vs Y" matchup: purely a team, a team plus extra words (a
+// player's name after the matchup: "Yankees vs Red Sox Schlittler"), or
+// unrecognized. The longest known team phrase is stripped; leftover words that
+// are themselves words of some team phrase ("los angeles" left over from
+// "Los Angeles Lakers") still count as part of the team name. Built lazily -
+// RECOGNIZED_TEAM_PHRASES is declared further down this module.
+let teamPhrasesLongestFirst: string[] | null = null;
+let teamPhraseWords: Set<string> | null = null;
+function classifyTeamSide(side: string): "team" | "team+extra" | "none" {
+  if (!teamPhrasesLongestFirst || !teamPhraseWords) {
+    teamPhrasesLongestFirst = [...RECOGNIZED_TEAM_PHRASES].sort((a, b) => b.length - a.length);
+    teamPhraseWords = new Set(teamPhrasesLongestFirst.flatMap((p) => p.split(/\s+/)));
+  }
+  const lower = side.toLowerCase().trim();
+  if (RECOGNIZED_TEAM_PHRASES.has(lower)) return "team";
+  for (const phrase of teamPhrasesLongestFirst) {
+    const re = teamPhraseRegex(phrase);
+    if (!re.test(lower)) continue;
+    const leftover = lower.replace(re, " ").split(/\s+/).filter(Boolean);
+    return leftover.every((w) => teamPhraseWords!.has(w)) ? "team" : "team+extra";
+  }
+  return "none";
 }
 
 // Builds the word-boundary regex a multi-word team phrase ("red sox", "blue
@@ -1679,6 +1744,10 @@ export function parsePickText(description: string): {
   cleanDescription: string;
   totalSide?: "over" | "under";
 } {
+  // "Zach Ertz 3+ receptions" -> "Zach Ertz Over 2.5 receptions" (supported NFL
+  // markets only - see normalizeNPlusPlayerProp), so the stored betDetail
+  // carries the over/under line that grading and odds lookup read.
+  description = normalizeNPlusPlayerProp(description);
   let odds: number | null = null;
   let units: number | null = null;
   const parens = [...description.matchAll(/\(([^)]+)\)/g)];
@@ -1751,7 +1820,10 @@ export function parsePickText(description: string): {
     /\b(no|yes)\s+run\s+(?:first|1st)(?:\s+inning)?\b/i.test(cleanDescription)
   ) {
     betType = "NRFI";
-  } else if (parsePlayerProp(cleanDescription)) {
+  } else if (parsePlayerProp(cleanDescription) || detectUnsupportedPropLine(cleanDescription)?.sport) {
+    // (detectUnsupportedPropLine(...).sport is only set for a confidently MLB/
+    // NHL prop - a generic "points"/"assists" line, which NBA uses too, keeps
+    // its existing classification.)
     // Checked before the ML/spread/total keyword branches below - a
     // player-prop pick ("Puka Nacua Anytime TD", "Josh Allen Over 275.5
     // Passing Yards") often contains an over/under/number that would
@@ -2355,6 +2427,9 @@ function findPlayerPick(
   // text (not just `candidate`), since the market phrase sits after the
   // number/keyword the name regexes above stopped at.
   if (parsePlayerProp(text)) return null;
+  // Same exclusivity for MLB/NHL prop vocabulary (Heliot Ramos, Dustin Wolf and
+  // Nick Paul all share a surname with a KNOWN_TENNIS_PLAYERS entry).
+  if (detectUnsupportedPropLine(text)) return null;
 
   const lower = candidate.toLowerCase();
   const words = lower.split(/\s+/);
@@ -2637,6 +2712,13 @@ export function parseCatalog(
         currentCapper = inlineMatch;
         continue;
       }
+      // An MLB/NHL player-prop line can't be imported yet - surface it instead
+      // of letting it be classified as a game total/moneyline or dropped.
+      if (detectUnsupportedPropLine(remainder)) {
+        unresolved.push(line);
+        unresolvedCapperNames.push(inlineMatch);
+        continue;
+      }
       const detected = detectSport(remainder);
       if (!detected.sportName) {
         const pairResolved = resolveAmbiguousPair(remainder);
@@ -2770,6 +2852,16 @@ export function parseCatalog(
     // (detectSport, parsePickText, findTeamNicknames, ...) only ever sees
     // pickText - the game-number token removed.
     const { gameNumber: headerGameNumber, rest: pickText } = extractGameNumber(strippedText);
+
+    // MLB/NHL player-prop lines (with or without a sport prefix / matchup) are
+    // not importable yet. Routed straight to `unresolved` BEFORE any sport/
+    // team/tennis resolution so they can't become a game TOTAL/MONEYLINE, an
+    // ATP pick, or a capper-name header. See unsupported-prop-vocab.ts.
+    if (detectUnsupportedPropLine(pickText)) {
+      unresolved.push(strippedText);
+      unresolvedCapperNames.push(currentCapper || "Unknown");
+      continue;
+    }
     const detected = detectSport(pickText, !afterBlank || looksLikePick(pickText));
 
     // A brand-new capper's first-ever line, written as "Name - pick" with an

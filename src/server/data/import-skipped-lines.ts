@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { computeMarketHint } from "@/lib/market-hint";
+import { detectUnsupportedPropLine } from "@/lib/parse-catalog";
 import type { ImportSkipStage } from "@prisma/client";
 
 // Write side of the import skipped-line log (ImportSkippedLine). Nothing in
@@ -69,14 +70,29 @@ export function parseSkippedLineEntries(payload: ParseSkippedLinesPayload): Skip
       rawText: l.text,
       reason: l.reason,
     })),
-    ...payload.unresolved.slice(0, MAX_LINES).map((l) => ({
-      stage: payload.recoveryRan ? ("RECOVERY_UNRESOLVED" as const) : ("PARSE_UNRESOLVED" as const),
-      capperName: l.capperName,
-      rawText: l.text,
-      reason: payload.recoveryRan
-        ? "Still unresolved after the live-schedule / roster recovery pass"
-        : "parseCatalog left it unresolved; the recovery pass failed",
-    })),
+    ...payload.unresolved.slice(0, MAX_LINES).map((l) => {
+      // A line declined as a player-prop / stat-total shape we can't import
+      // yet (MLB/NHL/NBA/WNBA props, unsupported NFL markets, team or game
+      // stat totals) is its own stage, with the same reason the import
+      // preview shows - not lumped into the generic unresolved buckets.
+      const unsupported = detectUnsupportedPropLine(l.text);
+      if (unsupported) {
+        return {
+          stage: "PROP_UNSUPPORTED" as const,
+          capperName: l.capperName,
+          rawText: l.text,
+          reason: unsupported.reason,
+        };
+      }
+      return {
+        stage: payload.recoveryRan ? ("RECOVERY_UNRESOLVED" as const) : ("PARSE_UNRESOLVED" as const),
+        capperName: l.capperName,
+        rawText: l.text,
+        reason: payload.recoveryRan
+          ? "Still unresolved after the live-schedule / roster recovery pass"
+          : "parseCatalog left it unresolved; the recovery pass failed",
+      };
+    }),
   ];
 }
 

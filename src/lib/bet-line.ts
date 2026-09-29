@@ -504,6 +504,31 @@ const PLAYER_PROP_STAT_PATTERNS: [Exclude<PlayerPropMarket, "TD">, RegExp][] = [
   ["RECEPTIONS", /\breceptions?\b|\brec\b/i],
 ];
 
+// "N+" ("3+ receptions", "80+ rushing yards") is the "N or more" threshold
+// phrasing, exactly "over N - 0.5" for these integer-valued stats - the line
+// every downstream reader (parsePlayerPropLine for grading, extractLine, the
+// market/odds lookup) already understands. Rewritten to that spelled-out form
+// ONLY when the text right after the "N+" is one of this app's supported
+// yardage/receptions markets (PLAYER_PROP_STAT_PATTERNS), so:
+//   - "2+ TDs" is untouched (parseTouchdownProp keeps its own multi-TD
+//     "unsupported" handling - TD isn't in PLAYER_PROP_STAT_PATTERNS);
+//   - "1+ sacks", "3+ passing completions" etc. aren't rewritten (see
+//     unsupported-prop-vocab.ts, which routes them to unresolved);
+//   - text that already states its own over/under number is left alone.
+// Integer thresholds only; anything else ("2.5+") is not a real phrasing.
+export function normalizeNPlusPlayerProp(text: string): string {
+  if (/\b(?:over|under)\s+\d/i.test(text)) return text;
+  return text.replace(/(?<![\w.-])(\d+)\+\s*(?=\S)/g, (whole, digits: string, offset: number) => {
+    const n = parseInt(digits, 10);
+    if (n < 1) return whole;
+    const after = text.slice(offset + whole.length);
+    const isSupportedMarket = PLAYER_PROP_STAT_PATTERNS.some(([, pattern]) =>
+      new RegExp("^(?:" + pattern.source + ")", "i").test(after)
+    );
+    return isSupportedMarket ? "Over " + (n - 0.5) + " " : whole;
+  });
+}
+
 // Generalizes parseTouchdownProp to every structured player-prop market this
 // app recognizes (PropMarket in schema.prisma) - passing/rushing/receiving
 // yards, receptions, and touchdowns - so any caller that needs to know WHICH

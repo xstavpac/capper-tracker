@@ -45,28 +45,62 @@ Leon Draisaitl anytime goal scorer`;
 
 async function main() {
   // ---- parseCatalog: the reported paste ----
+  // The prop-safety fix (this PR) routes every one of these lines to
+  // `unresolved` instead of eating it as a capper header, so nothing is
+  // silently dropped any more; the parse-time log maps them to PROP_UNSUPPORTED.
   const out = parseCatalog(PASTE, []);
-  // Becomes true once fix/mlb-nhl-prop-line-safety lands: the prop lines are
-  // then unresolved instead of dropped, and the parse-time log must map that
-  // reason to PROP_UNSUPPORTED (not yet wired - see the PR description).
-  const propSafetyOnMain = out.unresolved.length > 0;
-  if (propSafetyOnMain) {
-    expect("prop-safety detected: wire unresolved reason -> PROP_UNSUPPORTED and assert those rows here", true, false);
-  } else {
-    expect("paste yields 6 droppedAsHeaders", out.droppedAsHeaders.length, 6);
-    expect("dropped lines keep their exact text", out.droppedAsHeaders.map((d) => d.text), PASTE.split("\n").filter((l) => l !== "KRASH" && l !== "RBS"));
-    expect("KRASH, RBS never appear as dropped", out.droppedAsHeaders.some((d) => d.text === "KRASH" || d.text === "RBS"), false);
-    expect("first three attributed to KRASH, last three to RBS", out.droppedAsHeaders.map((d) => d.capperName), ["KRASH", "KRASH", "KRASH", "RBS", "RBS", "RBS"]);
-  }
+  const proplines = PASTE.split("\n").filter((l) => l !== "KRASH" && l !== "RBS");
+  expect("paste yields 0 droppedAsHeaders", out.droppedAsHeaders.length, 0);
+  expect("paste yields 0 droppedInline", out.droppedInline.length, 0);
+  expect("all 6 prop lines are unresolved, with their exact text", out.unresolved, proplines);
+  expect("first three attributed to KRASH, last three to RBS", out.unresolvedCapperNames, ["KRASH", "KRASH", "KRASH", "RBS", "RBS", "RBS"]);
+  expect("KRASH, RBS never appear as unresolved lines", out.unresolved.some((l) => l === "KRASH" || l === "RBS"), false);
   expect("no picks or parlays produced", [out.picks.length, out.parlays.length], [0, 0]);
 
-  // Behavior-neutral: dropped lines still become the active header, as before.
+  // The parse-time log entries for that paste: 6 PROP_UNSUPPORTED rows, none PARSE_SILENT.
+  const pasteEntries = parseSkippedLineEntries({
+    silent: [...out.droppedAsHeaders, ...out.droppedInline].map((d) => ({ text: d.text, capperName: d.capperName, reason: "n/a" })),
+    unresolved: out.unresolved.map((text, i) => ({ text, capperName: out.unresolvedCapperNames[i] })),
+    recoveryRan: true,
+  });
+  expect("KRASH/RBS paste logs 6 PROP_UNSUPPORTED rows", pasteEntries.filter((e) => e.stage === "PROP_UNSUPPORTED").length, 6);
+  expect("KRASH/RBS paste logs 0 PARSE_SILENT rows", pasteEntries.filter((e) => e.stage === "PARSE_SILENT").length, 0);
+  expect("KRASH/RBS paste logs nothing else", pasteEntries.length, 6);
+  expect("PROP_UNSUPPORTED rows carry the NHL reason and their capper", pasteEntries.map((e) => [e.capperName, e.reason]), [
+    ["KRASH", "NHL player props aren't supported yet"],
+    ["KRASH", "NHL player props aren't supported yet"],
+    ["KRASH", "NHL player props aren't supported yet"],
+    ["RBS", "NHL player props aren't supported yet"],
+    ["RBS", "NHL player props aren't supported yet"],
+    ["RBS", "NHL player props aren't supported yet"],
+  ]);
+  // Every family of "isn't supported yet" reason maps to the same stage; a plain miss does not.
+  const reasonCases: [string, string][] = [
+    ["Chris Sale over 5.5 K", "MLB player props aren't supported yet"],
+    ["NBA LeBron James over 25.5 points", "NBA player props aren't supported yet"],
+    ["WNBA A'ja Wilson over 9.5 rebounds", "WNBA player props aren't supported yet"],
+    ["Patrick Mahomes over 22.5 passing completions", "This NFL prop market isn't supported yet"],
+    ["Lakers over 45.5 rebounds", "Team stat totals aren't supported yet"],
+    ["Yankees vs Red Sox over 20.5 hits", "Game stat totals aren't supported yet"],
+    ["Jalen Brunson over 40.5 PRA", "Player prop not supported yet"],
+  ];
+  for (const [text, reason] of reasonCases) {
+    const [entry] = parseSkippedLineEntries({ silent: [], unresolved: [{ text, capperName: "Cap" }], recoveryRan: true });
+    expect(`"${text}" -> PROP_UNSUPPORTED / "${reason}"`, [entry.stage, entry.reason], ["PROP_UNSUPPORTED", reason]);
+  }
+  expect(
+    "a plain unresolved miss stays RECOVERY_UNRESOLVED",
+    parseSkippedLineEntries({ silent: [], unresolved: [{ text: "Foo Bar over 3.5", capperName: "Cap" }], recoveryRan: true })[0].stage,
+    "RECOVERY_UNRESOLVED"
+  );
+
+  // A prop line no longer becomes the active header: the next real pick keeps its real capper.
   const mixed = parseCatalog(`KRASH\nIvan Demidov 2+ shots on goal\nYankees ML`, []);
-  expect("pick after a dropped line keeps the dropped line as header (unchanged behavior)", mixed.picks.map((p) => p.capperName), ["Ivan Demidov 2+ shots on goal"]);
+  expect("pick after a prop line is attributed to KRASH, not to the prop line", mixed.picks.map((p) => [p.capperName, p.description]), [["KRASH", "Yankees ML"]]);
   expect("plain capper header is not dropped", parseCatalog("Bambino Bets\nYankees ML", []).droppedAsHeaders, []);
   expect("header with a digit (\"Sharp Guru 2\") is a (tolerated) false positive", parseCatalog("Sharp Guru 2\nYankees ML", []).droppedAsHeaders.length, 1);
-  const inline = parseCatalog(`Sharp Sam Some Guy 2+ shots on goal`, ["Sharp Sam"]);
-  expect("line after a saved capper's name that resolves to nothing is droppedInline", inline.droppedInline, [{ text: "Sharp Sam Some Guy 2+ shots on goal", capperName: "Sharp Sam" }]);
+  const inline = parseCatalog(`Sharp Sam Some Guy 2+ wins`, ["Sharp Sam"]);
+  expect("line after a saved capper's name that resolves to nothing is droppedInline", inline.droppedInline, [{ text: "Sharp Sam Some Guy 2+ wins", capperName: "Sharp Sam" }]);
 
   // ---- marketHint ----
   expect("hint: shots on goal", computeMarketHint("Ivan Demidov 2+ shots on goal"), "shots on goal");
@@ -82,7 +116,7 @@ async function main() {
   spy();
   const parseEntries = parseSkippedLineEntries({
     silent: [{ text: "Ivan Demidov 2+ shots on goal", capperName: "KRASH", reason: "Read as a capper header but looks like a pick" }],
-    unresolved: [{ text: "Foo Bar over 3.5 saves", capperName: "RBS" }],
+    unresolved: [{ text: "Foo Bar over 3.5", capperName: "RBS" }],
     recoveryRan: true,
   });
   await recordImportSkippedLines("user-1", parseEntries);
@@ -91,8 +125,8 @@ async function main() {
     userId: "user-1", capperName: "KRASH", rawText: "Ivan Demidov 2+ shots on goal", guessedSport: null,
     stage: "PARSE_SILENT", reason: "Read as a capper header but looks like a pick", marketHint: "shots on goal",
   });
-  expect("recovery leftover is RECOVERY_UNRESOLVED", [calls[0][1].stage, calls[0][1].marketHint], ["RECOVERY_UNRESOLVED", "saves"]);
-  expect("recovery failure downgrades to PARSE_UNRESOLVED", parseSkippedLineEntries({ silent: [], unresolved: [{ text: "x 2+ hits", capperName: "A" }], recoveryRan: false })[0].stage, "PARSE_UNRESOLVED");
+  expect("recovery leftover is RECOVERY_UNRESOLVED", [calls[0][1].stage, calls[0][1].marketHint], ["RECOVERY_UNRESOLVED", "over/under"]);
+  expect("recovery failure downgrades to PARSE_UNRESOLVED", parseSkippedLineEntries({ silent: [], unresolved: [{ text: "Foo Bar over 3.5", capperName: "A" }], recoveryRan: false })[0].stage, "PARSE_UNRESOLVED");
 
   // ---- resolution-time stages: one batch, each stage's row ----
   spy();

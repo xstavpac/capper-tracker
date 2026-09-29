@@ -22,7 +22,13 @@
 // capper whose picks ALL needed recovery - none of their own lines ever
 // entered the resolved-picks list either, so every one of them was
 // attributed to whichever earlier capper's pick happened to appear first.
-import { parsePickText, extractGameNumber, withGameNumberSuffix, type ParsedPick } from "@/lib/parse-catalog";
+import {
+  parsePickText,
+  extractGameNumber,
+  withGameNumberSuffix,
+  detectUnsupportedPropLine,
+  type ParsedPick,
+} from "@/lib/parse-catalog";
 import { resolveLineAgainstLiveTeams, parseFallbackBetText, type LiveTeam, type LineResolution } from "@/lib/live-team-fallback";
 import { resolvePlayerPropAgainstRoster } from "@/lib/player-roster-fallback";
 import { parsePlayerProp } from "@/lib/bet-line";
@@ -54,7 +60,7 @@ export function recoverUnresolvedLines(
   // twice costs nothing beyond this function's own runtime.
   const nonPlayerPropResolutions = new Map<string, LineResolution>();
   for (const line of unresolved) {
-    if (isPlayerProp.has(line)) continue;
+    if (isPlayerProp.has(line) || detectUnsupportedPropLine(line)) continue;
     nonPlayerPropResolutions.set(line, resolveLineAgainstLiveTeams(line, liveTeams));
   }
 
@@ -83,6 +89,13 @@ export function recoverUnresolvedLines(
     // nonPlayerPropResolutions below are keyed by the exact original `line`
     // string from the lookups built above.
     const { gameNumber, rest: lineForParsing } = extractGameNumber(line);
+
+    // MLB/NHL player props have no roster or team path yet - never let the
+    // live-team fallback match a word inside a player's name to a team.
+    if (detectUnsupportedPropLine(line)) {
+      stillUnresolved.push(line);
+      continue;
+    }
 
     if (isPlayerProp.has(line)) {
       // Only ever narrows a bare-surname collision - never affects the

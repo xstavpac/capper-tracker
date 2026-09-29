@@ -23,6 +23,8 @@ import {
   isPendingOrRejectedTotalLine as isPendingOrRejectedTotalLineShared,
   partitionReviewEntries,
   totalSkipped,
+  describeUnresolvedLines,
+  unresolvedReasonBreakdown,
 } from "@/lib/bulk-import-summary";
 import { betTypeLabel } from "@/lib/bet-line";
 
@@ -410,6 +412,11 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const ambiguousEntries = allEntries.filter((e) => e.p.ambiguous);
   const validPicks = validEntries.map((e) => e.p);
   const ambiguousPicks = ambiguousEntries.map((e) => e.p);
+  // Reason labels/counts for the "couldn't be identified" list - derived in
+  // lib/bulk-import-summary.ts (the count itself stays totalSkipped's
+  // unresolvedLines.length).
+  const unresolvedEntries = describeUnresolvedLines(unresolvedLines);
+  const unresolvedBreakdown = unresolvedReasonBreakdown(unresolvedEntries);
 
   // A flagged duplicate is excluded from the import by default - "Skip" just
   // confirms that exclusion explicitly, "Import anyway" is the only way back
@@ -701,10 +708,20 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                 sport or team - not imported and not attributed to any capper. Add these manually:
               </div>
               <ul className="mt-1 list-disc pl-4">
-                {unresolvedLines.map((l, i) => (
-                  <li key={i}>{l}</li>
+                {unresolvedEntries.map((entry, i) => (
+                  <li key={i}>
+                    {entry.text}
+                    {entry.reason && (
+                      <span className="ml-1 font-medium text-amber-700 dark:text-amber-400">- {entry.reason}</span>
+                    )}
+                  </li>
                 ))}
               </ul>
+              {unresolvedBreakdown.length > 0 && (
+                <div className="mt-1.5 text-amber-700 dark:text-amber-400">
+                  {unresolvedBreakdown.map((b) => b.count + " - " + b.reason).join("; ")}
+                </div>
+              )}
             </div>
           )}
 
