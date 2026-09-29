@@ -144,17 +144,17 @@ export function CappersLeaderboardCard({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
+          <table className="w-full min-w-[720px] max-[480px]:min-w-0 border-collapse text-sm max-[480px]:text-xs">
             <thead>
               <tr className="border-b border-border-subtle text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <th className="w-10 px-3 py-2">#</th>
-                <th className="px-3 py-2">Capper</th>
-                <th className="px-3 py-2">Last 20</th>
-                <th className="px-3 py-2">Record</th>
-                <th className="px-3 py-2">Win</th>
-                <th className="px-3 py-2">ROI</th>
-                <th className="px-3 py-2">Units</th>
-                <th className="w-8 px-3 py-2" />
+                <th className="w-10 max-[480px]:w-6 px-3 py-2 max-[480px]:px-1">#</th>
+                <th className="px-3 py-2 max-[480px]:px-1">Capper</th>
+                <th className="px-3 py-2 max-[480px]:hidden">Last 20</th>
+                <th className="px-3 py-2 max-[480px]:hidden">Record</th>
+                <th className="px-3 py-2 max-[480px]:px-1">Win</th>
+                <th className="px-3 py-2 max-[480px]:px-1">ROI</th>
+                <th className="px-3 py-2 max-[480px]:px-1">Units</th>
+                <th className="w-8 px-3 py-2 max-[480px]:px-1" />
               </tr>
             </thead>
             <tbody>
@@ -164,8 +164,8 @@ export function CappersLeaderboardCard({
                 const label = sparklineLabel(series);
                 return (
                   <ClickableRow key={e.capperId} href={href}>
-                    <td className="px-3 py-2 text-muted-foreground">{first + i + 1}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 max-[480px]:px-1 text-muted-foreground">{first + i + 1}</td>
+                    <td className="px-3 py-2 max-[480px]:max-w-[7.5rem] max-[480px]:px-1">
                       <div className="flex items-center gap-2.5">
                         <Avatar name={e.name} colorTag={e.colorTag} size={28} />
                         <div className="min-w-0">
@@ -179,17 +179,17 @@ export function CappersLeaderboardCard({
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2 max-[480px]:hidden">
                       <div className="w-20">
                         <CapperSparkline series={series} width={80} height={20} className="block" />
                         {label && <div className={"mt-0.5 text-[10px] leading-none " + LABEL_TONE[label.tone]}>{label.text}</div>}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{formatRecord(e.stats)}</td>
-                    <td className="px-3 py-2 font-medium text-foreground">{Math.round(e.stats.winPct)}%</td>
-                    <td className={"whitespace-nowrap px-3 py-2 font-medium " + signColor(e.stats.roi)}>{signed(e.stats.roi)}%</td>
-                    <td className={"whitespace-nowrap px-3 py-2 font-medium " + signColor(e.stats.netUnits)}>{signed(e.stats.netUnits)}u</td>
-                    <td className="px-3 py-2 text-muted-foreground">
+                    <td className="whitespace-nowrap px-3 py-2 max-[480px]:hidden text-muted-foreground">{formatRecord(e.stats)}</td>
+                    <td className="px-3 py-2 max-[480px]:px-1 font-medium text-foreground">{Math.round(e.stats.winPct)}%</td>
+                    <td className={"whitespace-nowrap px-3 py-2 max-[480px]:px-1 font-medium " + signColor(e.stats.roi)}>{signed(e.stats.roi)}%</td>
+                    <td className={"whitespace-nowrap px-3 py-2 max-[480px]:px-1 font-medium " + signColor(e.stats.netUnits)}>{signed(e.stats.netUnits)}u</td>
+                    <td className="px-3 py-2 max-[480px]:px-1 text-muted-foreground">
                       <Link href={href} aria-label={"Open " + e.name} className="block hover:text-foreground">
                         &rsaquo;
                       </Link>

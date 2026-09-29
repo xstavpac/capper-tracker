@@ -13,9 +13,9 @@
 // specialist tags from specialistCandidatesSelect + specialistTagsFromCandidateRows, and records
 // are turned into RecordStats by the same statsFromRows/recordStatsFromTotals. ROI/units used as
 // SORT keys are rounded in SQL with round2HalfUpSql (JS round2 semantics) so the order matches
-// the old JS sort exactly. Known non-parity: a WIN at odds = 0 makes the old JS units Infinity/NaN
-// (see zeroOddsWinUnitsWon); such a capper still displays that way here (same statsFromRows) but
-// sorts by the SQL sum that excludes the row.
+// the old JS sort exactly. A WIN at odds = 0 makes the old JS units Infinity/NaN (see
+// zeroOddsWinUnitsWon); the sort keys apply the same poisoning (uw_eff below), so the order always
+// matches the displayed ROI / units, with NaN - which has no order - last.
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
@@ -137,10 +137,20 @@ function entryCtes(name: string, totals: string, sportRoster: boolean, window: S
           CASE WHEN x."unitsRisked" > 0 THEN ${round2HalfUpSql(Prisma.sql`x.roi_raw`)} ELSE 0::float8 END AS roi_r
         FROM (
           SELECT e.*, e.wins + e.losses + e.pushes AS decided,
-            e."unitsWon" - e."unitsLost" AS net_raw,
-            CASE WHEN e."unitsRisked" > 0 THEN (e."unitsWon" - e."unitsLost") / e."unitsRisked" * 100::float8 ELSE 0::float8 END AS roi_raw,
+            e.uw_eff - e."unitsLost" AS net_raw,
+            CASE WHEN e."unitsRisked" > 0 THEN (e.uw_eff - e."unitsLost") / e."unitsRisked" * 100::float8 ELSE 0::float8 END AS roi_raw,
             CASE WHEN e.wins + e.losses > 0 THEN e.wins::float8 / (e.wins + e.losses)::float8 * 100::float8 ELSE 0::float8 END AS win_pct
-          FROM ${Prisma.raw(name)} e
+          FROM (
+            SELECT e0.*,
+              -- The unitsWon the page DISPLAYS (statsFromRows -> zeroOddsWinUnitsWon): a WIN at odds = 0 makes
+              -- it Infinity / -Infinity / NaN, and ROI and net units with it. The sort keys use exactly this,
+              -- so "Sort by ROI" can never disagree with the ROI column.
+              CASE WHEN e0."zeroOddsWinFlags" = 0 THEN e0."unitsWon"
+                   WHEN (e0."zeroOddsWinFlags" & 4) <> 0 OR (e0."zeroOddsWinFlags" & 3) = 3 THEN 'NaN'::float8
+                   WHEN (e0."zeroOddsWinFlags" & 1) <> 0 THEN 'Infinity'::float8
+                   ELSE '-Infinity'::float8 END AS uw_eff
+            FROM ${Prisma.raw(name)} e0
+          ) e
         ) x
       `,
     ],
@@ -149,13 +159,14 @@ function entryCtes(name: string, totals: string, sportRoster: boolean, window: S
 
 // Sort keys are a fixed whitelist (never user text); every ranking ends in the same total-order
 // tie-break as the old JS: units, then name, then id.
+// NaN has no place in an order, so it sorts last (Postgres would otherwise put it first when descending).
 const SORT_SQL: Record<CappersSortKey, Prisma.Sql> = {
-  roi: Prisma.sql`roi_r DESC`,
+  roi: Prisma.sql`(roi_r = 'NaN'::float8), roi_r DESC`,
   win: Prisma.sql`win_pct DESC`,
-  units: Prisma.sql`net_r DESC`,
+  units: Prisma.sql`(net_r = 'NaN'::float8), net_r DESC`,
   record: Prisma.sql`(wins - losses) DESC, wins DESC`,
 };
-const TIE_BREAK = Prisma.sql`net_r DESC, lower(name) COLLATE "C", name COLLATE "C", cid COLLATE "C"`;
+const TIE_BREAK = Prisma.sql`(net_r = 'NaN'::float8), net_r DESC, lower(name) COLLATE "C", name COLLATE "C", cid COLLATE "C"`;
 
 export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
   const now = q.now ?? new Date();
@@ -197,7 +208,7 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
   // Top cappers: same minimum-picks rule, but never below one decided pick (no ROI otherwise).
   add(
     "top",
-    Prisma.sql`SELECT * FROM ${Prisma.raw(unscoped)} WHERE decided >= ${Math.max(q.min, 1)} ORDER BY roi_r DESC, ${TIE_BREAK} LIMIT ${TOP_CAPPERS_COUNT}`
+    Prisma.sql`SELECT * FROM ${Prisma.raw(unscoped)} WHERE decided >= ${Math.max(q.min, 1)} ORDER BY (roi_r = 'NaN'::float8), roi_r DESC, ${TIE_BREAK} LIMIT ${TOP_CAPPERS_COUNT}`
   );
   add("disp", Prisma.sql`SELECT cid FROM pg UNION SELECT cid FROM top`);
 

@@ -411,6 +411,41 @@ async function main() {
   check("tone/label: positive is green '+6.1u L20'", sparklineTone(up) === "up" && sparklineLabel(up)?.text === "+6.1u L20");
   check("tone/label: negative is red '−3.2u L20'", sparklineTone(down) === "down" && sparklineLabel(down)?.text === "−3.2u L20");
 
+  // ============ Odds = 0 wins: the sort key must be exactly the displayed value ============
+  // A WIN at odds 0 makes the DISPLAYED unitsWon (and ROI, net units) Infinity / -Infinity / NaN. The SQL
+  // sort keys use the same poisoned expression, so the order always follows the numbers on screen
+  // (Infinity first ... -Infinity last, NaN last of all - it has no place in an order).
+  const U3 = await makeUser("odds0");
+  const z: Record<string, string> = {};
+  for (const k of ["inf", "nan", "ninf", "a", "b", "c", "d"]) z[k] = await makeCapper(U3, k, "Odds " + k);
+  await addPicks(U3, [
+    { capperId: z.inf, status: "WIN", odds: 0, units: 1, gameTime: ago(500) },
+    { capperId: z.inf, status: "LOSS", odds: -110, units: 1, gameTime: ago(400) },
+    { capperId: z.nan, status: "WIN", odds: 0, units: 0, gameTime: ago(500) },
+    { capperId: z.nan, status: "LOSS", odds: -110, units: 1, gameTime: ago(400) },
+    { capperId: z.ninf, status: "WIN", odds: 0, units: -1, gameTime: ago(500) },
+    { capperId: z.ninf, status: "LOSS", odds: -110, units: 3, gameTime: ago(400) },
+    { capperId: z.a, status: "WIN", odds: 200, units: 1, gameTime: ago(500) },
+    { capperId: z.b, status: "WIN", odds: 100, units: 1, gameTime: ago(500) },
+    { capperId: z.b, status: "LOSS", odds: 100, units: 1, gameTime: ago(450) },
+    { capperId: z.c, status: "LOSS", odds: -110, units: 2, gameTime: ago(500) },
+    { capperId: z.d, status: "WIN", odds: -110, units: 1, gameTime: ago(500) },
+    { capperId: z.d, status: "LOSS", odds: -110, units: 1.5, gameTime: ago(450) },
+  ]);
+  // Total order over displayed numbers: NaN last; otherwise descending (Infinity first, -Infinity last).
+  const nanRank = (v: number) => (Number.isNaN(v) ? 1 : 0);
+  const cmpDesc = (a: number, b: number) => nanRank(a) - nanRank(b) || (a === b ? 0 : b > a ? 1 : -1);
+  for (const sort of ["roi", "units"] as const) {
+    const d3 = await getCappersPageData({ userId: U3, window: "ALL", min: 0, sort, fav: false, q: "", page: 1 });
+    const shown = d3.rows.map((e) => (sort === "roi" ? e.stats.roi : e.stats.netUnits));
+    check(`odds 0: fixture displays Infinity, -Infinity and NaN (sort=${sort})`, shown.includes(Infinity) && shown.includes(-Infinity) && shown.some(Number.isNaN), shown.map(String).join(","));
+    check(`odds 0: sort=${sort} order follows the displayed values`, shown.every((v, i) => i === 0 || cmpDesc(shown[i - 1], v) <= 0), shown.map(String).join(","));
+    check(`odds 0: sort=${sort} puts Infinity first and NaN last`, shown[0] === Infinity && Number.isNaN(shown[shown.length - 1]), shown.map(String).join(","));
+  }
+  const top3 = await getCappersPageData({ userId: U3, window: "ALL", min: 1, sort: "roi", fav: false, q: "", page: 1 });
+  const topShown = top3.top.map((e) => e.stats.roi);
+  check("odds 0: top cappers follow the displayed ROI", topShown.every((v, i) => i === 0 || cmpDesc(topShown[i - 1], v) <= 0) && topShown[0] === Infinity, JSON.stringify(topShown));
+
   console.log(`\n${assertions} assertions, ${failures} failed.`);
 }
 
