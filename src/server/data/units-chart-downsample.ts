@@ -6,7 +6,7 @@
 //
 // This does NOT replace computeUnitsChartData / computeCumulativeUnitsSeries -
 // those stay full-fidelity (computeMaxDrawdown and the per-capper page depend
-// on that). It is applied ONLY inside computeDashboardSummary, on top of the
+// on that). It is applied to the dashboard series (in SQL by unitsSeriesSelect; here in JS only for the zero-odds fallback), on top of the
 // full series.
 //
 // X-axis note: the chart's XAxis is a plain categorical `dataKey="date"` -

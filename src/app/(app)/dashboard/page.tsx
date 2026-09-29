@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { requireUser } from "@/server/auth";
-import { getDashboardSummary } from "@/server/data/stats";
+import { getDashboardSummary } from "@/server/data/dashboard-summary";
 import { getPlanStatus } from "@/server/data/cappers";
 import { getCapperPanels } from "@/server/data/capper-panels";
 import { UnitsChart } from "@/components/dashboard/units-chart";
