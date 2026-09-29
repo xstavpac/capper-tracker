@@ -1021,7 +1021,7 @@ export async function gradePendingPicks(
   sportKey: string
 ): Promise<{ graded: number; notMatched: number }> {
   const pendingPicks = await prisma.pick.findMany({
-    where: { userId, status: "PENDING", sport: { name: sportName } },
+    where: { userId, status: "PENDING", sport: { name: sportName }, gameTime: { gte: regradeLookbackCutoff() } },
   });
   const { graded, notMatched } = await gradePickPool(pendingPicks, sportKey, sportName);
   return { graded, notMatched };
@@ -1273,11 +1273,17 @@ export async function gradeAllPendingPicks(
   const sport = await prisma.sport.findUnique({ where: { name: sportName } });
   if (!sport) return { graded: 0, notMatched: 0, remaining: 0, changedUserIds: new Set() };
 
-  const totalPending = await prisma.pick.count({ where: { sportId: sport.id, status: "PENDING" } });
+  // Picks older than the lookback are excluded from auto-grading: they stay
+  // PENDING (visible, and manually gradeable via updatePickStatus), but an
+  // unmatchable one (bad import: no game, gameTime = import time) can no
+  // longer take a queue slot or stretch fetchCandidatePool's window back to
+  // its own date on every run.
+  const gradeable = { sportId: sport.id, status: "PENDING" as const, gameTime: { gte: regradeLookbackCutoff() } };
+  const totalPending = await prisma.pick.count({ where: gradeable });
   if (totalPending === 0) return { graded: 0, notMatched: 0, remaining: 0, changedUserIds: new Set() };
 
   const toProcess = await prisma.pick.findMany({
-    where: { sportId: sport.id, status: "PENDING" },
+    where: gradeable,
     orderBy: { gameTime: "asc" },
     take: maxPicks,
   });
