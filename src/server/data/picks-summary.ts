@@ -25,11 +25,20 @@ export type PicksSummary = {
   pushes: number;
   netUnits: number;
   roi: number;
+  // Units staked on decided picks (WIN/LOSS/PUSH) - ROI's denominator.
+  unitsRisked: number;
 };
 
 function toSummary(t: RecordTotals): PicksSummary {
   const s = recordStatsFromTotals(t);
-  return { wins: s.wins, losses: s.losses, pushes: s.pushes, netUnits: s.netUnits, roi: s.roi };
+  return {
+    wins: s.wins,
+    losses: s.losses,
+    pushes: s.pushes,
+    netUnits: s.netUnits,
+    roi: s.roi,
+    unitsRisked: Math.round(t.unitsRisked * 100) / 100,
+  };
 }
 
 // One grouped query over the same filter set the list uses (minus bet type,
@@ -63,7 +72,7 @@ export async function getPicksSummary(userId: string, f: PicksSummaryFilters): P
       ${f.status ? Prisma.sql`AND p.status = ${f.status}::"PickStatus"` : Prisma.empty}
   `);
   const r = rows[0];
-  if (!r) return { wins: 0, losses: 0, pushes: 0, netUnits: 0, roi: 0 };
+  if (!r) return { wins: 0, losses: 0, pushes: 0, netUnits: 0, roi: 0, unitsRisked: 0 };
   return toSummary(r);
 }
 

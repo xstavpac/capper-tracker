@@ -1,26 +1,25 @@
 import { requireUser } from "@/server/auth";
-import { getFilteredPicksForUser, getSportsWithLeagues, getPickPlanStatus } from "@/server/data/picks";
+import { getFilteredPicksForUser, getSportsWithLeagues } from "@/server/data/picks";
 import {
   getPicksSummary,
   summarizeLoadedPicks,
   getCapperAllTimeRecords,
-  getSportIdsWithPicks,
   getFinalScoresForPicks,
   getFeedStatusesForPicks,
 } from "@/server/data/picks-summary";
 import { getCappersForUser } from "@/server/data/cappers";
 import { gradeUserPagePicks } from "@/server/data/page-grading";
 import { getParlaysForUser } from "@/server/data/parlays";
-import { PickForm } from "@/components/dashboard/pick-form";
 import { LegStatusButtons } from "@/components/dashboard/leg-status-buttons";
 import { RowDeleteButton } from "@/components/dashboard/row-delete-button";
 import { deleteParlayAction } from "@/server/actions/parlays";
-import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
 import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
 import { PicksFilterBar } from "@/components/picks/picks-filter-bar";
 import { PickLedger, type LedgerRow } from "@/components/picks/pick-ledger";
-import { PicksSummaryStrip } from "@/components/picks/picks-summary-strip";
+import { PicksSummaryStrip, TopColdestStrip } from "@/components/picks/picks-summary-strip";
+import { DateNavigator } from "@/components/picks/date-navigator";
+import { cumulativeUnitsSeries, sportChipLayout, topAndColdest, type HeaderPick } from "@/lib/picks-header";
 import {
   betTypeFilterCategory,
   firstHalfLabelPrefixForChipSet,
@@ -31,7 +30,6 @@ import {
   buildPickLabel,
   marketTag,
   splitIntoSections,
-  pendingCount,
   pickPhase,
   consensusHints,
   capperInitials,
@@ -159,21 +157,22 @@ export default async function PicksPage({
   const betTypeFilter = (searchParams.betType as BetTypeFilterKey) || undefined;
   const { startDateKey, endDateKey, isRange } = resolveDateFilter(searchParams);
 
+  const sportIdFilter = searchParams.sportId || undefined;
   const filters = {
     capperId: searchParams.capperId || undefined,
-    sportId: searchParams.sportId || undefined,
+    sportId: sportIdFilter,
     status: (searchParams.status as PickStatus) || undefined,
     startDateKey,
     endDateKey,
   };
 
-  const [allPicks, cappers, sports, planStatus, parlays, sportIdsWithPicks, sqlSummary] = await Promise.all([
-    getFilteredPicksForUser(user.id, filters),
+  const [allPicks, cappers, sports, parlays, sqlSummary] = await Promise.all([
+    // The sport chip is applied in JS below (not in this query) so the sport
+    // chips' counts can reflect every sport under the other active filters.
+    getFilteredPicksForUser(user.id, { ...filters, sportId: undefined }),
     getCappersForUser(user.id),
     getSportsWithLeagues(),
-    getPickPlanStatus(user.id),
     getParlaysForUser(user.id),
-    getSportIdsWithPicks(user.id),
     // Bet type is derived in JS, so with that chip on the summary is computed
     // from the already-loaded rows instead (see summarizeLoadedPicks).
     betTypeFilter ? Promise.resolve(null) : getPicksSummary(user.id, filters),
@@ -181,7 +180,8 @@ export default async function PicksPage({
 
   // Bet type is derived (betDetail text for NRFI/YRFI), not a stored column,
   // so it's filtered here rather than in the DB query.
-  const picks = allPicks.filter((p) => !betTypeFilter || betTypeFilterCategory(p) === betTypeFilter);
+  const sportScopedPicks = allPicks.filter((p) => !betTypeFilter || betTypeFilterCategory(p) === betTypeFilter);
+  const picks = sportIdFilter ? sportScopedPicks.filter((p) => p.sportId === sportIdFilter) : sportScopedPicks;
   const summary = sqlSummary ?? summarizeLoadedPicks(picks);
 
   const now = new Date();
@@ -221,6 +221,21 @@ export default async function PicksPage({
     optionsBySportId[s.id] = computeVisibleBetTypeOptions(s.name);
   }
 
+  const sportChips = sportChipLayout(
+    sportScopedPicks.map((p) => ({ sportId: p.sportId, sportName: p.sport.name })),
+    sportIdFilter ?? null
+  );
+  const headerPicks: HeaderPick[] = picks.map((p) => ({
+    capperId: p.capperId,
+    capperName: p.capper.name,
+    sportId: p.sportId,
+    sportName: p.sport.name,
+    status: p.status,
+    units: p.units,
+    odds: p.odds,
+    gameTime: p.gameTime,
+    gradedAt: p.gradedAt,
+  }));
   const otherFiltersActive =
     Boolean(filters.capperId) || Boolean(filters.sportId) || Boolean(filters.status) || Boolean(betTypeFilter);
   const dateFilterActive = Boolean(searchParams.date) || isRange;
@@ -267,6 +282,9 @@ export default async function PicksPage({
     source: p,
   }));
   const hints = consensusHints(ledgerPicks);
+  const livePicks = ledgerPicks.filter((p) => p.phase === "live").length;
+  const laterPicks = ledgerPicks.filter((p) => p.phase === "pending").length;
+  const topCold = topAndColdest(headerPicks, Boolean(filters.capperId));
 
   const sections = splitIntoSections(ledgerPicks).map((section) => ({
     key: section.key,
@@ -313,22 +331,33 @@ export default async function PicksPage({
           </div>
           <div>
             <h1 className="text-xl font-semibold leading-tight">Picks</h1>
-            <p className="text-sm text-muted-foreground">
-              {subtitleDate + " · " + picks.length + " pick" + (picks.length === 1 ? "" : "s")}
-            </p>
+            <DateNavigator
+              dateKey={startDateKey}
+              label={subtitleDate}
+              isRange={isRange}
+              countText={picks.length + " pick" + (picks.length === 1 ? "" : "s")}
+            />
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <DropCatalogLink href="/picks/import" />
-          <PickForm cappers={cappers} sports={sports} atLimit={planStatus.atLimit} />
         </div>
       </div>
 
-      <PicksSummaryStrip summary={summary} pending={pendingCount(ledgerPicks)} />
+      <PicksSummaryStrip
+        summary={summary}
+        series={cumulativeUnitsSeries(headerPicks)}
+        live={livePicks}
+        later={laterPicks}
+      />
+      {topCold && (
+        <TopColdestStrip
+          top={topCold.top}
+          coldest={topCold.coldest}
+          topLabel={!isRange && startDateKey === todayKey ? "Top today" : "Top"}
+        />
+      )}
 
       <PicksFilterBar
         cappers={cappers.map((c) => ({ value: c.id, label: c.name }))}
-        sports={sports.filter((s) => sportIdsWithPicks.includes(s.id)).map((s) => ({ value: s.id, label: s.name }))}
+        sportChips={sportChips}
         betTypeOptionsBySportId={optionsBySportId}
         todayKey={todayKey}
         dateLabel={dateChipLabel}
@@ -343,7 +372,7 @@ export default async function PicksPage({
           <p className="text-sm text-muted-foreground">
             {hasActiveFilters
               ? "No picks match these filters."
-              : "No picks logged yet - log your first pick above."}
+              : "No picks for this day yet."}
           </p>
         </div>
       ) : (

@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DateRangeFilter } from "@/components/picks/date-range-filter";
 import type { BetTypeFilterKey } from "@/lib/bet-type-filter";
+import { sportIcon } from "@/lib/sport-icon";
+import type { SportChip } from "@/lib/picks-header";
 
 type Option = { value: string; label: string };
 
@@ -124,7 +126,7 @@ function OptionList({
 
 export function PicksFilterBar({
   cappers,
-  sports,
+  sportChips,
   betTypeOptionsBySportId,
   todayKey,
   dateLabel,
@@ -134,7 +136,8 @@ export function PicksFilterBar({
   isRange,
 }: {
   cappers: Option[];
-  sports: Option[];
+  // Already ordered by count; `more` overflows into the More dropdown.
+  sportChips: { visible: SportChip[]; more: SportChip[]; total: number };
   betTypeOptionsBySportId: Record<string, { value: BetTypeFilterKey; label: string }[]>;
   todayKey: string;
   dateLabel: string;
@@ -177,6 +180,58 @@ export function PicksFilterBar({
 
   return (
     <div className={"mb-5 flex flex-wrap items-center gap-2 " + (pending ? "opacity-70" : "")}>
+      <button
+        type="button"
+        aria-pressed={!sportId}
+        onClick={() => sportId && setSport(sportId)}
+        className={chipBase + " " + (!sportId ? chipActive : chipIdle)}
+      >
+        All sports
+        <span className="text-xs opacity-70">{sportChips.total}</span>
+      </button>
+
+      {sportChips.visible.map((s) => (
+        <button
+          key={s.id}
+          type="button"
+          aria-pressed={sportId === s.id}
+          onClick={() => setSport(s.id)}
+          className={chipBase + " " + (sportId === s.id ? chipActive : chipIdle)}
+        >
+          <span aria-hidden="true">{sportIcon(s.name)}</span>
+          {s.name}
+          <span className="text-xs opacity-70">{s.count}</span>
+        </button>
+      ))}
+
+      {sportChips.more.length > 0 && (
+        <ChipMenu label="More" active={false}>
+          {(close) => (
+            <div role="listbox" className="max-h-64 overflow-y-auto">
+              {sportChips.more.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  role="option"
+                  aria-selected={sportId === s.id}
+                  onClick={() => {
+                    setSport(s.id);
+                    close();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                >
+                  <span aria-hidden="true">{sportIcon(s.name)}</span>
+                  <span className="flex-1">{s.name}</span>
+                  <span className="text-xs text-muted-foreground">{s.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </ChipMenu>
+      )}
+
+      <span className="mx-1 hidden h-5 w-px bg-border sm:block" aria-hidden="true" />
+
       <ChipMenu label={dateLabel} active={!dateIsDefault}>
         {(close) => (
           <form
@@ -226,18 +281,6 @@ export function PicksFilterBar({
           />
         )}
       </ChipMenu>
-
-      {sports.map((s) => (
-        <button
-          key={s.value}
-          type="button"
-          aria-pressed={sportId === s.value}
-          onClick={() => setSport(s.value)}
-          className={chipBase + " " + (sportId === s.value ? chipActive : chipIdle)}
-        >
-          {s.label}
-        </button>
-      ))}
 
       <ChipMenu label={betTypeName ?? "Bet type"} active={Boolean(betType)}>
         {(close) => (
