@@ -38,6 +38,7 @@ const CACHEABLE_ROUTES = [/^\/$/, /^\/privacy/];
 export default async function middleware(req: NextRequest) {
   const isPublic = PUBLIC_ROUTES.some((re) => re.test(req.nextUrl.pathname));
   const isCacheable = CACHEABLE_ROUTES.some((re) => re.test(req.nextUrl.pathname));
+  const isPublicApi = req.nextUrl.pathname.startsWith("/api/public/");
   const isApiRoute = req.nextUrl.pathname.startsWith("/api/") || req.nextUrl.pathname.startsWith("/trpc/");
 
   // Supabase's client throws synchronously if its URL/key aren't configured
@@ -49,7 +50,13 @@ export default async function middleware(req: NextRequest) {
   // until the env vars are set) rather than every route going down.
   let response = NextResponse.next({ request: req });
   let user = null;
-  if (isDevAuthBypassEnabled()) {
+  if (isPublicApi) {
+    // /api/public/* never reads a session, and some of it is CDN-cached and
+    // shared across every visitor (see api/public/ticker-scores) - so skip the
+    // Supabase session step entirely. That keeps a token-refresh Set-Cookie
+    // off a response a CDN could store and replay, and saves the auth work on
+    // the highest-volume route in the app.
+  } else if (isDevAuthBypassEnabled()) {
     // Local-dev-only - see lib/dev-auth-bypass.ts. Skips the real Supabase
     // session check; getCurrentUser() (server/auth.ts) does the matching
     // skip for the actual user lookup below.

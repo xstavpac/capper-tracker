@@ -91,6 +91,7 @@ export type SafePollOptions<T> = {
 };
 
 const DEFAULT_TIMEOUT_MS = 8_000;
+const VISIBLE_RESUME_DELAY_MS = 100;
 
 function readRetryAfterMs(err: unknown): number | null {
   if (err && typeof err === "object" && "retryAfterMs" in err) {
@@ -167,10 +168,12 @@ export function useSafePoll<T>(options: SafePollOptions<T>): SafePollResult<T> {
       }
     };
 
-    const scheduleNext = (delayMs: number) => {
+    // floorMs is the minimum delay: 1s for every ordinary schedule (never a
+    // sub-second retry), lowered only for the tab-visible resume below.
+    const scheduleNext = (delayMs: number, floorMs = 1_000) => {
       if (!isCurrent()) return;
       clearTimer();
-      timerRef.current = setTimeout(tick, Math.max(1_000, delayMs));
+      timerRef.current = setTimeout(tick, Math.max(floorMs, delayMs));
     };
 
     const tick = async () => {
@@ -262,7 +265,10 @@ export function useSafePoll<T>(options: SafePollOptions<T>): SafePollResult<T> {
       if (document.visibilityState === "visible") {
         failuresRef.current = 0;
         setConsecutiveFailures(0);
-        scheduleNext(1_000);
+        // Refresh right away on return - the data may be minutes stale. Still
+        // one timer (scheduleNext clears the pending one), so rapid
+        // hide/show flapping can't stack fetches.
+        scheduleNext(0, VISIBLE_RESUME_DELAY_MS);
       }
     };
     if (pauseWhenHidden && typeof document !== "undefined") {
