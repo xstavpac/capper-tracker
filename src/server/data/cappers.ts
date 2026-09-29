@@ -1,5 +1,6 @@
 ﻿import { prisma } from "@/lib/prisma";
-import type { Source } from "@prisma/client";
+import { Prisma, type Source } from "@prisma/client";
+import { findOrCreateCapper, findCapperNameCollision } from "@/server/data/capper-find-or-create";
 import { normalizeName, duplicateNameDistance } from "@/lib/fuzzy-match";
 import {
   computeStats,
@@ -284,15 +285,12 @@ export async function createCapper(
     colorTag?: string;
   }
 ) {
-  const normalized = normalizeName(data.name);
-  const existing = await prisma.capper.findMany({ where: { userId }, select: { name: true } });
-  if (existing.some((c) => normalizeName(c.name) === normalized)) {
-    throw new Error(`You already have a capper named "${data.name}".`);
+  const { name, ...rest } = data;
+  const { capper, created } = await findOrCreateCapper(userId, name, rest);
+  if (!created) {
+    throw new Error(`You already have a capper named "${name.trim()}".`);
   }
-
-  return prisma.capper.create({
-    data: { ...data, userId },
-  });
+  return capper;
 }
 
 export type CapperSummary = { id: string; name: string; pickCount: number };
@@ -413,17 +411,30 @@ export async function mergeCappers(userId: string, primaryId: string, duplicateI
 
 // Plain rename, no merge semantics - updateMany (not update) so the where
 // clause can carry both id and userId in one query rather than a separate
-// ownership check, letting a user rename their own capper to literally
-// anything, including a name that happens to collide with another of their
-// cappers, without that collision ever being treated as a merge signal. The
-// UI is what decides merge vs. rename (an explicit, separate action the user
-// picks), never this function inferring intent from the name string.
+// ownership check. A name that collides with another of this user's cappers
+// (same rules as creation, see findOrCreateCapper) is REFUSED with a friendly
+// error, never treated as a merge signal: the UI is what decides merge vs.
+// rename (an explicit, separate action the user picks), never this function
+// inferring intent from the name string. Changing only the case/spacing of the
+// capper's OWN name is fine - the capper itself is excluded from the check.
 export async function renameCapper(userId: string, capperId: string, name: string): Promise<void> {
   const trimmed = name.trim();
   if (!trimmed) {
     throw new Error("Capper name is required.");
   }
-  const { count } = await prisma.capper.updateMany({ where: { id: capperId, userId }, data: { name: trimmed } });
+  if (await findCapperNameCollision(userId, trimmed, capperId)) {
+    throw new Error(`You already have a capper named "${trimmed}".`);
+  }
+  let count: number;
+  try {
+    ({ count } = await prisma.capper.updateMany({ where: { id: capperId, userId }, data: { name: trimmed } }));
+  } catch (err) {
+    // Raced past the check above and hit cappers_user_lower_name_key.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      throw new Error(`You already have a capper named "${trimmed}".`);
+    }
+    throw err;
+  }
   if (count === 0) {
     throw new Error("Capper not found.");
   }

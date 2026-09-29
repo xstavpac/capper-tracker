@@ -5,7 +5,7 @@ import { requireUser } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
 import { cacheKeys } from "@/lib/cache-keys";
 import { importRowCapError } from "@/lib/import-limits";
-import { createCapper } from "@/server/data/cappers";
+import { findOrCreateCapper } from "@/server/data/capper-find-or-create";
 import { createPicksWithEntitlementCheck, type PickInsertData } from "@/server/data/subscriptions";
 import {
   resolveGameForNickname,
@@ -545,17 +545,24 @@ async function resolveOrCreateCapperId(
   cache: Map<string, string>
 ): Promise<string> {
   const normalizedName = normalizeName(capperName);
-  let capperId = cache.get(normalizedName);
+  // An empty normalized name (emoji-only / punctuation-only) matches nothing by
+  // that rule - and must not share a cache key - so it goes straight to
+  // findOrCreateCapper, whose index-expression rule tells such names apart.
+  const cacheKey = normalizedName === "" ? "raw:" + capperName.trim().toLowerCase() : normalizedName;
+  let capperId = cache.get(cacheKey);
   if (!capperId) {
-    const existing = existingCappers.find((c) => normalizeName(c.name) === normalizedName);
+    const existing =
+      normalizedName === "" ? undefined : existingCappers.find((c) => normalizeName(c.name) === normalizedName);
     if (existing) {
       capperId = existing.id;
     } else {
-      const created = await createCapper(userId, { name: capperName, source: "OTHER", customSource: "Catalog import" });
-      capperId = created.id;
-      existingCappers.push(created);
+      // Race-safe find-or-create: a concurrent create of the same name returns
+      // the existing row instead of throwing.
+      const { capper } = await findOrCreateCapper(userId, capperName, { source: "OTHER", customSource: "Catalog import" });
+      capperId = capper.id;
+      if (!existingCappers.some((c) => c.id === capper.id)) existingCappers.push(capper);
     }
-    cache.set(normalizedName, capperId);
+    cache.set(cacheKey, capperId);
   }
   return capperId;
 }
