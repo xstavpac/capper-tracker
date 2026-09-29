@@ -13,6 +13,7 @@ import {
   type MissingTotalLineResult,
   type BulkImportParlayLegItem,
 } from "@/server/actions/bulk-picks";
+import { logParseSkippedLinesAction } from "@/server/actions/import-skipped-lines";
 import { recoverUnresolvedPicksAction } from "@/server/actions/recover-unresolved-picks";
 import { getNflRosterFullNamesAction } from "@/server/actions/get-nfl-roster-names";
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
@@ -190,7 +191,14 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setTotalLineChoices({});
     setResolving(true);
     const rosterFullNames = await getRosterFullNames();
-    const { picks: items, parlays: parlayItems, unresolved } = parseCatalog(text, existingCapperNames, rosterFullNames);
+    const {
+      picks: items,
+      parlays: parlayItems,
+      unresolved,
+      unresolvedCapperNames,
+      droppedAsHeaders,
+      droppedInline,
+    } = parseCatalog(text, existingCapperNames, rosterFullNames);
     setParlays(parlayItems);
     // Last-resort pass: hand the lines parseCatalog couldn't place to the
     // server, which checks them against the real team names on today's live
@@ -200,6 +208,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     let effectiveItems = items;
     let unresolvedAfter = unresolved;
     let recovered: ParsedPick[] = [];
+    let recoveryRan = true;
     if (unresolved.length > 0) {
       try {
         const res = await recoverUnresolvedPicksAction(text, existingCapperNames);
@@ -209,9 +218,28 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       } catch {
         // Best-effort - a fallback failure just leaves every line unresolved,
         // exactly as before this pass existed.
+        recoveryRan = false;
       }
     }
     setUnresolvedLines(unresolvedAfter);
+    // Skipped-line log (fire-and-forget, once per paste): everything parsing
+    // failed to turn into a pick. The action swallows its own errors and
+    // takes the user from the session, so this can't affect the import.
+    const capperForUnresolved = new Map<string, string>();
+    unresolved.forEach((line, i) => {
+      if (!capperForUnresolved.has(line)) capperForUnresolved.set(line, unresolvedCapperNames[i] ?? "Unknown");
+    });
+    const silent = [
+      ...droppedAsHeaders.map((l) => ({ ...l, reason: "Read as a capper header but looks like a pick" })),
+      ...droppedInline.map((l) => ({ ...l, reason: "Discarded after a saved capper's name; no sport/team/player resolved" })),
+    ];
+    if (silent.length > 0 || unresolvedAfter.length > 0) {
+      void logParseSkippedLinesAction({
+        silent,
+        unresolved: unresolvedAfter.map((t) => ({ text: t, capperName: capperForUnresolved.get(t) ?? "Unknown" })),
+        recoveryRan,
+      }).catch(() => {});
+    }
     // autoResolveAmbiguousPicks preserves array order and length, so the
     // recovered picks keep the tail slots they were appended into.
     setRecoveredIndices(new Set(recovered.map((_, i) => items.length + i)));
@@ -461,6 +489,12 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         period: p.period,
         inferredLine: totalLineChoices[idx] === "confirm" ? totalLineFlags[idx]?.inferredLine : undefined,
         gameNumber: p.gameNumber,
+        raw: p.raw,
+      })),
+      skippedDuplicateEntries.map((e) => ({
+        capperName: resolvedCapperName(e.p.capperName),
+        sportName: e.p.sportName,
+        raw: e.p.raw,
       }))
     );
     // A refused picks import must not let the parlay import run on its own.

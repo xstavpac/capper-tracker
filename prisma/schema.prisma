@@ -127,6 +127,7 @@ model User {
   dismissedDuplicatePairs DismissedDuplicatePair[]
   customMetrics           CustomMetric[]
   featureFlagOverrides    FeatureFlagUserOverride[]
+  importSkippedLines      ImportSkippedLine[]
 
   @@map("users")
 }
@@ -494,6 +495,42 @@ model OddsApiUsageLog {
   @@index([pollTimestamp])
   @@index([sportKey, pollTimestamp])
   @@map("odds_api_usage_log")
+}
+
+// Where in the catalog-import pipeline a line was lost (see ImportSkippedLine).
+enum ImportSkipStage {
+  PARSE_SILENT // parseCatalog dropped it without a trace (read as a capper header, or discarded after a known-capper prefix)
+  PARSE_UNRESOLVED // parseCatalog listed it as unresolved and the recovery pass never ran (it threw)
+  PROP_UNSUPPORTED // declined as an unsupported MLB/NHL player prop (wiring pending fix/mlb-nhl-prop-line-safety)
+  RECOVERY_UNRESOLVED // still unresolved after the live-schedule / roster recovery pass
+  DUPLICATE_SKIPPED // flagged as a duplicate and excluded from the import
+  GAME_UNMATCHED // no scheduled game could be resolved for the pick
+  TOTAL_NO_LINE // a TOTAL with no number and no confirmed inferred line
+  INVALID_ODDS // resolved odds were zero / non-numeric
+  DOUBLEHEADER_FINAL // a doubleheader whose every leg was already final
+}
+
+// Write-only log of every catalog line the importer failed to turn into a
+// pick, so a season of data shows which markets/shapes cappers post that we
+// don't support. Standalone like OddsApiUsageLog: nothing reads it except
+// the admin report, and there is deliberately no retention prune.
+// marketHint is a normalized keyword bucket computed at write time
+// (lib/market-hint.ts) so the report can group without re-parsing text.
+model ImportSkippedLine {
+  id           String          @id @default(cuid())
+  userId       String
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  capperName   String // header active when the line was seen
+  rawText      String // the exact line
+  guessedSport String?
+  stage        ImportSkipStage
+  reason       String? // free text / error message
+  marketHint   String?
+  createdAt    DateTime        @default(now())
+
+  @@index([stage, createdAt])
+  @@index([marketHint])
+  @@map("import_skipped_lines")
 }
 
 // A variable/metric's provenance - global (computed once, shared by every

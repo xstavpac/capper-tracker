@@ -25,6 +25,7 @@ import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { computeDuplicateFlags, dedupCategory, type ResolvedDupCandidate, type DuplicateFlag } from "@/lib/duplicate-pick-detection";
+import { recordImportSkippedLines, type SkippedLineEntry } from "@/server/data/import-skipped-lines";
 import { createParlayBet, type LegCreateInput } from "@/server/data/parlays";
 import type { BetType, Period } from "@prisma/client";
 
@@ -50,7 +51,15 @@ export type BulkImportItem = {
   // doubleheader pick. Null for every pick with no such signal - resolution
   // then falls back to PR #105's existing doubleheader flag (never guesses).
   gameNumber: 1 | 2 | null;
+  // The pick's exact pasted line, for the import skipped-line log only -
+  // never used for resolution. Falls back to `description` when absent.
+  raw?: string;
 };
+
+// A pick the user (or the default) excluded as a possible duplicate. These
+// never reach the resolution loop, so the client reports them for the
+// skipped-line log alongside the picks that do.
+export type SkippedDuplicateItem = { capperName: string; sportName: string; raw: string };
 
 export type BulkImportResult =
   | {
@@ -582,7 +591,10 @@ async function resolveOrCreateSportId(sportName: string, cache: Map<string, stri
   return sportId;
 }
 
-export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<BulkImportResult> {
+export async function bulkImportPicksAction(
+  items: BulkImportItem[],
+  skippedDuplicates: SkippedDuplicateItem[] = []
+): Promise<BulkImportResult> {
   const user = await requireUser();
 
   // Before ANY write: the loop below find-or-creates cappers and sports as it
@@ -607,6 +619,17 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
   // per-item failure than the billing gate below, which is all-or-nothing
   // across whatever DID resolve.
   const toInsert: PickInsertData[] = [];
+  // Every item dropped below, for the skipped-line log - written once, in one
+  // batch, after the loop. Pure bookkeeping: nothing here affects the result.
+  const skippedLog: SkippedLineEntry[] = skippedDuplicates.map((d) => ({
+    stage: "DUPLICATE_SKIPPED",
+    capperName: d.capperName,
+    rawText: d.raw,
+    guessedSport: d.sportName,
+    reason: "Flagged as a possible duplicate and excluded from the import",
+  }));
+  const logSkip = (item: BulkImportItem, stage: SkippedLineEntry["stage"], reason: string) =>
+    skippedLog.push({ stage, capperName: item.capperName, rawText: item.raw ?? item.description, guessedSport: item.sportName, reason });
 
   for (const item of items) {
     try {
@@ -636,8 +659,10 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         // wrongly implies the schedule lookup itself failed.
         if (doubleheaderBothLegsFinal) {
           doubleheaderBothFinal.push(item.capperName + " - " + item.description);
+          logSkip(item, "DOUBLEHEADER_FINAL", "Doubleheader with every leg already final");
         } else {
           unmatchedGames.push(item.capperName + " - " + item.description);
+          logSkip(item, "GAME_UNMATCHED", "No scheduled game matched");
         }
         continue;
       }
@@ -649,6 +674,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         // this also catches the vanishingly-unlikely case of a market/prop-
         // price lookup itself resolving to 0.
         errors.push(item.capperName + " - " + item.description + ": Odds must be a valid non-zero number.");
+        logSkip(item, "INVALID_ODDS", "Odds must be a valid non-zero number (resolved " + odds + ")");
         continue;
       }
 
@@ -660,6 +686,7 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
         // propose) - refuse to persist an ungradeable TOTAL pick, same
         // principle as the unmatched-game rejection above.
         unmatchedGames.push(item.capperName + " - " + item.description);
+        logSkip(item, "TOTAL_NO_LINE", "TOTAL with no number and no confirmed inferred line");
         continue;
       }
 
@@ -699,7 +726,14 @@ export async function bulkImportPicksAction(items: BulkImportItem[]): Promise<Bu
   // The single all-or-nothing billing gate for this whole batch - see
   // createPicksWithEntitlementCheck. Nothing above this point has written a
   // Pick row yet.
-  const result = await createPicksWithEntitlementCheck(user.id, toInsert);
+  // The skipped-line write runs concurrently with the insert so it adds no
+  // latency, and never throws (see recordImportSkippedLines), so it can't
+  // fail the import. Awaited (not fire-and-forget) so serverless doesn't
+  // freeze the function mid-write.
+  const [result] = await Promise.all([
+    createPicksWithEntitlementCheck(user.id, toInsert),
+    recordImportSkippedLines(user.id, skippedLog),
+  ]);
 
   // Bust this user's cached Dashboard aggregations by tag (see
   // getDashboardSummary) - revalidatePath does not reliably evict
