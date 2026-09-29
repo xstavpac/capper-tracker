@@ -189,9 +189,44 @@ function main() {
   {
     const r = parseCatalog("Krash\nNBA LeBron James over 25.5 points");
     check("NBA prop is never a TOTAL (no picks at all)", r.picks.map((p) => p.betType), []);
-    // A team REBOUNDS total is a team stat: subject is a team, so untouched.
-    check("team-subject 'Lakers over 45.5 rebounds' not flagged", detectUnsupportedPropLine("Lakers over 45.5 rebounds"), null);
   }
+
+  // --- Team NON-scoring stat totals ----------------------------------------------
+  // "Lakers over 45.5 rebounds" used to import as a game TOTAL (graded on
+  // points). Now unresolved, "Team stat totals aren't supported yet".
+  const TEAM_STAT = UNSUPPORTED_PROP_REASONS.TEAM_STAT;
+  for (const line of [
+    "Lakers over 45.5 rebounds",
+    "NBA Lakers over 45.5 rebounds",
+    "NBA Celtics over 25.5 assists",
+    "Warriors over 13.5 threes",
+    "Heat under 8.5 steals",
+    "Bucks over 5.5 blocks",
+    "Lakers over 14.5 turnovers",
+    "Yankees over 8.5 hits",
+    "Oilers over 30.5 shots on goal",
+  ]) {
+    const r = parseCatalog("Krash\n" + line);
+    check(`team stat -> unresolved, never TOTAL: "${line}"`, [r.picks.length, r.parlays.length, r.unresolved], [0, 0, [line]]);
+    check(`  reason: "${line}"`, detectUnsupportedPropLine(line)?.reason, TEAM_STAT);
+  }
+  // Scoring totals / team totals are never touched (points, pts, runs, goals).
+  for (const line of [
+    "Lakers over 220.5 points",
+    "Lakers team total over 112.5",
+    "NBA Lakers vs Nuggets over 220.5 pts",
+    "Yankees over 4.5 runs",
+    "MLB Yankees vs Red Sox over 8.5 runs",
+    "Oilers over 3.5 goals",
+  ]) {
+    check(`scoring total untouched: "${line}"`, detectUnsupportedPropLine(line), null);
+  }
+  // A PLAYER with the same word is still the player-prop reason, not team-stat.
+  check(
+    "person + rebounds stays the player-prop reason",
+    detectUnsupportedPropLine("NBA Nikola Jokic over 12.5 rebounds")?.reason,
+    UNSUPPORTED_PROP_REASONS.NBA
+  );
 
   // --- B. NFL N+ props ----------------------------------------------------------
   // The exact production block: "Zach Ertz 3+ receptions" was eaten as a capper
@@ -254,6 +289,40 @@ function main() {
     const r = parseCatalog("Krash\n" + line);
     check(`unsupported NFL N+ -> unresolved: "${line}"`, [r.picks.length, r.unresolved.length], [0, 1]);
     check(`  reason: "${line}"`, detectUnsupportedPropLine(line)?.reason, UNSUPPORTED_PROP_REASONS.NFL);
+  }
+  // Same unsupported NFL stats in OVER/UNDER form: unresolved with the NFL
+  // reason, checked before parsePlayerProp (which reads "passing completions"
+  // and "pass attempts" as PASS_YDS, and "rushing attempts" as RUSH_YDS).
+  for (const line of [
+    "Patrick Mahomes over 22.5 passing completions",
+    "Josh Allen under 34.5 pass attempts",
+    "T.J. Watt over 0.5 sacks",
+    "Micah Parsons over 6.5 tackles",
+    "Derrick Henry over 15.5 carries",
+    "Amon-Ra St. Brown over 5.5 targets",
+    "Brandon Aubrey over 1.5 field goals",
+    "Sauce Gardner over 0.5 interceptions",
+    "NFL Derrick Henry over 20.5 rushing attempts",
+    "Derrick Henry o15.5 carries",
+  ]) {
+    const r = parseCatalog("Krash\n" + line);
+    check(`unsupported NFL over/under -> unresolved: "${line}"`, [r.picks.length, r.unresolved.length], [0, 1]);
+    check(`  reason: "${line}"`, detectUnsupportedPropLine(line)?.reason, UNSUPPORTED_PROP_REASONS.NFL);
+  }
+  // Supported NFL markets in over/under form are unaffected: still PLAYER_PROP
+  // picks (prefixed) with the text untouched.
+  for (const line of [
+    "Josh Allen over 250.5 passing yards",
+    "Saquon Barkley over 79.5 rushing yards",
+    "A.J. Brown over 99.5 receiving yards",
+    "Zach Ertz over 2.5 receptions",
+    "Jahmyr Gibbs over 99.5 rush and rec yards",
+    "Josh Allen over 299.5 pass and rush yards",
+    "Rome Odunze Anytime Touchdown",
+  ]) {
+    const r = parseCatalog("Krash\nNFL " + line);
+    check(`supported NFL prop unaffected: "${line}"`, r.picks.map((p) => [p.sportName, p.betType, p.description]), [["NFL", "PLAYER_PROP", line]]);
+    check(`  not flagged: "${line}"`, detectUnsupportedPropLine(line), null);
   }
   // An over/under line already present is never rewritten; headers with "3+" stay headers.
   check("explicit over/under text is left alone", normalizeNPlusPlayerProp("Zach Ertz Over 2.5 receptions"), "Zach Ertz Over 2.5 receptions");

@@ -55,7 +55,17 @@ const AMBIGUOUS_WORDS = [
   String.raw`pra`,
   String.raw`steals?`,
   String.raw`blocks?`,
+  String.raw`turnovers?`,
+  String.raw`fouls?`,
+  String.raw`corners?`,
+  String.raw`penalt(?:y|ies)`,
 ].join("|");
+
+// The scoring words among the above (plus runs): a TEAM subject with one of
+// these is an ordinary game/team total and is never touched. Every other
+// stat word with a team subject ("Lakers over 45.5 rebounds") is a team STAT
+// total, which this app has no market or grader for.
+const SCORING_WORDS = /^(?:runs?|points?|pts)$/i;
 
 // NFL stats that only exist as N+ props this app can't grade. Deliberately
 // excludes the supported yardage/receptions markets and TDs - those are
@@ -70,7 +80,12 @@ const NFL_UNSUPPORTED_WORDS = [
   String.raw`fgs?`,
   String.raw`extra\s+points?`,
 ].join("|");
-const NFL_N_PLUS_UNSUPPORTED = new RegExp(`(?<![\\w.-])\\d+\\+\\s*(?:${NFL_UNSUPPORTED_WORDS})\\b`, "i");
+// Both threshold spellings: "3+ sacks" and "over 22.5 passing completions" /
+// "u34.5 pass attempts".
+const NFL_UNSUPPORTED_STAT = new RegExp(
+  `(?:(?<![\\w.-])\\d+\\+|(?<![\\w.])(?:over|under|o|u)\\s*\\d+(?:\\.\\d+)?)\\s*(?:${NFL_UNSUPPORTED_WORDS})\\b`,
+  "i"
+);
 
 const ANY_WORDS = STRONG_WORDS + "|" + AMBIGUOUS_WORDS;
 
@@ -109,6 +124,7 @@ export const UNSUPPORTED_PROP_REASONS = {
   NBA: "NBA player props aren't supported yet",
   WNBA: "WNBA player props aren't supported yet",
   NFL: "This NFL prop market isn't supported yet",
+  TEAM_STAT: "Team stat totals aren't supported yet",
   GENERIC: "Player prop not supported yet",
 } as const;
 
@@ -141,14 +157,14 @@ function reasonFor(text: string, matchedWord: string): UnsupportedPropInfo {
   return { sport, reason: sport ? UNSUPPORTED_PROP_REASONS[sport] : UNSUPPORTED_PROP_REASONS.GENERIC };
 }
 
-// "3+ sacks" / "2+ passing completions": an NFL prop in N+ form for a stat
-// this app doesn't grade. Separate from detectUnsupportedProp because the
-// caller must check it BEFORE its "an NFL prop parsePlayerProp recognizes is
-// never flagged" early return - parsePlayerProp reads "passing completions"
-// as PASS_YDS (bare "passing" matches), which would otherwise import it as a
-// yardage pick.
-export function detectUnsupportedNflNPlus(text: string): UnsupportedPropInfo | null {
-  return NFL_N_PLUS_UNSUPPORTED.test(text) ? { sport: "NFL", reason: UNSUPPORTED_PROP_REASONS.NFL } : null;
+// "3+ sacks" / "over 22.5 passing completions": an NFL prop, in either
+// threshold spelling, for a stat this app doesn't grade. Separate from
+// detectUnsupportedProp because the caller must check it BEFORE its "an NFL
+// prop parsePlayerProp recognizes is never flagged" early return -
+// parsePlayerProp reads "passing completions" as PASS_YDS (bare "passing"
+// matches), which would otherwise import it as a yardage pick.
+export function detectUnsupportedNflStat(text: string): UnsupportedPropInfo | null {
+  return NFL_UNSUPPORTED_STAT.test(text) ? { sport: "NFL", reason: UNSUPPORTED_PROP_REASONS.NFL } : null;
 }
 
 // Returns non-null when `text` is an MLB/NHL-style player-prop line this app
@@ -161,7 +177,14 @@ export function detectUnsupportedProp(
 ): UnsupportedPropInfo | null {
   for (const phrase of PHRASES) {
     const m = phrase.exec(text);
-    if (m) return reasonFor(text, m[0]);
+    if (!m) continue;
+    // "Oilers over 30.5 shots on goal" - a whole team's shots total, not a
+    // skater's prop.
+    const subject = subjectBefore(text, m.index).replace(new RegExp(`\\s*(?:(?:over|under|o|u)\\s*)?${NUM}\\+?\\s*$`, "i"), "");
+    if (/shots?\s+on\s+goal/i.test(m[0]) && subject && PERSON_SHAPE.test(subject) && isTeamSubject(subject)) {
+      return { sport: null, reason: UNSUPPORTED_PROP_REASONS.TEAM_STAT };
+    }
+    return reasonFor(text, m[0]);
   }
 
   for (const re of [OVER_UNDER_THEN_WORD, WORD_THEN_OVER_UNDER, N_PLUS_THEN_WORD, BARE_NUM_THEN_STRONG]) {
@@ -169,11 +192,18 @@ export function detectUnsupportedProp(
     if (!m) continue;
     const word = m[1];
     const strong = new RegExp(`^(?:${STRONG_WORDS})$`, "i").test(word);
+    const subject = subjectBefore(text, m.index);
+    const teamSubject = !!subject && PERSON_SHAPE.test(subject) && isTeamSubject(subject);
+    if (teamSubject && !SCORING_WORDS.test(word)) {
+      // "Lakers over 45.5 rebounds", "Yankees over 8.5 hits": a stat total
+      // for a whole team - not a scoring total (left untouched below) and not
+      // a player prop either. Never a TOTAL.
+      return { sport: null, reason: UNSUPPORTED_PROP_REASONS.TEAM_STAT };
+    }
     if (!strong) {
       // Ambiguous word (runs/points/assists): a prop only when the subject is
       // a person. An empty subject ("Over 8.5 runs") or a team is a game total.
-      const subject = subjectBefore(text, m.index);
-      if (!subject || !PERSON_SHAPE.test(subject) || isTeamSubject(subject)) continue;
+      if (!subject || !PERSON_SHAPE.test(subject) || teamSubject) continue;
     }
     return reasonFor(text, word);
   }

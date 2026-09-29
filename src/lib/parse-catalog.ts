@@ -13,7 +13,7 @@ import {
 import { isKnownFullPlayerName } from "@/lib/player-roster-fallback";
 import {
   detectUnsupportedProp,
-  detectUnsupportedNflNPlus,
+  detectUnsupportedNflStat,
   type UnsupportedPropInfo,
 } from "@/lib/unsupported-prop-vocab";
 
@@ -1433,7 +1433,7 @@ export function detectUnsupportedPropLine(text: string): UnsupportedPropInfo | n
   // NFL stats with no grader ("3+ sacks", "2+ passing completions") are checked
   // first: parsePlayerProp would otherwise claim "passing completions" as
   // PASS_YDS and let it import as a yardage pick.
-  const nflUnsupported = detectUnsupportedNflNPlus(text);
+  const nflUnsupported = detectUnsupportedNflStat(text);
   if (nflUnsupported) return nflUnsupported;
   if (parsePlayerProp(text)) return null;
   return detectUnsupportedProp(
