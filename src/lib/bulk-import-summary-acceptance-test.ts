@@ -8,7 +8,14 @@
 // lines, and total-line-confirmation prompts left unanswered at submit
 // time - categories that never reach the server at all, so the toast never
 // saw them.
-import { isPendingOrRejectedTotalLine, partitionReviewEntries, totalSkipped, type ReviewPickState } from "./bulk-import-summary";
+import {
+  isPendingOrRejectedTotalLine,
+  partitionReviewEntries,
+  totalSkipped,
+  describeUnresolvedLines,
+  unresolvedReasonBreakdown,
+  type ReviewPickState,
+} from "./bulk-import-summary";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -134,6 +141,40 @@ check(
   }),
   5
 );
+
+// ---------------------------------------------------------------------------
+console.log("\n########## describeUnresolvedLines / unresolvedReasonBreakdown ##########");
+{
+  const lines = [
+    "Ivan Demidov 2+ shots on goal",
+    "William Nylander anytime goal scorer",
+    "Chris Sale over 5.5 K",
+    "Lakers over 45.5 rebounds",
+    "Foo Bar over 3.5", // a plain miss - no reason
+  ];
+  const entries = describeUnresolvedLines(lines);
+  check("every line keeps its text, in order", entries.map((e) => e.text), lines);
+  check("reasons: prop lines get one, a plain miss gets none", entries.map((e) => e.reason), [
+    "NHL player props aren't supported yet",
+    "NHL player props aren't supported yet",
+    "MLB player props aren't supported yet",
+    "Team stat totals aren't supported yet",
+    null,
+  ]);
+  check("breakdown groups by reason, most common first", unresolvedReasonBreakdown(entries), [
+    { reason: "NHL player props aren't supported yet", count: 2 },
+    { reason: "MLB player props aren't supported yet", count: 1 },
+    { reason: "Team stat totals aren't supported yet", count: 1 },
+  ]);
+  check("breakdown of only plain misses is empty", unresolvedReasonBreakdown(describeUnresolvedLines(["Foo Bar over 3.5"])), []);
+  // The count the header shows is the list length, whatever the reasons: prop
+  // lines are counted in totalSkipped exactly like any other unresolved line.
+  check(
+    "prop lines count in the shared skip total",
+    totalSkipped({ unresolvedLines: lines, ambiguousUnanswered: [], totalLinePending: [], duplicates: [], serverSkipped: 0 }),
+    5
+  );
+}
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);

@@ -1,8 +1,5 @@
 import { normalizeName } from "@/lib/fuzzy-match";
-<<<<<<< HEAD
 import { looksPickLikeHeader } from "@/lib/market-hint";
-import { parsePlayerProp, pickPeriodFromText, extractLine, type SegmentPeriod } from "@/lib/bet-line";
-=======
 import {
   parsePlayerProp,
   pickPeriodFromText,
