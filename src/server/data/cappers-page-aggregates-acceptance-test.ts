@@ -15,10 +15,10 @@
 //   DATABASE_URL=postgresql://postgres@localhost:5433/t_x DIRECT_URL=... npx tsx <this file>
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, type ScorecardWindow } from "@/server/data/stats";
+import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, currentStreak, type ScorecardWindow } from "@/server/data/stats";
 import * as adapter from "@/server/data/pick-aggregates-cappers-adapter";
 import type { LeaderboardEntry } from "@/server/data/cappers";
-import { getCappersPageData, sparklineTone, SPARKLINE_MIN_PICKS, HOT_STREAK_MIN, type CapperSparkline } from "@/server/data/cappers-page-aggregates";
+import { getCappersPageData, sparklineTone, SPARKLINE_MIN_PICKS, HOT_STREAK_MIN, getPanelRows, type CapperSparkline, type PanelWindow, type StreakEntry } from "@/server/data/cappers-page-aggregates";
 import { sparklineLabel } from "@/components/dashboard/capper-sparkline";
 import { comparePicksChronological } from "@/lib/pick-order";
 import { MIN_PICKS_OPTIONS, PAGE_SIZE, SORT_OPTIONS, type CappersSortKey } from "@/lib/cappers-page-params";
@@ -446,12 +446,12 @@ async function main() {
   const topShown = top3.top.map((e) => e.stats.roi);
   check("odds 0: top cappers follow the displayed ROI", topShown.every((v, i) => i === 0 || cmpDesc(topShown[i - 1], v) <= 0) && topShown[0] === Infinity, JSON.stringify(topShown));
 
-  // ============ Hottest this week ============
+  // ============ Winners this week ============
   // Independent reference straight from the raw picks: datePosted in the last 7 days (Most active's
   // window), graded (WIN/LOSS/PUSH) only, >= 5 graded, net units = sum(win units) - sum(loss units)
   // with a push at 0, rounded to 2dp, > 0; ordered units desc, then the page's tie order.
   const r2 = (n: number) => Math.round(n * 100) / 100;
-  async function referenceHottest(userId: string) {
+  async function referenceWinners(userId: string) {
     const since = Date.now() - 7 * 86400000;
     const picks = await prisma.pick.findMany({ where: { userId, datePosted: { gte: new Date(since) }, status: { in: ["WIN", "LOSS", "PUSH"] } }, include: { capper: true } });
     const by = new Map<string, { name: string; n: number; net: number }>();
@@ -467,8 +467,8 @@ async function main() {
       .slice(0, 5)
       .map(({ capperId, name, netUnits }) => ({ capperId, name, colorTag: null as string | null, netUnits }));
   }
-  const hottestOf = async (userId: string, o: { window?: ScorecardWindow; league?: string } = {}) =>
-    (await getCappersPageData({ userId, window: o.window ?? "ALL", league: o.league, min: 0, sort: "roi", fav: false, q: "", page: 1 })).hottest;
+  const winnersOf = async (userId: string, o: { window?: ScorecardWindow; league?: string } = {}) =>
+    (await getCappersPageData({ userId, window: o.window ?? "ALL", league: o.league, min: 0, sort: "roi", fav: false, q: "", page: 1 })).winners;
   // One pick per status, posted `startMin`, `startMin`+60, ... minutes ago.
   const seq = (capperId: string, statuses: PickSpec["status"][], o: { odds?: number; units?: number; startMin?: number; sport?: string } = {}): PickSpec[] =>
     statuses.map((status, i) => ({ capperId, status, odds: o.odds ?? 100, units: o.units ?? 1, sport: o.sport, gameTime: ago((o.startMin ?? 60) + i * 60) }));
@@ -506,15 +506,15 @@ async function main() {
     ...seq(h.lucky, [L], { odds: 100, startMin: 12 * DAY }),
   ]);
 
-  const gotH = await hottestOf(UH);
-  same("hottest: equals the raw-pick reference (top 5, ordered by units, page tie order)", gotH, await referenceHottest(UH));
-  check("hottest: exactly 5 rows although 7 cappers qualify", gotH.length === 5, String(gotH.length));
+  const gotH = await winnersOf(UH);
+  same("winners: equals the raw-pick reference (top 5, ordered by units, page tie order)", gotH, await referenceWinners(UH));
+  check("winners: exactly 5 rows although 7 cappers qualify", gotH.length === 5, String(gotH.length));
   check(
-    "hottest: ordered by net units, ties by name (Fav 5.0, Hot C 4.0, then Hot A / Pushy at 3.0, Hot B 2.64)",
+    "winners: ordered by net units, ties by name (Fav 5.0, Hot C 4.0, then Hot A / Pushy at 3.0, Hot B 2.64)",
     gotH.map((e) => e.name).join("|") === "Fav ignored|Hot C|Hot A|Pushy|Hot B",
     gotH.map((e) => e.name + " " + e.netUnits).join("|")
   );
-  same("hottest: units values (exact, 2dp)", gotH.map((e) => e.netUnits), [5, 4, 3, 3, 2.64]);
+  same("winners: units values (exact, 2dp)", gotH.map((e) => e.netUnits), [5, 4, 3, 3, 2.64]);
   const nameSet = new Set(gotH.map((e) => e.name));
   for (const [why, name] of [
     ["min 5 graded picks", "Lucky"],
@@ -525,8 +525,8 @@ async function main() {
     ["net units < 0", "Cold"],
     ["net units = 0", "Zero"],
   ] as const)
-    check(`hottest: "${name}" excluded (${why})`, !nameSet.has(name));
-  check("hottest: a push adds 0 units and counts as a graded pick (3 wins + 2 pushes = +3.0, eligible)", gotH.find((e) => e.name === "Pushy")?.netUnits === 3);
+    check(`winners: "${name}" excluded (${why})`, !nameSet.has(name));
+  check("winners: a push adds 0 units and counts as a graded pick (3 wins + 2 pushes = +3.0, eligible)", gotH.find((e) => e.name === "Pushy")?.netUnits === 3);
 
   // Tie rule at the cut: three cappers on exactly +1.0 compete for the one remaining slot.
   const UT = await makeUser("hottie");
@@ -541,9 +541,9 @@ async function main() {
     ...seq(tt.a, [W, L, L, W, W]),
     ...seq(tt.c, [W, L, L, W, W]),
   ]);
-  const gotT = await hottestOf(UT);
-  same("hottest tie rule: equal units -> lower(name) (names are unique per user, case-insensitively) (matches reference)", gotT, await referenceHottest(UT));
-  check("hottest tie rule: 'alpha tie' < 'Bravo tie' < 'charlie tie' by lower(name) (raw byte order would pick 'Bravo tie') -> the last slot goes to 'alpha tie'", gotT.length === 5 && gotT[4].name === "alpha tie", gotT.map((e) => e.name).join("|"));
+  const gotT = await winnersOf(UT);
+  same("winners tie rule: equal units -> lower(name) (names are unique per user, case-insensitively) (matches reference)", gotT, await referenceWinners(UT));
+  check("winners tie rule: 'alpha tie' < 'Bravo tie' < 'charlie tie' by lower(name) (raw byte order would pick 'Bravo tie') -> the last slot goes to 'alpha tie'", gotT.length === 5 && gotT[4].name === "alpha tie", gotT.map((e) => e.name).join("|"));
 
   // Fewer than 5 qualify -> fewer rows; none qualify -> empty list (the panel shows its muted empty state).
   const UF = await makeUser("hotfew");
@@ -555,35 +555,130 @@ async function main() {
     ...seq(ff.loser, [L, L, L, L, L]),
     ...seq(ff.few, [W, W]), // too few picks
   ]);
-  const gotF = await hottestOf(UF);
-  same("hottest: fewer than 5 qualify -> only those rows", gotF, await referenceHottest(UF));
-  check("hottest: fewer-than-5 case returns exactly the 2 winners, best first", gotF.map((e) => e.name + " " + e.netUnits).join("|") === "Few a 5|Few b 3", gotF.map((e) => e.name + " " + e.netUnits).join("|"));
+  const gotF = await winnersOf(UF);
+  same("winners: fewer than 5 qualify -> only those rows", gotF, await referenceWinners(UF));
+  check("winners: fewer-than-5 case returns exactly the 2 winners, best first", gotF.map((e) => e.name + " " + e.netUnits).join("|") === "Few a 5|Few b 3", gotF.map((e) => e.name + " " + e.netUnits).join("|"));
 
   const UN = await makeUser("hotnone");
   const nn = await makeCapper(UN, "n1", "Nobody wins");
   const nn2 = await makeCapper(UN, "n2", "Lucky small");
   await addPicks(UN, [...seq(nn, [L, L, L, L, L, W]), ...seq(nn2, [W, W, W, W])]);
-  check("hottest: no winning capper -> empty list", (await hottestOf(UN)).length === 0);
-  check("hottest: a user with no picks at all -> empty list", (await hottestOf(await makeUser("hotempty"))).length === 0);
+  check("winners: no winning capper -> empty list", (await winnersOf(UN)).length === 0);
+  check("winners: a user with no picks at all -> empty list", (await winnersOf(await makeUser("hotempty"))).length === 0);
 
   // The card ignores the time tabs and the league select: same list for every window and league.
   for (const window of SCORECARD_WINDOWS as ScorecardWindow[])
-    for (const league of [undefined, "MLB", "NFL"]) same(`hottest ignores window/league [${window} ${league ?? "all"}]`, await hottestOf(UH, { window, league }), gotH);
+    for (const league of [undefined, "MLB", "NFL"]) same(`winners ignores window/league [${window} ${league ?? "all"}]`, await winnersOf(UH, { window, league }), gotH);
 
   // Same units as elsewhere: these cappers have all their picks inside the week, so the ALL-time
-  // leaderboard's displayed net units (the number every other card shows) must equal the Hottest value.
+  // leaderboard's displayed net units (the number every other card shows) must equal the Winners value.
   const allTime = new Map((await adapter.getCapperLeaderboardTable(UH, "ALL")).map((e) => [e.capperId, e.stats.netUnits]));
-  for (const e of gotH) check(`hottest units == leaderboard units (${e.name})`, allTime.get(e.capperId) === e.netUnits, `${e.netUnits} vs ${allTime.get(e.capperId)}`);
+  for (const e of gotH) check(`winners units == leaderboard units (${e.name})`, allTime.get(e.capperId) === e.netUnits, `${e.netUnits} vs ${allTime.get(e.capperId)}`);
 
   // An odds = 0 win poisons the displayed units (Infinity / NaN); such a value has no bar or "+X.Xu", so it is left out.
   const U0 = await makeUser("hotodds0");
   const o0 = await makeCapper(U0, "o", "Odds zero");
   const o1 = await makeCapper(U0, "p", "Odds normal");
   await addPicks(U0, [...seq(o0, [W, W, W, W, L], { odds: 0 }), ...seq(o1, [W, W, W, W, L], { odds: 100 })]);
-  same("hottest: non-finite (odds = 0 win) units are left out, normal capper still listed", (await hottestOf(U0)).map((e) => e.name), ["Odds normal"]);
+  same("winners: non-finite (odds = 0 win) units are left out, normal capper still listed", (await winnersOf(U0)).map((e) => e.name), ["Odds normal"]);
 
   // Scoped to the user: every returned capper belongs to that user's fixture.
-  check("hottest: scoped to the user (no cross-user rows)", gotH.every((e) => e.capperId.startsWith(PREFIX + "user-hot-")) && gotT.every((e) => e.capperId.startsWith(PREFIX + "user-hottie-")));
+  check("winners: scoped to the user (no cross-user rows)", gotH.every((e) => e.capperId.startsWith(PREFIX + "user-hot-")) && gotT.every((e) => e.capperId.startsWith(PREFIX + "user-hottie-")));
+
+  // ---- Hottest / Coldest: CURRENT win / loss streak (v2 panels) ------------------------------------
+  // Same streak definition as the "Hot streaks" stat: WIN/LOSS only, a push or void neither extends nor
+  // breaks a run, newest first by (gameTime, createdAt, id). The panel window only decides eligibility
+  // (>= 1 graded pick with gameTime in the window); the run itself reads the whole history of the capper.
+  const streakOf = async (userId: string, panel: "hottest" | "coldest", window: PanelWindow = "week") => (await getPanelRows({ userId, panel, window })) as StreakEntry[];
+  const line = (rows: StreakEntry[]) => rows.map((e) => e.name + ":" + e.streak + (e.units === undefined ? "" : ":" + e.units));
+  const D8 = 8 * DAY + 60;
+  // Statuses below are listed NEWEST FIRST (seq puts index 0 the most recent).
+  const scenario = async (tag: string, cappers: { name: string; specs: (capperId: string) => PickSpec[] }[]) => {
+    const u = await makeUser(tag);
+    const ids: Record<string, string> = {};
+    for (const [i, c] of cappers.entries()) {
+      ids[c.name] = await makeCapper(u, String(i), c.name);
+      await addPicks(u, c.specs(ids[c.name]));
+    }
+    return { u, ids };
+  };
+
+  // 1. Skip rules and the minimum length.
+  const S1 = await scenario("streakskip", [
+    { name: "Six wins", specs: (c) => seq(c, [W, W, W, W, W, W, L], { odds: 100 }) },
+    { name: "Push skipped", specs: (c) => seq(c, [W, W, P, W, W, L], { odds: 100 }) }, // a push mid-run is skipped: 4 wins
+    { name: "Void skipped", specs: (c) => seq(c, [W, "CANCELLED", W, "PENDING", W, L], { odds: 100 }) }, // void + pending skipped: 3 wins
+    { name: "Loss breaks", specs: (c) => seq(c, [W, W, L, W, W, W], { odds: 100 }) }, // a LOSS ends the run at 2: below the minimum 3
+    { name: "Push on top", specs: (c) => seq(c, [P, W, W, W, L], { odds: 100 }) }, // newest pick is a push: the 3 wins behind it still count
+    { name: "Mixed", specs: (c) => seq(c, [W, L, W, L], { odds: 100 }) },
+  ]);
+  same("hottest: longest run first, then units, then name; pushes/voids skipped, a loss breaks a run, min 3", line(await streakOf(S1.u, "hottest")), [
+    "Six wins:6", "Push skipped:4", "Push on top:3", "Void skipped:3",
+  ]);
+  same("coldest: none of them are on a loss streak >= 3", await streakOf(S1.u, "coldest"), []);
+  // The default-window panel on the page is the same SQL as the dropdown fetch.
+  const pageS1 = await getCappersPageData({ userId: S1.u, window: "ALL", min: 0, sort: "roi", fav: false, q: "", page: 1 });
+  same("hottest: page statement == dropdown fetch (week)", pageS1.hottest, await streakOf(S1.u, "hottest"));
+  same("coldest: page statement == dropdown fetch (week)", pageS1.coldest, await streakOf(S1.u, "coldest"));
+  // Every streak length agrees with the JS definition (stats.ts currentStreak) over the picks of the capper.
+  for (const [name, id] of Object.entries(S1.ids)) {
+    const picks = await prisma.pick.findMany({ where: { capperId: id } });
+    const ref = currentStreak(picks.sort(comparePicksChronological).map((p) => ({ status: p.status }) as never));
+    const got = (await streakOf(S1.u, "hottest")).find((e) => e.name === name);
+    check(`hottest: "${name}" length == stats.ts currentStreak`, ref.type === "WIN" && ref.count >= 3 ? got?.streak === ref.count : got === undefined, `${JSON.stringify(ref)} vs ${got?.streak}`);
+  }
+  // Standout cards carry the same streak the leaderboard shows (ALL window).
+  const lbAll = new Map((await adapter.getCapperLeaderboardTable(S1.u, "ALL")).map((e) => [e.capperId, e.stats.currentStreak]));
+  for (const e of pageS1.top) same(`standout card streak == leaderboard streak (${e.name})`, e.stats.currentStreak, lbAll.get(e.capperId));
+
+  // 2. The window is only an eligibility filter.
+  const S2 = await scenario("streakwin", [
+    { name: "Old only", specs: (c) => seq(c, [W, W, W, W, W], { odds: 100, startMin: D8 }) }, // nothing this week
+    { name: "Spans window", specs: (c) => [...seq(c, [W, W, W], { odds: 100 }), ...seq(c, [W, W, W, L], { odds: 100, startMin: D8 })] }, // true run 6, not truncated to 3
+    { name: "Pending only", specs: (c) => [...seq(c, ["PENDING"], { odds: 100 }), ...seq(c, [W, W, W, W, W], { odds: 100, startMin: D8 })] }, // a pending pick is not graded
+    { name: "Push eligible", specs: (c) => [...seq(c, [P], { odds: 100 }), ...seq(c, [W, W, W, W, L], { odds: 100, startMin: D8 })] }, // a graded push makes it eligible
+    { name: "Month only", specs: (c) => seq(c, [W, W, W], { odds: 100, startMin: 10 * DAY }) },
+    { name: "No picks", specs: () => [] },
+  ]);
+  same("hottest [week]: true run length shown (6, not the 3 inside the window); no graded pick in window / pending-only excluded", line(await streakOf(S2.u, "hottest")), [
+    "Spans window:6", "Push eligible:4",
+  ]);
+  same("hottest [30d]: a wider window admits more cappers", line(await streakOf(S2.u, "hottest", "30d")), [
+    "Spans window:6", "Old only:5", "Pending only:5", "Push eligible:4", "Month only:3",
+  ]);
+  // Today (Eastern day so far): only a capper with a graded pick since Eastern midnight is eligible.
+  const S2t = await scenario("streaktoday", [
+    { name: "Today hot", specs: (c) => seq(c, [W, W, W], { odds: 100, startMin: 1 }) },
+    { name: "Two days ago", specs: (c) => seq(c, [W, W, W], { odds: 100, startMin: 2 * DAY }) },
+  ]);
+  same("hottest [today]: needs a graded pick since Eastern midnight", line(await streakOf(S2t.u, "hottest", "today")), ["Today hot:3"]);
+
+  // 3. Ties on length: larger units first, then name (case-insensitive, then bytewise).
+  const S3 = await scenario("streaktie", [
+    { name: "Bravo tie", specs: (c) => seq(c, [W, W, W, W, L], { odds: 100 }) },
+    { name: "alpha tie", specs: (c) => seq(c, [W, W, W, W, L], { odds: 100 }) },
+    { name: "Tie bigger units", specs: (c) => seq(c, [W, W, W, W, L], { odds: 200 }) },
+    { name: "Two wins", specs: (c) => seq(c, [W, W, L], { odds: 100 }) },
+  ]);
+  same("hottest: tie on length -> larger units, then name", line(await streakOf(S3.u, "hottest")), ["Tie bigger units:4", "alpha tie:4", "Bravo tie:4"]);
+
+  // 4. Coldest: units lost across the run, negated; odds-0 picks count toward the length but not the units.
+  const S4 = await scenario("streakcold", [
+    { name: "Cold six", specs: (c) => seq(c, [L, L, L, L, L, L, W], { odds: 100, units: 2 }) }, // 6 losses, -12.0u
+    { name: "Cold odds zero", specs: (c) => [...seq(c, [L], { odds: 0, startMin: 60 }), ...seq(c, [L, L, L, W], { odds: 100, startMin: 120 })] }, // 4 losses, the odds-0 one left out: -3.0u
+    { name: "Cold broken", specs: (c) => seq(c, [L, L, W, L, L, L], { odds: 100 }) }, // 2 -> excluded
+    { name: "Cold tie big", specs: (c) => seq(c, [L, L, L, L, W], { odds: 100, units: 3 }) }, // 4 losses, -12.0u
+    { name: "Cold tie small", specs: (c) => seq(c, [L, L, L, L, W], { odds: 100, units: 1 }) }, // 4 losses, -4.0u
+    { name: "Cold push", specs: (c) => seq(c, [L, P, L, L, W], { odds: 100 }) }, // push skipped: 3 losses, -3.0u
+    { name: "Hot one", specs: (c) => seq(c, [W, W, W], { odds: 100 }) },
+  ]);
+  same("coldest: longest loss run first, then larger units lost, then name; odds-0 left out of units; push skipped", line(await streakOf(S4.u, "coldest")), [
+    "Cold six:6:-12", "Cold tie big:4:-12", "Cold tie small:4:-4", "Cold odds zero:4:-3", "Cold push:3:-3",
+  ]);
+  same("hottest: only the win streak shows in Hottest", line(await streakOf(S4.u, "hottest")), ["Hot one:3"]);
+  same("coldest: page statement == dropdown fetch", (await getCappersPageData({ userId: S4.u, window: "ALL", min: 0, sort: "roi", fav: false, q: "", page: 1 })).coldest, await streakOf(S4.u, "coldest"));
+  check("streak panels: scoped to the user", (await streakOf(S4.u, "coldest")).every((e) => e.capperId.startsWith(PREFIX + "user-streakcold-")));
+  check("streak panels: a five-row response is small", JSON.stringify(await streakOf(S4.u, "coldest")).length < 2048);
 
   console.log(`\n${assertions} assertions, ${failures} failed.`);
 }

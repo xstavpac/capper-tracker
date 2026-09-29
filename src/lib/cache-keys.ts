@@ -5,6 +5,8 @@
 // (odds, liveScores - see ttl-memo.ts).
 export const cacheKeys = {
   dashboard: (userId: string) => `dashboard:${userId}`,
+  // One /cappers panel at one window for one user (the dropdown fetch, api/cappers/panel).
+  cappersPanel: (userId: string, panel: string, window: string) => `cappers-panel:${userId}:${panel}:${window}`,
   // Dated: the underlying OddsSnapshot row is itself (sportKey, fetchDate)-
   // scoped (its own Prisma unique constraint), so the cache key matches that
   // grain exactly - a day rollover naturally produces a fresh, never-yet-
