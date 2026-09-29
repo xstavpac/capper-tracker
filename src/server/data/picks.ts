@@ -208,7 +208,10 @@ export async function getPicksForCapper(userId: string, capperId: string) {
   return prisma.pick.findMany({
     where: { userId, capperId },
     include: { capper: true, sport: true, league: true },
-    orderBy: { gameTime: "asc" },
+    // (gameTime, createdAt, id): the canonical chronological tie-break, so this
+    // order matches comparePicksChronological and the SQL aggregates -
+    // selectCapperRecentPicks takes its "most recent" straight from it.
+    orderBy: [{ gameTime: "asc" }, { createdAt: "asc" }, { id: "asc" }],
   });
 }
 

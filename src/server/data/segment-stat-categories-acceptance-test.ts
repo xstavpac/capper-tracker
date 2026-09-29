@@ -170,6 +170,9 @@ const pick = (over: Partial<Pick> & { status: Pick["status"]; betType: Pick["bet
     line: over.line ?? null,
     units: 1,
     gameTime: new Date("2026-01-0" + ((pid % 8) + 1) + "T20:00:00Z"),
+    // Increases with creation order: computeStats breaks gameTime ties by (createdAt, id),
+    // and this fixture reuses 8 game dates, so ties keep their construction order.
+    createdAt: new Date(Date.UTC(2026, 0, 1) + pid * 1000),
     pickedSide: over.pickedSide ?? "HOME",
     mlFavoredSide: null,
     sport: { name: "NBA" },
