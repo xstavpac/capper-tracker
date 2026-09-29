@@ -1,5 +1,6 @@
 import { unstable_cache, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays, APP_TIME_ZONE } from "@/lib/dates";
 import { isSportInSeason, oddsApiRequestKeys } from "@/lib/sport-seasons";
 import type { OddsFetchStatus, BackfillStatus } from "@/lib/odds-cron-status";
@@ -531,6 +532,35 @@ export function backfillWriteInvalidatesCache(status: BackfillStatus): boolean {
   return status === "added";
 }
 
+// Just what the "is anything missing / has everything started?" checks need
+// from a cached game. The full OddsGame carries every bookmaker's every
+// market (tens to hundreds of KB per snapshot); id + commenceTime is a few
+// bytes per game.
+export type OddsGameStub = { id: string; commenceTime: string };
+
+// Reads only each cached game's id and commenceTime for the given fetchDates,
+// projected inside Postgres (jsonb_array_elements -> jsonb_agg), so the
+// bookmaker/market payload never leaves the database. A fetchDate with no
+// snapshot row is ABSENT from the returned map (callers need that to tell "no
+// base row" from "a row holding zero games", which comes back as []).
+// Order within a snapshot follows the stored array but callers must not
+// depend on it. Read-only: any path that must write the snapshot back does
+// so with its own statement (see backfillOddsForSport).
+export async function getOddsGameStubs(sportKey: string, fetchDates: string[]): Promise<Map<string, OddsGameStub[]>> {
+  if (fetchDates.length === 0) return new Map();
+  const rows = await prisma.$queryRaw<{ fetchDate: string; games: OddsGameStub[] }[]>(Prisma.sql`
+    SELECT s."fetchDate",
+           COALESCE(
+             (SELECT jsonb_agg(jsonb_build_object('id', g->>'id', 'commenceTime', g->>'commenceTime'))
+                FROM jsonb_array_elements(CASE WHEN jsonb_typeof(s.data) = 'array' THEN s.data ELSE '[]'::jsonb END) AS g),
+             '[]'::jsonb
+           ) AS games
+    FROM odds_snapshots s
+    WHERE s."sportKey" = ${sportKey} AND s."fetchDate" = ANY(${fetchDates}::text[])
+  `);
+  return new Map(rows.map((r) => [r.fetchDate, r.games]));
+}
+
 export async function backfillOddsForSport(sportKey: string): Promise<{ added: number; status: BackfillStatus }> {
   if (!isSportInSeason(sportKey)) return { added: 0, status: "off_season" };
 
@@ -540,15 +570,15 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
   // getOddsForSport's job (via the seed cron, or a page load that beats it),
   // not this function's. Running the full fetch below without an existing
   // row would just duplicate that path for no benefit.
-  const existing = await prisma.oddsSnapshot.findUnique({
-    where: { sportKey_fetchDate: { sportKey, fetchDate } },
-  });
-  if (!existing) return { added: 0, status: "no_base_row" };
+  // Only id + commenceTime are needed to decide anything here (the diff below
+  // is by id, the credit guard by start time), so this never reads the blob.
+  // The full blob is only ever touched inside Postgres, by the append below.
+  const existingGames = (await getOddsGameStubs(sportKey, [fetchDate])).get(fetchDate);
+  if (!existingGames) return { added: 0, status: "no_base_row" };
 
   const apiKey = process.env.ODDS_API_KEY;
   if (!apiKey) return { added: 0, status: "no_api_key" };
 
-  const existingGames = existing.data as unknown as OddsGame[];
   const existingIds = new Set(existingGames.map((g) => g.id));
 
   // Credit-cost guard: once every game already cached for today has started,
@@ -604,10 +634,18 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
   const missingGames = freshGames.filter((g) => !existingIds.has(g.id));
   if (missingGames.length === 0) return { added: 0, status: "nothing_missing" };
 
-  await prisma.oddsSnapshot.update({
-    where: { sportKey_fetchDate: { sportKey, fetchDate } },
-    data: { data: [...existingGames, ...missingGames] as any },
-  });
+  // Append server-side (jsonb array || jsonb array == [...existing, ...missing])
+  // instead of read-modify-write: the existing games stay byte-for-byte what
+  // is stored (this must never refresh an already-cached game), the blob is
+  // never pulled into this process, and a concurrent writer's changes aren't
+  // clobbered by a stale copy. Zero rows updated means the row vanished
+  // between the check and here - fail loudly, as update() did (P2025).
+  const appended = await prisma.$executeRaw`
+    UPDATE odds_snapshots
+    SET data = data || ${JSON.stringify(missingGames)}::jsonb
+    WHERE "sportKey" = ${sportKey} AND "fetchDate" = ${fetchDate}
+  `;
+  if (appended === 0) throw new Error("[backfillOddsForSport] snapshot row disappeared before append: " + sportKey + " " + fetchDate);
 
   // Same try/catch/log-and-continue treatment as seedOddsSnapshot - this
   // runs from the real cron Route Handler in production, where
@@ -897,16 +935,14 @@ const CFL_SCORE_WINDOW_AFTER_MS = 60 * 60 * 1000;
 // (no CFL OddsSnapshot because CFL isn't in LIVE_SPORTS / SPORT_SEASON_CONFIG
 // yet) there are no rows, so this returns false and getCflLiveScores never
 // hits the network.
-async function cflGameWithinScoreWindow(): Promise<boolean> {
+export async function cflGameWithinScoreWindow(): Promise<boolean> {
   const today = easternDateKey(new Date());
   const yesterday = easternDateKey(new Date(Date.now() - 86400000));
-  const snapshots = await prisma.oddsSnapshot.findMany({
-    where: { sportKey: "americanfootball_cfl", fetchDate: { in: [today, yesterday] } },
-    select: { data: true },
-  });
+  // Only start times matter - read id/commenceTime stubs, not the blobs.
+  const snapshots = await getOddsGameStubs("americanfootball_cfl", [today, yesterday]);
   const now = Date.now();
-  for (const snapshot of snapshots) {
-    for (const game of snapshot.data as unknown as OddsGame[]) {
+  for (const games of snapshots.values()) {
+    for (const game of games) {
       const start = new Date(game.commenceTime).getTime();
       if (start <= now + CFL_SCORE_WINDOW_AFTER_MS && start >= now - CFL_SCORE_WINDOW_BEFORE_MS) {
         return true;

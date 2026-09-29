@@ -43,6 +43,12 @@ function expect(label: string, actual: unknown, expected: unknown) {
 
 const prismaOriginals: Record<string, unknown> = {};
 function patch(path: string, fn: unknown) {
+  // Top-level client methods ("$queryRaw", "$executeRaw") have no model prefix.
+  if (path.startsWith("$")) {
+    prismaOriginals[path] ??= (prisma as unknown as Record<string, unknown>)[path];
+    (prisma as unknown as Record<string, unknown>)[path] = fn;
+    return;
+  }
   const [model, method] = path.split(".");
   const target = (prisma as unknown as Record<string, Record<string, unknown>>)[model];
   prismaOriginals[path] ??= target[method];
@@ -50,6 +56,10 @@ function patch(path: string, fn: unknown) {
 }
 function restorePrisma() {
   for (const path of Object.keys(prismaOriginals)) {
+    if (path.startsWith("$")) {
+      (prisma as unknown as Record<string, unknown>)[path] = prismaOriginals[path];
+      continue;
+    }
     const [model, method] = path.split(".");
     (prisma as unknown as Record<string, Record<string, unknown>>)[model][method] = prismaOriginals[path];
   }
@@ -116,7 +126,9 @@ const nflOddsKey = `odds:${NFL}:${fetchDate}`;
 // of these tests depend on a specific calendar day the way
 // odds-usage-log-failure-acceptance-test.ts's backfill same-day filter does,
 // so a plain future timestamp is enough and keeps this file simpler.
-const laterToday = new Date(Date.now() + 2 * 3600000).toISOString();
+// +1 minute, not +2h: a 2h offset crosses Eastern midnight after ~10pm ET, and
+// backfill only appends same-day games, so the test would flake at night.
+const laterToday = new Date(Date.now() + 60000).toISOString();
 
 async function main() {
   const realApiKey = process.env.ODDS_API_KEY;
@@ -231,10 +243,12 @@ async function main() {
   //    actually wired into the real function, not just correct in
   //    isolation as a predicate.
   // =====================================================================
-  patch("oddsSnapshot.findUnique", async () => ({ data: [] })); // existing base row, currently empty
+  // backfill reads id/commenceTime stubs via a raw projection (existing base
+  // row, currently empty) and appends via a raw jsonb || update.
+  patch("$queryRaw", async () => [{ fetchDate, games: [] }]);
   patch("oddsApiUsageLog.count", async () => 0);
   patch("oddsApiUsageLog.create", async () => ({}));
-  patch("oddsSnapshot.update", async () => ({}));
+  patch("$executeRaw", async () => 1);
   stubFetch({
     bulk: [{ id: "gBackfill", sport_key: NFL, home_team: "Kansas City Chiefs", away_team: "Denver Broncos", commence_time: laterToday, bookmakers: [] }],
   });

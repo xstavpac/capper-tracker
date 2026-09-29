@@ -79,6 +79,12 @@ function ok(label: string, cond: boolean, detail?: unknown) {
 
 const prismaOriginals: Record<string, unknown> = {};
 function patch(path: string, fn: unknown) {
+  // Top-level client methods ("$queryRaw", "$executeRaw") have no model prefix.
+  if (path.startsWith("$")) {
+    prismaOriginals[path] ??= (prisma as unknown as Record<string, unknown>)[path];
+    (prisma as unknown as Record<string, unknown>)[path] = fn;
+    return;
+  }
   const [model, method] = path.split(".");
   const target = (prisma as unknown as Record<string, Record<string, unknown>>)[model];
   prismaOriginals[path] ??= target[method];
@@ -86,6 +92,10 @@ function patch(path: string, fn: unknown) {
 }
 function restorePrisma() {
   for (const path of Object.keys(prismaOriginals)) {
+    if (path.startsWith("$")) {
+      (prisma as unknown as Record<string, unknown>)[path] = prismaOriginals[path];
+      continue;
+    }
     const [model, method] = path.split(".");
     (prisma as unknown as Record<string, Record<string, unknown>>)[model][method] = prismaOriginals[path];
   }
@@ -185,11 +195,13 @@ async function main() {
   //    game and report success.
   // =====================================================================
   const existingGame = { id: "existing1", sportKey: SPORT, homeTeam: "A", awayTeam: "B", commenceTime: laterToday, bookmakers: [] };
-  patch("oddsSnapshot.findUnique", async () => ({ data: [existingGame] }));
+  // backfill's check reads only id/commenceTime stubs (raw projection) and
+  // appends the missing games server-side (raw jsonb ||) - stub both.
+  patch("$queryRaw", async () => [{ fetchDate, games: [{ id: existingGame.id, commenceTime: existingGame.commenceTime }] }]);
   let updatedData: unknown = null;
-  patch("oddsSnapshot.update", async ({ data }: { data: { data: unknown } }) => {
-    updatedData = data.data;
-    return {};
+  patch("$executeRaw", async (_strings: unknown, appendedJson: string) => {
+    updatedData = [existingGame, ...JSON.parse(appendedJson)];
+    return 1;
   });
   patch("oddsApiUsageLog.count", async () => 0);
   patch("oddsApiUsageLog.create", async () => {
@@ -212,7 +224,7 @@ async function main() {
   expect("backfillOddsForSport: still reports 'added' despite the usage-log write failing", backfillResult?.status, "added");
   expect("backfillOddsForSport: the missing game was still counted", backfillResult?.added, 1);
   ok(
-    "backfillOddsForSport: the missing game was still appended (oddsSnapshot.update ran)",
+    "backfillOddsForSport: the missing game was still appended (the append ran)",
     Array.isArray(updatedData) && (updatedData as unknown[]).length === 2
   );
 
