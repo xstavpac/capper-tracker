@@ -22,7 +22,7 @@ export function Avatar({
 }
 
 // Same star glyph as the Cappers leaderboard's favorite toggle
-// (cappers-leaderboard-table.tsx's filled StarIcon state) - display-only
+// (favorite-star.tsx's filled StarIcon state) - display-only
 // here (no click/toggle affordance), so it doesn't need that component's
 // optimistic-update state machine, just the matching visual.
 export function FavoriteStarIcon() {

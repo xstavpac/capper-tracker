@@ -1,124 +1,83 @@
-import Link from "next/link";
 import { requireUser } from "@/server/auth";
-import {
-  getPlanStatus,
-  getCappersWithPickCounts,
-  findSuspectedDuplicateCappers,
-} from "@/server/data/cappers";
+import { getPlanStatus, getCappersWithPickCounts, findSuspectedDuplicateCappers, type LeaderboardEntry } from "@/server/data/cappers";
 import {
   getMostActiveThisWeek,
-  getCapperLeaderboardTablesByWindow,
-  getSportCategoryPanelData,
-  getFavoriteCappersSummariesByWindow,
+  getCapperLeaderboardTable,
+  getFavoriteCappersSummary,
 } from "@/server/data/pick-aggregates-cappers-adapter";
+import { getCapperSparklines, getCappersOverview } from "@/server/data/cappers-page-aggregates";
 import { LIVE_SPORTS } from "@/server/data/odds";
-import { PICK_CATEGORY_LABELS } from "@/server/data/stats";
+import { PAGE_SIZE, parseCappersParams, type CappersSortKey } from "@/lib/cappers-page-params";
 import { CapperForm } from "@/components/dashboard/capper-form";
-import { CappersLeaderboardTable } from "@/components/dashboard/cappers-leaderboard-table";
-import { FavoriteCappersSummary } from "@/components/dashboard/favorite-cappers-summary";
-import { BestAtPanel, type BestAtEntry } from "@/components/dashboard/best-at-panel";
-import { MostActivePanel } from "@/components/dashboard/most-active-panel";
 import { MergeCappersPanel } from "@/components/dashboard/merge-cappers-panel";
+import { CappersTimeTabs } from "@/components/dashboard/cappers-time-tabs";
+import { CappersStatCards } from "@/components/dashboard/cappers-stat-cards";
+import { MostActivePanel } from "@/components/dashboard/most-active-panel";
+import { TopCappers } from "@/components/dashboard/top-cappers";
+import { CappersLeaderboardCard } from "@/components/dashboard/cappers-leaderboard-card";
 
 const LEAGUES = LIVE_SPORTS.map((s) => s.label);
+const TOP_CAPPERS_COUNT = 4;
 
-// "Best at..." needs one concrete sport to compute a category set for
-// (chipSetForLeague) - MLB by default (richest category set: F5 ML/NRFI
-// alongside the universal ones), or whichever league pill is active.
-const DEFAULT_BEST_AT_SPORT = "MLB";
+const decided = (e: LeaderboardEntry) => e.stats.wins + e.stats.losses + e.stats.pushes;
 
-function pillClass(isActive: boolean) {
-  return (
-    "rounded-full px-4 py-1.5 text-sm font-medium " +
-    (isActive ? "bg-brand-600 text-white" : "bg-card text-muted-foreground shadow-soft hover:bg-muted")
+const SORTERS: Record<CappersSortKey, (a: LeaderboardEntry, b: LeaderboardEntry) => number> = {
+  roi: (a, b) => b.stats.roi - a.stats.roi,
+  win: (a, b) => b.stats.winPct - a.stats.winPct,
+  units: (a, b) => b.stats.netUnits - a.stats.netUnits,
+  record: (a, b) => b.stats.wins - b.stats.losses - (a.stats.wins - a.stats.losses) || b.stats.wins - a.stats.wins,
+};
+
+function rank(entries: LeaderboardEntry[], sort: CappersSortKey) {
+  // Ties fall back to units, then name, so the order (and the pages) never shuffle.
+  return [...entries].sort(
+    (a, b) => SORTERS[sort](a, b) || b.stats.netUnits - a.stats.netUnits || a.name.localeCompare(b.name) || (a.capperId < b.capperId ? -1 : 1)
   );
 }
 
-function buildHref(league: string | undefined) {
-  return league ? "/cappers?league=" + encodeURIComponent(league) : "/cappers";
-}
-
-export default async function CappersPage({
-  searchParams,
-}: {
-  searchParams: { league?: string };
-}) {
+export default async function CappersPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const user = await requireUser();
+  const params = parseCappersParams(searchParams, LEAGUES);
+  const { window } = params;
 
-  const league = LEAGUES.includes(searchParams.league ?? "") ? searchParams.league : undefined;
-  const bestAtSport = league ?? DEFAULT_BEST_AT_SPORT;
-
-  // All 6 SCORECARD_WINDOWS come back from one batched call (one aggregate
-  // query in the database, not one per window), same "toggle is instant, no
-  // reload" UX as before - see CappersLeaderboardTable, which just picks which
-  // of these already-fetched arrays to display.
-  const entriesByWindowPromise = getCapperLeaderboardTablesByWindow(user.id, { sportName: league });
-
-  // Not league-filtered, unlike the leaderboard above - the Favorites summary
-  // pools every favorited capper's picks across all sports, same "collective
-  // record across all of them together" scope regardless of which league pill
-  // happens to be active. With no pill the leaderboard above is already that
-  // same all-sports view, so its entries are reused instead of recomputed.
-  const favoriteSummaryPromise = league
-    ? getFavoriteCappersSummariesByWindow(user.id)
-    : entriesByWindowPromise.then((entries) => getFavoriteCappersSummariesByWindow(user.id, entries));
-
-  const [planStatus, entriesByWindow, favoriteSummaryByWindow, mostActive, categoryPanel, cappersWithCounts, suspectedDuplicates] =
+  const allLeaguesPromise = getCapperLeaderboardTable(user.id, window);
+  const [planStatus, allLeagues, leagueEntries, overview, mostActive, sparklines, favSummary, cappersWithCounts, suspectedDuplicates] =
     await Promise.all([
       getPlanStatus(user.id),
-      entriesByWindowPromise,
-      favoriteSummaryPromise,
-      getMostActiveThisWeek(user.id, { sportName: league }),
-      getSportCategoryPanelData(user.id, bestAtSport),
+      allLeaguesPromise,
+      params.league ? getCapperLeaderboardTable(user.id, window, { sportName: params.league }) : allLeaguesPromise,
+      getCappersOverview(user.id, window),
+      getMostActiveThisWeek(user.id),
+      getCapperSparklines(user.id),
+      params.fav ? getFavoriteCappersSummary(user.id, window) : Promise.resolve(null),
       getCappersWithPickCounts(user.id),
       findSuspectedDuplicateCappers(user.id),
     ]);
 
-  const bestAtEntries: BestAtEntry[] = categoryPanel.breakdown
-    .map((item) => {
-      const top = categoryPanel.leaderboards[item.key]?.[0];
-      if (!top) return null;
-      return { category: item.key, label: PICK_CATEGORY_LABELS[item.key], capperId: top.capperId, capperName: top.name, winPct: top.winPct };
-    })
-    .filter((e): e is BestAtEntry => e !== null);
+  // Same minimum-picks rule as the leaderboard below, but never zero: a capper with
+  // no decided picks has no ROI to rank.
+  const topCappers = rank(allLeagues.filter((e) => decided(e) >= Math.max(params.min, 1)), "roi").slice(0, TOP_CAPPERS_COUNT);
+
+  const q = params.q.trim().toLowerCase();
+  const filtered = rank(
+    leagueEntries.filter((e) => decided(e) >= params.min && (!params.fav || e.isFavorite) && (!q || e.name.toLowerCase().includes(q))),
+    params.sort
+  );
+  const lastPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const page = Math.min(params.page, lastPage);
+  const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Cappers</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {planStatus.capperCount + " capper" + (planStatus.capperCount === 1 ? "" : "s")}
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{planStatus.capperCount + " tracked capper" + (planStatus.capperCount === 1 ? "" : "s")}</p>
         </div>
         <CapperForm atLimit={false} />
       </div>
 
-      {favoriteSummaryByWindow && <FavoriteCappersSummary summaryByWindow={favoriteSummaryByWindow} />}
-
-      {suspectedDuplicates.length > 0 && (
-        <div className="mb-6">
-          <MergeCappersPanel cappers={cappersWithCounts} suspected={suspectedDuplicates} />
-        </div>
-      )}
-
-      {/* Link with scroll={false}, not a raw <a>: a plain anchor is a full
-          browser navigation (the App Router never sees it) and browsers reset
-          scroll to top on any full navigation, so filtering from partway down
-          the page jumped back to the top. This is the same fix already made
-          for the capper detail page's tab row in commit fbc82b0 - a soft
-          client navigation that swaps the filtered data in place with the
-          scroll position untouched. */}
-      <div className="mb-6 flex flex-wrap gap-2">
-        <Link href={buildHref(undefined)} scroll={false} className={pillClass(!league)}>
-          All leagues
-        </Link>
-        {LEAGUES.map((l) => (
-          <Link key={l} href={buildHref(l)} scroll={false} className={pillClass(league === l)}>
-            {l}
-          </Link>
-        ))}
-      </div>
+      {suspectedDuplicates.length > 0 && <MergeCappersPanel cappers={cappersWithCounts} suspected={suspectedDuplicates} />}
 
       {planStatus.capperCount === 0 ? (
         <div className="rounded-card bg-card p-10 text-center shadow-soft">
@@ -126,14 +85,18 @@ export default async function CappersPage({
         </div>
       ) : (
         <>
-          <div className="mb-6">
-            <CappersLeaderboardTable entriesByWindow={entriesByWindow} />
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <BestAtPanel entries={bestAtEntries} />
-            <MostActivePanel entries={mostActive} />
-          </div>
+          <CappersTimeTabs params={params} />
+          <CappersStatCards stats={overview} range={params.range} />
+          <MostActivePanel entries={mostActive} />
+          <TopCappers entries={topCappers} sparklines={sparklines} />
+          <CappersLeaderboardCard
+            rows={rows}
+            total={filtered.length}
+            params={{ ...params, page }}
+            leagues={LEAGUES}
+            sparklines={sparklines}
+            favSummary={favSummary}
+          />
         </>
       )}
     </div>
