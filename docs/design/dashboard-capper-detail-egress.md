@@ -17,7 +17,7 @@ of scope; **Q2 no SQL twins — momentum/consistency/odds-range run the existing
 on a narrow raw series**; Q3 one statement for the capper page; Q4 drop unread
 dashboard `overall` fields (grep evidence in §11); Q5 narrow
 `getCappersWithPickCounts` now; Q6 no `CHECK`, keep zero-odds flag paths; Q7
-capper chart stays full fidelity; Q8/Q9 no capper-page cache; PR order blocks →
+capper chart stays full fidelity; Q8/Q9 no capper-page cache; Q10 dashboard SQL series is the one allowed twin; Q11 capper streak from `currentStreak()` (blocked on the tie-break PR); PR order blocks →
 dashboard → capper detail.
 
 From the original brief:
@@ -338,8 +338,8 @@ same rule and are recorded here rather than left implicit: the capper page's
 **units charts** and its **all-time current streak** are also derived from that
 series by the existing `computeUnitsChartData` / `currentStreak`, so the
 capper-page SQL series and the streak fragment proposed in the first draft are
-gone (the SQL cumulative series of §3.c is now dashboard-only). Q11 asks for
-confirmation of the streak change.
+gone (the SQL cumulative series of §3.c is now dashboard-only). Q11 (DECIDED)
+confirms the streak change, gated on the tie-break PR (§11).
 
 ### 4.1 The series
 
@@ -641,7 +641,7 @@ statistics → ships as a PR for manual review, never auto-merged.
    narrowed to the fields the page reads (Q4, evidence in §11); the harness diff
    attached; the cache and page unchanged. `getCapperPanels` is not touched
    (Q1).
-4. **Capper detail [MR]** — `getCapperDetailData` bundle (one statement), the page
+4. **Capper detail [MR]** — **blocked until the in-progress tie-break/flaky-test PR is merged (Q11)**; `getCapperDetailData` bundle (one statement), the page
    rewired to consume it (existing JS functions over the narrow series), 
    `getPicksForCapper` un-called from the page (it stays for
    `capper-comparison.ts`), `getCappersWithPickCounts` narrowed to
@@ -706,15 +706,23 @@ Recorded from the review of PR #135. **DECIDED** items are not re-litigated.
 - **Q9 — `now` freezing under a cache. DECIDED: moot** (no cache).
 - **PR order. DECIDED:** blocks → dashboard → capper detail (§10).
 
-**Still open (introduced by these decisions):**
+- **Q10 — dashboard SQL series. DECIDED: allowed as the one exception to Q2's
+  "no twins".** The running-sum + bucketing SQL of §3.c (a SQL implementation of
+  `computeCumulativeUnitsSeries` + `downsampleUnitsChart`) stays, because the
+  alternative is shipping every settled row (≈ 520 KB at 20k picks) on every cold
+  dashboard miss, and the dashboard chart is already downsampled by design.
+  Conditions: the **bit-exact parity gate** of §8 (heaviest snapshot account plus
+  synthetic 2,000/2,001/2,002/5k/20k series) must pass; if it does not, the
+  **raw-series fallback** of §3.c (`(gameTime, run)` per settled pick, JS
+  `downsampleUnitsChart` unchanged) ships instead. No other SQL twin is
+  permitted by this decision.
+- **Q11 — capper-page current streak. DECIDED (confirmed):** it comes from the
+  existing `currentStreak()` over the narrow series (§4.2), not from SQL.
+  **Dependency:** this relies on the canonical `gameTime, createdAt, id`
+  tie-break in the JS sorts, which is being added by the in-progress flaky-test
+  PR (that PR also carries a JS-vs-SQL streak consistency test, which is what
+  pins the JS streak to the SQL streak `/cappers` uses). **The capper-detail
+  implementation PR (§10, PR 4) must not start until that PR is merged.** The
+  same PR gates any other JS sort the narrow series feeds.
 
-- **Q10 — the dashboard's SQL series is the one remaining SQL twin.** Q2 named
-  the capper-only sections; the dashboard's running-sum + bucketing SQL (§3.c) is
-  a SQL implementation of `computeCumulativeUnitsSeries` +
-  `downsampleUnitsChart`. It stays as designed — the alternative is shipping every
-  settled row (≈ 520 KB at 20k picks) — with the §3.c raw-series fallback if the
-  bit-exact parity gate fails. Confirm that Q2's "no twins" does not extend to it.
-- **Q11 — capper-page current streak from the series.** Applying Q2's rule, the
-  all-time streak now comes from `currentStreak()` over the narrow series rather
-  than the gaps-and-islands SQL (`queryCurrentStreaks`, which keeps serving
-  `/cappers`). Confirm, or keep a SQL streak for this page.
+**Open questions remaining: none.**
