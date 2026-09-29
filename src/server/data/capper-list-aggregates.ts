@@ -41,6 +41,8 @@ export type WindowTotals = {
   unitsLost: number;
   unitsRisked: number;
   zeroOddsWinFlags: number;
+  // Only present when the totals were requested with groupBySport.
+  sport?: string;
 };
 
 export type StreakRow = { capperId: string; window: ScorecardWindow; type: "WIN" | "LOSS"; count: number };
@@ -88,9 +90,17 @@ export type WindowScope = {
   pooled?: boolean;
   windows?: ScorecardWindow[];
   now?: Date;
+  // Also group by sport name (adds a `sport` column; the capper page needs a
+  // categoryWindow's money totals per sport because the selected sport is only
+  // known after the all-time tab list is computed - design doc §3.a). Default
+  // false: the rows are then exactly what /cappers has always received.
+  groupBySport?: boolean;
 };
 
-const ORDER = Prisma.sql`p."gameTime", p."createdAt", p.id COLLATE "C"`;
+// Exported (with IN_WINDOW, windowsValues and WIN_UNITS below) so the page-level
+// fragments in page-aggregate-fragments.ts spell the tie-break, the window predicate
+// and the per-pick win value once, not again.
+export const ORDER = Prisma.sql`p."gameTime", p."createdAt", p.id COLLATE "C"`;
 // Exported: the canonical chronological tie-break (gameTime, createdAt, id) agreed
 // in #123, reused as-is by picks-by-capper-aggregates.ts (docs/design/picks-by-capper-egress.md
 // §4.1) for its own row_number() windows - one implementation of the tie-break, not two.
@@ -100,7 +110,7 @@ export const ORDER_DESC = Prisma.sql`p."gameTime" DESC, p."createdAt" DESC, p.id
 // Instants travel as ISO strings cast to `timestamp` (no zone), which reads the
 // UTC wall clock regardless of the session's TimeZone setting - the column is
 // timestamp(3) holding UTC.
-function windowsValues(windows: ScorecardWindow[], now: Date): Prisma.Sql {
+export function windowsValues(windows: ScorecardWindow[], now: Date): Prisma.Sql {
   return Prisma.join(
     windows.map((w) => {
       const range = scorecardWindowRange(w, now);
@@ -111,7 +121,7 @@ function windowsValues(windows: ScorecardWindow[], now: Date): Prisma.Sql {
   );
 }
 
-const IN_WINDOW = Prisma.sql`(w.wstart IS NULL OR (p."gradedAt" IS NOT NULL AND p."gameTime" >= w.wstart AND p."gameTime" < w.wend))`;
+export const IN_WINDOW = Prisma.sql`(w.wstart IS NULL OR (p."gradedAt" IS NOT NULL AND p."gameTime" >= w.wstart AND p."gameTime" < w.wend))`;
 
 function scopePredicates(scope: { sportName?: string; capperIds?: string[] }): Prisma.Sql {
   const parts: Prisma.Sql[] = [];
@@ -124,34 +134,29 @@ function scopePredicates(scope: { sportName?: string; capperIds?: string[] }): P
 // division) so every per-pick value is the same IEEE-754 double the JS
 // unitsWonOnBet produces. NULLIF keeps an odds = 0 row from ever dividing by
 // zero; those rows are excluded from the sum and reported via zeroOddsWinFlags.
-const WIN_UNITS = Prisma.sql`p.units * (CASE WHEN p.odds > 0 THEN p.odds::float8 / 100::float8 ELSE 100::float8 / NULLIF(abs(p.odds), 0)::float8 END)`;
+export const WIN_UNITS = Prisma.sql`p.units * (CASE WHEN p.odds > 0 THEN p.odds::float8 / 100::float8 ELSE 100::float8 / NULLIF(abs(p.odds), 0)::float8 END)`;
 
-// One query, every requested window: per capper (or pooled) x window totals.
-export async function queryWindowTotals(scope: WindowScope): Promise<WindowTotals[]> {
-  if (scope.capperIds && scope.capperIds.length === 0) return [];
-  const windows = scope.windows ?? SCORECARD_WINDOWS;
-  const now = scope.now ?? new Date();
+// The window-bounds CTE every windowed fragment joins as `w`:
+//   WITH ${windowsCte(windows, now)}, totals AS (${windowTotalsSelect(scope)}), ...
+export function windowsCte(windows: ScorecardWindow[], now: Date): Prisma.Sql {
+  return Prisma.sql`w(win, wstart, wend) AS (VALUES ${windowsValues(windows, now)})`;
+}
+
+// The totals SELECT, without its WITH: per capper (or pooled) x window [x sport]
+// totals, reading the `w` CTE (windowsCte). Composable as a CTE body of a page's
+// single statement; queryWindowTotals below is the thin standalone wrapper.
+export function windowTotalsSelect(scope: WindowScope): Prisma.Sql {
   const capperSelect = scope.pooled ? Prisma.sql`NULL::text AS "capperId",` : Prisma.sql`p."capperId" AS "capperId",`;
-  const groupBy = scope.pooled ? Prisma.sql`w.win` : Prisma.sql`p."capperId", w.win`;
-
-  const rows = await prisma.$queryRaw<
-    {
-      capperId: string | null;
-      window: ScorecardWindow;
-      nPicks: number;
-      wins: number;
-      losses: number;
-      pushes: number;
-      unitsWon: number;
-      unitsLost: number;
-      unitsRisked: number;
-      zeroOddsWinFlags: number;
-    }[]
-  >(Prisma.sql`
-    WITH w(win, wstart, wend) AS (VALUES ${windowsValues(windows, now)})
+  const sportSelect = scope.groupBySport ? Prisma.sql`s.name AS "sport",` : Prisma.empty;
+  const sportJoin = scope.groupBySport ? Prisma.sql`JOIN sports s ON s.id = p."sportId"` : Prisma.empty;
+  const groupCols = [scope.pooled ? null : Prisma.sql`p."capperId"`, Prisma.sql`w.win`, scope.groupBySport ? Prisma.sql`s.name` : null].filter(
+    (c): c is Prisma.Sql => c !== null
+  );
+  return Prisma.sql`
     SELECT
       ${capperSelect}
       w.win AS "window",
+      ${sportSelect}
       count(*)::int AS "nPicks",
       (count(*) FILTER (WHERE p.status = 'WIN'))::int AS "wins",
       (count(*) FILTER (WHERE p.status = 'LOSS'))::int AS "losses",
@@ -162,10 +167,21 @@ export async function queryWindowTotals(scope: WindowScope): Promise<WindowTotal
       COALESCE(bit_or(CASE WHEN p.units > 0 THEN 1 WHEN p.units < 0 THEN 2 ELSE 4 END) FILTER (WHERE p.status = 'WIN' AND p.odds = 0), 0)::int AS "zeroOddsWinFlags"
     FROM picks p
     JOIN w ON ${IN_WINDOW}
+    ${sportJoin}
     WHERE p."userId" = ${scope.userId} ${scopePredicates(scope)}
-    GROUP BY ${groupBy}
+    GROUP BY ${Prisma.join(groupCols)}
+  `;
+}
+
+// One query, every requested window: per capper (or pooled) x window totals.
+export async function queryWindowTotals(scope: WindowScope): Promise<WindowTotals[]> {
+  if (scope.capperIds && scope.capperIds.length === 0) return [];
+  const windows = scope.windows ?? SCORECARD_WINDOWS;
+  const now = scope.now ?? new Date();
+  return prisma.$queryRaw<WindowTotals[]>(Prisma.sql`
+    WITH ${windowsCte(windows, now)}
+    ${windowTotalsSelect(scope)}
   `);
-  return rows;
 }
 
 // unitsWon on the JS path for a set containing WINs at odds = 0: units *
