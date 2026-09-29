@@ -62,7 +62,7 @@ export function PickForm({ cappers, sports, atLimit }: { cappers: Capper[]; spor
         onClick={() => setIsOpen(true)}
         className="rounded-full bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-soft transition hover:bg-brand-700"
       >
-        + Log a pick
+        + Log a single pick
       </button>
     );
   }
