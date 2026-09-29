@@ -7,7 +7,7 @@ import {
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
-import { persistFinalScores, gradePendingPicks, regradeFuzzyMatchedPicks } from "@/server/data/grading";
+import { gradeUserPagePicks } from "@/server/data/page-grading";
 import { getPicksForGame } from "@/server/data/picks";
 import { getGamePulsePanelRows } from "@/server/data/game-pulse";
 import { getTeamRecordAsOf, type TeamRecord } from "@/server/data/team-record";
@@ -96,13 +96,7 @@ export default async function GameDetailPage({
   // already shows FINAL. Scoped to just this game's sport (not the full
   // RESOLVABLE_SPORT_KEYS loop /picks does) since only one sport is in view.
   if (RESOLVABLE_SPORT_KEYS.includes(sportMeta.key)) {
-    try {
-      await persistFinalScores(sportMeta.key);
-      await gradePendingPicks(user.id, sportMeta.label, sportMeta.key);
-      await regradeFuzzyMatchedPicks(user.id, sportMeta.label, sportMeta.key);
-    } catch {
-      // Best-effort, same as /picks - don't block the page on a fetch failure.
-    }
+    await gradeUserPagePicks(user.id, [sportMeta.key]);
   }
 
   const odds = await getOddsForSport(sportMeta.key);
