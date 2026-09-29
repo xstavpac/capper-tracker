@@ -1,6 +1,9 @@
 import { type ParsedPick, type AmbiguousOption } from "@/lib/parse-catalog";
 import { runAmbiguousHierarchy, type AutoResolveResult } from "@/lib/ambiguous-hierarchy";
-import { checkAmbiguousTeamSchedules } from "@/server/actions/disambiguate-catalog";
+import {
+  checkAmbiguousTeamSchedules,
+  checkAmbiguousTeamWideSchedules,
+} from "@/server/actions/disambiguate-catalog";
 
 // Thin server-facing wrapper around the pure decision core in
 // ambiguous-hierarchy.ts. The only thing added here is the real
@@ -22,5 +25,6 @@ export async function autoResolveAmbiguousPicks(
 ): Promise<AutoResolveResult> {
   return runAmbiguousHierarchy(picks, priorChoices, {
     runScheduleCheck: checkAmbiguousTeamSchedules,
+    runWideScheduleCheck: checkAmbiguousTeamWideSchedules,
   });
 }

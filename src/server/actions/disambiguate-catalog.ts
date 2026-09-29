@@ -45,3 +45,36 @@ export async function checkAmbiguousTeamSchedules(queries: ScheduleCheckQuery[])
   );
   return result;
 }
+
+// The schedule-check tiebreaker in ambiguous-hierarchy.ts - answers "does
+// this candidate have a real game ANYWHERE on the posted schedule" rather
+// than checkAmbiguousTeamSchedules' "is playing right now". Same
+// resolveGameForNickname call, just without nearTermOnly, so it also
+// consults the full posted-schedule odds feed - a team playing later this
+// week still counts. Only ever called for the runner-up candidate(s) of a
+// key the near-term check already narrowed to one match.
+export async function checkAmbiguousTeamWideSchedules(queries: ScheduleCheckQuery[]): Promise<Record<string, boolean>> {
+  await requireUser();
+
+  const result: Record<string, boolean> = {};
+  await Promise.all(
+    queries.map(async ({ nickname, sport }) => {
+      const sportKey = SPORT_LABEL_TO_KEY[sport];
+      const mapKey = nickname + "|" + sport;
+      if (!sportKey || !RESOLVABLE_SPORT_KEYS.includes(sportKey)) {
+        result[mapKey] = false;
+        return;
+      }
+      const { game } = await resolveGameForNickname(sportKey, nickname);
+      result[mapKey] = game !== null;
+      console.log(
+        "[catalog-disambiguation] wide schedule tiebreaker check:",
+        nickname,
+        sport,
+        "->",
+        game !== null ? "has a real scheduled game" : "nothing on the schedule"
+      );
+    })
+  );
+  return result;
+}

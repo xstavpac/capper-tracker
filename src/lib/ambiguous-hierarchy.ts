@@ -99,6 +99,19 @@ export type ScheduleChecker = (queries: ScheduleCheckQuery[]) => Promise<Record<
 
 export type HierarchyDeps = {
   runScheduleCheck: ScheduleChecker;
+  // Tiebreaker for step 2 (schedule check): answers "does this candidate have
+  // a real game ANYWHERE on the posted schedule" (not just today/tomorrow),
+  // i.e. runScheduleCheck's question without nearTermOnly. Only ever called
+  // for the runner-up candidate(s) of a key runScheduleCheck already narrowed
+  // to exactly one near-term match - if a runner-up also has a real game
+  // (just not today), a lone near-term match is no longer decisive on its
+  // own and the key falls through to the season/pick-context/plausibility
+  // steps instead (the Indiana Fever vs Hoosiers case: a daily-cadence
+  // league must not out-vote a weekly one just by playing more often). A
+  // checker rejection is "can't confirm the runner-up has anything" -
+  // inconclusive, so the near-term decision stands as it did before this
+  // tiebreaker existed.
+  runWideScheduleCheck: ScheduleChecker;
   // Overridable reference date for the season (calendar) fallback - defaults
   // to now. Tests pin it so the calendar-fallback path is deterministic.
   now?: Date;
@@ -251,19 +264,57 @@ export async function runAmbiguousHierarchy(
       );
     }
 
+    // A lone near-term match per key is only TENTATIVE until the tiebreaker
+    // below confirms none of that key's other candidates has a real game just
+    // outside the window - collected first so the wide check batches into one
+    // round-trip instead of one per key.
+    const tentativeWinners = new Map<string, AmbiguousOption>();
     for (const key of keysNeedingResolution) {
       const options = ambiguousOptionsFor(key);
       const withGameToday = options.filter((o) => scheduleResults[o.nickname + "|" + o.sport]);
       if (!scheduleCheckFailed) scheduleSignalByKey.set(key, withGameToday);
-      if (withGameToday.length === 1) {
-        decided.set(key, {
-          choice: withGameToday[0],
-          method: "schedule",
-          reason: "only " + withGameToday[0].sport + " has a game scheduled today",
-        });
-      }
+      if (withGameToday.length === 1) tentativeWinners.set(key, withGameToday[0]);
       // 0 or 2+ matches - schedule inconclusive, falls through to the
       // calendar step below.
+    }
+
+    if (tentativeWinners.size > 0) {
+      const runnerUpQueries: ScheduleCheckQuery[] = [];
+      for (const [key, winner] of tentativeWinners) {
+        for (const o of ambiguousOptionsFor(key)) {
+          if (o.sport === winner.sport && o.nickname === winner.nickname) continue;
+          runnerUpQueries.push({ nickname: o.nickname, sport: o.sport });
+        }
+      }
+      let wideResults: Record<string, boolean> = {};
+      try {
+        wideResults = runnerUpQueries.length > 0 ? await deps.runWideScheduleCheck(runnerUpQueries) : {};
+      } catch (err) {
+        // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+        console.log(
+          "[catalog-disambiguation] wide schedule tiebreaker check failed, trusting the near-term match:",
+          err instanceof Error ? err.message : err
+        );
+      }
+
+      for (const [key, winner] of tentativeWinners) {
+        const runnerUpHasRealGame = ambiguousOptionsFor(key).some(
+          (o) => !(o.sport === winner.sport && o.nickname === winner.nickname) && wideResults[o.nickname + "|" + o.sport]
+        );
+        if (runnerUpHasRealGame) {
+          // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+          console.log(
+            "[catalog-disambiguation] schedule tiebreaker: runner-up has a real game outside the window, falling through:",
+            key
+          );
+          continue; // scheduleSignalByKey keeps the near-term subset for step 5's cross-check
+        }
+        decided.set(key, {
+          choice: winner,
+          method: "schedule",
+          reason: "only " + winner.sport + " has a game scheduled today",
+        });
+      }
     }
   }
 

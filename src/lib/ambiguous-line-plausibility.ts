@@ -38,17 +38,29 @@ import type { AmbiguousOption, ParsedPick } from "@/lib/parse-catalog";
 // rejecting a number shaped like a real point spread (+6.5, -9, ...).
 // DOMAIN ESTIMATE based on how MLB/KBO run lines are conventionally quoted -
 // not backtested against this app's own historical odds data.
-const RUN_LINE_SPREAD_BOUND: Partial<Record<string, number>> = {
+const SPREAD_MAGNITUDE_BOUND: Partial<Record<string, number>> = {
   MLB: 2.5,
   KBO: 2.5,
+  // WNBA spreads realistically top out in the mid-teens; a -44 (a real
+  // misresolution of an Indiana Hoosiers pick to the Fever) is essentially
+  // impossible. DOMAIN ESTIMATE, not backtested - same caveat as above.
+  WNBA: 20,
+  // NCAAF regularly sees 30-40+ point spreads (FBS-vs-FCS, ranked-vs-
+  // unranked); past this is already an extreme outlier. Bounded so the
+  // WNBA-vs-NCAAF "Indiana" collision can narrow in either direction.
+  NCAAF: 65,
 };
 
 // MLB/KBO full-game totals conventionally cluster roughly 6.5-11 runs.
 // DOMAIN ESTIMATE, not backtested against this app's own historical odds
-// data - same caveat as RUN_LINE_SPREAD_BOUND above.
-const RUN_LINE_TOTAL_BOUND: Partial<Record<string, { min: number; max: number }>> = {
+// data - same caveat as SPREAD_MAGNITUDE_BOUND above.
+const TOTAL_LINE_BOUND: Partial<Record<string, { min: number; max: number }>> = {
   MLB: { min: 4, max: 13 },
   KBO: { min: 4, max: 13 },
+  // WNBA full-game totals cluster roughly 150-175; NCAAF roughly 40-65 with
+  // rare shootouts higher. Estimates, set well outside the normal range.
+  WNBA: { min: 120, max: 200 },
+  NCAAF: { min: 20, max: 100 },
 };
 
 // `line` is the pick's own already-parsed numeric spread/total (ParsedPick's
@@ -60,8 +72,8 @@ const RUN_LINE_TOTAL_BOUND: Partial<Record<string, { min: number; max: number }>
 // unchanged, on purpose: the silent-wrong-resolution risk for a moneyline
 // pick is Bug 7's pick_context issue, a separate fix.
 //
-// A candidate whose sport has no entry in the bound tables above (NFL,
-// NCAAF, or any league not involved in a confirmed run-line collision) is
+// A candidate whose sport has no entry in the bound tables above (NFL, or
+// any league not involved in a confirmed cross-league line-shape collision) is
 // never filtered out by this function - it has no known realistic range
 // here to compare against, so it's left as plausible rather than guessed at.
 export function filterPlausibleCandidates(
@@ -73,14 +85,14 @@ export function filterPlausibleCandidates(
 
   if (betType === "SPREAD") {
     return candidates.filter((c) => {
-      const bound = RUN_LINE_SPREAD_BOUND[c.sport];
+      const bound = SPREAD_MAGNITUDE_BOUND[c.sport];
       return bound === undefined || Math.abs(line) <= bound;
     });
   }
 
   if (betType === "TOTAL" || betType === "TEAM_TOTAL") {
     return candidates.filter((c) => {
-      const range = RUN_LINE_TOTAL_BOUND[c.sport];
+      const range = TOTAL_LINE_BOUND[c.sport];
       return range === undefined || (line >= range.min && line <= range.max);
     });
   }
