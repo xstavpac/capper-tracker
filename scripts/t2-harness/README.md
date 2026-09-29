@@ -161,3 +161,5 @@ every subsequent diff run untrustworthy.
 | `validate-old-vs-old.mjs` | Item-4 validation: old vs old across both fixture users, asserts zero diffs AND that each scenario was meaningfully exercised. |
 | `self-test-failure-modes.mjs` | Item-3 validation: old vs two broken variants, asserts the diff DOES flag them. |
 | `units-series-parity.ts` | Egress PR "shared building blocks", Q10 gate: bit-exact parity of the dashboard SQL running-sum + downsample vs `computeCumulativeUnitsSeries` + `downsampleUnitsChart` on a restored snapshot (heaviest user, every user, each capper of the heaviest user). Read-only; exit 1 on any displayed-value diff. See `docs/design/dashboard-capper-detail-egress.md` §8. |
+| `dashboard-parity.ts` | Dashboard egress PR: page-level parity of `computeDashboardSummary` (one statement) vs the frozen `computeDashboardSummaryLegacy`, every user x pinned `now` sweep, on a snapshot with categories stamped (`backfill-pick-category --apply`). Read-only; exit 1 on any diff. |
+| `measure-dashboard.ts` | Dashboard egress PR: statements (via a logging Prisma client) and payload per cold dashboard summary, legacy vs one statement. |

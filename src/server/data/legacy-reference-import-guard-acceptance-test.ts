@@ -1,4 +1,4 @@
-// Static guard: picks-by-capper-legacy.ts and sport-category-panel-legacy.ts
+// Static guard: picks-by-capper-legacy.ts, sport-category-panel-legacy.ts and dashboard-summary-legacy.ts
 // are frozen, pre-migration reference implementations - kept ONLY so
 // picks-by-capper-aggregates-acceptance-test.ts / capper-list-aggregates-acceptance-test.ts /
 // live-category-panel-parity-acceptance-test.ts and the T2 harness
@@ -26,7 +26,7 @@ function check(label: string, pass: boolean, detail = "") {
   if (!pass) failures++;
 }
 
-const GUARDED_MODULES = ["picks-by-capper-legacy", "sport-category-panel-legacy"];
+const GUARDED_MODULES = ["picks-by-capper-legacy", "sport-category-panel-legacy", "dashboard-summary-legacy"];
 
 function stripComments(input: string): string {
   const src = input.replace(/\r\n/g, "\n");
