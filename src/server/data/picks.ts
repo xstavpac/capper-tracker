@@ -93,7 +93,14 @@ export async function updatePickStatus(userId: string, pickId: string, status: P
 
   return prisma.pick.update({
     where: { id: pickId },
-    data: { status, ...(wasPending && status !== "PENDING" ? { gradedAt: new Date() } : {}) },
+    data: {
+      status,
+      // A manual grade is the user's authoritative answer: clear the fuzzy-match
+      // flag so regradeAllFuzzyMatchedPicks (which re-grades every row still
+      // flagged true once an exact GameResult appears) can never overwrite it.
+      gradedViaFuzzyMatch: false,
+      ...(wasPending && status !== "PENDING" ? { gradedAt: new Date() } : {}),
+    },
   });
 }
 

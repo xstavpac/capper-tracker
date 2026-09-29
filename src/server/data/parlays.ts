@@ -95,7 +95,13 @@ export async function updateLegStatus(userId: string, legId: string, status: Pic
   const wasPending = leg.status === "PENDING";
   await prisma.leg.update({
     where: { id: legId },
-    data: { status, ...(wasPending && status !== "PENDING" ? { gradedAt: new Date() } : {}) },
+    data: {
+      status,
+      // Same rule as updatePickStatus: a manual grade clears the fuzzy flag so
+      // regradeAllFuzzyMatchedLegs can never overwrite it.
+      gradedViaFuzzyMatch: false,
+      ...(wasPending && status !== "PENDING" ? { gradedAt: new Date() } : {}),
+    },
   });
 
   await recomputeParlayBetStatus(leg.parlayBetId);
