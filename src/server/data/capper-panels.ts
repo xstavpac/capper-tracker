@@ -12,6 +12,7 @@ import {
 import { getCappersForUser, type CapperLeagueFilter } from "@/server/data/cappers";
 import { cachedByTag } from "@/server/data/cached";
 import { cacheKeys } from "@/lib/cache-keys";
+import { comparePicksByGradedAtDesc } from "@/lib/pick-order";
 
 // Cappers with no picks logged (datePosted) in this window drop off every
 // panel below, and reappear the moment they log a new one - confirmed with
@@ -194,7 +195,7 @@ async function computeCapperPanels(userId: string, filter?: CapperLeagueFilter):
     // gradedAt is always set for decided (WIN/LOSS/PUSH) picks.
     const decidedPicks = capperPicks
       .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
-      .sort((a, b) => (b.gradedAt?.getTime() ?? 0) - (a.gradedAt?.getTime() ?? 0));
+      .sort(comparePicksByGradedAtDesc);
 
     // Trending: needs both windows fully populated (8*2=16 decided also
     // covers window-5's smaller 5*2=10 requirement), and both the 5-window

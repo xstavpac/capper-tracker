@@ -5,6 +5,7 @@ import { formatEastern, startOfEasternDay } from "@/lib/dates";
 import { cacheKeys } from "@/lib/cache-keys";
 import { cachedByTag } from "@/server/data/cached";
 import { downsampleUnitsChart } from "@/server/data/units-chart-downsample";
+import { comparePicksChronological, comparePicksChronologicalDesc } from "@/lib/pick-order";
 
 // Re-exported for existing importers (betTypeLabel moved to lib/bet-line.ts
 // so client components can use it without pulling in this file's
@@ -42,9 +43,7 @@ export function unitsWonOnBet(units: number, odds: number): number {
  */
 export function computeStats(picks: Pick[]): OverallStats {
   // Streaks depend on chronological order, so sort oldest -> newest first.
-  const sorted = [...picks].sort(
-    (a, b) => a.gameTime.getTime() - b.gameTime.getTime()
-  );
+  const sorted = [...picks].sort(comparePicksChronological);
 
   let wins = 0;
   let losses = 0;
@@ -202,7 +201,7 @@ function momentumBucketKey(count: number): MomentumStreakLength {
 export function computeMomentum(picks: Pick[]): MomentumBreakdown {
   const decided = [...picks]
     .filter((p) => p.status === "WIN" || p.status === "LOSS")
-    .sort((a, b) => a.gameTime.getTime() - b.gameTime.getTime());
+    .sort(comparePicksChronological);
 
   const emptyBuckets = (): Record<MomentumStreakLength, { wins: number; losses: number; netUnits: number }> => ({
     "1": { wins: 0, losses: 0, netUnits: 0 },
@@ -1315,7 +1314,7 @@ export const CATEGORY_RECENT_FORM_WINDOW = 20;
 export function recentRecordColumn(picks: Pick[], window: number): CategoryRecentForm {
   const lastN = picks
     .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
-    .sort((a, b) => b.gameTime.getTime() - a.gameTime.getTime())
+    .sort(comparePicksChronologicalDesc)
     .slice(0, window);
   const rs = computeStats(lastN);
   return {
@@ -1567,7 +1566,7 @@ type CumulativeUnitsPoint = { pick: Pick; cumulativeUnits: number };
 function computeCumulativeUnitsSeries(picks: Pick[]): CumulativeUnitsPoint[] {
   const settled = [...picks]
     .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
-    .sort((a, b) => a.gameTime.getTime() - b.gameTime.getTime());
+    .sort(comparePicksChronological);
 
   let running = 0;
   return settled.map((pick) => {
