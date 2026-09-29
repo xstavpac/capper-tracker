@@ -22,7 +22,7 @@ export function MostActivePanel({ entries }: { entries: ActivityEntry[] }) {
             <Link
               key={entry.capperId}
               href={"/cappers/" + entry.capperId}
-              className="grid grid-cols-[minmax(7rem,12rem)_1fr_4.5rem] items-center gap-4 text-sm hover:opacity-80"
+              className="grid grid-cols-[6.5rem_1fr_3.75rem] items-center gap-3 text-sm hover:opacity-80 sm:grid-cols-[minmax(7rem,12rem)_1fr_4.5rem] sm:gap-4"
             >
               <span className="truncate font-medium text-foreground">{entry.name}</span>
               <span className="h-2 overflow-hidden rounded-full bg-muted">

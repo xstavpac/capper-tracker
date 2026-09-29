@@ -86,6 +86,8 @@ export type WindowScope = {
   sportName?: string;
   // Restrict to these cappers (the favorites-collective query).
   capperIds?: string[];
+  // Restrict to the user's favorited cappers, resolved inside the statement (no id list).
+  favoritesOnly?: boolean;
   // Collapse every capper into one row per window.
   pooled?: boolean;
   windows?: ScorecardWindow[];
@@ -123,8 +125,9 @@ export function windowsValues(windows: ScorecardWindow[], now: Date): Prisma.Sql
 
 export const IN_WINDOW = Prisma.sql`(w.wstart IS NULL OR (p."gradedAt" IS NOT NULL AND p."gameTime" >= w.wstart AND p."gameTime" < w.wend))`;
 
-function scopePredicates(scope: { sportName?: string; capperIds?: string[] }): Prisma.Sql {
+function scopePredicates(scope: { userId?: string; sportName?: string; capperIds?: string[]; favoritesOnly?: boolean }): Prisma.Sql {
   const parts: Prisma.Sql[] = [];
+  if (scope.favoritesOnly) parts.push(Prisma.sql`AND p."capperId" IN (SELECT id FROM cappers WHERE "userId" = ${scope.userId} AND "isFavorite")`);
   if (scope.sportName) parts.push(Prisma.sql`AND p."sportId" IN (SELECT id FROM sports WHERE name = ${scope.sportName})`);
   if (scope.capperIds) parts.push(Prisma.sql`AND p."capperId" IN (${Prisma.join(scope.capperIds)})`);
   return parts.length ? Prisma.join(parts, " ") : Prisma.empty;
@@ -206,8 +209,18 @@ export async function queryCurrentStreaks(scope: Omit<WindowScope, "pooled" | "c
   const windows = scope.windows ?? SCORECARD_WINDOWS;
   const now = scope.now ?? new Date();
   return prisma.$queryRaw<StreakRow[]>(Prisma.sql`
-    WITH w(win, wstart, wend) AS (VALUES ${windowsValues(windows, now)}),
-    d AS (
+    WITH ${windowsCte(windows, now)}, streaks AS (${currentStreaksSelect(scope)})
+    SELECT * FROM streaks
+  `);
+}
+
+// The streak SELECT, reading the `w` CTE (windowsCte); composable as a CTE body of a page's
+// single statement. `onlyCappersFrom` optionally names a CTE with a `cid` column: streaks are then
+// computed for just those cappers (the page's displayed rows), not the whole roster.
+export function currentStreaksSelect(scope: Omit<WindowScope, "pooled" | "capperIds"> & { onlyCappersFrom?: string }): Prisma.Sql {
+  const only = scope.onlyCappersFrom ? Prisma.sql`AND p."capperId" IN (SELECT cid FROM ${Prisma.raw(scope.onlyCappersFrom)})` : Prisma.empty;
+  return Prisma.sql`
+    WITH d AS (
       SELECT
         p."capperId" AS cid,
         w.win,
@@ -215,7 +228,7 @@ export async function queryCurrentStreaks(scope: Omit<WindowScope, "pooled" | "c
         row_number() OVER (PARTITION BY p."capperId", w.win ORDER BY ${ORDER_DESC}) AS rn
       FROM picks p
       JOIN w ON ${IN_WINDOW}
-      WHERE p."userId" = ${scope.userId} AND p.status IN ('WIN', 'LOSS') ${scopePredicates(scope)}
+      WHERE p."userId" = ${scope.userId} AND p.status IN ('WIN', 'LOSS') ${scopePredicates(scope)} ${only}
     )
     SELECT
       d.cid AS "capperId",
@@ -225,7 +238,7 @@ export async function queryCurrentStreaks(scope: Omit<WindowScope, "pooled" | "c
     FROM d
     JOIN d lead ON lead.cid = d.cid AND lead.win = d.win AND lead.rn = 1
     GROUP BY d.cid, d.win, lead.st
-  `);
+  `;
 }
 
 // Sortable "createdAt then id" key: 15-digit zero-padded epoch ms then the id,
@@ -245,8 +258,21 @@ export async function querySpecialistCandidates(scope: {
   minShare: number;
   minSample: number;
 }): Promise<SpecialistCandidateRow[]> {
+  return prisma.$queryRaw<SpecialistCandidateRow[]>(specialistCandidatesSelect(scope));
+}
+
+// The specialist-candidates SELECT (with its own inner WITH). `onlyCappersFrom` names a CTE with
+// a `cid` column to restrict to - the page's displayed rows rather than the whole roster.
+export function specialistCandidatesSelect(scope: {
+  userId: string;
+  sportName?: string;
+  minShare: number;
+  minSample: number;
+  onlyCappersFrom?: string;
+}): Prisma.Sql {
   const sport = scope.sportName ? Prisma.sql`AND p."sportId" IN (SELECT id FROM sports WHERE name = ${scope.sportName})` : Prisma.empty;
-  return prisma.$queryRaw<SpecialistCandidateRow[]>(Prisma.sql`
+  const only = scope.onlyCappersFrom ? Prisma.sql`AND p."capperId" IN (SELECT cid FROM ${Prisma.raw(scope.onlyCappersFrom)})` : Prisma.empty;
+  return Prisma.sql`
     WITH g AS (
       SELECT
         p."capperId" AS cid,
@@ -256,7 +282,7 @@ export async function querySpecialistCandidates(scope: {
         (count(*) FILTER (WHERE p.status = 'PUSH'))::int AS pu,
         min(${KEY}) AS k
       FROM picks p
-      WHERE p."userId" = ${scope.userId} AND p.status IN ('WIN', 'LOSS', 'PUSH') ${sport}
+      WHERE p."userId" = ${scope.userId} AND p.status IN ('WIN', 'LOSS', 'PUSH') ${sport} ${only}
       GROUP BY p."capperId", p.category
     ),
     t AS (
@@ -270,7 +296,7 @@ export async function querySpecialistCandidates(scope: {
            total AS "decidedTotal", tw AS "totalWins", tl AS "totalLosses"
     FROM t
     WHERE cat IS NOT NULL AND (w + l + pu) >= ${scope.minSample} AND (w + l + pu)::float8 / total::float8 >= ${scope.minShare}::float8
-  `);
+  `;
 }
 
 // The "best at" panel's data for one sport: per category, the pooled record and

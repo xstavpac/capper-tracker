@@ -53,6 +53,7 @@ import {
 import { getCapperPickDataset, sliceIntoWindows } from "@/server/data/pick-aggregates";
 import {
   queryWindowTotals,
+  type SpecialistCandidateRow,
   queryCurrentStreaks,
   querySpecialistCandidates,
   queryCategoryPanel,
@@ -94,7 +95,7 @@ const windowKey = (capperId: string, window: ScorecardWindow) => capperId + "|" 
 // Leaderboard
 // ---------------------------------------------------------------------------
 
-function statsFromRows(totals: WindowTotals | undefined, streak: StreakRow | undefined): RecordStats {
+export function statsFromRows(totals: WindowTotals | undefined, streak: StreakRow | undefined): RecordStats {
   // A WIN at odds = 0 makes the JS unitsWon Infinity/NaN (see
   // zeroOddsWinUnitsWon) - reproduced, not fixed.
   const poisoned = zeroOddsWinUnitsWon(totals?.zeroOddsWinFlags ?? 0);
@@ -194,7 +195,12 @@ async function loadSpecialists(userId: string, sportName: string | undefined): P
     minShare: SPECIALIST_CONCENTRATION_THRESHOLD,
     minSample: RANKING_MIN_SAMPLE,
   });
+  return specialistTagsFromCandidateRows(rows);
+}
 
+// The candidate rows -> tag decision, shared with the /cappers page bundle (which fetches the
+// same rows for just its displayed cappers).
+export function specialistTagsFromCandidateRows(rows: SpecialistCandidateRow[]): Map<string, SpecialistTag | null> {
   const byCapper = new Map<string, { decidedTotal: number; overall: { wins: number; losses: number }; candidates: typeof rows }>();
   for (const r of rows) {
     const g = byCapper.get(r.capperId) ?? { decidedTotal: r.decidedTotal, overall: { wins: r.totalWins, losses: r.totalLosses }, candidates: [] };

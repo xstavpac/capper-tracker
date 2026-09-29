@@ -36,7 +36,7 @@ export function TopCappers({ entries, sparklines }: { entries: LeaderboardEntry[
                 <p className={"mt-0.5 text-sm font-semibold " + color}>
                   {(roi >= 0 ? "+" : "−") + Math.abs(roi)}% &middot; {(netUnits >= 0 ? "+" : "−") + Math.abs(netUnits)}u
                 </p>
-                <CapperSparkline points={sparklines.get(e.capperId)?.points ?? [0]} height={32} className="mt-3 block w-full" />
+                <CapperSparkline series={sparklines.get(e.capperId)} height={32} className="mt-3 block w-full" />
               </Link>
             );
           })}

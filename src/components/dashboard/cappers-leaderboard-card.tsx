@@ -4,7 +4,7 @@ import type { CapperSparkline as Series } from "@/server/data/cappers-page-aggre
 import { RANKING_MIN_SAMPLE } from "@/server/data/stats";
 import { PAGE_SIZE, cappersHref, type CappersParams } from "@/lib/cappers-page-params";
 import { Avatar } from "@/components/dashboard/capper-panels";
-import { CapperSparkline, formatUnits } from "@/components/dashboard/capper-sparkline";
+import { CapperSparkline, sparklineLabel } from "@/components/dashboard/capper-sparkline";
 import { CappersLeaderboardControls, FavoritesToggle } from "@/components/dashboard/cappers-leaderboard-controls";
 import { ClickableRow } from "@/components/dashboard/clickable-row";
 import { FavoriteStar } from "@/components/dashboard/favorite-star";
@@ -12,6 +12,7 @@ import { formatRecord } from "@/components/dashboard/top-cappers";
 
 const GREEN = "text-emerald-600 dark:text-emerald-400";
 const RED = "text-red-600 dark:text-red-400";
+const LABEL_TONE = { up: GREEN, down: RED, flat: "text-muted-foreground" } as const;
 const signColor = (n: number) => (n >= 0 ? GREEN : RED);
 const signed = (n: number) => (n >= 0 ? "+" : "−") + Math.abs(n);
 
@@ -160,6 +161,7 @@ export function CappersLeaderboardCard({
               {rows.map((e, i) => {
                 const href = "/cappers/" + e.capperId;
                 const series = sparklines.get(e.capperId);
+                const label = sparklineLabel(series);
                 return (
                   <ClickableRow key={e.capperId} href={href}>
                     <td className="px-3 py-2 text-muted-foreground">{first + i + 1}</td>
@@ -178,14 +180,10 @@ export function CappersLeaderboardCard({
                       </div>
                     </td>
                     <td className="px-3 py-2">
-                      {series ? (
-                        <div className="w-20">
-                          <CapperSparkline points={series.points} width={80} height={20} className="block" />
-                          <div className={"mt-0.5 text-[10px] leading-none " + signColor(series.netUnits)}>{formatUnits(series.netUnits)} L20</div>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">&mdash;</span>
-                      )}
+                      <div className="w-20">
+                        <CapperSparkline series={series} width={80} height={20} className="block" />
+                        {label && <div className={"mt-0.5 text-[10px] leading-none " + LABEL_TONE[label.tone]}>{label.text}</div>}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{formatRecord(e.stats)}</td>
                     <td className="px-3 py-2 font-medium text-foreground">{Math.round(e.stats.winPct)}%</td>
