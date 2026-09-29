@@ -108,6 +108,33 @@ export async function getLiveTickerGames(): Promise<TickerGame[]> {
   return interleaveByCommenceTime(perSport);
 }
 
+export type LiveScoresBySport = Record<string, ScoreGame[]>;
+
+// The ticker's client-side poll source: every RESOLVABLE sport's live scores in
+// one payload, keyed by sport, so an open tab makes ONE request per poll
+// instead of one per sport. Each entry is exactly what
+// getLiveScoresForSport(sportKey) returns (the old per-sport
+// /api/public/live-scores?sport= response), unmodified - the client just
+// looks up its own sport's array.
+//
+// A sport whose fetch throws is left OUT of the map (and reported in
+// `failed`) rather than failing the whole response or being sent as []: the
+// client treats a missing sport as "no update, keep what's shown", where an
+// empty array would read as "the feed says no games".
+export async function getAllLiveScores(
+  fetchScores: (sportKey: string) => Promise<ScoreGame[]> = getLiveScoresForSport
+): Promise<{ scoresBySport: LiveScoresBySport; failed: string[] }> {
+  const settled = await Promise.allSettled(RESOLVABLE_SPORT_KEYS.map((sportKey) => fetchScores(sportKey)));
+  const scoresBySport: LiveScoresBySport = {};
+  const failed: string[] = [];
+  settled.forEach((result, i) => {
+    const sportKey = RESOLVABLE_SPORT_KEYS[i];
+    if (result.status === "fulfilled") scoresBySport[sportKey] = result.value;
+    else failed.push(sportKey);
+  });
+  return { scoresBySport, failed };
+}
+
 function parseScore(score: { scores: { name: string; score: string }[] | null } | undefined, teamName: string): number | null {
   const raw = score?.scores?.find((s) => s.name === teamName)?.score;
   if (raw === undefined) return null;

@@ -4,15 +4,14 @@ import { useEffect, useState } from "react";
 import type { TickerGame } from "@/server/data/live-ticker";
 import { closestByTime } from "@/lib/dates";
 import { LocalGameTime } from "@/components/local-game-time";
+import { useSafePoll } from "@/lib/use-safe-poll";
 
 // Deliberately lighter than the authenticated live page's 25s poll
 // (LIVE_POLL_INTERVAL_MS in live-scoreboard.tsx) - a game's score
-// realistically changes at most every few minutes either way, but this
-// endpoint is PUBLIC (reachable by any anonymous visitor, and crawlers,
-// with no session/rate-limit to bound it the way every other polled
-// endpoint in this app has), and the ticker's job is to read as "genuinely
-// live," not to be a real-time scoreboard - 45s keeps it visibly moving
-// without adding avoidable load to a page nobody has to be logged in to hit.
+// realistically changes at most every few minutes either way, and the
+// ticker's job is to read as "genuinely live," not to be a real-time
+// scoreboard - 45s keeps it visibly moving without adding avoidable load.
+// The endpoint it polls is public and CDN-cached (s-maxage=15).
 const TICKER_POLL_INTERVAL_MS = 45000;
 
 type ScoreUpdate = {
@@ -46,6 +45,37 @@ function parseScore(update: ScoreUpdate | undefined, teamName: string): number |
   if (raw === undefined) return null;
   const n = parseInt(raw, 10);
   return Number.isNaN(n) ? null : n;
+}
+
+type TickerScoresResponse = { scoresBySport: Record<string, ScoreUpdate[]> };
+
+async function fetchTickerScores(signal: AbortSignal): Promise<TickerScoresResponse> {
+  const res = await fetch("/api/public/ticker-scores", { signal });
+  if (!res.ok) throw new Error(`ticker-scores ${res.status}`);
+  const data = await res.json();
+  if (!data || typeof data.scoresBySport !== "object" || data.scoresBySport === null) {
+    throw new Error("ticker-scores: malformed response");
+  }
+  return data as TickerScoresResponse;
+}
+
+// A game only matches updates from its OWN sport's array - a sport missing
+// from the response (its upstream failed) leaves those games untouched.
+function applyScoreUpdates(games: TickerGame[], scoresBySport: Record<string, ScoreUpdate[]>): TickerGame[] {
+  return games.map((game) => {
+    const sportScores = scoresBySport[game.sportKey];
+    if (!Array.isArray(sportScores)) return game;
+    const update = matchUpdate(sportScores, game);
+    if (!update) return game;
+    return {
+      ...game,
+      status: update.status,
+      homeScore: parseScore(update, game.homeTeam),
+      awayScore: parseScore(update, game.awayTeam),
+      inningHalf: update.inningHalf,
+      inningOrdinal: update.inningOrdinal,
+    };
+  });
 }
 
 function GameState({ game }: { game: TickerGame }) {
@@ -95,51 +125,19 @@ export function LiveTicker({ initialGames }: { initialGames: TickerGame[] }) {
     setGames(initialGames);
   }, [initialGames]);
 
+  // One combined request per poll (all sports), through the shared hardened
+  // poll hook: it pauses while the tab is hidden, refreshes right away when
+  // the tab becomes visible again, and backs off on failures.
+  const { data: polled } = useSafePoll<TickerScoresResponse>({
+    fetcher: fetchTickerScores,
+    enabled: initialGames.length > 0,
+    intervalMs: TICKER_POLL_INTERVAL_MS,
+  });
+
   useEffect(() => {
-    if (games.length === 0) return;
-    const sportKeys = Array.from(new Set(initialGames.map((g) => g.sportKey)));
-    let cancelled = false;
-
-    const poll = async () => {
-      try {
-        const results = await Promise.all(
-          sportKeys.map(async (sportKey) => {
-            const res = await fetch(`/api/public/live-scores?sport=${encodeURIComponent(sportKey)}`, {
-              cache: "no-store",
-            });
-            if (!res.ok) return [] as ScoreUpdate[];
-            const data = await res.json();
-            return Array.isArray(data.scores) ? (data.scores as ScoreUpdate[]) : [];
-          })
-        );
-        if (cancelled) return;
-        const updates = results.flat();
-        setGames((prev) =>
-          prev.map((game) => {
-            const update = matchUpdate(updates, game);
-            if (!update) return game;
-            return {
-              ...game,
-              status: update.status,
-              homeScore: parseScore(update, game.homeTeam),
-              awayScore: parseScore(update, game.awayTeam),
-              inningHalf: update.inningHalf,
-              inningOrdinal: update.inningOrdinal,
-            };
-          })
-        );
-      } catch {
-        // Transient network hiccup - next tick tries again.
-      }
-    };
-
-    const interval = setInterval(poll, TICKER_POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sportKeys is derived from initialGames, which only ever changes on a fresh SSR (not something this ticker itself needs to re-derive every render)
-  }, [initialGames]);
+    if (!polled) return;
+    setGames((prev) => applyScoreUpdates(prev, polled.scoresBySport));
+  }, [polled]);
 
   if (games.length === 0) return null;
 
