@@ -1,4 +1,5 @@
 import { findGroupingNickname, teamGroupAliases, teamPhraseRegex, normalizeForGrouping } from "@/lib/parse-catalog";
+import type { PickedSide } from "@prisma/client";
 
 export type PickTeamGroup = "AWAY" | "HOME" | "OTHER";
 
@@ -16,11 +17,25 @@ export const OTHER_GROUP_LABEL = "Totals & other markets";
 // nicknames in its annotation).
 const TEAM_TIED_BET_TYPES = new Set(["MONEYLINE", "SPREAD"]);
 
-// Which side of the matchup a pick is on, inferred from betDetail text
-// against each team's nicknames - similar in spirit to the "does betDetail
-// mention this team's nickname" check matchPicksToGame (server/data/picks.ts)
-// uses to decide whether a pick belongs to a game at all (applied to each
-// side separately instead of OR'd together).
+// Which side of the matchup a pick is on. Prefers pick.pickedSide - captured
+// once at import time from the specific matched game (resolveGameAndOdds in
+// bulk-picks.ts) - over re-deriving it from betDetail text here, since
+// pickedSide already reflects whatever matching actually resolved the pick to
+// its game (e.g. live-team-fallback.ts's dynamically-generated prefix keys),
+// which can succeed off the pick's homeTeam/awayTeam columns even when
+// teamGroupAliases' smaller, curated vocabulary wouldn't recognize the raw
+// text (a bare city name like "Tampa Bay" with no mascot, or "Kent" for Kent
+// State, which teamGroupAliases only keys as "kent state").
+//
+// Falls back to the text heuristic below when pickedSide is null - same-
+// mascot NCAAF matchups where side genuinely can't be determined from the
+// pick alone, or picks that never went through resolveGameAndOdds.
+//
+// Text-heuristic fallback: which side of the matchup a pick is on, inferred
+// from betDetail text against each team's nicknames - similar in spirit to
+// the "does betDetail mention this team's nickname" check matchPicksToGame
+// (server/data/picks.ts) uses to decide whether a pick belongs to a game at
+// all (applied to each side separately instead of OR'd together).
 //
 // Checks betDetail against the team's WHOLE alias set (teamGroupAliases), not
 // a single nickname: for NCAAF one school ("Florida International Panthers")
@@ -32,11 +47,14 @@ const TEAM_TIED_BET_TYPES = new Set(["MONEYLINE", "SPREAD"]);
 // betDetail is diacritic/apostrophe-folded to line up with the ascii alias
 // keys ("San José State" -> "san jose state").
 export function classifyPickTeamGroup(
-  pick: { betType: string; betDetail: string | null },
+  pick: { betType: string; betDetail: string | null; pickedSide?: PickedSide | null },
   game: { homeTeam: string; awayTeam: string },
   sportName: string
 ): PickTeamGroup {
   if (!TEAM_TIED_BET_TYPES.has(pick.betType)) return "OTHER";
+
+  if (pick.pickedSide === "HOME") return "HOME";
+  if (pick.pickedSide === "AWAY") return "AWAY";
 
   const text = normalizeForGrouping(pick.betDetail ?? "");
   const mentions = (aliases: string[]) => aliases.some((a) => teamPhraseRegex(a).test(text));
