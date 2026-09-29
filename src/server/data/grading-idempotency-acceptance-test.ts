@@ -18,7 +18,14 @@
 //   npx tsx src/server/data/grading-idempotency-acceptance-test.ts
 // Exits non-zero on any failed assertion.
 import { prisma } from "@/lib/prisma";
-import { gradePickPool, regradeFuzzyPool } from "@/server/data/grading";
+import {
+  gradePickPool,
+  regradeFuzzyPool,
+  gradeAllPendingPicks,
+  gradePendingPicks,
+  REGRADE_LOOKBACK_DAYS,
+} from "@/server/data/grading";
+import { updatePickStatus } from "@/server/data/picks";
 import { gradeAllPendingLegs } from "@/server/data/parlay-grading";
 import type { Pick, Leg, GameResult } from "@prisma/client";
 
@@ -407,6 +414,159 @@ async function main() {
     expect(
       "the pick near the edge of the shared window still grades (not silently dropped by the shared query)",
       updates.every((u) => u.data.status === "WIN"),
+      true
+    );
+  }
+
+  // ---- 6. Stale-PENDING exclusion: an unmatchable pick older than the regrade
+  // lookback (bad early import: team = bet text, gameTime = import time) must
+  // not take a queue slot or widen the candidate GameResult window. The fake
+  // tables below honor the where/orderBy/take the code sends, so this proves
+  // the query filter, not just that a filter key exists. ----
+  {
+    const DAY = 86400000;
+    const now = Date.now();
+    const staleTime = new Date(now - 60 * DAY);
+    const recent = (n: number) => new Date(now - n * DAY);
+
+    type Row = Pick & { sportId: string };
+    const stale = { ...pendingPick("stale", { homeTeam: "Some bet text", awayTeam: "-", gameTime: staleTime }), sportId: "s1" } as Row;
+    const recents = [1, 2, 3].map(
+      (n) => ({ ...pendingPick("recent" + n, { gameTime: recent(n), pickedSide: "HOME" }), sportId: "s1" }) as Row
+    );
+    const table: Row[] = [stale, ...recents];
+    const matches = (r: Row, where: { status?: string; gameTime?: { gte: Date } }) =>
+      r.status === where.status && (!where.gameTime || r.gameTime.getTime() >= where.gameTime.gte.getTime());
+
+    const windows: { gte: Date; lt: Date }[] = [];
+    const games = [1, 2, 3].map((n) => gameResult({ gameDate: recent(n), externalId: "g" + n }));
+    patch("sport.findUnique", async () => ({ id: "s1", name: SPORT_NAME }));
+    patch("pick.count", async ({ where }: { where: never }) => table.filter((r) => matches(r, where)).length);
+    patch("pick.findMany", async ({ where, take }: { where: never; take: number }) =>
+      table
+        .filter((r) => matches(r, where))
+        .sort((a, b) => a.gameTime.getTime() - b.gameTime.getTime())
+        .slice(0, take)
+    );
+    patch("gameResult.findMany", async ({ where }: { where: { gameDate: { gte: Date; lt: Date } } }) => {
+      windows.push(where.gameDate);
+      return games.filter((g) => g.gameDate >= where.gameDate.gte && g.gameDate < where.gameDate.lt);
+    });
+    const writes: { where: { id: string; status: string } }[] = [];
+    patch("pick.updateMany", async (args: { where: { id: string; status: string } }) => {
+      writes.push(args);
+      return { count: 1 };
+    });
+
+    // 6a. Before-fix behavior, reproduced by handing gradePickPool the stale pick
+    // directly (what the old unfiltered query did): the window stretches ~60d.
+    await gradePickPool([stale, ...recents], SPORT_KEY, SPORT_NAME);
+    const beforeDays = (windows[0].lt.getTime() - windows[0].gte.getTime()) / DAY;
+    console.log(`candidate window with the stale pick included: ${beforeDays.toFixed(1)} days`);
+
+    // 6b. Cron path with a queue of 3 slots: the stale pick would have been
+    // slot #1 (oldest-first). Now it's excluded, all 3 recent picks grade.
+    windows.length = 0;
+    writes.length = 0;
+    const res = await gradeAllPendingPicks(SPORT_KEY, SPORT_NAME, 3);
+    const afterDays = (windows[0].lt.getTime() - windows[0].gte.getTime()) / DAY;
+    console.log(`candidate window with the stale pick excluded:  ${afterDays.toFixed(1)} days`);
+    expect("cron: window no longer reaches back to the stale pick", windows[0].gte.getTime() > staleTime.getTime() + 50 * DAY, true);
+    expect("cron: window is bounded by the recent picks (<= 3d span + 4d margin)", afterDays <= 7.01, true);
+    expect("cron: stale pick took no slot; all 3 recent picks graded", { graded: res.graded, remaining: res.remaining }, { graded: 3, remaining: 0 });
+    expect("cron: stale pick was never written", writes.map((w) => w.where.id).sort(), ["recent1", "recent2", "recent3"]);
+    expect("cron: every write is still gated on status: PENDING", writes.every((w) => w.where.status === "PENDING"), true);
+
+    // 6c. Per-user page path (gradePendingPicks) applies the same cutoff.
+    patch("pick.findMany", async ({ where }: { where: never }) => table.filter((r) => matches(r, where)));
+    windows.length = 0;
+    writes.length = 0;
+    await gradePendingPicks("u", SPORT_NAME, SPORT_KEY);
+    expect("page-load: stale pick excluded from the pool", writes.map((w) => w.where.id).sort(), ["recent1", "recent2", "recent3"]);
+    expect("page-load: window excludes the stale pick's date", windows[0].gte.getTime() > staleTime.getTime() + 50 * DAY, true);
+
+    // 6d. Boundary: a pick just inside the lookback still grades.
+    patch("pick.findMany", async ({ where, take }: { where: never; take: number }) =>
+      table
+        .filter((r) => matches(r, where))
+        .sort((a, b) => a.gameTime.getTime() - b.gameTime.getTime())
+        .slice(0, take)
+    );
+    const edge = { ...pendingPick("edge", { gameTime: new Date(now - (REGRADE_LOOKBACK_DAYS * DAY - 3600000)) }), sportId: "s1" } as Row;
+    table.push(edge);
+    games.push(gameResult({ gameDate: edge.gameTime, externalId: "gedge" }));
+    writes.length = 0;
+    await gradeAllPendingPicks(SPORT_KEY, SPORT_NAME);
+    expect("pick 1h inside the lookback still auto-grades", writes.some((w) => w.where.id === "edge"), true);
+
+    // 6e. The stale pick stays PENDING and can still be graded by hand.
+    const manualUpdates: { where: { id: string }; data: { status: string; gradedAt?: Date } }[] = [];
+    patch("pick.findFirst", async () => stale);
+    patch("pick.update", async (args: (typeof manualUpdates)[number]) => {
+      manualUpdates.push(args);
+      return { ...stale, ...args.data };
+    });
+    await updatePickStatus("user-stale", "stale", "WIN");
+    expect(
+      "manual grading of the stale pick still works (status set, gradedAt stamped)",
+      { id: manualUpdates[0].where.id, status: manualUpdates[0].data.status, stamped: manualUpdates[0].data.gradedAt instanceof Date },
+      { id: "stale", status: "WIN", stamped: true }
+    );
+    expect("stale pick row itself was untouched by auto-grading", stale.status, "PENDING");
+  }
+
+  // ---- 7. Same exclusion for parlay legs (gradeAllPendingLegs) ----
+  {
+    const DAY = 86400000;
+    const now = Date.now();
+    const mkLeg = (id: string, gameTime: Date, over: Partial<Leg> = {}) =>
+      ({
+        id,
+        parlayBetId: "P-" + id,
+        legIndex: 0,
+        sportId: "s1",
+        status: "PENDING",
+        betType: "MONEYLINE",
+        period: "FULL_GAME",
+        betDetail: "Yankees ML",
+        line: null,
+        homeTeam: "Yankees",
+        awayTeam: "Red Sox",
+        pickedSide: "HOME",
+        gameTime,
+        ...over,
+      }) as unknown as Leg;
+    const staleLeg = mkLeg("stale-leg", new Date(now - 60 * DAY), { homeTeam: "junk", awayTeam: "-" });
+    const recentLeg = mkLeg("recent-leg", new Date(now - 1 * DAY));
+    const legTable = [staleLeg, recentLeg];
+    const legMatches = (l: Leg, where: { status?: string; gameTime?: { gte: Date } }) =>
+      l.status === where.status && (!where.gameTime || l.gameTime.getTime() >= where.gameTime.gte.getTime());
+
+    patch("sport.findUnique", async () => ({ id: "s1", name: SPORT_NAME }));
+    patch("leg.count", async ({ where }: { where: never }) => legTable.filter((l) => legMatches(l, where)).length);
+    patch("leg.findMany", async ({ where, take }: { where: never; take: number }) => {
+      if ((where as { status?: string }).status !== "PENDING") return [{ status: "WIN" }];
+      return legTable.filter((l) => legMatches(l, where)).slice(0, take);
+    });
+    let legWindow: { gte: Date; lt: Date } | null = null;
+    patch("gameResult.findMany", async ({ where }: { where: { gameDate: { gte: Date; lt: Date } } }) => {
+      legWindow = where.gameDate;
+      return [gameResult({ gameDate: recentLeg.gameTime })];
+    });
+    const legWrites: string[] = [];
+    patch("leg.updateMany", async (args: { where: { id: string; status: string } }) => {
+      legWrites.push(args.where.id + ":" + args.where.status);
+      return { count: 1 };
+    });
+    patch("parlayBet.findUnique", async () => ({ status: "PENDING" }));
+    patch("parlayBet.updateMany", async () => ({ count: 1 }));
+
+    const res = await gradeAllPendingLegs(SPORT_KEY, SPORT_NAME, 1);
+    expect("legs: stale leg took no slot; the recent leg graded", { graded: res.graded, remaining: res.remaining }, { graded: 1, remaining: 0 });
+    expect("legs: only the recent leg was written, still PENDING-gated", legWrites, ["recent-leg:PENDING"]);
+    expect(
+      "legs: candidate window no longer reaches back to the stale leg",
+      legWindow !== null && (legWindow as { gte: Date }).gte.getTime() > staleLeg.gameTime.getTime() + 50 * DAY,
       true
     );
   }
