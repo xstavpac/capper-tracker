@@ -1,3 +1,5 @@
+import { parseNhlPlayerProp, normalizeNhlNPlus, type NhlPropMarket } from "@/lib/nhl-prop";
+
 type BetTypeLike = "SPREAD" | "MONEYLINE" | "TOTAL" | "TEAM_TOTAL" | "PLAYER_PROP" | "NRFI";
 type SideLike = "HOME" | "AWAY";
 
@@ -517,6 +519,13 @@ const PLAYER_PROP_STAT_PATTERNS: [Exclude<PlayerPropMarket, "TD">, RegExp][] = [
 //   - text that already states its own over/under number is left alone.
 // Integer thresholds only; anything else ("2.5+") is not a real phrasing.
 export function normalizeNPlusPlayerProp(text: string): string {
+  const nfl = normalizeNPlusNflPlayerProp(text);
+  // NHL markets (nhl-prop.ts) only get a turn when the NFL rewrite found
+  // nothing to do, so NFL output is byte-identical to before NHL existed.
+  return nfl !== text ? nfl : normalizeNhlNPlus(text);
+}
+
+function normalizeNPlusNflPlayerProp(text: string): string {
   if (/\b(?:over|under)\s+\d/i.test(text)) return text;
   return text.replace(/(?<![\w.-])(\d+)\+\s*(?=\S)/g, (whole, digits: string, offset: number) => {
     const n = parseInt(digits, 10);
@@ -583,6 +592,16 @@ export function parsePlayerProp(text: string): { playerName: string; propMarket:
   if (!playerName) return null;
 
   return { playerName, propMarket };
+}
+
+// Every structured player-prop market this app recognizes, NFL or NHL. NFL
+// is tried FIRST and unchanged; an NHL market is returned only for text the NFL
+// parser rejected. Callers that know the sport (grading, roster recovery)
+// should prefer the sport-specific parser; this exists for the sport-blind
+// spots (import classification, categorization, dedup, filters).
+export type AnyPlayerPropMarket = PlayerPropMarket | NhlPropMarket;
+export function parseAnyPlayerProp(text: string): { playerName: string; propMarket: AnyPlayerPropMarket } | null {
+  return parsePlayerProp(text) ?? parseNhlPlayerProp(text);
 }
 
 // Coarse, fixed odds bands - no precedent for this anywhere else in the app

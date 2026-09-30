@@ -50,6 +50,12 @@ const AMBIGUOUS_WORDS = [
   String.raw`rebounds?`,
   String.raw`rebs?`,
   String.raw`assists?`,
+  String.raw`ast`,
+  // Bare "shots" ("Matthews over 4.5 shots"): shorthand for shots on goal.
+  // Ambiguous on its own, so a person subject with no sport evidence gets the
+  // GENERIC reason (recovered via the NHL roster), a team subject is a team stat
+  // total, and an explicit NHL code makes it a supported NHL prop.
+  String.raw`shots`,
   String.raw`threes`,
   String.raw`3-?pointers?`,
   String.raw`pra`,

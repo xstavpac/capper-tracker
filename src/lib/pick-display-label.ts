@@ -16,6 +16,7 @@
 // back to its own existing betDetail/betTypeLabel display, exactly as today.
 import { shortTeamName } from "@/lib/pick-team-group";
 import { stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
+import { nhlAnytimeGoalSide } from "@/lib/nhl-prop";
 import { totalSideFromText, parsePlayerPropLine, nrfiSide, parseTouchdownProp } from "@/lib/bet-line";
 
 export type PickDisplayLabelInput = {
@@ -51,6 +52,11 @@ const PROP_MARKET_PHRASES: Record<string, string> = {
   RECEPTIONS: "Receptions",
   RUSH_REC_YDS: "Rush+Rec Yds",
   PASS_RUSH_YDS: "Pass+Rush Yds",
+  // NHL markets (ANYTIME_GOAL / FIRST_GOAL are yes-no shaped, handled below)
+  SHOTS_ON_GOAL: "Shots on Goal",
+  POINTS: "Points",
+  ASSISTS: "Assists",
+  SAVES: "Saves",
 };
 
 // Same spread-suffix sign convention formatPickLabel (bet-line.ts) already
@@ -119,6 +125,11 @@ export function buildPickDisplayLabel(input: PickDisplayLabelInput): string | nu
         if (parsePlayerPropLine(detail)) return null;
         return `${cleanedName} Anytime TD`;
       }
+
+      if (input.propMarket === "ANYTIME_GOAL") {
+        return nhlAnytimeGoalSide(input.betDetail ?? "") === "NO" ? `${cleanedName} No Goal` : `${cleanedName} Anytime Goal`;
+      }
+      if (input.propMarket === "FIRST_GOAL") return `${cleanedName} First Goal`;
 
       const phrase = PROP_MARKET_PHRASES[input.propMarket];
       if (!phrase) return null;

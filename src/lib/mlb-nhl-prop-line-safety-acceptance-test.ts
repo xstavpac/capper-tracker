@@ -38,6 +38,26 @@ function expectUnsupported(line: string, reason: string, capper = "Krash") {
   check(`  reason: "${line}"`, detectUnsupportedPropLine(line)?.reason, reason);
 }
 
+// NHL player props are SUPPORTED now (nhl-prop.ts), so an NHL market line is no
+// longer "unsupported". Two shapes, both still guaranteed never to be dropped,
+// a game TOTAL/MONEYLINE, or an ATP pick:
+//  - sport named ("NHL Ivan Demidov 2+ shots on goal"): imports as an NHL PLAYER_PROP;
+//  - sport-less ("Ivan Demidov 2+ shots on goal"): parked in `unresolved` (attributed
+//    to its capper) for the NHL-roster recovery pass (recover-unresolved-lines.ts).
+function expectNhlPick(line: string, capper = "Krash") {
+  const r = parseCatalog([capper, line].join("\n"));
+  check(`NHL pick imported: "${line}"`, r.picks.map((p) => [p.capperName, p.sportName, p.betType]), [[capper, "NHL", "PLAYER_PROP"]]);
+  check(`  nothing unresolved: "${line}"`, [r.unresolved.length, r.parlays.length], [0, 0]);
+  check(`  no longer flagged unsupported: "${line}"`, detectUnsupportedPropLine(line), null);
+}
+function expectNhlAwaitingRoster(line: string, capper = "Krash") {
+  const r = parseCatalog([capper, line].join("\n"));
+  check(`NHL line awaits roster recovery: "${line}"`, r.unresolved, [line]);
+  check(`  no picks/parlays: "${line}"`, [r.picks.length, r.parlays.length], [0, 0]);
+  check(`  attributed to ${capper}: "${line}"`, r.unresolvedCapperNames, [capper]);
+  check(`  no longer flagged unsupported: "${line}"`, detectUnsupportedPropLine(line), null);
+}
+
 function main() {
   // --- Probe lines from the discovery report ------------------------------
   expectUnsupported("Schlittler over 17.5 outs", MLB);
@@ -45,21 +65,23 @@ function main() {
   expectUnsupported("Tolle over 4.5 K", MLB);
   expectUnsupported("MLB Chris Sale over 5.5 K", MLB);
   expectUnsupported("MLB Yankees vs Red Sox Schlittler over 17.5 outs", MLB);
-  expectUnsupported("NHL Ivan Demidov 2+ shots on goal", NHL);
-  expectUnsupported("NHL William Nylander anytime goal scorer", NHL);
+  expectNhlPick("NHL Ivan Demidov 2+ shots on goal");
+  expectNhlPick("NHL William Nylander anytime goal scorer");
   // Tennis-surname collisions (ramos / wolf / paul are all in KNOWN_TENNIS_PLAYERS).
   expectUnsupported("Heliot Ramos over 1.5 total bases", MLB);
-  expectUnsupported("Dustin Wolf over 24.5 saves", NHL);
-  expectUnsupported("Nick Paul over 2.5 shots on goal", NHL);
+  expectNhlAwaitingRoster("Dustin Wolf over 24.5 saves");
+  expectNhlAwaitingRoster("Nick Paul over 2.5 shots on goal");
+  // An NHL market this app still cannot grade keeps the NHL reason (#152).
+  expectUnsupported("NHL Brady Tkachuk over 3.5 hits", NHL);
 
   // --- Other shapes from the ask ------------------------------------------
-  expectUnsupported("Ivan Demidov 2+ shots on goal", NHL);
-  expectUnsupported("Cole Caufield 3+ shots on goal", NHL);
+  expectNhlAwaitingRoster("Ivan Demidov 2+ shots on goal");
+  expectNhlAwaitingRoster("Cole Caufield 3+ shots on goal");
   expectUnsupported("Sale 3+ Ks", MLB);
-  expectUnsupported("Leon Draisaitl first goal scorer", NHL);
+  expectNhlAwaitingRoster("Leon Draisaitl first goal scorer");
   expectUnsupported("Leon Draisaitl over 1.5 points", UNSUPPORTED_PROP_REASONS.GENERIC);
-  expectUnsupported("NHL Leon Draisaitl over 1.5 points", NHL);
-  expectUnsupported("NHL Connor McDavid o1.5 assists", NHL);
+  expectNhlPick("NHL Leon Draisaitl over 1.5 points");
+  expectNhlPick("NHL Connor McDavid o1.5 assists");
   expectUnsupported("Aaron Judge to hit a home run", MLB);
   expectUnsupported("Aaron Judge over 0.5 HR", MLB);
   expectUnsupported("Juan Soto over 1.5 RBIs", MLB);
@@ -98,9 +120,9 @@ function main() {
       true
     );
     check(
-      "KRASH/RBS paste: every line has the NHL reason",
-      r.unresolved.map((l) => detectUnsupportedPropLine(l)?.reason),
-      Array(6).fill(NHL)
+      "KRASH/RBS paste: no line is flagged unsupported any more (they go to NHL-roster recovery)",
+      r.unresolved.map((l) => detectUnsupportedPropLine(l)),
+      Array(6).fill(null)
     );
   }
 

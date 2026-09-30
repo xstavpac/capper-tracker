@@ -21,7 +21,7 @@
 //      it.
 
 import type { BetType } from "@prisma/client";
-import { parsePlayerProp, type PlayerPropMarket } from "@/lib/bet-line";
+import { parseAnyPlayerProp, type AnyPlayerPropMarket } from "@/lib/bet-line";
 
 export type DuplicateFlag = { message: string };
 
@@ -31,7 +31,7 @@ export type DuplicateFlag = { message: string };
 // this (a freshly-parsed batch item that was never a Pick row, or a legacy
 // row predating those columns), pass null/undefined and dedupCategory falls
 // back to extracting it itself from betDetail.
-export type KnownPlayerProp = { propMarket: PlayerPropMarket; playerName: string };
+export type KnownPlayerProp = { propMarket: AnyPlayerPropMarket; playerName: string };
 
 // pickCategory (server/data/stats.ts) deliberately collapses every TEAM_TOTAL
 // pick into one bucket, "TEAM_TOTAL", regardless of which team or which side
@@ -73,7 +73,7 @@ export function dedupCategory(
     // parsePlayerProp extractor used at import time when the caller doesn't
     // have it (a freshly-parsed batch item, or a legacy row predating those
     // columns) - never a new, separate extraction.
-    const known = knownPlayerProp ?? parsePlayerProp(betDetail ?? "") ?? undefined;
+    const known = knownPlayerProp ?? parseAnyPlayerProp(betDetail ?? "") ?? undefined;
     if (!known) return category; // unparseable prop text - no worse than the old behavior
     return category + ":" + known.propMarket + ":" + known.playerName.trim().toLowerCase();
   }

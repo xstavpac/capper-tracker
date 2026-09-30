@@ -18,7 +18,7 @@ import {
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
 import { resolvePropOdds } from "@/server/data/nfl-prop-odds";
-import { extractLine, parsePlayerPropLine, parsePlayerProp } from "@/lib/bet-line";
+import { extractLine, parsePlayerPropLine, parsePlayerProp, parseAnyPlayerProp } from "@/lib/bet-line";
 import { isInvalidOdds } from "@/lib/pick-validation";
 import { TEAM_NICKNAME_CANONICAL, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
@@ -697,7 +697,7 @@ export async function bulkImportPicksAction(
       // result is needed" pattern as parseTouchdownProp/grading.ts. Only
       // set on the row being created right now; never used to update any
       // other row.
-      const playerProp = item.betType === "PLAYER_PROP" ? parsePlayerProp(item.description) : null;
+      const playerProp = item.betType === "PLAYER_PROP" ? parseAnyPlayerProp(item.description) : null;
 
       toInsert.push({
         capperId,

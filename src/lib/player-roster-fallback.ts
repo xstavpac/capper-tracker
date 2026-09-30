@@ -63,11 +63,12 @@
 // narrows only when it lands on exactly one distinct player, otherwise the
 // collision stays `ambiguous` exactly as before this existed.
 import { parsePlayerProp } from "@/lib/bet-line";
+import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { normalizeName, isLikelyDuplicateName } from "@/lib/fuzzy-match";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 
 export type PlayerPropResolution =
-  | { status: "resolved"; sport: "NFL"; team: string; playerName: string; via: "exact" | "fuzzy" | "surname" }
+  | { status: "resolved"; sport: "NFL" | "NHL"; team: string; playerName: string; via: "exact" | "fuzzy" | "surname" }
   | { status: "ambiguous"; matches: { playerName: string; team: string }[] }
   | { status: "unresolved" };
 
@@ -130,9 +131,13 @@ export function resolvePlayerPropAgainstRoster(
   line: string,
   roster: RosterPlayer[],
   relevantTeams?: string[],
-  pasteTeamMentions?: string[]
+  pasteTeamMentions?: string[],
+  // Which league's parser/roster this call is for. The parsed MARKET decides the
+  // sport upstream (recover-unresolved-lines.ts passes the NHL roster only for
+  // an NHL market), so an NFL and an NHL player sharing a name can never collide.
+  sport: "NFL" | "NHL" = "NFL"
 ): PlayerPropResolution {
-  const prop = parsePlayerProp(line);
+  const prop = sport === "NHL" ? parseNhlPlayerProp(line) : parsePlayerProp(line);
   if (!prop) return { status: "unresolved" };
 
   const typedName = stripNameSuffix(prop.playerName);
@@ -140,7 +145,7 @@ export function resolvePlayerPropAgainstRoster(
 
   const exact = distinctPlayers(roster.filter((p) => normalizeName(stripNameSuffix(p.playerName)) === normalizedTyped));
   if (exact.length === 1) {
-    return { status: "resolved", sport: "NFL", team: exact[0].team, playerName: exact[0].playerName, via: "exact" };
+    return { status: "resolved", sport, team: exact[0].team, playerName: exact[0].playerName, via: "exact" };
   }
   if (exact.length > 1) {
     return { status: "ambiguous", matches: exact.map((p) => ({ playerName: p.playerName, team: p.team })) };
@@ -148,7 +153,7 @@ export function resolvePlayerPropAgainstRoster(
 
   const fuzzy = distinctPlayers(roster.filter((p) => isLikelyDuplicateName(stripNameSuffix(p.playerName), typedName)));
   if (fuzzy.length === 1) {
-    return { status: "resolved", sport: "NFL", team: fuzzy[0].team, playerName: fuzzy[0].playerName, via: "fuzzy" };
+    return { status: "resolved", sport, team: fuzzy[0].team, playerName: fuzzy[0].playerName, via: "fuzzy" };
   }
   if (fuzzy.length > 1) {
     return { status: "ambiguous", matches: fuzzy.map((p) => ({ playerName: p.playerName, team: p.team })) };
@@ -164,13 +169,13 @@ export function resolvePlayerPropAgainstRoster(
     // needs the same stripping applied on this side of the comparison too.
     const bySurname = distinctPlayers(roster.filter((p) => normalizeName(stripNameSuffix(p.lastName)) === normalizedTyped));
     if (bySurname.length === 1) {
-      return { status: "resolved", sport: "NFL", team: bySurname[0].team, playerName: bySurname[0].playerName, via: "surname" };
+      return { status: "resolved", sport, team: bySurname[0].team, playerName: bySurname[0].playerName, via: "surname" };
     }
     if (bySurname.length > 1) {
       if (relevantTeams && relevantTeams.length > 0) {
         const narrowed = bySurname.filter((p) => relevantTeams.includes(p.team));
         if (narrowed.length === 1) {
-          return { status: "resolved", sport: "NFL", team: narrowed[0].team, playerName: narrowed[0].playerName, via: "surname" };
+          return { status: "resolved", sport, team: narrowed[0].team, playerName: narrowed[0].playerName, via: "surname" };
         }
       }
       if (pasteTeamMentions && pasteTeamMentions.length > 0) {
@@ -178,7 +183,7 @@ export function resolvePlayerPropAgainstRoster(
           pasteTeamMentions.some((mention) => p.team.toLowerCase().endsWith(mention.toLowerCase()))
         );
         if (narrowedByPaste.length === 1) {
-          return { status: "resolved", sport: "NFL", team: narrowedByPaste[0].team, playerName: narrowedByPaste[0].playerName, via: "surname" };
+          return { status: "resolved", sport, team: narrowedByPaste[0].team, playerName: narrowedByPaste[0].playerName, via: "surname" };
         }
       }
       return { status: "ambiguous", matches: bySurname.map((p) => ({ playerName: p.playerName, team: p.team })) };

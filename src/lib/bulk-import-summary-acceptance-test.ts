@@ -146,8 +146,9 @@ check(
 console.log("\n########## describeUnresolvedLines / unresolvedReasonBreakdown ##########");
 {
   const lines = [
-    "Ivan Demidov 2+ shots on goal",
-    "William Nylander anytime goal scorer",
+    // (NHL shots/goal-scorer lines are supported now; hits/blocks are not.)
+    "NHL Brady Tkachuk over 3.5 hits",
+    "NHL Darren Raddysh over 1.5 blocks",
     "Chris Sale over 5.5 K",
     "Lakers over 45.5 rebounds",
     "Foo Bar over 3.5", // a plain miss - no reason

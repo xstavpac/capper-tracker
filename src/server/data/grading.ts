@@ -11,6 +11,7 @@ import {
   type OddsGame,
 } from "@/server/data/odds";
 import { fetchNflPasserRows } from "@/server/data/nfl-passer-rows";
+import { gradeNhlPlayerProp } from "@/server/data/nhl-prop-grading";
 import { fetchNflRushingReceivingRows } from "@/server/data/nfl-rushing-receiving-rows";
 import { closestByTime, sameEasternDay } from "@/lib/dates";
 import { isPreseasonGame } from "@/lib/sport-seasons";
@@ -1001,6 +1002,11 @@ export async function resolvePlayerProp(
   eventId: string,
   sportName: string
 ): Promise<PlayerPropResolution> {
+  // NHL props are graded from ESPN's NHL summary (nhl-prop-grading.ts). Every
+  // other sport - including NFL - falls through to the untouched NFL path below,
+  // which still declines non-NFL sports with its existing "NFL-only" reason.
+  if (sportName === "NHL") return gradeNhlPlayerProp(pick, eventId);
+
   const market = resolvedPropMarket(pick);
   if (market === null || market === "TD") {
     return resolveTouchdownProp(pick, eventId, sportName);

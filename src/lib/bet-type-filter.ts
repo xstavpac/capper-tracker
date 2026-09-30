@@ -1,5 +1,5 @@
 import type { BetType, Period, PropMarket } from "@prisma/client";
-import { nrfiSide, parsePlayerProp } from "@/lib/bet-line";
+import { nrfiSide, parseAnyPlayerProp } from "@/lib/bet-line";
 import type { PickCategoryKey } from "@/server/data/stats";
 
 // Extracted out of the Picks page (where this originated) so the capper
@@ -42,6 +42,12 @@ export type BetTypeFilterKey =
   | "RECEPTIONS"
   | "RUSH_REC_YDS"
   | "PASS_RUSH_YDS"
+  | "ANYTIME_GOAL"
+  | "FIRST_GOAL"
+  | "SHOTS_ON_GOAL"
+  | "POINTS"
+  | "ASSISTS"
+  | "SAVES"
   | "NRFI"
   | "YRFI";
 
@@ -60,6 +66,12 @@ export const BET_TYPE_FILTER_OPTIONS: { value: BetTypeFilterKey; label: string }
   { value: "RECEPTIONS", label: "Receptions" },
   { value: "RUSH_REC_YDS", label: "Rush + Rec Yards" },
   { value: "PASS_RUSH_YDS", label: "Pass + Rush Yards" },
+  { value: "ANYTIME_GOAL", label: "Anytime Goal" },
+  { value: "FIRST_GOAL", label: "First Goal" },
+  { value: "SHOTS_ON_GOAL", label: "Shots on Goal" },
+  { value: "POINTS", label: "Points" },
+  { value: "ASSISTS", label: "Assists" },
+  { value: "SAVES", label: "Goalie Saves" },
   { value: "NRFI", label: "NRFI" },
   { value: "YRFI", label: "YRFI" },
 ];
@@ -102,7 +114,7 @@ export function betTypeFilterCategory(
     // client-safe. A market that can't be resolved from either source
     // returns null, matching no filter key - same as any other unparseable
     // pick today.
-    return pick.propMarket ?? parsePlayerProp(pick.betDetail ?? "")?.propMarket ?? null;
+    return pick.propMarket ?? parseAnyPlayerProp(pick.betDetail ?? "")?.propMarket ?? null;
   }
   return null;
 }
@@ -145,6 +157,9 @@ export function betTypeOptionsForChipSet(chipSet: PickCategoryKey[] | null): Set
   if (chipSet.includes("TEAM_TOTAL")) options.push("TEAM_TOTAL");
   if (chipSet.includes("TD_PROP"))
     options.push("TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "RUSH_REC_YDS", "PASS_RUSH_YDS");
+  // NHL player props: hockey is the only chip set with the P1/P2/P3 segment
+  // categories (and it has no TD_PROP tile, so the block above skips it).
+  if (has(["FIRST_PERIOD_ML"])) options.push("ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "ASSISTS", "SAVES");
   if (has(["NRFI", "YRFI"])) options.push("NRFI", "YRFI");
   return new Set(options);
 }

@@ -34,14 +34,17 @@ function spy(impl?: () => Promise<unknown>) {
   };
 }
 
+// NHL shots-on-goal / goal-scorer lines are SUPPORTED now (nhl-prop.ts), so this
+// #152 fixture uses NHL markets the app still cannot grade (hits / blocks),
+// tagged NHL so the NHL "unsupported" reason is what gets logged.
 const PASTE = `KRASH
-Ivan Demidov 2+ shots on goal
-Darren Raddysh 2+ shots on goal
-Cole Caufield 3+ shots on goal
+NHL Brady Tkachuk over 3.5 hits
+NHL Darren Raddysh over 1.5 blocks
+NHL Cole Caufield over 2.5 hits
 RBS
-William Nylander anytime goal scorer
-Mika Zibanejad anytime goal scorer
-Leon Draisaitl anytime goal scorer`;
+NHL Nikita Kucherov over 1.5 hits
+NHL Mika Zibanejad over 2.5 blocks
+NHL Leon Draisaitl over 4.5 hits`;
 
 async function main() {
   // ---- parseCatalog: the reported paste ----
