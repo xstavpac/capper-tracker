@@ -5,7 +5,7 @@
 // their own logic is modified here.
 import { resolveVariable } from "./resolver";
 import { getEvaluationEventFacts } from "./facts";
-import { getPregameEventFacts } from "./pregame-facts";
+import { getPregameEventFacts, type PregameSnapshotSource } from "./pregame-facts";
 import { resolveGameObservations, filterObservationsBeforeAsOf, type GameObservation } from "./observations";
 import { evaluateExpression, evaluateComparison, type ValueContext } from "@/lib/model-engine/evaluate";
 import { computeWeightedRate } from "@/lib/model-engine/weighted-accumulation";
@@ -130,10 +130,15 @@ function resolveRoleTeamName(role: string, facts: { favTeam: string | null; home
 // only changes where the data was fetched from, never what a given event is
 // allowed to see. Omitted (the default), this behaves exactly as it always
 // has - a fresh resolveGameObservations call per event.
+//
+// options.pregameSnapshots does the same for the pregame path: a caller that
+// evaluates many unstarted games in one run passes one createPregameSnapshotSource()
+// so each day's odds board is read once, not once per game. Omitted, every
+// pregame event reads its own (slim) projection, as before.
 export async function runModelDefinition(
   model: ModelDefinition,
   event: EvaluationEvent,
-  options?: { allObservations?: GameObservation[] }
+  options?: { allObservations?: GameObservation[]; pregameSnapshots?: PregameSnapshotSource }
 ): Promise<OrchestrationResult> {
   const context: ValueContext = {};
   const unavailableIds = new Set<string>();
@@ -165,7 +170,7 @@ export async function runModelDefinition(
     sportKey = facts.sportKey;
     roleFacts = { favTeam: facts.favTeam, homeTeam: facts.homeTeam, awayTeam: facts.awayTeam };
   } else {
-    const pregame = await getPregameEventFacts(event.sportKey, event.homeTeam, event.awayTeam);
+    const pregame = await getPregameEventFacts(event.sportKey, event.homeTeam, event.awayTeam, options?.pregameSnapshots);
     if (!pregame) {
       throw new Error(
         `runModelDefinition: no OddsSnapshot found for "${event.awayTeam} @ ${event.homeTeam}" (sportKey "${event.sportKey}") - no pregame odds cached yet today.`

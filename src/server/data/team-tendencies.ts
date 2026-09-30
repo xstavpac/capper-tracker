@@ -3,6 +3,7 @@ import type { OddsGame } from "@/server/data/odds";
 import { closestByTime, easternDateKey } from "@/lib/dates";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
+import { getOddsGamesForTendencies } from "@/server/data/odds-projections";
 
 // There is deliberately NO minimum-sample display gate on a team's fav / dog /
 // over / under rate. A tendency rate shows at any sample size >= 1 game, with
@@ -119,48 +120,16 @@ export function spreadPoint(oddsGame: OddsGame, teamName: string): number | null
   return null;
 }
 
-// Rebuilds every team's TeamTendency row for a sport from scratch, by
-// joining each finished GameResult against the odds snapshot for that same
-// matchup (pregame favorite/underdog price + total line). Recomputes the
-// full history every time rather than incrementally - GameResult/OddsSnapshot
-// rows are never edited after creation, so this is cheap correctness insurance
-// (a bug fix to the tendency logic self-heals on the next run) at the cost of
-// redoing the join, which stays trivial at this data volume for the
-// foreseeable future.
-//
-// The unbounded per-sport history scan is M9 in the scale audit - see
-// docs/m9-team-tendencies.md. The calculation is all-captured-history by
-// design (not a rolling/seasonal window), so there is no date bound to add;
-// the row/blob counts returned here are instrumentation to decide when the
-// larger fix (drop the OddsSnapshot scan, read GameResult.favTeam/totalLine)
-// is worth its correctness cost. The `select` clauses below are the free part:
-// this function only reads five GameResult columns and only OddsSnapshot.data.
-export async function recomputeTeamTendencies(sportKey: string): Promise<{
-  gamesProcessed: number;
-  teamsUpdated: number;
-  gameResultRows: number;
-  oddsSnapshotRows: number;
-  oddsGamesFlattened: number;
-}> {
-  const [gameResults, snapshots] = await Promise.all([
-    prisma.gameResult.findMany({
-      // isPreseason is an explicit per-row flag (isPreseasonGame /
-      // persistFinalScores), NOT a date or recency filter - the full history
-      // is still in scope, exactly as team-tendencies-acceptance-test.ts's
-      // 400-day-old-game regression requires. It only drops games that fell
-      // in their sport's preseason window (NFL only today), whose outcomes
-      // are low-signal and must not dilute the fav/dog/over/under rates.
-      // Games persisted before this flag existed are all false, so existing
-      // tendency counts are unchanged until those rows are deliberately
-      // reclassified.
-      where: { sportKey, isPreseason: false },
-      select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true, gameDate: true },
-    }),
-    prisma.oddsSnapshot.findMany({ where: { sportKey }, select: { data: true } }),
-  ]);
+export type TendencyGame = { homeTeam: string; awayTeam: string; homeScore: number; awayScore: number; gameDate: Date };
 
-  const oddsGames: OddsGame[] = snapshots.flatMap((s) => s.data as unknown as OddsGame[]);
-
+// The pure accumulation behind recomputeTeamTendencies: every finished game
+// matched against `oddsGames` (any list the helpers above can read - the full
+// boards or recomputeTeamTendencies' slim projection, see odds-projections.ts).
+// Exported so the parity test can feed it both and compare.
+export function computeTendencyCounts(
+  gameResults: TendencyGame[],
+  oddsGames: OddsGame[]
+): { acc: Map<string, TendencyAccumulator>; gamesProcessed: number } {
   const acc = new Map<string, TendencyAccumulator>();
   const getAcc = (teamName: string) => {
     let entry = acc.get(teamName);
@@ -228,6 +197,53 @@ export async function recomputeTeamTendencies(sportKey: string): Promise<{
     if (matchedAnything) gamesProcessed++;
   }
 
+  return { acc, gamesProcessed };
+}
+
+// Rebuilds every team's TeamTendency row for a sport from scratch, by
+// joining each finished GameResult against the odds snapshot for that same
+// matchup (pregame favorite/underdog price + total line). Recomputes the
+// full history every time rather than incrementally - GameResult/OddsSnapshot
+// rows are never edited after creation, so this is cheap correctness insurance
+// (a bug fix to the tendency logic self-heals on the next run) at the cost of
+// redoing the join, which stays trivial at this data volume for the
+// foreseeable future.
+//
+// The unbounded per-sport history scan is M9 in the scale audit - see
+// docs/m9-team-tendencies.md. The calculation is all-captured-history by
+// design (not a rolling/seasonal window), so there is no date bound to add;
+// the row/blob counts returned here are instrumentation to decide when the
+// larger fix (drop the OddsSnapshot scan, read GameResult.favTeam/totalLine)
+// is worth its correctness cost. The `select` clauses below are the free part:
+// this function only reads five GameResult columns, and the odds side is projected inside Postgres
+// (odds-projections.ts: per game just the teams, commenceTime, the h2h outcomes
+// and the first total point - not the whole bookmaker x market board).
+export async function recomputeTeamTendencies(sportKey: string): Promise<{
+  gamesProcessed: number;
+  teamsUpdated: number;
+  gameResultRows: number;
+  oddsSnapshotRows: number;
+  oddsGamesFlattened: number;
+}> {
+  const [gameResults, { games: oddsGames, snapshotCount }] = await Promise.all([
+    prisma.gameResult.findMany({
+      // isPreseason is an explicit per-row flag (isPreseasonGame /
+      // persistFinalScores), NOT a date or recency filter - the full history
+      // is still in scope, exactly as team-tendencies-acceptance-test.ts's
+      // 400-day-old-game regression requires. It only drops games that fell
+      // in their sport's preseason window (NFL only today), whose outcomes
+      // are low-signal and must not dilute the fav/dog/over/under rates.
+      // Games persisted before this flag existed are all false, so existing
+      // tendency counts are unchanged until those rows are deliberately
+      // reclassified.
+      where: { sportKey, isPreseason: false },
+      select: { homeTeam: true, awayTeam: true, homeScore: true, awayScore: true, gameDate: true },
+    }),
+    getOddsGamesForTendencies(sportKey),
+  ]);
+
+  const { acc, gamesProcessed } = computeTendencyCounts(gameResults, oddsGames);
+
   await Promise.all(
     Array.from(acc.entries()).map(([teamName, counts]) =>
       prisma.teamTendency.upsert({
@@ -242,7 +258,7 @@ export async function recomputeTeamTendencies(sportKey: string): Promise<{
     gamesProcessed,
     teamsUpdated: acc.size,
     gameResultRows: gameResults.length,
-    oddsSnapshotRows: snapshots.length,
+    oddsSnapshotRows: snapshotCount,
     oddsGamesFlattened: oddsGames.length,
   };
 }
