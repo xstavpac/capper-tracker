@@ -1219,7 +1219,7 @@ export function regradeLookbackCutoff(now: Date = new Date()): Date {
 // reachable from gradePickPool/regradeFuzzyPool that none of this file's
 // grading logic ever reads them; they're written by persistFinalScores and
 // read only by the separate Game Pulse / team-tendencies queries.
-const CANDIDATE_GAME_RESULT_SELECT = {
+export const CANDIDATE_GAME_RESULT_SELECT = {
   gameDate: true,
   homeTeam: true,
   awayTeam: true,
