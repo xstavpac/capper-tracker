@@ -58,17 +58,36 @@ function expectNhlAwaitingRoster(line: string, capper = "Krash") {
   check(`  no longer flagged unsupported: "${line}"`, detectUnsupportedPropLine(line), null);
 }
 
+// MLB player props are SUPPORTED now (mlb-prop.ts): same two shapes as NHL - sport named
+// ("MLB Chris Sale over 5.5 K") imports as an MLB PLAYER_PROP; sport-less ("Sale 3+ Ks") is parked in
+// `unresolved` (attributed to its capper) for the MLB-roster recovery pass. Never dropped, a game
+// TOTAL/MONEYLINE, or an ATP pick. Lines with no grader (stolen bases, hits allowed...) stay
+// unsupported with the MLB reason.
+function expectMlbPick(line: string, capper = "Krash") {
+  const r = parseCatalog([capper, line].join("\n"));
+  check(`MLB pick imported: "${line}"`, r.picks.map((p) => [p.capperName, p.sportName, p.betType]), [[capper, "MLB", "PLAYER_PROP"]]);
+  check(`  nothing unresolved: "${line}"`, [r.unresolved.length, r.parlays.length], [0, 0]);
+  check(`  no longer flagged unsupported: "${line}"`, detectUnsupportedPropLine(line), null);
+}
+function expectMlbAwaitingRoster(line: string, capper = "Krash") {
+  const r = parseCatalog([capper, line].join("\n"));
+  check(`MLB line awaits roster recovery: "${line}"`, r.unresolved, [line]);
+  check(`  no picks/parlays: "${line}"`, [r.picks.length, r.parlays.length], [0, 0]);
+  check(`  attributed to ${capper}: "${line}"`, r.unresolvedCapperNames, [capper]);
+  check(`  no longer flagged unsupported: "${line}"`, detectUnsupportedPropLine(line), null);
+}
+
 function main() {
   // --- Probe lines from the discovery report ------------------------------
-  expectUnsupported("Schlittler over 17.5 outs", MLB);
-  expectUnsupported("Chris Sale over 5.5 K", MLB);
-  expectUnsupported("Tolle over 4.5 K", MLB);
-  expectUnsupported("MLB Chris Sale over 5.5 K", MLB);
-  expectUnsupported("MLB Yankees vs Red Sox Schlittler over 17.5 outs", MLB);
+  expectMlbAwaitingRoster("Schlittler over 17.5 outs");
+  expectMlbAwaitingRoster("Chris Sale over 5.5 K");
+  expectMlbAwaitingRoster("Tolle over 4.5 K");
+  expectMlbPick("MLB Chris Sale over 5.5 K");
+  expectMlbPick("MLB Yankees vs Red Sox Schlittler over 17.5 outs");
   expectNhlPick("NHL Ivan Demidov 2+ shots on goal");
   expectNhlPick("NHL William Nylander anytime goal scorer");
   // Tennis-surname collisions (ramos / wolf / paul are all in KNOWN_TENNIS_PLAYERS).
-  expectUnsupported("Heliot Ramos over 1.5 total bases", MLB);
+  expectMlbAwaitingRoster("Heliot Ramos over 1.5 total bases");
   expectNhlAwaitingRoster("Dustin Wolf over 24.5 saves");
   expectNhlAwaitingRoster("Nick Paul over 2.5 shots on goal");
   // An NHL market this app still cannot grade keeps the NHL reason (#152).
@@ -77,18 +96,27 @@ function main() {
   // --- Other shapes from the ask ------------------------------------------
   expectNhlAwaitingRoster("Ivan Demidov 2+ shots on goal");
   expectNhlAwaitingRoster("Cole Caufield 3+ shots on goal");
-  expectUnsupported("Sale 3+ Ks", MLB);
+  expectMlbAwaitingRoster("Sale 3+ Ks");
   expectNhlAwaitingRoster("Leon Draisaitl first goal scorer");
   expectUnsupported("Leon Draisaitl over 1.5 points", UNSUPPORTED_PROP_REASONS.GENERIC);
   expectNhlPick("NHL Leon Draisaitl over 1.5 points");
   expectNhlPick("NHL Connor McDavid o1.5 assists");
-  expectUnsupported("Aaron Judge to hit a home run", MLB);
-  expectUnsupported("Aaron Judge over 0.5 HR", MLB);
-  expectUnsupported("Juan Soto over 1.5 RBIs", MLB);
+  expectMlbAwaitingRoster("Aaron Judge to hit a home run");
+  expectMlbAwaitingRoster("Aaron Judge over 0.5 HR");
+  expectMlbAwaitingRoster("Juan Soto over 1.5 RBIs");
   expectUnsupported("Bobby Witt over 0.5 stolen bases", MLB);
-  expectUnsupported("Mookie Betts over 1.5 hits", MLB);
-  expectUnsupported("Mookie Betts over 0.5 runs", MLB);
-  expectUnsupported("Garrett Crochet over 6.5 strikeouts", MLB);
+  expectMlbAwaitingRoster("Mookie Betts over 1.5 hits");
+  expectMlbAwaitingRoster("Mookie Betts over 0.5 runs");
+  expectMlbAwaitingRoster("Garrett Crochet over 6.5 strikeouts");
+  // Phase-1 silent drops: no pick AND no unresolved entry (eaten as a capper header). Now parked.
+  expectMlbAwaitingRoster("Juan Soto 1+ BB");
+  expectMlbAwaitingRoster("Bobby Witt Jr. o1.5 TB");
+  expectMlbAwaitingRoster("Mookie Betts over 0.5 walks");
+  expectUnsupported("Judge stolen base", MLB);
+  expectUnsupported("Judge 1+ SB", MLB);
+  // Different markets that share MLB stat words: never read as the plain market.
+  expectUnsupported("Skenes o3.5 hits allowed", MLB);
+  expectUnsupported("Judge 1+ stolen bases", MLB);
 
   // --- The full KRASH / RBS NHL paste -------------------------------------
   {
@@ -273,9 +301,10 @@ function main() {
     check(`  reason: "${line}"`, detectUnsupportedPropLine(line)?.reason, GAME_STAT);
   }
   // A player's name after the matchup keeps the PLAYER-prop reason.
+  check("matchup + pitcher name is a SUPPORTED MLB prop now (Schlittler)", detectUnsupportedPropLine("MLB Yankees vs Red Sox Schlittler over 17.5 outs"), null);
   check(
-    "matchup + pitcher name keeps MLB player-prop reason (Schlittler)",
-    detectUnsupportedPropLine("MLB Yankees vs Red Sox Schlittler over 17.5 outs")?.reason,
+    "matchup + unsupported MLB stat keeps the MLB reason",
+    detectUnsupportedPropLine("MLB Yankees vs Red Sox Schlittler over 4.5 hits allowed")?.reason,
     UNSUPPORTED_PROP_REASONS.MLB
   );
   check(

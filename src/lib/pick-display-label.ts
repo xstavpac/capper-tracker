@@ -57,6 +57,15 @@ const PROP_MARKET_PHRASES: Record<string, string> = {
   POINTS: "Points",
   ASSISTS: "Assists",
   SAVES: "Saves",
+  // MLB markets
+  STRIKEOUTS: "Ks",
+  OUTS_RECORDED: "Outs",
+  TOTAL_BASES: "Total Bases",
+  HITS: "Hits",
+  WALKS: "Walks",
+  RUNS: "Runs",
+  RBIS: "RBIs",
+  HOME_RUNS: "Home Runs",
 };
 
 // Same spread-suffix sign convention formatPickLabel (bet-line.ts) already

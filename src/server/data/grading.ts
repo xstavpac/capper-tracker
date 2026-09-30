@@ -11,6 +11,7 @@ import {
 } from "@/server/data/odds";
 import { extractPasserRows, type PasserRow } from "@/server/data/nfl-passer-rows";
 import { gradeNhlPlayerProp } from "@/server/data/nhl-prop-grading";
+import { gradeMlbPlayerProp } from "@/server/data/mlb-prop-grading";
 import {
   extractRushingRows,
   extractReceivingRows,
@@ -1098,6 +1099,8 @@ export async function resolvePlayerProp(
   // other sport - including NFL - falls through to the untouched NFL path below,
   // which still declines non-NFL sports with its existing "NFL-only" reason.
   if (sportName === "NHL") return gradeNhlPlayerProp(pick, eventId);
+  // MLB props are graded from the MLB Stats API box score (mlb-prop-grading.ts); eventId is the gamePk.
+  if (sportName === "MLB") return gradeMlbPlayerProp(pick, eventId);
 
   const market = resolvedPropMarket(pick);
   if (market === null || market === "TD") {

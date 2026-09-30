@@ -31,11 +31,14 @@ export type MatrixCase = { group: string; input: MatrixInput };
 
 const PERIODS = Object.values(Period);
 const BET_TYPES = Object.values(BetType);
-// NHL markets (added 2026-10) are deliberately not swept: pickCategory only tests
+// NHL and MLB markets (added 2026-10) are deliberately not swept: pickCategory only tests
 // propMarket for truthiness (-> TD_PROP), so they add no branch, and keeping the
 // axis at the NFL values keeps the pinned golden table valid without a regen.
-const NHL_PROP_MARKETS = new Set<string>(["ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "ASSISTS", "SAVES"]);
-const PROP_MARKETS: (PropMarket | null)[] = [null, ...Object.values(PropMarket).filter((m) => !NHL_PROP_MARKETS.has(m))];
+const NON_NFL_PROP_MARKETS = new Set<string>([
+  "ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "ASSISTS", "SAVES",
+  "STRIKEOUTS", "OUTS_RECORDED", "TOTAL_BASES", "HITS", "WALKS", "RUNS", "RBIS", "HOME_RUNS",
+]);
+const PROP_MARKETS: (PropMarket | null)[] = [null, ...Object.values(PropMarket).filter((m) => !NON_NFL_PROP_MARKETS.has(m))];
 const SIDES: (PickedSide | null)[] = [null, ...Object.values(PickedSide)];
 
 // Only MLB vs everyone else matters today (F5 vs first-half naming) - lower-case

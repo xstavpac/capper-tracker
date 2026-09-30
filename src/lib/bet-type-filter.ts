@@ -48,6 +48,14 @@ export type BetTypeFilterKey =
   | "POINTS"
   | "ASSISTS"
   | "SAVES"
+  | "STRIKEOUTS"
+  | "OUTS_RECORDED"
+  | "TOTAL_BASES"
+  | "HITS"
+  | "WALKS"
+  | "RUNS"
+  | "RBIS"
+  | "HOME_RUNS"
   | "NRFI"
   | "YRFI";
 
@@ -72,6 +80,14 @@ export const BET_TYPE_FILTER_OPTIONS: { value: BetTypeFilterKey; label: string }
   { value: "POINTS", label: "Points" },
   { value: "ASSISTS", label: "Assists" },
   { value: "SAVES", label: "Goalie Saves" },
+  { value: "STRIKEOUTS", label: "Strikeouts" },
+  { value: "OUTS_RECORDED", label: "Outs Recorded" },
+  { value: "TOTAL_BASES", label: "Total Bases" },
+  { value: "HITS", label: "Hits" },
+  { value: "WALKS", label: "Walks" },
+  { value: "RUNS", label: "Runs" },
+  { value: "RBIS", label: "RBIs" },
+  { value: "HOME_RUNS", label: "Home Runs" },
   { value: "NRFI", label: "NRFI" },
   { value: "YRFI", label: "YRFI" },
 ];
@@ -160,7 +176,8 @@ export function betTypeOptionsForChipSet(chipSet: PickCategoryKey[] | null): Set
   // NHL player props: hockey is the only chip set with the P1/P2/P3 segment
   // categories (and it has no TD_PROP tile, so the block above skips it).
   if (has(["FIRST_PERIOD_ML"])) options.push("ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "ASSISTS", "SAVES");
-  if (has(["NRFI", "YRFI"])) options.push("NRFI", "YRFI");
+  // MLB player props: baseball is the chip set with the NRFI/YRFI tiles.
+  if (has(["NRFI", "YRFI"])) options.push("STRIKEOUTS", "OUTS_RECORDED", "TOTAL_BASES", "HITS", "WALKS", "RUNS", "RBIS", "HOME_RUNS", "NRFI", "YRFI");
   return new Set(options);
 }
 

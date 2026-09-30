@@ -29,7 +29,7 @@ const STRONG_WORDS = [
   String.raw`ks?`,
   String.raw`outs(?:\s+recorded)?`,
   String.raw`total\s+bases`,
-  String.raw`stolen\s+bases`,
+  String.raw`stolen\s+bases?`,
   String.raw`rbis?`,
   String.raw`hits`,
   String.raw`saves`,
@@ -45,6 +45,12 @@ const STRONG_WORDS = [
 const AMBIGUOUS_WORDS = [
   String.raw`pts\s*\+\s*reb\s*\+\s*ast`,
   String.raw`runs?`,
+  // MLB hitter words that are only ever a stat NEXT TO a number ("1+ BB", "o1.5 TB"):
+  // ambiguous as bare words (TB = Tampa Bay), so a person subject is required.
+  String.raw`walks?`,
+  String.raw`bb`,
+  String.raw`tb`,
+  String.raw`sbs?`,
   String.raw`points?`,
   String.raw`pts`,
   String.raw`rebounds?`,
@@ -115,6 +121,10 @@ const PHRASES: RegExp[] = [
   /\bgoal\s*scorers?\b/i,
   /\bshots?\s+on\s+goal\b/i,
   /\bto\s+hit\s+a\s+(?:home\s?run|hr)\b/i,
+  // Stolen base is not a market this app grades - but the line must land in `unresolved`
+  // with the MLB reason, never be read as a capper-name header and silently dropped.
+  /\b(?:anytime\s+)?stolen\s+base\b/i,
+  /\bto\s+steal\s+a\s+base\b/i,
   /\b(?:anytime|any\s*time|first|1st|last)\s+(?:home\s?run|hr)\b/i,
 ];
 
@@ -125,10 +135,10 @@ const TRAILING_NUMBER = new RegExp(String.raw`\s*(?:(?:over|under|o|u)\s*)?${NUM
 const PERSON_SHAPE = /^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/;
 
 const NHL_WORDS = /\b(?:shots?\s+on\s+goal|sogs?|goal\s*scorers?|saves)\b/i;
-const MLB_WORDS = /\b(?:strike\s?outs?|ks?|outs|total\s+bases|stolen\s+bases|rbis?|hits|home\s?runs?|hrs?|runs?)\b/i;
+const MLB_WORDS = /\b(?:strike\s?outs?|ks?|outs|total\s+bases|stolen\s+bases?|steal\s+a\s+base|sbs?|rbis?|hits|home\s?runs?|hrs?|runs?|walks?|bb|tb)\b/i;
 
 export const UNSUPPORTED_PROP_REASONS = {
-  MLB: "MLB player props aren't supported yet",
+  MLB: "This MLB prop market isn't supported yet",
   NHL: "NHL player props aren't supported yet",
   NBA: "NBA player props aren't supported yet",
   WNBA: "WNBA player props aren't supported yet",

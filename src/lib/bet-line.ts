@@ -1,4 +1,5 @@
 import { parseNhlPlayerProp, normalizeNhlNPlus, type NhlPropMarket } from "@/lib/nhl-prop";
+import { parseMlbPlayerProp, type MlbPropMarket } from "@/lib/mlb-prop";
 
 type BetTypeLike = "SPREAD" | "MONEYLINE" | "TOTAL" | "TEAM_TOTAL" | "PLAYER_PROP" | "NRFI";
 type SideLike = "HOME" | "AWAY";
@@ -599,9 +600,17 @@ export function parsePlayerProp(text: string): { playerName: string; propMarket:
 // parser rejected. Callers that know the sport (grading, roster recovery)
 // should prefer the sport-specific parser; this exists for the sport-blind
 // spots (import classification, categorization, dedup, filters).
-export type AnyPlayerPropMarket = PlayerPropMarket | NhlPropMarket;
-export function parseAnyPlayerProp(text: string): { playerName: string; propMarket: AnyPlayerPropMarket } | null {
+export type AnyPlayerPropMarket = PlayerPropMarket | NhlPropMarket | MlbPropMarket;
+// NFL then NHL only - the two parsers that are safe on a RAW catalog line. The MLB parser is
+// sport- and team-blind ("Yankees over 2.5 runs" reads as RUNS for "Yankees"), so raw-line
+// classification (parse-catalog.ts) uses this plus its own evidence-gated parseSupportedMlbProp.
+export function parseNflNhlPlayerProp(text: string): { playerName: string; propMarket: PlayerPropMarket | NhlPropMarket } | null {
   return parsePlayerProp(text) ?? parseNhlPlayerProp(text);
+}
+// Every structured market, for callers that ALREADY KNOW the text is a PLAYER_PROP pick (display,
+// dedup, filters, import bookkeeping): NFL, then NHL, then MLB.
+export function parseAnyPlayerProp(text: string): { playerName: string; propMarket: AnyPlayerPropMarket } | null {
+  return parseNflNhlPlayerProp(text) ?? parseMlbPlayerProp(text);
 }
 
 // Coarse, fixed odds bands - no precedent for this anywhere else in the app

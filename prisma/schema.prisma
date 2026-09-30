@@ -116,6 +116,17 @@ enum PropMarket {
   POINTS
   ASSISTS
   SAVES
+  // MLB markets (2026-10). Graded from the MLB Stats API box score (GameResult.externalId is the
+  // gamePk) - see server/data/mlb-boxscore.ts and mlb-prop-grading.ts. Additive. STRIKEOUTS and
+  // OUTS_RECORDED are pitcher markets; the rest are hitter markets.
+  STRIKEOUTS
+  OUTS_RECORDED
+  TOTAL_BASES
+  HITS
+  WALKS
+  RUNS
+  RBIS
+  HOME_RUNS
 }
 
 // ---------- Models ----------
@@ -1065,6 +1076,29 @@ model NhlRosterPlayer {
   @@index([team])
   @@index([lastName])
   @@map("nhl_roster_players")
+}
+
+// Cached MLB 40-man roster snapshot, the MLB twin of NhlRosterPlayer above. Keyed on the MLB Stats
+// API person id (mlbPlayerId) because MLB prop grading reads the Stats API box score, whose
+// players carry those ids (GameResult.externalId for MLB is the Stats API gamePk too). position is
+// the Stats API abbreviation (P, C, 1B..RF, OF, DH, TWP) - prop matching is position-aware
+// (pitcher markets need P/TWP, hitter markets need non-P). Loaded by scripts/load-mlb-roster.ts;
+// read by catalog-import recovery and by MLB prop grading. A roster changes by trade/call-up, so
+// like NFL/NHL there is no cron - rerun the loader by hand (and at opening day).
+model MlbRosterPlayer {
+  id           String   @id @default(cuid())
+  mlbPlayerId  String   @unique
+  fullName     String
+  firstName    String
+  lastName     String
+  team         String
+  position     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([team])
+  @@index([lastName])
+  @@map("mlb_roster_players")
 }
 
 // A user-uploaded metric (Charts' Custom Metrics feature) - the catalog

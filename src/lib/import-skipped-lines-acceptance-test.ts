@@ -79,7 +79,7 @@ async function main() {
   ]);
   // Every family of "isn't supported yet" reason maps to the same stage; a plain miss does not.
   const reasonCases: [string, string][] = [
-    ["Chris Sale over 5.5 K", "MLB player props aren't supported yet"],
+    ["Aaron Judge 1+ stolen bases", "This MLB prop market isn't supported yet"],
     ["NBA LeBron James over 25.5 points", "NBA player props aren't supported yet"],
     ["WNBA A'ja Wilson over 9.5 rebounds", "WNBA player props aren't supported yet"],
     ["Patrick Mahomes over 22.5 passing completions", "This NFL prop market isn't supported yet"],
