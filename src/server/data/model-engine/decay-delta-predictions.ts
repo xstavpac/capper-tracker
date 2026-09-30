@@ -144,7 +144,7 @@ export async function persistGradedDecayDeltaGames(sportKey: string): Promise<Gr
     prisma.gameResult.count({ where: eligible }),
     prisma.gameResult.findMany({
       where: { ...eligible, id: { notIn: [...alreadyPersistedIds] } },
-      orderBy: { gameDate: "asc" },
+      orderBy: [{ gameDate: "asc" }, { id: "asc" }],
       select: GRADED_GAME_SELECT,
     }),
   ]);

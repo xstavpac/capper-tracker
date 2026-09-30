@@ -24,7 +24,7 @@ async function main() {
     const eligible = { sportKey, favTeam: { not: null }, totalLine: { not: null } };
 
     // OLD path
-    const all = await tx.gameResult.findMany({ where: eligible, orderBy: { gameDate: "asc" }, select: GRADED_GAME_SELECT });
+    const all = await tx.gameResult.findMany({ where: eligible, orderBy: [{ gameDate: "asc" }, { id: "asc" }], select: GRADED_GAME_SELECT });
     const existing = await tx.decayDeltaPrediction.findMany({
       where: { modelId: MODEL_ID, gameResultId: { not: null } },
       select: { gameResultId: true },
@@ -36,7 +36,7 @@ async function main() {
     const scanned = await tx.gameResult.count({ where: eligible });
     const newPending = await tx.gameResult.findMany({
       where: { ...eligible, id: { notIn: [...persisted] } },
-      orderBy: { gameDate: "asc" },
+      orderBy: [{ gameDate: "asc" }, { id: "asc" }],
       select: GRADED_GAME_SELECT,
     });
 
