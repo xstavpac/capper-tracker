@@ -80,7 +80,7 @@ export type PlayerPropResolution =
 // character trailing insertion like " III" is bigger than
 // isLikelyDuplicateName's edit-distance threshold for most name lengths, so
 // plain fuzzy matching alone can't reliably absorb it.
-function stripNameSuffix(name: string): string {
+export function stripNameSuffix(name: string): string {
   return name.replace(/\s+(jr\.?|sr\.?|II|III|IV|V)$/i, "").trim();
 }
 
