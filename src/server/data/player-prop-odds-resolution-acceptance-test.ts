@@ -117,7 +117,7 @@ async function main() {
     resolvePropOddsFromGame(game, { playerName: "Patrick Mahomes", propMarket: "PASS_YDS", side: "Over", point: 275.5 }) === null
   );
   ok(
-    "TD has no Over/Under+point concept (one-sided 'Yes' market, see nfl-prop-odds.ts) -> null, never guessed",
+    "TD against a snapshot with no player_anytime_td market (this fixture is rush/receiving only) -> null, never guessed",
     resolvePropOddsFromGame(game, { playerName: "Travis Kelce", propMarket: "TD", side: "Over", point: 0.5 }) === null
   );
 

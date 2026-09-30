@@ -18,7 +18,7 @@ import {
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
 import { resolvePropOdds } from "@/server/data/nfl-prop-odds";
-import { extractLine, parsePlayerPropLine, parsePlayerProp, parseAnyPlayerProp } from "@/lib/bet-line";
+import { extractLine, parsePlayerPropLine, parsePlayerProp, parseAnyPlayerProp, isAnytimeTdPick } from "@/lib/bet-line";
 import { isInvalidOdds } from "@/lib/pick-validation";
 import { TEAM_NICKNAME_CANONICAL, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
@@ -245,7 +245,20 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
         // wherever needed" pattern as parseTouchdownProp/extractLine.
         const parsedProp = parsePlayerProp(item.description);
         const parsedLine = parsePlayerPropLine(item.description);
-        if (parsedProp && parsedLine) {
+        // Anytime TD is the one market with no Over/Under line (one-sided
+        // "Yes", see nfl-prop-odds.ts), so it's priced without parsedLine -
+        // but only for a genuine full-game anytime-TD pick (isAnytimeTdPick
+        // excludes first-TD, multi-TD, Over/Under-TD, rushing-/receiving-only
+        // and half/quarter-scoped text, none of which that market prices).
+        if (parsedProp && parsedProp.propMarket === "TD") {
+          if (isAnytimeTdPick(item.description)) {
+            const tdName = stripTeamNamesFromPlayerName(parsedProp.playerName, [game.homeTeam, game.awayTeam], item.sportName);
+            const tdPrice = tdName ? await resolvePropOdds(liveSportKey, game, { playerName: tdName, propMarket: "TD" }) : null;
+            if (tdPrice !== null) {
+              odds = tdPrice;
+            }
+          }
+        } else if (parsedProp && parsedLine) {
           // parsePlayerProp leaves a capper-included team nickname in the
           // player name untouched (e.g. "Chiefs Travis Kelce" from "Chiefs
           // Travis Kelce Over 42.5 Receiving Yards" - it's needed for game

@@ -260,10 +260,8 @@ async function fetchOneEventPropOdds(
 // the Odds API market key that carries its Over/Under+point line. TD
 // deliberately has no entry: player_anytime_td is one-sided ("Yes" only,
 // never a `point` - see this file's header) and has no Over/Under+line
-// concept to match a pick's parsed side/point against, so a TD prop with no
-// explicit odds simply keeps the -110 default, same as before this resolver
-// existed - resolvePropOddsFromGame returns null for it below rather than
-// guessing at a price from a differently-shaped market.
+// concept to match a pick's parsed side/point against - it is priced by its
+// own one-sided path (resolveAnytimeTdOddsFromGame), not through this map.
 const PLAYER_PROP_ODDS_MARKET_KEYS: Partial<Record<PlayerPropMarket, NflPropMarketKey>> = {
   PASS_YDS: "player_pass_yds",
   RUSH_YDS: "player_rush_yds",
@@ -273,12 +271,29 @@ const PLAYER_PROP_ODDS_MARKET_KEYS: Partial<Record<PlayerPropMarket, NflPropMark
   PASS_RUSH_YDS: "player_pass_rush_yds",
 };
 
+// side/point are the Over/Under+line identity; TD (anytime-TD, one-sided "Yes"
+// with no line) has neither, so they're optional and ignored for it - every
+// other market returns null without both.
 export type PlayerPropOddsQuery = {
   playerName: string;
   propMarket: PlayerPropMarket;
-  side: "Over" | "Under";
-  point: number;
+  side?: "Over" | "Under";
+  point?: number;
 };
+
+// Anytime-TD price: player_anytime_td is one-sided ("Yes" only, never a
+// point - see this file's header), so the match is player + "Yes", with the
+// same first-bookmaker-wins and fuzzy-name policy as the Over/Under markets.
+// Team-defense and "No Scorer" outcomes are already excluded by
+// normalizePlayerPropLines. Callers must only ask for a genuine anytime-TD
+// pick: first-TD / multi-TD / Over-Under-TD are different markets with
+// different prices (bulk-picks.ts gates on parseTouchdownProp for that).
+export function resolveAnytimeTdOddsFromGame(game: OddsGame, playerName: string): number | null {
+  const match = normalizePlayerPropLines(game).find(
+    (l) => l.marketKey === PLAYER_ANYTIME_TD_MARKET_KEY && l.side === "Yes" && isLikelyDuplicateName(l.playerName, playerName)
+  );
+  return match ? match.price : null;
+}
 
 // Pure - matches a bulk-imported player-prop pick's parsed playerName/
 // propMarket/side/point against an already-fetched/cached OddsGame's prop
@@ -292,12 +307,15 @@ export type PlayerPropOddsQuery = {
 // same fuzzy match resolveTouchdownProp (grading.ts) already uses to pair a
 // capper's typed name against a real box-score/roster name, rather than a
 // new matching strategy. Returns null - same as findMarketPrice - when the
-// market has no Over/Under+point concept (TD), or no bookmaker has this
-// exact player+market+side+point combination (the player isn't offered this
+// market has no odds mapping, or no bookmaker has this exact
+// player+market+side+point combination (the player isn't offered this
 // market, or every offered line is at a different point than the pick's).
+// TD is the one exception to the side/point shape: see
+// resolveAnytimeTdOddsFromGame.
 export function resolvePropOddsFromGame(game: OddsGame, prop: PlayerPropOddsQuery): number | null {
+  if (prop.propMarket === "TD") return resolveAnytimeTdOddsFromGame(game, prop.playerName);
   const marketKey = PLAYER_PROP_ODDS_MARKET_KEYS[prop.propMarket];
-  if (!marketKey) return null;
+  if (!marketKey || !prop.side || prop.point === undefined) return null;
 
   const lines = normalizePlayerPropLines(game);
   const match = lines.find(
