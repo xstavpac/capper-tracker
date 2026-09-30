@@ -435,7 +435,7 @@ function main() {
       lastName: "Gibbs",
       team: "Detroit Lions",
       position: "RB",
-      espnPlayerId: "1",
+      externalPlayerId: "1",
     },
   ];
   const { unresolved, unresolvedCapperNames } = parseCatalog(

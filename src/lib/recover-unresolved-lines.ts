@@ -27,10 +27,12 @@ import {
   extractGameNumber,
   withGameNumberSuffix,
   detectUnsupportedPropLine,
+  parseSupportedMlbProp,
   type ParsedPick,
 } from "@/lib/parse-catalog";
 import { resolveLineAgainstLiveTeams, parseFallbackBetText, type LiveTeam, type LineResolution } from "@/lib/live-team-fallback";
 import { resolvePlayerPropAgainstRoster } from "@/lib/player-roster-fallback";
+import { resolveMlbPropAgainstRoster } from "@/lib/mlb-roster-fallback";
 import { parsePlayerProp } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { UNSUPPORTED_PROP_REASONS } from "@/lib/unsupported-prop-vocab";
@@ -49,7 +51,9 @@ export function recoverUnresolvedLines(
   resolvedPicks: ParsedPick[] = [],
   // Cached NHL roster. Optional/empty by default, in which case NHL lines stay
   // unresolved exactly as before NHL props existed.
-  nhlRoster: RosterPlayer[] = []
+  nhlRoster: RosterPlayer[] = [],
+  // Cached MLB 40-man roster. Same default: empty means MLB lines stay unresolved as before.
+  mlbRoster: RosterPlayer[] = []
 ): RecoverUnresolvedResult {
   const recovered: ParsedPick[] = [];
   const stillUnresolved: string[] = [];
@@ -69,6 +73,13 @@ export function recoverUnresolvedLines(
     })
   );
 
+  // MLB prop lines (mlb-prop.ts) neither the NFL nor NHL parser claims. parseSupportedMlbProp already
+  // requires MLB vocabulary/code plus a PERSON subject (team totals never qualify); the MLB roster hit
+  // below - position-aware, unique - is the only thing that ever gives a sport-less line its sport.
+  const isMlbProp = new Set(
+    unresolved.filter((line) => !isPlayerProp.has(line) && !isNhlProp.has(line) && parseSupportedMlbProp(line) !== null)
+  );
+
   // Every non-player-prop unresolved line's own team-fallback resolution,
   // computed up front (once, and reused below in the main loop) so that a
   // team pick appearing AFTER a player-prop line in the raw paste still
@@ -78,7 +89,7 @@ export function recoverUnresolvedLines(
   // twice costs nothing beyond this function's own runtime.
   const nonPlayerPropResolutions = new Map<string, LineResolution>();
   for (const line of unresolved) {
-    if (isPlayerProp.has(line) || isNhlProp.has(line) || detectUnsupportedPropLine(line)) continue;
+    if (isPlayerProp.has(line) || isNhlProp.has(line) || isMlbProp.has(line) || detectUnsupportedPropLine(line)) continue;
     nonPlayerPropResolutions.set(line, resolveLineAgainstLiveTeams(line, liveTeams));
   }
 
@@ -104,6 +115,13 @@ export function recoverUnresolvedLines(
       .map((r) => (r as Extract<LineResolution, { status: "resolved" }>).nickname),
   ];
 
+  const mlbPasteTeamMentions = [
+    ...resolvedPicks.filter((p) => p.sportName === "MLB").flatMap((p) => p.teamNicknames),
+    ...[...nonPlayerPropResolutions.values()]
+      .filter((r) => r.status === "resolved" && r.sport === "MLB")
+      .map((r) => (r as Extract<LineResolution, { status: "resolved" }>).nickname),
+  ];
+
   for (let i = 0; i < unresolved.length; i++) {
     const line = unresolved[i];
     const capperName = unresolvedCapperNames[i] ?? "Unknown";
@@ -120,6 +138,33 @@ export function recoverUnresolvedLines(
       // EXACTLY ONE distinct NHL player; ambiguous/unresolved stay unresolved.
       const relevantNhlTeams = liveTeams.filter((t) => t.sport === "NHL").map((t) => t.name);
       const res = resolvePlayerPropAgainstRoster(line, nhlRoster, relevantNhlTeams, nhlPasteTeamMentions, "NHL");
+      if (res.status !== "resolved") {
+        stillUnresolved.push(line);
+        continue;
+      }
+      const parsed = parsePickText(lineForParsing);
+      recovered.push({
+        capperName,
+        sportName: res.sport,
+        description: withGameNumberSuffix(parsed.cleanDescription, gameNumber),
+        betType: parsed.betType,
+        odds: parsed.odds ?? -110,
+        hasExplicitOdds: parsed.odds !== null,
+        totalSide: parsed.totalSide,
+        units: parsed.units,
+        period: parsed.period,
+        raw: line,
+        teamNicknames: [res.team.toLowerCase()],
+        gameNumber,
+      });
+      continue;
+    }
+
+    if (isMlbProp.has(line)) {
+      // Same conservative policy: resolves only on EXACTLY ONE position-fitting MLB player, with team
+      // context (paste mentions, then the live MLB slate) used only to break a collision.
+      const relevantMlbTeams = liveTeams.filter((t) => t.sport === "MLB").map((t) => t.name);
+      const res = resolveMlbPropAgainstRoster(line, mlbRoster, relevantMlbTeams, mlbPasteTeamMentions, [nhlRoster]);
       if (res.status !== "resolved") {
         stillUnresolved.push(line);
         continue;

@@ -28,9 +28,9 @@ function check(label: string, actual: unknown, expected: unknown) {
 }
 
 const roster: RosterPlayer[] = [
-  { playerName: "Mike Evans", firstName: "Mike", lastName: "Evans", team: "Tampa Bay Buccaneers", position: "WR", espnPlayerId: "1" },
-  { playerName: "Caleb Williams", firstName: "Caleb", lastName: "Williams", team: "Chicago Bears", position: "QB", espnPlayerId: "2" },
-  { playerName: "Bijan Robinson", firstName: "Bijan", lastName: "Robinson", team: "Atlanta Falcons", position: "RB", espnPlayerId: "3" },
+  { playerName: "Mike Evans", firstName: "Mike", lastName: "Evans", team: "Tampa Bay Buccaneers", position: "WR", externalPlayerId: "1" },
+  { playerName: "Caleb Williams", firstName: "Caleb", lastName: "Williams", team: "Chicago Bears", position: "QB", externalPlayerId: "2" },
+  { playerName: "Bijan Robinson", firstName: "Bijan", lastName: "Robinson", team: "Atlanta Falcons", position: "RB", externalPlayerId: "3" },
 ];
 const liveTeams: LiveTeam[] = [];
 
@@ -110,7 +110,7 @@ function main() {
   {
     const bijanGibbsRoster: RosterPlayer[] = [
       ...roster,
-      { playerName: "Jahmyr Gibbs", firstName: "Jahmyr", lastName: "Gibbs", team: "Detroit Lions", position: "RB", espnPlayerId: "4" },
+      { playerName: "Jahmyr Gibbs", firstName: "Jahmyr", lastName: "Gibbs", team: "Detroit Lions", position: "RB", externalPlayerId: "4" },
     ];
     const { unresolved, unresolvedCapperNames } = parseCatalog(
       "godfather\nGibbs over 65.5 rushing yards",
@@ -138,8 +138,8 @@ function main() {
   {
     const allenRoster: RosterPlayer[] = [
       ...roster,
-      { playerName: "Josh Allen", firstName: "Josh", lastName: "Allen", team: "Buffalo Bills", position: "QB", espnPlayerId: "5" },
-      { playerName: "Keenan Allen", firstName: "Keenan", lastName: "Allen", team: "Indianapolis Colts", position: "WR", espnPlayerId: "6" },
+      { playerName: "Josh Allen", firstName: "Josh", lastName: "Allen", team: "Buffalo Bills", position: "QB", externalPlayerId: "5" },
+      { playerName: "Keenan Allen", firstName: "Keenan", lastName: "Allen", team: "Indianapolis Colts", position: "WR", externalPlayerId: "6" },
     ];
 
     // 7a: no other context in the paste at all -> stays unresolved, same as
@@ -180,8 +180,8 @@ function main() {
     {
       const springfieldAllenRoster: RosterPlayer[] = [
         ...roster,
-        { playerName: "Josh Allen", firstName: "Josh", lastName: "Allen", team: "Buffalo Bills", position: "QB", espnPlayerId: "5" },
-        { playerName: "Keenan Allen", firstName: "Keenan", lastName: "Allen", team: "Springfield Isotopes", position: "WR", espnPlayerId: "6" },
+        { playerName: "Josh Allen", firstName: "Josh", lastName: "Allen", team: "Buffalo Bills", position: "QB", externalPlayerId: "5" },
+        { playerName: "Keenan Allen", firstName: "Keenan", lastName: "Allen", team: "Springfield Isotopes", position: "WR", externalPlayerId: "6" },
       ];
       const { picks, unresolved, unresolvedCapperNames } = parseCatalog(
         "Godfather\nAllen anytime touchdown\nSpringfield ML",
@@ -210,7 +210,7 @@ function main() {
     {
       const twoOnSameTeamRoster: RosterPlayer[] = [
         ...allenRoster,
-        { playerName: "Kyle Allen", firstName: "Kyle", lastName: "Allen", team: "Buffalo Bills", position: "QB", espnPlayerId: "7" },
+        { playerName: "Kyle Allen", firstName: "Kyle", lastName: "Allen", team: "Buffalo Bills", position: "QB", externalPlayerId: "7" },
       ];
       const { picks, unresolved, unresolvedCapperNames } = parseCatalog(
         "Godfather\nBills -3\nAllen anytime touchdown",
@@ -242,11 +242,11 @@ function main() {
   {
     const watsonRoster: RosterPlayer[] = [
       ...roster,
-      { playerName: "Christian Watson", firstName: "Christian", lastName: "Watson", team: "Green Bay Packers", position: "WR", espnPlayerId: "10" },
-      { playerName: "Kyler Murray", firstName: "Kyler", lastName: "Murray", team: "Arizona Cardinals", position: "QB", espnPlayerId: "11" },
-      { playerName: "Derek Korda", firstName: "Derek", lastName: "Korda", team: "Springfield Isotopes", position: "QB", espnPlayerId: "12" },
-      { playerName: "Marcus Paul", firstName: "Marcus", lastName: "Paul", team: "Springfield Isotopes", position: "RB", espnPlayerId: "13" },
-      { playerName: "Xavier Fritz", firstName: "Xavier", lastName: "Fritz", team: "Springfield Isotopes", position: "RB", espnPlayerId: "14" },
+      { playerName: "Christian Watson", firstName: "Christian", lastName: "Watson", team: "Green Bay Packers", position: "WR", externalPlayerId: "10" },
+      { playerName: "Kyler Murray", firstName: "Kyler", lastName: "Murray", team: "Arizona Cardinals", position: "QB", externalPlayerId: "11" },
+      { playerName: "Derek Korda", firstName: "Derek", lastName: "Korda", team: "Springfield Isotopes", position: "QB", externalPlayerId: "12" },
+      { playerName: "Marcus Paul", firstName: "Marcus", lastName: "Paul", team: "Springfield Isotopes", position: "RB", externalPlayerId: "13" },
+      { playerName: "Xavier Fritz", firstName: "Xavier", lastName: "Fritz", team: "Springfield Isotopes", position: "RB", externalPlayerId: "14" },
       // "Mike Evans" is already in the base `roster` fixture (Tampa Bay Buccaneers).
     ];
 

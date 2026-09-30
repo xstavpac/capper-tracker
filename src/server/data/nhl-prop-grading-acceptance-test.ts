@@ -121,7 +121,7 @@ async function main() {
   const missName = await grade(pick("Zed Nobody over 1.5 shots on goal"));
   check("(d) a name-only miss (not on the roster) stays PENDING with the couldn't-find reason", missName, { outcome: null, reason: 'couldn\'t find "Zed Nobody" in the box score' });
   check("(d) roster cache empty -> stays PENDING", (await grade(pick("Andrei Kuzmenko over 1.5 shots on goal"), pitBox, [])).outcome, null);
-  const dupRoster: RosterPlayer[] = [...pitRoster, { playerName: "Andrei Kuzmenko", firstName: "Andrei", lastName: "Kuzmenko", team: "Buffalo Sabres", position: "LW", espnPlayerId: "77777" }];
+  const dupRoster: RosterPlayer[] = [...pitRoster, { playerName: "Andrei Kuzmenko", firstName: "Andrei", lastName: "Kuzmenko", team: "Buffalo Sabres", position: "LW", externalPlayerId: "77777" }];
   check("(d) name resolving to TWO roster ids stays PENDING", (await grade(pick("Andrei Kuzmenko over 1.5 shots on goal"), pitBox, dupRoster)).outcome, null);
   const notComplete: NhlBoxScore = { ...pitBox, isComplete: false };
   check("(d) incomplete box score -> absent player stays PENDING", (await grade(pick("Andrei Kuzmenko over 1.5 shots on goal"), notComplete)).outcome, null);

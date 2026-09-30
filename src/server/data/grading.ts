@@ -11,6 +11,7 @@ import {
 } from "@/server/data/odds";
 import { extractPasserRows, type PasserRow } from "@/server/data/nfl-passer-rows";
 import { gradeNhlPlayerProp } from "@/server/data/nhl-prop-grading";
+import { gradeMlbPlayerProp } from "@/server/data/mlb-prop-grading";
 import {
   extractRushingRows,
   extractReceivingRows,
@@ -867,13 +868,13 @@ async function locateNflPlayer(
       playerName,
       roster,
       (r) => r.playerName,
-      (r) => r.espnPlayerId,
+      (r) => r.externalPlayerId,
       { getLastName: (r) => r.lastName, allowFuzzy: false }
     );
-    if (rosterHit.status !== "one" || !rosterHit.item.espnPlayerId) return notFound();
+    if (rosterHit.status !== "one" || !rosterHit.item.externalPlayerId) return notFound();
     const rp = rosterHit.item;
 
-    const inBox = index.players.find((p) => p.espnPlayerId === rp.espnPlayerId);
+    const inBox = index.players.find((p) => p.espnPlayerId === rp.externalPlayerId);
     if (inBox) {
       // Same player, spelled differently than ESPN's displayName. Only usable
       // if they're in the pool this market grades from.
@@ -1098,6 +1099,8 @@ export async function resolvePlayerProp(
   // other sport - including NFL - falls through to the untouched NFL path below,
   // which still declines non-NFL sports with its existing "NFL-only" reason.
   if (sportName === "NHL") return gradeNhlPlayerProp(pick, eventId);
+  // MLB props are graded from the MLB Stats API box score (mlb-prop-grading.ts); eventId is the gamePk.
+  if (sportName === "MLB") return gradeMlbPlayerProp(pick, eventId);
 
   const market = resolvedPropMarket(pick);
   if (market === null || market === "TD") {

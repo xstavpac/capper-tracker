@@ -2075,10 +2075,10 @@ NC State +4.5`;
     // ambiguous, per the check above).
     {
       const bareSurnameRoster: RosterPlayer[] = [
-        { playerName: "Casey Washington", firstName: "Casey", lastName: "Washington", team: "Carolina Panthers", position: "WR", espnPlayerId: "1" },
-        { playerName: "Parker Washington", firstName: "Parker", lastName: "Washington", team: "Jacksonville Jaguars", position: "WR", espnPlayerId: "2" },
-        { playerName: "Malik Washington", firstName: "Malik", lastName: "Washington", team: "Miami Dolphins", position: "WR", espnPlayerId: "3" },
-        { playerName: "Darnell Washington", firstName: "Darnell", lastName: "Washington", team: "Pittsburgh Steelers", position: "TE", espnPlayerId: "4" },
+        { playerName: "Casey Washington", firstName: "Casey", lastName: "Washington", team: "Carolina Panthers", position: "WR", externalPlayerId: "1" },
+        { playerName: "Parker Washington", firstName: "Parker", lastName: "Washington", team: "Jacksonville Jaguars", position: "WR", externalPlayerId: "2" },
+        { playerName: "Malik Washington", firstName: "Malik", lastName: "Washington", team: "Miami Dolphins", position: "WR", externalPlayerId: "3" },
+        { playerName: "Darnell Washington", firstName: "Darnell", lastName: "Washington", team: "Pittsburgh Steelers", position: "TE", externalPlayerId: "4" },
       ];
       const surnameResolution = resolvePlayerPropAgainstRoster("Washington Over 4.5 Receptions", bareSurnameRoster);
       check("bare 'Washington' surname tier (if ever reached) stays ambiguous across a real multi-player collision (no guessing)", surnameResolution.status, "ambiguous");

@@ -149,7 +149,7 @@ console.log("\n########## describeUnresolvedLines / unresolvedReasonBreakdown ##
     // (NHL shots/goal-scorer lines are supported now; hits/blocks are not.)
     "NHL Brady Tkachuk over 3.5 hits",
     "NHL Darren Raddysh over 1.5 blocks",
-    "Chris Sale over 5.5 K",
+    "Aaron Judge 1+ stolen bases",
     "Lakers over 45.5 rebounds",
     "Foo Bar over 3.5", // a plain miss - no reason
   ];
@@ -158,14 +158,14 @@ console.log("\n########## describeUnresolvedLines / unresolvedReasonBreakdown ##
   check("reasons: prop lines get one, a plain miss gets none", entries.map((e) => e.reason), [
     "NHL player props aren't supported yet",
     "NHL player props aren't supported yet",
-    "MLB player props aren't supported yet",
+    "This MLB prop market isn't supported yet",
     "Team stat totals aren't supported yet",
     null,
   ]);
   check("breakdown groups by reason, most common first", unresolvedReasonBreakdown(entries), [
     { reason: "NHL player props aren't supported yet", count: 2 },
-    { reason: "MLB player props aren't supported yet", count: 1 },
     { reason: "Team stat totals aren't supported yet", count: 1 },
+    { reason: "This MLB prop market isn't supported yet", count: 1 },
   ]);
   check("breakdown of only plain misses is empty", unresolvedReasonBreakdown(describeUnresolvedLines(["Foo Bar over 3.5"])), []);
   // The count the header shows is the list length, whatever the reasons: prop

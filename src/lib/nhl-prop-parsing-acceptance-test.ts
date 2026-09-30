@@ -29,7 +29,7 @@ const pit = extractNhlRosterPlayers(
 );
 const p = (playerName: string, team: string, position = "C", id = playerName): RosterPlayer => {
   const [first, ...rest] = playerName.split(" ");
-  return { playerName, firstName: first, lastName: rest.join(" "), team, position, espnPlayerId: "syn-" + id };
+  return { playerName, firstName: first, lastName: rest.join(" "), team, position, externalPlayerId: "syn-" + id };
 };
 // Two "Johnson"s on different teams (collision), one unique synthetic star.
 const roster: RosterPlayer[] = [
@@ -178,7 +178,8 @@ function main() {
   check("team shots total stays a team stat total", detectUnsupportedPropLine("Oilers over 30.5 shots on goal")?.reason, UNSUPPORTED_PROP_REASONS.TEAM_STAT);
   check("game shots total stays a game stat total", detectUnsupportedPropLine("Oilers vs Flames over 60.5 shots on goal")?.reason, UNSUPPORTED_PROP_REASONS.GAME_STAT);
   check("MLB saves (tagged MLB) stays MLB-unsupported", detectUnsupportedPropLine("MLB Devin Williams over 0.5 saves")?.reason, UNSUPPORTED_PROP_REASONS.MLB);
-  check("MLB strikeouts stays MLB-unsupported", detectUnsupportedPropLine("Chris Sale over 5.5 K")?.reason, UNSUPPORTED_PROP_REASONS.MLB);
+  check("MLB strikeouts is a supported market now (not flagged)", detectUnsupportedPropLine("MLB Chris Sale over 5.5 K"), null);
+  check("MLB stolen bases stays MLB-unsupported", detectUnsupportedPropLine("Aaron Judge 1+ stolen bases")?.reason, UNSUPPORTED_PROP_REASONS.MLB);
   check("NBA points stays NBA-unsupported", detectUnsupportedPropLine("NBA LeBron James over 25.5 points")?.reason, UNSUPPORTED_PROP_REASONS.NBA);
 
   // ---- parseCatalog: never dropped, never a total/ML/ATP -------------------
