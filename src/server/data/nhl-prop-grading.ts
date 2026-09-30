@@ -10,7 +10,7 @@
 // shootout attempts; first-goal ordering uses plays with period <= 4.
 //
 // Did-not-play policy: a pick resolves PUSH (stake returned) ONLY when ALL hold:
-//   1. the NHL roster cache resolves the typed name to EXACTLY ONE espnPlayerId
+//   1. the NHL roster cache resolves the typed name to EXACTLY ONE player id
 //      (league-wide, so a name that could be two players never pushes),
 //   2. the game is final,
 //   3. the box score is complete (both teams have populated skater AND goalie
@@ -61,15 +61,16 @@ type NameMatch<T> = { status: "one"; item: T } | { status: "many" } | { status: 
 // Exact normalized full name -> fuzzy full name -> (single typed token only)
 // bare surname; each tier counts only if it narrows to exactly one distinct
 // player id. Same tier policy as player-roster-fallback.ts.
-function matchByName<T extends { espnPlayerId: string }>(
+function matchByName<T>(
   typed: string,
   items: T[],
+  id: (i: T) => string,
   fullName: (i: T) => string,
   lastName: (i: T) => string
 ): NameMatch<T> {
   const t = stripSuffix(typed);
   const nt = normalizeName(t);
-  const distinct = (xs: T[]) => [...new Map(xs.map((x) => [x.espnPlayerId, x])).values()];
+  const distinct = (xs: T[]) => [...new Map(xs.map((x) => [id(x), x])).values()];
   const tiers: T[][] = [
     items.filter((i) => normalizeName(stripSuffix(fullName(i))) === nt),
     items.filter((i) => isLikelyDuplicateName(stripSuffix(fullName(i)), t)),
@@ -120,8 +121,8 @@ export async function gradeNhlPlayerProp(pick: NhlPropPick, eventId: string, dep
   }
 
   const isGoalieMarket = market === "SAVES";
-  const skaterHit = matchByName(playerName, box.skaters, (r) => r.playerName, (r) => lastWord(r.playerName));
-  const goalieHit = matchByName(playerName, box.goalies, (r) => r.playerName, (r) => lastWord(r.playerName));
+  const skaterHit = matchByName(playerName, box.skaters, (r) => r.espnPlayerId, (r) => r.playerName, (r) => lastWord(r.playerName));
+  const goalieHit = matchByName(playerName, box.goalies, (r) => r.espnPlayerId, (r) => r.playerName, (r) => lastWord(r.playerName));
   const own = isGoalieMarket ? goalieHit : skaterHit;
   const other = isGoalieMarket ? skaterHit : goalieHit;
 
@@ -153,14 +154,14 @@ export async function gradeNhlPlayerProp(pick: NhlPropPick, eventId: string, dep
       console.error("gradeNhlPlayerProp: NHL roster read failed", err);
       return notFound;
     }
-    const rosterHit = matchByName(playerName, roster, (r) => r.playerName, (r) => r.lastName);
+    const rosterHit = matchByName(playerName, roster, (r) => r.externalPlayerId, (r) => r.playerName, (r) => r.lastName);
     if (rosterHit.status !== "one") return notFound;
     const rp = rosterHit.item;
-    const inSkaters = box.skaters.find((r) => r.espnPlayerId === rp.espnPlayerId);
-    const inGoalies = box.goalies.find((r) => r.espnPlayerId === rp.espnPlayerId);
+    const inSkaters = box.skaters.find((r) => r.espnPlayerId === rp.externalPlayerId);
+    const inGoalies = box.goalies.find((r) => r.espnPlayerId === rp.externalPlayerId);
     if (isGoalieMarket ? inGoalies : inSkaters) {
       // Same player, different spelling than the box score's displayName.
-      playerId = rp.espnPlayerId;
+      playerId = rp.externalPlayerId;
     } else if (inSkaters || inGoalies) {
       return { outcome: null, reason: '"' + playerName + '" is a ' + (isGoalieMarket ? "skater" : "goalie") + " in this box score, which this market doesn't cover" };
     } else {

@@ -29,7 +29,7 @@ const pit = extractNhlRosterPlayers(
 );
 const p = (playerName: string, team: string, position = "C", id = playerName): RosterPlayer => {
   const [first, ...rest] = playerName.split(" ");
-  return { playerName, firstName: first, lastName: rest.join(" "), team, position, espnPlayerId: "syn-" + id };
+  return { playerName, firstName: first, lastName: rest.join(" "), team, position, externalPlayerId: "syn-" + id };
 };
 // Two "Johnson"s on different teams (collision), one unique synthetic star.
 const roster: RosterPlayer[] = [

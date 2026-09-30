@@ -303,9 +303,9 @@ function main() {
   // name and the next pick credited to that fake capper.
   {
     const rosterFixture = [
-      { playerName: "DeVonta Smith", firstName: "DeVonta", lastName: "Smith", team: "Philadelphia Eagles", position: "WR", espnPlayerId: "1" },
-      { playerName: "Zach Ertz", firstName: "Zach", lastName: "Ertz", team: "Washington Commanders", position: "TE", espnPlayerId: "2" },
-      { playerName: "Rome Odunze", firstName: "Rome", lastName: "Odunze", team: "Chicago Bears", position: "WR", espnPlayerId: "3" },
+      { playerName: "DeVonta Smith", firstName: "DeVonta", lastName: "Smith", team: "Philadelphia Eagles", position: "WR", externalPlayerId: "1" },
+      { playerName: "Zach Ertz", firstName: "Zach", lastName: "Ertz", team: "Washington Commanders", position: "TE", externalPlayerId: "2" },
+      { playerName: "Rome Odunze", firstName: "Rome", lastName: "Odunze", team: "Chicago Bears", position: "WR", externalPlayerId: "3" },
     ];
     const block = ["CHEESE", "DeVonta Smith Over 4.5 receptions", "Zach Ertz 3+ receptions", "Rome Odunze Anytime Touchdown"].join("\n");
     const parsed = parseCatalog(block, []);

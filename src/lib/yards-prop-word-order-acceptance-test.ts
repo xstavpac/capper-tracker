@@ -27,7 +27,7 @@ const mk = (name: string, team: string, position: string) => ({
   lastName: name.split(" ").slice(1).join(" "),
   team,
   position,
-  espnPlayerId: name,
+  externalPlayerId: name,
 });
 const roster = [
   mk("Caleb Williams", "Chicago Bears", "QB"),

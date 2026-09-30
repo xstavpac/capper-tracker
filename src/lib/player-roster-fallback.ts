@@ -9,7 +9,7 @@
 // against it" shape as gatherLiveTeamNames / resolveLineAgainstLiveTeams.
 //
 // Conservative by construction, same policy as resolveLineAgainstLiveTeams:
-//   - resolves only when EXACTLY ONE distinct player (by espnPlayerId)
+//   - resolves only when EXACTLY ONE distinct player (by externalPlayerId)
 //     matches. An exact (normalized) full-name match is always preferred;
 //     the fuzzy matcher (isLikelyDuplicateName, already used by grading.ts
 //     for box-score names) is tried next, ONLY when no exact match exists at
@@ -84,13 +84,13 @@ export function stripNameSuffix(name: string): string {
   return name.replace(/\s+(jr\.?|sr\.?|II|III|IV|V)$/i, "").trim();
 }
 
-// Distinct by espnPlayerId - a roster lists each player once, but this
+// Distinct by externalPlayerId - a roster lists each player once, but this
 // guards against the same player somehow matching twice (e.g. a future
 // multi-source roster merge) inflating what should be a single-player
 // match into a false "ambiguous".
 function distinctPlayers(matches: RosterPlayer[]): RosterPlayer[] {
   const byId = new Map<string, RosterPlayer>();
-  for (const m of matches) byId.set(m.espnPlayerId, m);
+  for (const m of matches) byId.set(m.externalPlayerId, m);
   return [...byId.values()];
 }
 

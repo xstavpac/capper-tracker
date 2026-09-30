@@ -44,29 +44,29 @@ console.log("\n########## extractRosterPlayers: Kansas City Chiefs ##########");
   const kc = extractRosterPlayers("Kansas City Chiefs", loadFixture("nfl-roster-kc.json"));
   ok("extracts only QB/RB/WR/TE (well under the ~75-player full roster)", kc.length > 0 && kc.length < 40, kc.length);
   ok("every extracted player is QB/RB/WR/TE", kc.every((p) => ["QB", "RB", "WR", "TE"].includes(p.position)));
-  expect("Patrick Mahomes -> Kansas City Chiefs QB, correct espnPlayerId", find(kc, "Patrick Mahomes"), {
+  expect("Patrick Mahomes -> Kansas City Chiefs QB, correct externalPlayerId", find(kc, "Patrick Mahomes"), {
     playerName: "Patrick Mahomes",
     firstName: "Patrick",
     lastName: "Mahomes",
     team: "Kansas City Chiefs",
     position: "QB",
-    espnPlayerId: "3139477",
+    externalPlayerId: "3139477",
   });
-  expect("Travis Kelce -> Kansas City Chiefs TE, correct espnPlayerId", find(kc, "Travis Kelce"), {
+  expect("Travis Kelce -> Kansas City Chiefs TE, correct externalPlayerId", find(kc, "Travis Kelce"), {
     playerName: "Travis Kelce",
     firstName: "Travis",
     lastName: "Kelce",
     team: "Kansas City Chiefs",
     position: "TE",
-    espnPlayerId: "15847",
+    externalPlayerId: "15847",
   });
-  expect("Rashee Rice -> Kansas City Chiefs WR, correct espnPlayerId", find(kc, "Rashee Rice"), {
+  expect("Rashee Rice -> Kansas City Chiefs WR, correct externalPlayerId", find(kc, "Rashee Rice"), {
     playerName: "Rashee Rice",
     firstName: "Rashee",
     lastName: "Rice",
     team: "Kansas City Chiefs",
     position: "WR",
-    espnPlayerId: "4428331",
+    externalPlayerId: "4428331",
   });
   expect(
     "Kenneth Walker III (real generational suffix, including in ESPN's own lastName field) -> Kansas City Chiefs RB",
@@ -77,7 +77,7 @@ console.log("\n########## extractRosterPlayers: Kansas City Chiefs ##########");
       lastName: "Walker III",
       team: "Kansas City Chiefs",
       position: "RB",
-      espnPlayerId: "4567048",
+      externalPlayerId: "4567048",
     }
   );
 }
@@ -87,29 +87,29 @@ console.log("\n########## extractRosterPlayers: Denver Broncos ##########");
   const den = extractRosterPlayers("Denver Broncos", loadFixture("nfl-roster-den.json"));
   ok("extracts only QB/RB/WR/TE (well under the ~75-player full roster)", den.length > 0 && den.length < 40, den.length);
   ok("every extracted player is QB/RB/WR/TE", den.every((p) => ["QB", "RB", "WR", "TE"].includes(p.position)));
-  expect("Jaylen Waddle -> Denver Broncos WR, correct espnPlayerId", find(den, "Jaylen Waddle"), {
+  expect("Jaylen Waddle -> Denver Broncos WR, correct externalPlayerId", find(den, "Jaylen Waddle"), {
     playerName: "Jaylen Waddle",
     firstName: "Jaylen",
     lastName: "Waddle",
     team: "Denver Broncos",
     position: "WR",
-    espnPlayerId: "4372016",
+    externalPlayerId: "4372016",
   });
-  expect("Courtland Sutton -> Denver Broncos WR, correct espnPlayerId", find(den, "Courtland Sutton"), {
+  expect("Courtland Sutton -> Denver Broncos WR, correct externalPlayerId", find(den, "Courtland Sutton"), {
     playerName: "Courtland Sutton",
     firstName: "Courtland",
     lastName: "Sutton",
     team: "Denver Broncos",
     position: "WR",
-    espnPlayerId: "3128429",
+    externalPlayerId: "3128429",
   });
-  expect("Evan Engram -> Denver Broncos TE, correct espnPlayerId", find(den, "Evan Engram"), {
+  expect("Evan Engram -> Denver Broncos TE, correct externalPlayerId", find(den, "Evan Engram"), {
     playerName: "Evan Engram",
     firstName: "Evan",
     lastName: "Engram",
     team: "Denver Broncos",
     position: "TE",
-    espnPlayerId: "3051876",
+    externalPlayerId: "3051876",
   });
 }
 
@@ -117,13 +117,13 @@ console.log("\n########## extractRosterPlayers: Detroit Lions (bare-surname case
 {
   const det = extractRosterPlayers("Detroit Lions", loadFixture("nfl-roster-det.json"));
   ok("extracts only QB/RB/WR/TE (well under the ~78-player full roster)", det.length > 0 && det.length < 40, det.length);
-  expect("Jahmyr Gibbs -> Detroit Lions RB, correct espnPlayerId", find(det, "Jahmyr Gibbs"), {
+  expect("Jahmyr Gibbs -> Detroit Lions RB, correct externalPlayerId", find(det, "Jahmyr Gibbs"), {
     playerName: "Jahmyr Gibbs",
     firstName: "Jahmyr",
     lastName: "Gibbs",
     team: "Detroit Lions",
     position: "RB",
-    espnPlayerId: "4429795",
+    externalPlayerId: "4429795",
   });
 }
 

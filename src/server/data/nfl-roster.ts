@@ -30,7 +30,7 @@ export type RosterPlayer = {
   lastName: string;
   team: string;
   position: string;
-  espnPlayerId: string;
+  externalPlayerId: string; // the source league API's own player id (ESPN for NFL/NHL, MLB Stats API for MLB)
 };
 
 // The only positions this app's player-prop markets cover today (passing/
@@ -127,7 +127,7 @@ export function extractRosterPlayers(team: string, espnRosterResponse: unknown):
         lastName: item.lastName,
         team,
         position,
-        espnPlayerId: item.id,
+        externalPlayerId: item.id,
       });
     }
   }

@@ -13,6 +13,6 @@ export async function getCachedNhlRoster(): Promise<RosterPlayer[]> {
     lastName: r.lastName,
     team: r.team,
     position: r.position,
-    espnPlayerId: r.espnPlayerId,
+    externalPlayerId: r.espnPlayerId,
   }));
 }

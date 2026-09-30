@@ -32,7 +32,7 @@ async function main() {
   if (COMMIT) {
     for (const player of roster) {
       await prisma.nflRosterPlayer.upsert({
-        where: { espnPlayerId: player.espnPlayerId },
+        where: { espnPlayerId: player.externalPlayerId },
         update: {
           fullName: player.playerName,
           firstName: player.firstName,
@@ -41,7 +41,7 @@ async function main() {
           position: player.position,
         },
         create: {
-          espnPlayerId: player.espnPlayerId,
+          espnPlayerId: player.externalPlayerId,
           fullName: player.playerName,
           firstName: player.firstName,
           lastName: player.lastName,
@@ -55,7 +55,7 @@ async function main() {
     // stale rows here are the exact wrong-data risk the roster fallback is
     // built to avoid, so a fresh commit replaces the table's contents
     // rather than only ever adding to it.
-    const currentIds = new Set(roster.map((p) => p.espnPlayerId));
+    const currentIds = new Set(roster.map((p) => p.externalPlayerId));
     const stale = await prisma.nflRosterPlayer.findMany({ select: { id: true, espnPlayerId: true } });
     const staleIds = stale.filter((s) => !currentIds.has(s.espnPlayerId)).map((s) => s.id);
     if (staleIds.length > 0) {

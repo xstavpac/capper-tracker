@@ -108,15 +108,15 @@ console.log("\n########## PART B: generational-suffix normalization (real roster
 console.log("\n########## PART C: intentional same-name ambiguity - never guessed ##########");
 {
   // Constructed, not from a real roster - two distinct players (different
-  // espnPlayerId) sharing an identical full name across two teams. This is
+  // externalPlayerId) sharing an identical full name across two teams. This is
   // the textbook case #4 of the roster-lookup task exists to protect
   // against: a lookup that guesses wrong on an ambiguous name reintroduces
   // the exact class of bug #83 fixed, just relocated to the new roster path
   // instead of parse-catalog.ts's team-name matching.
   const ambiguousRoster: RosterPlayer[] = [
     ...roster,
-    { playerName: "Marcus Johnson", firstName: "Marcus", lastName: "Johnson", team: "Kansas City Chiefs", position: "WR", espnPlayerId: "9000001" },
-    { playerName: "Marcus Johnson", firstName: "Marcus", lastName: "Johnson", team: "Denver Broncos", position: "WR", espnPlayerId: "9000002" },
+    { playerName: "Marcus Johnson", firstName: "Marcus", lastName: "Johnson", team: "Kansas City Chiefs", position: "WR", externalPlayerId: "9000001" },
+    { playerName: "Marcus Johnson", firstName: "Marcus", lastName: "Johnson", team: "Denver Broncos", position: "WR", externalPlayerId: "9000002" },
   ];
   const r = resolvePlayerPropAgainstRoster("Marcus Johnson Over 45.5 Receiving Yards", ambiguousRoster);
   check("a name matching two distinct players on two different teams stays 'ambiguous', not guessed", r, {
@@ -155,7 +155,7 @@ console.log("\n########## PART D: bare-surname tier ('Gibbs over 65.5 rushing ya
   // for the full-name tiers.
   const twoGibbsRoster: RosterPlayer[] = [
     ...roster,
-    { playerName: "Marcus Gibbs", firstName: "Marcus", lastName: "Gibbs", team: "Denver Broncos", position: "WR", espnPlayerId: "9000003" },
+    { playerName: "Marcus Gibbs", firstName: "Marcus", lastName: "Gibbs", team: "Denver Broncos", position: "WR", externalPlayerId: "9000003" },
   ];
   const r3 = resolvePlayerPropAgainstRoster("Gibbs over 65.5 rushing yards", twoGibbsRoster);
   check("D3: two distinct players sharing a surname stays 'ambiguous', not guessed", r3, {

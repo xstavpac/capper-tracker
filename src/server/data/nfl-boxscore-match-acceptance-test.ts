@@ -39,9 +39,9 @@ const TEN_NYG = { id: "401872956", file: "nfl-boxscore-401872956-ten-nyg.json", 
 const PHI_CHI = { id: "401872963", file: "nfl-boxscore-401872963-phi-chi.json", home: "Chicago Bears", away: "Philadelphia Eagles" };
 const NYJ_DET = { id: "401872954", file: "nfl-boxscore-401872954-nyj-det.json", home: "Detroit Lions", away: "New York Jets" };
 
-function rp(espnPlayerId: string, playerName: string, team: string, position = "WR"): RosterPlayer {
+function rp(externalPlayerId: string, playerName: string, team: string, position = "WR"): RosterPlayer {
   const parts = playerName.split(" ");
-  return { espnPlayerId, playerName, firstName: parts[0], lastName: parts.slice(1).join(" "), team, position };
+  return { externalPlayerId, playerName, firstName: parts[0], lastName: parts.slice(1).join(" "), team, position };
 }
 // lastName deliberately mirrors ESPN's real quirk ("Walker III").
 const ROSTER: RosterPlayer[] = [

@@ -83,7 +83,7 @@ export function extractNhlRosterPlayers(team: string, espnRosterResponse: unknow
         lastName: item.lastName,
         team,
         position,
-        espnPlayerId: item.id,
+        externalPlayerId: item.id,
       });
     }
   }

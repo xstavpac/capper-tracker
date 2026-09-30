@@ -45,12 +45,12 @@ async function main() {
       position: player.position,
     };
     await prisma.nhlRosterPlayer.upsert({
-      where: { espnPlayerId: player.espnPlayerId },
+      where: { espnPlayerId: player.externalPlayerId },
       update: data,
-      create: { espnPlayerId: player.espnPlayerId, ...data },
+      create: { espnPlayerId: player.externalPlayerId, ...data },
     });
   }
-  const currentIds = new Set(roster.map((p) => p.espnPlayerId));
+  const currentIds = new Set(roster.map((p) => p.externalPlayerId));
   const existing = await prisma.nhlRosterPlayer.findMany({ select: { id: true, espnPlayerId: true } });
   const staleIds = existing.filter((s) => !currentIds.has(s.espnPlayerId)).map((s) => s.id);
   if (staleIds.length > 0) await prisma.nhlRosterPlayer.deleteMany({ where: { id: { in: staleIds } } });

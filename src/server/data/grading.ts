@@ -867,13 +867,13 @@ async function locateNflPlayer(
       playerName,
       roster,
       (r) => r.playerName,
-      (r) => r.espnPlayerId,
+      (r) => r.externalPlayerId,
       { getLastName: (r) => r.lastName, allowFuzzy: false }
     );
-    if (rosterHit.status !== "one" || !rosterHit.item.espnPlayerId) return notFound();
+    if (rosterHit.status !== "one" || !rosterHit.item.externalPlayerId) return notFound();
     const rp = rosterHit.item;
 
-    const inBox = index.players.find((p) => p.espnPlayerId === rp.espnPlayerId);
+    const inBox = index.players.find((p) => p.espnPlayerId === rp.externalPlayerId);
     if (inBox) {
       // Same player, spelled differently than ESPN's displayName. Only usable
       // if they're in the pool this market grades from.
