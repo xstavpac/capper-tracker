@@ -1,11 +1,19 @@
-// Behavior-preservation test for getCapperPanels' caching + relation narrowing.
+// Behavior-preservation test for getCapperPanels' move from a full-history pick
+// fetch to database-side aggregates (capper-list-aggregates.ts), plus its caching.
 //
-// The GOLDEN blocks below were captured by running the ORIGINAL implementation
-// (always `include: { sport: true }`, uncached) against this exact fixture
-// before the change. The new implementation must reproduce them byte for byte,
-// unfiltered, with a sportName filter, and with a category filter. It also
-// asserts the query shape (no relation join unless a category filter needs
-// sport.name) and that cache keys never collide across users/filters.
+// Three layers:
+//   1. GOLDEN blocks below: captured from the ORIGINAL implementation (always
+//      `include: { sport: true }`, uncached) against this exact fixture. The SQL
+//      implementation must reproduce them byte for byte, unfiltered and with a
+//      sportName filter. The one deliberate difference: the streak entries' `stats`
+//      no longer carry longestWinStreak / longestLossStreak (nothing reads them; the
+//      type narrowed to RecordStats), so those two keys are stripped from the goldens.
+//   2. PARITY: getCapperPanels must equal the frozen raw-pick implementation
+//      (capper-panels-legacy.ts) on the same rows - the fixture above plus a second
+//      user whose picks stress the cases the golden fixture avoids: picks graded in
+//      the same instant, an all-PENDING capper, a capper with no picks, picks on the
+//      activity-cutoff edge, a zero-odds WIN.
+//   3. Query shape (the panels never fetch pick rows) and cache-key uniqueness.
 //
 // DB-backed and WRITING: creates its own user/cappers/picks (ids prefixed
 // `__PanelsCache__`) and deletes them by exact id at the end. Refuses to run
@@ -16,7 +24,8 @@
 //   npx tsx src/server/data/capper-panels-acceptance-test.ts
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { getCapperPanels, capperPanelsCacheKey } from "@/server/data/capper-panels";
+import { getCapperPanels, capperPanelsCacheKey, type CapperPanels } from "@/server/data/capper-panels";
+import { getCapperPanelsLegacy } from "@/server/data/capper-panels-legacy";
 import { cacheKeys } from "@/lib/cache-keys";
 import { computeStats } from "@/server/data/stats";
 import { queryCurrentStreaks } from "@/server/data/capper-list-aggregates";
@@ -100,7 +109,93 @@ const X = "PENDING" as const;
 // ---- GOLDEN (captured from the original implementation) ---------------------
 const GOLDEN_UNFILTERED: unknown = {"hotStreaks":[{"capperId":"__PanelsCache__c-rising","name":"Rising Rita","colorTag":null,"streakCount":8,"weightedScore":-3.93,"stats":{"wins":8,"losses":8,"pushes":0,"winPct":50,"unitsWon":10,"unitsLost":11.5,"netUnits":-1.5,"roi":-6.38,"currentStreak":{"type":"WIN","count":8},"longestWinStreak":8,"longestLossStreak":8}},{"capperId":"__PanelsCache__c-hot","name":"Hot Hand","colorTag":"#ff0000","streakCount":3,"weightedScore":10.16,"stats":{"wins":8,"losses":4,"pushes":0,"winPct":66.66666666666666,"unitsWon":9.17,"unitsLost":6,"netUnits":3.17,"roi":18.63,"currentStreak":{"type":"WIN","count":3},"longestWinStreak":3,"longestLossStreak":1}}],"coolingOff":[{"capperId":"__PanelsCache__c-fall","name":"Falling Fred","colorTag":null,"streakCount":10,"weightedScore":15.14,"stats":{"wins":20,"losses":10,"pushes":0,"winPct":66.66666666666666,"unitsWon":24.58,"unitsLost":15.5,"netUnits":9.08,"roi":20.19,"currentStreak":{"type":"LOSS","count":10},"longestWinStreak":20,"longestLossStreak":10}},{"capperId":"__PanelsCache__c-cold","name":"Cold Cat","colorTag":null,"streakCount":4,"weightedScore":-11.98,"stats":{"wins":3,"losses":5,"pushes":0,"winPct":37.5,"unitsWon":4.9,"unitsLost":8,"netUnits":-3.1,"roi":-26.96,"currentStreak":{"type":"LOSS","count":4},"longestWinStreak":2,"longestLossStreak":4}}],"rising":[{"capperId":"__PanelsCache__c-rising","name":"Rising Rita","colorTag":null,"previousWinPct":60,"recentWinPct":100,"risePts":40}],"fallingOff":[{"capperId":"__PanelsCache__c-fall","name":"Falling Fred","colorTag":null,"lifetimeWinPct":66.67,"recentWinPct":0,"dropPts":66.67},{"capperId":"__PanelsCache__c-nfl","name":"Nfl Nate","colorTag":null,"lifetimeWinPct":80,"recentWinPct":70,"dropPts":10}],"bestLast20":[{"capperId":"__PanelsCache__c-hot","name":"Hot Hand","colorTag":"#ff0000","wins":8,"losses":4,"pushes":0,"recentWinPct":66.67,"weightedScore":60.18},{"capperId":"__PanelsCache__c-nfl","name":"Nfl Nate","colorTag":null,"wins":8,"losses":2,"pushes":2,"recentWinPct":66.67,"weightedScore":60.18},{"capperId":"__PanelsCache__c-rising","name":"Rising Rita","colorTag":null,"wins":8,"losses":8,"pushes":0,"recentWinPct":50,"weightedScore":50.92},{"capperId":"__PanelsCache__c-fall","name":"Falling Fred","colorTag":null,"wins":10,"losses":10,"pushes":0,"recentWinPct":50,"weightedScore":50.8}],"worstLast20":[{"capperId":"__PanelsCache__c-fall","name":"Falling Fred","colorTag":null,"wins":10,"losses":10,"pushes":0,"recentWinPct":50,"weightedScore":50.8},{"capperId":"__PanelsCache__c-rising","name":"Rising Rita","colorTag":null,"wins":8,"losses":8,"pushes":0,"recentWinPct":50,"weightedScore":50.92},{"capperId":"__PanelsCache__c-hot","name":"Hot Hand","colorTag":"#ff0000","wins":8,"losses":4,"pushes":0,"recentWinPct":66.67,"weightedScore":60.18},{"capperId":"__PanelsCache__c-nfl","name":"Nfl Nate","colorTag":null,"wins":8,"losses":2,"pushes":2,"recentWinPct":66.67,"weightedScore":60.18}]};
 const GOLDEN_SPORT_MLB: unknown = {"hotStreaks":[{"capperId":"__PanelsCache__c-rising","name":"Rising Rita","colorTag":null,"streakCount":8,"weightedScore":-3.93,"stats":{"wins":8,"losses":8,"pushes":0,"winPct":50,"unitsWon":10,"unitsLost":11.5,"netUnits":-1.5,"roi":-6.38,"currentStreak":{"type":"WIN","count":8},"longestWinStreak":8,"longestLossStreak":8}},{"capperId":"__PanelsCache__c-hot","name":"Hot Hand","colorTag":"#ff0000","streakCount":4,"weightedScore":10.06,"stats":{"wins":7,"losses":3,"pushes":0,"winPct":70,"unitsWon":7.92,"unitsLost":5,"netUnits":2.92,"roi":20.11,"currentStreak":{"type":"WIN","count":4},"longestWinStreak":4,"longestLossStreak":1}}],"coolingOff":[{"capperId":"__PanelsCache__c-fall","name":"Falling Fred","colorTag":null,"streakCount":10,"weightedScore":15.14,"stats":{"wins":20,"losses":10,"pushes":0,"winPct":66.66666666666666,"unitsWon":24.58,"unitsLost":15.5,"netUnits":9.08,"roi":20.19,"currentStreak":{"type":"LOSS","count":10},"longestWinStreak":20,"longestLossStreak":10}},{"capperId":"__PanelsCache__c-cold","name":"Cold Cat","colorTag":null,"streakCount":4,"weightedScore":-11.98,"stats":{"wins":3,"losses":5,"pushes":0,"winPct":37.5,"unitsWon":4.9,"unitsLost":8,"netUnits":-3.1,"roi":-26.96,"currentStreak":{"type":"LOSS","count":4},"longestWinStreak":2,"longestLossStreak":4}}],"rising":[{"capperId":"__PanelsCache__c-rising","name":"Rising Rita","colorTag":null,"previousWinPct":60,"recentWinPct":100,"risePts":40}],"fallingOff":[{"capperId":"__PanelsCache__c-fall","name":"Falling Fred","colorTag":null,"lifetimeWinPct":66.67,"recentWinPct":0,"dropPts":66.67}],"bestLast20":[{"capperId":"__PanelsCache__c-hot","name":"Hot Hand","colorTag":"#ff0000","wins":7,"losses":3,"pushes":0,"recentWinPct":70,"weightedScore":61.2},{"capperId":"__PanelsCache__c-rising","name":"Rising Rita","colorTag":null,"wins":8,"losses":8,"pushes":0,"recentWinPct":50,"weightedScore":50.92},{"capperId":"__PanelsCache__c-fall","name":"Falling Fred","colorTag":null,"wins":10,"losses":10,"pushes":0,"recentWinPct":50,"weightedScore":50.8}],"worstLast20":[{"capperId":"__PanelsCache__c-fall","name":"Falling Fred","colorTag":null,"wins":10,"losses":10,"pushes":0,"recentWinPct":50,"weightedScore":50.8},{"capperId":"__PanelsCache__c-rising","name":"Rising Rita","colorTag":null,"wins":8,"losses":8,"pushes":0,"recentWinPct":50,"weightedScore":50.92},{"capperId":"__PanelsCache__c-hot","name":"Hot Hand","colorTag":"#ff0000","wins":7,"losses":3,"pushes":0,"recentWinPct":70,"weightedScore":61.2}]};
-const GOLDEN_CATEGORY_FAV_ML: unknown = {"hotStreaks":[{"capperId":"__PanelsCache__c-rising","name":"Rising Rita","colorTag":null,"streakCount":8,"weightedScore":-3.93,"stats":{"wins":8,"losses":8,"pushes":0,"winPct":50,"unitsWon":10,"unitsLost":11.5,"netUnits":-1.5,"roi":-6.38,"currentStreak":{"type":"WIN","count":8},"longestWinStreak":8,"longestLossStreak":8}},{"capperId":"__PanelsCache__c-hot","name":"Hot Hand","colorTag":"#ff0000","streakCount":3,"weightedScore":10.16,"stats":{"wins":8,"losses":4,"pushes":0,"winPct":66.66666666666666,"unitsWon":9.17,"unitsLost":6,"netUnits":3.17,"roi":18.63,"currentStreak":{"type":"WIN","count":3},"longestWinStreak":3,"longestLossStreak":1}}],"coolingOff":[],"rising":[{"capperId":"__PanelsCache__c-rising","name":"Rising Rita","colorTag":null,"previousWinPct":60,"recentWinPct":100,"risePts":40}],"fallingOff":[{"capperId":"__PanelsCache__c-nfl","name":"Nfl Nate","colorTag":null,"lifetimeWinPct":80,"recentWinPct":70,"dropPts":10}],"bestLast20":[{"capperId":"__PanelsCache__c-hot","name":"Hot Hand","colorTag":"#ff0000","wins":8,"losses":4,"pushes":0,"recentWinPct":66.67,"weightedScore":60.18},{"capperId":"__PanelsCache__c-nfl","name":"Nfl Nate","colorTag":null,"wins":8,"losses":2,"pushes":2,"recentWinPct":66.67,"weightedScore":60.18},{"capperId":"__PanelsCache__c-rising","name":"Rising Rita","colorTag":null,"wins":8,"losses":8,"pushes":0,"recentWinPct":50,"weightedScore":50.92}],"worstLast20":[{"capperId":"__PanelsCache__c-rising","name":"Rising Rita","colorTag":null,"wins":8,"losses":8,"pushes":0,"recentWinPct":50,"weightedScore":50.92},{"capperId":"__PanelsCache__c-hot","name":"Hot Hand","colorTag":"#ff0000","wins":8,"losses":4,"pushes":0,"recentWinPct":66.67,"weightedScore":60.18},{"capperId":"__PanelsCache__c-nfl","name":"Nfl Nate","colorTag":null,"wins":8,"losses":2,"pushes":2,"recentWinPct":66.67,"weightedScore":60.18}]};
+
+
+// Cases the golden fixture avoids. Everything is compared to the frozen raw-pick
+// implementation, which defines correct behavior for these.
+async function edgeCases(sportIds: Record<string, string>) {
+  const edgeUser = `${PREFIX}edge-user`;
+  await prisma.user.create({ data: { id: edgeUser, supabaseId: `${PREFIX}edge-sb`, email: `${PREFIX}edge@example.invalid` } });
+  try {
+    const cid = (k: string) => `${PREFIX}e-${k}`;
+    for (const [k, name] of [["tie", "Tie Tim"], ["pend", "Pending Pam"], ["none", "No Picks Nina"], ["edge", "Edge Ed"], ["zero", "Zero Zed"]]) {
+      await prisma.capper.create({ data: { id: cid(k), userId: edgeUser, name, source: "OTHER" } });
+    }
+    const base = {
+      userId: edgeUser,
+      sportId: sportIds.MLB,
+      homeTeam: "H",
+      awayTeam: "A",
+      betType: "MONEYLINE" as const,
+      betDetail: null,
+      line: null,
+      period: "FULL_GAME" as const,
+      units: 1,
+      odds: -110,
+    };
+    const rows: Row[] = [];
+    let n = 0;
+    const mk = (capper: string, status: "WIN" | "LOSS" | "PUSH" | "PENDING", o: { gradedAt?: Date | null; gameTime?: Date; createdAt?: Date; postedAgoMs?: number; odds?: number; id?: string }) => {
+      n++;
+      rows.push({
+        ...base,
+        id: o.id ?? `${PREFIX}edge-pick-${String(n).padStart(3, "0")}`,
+        capperId: cid(capper),
+        status,
+        odds: o.odds ?? base.odds,
+        datePosted: new Date(T0 - (o.postedAgoMs ?? HOUR)),
+        gameTime: o.gameTime ?? new Date(T0 - n * HOUR),
+        gradedAt: o.gradedAt === undefined ? (status === "PENDING" ? null : new Date(T0 - n * HOUR)) : o.gradedAt,
+        createdAt: o.createdAt ?? new Date(T0 - n * 1000),
+      });
+    };
+
+    // Tie Tim: 20 decided picks ALL graded in the same instant, so every rank in
+    // the recent-form slices is decided purely by the (createdAt DESC, id DESC)
+    // tie-break. Results alternate in blocks so the slice boundaries matter.
+    const sameInstant = new Date(T0 - 5 * HOUR);
+    const pattern: ("WIN" | "LOSS" | "PUSH")[] = ["W", "W", "L", "W", "L", "L", "W", "P", "W", "L", "W", "W", "L", "W", "L", "L", "W", "W", "L", "W"].map((c) => (c === "W" ? "WIN" : c === "L" ? "LOSS" : "PUSH"));
+    pattern.forEach((status, i) => mk("tie", status, { gradedAt: sameInstant, createdAt: new Date(T0 - 100000 + i * 1000), id: `${PREFIX}edge-tie-${String(i).padStart(2, "0")}` }));
+    // ...and two picks sharing gradedAt AND createdAt, separated by id alone.
+    mk("tie", "WIN", { gradedAt: sameInstant, createdAt: new Date(T0 - 50000), id: `${PREFIX}edge-tie-zz-a` });
+    mk("tie", "LOSS", { gradedAt: sameInstant, createdAt: new Date(T0 - 50000), id: `${PREFIX}edge-tie-zz-b` });
+
+    // Pending Pam: only PENDING/ungraded picks - active, but no decided picks.
+    for (let i = 0; i < 4; i++) mk("pend", "PENDING", {});
+
+    // Edge Ed: newest datePosted is one minute INSIDE the 14-day activity cutoff.
+    [ "WIN", "LOSS", "WIN", "WIN", "LOSS", "WIN", "LOSS", "LOSS", "WIN", "WIN", "WIN", "LOSS" ].forEach((s) =>
+      mk("edge", s as "WIN" | "LOSS", { postedAgoMs: 14 * DAY - 60000 })
+    );
+
+    // Zero Zed: a WIN at odds 0 poisons unitsWon (Infinity/NaN in JS) - must
+    // behave the same way on the SQL path.
+    [ "LOSS", "WIN", "WIN", "WIN" ].forEach((s, i) => mk("zero", s as "WIN" | "LOSS", { odds: i === 1 ? 0 : -120 }));
+
+    await prisma.pick.createMany({ data: rows });
+
+    const a = await getCapperPanels(edgeUser);
+    const b = await getCapperPanelsLegacy(edgeUser);
+    const strip = (x: CapperPanels) => {
+      const g = JSON.parse(JSON.stringify(x, (_k, v) => (typeof v === "number" && !Number.isFinite(v) ? String(v) : v))) as CapperPanels;
+      for (const list of [g.hotStreaks, g.coolingOff]) for (const e of list) {
+        const s = e.stats as unknown as Record<string, unknown>;
+        delete s.longestWinStreak;
+        delete s.longestLossStreak;
+      }
+      return g;
+    };
+    check("edge fixture: SQL panels == legacy (ties, pending-only, no picks, cutoff edge, zero odds)", JSON.stringify(strip(a)) === JSON.stringify(strip(b)), process.env.PANELS_DEBUG ? JSON.stringify(strip(a)) + "\nVS\n" + JSON.stringify(strip(b)) : "");
+    const names = new Set([...a.bestLast20, ...a.hotStreaks, ...a.coolingOff, ...a.rising, ...a.fallingOff].map((e) => e.name));
+    check("edge fixture: the tie capper reaches a panel (the tie-break is actually exercised)", names.has("Tie Tim"));
+    check("edge fixture: capper with no picks never appears", !names.has("No Picks Nina"));
+    check("edge fixture: all-pending capper never appears", !names.has("Pending Pam"));
+  } finally {
+    await prisma.pick.deleteMany({ where: { userId: edgeUser } });
+    await prisma.capper.deleteMany({ where: { userId: edgeUser } });
+    await prisma.user.deleteMany({ where: { id: edgeUser } });
+  }
+}
 
 async function main() {
   const userId = `${PREFIX}user`;
@@ -160,23 +255,34 @@ async function main() {
 
   try {
     const unfiltered = await getCapperPanels(userId);
+    const afterUnfiltered = seen.length;
     const sportMlb = await getCapperPanels(userId, { sportName: "MLB" });
-    const categoryFavMl = await getCapperPanels(userId, { category: "FAV_ML" });
+    const afterMlb = seen.length;
 
-    if (GOLDEN_UNFILTERED === null || GOLDEN_SPORT_MLB === null || GOLDEN_CATEGORY_FAV_ML === null) {
+    if (GOLDEN_UNFILTERED === null || GOLDEN_SPORT_MLB === null) {
       console.log("CAPTURE (no golden embedded yet):");
-      console.log(JSON.stringify({ unfiltered, sportMlb, categoryFavMl }));
+      console.log(JSON.stringify({ unfiltered, sportMlb }));
       process.exitCode = 2;
       return;
     }
 
     if (process.env.PANELS_DEBUG) {
       console.log("DEBUG unfiltered=" + JSON.stringify(unfiltered));
-      console.log("DEBUG categoryFavMl=" + JSON.stringify(categoryFavMl));
     }
-    check("unfiltered output identical to original implementation", JSON.stringify(unfiltered) === JSON.stringify(GOLDEN_UNFILTERED));
-    check("sportName=MLB output identical to original implementation", JSON.stringify(sportMlb) === JSON.stringify(GOLDEN_SPORT_MLB));
-    check("category=FAV_ML output identical to original implementation", JSON.stringify(categoryFavMl) === JSON.stringify(GOLDEN_CATEGORY_FAV_ML));
+    // The goldens predate the stats narrowing - see the header.
+    const withoutLongestStreaks = (golden: unknown): unknown => {
+      const g = JSON.parse(JSON.stringify(golden)) as CapperPanels;
+      for (const list of [g.hotStreaks, g.coolingOff]) {
+        for (const e of list) {
+          const s = e.stats as unknown as Record<string, unknown>;
+          delete s.longestWinStreak;
+          delete s.longestLossStreak;
+        }
+      }
+      return g;
+    };
+    check("unfiltered output identical to original implementation", JSON.stringify(unfiltered) === JSON.stringify(withoutLongestStreaks(GOLDEN_UNFILTERED)));
+    check("sportName=MLB output identical to original implementation", JSON.stringify(sportMlb) === JSON.stringify(withoutLongestStreaks(GOLDEN_SPORT_MLB)));
 
     const panelHasEntries = (p: typeof unfiltered) =>
       p.hotStreaks.length > 0 && p.coolingOff.length > 0 && p.rising.length > 0 && p.fallingOff.length > 0 && p.bestLast20.length > 0;
@@ -187,16 +293,24 @@ async function main() {
         JSON.stringify(unfiltered) !== JSON.stringify(sportMlb)
     );
 
-    // Query shape. Calls that hit the pick table directly for panels have a
-    // capperId `in` filter; getCappersForUser's membership scan does not.
-    const panelQueries = seen.filter((a) => a?.where && "capperId" in (a.where as object));
-    check("three panel queries were issued", panelQueries.length === 3, `got ${panelQueries.length}`);
-    check("unfiltered panel query joins no relation", panelQueries[0]?.include === undefined && panelQueries[0]?.select === undefined);
-    check("sportName-only panel query joins no relation (filter lives in where)", panelQueries[1]?.include === undefined && panelQueries[1]?.select === undefined);
-    check(
-      "category panel query joins only sport.name",
-      JSON.stringify(panelQueries[2]?.include) === JSON.stringify({ sport: { select: { name: true } } })
-    );
+    // Parity against the frozen raw-pick implementation, same rows.
+    const legacyUnfiltered = await getCapperPanelsLegacy(userId);
+    const legacyMlb = await getCapperPanelsLegacy(userId, { sportName: "MLB" });
+    const legacyNfl = await getCapperPanelsLegacy(userId, { sportName: "NFL" });
+    const strip = (x: CapperPanels) => withoutLongestStreaks(x);
+    check("unfiltered == legacy raw-pick implementation", JSON.stringify(unfiltered) === JSON.stringify(strip(legacyUnfiltered)));
+    check("sportName=MLB == legacy", JSON.stringify(sportMlb) === JSON.stringify(strip(legacyMlb)));
+    check("sportName=NFL == legacy", JSON.stringify(await getCapperPanels(userId, { sportName: "NFL" })) === JSON.stringify(strip(legacyNfl)));
+
+    // Query shape. The panels must never fetch pick rows: measured from the
+    // findMany spy, reset before the legacy calls above.
+    const panelPickFetches = seen.slice(0, afterUnfiltered).filter((a) => a?.where && "capperId" in (a.where as object));
+    check("unfiltered panels issue no pick.findMany for the history", panelPickFetches.length === 0, `got ${panelPickFetches.length}`);
+    const mlbPickFetches = seen.slice(afterUnfiltered, afterMlb).filter((a) => a?.where && "capperId" in (a.where as object));
+    check("sportName panels issue no pick.findMany for the history", mlbPickFetches.length === 0, `got ${mlbPickFetches.length}`);
+
+    // Second user: tie / edge cases, compared to the legacy implementation.
+    await edgeCases(sportIds);
 
     // JS streak (computeStats + the shared pick tie-break) vs the SQL streak the
     // /cappers path uses (queryCurrentStreaks: gaps-and-islands over
@@ -225,10 +339,8 @@ async function main() {
       capperPanelsCacheKey("u2"),
       capperPanelsCacheKey("u1", { sportName: "MLB" }),
       capperPanelsCacheKey("u1", { sportName: "NFL" }),
-      capperPanelsCacheKey("u1", { category: "FAV_ML" }),
-      capperPanelsCacheKey("u1", { sportName: "MLB", category: "FAV_ML" }),
     ];
-    check("cache keys are unique per user and filter", new Set(keys).size === keys.length);
+        check("cache keys are unique per user and filter", new Set(keys).size === keys.length);
     check("cache keys never equal the dashboard tag", !keys.includes(cacheKeys.dashboard("u1")) && !keys.includes(cacheKeys.dashboard("u2")));
     check("undefined filter and empty filter share a key", capperPanelsCacheKey("u1") === capperPanelsCacheKey("u1", {}));
   } finally {

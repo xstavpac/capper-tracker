@@ -18,7 +18,7 @@
 // --keep-db: skip the final DROP DATABASE (debugging only - the DB is still
 // a t2_run_* disposable, so a later `--cleanup-orphans` will still reclaim it).
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRunDb, dropRunDb, newRunId, runDbUrl } from "./lib/disposable-db.mjs";
@@ -60,7 +60,34 @@ function loadFixtures(dbUrl) {
   });
 }
 
-function restoreSnapshot(dbUrl, dumpFile) {
+// A snapshot is a pg_dump of production AT THE TIME IT WAS TAKEN, with no
+// _prisma_migrations table, so a migration added after that date is missing from
+// the restored schema (and a bare "prisma migrate deploy" would try to re-create
+// everything). `--apply-migrations-after=<migration-name-prefix>` applies the raw SQL of
+// every migration whose directory name sorts AFTER that prefix, in order, straight
+// onto the restored DB. Schema-only migrations (columns/indexes/tables) are what
+// this is for; it does not backfill data. Statements that fail are reported and skipped
+// (see applyMigrationsAfter's body for why).
+function applyMigrationsAfter(dbUrl, afterPrefix) {
+  assertNotProd(dbUrl, "post-restore migration target");
+  const dir = join(REPO_ROOT, "prisma", "migrations");
+  const pending = readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && d.name > afterPrefix)
+    .map((d) => d.name)
+    .sort();
+  for (const name of pending) {
+    console.log(`[t2-harness] applying post-snapshot migration ${name}`);
+    // No ON_ERROR_STOP: the snapshot is a SUBSET of production's tables (e.g. no
+    // game_results), so a statement aimed at a table that isn't there fails and is
+    // skipped while the rest of the migration (the picks/cappers DDL this exists for)
+    // still applies. Each statement autocommits, so nothing is left half-applied. The
+    // capture step reads the real schema through Prisma and fails loudly if a column
+    // it needs is missing.
+    execFileSync(pgBin("psql"), [dbUrl, "-q", "-f", join(dir, name, "migration.sql")], { stdio: "inherit" });
+  }
+}
+
+function restoreSnapshot(dbUrl, dumpFile, migrateAfter) {
   assertNotProd(dbUrl, "snapshot-restore target");
   if (!existsSync(dumpFile)) throw new Error(`snapshot dump not found: ${dumpFile}`);
   // dbUrl is postgresql://<user>@<host>:<port>/<dbname> (see lib/disposable-db.mjs)
@@ -70,6 +97,7 @@ function restoreSnapshot(dbUrl, dumpFile) {
   execFileSync(pgBin("pg_restore"), [
     "-h", dbHost, "-p", dbPort, "-U", dbUser, "-d", dbNameOnly, "--no-owner", "--no-privileges", dumpFile,
   ], { stdio: "inherit" });
+  if (migrateAfter) applyMigrationsAfter(dbUrl, migrateAfter);
 }
 
 // Runs capture-output.ts for one implementation against the run DB and
@@ -78,9 +106,9 @@ function restoreSnapshot(dbUrl, dumpFile) {
 // PrismaClient reads DATABASE_URL once at import time - the only reliable
 // way to point two invocations at the same disposable DB with a clean
 // Prisma connection each time is two separate processes.
-function captureOutput(dbUrl, implName, userSelector) {
+function captureOutput(dbUrl, implName, userSelector, extraArgs = []) {
   assertNotProd(dbUrl, "capture-output target");
-  const args = ["--import", "tsx", join(HERE, "capture-output.ts"), `--impl=${implName}`, ...userSelector];
+  const args = ["--import", "tsx", join(HERE, "capture-output.ts"), `--impl=${implName}`, ...userSelector, ...extraArgs];
   const res = spawnSync(process.execPath, args, {
     cwd: REPO_ROOT,
     env: { ...process.env, DATABASE_URL: dbUrl, DIRECT_URL: dbUrl },
@@ -102,7 +130,7 @@ function captureOutput(dbUrl, implName, userSelector) {
   return JSON.parse(lastLine);
 }
 
-export function runDiffOnce({ source, implOld, implNew, userSelector, keepDb = false, label = "" } = {}) {
+export function runDiffOnce({ source, implOld, implNew, userSelector, keepDb = false, label = "", extraArgs = [], migrateAfter = null } = {}) {
   const runId = newRunId();
   console.log(`\n[t2-harness] run ${runId}${label ? ` (${label})` : ""}: creating disposable DB...`);
   createRunDb(runId);
@@ -123,15 +151,15 @@ export function runDiffOnce({ source, implOld, implNew, userSelector, keepDb = f
       // types twice and fail. pg_restore populates the schema by itself.
       const dumpFile = source.slice("snapshot:".length);
       console.log(`[t2-harness] restoring anonymized snapshot (schema + data) from ${dumpFile}...`);
-      restoreSnapshot(dbUrl, dumpFile);
+      restoreSnapshot(dbUrl, dumpFile, migrateAfter);
     } else {
       throw new Error(`unknown --source: ${source} (expected "fixtures" or "snapshot:<path>")`);
     }
 
     console.log(`[t2-harness] capturing --impl=${implOld} output...`);
-    const oldOut = captureOutput(dbUrl, implOld, userSelector);
+    const oldOut = captureOutput(dbUrl, implOld, userSelector, extraArgs);
     console.log(`[t2-harness] capturing --impl=${implNew} output...`);
-    const newOut = captureOutput(dbUrl, implNew, userSelector);
+    const newOut = captureOutput(dbUrl, implNew, userSelector, extraArgs);
 
     const diffs = deepDiff(oldOut, newOut);
     return { runId, diffs, oldOut, newOut };
@@ -151,6 +179,8 @@ function cliMain() {
   const implOld = typeof args["impl-old"] === "string" ? args["impl-old"] : "old";
   const implNew = typeof args["impl-new"] === "string" ? args["impl-new"] : "old";
   const keepDb = args["keep-db"] === true;
+  // --surface=panels [--as-of=auto|<ISO>] are forwarded to capture-output.ts untouched.
+  const extraArgs = ["surface", "as-of"].filter((k) => typeof args[k] === "string").map((k) => `--${k}=${args[k]}`);
   const userSelector =
     typeof args["user-id"] === "string"
       ? [`--user-id=${args["user-id"]}`]
@@ -164,7 +194,15 @@ function cliMain() {
             ["--auto-user"]
           : ["--fixture-user=A"];
 
-  const { runId, diffs } = runDiffOnce({ source, implOld, implNew, userSelector, keepDb });
+  const { runId, diffs } = runDiffOnce({
+    source,
+    implOld,
+    implNew,
+    userSelector,
+    keepDb,
+    extraArgs,
+    migrateAfter: typeof args["apply-migrations-after"] === "string" ? args["apply-migrations-after"] : null,
+  });
 
   console.log(`\n${"=".repeat(60)}`);
   if (diffs.length === 0) {

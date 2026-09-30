@@ -1567,7 +1567,7 @@ export function computeUnitsChartData(picks: SeriesPick[]): UnitsChartPoint[] {
 // Overlay view plots both cappers on, so trajectory SHAPE is comparable
 // regardless of how many picks each capper has logged or over what real
 // date range.
-export function computeUnitsChartByPickNumber(picks: Pick[]): PickNumberChartPoint[] {
+export function computeUnitsChartByPickNumber(picks: SeriesPick[]): PickNumberChartPoint[] {
   return computeCumulativeUnitsSeries(picks).map((p, i) => ({
     pickNumber: i + 1,
     cumulativeUnits: p.cumulativeUnits,
@@ -1585,7 +1585,7 @@ export function computeUnitsChartByPickNumber(picks: Pick[]): PickNumberChartPoi
 // from that starting point, not a value waiting to be established. Returns
 // 0 for a capper with no settled picks (or one whose picks only ever went
 // up) - never negative.
-export function computeMaxDrawdown(picks: Pick[]): number {
+export function computeMaxDrawdown(picks: SeriesPick[]): number {
   const series = computeCumulativeUnitsSeries(picks);
   let peak = 0;
   let maxDrawdown = 0;

@@ -14,6 +14,56 @@ import { FullscreenButton } from "@/components/charts/fullscreen-button";
 const PALETTE_A = "#2563eb";
 const PALETTE_B = "#dc2626";
 
+// Every committed filter change refetches both cappers' history, so a number field
+// must not commit on each keystroke (typing "-110" would fire four comparisons).
+const NUMBER_INPUT_DEBOUNCE_MS = 400;
+
+// A number input that keeps what the user is typing locally and commits it to the
+// filter state only after a pause in typing (or immediately on blur). An
+// unparseable in-progress value ("-", ".") is held, not committed. A committed
+// value changing from outside (Clear filters) replaces the typed text.
+function DebouncedNumberInput({
+  value,
+  onCommit,
+  placeholder,
+  className,
+}: {
+  value: number | null;
+  onCommit: (next: number | null) => void;
+  placeholder: string;
+  className: string;
+}) {
+  const [text, setText] = useState(value === null ? "" : String(value));
+  const parse = (s: string): number | null => (s === "" ? null : Number(s));
+
+  useEffect(() => {
+    setText((prev) => (parse(prev) === value ? prev : value === null ? "" : String(value)));
+  }, [value]);
+
+  useEffect(() => {
+    const parsed = parse(text);
+    if (parsed === value || (parsed !== null && Number.isNaN(parsed))) return;
+    const timer = setTimeout(() => onCommit(parsed), NUMBER_INPUT_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+
+  return (
+    <input
+      type="number"
+      placeholder={placeholder}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        const parsed = parse(text);
+        if (parsed !== value && !(parsed !== null && Number.isNaN(parsed))) onCommit(parsed);
+      }}
+      className={className}
+    />
+  );
+}
+
+
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -268,38 +318,34 @@ export function CapperComparisonWorkspace({
 
           <div className="flex items-center gap-1.5 text-sm">
             <label className="text-muted-foreground">Odds</label>
-            <input
-              type="number"
+            <DebouncedNumberInput
               placeholder="min"
-              value={filters.oddsMin ?? ""}
-              onChange={(e) => updateFilter("oddsMin", e.target.value === "" ? null : Number(e.target.value))}
+              value={filters.oddsMin}
+              onCommit={(v) => updateFilter("oddsMin", v)}
               className="w-20 rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground"
             />
             <span className="text-muted-foreground">to</span>
-            <input
-              type="number"
+            <DebouncedNumberInput
               placeholder="max"
-              value={filters.oddsMax ?? ""}
-              onChange={(e) => updateFilter("oddsMax", e.target.value === "" ? null : Number(e.target.value))}
+              value={filters.oddsMax}
+              onCommit={(v) => updateFilter("oddsMax", v)}
               className="w-20 rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground"
             />
           </div>
 
           <div className="flex items-center gap-1.5 text-sm">
             <label className="text-muted-foreground">Units</label>
-            <input
-              type="number"
+            <DebouncedNumberInput
               placeholder="min"
-              value={filters.unitsMin ?? ""}
-              onChange={(e) => updateFilter("unitsMin", e.target.value === "" ? null : Number(e.target.value))}
+              value={filters.unitsMin}
+              onCommit={(v) => updateFilter("unitsMin", v)}
               className="w-16 rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground"
             />
             <span className="text-muted-foreground">to</span>
-            <input
-              type="number"
+            <DebouncedNumberInput
               placeholder="max"
-              value={filters.unitsMax ?? ""}
-              onChange={(e) => updateFilter("unitsMax", e.target.value === "" ? null : Number(e.target.value))}
+              value={filters.unitsMax}
+              onCommit={(v) => updateFilter("unitsMax", v)}
               className="w-16 rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground"
             />
           </div>

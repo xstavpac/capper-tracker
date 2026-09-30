@@ -1,27 +1,26 @@
-import { prisma } from "@/lib/prisma";
 import {
-  computeStats,
-  pickCategory,
   weightedRoiScore,
   round2,
+  ALL_TIME_WINDOW,
   RANKING_MIN_SAMPLE,
   SCORECARD_WIN_THRESHOLD,
   DASHBOARD_REPORTS_CACHE_TTL_SECONDS,
-  type OverallStats,
+  type RecordStats,
 } from "@/server/data/stats";
-import { getCappersForUser, type CapperLeagueFilter } from "@/server/data/cappers";
+import { getCappersForUser } from "@/server/data/cappers";
+import { statsFromRows } from "@/server/data/pick-aggregates-cappers-adapter";
+import { queryWindowTotals, queryCurrentStreaks, queryRecentForm } from "@/server/data/capper-list-aggregates";
 import { cachedByTag } from "@/server/data/cached";
 import { cacheKeys } from "@/lib/cache-keys";
-import { comparePicksByGradedAtDesc } from "@/lib/pick-order";
 
 // Cappers with no picks logged (datePosted) in this window drop off every
 // panel below, and reappear the moment they log a new one - confirmed with
 // the user as panels-only (the main ranked list has no activity cutoff).
-const ACTIVITY_WINDOW_DAYS = 14;
+export const ACTIVITY_WINDOW_DAYS = 14;
 
 // Same win-streak-badge threshold used in the main ranked list's flame/
 // snowflake badge - a single win/loss isn't a "streak" worth surfacing here.
-const STREAK_PANEL_MIN = 2;
+export const STREAK_PANEL_MIN = 2;
 
 // Trending: recent-5-vs-previous-5 momentum, confirmed by an independent
 // recent-8-vs-previous-8 check both clearing the same bar. A single 5-pick
@@ -34,14 +33,14 @@ const STREAK_PANEL_MIN = 2;
 // window sizes and single/hybrid rules tested, 5-and-8-together was the only
 // one that (a) survived cross-window consistency and (b) wasn't left with
 // zero measurable population.
-const TRENDING_WINDOW = 5;
-const TRENDING_CONFIRM_WINDOW = 8;
-const TRENDING_THRESHOLD_PTS = 10;
+export const TRENDING_WINDOW = 5;
+export const TRENDING_CONFIRM_WINDOW = 8;
+export const TRENDING_THRESHOLD_PTS = 10;
 
 // Best/Worst Last-20's window - "last 20 graded picks" is the panel's own name.
-const RECENT_FORM_WINDOW = 20;
+export const RECENT_FORM_WINDOW = 20;
 // Need at least half the window decided before recent form means anything.
-const RECENT_FORM_MIN_SAMPLE = 10;
+export const RECENT_FORM_MIN_SAMPLE = 10;
 
 // Falling Off gets its own, narrower window (originally spec'd as "last 10-15
 // picks", separate from Best/Worst-20's 20). This isn't just a smaller number for
@@ -52,22 +51,23 @@ const RECENT_FORM_MIN_SAMPLE = 10;
 // than 20 decided picks, so at window=20 this panel is effectively unreachable in
 // practice - confirmed against real data, where every capper showed a 0.0pt drop.
 // A 10-pick window lets it fire for anyone with as few as ~11-13 decided picks.
-const FALLING_OFF_WINDOW = 10;
-const FALLING_OFF_MIN_SAMPLE = 5;
+export const FALLING_OFF_WINDOW = 10;
+export const FALLING_OFF_MIN_SAMPLE = 5;
 // "Meaningfully worse" for Falling Off - a flat 10-percentage-point drop.
-const FALLING_OFF_THRESHOLD_PTS = 10;
+export const FALLING_OFF_THRESHOLD_PTS = 10;
 // Same shrinkage strength as weightedRoiScore, applied to win% instead of
 // ROI for Best Last-20 - kept identical for consistency across the page's
 // two weighted-ranking mechanisms. Ranks the panel only - the displayed
 // record/win% is always the raw recent rate, never the shrunk score.
-const RECENT_FORM_SHRINKAGE_K = 10;
+export const RECENT_FORM_SHRINKAGE_K = 10;
 
 type PanelCapperBase = { capperId: string; name: string; colorTag: string | null };
 
 export type StreakPanelEntry = PanelCapperBase & {
   streakCount: number;
   weightedScore: number;
-  stats: OverallStats;
+  // RecordStats, not OverallStats: the panels never read the longest-streak fields.
+  stats: RecordStats;
 };
 // Momentum, not standing: recent-5 win% vs the previous-5 win% right before
 // it - same shape as FallingOffPanelEntry (a before/after pair plus the
@@ -105,13 +105,11 @@ export type CapperPanels = {
 // same convention computeStats' winPct uses. Null (not 0) when the slice has
 // no decided W/L picks at all, so callers can distinguish "0% window" from
 // "nothing to measure" rather than accidentally comparing against a 0.
-function windowWinPct(picks: { status: string }[]): number | null {
-  const wins = picks.filter((p) => p.status === "WIN").length;
-  const losses = picks.filter((p) => p.status === "LOSS").length;
+function windowWinPct({ wins, losses }: { wins: number; losses: number }): number | null {
   return wins + losses > 0 ? round2((wins / (wins + losses)) * 100) : null;
 }
 
-const EMPTY_PANELS: CapperPanels = {
+export const EMPTY_PANELS: CapperPanels = {
   hotStreaks: [],
   coolingOff: [],
   rising: [],
@@ -120,18 +118,22 @@ const EMPTY_PANELS: CapperPanels = {
   worstLast20: [],
 };
 
+// Only a league scope survives as a filter: the bet-category filter the original
+// signature also carried was never set by any caller and is gone.
+export type CapperPanelsFilter = { sportName?: string };
+
 // The cache slot is chosen by this string alone (cachedByTag's callback text is
 // identical for every user/filter), so every input that changes the result must
 // appear here. Distinct from cacheKeys.dashboard - that one is only the shared
 // invalidation tag.
-export function capperPanelsCacheKey(userId: string, filter?: CapperLeagueFilter): string {
-  return `capper-panels:${userId}:${filter?.sportName ?? ""}:${filter?.category ?? ""}`;
+export function capperPanelsCacheKey(userId: string, filter?: CapperPanelsFilter): string {
+  return `capper-panels:${userId}:${filter?.sportName ?? ""}`;
 }
 
 // Reads only Pick rows (plus the roster), so it shares getDashboardSummary's
 // invalidation tag and TTL: every pick mutation already calls
 // revalidateTag(cacheKeys.dashboard(userId)) (docs/cache-invalidation-contract.md).
-export async function getCapperPanels(userId: string, filter?: CapperLeagueFilter): Promise<CapperPanels> {
+export async function getCapperPanels(userId: string, filter?: CapperPanelsFilter): Promise<CapperPanels> {
   return cachedByTag(
     capperPanelsCacheKey(userId, filter),
     DASHBOARD_REPORTS_CACHE_TTL_SECONDS,
@@ -140,33 +142,37 @@ export async function getCapperPanels(userId: string, filter?: CapperLeagueFilte
   );
 }
 
-async function computeCapperPanels(userId: string, filter?: CapperLeagueFilter): Promise<CapperPanels> {
+// The recent-form slices, derived from the window constants above so the SQL and
+// the thresholds cannot drift apart. Ranks are over the capper's decided picks,
+// most recently graded first.
+const RECENT_FORM_SLICES = {
+  recent5: [1, TRENDING_WINDOW],
+  previous5: [TRENDING_WINDOW + 1, TRENDING_WINDOW * 2],
+  recent8: [1, TRENDING_CONFIRM_WINDOW],
+  previous8: [TRENDING_CONFIRM_WINDOW + 1, TRENDING_CONFIRM_WINDOW * 2],
+  recentDrop: [1, FALLING_OFF_WINDOW],
+  recentForm: [1, RECENT_FORM_WINDOW],
+} as const;
+
+// Data source: the database summarizes (capper-list-aggregates.ts - lifetime
+// totals and streaks from the same queries /cappers uses, plus queryRecentForm for
+// the last-N slices and the last-posted instant) and this function only applies
+// the thresholds. The pick history is never fetched.
+async function computeCapperPanels(userId: string, filter?: CapperPanelsFilter): Promise<CapperPanels> {
   const cappers = await getCappersForUser(userId, filter);
   if (cappers.length === 0) return EMPTY_PANELS;
 
-  const where = {
-    userId,
-    capperId: { in: cappers.map((c) => c.id) },
-    // Applied here, in the WHERE - the sport relation is not needed for this.
-    ...(filter?.sportName ? { sport: { name: filter.sportName } } : {}),
-  };
-  // sport.name is read in exactly one place: pickCategory needs it to evaluate
-  // filter.category. The unfiltered /dashboard call never touches it, so the
-  // relation is only joined (name alone) when a category filter is active.
-  const scoped = filter?.category
-    ? (await prisma.pick.findMany({ where, include: { sport: { select: { name: true } } } })).filter(
-        (p) => pickCategory({ ...p, sportName: p.sport.name }) === filter.category
-      )
-    : await prisma.pick.findMany({ where });
+  const now = new Date();
+  const [totalRows, streakRows, formRows] = await Promise.all([
+    queryWindowTotals({ userId, sportName: filter?.sportName, windows: [ALL_TIME_WINDOW], now }),
+    queryCurrentStreaks({ userId, sportName: filter?.sportName, windows: [ALL_TIME_WINDOW], now }),
+    queryRecentForm({ userId, sportName: filter?.sportName, slices: RECENT_FORM_SLICES }),
+  ]);
+  const totalsByCapper = new Map(totalRows.map((r) => [r.capperId!, r]));
+  const streakByCapper = new Map(streakRows.map((r) => [r.capperId, r]));
+  const formByCapper = new Map(formRows.map((r) => [r.capperId, r]));
 
-  const byCapper = new Map<string, typeof scoped>();
-  for (const pick of scoped) {
-    const list = byCapper.get(pick.capperId);
-    if (list) list.push(pick);
-    else byCapper.set(pick.capperId, [pick]);
-  }
-
-  const activityCutoff = new Date(Date.now() - ACTIVITY_WINDOW_DAYS * 86400000);
+  const activityCutoff = new Date(now.getTime() - ACTIVITY_WINDOW_DAYS * 86400000);
 
   const hotStreaks: StreakPanelEntry[] = [];
   const coolingOff: StreakPanelEntry[] = [];
@@ -175,14 +181,15 @@ async function computeCapperPanels(userId: string, filter?: CapperLeagueFilter):
   const bestLast20: BestLast20Entry[] = [];
 
   for (const capper of cappers) {
-    const capperPicks = byCapper.get(capper.id) ?? [];
-    if (capperPicks.length === 0) continue;
+    // No row = the capper has no picks at all.
+    const form = formByCapper.get(capper.id);
+    if (!form) continue;
 
-    const isActive = capperPicks.some((p) => p.datePosted >= activityCutoff);
+    const isActive = form.lastPostedAt >= activityCutoff;
     if (!isActive) continue;
 
     const base: PanelCapperBase = { capperId: capper.id, name: capper.name, colorTag: capper.colorTag };
-    const stats = computeStats(capperPicks);
+    const stats = statsFromRows(totalsByCapper.get(capper.id), streakByCapper.get(capper.id));
     const decidedCount = stats.wins + stats.losses + stats.pushes;
 
     if (stats.currentStreak.count >= STREAK_PANEL_MIN) {
@@ -191,22 +198,18 @@ async function computeCapperPanels(userId: string, filter?: CapperLeagueFilter):
       else if (stats.currentStreak.type === "LOSS") coolingOff.push(entry);
     }
 
-    // Most-recently-graded-first, for the recent-form panels below.
-    // gradedAt is always set for decided (WIN/LOSS/PUSH) picks.
-    const decidedPicks = capperPicks
-      .filter((p) => p.status === "WIN" || p.status === "LOSS" || p.status === "PUSH")
-      .sort(comparePicksByGradedAtDesc);
+    const { recent5, previous5, recent8, previous8, recentDrop, recentForm } = form.slices;
 
     // Trending: needs both windows fully populated (8*2=16 decided also
     // covers window-5's smaller 5*2=10 requirement), and both the 5-window
     // and 8-window rise must independently clear the threshold. No sample
     // ceiling and no "new capper only" gate - an established capper with
     // hundreds of decided picks qualifies exactly the same as one with 16.
-    if (decidedPicks.length >= TRENDING_CONFIRM_WINDOW * 2) {
-      const recent5Pct = windowWinPct(decidedPicks.slice(0, TRENDING_WINDOW));
-      const previous5Pct = windowWinPct(decidedPicks.slice(TRENDING_WINDOW, TRENDING_WINDOW * 2));
-      const recent8Pct = windowWinPct(decidedPicks.slice(0, TRENDING_CONFIRM_WINDOW));
-      const previous8Pct = windowWinPct(decidedPicks.slice(TRENDING_CONFIRM_WINDOW, TRENDING_CONFIRM_WINDOW * 2));
+    if (decidedCount >= TRENDING_CONFIRM_WINDOW * 2) {
+      const recent5Pct = windowWinPct(recent5);
+      const previous5Pct = windowWinPct(previous5);
+      const recent8Pct = windowWinPct(recent8);
+      const previous8Pct = windowWinPct(previous8);
 
       if (recent5Pct !== null && previous5Pct !== null && recent8Pct !== null && previous8Pct !== null) {
         const rise5 = round2(recent5Pct - previous5Pct);
@@ -221,10 +224,9 @@ async function computeCapperPanels(userId: string, filter?: CapperLeagueFilter):
     // Falling Off needs a real lifetime baseline (RANKING_MIN_SAMPLE) and enough
     // of its own, narrower window decided to mean anything.
     if (decidedCount >= RANKING_MIN_SAMPLE) {
-      const recentForDrop = decidedPicks.slice(0, FALLING_OFF_WINDOW);
-      const recentForDropDecided = recentForDrop.length;
+      const recentForDropDecided = recentDrop.wins + recentDrop.losses + recentDrop.pushes;
       if (recentForDropDecided >= FALLING_OFF_MIN_SAMPLE) {
-        const recentWins = recentForDrop.filter((p) => p.status === "WIN").length;
+        const recentWins = recentDrop.wins;
         const recentWinPct = round2((recentWins / recentForDropDecided) * 100);
         const dropPts = round2(stats.winPct - recentWinPct);
 
@@ -234,12 +236,11 @@ async function computeCapperPanels(userId: string, filter?: CapperLeagueFilter):
       }
     }
 
-    const recent = decidedPicks.slice(0, RECENT_FORM_WINDOW);
-    const recentDecided = recent.length;
+    const recentDecided = recentForm.wins + recentForm.losses + recentForm.pushes;
 
     if (decidedCount >= RANKING_MIN_SAMPLE && recentDecided >= RECENT_FORM_MIN_SAMPLE) {
-      const recentWins = recent.filter((p) => p.status === "WIN").length;
-      const recentLosses = recent.filter((p) => p.status === "LOSS").length;
+      const recentWins = recentForm.wins;
+      const recentLosses = recentForm.losses;
       const recentPushes = recentDecided - recentWins - recentLosses;
       const recentWinPct = round2((recentWins / recentDecided) * 100);
 
