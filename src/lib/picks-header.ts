@@ -57,13 +57,14 @@ export type CapperLine = {
 
 // Top / coldest cappers among those with >= 2 settled picks. Top = most units,
 // coldest = fewest; ties broken by record (wins - losses, then win rate) and
-// then name so the result is deterministic. `coldest` is null unless that
-// capper is actually negative. The whole thing is null when nobody qualifies
-// or the view is a single capper.
+// then name so the result is deterministic. `top` is null unless that capper
+// is actually positive and `coldest` unless negative, so a lone -2u capper is
+// only ever Coldest. The whole thing is null when neither half qualifies or
+// the view is a single capper.
 export function topAndColdest(
   picks: HeaderPick[],
   singleCapperFiltered: boolean
-): { top: CapperLine; coldest: CapperLine | null } | null {
+): { top: CapperLine | null; coldest: CapperLine | null } | null {
   if (singleCapperFiltered) return null;
   const by = new Map<string, CapperLine & { settled: number }>();
   for (const p of picks) {
@@ -100,9 +101,11 @@ export function topAndColdest(
     a.wins - a.losses - (b.wins - b.losses) ||
     (winRatePct(a.wins, a.losses) ?? 0) - (winRatePct(b.wins, b.losses) ?? 0) ||
     b.name.localeCompare(a.name);
-  const top = [...eligible].sort((a, b) => b.units - a.units || recordCmp(b, a))[0];
-  const cold = [...eligible].sort((a, b) => a.units - b.units || recordCmp(a, b))[0];
-  return { top, coldest: cold.units < 0 && cold.capperId !== top.capperId ? cold : null };
+  const best = [...eligible].sort((a, b) => b.units - a.units || recordCmp(b, a))[0];
+  const worst = [...eligible].sort((a, b) => a.units - b.units || recordCmp(a, b))[0];
+  const top = best.units > 0 ? best : null;
+  const coldest = worst.units < 0 ? worst : null;
+  return top || coldest ? { top, coldest } : null;
 }
 
 export type SportChip = { id: string; name: string; count: number };

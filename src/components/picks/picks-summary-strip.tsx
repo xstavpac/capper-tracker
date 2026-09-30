@@ -49,6 +49,12 @@ const FlameIcon = () => (
   </svg>
 );
 
+const SnowflakeIcon = () => (
+  <svg {...iconProps}>
+    <path d="M12 2v20M4.9 7l14.2 10M4.9 17L19.1 7M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5" />
+  </svg>
+);
+
 function Sparkline({ series }: { series: number[] }) {
   const w = 72;
   const h = 22;
@@ -192,28 +198,43 @@ function StripEntry({ label, line, icon }: { label: string; line: CapperLine; ic
 }
 
 // Subtle single row under the stat bar. Qualification and hide rules live in
-// topAndColdest (lib/picks-header.ts); this only renders its result.
+// topAndColdest (lib/picks-header.ts); this renders whichever halves it
+// returns, split by a thin divider when both show.
 export function TopColdestStrip({
   top,
   coldest,
   topLabel,
 }: {
-  top: CapperLine;
+  top: CapperLine | null;
   coldest: CapperLine | null;
   topLabel: string;
 }) {
+  if (!top && !coldest) return null;
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl border border-border-subtle bg-muted/40 px-4 py-2 text-xs">
-      <StripEntry
-        label={topLabel}
-        line={top}
-        icon={
-          <span className="text-amber-500">
-            <FlameIcon />
-          </span>
-        }
-      />
-      {coldest && <StripEntry label="Coldest" line={coldest} />}
+    <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-border-subtle bg-muted/40 px-4 py-2 text-xs">
+      {top && (
+        <StripEntry
+          label={topLabel}
+          line={top}
+          icon={
+            <span className="text-amber-500">
+              <FlameIcon />
+            </span>
+          }
+        />
+      )}
+      {top && coldest && <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />}
+      {coldest && (
+        <StripEntry
+          label="Coldest"
+          line={coldest}
+          icon={
+            <span className="text-sky-500">
+              <SnowflakeIcon />
+            </span>
+          }
+        />
+      )}
     </div>
   );
 }
