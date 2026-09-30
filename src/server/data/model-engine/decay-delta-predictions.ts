@@ -127,19 +127,27 @@ export const GRADED_GAME_SELECT = {
 } satisfies Prisma.GameResultSelect;
 
 export async function persistGradedDecayDeltaGames(sportKey: string): Promise<GradedSyncResult> {
-  const games = await prisma.gameResult.findMany({
-    where: { sportKey, favTeam: { not: null }, totalLine: { not: null } },
-    orderBy: { gameDate: "asc" },
-    select: GRADED_GAME_SELECT,
-  });
-
+  // Already-persisted ids first (id-only), so the GameResult read below can
+  // exclude them in SQL instead of fetching every rated game in history and
+  // discarding most of it here - the daily read is just the newly-graded games.
+  // (The id set spans all sports, as before; a GameResult id is unique across
+  // sports, so the extra ids simply never match.)
   const existing = await prisma.decayDeltaPrediction.findMany({
     where: { modelId: MODEL_ID, gameResultId: { not: null } },
     select: { gameResultId: true },
   });
   const alreadyPersistedIds = new Set(existing.map((r) => r.gameResultId!));
 
-  const pending = games.filter((row) => !alreadyPersistedIds.has(row.id));
+  const eligible = { sportKey, favTeam: { not: null }, totalLine: { not: null } } satisfies Prisma.GameResultWhereInput;
+  // `scanned` keeps meaning "rated games in history" - a COUNT, so no rows move.
+  const [scanned, pending] = await Promise.all([
+    prisma.gameResult.count({ where: eligible }),
+    prisma.gameResult.findMany({
+      where: { ...eligible, id: { notIn: [...alreadyPersistedIds] } },
+      orderBy: { gameDate: "asc" },
+      select: GRADED_GAME_SELECT,
+    }),
+  ]);
 
   let newlyPersisted = 0;
   let convertedFromPregame = 0;
@@ -208,7 +216,7 @@ export async function persistGradedDecayDeltaGames(sportKey: string): Promise<Gr
     }
   }
 
-  return { scanned: games.length, alreadyPersisted: alreadyPersistedIds.size, newlyPersisted, convertedFromPregame, skipped };
+  return { scanned, alreadyPersisted: alreadyPersistedIds.size, newlyPersisted, convertedFromPregame, skipped };
 }
 
 export type PregameSyncResult = { candidateGames: number; alreadyCovered: number; newlyPersisted: number; skipped: number };

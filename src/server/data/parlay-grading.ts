@@ -6,6 +6,7 @@ import {
   gradeTouchdownProp,
   regradeLookbackCutoff,
   REGRADE_MAX_ROWS,
+  CANDIDATE_GAME_RESULT_SELECT,
 } from "@/server/data/grading";
 
 // Concurrency cap for the bulk write passes below - same value and same
@@ -147,6 +148,7 @@ export async function gradeAllPendingLegs(
   const maxTime = Math.max(...toProcess.map((l) => l.gameTime.getTime())) + 2 * 86400000;
   const candidates = await prisma.gameResult.findMany({
     where: { sportKey, gameDate: { gte: new Date(minTime), lt: new Date(maxTime) } },
+    select: CANDIDATE_GAME_RESULT_SELECT,
   });
 
   let graded = 0;
@@ -215,6 +217,7 @@ export async function regradeAllFuzzyMatchedLegs(
   const maxTime = Math.max(...fuzzyGraded.map((l) => l.gameTime.getTime())) + 2 * 86400000;
   const candidates = await prisma.gameResult.findMany({
     where: { sportKey, gameDate: { gte: new Date(minTime), lt: new Date(maxTime) } },
+    select: CANDIDATE_GAME_RESULT_SELECT,
   });
 
   let upgraded = 0;
