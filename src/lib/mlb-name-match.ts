@@ -12,10 +12,10 @@
 // Tiers, each counting ONLY if it narrows to exactly one distinct player id (same policy
 // as player-roster-fallback.ts / nhl-prop-grading.ts):
 //   1. exact folded full name            ("jose ferrer" == "jose ferrer")
-//   2. same surname + compatible first   (one first name is a >=3-char prefix of the
-//      name                               other: Alex/Alexander, Mike/Michael is NOT -
-//                                         "mike" is not a prefix of "michael"; nicknames
-//                                         beyond prefixes are deliberately not guessed)
+//   2. same surname + compatible first   (one first name is a >=3-char prefix of the other -
+//      name                               Alex/Alexander - or both are in the same FIRST_NAME_ALIASES
+//                                         group - Mike/Michael, Nick/Nicholas; other nicknames are
+//                                         deliberately not guessed)
 //   3. fuzzy full name                   (isLikelyDuplicateName on the folded names -
 //                                         typos only)
 //   4. bare surname (single typed token only)
@@ -49,8 +49,41 @@ export type MlbNameMatch<T> = { status: "one"; item: T } | { status: "many"; ite
 
 export type MlbMatchOptions = { allowFuzzy?: boolean; allowSurname?: boolean };
 
+// Standard English first-name short forms a >=3-char prefix can't catch (mike/michael,
+// nick/nicholas, joe/joseph, jim/james, bill/william, tony/anthony). Each group is one person's
+// name in different registers; prefix pairs like matt/matthew or chris/christopher are covered by the
+// prefix rule below but listed anyway so the table stands on its own. Deliberately conservative:
+// a pair appears only when it is a real, common short form - never a guess between two different
+// first names (bobby/robert and similar hypocorisms stay unmatched). Matching still requires the same
+// surname AND a unique result, so a table hit alone never resolves anything.
+const FIRST_NAME_ALIASES: string[][] = [
+  ["mike", "mikey", "michael"],
+  ["nick", "nicholas", "nico"],
+  ["matt", "matthew"],
+  ["chris", "christopher"],
+  ["alex", "alexander"],
+  ["joe", "joey", "joseph"],
+  ["jim", "jimmy", "james"],
+  ["bill", "billy", "will", "willie", "william"],
+  ["tony", "anthony"],
+  ["dave", "david"],
+  ["dan", "danny", "daniel"],
+  ["tom", "tommy", "thomas"],
+  ["ben", "benny", "benjamin"],
+  ["josh", "joshua"],
+  ["jake", "jacob"],
+  ["andy", "drew", "andrew"],
+  ["ed", "eddie", "edward"],
+  ["sam", "samuel"],
+  ["zach", "zack", "zachary"],
+];
+const ALIAS_GROUP = new Map<string, number>();
+FIRST_NAME_ALIASES.forEach((group, i) => group.forEach((n) => ALIAS_GROUP.set(n, i)));
+
 function firstNamesCompatible(a: string, b: string): boolean {
   if (a === b) return true;
+  const ga = ALIAS_GROUP.get(a);
+  if (ga !== undefined && ga === ALIAS_GROUP.get(b)) return true;
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
   return short.length >= 3 && long.startsWith(short);
 }

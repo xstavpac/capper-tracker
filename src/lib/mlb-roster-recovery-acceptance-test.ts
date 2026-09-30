@@ -55,7 +55,17 @@ check("accent-free typed vs accented roster: Jose Ferrer -> Jose A. Ferrer (midd
 check("accented typed: Jesús Luzardo style -> accent-free", m("José Ferrer"), ["one", "José A. Ferrer", "Seattle Mariners"]);
 check("first-name short form: Alexander Cook -> Alex Cook", m("Alexander Cook"), ["one", "Alex Cook", "Tampa Bay Rays"]);
 check("first-name short form the other way: Alex Cook", m("Alex Cook"), ["one", "Alex Cook", "Tampa Bay Rays"]);
-check("a nickname that is NOT a prefix is not guessed (Mike vs Michael stays unmatched)", matchMlbName("Mike Schmidt", [{ id: "1", n: "Michael Schmidt" }], (p) => p.id, (p) => p.n, { allowFuzzy: false }).status, "none");
+// Standard first-name aliases, against real roster names (Mike Trout is legally Michael, Nick Pivetta Nicholas,
+// Chris Sale Christopher, Matt Olson Matthew).
+check("alias: Michael Trout -> Mike Trout", m("Michael Trout"), ["one", "Mike Trout", "Los Angeles Angels"]);
+check("alias: Nicholas Pivetta -> Nick Pivetta", m("Nicholas Pivetta")[1], "Nick Pivetta");
+check("alias: Christopher Sale -> Chris Sale", m("Christopher Sale")[1], "Chris Sale");
+check("alias: Matthew Olson -> Matt Olson", m("Matthew Olson")[1], "Matt Olson");
+check("alias (short form typed, roster has the long form): Mike Busch -> Michael Busch", m("Mike Busch")[1], "Michael Busch");
+check("a different first name with the same surname is not an alias (Nick Conforto vs Michael Conforto)", m("Nick Conforto"), ["none"]);
+check("an unlisted hypocorism is not guessed (Bobby vs Robert)", matchMlbName("Bobby Smith", [{ id: "1", n: "Robert Smith" }], (p) => p.id, (p) => p.n, { allowFuzzy: false }).status, "none");
+check("an exact name wins over an alias candidate (Mike Smith vs Michael Smith + Mike Smith)", matchMlbName("Mike Smith", [{ id: "1", n: "Michael Smith" }, { id: "2", n: "Mike Smith" }], (p) => p.id, (p) => p.n, { allowFuzzy: false }).status, "one");
+check("alias pair that collides -> many, never guessed", matchMlbName("Mike Smith", [{ id: "1", n: "Michael Smith" }, { id: "2", n: "Mikey Smith" }], (p) => p.id, (p) => p.n, { allowFuzzy: false }).status, "many");
 check("TWO real Max Muncys -> many, never guessed", m("Max Muncy")[0], "many");
 check("TWO real Jose Fermins (Angels + Cardinals; accent only differs) -> many", m("Jose Fermin")[0], "many");
 check("bare surname, unique in the pool", m("Ohtani"), ["one", "Shohei Ohtani", "Los Angeles Dodgers"]);
@@ -69,6 +79,7 @@ const res = (line: string, relevant: string[] = [], paste: string[] = [], other:
   const r = resolveMlbPropAgainstRoster(line, roster, relevant, paste, other);
   return r.status === "resolved" ? ["resolved", r.playerName, r.team] : r.status === "ambiguous" ? ["ambiguous", r.matches.map((x) => x.team).sort()] : ["unresolved"];
 };
+check("alias + recovery: 'Michael Trout 2+ hits' resolves the Angels' Mike Trout", res("Michael Trout 2+ hits"), ["resolved", "Mike Trout", "Los Angeles Angels"]);
 check("pitcher K line resolves a pitcher (Chris Sale)", res("Chris Sale over 5.5 Ks"), ["resolved", "Chris Sale", "Atlanta Braves"]);
 check("pitcher K line: bare surname resolves the pitcher (Luzardo)", res("Luzardo o5.5 K"), ["resolved", "Jesús Luzardo", "Philadelphia Phillies"]);
 check("a HITTER on a K line never resolves (batter strikeouts are not a market)", res("Trea Turner over 1.5 Ks"), ["unresolved"]);
