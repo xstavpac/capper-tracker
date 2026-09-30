@@ -1,5 +1,5 @@
-import type { Pick } from "@prisma/client";
-import { getPicksForCapper } from "@/server/data/picks";
+import type { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { getCapperById } from "@/server/data/cappers";
 import {
   computeStats,
@@ -13,6 +13,44 @@ import { favoriteOrUnderdog } from "@/lib/bet-line";
 import { betTypeFilterCategory, type BetTypeFilterKey } from "@/lib/bet-type-filter";
 import { easternDateRange } from "@/lib/dates";
 import { comparePicksChronological } from "@/lib/pick-order";
+
+// The only Pick columns the comparison reads: what the filters below inspect
+// (sportId, betType, period, betDetail, propMarket, line, odds, pickedSide,
+// mlFavoredSide, gameTime, units) and what computeStats / the units series need
+// (status, units, odds, plus id + createdAt for the canonical (gameTime, createdAt,
+// id) tie-break in lib/pick-order.ts, and gradedAt, which SeriesPick types but
+// these functions never read). Deliberately not the full row with its capper /
+// sport / league relations: notes, sportsbook, team names and the rest were
+// shipped per pick and never looked at, and the capper's name already comes from
+// getCapperById.
+const COMPARISON_PICK_SELECT = {
+  id: true,
+  sportId: true,
+  betType: true,
+  period: true,
+  betDetail: true,
+  propMarket: true,
+  line: true,
+  odds: true,
+  pickedSide: true,
+  mlFavoredSide: true,
+  gameTime: true,
+  units: true,
+  status: true,
+  createdAt: true,
+  gradedAt: true,
+} satisfies Prisma.PickSelect;
+
+export type ComparisonPick = Prisma.PickGetPayload<{ select: typeof COMPARISON_PICK_SELECT }>;
+
+// Same scope and order as getPicksForCapper (userId + capperId, gameTime asc), minus the relations.
+function getComparisonPicks(userId: string, capperId: string): Promise<ComparisonPick[]> {
+  return prisma.pick.findMany({
+    where: { userId, capperId },
+    select: COMPARISON_PICK_SELECT,
+    orderBy: { gameTime: "asc" },
+  });
+}
 
 // Everything the capper comparison tool's shared filter bar can narrow by.
 // Applied entirely in-memory (see applyComparisonFilters below), the same
@@ -56,7 +94,7 @@ export const EMPTY_COMPARISON_FILTERS: ComparisonFilters = {
 // growing-prefix approach computeMomentum already uses in stats.ts, reused
 // directly rather than re-derived) so the actual filter pass below is a
 // plain O(1) lookup per pick, not an O(n) rescan per pick.
-function precedingStreakByPickId(picks: Pick[]): Map<string, { type: "WIN" | "LOSS"; count: number }> {
+function precedingStreakByPickId(picks: ComparisonPick[]): Map<string, { type: "WIN" | "LOSS"; count: number }> {
   const decided = [...picks]
     .filter((p) => p.status === "WIN" || p.status === "LOSS")
     .sort(comparePicksChronological);
@@ -77,7 +115,7 @@ function precedingStreakByPickId(picks: Pick[]): Map<string, { type: "WIN" | "LO
 // existing precedent anywhere in the codebase (confirmed during
 // investigation), so those are new, deliberately small (one line each)
 // derivations straight off fields already on Pick.
-export function applyComparisonFilters(picks: Pick[], filters: ComparisonFilters): Pick[] {
+export function applyComparisonFilters(picks: ComparisonPick[], filters: ComparisonFilters): ComparisonPick[] {
   const streakByPickId = filters.streak ? precedingStreakByPickId(picks) : null;
   const dateRange = filters.dateRange ? easternDateRange(filters.dateRange.start, filters.dateRange.end) : null;
 
@@ -116,7 +154,7 @@ async function buildProfile(userId: string, capperId: string, filters: Compariso
   const capper = await getCapperById(userId, capperId);
   if (!capper) throw new Error("Capper not found.");
 
-  const allPicks = await getPicksForCapper(userId, capperId);
+  const allPicks = await getComparisonPicks(userId, capperId);
   const filtered = applyComparisonFilters(allPicks, filters);
 
   return {
@@ -130,7 +168,7 @@ async function buildProfile(userId: string, capperId: string, filters: Compariso
 }
 
 // Both cappers built independently and in parallel - deliberately NOT a
-// single combined query, since ownership (getCapperById/getPicksForCapper,
+// single combined query, since ownership (getCapperById/getComparisonPicks,
 // both userId-scoped) and filtering are identical work per capper regardless
 // of whether they're fetched together or apart, and comparing two capperIds
 // says nothing about whether they belong to the same sport/league/anything

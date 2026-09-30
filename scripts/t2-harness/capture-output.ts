@@ -13,6 +13,13 @@
 // register it here under e.g. "t3" - nothing else in this file, or in
 // run-diff.mjs, needs to change.
 //
+// --surface=panels switches this from the /cappers data functions to the /dashboard
+// capper panels (getCapperPanels): `old` is the frozen raw-pick implementation
+// (capper-panels-legacy.ts), `t3` the database-aggregate one in production. Panels
+// are captured for EVERY user with picks (--auto-user) or the one selected, as of a
+// fixed clock (--as-of=auto [each user's own last activity] | <ISO>): the 14-day activity gate makes the output depend
+// on "now", so a snapshot older than two weeks would otherwise diff two empty panels.
+//
 // Usage:
 //   node --import tsx scripts/t2-harness/capture-output.ts --impl=old --fixture-user=A
 //   node --import tsx scripts/t2-harness/capture-output.ts --impl=old --user-id=<cuid>
@@ -192,8 +199,104 @@ async function resolveUserId(prisma: typeof import("@/lib/prisma").prisma, args:
   throw new Error("must pass --user-id=<cuid>, --fixture-user=A|B, or --auto-user");
 }
 
+// ---- panels surface ---------------------------------------------------------
+
+type PanelsImpl = { getCapperPanels: (userId: string, filter?: { sportName?: string }) => Promise<unknown> };
+
+const PANELS_IMPLEMENTATIONS: Record<string, () => Promise<PanelsImpl>> = {
+  old: async () => {
+    const { getCapperPanelsLegacy } = await import("@/server/data/capper-panels-legacy");
+    return { getCapperPanels: getCapperPanelsLegacy };
+  },
+  t3: async () => {
+    const { getCapperPanels } = await import("@/server/data/capper-panels");
+    return { getCapperPanels };
+  },
+};
+
+// Every user with at least one pick, most picks first - the snapshot has a handful,
+// and a bug that only shows on a small or oddly-shaped account is exactly what a
+// top-user-only diff would miss.
+async function allUserIdsWithPicks(prisma: typeof import("@/lib/prisma").prisma): Promise<string[]> {
+  const rows = await prisma.pick.groupBy({ by: ["userId"], _count: { userId: true }, orderBy: { _count: { userId: "desc" } } });
+  return rows.map((r) => r.userId);
+}
+
+// Fixes "now" for everything the implementation calls: Date.now() and a bare new Date().
+// Applied only after Prisma has loaded, only for the panels surface.
+const RealDate = Date;
+function freezeClock(iso: string) {
+  const fixed = RealDate.parse(iso);
+  class FrozenDate extends RealDate {
+    constructor(...a: unknown[]) {
+      if (a.length === 0) super(fixed);
+      else super(...(a as [number]));
+    }
+    static now() {
+      return fixed;
+    }
+  }
+  globalThis.Date = FrozenDate as unknown as DateConstructor;
+}
+
+// Normalization of the ONE intended difference: the original streak entries' stats
+// carried longestWinStreak / longestLossStreak, which nothing reads and the new
+// implementation no longer produces. Dropped from both sides so the diff shows only
+// real differences.
+function dropLongestStreaks(panels: unknown): unknown {
+  const p = JSON.parse(JSON.stringify(panels, (_k, v) => (typeof v === "number" && !Number.isFinite(v) ? String(v) : v))) as {
+    hotStreaks?: { stats: Record<string, unknown> }[];
+    coolingOff?: { stats: Record<string, unknown> }[];
+  };
+  for (const list of [p.hotStreaks ?? [], p.coolingOff ?? []]) {
+    for (const e of list) {
+      delete e.stats.longestWinStreak;
+      delete e.stats.longestLossStreak;
+    }
+  }
+  return p;
+}
+
+async function mainPanels(args: Record<string, string | true>) {
+  const implName = args.impl;
+  if (typeof implName !== "string" || !PANELS_IMPLEMENTATIONS[implName]) {
+    console.error(`Usage: --surface=panels --impl=<${Object.keys(PANELS_IMPLEMENTATIONS).join("|")}> --auto-user|--user-id=<cuid>|--fixture-user=A|B [--as-of=auto|<ISO>]`);
+    process.exit(1);
+  }
+  const impl = await PANELS_IMPLEMENTATIONS[implName]();
+  const { prisma } = await import("@/lib/prisma");
+
+  const userIds = args["auto-user"] === true ? await allUserIdsWithPicks(prisma) : [await resolveUserId(prisma, args)];
+
+  // auto = each user as of one hour after THEIR OWN latest datePosted, so every
+  // account (not just the most recently active one) has cappers inside the 14-day
+  // activity window. Resolved before the clock is frozen.
+  const asOf = args["as-of"];
+  const asOfByUser = new Map<string, string>();
+  if (asOf === "auto") {
+    for (const userId of userIds) {
+      const latest = await prisma.pick.aggregate({ where: { userId }, _max: { datePosted: true } });
+      if (latest._max.datePosted) asOfByUser.set(userId, new RealDate(latest._max.datePosted.getTime() + 3600000).toISOString());
+    }
+  }
+
+  const out: Record<string, unknown> = {};
+  for (const [i, userId] of userIds.entries()) {
+    const iso = asOf === "auto" ? asOfByUser.get(userId) : typeof asOf === "string" ? asOf : undefined;
+    if (iso) freezeClock(iso);
+    for (const sportName of [undefined, "MLB", "NFL"] as const) {
+      out[`user${i}.panels.${sportName ?? "allLeagues"}`] = dropLongestStreaks(
+        await impl.getCapperPanels(userId, sportName ? { sportName } : undefined)
+      );
+    }
+  }
+  await prisma.$disconnect();
+  process.stdout.write(JSON.stringify(out));
+}
+
 async function main() {
   const args = parseArgs();
+  if (args.surface === "panels") return mainPanels(args);
   const implName = args.impl;
   if (typeof implName !== "string" || !IMPLEMENTATIONS[implName]) {
     console.error(`Usage: --impl=<${Object.keys(IMPLEMENTATIONS).join("|")}> --user-id=<cuid>|--fixture-user=A|B`);

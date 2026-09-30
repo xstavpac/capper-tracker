@@ -165,3 +165,29 @@ every subsequent diff run untrustworthy.
 | `measure-dashboard.ts` | Dashboard egress PR: statements (via a logging Prisma client) and payload per cold dashboard summary, legacy vs one statement. |
 | `capper-detail-parity.ts` | Capper-detail egress PR: page-level parity of `getCapperDetailData` (one statement + the existing JS over the narrow decided series) vs the frozen `computeCapperDetailLegacy`. At each pinned `now` the full window x categoryWindow x categorySport matrix for the 10 heaviest + 20 sampled cappers, the diagonal for the rest; snapshot with categories stamped. Read-only; exit 1 on any diff (`--quick` = latest `now` only). |
 | `measure-capper-detail.ts` | Capper-detail egress PR: statements (via a logging Prisma client) and payload per capper-page data load, legacy vs one statement (`--synthetic=N` adds a disposable N-pick capper, deleted by exact id). |
+
+## Diffing the /dashboard capper panels, and older snapshots
+
+`--surface=panels` switches the capture from the /cappers data functions to
+`getCapperPanels` (src/server/data/capper-panels.ts). `--impl-old=old` is the frozen
+raw-pick implementation (`capper-panels-legacy.ts`); `--impl-new=t3` is the
+database-aggregate one production runs:
+
+```
+node scripts/t2-harness/run-diff.mjs   --source=snapshot:scripts/t2-harness/.snapshots/<name>.dump   --apply-migrations-after=20260915120000_enable_rls_on_all_tables   --surface=panels --as-of=auto --impl-old=old --impl-new=t3
+```
+
+- **Every user with picks** is captured (`--auto-user`), each for all leagues, MLB and NFL - a
+  bug that only shows on a small or oddly-shaped account would be invisible in a top-user-only diff.
+- **`--as-of=auto`** freezes the clock per user at one hour after that user's own latest
+  `datePosted` (or pass an ISO instant for one fixed clock). The panels' 14-day activity gate makes
+  the output depend on "now"; against a snapshot older than two weeks the real clock would diff two
+  empty panel sets. Check the entry counts are non-zero before trusting a clean result.
+- **`--apply-migrations-after=<migration directory name>`** applies the raw SQL of every later
+  migration straight onto the restored snapshot. A snapshot is a dump as of the day it was taken and
+  has no `_prisma_migrations` table, so columns added since (`picks.gameNumber`, `category`, ...)
+  are otherwise missing. The snapshot is also a subset of production's tables, so statements aimed at
+  an absent table fail and are skipped; the capture step reads the real schema through Prisma and
+  fails loudly if a column it needs is missing.
+- The one intended difference - the streak entries' `stats` no longer carry
+  `longestWinStreak`/`longestLossStreak` - is dropped from both sides before diffing.

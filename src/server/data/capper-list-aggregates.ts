@@ -344,3 +344,92 @@ export async function queryCategoryPanel(scope: {
     FROM r WHERE rk <= ${scope.limit}
   `);
 }
+
+// ---------------------------------------------------------------------------
+// Recent form (the /dashboard capper panels)
+// ---------------------------------------------------------------------------
+
+// A 1-based, inclusive rank range over a capper's decided (WIN/LOSS/PUSH) picks,
+// most recently graded first. The caller (capper-panels.ts) derives every range
+// from its own window constants and names it; the names are spliced into the SQL
+// as quoted aliases, so they must be plain identifiers (asserted below) and the
+// bounds plain integers - never request input.
+export type RecentFormSlices<K extends string> = Record<K, readonly [from: number, to: number]>;
+export type RecentFormSlice = { wins: number; losses: number; pushes: number };
+
+export type RecentFormRow<K extends string> = {
+  capperId: string;
+  // max(datePosted) over ALL of the capper's picks, any status - the panels'
+  // 14-day activity gate is "some pick was posted on/after the cutoff".
+  lastPostedAt: Date;
+  slices: Record<K, RecentFormSlice>;
+};
+
+// "Most recently graded first": gradedAt DESC (an ungraded pick sorts last, like
+// the JS comparator's epoch 0), then createdAt DESC, id DESC - the SQL twin of
+// comparePicksByGradedAtDesc in lib/pick-order.ts, so a run of picks graded in
+// the same instant is ordered the same in both.
+const ORDER_GRADED_DESC = Prisma.sql`p."gradedAt" DESC NULLS LAST, p."createdAt" DESC, p.id COLLATE "C" DESC`;
+
+// One row per capper with at least one pick: the last-posted instant plus W/L/P
+// counts for every requested slice, computed in the database so the panels never
+// fetch the pick history. A capper whose picks are all PENDING/CANCELLED still
+// gets a row (activity counts every status) with all-zero slices.
+export async function queryRecentForm<K extends string>(scope: {
+  userId: string;
+  sportName?: string;
+  slices: RecentFormSlices<K>;
+}): Promise<RecentFormRow<K>[]> {
+  const entries = Object.entries(scope.slices) as [K, readonly [number, number]][];
+  for (const [key, [from, to]] of entries) {
+    if (!/^[a-zA-Z][a-zA-Z0-9]*$/.test(key) || !Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from) {
+      throw new Error(`invalid recent-form slice ${key}: [${from}, ${to}]`);
+    }
+  }
+  const sliceColumns = Prisma.join(
+    entries.flatMap(([key, [from, to]]) =>
+      (["WIN", "LOSS", "PUSH"] as const).map((status) => {
+        const alias = Prisma.raw(`"${key}${status}"`);
+        return Prisma.sql`(count(*) FILTER (WHERE r.st = ${status} AND r.rn BETWEEN ${from} AND ${to}))::int AS ${alias}`;
+      })
+    )
+  );
+  const maxRank = Math.max(...entries.map(([, [, to]]) => to));
+  const sport = scopePredicates({ sportName: scope.sportName });
+
+  const rows = await prisma.$queryRaw<Record<string, unknown>[]>(Prisma.sql`
+    WITH a AS (
+      SELECT p."capperId" AS cid, max(p."datePosted") AS last_posted
+      FROM picks p
+      WHERE p."userId" = ${scope.userId} ${sport}
+      GROUP BY p."capperId"
+    ),
+    r AS (
+      SELECT p."capperId" AS cid, p.status::text AS st,
+        row_number() OVER (PARTITION BY p."capperId" ORDER BY ${ORDER_GRADED_DESC}) AS rn
+      FROM picks p
+      WHERE p."userId" = ${scope.userId} AND p.status IN ('WIN', 'LOSS', 'PUSH') ${sport}
+    ),
+    s AS (
+      SELECT r.cid, ${sliceColumns}
+      FROM r
+      WHERE r.rn <= ${maxRank}
+      GROUP BY r.cid
+    )
+    SELECT a.cid AS "capperId", a.last_posted AS "lastPostedAt", s.*
+    FROM a
+    LEFT JOIN s ON s.cid = a.cid
+  `);
+
+  return rows.map((row) => {
+    const slices = {} as Record<K, RecentFormSlice>;
+    for (const [key] of entries) {
+      slices[key] = {
+        wins: Number(row[`${key}WIN`] ?? 0),
+        losses: Number(row[`${key}LOSS`] ?? 0),
+        pushes: Number(row[`${key}PUSH`] ?? 0),
+      };
+    }
+    return { capperId: row.capperId as string, lastPostedAt: row.lastPostedAt as Date, slices };
+  });
+}
