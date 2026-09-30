@@ -539,6 +539,18 @@ function normalizeNPlusNflPlayerProp(text: string): string {
   });
 }
 
+// True only for a genuine full-game anytime-TD pick - the one TD shape
+// the odds snapshot's player_anytime_td market actually prices. Excludes
+// everything parseTouchdownProp flags unsupported (first-TD, multi-TD,
+// Over/Under-TD), rushing-/receiving-only TD text (a narrower bet than
+// "any TD"), and half/quarter-scoped text. Import-time pricing only; grading
+// reads parseTouchdownProp directly and is unaffected.
+export function isAnytimeTdPick(text: string): boolean {
+  const td = parseTouchdownProp(text);
+  if (!td || td.unsupported || td.propType !== "ANY") return false;
+  return !/\b(?:1st|2nd|first|second)\s+half\b|\b(?:1st|2nd|3rd|4th|first|second|third|fourth)\s+quarter\b|\bq[1-4]\b/i.test(text);
+}
+
 // Generalizes parseTouchdownProp to every structured player-prop market this
 // app recognizes (PropMarket in schema.prisma) - passing/rushing/receiving
 // yards, receptions, and touchdowns - so any caller that needs to know WHICH
