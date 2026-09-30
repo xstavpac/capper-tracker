@@ -2,15 +2,18 @@ import { normalizeName } from "@/lib/fuzzy-match";
 import { looksPickLikeHeader } from "@/lib/market-hint";
 import {
   parsePlayerProp,
+  parseAnyPlayerProp,
   pickPeriodFromText,
   extractLine,
   normalizeNPlusPlayerProp,
   type SegmentPeriod,
 } from "@/lib/bet-line";
 import { isKnownFullPlayerName } from "@/lib/player-roster-fallback";
+import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import {
   detectUnsupportedProp,
   detectUnsupportedNflStat,
+  UNSUPPORTED_PROP_REASONS,
   type UnsupportedPropInfo,
 } from "@/lib/unsupported-prop-vocab";
 
@@ -1412,6 +1415,13 @@ function looksLikePick(text: string): boolean {
     // signals above to catch, so they used to fall through to the capper-name
     // fallback and vanish. See unsupported-prop-vocab.ts.
     detectUnsupportedPropLine(text) !== null ||
+    // A supported NHL prop ("Draisaitl anytime goal scorer", "2+ shots on goal")
+    // - no longer flagged unsupported above, so it must still count as a pick.
+    // (Abbreviations - ATGS/AGS/FGS - count too: without it "McDavid ATGS" was read
+    // as a capper header and silently dropped. The cost is that a BRAND-NEW capper
+    // whose header contains one of those tokens is read as a pick; a saved capper's
+    // name is matched earlier and is unaffected, and "*Name" escapes it.)
+    parseNhlPlayerProp(text) !== null ||
     // "Zach Ertz 3+ receptions" - a SUPPORTED NFL market in N+ form. No signed
     // number / over-under word here either, so it was read as a capper name
     // (and the next pick got credited to that fake capper). parsePickText
@@ -1433,11 +1443,30 @@ export function detectUnsupportedPropLine(text: string): UnsupportedPropInfo | n
   const nflUnsupported = detectUnsupportedNflStat(text);
   if (nflUnsupported) return nflUnsupported;
   if (parsePlayerProp(text)) return null;
-  return detectUnsupportedProp(
+  const info = detectUnsupportedProp(
     text,
     (subject) => detectSport(subject, true).sportName !== "" || RECOGNIZED_TEAM_PHRASES.has(subject.toLowerCase()),
     classifyTeamSide
   );
+  // A supported NHL market (nhl-prop.ts) is no longer "unsupported" - but ONLY
+  // when the vocabulary/explicit code already says NHL (info.sport === "NHL").
+  // Team/game stat totals (sport null, TEAM_STAT/GAME_STAT), MLB/NBA/WNBA
+  // codes, and sport-less points/assists (GENERIC - basketball vocabulary too)
+  // keep their existing reasons; the last of these is recovered later, and only
+  // via a unique hit in the NHL roster (recover-unresolved-lines.ts).
+  if (info?.sport === "NHL" && parseNhlPlayerProp(text)) return null;
+  // Team-prefixed NHL player prop ("Oilers McDavid over 3.5 shots on goal"): the
+  // subject "Oilers McDavid" reads as a team, so the detector above calls it a
+  // team stat total. It is a player prop when the NHL parser finds a name that
+  // is a recognized NHL team PLUS extra words that are not themselves a team
+  // ("Oilers Flames" stays a team/game stat). NFL never reaches here for its own
+  // markets (parsePlayerProp returned above), and a bare team ("Oilers over 30.5
+  // shots on goal") has no extra words, so it stays TEAM_STAT.
+  if (info?.reason === UNSUPPORTED_PROP_REASONS.TEAM_STAT) {
+    const nhl = parseNhlPlayerProp(text);
+    if (nhl && classifyTeamSide(nhl.playerName) === "team+extra" && detectSport(nhl.playerName, true).sportName === "NHL") return null;
+  }
+  return info;
 }
 
 // One side of an "X vs Y" matchup: purely a team, a team plus extra words (a
@@ -1516,7 +1545,7 @@ export function teamPhraseRegex(phrase: string): RegExp {
 // as every caller here.
 export function isPlayerPropSurnameCollision(text: string, phrase: string): boolean {
   if (phrase.includes(" ")) return false;
-  const prop = parsePlayerProp(text);
+  const prop = parseAnyPlayerProp(text);
   if (!prop) return false;
   const nameWords = prop.playerName.toLowerCase().split(/\s+/).filter(Boolean);
   if (nameWords.length < 2) return false;
@@ -1820,7 +1849,7 @@ export function parsePickText(description: string): {
     /\b(no|yes)\s+run\s+(?:first|1st)(?:\s+inning)?\b/i.test(cleanDescription)
   ) {
     betType = "NRFI";
-  } else if (parsePlayerProp(cleanDescription) || detectUnsupportedPropLine(cleanDescription)?.sport) {
+  } else if (parseAnyPlayerProp(cleanDescription) || detectUnsupportedPropLine(cleanDescription)?.sport) {
     // (detectUnsupportedPropLine(...).sport is only set for a confidently MLB/
     // NHL prop - a generic "points"/"assists" line, which NBA uses too, keeps
     // its existing classification.)
@@ -2427,6 +2456,9 @@ function findPlayerPick(
   // text (not just `candidate`), since the market phrase sits after the
   // number/keyword the name regexes above stopped at.
   if (parsePlayerProp(text)) return null;
+  // Supported NHL markets are no longer caught by detectUnsupportedPropLine
+  // below, so they need their own exclusivity here (Nick Paul, Dustin Wolf...).
+  if (parseNhlPlayerProp(text)) return null;
   // Same exclusivity for MLB/NHL prop vocabulary (Heliot Ramos, Dustin Wolf and
   // Nick Paul all share a surname with a KNOWN_TENNIS_PLAYERS entry).
   if (detectUnsupportedPropLine(text)) return null;
@@ -2714,7 +2746,13 @@ export function parseCatalog(
       }
       // An MLB/NHL player-prop line can't be imported yet - surface it instead
       // of letting it be classified as a game total/moneyline or dropped.
-      if (detectUnsupportedPropLine(remainder)) {
+      // (A supported NHL prop with no sport named is still parked in `unresolved`
+      // here - not silently dropped - for the NHL-roster recovery pass. NFL props
+      // are unchanged: they never took this branch.)
+      if (
+        detectUnsupportedPropLine(remainder) ||
+        (!parsePlayerProp(remainder) && parseNhlPlayerProp(remainder) && !detectSport(remainder).sportName)
+      ) {
         unresolved.push(line);
         unresolvedCapperNames.push(inlineMatch);
         continue;

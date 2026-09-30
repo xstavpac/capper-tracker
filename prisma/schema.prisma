@@ -106,6 +106,16 @@ enum PropMarket {
   // confirmed live on an actual QB - hold for a future pass.
   RUSH_REC_YDS
   PASS_RUSH_YDS
+  // NHL markets (2026-10). Graded from ESPN's NHL summary box score / scoring
+  // plays - see server/data/nhl-boxscore.ts and nhl-prop-grading.ts. Additive:
+  // no NFL value or grading path changes. POINTS = goals + assists; SAVES is
+  // the goalie market; ANYTIME_GOAL / FIRST_GOAL are yes/no shaped (no line).
+  ANYTIME_GOAL
+  FIRST_GOAL
+  SHOTS_ON_GOAL
+  POINTS
+  ASSISTS
+  SAVES
 }
 
 // ---------- Models ----------
@@ -1034,6 +1044,27 @@ model NflRosterPlayer {
   @@index([team])
   @@index([lastName])
   @@map("nfl_roster_players")
+}
+
+// Cached NHL roster snapshot (C/LW/RW/D/G), the NHL twin of NflRosterPlayer
+// above - a separate table (not a sport column on that one) so the live NFL
+// roster code and its espnPlayerId @unique stay untouched (ESPN player ids are
+// per-league). Loaded by scripts/load-nhl-roster.ts; read by catalog-import
+// recovery and by NHL prop grading's id-verified did-not-play check.
+model NhlRosterPlayer {
+  id           String   @id @default(cuid())
+  espnPlayerId String   @unique
+  fullName     String
+  firstName    String
+  lastName     String
+  team         String
+  position     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([team])
+  @@index([lastName])
+  @@map("nhl_roster_players")
 }
 
 // A user-uploaded metric (Charts' Custom Metrics feature) - the catalog

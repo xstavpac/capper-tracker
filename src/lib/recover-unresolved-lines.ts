@@ -32,6 +32,8 @@ import {
 import { resolveLineAgainstLiveTeams, parseFallbackBetText, type LiveTeam, type LineResolution } from "@/lib/live-team-fallback";
 import { resolvePlayerPropAgainstRoster } from "@/lib/player-roster-fallback";
 import { parsePlayerProp } from "@/lib/bet-line";
+import { parseNhlPlayerProp } from "@/lib/nhl-prop";
+import { UNSUPPORTED_PROP_REASONS } from "@/lib/unsupported-prop-vocab";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 
 export type RecoverUnresolvedResult = {
@@ -44,12 +46,28 @@ export function recoverUnresolvedLines(
   unresolvedCapperNames: string[],
   liveTeams: LiveTeam[],
   roster: RosterPlayer[],
-  resolvedPicks: ParsedPick[] = []
+  resolvedPicks: ParsedPick[] = [],
+  // Cached NHL roster. Optional/empty by default, in which case NHL lines stay
+  // unresolved exactly as before NHL props existed.
+  nhlRoster: RosterPlayer[] = []
 ): RecoverUnresolvedResult {
   const recovered: ParsedPick[] = [];
   const stillUnresolved: string[] = [];
 
   const isPlayerProp = new Set(unresolved.filter((line) => parsePlayerProp(line) !== null));
+
+  // NHL prop lines (nhl-prop.ts) the NFL parser does not claim. Eligible only
+  // when the line is not a team/game stat total or another sport's prop: i.e.
+  // not flagged unsupported at all, flagged NHL, or flagged with the GENERIC
+  // reason (sport-less points/assists - basketball vocabulary too, which is why
+  // the NHL roster hit below is the ONLY sport evidence such a line gets).
+  const isNhlProp = new Set(
+    unresolved.filter((line) => {
+      if (isPlayerProp.has(line) || parseNhlPlayerProp(line) === null) return false;
+      const unsupported = detectUnsupportedPropLine(line);
+      return !unsupported || unsupported.sport === "NHL" || unsupported.reason === UNSUPPORTED_PROP_REASONS.GENERIC;
+    })
+  );
 
   // Every non-player-prop unresolved line's own team-fallback resolution,
   // computed up front (once, and reused below in the main loop) so that a
@@ -60,7 +78,7 @@ export function recoverUnresolvedLines(
   // twice costs nothing beyond this function's own runtime.
   const nonPlayerPropResolutions = new Map<string, LineResolution>();
   for (const line of unresolved) {
-    if (isPlayerProp.has(line) || detectUnsupportedPropLine(line)) continue;
+    if (isPlayerProp.has(line) || isNhlProp.has(line) || detectUnsupportedPropLine(line)) continue;
     nonPlayerPropResolutions.set(line, resolveLineAgainstLiveTeams(line, liveTeams));
   }
 
@@ -79,6 +97,13 @@ export function recoverUnresolvedLines(
       .map((r) => (r as Extract<LineResolution, { status: "resolved" }>).nickname),
   ];
 
+  const nhlPasteTeamMentions = [
+    ...resolvedPicks.filter((p) => p.sportName === "NHL").flatMap((p) => p.teamNicknames),
+    ...[...nonPlayerPropResolutions.values()]
+      .filter((r) => r.status === "resolved" && r.sport === "NHL")
+      .map((r) => (r as Extract<LineResolution, { status: "resolved" }>).nickname),
+  ];
+
   for (let i = 0; i < unresolved.length; i++) {
     const line = unresolved[i];
     const capperName = unresolvedCapperNames[i] ?? "Unknown";
@@ -90,8 +115,36 @@ export function recoverUnresolvedLines(
     // string from the lookups built above.
     const { gameNumber, rest: lineForParsing } = extractGameNumber(line);
 
+    if (isNhlProp.has(line)) {
+      // Same conservative policy as the NFL branch below: resolves only on
+      // EXACTLY ONE distinct NHL player; ambiguous/unresolved stay unresolved.
+      const relevantNhlTeams = liveTeams.filter((t) => t.sport === "NHL").map((t) => t.name);
+      const res = resolvePlayerPropAgainstRoster(line, nhlRoster, relevantNhlTeams, nhlPasteTeamMentions, "NHL");
+      if (res.status !== "resolved") {
+        stillUnresolved.push(line);
+        continue;
+      }
+      const parsed = parsePickText(lineForParsing);
+      recovered.push({
+        capperName,
+        sportName: res.sport,
+        description: withGameNumberSuffix(parsed.cleanDescription, gameNumber),
+        betType: parsed.betType,
+        odds: parsed.odds ?? -110,
+        hasExplicitOdds: parsed.odds !== null,
+        totalSide: parsed.totalSide,
+        units: parsed.units,
+        period: parsed.period,
+        raw: line,
+        teamNicknames: [res.team.toLowerCase()],
+        gameNumber,
+      });
+      continue;
+    }
+
     // MLB/NHL player props have no roster or team path yet - never let the
     // live-team fallback match a word inside a player's name to a team.
+    // (Supported NHL markets took the isNhlProp branch above.)
     if (detectUnsupportedPropLine(line)) {
       stillUnresolved.push(line);
       continue;

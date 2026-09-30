@@ -7,6 +7,8 @@ import { recoverUnresolvedLines, type RecoverUnresolvedResult } from "@/lib/reco
 import { parsePlayerProp } from "@/lib/bet-line";
 import { getLiveScoresForSport, getOddsForSport, LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { getCachedNflRoster } from "@/server/data/nfl-roster-cache";
+import { getCachedNhlRoster } from "@/server/data/nhl-roster-cache";
+import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 
 // Last-resort resolver for catalog lines the browser-side parser left in its
 // `unresolved` list (Variant 1 - see live-team-fallback.ts's header), plus
@@ -104,5 +106,18 @@ export async function recoverUnresolvedPicksAction(
   // recover-unresolved-lines.ts's pasteTeamMentions and player-roster-
   // fallback.ts's header comment). Only ever consulted when isPlayerProp is
   // non-empty; harmless to pass otherwise.
-  return recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, roster, picks);
+  // The NHL roster is read only when some unresolved line is an NHL prop, so a
+  // paste with none pays no extra query. A failed read (table not migrated yet,
+  // transient DB error) degrades to "NHL lines stay unresolved" - it must never
+  // break NFL recovery.
+  let nhlRoster: Awaited<ReturnType<typeof getCachedNhlRoster>> = [];
+  if (unresolved.some((line) => parsePlayerProp(line) === null && parseNhlPlayerProp(line) !== null)) {
+    try {
+      nhlRoster = await getCachedNhlRoster();
+    } catch (err) {
+      console.error("recoverUnresolvedPicksAction: NHL roster read failed", err);
+    }
+  }
+
+  return recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, roster, picks, nhlRoster);
 }
