@@ -47,7 +47,7 @@ async function main() {
       `new=${newPending.length} old=${oldPending.length}`
     );
     console.log(`info: persisted ids (all sports) = ${persisted.size}; rows the daily cron now reads = ${newPending.length} instead of ${all.length}`);
-  });
+  }, { timeout: 60000, maxWait: 15000 }); // prod round-trips exceed the 5s default
   await prisma.$disconnect();
   if (failures > 0) process.exit(1);
   console.log("ALL PASS");
