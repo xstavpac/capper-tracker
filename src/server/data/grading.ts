@@ -7,12 +7,18 @@ import {
   getMlbEarlyInningScores,
   getNflGameFacts,
   getEspnGameSegments,
-  getNflPlayerTdStats,
   type OddsGame,
 } from "@/server/data/odds";
-import { fetchNflPasserRows } from "@/server/data/nfl-passer-rows";
+import { extractPasserRows, type PasserRow } from "@/server/data/nfl-passer-rows";
 import { gradeNhlPlayerProp } from "@/server/data/nhl-prop-grading";
-import { fetchNflRushingReceivingRows } from "@/server/data/nfl-rushing-receiving-rows";
+import {
+  extractRushingRows,
+  extractReceivingRows,
+  type RushingRow,
+  type ReceivingRow,
+} from "@/server/data/nfl-rushing-receiving-rows";
+import { indexNflBoxScore, isOffensePlayer, matchNflPlayerName, type BoxPlayer } from "@/server/data/nfl-boxscore-match";
+import type { RosterPlayer } from "@/server/data/nfl-roster";
 import { closestByTime, sameEasternDay } from "@/lib/dates";
 import { isPreseasonGame } from "@/lib/sport-seasons";
 import { teamNamesMatch } from "@/lib/team-name-match";
@@ -27,7 +33,6 @@ import {
   type PlayerPropMarket,
 } from "@/lib/bet-line";
 import { NCAAF_CANONICAL_SUFFIX, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
-import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
 
 function findMarket(game: OddsGame, key: string) {
   for (const b of game.bookmakers) {
@@ -765,7 +770,7 @@ export function resolveOutcome(
 }
 
 export type TouchdownPropResolution =
-  | { outcome: "WIN" | "LOSS" }
+  | { outcome: "WIN" | "LOSS" | "PUSH" }
   // Mirrors resolveOutcome/gradePick's "matched the game fine, but couldn't
   // confidently grade the bet itself" null - `reason` is the specific why,
   // for getPendingPicksForUser's triage view (picks.ts), which otherwise has
@@ -773,21 +778,139 @@ export type TouchdownPropResolution =
   // score just isn't posted yet" apart from "couldn't find this player."
   | { outcome: null; reason: string };
 
+// Test seams for the NFL box-score grading path (same idea as NhlPropDeps):
+// production passes nothing and gets the live ESPN fetch + cached roster;
+// tests inject saved fixtures so nothing touches the network or prisma.
+export type NflPropDeps = {
+  fetchSummary?: (eventId: string) => Promise<unknown | null>;
+  getRoster?: () => Promise<RosterPlayer[]>;
+};
+
+async function fetchNflSummary(eventId: string): Promise<unknown | null> {
+  const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=" + eventId, {
+    next: { revalidate: 3600 },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+type NflStatLine = { passing: PasserRow | null; rushing: RushingRow | null; receiving: ReceivingRow | null };
+type NflLocateResult =
+  | { ok: true; stats: NflStatLine }
+  | { ok: false; resolution: { outcome: null; reason: string } | { outcome: "PUSH" } };
+
+function rowFor<T extends { espnPlayerId: string | null; playerName: string; team: string }>(rows: T[], p: BoxPlayer): T | null {
+  return (
+    rows.find((r) =>
+      p.espnPlayerId && r.espnPlayerId
+        ? r.espnPlayerId === p.espnPlayerId && r.team === p.team
+        : r.playerName === p.playerName && r.team === p.team
+    ) ?? null
+  );
+}
+
+// Finds the player a pick is about inside one NFL game's box score and pulls
+// their passing/rushing/receiving rows (each null when the player has no row
+// in that group - callers treat that as a real 0, see below).
+//
+// Matching is name-tiered (suffix-insensitive, bare-surname within the game's
+// two teams; see nfl-boxscore-match.ts) and never guesses: an ambiguous name
+// stays PENDING. `pool` is where full-name matching looks - "offense" for the
+// yardage/reception markets (a defender can't be the subject), "all" for the
+// anytime-TD market (kept as broad as it always was: any player with any
+// stat line is gradeable).
+//
+// A name that matches nobody in the box score is not automatically "not found":
+// if the cached roster resolves it (exact or bare-surname only - never a fuzzy
+// hit) to EXACTLY ONE real ESPN id, that player is on one of this game's two
+// teams, the game is explicitly final with a complete box score, and that id
+// has no row in ANY stat group, the player did not play and the pick PUSHes
+// (same did-not-play policy as NHL, nhl-prop-grading.ts). Anything short of
+// all of that stays PENDING.
+async function locateNflPlayer(
+  playerName: string,
+  eventId: string,
+  pool: "offense" | "all",
+  deps: NflPropDeps
+): Promise<NflLocateResult> {
+  const fail = (reason: string): NflLocateResult => ({ ok: false, resolution: { outcome: null, reason } });
+  const notFound = () => fail('couldn\'t find "' + playerName + '" in the box score');
+
+  const data = await (deps.fetchSummary ?? fetchNflSummary)(eventId);
+  const index = data ? indexNflBoxScore(data) : null;
+  if (!data || !index) return fail("the box score isn't available yet for this game");
+  if (!index.isFinal) return fail("the box score isn't final yet for this game");
+
+  const offense = index.players.filter(isOffensePlayer);
+  const candidates = pool === "offense" ? offense : index.players;
+  const hit = matchNflPlayerName(
+    playerName,
+    candidates,
+    (p) => p.playerName,
+    (p) => p.espnPlayerId,
+    { surnamePool: offense }
+  );
+  if (hit.status === "many") return fail('"' + playerName + '" matches more than one player in this game\'s box score');
+
+  let player: BoxPlayer | null = hit.status === "one" ? hit.item : null;
+
+  if (!player) {
+    let roster: RosterPlayer[] = [];
+    try {
+      const loadRoster = deps.getRoster ?? (async () => (await import("@/server/data/nfl-roster-cache")).getCachedNflRoster());
+      roster = await loadRoster();
+    } catch (err) {
+      console.error("resolveNflPlayerProp: NFL roster read failed", err);
+      return notFound();
+    }
+    const rosterHit = matchNflPlayerName(
+      playerName,
+      roster,
+      (r) => r.playerName,
+      (r) => r.espnPlayerId,
+      { getLastName: (r) => r.lastName, allowFuzzy: false }
+    );
+    if (rosterHit.status !== "one" || !rosterHit.item.espnPlayerId) return notFound();
+    const rp = rosterHit.item;
+
+    const inBox = index.players.find((p) => p.espnPlayerId === rp.espnPlayerId);
+    if (inBox) {
+      // Same player, spelled differently than ESPN's displayName. Only usable
+      // if they're in the pool this market grades from.
+      if (!candidates.includes(inBox)) return notFound();
+      player = inBox;
+    } else {
+      if (!index.teams.includes(rp.team) || !index.explicitlyFinal || !index.isComplete) return notFound();
+      return { ok: false, resolution: { outcome: "PUSH" } };
+    }
+  }
+
+  return {
+    ok: true,
+    stats: {
+      passing: rowFor(extractPasserRows(eventId, data), player),
+      rushing: rowFor(extractRushingRows(eventId, data), player),
+      receiving: rowFor(extractReceivingRows(eventId, data), player),
+    },
+  };
+}
+
 // NFL touchdown-prop grading - a different shape than resolveOutcome above
-// (async, no PUSH, and reads player-level box-score data instead of
-// GameResult's team scores), so it's a separate path rather than a new case
-// inside gradePick/resolveOutcome. A straight "did they score anytime" market
-// has no real-world push, so this only ever resolves to WIN, LOSS, or
-// unresolved (stays PENDING for manual review). The single source of truth
-// for both the actual grading (gradeTouchdownProp below) and the triage
-// page's reason text (getPendingPicksForUser, picks.ts) - both call this,
-// neither re-implements the parsing/matching steps.
+// (async and reads player-level box-score data instead of GameResult's team
+// scores), so it's a separate path rather than a new case inside gradePick/
+// resolveOutcome. Anytime-TD resolves WIN/LOSS, or PUSH only for a verified
+// did-not-play (see locateNflPlayer); otherwise unresolved (stays PENDING for
+// manual review). The single source of truth for both the actual grading
+// (gradeTouchdownProp below) and the triage page's reason text
+// (getPendingPicksForUser, picks.ts) - both call this, neither re-implements
+// the parsing/matching steps.
 export async function resolveTouchdownProp(
   pick: { betDetail: string | null; homeTeam: string; awayTeam: string },
   eventId: string,
-  sportName: string
+  sportName: string,
+  deps: NflPropDeps = {}
 ): Promise<TouchdownPropResolution> {
-  // getNflPlayerTdStats below fetches ESPN's football/nfl box-score endpoint
+  // The box-score reads below hit ESPN's football/nfl summary endpoint
   // specifically - there's no per-sport dispatch here the way getEspnScores
   // has for live scores, so calling it with an eventId sourced from any other
   // sport's GameResult would hit the wrong endpoint entirely (NFL summary
@@ -823,24 +946,14 @@ export async function resolveTouchdownProp(
     return { outcome: null, reason: "couldn't identify a player name in the bet text" };
   }
 
-  const stats = await getNflPlayerTdStats(eventId);
-  if (!stats) {
-    return { outcome: null, reason: "the box score isn't available yet for this game" };
-  }
+  const located = await locateNflPlayer(playerName, eventId, "all", deps);
+  if (!located.ok) return located.resolution;
 
-  const match = stats.find((s) => isLikelyDuplicateName(s.playerName, playerName));
-  if (!match) {
-    // Not found anywhere in the box score - don't guess, leave it for manual
-    // grading (could be a name mismatch, or a player who didn't play at all).
-    return { outcome: null, reason: 'couldn\'t find "' + playerName + '" in the box score' };
-  }
-
-  const scored =
-    parsed.propType === "RUSHING"
-      ? match.rushTds > 0
-      : parsed.propType === "RECEIVING"
-        ? match.recTds > 0
-        : match.rushTds + match.recTds > 0;
+  // A player with a stat line in only one of rushing/receiving has a real 0
+  // TDs in the other.
+  const rushTds = located.stats.rushing?.touchdowns ?? 0;
+  const recTds = located.stats.receiving?.touchdowns ?? 0;
+  const scored = parsed.propType === "RUSHING" ? rushTds > 0 : parsed.propType === "RECEIVING" ? recTds > 0 : rushTds + recTds > 0;
 
   return { outcome: scored ? "WIN" : "LOSS" };
 }
@@ -848,9 +961,10 @@ export async function resolveTouchdownProp(
 export async function gradeTouchdownProp(
   pick: { betDetail: string | null; homeTeam: string; awayTeam: string },
   eventId: string,
-  sportName: string
+  sportName: string,
+  deps: NflPropDeps = {}
 ): Promise<GradeOutcome> {
-  return (await resolveTouchdownProp(pick, eventId, sportName)).outcome;
+  return (await resolveTouchdownProp(pick, eventId, sportName, deps)).outcome;
 }
 
 type PlayerPropPick = {
@@ -916,7 +1030,8 @@ async function resolveYardageOrReceptionsProp(
   pick: PlayerPropPick,
   eventId: string,
   sportName: string,
-  market: YardageOrReceptionsMarket
+  market: YardageOrReceptionsMarket,
+  deps: NflPropDeps
 ): Promise<PlayerPropResolution> {
   // Same NFL-only gate resolveTouchdownProp uses and for the same reason:
   // these markets are graded from ESPN's NFL box-score endpoint specifically.
@@ -935,53 +1050,29 @@ async function resolveYardageOrReceptionsProp(
     return { outcome: null, reason: "couldn't identify a player name in the bet text" };
   }
 
-  const notFound = { outcome: null, reason: 'couldn\'t find "' + playerName + '" in the box score' } as const;
-  const noBoxScore = { outcome: null, reason: "the box score isn't available yet for this game" } as const;
+  const located = await locateNflPlayer(playerName, eventId, "offense", deps);
+  if (!located.ok) return located.resolution;
 
-  let actual: number;
-  if (market === "PASS_YDS" || market === "PASS_RUSH_YDS") {
-    const passerRows = await fetchNflPasserRows(eventId);
-    if (!passerRows) return noBoxScore;
-    const passMatch = passerRows.find((r) => isLikelyDuplicateName(r.playerName, playerName));
-
-    if (market === "PASS_YDS") {
-      if (!passMatch) return notFound;
-      actual = passMatch.passingYards;
-    } else {
-      // PASS_RUSH_YDS: sum passingYards + rushingYards for the same player.
-      // A player can legitimately appear in only one of the two row sets
-      // (a QB with zero carries never shows up in extractRushingRows at
-      // all, same as a non-passer never shows up in fetchNflPasserRows) -
-      // that's a real 0 for the missing side, not a "couldn't find" error.
-      // Only missing from BOTH means this player genuinely isn't in this
-      // game's box score at all.
-      const rushRecRows = await fetchNflRushingReceivingRows(eventId);
-      if (!rushRecRows) return noBoxScore;
-      const rushMatch = rushRecRows.rushing.find((r) => isLikelyDuplicateName(r.playerName, playerName));
-      if (!passMatch && !rushMatch) return notFound;
-      actual = (passMatch?.passingYards ?? 0) + (rushMatch?.rushingYards ?? 0);
-    }
-  } else {
-    const rows = await fetchNflRushingReceivingRows(eventId);
-    if (!rows) return noBoxScore;
-    if (market === "RUSH_YDS") {
-      const match = rows.rushing.find((r) => isLikelyDuplicateName(r.playerName, playerName));
-      if (!match) return notFound;
-      actual = match.rushingYards;
-    } else if (market === "REC_YDS" || market === "RECEPTIONS") {
-      const match = rows.receiving.find((r) => isLikelyDuplicateName(r.playerName, playerName));
-      if (!match) return notFound;
-      actual = market === "REC_YDS" ? match.receivingYards : match.receptions;
-    } else {
-      // RUSH_REC_YDS: same "missing from one side is a real 0, missing from
-      // both is a real miss" split as PASS_RUSH_YDS above, both rows read
-      // from the one already-fetched rushing/receiving response.
-      const rushMatch = rows.rushing.find((r) => isLikelyDuplicateName(r.playerName, playerName));
-      const recMatch = rows.receiving.find((r) => isLikelyDuplicateName(r.playerName, playerName));
-      if (!rushMatch && !recMatch) return notFound;
-      actual = (rushMatch?.rushingYards ?? 0) + (recMatch?.receivingYards ?? 0);
-    }
-  }
+  // A player present in the box score but with no row in this market's stat
+  // group has a real 0 there (a QB with zero carries, an RB who rushed but
+  // caught nothing, a receiver with no carries) - never a "couldn't find".
+  // Same rule PASS_RUSH_YDS/RUSH_REC_YDS have always applied to their two halves.
+  const { passing, rushing, receiving } = located.stats;
+  const passYds = passing?.passingYards ?? 0;
+  const rushYds = rushing?.rushingYards ?? 0;
+  const recYds = receiving?.receivingYards ?? 0;
+  const actual =
+    market === "PASS_YDS"
+      ? passYds
+      : market === "PASS_RUSH_YDS"
+        ? passYds + rushYds
+        : market === "RUSH_YDS"
+          ? rushYds
+          : market === "REC_YDS"
+            ? recYds
+            : market === "RECEPTIONS"
+              ? (receiving?.receptions ?? 0)
+              : rushYds + recYds; // RUSH_REC_YDS
 
   return { outcome: gradeAgainstLine(actual, lineInfo.line, lineInfo.direction) };
 }
@@ -1000,7 +1091,8 @@ async function resolveYardageOrReceptionsProp(
 export async function resolvePlayerProp(
   pick: PlayerPropPick,
   eventId: string,
-  sportName: string
+  sportName: string,
+  deps: NflPropDeps = {}
 ): Promise<PlayerPropResolution> {
   // NHL props are graded from ESPN's NHL summary (nhl-prop-grading.ts). Every
   // other sport - including NFL - falls through to the untouched NFL path below,
@@ -1009,9 +1101,9 @@ export async function resolvePlayerProp(
 
   const market = resolvedPropMarket(pick);
   if (market === null || market === "TD") {
-    return resolveTouchdownProp(pick, eventId, sportName);
+    return resolveTouchdownProp(pick, eventId, sportName, deps);
   }
-  return resolveYardageOrReceptionsProp(pick, eventId, sportName, market);
+  return resolveYardageOrReceptionsProp(pick, eventId, sportName, market, deps);
 }
 
 export async function gradePlayerProp(pick: PlayerPropPick, eventId: string, sportName: string): Promise<GradeOutcome> {
