@@ -247,3 +247,19 @@ Act when **any** is true, using the `refresh-scores-run` log line:
 `deriveLedgerFields` or the grading path, any date/season/window filter on the
 tendency query, incremental accumulation, a `GameResult.favTeam` backfill,
 schema/index changes, cron-schedule or `maxDuration` changes.
+
+## 10. Done — odds side projected inside Postgres
+
+`recomputeTeamTendencies` no longer pulls `OddsSnapshot.data` into JS. The odds
+side now comes from `getOddsGamesForTendencies` (`odds-projections.ts`): one raw
+SQL statement that returns, per stored game, its teams, `commenceTime`, the
+first outcome of each distinct name across each bookmaker's first `h2h` market,
+and the first `point` across each bookmaker's first `totals` market. The
+unchanged `moneylinePrice` / `totalLine` / `findOddsGameForResult` helpers run
+over that synthetic game, so the selected game, prices and line are the ones the
+full board gave them. Snapshot order is now pinned to `fetchDate` (the old
+`findMany` had no `orderBy`; ties between repeat appearances of a game resolve
+to the first in array order). Parity, including against real stored boards, is
+locked in by `odds-projections-parity-acceptance-test.ts`. The "Option A" fix
+above (read `GameResult.favTeam` / `totalLine`) is still not taken — it changes
+counts for rows persisted before those columns existed.

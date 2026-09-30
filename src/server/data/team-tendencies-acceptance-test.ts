@@ -90,13 +90,28 @@ function oddsFor(
 // ---- prisma spies -------------------------------------------------------
 
 const originals: Record<string, unknown> = {};
+const originalQueryRaw = (prisma as unknown as { $queryRaw: unknown }).$queryRaw;
 function patch(path: string, fn: unknown) {
   const [model, method] = path.split(".");
   const target = (prisma as unknown as Record<string, Record<string, unknown>>)[model];
   originals[path] ??= target[method];
   target[method] = fn;
 }
+function projectForFixture(g: OddsGame, ord: number) {
+  const ml: unknown[][] = [];
+  let pt: [number | null] | null = null;
+  for (const b of g.bookmakers) {
+    const h2h = b.markets.find((m) => m.key === "h2h");
+    for (const o of (h2h?.outcomes ?? []) as Record<string, unknown>[]) ml.push("price" in o ? [o.name, o.price] : [o.name]);
+    if (pt) continue;
+    const totals = b.markets.find((m) => m.key === "totals");
+    const withPoint = (totals?.outcomes as Record<string, unknown>[] | undefined)?.find((o) => "point" in o);
+    if (withPoint) pt = [(withPoint.point as number | null | undefined) ?? null];
+  }
+  return { ord, homeTeam: g.homeTeam, awayTeam: g.awayTeam, commenceTime: g.commenceTime, ml, pt };
+}
 function restoreAll() {
+  (prisma as unknown as { $queryRaw: unknown }).$queryRaw = originalQueryRaw;
   for (const path of Object.keys(originals)) {
     const [model, method] = path.split(".");
     (prisma as unknown as Record<string, Record<string, unknown>>)[model][method] = originals[path];
@@ -119,7 +134,16 @@ async function runRecompute(rows: Row[], oddsGames: OddsGame[]) {
     const want = args?.where?.isPreseason;
     return want === undefined ? rows : rows.filter((r) => r.isPreseason === want);
   });
-  patch("oddsSnapshot.findMany", async () => [{ data: oddsGames }]);
+  // recomputeTeamTendencies reads its odds side through two raw SQL statements
+  // (odds-projections.ts): the projected per-game rows and a snapshot count.
+  // Answer both from the fixture: one snapshot holding oddsGames, projected the
+  // way the SQL does (the real SQL is checked against the stored boards in
+  // odds-projections-parity-acceptance-test.ts).
+  (prisma as unknown as { $queryRaw: unknown }).$queryRaw = async (q: { sql?: string; strings?: string[] }) => {
+    const text = q.sql ?? (q.strings ?? []).join("?");
+    if (text.includes("count(*)")) return [{ n: 1 }];
+    return oddsGames.map((g, i) => projectForFixture(g, i));
+  };
   const upserts: { where: { sportKey_teamName: { teamName: string } }; create: Counts & { teamName: string } }[] = [];
   patch("teamTendency.upsert", async (args: (typeof upserts)[number]) => {
     upserts.push(args);

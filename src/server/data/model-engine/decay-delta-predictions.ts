@@ -10,12 +10,12 @@
 import { prisma } from "@/lib/prisma";
 import { closestByTime, sameEasternDay } from "@/lib/dates";
 import { runModelDefinition } from "./orchestrate";
-import { getPregameEventFacts } from "./pregame-facts";
+import { getPregameEventFacts, createPregameSnapshotSource } from "./pregame-facts";
 import { resolveAllGameObservations, type GameObservation } from "./observations";
 import { actualFavWon, type GradedRow } from "./decay-delta-outcome";
 import { decayDeltaModel } from "@/lib/model-engine/fixtures/decay-delta";
-import type { OddsGame } from "@/server/data/odds";
-import type { DecayDeltaPrediction } from "@prisma/client";
+import { getLatestPregameSnapshot } from "@/server/data/odds-projections";
+import type { DecayDeltaPrediction, Prisma } from "@prisma/client";
 
 const MODEL_ID = decayDeltaModel.modelId; // "decay-delta-v1" - read off the fixture itself, not hardcoded a second time
 
@@ -112,10 +112,25 @@ export type GradedSyncResult = {
 // have a DecayDeltaPrediction row for this gameResultId. An existing graded
 // row is NEVER re-fetched into computation at all - its id is excluded from
 // the pending set up front, so runModelDefinition never runs for it again.
+// Everything the graded pass reads off a GameResult (GradedRow + totalLine, the
+// row shape computeGradedDecayDelta takes) - deliberately not the whole row,
+// which drags along the Game-Pulse JSON blobs for every rated game in history.
+export const GRADED_GAME_SELECT = {
+  id: true,
+  favTeam: true,
+  homeTeam: true,
+  awayTeam: true,
+  homeScore: true,
+  awayScore: true,
+  gameDate: true,
+  totalLine: true,
+} satisfies Prisma.GameResultSelect;
+
 export async function persistGradedDecayDeltaGames(sportKey: string): Promise<GradedSyncResult> {
   const games = await prisma.gameResult.findMany({
     where: { sportKey, favTeam: { not: null }, totalLine: { not: null } },
     orderBy: { gameDate: "asc" },
+    select: GRADED_GAME_SELECT,
   });
 
   const existing = await prisma.decayDeltaPrediction.findMany({
@@ -210,10 +225,15 @@ export type PregameSyncResult = { candidateGames: number; alreadyCovered: number
 export async function persistPregameDecayDeltaGames(sportKey: string): Promise<PregameSyncResult> {
   const now = new Date();
 
-  const snapshot = await prisma.oddsSnapshot.findFirst({ where: { sportKey }, orderBy: { fetchDate: "desc" } });
+  // Slim projection of the latest board (home/away/commenceTime per game), not
+  // the full bookmaker x market payload - and one shared snapshot source below,
+  // so each day's board is read once for the whole loop instead of twice per
+  // unstarted game (this function's own lookup plus runModelDefinition's).
+  const snapshot = await getLatestPregameSnapshot(sportKey);
   if (!snapshot) return { candidateGames: 0, alreadyCovered: 0, newlyPersisted: 0, skipped: 0 };
+  const pregameSnapshots = createPregameSnapshotSource();
 
-  const games = snapshot.data as unknown as OddsGame[];
+  const games = snapshot.games;
   const notStarted = games.filter((g) => new Date(g.commenceTime) > now);
 
   let alreadyCovered = 0;
@@ -232,13 +252,13 @@ export async function persistPregameDecayDeltaGames(sportKey: string): Promise<P
       continue;
     }
 
-    const pregame = await getPregameEventFacts(sportKey, g.homeTeam, g.awayTeam);
+    const pregame = await getPregameEventFacts(sportKey, g.homeTeam, g.awayTeam, pregameSnapshots);
     if (!pregame || pregame.favTeam === null) {
       skipped++;
       continue;
     }
 
-    const result = await runModelDefinition(decayDeltaModel, { sportKey, homeTeam: g.homeTeam, awayTeam: g.awayTeam, asOf: now });
+    const result = await runModelDefinition(decayDeltaModel, { sportKey, homeTeam: g.homeTeam, awayTeam: g.awayTeam, asOf: now }, { pregameSnapshots });
     const bucket = result.buckets["bucket_decay_delta"];
     if (!bucket.found || bucket.ruleId === null) {
       skipped++;

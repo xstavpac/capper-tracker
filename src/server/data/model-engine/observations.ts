@@ -10,6 +10,7 @@
 // already traced and cited exactly during the fact-finding pass - see
 // resolveGameObservations' own comments below for the one deliberate,
 // permanent divergence from it.
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { easternDateKey } from "@/lib/dates";
 
@@ -37,8 +38,30 @@ export async function resolveAllGameObservations(sportKey: string): Promise<Game
   const rows = await prisma.gameResult.findMany({
     where: { sportKey },
     orderBy: { gameDate: "asc" },
+    // Only what deriveObservations reads - the row also carries the Game-Pulse
+    // JSON blobs (innings/quarters/linescore/scoring plays) and a dozen other
+    // columns, and this fetch is the full sport history.
+    select: OBSERVATION_ROW_SELECT,
   });
+  return deriveObservations(rows);
+}
 
+export const OBSERVATION_ROW_SELECT = {
+  id: true,
+  gameDate: true,
+  favTeam: true,
+  homeTeam: true,
+  awayTeam: true,
+  homeScore: true,
+  awayScore: true,
+  totalLine: true,
+} satisfies Prisma.GameResultSelect;
+
+export type ObservationRow = Prisma.GameResultGetPayload<{ select: typeof OBSERVATION_ROW_SELECT }>;
+
+// The pure per-row transform (exported so the parity test can run it over full
+// GameResult rows and over the slim select and compare).
+export function deriveObservations(rows: ObservationRow[]): GameObservation[] {
   const observations: GameObservation[] = [];
 
   for (const row of rows) {
