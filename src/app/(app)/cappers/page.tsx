@@ -8,9 +8,11 @@ import { MergeCappersPanel } from "@/components/dashboard/merge-cappers-panel";
 import { CappersTimeTabs } from "@/components/dashboard/cappers-time-tabs";
 import { CappersStatCards } from "@/components/dashboard/cappers-stat-cards";
 import { CapperPanel } from "@/components/dashboard/capper-panel";
-import { FlameIcon, SnowflakeIcon, TrendingUpIcon, UsersIcon, ActivityIcon } from "@/components/dashboard/cappers-icons";
+import { FlameIcon, SnowflakeIcon, TrendingUpIcon, ActivityIcon } from "@/components/dashboard/cappers-icons";
 import { TopCappers } from "@/components/dashboard/top-cappers";
 import { CappersLeaderboardCard } from "@/components/dashboard/cappers-leaderboard-card";
+import { ImageBanner } from "@/components/ui/ImageBanner";
+import cappersBanner from "../../../../public/banners/cappers.png";
 
 const LEAGUES = LIVE_SPORTS.map((s) => s.label);
 
@@ -38,11 +40,8 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2.5 text-xl font-semibold">
-          <UsersIcon className="h-6 w-6 text-brand-600" />
-          Cappers
-        </h1>
+      <ImageBanner src={cappersBanner} title="Cappers" priority />
+      <div className="flex justify-end">
         <CapperForm atLimit={false} />
       </div>
 
