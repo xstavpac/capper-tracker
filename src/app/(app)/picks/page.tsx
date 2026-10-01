@@ -40,6 +40,8 @@ import {
 } from "@/lib/pick-display";
 import { formatPickLabel } from "@/lib/bet-line";
 import type { PickStatus } from "@prisma/client";
+import { ImageBanner } from "@/components/ui/ImageBanner";
+import picksBanner from "../../../../public/banners/picks.png";
 
 // betTypeOptionsForChipSet/firstHalfLabelPrefixForChipSet/
 // visibleBetTypeOptionsForChipSet now live in lib/bet-type-filter.ts (moved
@@ -109,26 +111,6 @@ function resolveDateFilter(searchParams: { date?: string; startDate?: string; en
     [startDateKey, endDateKey] = [endDateKey, startDateKey];
   }
   return { startDateKey, endDateKey, isRange: true };
-}
-
-function TicketIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-5 w-5"
-      aria-hidden="true"
-    >
-      <path d="M15 5v2" />
-      <path d="M15 11v2" />
-      <path d="M15 17v2" />
-      <path d="M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-3a2 2 0 0 0 0 -4v-3a2 2 0 0 1 2 -2" />
-    </svg>
-  );
 }
 
 function fmtUnits(n: number): string {
@@ -324,21 +306,14 @@ export default async function PicksPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
-            <TicketIcon />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold leading-tight">Picks</h1>
-            <DateNavigator
-              dateKey={startDateKey}
-              label={subtitleDate}
-              isRange={isRange}
-              countText={picks.length + " pick" + (picks.length === 1 ? "" : "s")}
-            />
-          </div>
-        </div>
+      <ImageBanner src={picksBanner} title="Picks" priority />
+      <div className="mb-5">
+        <DateNavigator
+          dateKey={startDateKey}
+          label={subtitleDate}
+          isRange={isRange}
+          countText={picks.length + " pick" + (picks.length === 1 ? "" : "s")}
+        />
       </div>
 
       <PicksSummaryStrip

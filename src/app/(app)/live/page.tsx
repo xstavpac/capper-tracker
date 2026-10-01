@@ -10,6 +10,8 @@ import { resolveGridLiveSelection } from "@/lib/grid-live-selection";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { ParlaySlipButton } from "@/components/parlay/parlay-slip-button";
 import { easternDateKey } from "@/lib/dates";
+import { ImageBanner } from "@/components/ui/ImageBanner";
+import liveBanner from "../../../../public/banners/live.png";
 
 function tabClass(isActive: boolean) {
   return (
@@ -118,11 +120,9 @@ export default async function LivePage({
   return (
     <>
       <div className="mx-auto max-w-5xl">
+        <ImageBanner src={liveBanner} title="Live odds and scores" priority />
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold">Live odds and scores</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Powered by The Odds API</p>
-          </div>
+          <p className="text-sm text-muted-foreground">Powered by The Odds API</p>
           <ParlaySlipButton />
         </div>
 
