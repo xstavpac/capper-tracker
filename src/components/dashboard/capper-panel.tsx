@@ -167,7 +167,7 @@ function HottestRows({ rows }: { rows: StreakEntry[] }) {
             <Rank n={i + 1} />
             <span className="truncate font-medium text-foreground">{e.name}</span>
             <Bar pct={max > 0 ? (e.streak / max) * 100 : 0} className="bg-emerald-500" />
-            <span className={"text-right font-medium " + GREEN}>{e.streak + " wins"}</span>
+            <span className={"whitespace-nowrap text-right font-medium " + GREEN}>{e.streak + "-win streak"}</span>
           </Link>
         </li>
       ))}
@@ -202,9 +202,9 @@ function ColdestRows({ rows }: { rows: StreakEntry[] }) {
           <Link href={"/cappers/" + e.capperId} className={PLAIN_ROW}>
             <Rank n={i + 1} />
             <span className="truncate font-medium text-foreground">{e.name}</span>
-            <span className={"flex items-center gap-1 font-medium " + RED}>
+            <span className={"flex items-center gap-1 whitespace-nowrap font-medium " + RED}>
               <ArrowDownIcon className="h-3.5 w-3.5" />
-              {e.streak + " losses · " + units(e.units ?? 0)}
+              {e.streak + "-loss streak"}
             </span>
           </Link>
         </li>

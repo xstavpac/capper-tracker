@@ -62,7 +62,7 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
             <CapperPanel panel="winners" icon={<TrendingUpIcon />} initial={data.winners} />
             <CapperPanel panel="coldest" icon={<SnowflakeIcon />} initial={data.coldest} />
           </div>
-          <TopCappers entries={data.top} sparklines={data.sparklines} />
+          <TopCappers entries={data.top} sparklines={data.topSparklines} />
           <CappersLeaderboardCard
             rows={data.rows}
             total={data.total}

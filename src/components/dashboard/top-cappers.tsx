@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LeaderboardEntry } from "@/server/data/cappers";
 import type { CapperSparkline as Series } from "@/server/data/cappers-page-aggregates";
 import { Avatar } from "@/components/dashboard/capper-panels";
+import { SPARKLINE_MIN_PICKS } from "@/server/data/cappers-page-aggregates";
 import { CapperSparkline } from "@/components/dashboard/capper-sparkline";
 import { ChevronRightIcon, TrophyIcon } from "@/components/dashboard/cappers-icons";
 
@@ -15,7 +16,7 @@ export function formatRecord(s: LeaderboardEntry["stats"]) {
 }
 
 // The top performers of the page's current time tab (the same ranking as before, now framed as a
-// section). Each card keeps its last-20 sparkline.
+// section). Each card carries a sparkline of the selected window (hidden below the sparkline minimum).
 export function TopCappers({ entries, sparklines }: { entries: LeaderboardEntry[]; sparklines: Map<string, Series> }) {
   return (
     <section className="rounded-card border border-border bg-card p-4 sm:p-5">
@@ -32,11 +33,12 @@ export function TopCappers({ entries, sparklines }: { entries: LeaderboardEntry[
         <p className="text-xs text-muted-foreground">Changes with your time filter</p>
       </div>
       {entries.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">No cappers meet the minimum picks for this period.</p>
+        <p className="py-4 text-center text-sm text-muted-foreground">No standout cappers for this timeframe yet.</p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {entries.map((e) => {
             const { roi, netUnits, currentStreak: streak } = e.stats;
+            const series = sparklines.get(e.capperId);
             const color = roi >= 0 ? GREEN : RED;
             const showStreak = streak.type !== "NONE" && streak.count >= STREAK_BADGE_MIN;
             return (
@@ -64,7 +66,9 @@ export function TopCappers({ entries, sparklines }: { entries: LeaderboardEntry[
                 <p className={"mt-0.5 text-sm font-semibold " + color}>
                   {(netUnits >= 0 ? "+" : "−") + Math.abs(netUnits)}u &middot; {(roi >= 0 ? "+" : "−") + Math.abs(roi)}%
                 </p>
-                <CapperSparkline series={sparklines.get(e.capperId)} height={32} className="mt-3 block w-full" />
+                {series && series.n >= SPARKLINE_MIN_PICKS && (
+                  <CapperSparkline series={series} height={32} className="mt-3 block w-full" label="Units over the selected timeframe" />
+                )}
               </Link>
             );
           })}

@@ -18,7 +18,7 @@ import type { Prisma } from "@prisma/client";
 import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, currentStreak, type ScorecardWindow } from "@/server/data/stats";
 import * as adapter from "@/server/data/pick-aggregates-cappers-adapter";
 import type { LeaderboardEntry } from "@/server/data/cappers";
-import { getCappersPageData, sparklineTone, SPARKLINE_MIN_PICKS, HOT_STREAK_MIN, getPanelRows, type CapperSparkline, type PanelWindow, type StreakEntry } from "@/server/data/cappers-page-aggregates";
+import { getCappersPageData, sparklineTone, SPARKLINE_MIN_PICKS, HOT_STREAK_MIN, STANDOUT_MIN_GRADED, getPanelRows, type CapperSparkline, type PanelWindow, type StreakEntry } from "@/server/data/cappers-page-aggregates";
 import { sparklineLabel } from "@/components/dashboard/capper-sparkline";
 import { comparePicksChronological } from "@/lib/pick-order";
 import { MIN_PICKS_OPTIONS, PAGE_SIZE, SORT_OPTIONS, type CappersSortKey } from "@/lib/cappers-page-params";
@@ -334,8 +334,12 @@ async function main() {
       // Everything below is independent of the leaderboard filters: use the default query.
       const data = await getCappersPageData({ userId: U, window, league, min: 10, sort: "roi", fav: true, q: "", page: 1 });
 
-      // Top cappers: unscoped by league, same min-picks rule (never below 1), ranked by ROI.
-      const topExpected = rank(oldAll.filter((e) => decided(e) >= 10), "roi").slice(0, 4);
+      // Standout: unscoped by league, the window's own minimum (not the leaderboard's), net units > 0
+      // AND wins > losses (finite), ranked by net units, then win %, then graded picks.
+      const topExpected = oldAll
+        .filter((e) => decided(e) >= STANDOUT_MIN_GRADED[window] && e.stats.netUnits > 0 && Number.isFinite(e.stats.netUnits) && e.stats.wins > e.stats.losses)
+        .sort((a, b) => b.stats.netUnits - a.stats.netUnits || b.stats.winPct - a.stats.winPct || decided(b) - decided(a))
+        .slice(0, 4);
       // The cards draw name, avatar colour, record, win %, ROI and units - no badges - so specialist and
       // streak are deliberately not fetched for them.
       const cardFields = (e: LeaderboardEntry) => {
@@ -343,6 +347,9 @@ async function main() {
         return { capperId: e.capperId, name: e.name, colorTag: e.colorTag, stats };
       };
       same(`top cappers [${label}]`, data.top.map(cardFields), topExpected.map(cardFields));
+      // The leaderboard's min-picks dropdown never changes Standout.
+      const dataLoose = await getCappersPageData({ userId: U, window, league, min: 0, sort: "units", fav: false, q: "", page: 1 });
+      same(`top cappers ignore the min-picks dropdown [${label}]`, dataLoose.top.map(cardFields), data.top.map(cardFields));
 
       // Favorites summary: the old function, all sports regardless of league.
       const oldFav = await adapter.getFavoriteCappersSummary(U, window);
@@ -378,7 +385,7 @@ async function main() {
   // Sparklines: only for the displayed cappers, each equal to the raw-pick reference.
   const ref = await referenceSparklines(U);
   const disp = await getCappersPageData({ userId: U, window: "LAST_30", min: 0, sort: "units", fav: false, q: "", page: 2 });
-  const shownIds = new Set([...disp.rows.map((e) => e.capperId), ...disp.top.map((e) => e.capperId)]);
+  const shownIds = new Set([...disp.rows.map((e) => e.capperId), ]);
   check("sparklines cover only displayed cappers", [...disp.sparklines.keys()].every((k) => shownIds.has(k)), `${disp.sparklines.size} series for ${shownIds.size} displayed`);
   check("sparklines cover every displayed capper with a graded pick", [...shownIds].every((id) => !ref.has(id) || disp.sparklines.has(id)));
   for (const [id, s] of disp.sparklines) same(`sparkline series matches raw reference (${id.slice(-4)})`, s.points, ref.get(id)!.points);
@@ -444,7 +451,7 @@ async function main() {
   }
   const top3 = await getCappersPageData({ userId: U3, window: "ALL", min: 1, sort: "roi", fav: false, q: "", page: 1 });
   const topShown = top3.top.map((e) => e.stats.roi);
-  check("odds 0: top cappers follow the displayed ROI", topShown.every((v, i) => i === 0 || cmpDesc(topShown[i - 1], v) <= 0) && topShown[0] === Infinity, JSON.stringify(topShown));
+  check("odds 0: Standout leaves out non-finite units, rest ordered by net units", top3.top.every((e) => Number.isFinite(e.stats.netUnits) && e.stats.netUnits > 0) && top3.top.every((e, i) => i === 0 || top3.top[i - 1].stats.netUnits >= e.stats.netUnits), JSON.stringify(topShown));
 
   // ============ Winners this week ============
   // Independent reference straight from the raw picks: datePosted in the last 7 days (Most active's

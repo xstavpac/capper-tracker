@@ -10,12 +10,14 @@ export function CapperSparkline({
   width,
   height = 20,
   className,
+  label = "Units over last 20 graded picks",
 }: {
   series: Series | undefined;
   // Omit for a full-width line (the SVG stretches to its container).
   width?: number;
   height?: number;
   className?: string;
+  label?: string;
 }) {
   const tone = sparklineTone(series);
   const W = 100;
@@ -39,7 +41,7 @@ export function CapperSparkline({
   }
 
   return (
-    <svg viewBox={"0 0 " + W + " " + height} preserveAspectRatio="none" width={width ?? "100%"} height={height} className={className} role="img" aria-label="Units over last 20 graded picks">
+    <svg viewBox={"0 0 " + W + " " + height} preserveAspectRatio="none" width={width ?? "100%"} height={height} className={className} role="img" aria-label={label}>
       <path d={path} fill="none" stroke={STROKE[tone]} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
   );
