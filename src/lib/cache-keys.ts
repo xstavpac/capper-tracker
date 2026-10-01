@@ -22,6 +22,11 @@ export const cacheKeys = {
   // odds(sportKey, fetchDate), which is what every OddsSnapshot write path
   // revalidates - see tickerOddsCacheParams (odds.ts).
   tickerOdds: (sportKey: string, fetchDate: string) => `ticker-odds:${sportKey}:${fetchDate}`,
+  // /live's carried-over yesterday board (getYesterdayOddsForSport): the projected
+  // games of the (sportKey, fetchDate) snapshot, fetchDate being the ET date BEFORE
+  // today. Its own key (it must not collide with the full-blob or ticker entries) but
+  // TAGGED with odds(sportKey, fetchDate) - see yesterdayOddsCacheParams (odds.ts).
+  yesterdayOdds: (sportKey: string, fetchDate: string) => `yesterday-odds:${sportKey}:${fetchDate}`,
   liveScores: (sportKey: string) => `live-scores:${sportKey}`,
   // Page-load persistFinalScores throttle (see page-grading.ts): the memo key
   // per sport, and - with a time bucket appended - the window-claim entry.
