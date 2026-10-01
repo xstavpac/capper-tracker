@@ -154,7 +154,11 @@ export default async function PicksPage({
     getFilteredPicksForUser(user.id, { ...filters, sportId: undefined }),
     getCappersForUser(user.id),
     getSportsWithLeagues(),
-    getParlaysForUser(user.id),
+    getParlaysForUser(user.id, {
+      capperId: filters.capperId,
+      startDateKey: filters.startDateKey,
+      endDateKey: filters.endDateKey,
+    }),
     // Bet type is derived in JS, so with that chip on the summary is computed
     // from the already-loaded rows instead (see summarizeLoadedPicks).
     betTypeFilter ? Promise.resolve(null) : getPicksSummary(user.id, filters),

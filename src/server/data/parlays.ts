@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import type { BetType, Period, PickStatus } from "@prisma/client";
+import type { BetType, Period, PickStatus, Prisma } from "@prisma/client";
+import { easternDateRange } from "@/lib/dates";
 import { recomputeParlayBetStatus } from "@/server/data/parlay-grading";
 
 export type LegCreateInput = {
@@ -67,13 +68,47 @@ export async function deleteParlayBet(userId: string, parlayBetId: string): Prom
   }
 }
 
-export async function getParlaysForUser(userId: string) {
-  return prisma.parlayBet.findMany({
-    where: { userId },
-    include: {
-      capper: true,
-      legs: { include: { sport: true, league: true }, orderBy: { legIndex: "asc" } },
+// Exactly what /picks renders for a parlay card: capper name, sport name per leg, and the leg
+// scalars the card and LegStatusButtons read. No full Capper/Sport/League rows (league is never shown).
+export const PARLAY_CARD_SELECT = {
+  id: true,
+  units: true,
+  status: true,
+  datePosted: true,
+  capper: { select: { name: true } },
+  legs: {
+    select: {
+      id: true,
+      awayTeam: true,
+      homeTeam: true,
+      period: true,
+      betDetail: true,
+      betType: true,
+      line: true,
+      odds: true,
+      status: true,
+      sport: { select: { name: true } },
     },
+    orderBy: { legIndex: "asc" },
+  },
+} satisfies Prisma.ParlayBetSelect;
+
+export type ParlayFilters = { capperId?: string; startDateKey?: string; endDateKey?: string };
+
+// PENDING parlays always (any date - an open parlay must not vanish when you navigate days) plus
+// parlays posted inside the page's Eastern date range, the same easternDateRange the picks query
+// uses. capperId narrows both sets. With no date keys the read is unbounded (full history).
+export function parlaysWhere(userId: string, filters: ParlayFilters = {}): Prisma.ParlayBetWhereInput {
+  const base: Prisma.ParlayBetWhereInput = { userId, ...(filters.capperId ? { capperId: filters.capperId } : {}) };
+  if (!filters.startDateKey || !filters.endDateKey) return base;
+  const range = easternDateRange(filters.startDateKey, filters.endDateKey);
+  return { ...base, OR: [{ status: "PENDING" }, { datePosted: { gte: range.start, lt: range.end } }] };
+}
+
+export async function getParlaysForUser(userId: string, filters: ParlayFilters = {}) {
+  return prisma.parlayBet.findMany({
+    where: parlaysWhere(userId, filters),
+    select: PARLAY_CARD_SELECT,
     orderBy: { datePosted: "desc" },
   });
 }

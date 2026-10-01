@@ -433,6 +433,8 @@ model ParlayBet {
 
   @@index([userId, capperId])
   @@index([userId, status])
+  // /picks reads PENDING parlays plus those posted in the page's date range.
+  @@index([userId, datePosted])
   @@map("parlay_bets")
 }
 
