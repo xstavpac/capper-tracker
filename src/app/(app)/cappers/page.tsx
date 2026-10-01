@@ -41,19 +41,22 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <ImageBanner src={cappersBanner} title="Cappers" priority />
-      <div className="flex justify-end">
-        <CapperForm atLimit={false} />
-      </div>
-
       {suspectedDuplicates.length > 0 && <MergeCappersPanel cappers={cappersWithCounts} suspected={suspectedDuplicates} />}
 
       {data.capperCount === 0 ? (
-        <div className="rounded-card bg-card p-10 text-center shadow-soft">
-          <p className="text-sm text-muted-foreground">No cappers yet - add the first person or channel you follow for picks.</p>
-        </div>
+        <>
+          <div className="flex justify-end">
+            <CapperForm atLimit={false} />
+          </div>
+          <div className="rounded-card bg-card p-10 text-center shadow-soft">
+            <p className="text-sm text-muted-foreground">No cappers yet - add the first person or channel you follow for picks.</p>
+          </div>
+        </>
       ) : (
         <>
-          <CappersTimeTabs params={params} />
+          <CappersTimeTabs params={params}>
+            <CapperForm atLimit={false} />
+          </CappersTimeTabs>
           <CappersStatCards stats={data.overview} capperCount={data.capperCount} range={params.range} />
           <div className="grid grid-cols-1 items-stretch gap-4 min-[769px]:grid-cols-2 sm:gap-6">
             <CapperPanel panel="active" icon={<ActivityIcon />} initial={data.mostActive} />

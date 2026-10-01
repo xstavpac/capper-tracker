@@ -38,7 +38,7 @@ export function CapperForm({ atLimit }: { atLimit: boolean }) {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="rounded-full bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-soft transition hover:bg-brand-700"
+        className="rounded-full bg-brand-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-soft transition hover:bg-brand-700 md:ml-auto"
       >
         + Add capper
       </button>
@@ -68,7 +68,7 @@ export function CapperForm({ atLimit }: { atLimit: boolean }) {
     <form
       ref={formRef}
       action={handleSubmit}
-      className="rounded-card bg-card p-5 shadow-soft"
+      className="w-full rounded-card bg-card p-5 shadow-soft"
     >
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-medium text-foreground">Add a capper</h3>
