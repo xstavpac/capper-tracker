@@ -18,7 +18,7 @@ export default async function ParlayPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <ImageBanner src={parlayBanner} title="Parlay Generator" priority />
+      <ImageBanner src={parlayBanner} title="Parlay Generator" priority mobileHeight={48} />
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Auto-Generate a parlay from today&apos;s games, or build one from your pooled picks.

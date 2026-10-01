@@ -3,6 +3,8 @@ import { getCappersForUser } from "@/server/data/cappers";
 import { getSportsWithLeagues, getPickPlanStatus } from "@/server/data/picks";
 import { PickForm } from "@/components/dashboard/pick-form";
 import { BulkImportForm } from "@/components/dashboard/bulk-import-form";
+import { ImageBanner } from "@/components/ui/ImageBanner";
+import catalogImportBanner from "../../../../../public/banners/catalogImport.png";
 
 export default async function BulkImportPage() {
   const user = await requireUser();
@@ -14,8 +16,8 @@ export default async function BulkImportPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
+      <ImageBanner src={catalogImportBanner} title="Betting Catalog Import" priority />
       <div className="mb-4">
-        <h1 className="text-xl font-semibold">Betting Catalog Import</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           <a href="/picks" className="text-brand-600">
             Back to Picks

@@ -6,16 +6,16 @@ type ImageBannerProps = {
   src: StaticImageData;
   title: string;
   priority?: boolean;
-  // Show the whole image on mobile at its own aspect ratio instead of the fixed 68px left-anchored crop.
-  fitMobile?: boolean;
+  // Mobile height in px of the left-anchored crop; lower it only when the title would otherwise be clipped.
+  mobileHeight?: number;
 };
 
-export function ImageBanner({ src, title, priority = false, fitMobile = false }: ImageBannerProps) {
-  const style = { "--banner-ar": `${src.width} / ${src.height}` } as CSSProperties;
+export function ImageBanner({ src, title, priority = false, mobileHeight = 68 }: ImageBannerProps) {
+  const style = { "--banner-ar": `${src.width} / ${src.height}`, "--banner-mh": `${mobileHeight}px` } as CSSProperties;
   return (
     <div
       style={style}
-      className={`relative mb-6 ${fitMobile ? "aspect-[var(--banner-ar)]" : "h-[68px]"} w-full overflow-hidden rounded-xl border border-white/5 md:h-auto md:aspect-[var(--banner-ar)]`}
+      className={`relative mb-6 h-[var(--banner-mh)] w-full overflow-hidden rounded-xl border border-white/5 md:h-auto md:aspect-[var(--banner-ar)]`}
     >
       <Image
         src={src}

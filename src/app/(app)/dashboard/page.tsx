@@ -7,7 +7,6 @@ import { UnitsChart } from "@/components/dashboard/units-chart";
 import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { TrendingCappers } from "@/components/dashboard/trending-cappers";
 import { EnergyCountUp, EnergyRecordCountUp } from "@/components/dashboard/energy-surge";
-import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
 import { ImageBanner } from "@/components/ui/ImageBanner";
 import dashboardBanner from "../../../../public/banners/dashboard.png";
 
@@ -44,10 +43,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <ImageBanner src={dashboardBanner} title="Dashboard" priority fitMobile />
-      <div className="mb-6 flex justify-end">
-        <DropCatalogLink href="/picks/import" />
-      </div>
+      <ImageBanner src={dashboardBanner} title="Dashboard" priority mobileHeight={61} />
 
       <div className="mb-6 rounded-card border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-6 dark:border-brand-500/20 dark:from-brand-500/10 dark:to-card">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
