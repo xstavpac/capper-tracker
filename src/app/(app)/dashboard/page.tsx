@@ -43,7 +43,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <ImageBanner src={dashboardBanner} title="Dashboard" priority mobileHeight={62} />
+      <ImageBanner src={dashboardBanner} title="Dashboard" priority mobileHeight={61} />
 
       <div className="mb-6 rounded-card border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-6 dark:border-brand-500/20 dark:from-brand-500/10 dark:to-card">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">

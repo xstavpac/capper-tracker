@@ -40,7 +40,7 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <ImageBanner src={cappersBanner} title="Cappers" priority />
+      <ImageBanner src={cappersBanner} title="Cappers" priority mobileHeight={66} />
       {suspectedDuplicates.length > 0 && <MergeCappersPanel cappers={cappersWithCounts} suspected={suspectedDuplicates} />}
 
       {data.capperCount === 0 ? (
