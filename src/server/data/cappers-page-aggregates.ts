@@ -34,6 +34,7 @@ import {
   specialistCandidatesSelect,
   windowTotalsSelect,
   windowsCte,
+  IN_WINDOW,
   type SpecialistCandidateRow,
   type StreakRow,
   type WindowTotals,
@@ -60,6 +61,18 @@ export const SPARKLINE_PICKS = 20;
 export const SPARKLINE_MIN_PICKS = 3;
 export const HOT_STREAK_MIN = 5;
 export const TOP_CAPPERS_COUNT = 4;
+// Standout Cappers' own minimum graded picks (wins + losses + pushes) per page time window. It does
+// NOT follow the leaderboard's min-picks dropdown. Tune here.
+export const STANDOUT_MIN_GRADED: Record<ScorecardWindow, number> = {
+  TODAY: 2,
+  YESTERDAY: 2,
+  LAST_7: 5,
+  LAST_30: 10,
+  LAST_60: 10,
+  ALL: 10,
+};
+// The Standout sparkline is downsampled to about this many points (the net label stays exact).
+const STANDOUT_SPARKLINE_MAX_POINTS = 60;
 export const MOST_ACTIVE_COUNT = 5;
 export const HOTTEST_COUNT = 5;
 // Graded picks a capper needs in the week to be eligible for Hottest (one lucky bet can't top it).
@@ -68,7 +81,8 @@ const DAY_MS = 86400000;
 
 export type CapperSparkline = {
   // Cumulative units after each of the capper's last (up to) 20 graded picks, oldest first,
-  // starting from 0. Pushes are flat steps. Not affected by the page's time window.
+  // starting from 0. Pushes are flat steps. The leaderboard's is not affected by the page's time
+  // window; Standout's (CappersPageData.topSparklines) covers the selected window.
   points: number[];
   netUnits: number;
   // Graded picks behind the line (<= 20).
@@ -116,6 +130,8 @@ export type CappersPageData = {
   page: number;
   top: LeaderboardEntry[];
   sparklines: Map<string, CapperSparkline>;
+  // Standout cards: each card's graded picks across the page's selected window (n = all of them).
+  topSparklines: Map<string, CapperSparkline>;
   mostActive: ActivityEntry[];
   hottest: StreakEntry[];
   winners: WinnerEntry[];
@@ -300,7 +316,7 @@ function streakPanelSql(kind: "WIN" | "LOSS", userId: string, range: { start: Da
 export async function getPanelRows(q: { userId: string; panel: PanelKey; window: PanelWindow; now?: Date }): Promise<PanelRows> {
   const range = panelRange(q.window, q.now ?? new Date());
   const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
-    WITH roster AS (SELECT id, name, "colorTag", "isFavorite" FROM cappers WHERE "userId" = ${q.userId}),
+    WITH roster AS (SELECT id, name, "colorTag", "isFavorite" FROM cappers WHERE "userId" = ${q.userId} AND NOT "isTest"),
     pnl AS (${panelSql(q.panel, q.userId, range)})
     SELECT * FROM pnl
   `);
@@ -323,8 +339,9 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
   const ctes: [string, Prisma.Sql][] = [];
   const add = (name: string, sql: Prisma.Sql) => ctes.push([name, sql]);
 
-  add("roster", Prisma.sql`SELECT id, name, "colorTag", "isFavorite" FROM cappers WHERE "userId" = ${q.userId}`);
+  add("roster", Prisma.sql`SELECT id, name, "colorTag", "isFavorite" FROM cappers WHERE "userId" = ${q.userId} AND NOT "isTest"`);
   add("ut", windowTotalsSelect({ userId: q.userId }));
+  add("ut_r", Prisma.sql`SELECT * FROM ut WHERE "capperId" IN (SELECT id FROM roster)`);
   if (q.league) {
     add("lroster", Prisma.sql`SELECT DISTINCT p."capperId" AS cid FROM picks p WHERE p."userId" = ${q.userId} AND p."sportId" IN (SELECT id FROM sports WHERE name = ${q.league})`);
     add("lt", windowTotalsSelect({ userId: q.userId, sportName: q.league }));
@@ -350,12 +367,19 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
   const pageNo = Prisma.sql`LEAST(${Math.max(1, q.page)}::int, ${lastPage})`;
   add("pg", Prisma.sql`SELECT * FROM fil WHERE rn > (${pageNo} - 1) * ${PAGE_SIZE} AND rn <= ${pageNo} * ${PAGE_SIZE}`);
 
-  // Top cappers: same minimum-picks rule, but never below one decided pick (no ROI otherwise).
+  // Standout cappers: the selected window's own built-in minimum (STANDOUT_MIN_GRADED, never the
+  // leaderboard's dropdown). Qualify only with net units > 0 AND wins > losses; an odds-0 win makes
+  // net units non-finite and is left out. Ranked by net units, then win %, then graded picks.
+  // Nobody qualifying yields no rows - there is no fallback to a non-qualifying capper.
   add(
     "top",
-    Prisma.sql`SELECT * FROM ${Prisma.raw(unscoped)} WHERE decided >= ${Math.max(q.min, 1)} ORDER BY (roi_r = 'NaN'::float8), roi_r DESC, ${TIE_BREAK} LIMIT ${TOP_CAPPERS_COUNT}`
+    Prisma.sql`
+      SELECT * FROM ${Prisma.raw(unscoped)}
+      WHERE decided >= ${STANDOUT_MIN_GRADED[q.window]} AND net_r > 0 AND net_r < 'Infinity'::float8 AND wins > losses
+      ORDER BY net_r DESC, win_pct DESC, decided DESC, ${TIE_BREAK}
+      LIMIT ${TOP_CAPPERS_COUNT}`
   );
-  add("disp", Prisma.sql`SELECT cid FROM pg UNION SELECT cid FROM top`);
+  add("disp", Prisma.sql`SELECT cid FROM pg`);
 
   // Streaks: the hot-streaks card needs every capper's (unscoped) streak, computed once; the
   // leaderboard rows read theirs from it, or - with a league - a league-scoped one for the page's
@@ -391,6 +415,32 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
     `
   );
 
+  // Standout sparklines: the same graded picks the card's record is built from (the page window's
+  // predicate, WIN/LOSS/PUSH), as a running net-units sum oldest-first, thinned to ~60 points.
+  add(
+    "tsl",
+    Prisma.sql`
+      SELECT cid AS "capperId", max(i)::int AS n, jsonb_agg(cum ORDER BY i) FILTER (WHERE i % step = 0 OR i = cnt) AS pts
+      FROM (
+        SELECT cid, i, cnt, cum, GREATEST(1, CEIL(cnt::float8 / ${STANDOUT_SPARKLINE_MAX_POINTS}::float8)::int) AS step
+        FROM (
+          SELECT cid, i, cum, max(i) OVER (PARTITION BY cid) AS cnt
+          FROM (
+            SELECT cid, row_number() OVER (PARTITION BY cid ORDER BY gt, ca, id) AS i,
+              sum(delta) OVER (PARTITION BY cid ORDER BY gt, ca, id) AS cum
+            FROM (
+              SELECT p."capperId" AS cid, p."gameTime" AS gt, p."createdAt" AS ca, p.id COLLATE "C" AS id,
+                CASE p.status WHEN 'WIN' THEN COALESCE(${WIN_UNITS}, 0) WHEN 'LOSS' THEN -p.units ELSE 0 END::float8 AS delta
+              FROM picks p
+              JOIN w ON ${IN_WINDOW}
+              WHERE p."userId" = ${q.userId} AND p."capperId" IN (SELECT cid FROM top) AND p.status IN ('WIN', 'LOSS', 'PUSH')
+            ) g
+          ) r
+        ) c
+      ) t
+      GROUP BY cid
+    `
+  );
   // The four panels, all at the default "This week" window (see panelSql; the dropdown fetches one
   // panel at another window through getPanelRows).
   const weekRange = panelRange(DEFAULT_PANEL_WINDOW, now);
@@ -412,24 +462,24 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
         (SELECT count(*) FROM roster)::int AS "capperCount",
         (SELECT count(*) FROM roster WHERE "isFavorite")::int AS "favCount",
         a.cur, a.prev, a.week, a.prior,
-        (SELECT COALESCE(sum(wins), 0) FROM ut)::int AS wins, (SELECT COALESCE(sum(losses), 0) FROM ut)::int AS losses,
-        (SELECT COALESCE(sum(pushes), 0) FROM ut)::int AS pushes,
-        (SELECT COALESCE(sum("unitsWon"), 0) FROM ut)::float8 AS "unitsWon", (SELECT COALESCE(sum("unitsLost"), 0) FROM ut)::float8 AS "unitsLost",
-        (SELECT COALESCE(sum("unitsRisked"), 0) FROM ut)::float8 AS "unitsRisked",
-        (SELECT count(*) FROM st_u WHERE type = 'WIN' AND "count" >= ${HOT_STREAK_MIN})::int AS hot
+        (SELECT COALESCE(sum(wins), 0) FROM ut_r)::int AS wins, (SELECT COALESCE(sum(losses), 0) FROM ut_r)::int AS losses,
+        (SELECT COALESCE(sum(pushes), 0) FROM ut_r)::int AS pushes,
+        (SELECT COALESCE(sum("unitsWon"), 0) FROM ut_r)::float8 AS "unitsWon", (SELECT COALESCE(sum("unitsLost"), 0) FROM ut_r)::float8 AS "unitsLost",
+        (SELECT COALESCE(sum("unitsRisked"), 0) FROM ut_r)::float8 AS "unitsRisked",
+        (SELECT count(*) FROM st_u WHERE type = 'WIN' AND "count" >= ${HOT_STREAK_MIN} AND "capperId" IN (SELECT id FROM roster))::int AS hot
       FROM (
         SELECT
           (count(DISTINCT p."capperId") FILTER (WHERE ${curFilter}))::int AS cur,
           (count(DISTINCT p."capperId") FILTER (WHERE ${prevFilter}))::int AS prev,
           (count(*) FILTER (WHERE p."datePosted" >= ${ts(weekStart)} AND p."datePosted" < ${ts(now)}))::int AS week,
           (count(*) FILTER (WHERE p."datePosted" >= ${ts(priorWeekStart)} AND p."datePosted" < ${ts(weekStart)}))::int AS prior
-        FROM picks p WHERE p."userId" = ${q.userId} ${lowerBound}
+        FROM picks p WHERE p."userId" = ${q.userId} AND p."capperId" IN (SELECT id FROM roster) ${lowerBound}
       ) a
     `
   );
   if (q.fav) add("fs", windowTotalsSelect({ userId: q.userId, favoritesOnly: true, pooled: true }));
 
-  const outputs = ["ov", "pg", "top", "st", "stt", "sp", "sl", "ma", "hot", "win", "cold", ...(q.fav ? ["fs"] : [])];
+  const outputs = ["ov", "pg", "top", "st", "stt", "sp", "sl", "tsl", "ma", "hot", "win", "cold", ...(q.fav ? ["fs"] : [])];
   return Prisma.sql`
     WITH ${windowsCte([q.window], now)},
     ${Prisma.join(
@@ -484,11 +534,16 @@ export async function getCappersPageData(q: CappersPageQuery): Promise<CappersPa
   const total = pg.length ? Number(pg[0].total) : 0;
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const sparklines = new Map<string, CapperSparkline>();
-  for (const s of out.sl ?? []) {
-    const pts = (s.pts as number[]).map(Number);
-    sparklines.set(s.capperId, { points: [0, ...pts], netUnits: round2(pts[pts.length - 1] ?? 0), n: Number(s.n) });
-  }
+  const seriesMap = (rows: any[] | undefined) => {
+    const m = new Map<string, CapperSparkline>();
+    for (const s of rows ?? []) {
+      const pts = (s.pts as number[]).map(Number);
+      m.set(s.capperId, { points: [0, ...pts], netUnits: round2(pts[pts.length - 1] ?? 0), n: Number(s.n) });
+    }
+    return m;
+  };
+  const sparklines = seriesMap(out.sl);
+  const topSparklines = seriesMap(out.tsl);
 
   const pooled = recordStatsFromTotals({
     wins: ov.wins ?? 0,
@@ -523,6 +578,7 @@ export async function getCappersPageData(q: CappersPageQuery): Promise<CappersPa
     page: Math.min(Math.max(1, q.page), lastPage),
     top: ((out.top ?? []) as EntryRow[]).map((r) => entryOf(r, q.window, topStreaks.get(r.cid), null)),
     sparklines,
+    topSparklines,
     mostActive: (out.ma ?? []).map((m: ActivityEntry) => ({ capperId: m.capperId, name: m.name, colorTag: m.colorTag, pickCount: Number(m.pickCount) })),
     hottest: (out.hot ?? []).map((h: StreakEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, streak: Number(h.streak) })),
     winners: (out.win ?? []).map((h: WinnerEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, netUnits: Number(h.netUnits) })),

@@ -234,6 +234,8 @@ model Capper {
   customSource        String?
   notes               String?
   isFavorite          Boolean  @default(false)
+  // Test/dummy account: left out of every /cappers aggregate (leaderboard, panels, Standout, overview).
+  isTest              Boolean  @default(false)
   sportSpecialization String?
   colorTag            String?
   createdAt           DateTime @default(now())
