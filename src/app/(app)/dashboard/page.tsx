@@ -8,6 +8,8 @@ import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
 import { TrendingCappers } from "@/components/dashboard/trending-cappers";
 import { EnergyCountUp, EnergyRecordCountUp } from "@/components/dashboard/energy-surge";
 import { DropCatalogLink } from "@/components/dashboard/drop-catalog-button";
+import { ImageBanner } from "@/components/ui/ImageBanner";
+import dashboardBanner from "../../../../public/banners/dashboard.png";
 
 // Color is now owned by EnergySurge/EnergyCountUp (each value sets its own
 // final tone color directly, since the completion effect animates that same
@@ -42,8 +44,8 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
+      <ImageBanner src={dashboardBanner} title="Dashboard" priority />
+      <div className="mb-6 flex justify-end">
         <DropCatalogLink href="/picks/import" />
       </div>
 
