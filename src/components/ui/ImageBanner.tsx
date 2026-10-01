@@ -6,14 +6,16 @@ type ImageBannerProps = {
   src: StaticImageData;
   title: string;
   priority?: boolean;
+  // Tailwind height class for the mobile crop; override only when the default 68px clips the title.
+  mobileHeightClass?: string;
 };
 
-export function ImageBanner({ src, title, priority = false }: ImageBannerProps) {
+export function ImageBanner({ src, title, priority = false, mobileHeightClass = "h-[68px]" }: ImageBannerProps) {
   const style = { "--banner-ar": `${src.width} / ${src.height}` } as CSSProperties;
   return (
     <div
       style={style}
-      className="relative mb-6 h-[68px] w-full overflow-hidden rounded-xl border border-white/5 md:h-auto md:aspect-[var(--banner-ar)]"
+      className={`relative mb-6 ${mobileHeightClass} w-full overflow-hidden rounded-xl border border-white/5 md:h-auto md:aspect-[var(--banner-ar)]`}
     >
       <Image
         src={src}

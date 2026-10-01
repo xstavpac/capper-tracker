@@ -44,7 +44,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <ImageBanner src={dashboardBanner} title="Dashboard" priority />
+      <ImageBanner src={dashboardBanner} title="Dashboard" priority mobileHeightClass="h-[38px]" />
       <div className="mb-6 flex justify-end">
         <DropCatalogLink href="/picks/import" />
       </div>
