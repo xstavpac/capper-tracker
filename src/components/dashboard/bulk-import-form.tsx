@@ -64,6 +64,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // silently misread as a capper name that then swallows every real pick
   // after it.
   const [unresolvedLines, setUnresolvedLines] = useState<string[]>([]);
+  // Specific per-line failure reasons from the server recovery pass (line text -> reason).
+  const [unresolvedReasons, setUnresolvedReasons] = useState<Record<string, string>>({});
   // Indices in `parsed` for picks the static parser couldn't place and the
   // server's live-schedule fallback recovered (see recoverUnresolvedPicksAction).
   // Shown with a "live schedule" tag so the user can eyeball them - these
@@ -233,12 +235,14 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     let unresolvedAfter = unresolved;
     let recovered: ParsedPick[] = [];
     let recoveryRan = true;
+    setUnresolvedReasons({});
     if (unresolved.length > 0) {
       try {
         const res = await recoverUnresolvedPicksAction(text, existingCapperNames);
         recovered = res.recovered;
         effectiveItems = [...items, ...recovered];
         unresolvedAfter = res.stillUnresolved;
+        setUnresolvedReasons(res.reasons);
       } catch {
         // Best-effort - a fallback failure just leaves every line unresolved,
         // exactly as before this pass existed.
@@ -415,7 +419,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // Reason labels/counts for the "couldn't be identified" list - derived in
   // lib/bulk-import-summary.ts (the count itself stays totalSkipped's
   // unresolvedLines.length).
-  const unresolvedEntries = describeUnresolvedLines(unresolvedLines);
+  const unresolvedEntries = describeUnresolvedLines(unresolvedLines, unresolvedReasons);
   const unresolvedBreakdown = unresolvedReasonBreakdown(unresolvedEntries);
 
   // A flagged duplicate is excluded from the import by default - "Skip" just
@@ -614,6 +618,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         setParsed(null);
         setParlays([]);
         setUnresolvedLines([]);
+        setUnresolvedReasons({});
         setText("");
       }
     }

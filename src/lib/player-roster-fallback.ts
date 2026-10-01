@@ -192,3 +192,64 @@ export function resolvePlayerPropAgainstRoster(
 
   return { status: "unresolved" };
 }
+
+// Passing touchdowns (PASS_TDS) are a QB-only market, so a typed name resolves against the roster's
+// quarterbacks only: "Watson" is Deshaun Watson (QB), never WR Christian Watson. Same exact -> fuzzy ->
+// bare-surname tiers (and the same live-slate / paste-mention tie-breaks) as resolvePlayerPropAgainstRoster,
+// run on the QB subset - so when two QBs share a surname, the one whose team has a game in the live window
+// (or was named elsewhere in the paste) wins, and a tie that survives both is "ambiguous", never guessed.
+//
+// Unlike the generic resolver this one says WHY it failed (a specific, user-facing reason naming the
+// player) instead of just "unresolved", and applies the "has a game in the window" check when the live
+// slate is known: a QB whose team isn't on the NFL schedule/odds board can't be matched to a game anyway.
+export type PassTdResolution =
+  | { status: "resolved"; team: string; playerName: string; via: "exact" | "fuzzy" | "surname" }
+  | { status: "failed"; reason: string };
+
+function describeQuarterbacks(matches: { playerName: string; team: string }[]): string {
+  return matches.map((m) => m.playerName + " (" + m.team + ")").join(", ");
+}
+
+export function resolvePassingTdQuarterback(
+  line: string,
+  roster: RosterPlayer[],
+  relevantTeams?: string[],
+  pasteTeamMentions?: string[]
+): PassTdResolution | null {
+  const prop = parsePlayerProp(line);
+  if (!prop || prop.propMarket !== "PASS_TDS") return null;
+  const typed = prop.playerName;
+  const quarterbacks = roster.filter((p) => p.position === "QB");
+
+  const res = resolvePlayerPropAgainstRoster(line, quarterbacks, relevantTeams, pasteTeamMentions);
+  if (res.status === "resolved") {
+    // Only enforceable when the slate was actually fetched; an empty list means "unknown", not "no games".
+    if (relevantTeams && relevantTeams.length > 0 && !relevantTeams.includes(res.team)) {
+      return {
+        status: "failed",
+        reason:
+          res.playerName + " (" + res.team + ") has no game in the current NFL window (bye week or not scheduled), so this pick can't be matched to a game",
+      };
+    }
+    return { status: "resolved", team: res.team, playerName: res.playerName, via: res.via };
+  }
+  if (res.status === "ambiguous") {
+    return {
+      status: "failed",
+      reason:
+        '"' + typed + '" matches more than one quarterback (' + describeQuarterbacks(res.matches) + ") - add the first name to say which one",
+    };
+  }
+
+  // No QB matches. Say so precisely: a real player at another position is a different failure than an
+  // unknown name.
+  const other = resolvePlayerPropAgainstRoster(line, roster.filter((p) => p.position !== "QB"));
+  if (other.status === "resolved") {
+    const pos = roster.find((p) => p.playerName === other.playerName && p.team === other.team)?.position ?? "non-QB";
+    return {
+      status: "failed",
+      reason: other.playerName + " (" + other.team + ") is a " + pos + ", not a quarterback - passing TDs is a QB-only market",
+    };
+  }
+  return { status: "failed", reason: "couldn't find a quarterback named \"" + typed + "\" on an active NFL roster" };
+}

@@ -31,9 +31,9 @@ import {
   type ParsedPick,
 } from "@/lib/parse-catalog";
 import { resolveLineAgainstLiveTeams, parseFallbackBetText, type LiveTeam, type LineResolution } from "@/lib/live-team-fallback";
-import { resolvePlayerPropAgainstRoster } from "@/lib/player-roster-fallback";
+import { resolvePlayerPropAgainstRoster, resolvePassingTdQuarterback } from "@/lib/player-roster-fallback";
 import { resolveMlbPropAgainstRoster } from "@/lib/mlb-roster-fallback";
-import { parsePlayerProp } from "@/lib/bet-line";
+import { parsePlayerProp, isPassingTdsText } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { UNSUPPORTED_PROP_REASONS } from "@/lib/unsupported-prop-vocab";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
@@ -41,6 +41,9 @@ import type { RosterPlayer } from "@/server/data/nfl-roster";
 export type RecoverUnresolvedResult = {
   recovered: ParsedPick[];
   stillUnresolved: string[];
+  // Specific, user-facing reason for a stillUnresolved line, keyed by the exact line text. Only set
+  // where the resolver knows why (today: passing-TDs QB resolution); other lines keep the generic message.
+  reasons: Record<string, string>;
 };
 
 export function recoverUnresolvedLines(
@@ -57,6 +60,7 @@ export function recoverUnresolvedLines(
 ): RecoverUnresolvedResult {
   const recovered: ParsedPick[] = [];
   const stillUnresolved: string[] = [];
+  const reasons: Record<string, string> = {};
 
   const isPlayerProp = new Set(unresolved.filter((line) => parsePlayerProp(line) !== null));
 
@@ -203,19 +207,33 @@ export function recoverUnresolvedLines(
       // a tie via the slate and falls back to reporting `ambiguous`, same as
       // before this existed - no new network call is made to populate it.
       const relevantNflTeams = liveTeams.filter((t) => t.sport === "NFL").map((t) => t.name);
-      const res = resolvePlayerPropAgainstRoster(line, roster, relevantNflTeams, pasteTeamMentions);
-      if (res.status !== "resolved") {
-        // "ambiguous" (2+ distinct players matching) is deliberately treated
-        // the same as "unresolved" here, same policy as the team-name
-        // fallback below - never guessed.
-        stillUnresolved.push(line);
-        continue;
+      let team: string;
+      if (isPassingTdsText(line)) {
+        // QB-only market: resolves against quarterbacks and reports WHY it failed (ambiguous QBs, a
+        // non-QB, an unknown name, no game in the window) instead of the generic unresolved message.
+        const qb = resolvePassingTdQuarterback(line, roster, relevantNflTeams, pasteTeamMentions);
+        if (qb?.status !== "resolved") {
+          stillUnresolved.push(line);
+          if (qb) reasons[line] = qb.reason;
+          continue;
+        }
+        team = qb.team;
+      } else {
+        const res = resolvePlayerPropAgainstRoster(line, roster, relevantNflTeams, pasteTeamMentions);
+        if (res.status !== "resolved") {
+          // "ambiguous" (2+ distinct players matching) is deliberately treated
+          // the same as "unresolved" here, same policy as the team-name
+          // fallback below - never guessed.
+          stillUnresolved.push(line);
+          continue;
+        }
+        team = res.team;
       }
 
       const parsed = parsePickText(lineForParsing);
       recovered.push({
         capperName,
-        sportName: res.sport,
+        sportName: "NFL",
         description: withGameNumberSuffix(parsed.cleanDescription, gameNumber),
         betType: parsed.betType,
         odds: parsed.odds ?? -110,
@@ -224,7 +242,7 @@ export function recoverUnresolvedLines(
         units: parsed.units,
         period: parsed.period,
         raw: line,
-        teamNicknames: [res.team.toLowerCase()],
+        teamNicknames: [team.toLowerCase()],
         gameNumber,
       });
       continue;
@@ -255,5 +273,5 @@ export function recoverUnresolvedLines(
     });
   }
 
-  return { recovered, stillUnresolved };
+  return { recovered, stillUnresolved, reasons };
 }
