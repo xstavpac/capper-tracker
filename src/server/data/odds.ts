@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays, APP_TIME_ZONE } from "@/lib/dates";
 import { isSportInSeason, oddsApiRequestKeys } from "@/lib/sport-seasons";
 import type { OddsFetchStatus, BackfillStatus } from "@/lib/odds-cron-status";
+import { findSameDayDuplicateEvents, warnSameDayDuplicateEvents } from "@/lib/odds-duplicate-events";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { cacheKeys } from "@/lib/cache-keys";
 import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
@@ -545,6 +546,10 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsFetchResul
   // paper over; the live ticker (live-ticker.ts) keeps its own same-day
   // display filter independently.
 
+  // Visibility only (nothing is dropped here): two events for the same teams on
+  // the same ET date, e.g. the 2026-10-01 Phillies @ Braves phantom.
+  warnSameDayDuplicateEvents("seed", sportKey, fetchDate, findSameDayDuplicateEvents(games));
+
   await prisma.oddsSnapshot.upsert({
     where: { sportKey_fetchDate: { sportKey, fetchDate } },
     update: { data: games as any },
@@ -712,6 +717,18 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
 
   const missingGames = freshGames.filter((g) => !existingIds.has(g.id));
   if (missingGames.length === 0) return { added: 0, status: "nothing_missing" };
+
+  // Visibility only: warn when a game about to be appended shares its teams and
+  // ET date with another event in today's API listing (checked over freshGames,
+  // so a duplicate between a new and an already-cached event is seen too, and a
+  // run that appends nothing stays silent instead of repeating every 4h).
+  const missingIds = new Set(missingGames.map((g) => g.id));
+  warnSameDayDuplicateEvents(
+    "backfill",
+    sportKey,
+    fetchDate,
+    findSameDayDuplicateEvents(freshGames).filter((grp) => grp.events.some((e) => missingIds.has(e.id)))
+  );
 
   // Append server-side (jsonb array || jsonb array == [...existing, ...missing])
   // instead of read-modify-write: the existing games stay byte-for-byte what

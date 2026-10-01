@@ -355,7 +355,7 @@ export async function getPicksForGame(
 export async function getPicksForGames(
   userId: string,
   sportName: string,
-  games: { homeTeam: string; awayTeam: string; commenceTime: Date }[]
+  games: { homeTeam: string; awayTeam: string; commenceTime: Date; gameNumber?: number | null }[]
 ) {
   if (games.length === 0) return [];
 
@@ -374,12 +374,53 @@ export async function getPicksForGames(
   });
   if (allPicks.length === 0) return games.map(() => []);
 
-  return games.map((game) => {
+  const matchedPerGame = games.map((game) => {
     const gameWindowStart = new Date(game.commenceTime.getTime() - 2 * 86400000);
     const gameWindowEnd = new Date(game.commenceTime.getTime() + 2 * 86400000);
     const candidates = allPicks.filter((p) => p.gameTime >= gameWindowStart && p.gameTime < gameWindowEnd);
     return matchPicksToGame(candidates, game, sportName);
   });
+  return assignPicksToNearestGame(matchedPerGame, games);
+}
+
+// matchPicksToGame matches each game independently, so a pick can land on
+// several cards of the same matchup - two legs of a doubleheader, or two cards
+// whose start times are both inside the 6h drift window (2026-10-01: the same
+// 16 Phillies/Braves picks showed under a 1:00 PM and a 7:11 PM card). Here each
+// pick keeps only the ONE card it belongs to: the nearest by
+// |gameTime - commenceTime|, ties (a pick exactly equidistant from two cards)
+// going to the earlier card, then the lower index. A pick carrying a
+// doubleheader gameNumber first rules out cards whose own gameNumber differs;
+// if that rules out every card it falls back to plain nearest rather than
+// vanishing. Pure; a pick on only one card is returned untouched, in order.
+export function assignPicksToNearestGame<T extends { gameTime: Date; gameNumber?: number | null }>(
+  matchedPerGame: T[][],
+  games: { commenceTime: Date; gameNumber?: number | null }[]
+): T[][] {
+  const owner = new Map<T, number>();
+  const claimants = new Map<T, number[]>();
+  matchedPerGame.forEach((picks, gi) => {
+    for (const p of picks) claimants.set(p, [...(claimants.get(p) ?? []), gi]);
+  });
+
+  for (const [pick, gis] of claimants) {
+    if (gis.length === 1) {
+      owner.set(pick, gis[0]);
+      continue;
+    }
+    const sameLeg = gis.filter(
+      (gi) => pick.gameNumber == null || games[gi].gameNumber == null || games[gi].gameNumber === pick.gameNumber
+    );
+    const pool = sameLeg.length > 0 ? sameLeg : gis;
+    const dist = (gi: number) => Math.abs(pick.gameTime.getTime() - games[gi].commenceTime.getTime());
+    pool.sort(
+      (a, b) =>
+        dist(a) - dist(b) || games[a].commenceTime.getTime() - games[b].commenceTime.getTime() || a - b
+    );
+    owner.set(pick, pool[0]);
+  }
+
+  return matchedPerGame.map((picks, gi) => picks.filter((p) => owner.get(p) === gi));
 }
 
 // A capper's all-time record within one specific pickCategory (favorite/

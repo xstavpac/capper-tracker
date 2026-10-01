@@ -28,6 +28,7 @@ import { formatPickLabel } from "@/lib/bet-line";
 import { type ExpanderPick } from "@/components/live/game-picks-expander";
 import { slateCutoffKey } from "@/components/live/live-scoreboard-ordering";
 import { easternDateKey } from "@/lib/dates";
+import { dropPhantomCards } from "@/lib/live-board-dedup";
 
 export type LiveBoardData = {
   odds: OddsGame[];
@@ -56,15 +57,25 @@ export async function getLiveBoardData(
   );
   const boardOdds = allOdds.filter((g) => easternDateKey(new Date(g.commenceTime)) <= cutoffKey);
   const boardGameIds = new Set(boardOdds.map((g) => g.id));
-  const odds = [...boardOdds, ...yesterdayOdds.filter((g) => !boardGameIds.has(g.id))];
+  // Drop phantom cards (an Odds API event with no schedule-feed game, next to a
+  // same-teams same-day sibling that has one) BEFORE pick matching and before
+  // returning, so picks, Board Pulse and the parlay generators all see the
+  // cleaned list. Rule and rationale: lib/live-board-dedup.ts.
+  const { games: odds, scheduleGames } = dropPhantomCards(
+    [...boardOdds, ...yesterdayOdds.filter((g) => !boardGameIds.has(g.id))],
+    scores
+  );
 
   const matchedPicksByGame = await getPicksForGames(
     userId,
     sportLabel,
-    odds.map((game) => ({
+    odds.map((game, i) => ({
       homeTeam: game.homeTeam,
       awayTeam: game.awayTeam,
       commenceTime: new Date(game.commenceTime),
+      // MLB doubleheader leg, when the schedule feed assigned this card one;
+      // null for a single game ("N") so it can never exclude a card.
+      gameNumber: scheduleGames[i]?.doubleHeaderStatus === "N" ? null : (scheduleGames[i]?.gameNumber ?? null),
     }))
   );
 
