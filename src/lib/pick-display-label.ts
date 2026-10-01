@@ -52,6 +52,7 @@ const PROP_MARKET_PHRASES: Record<string, string> = {
   RECEPTIONS: "Receptions",
   RUSH_REC_YDS: "Rush+Rec Yds",
   PASS_RUSH_YDS: "Pass+Rush Yds",
+  PASS_TDS: "Passing TDs",
   // NHL markets (ANYTIME_GOAL / FIRST_GOAL are yes-no shaped, handled below)
   SHOTS_ON_GOAL: "Shots on Goal",
   POINTS: "Points",
@@ -152,7 +153,10 @@ export function buildPickDisplayLabel(input: PickDisplayLabelInput): string | nu
       if (!lineInfo) return null;
 
       const sideWord = lineInfo.direction === "OVER" ? "Over" : "Under";
-      return `${cleanedName} ${sideWord} ${lineInfo.line} ${phrase}`;
+      // Passing-TDs picks are often recovered from a bare typed name ("Deshaun watson over 0.5 ...");
+      // capitalize a word only when the capper left it lowercase, so "DeAndre"/"McCaffrey" are untouched.
+      const shownName = input.propMarket === "PASS_TDS" ? cleanedName.replace(/(^|\s)([a-z])/g, (_m, sp: string, c: string) => sp + c.toUpperCase()) : cleanedName;
+      return `${shownName} ${sideWord} ${lineInfo.line} ${phrase}`;
     }
 
     case "NRFI": {

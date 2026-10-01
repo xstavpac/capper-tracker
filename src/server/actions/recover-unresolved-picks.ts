@@ -4,7 +4,7 @@ import { requireUser } from "@/server/auth";
 import { parseCatalog, parseSupportedMlbProp } from "@/lib/parse-catalog";
 import type { LiveTeam } from "@/lib/live-team-fallback";
 import { recoverUnresolvedLines, type RecoverUnresolvedResult } from "@/lib/recover-unresolved-lines";
-import { parsePlayerProp } from "@/lib/bet-line";
+import { parsePlayerProp, isPassingTdsText } from "@/lib/bet-line";
 import { getLiveScoresForSport, getOddsForSport, LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { getCachedNflRoster } from "@/server/data/nfl-roster-cache";
 import { getCachedNhlRoster } from "@/server/data/nhl-roster-cache";
@@ -92,14 +92,17 @@ export async function recoverUnresolvedPicksAction(
   const rosterFullNames = roster.map((p) => p.playerName);
 
   const { picks, unresolved, unresolvedCapperNames } = parseCatalog(text, knownCapperNames, rosterFullNames);
-  if (unresolved.length === 0) return { recovered: [], stillUnresolved: [] };
+  if (unresolved.length === 0) return { recovered: [], stillUnresolved: [], reasons: {} };
 
   // Partition once, up front, so live-team data is fetched at most once (and
   // only when a line that could actually use it exists) - the roster is
   // already in hand from the fetch above.
   const isPlayerProp = new Set(unresolved.filter((line) => parsePlayerProp(line) !== null));
 
-  const liveTeams = isPlayerProp.size < unresolved.length ? await gatherLiveTeamNames() : [];
+  // Passing-TDs lines need the live slate too: it breaks a QB surname tie and backs the "has a game in the
+  // window" check (see resolvePassingTdQuarterback), even in a paste made entirely of player props.
+  const needsLiveTeams = isPlayerProp.size < unresolved.length || unresolved.some(isPassingTdsText);
+  const liveTeams = needsLiveTeams ? await gatherLiveTeamNames() : [];
 
   // `picks` - the lines parseCatalog already resolved outright on its first
   // pass over this same paste - is passed through as paste-local

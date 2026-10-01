@@ -831,7 +831,7 @@ function rowFor<T extends { espnPlayerId: string | null; playerName: string; tea
 async function locateNflPlayer(
   playerName: string,
   eventId: string,
-  pool: "offense" | "all",
+  pool: "offense" | "all" | "passers",
   deps: NflPropDeps
 ): Promise<NflLocateResult> {
   const fail = (reason: string): NflLocateResult => ({ ok: false, resolution: { outcome: null, reason } });
@@ -843,13 +843,17 @@ async function locateNflPlayer(
   if (!index.isFinal) return fail("the box score isn't final yet for this game");
 
   const offense = index.players.filter(isOffensePlayer);
-  const candidates = pool === "offense" ? offense : index.players;
+  // "passers" (passing-TDs market, QB-only): names match against the players with a passing row, so a
+  // WR sharing the surname ("Watson" in a game with Deshaun and Christian) can never collide. A QB who
+  // is in the box score without a passing row is still found through the roster path below (real 0).
+  const passers = index.players.filter((p) => p.groups.includes("passing"));
+  const candidates = pool === "offense" ? offense : pool === "passers" ? passers : index.players;
   const hit = matchNflPlayerName(
     playerName,
     candidates,
     (p) => p.playerName,
     (p) => p.espnPlayerId,
-    { surnamePool: offense }
+    { surnamePool: pool === "passers" ? passers : offense }
   );
   if (hit.status === "many") return fail('"' + playerName + '" matches more than one player in this game\'s box score');
 
@@ -866,7 +870,7 @@ async function locateNflPlayer(
     }
     const rosterHit = matchNflPlayerName(
       playerName,
-      roster,
+      pool === "passers" ? roster.filter((r) => r.position === "QB") : roster,
       (r) => r.playerName,
       (r) => r.externalPlayerId,
       { getLastName: (r) => r.lastName, allowFuzzy: false }
@@ -878,7 +882,7 @@ async function locateNflPlayer(
     if (inBox) {
       // Same player, spelled differently than ESPN's displayName. Only usable
       // if they're in the pool this market grades from.
-      if (!candidates.includes(inBox)) return notFound();
+      if (!(pool === "passers" ? offense : candidates).includes(inBox)) return notFound();
       player = inBox;
     } else {
       if (!index.teams.includes(rp.team) || !index.explicitlyFinal || !index.isComplete) return notFound();
@@ -1009,7 +1013,9 @@ function resolvedPlayerName(pick: PlayerPropPick): string | null {
 // nfl-rushing-receiving-rows.ts), which store passingYards/rushingYards/
 // receivingYards/receptions as integers. RUSH_REC_YDS/PASS_RUSH_YDS actual
 // values are a sum of two of these integers, still always a whole number, so
-// the same reasoning holds without a separate check.
+// the same reasoning holds without a separate check. PASS_TDS (a TD count) is
+// an integer too: o0.5/o1.5 can never push, a whole-number line ("over 2")
+// pushes on equal.
 function gradeAgainstLine(actual: number, line: number, direction: "OVER" | "UNDER"): "WIN" | "LOSS" | "PUSH" {
   if (actual === line) return "PUSH";
   return actual > line === (direction === "OVER") ? "WIN" : "LOSS";
@@ -1051,7 +1057,7 @@ async function resolveYardageOrReceptionsProp(
     return { outcome: null, reason: "couldn't identify a player name in the bet text" };
   }
 
-  const located = await locateNflPlayer(playerName, eventId, "offense", deps);
+  const located = await locateNflPlayer(playerName, eventId, market === "PASS_TDS" ? "passers" : "offense", deps);
   if (!located.ok) return located.resolution;
 
   // A player present in the box score but with no row in this market's stat
@@ -1073,7 +1079,9 @@ async function resolveYardageOrReceptionsProp(
             ? recYds
             : market === "RECEPTIONS"
               ? (receiving?.receptions ?? 0)
-              : rushYds + recYds; // RUSH_REC_YDS
+              : market === "PASS_TDS"
+                ? (passing?.touchdowns ?? 0)
+                : rushYds + recYds; // RUSH_REC_YDS
 
   return { outcome: gradeAgainstLine(actual, lineInfo.line, lineInfo.direction) };
 }

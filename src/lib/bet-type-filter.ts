@@ -42,6 +42,7 @@ export type BetTypeFilterKey =
   | "RECEPTIONS"
   | "RUSH_REC_YDS"
   | "PASS_RUSH_YDS"
+  | "PASS_TDS"
   | "ANYTIME_GOAL"
   | "FIRST_GOAL"
   | "SHOTS_ON_GOAL"
@@ -74,6 +75,7 @@ export const BET_TYPE_FILTER_OPTIONS: { value: BetTypeFilterKey; label: string }
   { value: "RECEPTIONS", label: "Receptions" },
   { value: "RUSH_REC_YDS", label: "Rush + Rec Yards" },
   { value: "PASS_RUSH_YDS", label: "Pass + Rush Yards" },
+  { value: "PASS_TDS", label: "Passing TDs" },
   { value: "ANYTIME_GOAL", label: "Anytime Goal" },
   { value: "FIRST_GOAL", label: "First Goal" },
   { value: "SHOTS_ON_GOAL", label: "Shots on Goal" },
@@ -172,7 +174,7 @@ export function betTypeOptionsForChipSet(chipSet: PickCategoryKey[] | null): Set
   if (has(FIRST_HALF_CATEGORY_KEYS)) options.push("F5_SPREAD", "F5_MONEYLINE", "F5_TOTAL");
   if (chipSet.includes("TEAM_TOTAL")) options.push("TEAM_TOTAL");
   if (chipSet.includes("TD_PROP"))
-    options.push("TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "RUSH_REC_YDS", "PASS_RUSH_YDS");
+    options.push("TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "RUSH_REC_YDS", "PASS_RUSH_YDS", "PASS_TDS");
   // NHL player props: hockey is the only chip set with the P1/P2/P3 segment
   // categories (and it has no TD_PROP tile, so the block above skips it).
   if (has(["FIRST_PERIOD_ML"])) options.push("ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "ASSISTS", "SAVES");

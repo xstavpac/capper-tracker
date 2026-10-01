@@ -360,6 +360,9 @@ export function parseTouchdownProp(
   text: string
 ): { playerName: string; propType: TdPropType; unsupported?: string } | null {
   if (!/\btouchdowns?\b/i.test(text) && !/\btds?\b/i.test(text) && !/\batd\b/i.test(text)) return null;
+  // "Watson over 0.5 passing touchdowns" is the PASS_TDS count market, not a TD-scorer prop - see
+  // PASSING_TDS_PATTERN. Declined here so it can never be read (or priced) as anytime-TD.
+  if (isPassingTdsText(text)) return null;
 
   // First-TD ("who scores first in the game") and multi-TD ("2+ TDs") are a
   // different bet shape than the anytime-TD market this app actually grades
@@ -428,7 +431,8 @@ export type PlayerPropMarket =
   | "RECEPTIONS"
   | "TD"
   | "RUSH_REC_YDS"
-  | "PASS_RUSH_YDS";
+  | "PASS_RUSH_YDS"
+  | "PASS_TDS";
 
 // The stat-category word ALONE is enough to identify PASS_YDS/RUSH_YDS - "65.5
 // rushing", "245.5 passing" - a real capper catalog import gap found testing
@@ -485,8 +489,19 @@ const LEADING_YARDS = `(?:\\b${YARDS_UNIT}\\s+)?`;
 // already produces - no player-position/roster lookup needed to make this
 // call: "passing and receiving" cannot be a genuine distinct market for
 // ANY player, QB or otherwise, so the typo-correction is safe unconditionally.
+// NFL passing touchdowns (PASS_TDS): "passing touchdowns", "passing TDs", "pass TD", "pass touchdowns" -
+// the passing qualifier sits directly next to the TD word, so a bare "Watson anytime TD" / "to score a
+// TD" (the scorer market) never matches. Hoisted use from parseTouchdownProp is safe: function call time.
+const PASSING_TDS_PATTERN = /\bpass(?:ing)?\s+(?:touchdowns?|tds?)\b/i;
+
+export function isPassingTdsText(text: string): boolean {
+  return PASSING_TDS_PATTERN.test(text);
+}
+
 const PROP_MARKET_CONNECTOR = /\s*(?:and|&|\+|\/)\s*/.source;
 const PLAYER_PROP_STAT_PATTERNS: [Exclude<PlayerPropMarket, "TD">, RegExp][] = [
+  // First: "passing touchdowns" would otherwise be claimed by PASS_YDS's bare "passing" below.
+  ["PASS_TDS", PASSING_TDS_PATTERN],
   [
     "RUSH_REC_YDS",
     new RegExp(
@@ -514,7 +529,8 @@ const PLAYER_PROP_STAT_PATTERNS: [Exclude<PlayerPropMarket, "TD">, RegExp][] = [
 // ONLY when the text right after the "N+" is one of this app's supported
 // yardage/receptions markets (PLAYER_PROP_STAT_PATTERNS), so:
 //   - "2+ TDs" is untouched (parseTouchdownProp keeps its own multi-TD
-//     "unsupported" handling - TD isn't in PLAYER_PROP_STAT_PATTERNS);
+//     "unsupported" handling - TD isn't in PLAYER_PROP_STAT_PATTERNS), but
+//     "2+ passing TDs" IS rewritten: PASS_TDS is a count market with a line;
 //   - "1+ sacks", "3+ passing completions" etc. aren't rewritten (see
 //     unsupported-prop-vocab.ts, which routes them to unresolved);
 //   - text that already states its own over/under number is left alone.

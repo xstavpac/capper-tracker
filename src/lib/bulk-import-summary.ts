@@ -114,8 +114,10 @@ export function totalSkipped(categories: SkippedPickCategories): number {
 
 export type UnresolvedLineEntry = { text: string; reason: string | null };
 
-export function describeUnresolvedLines(lines: string[]): UnresolvedLineEntry[] {
-  return lines.map((text) => ({ text, reason: detectUnsupportedPropLine(text)?.reason ?? null }));
+// `specificReasons` (line text -> reason, from the server recovery pass) wins over the vocabulary detector:
+// it knows why THIS line failed (e.g. which quarterbacks a surname matched).
+export function describeUnresolvedLines(lines: string[], specificReasons: Record<string, string> = {}): UnresolvedLineEntry[] {
+  return lines.map((text) => ({ text, reason: specificReasons[text] ?? detectUnsupportedPropLine(text)?.reason ?? null }));
 }
 
 // How many unresolved lines carry an "isn't supported yet" reason, grouped by
