@@ -9,6 +9,8 @@ import { MODEL_VARIABLES } from "@/lib/model-builder";
 import { getCustomMetricVariables } from "@/server/data/custom-metrics";
 import { getCappersForUser } from "@/server/data/cappers";
 import { getSportsWithLeagues } from "@/server/data/picks";
+import { ImageBanner } from "@/components/ui/ImageBanner";
+import chartsBanner from "../../../../public/banners/charts.png";
 
 const MLB_KEY = "baseball_mlb";
 const NFL_KEY = "americanfootball_nfl";
@@ -65,9 +67,9 @@ export default async function ChartsPage() {
 
   return (
     <div className="mx-auto max-w-[1400px]">
+      <ImageBanner src={chartsBanner} title="Charts" priority />
       <div className="mb-6">
-        <h1 className="text-xl font-semibold">Charts</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Pick a sport, a team, and a variable to see its history - stats and tendencies fill in over time as games are
           played and the snapshot jobs run, so recent variables may only show a few points so far. Upload your own CSV
           metrics with Add Custom Metric to chart them right alongside the built-in ones.

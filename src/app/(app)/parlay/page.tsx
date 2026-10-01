@@ -3,6 +3,8 @@ import { LIVE_SPORTS } from "@/server/data/odds";
 import { ParlaySlipButton } from "@/components/parlay/parlay-slip-button";
 import { ParlayPoolSection } from "@/components/parlay/parlay-pool-section";
 import { AutoGenerateSection } from "@/components/parlay/auto-generate-section";
+import { ImageBanner } from "@/components/ui/ImageBanner";
+import parlayBanner from "../../../../public/banners/parlay.png";
 
 // The Parlay Generator. Auto-Generate (AutoGenerateSection) builds Parlay A
 // and its Hedge/Contrarian variants from today's games. My Picks mode builds
@@ -16,13 +18,11 @@ export default async function ParlayPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
+      <ImageBanner src={parlayBanner} title="Parlay Generator" priority />
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Parlay Generator</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Auto-Generate a parlay from today&apos;s games, or build one from your pooled picks.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Auto-Generate a parlay from today&apos;s games, or build one from your pooled picks.
+        </p>
         <ParlaySlipButton />
       </div>
 
