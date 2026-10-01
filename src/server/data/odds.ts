@@ -10,6 +10,7 @@ import { cacheKeys } from "@/lib/cache-keys";
 import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
 import { cachedByTag } from "@/server/data/cached";
 import { persistOddsApiUsage } from "@/server/data/odds-api-usage";
+import { getYesterdayBoardGames } from "@/server/data/odds-projections";
 
 // Live scores are current-ish data polled every 25s per open /live tab -
 // keep the window tight. Odds change at most every 4h (the backfill cron)
@@ -584,12 +585,37 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsFetchResul
 // drops these again the moment they go Final). Returns [] if last night's
 // snapshot is missing - same "nothing to show" outcome as any other day
 // with no cached odds.
+//
+// Egress: this used to findUnique the whole snapshot blob (70-320 kB, far more
+// for NFL with props) on EVERY /live load, per user. It now reads a Postgres-side
+// projection (getYesterdayBoardGames: every game's top-level fields plus only the
+// bookmakers/markets /live can reach) through the shared Data Cache, so one read
+// per (sport, day) serves every user. Returned games are NOT full boards - callers
+// needing a full bookmaker x market payload must not use this (nothing else does).
+//
+// TTL: nothing writes a snapshot after its ET day ends - the seed, the backfill
+// append and the NFL prop enrichment all write the row for the day they started
+// on (the one exception is a run that starts in the last seconds before midnight
+// and finishes after it). And any such write still revalidates the exact tag this
+// entry carries, so the TTL is only the backstop for a failed revalidateTag and
+// can be long.
+const YESTERDAY_ODDS_CACHE_TTL_SECONDS = 6 * 3600;
+
+// Pure so the key/tag/TTL contract is provable without a Next request context.
+export function yesterdayOddsCacheParams(sportKey: string, fetchDate: string) {
+  return {
+    key: cacheKeys.yesterdayOdds(sportKey, fetchDate),
+    // The tag every OddsSnapshot write path already revalidates for this
+    // (sportKey, fetchDate) - so no write path needed to change.
+    tags: [cacheKeys.odds(sportKey, fetchDate)],
+    ttlSeconds: YESTERDAY_ODDS_CACHE_TTL_SECONDS,
+  };
+}
+
 export async function getYesterdayOddsForSport(sportKey: string): Promise<OddsGame[]> {
   const fetchDate = easternDateKey(new Date(Date.now() - 86400000));
-  const snapshot = await prisma.oddsSnapshot.findUnique({
-    where: { sportKey_fetchDate: { sportKey, fetchDate } },
-  });
-  return snapshot ? (snapshot.data as unknown as OddsGame[]) : [];
+  const p = yesterdayOddsCacheParams(sportKey, fetchDate);
+  return cachedByTag(p.key, p.ttlSeconds, () => getYesterdayBoardGames(sportKey, fetchDate), p.tags);
 }
 
 // Runs periodically (see /api/cron/backfill-odds), well after the once-daily
