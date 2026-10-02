@@ -7,8 +7,8 @@ import { CapperForm } from "@/components/dashboard/capper-form";
 import { MergeCappersPanel } from "@/components/dashboard/merge-cappers-panel";
 import { CappersTimeTabs } from "@/components/dashboard/cappers-time-tabs";
 import { CappersStatCards } from "@/components/dashboard/cappers-stat-cards";
-import { CapperPanel } from "@/components/dashboard/capper-panel";
-import { FlameIcon, SnowflakeIcon, TrendingUpIcon, ActivityIcon } from "@/components/dashboard/cappers-icons";
+import { CapperPanel, FormPanel } from "@/components/dashboard/capper-panel";
+import { FlameIcon, SnowflakeIcon, TrendingUpIcon, ActivityIcon, ArrowUpIcon, ListChecksIcon } from "@/components/dashboard/cappers-icons";
 import { TopCappers } from "@/components/dashboard/top-cappers";
 import { CappersLeaderboardCard } from "@/components/dashboard/cappers-leaderboard-card";
 import { ImageBanner } from "@/components/ui/ImageBanner";
@@ -60,7 +60,9 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
           <CappersStatCards stats={data.overview} capperCount={data.capperCount} range={params.range} />
           <div className="grid grid-cols-1 items-stretch gap-4 min-[769px]:grid-cols-2 sm:gap-6">
             <CapperPanel panel="active" icon={<ActivityIcon />} initial={data.mostActive} />
+            <FormPanel panel="rising" icon={<ArrowUpIcon />} rows={data.rising} />
             <CapperPanel panel="hottest" icon={<FlameIcon />} initial={data.hottest} />
+            <FormPanel panel="consistent" icon={<ListChecksIcon />} rows={data.consistent} />
             <CapperPanel panel="winners" icon={<TrendingUpIcon />} initial={data.winners} />
             <CapperPanel panel="coldest" icon={<SnowflakeIcon />} initial={data.coldest} />
           </div>

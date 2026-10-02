@@ -23,3 +23,26 @@ export const STREAK_PANEL_MIN = 3;
 export const STREAK_LOOKBACK = 100;
 
 export type PanelRows = ActivityEntry[] | WinnerEntry[] | StreakEntry[];
+
+// Rising Fast / Most Consistent are windowless: they read each capper's newest decided (WIN / LOSS)
+// picks by count, never the time tabs or the dropdown, so they are not PanelKeys (no /api/cappers/panel).
+// Decided picks are examined newest first in the canonical ORDER_DESC, at most FORM_LOOKBACK per capper.
+export const FORM_LOOKBACK = 100;
+// Rising Fast: recent = newest RISING_RECENT; baseline = the picks BEFORE those (never the combined set),
+// needing at least RISING_MIN_BASELINE of them. Score = recent win% - baseline win%, positive only.
+export const RISING_RECENT = 10;
+export const RISING_MIN_BASELINE = 30;
+// Most Consistent: the newest CONSISTENT_PICKS decided picks (all required) in CONSISTENT_BLOCKS
+// sequential blocks; the mean block win% must be at least CONSISTENT_MIN_MEAN_PCT.
+export const CONSISTENT_PICKS = 50;
+export const CONSISTENT_BLOCKS = 5;
+export const CONSISTENT_MIN_MEAN_PCT = 50;
+export const FORM_PANEL_COUNT = 5;
+
+export type FormPanelKey = "rising" | "consistent";
+
+// `form`: the recent decided picks oldest first (1 = win, 0 = loss) - the sparkline series. The score
+// itself stays server-side (ranking only).
+export type RisingEntry = { capperId: string; name: string; colorTag: string | null; form: number[] };
+// `blocks`: each block's win % (0-100), oldest block first - the sparkline series.
+export type ConsistentEntry = { capperId: string; name: string; colorTag: string | null; blocks: number[] };

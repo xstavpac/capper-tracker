@@ -48,6 +48,15 @@ import {
   DEFAULT_PANEL_WINDOW,
   STREAK_LOOKBACK,
   STREAK_PANEL_MIN,
+  FORM_LOOKBACK,
+  RISING_RECENT,
+  RISING_MIN_BASELINE,
+  CONSISTENT_PICKS,
+  CONSISTENT_BLOCKS,
+  CONSISTENT_MIN_MEAN_PCT,
+  FORM_PANEL_COUNT,
+  type ConsistentEntry,
+  type RisingEntry,
   type PanelKey,
   type PanelRows,
   type PanelWindow,
@@ -136,6 +145,8 @@ export type CappersPageData = {
   hottest: StreakEntry[];
   winners: WinnerEntry[];
   coldest: StreakEntry[];
+  rising: RisingEntry[];
+  consistent: ConsistentEntry[];
   favSummary: FavoriteCappersSummary | null;
 };
 
@@ -312,6 +323,86 @@ function streakPanelSql(kind: "WIN" | "LOSS", userId: string, range: { start: Da
   `;
 }
 
+// Rising Fast / Most Consistent, both read from ONE bounded lookup of each roster capper's newest
+// FORM_LOOKBACK decided picks (WIN / LOSS only; push, cancelled and pending are not decided), newest
+// first in ORDER_DESC via the same LATERAL index-ordered LIMIT the streak panels use
+// (picks_user_capper_streak_idx). They read the `roster` CTE, so they share the other panels' capper
+// eligibility (test accounts left out), and ignore the page's time window. Returns [name, sql] CTEs:
+//   dl         (cid, win, rn)  rn 1 = newest.
+//   rising     recent = rn 1..RISING_RECENT, baseline = rn > RISING_RECENT (never the combined set).
+//              Needs exactly RISING_RECENT recent + >= RISING_MIN_BASELINE baseline; score =
+//              recent win% - baseline win% must be > 0. Ranked score desc, larger baseline, id.
+//   consistent the newest CONSISTENT_PICKS (all required) as CONSISTENT_BLOCKS equal blocks, oldest
+//              first; mean block win% >= CONSISTENT_MIN_MEAN_PCT. Ranked by population standard
+//              deviation of the block win%s ascending, then higher mean, then id.
+// Scores are numeric (exact) and rounded to 9 places so equal fractions tie instead of differing by
+// float noise. Neither score leaves the database - rows carry only the sparkline series.
+export function formPanelCtes(userId: string): [string, Prisma.Sql][] {
+  const blockSize = CONSISTENT_PICKS / CONSISTENT_BLOCKS;
+  return [
+    [
+      "dl",
+      Prisma.sql`
+        SELECT r.id AS cid, q.win,
+          row_number() OVER (PARTITION BY r.id ORDER BY q."gameTime" DESC, q."createdAt" DESC, q.id COLLATE "C" DESC) AS rn
+        FROM roster r
+        CROSS JOIN LATERAL (
+          SELECT (p.status = 'WIN') AS win, p."gameTime", p."createdAt", p.id
+          FROM picks p
+          WHERE p."userId" = ${userId} AND p."capperId" = r.id AND p.status IN ('WIN', 'LOSS')
+          ORDER BY ${ORDER_DESC}
+          LIMIT ${FORM_LOOKBACK}
+        ) q
+      `,
+    ],
+    [
+      "rising",
+      Prisma.sql`
+        SELECT s.cid AS "capperId", r.name, r."colorTag",
+          (SELECT array_agg(d.win::int ORDER BY d.rn DESC) FROM dl d WHERE d.cid = s.cid AND d.rn <= ${RISING_RECENT}::int) AS form
+        FROM (
+          SELECT cid,
+            count(*) FILTER (WHERE rn <= ${RISING_RECENT}::int) AS rn_n,
+            count(*) FILTER (WHERE rn <= ${RISING_RECENT}::int AND win) AS rw,
+            count(*) FILTER (WHERE rn > ${RISING_RECENT}::int) AS bn,
+            count(*) FILTER (WHERE rn > ${RISING_RECENT}::int AND win) AS bw
+          FROM dl GROUP BY cid
+        ) s
+        JOIN roster r ON r.id = s.cid
+        WHERE s.rn_n = ${RISING_RECENT}::int AND s.bn >= ${RISING_MIN_BASELINE}::int
+          AND round(s.rw::numeric / s.rn_n - s.bw::numeric / s.bn, 9) > 0
+        ORDER BY round(s.rw::numeric / s.rn_n - s.bw::numeric / s.bn, 9) DESC, s.bn DESC, r.id COLLATE "C"
+        LIMIT ${FORM_PANEL_COUNT}
+      `,
+    ],
+    [
+      "consistent",
+      Prisma.sql`
+        SELECT b.cid AS "capperId", r.name, r."colorTag", b.blocks
+        FROM (
+          SELECT cid, sum(n) AS n, sum(w) AS tw,
+            round(stddev_pop(w::numeric * 100 / n), 9) AS sd,
+            array_agg(round(w::numeric * 100 / n, 4)::float8 ORDER BY blk) AS blocks
+          FROM (
+            SELECT cid, blk, count(*) AS n, count(*) FILTER (WHERE win) AS w
+            FROM (
+              SELECT cid, win, (${CONSISTENT_PICKS}::int - rn) / ${blockSize}::int AS blk
+              FROM dl WHERE rn <= ${CONSISTENT_PICKS}::int
+            ) y
+            GROUP BY cid, blk
+          ) x
+          GROUP BY cid
+        ) b
+        JOIN roster r ON r.id = b.cid
+        WHERE b.n = ${CONSISTENT_PICKS}::int
+          AND b.tw::numeric * 100 / b.n >= ${CONSISTENT_MIN_MEAN_PCT}::int
+        ORDER BY b.sd ASC, b.tw DESC, r.id COLLATE "C"
+        LIMIT ${FORM_PANEL_COUNT}
+      `,
+    ],
+  ];
+}
+
 // One panel at one window, as its own small statement (the dropdown's fetch). Same SQL as the page.
 export async function getPanelRows(q: { userId: string; panel: PanelKey; window: PanelWindow; now?: Date }): Promise<PanelRows> {
   const range = panelRange(q.window, q.now ?? new Date());
@@ -448,6 +539,8 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
   add("hot", panelSql("hottest", q.userId, weekRange));
   add("win", panelSql("winners", q.userId, weekRange));
   add("cold", panelSql("coldest", q.userId, weekRange));
+  // Windowless form panels (Rising Fast, Most Consistent): see formPanelCtes.
+  ctes.push(...formPanelCtes(q.userId));
   // Streaks for the Standout cards (always the unscoped roster, like the cards themselves).
   add("stt", Prisma.sql`SELECT * FROM st_u WHERE "capperId" IN (SELECT cid FROM top)`);
 
@@ -479,7 +572,7 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
   );
   if (q.fav) add("fs", windowTotalsSelect({ userId: q.userId, favoritesOnly: true, pooled: true }));
 
-  const outputs = ["ov", "pg", "top", "st", "stt", "sp", "sl", "tsl", "ma", "hot", "win", "cold", ...(q.fav ? ["fs"] : [])];
+  const outputs = ["ov", "pg", "top", "st", "stt", "sp", "sl", "tsl", "ma", "hot", "win", "cold", "rising", "consistent", ...(q.fav ? ["fs"] : [])];
   return Prisma.sql`
     WITH ${windowsCte([q.window], now)},
     ${Prisma.join(
@@ -583,6 +676,8 @@ export async function getCappersPageData(q: CappersPageQuery): Promise<CappersPa
     hottest: (out.hot ?? []).map((h: StreakEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, streak: Number(h.streak) })),
     winners: (out.win ?? []).map((h: WinnerEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, netUnits: Number(h.netUnits) })),
     coldest: (out.cold ?? []).map((h: StreakEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, streak: Number(h.streak), units: Number(h.units) })),
+    rising: (out.rising ?? []).map((h: RisingEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, form: (h.form ?? []).map(Number) })),
+    consistent: (out.consistent ?? []).map((h: ConsistentEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, blocks: (h.blocks ?? []).map(Number) })),
     favSummary,
   };
 }
