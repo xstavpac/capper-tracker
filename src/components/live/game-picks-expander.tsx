@@ -5,7 +5,7 @@ import type { PickStatus } from "@prisma/client";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
-import { OTHER_GROUP_LABEL } from "@/lib/pick-team-group";
+import { OTHER_GROUP_LABEL, TOTALS_GROUP_LABEL, sortTotalsPicks } from "@/lib/pick-team-group";
 import { PickCard } from "@/components/live/pick-card";
 
 export type ExpanderPick = {
@@ -46,8 +46,8 @@ export type ExpanderPick = {
   // (see live/page.tsx) since classifying it needs the game's homeTeam/
   // awayTeam alongside betDetail. teamLabel is the short display name for
   // AWAY/HOME ("Pirates") - empty for OTHER, which always uses a fixed
-  // "Totals & other markets" header instead.
-  teamGroup: "AWAY" | "HOME" | "OTHER";
+  // fixed "Totals" / "Other markets" header instead.
+  teamGroup: "AWAY" | "HOME" | "TOTALS" | "OTHER";
   teamLabel: string;
   // The team's real primary brand color (getTeamColor, computed server-side in
   // live/page.tsx from the game's sport key + full team name) for this group's
@@ -62,10 +62,10 @@ export type ExpanderPick = {
   datePosted?: string;
 };
 
-// Fixed AWAY -> HOME -> OTHER ordering (matches how the game card itself
-// always lists away over home) - "OTHER" reuses the same three-group shape
-// with a static label instead of a per-game team name.
-const TEAM_GROUP_ORDER: ExpanderPick["teamGroup"][] = ["AWAY", "HOME", "OTHER"];
+// Fixed AWAY -> HOME -> TOTALS -> OTHER ordering (matches how the game card
+// itself always lists away over home) - TOTALS and OTHER reuse the same
+// group shape with a static label instead of a per-game team name.
+const TEAM_GROUP_ORDER: ExpanderPick["teamGroup"][] = ["AWAY", "HOME", "TOTALS", "OTHER"];
 
 function ListIcon() {
   return (
@@ -131,13 +131,16 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
   }
 
   const groups = TEAM_GROUP_ORDER.map((teamGroup) => {
-    const groupPicks = picks.filter((p) => p.teamGroup === teamGroup);
-    const label = teamGroup === "OTHER" ? OTHER_GROUP_LABEL : groupPicks[0]?.teamLabel;
-    // Drives both the header dot and the row's background tint. OTHER isn't a
-    // real team - always neutral gray. A real team uses its brand color,
-    // falling back to the same gray when unmapped.
-    const dotColor = teamGroup === "OTHER" ? null : groupPicks[0]?.teamColor ?? null;
-    return { teamGroup, label, dotColor, picks: groupPicks };
+    const rawPicks = picks.filter((p) => p.teamGroup === teamGroup);
+    const groupPicks = teamGroup === "TOTALS" ? sortTotalsPicks(rawPicks) : rawPicks;
+    const label =
+      teamGroup === "TOTALS" ? TOTALS_GROUP_LABEL : teamGroup === "OTHER" ? OTHER_GROUP_LABEL : groupPicks[0]?.teamLabel;
+    // Drives both the header dot and the row's background tint. TOTALS and
+    // OTHER aren't real teams - TOTALS is neutral gray, OTHER is violet. A
+    // real team uses its brand color, falling back to the same gray when
+    // unmapped.
+    const dotColor = teamGroup === "TOTALS" || teamGroup === "OTHER" ? null : groupPicks[0]?.teamColor ?? null;
+    return { teamGroup, label, dotColor, violet: teamGroup === "OTHER", picks: groupPicks };
   }).filter((g) => g.picks.length > 0);
 
   return (
@@ -158,19 +161,30 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
           {groups.map((group) => (
             <div key={group.teamGroup}>
               <div
-                className="mb-1.5 flex items-center gap-1.5 rounded-md px-2 py-1"
-                style={{
-                  // A subtle wash of the team's color across the whole header
-                  // row - the hex plus a low-alpha suffix (~12%). OTHER and any
-                  // unmapped team use the same faint neutral-gray tint.
-                  backgroundColor: group.dotColor
-                    ? group.dotColor + "1F"
-                    : "rgb(var(--muted-foreground) / 0.10)",
-                }}
+                className={
+                  "mb-1.5 flex items-center gap-1.5 rounded-md px-2 py-1" +
+                  (group.violet ? " bg-violet-500/10 dark:bg-violet-400/10" : "")
+                }
+                style={
+                  group.violet
+                    ? undefined
+                    : {
+                        // A subtle wash of the team's color across the whole
+                        // header row - the hex plus a low-alpha suffix (~12%).
+                        // TOTALS and any unmapped team use the same faint
+                        // neutral-gray tint.
+                        backgroundColor: group.dotColor
+                          ? group.dotColor + "1F"
+                          : "rgb(var(--muted-foreground) / 0.10)",
+                      }
+                }
               >
                 <span
-                  className="h-2 w-2 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15"
-                  style={{ backgroundColor: group.dotColor ?? "rgb(var(--muted-foreground))" }}
+                  className={
+                    "h-2 w-2 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15" +
+                    (group.violet ? " bg-violet-500 dark:bg-violet-400" : "")
+                  }
+                  style={group.violet ? undefined : { backgroundColor: group.dotColor ?? "rgb(var(--muted-foreground))" }}
                   aria-hidden="true"
                 />
                 <span className="text-[12px] font-semibold text-foreground">{group.label}</span>

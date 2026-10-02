@@ -1,14 +1,20 @@
 import { findGroupingNickname, teamGroupAliases, teamPhraseRegex, normalizeForGrouping } from "@/lib/parse-catalog";
 import type { PickedSide } from "@prisma/client";
 
-export type PickTeamGroup = "AWAY" | "HOME" | "OTHER";
+export type PickTeamGroup = "AWAY" | "HOME" | "TOTALS" | "OTHER";
 
-// Shared label for the OTHER group (totals, NRFI, player props, and any
-// team-tied bet whose betDetail didn't text-match either side) - both
-// GamePicksExpander (Standard Live) and GameDetailPanel (Grid Live) render
-// this same group under this same label, so it lives here rather than in
-// either view.
-export const OTHER_GROUP_LABEL = "Totals & other markets";
+// Shared labels for the two non-team groups - GamePicksExpander (Standard
+// Live), GameDetailPanel (Grid Live) and /live/[gameId] all render these same
+// groups under these same labels, so they live here rather than in any view.
+// TOTALS is game/team over-unders only; OTHER is player props, NRFI, and any
+// team-tied bet whose betDetail didn't text-match either side.
+export const TOTALS_GROUP_LABEL = "Totals";
+export const OTHER_GROUP_LABEL = "Other markets";
+
+// Classified strictly from the resolved betType stored at import - never from
+// "over"/"under" wording or the presence of a line, since a player prop
+// ("Over 5.5 Ks") has both but is not a game total.
+const TOTALS_BET_TYPES = new Set(["TOTAL", "TEAM_TOTAL"]);
 
 // Only moneyline and spread bets are actually resolved by which team wins/
 // covers - totals, NRFI, and player props are decided by something else
@@ -51,6 +57,7 @@ export function classifyPickTeamGroup(
   game: { homeTeam: string; awayTeam: string },
   sportName: string
 ): PickTeamGroup {
+  if (TOTALS_BET_TYPES.has(pick.betType)) return "TOTALS";
   if (!TEAM_TIED_BET_TYPES.has(pick.betType)) return "OTHER";
 
   if (pick.pickedSide === "HOME") return "HOME";
@@ -63,6 +70,18 @@ export function classifyPickTeamGroup(
   if (mentions(teamGroupAliases(game.homeTeam, sportName))) return "HOME";
 
   return "OTHER";
+}
+
+// Order inside the Totals group: full-game game totals, then period totals
+// (half/quarter/inning/period), then team totals. Stable for ties, so picks
+// keep their incoming order within each rank.
+function totalsRank(pick: { betType: string; period: string }): number {
+  if (pick.betType === "TEAM_TOTAL") return 2;
+  return pick.period === "FULL_GAME" ? 0 : 1;
+}
+
+export function sortTotalsPicks<T extends { betType: string; period: string }>(picks: T[]): T[] {
+  return [...picks].sort((a, b) => totalsRank(a) - totalsRank(b));
 }
 
 // "Pittsburgh Pirates" -> "Pirates" for a group header short enough to sit

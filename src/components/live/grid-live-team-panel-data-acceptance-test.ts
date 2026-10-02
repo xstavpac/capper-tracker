@@ -1,9 +1,9 @@
 // Correctness proof for buildGridLiveGamePanelData
 // (grid-live-team-panel-data.ts) - the data behind Grid Live's
 // combined game-detail panel. Covers: both teams' picks are split out
-// correctly from one game's full pick list, OTHER-group (totals/non-team)
+// correctly from one game's full pick list, TOTALS and OTHER group (non-team)
 // picks never leak into either team's section but DO surface in their own
-// "other" section (mirroring GamePicksExpander's AWAY/HOME/OTHER grouping),
+// "other" section (mirroring GamePicksExpander's AWAY/HOME/TOTALS/OTHER grouping),
 // and a team with zero picks still resolves a valid label/color for the
 // empty state.
 // Run with:
@@ -12,7 +12,7 @@
 // Exits non-zero if any assertion fails.
 import { buildGridLiveGamePanelData, orderTeamSections } from "./grid-live-team-panel-data";
 import type { ExpanderPick } from "./game-picks-expander";
-import { OTHER_GROUP_LABEL } from "@/lib/pick-team-group";
+import { OTHER_GROUP_LABEL, TOTALS_GROUP_LABEL } from "@/lib/pick-team-group";
 
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {
@@ -55,7 +55,19 @@ function pick(overrides: Partial<ExpanderPick>): ExpanderPick {
 const homePick = pick({ pickId: "home-1", teamGroup: "HOME", teamLabel: "Pirates" });
 const awayPick = pick({ pickId: "away-1", teamGroup: "AWAY", teamLabel: "Cubs" });
 const otherPick = pick({ pickId: "other-1", teamGroup: "OTHER" });
-const picks = [homePick, awayPick, otherPick];
+const totalFull = pick({ pickId: "t-full", teamGroup: "TOTALS", betType: "TOTAL", period: "FULL_GAME" });
+const totalPeriod = pick({ pickId: "t-period", teamGroup: "TOTALS", betType: "TOTAL", period: "FIRST_HALF" });
+const totalTeam = pick({ pickId: "t-team", teamGroup: "TOTALS", betType: "TEAM_TOTAL", period: "FULL_GAME" });
+const picks = [homePick, awayPick, otherPick, totalTeam, totalPeriod, totalFull];
+
+{
+  const data = buildGridLiveGamePanelData(game, "baseball_mlb", "MLB", picks);
+  expect("totals section orders full-game, then period, then team totals", data.totals.picks.map((p) => p.pickId), ["t-full", "t-period", "t-team"]);
+  expect("totals section's teamLabel is the shared 'Totals' label", data.totals.teamLabel, TOTALS_GROUP_LABEL);
+  expect("totals section keeps the neutral gray (no violet tone)", [data.totals.teamColor, data.totals.tone], [null, undefined]);
+  expect("other section carries the violet tone", data.other.tone, "violet");
+  expect("totals picks never appear in the other section", data.other.picks.map((p) => p.pickId), ["other-1"]);
+}
 
 {
   const data = buildGridLiveGamePanelData(game, "baseball_mlb", "MLB", picks);
@@ -65,7 +77,7 @@ const picks = [homePick, awayPick, otherPick];
   expect("away section's teamLabel is the away team's short name", data.away.teamLabel, "Cubs");
   expect("OTHER-group picks appear in neither team section", [...data.home.picks, ...data.away.picks].some((p) => p.pickId === "other-1"), false);
   expect("OTHER-group picks appear in the other section", data.other.picks.map((p) => p.pickId), ["other-1"]);
-  expect("other section's teamLabel is the shared 'Totals & other markets' label", data.other.teamLabel, OTHER_GROUP_LABEL);
+  expect("other section's teamLabel is the shared 'Other markets' label", data.other.teamLabel, OTHER_GROUP_LABEL);
   expect("other section's teamColor is always neutral (null), not a team color", data.other.teamColor, null);
 }
 
