@@ -2,8 +2,8 @@
 //   npx tsx src/lib/pick-team-group-acceptance-test.ts
 //
 // Written for the Twins/Tigers misgrouping bug: real live-page catalog
-// picks against Twins and Tigers moneylines were landing under "Totals &
-// Other Markets" instead of their own team header, while the same bet
+// picks against Twins and Tigers moneylines were landing under the catch-all
+// "Other markets" group instead of their own team header, while the same bet
 // shape for Braves/Mets/Pirates/Padres grouped correctly. Root cause was
 // the "Disambiguate bare KBO nicknames colliding with MLB/NFL teams" commit
 // (d9bfe3c) - it moved twins/tigers/bears/lions/eagles out of the bare
@@ -22,7 +22,7 @@
 // path this must never touch is still exactly as before by re-asserting the
 // same KBO-collision behavior parse-catalog-acceptance-test.ts's PART C
 // already covers, from this file's own imports.
-import { classifyPickTeamGroup, shortTeamName } from "./pick-team-group";
+import { classifyPickTeamGroup, shortTeamName, sortTotalsPicks } from "./pick-team-group";
 import { parseCatalog, teamGroupAliases } from "./parse-catalog";
 
 let failures = 0;
@@ -89,9 +89,9 @@ function main() {
       "HOME"
     );
     check(
-      "Mets total (not team-tied) still groups OTHER",
+      "Mets total (not team-tied) groups TOTALS",
       classifyPickTeamGroup({ betType: "TOTAL", betDetail: "Mets Padres Over 8.5 - 1-1 (50%) on over picks" }, game, "MLB"),
-      "OTHER"
+      "TOTALS"
     );
     check("shortTeamName('San Diego Padres') unaffected", shortTeamName(game.awayTeam, "MLB"), "Padres");
   }
@@ -135,7 +135,7 @@ function main() {
   console.log("\n########## PART D: NCAAF multi-alias schools group under the right team ##########");
 
   // Reported bug: "Florida International Panthers @ South Florida Bulls" - a
-  // "FIU +14.5" spread pick landed in "Totals & other markets" while a
+  // "FIU +14.5" spread pick landed in "Other markets" while a
   // "Florida International +14.5" pick on the same game grouped correctly.
   // Root cause: classifyPickTeamGroup derived ONE nickname from the schedule
   // name ("florida international", the longest NCAAF_SCHOOLS key in it) and
@@ -158,7 +158,7 @@ function main() {
   {
     const families: {
       game: { homeTeam: string; awayTeam: string };
-      picks: [string, "AWAY" | "HOME" | "OTHER"][];
+      picks: [string, "AWAY" | "HOME" | "TOTALS" | "OTHER"][];
     }[] = [
       {
         // abbreviation misgroups (schedule name carries the full form)
@@ -279,20 +279,20 @@ function main() {
       "AWAY"
     );
     check(
-      "an MLB game total still groups OTHER",
+      "an MLB game total groups TOTALS",
       classifyPickTeamGroup(
         { betType: "TOTAL", betDetail: "Twins Braves Over 8.5 - 1-1 (50%) on over picks" },
         { homeTeam: "Minnesota Twins", awayTeam: "Atlanta Braves" },
         "MLB"
       ),
-      "OTHER"
+      "TOTALS"
     );
   }
 
   console.log("\n########## PART G: Montana State (2026-09 3-bug report, Bug 3) ##########");
 
   // Reported bug: a "Ben burns" (lowercase) Montana State moneyline pick
-  // landed under "Totals & other markets" instead of grouped by team. The
+  // landed under "Other markets" instead of grouped by team. The
   // task's own hypothesis was that the lowercase capper name caused this;
   // investigation disproved that (capper-name matching never reaches this
   // function - classifyPickTeamGroup only reads betType/betDetail, never
@@ -394,13 +394,35 @@ function main() {
       "HOME"
     );
 
-    // A non-team-tied bet type still short-circuits to OTHER even with
+    // A non-team-tied bet type still short-circuits to TOTALS/OTHER even with
     // pickedSide set - pickedSide only ever applies to MONEYLINE/SPREAD.
     check(
-      "a TOTAL with pickedSide set still groups OTHER (bet type gate runs first)",
+      "a TOTAL with pickedSide set still groups TOTALS (bet type gate runs first)",
       classifyPickTeamGroup({ betType: "TOTAL", betDetail: "Rays Yankees Over 8.5", pickedSide: "HOME" }, raysGame, "MLB"),
-      "OTHER"
+      "TOTALS"
     );
+  }
+
+  console.log("\n########## PART I: TOTALS vs OTHER split, strictly by betType ##########");
+  {
+    const game = { homeTeam: "Minnesota Twins", awayTeam: "Atlanta Braves" };
+    const cases: [string, string, string | null, "TOTALS" | "OTHER"][] = [
+      ["TOTAL game total", "TOTAL", "Twins Braves Over 8.5", "TOTALS"],
+      ["TEAM_TOTAL team total", "TEAM_TOTAL", "Twins Over 4.5", "TOTALS"],
+      ["PLAYER_PROP with an over line stays OTHER", "PLAYER_PROP", "Over 5.5 Ks", "OTHER"],
+      ["PLAYER_PROP rec yds over stays OTHER", "PLAYER_PROP", "Over 74.5 rec yds", "OTHER"],
+      ["NRFI is OTHER", "NRFI", "NRFI", "OTHER"],
+    ];
+    for (const [label, betType, betDetail, expected] of cases) {
+      check(label, classifyPickTeamGroup({ betType, betDetail }, game, "MLB"), expected);
+    }
+    check("a prop is never TOTALS even with pickedSide set", classifyPickTeamGroup({ betType: "PLAYER_PROP", betDetail: "Over 5.5 Ks", pickedSide: "HOME" }, game, "MLB"), "OTHER");
+    const rows = [
+      { id: "team", betType: "TEAM_TOTAL", period: "FULL_GAME" },
+      { id: "period", betType: "TOTAL", period: "FIRST_HALF" },
+      { id: "full", betType: "TOTAL", period: "FULL_GAME" },
+    ];
+    check("sortTotalsPicks: full-game, period, team", sortTotalsPicks(rows).map((r) => r.id), ["full", "period", "team"]);
   }
 
   console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);

@@ -33,8 +33,10 @@ function TeamPickSection({
   teamLabel,
   teamColor,
   picks,
+  tone,
   headerRef,
 }: GridLiveTeamSideData & { headerRef?: Ref<HTMLDivElement> }) {
+  const violet = tone === "violet";
   const [loading, setLoading] = useState(false);
   const [records, setRecords] = useState<CapperLeagueRecords | null>(null);
 
@@ -73,17 +75,27 @@ function TeamPickSection({
         // since selecting a game is a click) shows no ring, while a
         // keyboard-triggered selection still gets one.
         tabIndex={-1}
-        className="mb-2 flex scroll-mt-4 items-center gap-1.5 rounded-md px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-        style={{
-          // Same wash formula as GamePicksExpander's team-group header
-          // (hex color + a ~12% alpha suffix) - reused as-is so the two
-          // views' team-hue treatment matches exactly.
-          backgroundColor: teamColor ? teamColor + "1F" : "rgb(var(--muted-foreground) / 0.10)",
-        }}
+        className={
+          "mb-2 flex scroll-mt-4 items-center gap-1.5 rounded-md px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-brand-400" +
+          (violet ? " bg-violet-500/10 dark:bg-violet-400/10" : "")
+        }
+        style={
+          violet
+            ? undefined
+            : {
+                // Same wash formula as GamePicksExpander's team-group header
+                // (hex color + a ~12% alpha suffix) - reused as-is so the two
+                // views' team-hue treatment matches exactly.
+                backgroundColor: teamColor ? teamColor + "1F" : "rgb(var(--muted-foreground) / 0.10)",
+              }
+        }
       >
         <span
-          className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15"
-          style={{ backgroundColor: teamColor ?? "rgb(var(--muted-foreground))" }}
+          className={
+            "h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15" +
+            (violet ? " bg-violet-500 dark:bg-violet-400" : "")
+          }
+          style={violet ? undefined : { backgroundColor: teamColor ?? "rgb(var(--muted-foreground))" }}
           aria-hidden="true"
         />
         <span className="text-sm font-semibold text-foreground">{teamLabel}</span>
@@ -138,11 +150,21 @@ export function GameDetailPanel({
       <TeamPickSection {...first} headerRef={firstHeaderRef} />
       <div className="my-4 border-t border-border-subtle" />
       <TeamPickSection {...second} />
-      <div className="my-4 border-t border-border-subtle" />
-      {/* Totals, NRFI, player props, and any team-tied bet betDetail
-          couldn't match to a side - same OTHER group GamePicksExpander shows
-          under this label, now surfaced in Grid too. */}
-      <TeamPickSection {...data.other} />
+      {/* Game/team totals, then player props, NRFI, and any team-tied bet
+          betDetail couldn't match to a side - the same TOTALS and OTHER
+          groups GamePicksExpander shows. Each hides when empty. */}
+      {data.totals.picks.length > 0 && (
+        <>
+          <div className="my-4 border-t border-border-subtle" />
+          <TeamPickSection {...data.totals} />
+        </>
+      )}
+      {data.other.picks.length > 0 && (
+        <>
+          <div className="my-4 border-t border-border-subtle" />
+          <TeamPickSection {...data.other} />
+        </>
+      )}
     </div>
   );
 }

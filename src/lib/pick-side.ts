@@ -32,14 +32,14 @@ export type PickSide = "HOME" | "AWAY";
 // Only MONEYLINE/SPREAD picks are resolvable at all - a TOTAL, NRFI, or
 // TEAM_TOTAL pick isn't decided by which side wins/covers, so it never has a
 // "side" no matter what team name its betDetail happens to mention
-// (classifyPickTeamGroup returns OTHER for every other betType by design).
+// (classifyPickTeamGroup returns TOTALS or OTHER for every other betType by design).
 export function derivePickSide(
   pick: { betType: string; betDetail: string | null },
   game: { homeTeam: string; awayTeam: string },
   sportName: string
 ): PickSide | null {
   const group = classifyPickTeamGroup(pick, game, sportName);
-  return group === "OTHER" ? null : group;
+  return group === "OTHER" || group === "TOTALS" ? null : group;
 }
 
 // The actual team name the pick is on ("Pittsburgh Pirates"), for comparing

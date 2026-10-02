@@ -1255,7 +1255,7 @@ const TEAM_SPORT_ENTRIES: TeamEntry[] = [
 // classifyPickTeamGroup used to) returns the disambiguated long form for any
 // KBO-collision team, which then never matches betDetail's short form,
 // silently misgrouping every Twins/Tigers/Bears/Lions/Eagles moneyline pick
-// into "Totals & Other Markets" instead of its own team header.
+// into "Other markets" (or "Totals") instead of its own team header.
 //
 // Built from the same bare-nickname lists TEAM_SPORT_ENTRIES uses, plus the
 // bare key of every genuine-NICKNAME AMBIGUOUS_NICKNAMES entry (which is
@@ -1293,7 +1293,7 @@ const GROUPING_TEAM_NICKNAMES: TeamEntry[] = [
 // rainbow warriors" matches the key "hawaii", "San José State Spartans" ->
 // "san jose state spartans" matches "san jose state". Without this,
 // findGroupingNickname returned undefined for those teams and every one of
-// their picks fell through to "Totals & other markets". NOT used by the
+// their picks fell through to "Other markets". NOT used by the
 // import parser (detectSport/findTeamNickname/parseCatalog).
 export function normalizeForGrouping(text: string): string {
   return text
@@ -1338,7 +1338,7 @@ export function teamGroupAliases(teamDisplayName: string, sportName: string): st
   // Pro sports: `primary` is the bare mascot ("cubs"); add any curated
   // short-form aliases that translate to it ("cub", "cubbies") so a pick
   // written with the alias still groups under the right team header on
-  // /live instead of "Totals & other markets". Most aliases translate to
+  // /live instead of "Other markets". Most aliases translate to
   // exactly `primary`; the few whose canonical is the FULL name (e.g. "tigs"
   // -> "detroit tigers", since bare "tigers" is an AMBIGUOUS_NICKNAMES key)
   // are matched by that full name being a suffix of the display name.

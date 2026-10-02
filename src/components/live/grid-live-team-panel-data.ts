@@ -10,18 +10,22 @@
 // for per pick; this only reads the field that classification already
 // produced.
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
-import { OTHER_GROUP_LABEL, shortTeamName } from "@/lib/pick-team-group";
+import { OTHER_GROUP_LABEL, TOTALS_GROUP_LABEL, shortTeamName, sortTotalsPicks } from "@/lib/pick-team-group";
 import { getTeamColor } from "@/lib/team-colors";
 
 export type GridLiveTeamSideData = {
   teamLabel: string;
   teamColor: string | null;
   picks: ExpanderPick[];
+  // Header accent for the non-team groups: undefined = the team color (or
+  // neutral gray when teamColor is null), "violet" = the Other markets accent.
+  tone?: "violet";
 };
 
 export type GridLiveGamePanelData = {
   away: GridLiveTeamSideData;
   home: GridLiveTeamSideData;
+  totals: GridLiveTeamSideData;
   other: GridLiveTeamSideData;
 };
 
@@ -43,10 +47,19 @@ export function buildGridLiveGamePanelData(
       picks: picks.filter((p) => p.teamGroup === "HOME"),
     },
     // Not a real team - always the neutral-gray dot (teamColor: null), same
-    // as GamePicksExpander's OTHER group.
+    // as GamePicksExpander's TOTALS group. Full-game totals, then period
+    // totals, then team totals.
+    totals: {
+      teamLabel: TOTALS_GROUP_LABEL,
+      teamColor: null,
+      picks: sortTotalsPicks(picks.filter((p) => p.teamGroup === "TOTALS")),
+    },
+    // Not a real team either - violet accent, same as GamePicksExpander's
+    // OTHER group.
     other: {
       teamLabel: OTHER_GROUP_LABEL,
       teamColor: null,
+      tone: "violet",
       picks: picks.filter((p) => p.teamGroup === "OTHER"),
     },
   };
