@@ -543,17 +543,20 @@ const AXIS_TEXT = "text-[11px] font-medium leading-none tabular-nums text-[#5B62
 const LINE_COLORS = ["#16A34A", "#2563EB", "#F59E0B", "#A855F7", "#06B6D4"];
 const signedPts = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v));
 
-// Round gridlines for the lines' range: the smallest step that covers it in at most five bands. The
-// range always reaches one step below 0, which is where the norm line's label sits.
-function ptsAxis(values: number[]): { lo: number; hi: number; step: number } {
-  const min = Math.min(0, ...values);
+// The axis for the lines' range. It bottoms out at the lowest point rounded down to a 10 and tops out at
+// the highest rounded up to a gridline; gridlines are the smallest round step that gives at most five
+// bands, drawn at its multiples (0 always among them). A dip of under half a point past a 10 (two
+// losses against a 51% norm reach -10.2) does not buy a whole extra band: it is under a pixel.
+function ptsAxis(values: number[]): { lo: number; hi: number; ticks: number[] } {
+  const lo = Math.floor((Math.min(0, ...values) + 0.5) / 10) * 10;
   const max = Math.max(0, ...values);
-  for (const step of [10, 20, 25, 50, 100]) {
-    const lo = Math.min(-step, Math.floor(min / step) * step);
-    const hi = Math.max(step, Math.ceil(max / step) * step);
-    if ((hi - lo) / step <= 5) return { lo, hi, step };
-  }
-  return { lo: -100, hi: 100, step: 100 };
+  const step = [10, 20, 50, 100].find((st) => (Math.max(st, Math.ceil(max / st) * st) - lo) / st <= 5) ?? 100;
+  const hi = Math.max(step, Math.ceil(max / step) * step);
+  const ticks: number[] = [];
+  for (let t = hi; t >= lo; t -= step) ticks.push(t);
+  // The bottom of the axis gets its own label when it falls between gridlines with room to spare.
+  if (ticks[ticks.length - 1] - lo >= step / 2) ticks.push(lo);
+  return { lo, hi, ticks };
 }
 // The plot is at least this tall (px): what "do two endpoint labels collide" is judged against.
 const PLOT_MIN_H = 116;
@@ -565,10 +568,9 @@ const LABEL_H = 13;
 function RisingChart({ rows }: { rows: RisingEntry[] }) {
   const lines = rows.map((r) => risingSeries(r.results, r.baseline));
   const n = Math.max(2, ...lines.map((l) => l.length));
-  const { lo, hi, step } = ptsAxis(lines.flat());
-  const ticks = Array.from({ length: Math.round((hi - lo) / step) + 1 }, (_, k) => hi - k * step);
+  const { lo, hi, ticks } = ptsAxis(lines.flat());
   const x = (i: number) => (i / (n - 1)) * 100;
-  const y = (v: number) => ((hi - Math.min(hi, Math.max(lo, v))) / (hi - lo)) * 100;
+  const y = (v: number) => ((hi - v) / (hi - lo)) * 100;
   const points = (l: number[]) => l.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(2)).join(" ");
   const ends = lines.map((l) => l[l.length - 1] ?? 0);
   // Every line gets its "+X pts" in the right margin where the panel is wide enough and no two labels
@@ -589,8 +591,17 @@ function RisingChart({ rows }: { rows: RisingEntry[] }) {
       <div role="img" aria-label={label} className="relative min-h-[144px] w-full min-w-0 flex-1">
         <div className={"absolute bottom-5 left-[34px] top-2 " + (allLabels ? "right-2 min-[1280px]:max-[1499px]:right-[54px] min-[1700px]:right-[54px]" : "right-2")}>
           {ticks.map((t) => (
-            <span key={t} aria-hidden className={"absolute right-full mr-1.5 -translate-y-1/2 " + AXIS_TEXT} style={{ top: y(t) + "%" }}>
-              {signedPts(t)}
+            <span key={t} aria-hidden className={"absolute right-full mr-1.5 -translate-y-1/2 text-right " + (t === 0 ? "text-[11px] font-semibold leading-none text-[#3A4152] dark:text-foreground/80" : AXIS_TEXT)} style={{ top: y(t) + "%" }}>
+              {/* 0 is the norm line. Its label sits in the axis margin: every line starts at the line's left end, so a label on the plot would be crossed. */}
+              {t === 0 ? (
+                <>
+                  Their
+                  <br />
+                  norm
+                </>
+              ) : (
+                signedPts(t)
+              )}
             </span>
           ))}
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden className="absolute inset-0 h-full w-full overflow-visible">
@@ -606,17 +617,14 @@ function RisingChart({ rows }: { rows: RisingEntry[] }) {
                 points={points(lines[i])}
                 fill="none"
                 stroke={LINE_COLORS[i]}
-                strokeWidth={i === 0 ? 2.5 : 1.5}
-                strokeOpacity={i === 0 ? 1 : 0.8}
+                strokeWidth={i === 0 ? 2.5 : 1.25}
+                strokeOpacity={i === 0 ? 1 : 0.4}
                 strokeLinejoin="round"
                 strokeLinecap="round"
                 vectorEffect="non-scaling-stroke"
               />
             ))}
           </svg>
-          <span aria-hidden className="absolute right-1 whitespace-nowrap text-[11px] font-semibold leading-none text-[#3A4152] dark:text-foreground/80" style={{ top: y(0) + "%", transform: "translateY(4px)" }}>
-            Their norm
-          </span>
           <span aria-hidden className="absolute h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[2.5px] bg-white dark:bg-[#0B1220]" style={{ left: x(lines[0].length - 1) + "%", top: y(ends[0]) + "%", borderColor: LINE_COLORS[0] }} />
           {/* #1's label on the plot, clear of its line: left of the dot when the line climbs into it, under it when the last pick lost. Hidden where the margin labels show. */}
           <span
