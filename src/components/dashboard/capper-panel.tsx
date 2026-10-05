@@ -596,7 +596,9 @@ function RisingFooter({ rows, down }: { rows: RisingEntry[]; down: boolean }) {
     <>
       <Icon className={"h-[18px] w-[18px] shrink-0 stroke-[2.4] " + look.pts} />
       <FooterLine name={rows[0].name}>
-        is trending {down ? "down" : "up"} <span className={"font-semibold tabular-nums " + look.pts}>{ptsLabel(rows[0].pts)}</span>
+        {/* One string: split text nodes are not kerned across the join. */}
+        {down ? "is trending down " : "is trending up "}
+        <span className={"font-semibold tabular-nums " + look.pts}>{ptsLabel(rows[0].pts)}</span>
       </FooterLine>
       <Link href={capperHref(rows[0].capperId)} className={"shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white hover:brightness-95 " + (down ? "bg-[#E11D48]" : "bg-[#16A34A]")}>
         View trend →
