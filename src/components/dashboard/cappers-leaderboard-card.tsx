@@ -3,7 +3,6 @@ import type { LeaderboardEntry, FavoriteCappersSummary } from "@/server/data/cap
 import type { CapperSparkline as Series } from "@/server/data/cappers-page-aggregates";
 import { RANKING_MIN_SAMPLE } from "@/server/data/stats";
 import { PAGE_SIZE, cappersHref, type CappersParams } from "@/lib/cappers-page-params";
-import { Avatar } from "@/components/dashboard/capper-panels";
 import { CapperSparkline, sparklineLabel } from "@/components/dashboard/capper-sparkline";
 import { CappersLeaderboardControls, FavoritesToggle } from "@/components/dashboard/cappers-leaderboard-controls";
 import { ClickableRow } from "@/components/dashboard/clickable-row";
@@ -166,17 +165,14 @@ export function CappersLeaderboardCard({
                   <ClickableRow key={e.capperId} href={href}>
                     <td className="px-3 py-2 max-[480px]:px-1 text-muted-foreground">{first + i + 1}</td>
                     <td className="px-3 py-2 max-[480px]:max-w-[7.5rem] max-[480px]:px-1">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar name={e.name} colorTag={e.colorTag} size={28} />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <Link href={href} className="truncate font-medium text-foreground hover:underline">
-                              {e.name}
-                            </Link>
-                            <FavoriteStar capperId={e.capperId} isFavorite={e.isFavorite} />
-                          </div>
-                          <Badges entry={e} />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Link href={href} className="truncate font-medium text-foreground hover:underline">
+                            {e.name}
+                          </Link>
+                          <FavoriteStar capperId={e.capperId} isFavorite={e.isFavorite} />
                         </div>
+                        <Badges entry={e} />
                       </div>
                     </td>
                     <td className="px-3 py-2 max-[480px]:hidden">

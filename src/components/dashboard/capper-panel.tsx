@@ -128,40 +128,17 @@ const LEADERBOARD_HREF = "#leaderboard";
 // Shared pieces
 // ---------------------------------------------------------------------------
 
-const AVATAR_COLORS = ["#2563EB", "#0F766E", "#B45309", "#7C3AED", "#BE185D", "#1D4ED8", "#15803D", "#9F1239", "#334155", "#C2410C"];
-// A capper with no color tag always gets the same color, picked from its id.
-function avatarColor(e: { capperId: string; colorTag: string | null }): string {
-  if (e.colorTag) return e.colorTag;
-  let h = 0;
-  for (let i = 0; i < e.capperId.length; i++) h = (h * 31 + e.capperId.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
-}
-// Two words -> their initials; one word -> its first two characters.
-function initials(name: string): string {
-  const parts = name
-    .replace(/[^A-Za-z0-9 ]/g, "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (parts.length === 0) return name.trim().slice(0, 2).toUpperCase();
-  return (parts.length > 1 ? parts[0][0] + parts[1][0] : parts[0].slice(0, 2)).toUpperCase();
-}
-function Avatar({ e, size = 24 }: { e: { capperId: string; name: string; colorTag: string | null }; size?: number }) {
-  return (
-    <span aria-hidden className="flex shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white" style={{ backgroundColor: avatarColor(e), width: size, height: size }}>
-      {initials(e.name)}
-    </span>
-  );
-}
-
+// Every panel's rank column is this wide (the Biggest Winners medal too), so names start on the same
+// line across a row of panels.
 function Rank({ n }: { n: number }) {
-  return <span className="w-4 shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{n + "."}</span>;
+  return <span className="w-5 shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{n + "."}</span>;
 }
 function Name({ children }: { children: ReactNode }) {
   return <span className="block truncate text-sm font-semibold text-foreground">{children}</span>;
 }
 
-const ROW = "flex h-9 items-center gap-2.5 rounded-[10px] px-1.5 transition-colors hover:bg-foreground/[0.035]";
+// The gap closes to 6px in the three-column range where the sidebar leaves each panel at its narrowest.
+const ROW = "flex h-9 items-center gap-2.5 rounded-[10px] px-1.5 transition-colors hover:bg-foreground/[0.035] min-[1500px]:max-[1699px]:gap-1.5";
 const FOOTER_TEXT = "min-w-0 flex-1 truncate text-xs font-medium text-[#3A4152] dark:text-foreground/75";
 const FOOTER_LINK = "shrink-0 whitespace-nowrap text-xs font-semibold hover:underline";
 const STRONG = "font-semibold text-foreground";
@@ -319,8 +296,7 @@ function ActiveRows({ rows }: { rows: ActiveEntry[] }) {
         <li key={e.capperId}>
           <Link href={capperHref(e.capperId)} className={ROW}>
             <Rank n={i + 1} />
-            <Avatar e={e} />
-            <span className="w-[104px] shrink-0 min-[400px]:w-28 min-[1700px]:w-44">
+            <span className="w-[132px] shrink-0 min-[400px]:w-[172px] min-[1700px]:w-52">
               <Name>{e.name}</Name>
             </span>
             <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-md bg-[#E3E8F5] dark:bg-white/10">
@@ -401,7 +377,6 @@ function HottestRows({ rows }: { rows: StreakEntry[] }) {
             <li key={e.capperId}>
               <Link href={capperHref(e.capperId)} className={ROW}>
                 <Rank n={i + 2} />
-                <Avatar e={e} size={22} />
                 <span className="min-w-0 flex-1">
                   <Name>{e.name}</Name>
                 </span>
@@ -410,7 +385,7 @@ function HottestRows({ rows }: { rows: StreakEntry[] }) {
                   {Array.from({ length: STREAK_DOTS }, (_, k) => (
                     <span key={k} className={DOT + " " + (k < Math.min(e.streak, STREAK_DOTS) ? "bg-[#22C55E]" : "bg-[#E7D9CB] dark:bg-white/15")} />
                   ))}
-                  {overflow && <span className={"w-5 text-xs font-semibold leading-none tabular-nums " + GREEN}>{e.streak > STREAK_DOTS ? "+" + (e.streak - STREAK_DOTS) : ""}</span>}
+                  {overflow && <span className={"w-5 min-[1500px]:max-[1699px]:w-4 text-xs font-semibold leading-none tabular-nums " + GREEN}>{e.streak > STREAK_DOTS ? "+" + (e.streak - STREAK_DOTS) : ""}</span>}
                 </span>
                 <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 stroke-[2.4] text-[#8A6A4E] dark:text-muted-foreground min-[1500px]:max-[1699px]:hidden" />
               </Link>
@@ -442,35 +417,36 @@ const MEDAL = ["bg-[#F5B301] text-[#3A2A00]", "bg-[#C5CBD6] text-[#1F2633]", "bg
 // is not (a phone, and the narrow three-column range).
 const RECORD_COL = "w-[74px] max-[479px]:w-10 min-[1500px]:max-[1699px]:w-10";
 const RECORD_PART = "max-[479px]:block min-[1500px]:max-[1699px]:block";
+const UNITS_COL = "w-[60px] min-[1500px]:max-[1699px]:w-14";
+const VIEW_COL = "w-11 min-[1500px]:max-[1699px]:w-10";
 function WinnerRows({ rows }: { rows: WinnerEntry[] }) {
   return (
     <>
-      <div aria-hidden className="flex items-center gap-2.5 border-b border-[#0F1420]/[0.08] px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-[#5B6275] dark:border-white/10 dark:text-muted-foreground">
-        <span className="w-6">#</span>
+      <div aria-hidden className="flex items-center gap-2.5 min-[1500px]:max-[1699px]:gap-1.5 border-b border-[#0F1420]/[0.08] px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-[#5B6275] dark:border-white/10 dark:text-muted-foreground">
+        <span className="w-5">#</span>
         <span className="flex-1">Capper</span>
         <span className={RECORD_COL}>Record</span>
-        <span className="w-[60px] text-right">Units</span>
-        <span className="hidden w-11 min-[400px]:block" />
+        <span className={UNITS_COL + " text-right"}>Units</span>
+        <span className={"hidden min-[400px]:block " + VIEW_COL} />
       </div>
       <ol className="mt-1 flex flex-col gap-0.5">
         {rows.map((e, i) => {
           const decided = e.wins + e.losses;
           return (
             <li key={e.capperId} className={ROW + " " + (i === 0 ? "bg-[#E9F7EE] dark:bg-emerald-500/10" : "")}>
-              <span className={"flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums " + (MEDAL[i] ?? "bg-[#E6EBE8] text-foreground dark:bg-white/10")}>{i + 1}</span>
-              <Link href={capperHref(e.capperId)} className="flex min-w-0 flex-1 items-center gap-2 hover:underline">
-                <Avatar e={e} />
+              <span className={"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums " + (MEDAL[i] ?? "bg-[#E6EBE8] text-foreground dark:bg-white/10")}>{i + 1}</span>
+              <Link href={capperHref(e.capperId)} className="min-w-0 flex-1 hover:underline">
                 <Name>{e.name}</Name>
               </Link>
               <span className={RECORD_COL + " shrink-0 whitespace-nowrap text-xs font-medium leading-tight tabular-nums text-foreground"}>
                 <span className={RECORD_PART}>{e.wins + "–" + e.losses}</span>
                 {decided > 0 && <span className={RECORD_PART + " ml-1 font-semibold text-[#5B6275] max-[479px]:ml-0 min-[1500px]:max-[1699px]:ml-0 dark:text-muted-foreground"}>{Math.round((e.wins / decided) * 100) + "%"}</span>}
               </span>
-              <span className={"w-[60px] shrink-0 text-right text-sm font-semibold tracking-[-0.01em] tabular-nums " + GREEN}>{units(e.netUnits)}</span>
+              <span className={UNITS_COL + " shrink-0 text-right text-sm font-semibold tracking-[-0.01em] tabular-nums " + GREEN}>{units(e.netUnits)}</span>
               <Link
                 href={capperHref(e.capperId)}
                 aria-label={"View " + e.name}
-                className="hidden w-11 shrink-0 rounded-lg bg-[#E3F8EA] py-1 text-center text-xs font-semibold text-[#15803D] hover:brightness-95 dark:bg-emerald-500/15 dark:text-emerald-400 min-[400px]:block"
+                className={"hidden shrink-0 rounded-lg bg-[#E3F8EA] py-1 text-center text-xs font-semibold text-[#15803D] hover:brightness-95 dark:bg-emerald-500/15 dark:text-emerald-400 min-[400px]:block " + VIEW_COL}
               >
                 View
               </Link>
@@ -505,12 +481,11 @@ function ColdestRows({ rows }: { rows: StreakEntry[] }) {
           <Link
             href={capperHref(e.capperId)}
             className={
-              "flex h-9 items-center gap-2.5 rounded-xl border px-2 transition-colors " +
+              "flex h-9 items-center gap-2.5 rounded-xl border px-[5px] transition-colors min-[1500px]:max-[1699px]:gap-1.5 " +
               (i === 0 ? "border-[#F3B4B4] bg-white dark:border-red-500/40 dark:bg-card" : "border-transparent hover:bg-foreground/[0.035]")
             }
           >
             <Rank n={i + 1} />
-            <Avatar e={e} size={22} />
             <span className="min-w-0 flex-1">
               <Name>{e.name}</Name>
             </span>
@@ -699,12 +674,11 @@ function ConsistentRows({ rows }: { rows: ConsistentEntry[] }) {
           <li key={e.capperId}>
             <Link href={capperHref(e.capperId)} className={ROW}>
               <Rank n={i + 1} />
-              <Avatar e={e} />
               <span className="min-w-0 flex-1">
                 <Name>{e.name}</Name>
               </span>
-              <span className={"shrink-0 whitespace-nowrap rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase leading-tight tracking-[0.06em] " + TIER_CLASS[tier]}>{tier}</span>
-              <svg width={70} height={26} viewBox="0 0 70 26" role="img" aria-label={"Win rate per 10-pick block: " + e.blocks.map((v) => Math.round(v) + "%").join(", ")} className="shrink-0 max-[400px]:w-12 min-[1500px]:max-[1699px]:w-12">
+              <span className={"shrink-0 whitespace-nowrap rounded-[5px] px-1.5 min-[1500px]:max-[1699px]:px-1 py-0.5 text-[9.5px] font-semibold uppercase leading-tight tracking-[0.06em] " + TIER_CLASS[tier]}>{tier}</span>
+              <svg width={70} height={26} viewBox="0 0 70 26" role="img" aria-label={"Win rate per 10-pick block: " + e.blocks.map((v) => Math.round(v) + "%").join(", ")} className="shrink-0 max-[400px]:w-12 min-[1500px]:max-[1699px]:w-9">
                 <line x1={0} x2={70} y1={13} y2={13} strokeDasharray="2 3" className="stroke-[#E2D4FB] dark:stroke-violet-500/30" />
                 <polyline points={pts} fill="none" stroke="#22A55B" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
               </svg>

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { LeaderboardEntry } from "@/server/data/cappers";
 import type { CapperSparkline as Series } from "@/server/data/cappers-page-aggregates";
-import { Avatar } from "@/components/dashboard/capper-panels";
 import { SPARKLINE_MIN_PICKS } from "@/server/data/cappers-page-aggregates";
 import { CapperSparkline } from "@/components/dashboard/capper-sparkline";
 import { ChevronRightIcon, TrophyIcon } from "@/components/dashboard/cappers-icons";
@@ -44,7 +43,6 @@ export function TopCappers({ entries, sparklines }: { entries: LeaderboardEntry[
             return (
               <Link key={e.capperId} href={"/cappers/" + e.capperId} className="block rounded-card border border-border p-4 transition hover:bg-muted">
                 <div className="flex items-center gap-2.5">
-                  <Avatar name={e.name} colorTag={e.colorTag} size={32} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-foreground">{e.name}</p>
                     {showStreak && (
