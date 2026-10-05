@@ -8,6 +8,7 @@ import {
   PANEL_WINDOW_LABELS,
   consistencyScore,
   consistencyTier,
+  risingSeries,
   type ActiveEntry,
   type ConsistencyTier,
   type ConsistentEntry,
@@ -128,40 +129,17 @@ const LEADERBOARD_HREF = "#leaderboard";
 // Shared pieces
 // ---------------------------------------------------------------------------
 
-const AVATAR_COLORS = ["#2563EB", "#0F766E", "#B45309", "#7C3AED", "#BE185D", "#1D4ED8", "#15803D", "#9F1239", "#334155", "#C2410C"];
-// A capper with no color tag always gets the same color, picked from its id.
-function avatarColor(e: { capperId: string; colorTag: string | null }): string {
-  if (e.colorTag) return e.colorTag;
-  let h = 0;
-  for (let i = 0; i < e.capperId.length; i++) h = (h * 31 + e.capperId.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
-}
-// Two words -> their initials; one word -> its first two characters.
-function initials(name: string): string {
-  const parts = name
-    .replace(/[^A-Za-z0-9 ]/g, "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (parts.length === 0) return name.trim().slice(0, 2).toUpperCase();
-  return (parts.length > 1 ? parts[0][0] + parts[1][0] : parts[0].slice(0, 2)).toUpperCase();
-}
-function Avatar({ e, size = 24 }: { e: { capperId: string; name: string; colorTag: string | null }; size?: number }) {
-  return (
-    <span aria-hidden className="flex shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white" style={{ backgroundColor: avatarColor(e), width: size, height: size }}>
-      {initials(e.name)}
-    </span>
-  );
-}
-
+// Every panel's rank column is this wide (the Biggest Winners medal too), so names start on the same
+// line across a row of panels.
 function Rank({ n }: { n: number }) {
-  return <span className="w-4 shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{n + "."}</span>;
+  return <span className="w-5 shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{n + "."}</span>;
 }
 function Name({ children }: { children: ReactNode }) {
   return <span className="block truncate text-sm font-semibold text-foreground">{children}</span>;
 }
 
-const ROW = "flex h-9 items-center gap-2.5 rounded-[10px] px-1.5 transition-colors hover:bg-foreground/[0.035]";
+// The gap closes to 6px in the three-column range where the sidebar leaves each panel at its narrowest.
+const ROW = "flex h-9 items-center gap-2.5 rounded-[10px] px-1.5 transition-colors hover:bg-foreground/[0.035] min-[1500px]:max-[1699px]:gap-1.5";
 const FOOTER_TEXT = "min-w-0 flex-1 truncate text-xs font-medium text-[#3A4152] dark:text-foreground/75";
 const FOOTER_LINK = "shrink-0 whitespace-nowrap text-xs font-semibold hover:underline";
 const STRONG = "font-semibold text-foreground";
@@ -319,8 +297,7 @@ function ActiveRows({ rows }: { rows: ActiveEntry[] }) {
         <li key={e.capperId}>
           <Link href={capperHref(e.capperId)} className={ROW}>
             <Rank n={i + 1} />
-            <Avatar e={e} />
-            <span className="w-[104px] shrink-0 min-[400px]:w-28 min-[1700px]:w-44">
+            <span className="w-[132px] shrink-0 min-[400px]:w-[172px] min-[1700px]:w-52">
               <Name>{e.name}</Name>
             </span>
             <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-md bg-[#E3E8F5] dark:bg-white/10">
@@ -401,7 +378,6 @@ function HottestRows({ rows }: { rows: StreakEntry[] }) {
             <li key={e.capperId}>
               <Link href={capperHref(e.capperId)} className={ROW}>
                 <Rank n={i + 2} />
-                <Avatar e={e} size={22} />
                 <span className="min-w-0 flex-1">
                   <Name>{e.name}</Name>
                 </span>
@@ -410,7 +386,7 @@ function HottestRows({ rows }: { rows: StreakEntry[] }) {
                   {Array.from({ length: STREAK_DOTS }, (_, k) => (
                     <span key={k} className={DOT + " " + (k < Math.min(e.streak, STREAK_DOTS) ? "bg-[#22C55E]" : "bg-[#E7D9CB] dark:bg-white/15")} />
                   ))}
-                  {overflow && <span className={"w-5 text-xs font-semibold leading-none tabular-nums " + GREEN}>{e.streak > STREAK_DOTS ? "+" + (e.streak - STREAK_DOTS) : ""}</span>}
+                  {overflow && <span className={"w-5 min-[1500px]:max-[1699px]:w-4 text-xs font-semibold leading-none tabular-nums " + GREEN}>{e.streak > STREAK_DOTS ? "+" + (e.streak - STREAK_DOTS) : ""}</span>}
                 </span>
                 <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 stroke-[2.4] text-[#8A6A4E] dark:text-muted-foreground min-[1500px]:max-[1699px]:hidden" />
               </Link>
@@ -442,35 +418,36 @@ const MEDAL = ["bg-[#F5B301] text-[#3A2A00]", "bg-[#C5CBD6] text-[#1F2633]", "bg
 // is not (a phone, and the narrow three-column range).
 const RECORD_COL = "w-[74px] max-[479px]:w-10 min-[1500px]:max-[1699px]:w-10";
 const RECORD_PART = "max-[479px]:block min-[1500px]:max-[1699px]:block";
+const UNITS_COL = "w-[60px] min-[1500px]:max-[1699px]:w-14";
+const VIEW_COL = "w-11 min-[1500px]:max-[1699px]:w-10";
 function WinnerRows({ rows }: { rows: WinnerEntry[] }) {
   return (
     <>
-      <div aria-hidden className="flex items-center gap-2.5 border-b border-[#0F1420]/[0.08] px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-[#5B6275] dark:border-white/10 dark:text-muted-foreground">
-        <span className="w-6">#</span>
+      <div aria-hidden className="flex items-center gap-2.5 min-[1500px]:max-[1699px]:gap-1.5 border-b border-[#0F1420]/[0.08] px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-[#5B6275] dark:border-white/10 dark:text-muted-foreground">
+        <span className="w-5">#</span>
         <span className="flex-1">Capper</span>
         <span className={RECORD_COL}>Record</span>
-        <span className="w-[60px] text-right">Units</span>
-        <span className="hidden w-11 min-[400px]:block" />
+        <span className={UNITS_COL + " text-right"}>Units</span>
+        <span className={"hidden min-[400px]:block " + VIEW_COL} />
       </div>
       <ol className="mt-1 flex flex-col gap-0.5">
         {rows.map((e, i) => {
           const decided = e.wins + e.losses;
           return (
             <li key={e.capperId} className={ROW + " " + (i === 0 ? "bg-[#E9F7EE] dark:bg-emerald-500/10" : "")}>
-              <span className={"flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums " + (MEDAL[i] ?? "bg-[#E6EBE8] text-foreground dark:bg-white/10")}>{i + 1}</span>
-              <Link href={capperHref(e.capperId)} className="flex min-w-0 flex-1 items-center gap-2 hover:underline">
-                <Avatar e={e} />
+              <span className={"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums " + (MEDAL[i] ?? "bg-[#E6EBE8] text-foreground dark:bg-white/10")}>{i + 1}</span>
+              <Link href={capperHref(e.capperId)} className="min-w-0 flex-1 hover:underline">
                 <Name>{e.name}</Name>
               </Link>
               <span className={RECORD_COL + " shrink-0 whitespace-nowrap text-xs font-medium leading-tight tabular-nums text-foreground"}>
                 <span className={RECORD_PART}>{e.wins + "–" + e.losses}</span>
                 {decided > 0 && <span className={RECORD_PART + " ml-1 font-semibold text-[#5B6275] max-[479px]:ml-0 min-[1500px]:max-[1699px]:ml-0 dark:text-muted-foreground"}>{Math.round((e.wins / decided) * 100) + "%"}</span>}
               </span>
-              <span className={"w-[60px] shrink-0 text-right text-sm font-semibold tracking-[-0.01em] tabular-nums " + GREEN}>{units(e.netUnits)}</span>
+              <span className={UNITS_COL + " shrink-0 text-right text-sm font-semibold tracking-[-0.01em] tabular-nums " + GREEN}>{units(e.netUnits)}</span>
               <Link
                 href={capperHref(e.capperId)}
                 aria-label={"View " + e.name}
-                className="hidden w-11 shrink-0 rounded-lg bg-[#E3F8EA] py-1 text-center text-xs font-semibold text-[#15803D] hover:brightness-95 dark:bg-emerald-500/15 dark:text-emerald-400 min-[400px]:block"
+                className={"hidden shrink-0 rounded-lg bg-[#E3F8EA] py-1 text-center text-xs font-semibold text-[#15803D] hover:brightness-95 dark:bg-emerald-500/15 dark:text-emerald-400 min-[400px]:block " + VIEW_COL}
               >
                 View
               </Link>
@@ -505,12 +482,11 @@ function ColdestRows({ rows }: { rows: StreakEntry[] }) {
           <Link
             href={capperHref(e.capperId)}
             className={
-              "flex h-9 items-center gap-2.5 rounded-xl border px-2 transition-colors " +
+              "flex h-9 items-center gap-2.5 rounded-xl border px-[5px] transition-colors min-[1500px]:max-[1699px]:gap-1.5 " +
               (i === 0 ? "border-[#F3B4B4] bg-white dark:border-red-500/40 dark:bg-card" : "border-transparent hover:bg-foreground/[0.035]")
             }
           >
             <Rank n={i + 1} />
-            <Avatar e={e} size={22} />
             <span className="min-w-0 flex-1">
               <Name>{e.name}</Name>
             </span>
@@ -562,81 +538,119 @@ export function FormPanel({ panel, rows }: { panel: FormPanelKey; rows: RisingEn
   );
 }
 
-// Gridlines, in win %.
-const TREND_TICKS = [100, 75, 50, 25, 0];
 const AXIS_TEXT = "text-[11px] font-medium leading-none tabular-nums text-[#5B6275] dark:text-muted-foreground";
+// Line colors by rank; the legend swatches match.
+const LINE_COLORS = ["#16A34A", "#2563EB", "#F59E0B", "#A855F7", "#06B6D4"];
+const signedPts = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v));
 
-// The #1 riser's rolling win % (10-pick window) over their last 10 decided picks, oldest to newest,
-// against their baseline (the win % of the picks before those). The line can dip and still be a rise:
-// the score is where it ends above the baseline. Ranks 1-5 are listed beside it.
+// The axis for the lines' range. It bottoms out at the lowest point rounded down to a 10 and tops out at
+// the highest rounded up to a gridline; gridlines are the smallest round step that gives at most five
+// bands, drawn at its multiples (0 always among them). A dip of under half a point past a 10 (two
+// losses against a 51% norm reach -10.2) does not buy a whole extra band: it is under a pixel.
+function ptsAxis(values: number[]): { lo: number; hi: number; ticks: number[] } {
+  const lo = Math.floor((Math.min(0, ...values) + 0.5) / 10) * 10;
+  const max = Math.max(0, ...values);
+  const step = [10, 20, 50, 100].find((st) => (Math.max(st, Math.ceil(max / st) * st) - lo) / st <= 5) ?? 100;
+  const hi = Math.max(step, Math.ceil(max / step) * step);
+  const ticks: number[] = [];
+  for (let t = hi; t >= lo; t -= step) ticks.push(t);
+  // The bottom of the axis gets its own label when it falls between gridlines with room to spare.
+  if (ticks[ticks.length - 1] - lo >= step / 2) ticks.push(lo);
+  return { lo, hi, ticks };
+}
+// The plot is at least this tall (px): what "do two endpoint labels collide" is judged against.
+const PLOT_MIN_H = 116;
+const LABEL_H = 13;
+
+// "Wins above their norm" for the top risers: each line starts at 0 and, pick by pick over the last 10
+// decided picks, adds what the result beat the capper's own baseline win rate by (risingSeries). A
+// riser's line climbs, and ends on exactly their score. 0 is the norm line.
 function RisingChart({ rows }: { rows: RisingEntry[] }) {
-  const lead = rows[0];
-  const n = Math.max(2, lead.trend.length);
-  const last = lead.trend[lead.trend.length - 1] ?? 0;
-  // pts = recent win % - baseline win %, and the line ends at the recent win %.
-  const baseline = Math.min(100, Math.max(0, last - lead.pts));
+  const lines = rows.map((r) => risingSeries(r.results, r.baseline));
+  const n = Math.max(2, ...lines.map((l) => l.length));
+  const { lo, hi, ticks } = ptsAxis(lines.flat());
   const x = (i: number) => (i / (n - 1)) * 100;
-  const y = (v: number) => 100 - Math.min(100, Math.max(0, v));
-  const line = lead.trend.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(1)).join(" ");
-  const endX = x(lead.trend.length - 1);
-  // Labels sit clear of the line: the baseline's on the side the line does not start on, the
-  // endpoint's above its dot unless that would leave the plot or the line comes down into it.
-  const baselineBelow = baseline > 88 || (baseline >= 12 && (lead.trend[0] ?? 0) >= baseline);
-  const endBelow = last > 85 || Math.max(...lead.trend.slice(-4)) > last + 5;
+  const y = (v: number) => ((hi - v) / (hi - lo)) * 100;
+  const points = (l: number[]) => l.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(2)).join(" ");
+  const ends = lines.map((l) => l[l.length - 1] ?? 0);
+  // Every line gets its "+X pts" in the right margin where the panel is wide enough and no two labels
+  // would touch; otherwise only #1 is labelled, on the plot.
+  const minGap = (LABEL_H / PLOT_MIN_H) * (hi - lo);
+  const sortedEnds = [...ends].sort((p, q) => p - q);
+  const allLabels = rows.length > 1 && sortedEnds.every((v, i) => i === 0 || v - sortedEnds[i - 1] >= minGap);
+  const ranked = rows.map((r, i) => ({ r, i })).reverse(); // drawn last-to-first so #1 sits on top
   const label =
-    lead.name +
-    "'s rolling win rate across the last " +
-    n +
-    " decided picks: now " +
-    Math.round(last) +
-    "%, against a baseline of " +
-    Math.round(baseline) +
-    "%, up " +
-    lead.pts +
-    " points." +
-    (rows.length > 1
-      ? " Also rising: " +
-        rows
-          .slice(1)
-          .map((r) => r.name + " up " + r.pts + " points")
-          .join("; ") +
-        "."
-      : "");
+    "Wins above their norm across the last " +
+    (n - 1) +
+    " decided picks, in points: each line starts at 0 and ends on the capper's score. " +
+    rows.map((r) => r.name + " +" + r.pts).join("; ") +
+    ".";
   return (
     <div className="flex flex-1 flex-col gap-2.5 min-[400px]:flex-row">
       {/* At least ~140px tall, and as tall as the panel's row makes it: no gap above or below. */}
       <div role="img" aria-label={label} className="relative min-h-[144px] w-full min-w-0 flex-1">
-        <div className="absolute bottom-5 left-[34px] right-2 top-2">
-          {TREND_TICKS.map((t) => (
-            <span key={t} aria-hidden className={"absolute right-full mr-1.5 -translate-y-1/2 " + AXIS_TEXT} style={{ top: y(t) + "%" }}>
-              {t + "%"}
+        <div className={"absolute bottom-5 left-[34px] top-2 " + (allLabels ? "right-2 min-[1280px]:max-[1499px]:right-[54px] min-[1700px]:right-[54px]" : "right-2")}>
+          {ticks.map((t) => (
+            <span key={t} aria-hidden className={"absolute right-full mr-1.5 -translate-y-1/2 text-right " + (t === 0 ? "text-[11px] font-semibold leading-none text-[#3A4152] dark:text-foreground/80" : AXIS_TEXT)} style={{ top: y(t) + "%" }}>
+              {/* 0 is the norm line. Its label sits in the axis margin: every line starts at the line's left end, so a label on the plot would be crossed. */}
+              {t === 0 ? (
+                <>
+                  Their
+                  <br />
+                  norm
+                </>
+              ) : (
+                signedPts(t)
+              )}
             </span>
           ))}
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden className="absolute inset-0 h-full w-full overflow-visible">
-            {TREND_TICKS.map((t) => (
-              <line key={t} x1={0} x2={100} y1={y(t)} y2={y(t)} vectorEffect="non-scaling-stroke" className={t === 0 ? "stroke-[#0F1420]/25 dark:stroke-white/25" : "stroke-[#0F1420]/[0.08] dark:stroke-white/10"} />
+            {ticks
+              .filter((t) => t !== 0)
+              .map((t) => (
+                <line key={t} x1={0} x2={100} y1={y(t)} y2={y(t)} vectorEffect="non-scaling-stroke" className="stroke-[#0F1420]/[0.08] dark:stroke-white/10" />
+              ))}
+            <line x1={0} x2={100} y1={y(0)} y2={y(0)} strokeWidth={1.5} vectorEffect="non-scaling-stroke" className="stroke-[#0F1420]/45 dark:stroke-white/50" />
+            {ranked.map(({ r, i }) => (
+              <polyline
+                key={r.capperId}
+                points={points(lines[i])}
+                fill="none"
+                stroke={LINE_COLORS[i]}
+                strokeWidth={i === 0 ? 2.5 : 1.25}
+                strokeOpacity={i === 0 ? 1 : 0.4}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
             ))}
-            <polygon points={line + " " + endX.toFixed(1) + "," + y(baseline) + " 0," + y(baseline)} fill="#16A34A" fillOpacity={0.14} />
-            <line x1={0} x2={100} y1={y(baseline)} y2={y(baseline)} strokeWidth={1.5} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" className="stroke-[#0F1420]/55 dark:stroke-white/60" />
-            <polyline points={line} fill="none" stroke="#16A34A" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           </svg>
-          <span aria-hidden className="absolute left-1 whitespace-nowrap text-[11px] font-semibold leading-none tabular-nums text-[#3A4152] dark:text-foreground/80" style={{ top: y(baseline) + "%", transform: baselineBelow ? "translateY(4px)" : "translateY(calc(-100% - 4px))" }}>
-            {"Baseline " + Math.round(baseline) + "%"}
-          </span>
-          <span aria-hidden className="absolute h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[2.5px] border-[#16A34A] bg-white dark:bg-[#0B1220]" style={{ left: endX + "%", top: y(last) + "%" }} />
+          <span aria-hidden className="absolute h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[2.5px] bg-white dark:bg-[#0B1220]" style={{ left: x(lines[0].length - 1) + "%", top: y(ends[0]) + "%", borderColor: LINE_COLORS[0] }} />
+          {/* #1's label on the plot, clear of its line: left of the dot when the line climbs into it, under it when the last pick lost. Hidden where the margin labels show. */}
           <span
             aria-hidden
-            className="absolute right-0 whitespace-nowrap rounded-md bg-[#15803D] px-1.5 py-[3px] text-[11px] font-semibold leading-none tabular-nums text-white"
-            style={{ top: y(last) + "%", transform: endBelow ? "translateY(9px)" : "translateY(calc(-100% - 9px))" }}
+            className={"absolute right-3.5 whitespace-nowrap rounded-md bg-[#15803D] px-1.5 py-[3px] text-[11px] font-semibold leading-none tabular-nums text-white " + (allLabels ? "min-[1280px]:max-[1499px]:hidden min-[1700px]:hidden" : "")}
+            style={{ top: y(ends[0]) + "%", transform: (lines[0][lines[0].length - 2] ?? 0) < ends[0] ? "translateY(-50%)" : "translateY(9px)" }}
           >
-            {"+" + lead.pts + " pts"}
+            {"+" + rows[0].pts + " pts"}
           </span>
+          {allLabels &&
+            rows.map((r, i) => (
+              <span
+                key={r.capperId}
+                aria-hidden
+                className={"absolute left-full ml-2 hidden -translate-y-1/2 whitespace-nowrap text-[11px] leading-none tabular-nums min-[1280px]:max-[1499px]:block min-[1700px]:block " + (i === 0 ? "font-bold" : "font-semibold")}
+                style={{ top: y(ends[i]) + "%", color: LINE_COLORS[i] }}
+              >
+                {"+" + r.pts + " pts"}
+              </span>
+            ))}
         </div>
-        {/* Picks back from the newest; the last point is the current rolling win %. */}
+        {/* Picks back from the newest: the lines start before the first of them, at 0. */}
         <span aria-hidden className={"absolute bottom-0 left-[34px] " + AXIS_TEXT}>
           {n - 1 + " picks ago"}
         </span>
-        <span aria-hidden className="absolute bottom-0 right-2 text-[11px] font-semibold leading-none text-foreground">
+        <span aria-hidden className={"absolute bottom-0 text-[11px] font-semibold leading-none text-foreground " + (allLabels ? "right-2 min-[1280px]:max-[1499px]:right-[54px] min-[1700px]:right-[54px]" : "right-2")}>
           Latest
         </span>
       </div>
@@ -644,13 +658,7 @@ function RisingChart({ rows }: { rows: RisingEntry[] }) {
         {rows.map((r, i) => (
           <li key={r.capperId}>
             <Link href={capperHref(r.capperId)} className={"flex h-8 items-center gap-[7px] rounded-lg px-1.5 transition-colors " + (i === 0 ? "bg-[#DCF3E4] dark:bg-emerald-500/15" : "hover:bg-foreground/[0.035]")}>
-              {i === 0 ? (
-                <span aria-hidden className="h-1 w-[11px] shrink-0 rounded-full bg-[#16A34A]" />
-              ) : (
-                <span aria-hidden className="w-[11px] shrink-0 text-center text-xs font-semibold tabular-nums text-[#5B6275] dark:text-muted-foreground">
-                  {i + 1}
-                </span>
-              )}
+              <span aria-hidden className={"w-[11px] shrink-0 rounded-full " + (i === 0 ? "h-1" : "h-[3px]")} style={{ backgroundColor: LINE_COLORS[i] }} />
               <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{r.name}</span>
               <span className={"whitespace-nowrap text-xs font-semibold tabular-nums " + GREEN}>{"+" + r.pts + " pts"}</span>
             </Link>
@@ -699,12 +707,11 @@ function ConsistentRows({ rows }: { rows: ConsistentEntry[] }) {
           <li key={e.capperId}>
             <Link href={capperHref(e.capperId)} className={ROW}>
               <Rank n={i + 1} />
-              <Avatar e={e} />
               <span className="min-w-0 flex-1">
                 <Name>{e.name}</Name>
               </span>
-              <span className={"shrink-0 whitespace-nowrap rounded-[5px] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase leading-tight tracking-[0.06em] " + TIER_CLASS[tier]}>{tier}</span>
-              <svg width={70} height={26} viewBox="0 0 70 26" role="img" aria-label={"Win rate per 10-pick block: " + e.blocks.map((v) => Math.round(v) + "%").join(", ")} className="shrink-0 max-[400px]:w-12 min-[1500px]:max-[1699px]:w-12">
+              <span className={"shrink-0 whitespace-nowrap rounded-[5px] px-1.5 min-[1500px]:max-[1699px]:px-1 py-0.5 text-[9.5px] font-semibold uppercase leading-tight tracking-[0.06em] " + TIER_CLASS[tier]}>{tier}</span>
+              <svg width={70} height={26} viewBox="0 0 70 26" role="img" aria-label={"Win rate per 10-pick block: " + e.blocks.map((v) => Math.round(v) + "%").join(", ")} className="shrink-0 max-[400px]:w-12 min-[1500px]:max-[1699px]:w-9">
                 <line x1={0} x2={70} y1={13} y2={13} strokeDasharray="2 3" className="stroke-[#E2D4FB] dark:stroke-violet-500/30" />
                 <polyline points={pts} fill="none" stroke="#22A55B" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
               </svg>
