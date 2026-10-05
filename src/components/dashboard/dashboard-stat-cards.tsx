@@ -42,7 +42,8 @@ export function DashboardStatCards({ summary }: { summary: Summary }) {
   const weekDiff = w.wins[last] - w.losses[last];
 
   return (
-    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-1 min-[900px]:grid-cols-2 min-[1100px]:grid-cols-3 min-[1700px]:grid-cols-6">
+    // auto-rows-fr: the Record card's second sub line makes it a line taller, and every row matches it.
+    <div className="grid auto-rows-fr grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-1 min-[900px]:grid-cols-2 min-[1100px]:grid-cols-3 min-[1700px]:grid-cols-6">
       <StatCard
         label="Total picks"
         icon={<ListChecksIcon className={ICON} />}
@@ -66,12 +67,13 @@ export function DashboardStatCards({ summary }: { summary: Summary }) {
         icon={<TrophyIcon className={ICON} />}
         iconClass={GREEN_TILE}
         color="#16A34A"
-        // Wins and losses only: the pushes go on the sub line, so the value stays short at any total.
+        // Wins and losses only, so the value stays short at any total. The pushes get a sub line of
+        // their own above the week's record; each is one line and ends in an ellipsis rather than wrap.
         value={overall.wins + "–" + overall.losses}
         sub={
           <>
-            {overall.pushes > 0 && <span className={MUTED}>{overall.pushes.toLocaleString("en-US") + (overall.pushes === 1 ? " push · " : " pushes · ")}</span>}
-            {gradedThisWeek > 0 ? record(w.wins[last], w.losses[last], w.pushes[last]) + " this week" : NO_GRADED}
+            {overall.pushes > 0 && <span className={"block truncate " + MUTED}>{overall.pushes.toLocaleString("en-US") + (overall.pushes === 1 ? " push" : " pushes")}</span>}
+            <span className="block truncate">{gradedThisWeek > 0 ? record(w.wins[last], w.losses[last], w.pushes[last]) + " this week" : NO_GRADED}</span>
           </>
         }
         subClass={gradedThisWeek > 0 ? tone(weekDiff) : undefined}

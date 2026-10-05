@@ -68,7 +68,7 @@ export function StatCard({
             the font follows its width over the value's length (a tabular character is ~0.62em wide),
             from 22px down to an 18px floor. Past the floor it wraps (it never shrinks below its own width
             first, so the sparkline has fully given way by then) rather than overflow or clip. */}
-        <div className="mt-0.5 flex items-center justify-between gap-2 [container-type:inline-size]">
+        <div className="mt-0.5 flex items-center justify-between gap-3 [container-type:inline-size]">
           <p
             className={"max-w-full shrink-0 font-semibold leading-[1.15] tracking-[-0.02em] tabular-nums [overflow-wrap:anywhere] " + (valueClass ?? "text-foreground")}
             style={{ fontSize: "clamp(18px, calc(100cqw / " + (Math.max(1, value.length) * 0.62).toFixed(2) + "), 22px)" }}
