@@ -23,16 +23,22 @@ export default async function DashboardPage() {
 
   return (
     <ThemedPage>
-      {/* dashboard.png is 2040x221. Across it, the icon's circle starts at 4.0%, the "D" at 18.1%,
-          the word ends at 55.1% and the illustration starts at 58.8%. A phone's row is 52px tall, so
-          the art is 480px wide: shifted 3px left, the circle is 16px from the card's edge, the word
-          ends at 262px and the illustration would start at 279px. The crop ends 10px before that.
-          From `sm` up nothing is shifted, and the crop ends 10px before the illustration's start in
-          the 104px row (565px) and the 112px row (608px).
-          The motto is indented to sit under the D: 18.1% of the art's width, less the shift on a
-          phone - 84px there, 174px in the 104px row (960px of art) and 187px in the 112px row (1034px). */}
-      <PageBanner src={dashboardBanner} title="Dashboard" className="bg-[#001637]" rowClassName="max-sm:h-[52px]" cropClassName="w-[269px] sm:w-[555px] lg:w-[598px]" imageClassName="max-sm:-ml-[3px]" glow="card">
-        <p className="whitespace-nowrap pb-[11px] pl-[84px] text-[9.5px] font-bold uppercase tracking-[2px] text-[#BFD3FF] sm:pb-4 sm:pl-[174px] sm:text-[13px] sm:tracking-[3.5px] lg:pl-[187px]">
+      {/* dashboard.png is 2040x221. In its own pixels the icon's circle spans 82-256 (centre 111
+          down), the art's divider is at 305-308, the word spans 369-1125 (52-162 down) and the
+          illustration starts at 1200. A phone's row is 52px, and its motto is centred under the
+          word (the banner's --banner-word-left and -width). From `sm` up the crop ends 10px before
+          the illustration's start in the 104px row (565px) and the 112px row (608px), and the motto
+          is indented to sit under the D: 174px in the 104px row (960px of art) and 187px in the
+          112px row (1034px). */}
+      <PageBanner
+        src={dashboardBanner}
+        title="Dashboard"
+        className="bg-[#001637]"
+        phone={{ height: 52, circle: { left: 82, right: 256, centerY: 111 }, word: { start: 369, end: 1125, top: 52, bottom: 162 } }}
+        cropClassName="sm:w-[555px] lg:w-[598px]"
+        glow="card"
+      >
+        <p className="whitespace-nowrap pb-[11px] text-[9.5px] font-bold uppercase tracking-[2px] text-[#BFD3FF] max-sm:ml-[var(--banner-word-left)] max-sm:w-[var(--banner-word-width)] max-sm:text-center sm:pb-4 sm:pl-[174px] sm:text-[13px] sm:tracking-[3.5px] lg:pl-[187px]">
           Track <span className="text-[#38BDF8]">·</span> Compare <span className="text-[#38BDF8]">·</span> Decide
         </p>
       </PageBanner>
