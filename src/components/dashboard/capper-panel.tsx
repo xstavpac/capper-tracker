@@ -320,7 +320,7 @@ function ActiveRows({ rows }: { rows: ActiveEntry[] }) {
           <Link href={capperHref(e.capperId)} className={ROW}>
             <Rank n={i + 1} />
             <Avatar e={e} />
-            <span className="w-[104px] shrink-0 min-[400px]:w-28">
+            <span className="w-[104px] shrink-0 min-[400px]:w-28 min-[1700px]:w-44">
               <Name>{e.name}</Name>
             </span>
             <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-md bg-[#E3E8F5] dark:bg-white/10">
@@ -640,7 +640,7 @@ function RisingChart({ rows }: { rows: RisingEntry[] }) {
           Latest
         </span>
       </div>
-      <ol className="flex w-full shrink-0 flex-col justify-center gap-0.5 min-[400px]:w-[150px]">
+      <ol className="flex w-full shrink-0 flex-col justify-center gap-0.5 min-[400px]:w-[150px] min-[1700px]:w-[200px]">
         {rows.map((r, i) => (
           <li key={r.capperId}>
             <Link href={capperHref(r.capperId)} className={"flex h-8 items-center gap-[7px] rounded-lg px-1.5 transition-colors " + (i === 0 ? "bg-[#DCF3E4] dark:bg-emerald-500/15" : "hover:bg-foreground/[0.035]")}>
