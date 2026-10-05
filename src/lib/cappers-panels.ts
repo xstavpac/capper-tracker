@@ -28,14 +28,17 @@ export const STREAK_LOOKBACK = 100;
 
 export type PanelRows = ActiveEntry[] | WinnerEntry[] | StreakEntry[];
 
-// Rising Fast / Most Consistent are windowless: they read each capper's newest decided (WIN / LOSS)
+// Rising Fast / Falling off / Most Consistent are windowless: they read each capper's newest decided (WIN / LOSS)
 // picks by count, never the time tabs or the dropdown, so they are not PanelKeys (no /api/cappers/panel).
 // Decided picks are examined newest first in the canonical ORDER_DESC, at most FORM_LOOKBACK per capper.
 export const FORM_LOOKBACK = 100;
 // Rising Fast: recent = newest RISING_RECENT; baseline = the picks BEFORE those (never the combined set),
 // needing at least RISING_MIN_BASELINE of them. Score = recent win% - baseline win%, positive only.
+// Falling off is its mirror: the same read and score, negative only, most negative first.
+// Either way the score must round to at least FORM_TREND_MIN_PTS points, so a "+0" / "−0" never shows.
 export const RISING_RECENT = 10;
 export const RISING_MIN_BASELINE = 30;
+export const FORM_TREND_MIN_PTS = 1;
 // Most Consistent: the newest CONSISTENT_PICKS decided picks (all required) in CONSISTENT_BLOCKS
 // sequential blocks; the mean block win% must be at least CONSISTENT_MIN_MEAN_PCT.
 export const CONSISTENT_PICKS = 50;
@@ -43,14 +46,18 @@ export const CONSISTENT_BLOCKS = 5;
 export const CONSISTENT_MIN_MEAN_PCT = 50;
 export const FORM_PANEL_COUNT = 5;
 
-export type FormPanelKey = "rising" | "consistent";
+export type FormPanelKey = "rising" | "falling" | "consistent";
 
+// A Rising Fast or Falling off row (`pts` is negative on Falling off).
 // `pts`: the score in whole percentage points (recent win% - baseline win%). `results`: the newest
 // RISING_RECENT decided picks, oldest first, true = win. `baseline`: the baseline win rate as a
 // fraction (0-1), the same one `pts` is measured against.
 export type RisingEntry = { capperId: string; name: string; colorTag: string | null; pts: number; results: boolean[]; baseline: number };
 
-// Rising Fast's chart line, "wins above their norm": 0 before the first of the recent picks, then after
+// "+12 pts" / "−12 pts".
+export const ptsLabel = (pts: number) => (pts < 0 ? "−" : "+") + Math.abs(pts) + " pts";
+
+// The chart line of Rising Fast ("wins above their norm") and Falling off ("wins below their norm"): 0 before the first of the recent picks, then after
 // each pick the running sum of (result - baseline) in points, where a win is 1 and a loss is 0. One pick
 // is worth 100 / RISING_RECENT points, so the last value is recent win% - baseline win%: the score.
 export function risingSeries(results: boolean[], baseline: number): number[] {

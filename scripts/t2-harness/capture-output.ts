@@ -14,8 +14,9 @@
 // run-diff.mjs, needs to change.
 //
 // --surface=panels switches this from the /cappers data functions to the /dashboard
-// capper panels (getCapperPanels): `old` is the frozen raw-pick implementation
-// (capper-panels-legacy.ts), `t3` the database-aggregate one in production. Panels
+// capper panels (getCapperPanels): `t3` is the one-statement implementation in production
+// (the frozen raw-pick one it was first diffed against is gone - the panels it computed were
+// replaced). Register a candidate next to it to diff the two. Panels
 // are captured for EVERY user with picks (--auto-user) or the one selected, as of a
 // fixed clock (--as-of=auto [each user's own last activity] | <ISO>): the 14-day activity gate makes the output depend
 // on "now", so a snapshot older than two weeks would otherwise diff two empty panels.
@@ -201,13 +202,9 @@ async function resolveUserId(prisma: typeof import("@/lib/prisma").prisma, args:
 
 // ---- panels surface ---------------------------------------------------------
 
-type PanelsImpl = { getCapperPanels: (userId: string, filter?: { sportName?: string }) => Promise<unknown> };
+type PanelsImpl = { getCapperPanels: (userId: string) => Promise<unknown> };
 
 const PANELS_IMPLEMENTATIONS: Record<string, () => Promise<PanelsImpl>> = {
-  old: async () => {
-    const { getCapperPanelsLegacy } = await import("@/server/data/capper-panels-legacy");
-    return { getCapperPanels: getCapperPanelsLegacy };
-  },
   t3: async () => {
     const { getCapperPanels } = await import("@/server/data/capper-panels");
     return { getCapperPanels };
@@ -239,24 +236,6 @@ function freezeClock(iso: string) {
   globalThis.Date = FrozenDate as unknown as DateConstructor;
 }
 
-// Normalization of the ONE intended difference: the original streak entries' stats
-// carried longestWinStreak / longestLossStreak, which nothing reads and the new
-// implementation no longer produces. Dropped from both sides so the diff shows only
-// real differences.
-function dropLongestStreaks(panels: unknown): unknown {
-  const p = JSON.parse(JSON.stringify(panels, (_k, v) => (typeof v === "number" && !Number.isFinite(v) ? String(v) : v))) as {
-    hotStreaks?: { stats: Record<string, unknown> }[];
-    coolingOff?: { stats: Record<string, unknown> }[];
-  };
-  for (const list of [p.hotStreaks ?? [], p.coolingOff ?? []]) {
-    for (const e of list) {
-      delete e.stats.longestWinStreak;
-      delete e.stats.longestLossStreak;
-    }
-  }
-  return p;
-}
-
 async function mainPanels(args: Record<string, string | true>) {
   const implName = args.impl;
   if (typeof implName !== "string" || !PANELS_IMPLEMENTATIONS[implName]) {
@@ -284,11 +263,7 @@ async function mainPanels(args: Record<string, string | true>) {
   for (const [i, userId] of userIds.entries()) {
     const iso = asOf === "auto" ? asOfByUser.get(userId) : typeof asOf === "string" ? asOf : undefined;
     if (iso) freezeClock(iso);
-    for (const sportName of [undefined, "MLB", "NFL"] as const) {
-      out[`user${i}.panels.${sportName ?? "allLeagues"}`] = dropLongestStreaks(
-        await impl.getCapperPanels(userId, sportName ? { sportName } : undefined)
-      );
-    }
+    out[`user${i}.panels`] = await impl.getCapperPanels(userId);
   }
   await prisma.$disconnect();
   process.stdout.write(JSON.stringify(out));

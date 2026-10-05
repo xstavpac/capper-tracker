@@ -178,3 +178,27 @@ export const TrophyFilledIcon = ({ className }: P) => (
     <path d="M12 14v3.5M8 20.5h8M9.5 17.5h5v3h-5z" />
   </svg>
 );
+
+export const TrendingDownIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <path d="M3 7l6 6 4-4 8 8" />
+    <path d="M15 17h6v-6" />
+  </svg>
+);
+
+export const ClockIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+);
+
+// Same glyph as the sidebar's Dashboard item.
+export const DashboardIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <rect x="4" y="4" width="7" height="9" rx="1.5" />
+    <rect x="13" y="4" width="7" height="5" rx="1.5" />
+    <rect x="13" y="11" width="7" height="9" rx="1.5" />
+    <rect x="4" y="15" width="7" height="5" rx="1.5" />
+  </svg>
+);

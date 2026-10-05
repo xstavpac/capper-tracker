@@ -31,7 +31,8 @@ async function main() {
     for (const off of [0, 1, 7, 30, 60]) {
       const now = new Date(u.maxGame.getTime() - off * DAY);
       const legacy = narrowLegacySummary(computeDashboardSummaryLegacy(rows, now));
-      const next = await computeDashboardSummary(u.userId, now);
+      // `trends` has no legacy counterpart (dashboard-summary-acceptance-test.ts covers it).
+      const { trends: _trends, ...next } = await computeDashboardSummary(u.userId, now);
       const d = firstDiff(next, legacy);
       cases++;
       if (d) failed++;

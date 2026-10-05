@@ -169,15 +169,16 @@ every subsequent diff run untrustworthy.
 ## Diffing the /dashboard capper panels, and older snapshots
 
 `--surface=panels` switches the capture from the /cappers data functions to
-`getCapperPanels` (src/server/data/capper-panels.ts). `--impl-old=old` is the frozen
-raw-pick implementation (`capper-panels-legacy.ts`); `--impl-new=t3` is the
-database-aggregate one production runs:
+`getCapperPanels` (src/server/data/capper-panels.ts). `t3` is the one-statement
+implementation production runs; the frozen raw-pick `old` it was first diffed against was
+removed with the panels it computed, so register a candidate in `PANELS_IMPLEMENTATIONS`
+(capture-output.ts) and pass it as the other side:
 
 ```
-node scripts/t2-harness/run-diff.mjs   --source=snapshot:scripts/t2-harness/.snapshots/<name>.dump   --apply-migrations-after=20260915120000_enable_rls_on_all_tables   --surface=panels --as-of=auto --impl-old=old --impl-new=t3
+node scripts/t2-harness/run-diff.mjs   --source=snapshot:scripts/t2-harness/.snapshots/<name>.dump   --apply-migrations-after=20260915120000_enable_rls_on_all_tables   --surface=panels --as-of=auto --impl-old=t3 --impl-new=<candidate>
 ```
 
-- **Every user with picks** is captured (`--auto-user`), each for all leagues, MLB and NFL - a
+- **Every user with picks** is captured (`--auto-user`) - a
   bug that only shows on a small or oddly-shaped account would be invisible in a top-user-only diff.
 - **`--as-of=auto`** freezes the clock per user at one hour after that user's own latest
   `datePosted` (or pass an ISO instant for one fixed clock). The panels' 14-day activity gate makes
@@ -189,5 +190,4 @@ node scripts/t2-harness/run-diff.mjs   --source=snapshot:scripts/t2-harness/.sna
   are otherwise missing. The snapshot is also a subset of production's tables, so statements aimed at
   an absent table fail and are skipped; the capture step reads the real schema through Prisma and
   fails loudly if a column it needs is missing.
-- The one intended difference - the streak entries' `stats` no longer carry
-  `longestWinStreak`/`longestLossStreak` - is dropped from both sides before diffing.
+

@@ -1,156 +1,88 @@
-import type { ReactNode } from "react";
+import Link from "next/link";
 import { requireUser } from "@/server/auth";
-import { getDashboardSummary } from "@/server/data/dashboard-summary";
-import { getPlanStatus } from "@/server/data/cappers";
+import { getDashboardSummary, STALE_PENDING_HOURS } from "@/server/data/dashboard-summary";
 import { getCapperPanels } from "@/server/data/capper-panels";
+import { ThemedPage } from "@/components/dashboard/themed-page";
+import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
+import { DashboardStatCards } from "@/components/dashboard/dashboard-stat-cards";
+import { DashboardCategoryCards } from "@/components/dashboard/dashboard-category-cards";
+import { DashboardPanels } from "@/components/dashboard/dashboard-panels";
 import { UnitsChart } from "@/components/dashboard/units-chart";
-import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
-import { TrendingCappers } from "@/components/dashboard/trending-cappers";
-import { EnergyCountUp, EnergyRecordCountUp } from "@/components/dashboard/energy-surge";
-import { ImageBanner } from "@/components/ui/ImageBanner";
-import dashboardBanner from "../../../../public/banners/dashboard.png";
+import { FOOTER_LINK, FOOTER_TEXT, GREEN, PanelShell, RED, TINTS } from "@/components/dashboard/panel-shell";
+import { ActivityIcon, DashboardIcon, ListIcon } from "@/components/dashboard/cappers-icons";
 
-// Color is now owned by EnergySurge/EnergyCountUp (each value sets its own
-// final tone color directly, since the completion effect animates that same
-// color property) - this wrapper is layout/label only.
-function HeroStat({ label, value, href }: { label: string; value: ReactNode; href?: string }) {
-  const content = (
-    <>
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-0.5 whitespace-nowrap text-lg font-semibold">{value}</div>
-    </>
-  );
-  if (href) {
-    return (
-      <a href={href} className="block rounded-md transition hover:opacity-70">
-        {content}
-      </a>
-    );
-  }
-  return <div>{content}</div>;
-}
-
-const STALE_PENDING_HOURS = 24;
+const ICON = "h-[17px] w-[17px] stroke-[2.2]";
+const PERFORMANCE = { ...TINTS.neutral, title: "Performance", subtitle: "Cumulative units across every settled pick", icon: <ActivityIcon className={ICON} /> };
+const RECENT = { ...TINTS.neutral, title: "Recent picks", subtitle: "The latest ten, newest first", icon: <ListIcon className={ICON} /> };
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const [summary, panels, planStatus] = await Promise.all([
-    getDashboardSummary(user.id),
-    getCapperPanels(user.id),
-    getPlanStatus(user.id),
-  ]);
-  const { overall, chartData, stalePendingCount } = summary;
+  const [summary, panels] = await Promise.all([getDashboardSummary(user.id), getCapperPanels(user.id)]);
+  const { chartData, stalePendingCount } = summary;
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <ImageBanner src={dashboardBanner} title="Dashboard" priority mobileHeight={61} />
+    <ThemedPage>
+      <PageHeaderBar icon={<DashboardIcon className="h-[19px] w-[19px]" />} title="Dashboard" tagline="Your betting at a glance" />
 
-      <div className="mb-6 rounded-card border border-brand-100 bg-gradient-to-br from-brand-50 to-white p-6 dark:border-brand-500/20 dark:from-brand-500/10 dark:to-card">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex flex-wrap gap-x-10 gap-y-4">
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-brand-600 dark:text-brand-400">Total picks tracked</div>
-              <div className="mt-1 text-4xl font-bold">
-                <EnergyCountUp value={summary.totalPicks} commas />
-              </div>
-            </div>
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-brand-600 dark:text-brand-400">Cappers tracked</div>
-              <div className="mt-1 text-4xl font-bold">
-                <EnergyCountUp value={planStatus.capperCount} commas />
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
-            <HeroStat
-              label="Record"
-              value={<EnergyRecordCountUp wins={overall.wins} losses={overall.losses} pushes={overall.pushes} />}
-            />
-            <HeroStat
-              label="ROI"
-              value={
-                <EnergyCountUp
-                  value={overall.roi}
-                  decimals={2}
-                  signed
-                  suffix="%"
-                  tone={overall.roi >= 0 ? "up" : "down"}
-                />
-              }
-            />
-            <HeroStat
-              label="Net units"
-              value={
-                <EnergyCountUp
-                  value={overall.netUnits}
-                  decimals={2}
-                  signed
-                  suffix="u"
-                  tone={overall.netUnits >= 0 ? "up" : "down"}
-                />
-              }
-            />
-            <HeroStat label="Pending" value={<EnergyCountUp value={summary.pendingCount} />} href="/picks/pending" />
-          </div>
-        </div>
-      </div>
+      <DashboardStatCards summary={summary} />
 
       {stalePendingCount > 0 && (
         <a
           href="/picks/pending"
-          className="mb-6 flex items-center justify-between gap-3 rounded-card border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 transition hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20"
         >
           <span>
             {stalePendingCount} pick{stalePendingCount === 1 ? " has" : "s have"} been pending over{" "}
             {STALE_PENDING_HOURS} hours - review them
           </span>
-          <span className="font-medium">&rarr;</span>
+          <span className="font-semibold">&rarr;</span>
         </a>
       )}
 
-      {summary.categoryBreakdown.length > 0 && (
-        <div className="mb-6">
-          <h2 className="mb-2 text-sm font-semibold text-foreground">Record by category</h2>
-          <CategoryBreakdown items={summary.categoryBreakdown} animateIn />
-        </div>
-      )}
+      <section className="space-y-2 pt-1">
+        <h2 className="px-0.5 text-[15px] font-semibold tracking-[-0.01em] text-foreground">Record by category</h2>
+        <DashboardCategoryCards items={summary.categoryBreakdown} />
+      </section>
 
-      <TrendingCappers panels={panels} />
+      <DashboardPanels panels={panels} />
 
-      <div className="mb-6 rounded-card bg-card p-5 shadow-soft">
-        <div className="mb-2 text-sm font-medium text-muted-foreground">Performance</div>
-        <UnitsChart data={chartData} />
-      </div>
+      <PanelShell theme={PERFORMANCE} footer={undefined}>
+        <UnitsChart data={chartData} themed />
+      </PanelShell>
 
-      <div className="rounded-card bg-card p-4 shadow-soft">
-        <div className="text-sm text-muted-foreground">Recent picks</div>
-        <div className="mt-3 divide-y divide-border-subtle">
-          {summary.recentPicks.length === 0 && (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No picks yet - add your first capper to get started.
-            </p>
-          )}
-          {summary.recentPicks.map((pick) => (
-            <div key={pick.id} className="flex items-center justify-between py-2 text-sm">
-              <span>
-                {pick.awayTeam} @ {pick.homeTeam} - {pick.label}
-                <span className="text-muted-foreground"> ({pick.capperName})</span>
-              </span>
-              <span
-                className={
-                  pick.status === "WIN"
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : pick.status === "LOSS"
-                      ? "text-red-600 dark:text-red-400"
-                      : "text-muted-foreground"
-                }
-              >
-                {pick.status === "PENDING" ? "Pending" : pick.status + " - " + pick.units + "u"}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+      <PanelShell
+        theme={RECENT}
+        footer={
+          summary.recentPicks.length > 0 && (
+            <>
+              <p className={FOOTER_TEXT}>
+                {summary.totalPicks.toLocaleString("en-US")} pick{summary.totalPicks === 1 ? "" : "s"} tracked
+              </p>
+              <Link href="/picks" className={FOOTER_LINK + " " + RECENT.accent}>
+                View all →
+              </Link>
+            </>
+          )
+        }
+      >
+        {summary.recentPicks.length === 0 ? (
+          <p className="py-6 text-center text-[13px] font-medium text-muted-foreground">No picks yet - add your first capper to get started.</p>
+        ) : (
+          <ul className="divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
+            {summary.recentPicks.map((pick) => (
+              <li key={pick.id} className="flex items-center justify-between gap-3 px-1.5 py-2 text-[13px] font-medium">
+                <span className="min-w-0 text-foreground">
+                  {pick.awayTeam} @ {pick.homeTeam} - {pick.label}
+                  <span className="text-[#5B6275] dark:text-muted-foreground"> ({pick.capperName})</span>
+                </span>
+                <span className={"shrink-0 whitespace-nowrap font-semibold tabular-nums " + (pick.status === "WIN" ? GREEN : pick.status === "LOSS" ? RED : "text-[#5B6275] dark:text-muted-foreground")}>
+                  {pick.status === "PENDING" ? "Pending" : pick.status + " - " + pick.units + "u"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </PanelShell>
+    </ThemedPage>
   );
 }

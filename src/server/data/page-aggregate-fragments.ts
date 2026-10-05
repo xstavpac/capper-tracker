@@ -458,6 +458,98 @@ export function pendingCountsFromBundle(rows: unknown[]): PendingCounts {
 }
 
 // ---------------------------------------------------------------------------
+// 3.f Weekly trend + roster counts (the dashboard stat cards' deltas and sparklines)
+// ---------------------------------------------------------------------------
+
+const WEEK_SECONDS = 7 * 86400;
+
+// One row per rolling week that has anything in it, per kind: 'posted' counts picks of any
+// status by datePosted; 'graded' holds the record and the money totals of decided picks by
+// gameTime (the same per-pick expressions as windowTotalsSelect; a WIN at odds = 0 is left
+// out of unitsWon). Week 0 starts at `start`; picks at or after `now` are in no week. Reads
+// only the picks inside [start, now): at most 2 x weeks rows come back.
+export function weeklyTrendSelect(scope: { userId: string; start: Date; now: Date }): Prisma.Sql {
+  const t0 = Prisma.sql`${scope.start.toISOString()}::timestamp`;
+  const t1 = Prisma.sql`${scope.now.toISOString()}::timestamp`;
+  const week = (col: string) => Prisma.sql`floor(extract(epoch FROM p.${Prisma.raw(col)} - ${t0}) / ${WEEK_SECONDS}::int)::int`;
+  return Prisma.sql`
+    SELECT 'posted'::text AS "kind", x.wk AS "week", count(*)::int AS "n",
+           0::int AS "wins", 0::int AS "losses", 0::int AS "pushes",
+           0::float8 AS "unitsWon", 0::float8 AS "unitsLost", 0::float8 AS "unitsRisked"
+    FROM (
+      SELECT ${week('"datePosted"')} AS wk
+      FROM picks p
+      WHERE p."userId" = ${scope.userId} AND p."datePosted" >= ${t0} AND p."datePosted" < ${t1}
+    ) x
+    GROUP BY x.wk
+    UNION ALL
+    SELECT 'graded'::text, x.wk, count(*)::int,
+           (count(*) FILTER (WHERE x.st = 'WIN'))::int, (count(*) FILTER (WHERE x.st = 'LOSS'))::int, (count(*) FILTER (WHERE x.st = 'PUSH'))::int,
+           COALESCE(sum(x.win_units) FILTER (WHERE x.st = 'WIN' AND x.odds <> 0), 0)::float8,
+           COALESCE(sum(x.units) FILTER (WHERE x.st = 'LOSS'), 0)::float8,
+           COALESCE(sum(x.units), 0)::float8
+    FROM (
+      SELECT ${week('"gameTime"')} AS wk, p.status::text AS st, p.units, p.odds, ${WIN_UNITS} AS win_units
+      FROM picks p
+      WHERE p."userId" = ${scope.userId} AND p.status IN ('WIN', 'LOSS', 'PUSH') AND p."gameTime" >= ${t0} AND p."gameTime" < ${t1}
+    ) x
+    GROUP BY x.wk
+  `;
+}
+
+// The roster as /cappers counts it (test cappers left out): its size now, how many were added
+// since `monthAgo`, and its size at each of `weekEnds` (the CURRENT roster by date added -
+// deleted / merged cappers leave no history). Always exactly one row.
+export function rosterTrendSelect(scope: { userId: string; weekEnds: Date[]; monthAgo: Date }): Prisma.Sql {
+  const ends = Prisma.join(scope.weekEnds.map((d, i) => Prisma.sql`(${i}::int, ${d.toISOString()}::timestamp)`));
+  return Prisma.sql`
+    SELECT count(*)::int AS "count",
+           (count(*) FILTER (WHERE c."createdAt" >= ${scope.monthAgo.toISOString()}::timestamp))::int AS "newMonth",
+           (SELECT jsonb_agg((SELECT count(*) FROM cappers r WHERE r."userId" = ${scope.userId} AND NOT r."isTest" AND r."createdAt" < e.t)::int ORDER BY e.k)
+            FROM (VALUES ${ends}) e(k, t)) AS "tracked"
+    FROM cappers c
+    WHERE c."userId" = ${scope.userId} AND NOT c."isTest"
+  `;
+}
+
+// Per rolling week, oldest first (index weeks - 1 is the 7 days ending now).
+export type DashboardTrends = {
+  capperCount: number;
+  newCappersThisMonth: number;
+  weekly: {
+    tracked: number[]; // roster size at each week's end
+    posted: number[]; // picks posted that week, any status
+    wins: number[]; // decided picks with a game that week ...
+    losses: number[];
+    pushes: number[];
+    unitsWon: number[]; // ... and their money totals
+    unitsLost: number[];
+    unitsRisked: number[];
+  };
+};
+
+export function dashboardTrendsFromBundle(weeklyRows: unknown[], rosterRows: unknown[], weeks: number): DashboardTrends {
+  const zeros = () => Array.from({ length: weeks }, () => 0);
+  const weekly = { tracked: zeros(), posted: zeros(), wins: zeros(), losses: zeros(), pushes: zeros(), unitsWon: zeros(), unitsLost: zeros(), unitsRisked: zeros() };
+  for (const r of weeklyRows as Record<string, unknown>[]) {
+    const i = Number(r.week);
+    if (!(i >= 0 && i < weeks)) continue;
+    if (r.kind === "posted") weekly.posted[i] = Number(r.n);
+    else {
+      weekly.wins[i] = Number(r.wins);
+      weekly.losses[i] = Number(r.losses);
+      weekly.pushes[i] = Number(r.pushes);
+      weekly.unitsWon[i] = Number(r.unitsWon);
+      weekly.unitsLost[i] = Number(r.unitsLost);
+      weekly.unitsRisked[i] = Number(r.unitsRisked);
+    }
+  }
+  const roster = (rosterRows[0] ?? {}) as Record<string, unknown>;
+  ((roster.tracked as unknown[] | null) ?? []).slice(0, weeks).forEach((v, i) => (weekly.tracked[i] = Number(v)));
+  return { capperCount: Number(roster.count ?? 0), newCappersThisMonth: Number(roster.newMonth ?? 0), weekly };
+}
+
+// ---------------------------------------------------------------------------
 // 4.1 The narrow decided-pick series (capper detail)
 // ---------------------------------------------------------------------------
 

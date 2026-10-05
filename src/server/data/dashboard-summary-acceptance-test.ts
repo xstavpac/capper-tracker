@@ -149,10 +149,11 @@ function randomSpecs(capperId: string, n: number, seed: number, spanDays = 70): 
 async function compare(label: string, userId: string, now = NOW) {
   const legacyRaw = computeDashboardSummaryLegacy(await loadLegacyDashboardPicks(userId), now);
   const legacy = narrowLegacySummary(legacyRaw);
-  const next = await computeDashboardSummary(userId, now);
+  // `trends` (the stat cards' weekly series) has no legacy counterpart: checked on its own below.
+  const { trends, ...next } = await computeDashboardSummary(userId, now);
   const d = firstDiff(next, legacy);
   check(`${label}: summary identical to legacy (===, -0 == +0)`, d === null, d ?? "");
-  return { legacy, next };
+  return { legacy, next, trends };
 }
 
 async function makeUser(tag: string) {
@@ -221,9 +222,34 @@ async function main() {
   }
   {
     const { userId, capperId } = await makeUser("mixed");
-    await insertAll(randomSpecs(capperId, 400, 21).map((s) => row(userId, s)));
-    const { next } = await compare("random mixed history (400 picks, all statuses, gradedAt gaps, ties)", userId);
+    const specs = randomSpecs(capperId, 400, 21);
+    await insertAll(specs.map((s) => row(userId, s)));
+    const { next, trends } = await compare("random mixed history (400 picks, all statuses, gradedAt gaps, ties)", userId);
     check("mixed: tiles present, at most 6", next.categoryBreakdown.length > 0 && next.categoryBreakdown.length <= 6);
+
+    // trends: the 8 rolling weeks ending NOW, re-derived from the specs (datePosted == gameTime in this
+    // fixture). Posted counts every status; the record and units risked only decided picks.
+    const WEEK = 7 * 86400000;
+    const zeros = () => Array.from({ length: 8 }, () => 0);
+    const want = { posted: zeros(), wins: zeros(), losses: zeros(), pushes: zeros(), unitsRisked: zeros() };
+    for (const s of specs) {
+      const wk = Math.floor((s.gameTime.getTime() - (NOW.getTime() - 8 * WEEK)) / WEEK);
+      if (wk < 0 || wk > 7 || s.gameTime >= NOW) continue;
+      want.posted[wk]++;
+      const key = s.status === "WIN" ? "wins" : s.status === "LOSS" ? "losses" : s.status === "PUSH" ? "pushes" : null;
+      if (!key) continue;
+      want[key][wk]++;
+      want.unitsRisked[wk] += s.units ?? 1;
+    }
+    const w = trends.weekly;
+    check("trends: picks posted per week == re-derivation, and some fall outside the 8 weeks", w.posted.join() === want.posted.join() && want.posted.reduce((a, b) => a + b, 0) < specs.length, `${w.posted.join()} vs ${want.posted.join()}`);
+    check("trends: weekly W / L / P == re-derivation", [w.wins, w.losses, w.pushes].join("|") === [want.wins, want.losses, want.pushes].join("|"), `${[w.wins, w.losses, w.pushes].join("|")} vs ${[want.wins, want.losses, want.pushes].join("|")}`);
+    check("trends: weekly units risked == re-derivation", w.unitsRisked.every((v, i) => Math.abs(v - want.unitsRisked[i]) < 1e-9), `${w.unitsRisked.join()} vs ${want.unitsRisked.join()}`);
+    check("trends: weekly net units never exceed the all-time record's reach (won - lost is finite, lost <= risked)", w.unitsLost.every((v, i) => v <= w.unitsRisked[i] + 1e-9) && w.unitsWon.every(Number.isFinite));
+    // The fixture's one capper was created just now: after every (pinned) week end, inside the last 30 days.
+    check("trends: roster counts 1 capper, added this month, in no past week's roster", trends.capperCount === 1 && trends.newCappersThisMonth === 1 && w.tracked.join() === zeros().join(), JSON.stringify(trends));
+    await prisma.capper.create({ data: { id: `${PREFIX}capper-mixed-test`, userId, name: "Test capper", source: "OTHER", isTest: true } });
+    check("trends: a test capper is not counted", (await computeDashboardSummary(userId, NOW)).trends.capperCount === 1);
   }
   {
     // G4, documented: the SQL tiles read the STORED category, so a never-stamped row (categoryVersion 0,
@@ -233,7 +259,7 @@ async function main() {
     const specs = randomSpecs(capperId, 120, 77).map((s, i) => ({ ...s, unstamped: i % 9 === 0 }));
     await insertAll(specs.map((s) => row(userId, s)));
     const legacy = narrowLegacySummary(computeDashboardSummaryLegacy(await loadLegacyDashboardPicks(userId), NOW));
-    const next = await computeDashboardSummary(userId, NOW);
+    const { trends: _trends, ...next } = await computeDashboardSummary(userId, NOW);
     const { categoryBreakdown: lb, ...lrest } = legacy;
     const { categoryBreakdown: nb, ...nrest } = next;
     check("unstamped rows: everything except the tiles is still identical", firstDiff(nrest, lrest) === null, firstDiff(nrest, lrest) ?? "");
@@ -256,7 +282,7 @@ async function main() {
     // `now` differs by milliseconds between the calls; nothing in this fixture sits near the cutoff.
     check("getDashboardSummary (cachedByTag wrapper) == computeDashboardSummary", firstDiff(viaWrapper, direct) === null, firstDiff(viaWrapper, direct) ?? "");
     check("Q4 shape: overall is exactly { wins, losses, pushes, roi, netUnits }", Object.keys(direct.overall).sort().join() === "losses,netUnits,pushes,roi,wins");
-    check("summary keys are the page's reads: overall, totalPicks, categoryBreakdown, chartData, pendingCount, stalePendingCount, recentPicks", Object.keys(direct).sort().join() === "categoryBreakdown,chartData,overall,pendingCount,recentPicks,stalePendingCount,totalPicks");
+    check("summary keys are the page's reads: overall, totalPicks, categoryBreakdown, chartData, pendingCount, stalePendingCount, recentPicks, trends", Object.keys(direct).sort().join() === "categoryBreakdown,chartData,overall,pendingCount,recentPicks,stalePendingCount,totalPicks,trends");
   }
 
   console.log(`\n${assertions} assertions, ${failures} failed.`);
