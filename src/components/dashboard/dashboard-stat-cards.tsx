@@ -43,7 +43,9 @@ export function DashboardStatCards({ summary }: { summary: Summary }) {
 
   return (
     // auto-rows-fr: the Record card's second sub line makes it a line taller, and every row matches it.
-    <div className="grid auto-rows-fr grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-1 min-[900px]:grid-cols-2 min-[1100px]:grid-cols-3 min-[1700px]:grid-cols-6">
+    // Six across only from 2070px, where the cards reach their widest (the page stops growing at 1680px):
+    // any narrower and a sub line ends in an ellipsis or a sparkline is squeezed out. Three across below.
+    <div className="grid auto-rows-fr grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-1 min-[900px]:grid-cols-2 min-[1100px]:grid-cols-3 min-[2070px]:grid-cols-6">
       <StatCard
         label="Total picks"
         icon={<ListChecksIcon className={ICON} />}
