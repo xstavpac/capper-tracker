@@ -160,9 +160,13 @@ export function GameDetailPanel({
       {progress && <LiveProgressBar pct={progress.pct} label={progress.label} />}
       {/* The groups, in the same order as before (leading team, other team, then Totals and Other
           markets - the same TOTALS and OTHER groups GamePicksExpander shows, each hidden when empty),
-          flowed into balanced columns: two when the panel has room for two ~230px columns, else one.
-          -mb-3 takes back the last group's own bottom margin. */}
-      <div className="-mb-3 mt-3 gap-3 [columns:230px_2]">
+          as one grid: a single column on mobile, and on desktop a 2x2 - the two teams side by side,
+          then Totals | Other markets beneath. items-start lets each group keep its own height. The 2x2
+          starts at 1200px rather than lg: because from lg: the app sidebar and the Games list sit beside
+          this panel, leaving it ~290px at 1024 (two 140px columns); 1200px is where each column reaches
+          the ~230px a pick card needs. Rows are spaced by each group's own bottom margin (hence gap-x
+          only); -mb-3 takes the last row's back. */}
+      <div className="-mb-3 mt-3 grid grid-cols-1 items-start gap-x-3 min-[1200px]:grid-cols-2">
         <TeamPickSection {...first} headerRef={firstHeaderRef} />
         <TeamPickSection {...second} />
         {data.totals.picks.length > 0 && <TeamPickSection {...data.totals} />}
