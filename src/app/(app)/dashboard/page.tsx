@@ -27,9 +27,11 @@ export default async function DashboardPage() {
           the word ends at 55.1% and the illustration starts at 58.8%. A phone's row is 52px tall, so
           the art is 480px wide: shifted 3px left, the circle is 16px from the card's edge, the word
           ends at 262px and the illustration would start at 279px. The crop ends 10px before that.
+          From `sm` up nothing is shifted, and the crop ends 10px before the illustration's start in
+          the 104px row (565px) and the 112px row (608px).
           The motto is indented to sit under the D: 18.1% of the art's width, less the shift on a
           phone - 84px there, 174px in the 104px row (960px of art) and 187px in the 112px row (1034px). */}
-      <PageBanner src={dashboardBanner} title="Dashboard" className="bg-[#001637]" rowClassName="max-sm:h-[52px]" cropClassName="max-sm:w-[269px]" imageClassName="max-sm:-ml-[3px]" glow="card">
+      <PageBanner src={dashboardBanner} title="Dashboard" className="bg-[#001637]" rowClassName="max-sm:h-[52px]" cropClassName="w-[269px] sm:w-[555px] lg:w-[598px]" imageClassName="max-sm:-ml-[3px]" glow="card">
         <p className="whitespace-nowrap pb-[11px] pl-[84px] text-[9.5px] font-bold uppercase tracking-[2px] text-[#BFD3FF] sm:pb-4 sm:pl-[174px] sm:text-[13px] sm:tracking-[3.5px] lg:pl-[187px]">
           Track <span className="text-[#38BDF8]">·</span> Compare <span className="text-[#38BDF8]">·</span> Decide
         </p>
