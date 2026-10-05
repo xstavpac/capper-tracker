@@ -49,7 +49,7 @@ export function StatCard({
   color: string;
   value: string;
   valueClass?: string;
-  sub: string;
+  sub: ReactNode;
   subClass?: string;
   // Omitted when the number has no history to draw: the card then has no sparkline.
   series?: number[];
@@ -63,9 +63,18 @@ export function StatCard({
       <span className={"flex h-10 w-10 shrink-0 items-center justify-center rounded-full " + iconClass}>{icon}</span>
       <div className="min-w-0 flex-1">
         <p className={"truncate text-[10.5px] font-semibold uppercase tracking-[0.07em] " + MUTED}>{label}</p>
-        {/* The sparkline shares the value's row, so it gives way before the number does in a narrow card. */}
-        <div className="mt-0.5 flex items-center justify-between gap-2">
-          <p className={"whitespace-nowrap text-[22px] font-semibold leading-[1.15] tracking-[-0.02em] tabular-nums " + (valueClass ?? "text-foreground")}>{value}</p>
+        {/* The sparkline shares the value's row, so it gives way before the number does in a narrow card.
+            A value still too long for the row then shrinks to fit it: the row is a size container and
+            the font follows its width over the value's length (a tabular character is ~0.62em wide),
+            from 22px down to an 18px floor. Past the floor it wraps (it never shrinks below its own width
+            first, so the sparkline has fully given way by then) rather than overflow or clip. */}
+        <div className="mt-0.5 flex items-center justify-between gap-2 [container-type:inline-size]">
+          <p
+            className={"max-w-full shrink-0 font-semibold leading-[1.15] tracking-[-0.02em] tabular-nums [overflow-wrap:anywhere] " + (valueClass ?? "text-foreground")}
+            style={{ fontSize: "clamp(18px, calc(100cqw / " + (Math.max(1, value.length) * 0.62).toFixed(2) + "), 22px)" }}
+          >
+            {value}
+          </p>
           {series && series.length > 1 && <Spark values={series} color={color} />}
         </div>
         <p className={"mt-0.5 text-[11.5px] font-medium leading-tight tabular-nums " + (subClass ?? MUTED)}>{sub}</p>

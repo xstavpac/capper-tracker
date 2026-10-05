@@ -7,25 +7,14 @@ import { LiveScoreboard } from "@/components/live/live-scoreboard";
 import { GridLiveBoard } from "@/components/live/grid-live-board";
 import { orderBoardGames } from "@/components/live/live-scoreboard-ordering";
 import { resolveGridLiveSelection } from "@/lib/grid-live-selection";
-import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
+import { LiveCategoryPanel } from "@/components/live/live-category-panel";
 import { ParlaySlipButton } from "@/components/parlay/parlay-slip-button";
 import { easternDateKey } from "@/lib/dates";
-import { ImageBanner } from "@/components/ui/ImageBanner";
-import liveBanner from "../../../../public/banners/live.png";
+import { ThemedPage } from "@/components/dashboard/themed-page";
+import { PILL_GROUP, PageHeaderBar, pill } from "@/components/dashboard/page-header-bar";
+import { LiveIcon } from "@/components/dashboard/cappers-icons";
 
-function tabClass(isActive: boolean) {
-  return (
-    "rounded-full px-4 py-1.5 text-sm font-medium " +
-    (isActive ? "bg-red-600 text-white" : "bg-card text-muted-foreground shadow-soft hover:bg-muted")
-  );
-}
-
-function viewToggleClass(isActive: boolean) {
-  return (
-    "rounded-full px-3 py-1 text-xs font-medium " +
-    (isActive ? "bg-foreground text-background" : "bg-card text-muted-foreground shadow-soft hover:bg-muted")
-  );
-}
+const EMPTY = "rounded-[18px] bg-white p-10 text-center shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none";
 
 export default async function LivePage({
   searchParams,
@@ -118,71 +107,57 @@ export default async function LivePage({
     : null;
 
   return (
-    <>
-      <div className="mx-auto max-w-5xl">
-        <ImageBanner src={liveBanner} title="Live odds and scores" priority />
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-          <p className="text-sm text-muted-foreground">Powered by The Odds API</p>
-          <ParlaySlipButton />
-        </div>
-
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-2">
-            {LIVE_SPORTS.map((s) => (
-              <a
-                key={s.key}
-                href={"/live?sport=" + s.key + (isGrid ? "&view=advanced" : "&view=feed")}
-                className={tabClass(activeSport === s.key)}
-              >
-                {s.label}
-              </a>
-            ))}
-          </div>
-          <div className="flex gap-1.5 rounded-full bg-muted/60 p-1">
-            <a href={"/live?sport=" + activeSport + "&view=feed"} className={viewToggleClass(!isGrid)}>
+    <ThemedPage>
+      {/* The shared dark banner: league pills (plain links, like the view toggle - see isGrid above),
+          then the Feed/Grid toggle and the Parlay slip control on the right. */}
+      <PageHeaderBar icon={<LiveIcon className="h-[19px] w-[19px]" />} iconClass="rounded-[11px] bg-red-600" title="Live" tagline="Powered by The Odds API">
+        <nav aria-label="League" className={PILL_GROUP + " xl:mx-auto"}>
+          {LIVE_SPORTS.map((s) => (
+            <a
+              key={s.key}
+              href={"/live?sport=" + s.key + (isGrid ? "&view=advanced" : "&view=feed")}
+              aria-current={activeSport === s.key ? "page" : undefined}
+              className={pill(activeSport === s.key) + " px-3 min-[1700px]:px-3.5"}
+            >
+              {s.label}
+            </a>
+          ))}
+        </nav>
+        <div className="flex flex-wrap items-center gap-2.5 ml-auto">
+          <nav aria-label="View" className={PILL_GROUP}>
+            <a href={"/live?sport=" + activeSport + "&view=feed"} aria-current={!isGrid ? "page" : undefined} className={pill(!isGrid) + " px-3"}>
               Feed
             </a>
-            <a href={"/live?sport=" + activeSport + "&view=advanced"} className={viewToggleClass(isGrid)}>
+            <a href={"/live?sport=" + activeSport + "&view=advanced"} aria-current={isGrid ? "page" : undefined} className={pill(isGrid) + " px-3"}>
               Grid
             </a>
-          </div>
+          </nav>
+          <ParlaySlipButton dark />
         </div>
+      </PageHeaderBar>
 
-        {sportCategoryBreakdown.length > 0 && (
-          <div className="mb-6">
-            <h2 className="mb-2 text-sm font-semibold text-foreground">{sportLabel} record by category</h2>
-            <CategoryBreakdown items={sportCategoryBreakdown} leaderboards={sportCategoryLeaderboards} />
-          </div>
-        )}
+      {sportCategoryBreakdown.length > 0 && (
+        <LiveCategoryPanel sportLabel={sportLabel} items={sportCategoryBreakdown} leaderboards={sportCategoryLeaderboards} />
+      )}
 
-        {odds.length === 0 && hasApiKey && (
-          <div className="rounded-card bg-card p-10 text-center shadow-soft">
-            <p className="text-sm text-muted-foreground">No games found for this sport right now.</p>
-          </div>
-        )}
-      </div>
+      {odds.length === 0 && hasApiKey && (
+        <div className={EMPTY}>
+          <p className="text-[13px] font-medium text-muted-foreground">No games found for this sport right now.</p>
+        </div>
+      )}
 
-      {/* Grid Live's board gets its own, wider container instead of living
-          inside the max-w-5xl div above - the header/tabs/category panel
-          stay put, but the board is the one thing on this page with genuine
-          unused margin next to it on larger screens (its game-card list
-          column was a fixed, cramped 320px regardless of viewport). Only
-          grows past max-w-5xl at xl/2xl - untouched at the in-between
-          desktop widths (1024-1279px) where that margin doesn't exist yet.
-          Feed's LiveScoreboard is deliberately NOT touched by this - it gets
-          its own unchanged max-w-5xl wrapper below. */}
+      {/* Grid Live's board fills the themed page's width; Feed's LiveScoreboard keeps its own
+          max-w-5xl wrapper below. */}
       {odds.length > 0 && isGrid && initialSelection && (
-        <div className="mx-auto max-w-5xl xl:max-w-6xl 2xl:max-w-7xl">
-          <GridLiveBoard
-            key={activeSport}
-            activeSport={activeSport}
-            sportLabel={sportLabel}
-            odds={odds}
-            initialScores={scores}
-            matchedPicksByGame={expanderPicksByGame}
-            initialSelection={initialSelection}
-          />
-        </div>
+        <GridLiveBoard
+          key={activeSport}
+          activeSport={activeSport}
+          sportLabel={sportLabel}
+          odds={odds}
+          initialScores={scores}
+          matchedPicksByGame={expanderPicksByGame}
+          initialSelection={initialSelection}
+        />
       )}
 
       {odds.length > 0 && !isGrid && (
@@ -198,7 +173,7 @@ export default async function LivePage({
           />
         </div>
       )}
-    </>
+    </ThemedPage>
   );
 }
 

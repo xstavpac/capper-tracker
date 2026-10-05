@@ -20,7 +20,7 @@ import {
   type GameCardRecordRow,
   type GameCardStreak,
 } from "@/lib/game-card-record-line";
-import { Avatar, FavoriteStarIcon } from "@/components/dashboard/capper-panels";
+import { FavoriteStarIcon } from "@/components/dashboard/capper-panels";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { useParlayPool } from "@/components/parlay/parlay-pool-context";
 
@@ -129,16 +129,18 @@ export function PickCard({
   return (
     <div
       className={
-        "rounded-[7px] border px-2.5 py-2 " +
+        "rounded-[10px] border px-3 py-2 " +
         (isTopPerformer
-          ? "border-emerald-300 bg-emerald-50/60 ring-1 ring-emerald-200 dark:border-emerald-700 dark:bg-emerald-500/10 dark:ring-emerald-800"
-          : "border-border-subtle")
+          ? "border-[#86D5A4] bg-[#ECFAF1] ring-1 ring-[#86D5A4]/60 dark:border-emerald-500/60 dark:bg-emerald-500/[0.12] dark:ring-emerald-500/30"
+          : "border-[#E6E8EF] bg-white dark:border-border dark:bg-card")
       }
     >
-      <div className="flex items-center justify-between gap-2">
+      {/* The status and odds drop under the name in a narrow card rather than squeezing it. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
         <div className="flex min-w-0 items-center gap-1.5">
           {selectable && <SelectCheckbox pick={pick} />}
-          <Avatar name={pick.capperName} colorTag={pick.capperColorTag} size={17} />
+          {/* The capper's own color (the blue a capper with no color set has always had). */}
+          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: pick.capperColorTag ?? "#3B82F6" }} aria-hidden="true" />
           <Link
             href={"/cappers/" + pick.capperId}
             onClick={(e) => e.stopPropagation()}
@@ -153,7 +155,7 @@ export function PickCard({
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <span className={"rounded-full px-1.5 py-0 text-[9px] font-semibold " + STATUS_CLASSES[pick.status]}>
             {STATUS_LABELS[pick.status]}
           </span>
@@ -178,7 +180,7 @@ export function PickCard({
           )}
         </div>
       </div>
-      <div className="mt-0.5 pl-[23px] text-[11px] text-muted-foreground">
+      <div className="mt-0.5 pl-[14px] text-[11px] text-muted-foreground">
         <div className="text-foreground/90">{pick.betDetail}</div>
         {loading ? (
           <div className="mt-0.5 text-[10px] text-muted-foreground">Loading record&hellip;</div>

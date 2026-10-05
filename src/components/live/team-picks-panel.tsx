@@ -7,6 +7,8 @@ import { PickCard } from "@/components/live/pick-card";
 import { orderTeamSections, type GridLiveGamePanelData, type GridLiveTeamSideData } from "@/components/live/grid-live-team-panel-data";
 import { LiveProgressBar } from "@/components/live/live-progress-bar";
 import type { LiveGameProgress } from "@/lib/live-game-progress";
+import { LocalGameTime } from "@/components/local-game-time";
+import { TINTS } from "@/components/dashboard/panel-shell";
 
 // Grid Live's fixed detail panel - shows BOTH teams' picks at once,
 // stacked in one card, unlike GamePicksExpander (which lists AWAY/HOME/OTHER
@@ -63,7 +65,16 @@ function TeamPickSection({
   }, [picksKey]);
 
   return (
-    <div>
+    // One tinted box per group: a wash of the team's color (same hex + low-alpha formula as
+    // GamePicksExpander's team-group header), neutral gray for Totals or an unmapped team, violet for
+    // Other markets. break-inside-avoid keeps a group whole in GameDetailPanel's column layout.
+    <div
+      className={
+        "mb-3 break-inside-avoid rounded-[14px] border p-2.5 " +
+        (violet ? TINTS.violet.card : teamColor ? "dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]" : "border-[#E3E6EE] bg-[#F5F6FA] dark:border-border dark:bg-white/[0.04]")
+      }
+      style={!violet && teamColor ? { backgroundColor: teamColor + "14", borderColor: teamColor + "47" } : undefined}
+    >
       <div
         ref={headerRef}
         // -1 so this is never in the tab sequence itself but IS a valid
@@ -75,20 +86,7 @@ function TeamPickSection({
         // since selecting a game is a click) shows no ring, while a
         // keyboard-triggered selection still gets one.
         tabIndex={-1}
-        className={
-          "mb-2 flex scroll-mt-4 items-center gap-1.5 rounded-md px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-brand-400" +
-          (violet ? " bg-violet-500/10 dark:bg-violet-400/10" : "")
-        }
-        style={
-          violet
-            ? undefined
-            : {
-                // Same wash formula as GamePicksExpander's team-group header
-                // (hex color + a ~12% alpha suffix) - reused as-is so the two
-                // views' team-hue treatment matches exactly.
-                backgroundColor: teamColor ? teamColor + "1F" : "rgb(var(--muted-foreground) / 0.10)",
-              }
-        }
+        className="mb-2 flex scroll-mt-4 items-center gap-2 rounded-md px-1 py-0.5 outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
       >
         <span
           className={
@@ -98,14 +96,14 @@ function TeamPickSection({
           style={violet ? undefined : { backgroundColor: teamColor ?? "rgb(var(--muted-foreground))" }}
           aria-hidden="true"
         />
-        <span className="text-sm font-semibold text-foreground">{teamLabel}</span>
-        <span className="text-xs text-muted-foreground">
-          &mdash; {picks.length} pick{picks.length === 1 ? "" : "s"}
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{teamLabel}</span>
+        <span className="shrink-0 text-xs font-medium text-[#5B6275] dark:text-muted-foreground">
+          {picks.length} pick{picks.length === 1 ? "" : "s"}
         </span>
       </div>
 
       {picks.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">No logged picks for {teamLabel}.</p>
+        <p className="py-4 text-center text-[13px] font-medium text-muted-foreground">No logged picks for {teamLabel}.</p>
       ) : (
         <div className="space-y-1.5">
           {picks.map((pick) => (
@@ -126,10 +124,16 @@ function TeamPickSection({
 // tapped - the "clicked/expanded state") is where it has to live.
 export function GameDetailPanel({
   data,
+  commenceTime,
+  pickCount,
   progress,
   firstHeaderRef,
 }: {
   data: GridLiveGamePanelData;
+  // The selected game's start and its total matched picks (every group), for the panel's header -
+  // both read from what GridLiveBoard already holds for the game list.
+  commenceTime: string;
+  pickCount: number;
   progress?: LiveGameProgress | null;
   // Desktop's auto-scroll-to-picks target (see grid-live-board.tsx) - the
   // leading team section's header, whichever team that is per
@@ -141,30 +145,29 @@ export function GameDetailPanel({
 }) {
   const [first, second] = orderTeamSections(data.away, data.home);
   return (
-    <div className="rounded-card bg-card p-4 shadow-soft">
-      {progress && (
-        <div className="mb-4">
-          <LiveProgressBar pct={progress.pct} label={progress.label} />
-        </div>
-      )}
-      <TeamPickSection {...first} headerRef={firstHeaderRef} />
-      <div className="my-4 border-t border-border-subtle" />
-      <TeamPickSection {...second} />
-      {/* Game/team totals, then player props, NRFI, and any team-tied bet
-          betDetail couldn't match to a side - the same TOTALS and OTHER
-          groups GamePicksExpander shows. Each hides when empty. */}
-      {data.totals.picks.length > 0 && (
-        <>
-          <div className="my-4 border-t border-border-subtle" />
-          <TeamPickSection {...data.totals} />
-        </>
-      )}
-      {data.other.picks.length > 0 && (
-        <>
-          <div className="my-4 border-t border-border-subtle" />
-          <TeamPickSection {...data.other} />
-        </>
-      )}
-    </div>
+    <section className={"rounded-[18px] border p-3.5 " + TINTS.neutral.card}>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <h2 className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">
+          {data.away.teamLabel} @ {data.home.teamLabel}
+        </h2>
+        <p className="flex shrink-0 items-center gap-2 text-xs font-medium text-[#5B6275] dark:text-muted-foreground">
+          <LocalGameTime date={commenceTime} options={{ month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }} />
+          <span className="rounded-full bg-[#E6ECFF] px-2 py-0.5 text-[10.5px] font-semibold leading-none text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+            {pickCount} pick{pickCount === 1 ? "" : "s"}
+          </span>
+        </p>
+      </div>
+      {progress && <LiveProgressBar pct={progress.pct} label={progress.label} />}
+      {/* The groups, in the same order as before (leading team, other team, then Totals and Other
+          markets - the same TOTALS and OTHER groups GamePicksExpander shows, each hidden when empty),
+          flowed into balanced columns: two when the panel has room for two ~230px columns, else one.
+          -mb-3 takes back the last group's own bottom margin. */}
+      <div className="-mb-3 mt-3 gap-3 [columns:230px_2]">
+        <TeamPickSection {...first} headerRef={firstHeaderRef} />
+        <TeamPickSection {...second} />
+        {data.totals.picks.length > 0 && <TeamPickSection {...data.totals} />}
+        {data.other.picks.length > 0 && <TeamPickSection {...data.other} />}
+      </div>
+    </section>
   );
 }

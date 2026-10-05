@@ -201,7 +201,7 @@ export function GridLiveBoard({
   const selectedProgress = selectedEntry ? getLiveGameProgress(activeSport, selectedEntry.score) : null;
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,320px)_1fr] xl:grid-cols-[minmax(0,380px)_1fr] 2xl:grid-cols-[minmax(0,420px)_1fr]">
+    <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)] min-[1500px]:grid-cols-[minmax(0,380px)_minmax(0,1fr)] min-[1700px]:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
       <GridLiveGameList
         sortedGames={sortedGames}
         matchedPicksByGame={matchedPicksByGame}
@@ -212,14 +212,20 @@ export function GridLiveBoard({
       />
       <div ref={panelRef}>
         {panelData ? (
-          <GameDetailPanel data={panelData} progress={selectedProgress} firstHeaderRef={firstHeaderRef} />
+          <GameDetailPanel
+            data={panelData}
+            commenceTime={selectedEntry.game.commenceTime}
+            pickCount={(matchedPicksByGame[selectedEntry.gameIndex] ?? []).length}
+            progress={selectedProgress}
+            firstHeaderRef={firstHeaderRef}
+          />
         ) : (
           <div
             ref={emptyStateRef}
             tabIndex={-1}
-            className="scroll-mt-4 rounded-card bg-card p-10 text-center shadow-soft outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            className="scroll-mt-4 rounded-[18px] bg-white p-10 text-center shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dark:border dark:border-border dark:bg-card dark:shadow-none"
           >
-            <p className="text-sm text-muted-foreground">No games found for this sport right now.</p>
+            <p className="text-[13px] font-medium text-muted-foreground">No games found for this sport right now.</p>
           </div>
         )}
       </div>
