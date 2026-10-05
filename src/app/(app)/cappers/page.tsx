@@ -13,7 +13,7 @@ import { CappersLeaderboardCard } from "@/components/dashboard/cappers-leaderboa
 import { ThemedPage } from "@/components/dashboard/themed-page";
 
 const LEAGUES = LIVE_SPORTS.map((s) => s.label);
-// The Add capper button as it sits in the dark banner.
+// The Add capper button in the no-cappers-yet card (otherwise it is in the leaderboard card).
 const ADD_BUTTON = "h-10 shrink-0 rounded-[10px] bg-brand-600 px-[18px] text-[13px] font-medium text-white transition hover:bg-brand-700";
 
 export default async function CappersPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
@@ -40,22 +40,16 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
 
   return (
     <ThemedPage>
-      <CappersHeader params={params} controls={data.capperCount > 0}>
-        {data.capperCount > 0 ? (
-          // On a phone the Add control is in the leaderboard card instead. sm:contents: from `sm` up
-          // the wrapper is not a box, so the button (or the open form) sits in the banner as before.
-          <div className="hidden sm:contents">
-            <CapperForm atLimit={false} triggerClassName={ADD_BUTTON} />
-          </div>
-        ) : (
-          <CapperForm atLimit={false} triggerClassName={ADD_BUTTON + " ml-auto"} />
-        )}
-      </CappersHeader>
+      <CappersHeader params={params} controls={data.capperCount > 0} />
       {suspectedDuplicates.length > 0 && <MergeCappersPanel cappers={cappersWithCounts} suspected={suspectedDuplicates} />}
 
       {data.capperCount === 0 ? (
         <div className="rounded-card bg-card p-10 text-center shadow-soft">
           <p className="text-sm text-muted-foreground">No cappers yet - add the first person or channel you follow for picks.</p>
+          {/* text-left: the open form is laid out as it is everywhere else. */}
+          <div className="mt-4 flex justify-center text-left">
+            <CapperForm atLimit={false} triggerClassName={ADD_BUTTON} />
+          </div>
         </div>
       ) : (
         <>

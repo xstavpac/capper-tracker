@@ -3,13 +3,14 @@ import { requireUser } from "@/server/auth";
 import { getDashboardSummary, STALE_PENDING_HOURS } from "@/server/data/dashboard-summary";
 import { getCapperPanels } from "@/server/data/capper-panels";
 import { ThemedPage } from "@/components/dashboard/themed-page";
-import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
+import { PageBanner } from "@/components/dashboard/page-banner";
 import { DashboardStatCards } from "@/components/dashboard/dashboard-stat-cards";
 import { DashboardCategoryCards } from "@/components/dashboard/dashboard-category-cards";
 import { DashboardPanels } from "@/components/dashboard/dashboard-panels";
 import { UnitsChart } from "@/components/dashboard/units-chart";
 import { FOOTER_LINK, FOOTER_TEXT, GREEN, PanelShell, RED, TINTS } from "@/components/dashboard/panel-shell";
-import { ActivityIcon, DashboardIcon, ListIcon } from "@/components/dashboard/cappers-icons";
+import { ActivityIcon, ListIcon } from "@/components/dashboard/cappers-icons";
+import dashboardBanner from "../../../../public/banners/dashboard.png";
 
 const ICON = "h-[17px] w-[17px] stroke-[2.2]";
 const PERFORMANCE = { ...TINTS.neutral, title: "Performance", subtitle: "Cumulative units across every settled pick", icon: <ActivityIcon className={ICON} /> };
@@ -22,7 +23,14 @@ export default async function DashboardPage() {
 
   return (
     <ThemedPage>
-      <PageHeaderBar icon={<DashboardIcon className="h-[19px] w-[19px]" />} title="Dashboard" tagline="Your betting at a glance" />
+      {/* dashboard.png is 2040x221, and the "D" of the word starts 18.14% of the way across it. The
+          motto is indented to sit under that D: 18.14% of the card from `sm` up (the art spans the
+          card), and 107px on a phone - the art is 64px tall there, so 64 x 2040/221 = 591px wide. */}
+      <PageBanner src={dashboardBanner} title="Dashboard" frameClassName="h-16 sm:h-auto sm:aspect-[2040/221]">
+        <p className="whitespace-nowrap pb-3.5 pl-[107px] text-[10.5px] font-bold uppercase tracking-[2.2px] text-[#BFD3FF] sm:pb-[18px] sm:pl-[18.14%] sm:text-[13px] sm:tracking-[3.5px]">
+          Track <span className="text-[#38BDF8]">·</span> Compare <span className="text-[#38BDF8]">·</span> Decide
+        </p>
+      </PageBanner>
 
       <DashboardStatCards summary={summary} />
 
