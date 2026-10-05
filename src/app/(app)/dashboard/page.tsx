@@ -39,12 +39,10 @@ export default async function DashboardPage() {
         </a>
       )}
 
-      {summary.categoryBreakdown.length > 0 && (
-        <section className="space-y-2 pt-1">
-          <h2 className="px-0.5 text-[15px] font-semibold tracking-[-0.01em] text-foreground">Record by category</h2>
-          <DashboardCategoryCards items={summary.categoryBreakdown} />
-        </section>
-      )}
+      <section className="space-y-2 pt-1">
+        <h2 className="px-0.5 text-[15px] font-semibold tracking-[-0.01em] text-foreground">Record by category</h2>
+        <DashboardCategoryCards items={summary.categoryBreakdown} />
+      </section>
 
       <DashboardPanels panels={panels} />
 
