@@ -5,6 +5,8 @@ import { RANKING_MIN_SAMPLE } from "@/server/data/stats";
 import { PAGE_SIZE, cappersHref, type CappersParams } from "@/lib/cappers-page-params";
 import { CapperSparkline, sparklineLabel } from "@/components/dashboard/capper-sparkline";
 import { CappersLeaderboardControls, FavoritesToggle } from "@/components/dashboard/cappers-leaderboard-controls";
+import { CappersSearch } from "@/components/dashboard/cappers-search";
+import { CapperForm } from "@/components/dashboard/capper-form";
 import { ClickableRow } from "@/components/dashboard/clickable-row";
 import { FavoriteStar } from "@/components/dashboard/favorite-star";
 import { formatRecord } from "@/components/dashboard/top-cappers";
@@ -110,7 +112,13 @@ export function CappersLeaderboardCard({
   return (
     <div id="leaderboard" className="scroll-mt-4 rounded-card bg-card p-5 shadow-soft">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-foreground">Capper leaderboard</h2>
+        <h2 className="text-base font-semibold text-foreground max-sm:w-full">Capper leaderboard</h2>
+        {/* Phone only: the search and the Add control, which the banner carries from `sm` up. The
+            open form takes the row under the search. */}
+        <div className="flex w-full flex-wrap items-center gap-2 sm:hidden">
+          <CappersSearch params={params} variant="leaderboard" />
+          <CapperForm atLimit={false} triggerLabel="+ Add" triggerClassName="h-11 shrink-0 rounded-lg bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700" />
+        </div>
         <FavoritesToggle params={params} />
       </div>
 

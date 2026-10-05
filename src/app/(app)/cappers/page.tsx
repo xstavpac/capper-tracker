@@ -41,7 +41,15 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
   return (
     <ThemedPage>
       <CappersHeader params={params} controls={data.capperCount > 0}>
-        <CapperForm atLimit={false} triggerClassName={ADD_BUTTON + (data.capperCount > 0 ? "" : " ml-auto")} />
+        {data.capperCount > 0 ? (
+          // On a phone the Add control is in the leaderboard card instead. sm:contents: from `sm` up
+          // the wrapper is not a box, so the button (or the open form) sits in the banner as before.
+          <div className="hidden sm:contents">
+            <CapperForm atLimit={false} triggerClassName={ADD_BUTTON} />
+          </div>
+        ) : (
+          <CapperForm atLimit={false} triggerClassName={ADD_BUTTON + " ml-auto"} />
+        )}
       </CappersHeader>
       {suspectedDuplicates.length > 0 && <MergeCappersPanel cappers={cappersWithCounts} suspected={suspectedDuplicates} />}
 
