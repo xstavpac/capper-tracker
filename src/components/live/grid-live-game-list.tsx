@@ -5,6 +5,8 @@ import { TeamColorBar } from "@/components/live/team-color-bar";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getLiveGameProgress } from "@/lib/live-game-progress";
 import { LiveProgressBar, LiveProgressLabel } from "@/components/live/live-progress-bar";
+import { TINTS } from "@/components/dashboard/panel-shell";
+import { CalendarIcon } from "@/components/dashboard/cappers-icons";
 
 // The compact, one-row-per-game list Grid Live shows instead of Feed
 // Live's full accordion cards. Deliberately minimal - just enough to
@@ -44,14 +46,21 @@ export function GridLiveGameList({
 }) {
   if (sortedGames.length === 0) {
     return (
-      <div className="rounded-card bg-card p-6 text-center shadow-soft">
-        <p className="text-sm text-muted-foreground">No games found for this sport right now.</p>
+      <div className={"rounded-[18px] border p-6 text-center " + TINTS.blue.card}>
+        <p className="text-[13px] font-medium text-muted-foreground">No games found for this sport right now.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-1.5">
+    <section className={"rounded-[18px] border p-3 " + TINTS.blue.card}>
+      <div className="mb-2.5 flex items-center gap-3 px-0.5">
+        <span className={"flex h-[26px] w-[26px] shrink-0 items-center justify-center " + TINTS.blue.iconWrap}>
+          <CalendarIcon className="h-[15px] w-[15px] stroke-[2.2]" />
+        </span>
+        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-foreground">Games</h2>
+      </div>
+      <div className="space-y-2">
       {sortedGames.map(({ game, gameIndex, score }) => {
         const isSelected = game.id === selectedGameId;
         const isLive = score?.status === "live";
@@ -71,13 +80,13 @@ export function GridLiveGameList({
             onClick={() => onSelectGame(game.id)}
             onDoubleClick={() => onOpenGame(game.id)}
             className={
-              "block w-full rounded-lg border px-3 py-2 text-left transition-colors " +
+              "block w-full rounded-xl border bg-white px-3 py-2.5 text-left transition-colors dark:bg-card " +
               (isSelected
-                ? "border-brand-300 bg-brand-50 dark:border-brand-700 dark:bg-brand-500/10"
-                : "border-border-subtle bg-card hover:bg-muted")
+                ? "border-brand-600 ring-1 ring-brand-600 dark:border-brand-400 dark:ring-brand-400"
+                : "border-[#E1E7FA] hover:border-brand-300 dark:border-border dark:hover:border-brand-500/60")
             }
           >
-            <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
+            <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-[#5B6275] dark:text-muted-foreground">
               <span>
                 <LocalGameTime
                   date={game.commenceTime}
@@ -91,29 +100,33 @@ export function GridLiveGameList({
                       <LiveProgressLabel label={progress.label} />
                     </span>
                   )}
-                  <span className="rounded-full bg-red-100 px-1.5 py-0 text-[10px] font-medium text-red-600 dark:bg-red-500/15 dark:text-red-400">
+                  <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-red-600 dark:bg-red-500/15 dark:text-red-400">
                     LIVE
                   </span>
                 </span>
               ) : (
-                pickCount > 0 && <span>{pickCount} pick{pickCount === 1 ? "" : "s"}</span>
+                pickCount > 0 && (
+                  <span className="rounded-full bg-[#E6ECFF] px-2 py-0.5 text-[10.5px] font-semibold leading-none text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+                    {pickCount} pick{pickCount === 1 ? "" : "s"}
+                  </span>
+                )
               )}
             </div>
             <div className="flex items-center justify-between gap-2">
               <span className="flex min-w-0 items-center gap-1.5">
                 <TeamColorBar color={getTeamColor(activeSport, game.awayTeam)} />
-                <span className="truncate text-xs font-medium">{game.awayTeam}</span>
+                <span className="truncate text-[13px] font-semibold text-foreground">{game.awayTeam}</span>
               </span>
-              <span className="shrink-0 text-xs text-muted-foreground">
+              <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">
                 {score?.scores?.find((s) => s.name === game.awayTeam)?.score ?? ""}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-2">
+            <div className="mt-1 flex items-center justify-between gap-2">
               <span className="flex min-w-0 items-center gap-1.5">
                 <TeamColorBar color={getTeamColor(activeSport, game.homeTeam)} />
-                <span className="truncate text-xs font-medium">{game.homeTeam}</span>
+                <span className="truncate text-[13px] font-semibold text-foreground">{game.homeTeam}</span>
               </span>
-              <span className="shrink-0 text-xs text-muted-foreground">
+              <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">
                 {score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? ""}
               </span>
             </div>
@@ -125,6 +138,7 @@ export function GridLiveGameList({
           </button>
         );
       })}
-    </div>
+      </div>
+    </section>
   );
 }

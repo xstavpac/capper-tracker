@@ -7,7 +7,8 @@
 import { useState } from "react";
 import { useParlayPool } from "@/components/parlay/parlay-pool-context";
 
-export function ParlaySlipButton() {
+// `dark` is the look for the dark page banner (/live); the default is the light-surface look (/parlay).
+export function ParlaySlipButton({ dark = false }: { dark?: boolean }) {
   const { pool, addMode, checkedPicks, enterAddMode, confirmAdd, discardAdd } = useParlayPool();
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
@@ -30,13 +31,13 @@ export function ParlaySlipButton() {
 
   if (confirmingDiscard) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-soft">
-        <span className="text-muted-foreground">
+      <div className={"flex items-center gap-2 rounded-lg border px-3 py-2 text-sm " + (dark ? "border-[#263048] bg-[#1A2236]" : "border-border bg-card shadow-soft")}>
+        <span className={dark ? "text-[#C9D0E0]" : "text-muted-foreground"}>
           Discard {checkedCount} selected pick{checkedCount === 1 ? "" : "s"}?
         </span>
         <button
           onClick={() => setConfirmingDiscard(false)}
-          className="rounded-full px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted"
+          className={"rounded-full px-2.5 py-1 text-xs font-medium " + (dark ? "text-[#C9D0E0] hover:bg-white/10 hover:text-white" : "text-muted-foreground hover:bg-muted")}
         >
           Cancel
         </button>
@@ -58,10 +59,11 @@ export function ParlaySlipButton() {
       <button
         onClick={handleToggle}
         className={
-          "rounded-full px-3.5 py-1.5 text-sm font-medium shadow-soft transition " +
-          (addMode
-            ? "bg-foreground text-background"
-            : "bg-card text-muted-foreground hover:bg-muted")
+          dark
+            ? "rounded-[10px] border px-3.5 py-2 text-[12.5px] font-medium transition " +
+              (addMode ? "border-white bg-white text-[#0F1420]" : "border-[#263048] bg-[#1A2236] text-[#C9D0E0] hover:text-white")
+            : "rounded-full px-3.5 py-1.5 text-sm font-medium shadow-soft transition " +
+              (addMode ? "bg-foreground text-background" : "bg-card text-muted-foreground hover:bg-muted")
         }
       >
         {label}
@@ -69,7 +71,11 @@ export function ParlaySlipButton() {
       {addMode && checkedCount > 0 && (
         <button
           onClick={confirmAdd}
-          className="rounded-full bg-brand-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700"
+          className={
+            dark
+              ? "rounded-[10px] border border-brand-600 bg-brand-600 px-3.5 py-2 text-[12.5px] font-medium text-white hover:bg-brand-700"
+              : "rounded-full bg-brand-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700"
+          }
         >
           Confirm
         </button>

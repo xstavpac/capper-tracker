@@ -66,8 +66,14 @@ export function DashboardStatCards({ summary }: { summary: Summary }) {
         icon={<TrophyIcon className={ICON} />}
         iconClass={GREEN_TILE}
         color="#16A34A"
-        value={record(overall.wins, overall.losses, overall.pushes)}
-        sub={gradedThisWeek > 0 ? record(w.wins[last], w.losses[last], w.pushes[last]) + " this week" : NO_GRADED}
+        // Wins and losses only: the pushes go on the sub line, so the value stays short at any total.
+        value={overall.wins + "–" + overall.losses}
+        sub={
+          <>
+            {overall.pushes > 0 && <span className={MUTED}>{overall.pushes.toLocaleString("en-US") + (overall.pushes === 1 ? " push · " : " pushes · ")}</span>}
+            {gradedThisWeek > 0 ? record(w.wins[last], w.losses[last], w.pushes[last]) + " this week" : NO_GRADED}
+          </>
+        }
         subClass={gradedThisWeek > 0 ? tone(weekDiff) : undefined}
         // Wins less losses: up when the week won more than it lost.
         series={walkBack(overall.wins - overall.losses, w.wins.map((wins, i) => wins - w.losses[i]))}
