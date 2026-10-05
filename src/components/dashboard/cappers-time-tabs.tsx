@@ -1,11 +1,11 @@
-import type { ReactNode } from "react";
 import Link from "next/link";
 import { RANGE_OPTIONS, cappersHref, type CappersParams } from "@/lib/cappers-page-params";
 
+// The pill group in the /cappers banner (dark in both themes).
 // scroll={false}: a soft navigation that swaps the data in place instead of jumping to the top.
-export function CappersTimeTabs({ params, children }: { params: CappersParams; children?: ReactNode }) {
+export function CappersTimeTabs({ params }: { params: CappersParams }) {
   return (
-    <nav aria-label="Time range" className="flex flex-wrap items-center gap-1">
+    <nav aria-label="Time range" className="flex flex-wrap gap-1 rounded-xl border border-[#263048] bg-[#1A2236] p-1 xl:mx-auto">
       {RANGE_OPTIONS.map((r) => {
         const active = r.key === params.range;
         return (
@@ -15,16 +15,14 @@ export function CappersTimeTabs({ params, children }: { params: CappersParams; c
             scroll={false}
             aria-current={active ? "page" : undefined}
             className={
-              "rounded-full px-3.5 py-1.5 text-sm font-medium transition " +
-              (active ? "bg-brand-600 text-white" : "text-muted-foreground hover:text-foreground")
+              "rounded-[9px] px-3 py-2 text-[12.5px] transition min-[1700px]:px-3.5 " +
+              (active ? "bg-brand-600 font-bold text-white" : "font-semibold text-[#C9D0E0] hover:text-white")
             }
           >
             {r.label}
           </Link>
         );
       })}
-      {/* Trailing slot for the Add capper pill: after the last chip on mobile, right-aligned on desktop. */}
-      {children}
     </nav>
   );
 }

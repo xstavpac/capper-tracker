@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   RANGE_OPTIONS,
@@ -15,38 +15,17 @@ const selectClass =
   "rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground shadow-sm focus:border-brand-400 focus:outline-none";
 
 // Every control writes a URL param and lets the server re-render; nothing here holds
-// data. scroll:false keeps the viewport where it is, like the time tabs.
+// data. scroll:false keeps the viewport where it is, like the time tabs. (Search lives in the page
+// header: cappers-search.tsx.)
 export function CappersLeaderboardControls({ params, leagues }: { params: CappersParams; leagues: string[] }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [query, setQuery] = useState(params.q);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
 
   const go = (overrides: Partial<CappersParams>) =>
     startTransition(() => router.push(cappersHref(params, overrides), { scroll: false }));
 
-  // Keep the box in step when the URL changes underneath it (back button, tab click).
-  useEffect(() => setQuery(params.q), [params.q]);
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  function onSearch(value: string) {
-    setQuery(value);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      if (value.trim() !== params.q.trim()) go({ q: value });
-    }, 300);
-  }
-
   return (
-    <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))]">
-      <input
-        type="search"
-        value={query}
-        onChange={(e) => onSearch(e.target.value)}
-        placeholder="Search cappers..."
-        aria-label="Search cappers"
-        className={selectClass + " col-span-2 placeholder:text-muted-foreground lg:col-span-1"}
-      />
+    <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
       <select aria-label="League" value={params.league ?? ""} onChange={(e) => go({ league: e.target.value || undefined })} className={selectClass}>
         <option value="">All leagues</option>
         {leagues.map((l) => (

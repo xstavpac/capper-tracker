@@ -3,7 +3,11 @@
 import type { ActivityEntry } from "@/server/data/cappers";
 
 // Biggest Winners: net units over the panel window (the old "Hottest this week").
-export type WinnerEntry = { capperId: string; name: string; colorTag: string | null; netUnits: number };
+// wins / losses are the same window's record.
+export type WinnerEntry = { capperId: string; name: string; colorTag: string | null; netUnits: number; wins: number; losses: number };
+
+// Most Active: totalPicks is the window's picks across the whole roster (the same on every row).
+export type ActiveEntry = ActivityEntry & { totalPicks: number };
 
 // Hottest / Coldest: a capper's CURRENT consecutive win / loss streak. `units` is only present on
 // Coldest (net units lost across the streak, negative, odds-0 picks left out).
@@ -22,7 +26,7 @@ export const STREAK_PANEL_MIN = 3;
 // no capper's full history is ever scanned. A run longer than this reads as this long.
 export const STREAK_LOOKBACK = 100;
 
-export type PanelRows = ActivityEntry[] | WinnerEntry[] | StreakEntry[];
+export type PanelRows = ActiveEntry[] | WinnerEntry[] | StreakEntry[];
 
 // Rising Fast / Most Consistent are windowless: they read each capper's newest decided (WIN / LOSS)
 // picks by count, never the time tabs or the dropdown, so they are not PanelKeys (no /api/cappers/panel).
@@ -41,8 +45,19 @@ export const FORM_PANEL_COUNT = 5;
 
 export type FormPanelKey = "rising" | "consistent";
 
-// `form`: the recent decided picks oldest first (1 = win, 0 = loss) - the sparkline series. The score
-// itself stays server-side (ranking only).
-export type RisingEntry = { capperId: string; name: string; colorTag: string | null; form: number[] };
-// `blocks`: each block's win % (0-100), oldest block first - the sparkline series.
-export type ConsistentEntry = { capperId: string; name: string; colorTag: string | null; blocks: number[] };
+// `pts`: the score in whole percentage points (recent win% - baseline win%). `trend`: win % (0-100) of
+// each of the last RISING_RECENT rolling RISING_RECENT-pick windows, oldest first - the chart line,
+// ending at the recent win%.
+export type RisingEntry = { capperId: string; name: string; colorTag: string | null; pts: number; trend: number[] };
+// `blocks`: each block's win % (0-100), oldest block first - the sparkline series. `sd`: their
+// population standard deviation (the ranking key).
+export type ConsistentEntry = { capperId: string; name: string; colorTag: string | null; blocks: number[]; sd: number };
+
+// Most Consistent's confidence score (0-100, higher = steadier) and its tier.
+export function consistencyScore(sd: number): number {
+  return Math.min(100, Math.max(0, Math.round(100 - 2.5 * sd)));
+}
+export type ConsistencyTier = "Elite" | "Rock Solid" | "Steady";
+export function consistencyTier(score: number): ConsistencyTier {
+  return score >= 90 ? "Elite" : score >= 80 ? "Rock Solid" : "Steady";
+}
