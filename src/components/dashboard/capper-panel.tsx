@@ -8,6 +8,7 @@ import {
   PANEL_WINDOW_LABELS,
   consistencyScore,
   consistencyTier,
+  ptsLabel,
   risingSeries,
   type ActiveEntry,
   type ConsistencyTier,
@@ -30,11 +31,12 @@ import {
   ShieldCheckIcon,
   SnowflakeIcon,
   TargetIcon,
+  TrendingDownIcon,
   TrendingUpIcon,
   TrophyFilledIcon,
   UsersIcon,
 } from "@/components/dashboard/cappers-icons";
-import { FOOTER_LINK, FOOTER_TEXT, FooterLine, GREEN, Message, Name, PanelShell, RED, ROW, Rank, TINTS, type PanelTheme } from "@/components/dashboard/panel-shell";
+import { CONTROL, FOOTER_LINK, FOOTER_TEXT, FooterLine, GREEN, Message, Name, PanelShell, RED, ROW, Rank, TINTS, type PanelTheme } from "@/components/dashboard/panel-shell";
 
 type AnyPanel = PanelKey | FormPanelKey;
 
@@ -48,10 +50,11 @@ const EMPTY: Record<PanelKey, (w: PanelWindow) => string> = {
 };
 const FORM_EMPTY: Record<FormPanelKey, string> = {
   rising: "Nobody is outperforming their usual form yet.",
+  falling: "Nobody is underperforming their usual form.",
   consistent: "No capper has 50 decided picks with a steady 50%+ record yet.",
 };
 // Windowless panels say what they read where the others have their window dropdown.
-const FORM_SUBLABEL: Record<FormPanelKey, string> = { rising: "Last 10 vs prior 90", consistent: "Last 50 picks" };
+const FORM_SUBLABEL: Record<FormPanelKey, string> = { rising: "Last 10 vs prior 90", falling: "Last 10 vs prior 90", consistent: "Last 50 picks" };
 
 // Each panel's hue (TINTS, panel-shell.tsx) with its own title, subtitle and header icon.
 const ICON = "h-[17px] w-[17px]";
@@ -64,6 +67,7 @@ const THEME: Record<AnyPanel, PanelTheme> = {
     icon: <TrendingUpIcon className={ICON + " stroke-[2.4]"} />,
     iconWrap: "rounded-lg bg-[#DCF7E6] text-[#15803D] dark:bg-emerald-500/15 dark:text-emerald-400",
   },
+  falling: { ...TINTS.rose, title: "Falling off", subtitle: "Momentum is fading", icon: <TrendingDownIcon className={ICON + " stroke-[2.4]"} />, iconWrap: "rounded-lg bg-[#FFDDE7] text-[#BE123C] dark:bg-rose-500/15 dark:text-rose-400" },
   hottest: { ...TINTS.orange, title: "Hot Hand", subtitle: "Current win streaks lighting up", icon: <FlameFilledIcon className={ICON} /> },
   consistent: { ...TINTS.violet, title: "Most Consistent", subtitle: "Confidence score · last 50 picks", icon: <TargetIcon className={ICON + " stroke-[2.2]"} /> },
   winners: { ...TINTS.green, title: "Biggest Winners", subtitle: "Top profit (units won)", icon: <TrophyFilledIcon className={ICON} /> },
@@ -72,9 +76,8 @@ const THEME: Record<AnyPanel, PanelTheme> = {
 
 const units = (n: number) => (n < 0 ? "−" : "+") + Math.abs(n).toFixed(1) + "u";
 const capperHref = (id: string) => "/cappers/" + id;
+// Where a footer's "View all" goes: the leaderboard on this page, unless the panel sits on another one.
 const LEADERBOARD_HREF = "#leaderboard";
-
-const CONTROL = "rounded-[9px] border bg-white text-xs font-medium text-foreground dark:bg-card";
 
 // ---------------------------------------------------------------------------
 // Windowed panels (Most Active, Hot Hand, Biggest Winners, Coldest)
@@ -83,7 +86,8 @@ const CONTROL = "rounded-[9px] border bg-white text-xs font-medium text-foregrou
 // It renders the server-fetched "This week" rows first; changing its window dropdown fetches ONLY this
 // panel (GET /api/cappers/panel), never the whole page. Fetched windows are kept in memory so flipping
 // back is free. `weekPct` (Most Active only): picks this week against last week, in percent.
-export function CapperPanel({ panel, initial, weekPct }: { panel: PanelKey; initial: PanelRows; weekPct?: number | null }) {
+// `leaderboardHref`: the footer's "View all" target, for a panel shown away from /cappers.
+export function CapperPanel({ panel, initial, weekPct, leaderboardHref = LEADERBOARD_HREF }: { panel: PanelKey; initial: PanelRows; weekPct?: number | null; leaderboardHref?: string }) {
   const [win, setWin] = useState<PanelWindow>(DEFAULT_PANEL_WINDOW);
   const [rows, setRows] = useState<PanelRows>(initial);
   // The window the rows on screen belong to. It trails `win` while a fetch is in flight, so the
@@ -159,13 +163,13 @@ export function CapperPanel({ panel, initial, weekPct }: { panel: PanelKey; init
       }
       footer={
         !ready ? undefined : panel === "active" ? (
-          <ActiveFooter rows={rows as ActiveEntry[]} win={shown} weekPct={weekPct ?? null} />
+          <ActiveFooter rows={rows as ActiveEntry[]} win={shown} weekPct={weekPct ?? null} href={leaderboardHref} />
         ) : panel === "hottest" ? (
-          <HottestFooter rows={rows as StreakEntry[]} />
+          <HottestFooter rows={rows as StreakEntry[]} href={leaderboardHref} />
         ) : panel === "winners" ? (
-          <WinnersFooter rows={rows as WinnerEntry[]} />
+          <WinnersFooter rows={rows as WinnerEntry[]} href={leaderboardHref} />
         ) : (
-          <ColdestFooter rows={rows as StreakEntry[]} />
+          <ColdestFooter rows={rows as StreakEntry[]} href={leaderboardHref} />
         )
       }
     >
@@ -216,7 +220,7 @@ function ActiveRows({ rows }: { rows: ActiveEntry[] }) {
 const TOTAL_LABEL: Record<PanelWindow, string> = { today: "Total picks today", week: "Total picks this week", "30d": "Total picks, last 30 days" };
 // The window's picks across the whole roster. The change against the week before exists only for
 // "This week" (the page's overview number), so the other windows show the total alone.
-function ActiveFooter({ rows, win, weekPct }: { rows: ActiveEntry[]; win: PanelWindow; weekPct: number | null }) {
+function ActiveFooter({ rows, win, weekPct, href }: { rows: ActiveEntry[]; win: PanelWindow; weekPct: number | null; href: string }) {
   const pct = win === "week" ? weekPct : null;
   return (
     <>
@@ -226,7 +230,7 @@ function ActiveFooter({ rows, win, weekPct }: { rows: ActiveEntry[]; win: PanelW
         <span className="ml-1.5 font-semibold tabular-nums text-foreground">{(rows[0]?.totalPicks ?? 0).toLocaleString("en-US")}</span>
         {pct !== null && pct !== 0 && <span className={"ml-1.5 whitespace-nowrap font-semibold tabular-nums " + (pct < 0 ? RED : GREEN)}>{(pct < 0 ? "↓ " : "↑ ") + Math.abs(pct) + "%"}</span>}
       </p>
-      <a href={LEADERBOARD_HREF} className={FOOTER_LINK + " " + THEME.active.accent}>
+      <a href={href} className={FOOTER_LINK + " " + THEME.active.accent}>
         View all →
       </a>
     </>
@@ -297,14 +301,14 @@ function HottestRows({ rows }: { rows: StreakEntry[] }) {
   );
 }
 
-function HottestFooter({ rows }: { rows: StreakEntry[] }) {
+function HottestFooter({ rows, href }: { rows: StreakEntry[]; href: string }) {
   return (
     <>
       <FlameFilledIcon className="h-[18px] w-[18px] shrink-0" />
       <FooterLine name={rows[0].name}>
         is on the longest run <span className={"font-semibold tabular-nums " + THEME.hottest.accent}>({rows[0].streak} wins)</span>
       </FooterLine>
-      <a href={LEADERBOARD_HREF} className={FOOTER_LINK + " " + THEME.hottest.accent}>
+      <a href={href} className={FOOTER_LINK + " " + THEME.hottest.accent}>
         View all →
       </a>
     </>
@@ -358,14 +362,14 @@ function WinnerRows({ rows }: { rows: WinnerEntry[] }) {
   );
 }
 
-function WinnersFooter({ rows }: { rows: WinnerEntry[] }) {
+function WinnersFooter({ rows, href }: { rows: WinnerEntry[]; href: string }) {
   const total = rows.reduce((sum, e) => sum + e.netUnits, 0);
   return (
     <>
       <TrendingUpIcon className={"h-[18px] w-[18px] shrink-0 stroke-[2.4] " + GREEN} />
       <span className={"text-[15px] font-semibold leading-none tabular-nums " + GREEN}>{units(total)}</span>
       <p className={FOOTER_TEXT}>{rows.length >= 5 ? "total profit from top 5" : "total profit from the top " + rows.length}</p>
-      <a href={LEADERBOARD_HREF} className={FOOTER_LINK + " " + GREEN}>
+      <a href={href} className={FOOTER_LINK + " " + GREEN}>
         View all →
       </a>
     </>
@@ -404,7 +408,7 @@ function ColdestRows({ rows }: { rows: StreakEntry[] }) {
 
 // "(5L, −5.0u)": the run and the units lost across it. A comma, not "·": at this size the dot before the
 // minus sign read as a second minus.
-function ColdestFooter({ rows }: { rows: StreakEntry[] }) {
+function ColdestFooter({ rows, href }: { rows: StreakEntry[]; href: string }) {
   const lead = rows[0];
   return (
     <>
@@ -412,7 +416,7 @@ function ColdestFooter({ rows }: { rows: StreakEntry[] }) {
       <FooterLine name={lead.name}>
         has the longest skid <span className={"font-semibold tabular-nums " + RED}>{"(" + lead.streak + "L" + (lead.units === undefined ? "" : ", " + units(lead.units)) + ")"}</span>
       </FooterLine>
-      <a href={LEADERBOARD_HREF} className={FOOTER_LINK + " " + RED}>
+      <a href={href} className={FOOTER_LINK + " " + RED}>
         View all →
       </a>
     </>
@@ -420,27 +424,34 @@ function ColdestFooter({ rows }: { rows: StreakEntry[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Windowless panels (Rising Fast, Most Consistent)
+// Windowless panels (Rising Fast, Falling off, Most Consistent)
 // ---------------------------------------------------------------------------
 
 // No dropdown and no fetch: the server renders the rows once.
-export function FormPanel({ panel, rows }: { panel: FormPanelKey; rows: RisingEntry[] | ConsistentEntry[] }) {
+export function FormPanel({ panel, rows, leaderboardHref = LEADERBOARD_HREF }: { panel: FormPanelKey; rows: RisingEntry[] | ConsistentEntry[]; leaderboardHref?: string }) {
   const ready = rows.length > 0;
+  const down = panel === "falling";
   return (
     <PanelShell
       theme={THEME[panel]}
       control={<span className={CONTROL + " shrink-0 whitespace-nowrap px-2.5 py-[5px] " + THEME[panel].control}>{FORM_SUBLABEL[panel]}</span>}
-      footer={!ready ? undefined : panel === "rising" ? <RisingFooter rows={rows as RisingEntry[]} /> : <ConsistentFooter rows={rows as ConsistentEntry[]} />}
+      footer={!ready ? undefined : panel === "consistent" ? <ConsistentFooter rows={rows as ConsistentEntry[]} href={leaderboardHref} /> : <RisingFooter rows={rows as RisingEntry[]} down={down} />}
     >
-      {!ready ? <Message>{FORM_EMPTY[panel]}</Message> : panel === "rising" ? <RisingChart rows={rows as RisingEntry[]} /> : <ConsistentRows rows={rows as ConsistentEntry[]} />}
+      {!ready ? <Message>{FORM_EMPTY[panel]}</Message> : panel === "consistent" ? <ConsistentRows rows={rows as ConsistentEntry[]} /> : <RisingChart rows={rows as RisingEntry[]} down={down} />}
     </PanelShell>
   );
 }
 
 const AXIS_TEXT = "text-[11px] font-medium leading-none tabular-nums text-[#5B6275] dark:text-muted-foreground";
-// Line colors by rank; the legend swatches match.
+// Line colors by rank; the legend swatches match. #1 takes the panel's own hue.
 const LINE_COLORS = ["#16A34A", "#2563EB", "#F59E0B", "#A855F7", "#06B6D4"];
+const LINE_COLORS_DOWN = ["#E11D48", ...LINE_COLORS.slice(1)];
 const signedPts = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v));
+// What sets Falling off's chart apart from Rising Fast's: #1's label chip, its legend row and the points' color.
+const TREND = {
+  up: { colors: LINE_COLORS, chip: "bg-[#15803D]", lead: "bg-[#DCF3E4] dark:bg-emerald-500/15", pts: GREEN },
+  down: { colors: LINE_COLORS_DOWN, chip: "bg-[#BE123C]", lead: "bg-[#FFE1E9] dark:bg-rose-500/15", pts: "text-[#BE123C] dark:text-rose-400" },
+};
 
 // The axis for the lines' range. It bottoms out at the lowest point rounded down to a 10 and tops out at
 // the highest rounded up to a gridline; gridlines are the smallest round step that gives at most five
@@ -464,10 +475,14 @@ const LABEL_H = 13;
 // "Wins above their norm" for the top risers: each line starts at 0 and, pick by pick over the last 10
 // decided picks, adds what the result beat the capper's own baseline win rate by (risingSeries). A
 // riser's line climbs, and ends on exactly their score. 0 is the norm line.
-function RisingChart({ rows }: { rows: RisingEntry[] }) {
+// `down` is Falling off, "wins below their norm": the same chart upside down - the lines sink to a
+// negative score, the axis is the mirror image, and #1 is drawn in the panel's rose.
+function RisingChart({ rows, down = false }: { rows: RisingEntry[]; down?: boolean }) {
+  const look = down ? TREND.down : TREND.up;
   const lines = rows.map((r) => risingSeries(r.results, r.baseline));
   const n = Math.max(2, ...lines.map((l) => l.length));
-  const { lo, hi, ticks } = ptsAxis(lines.flat());
+  const up = ptsAxis(down ? lines.flat().map((v) => -v) : lines.flat());
+  const { lo, hi, ticks } = down ? { lo: -up.hi, hi: -up.lo, ticks: up.ticks.map((t) => -t) } : up;
   const x = (i: number) => (i / (n - 1)) * 100;
   const y = (v: number) => ((hi - v) / (hi - lo)) * 100;
   const points = (l: number[]) => l.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(2)).join(" ");
@@ -479,11 +494,17 @@ function RisingChart({ rows }: { rows: RisingEntry[] }) {
   const allLabels = rows.length > 1 && sortedEnds.every((v, i) => i === 0 || v - sortedEnds[i - 1] >= minGap);
   const ranked = rows.map((r, i) => ({ r, i })).reverse(); // drawn last-to-first so #1 sits on top
   const label =
-    "Wins above their norm across the last " +
+    "Wins " +
+    (down ? "below" : "above") +
+    " their norm across the last " +
     (n - 1) +
     " decided picks, in points: each line starts at 0 and ends on the capper's score. " +
-    rows.map((r) => r.name + " +" + r.pts).join("; ") +
+    rows.map((r) => r.name + " " + (down ? "−" : "+") + Math.abs(r.pts)).join("; ") +
     ".";
+  // #1's label sits level with its dot when the line arrives moving away from the norm, and on the far
+  // side of the dot (under it rising, over it falling) when the last pick went the other way.
+  const prev = lines[0][lines[0].length - 2] ?? 0;
+  const leadLabelShift = (down ? prev > ends[0] : prev < ends[0]) ? "translateY(-50%)" : down ? "translateY(calc(-100% - 9px))" : "translateY(9px)";
   return (
     <div className="flex flex-1 flex-col gap-2.5 min-[400px]:flex-row">
       {/* At least ~140px tall, and as tall as the panel's row makes it: no gap above or below. */}
@@ -515,7 +536,7 @@ function RisingChart({ rows }: { rows: RisingEntry[] }) {
                 key={r.capperId}
                 points={points(lines[i])}
                 fill="none"
-                stroke={LINE_COLORS[i]}
+                stroke={look.colors[i]}
                 strokeWidth={i === 0 ? 2.5 : 1.25}
                 strokeOpacity={i === 0 ? 1 : 0.4}
                 strokeLinejoin="round"
@@ -524,14 +545,14 @@ function RisingChart({ rows }: { rows: RisingEntry[] }) {
               />
             ))}
           </svg>
-          <span aria-hidden className="absolute h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[2.5px] bg-white dark:bg-[#0B1220]" style={{ left: x(lines[0].length - 1) + "%", top: y(ends[0]) + "%", borderColor: LINE_COLORS[0] }} />
+          <span aria-hidden className="absolute h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[2.5px] bg-white dark:bg-[#0B1220]" style={{ left: x(lines[0].length - 1) + "%", top: y(ends[0]) + "%", borderColor: look.colors[0] }} />
           {/* #1's label on the plot, clear of its line: left of the dot when the line climbs into it, under it when the last pick lost. Hidden where the margin labels show. */}
           <span
             aria-hidden
-            className={"absolute right-3.5 whitespace-nowrap rounded-md bg-[#15803D] px-1.5 py-[3px] text-[11px] font-semibold leading-none tabular-nums text-white " + (allLabels ? "min-[1280px]:max-[1499px]:hidden min-[1700px]:hidden" : "")}
-            style={{ top: y(ends[0]) + "%", transform: (lines[0][lines[0].length - 2] ?? 0) < ends[0] ? "translateY(-50%)" : "translateY(9px)" }}
+            className={"absolute right-3.5 whitespace-nowrap rounded-md " + look.chip + " px-1.5 py-[3px] text-[11px] font-semibold leading-none tabular-nums text-white " + (allLabels ? "min-[1280px]:max-[1499px]:hidden min-[1700px]:hidden" : "")}
+            style={{ top: y(ends[0]) + "%", transform: leadLabelShift }}
           >
-            {"+" + rows[0].pts + " pts"}
+            {ptsLabel(rows[0].pts)}
           </span>
           {allLabels &&
             rows.map((r, i) => (
@@ -539,9 +560,9 @@ function RisingChart({ rows }: { rows: RisingEntry[] }) {
                 key={r.capperId}
                 aria-hidden
                 className={"absolute left-full ml-2 hidden -translate-y-1/2 whitespace-nowrap text-[11px] leading-none tabular-nums min-[1280px]:max-[1499px]:block min-[1700px]:block " + (i === 0 ? "font-bold" : "font-semibold")}
-                style={{ top: y(ends[i]) + "%", color: LINE_COLORS[i] }}
+                style={{ top: y(ends[i]) + "%", color: look.colors[i] }}
               >
-                {"+" + r.pts + " pts"}
+                {ptsLabel(r.pts)}
               </span>
             ))}
         </div>
@@ -556,10 +577,10 @@ function RisingChart({ rows }: { rows: RisingEntry[] }) {
       <ol className="flex w-full shrink-0 flex-col justify-center gap-0.5 min-[400px]:w-[150px] min-[1700px]:w-[200px]">
         {rows.map((r, i) => (
           <li key={r.capperId}>
-            <Link href={capperHref(r.capperId)} className={"flex h-8 items-center gap-[7px] rounded-lg px-1.5 transition-colors " + (i === 0 ? "bg-[#DCF3E4] dark:bg-emerald-500/15" : "hover:bg-foreground/[0.035]")}>
-              <span aria-hidden className={"w-[11px] shrink-0 rounded-full " + (i === 0 ? "h-1" : "h-[3px]")} style={{ backgroundColor: LINE_COLORS[i] }} />
+            <Link href={capperHref(r.capperId)} className={"flex h-8 items-center gap-[7px] rounded-lg px-1.5 transition-colors " + (i === 0 ? look.lead : "hover:bg-foreground/[0.035]")}>
+              <span aria-hidden className={"w-[11px] shrink-0 rounded-full " + (i === 0 ? "h-1" : "h-[3px]")} style={{ backgroundColor: look.colors[i] }} />
               <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{r.name}</span>
-              <span className={"whitespace-nowrap text-xs font-semibold tabular-nums " + GREEN}>{"+" + r.pts + " pts"}</span>
+              <span className={"whitespace-nowrap text-xs font-semibold tabular-nums " + look.pts}>{ptsLabel(r.pts)}</span>
             </Link>
           </li>
         ))}
@@ -568,14 +589,16 @@ function RisingChart({ rows }: { rows: RisingEntry[] }) {
   );
 }
 
-function RisingFooter({ rows }: { rows: RisingEntry[] }) {
+function RisingFooter({ rows, down }: { rows: RisingEntry[]; down: boolean }) {
+  const look = down ? TREND.down : TREND.up;
+  const Icon = down ? TrendingDownIcon : TrendingUpIcon;
   return (
     <>
-      <TrendingUpIcon className={"h-[18px] w-[18px] shrink-0 stroke-[2.4] " + GREEN} />
+      <Icon className={"h-[18px] w-[18px] shrink-0 stroke-[2.4] " + look.pts} />
       <FooterLine name={rows[0].name}>
-        is trending up <span className={"font-semibold tabular-nums " + GREEN}>{"+" + rows[0].pts + " pts"}</span>
+        is trending {down ? "down" : "up"} <span className={"font-semibold tabular-nums " + look.pts}>{ptsLabel(rows[0].pts)}</span>
       </FooterLine>
-      <Link href={capperHref(rows[0].capperId)} className="shrink-0 whitespace-nowrap rounded-lg bg-[#16A34A] px-2.5 py-1.5 text-xs font-semibold text-white hover:brightness-95">
+      <Link href={capperHref(rows[0].capperId)} className={"shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white hover:brightness-95 " + (down ? "bg-[#E11D48]" : "bg-[#16A34A]")}>
         View trend →
       </Link>
     </>
@@ -632,7 +655,7 @@ function ConsistentRows({ rows }: { rows: ConsistentEntry[] }) {
   );
 }
 
-function ConsistentFooter({ rows }: { rows: ConsistentEntry[] }) {
+function ConsistentFooter({ rows, href }: { rows: ConsistentEntry[]; href: string }) {
   const score = consistencyScore(rows[0].sd);
   return (
     <>
@@ -640,7 +663,7 @@ function ConsistentFooter({ rows }: { rows: ConsistentEntry[] }) {
       <FooterLine name={rows[0].name}>
         is the most reliable <span className={"font-semibold tabular-nums " + THEME.consistent.accent}>{"(" + score + " · " + consistencyTier(score) + ")"}</span>
       </FooterLine>
-      <a href={LEADERBOARD_HREF} className={FOOTER_LINK + " " + THEME.consistent.accent}>
+      <a href={href} className={FOOTER_LINK + " " + THEME.consistent.accent}>
         View all →
       </a>
     </>

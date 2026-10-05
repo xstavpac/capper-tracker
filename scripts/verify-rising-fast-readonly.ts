@@ -1,5 +1,5 @@
 // READ-ONLY check of the Rising Fast chart against REAL data. Writes nothing: the only DB calls are the
-// page's own read (getCappersPageData) and findFirst / findMany. Run:
+// dashboard's own panels read (computeCapperPanels) and findFirst / findMany. Run:
 //
 //   npx tsx --env-file=.env scripts/verify-rising-fast-readonly.ts --email=you@example.com
 //   npx tsx --env-file=.env scripts/verify-rising-fast-readonly.ts --email=you@example.com --risers=5
@@ -10,7 +10,7 @@
 // then compares each with what the page returned and checks the line's last point is the displayed +pts.
 // Prints the DATABASE_URL host (password never shown) first so the target is obvious.
 import { PrismaClient } from "@prisma/client";
-import { getCappersPageData } from "@/server/data/cappers-page-aggregates";
+import { computeCapperPanels } from "@/server/data/capper-panels";
 import { FORM_LOOKBACK, RISING_RECENT, risingSeries } from "@/lib/cappers-panels";
 import { comparePicksChronologicalDesc } from "@/lib/pick-order";
 
@@ -33,7 +33,7 @@ async function main() {
   const user = await prisma.user.findFirst({ where: { email: EMAIL }, select: { id: true } });
   if (!user) throw new Error("no user with that email");
 
-  const page = await getCappersPageData({ userId: user.id, window: "ALL", min: 0, sort: "roi", fav: false, q: "", page: 1 });
+  const page = await computeCapperPanels(user.id);
   console.log("Rising Fast rows on the page: " + page.rising.map((e) => e.name + " +" + e.pts).join(", ") + "\n");
   if (page.rising.length === 0) console.log("No risers for this account: nothing to verify.");
 

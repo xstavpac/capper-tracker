@@ -105,6 +105,9 @@ export function PanelShell({ theme: t, control, footer, busy, children }: { them
   );
 }
 
+// The header's control: a window dropdown, or a chip saying what a windowless panel reads.
+export const CONTROL = "rounded-[9px] border bg-white text-xs font-medium text-foreground dark:bg-card";
+
 export function Message({ children, error }: { children: ReactNode; error?: boolean }) {
   return <p className={"flex flex-1 items-center justify-center py-6 text-center text-[13px] font-medium " + (error ? RED : "text-muted-foreground")}>{children}</p>;
 }

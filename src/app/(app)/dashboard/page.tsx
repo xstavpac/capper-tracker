@@ -6,7 +6,7 @@ import { ThemedPage } from "@/components/dashboard/themed-page";
 import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
 import { DashboardStatCards } from "@/components/dashboard/dashboard-stat-cards";
 import { DashboardCategoryCards } from "@/components/dashboard/dashboard-category-cards";
-import { TrendingCappers } from "@/components/dashboard/trending-cappers";
+import { DashboardPanels } from "@/components/dashboard/dashboard-panels";
 import { UnitsChart } from "@/components/dashboard/units-chart";
 import { FOOTER_LINK, FOOTER_TEXT, GREEN, PanelShell, RED, TINTS } from "@/components/dashboard/panel-shell";
 import { ActivityIcon, DashboardIcon, ListIcon } from "@/components/dashboard/cappers-icons";
@@ -46,7 +46,7 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      <TrendingCappers panels={panels} />
+      <DashboardPanels panels={panels} />
 
       <PanelShell theme={PERFORMANCE} footer={undefined}>
         <UnitsChart data={chartData} themed />

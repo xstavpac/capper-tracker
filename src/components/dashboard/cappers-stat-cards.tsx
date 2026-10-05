@@ -1,5 +1,5 @@
-import { HOT_STREAK_MIN, type OverviewStats } from "@/server/data/cappers-page-aggregates";
-import { ActivityIcon, CalendarIcon, FlameIcon, PercentIcon, UsersIcon } from "@/components/dashboard/cappers-icons";
+import type { OverviewStats } from "@/server/data/cappers-page-aggregates";
+import { ActivityIcon, CalendarIcon, PercentIcon, TrendingUpIcon, UsersIcon } from "@/components/dashboard/cappers-icons";
 import { GREEN, RED, StatCard, delta, signed } from "@/components/dashboard/stat-card";
 
 const ICON = "h-[17px] w-[17px] stroke-[2.2]";
@@ -55,13 +55,15 @@ export function CappersStatCards({ stats, capperCount }: { stats: OverviewStats;
         className={BOTTOM}
       />
       <StatCard
-        label="Hot streaks"
-        icon={<FlameIcon className={ICON} />}
-        iconClass="bg-[#FFE3CC] text-orange-500 dark:bg-orange-500/15"
-        color="#F97316"
-        value={String(stats.hotStreaks)}
-        sub={"on " + HOT_STREAK_MIN + "+ win streaks"}
-        series={w.hot}
+        // The time tabs' pooled net units, next to the ROI it goes with; the sparkline is each week's own net.
+        label="Net units"
+        icon={<TrendingUpIcon className={ICON} />}
+        iconClass="bg-[#DCF7E6] text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400"
+        color="#16A34A"
+        value={Number.isFinite(stats.netUnits) ? (stats.netUnits > 0 ? "+" : stats.netUnits < 0 ? "−" : "") + Math.abs(stats.netUnits).toFixed(2) + "u" : String(stats.netUnits)}
+        valueClass={stats.netUnits < 0 ? RED : stats.netUnits > 0 ? GREEN : undefined}
+        sub={stats.record.wins + "–" + stats.record.losses + (stats.record.pushes > 0 ? "–" + stats.record.pushes : "") + " record"}
+        series={w.net}
         className={BOTTOM}
       />
     </div>

@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { SEGMENT_CATEGORY_KEYS, splitSegmentCategoryKey, type PickCategoryKey } from "@/server/data/stats";
-import { HotStreaksIcon } from "@/components/dashboard/trending-cappers";
+import { HotStreaksIcon } from "@/components/dashboard/hot-streaks-icon";
 
 // Straight vertical arrow (shaft + open chevron head, not a filled triangle
 // and not the diagonal zigzag TrendIcon uses elsewhere) - the shape the
