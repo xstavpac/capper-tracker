@@ -16,7 +16,7 @@ const LAST20: Record<"best" | "worst", PanelTheme & { empty: string; lead: strin
     subtitle: "Strongest recent records",
     icon: <TargetIcon className={ICON} />,
     empty: "No active capper is at 50% or better over their last 20.",
-    lead: "has the best recent record",
+    lead: "leads at",
     footerIcon: GREEN,
   },
   worst: {
@@ -25,7 +25,7 @@ const LAST20: Record<"best" | "worst", PanelTheme & { empty: string; lead: strin
     subtitle: "Weakest recent records",
     icon: <AlertTriangleIcon className={ICON} />,
     empty: "No active capper is under 50% over their last 20.",
-    lead: "has the weakest recent record",
+    lead: "trails at",
     footerIcon: RED,
   },
 };
@@ -48,7 +48,7 @@ function Last20Panel({ panel, rows }: { panel: "best" | "worst"; rows: BestLast2
           <>
             <Icon className={"h-[18px] w-[18px] shrink-0 stroke-[2.2] " + t.footerIcon} />
             <FooterLine name={rows[0].name}>
-              {t.lead} <span className={"font-semibold tabular-nums " + pctClass(rows[0])}>{"(" + record(rows[0]) + ", " + pct(rows[0]) + ")"}</span>
+              {t.lead} <span className={"font-semibold tabular-nums " + pctClass(rows[0])}>{pct(rows[0]) + " (" + record(rows[0]) + ")"}</span>
             </FooterLine>
             <Link href={LEADERBOARD} className={FOOTER_LINK + " " + t.accent}>
               View all →
