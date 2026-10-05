@@ -18,7 +18,7 @@ import type { Prisma } from "@prisma/client";
 import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, currentStreak, type ScorecardWindow } from "@/server/data/stats";
 import * as adapter from "@/server/data/pick-aggregates-cappers-adapter";
 import type { LeaderboardEntry } from "@/server/data/cappers";
-import { getCappersPageData, sparklineTone, SPARKLINE_MIN_PICKS, HOT_STREAK_MIN, STANDOUT_MIN_GRADED, getPanelRows, type CapperSparkline, type PanelWindow, type StreakEntry } from "@/server/data/cappers-page-aggregates";
+import { getCappersPageData, sparklineTone, SPARKLINE_MIN_PICKS, HOT_STREAK_MIN, STANDOUT_MIN_GRADED, STAT_WEEKS, getPanelRows, consistencyScore, consistencyTier, type ActiveEntry, type CapperSparkline, type PanelWindow, type StreakEntry } from "@/server/data/cappers-page-aggregates";
 import { sparklineLabel } from "@/components/dashboard/capper-sparkline";
 import { comparePicksChronological } from "@/lib/pick-order";
 import { MIN_PICKS_OPTIONS, PAGE_SIZE, SORT_OPTIONS, type CappersSortKey } from "@/lib/cappers-page-params";
@@ -358,7 +358,8 @@ async function main() {
       same(`favorites summary [${label}]`, newCollective, oldCollective);
 
       // Most active: the old function (this week, never league/window scoped).
-      same(`most active [${label}]`, data.mostActive, await adapter.getMostActiveThisWeek(U));
+      // totalPicks is new with the panel footer (checked on its own fixture below); the old page had no such number.
+      same(`most active [${label}]`, data.mostActive.map(({ totalPicks: _total, ...e }) => e), await adapter.getMostActiveThisWeek(U));
 
       // Hot streaks card = unscoped WIN streaks >= 5 in the window (from the old entries' streaks).
       const hotExpected = oldAll.filter((e) => e.stats.currentStreak.type === "WIN" && e.stats.currentStreak.count >= HOT_STREAK_MIN).length;
@@ -377,7 +378,9 @@ async function main() {
   const weekAgo = now.getTime() - 7 * 86400000;
   const twoWeeks = now.getTime() - 14 * 86400000;
   const ov = (await getCappersPageData({ userId: U, window: "ALL", min: 0, sort: "roi", fav: false, q: "", page: 1, now })).overview;
-  check("active cappers ALL = cappers with any pick", ov.activeCappers === new Set(rawPicks.map((p) => p.capperId)).size && ov.activeCappersDelta === null);
+  check("active cappers ALL = cappers with any pick", ov.activeCappers === new Set(rawPicks.map((p) => p.capperId)).size);
+  const activeIn = (from: number, to: number) => new Set(rawPicks.filter((p) => p.datePosted.getTime() >= from && p.datePosted.getTime() < to).map((p) => p.capperId)).size;
+  check("active cappers delta = this week's active cappers minus last week's", ov.activeCappersDelta === activeIn(weekAgo, now.getTime()) - activeIn(twoWeeks, weekAgo), String(ov.activeCappersDelta));
   check("picks this week", ov.picksThisWeek === rawPicks.filter((p) => p.datePosted.getTime() >= weekAgo).length);
   const priorWeek = rawPicks.filter((p) => p.datePosted.getTime() >= twoWeeks && p.datePosted.getTime() < weekAgo).length;
   check("picks this week % vs last week", priorWeek === 0 ? ov.picksThisWeekPct === null : Math.abs(ov.picksThisWeekPct! - Math.round(((ov.picksThisWeek - priorWeek) / priorWeek) * 1000) / 10) < 1e-9);
@@ -461,18 +464,20 @@ async function main() {
   async function referenceWinners(userId: string) {
     const since = Date.now() - 7 * 86400000;
     const picks = await prisma.pick.findMany({ where: { userId, datePosted: { gte: new Date(since) }, status: { in: ["WIN", "LOSS", "PUSH"] } }, include: { capper: true } });
-    const by = new Map<string, { name: string; n: number; net: number }>();
+    const by = new Map<string, { name: string; n: number; net: number; wins: number; losses: number }>();
     for (const p of picks) {
-      const e = by.get(p.capperId) ?? by.set(p.capperId, { name: p.capper.name, n: 0, net: 0 }).get(p.capperId)!;
+      const e = by.get(p.capperId) ?? by.set(p.capperId, { name: p.capper.name, n: 0, net: 0, wins: 0, losses: 0 }).get(p.capperId)!;
       e.n++;
+      if (p.status === "WIN") e.wins++;
+      if (p.status === "LOSS") e.losses++;
       e.net += p.status === "WIN" ? p.units * (p.odds > 0 ? p.odds / 100 : 100 / Math.abs(p.odds)) : p.status === "LOSS" ? -p.units : 0;
     }
     return [...by.entries()]
-      .map(([capperId, e]) => ({ capperId, name: e.name, n: e.n, netUnits: r2(e.net) }))
+      .map(([capperId, e]) => ({ capperId, name: e.name, n: e.n, netUnits: r2(e.net), wins: e.wins, losses: e.losses }))
       .filter((e) => e.n >= 5 && e.netUnits > 0)
       .sort((a, b) => b.netUnits - a.netUnits || cmpStr(a.name.toLowerCase(), b.name.toLowerCase()) || cmpStr(a.name, b.name) || cmpStr(a.capperId, b.capperId))
       .slice(0, 5)
-      .map(({ capperId, name, netUnits }) => ({ capperId, name, colorTag: null as string | null, netUnits }));
+      .map(({ capperId, name, netUnits, wins, losses }) => ({ capperId, name, colorTag: null as string | null, netUnits, wins, losses }));
   }
   const winnersOf = async (userId: string, o: { window?: ScorecardWindow; league?: string } = {}) =>
     (await getCappersPageData({ userId, window: o.window ?? "ALL", league: o.league, min: 0, sort: "roi", fav: false, q: "", page: 1 })).winners;
@@ -686,6 +691,56 @@ async function main() {
   same("coldest: page statement == dropdown fetch", (await getCappersPageData({ userId: S4.u, window: "ALL", min: 0, sort: "roi", fav: false, q: "", page: 1 })).coldest, await streakOf(S4.u, "coldest"));
   check("streak panels: scoped to the user", (await streakOf(S4.u, "coldest")).every((e) => e.capperId.startsWith(PREFIX + "user-streakcold-")));
   check("streak panels: a five-row response is small", JSON.stringify(await streakOf(S4.u, "coldest")).length < 2048);
+
+  // ---- Redesign fields ---------------------------------------------------------------------------
+  same("winners: the window's wins-losses ride on each row", gotH.map((e) => e.name + " " + e.wins + "-" + e.losses), ["Fav ignored 5-0", "Hot C 5-1", "Hot A 3-3", "Pushy 3-0", "Hot B 4-1"]);
+
+  // 5. Most Active total + the stat cards' weekly series. Newest first: "A" 2-1 this week and 0-2 the
+  // week before; "H" lost an hour ago after six straight wins 8 days back; six more cappers with one
+  // pending pick each; a test account whose picks count nowhere.
+  const S5 = await scenario("weekly", [
+    { name: "A", specs: (c) => [...seq(c, [W, W, L], { odds: 100 }), ...seq(c, [L, L], { odds: 100, startMin: D8 })] },
+    { name: "H", specs: (c) => [...seq(c, [L], { odds: 100 }), ...seq(c, [W, W, W, W, W, W], { odds: 100, startMin: D8 })] },
+    ...["B", "C", "D", "E", "F", "G"].map((name) => ({ name, specs: (c: string) => seq(c, ["PENDING"], { odds: 100 }) })),
+    { name: "Test account", specs: (c) => seq(c, [W, W, W, W, W, W, W], { odds: 100 }) },
+  ]);
+  await prisma.capper.update({ where: { id: S5.ids["Test account"] }, data: { isTest: true } });
+  await prisma.capper.update({ where: { id: S5.ids.B }, data: { createdAt: new Date(Date.now() - 20 * 86400000) } });
+  await prisma.capper.update({ where: { id: S5.ids.C }, data: { createdAt: new Date(Date.now() - 40 * 86400000) } });
+  const pageS5 = await getCappersPageData({ userId: S5.u, window: "ALL", min: 0, sort: "roi", fav: false, q: "", page: 1 });
+  const o5 = pageS5.overview;
+  same("most active: five rows, each carrying the roster-wide total (test account left out)", pageS5.mostActive.map((e) => e.pickCount + "/" + e.totalPicks), ["3/10", "1/10", "1/10", "1/10", "1/10"]);
+  same("most active: page statement == dropdown fetch (week)", pageS5.mostActive, (await getPanelRows({ userId: S5.u, panel: "active", window: "week" })) as ActiveEntry[]);
+  check("weekly series: " + STAT_WEEKS + " points each", Object.values(o5.weekly).every((s) => s.length === STAT_WEEKS));
+  same("weekly picks: posted per rolling week, oldest first", o5.weekly.picks, [0, 0, 0, 0, 0, 0, 8, 10]);
+  check("weekly picks: the last two points are the Picks-this-week card's own numbers", o5.weekly.picks[7] === o5.picksThisWeek && o5.picksThisWeekPct === 25, o5.picksThisWeek + " " + o5.picksThisWeekPct);
+  same("weekly active cappers", o5.weekly.active, [0, 0, 0, 0, 0, 0, 2, 8]);
+  check("active cappers delta is week over week on the ALL tab too", o5.activeCappersDelta === 6, String(o5.activeCappersDelta));
+  same("weekly tracked cappers: roster size at each week's end, by date added", o5.weekly.tracked, [0, 0, 1, 1, 1, 2, 2, 8]);
+  check("tracked: last point == capper count; new this month excludes the one added 40 days ago", o5.weekly.tracked[7] === pageS5.capperCount && o5.newCappersThisMonth === 7, pageS5.capperCount + " " + o5.newCappersThisMonth);
+  same("weekly ROI: pooled over the picks graded with a game that week", o5.weekly.roi, [0, 0, 0, 0, 0, 0, 50, 0]);
+  same("weekly hot streaks: H was on six straight a week ago, and is not now", o5.weekly.hot, [0, 0, 0, 0, 0, 0, 1, 0]);
+  check("weekly hot streaks: the last point agrees with the Hot-streaks card here", o5.weekly.hot[7] === o5.hotStreaks, String(o5.hotStreaks));
+  const pageS5tab = await getCappersPageData({ userId: S5.u, window: "TODAY", min: 0, sort: "roi", fav: false, q: "", page: 1 });
+  same("weekly series do not follow the time tab", pageS5tab.overview.weekly, o5.weekly);
+  check("active cappers delta does not follow the time tab", pageS5tab.overview.activeCappersDelta === 6);
+
+  // 6. Rising Fast points + rolling trend; Most Consistent deviation, confidence score and tier.
+  const reps = (n: number, s: PickSpec["status"]) => Array.from({ length: n }, () => s);
+  const block = (wins: number) => [...reps(wins, W), ...reps(10 - wins, L)];
+  const S6 = await scenario("form", [
+    // Recent 10: 8-2 (80%). Baseline 30: alternating W/L (50%). Score +30 points.
+    { name: "Riser", specs: (c) => seq(c, [...reps(8, W), L, L, ...Array.from({ length: 30 }, (_, i) => (i % 2 === 0 ? W : L))], { odds: 100 }) },
+    { name: "Flat", specs: (c) => seq(c, [...block(6), ...block(6), ...block(6), ...block(6), ...block(6)], { odds: 100 }) },
+    { name: "Wavy", specs: (c) => seq(c, [...block(5), ...block(7), ...block(5), ...block(7), ...block(5)], { odds: 100 }) },
+  ]);
+  const pageS6 = await getCappersPageData({ userId: S6.u, window: "ALL", min: 0, sort: "roi", fav: false, q: "", page: 1 });
+  same("rising: only the capper beating their baseline, with the score in points", pageS6.rising.map((e) => e.name + " +" + e.pts), ["Riser +30"]);
+  same("rising: trend = rolling 10-pick win % over the last 10 picks, oldest first, ending at the recent win %", pageS6.rising[0]?.trend, [50, 40, 50, 50, 60, 60, 70, 70, 80, 80]);
+  same("consistent: steadiest first, blocks oldest first", pageS6.consistent.map((e) => e.name + " " + e.blocks.join(",")), ["Flat 60,60,60,60,60", "Wavy 50,70,50,70,50"]);
+  same("consistent: population standard deviation of the block win %s", pageS6.consistent.map((e) => e.sd), [0, Math.sqrt(96)]);
+  same("consistent: confidence = clamp(round(100 - 2.5 * sd)) and its tier", pageS6.consistent.map((e) => consistencyScore(e.sd) + " " + consistencyTier(consistencyScore(e.sd))), ["100 Elite", "76 Steady"]);
+  same("confidence: clamped to 0-100; tiers Elite >= 90, Rock Solid >= 80, Steady below", [consistencyScore(100), consistencyScore(0), consistencyScore(4), ...[90, 89, 80, 79].map(consistencyTier)], [0, 100, 90, "Elite", "Rock Solid", "Rock Solid", "Steady"]);
 
   console.log(`\n${assertions} assertions, ${failures} failed.`);
 }

@@ -41,7 +41,7 @@ import {
 } from "@/server/data/capper-list-aggregates";
 import { round2HalfUpSql } from "@/server/data/page-aggregate-fragments";
 import { statsFromRows, specialistTagsFromCandidateRows } from "@/server/data/pick-aggregates-cappers-adapter";
-import type { ActivityEntry, FavoriteCappersSummary, LeaderboardEntry } from "@/server/data/cappers";
+import type { FavoriteCappersSummary, LeaderboardEntry } from "@/server/data/cappers";
 import { PAGE_SIZE, type CappersSortKey } from "@/lib/cappers-page-params";
 import { startOfEasternDay } from "@/lib/dates";
 import {
@@ -55,6 +55,7 @@ import {
   CONSISTENT_BLOCKS,
   CONSISTENT_MIN_MEAN_PCT,
   FORM_PANEL_COUNT,
+  type ActiveEntry,
   type ConsistentEntry,
   type RisingEntry,
   type PanelKey,
@@ -87,6 +88,8 @@ export const HOTTEST_COUNT = 5;
 // Graded picks a capper needs in the week to be eligible for Hottest (one lucky bet can't top it).
 export const HOTTEST_MIN_GRADED = 5;
 const DAY_MS = 86400000;
+// The stat cards' sparklines: this many rolling 7-day buckets ending now, oldest first.
+export const STAT_WEEKS = 8;
 
 export type CapperSparkline = {
   // Cumulative units after each of the capper's last (up to) 20 graded picks, oldest first,
@@ -107,8 +110,16 @@ export function sparklineTone(s: CapperSparkline | undefined): SparklineTone {
 
 export type OverviewStats = {
   activeCappers: number;
-  // Change against the immediately preceding period of the same length; null for ALL.
-  activeCappersDelta: number | null;
+  // Cappers with a pick posted in the last 7 days minus the 7 days before (whatever the time tab).
+  activeCappersDelta: number;
+  // Cappers on the roster added in the last 30 days.
+  newCappersThisMonth: number;
+  // One value per rolling week (STAT_WEEKS of them, oldest first), independent of the time tab:
+  // roster size at each week's end (the CURRENT roster by date added - deleted / merged cappers
+  // leave no history), cappers with a pick posted that week, picks posted that week, pooled ROI of
+  // the picks graded with a game that week, and cappers on a HOT_STREAK_MIN+ win streak at the
+  // week's end (whole history, bounded to FORM_LOOKBACK decided picks per capper).
+  weekly: { tracked: number[]; active: number[]; picks: number[]; roi: number[]; hot: number[] };
   picksThisWeek: number;
   // Percent change vs the 7 days before; null when last week had no picks.
   picksThisWeekPct: number | null;
@@ -141,7 +152,7 @@ export type CappersPageData = {
   sparklines: Map<string, CapperSparkline>;
   // Standout cards: each card's graded picks across the page's selected window (n = all of them).
   topSparklines: Map<string, CapperSparkline>;
-  mostActive: ActivityEntry[];
+  mostActive: ActiveEntry[];
   hottest: StreakEntry[];
   winners: WinnerEntry[];
   coldest: StreakEntry[];
@@ -229,15 +240,17 @@ export function panelRange(w: PanelWindow, now: Date): { start: Date; end: Date 
 
 // The SELECT for one panel, reading a `roster` CTE (id, name, "colorTag", "isFavorite") - the page's
 // statement has one, and getPanelRows builds one. Returns at most 5 rows, never a pick row.
-//   active   - picks posted (datePosted) in the window, any status.
+//   active   - picks posted (datePosted) in the window, any status. Every row also carries
+//              totalPicks: the window's picks across the whole roster, not just these five.
 //   winners  - net units over graded picks posted in the window: >= HOTTEST_MIN_GRADED graded picks,
-//              net units > 0, odds-0 win left out. This is the old "Hottest this week".
+//              net units > 0, odds-0 win left out. This is the old "Hottest this week". Rows carry
+//              the window's wins / losses too.
 //   hottest / coldest - current WIN / LOSS streak (see streakPanelSql).
 export function panelSql(panel: PanelKey, userId: string, range: { start: Date; end: Date }): Prisma.Sql {
   if (panel === "hottest" || panel === "coldest") return streakPanelSql(panel === "hottest" ? "WIN" : "LOSS", userId, range);
   if (panel === "active") {
     return Prisma.sql`
-      SELECT r.id AS "capperId", r.name, r."colorTag", m.n AS "pickCount"
+      SELECT r.id AS "capperId", r.name, r."colorTag", m.n AS "pickCount", (sum(m.n) OVER ())::int AS "totalPicks"
       FROM (SELECT p."capperId" AS cid, count(*)::int AS n FROM picks p WHERE p."userId" = ${userId} AND p."datePosted" >= ${ts(range.start)} GROUP BY p."capperId") m
       JOIN roster r ON r.id = m.cid
       ORDER BY m.n DESC, r."isFavorite" DESC, r.name, r.id
@@ -249,14 +262,16 @@ export function panelSql(panel: PanelKey, userId: string, range: { start: Date; 
   // ties use the page's tie order (TIE_BREAK). A non-finite value (odds = 0 win) has no label to
   // draw, so it is left out.
   return Prisma.sql`
-    SELECT h.cid AS "capperId", h.name, h."colorTag", h.net_r AS "netUnits"
+    SELECT h.cid AS "capperId", h.name, h."colorTag", h.net_r AS "netUnits", h.wins, h.losses
     FROM (
-      SELECT g.cid, r.name, r."colorTag", ${round2HalfUpSql(Prisma.sql`g.net_raw`)} AS net_r
+      SELECT g.cid, r.name, r."colorTag", ${round2HalfUpSql(Prisma.sql`g.net_raw`)} AS net_r, g.wins, g.losses
       FROM (
-        SELECT a.cid, ${uwEffSql("a")} - a."unitsLost" AS net_raw
+        SELECT a.cid, a.wins, a.losses, ${uwEffSql("a")} - a."unitsLost" AS net_raw
         FROM (
           SELECT p."capperId" AS cid,
             (count(*) FILTER (WHERE p.status IN ('WIN', 'LOSS', 'PUSH')))::int AS graded,
+            (count(*) FILTER (WHERE p.status = 'WIN'))::int AS wins,
+            (count(*) FILTER (WHERE p.status = 'LOSS'))::int AS losses,
             COALESCE(sum(${WIN_UNITS}) FILTER (WHERE p.status = 'WIN' AND p.odds <> 0), 0)::float8 AS "unitsWon",
             COALESCE(sum(p.units) FILTER (WHERE p.status = 'LOSS'), 0)::float8 AS "unitsLost",
             COALESCE(bit_or(CASE WHEN p.units > 0 THEN 1 WHEN p.units < 0 THEN 2 ELSE 4 END) FILTER (WHERE p.status = 'WIN' AND p.odds = 0), 0)::int AS "zeroOddsWinFlags"
@@ -328,22 +343,26 @@ function streakPanelSql(kind: "WIN" | "LOSS", userId: string, range: { start: Da
 // first in ORDER_DESC via the same LATERAL index-ordered LIMIT the streak panels use
 // (picks_user_capper_streak_idx). They read the `roster` CTE, so they share the other panels' capper
 // eligibility (test accounts left out), and ignore the page's time window. Returns [name, sql] CTEs:
-//   dl         (cid, win, rn)  rn 1 = newest.
+//   dl         (cid, win, gt, rn)  rn 1 = newest; gt = gameTime.
 //   rising     recent = rn 1..RISING_RECENT, baseline = rn > RISING_RECENT (never the combined set).
 //              Needs exactly RISING_RECENT recent + >= RISING_MIN_BASELINE baseline; score =
 //              recent win% - baseline win% must be > 0. Ranked score desc, larger baseline, id.
+//              Rows carry pts (the score in whole percentage points) and trend: the win % of each
+//              of the last RISING_RECENT rolling RISING_RECENT-pick windows, oldest first, so its
+//              last value is the recent win%.
 //   consistent the newest CONSISTENT_PICKS (all required) as CONSISTENT_BLOCKS equal blocks, oldest
 //              first; mean block win% >= CONSISTENT_MIN_MEAN_PCT. Ranked by population standard
 //              deviation of the block win%s ascending, then higher mean, then id.
 // Scores are numeric (exact) and rounded to 9 places so equal fractions tie instead of differing by
-// float noise. Neither score leaves the database - rows carry only the sparkline series.
+// float noise. Consistent rows carry sd (that standard deviation), which the confidence score is
+// derived from (consistencyScore).
 export function formPanelCtes(userId: string): [string, Prisma.Sql][] {
   const blockSize = CONSISTENT_PICKS / CONSISTENT_BLOCKS;
   return [
     [
       "dl",
       Prisma.sql`
-        SELECT r.id AS cid, q.win,
+        SELECT r.id AS cid, q.win, q."gameTime" AS gt,
           row_number() OVER (PARTITION BY r.id ORDER BY q."gameTime" DESC, q."createdAt" DESC, q.id COLLATE "C" DESC) AS rn
         FROM roster r
         CROSS JOIN LATERAL (
@@ -358,27 +377,36 @@ export function formPanelCtes(userId: string): [string, Prisma.Sql][] {
     [
       "rising",
       Prisma.sql`
-        SELECT s.cid AS "capperId", r.name, r."colorTag",
-          (SELECT array_agg(d.win::int ORDER BY d.rn DESC) FROM dl d WHERE d.cid = s.cid AND d.rn <= ${RISING_RECENT}::int) AS form
+        SELECT t.cid AS "capperId", t.name, t."colorTag", round(t.score * 100)::int AS pts,
+          (SELECT array_agg(x.pct ORDER BY x.o DESC) FROM (
+            SELECT g.o, round(count(*) FILTER (WHERE d.win)::numeric * 100 / ${RISING_RECENT}::int, 4)::float8 AS pct
+            FROM generate_series(0, ${RISING_RECENT}::int - 1) g(o)
+            JOIN dl d ON d.cid = t.cid AND d.rn < 2 * ${RISING_RECENT}::int AND d.rn > g.o AND d.rn <= g.o + ${RISING_RECENT}::int
+            GROUP BY g.o
+          ) x) AS trend
         FROM (
-          SELECT cid,
-            count(*) FILTER (WHERE rn <= ${RISING_RECENT}::int) AS rn_n,
-            count(*) FILTER (WHERE rn <= ${RISING_RECENT}::int AND win) AS rw,
-            count(*) FILTER (WHERE rn > ${RISING_RECENT}::int) AS bn,
-            count(*) FILTER (WHERE rn > ${RISING_RECENT}::int AND win) AS bw
-          FROM dl GROUP BY cid
-        ) s
-        JOIN roster r ON r.id = s.cid
-        WHERE s.rn_n = ${RISING_RECENT}::int AND s.bn >= ${RISING_MIN_BASELINE}::int
-          AND round(s.rw::numeric / s.rn_n - s.bw::numeric / s.bn, 9) > 0
-        ORDER BY round(s.rw::numeric / s.rn_n - s.bw::numeric / s.bn, 9) DESC, s.bn DESC, r.id COLLATE "C"
-        LIMIT ${FORM_PANEL_COUNT}
+          SELECT s.cid, r.name, r."colorTag", s.bn, round(s.rw::numeric / s.rn_n - s.bw::numeric / s.bn, 9) AS score
+          FROM (
+            SELECT cid,
+              count(*) FILTER (WHERE rn <= ${RISING_RECENT}::int) AS rn_n,
+              count(*) FILTER (WHERE rn <= ${RISING_RECENT}::int AND win) AS rw,
+              count(*) FILTER (WHERE rn > ${RISING_RECENT}::int) AS bn,
+              count(*) FILTER (WHERE rn > ${RISING_RECENT}::int AND win) AS bw
+            FROM dl GROUP BY cid
+          ) s
+          JOIN roster r ON r.id = s.cid
+          WHERE s.rn_n = ${RISING_RECENT}::int AND s.bn >= ${RISING_MIN_BASELINE}::int
+            AND round(s.rw::numeric / s.rn_n - s.bw::numeric / s.bn, 9) > 0
+          ORDER BY score DESC, s.bn DESC, r.id COLLATE "C"
+          LIMIT ${FORM_PANEL_COUNT}
+        ) t
+        ORDER BY t.score DESC, t.bn DESC, t.cid COLLATE "C"
       `,
     ],
     [
       "consistent",
       Prisma.sql`
-        SELECT b.cid AS "capperId", r.name, r."colorTag", b.blocks
+        SELECT b.cid AS "capperId", r.name, r."colorTag", b.blocks, b.sd::float8 AS sd
         FROM (
           SELECT cid, sum(n) AS n, sum(w) AS tw,
             round(stddev_pop(w::numeric * 100 / n), 9) AS sd,
@@ -413,8 +441,8 @@ export async function getPanelRows(q: { userId: string; panel: PanelKey; window:
   `);
   return rows.map((r) => ({
     ...r,
-    ...(r.pickCount === undefined ? {} : { pickCount: Number(r.pickCount) }),
-    ...(r.netUnits === undefined ? {} : { netUnits: Number(r.netUnits) }),
+    ...(r.pickCount === undefined ? {} : { pickCount: Number(r.pickCount), totalPicks: Number(r.totalPicks) }),
+    ...(r.netUnits === undefined ? {} : { netUnits: Number(r.netUnits), wins: Number(r.wins), losses: Number(r.losses) }),
     ...(r.streak === undefined ? {} : { streak: Number(r.streak) }),
     ...(r.units === undefined ? {} : { units: Number(r.units) }),
   }));
@@ -423,14 +451,14 @@ export async function getPanelRows(q: { userId: string; panel: PanelKey; window:
 export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
   const now = q.now ?? new Date();
   const range = scorecardWindowRange(q.window, now);
-  const previous = range ? { start: new Date(range.start.getTime() - (range.end.getTime() - range.start.getTime())), end: range.start } : null;
-  const weekStart = new Date(now.getTime() - 7 * DAY_MS);
-  const priorWeekStart = new Date(now.getTime() - 14 * DAY_MS);
+  // weekEdges[i]..weekEdges[i + 1] is stat-card week i (oldest first); the last edge is now.
+  const weekEdges = Array.from({ length: STAT_WEEKS + 1 }, (_, i) => new Date(now.getTime() - (STAT_WEEKS - i) * 7 * DAY_MS));
+  const weekEnds = Prisma.join(weekEdges.slice(1).map((d, i) => Prisma.sql`(${i}::int, ${ts(d)})`));
 
   const ctes: [string, Prisma.Sql][] = [];
   const add = (name: string, sql: Prisma.Sql) => ctes.push([name, sql]);
 
-  add("roster", Prisma.sql`SELECT id, name, "colorTag", "isFavorite" FROM cappers WHERE "userId" = ${q.userId} AND NOT "isTest"`);
+  add("roster", Prisma.sql`SELECT id, name, "colorTag", "isFavorite", "createdAt" FROM cappers WHERE "userId" = ${q.userId} AND NOT "isTest"`);
   add("ut", windowTotalsSelect({ userId: q.userId }));
   add("ut_r", Prisma.sql`SELECT * FROM ut WHERE "capperId" IN (SELECT id FROM roster)`);
   if (q.league) {
@@ -541,33 +569,77 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
   add("cold", panelSql("coldest", q.userId, weekRange));
   // Windowless form panels (Rising Fast, Most Consistent): see formPanelCtes.
   ctes.push(...formPanelCtes(q.userId));
+  // Hot-streak history for the stat card: at each week's end, the cappers whose decided picks before
+  // it open with HOT_STREAK_MIN+ wins. Reads only dl (picks before a cutoff are a contiguous rn tail).
+  add(
+    "hs",
+    Prisma.sql`
+      SELECT e.k, (count(*) FILTER (WHERE x.run >= ${HOT_STREAK_MIN}))::int AS n
+      FROM (VALUES ${weekEnds}) e(k, t)
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(min(d.rn) FILTER (WHERE NOT d.win), max(d.rn) + 1) - min(d.rn) AS run
+        FROM dl d WHERE d.gt < e.t GROUP BY d.cid
+      ) x ON true
+      GROUP BY e.k
+    `
+  );
   // Streaks for the Standout cards (always the unscoped roster, like the cards themselves).
   add("stt", Prisma.sql`SELECT * FROM st_u WHERE "capperId" IN (SELECT cid FROM top)`);
 
   // Overview: counts by datePosted (activity), pooled money totals from the per-capper totals.
   const curFilter = range ? Prisma.sql`p."datePosted" >= ${ts(range.start)} AND p."datePosted" < ${ts(range.end)}` : Prisma.sql`true`;
-  const prevFilter = previous ? Prisma.sql`p."datePosted" >= ${ts(previous.start)} AND p."datePosted" < ${ts(previous.end)}` : Prisma.sql`false`;
-  const lowerBound = range ? Prisma.sql`AND p."datePosted" >= ${ts(new Date(Math.min(previous!.start.getTime(), priorWeekStart.getTime())))}` : Prisma.empty;
+  // The same scan feeds the weekly series, so its lower bound reaches back STAT_WEEKS weeks (by
+  // either date: the ROI series buckets by gameTime, the counts by datePosted).
+  const oldest = ts(new Date(Math.min(range ? range.start.getTime() : Infinity, weekEdges[0].getTime())));
+  const lowerBound = range ? Prisma.sql`AND (p."datePosted" >= ${oldest} OR p."gameTime" >= ${oldest})` : Prisma.empty;
+  const weekOf = (col: string) => Prisma.sql`floor(extract(epoch FROM p.${Prisma.raw(col)} - k.t0) / ${7 * 86400}::int)::int`;
+  // The one scan of the roster's picks, reduced to a row per capper x week posted x week graded
+  // (dw / gw: 0 = oldest stat-card week, NULL = outside them; gw also NULL when not graded), then
+  // rolled up three ways in one pass: g = 3 everything (the tab's active cappers), g = 1 per week
+  // posted, g = 2 per week graded. OFFSET 0 keeps the week origin a value computed once rather than
+  // a text-to-timestamp cast repeated for every pick.
+  add(
+    "ag",
+    Prisma.sql`
+      SELECT GROUPING(c.dw, c.gw)::int AS g, c.dw, c.gw,
+        COALESCE(sum(c.n), 0)::int AS n,
+        count(DISTINCT c.cid)::int AS nc,
+        (count(DISTINCT c.cid) FILTER (WHERE c.cur))::int AS cur,
+        COALESCE(sum(c.uw), 0)::float8 AS uw, COALESCE(sum(c.ul), 0)::float8 AS ul, COALESCE(sum(c.ur), 0)::float8 AS ur
+      FROM (
+        SELECT x.cid, x.dw, x.gw, x.cur, count(*) AS n,
+          sum(x.win_units) FILTER (WHERE x.status = 'WIN' AND x.odds <> 0) AS uw,
+          sum(x.units) FILTER (WHERE x.status = 'LOSS') AS ul,
+          sum(x.units) FILTER (WHERE x.status IN ('WIN', 'LOSS', 'PUSH')) AS ur
+        FROM (
+          SELECT p."capperId" AS cid, p.status, p.units, p.odds, ${WIN_UNITS} AS win_units, (${curFilter}) AS cur,
+            CASE WHEN ${weekOf('"datePosted"')} BETWEEN 0 AND ${STAT_WEEKS - 1} THEN ${weekOf('"datePosted"')} END AS dw,
+            CASE WHEN p."gradedAt" IS NOT NULL AND ${weekOf('"gameTime"')} BETWEEN 0 AND ${STAT_WEEKS - 1} THEN ${weekOf('"gameTime"')} END AS gw
+          FROM picks p CROSS JOIN (SELECT ${ts(weekEdges[0])} AS t0 OFFSET 0) k
+          WHERE p."userId" = ${q.userId} AND p."capperId" IN (SELECT id FROM roster) ${lowerBound}
+        ) x
+        GROUP BY x.cid, x.dw, x.gw, x.cur
+      ) c
+      GROUP BY GROUPING SETS ((), (c.dw), (c.gw))
+    `
+  );
   add(
     "ov",
     Prisma.sql`
       SELECT
         (SELECT count(*) FROM roster)::int AS "capperCount",
         (SELECT count(*) FROM roster WHERE "isFavorite")::int AS "favCount",
-        a.cur, a.prev, a.week, a.prior,
+        (SELECT count(*) FROM roster WHERE "createdAt" >= ${ts(new Date(now.getTime() - 30 * DAY_MS))})::int AS "newMonth",
+        (SELECT jsonb_agg((SELECT count(*) FROM roster r WHERE r."createdAt" < e.t)::int ORDER BY e.k) FROM (VALUES ${weekEnds}) e(k, t)) AS wk_tracked,
+        (SELECT jsonb_agg(hs.n ORDER BY hs.k) FROM hs) AS wk_hot,
+        (SELECT cur FROM ag WHERE g = 3) AS cur,
+        (SELECT jsonb_agg(jsonb_build_array(dw, n, nc)) FROM ag WHERE g = 1 AND dw IS NOT NULL) AS wk_posted,
+        (SELECT jsonb_agg(jsonb_build_array(gw, uw, ul, ur)) FROM ag WHERE g = 2 AND gw IS NOT NULL) AS wk_graded,
         (SELECT COALESCE(sum(wins), 0) FROM ut_r)::int AS wins, (SELECT COALESCE(sum(losses), 0) FROM ut_r)::int AS losses,
         (SELECT COALESCE(sum(pushes), 0) FROM ut_r)::int AS pushes,
         (SELECT COALESCE(sum("unitsWon"), 0) FROM ut_r)::float8 AS "unitsWon", (SELECT COALESCE(sum("unitsLost"), 0) FROM ut_r)::float8 AS "unitsLost",
         (SELECT COALESCE(sum("unitsRisked"), 0) FROM ut_r)::float8 AS "unitsRisked",
         (SELECT count(*) FROM st_u WHERE type = 'WIN' AND "count" >= ${HOT_STREAK_MIN} AND "capperId" IN (SELECT id FROM roster))::int AS hot
-      FROM (
-        SELECT
-          (count(DISTINCT p."capperId") FILTER (WHERE ${curFilter}))::int AS cur,
-          (count(DISTINCT p."capperId") FILTER (WHERE ${prevFilter}))::int AS prev,
-          (count(*) FILTER (WHERE p."datePosted" >= ${ts(weekStart)} AND p."datePosted" < ${ts(now)}))::int AS week,
-          (count(*) FILTER (WHERE p."datePosted" >= ${ts(priorWeekStart)} AND p."datePosted" < ${ts(weekStart)}))::int AS prior
-        FROM picks p WHERE p."userId" = ${q.userId} AND p."capperId" IN (SELECT id FROM roster) ${lowerBound}
-      ) a
     `
   );
   if (q.fav) add("fs", windowTotalsSelect({ userId: q.userId, favoritesOnly: true, pooled: true }));
@@ -646,8 +718,21 @@ export async function getCappersPageData(q: CappersPageQuery): Promise<CappersPa
     unitsLost: ov.unitsLost ?? 0,
     unitsRisked: ov.unitsRisked ?? 0,
   });
-  const week = Number(ov.week ?? 0);
-  const prior = Number(ov.prior ?? 0);
+  // Weekly rows: [week, picks posted, cappers posting] and [week, units won, lost, risked].
+  const weekly = (rows: unknown, col: number) => {
+    const out = Array.from({ length: STAT_WEEKS }, () => 0);
+    for (const r of (rows as number[][] | null) ?? []) out[Number(r[0])] = Number(r[col]);
+    return out;
+  };
+  const series = (v: unknown) => Array.from({ length: STAT_WEEKS }, (_, i) => Number((v as unknown[] | null)?.[i] ?? 0));
+  const wkPicks = weekly(ov.wk_posted, 1);
+  const wkActive = weekly(ov.wk_posted, 2);
+  const wkUw = weekly(ov.wk_graded, 1);
+  const wkUl = weekly(ov.wk_graded, 2);
+  const wkUr = weekly(ov.wk_graded, 3);
+  // The last two weeks are "this week" and "last week" (rolling 7 days ending now).
+  const week = wkPicks[STAT_WEEKS - 1];
+  const prior = wkPicks[STAT_WEEKS - 2];
 
   let favSummary: FavoriteCappersSummary | null = null;
   if (q.fav && Number(ov.favCount ?? 0) > 0) {
@@ -659,7 +744,15 @@ export async function getCappersPageData(q: CappersPageQuery): Promise<CappersPa
     capperCount: Number(ov.capperCount ?? 0),
     overview: {
       activeCappers: Number(ov.cur ?? 0),
-      activeCappersDelta: scorecardWindowRange(q.window, now) ? Number(ov.cur ?? 0) - Number(ov.prev ?? 0) : null,
+      activeCappersDelta: wkActive[STAT_WEEKS - 1] - wkActive[STAT_WEEKS - 2],
+      newCappersThisMonth: Number(ov.newMonth ?? 0),
+      weekly: {
+        tracked: series(ov.wk_tracked),
+        active: wkActive,
+        picks: wkPicks,
+        roi: wkUr.map((ur, i) => (ur > 0 ? round2(((wkUw[i] - wkUl[i]) / ur) * 100) : 0)),
+        hot: series(ov.wk_hot),
+      },
       picksThisWeek: week,
       picksThisWeekPct: prior > 0 ? Math.round(((week - prior) / prior) * 1000) / 10 : null,
       avgRoi: pooled.roi,
@@ -672,12 +765,12 @@ export async function getCappersPageData(q: CappersPageQuery): Promise<CappersPa
     top: ((out.top ?? []) as EntryRow[]).map((r) => entryOf(r, q.window, topStreaks.get(r.cid), null)),
     sparklines,
     topSparklines,
-    mostActive: (out.ma ?? []).map((m: ActivityEntry) => ({ capperId: m.capperId, name: m.name, colorTag: m.colorTag, pickCount: Number(m.pickCount) })),
+    mostActive: (out.ma ?? []).map((m: ActiveEntry) => ({ capperId: m.capperId, name: m.name, colorTag: m.colorTag, pickCount: Number(m.pickCount), totalPicks: Number(m.totalPicks) })),
     hottest: (out.hot ?? []).map((h: StreakEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, streak: Number(h.streak) })),
-    winners: (out.win ?? []).map((h: WinnerEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, netUnits: Number(h.netUnits) })),
+    winners: (out.win ?? []).map((h: WinnerEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, netUnits: Number(h.netUnits), wins: Number(h.wins), losses: Number(h.losses) })),
     coldest: (out.cold ?? []).map((h: StreakEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, streak: Number(h.streak), units: Number(h.units) })),
-    rising: (out.rising ?? []).map((h: RisingEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, form: (h.form ?? []).map(Number) })),
-    consistent: (out.consistent ?? []).map((h: ConsistentEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, blocks: (h.blocks ?? []).map(Number) })),
+    rising: (out.rising ?? []).map((h: RisingEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, pts: Number(h.pts), trend: (h.trend ?? []).map(Number) })),
+    consistent: (out.consistent ?? []).map((h: ConsistentEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, blocks: (h.blocks ?? []).map(Number), sd: Number(h.sd) })),
     favSummary,
   };
 }
