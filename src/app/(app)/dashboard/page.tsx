@@ -23,11 +23,16 @@ export default async function DashboardPage() {
 
   return (
     <ThemedPage>
-      {/* dashboard.png is 2040x221, and the "D" of the word starts 18.14% of the way across it. The
-          motto is indented to sit under that D: 18.14% of the card from `sm` up (the art spans the
-          card), and 107px on a phone - the art is 64px tall there, so 64 x 2040/221 = 591px wide. */}
-      <PageBanner src={dashboardBanner} title="Dashboard" frameClassName="h-16 sm:h-auto sm:aspect-[2040/221]">
-        <p className="whitespace-nowrap pb-3.5 pl-[107px] text-[10.5px] font-bold uppercase tracking-[2.2px] text-[#BFD3FF] sm:pb-[18px] sm:pl-[18.14%] sm:text-[13px] sm:tracking-[3.5px]">
+      {/* dashboard.png is 2040x221. Across it, the icon's circle starts at 4.0%, the "D" at 18.1%,
+          the word ends at 55.1% and the illustration starts at 58.8%. A phone's row is 52px tall, so
+          the art is 480px wide: shifted 3px left, the circle is 16px from the card's edge, the word
+          ends at 262px and the illustration would start at 279px. The crop ends 10px before that.
+          From `sm` up nothing is shifted, and the crop ends 10px before the illustration's start in
+          the 104px row (565px) and the 112px row (608px).
+          The motto is indented to sit under the D: 18.1% of the art's width, less the shift on a
+          phone - 84px there, 174px in the 104px row (960px of art) and 187px in the 112px row (1034px). */}
+      <PageBanner src={dashboardBanner} title="Dashboard" className="bg-[#001637]" rowClassName="max-sm:h-[52px]" cropClassName="w-[269px] sm:w-[555px] lg:w-[598px]" imageClassName="max-sm:-ml-[3px]" glow="card">
+        <p className="whitespace-nowrap pb-[11px] pl-[84px] text-[9.5px] font-bold uppercase tracking-[2px] text-[#BFD3FF] sm:pb-4 sm:pl-[174px] sm:text-[13px] sm:tracking-[3.5px] lg:pl-[187px]">
           Track <span className="text-[#38BDF8]">·</span> Compare <span className="text-[#38BDF8]">·</span> Decide
         </p>
       </PageBanner>

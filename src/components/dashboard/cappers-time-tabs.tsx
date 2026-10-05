@@ -11,10 +11,10 @@ const FADE = 28;
 // segmented group. The phone's row is a scroll container, which clips: its padding (cancelled by
 // the negative margins) is the room the selected chip's glow needs.
 const ROW =
-  "flex gap-2 max-sm:-my-3 max-sm:-ml-3.5 max-sm:snap-x max-sm:scroll-pl-3.5 max-sm:overflow-x-auto max-sm:py-3 max-sm:pl-3.5 max-sm:pr-7 max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden " +
+  "flex gap-2 max-sm:-mb-3 max-sm:-ml-3 max-sm:-mt-2.5 max-sm:snap-x max-sm:scroll-pl-3 max-sm:overflow-x-auto max-sm:pb-3 max-sm:pl-3 max-sm:pr-7 max-sm:pt-2.5max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden " +
   "sm:inline-flex sm:max-w-full sm:flex-wrap sm:gap-1.5 sm:rounded-full sm:border sm:border-[rgba(96,140,255,0.2)] sm:bg-[rgba(30,58,138,0.25)] sm:p-1";
 const CHIP =
-  "flex h-[34px] flex-none items-center whitespace-nowrap rounded-full px-3.5 text-[12.5px] font-medium capitalize transition max-sm:snap-start max-sm:border sm:h-8 ";
+  "flex h-8 flex-none items-center whitespace-nowrap rounded-full px-[13px] text-[12.5px] font-medium capitalize transition max-sm:snap-start max-sm:border sm:px-3.5 ";
 const ACTIVE = "bg-[#2563EB] text-white shadow-[0_0_14px_rgba(37,99,235,0.6)] max-sm:border-[#2563EB]";
 const INACTIVE = "text-[#D3DEFA] hover:text-white max-sm:border-[rgba(96,140,255,0.2)] max-sm:bg-[rgba(30,58,138,0.25)]";
 
@@ -57,7 +57,7 @@ export function CappersTimeTabs({ params }: { params: CappersParams }) {
         })}
       </nav>
       {/* Hints that the row scrolls: fades into the banner's background. */}
-      <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-7 bg-gradient-to-r from-transparent to-[#030B29] sm:hidden" />
+      <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-7 bg-gradient-to-r from-transparent to-[#011948] sm:hidden" />
     </div>
   );
 }
