@@ -740,7 +740,7 @@ async function main() {
   same("consistent: steadiest first, blocks oldest first", pageS6.consistent.map((e) => e.name + " " + e.blocks.join(",")), ["Flat 60,60,60,60,60", "Wavy 50,70,50,70,50"]);
   same("consistent: population standard deviation of the block win %s", pageS6.consistent.map((e) => e.sd), [0, Math.sqrt(96)]);
   same("consistent: confidence = clamp(round(100 - 2.5 * sd)) and its tier", pageS6.consistent.map((e) => consistencyScore(e.sd) + " " + consistencyTier(consistencyScore(e.sd))), ["100 Elite", "76 Steady"]);
-  same("confidence: clamped to 0-100; tiers Elite >= 90, Rock Solid >= 80, Steady below", [consistencyScore(100), consistencyScore(0), consistencyScore(4), ...[90, 89, 80, 79].map(consistencyTier)], [0, 100, 90, "Elite", "Rock Solid", "Rock Solid", "Steady"]);
+  same("confidence: clamped to 0-100; tiers Elite >= 85, Rock Solid >= 80, Steady below", [consistencyScore(100), consistencyScore(0), consistencyScore(4), ...[85, 84, 80, 79].map(consistencyTier)], [0, 100, 90, "Elite", "Rock Solid", "Rock Solid", "Steady"]);
 
   console.log(`\n${assertions} assertions, ${failures} failed.`);
 }

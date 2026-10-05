@@ -10,10 +10,19 @@ import { CappersStatCards } from "@/components/dashboard/cappers-stat-cards";
 import { CapperPanel, FormPanel } from "@/components/dashboard/capper-panel";
 import { TopCappers } from "@/components/dashboard/top-cappers";
 import { CappersLeaderboardCard } from "@/components/dashboard/cappers-leaderboard-card";
+import { Plus_Jakarta_Sans } from "next/font/google";
+
+// This page's own typeface, applied to its wrapper only (self-hosted by next/font at build time).
+const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], display: "swap", fallback: ["system-ui", "sans-serif"] });
+// The page's soft neutral backdrop, painted over the shared layout's content padding (p-4 / md:p-8)
+// rather than changing that layout, and at least as tall as that content area (the viewport less the
+// ticker and the layout gutter) so a short page is not half white. The top is only pulled up when
+// nothing sits above the page.
+const BACKDROP = "-mx-4 -mb-4 bg-[#F5F6FA] px-4 pb-4 pt-4 first:-mt-4 dark:bg-transparent md:-mx-8 md:-mb-8 md:min-h-[calc(100vh-68px)] md:rounded-[11px] md:px-8 md:pb-8 md:pt-8 md:first:-mt-8";
 
 const LEAGUES = LIVE_SPORTS.map((s) => s.label);
 // The Add capper button as it sits in the dark banner.
-const ADD_BUTTON = "h-10 shrink-0 rounded-[10px] bg-brand-600 px-[18px] text-[13px] font-bold text-white transition hover:bg-brand-700";
+const ADD_BUTTON = "h-10 shrink-0 rounded-[10px] bg-brand-600 px-[18px] text-[13px] font-medium text-white transition hover:bg-brand-700";
 
 export default async function CappersPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const user = await requireUser();
@@ -38,7 +47,8 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
   const cappersWithCounts = suspectedDuplicates.length > 0 ? await getCappersWithPickCounts(user.id) : [];
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-3.5">
+    <div className={jakarta.className + " " + BACKDROP}>
+      <div className="mx-auto max-w-[1280px] space-y-3.5">
       <CappersHeader params={params} controls={data.capperCount > 0}>
         <CapperForm atLimit={false} triggerClassName={ADD_BUTTON + (data.capperCount > 0 ? "" : " ml-auto")} />
       </CappersHeader>
@@ -51,9 +61,9 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
       ) : (
         <>
           <CappersStatCards stats={data.overview} capperCount={data.capperCount} />
-          {/* Three across on a wide screen (Most Active | Rising Fast | Hot Hand, then Most Consistent |
-              Biggest Winners | Coldest), fewer as the width shrinks, one per row on a phone. */}
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))] items-stretch gap-3.5">
+          {/* Three across from a ~1500px screen (Most Active | Rising Fast | Hot Hand, then Most Consistent |
+              Biggest Winners | Coldest), two across from ~1100px, one per row below that. */}
+          <div className="grid grid-cols-1 items-stretch gap-3.5 min-[1100px]:grid-cols-2 min-[1500px]:grid-cols-3">
             <CapperPanel panel="active" initial={data.mostActive} weekPct={data.overview.picksThisWeekPct} />
             <FormPanel panel="rising" rows={data.rising} />
             <CapperPanel panel="hottest" initial={data.hottest} />
@@ -74,6 +84,7 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }

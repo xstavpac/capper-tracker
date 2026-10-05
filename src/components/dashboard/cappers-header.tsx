@@ -9,15 +9,14 @@ import { CrownIcon } from "@/components/dashboard/cappers-icons";
 // no-cappers-yet state has nothing to filter). The banner is dark in both themes.
 export function CappersHeader({ params, controls = true, children }: { params: CappersParams; controls?: boolean; children?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[18px] bg-[#0F1420] px-4 py-4 sm:px-5 min-[1700px]:gap-x-5">
-      <div className="flex shrink-0 items-center gap-3.5">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-brand-600 bg-[#1A2236] text-white">
-          <CrownIcon className="h-[26px] w-[26px]" />
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-3 rounded-[18px] bg-[#0F1420] px-4 py-4 sm:px-5">
+      <div className="flex shrink-0 items-center gap-3">
+        <span className="flex h-[38px] w-[38px] items-center justify-center rounded-full border-2 border-brand-600 bg-[#1A2236] text-white">
+          <CrownIcon className="h-[19px] w-[19px]" />
         </span>
-        <h1 className="text-[30px] font-extrabold leading-none tracking-tight text-white">Cappers</h1>
-        {/* The tagline shows where there is a row to spare for it: stacked (narrow) or a very wide banner. */}
-        <span aria-hidden className="hidden h-[22px] w-px bg-[#2A3348] min-[420px]:block xl:hidden min-[1700px]:block" />
-        <p className="hidden text-[13px] font-semibold text-[#A3ACC2] min-[420px]:block xl:hidden min-[1700px]:block">Track. Compare. Win.</p>
+        <h1 className="text-xl font-semibold leading-none tracking-[-0.02em] text-white">Cappers</h1>
+        <span aria-hidden className="h-[22px] w-px bg-[#2A3348]" />
+        <p className="whitespace-nowrap text-[13px] font-medium text-[#A3ACC2]">Track. Compare. Win.</p>
       </div>
       {controls && <CappersTimeTabs params={params} />}
       {controls && <CappersSearch params={params} />}

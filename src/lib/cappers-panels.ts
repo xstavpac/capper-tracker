@@ -58,6 +58,9 @@ export function consistencyScore(sd: number): number {
   return Math.min(100, Math.max(0, Math.round(100 - 2.5 * sd)));
 }
 export type ConsistencyTier = "Elite" | "Rock Solid" | "Steady";
+// Lowest score for each tier; anything under rockSolid is Steady. Tuned (2026-10) so the five rows
+// the panel shows do not all read the same: retune here.
+export const CONSISTENCY_TIER_CUTOFFS = { elite: 85, rockSolid: 80 } as const;
 export function consistencyTier(score: number): ConsistencyTier {
-  return score >= 90 ? "Elite" : score >= 80 ? "Rock Solid" : "Steady";
+  return score >= CONSISTENCY_TIER_CUTOFFS.elite ? "Elite" : score >= CONSISTENCY_TIER_CUTOFFS.rockSolid ? "Rock Solid" : "Steady";
 }
