@@ -45,10 +45,19 @@ export const FORM_PANEL_COUNT = 5;
 
 export type FormPanelKey = "rising" | "consistent";
 
-// `pts`: the score in whole percentage points (recent win% - baseline win%). `trend`: win % (0-100) of
-// each of the last RISING_RECENT rolling RISING_RECENT-pick windows, oldest first - the chart line,
-// ending at the recent win%.
-export type RisingEntry = { capperId: string; name: string; colorTag: string | null; pts: number; trend: number[] };
+// `pts`: the score in whole percentage points (recent win% - baseline win%). `results`: the newest
+// RISING_RECENT decided picks, oldest first, true = win. `baseline`: the baseline win rate as a
+// fraction (0-1), the same one `pts` is measured against.
+export type RisingEntry = { capperId: string; name: string; colorTag: string | null; pts: number; results: boolean[]; baseline: number };
+
+// Rising Fast's chart line, "wins above their norm": 0 before the first of the recent picks, then after
+// each pick the running sum of (result - baseline) in points, where a win is 1 and a loss is 0. One pick
+// is worth 100 / RISING_RECENT points, so the last value is recent win% - baseline win%: the score.
+export function risingSeries(results: boolean[], baseline: number): number[] {
+  const perPick = 100 / RISING_RECENT;
+  let sum = 0;
+  return [0, ...results.map((win) => (sum += ((win ? 1 : 0) - baseline) * perPick))];
+}
 // `blocks`: each block's win % (0-100), oldest block first - the sparkline series. `sd`: their
 // population standard deviation (the ranking key).
 export type ConsistentEntry = { capperId: string; name: string; colorTag: string | null; blocks: number[]; sd: number };

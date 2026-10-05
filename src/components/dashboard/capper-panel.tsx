@@ -8,6 +8,7 @@ import {
   PANEL_WINDOW_LABELS,
   consistencyScore,
   consistencyTier,
+  risingSeries,
   type ActiveEntry,
   type ConsistencyTier,
   type ConsistentEntry,
@@ -537,81 +538,111 @@ export function FormPanel({ panel, rows }: { panel: FormPanelKey; rows: RisingEn
   );
 }
 
-// Gridlines, in win %.
-const TREND_TICKS = [100, 75, 50, 25, 0];
 const AXIS_TEXT = "text-[11px] font-medium leading-none tabular-nums text-[#5B6275] dark:text-muted-foreground";
+// Line colors by rank; the legend swatches match.
+const LINE_COLORS = ["#16A34A", "#2563EB", "#F59E0B", "#A855F7", "#06B6D4"];
+const signedPts = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v));
 
-// The #1 riser's rolling win % (10-pick window) over their last 10 decided picks, oldest to newest,
-// against their baseline (the win % of the picks before those). The line can dip and still be a rise:
-// the score is where it ends above the baseline. Ranks 1-5 are listed beside it.
+// Round gridlines for the lines' range: the smallest step that covers it in at most five bands. The
+// range always reaches one step below 0, which is where the norm line's label sits.
+function ptsAxis(values: number[]): { lo: number; hi: number; step: number } {
+  const min = Math.min(0, ...values);
+  const max = Math.max(0, ...values);
+  for (const step of [10, 20, 25, 50, 100]) {
+    const lo = Math.min(-step, Math.floor(min / step) * step);
+    const hi = Math.max(step, Math.ceil(max / step) * step);
+    if ((hi - lo) / step <= 5) return { lo, hi, step };
+  }
+  return { lo: -100, hi: 100, step: 100 };
+}
+// The plot is at least this tall (px): what "do two endpoint labels collide" is judged against.
+const PLOT_MIN_H = 116;
+const LABEL_H = 13;
+
+// "Wins above their norm" for the top risers: each line starts at 0 and, pick by pick over the last 10
+// decided picks, adds what the result beat the capper's own baseline win rate by (risingSeries). A
+// riser's line climbs, and ends on exactly their score. 0 is the norm line.
 function RisingChart({ rows }: { rows: RisingEntry[] }) {
-  const lead = rows[0];
-  const n = Math.max(2, lead.trend.length);
-  const last = lead.trend[lead.trend.length - 1] ?? 0;
-  // pts = recent win % - baseline win %, and the line ends at the recent win %.
-  const baseline = Math.min(100, Math.max(0, last - lead.pts));
+  const lines = rows.map((r) => risingSeries(r.results, r.baseline));
+  const n = Math.max(2, ...lines.map((l) => l.length));
+  const { lo, hi, step } = ptsAxis(lines.flat());
+  const ticks = Array.from({ length: Math.round((hi - lo) / step) + 1 }, (_, k) => hi - k * step);
   const x = (i: number) => (i / (n - 1)) * 100;
-  const y = (v: number) => 100 - Math.min(100, Math.max(0, v));
-  const line = lead.trend.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(1)).join(" ");
-  const endX = x(lead.trend.length - 1);
-  // Labels sit clear of the line: the baseline's on the side the line does not start on, the
-  // endpoint's above its dot unless that would leave the plot or the line comes down into it.
-  const baselineBelow = baseline > 88 || (baseline >= 12 && (lead.trend[0] ?? 0) >= baseline);
-  const endBelow = last > 85 || Math.max(...lead.trend.slice(-4)) > last + 5;
+  const y = (v: number) => ((hi - Math.min(hi, Math.max(lo, v))) / (hi - lo)) * 100;
+  const points = (l: number[]) => l.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(2)).join(" ");
+  const ends = lines.map((l) => l[l.length - 1] ?? 0);
+  // Every line gets its "+X pts" in the right margin where the panel is wide enough and no two labels
+  // would touch; otherwise only #1 is labelled, on the plot.
+  const minGap = (LABEL_H / PLOT_MIN_H) * (hi - lo);
+  const sortedEnds = [...ends].sort((p, q) => p - q);
+  const allLabels = rows.length > 1 && sortedEnds.every((v, i) => i === 0 || v - sortedEnds[i - 1] >= minGap);
+  const ranked = rows.map((r, i) => ({ r, i })).reverse(); // drawn last-to-first so #1 sits on top
   const label =
-    lead.name +
-    "'s rolling win rate across the last " +
-    n +
-    " decided picks: now " +
-    Math.round(last) +
-    "%, against a baseline of " +
-    Math.round(baseline) +
-    "%, up " +
-    lead.pts +
-    " points." +
-    (rows.length > 1
-      ? " Also rising: " +
-        rows
-          .slice(1)
-          .map((r) => r.name + " up " + r.pts + " points")
-          .join("; ") +
-        "."
-      : "");
+    "Wins above their norm across the last " +
+    (n - 1) +
+    " decided picks, in points: each line starts at 0 and ends on the capper's score. " +
+    rows.map((r) => r.name + " +" + r.pts).join("; ") +
+    ".";
   return (
     <div className="flex flex-1 flex-col gap-2.5 min-[400px]:flex-row">
       {/* At least ~140px tall, and as tall as the panel's row makes it: no gap above or below. */}
       <div role="img" aria-label={label} className="relative min-h-[144px] w-full min-w-0 flex-1">
-        <div className="absolute bottom-5 left-[34px] right-2 top-2">
-          {TREND_TICKS.map((t) => (
+        <div className={"absolute bottom-5 left-[34px] top-2 " + (allLabels ? "right-2 min-[1280px]:max-[1499px]:right-[54px] min-[1700px]:right-[54px]" : "right-2")}>
+          {ticks.map((t) => (
             <span key={t} aria-hidden className={"absolute right-full mr-1.5 -translate-y-1/2 " + AXIS_TEXT} style={{ top: y(t) + "%" }}>
-              {t + "%"}
+              {signedPts(t)}
             </span>
           ))}
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden className="absolute inset-0 h-full w-full overflow-visible">
-            {TREND_TICKS.map((t) => (
-              <line key={t} x1={0} x2={100} y1={y(t)} y2={y(t)} vectorEffect="non-scaling-stroke" className={t === 0 ? "stroke-[#0F1420]/25 dark:stroke-white/25" : "stroke-[#0F1420]/[0.08] dark:stroke-white/10"} />
+            {ticks
+              .filter((t) => t !== 0)
+              .map((t) => (
+                <line key={t} x1={0} x2={100} y1={y(t)} y2={y(t)} vectorEffect="non-scaling-stroke" className="stroke-[#0F1420]/[0.08] dark:stroke-white/10" />
+              ))}
+            <line x1={0} x2={100} y1={y(0)} y2={y(0)} strokeWidth={1.5} vectorEffect="non-scaling-stroke" className="stroke-[#0F1420]/45 dark:stroke-white/50" />
+            {ranked.map(({ r, i }) => (
+              <polyline
+                key={r.capperId}
+                points={points(lines[i])}
+                fill="none"
+                stroke={LINE_COLORS[i]}
+                strokeWidth={i === 0 ? 2.5 : 1.5}
+                strokeOpacity={i === 0 ? 1 : 0.8}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
             ))}
-            <polygon points={line + " " + endX.toFixed(1) + "," + y(baseline) + " 0," + y(baseline)} fill="#16A34A" fillOpacity={0.14} />
-            <line x1={0} x2={100} y1={y(baseline)} y2={y(baseline)} strokeWidth={1.5} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" className="stroke-[#0F1420]/55 dark:stroke-white/60" />
-            <polyline points={line} fill="none" stroke="#16A34A" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           </svg>
-          <span aria-hidden className="absolute left-1 whitespace-nowrap text-[11px] font-semibold leading-none tabular-nums text-[#3A4152] dark:text-foreground/80" style={{ top: y(baseline) + "%", transform: baselineBelow ? "translateY(4px)" : "translateY(calc(-100% - 4px))" }}>
-            {"Baseline " + Math.round(baseline) + "%"}
+          <span aria-hidden className="absolute right-1 whitespace-nowrap text-[11px] font-semibold leading-none text-[#3A4152] dark:text-foreground/80" style={{ top: y(0) + "%", transform: "translateY(4px)" }}>
+            Their norm
           </span>
-          <span aria-hidden className="absolute h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[2.5px] border-[#16A34A] bg-white dark:bg-[#0B1220]" style={{ left: endX + "%", top: y(last) + "%" }} />
+          <span aria-hidden className="absolute h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[2.5px] bg-white dark:bg-[#0B1220]" style={{ left: x(lines[0].length - 1) + "%", top: y(ends[0]) + "%", borderColor: LINE_COLORS[0] }} />
+          {/* #1's label on the plot, clear of its line: left of the dot when the line climbs into it, under it when the last pick lost. Hidden where the margin labels show. */}
           <span
             aria-hidden
-            className="absolute right-0 whitespace-nowrap rounded-md bg-[#15803D] px-1.5 py-[3px] text-[11px] font-semibold leading-none tabular-nums text-white"
-            style={{ top: y(last) + "%", transform: endBelow ? "translateY(9px)" : "translateY(calc(-100% - 9px))" }}
+            className={"absolute right-3.5 whitespace-nowrap rounded-md bg-[#15803D] px-1.5 py-[3px] text-[11px] font-semibold leading-none tabular-nums text-white " + (allLabels ? "min-[1280px]:max-[1499px]:hidden min-[1700px]:hidden" : "")}
+            style={{ top: y(ends[0]) + "%", transform: (lines[0][lines[0].length - 2] ?? 0) < ends[0] ? "translateY(-50%)" : "translateY(9px)" }}
           >
-            {"+" + lead.pts + " pts"}
+            {"+" + rows[0].pts + " pts"}
           </span>
+          {allLabels &&
+            rows.map((r, i) => (
+              <span
+                key={r.capperId}
+                aria-hidden
+                className={"absolute left-full ml-2 hidden -translate-y-1/2 whitespace-nowrap text-[11px] leading-none tabular-nums min-[1280px]:max-[1499px]:block min-[1700px]:block " + (i === 0 ? "font-bold" : "font-semibold")}
+                style={{ top: y(ends[i]) + "%", color: LINE_COLORS[i] }}
+              >
+                {"+" + r.pts + " pts"}
+              </span>
+            ))}
         </div>
-        {/* Picks back from the newest; the last point is the current rolling win %. */}
+        {/* Picks back from the newest: the lines start before the first of them, at 0. */}
         <span aria-hidden className={"absolute bottom-0 left-[34px] " + AXIS_TEXT}>
           {n - 1 + " picks ago"}
         </span>
-        <span aria-hidden className="absolute bottom-0 right-2 text-[11px] font-semibold leading-none text-foreground">
+        <span aria-hidden className={"absolute bottom-0 text-[11px] font-semibold leading-none text-foreground " + (allLabels ? "right-2 min-[1280px]:max-[1499px]:right-[54px] min-[1700px]:right-[54px]" : "right-2")}>
           Latest
         </span>
       </div>
@@ -619,13 +650,7 @@ function RisingChart({ rows }: { rows: RisingEntry[] }) {
         {rows.map((r, i) => (
           <li key={r.capperId}>
             <Link href={capperHref(r.capperId)} className={"flex h-8 items-center gap-[7px] rounded-lg px-1.5 transition-colors " + (i === 0 ? "bg-[#DCF3E4] dark:bg-emerald-500/15" : "hover:bg-foreground/[0.035]")}>
-              {i === 0 ? (
-                <span aria-hidden className="h-1 w-[11px] shrink-0 rounded-full bg-[#16A34A]" />
-              ) : (
-                <span aria-hidden className="w-[11px] shrink-0 text-center text-xs font-semibold tabular-nums text-[#5B6275] dark:text-muted-foreground">
-                  {i + 1}
-                </span>
-              )}
+              <span aria-hidden className={"w-[11px] shrink-0 rounded-full " + (i === 0 ? "h-1" : "h-[3px]")} style={{ backgroundColor: LINE_COLORS[i] }} />
               <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{r.name}</span>
               <span className={"whitespace-nowrap text-xs font-semibold tabular-nums " + GREEN}>{"+" + r.pts + " pts"}</span>
             </Link>

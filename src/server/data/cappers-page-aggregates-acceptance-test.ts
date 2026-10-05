@@ -19,6 +19,7 @@ import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, currentStreak, 
 import * as adapter from "@/server/data/pick-aggregates-cappers-adapter";
 import type { LeaderboardEntry } from "@/server/data/cappers";
 import { getCappersPageData, sparklineTone, SPARKLINE_MIN_PICKS, HOT_STREAK_MIN, STANDOUT_MIN_GRADED, STAT_WEEKS, getPanelRows, consistencyScore, consistencyTier, type ActiveEntry, type CapperSparkline, type PanelWindow, type StreakEntry } from "@/server/data/cappers-page-aggregates";
+import { risingSeries } from "@/lib/cappers-panels";
 import { sparklineLabel } from "@/components/dashboard/capper-sparkline";
 import { comparePicksChronological } from "@/lib/pick-order";
 import { MIN_PICKS_OPTIONS, PAGE_SIZE, SORT_OPTIONS, type CappersSortKey } from "@/lib/cappers-page-params";
@@ -725,7 +726,7 @@ async function main() {
   same("weekly series do not follow the time tab", pageS5tab.overview.weekly, o5.weekly);
   check("active cappers delta does not follow the time tab", pageS5tab.overview.activeCappersDelta === 6);
 
-  // 6. Rising Fast points + rolling trend; Most Consistent deviation, confidence score and tier.
+  // 6. Rising Fast points + results + baseline; Most Consistent deviation, confidence score and tier.
   const reps = (n: number, s: PickSpec["status"]) => Array.from({ length: n }, () => s);
   const block = (wins: number) => [...reps(wins, W), ...reps(10 - wins, L)];
   const S6 = await scenario("form", [
@@ -736,7 +737,12 @@ async function main() {
   ]);
   const pageS6 = await getCappersPageData({ userId: S6.u, window: "ALL", min: 0, sort: "roi", fav: false, q: "", page: 1 });
   same("rising: only the capper beating their baseline, with the score in points", pageS6.rising.map((e) => e.name + " +" + e.pts), ["Riser +30"]);
-  same("rising: trend = rolling 10-pick win % over the last 10 picks, oldest first, ending at the recent win %", pageS6.rising[0]?.trend, [50, 40, 50, 50, 60, 60, 70, 70, 80, 80]);
+  same("rising: results = the last 10 decided picks, oldest first", pageS6.rising[0]?.results, [false, false, true, true, true, true, true, true, true, true]);
+  same("rising: baseline = the win rate of the picks before those, as a fraction", pageS6.rising[0]?.baseline, 0.5);
+  const lineS6 = risingSeries(pageS6.rising[0]?.results ?? [], pageS6.rising[0]?.baseline ?? 0);
+  same("rising: chart line starts at 0 and adds (result - baseline) x 10 per pick", lineS6, [0, -5, -10, -5, 0, 5, 10, 15, 20, 25, 30]);
+  check("rising: the line's last point is the displayed points", Math.round(lineS6[lineS6.length - 1]) === pageS6.rising[0]?.pts);
+  same("rising: a baseline that is not a round fraction still ends on the score", Math.round(risingSeries([true, true, false, true, true, true, true, false, true, true], 0.51)[10]), 29);
   same("consistent: steadiest first, blocks oldest first", pageS6.consistent.map((e) => e.name + " " + e.blocks.join(",")), ["Flat 60,60,60,60,60", "Wavy 50,70,50,70,50"]);
   same("consistent: population standard deviation of the block win %s", pageS6.consistent.map((e) => e.sd), [0, Math.sqrt(96)]);
   same("consistent: confidence = clamp(round(100 - 2.5 * sd)) and its tier", pageS6.consistent.map((e) => consistencyScore(e.sd) + " " + consistencyTier(consistencyScore(e.sd))), ["100 Elite", "76 Steady"]);

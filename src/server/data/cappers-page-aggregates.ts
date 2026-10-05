@@ -347,9 +347,9 @@ function streakPanelSql(kind: "WIN" | "LOSS", userId: string, range: { start: Da
 //   rising     recent = rn 1..RISING_RECENT, baseline = rn > RISING_RECENT (never the combined set).
 //              Needs exactly RISING_RECENT recent + >= RISING_MIN_BASELINE baseline; score =
 //              recent win% - baseline win% must be > 0. Ranked score desc, larger baseline, id.
-//              Rows carry pts (the score in whole percentage points) and trend: the win % of each
-//              of the last RISING_RECENT rolling RISING_RECENT-pick windows, oldest first, so its
-//              last value is the recent win%.
+//              Rows carry pts (the score in whole percentage points), baseline (the baseline win
+//              rate as a fraction) and results (the recent picks' win flags, oldest first), all read
+//              from dl: the chart is drawn from those (risingSeries).
 //   consistent the newest CONSISTENT_PICKS (all required) as CONSISTENT_BLOCKS equal blocks, oldest
 //              first; mean block win% >= CONSISTENT_MIN_MEAN_PCT. Ranked by population standard
 //              deviation of the block win%s ascending, then higher mean, then id.
@@ -377,15 +377,11 @@ export function formPanelCtes(userId: string): [string, Prisma.Sql][] {
     [
       "rising",
       Prisma.sql`
-        SELECT t.cid AS "capperId", t.name, t."colorTag", round(t.score * 100)::int AS pts,
-          (SELECT array_agg(x.pct ORDER BY x.o DESC) FROM (
-            SELECT g.o, round(count(*) FILTER (WHERE d.win)::numeric * 100 / ${RISING_RECENT}::int, 4)::float8 AS pct
-            FROM generate_series(0, ${RISING_RECENT}::int - 1) g(o)
-            JOIN dl d ON d.cid = t.cid AND d.rn < 2 * ${RISING_RECENT}::int AND d.rn > g.o AND d.rn <= g.o + ${RISING_RECENT}::int
-            GROUP BY g.o
-          ) x) AS trend
+        SELECT t.cid AS "capperId", t.name, t."colorTag", round(t.score * 100)::int AS pts, t.baseline::float8 AS baseline,
+          (SELECT array_agg(d.win ORDER BY d.rn DESC) FROM dl d WHERE d.cid = t.cid AND d.rn <= ${RISING_RECENT}::int) AS results
         FROM (
-          SELECT s.cid, r.name, r."colorTag", s.bn, round(s.rw::numeric / s.rn_n - s.bw::numeric / s.bn, 9) AS score
+          SELECT s.cid, r.name, r."colorTag", s.bn, round(s.bw::numeric / s.bn, 9) AS baseline,
+            round(s.rw::numeric / s.rn_n - s.bw::numeric / s.bn, 9) AS score
           FROM (
             SELECT cid,
               count(*) FILTER (WHERE rn <= ${RISING_RECENT}::int) AS rn_n,
@@ -769,7 +765,7 @@ export async function getCappersPageData(q: CappersPageQuery): Promise<CappersPa
     hottest: (out.hot ?? []).map((h: StreakEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, streak: Number(h.streak) })),
     winners: (out.win ?? []).map((h: WinnerEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, netUnits: Number(h.netUnits), wins: Number(h.wins), losses: Number(h.losses) })),
     coldest: (out.cold ?? []).map((h: StreakEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, streak: Number(h.streak), units: Number(h.units) })),
-    rising: (out.rising ?? []).map((h: RisingEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, pts: Number(h.pts), trend: (h.trend ?? []).map(Number) })),
+    rising: (out.rising ?? []).map((h: RisingEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, pts: Number(h.pts), results: (h.results ?? []).map(Boolean), baseline: Number(h.baseline) })),
     consistent: (out.consistent ?? []).map((h: ConsistentEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, blocks: (h.blocks ?? []).map(Number), sd: Number(h.sd) })),
     favSummary,
   };
