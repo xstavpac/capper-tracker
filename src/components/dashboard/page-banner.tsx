@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import Image, { type StaticImageData } from "next/image";
 
 // From `sm` up. The art fades into the card on its right (over the last 12px of a crop, the last
@@ -23,33 +23,58 @@ const PHONE_GLOW_RIGHT = PHONE_GLOW + "right-0 bg-[linear-gradient(90deg,rgba(37
 const BAR = "pointer-events-none absolute inset-y-0 w-[3px] bg-[linear-gradient(180deg,#38BDF8,#2563EB)] shadow-[0_0_14px_2px_rgba(56,189,248,0.7)] ";
 
 // A phone's row, in px: the icon's circle starts EDGE from the card's edge; the word's crop has FADE
-// of art on each side of the word, which is what fades; the word's first letter is at least GAP
-// from the circle. The icon's crop is opaque to HALO past the circle and gone by HALO_END, which is
-// short of the art's own divider (about 12px from the circle at these row heights).
+// of art on each side of the word, which fades out; the word's first letter is at least GAP from
+// the circle. The icon's crop is opaque to HALO past the circle and gone by HALO_END, which is
+// short of the art's own divider (about 12px from the circle at these row heights). The word's
+// crop is opaque out to SOLID of the way to the row's top and bottom.
 const EDGE = 16;
 const FADE = 8;
 const GAP = 24;
 const HALO = 3;
 const HALO_END = 9;
+const SOLID = 0.82;
 
 const px = (n: number) => Math.round(n * 10) / 10 + "px";
 
-// Where the icon's circle and the word are in the file, in its own pixels, and the phone's row height.
-export type PhoneArt = { height: number; circle: { left: number; right: number; centerY: number }; word: { start: number; end: number } };
+// Where the icon's circle and the word's letters are in the file, in its own pixels, and the
+// phone's row height.
+export type PhoneArt = {
+  height: number;
+  circle: { left: number; right: number; centerY: number };
+  word: { start: number; end: number; top: number; bottom: number };
+};
+
+// Where the word's crop is in a phone's card: centred, or further right on a narrow phone to keep
+// GAP from the icon. The card carries both as --banner-word-left and --banner-word-width, so a
+// page's strip can line up with the word.
+function phoneWord(src: StaticImageData, art: PhoneArt) {
+  const scale = art.height / src.height;
+  const circleRight = EDGE + (art.circle.right - art.circle.left) * scale;
+  const width = (art.word.end - art.word.start) * scale + 2 * FADE;
+  return { circleRight, width: px(width), left: `max(calc(50% - ${px(width / 2)}), ${px(circleRight + GAP - FADE)})` };
+}
 
 // A phone's row: two crops of the art, drawn at the row's height. The icon is on the left, cut to
-// its circle by a round mask, so none of the art's navy shows as a box around it. The word is
-// centred in the card, or further right on a narrow phone to keep GAP from the icon. The line
-// between them is drawn here, halfway between the two: the art's own divider is in neither crop.
-// The sizes come from the file's measurements, so they are inline styles.
+// its circle by a round mask, so none of the art's navy shows as a box around it. The line between
+// the icon and the word is drawn here, halfway between the two: the art's own divider is in neither
+// crop. The sizes come from the file's measurements, so they are inline styles.
+// The word's crop is masked by an ellipse about the row's centre that is opaque over the letters
+// and gone at the row's top and bottom, and fades over FADE at its sides (an ellipse alone would
+// reach the art's divider). The art's navy there is darker than the card, which a mask can only
+// soften into a shadow, so the crop is also blended with `lighten`: only what is lighter than the
+// card shows.
 function PhoneRow({ src, art, glow }: { src: StaticImageData; art: PhoneArt; glow: boolean }) {
   const scale = art.height / src.height;
   const radius = ((art.circle.right - art.circle.left) / 2) * scale;
-  const circleRight = EDGE + 2 * radius;
+  const { circleRight, width: wordWidth, left: wordLeft } = phoneWord(src, art);
   const iconMask = `radial-gradient(circle at ${px(EDGE + radius)} ${px(art.circle.centerY * scale)}, #000 ${px(radius + HALO)}, transparent ${px(radius + HALO_END)})`;
-  const wordWidth = (art.word.end - art.word.start) * scale + 2 * FADE;
-  const wordMask = `linear-gradient(90deg, transparent, #000 ${FADE}px, #000 calc(100% - ${FADE}px), transparent)`;
-  const wordLeft = `max(calc(50% - ${px(wordWidth / 2)}), ${px(circleRight + GAP - FADE)})`;
+  // The ellipse's opaque part reaches the corners of the letters' box (FADE / 2 wider, for their glow).
+  const solidY = (art.height / 2) * SOLID;
+  const reach = Math.max(art.height / 2 - art.word.top * scale, art.word.bottom * scale - art.height / 2);
+  const solidX = (((art.word.end - art.word.start) * scale + FADE) / 2) / Math.sqrt(1 - Math.min(reach / solidY, 0.95) ** 2);
+  const wordMask =
+    `radial-gradient(ellipse ${px(solidX / SOLID)} ${px(art.height / 2)} at center, #000 ${SOLID * 100}%, transparent), ` +
+    `linear-gradient(90deg, transparent, #000 ${FADE}px, #000 calc(100% - ${FADE}px), transparent)`;
   const image = (shift: number) => (
     <Image src={src} alt="" priority quality={90} sizes="550px" className="h-full w-auto max-w-none" style={{ marginLeft: px(-shift) }} />
   );
@@ -64,7 +89,10 @@ function PhoneRow({ src, art, glow }: { src: StaticImageData; art: PhoneArt; glo
         className="absolute top-1/4 h-1/2 w-0.5 rounded-full bg-[#22D3EE] shadow-[0_0_6px_rgba(34,211,238,0.8)]"
         style={{ left: `calc((${px(circleRight + FADE)} + ${wordLeft}) / 2 - 1px)` }}
       />
-      <div className="absolute inset-y-0 overflow-hidden" style={{ left: wordLeft, width: px(wordWidth), maskImage: wordMask, WebkitMaskImage: wordMask }}>
+      <div
+        className="absolute inset-y-0 overflow-hidden mix-blend-lighten"
+        style={{ left: wordLeft, width: wordWidth, maskImage: wordMask, WebkitMaskImage: wordMask, maskComposite: "intersect", WebkitMaskComposite: "source-in" }}
+      >
         {image(art.word.start * scale - FADE)}
       </div>
       {glow && <span aria-hidden className={PHONE_GLOW_LEFT} />}
@@ -99,8 +127,12 @@ export function PageBanner({
   glow: "art" | "card";
   children?: ReactNode;
 }) {
+  const word = phoneWord(src, phone);
   return (
-    <div className={"relative overflow-hidden rounded-2xl [container-type:inline-size] shadow-[0_8px_24px_rgba(3,11,41,0.22)] " + className}>
+    <div
+      className={"relative overflow-hidden rounded-2xl [container-type:inline-size] shadow-[0_8px_24px_rgba(3,11,41,0.22)] " + className}
+      style={{ "--banner-word-left": word.left, "--banner-word-width": word.width } as CSSProperties}
+    >
       <PhoneRow src={src} art={phone} glow={glow === "art"} />
       <div className="relative h-[104px] max-sm:hidden lg:h-28">
         {/* Out of the flow, so the art's width can't widen the card: it is cut at the card's edge. */}

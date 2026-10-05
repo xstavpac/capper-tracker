@@ -9,14 +9,14 @@ import cappersBanner from "../../../public/banners/cappers.png";
 export function CappersHeader({ params, controls = true }: { params: CappersParams; controls?: boolean }) {
   return (
     // cappers.png is 2132x217. In its own pixels the icon's circle spans 119-297 (centre 110 down),
-    // the art's divider is at 344-347, the word spans 401-1018 and the illustration starts at 1094.
-    // A phone's row is 56px. From `sm` up the crop ends 10px before the illustration's start in the
+    // the art's divider is at 344-347, the word spans 401-1018 (48-190 down) and the illustration
+    // starts at 1094. A phone's row is 56px. From `sm` up the crop ends 10px before the illustration's start in the
     // 104px row (524px) and the 112px row (565px).
     <PageBanner
       src={cappersBanner}
       title="Cappers"
       className="bg-[#011948]"
-      phone={{ height: 56, circle: { left: 119, right: 297, centerY: 110 }, word: { start: 401, end: 1018 } }}
+      phone={{ height: 56, circle: { left: 119, right: 297, centerY: 110 }, word: { start: 401, end: 1018, top: 48, bottom: 190 } }}
       cropClassName="sm:w-[514px] lg:w-[555px]"
       glow="art"
     >
