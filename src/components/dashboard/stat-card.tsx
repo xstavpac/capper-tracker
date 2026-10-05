@@ -12,7 +12,7 @@ export const signed = (n: number, suffix = "") => (n > 0 ? "+" : n < 0 ? "−" :
 export const delta = (n: number, text: string) => ({ sub: (n > 0 ? "↑ +" : n < 0 ? "↓ −" : "") + text, subClass: n > 0 ? GREEN : n < 0 ? RED : MUTED });
 
 // The card's trend: one point per week, oldest first, scaled to its own range, with a soft fill.
-function Spark({ values, color }: { values: number[]; color: string }) {
+function Spark({ values, color, className }: { values: number[]; color: string; className?: string }) {
   const W = 64;
   const H = 34;
   const pad = 4;
@@ -22,7 +22,7 @@ function Spark({ values, color }: { values: number[]; color: string }) {
   const step = W / (values.length - 1);
   const pts = values.map((v, i) => (i * step).toFixed(1) + "," + (max === min ? H / 2 : pad + (H - pad * 2) * (1 - (v - min) / span)).toFixed(1)).join(" ");
   return (
-    <svg viewBox={"0 0 " + W + " " + H} preserveAspectRatio="none" className="h-[34px] w-16 min-w-0 shrink" aria-hidden>
+    <svg viewBox={"0 0 " + W + " " + H} preserveAspectRatio="none" className={"h-[34px] w-16 min-w-0 shrink" + (className ?? "")} aria-hidden>
       <polygon points={pts + " " + W + "," + H + " 0," + H} fill={color} fillOpacity={0.07} />
       <polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
     </svg>
@@ -41,8 +41,16 @@ export function StatCard({
   series,
   className,
   href,
+  mobileLabel,
+  compactMobile = false,
 }: {
   label: string;
+  // A shorter label for the phone (below `sm`).
+  mobileLabel?: string;
+  // The phone layout (below `sm`), for a card half the screen wide: a small icon tile and the label
+  // on one line, the value and a small sparkline under them, then the sub line, cut short with an
+  // ellipsis rather than wrapped.
+  compactMobile?: boolean;
   icon: ReactNode;
   iconClass: string;
   // The sparkline's color.
@@ -57,27 +65,43 @@ export function StatCard({
   // Makes the whole card a link.
   href?: string;
 }) {
-  const card = "flex items-center gap-3 rounded-2xl bg-white px-4 py-[13px] shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none min-[1700px]:gap-3.5 " + (className ?? "");
+  const m = compactMobile;
+  const card =
+    "flex items-center gap-3 rounded-2xl bg-white px-4 py-[13px] shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none min-[1700px]:gap-3.5 " +
+    // The phone layout is a two-column grid (tile | label) whose other rows span both columns; the
+    // text column below dissolves into it (max-sm:contents).
+    (m ? "max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)] max-sm:gap-x-1.5 max-sm:gap-y-1 max-sm:px-3 max-sm:py-2.5 " : "") +
+    (className ?? "");
   const body = (
     <>
-      <span className={"flex h-10 w-10 shrink-0 items-center justify-center rounded-full " + iconClass}>{icon}</span>
-      <div className="min-w-0 flex-1">
-        <p className={"truncate text-[10.5px] font-semibold uppercase tracking-[0.07em] " + MUTED}>{label}</p>
+      <span className={"flex h-10 w-10 shrink-0 items-center justify-center rounded-full " + (m ? "max-sm:h-[22px] max-sm:w-[22px] max-sm:rounded-md max-sm:[&>svg]:h-3 max-sm:[&>svg]:w-3 " : "") + iconClass}>{icon}</span>
+      <div className={"min-w-0 flex-1" + (m ? " max-sm:contents" : "")}>
+        <p className={"truncate text-[10.5px] font-semibold uppercase tracking-[0.07em] " + MUTED}>
+          {mobileLabel ? (
+            <>
+              <span className="sm:hidden">{mobileLabel}</span>
+              <span className="max-sm:hidden">{label}</span>
+            </>
+          ) : (
+            label
+          )}
+        </p>
         {/* The sparkline shares the value's row, so it gives way before the number does in a narrow card.
             A value still too long for the row then shrinks to fit it: the row is a size container and
             the font follows its width over the value's length (a tabular character is ~0.62em wide),
-            from 22px down to an 18px floor. Past the floor it wraps (it never shrinks below its own width
-            first, so the sparkline has fully given way by then) rather than overflow or clip. */}
-        <div className="mt-0.5 flex items-center justify-between gap-3 [container-type:inline-size]">
+            from 22px (24px in the phone layout) down to an 18px floor. Past the floor it wraps (it never
+            shrinks below its own width first, so the sparkline has fully given way by then) rather than
+            overflow or clip. */}
+        <div className={"mt-0.5 flex items-center justify-between gap-3 [container-type:inline-size]" + (m ? " max-sm:col-span-2 max-sm:mt-0 max-sm:gap-2 max-sm:[--value-max:24px]" : "")}>
           <p
-            className={"max-w-full shrink-0 font-semibold leading-[1.15] tracking-[-0.02em] tabular-nums [overflow-wrap:anywhere] " + (valueClass ?? "text-foreground")}
-            style={{ fontSize: "clamp(18px, calc(100cqw / " + (Math.max(1, value.length) * 0.62).toFixed(2) + "), 22px)" }}
+            className={"max-w-full shrink-0 font-semibold leading-[1.15] tracking-[-0.02em] tabular-nums [overflow-wrap:anywhere] " + (m ? "max-sm:font-bold " : "") + (valueClass ?? "text-foreground")}
+            style={{ fontSize: "clamp(18px, calc(100cqw / " + (Math.max(1, value.length) * 0.62).toFixed(2) + "), var(--value-max, 22px))" }}
           >
             {value}
           </p>
-          {series && series.length > 1 && <Spark values={series} color={color} />}
+          {series && series.length > 1 && <Spark values={series} color={color} className={m ? " max-sm:h-5 max-sm:w-[54px]" : undefined} />}
         </div>
-        <p className={"mt-0.5 text-[11.5px] font-medium leading-tight tabular-nums " + (subClass ?? MUTED)}>{sub}</p>
+        <p className={"mt-0.5 text-[11.5px] font-medium leading-tight tabular-nums " + (m ? "max-sm:col-span-2 max-sm:mt-0 max-sm:truncate " : "") + (subClass ?? MUTED)}>{sub}</p>
       </div>
     </>
   );

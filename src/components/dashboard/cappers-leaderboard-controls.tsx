@@ -15,8 +15,8 @@ const selectClass =
   "rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground shadow-sm focus:border-brand-400 focus:outline-none";
 
 // Every control writes a URL param and lets the server re-render; nothing here holds
-// data. scroll:false keeps the viewport where it is, like the time tabs. (Search lives in the page
-// header: cappers-search.tsx.)
+// data. scroll:false keeps the viewport where it is, like the time tabs. (Search is
+// cappers-search.tsx: in the page header, or above these on a phone.)
 export function CappersLeaderboardControls({ params, leagues }: { params: CappersParams; leagues: string[] }) {
   const router = useRouter();
   const [, startTransition] = useTransition();

@@ -7,10 +7,12 @@ import { PageHeaderBar } from "@/components/dashboard/page-header-bar";
 
 // The /cappers banner: logo + title, the time tabs, the search box (the `q` param) and - as
 // `children` - the Add capper control. `controls={false}` leaves out the tabs and the search (the
-// no-cappers-yet state has nothing to filter). The banner is dark in both themes.
+// no-cappers-yet state has nothing to filter). The banner is dark in both themes. On a phone it
+// ends under the time tabs: the search hides itself, and the page hides the Add capper control
+// (both are in the leaderboard card there).
 export function CappersHeader({ params, controls = true, children }: { params: CappersParams; controls?: boolean; children?: ReactNode }) {
   return (
-    <PageHeaderBar icon={<CrownIcon className="h-[19px] w-[19px]" />} title="Cappers" tagline="Track. Compare. Win.">
+    <PageHeaderBar icon={<CrownIcon className="h-[19px] w-[19px] max-sm:h-4 max-sm:w-4" />} title="Cappers" tagline="Track. Compare. Win." compactMobile>
       {controls && <CappersTimeTabs params={params} />}
       {controls && <CappersSearch params={params} />}
       {children}

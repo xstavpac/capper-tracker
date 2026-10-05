@@ -14,8 +14,9 @@ const SOURCES = [
 
 const COLOR_TAGS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#6B7280"];
 
-// `triggerClassName` restyles the closed-state "Add capper" button for where it is placed.
-export function CapperForm({ atLimit, triggerClassName }: { atLimit: boolean; triggerClassName?: string }) {
+// `triggerClassName` restyles the closed-state "Add capper" button for where it is placed, and
+// `triggerLabel` rewords it.
+export function CapperForm({ atLimit, triggerClassName, triggerLabel = "+ Add Capper" }: { atLimit: boolean; triggerClassName?: string; triggerLabel?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [source, setSource] = useState("TWITTER");
   const [colorTag, setColorTag] = useState(COLOR_TAGS[0]);
@@ -41,7 +42,7 @@ export function CapperForm({ atLimit, triggerClassName }: { atLimit: boolean; tr
         onClick={() => setIsOpen(true)}
         className={triggerClassName ?? "rounded-full bg-brand-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-soft transition hover:bg-brand-700 md:ml-auto"}
       >
-        + Add Capper
+        {triggerLabel}
       </button>
     );
   }

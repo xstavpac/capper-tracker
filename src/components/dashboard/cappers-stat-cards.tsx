@@ -11,9 +11,12 @@ export function CappersStatCards({ stats, capperCount }: { stats: OverviewStats;
   const pct = stats.picksThisWeekPct;
   const w = stats.weekly;
   return (
-    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 md:grid-cols-1 min-[900px]:grid-cols-2 min-[1100px]:grid-cols-6 min-[1500px]:grid-cols-5">
+    // Two across on a phone, in the compact card; Net units, the fifth, takes the full last row.
+    <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 md:grid-cols-1 min-[900px]:grid-cols-2 min-[1100px]:grid-cols-6 min-[1500px]:grid-cols-5">
       <StatCard
         label="Tracked cappers"
+        mobileLabel="Tracked"
+        compactMobile
         icon={<UsersIcon className={ICON} />}
         iconClass="bg-[#E6ECFF] text-brand-600 dark:bg-brand-500/15 dark:text-brand-400"
         color="#2563EB"
@@ -25,6 +28,8 @@ export function CappersStatCards({ stats, capperCount }: { stats: OverviewStats;
       <StatCard
         // The value follows the time tabs; the delta is always this week against last week.
         label="Active cappers"
+        mobileLabel="Active"
+        compactMobile
         icon={<ActivityIcon className={ICON} />}
         iconClass="bg-[#DCF7E6] text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400"
         color="#16A34A"
@@ -35,6 +40,8 @@ export function CappersStatCards({ stats, capperCount }: { stats: OverviewStats;
       />
       <StatCard
         label="Picks this week"
+        mobileLabel="Picks / week"
+        compactMobile
         icon={<CalendarIcon className={ICON} />}
         iconClass="bg-[#E6ECFF] text-brand-600 dark:bg-brand-500/15 dark:text-brand-400"
         color="#2563EB"
@@ -45,6 +52,7 @@ export function CappersStatCards({ stats, capperCount }: { stats: OverviewStats;
       />
       <StatCard
         label="Avg ROI"
+        compactMobile
         icon={<PercentIcon className={ICON} />}
         iconClass="bg-[#EDE2FF] text-violet-600 dark:bg-violet-500/15 dark:text-violet-400"
         color="#7C3AED"
@@ -57,6 +65,7 @@ export function CappersStatCards({ stats, capperCount }: { stats: OverviewStats;
       <StatCard
         // The time tabs' pooled net units, next to the ROI it goes with; the sparkline is each week's own net.
         label="Net units"
+        compactMobile
         icon={<TrendingUpIcon className={ICON} />}
         iconClass="bg-[#DCF7E6] text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400"
         color="#16A34A"
@@ -64,7 +73,7 @@ export function CappersStatCards({ stats, capperCount }: { stats: OverviewStats;
         valueClass={stats.netUnits < 0 ? RED : stats.netUnits > 0 ? GREEN : undefined}
         sub={stats.record.wins + "–" + stats.record.losses + (stats.record.pushes > 0 ? "–" + stats.record.pushes : "") + " record"}
         series={w.net}
-        className={BOTTOM}
+        className={BOTTOM + " max-sm:col-span-2"}
       />
     </div>
   );
