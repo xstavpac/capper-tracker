@@ -245,13 +245,14 @@ function freezeClock(iso: string) {
 // real differences.
 function dropLongestStreaks(panels: unknown): unknown {
   const p = JSON.parse(JSON.stringify(panels, (_k, v) => (typeof v === "number" && !Number.isFinite(v) ? String(v) : v))) as {
-    hotStreaks?: { stats: Record<string, unknown> }[];
-    coolingOff?: { stats: Record<string, unknown> }[];
+    hotStreaks?: { stats?: Record<string, unknown> }[];
+    coolingOff?: { stats?: Record<string, unknown> }[];
   };
   for (const list of [p.hotStreaks ?? [], p.coolingOff ?? []]) {
     for (const e of list) {
-      delete e.stats.longestWinStreak;
-      delete e.stats.longestLossStreak;
+      // Only the legacy implementation's streak rows carry stats.
+      delete e.stats?.longestWinStreak;
+      delete e.stats?.longestLossStreak;
     }
   }
   return p;

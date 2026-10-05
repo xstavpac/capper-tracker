@@ -1,7 +1,3 @@
-import type { ReactNode } from "react";
-import { getRecordColor } from "@/server/data/stats";
-import { TrendIcon } from "@/components/dashboard/trend-icon";
-
 export function Avatar({
   name,
   colorTag,
@@ -37,108 +33,6 @@ export function FavoriteStarIcon() {
       <path d="M12 2.5l2.9 6.3 6.9.7-5.2 4.7 1.6 6.8L12 17.6l-6.2 3.4 1.6-6.8-5.2-4.7 6.9-.7z" />
     </svg>
   );
-}
-
-export function PanelRow({
-  capperId,
-  name,
-  colorTag,
-  right,
-  icon,
-}: {
-  capperId: string;
-  name: string;
-  colorTag: string | null;
-  right: ReactNode;
-  icon?: ReactNode;
-}) {
-  return (
-    <a
-      href={"/cappers/" + capperId}
-      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-muted"
-    >
-      <div className="flex min-w-0 items-center gap-1.5">
-        <Avatar name={name} colorTag={colorTag} />
-        {icon}
-        <span className="truncate">{name}</span>
-      </div>
-      <span className="shrink-0 text-xs font-medium">{right}</span>
-    </a>
-  );
-}
-
-// Name + right-aligned record + a thin progress bar underneath whose fill
-// length is the win%, animating in from empty on load. Used by Rising and
-// Best Last-20 specifically - the two "catch something happening right now"
-// panels - kept deliberately plainer everywhere else in this file.
-//
-// trending marks the one thing that distinguishes Rising from Best Last-20:
-// a small lightning-bolt badge next to the name. Rising is about momentum
-// ("catching fire" right now), Best Last-20 is about current standing - the
-// icon is the only visual difference, so it only ever applies to Rising rows.
-export function BarRow({
-  capperId,
-  name,
-  colorTag,
-  record,
-  winPct,
-  trending = false,
-  showWinPct = false,
-  startDelayMs = 0,
-}: {
-  capperId: string;
-  name: string;
-  colorTag: string | null;
-  record: string;
-  winPct: number;
-  trending?: boolean;
-  showWinPct?: boolean;
-  // Holds the bar at empty until this many ms have passed, same prop name/
-  // meaning as CountUp's own startDelayMs - lets a caller (trending-cappers.tsx,
-  // passing SURGE_DURATION_MS) key the bar's growth off the exact same "hero
-  // stat surge just finished" signal the count-ups already wait for, instead
-  // of the bar animating independently the moment it mounts. animationFillMode
-  // "both" is what makes the delay actually hold the bar at its 0% starting
-  // keyframe throughout - without it, the browser shows the bar's underlying
-  // (non-animated) inline scaleX - its FINAL fill value - for the whole delay,
-  // then snaps back to 0 right as the animation starts, which looks broken.
-  startDelayMs?: number;
-}) {
-  const positive = getRecordColor(winPct) === "green";
-  const fill = Math.min(100, Math.max(0, winPct)) / 100;
-
-  return (
-    <a href={"/cappers/" + capperId} className="block rounded-lg px-2 py-1.5 hover:bg-muted">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Avatar name={name} colorTag={colorTag} />
-          <span className="truncate text-sm">{name}</span>
-          {trending && <TrendIcon direction="up" />}
-        </div>
-        <span className={"shrink-0 text-sm font-semibold " + (positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
-          {record}
-          {showWinPct && (
-            <span className="ml-1 font-normal text-muted-foreground">{Math.round(winPct)}%</span>
-          )}
-        </span>
-      </div>
-      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className={"h-full origin-left animate-fill-bar rounded-full " + (positive ? "bg-emerald-500" : "bg-red-500")}
-          style={{
-            transform: "scaleX(" + fill + ")",
-            ["--fill" as string]: fill,
-            animationDelay: startDelayMs + "ms",
-            animationFillMode: "both",
-          }}
-        />
-      </div>
-    </a>
-  );
-}
-
-export function record(wins: number, losses: number, pushes: number) {
-  return wins + "-" + losses + (pushes > 0 ? "-" + pushes : "");
 }
 
 function FlameIcon() {
@@ -203,32 +97,3 @@ export function winPctExcludingPushes(wins: number, losses: number) {
   const decided = wins + losses;
   return decided > 0 ? (wins / decided) * 100 : 0;
 }
-
-export function Panel({
-  title,
-  subtitle,
-  icon,
-  children,
-}: {
-  title: string;
-  subtitle?: string;
-  icon?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="rounded-card bg-card p-4 shadow-soft">
-      <div
-        className={
-          "flex items-center gap-1.5 " +
-          (subtitle ? "text-sm font-semibold text-foreground" : "mb-2 text-sm font-semibold text-foreground")
-        }
-      >
-        {icon}
-        {title}
-      </div>
-      {subtitle && <p className="mb-2 text-xs text-muted-foreground">{subtitle}</p>}
-      <div className="space-y-0.5">{children}</div>
-    </div>
-  );
-}
-

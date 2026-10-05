@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_PANEL_WINDOW,
   PANEL_WINDOWS,
@@ -34,11 +34,9 @@ import {
   TrophyFilledIcon,
   UsersIcon,
 } from "@/components/dashboard/cappers-icons";
+import { FOOTER_LINK, FOOTER_TEXT, FooterLine, GREEN, Message, Name, PanelShell, RED, ROW, Rank, TINTS, type PanelTheme } from "@/components/dashboard/panel-shell";
 
 type AnyPanel = PanelKey | FormPanelKey;
-
-const GREEN = "text-[#15803D] dark:text-emerald-400";
-const RED = "text-[#B91C1C] dark:text-red-400";
 
 // What each window reads in a sentence ("... this week").
 const WINDOW_PHRASE: Record<PanelWindow, string> = { today: "today", week: "this week", "30d": "in the last 30 days" };
@@ -55,127 +53,28 @@ const FORM_EMPTY: Record<FormPanelKey, string> = {
 // Windowless panels say what they read where the others have their window dropdown.
 const FORM_SUBLABEL: Record<FormPanelKey, string> = { rising: "Last 10 vs prior 90", consistent: "Last 50 picks" };
 
-// Each panel's own hue: a soft card tint + border, the header's icon tile, the subtitle's dark shade,
-// the control's border, and the footer's icon + link color. Dark mode keeps a faint wash of the hue.
+// Each panel's hue (TINTS, panel-shell.tsx) with its own title, subtitle and header icon.
 const ICON = "h-[17px] w-[17px]";
-const THEME: Record<AnyPanel, { title: string; subtitle: string; card: string; icon: ReactNode; iconWrap: string; subtitleClass: string; control: string; accent: string }> = {
-  active: {
-    title: "Most Active",
-    subtitle: "Who's putting in the work",
-    card: "bg-[#F6F8FF] border-[#E1E7FA] dark:bg-brand-500/[0.06] dark:border-brand-500/30",
-    icon: <UsersIcon className={ICON + " stroke-[1.8]"} />,
-    iconWrap: "rounded-full bg-[#E6ECFF] text-brand-600 dark:bg-brand-500/15 dark:text-brand-400",
-    subtitleClass: "text-[#5B6275] dark:text-muted-foreground",
-    control: "border-[#DADDE5] dark:border-border",
-    accent: "text-brand-600 dark:text-brand-400",
-  },
+const THEME: Record<AnyPanel, PanelTheme> = {
+  active: { ...TINTS.blue, title: "Most Active", subtitle: "Who's putting in the work", icon: <UsersIcon className={ICON + " stroke-[1.8]"} /> },
   rising: {
+    ...TINTS.green,
     title: "Rising Fast",
     subtitle: "Momentum is building",
-    card: "bg-[#F4FBF7] border-[#D6EFDF] dark:bg-emerald-500/[0.06] dark:border-emerald-500/30",
     icon: <TrendingUpIcon className={ICON + " stroke-[2.4]"} />,
     iconWrap: "rounded-lg bg-[#DCF7E6] text-[#15803D] dark:bg-emerald-500/15 dark:text-emerald-400",
-    subtitleClass: "text-[#5B6275] dark:text-muted-foreground",
-    control: "border-[#DADDE5] dark:border-border",
-    accent: GREEN,
   },
-  hottest: {
-    title: "Hot Hand",
-    subtitle: "Current win streaks lighting up",
-    card: "bg-[#FFF8F2] border-[#F8E1CC] dark:bg-orange-500/[0.06] dark:border-orange-500/30",
-    icon: <FlameFilledIcon className={ICON} />,
-    iconWrap: "rounded-full bg-[#FFE3CC] dark:bg-orange-500/15",
-    subtitleClass: "text-[#6B4A2E] dark:text-muted-foreground",
-    control: "border-[#F1D3B6] dark:border-border",
-    accent: "text-[#C2410C] dark:text-orange-400",
-  },
-  consistent: {
-    title: "Most Consistent",
-    subtitle: "Confidence score · last 50 picks",
-    card: "bg-[#FAF7FF] border-[#E7DDFA] dark:bg-violet-500/[0.06] dark:border-violet-500/30",
-    icon: <TargetIcon className={ICON + " stroke-[2.2]"} />,
-    iconWrap: "rounded-full bg-[#EDE2FF] text-[#7C3AED] dark:bg-violet-500/15 dark:text-violet-400",
-    subtitleClass: "text-[#5B4E75] dark:text-muted-foreground",
-    control: "border-[#E2D4FB] dark:border-border",
-    accent: "text-[#6D28D9] dark:text-violet-400",
-  },
-  winners: {
-    title: "Biggest Winners",
-    subtitle: "Top profit (units won)",
-    card: "bg-[#F4FBF7] border-[#D6EFDF] dark:bg-emerald-500/[0.06] dark:border-emerald-500/30",
-    icon: <TrophyFilledIcon className={ICON} />,
-    iconWrap: "rounded-full bg-[#DCF7E6] text-[#16A34A] dark:bg-emerald-500/15 dark:text-emerald-400",
-    subtitleClass: "text-[#5B6275] dark:text-muted-foreground",
-    control: "border-[#DADDE5] dark:border-border",
-    accent: GREEN,
-  },
-  coldest: {
-    title: "Coldest",
-    subtitle: "Who's on a cold streak",
-    card: "bg-[#FFF7F7] border-[#F6D9D9] dark:bg-red-500/[0.06] dark:border-red-500/30",
-    icon: <SnowflakeIcon className={ICON} />,
-    iconWrap: "rounded-full bg-[#FFE0E0] text-[#DC2626] dark:bg-red-500/15 dark:text-red-400",
-    subtitleClass: "text-[#7A3A3A] dark:text-muted-foreground",
-    control: "border-[#F3CACA] dark:border-border",
-    accent: RED,
-  },
+  hottest: { ...TINTS.orange, title: "Hot Hand", subtitle: "Current win streaks lighting up", icon: <FlameFilledIcon className={ICON} /> },
+  consistent: { ...TINTS.violet, title: "Most Consistent", subtitle: "Confidence score · last 50 picks", icon: <TargetIcon className={ICON + " stroke-[2.2]"} /> },
+  winners: { ...TINTS.green, title: "Biggest Winners", subtitle: "Top profit (units won)", icon: <TrophyFilledIcon className={ICON} /> },
+  coldest: { ...TINTS.red, title: "Coldest", subtitle: "Who's on a cold streak", icon: <SnowflakeIcon className={ICON} /> },
 };
 
 const units = (n: number) => (n < 0 ? "−" : "+") + Math.abs(n).toFixed(1) + "u";
 const capperHref = (id: string) => "/cappers/" + id;
 const LEADERBOARD_HREF = "#leaderboard";
 
-// ---------------------------------------------------------------------------
-// Shared pieces
-// ---------------------------------------------------------------------------
-
-// Every panel's rank column is this wide (the Biggest Winners medal too), so names start on the same
-// line across a row of panels.
-function Rank({ n }: { n: number }) {
-  return <span className="w-5 shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{n + "."}</span>;
-}
-function Name({ children }: { children: ReactNode }) {
-  return <span className="block truncate text-sm font-semibold text-foreground">{children}</span>;
-}
-
-// The gap closes to 6px in the three-column range where the sidebar leaves each panel at its narrowest.
-const ROW = "flex h-9 items-center gap-2.5 rounded-[10px] px-1.5 transition-colors hover:bg-foreground/[0.035] min-[1500px]:max-[1699px]:gap-1.5";
-const FOOTER_TEXT = "min-w-0 flex-1 truncate text-xs font-medium text-[#3A4152] dark:text-foreground/75";
-const FOOTER_LINK = "shrink-0 whitespace-nowrap text-xs font-semibold hover:underline";
-const STRONG = "font-semibold text-foreground";
-
-// A footer sentence that opens with a capper's name: the name truncates, the rest (the stat) never does.
-function FooterLine({ name, children }: { name: string; children: ReactNode }) {
-  return (
-    <p className="flex min-w-0 flex-1 overflow-hidden text-xs font-medium text-[#3A4152] dark:text-foreground/75">
-      <span className={"min-w-0 truncate " + STRONG}>{name}</span>
-      <span className="shrink-0 whitespace-pre"> {children}</span>
-    </p>
-  );
-}
-
-function PanelShell({ panel, control, footer, busy, children }: { panel: AnyPanel; control: ReactNode; footer: ReactNode; busy?: boolean; children: ReactNode }) {
-  const t = THEME[panel];
-  return (
-    <section className={"flex h-full flex-col rounded-[18px] border p-3.5 " + t.card}>
-      <div className="flex items-center gap-3">
-        <span className={"flex h-[26px] w-[26px] shrink-0 items-center justify-center " + t.iconWrap}>{t.icon}</span>
-        <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">{t.title}</h2>
-        {control}
-      </div>
-      {/* Under the whole header row, so it never has to share a line with the control. */}
-      <p className={"-mt-px truncate pl-[38px] text-xs font-medium leading-4 " + t.subtitleClass}>{t.subtitle}</p>
-      <div className="mt-2.5 flex flex-1 flex-col">{children}</div>
-      {footer && <div className={"mt-2 flex h-10 items-center gap-2.5 border-t border-[#0F1420]/[0.08] px-0.5 transition-opacity dark:border-white/10 " + (busy ? "opacity-60" : "")}>{footer}</div>}
-    </section>
-  );
-}
-
 const CONTROL = "rounded-[9px] border bg-white text-xs font-medium text-foreground dark:bg-card";
-
-function Message({ children, error }: { children: ReactNode; error?: boolean }) {
-  return <p className={"flex flex-1 items-center justify-center py-6 text-center text-[13px] font-medium " + (error ? RED : "text-muted-foreground")}>{children}</p>;
-}
 
 // ---------------------------------------------------------------------------
 // Windowed panels (Most Active, Hot Hand, Biggest Winners, Coldest)
@@ -236,7 +135,7 @@ export function CapperPanel({ panel, initial, weekPct }: { panel: PanelKey; init
   const ready = state !== "error" && rows.length > 0;
   return (
     <PanelShell
-      panel={panel}
+      theme={THEME[panel]}
       busy={state === "loading"}
       control={
         <div className="relative shrink-0">
@@ -529,7 +428,7 @@ export function FormPanel({ panel, rows }: { panel: FormPanelKey; rows: RisingEn
   const ready = rows.length > 0;
   return (
     <PanelShell
-      panel={panel}
+      theme={THEME[panel]}
       control={<span className={CONTROL + " shrink-0 whitespace-nowrap px-2.5 py-[5px] " + THEME[panel].control}>{FORM_SUBLABEL[panel]}</span>}
       footer={!ready ? undefined : panel === "rising" ? <RisingFooter rows={rows as RisingEntry[]} /> : <ConsistentFooter rows={rows as ConsistentEntry[]} />}
     >

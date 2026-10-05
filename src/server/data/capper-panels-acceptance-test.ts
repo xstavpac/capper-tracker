@@ -15,6 +15,15 @@
 //      activity-cutoff edge, a zero-odds WIN.
 //   3. Query shape (the panels never fetch pick rows) and cache-key uniqueness.
 //
+// Layers 1 and 2 cover the four recent-form panels (rising, fallingOff, best / worst
+// last 20). Two things differ from the original on purpose, so the goldens and the
+// legacy output go through `formPanels` before they are compared:
+//   - Best Last-20 keeps only cappers at 50%+ and Worst only those under it (the
+//     original Worst was Best reversed, so the same names sat in both);
+//   - Hot streaks / Cooling off are no longer computed here at all: they are /cappers'
+//     Hot Hand / Coldest at "This week" (getStreakPanels), checked against
+//     getPanelRows instead (layer 4).
+//
 // DB-backed and WRITING: creates its own user/cappers/picks (ids prefixed
 // `__PanelsCache__`) and deletes them by exact id at the end. Refuses to run
 // unless DATABASE_URL points at localhost. Run against a disposable local
@@ -24,7 +33,8 @@
 //   npx tsx src/server/data/capper-panels-acceptance-test.ts
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { getCapperPanels, capperPanelsCacheKey, type CapperPanels } from "@/server/data/capper-panels";
+import { getCapperPanels, capperPanelsCacheKey, BEST_LAST20_MIN_WIN_PCT, type BestLast20Entry, type CapperPanels, type LegacyCapperPanels } from "@/server/data/capper-panels";
+import { getPanelRows } from "@/server/data/cappers-page-aggregates";
 import { getCapperPanelsLegacy } from "@/server/data/capper-panels-legacy";
 import { cacheKeys } from "@/lib/cache-keys";
 import { computeStats } from "@/server/data/stats";
@@ -47,6 +57,15 @@ function check(label: string, pass: boolean, detail = "") {
   console.log(`${pass ? "PASS" : "FAIL"}: ${label}${!pass && detail ? "  " + detail : ""}`);
   if (!pass) failures++;
 }
+
+// The recent-form panels of a current, legacy or golden result, as the current
+// implementation defines them: Best / Worst split at BEST_LAST20_MIN_WIN_PCT.
+function formPanels(x: CapperPanels | LegacyCapperPanels | unknown) {
+  const p = JSON.parse(JSON.stringify(x)) as LegacyCapperPanels;
+  const isBest = (e: BestLast20Entry) => e.recentWinPct >= BEST_LAST20_MIN_WIN_PCT;
+  return { rising: p.rising, fallingOff: p.fallingOff, bestLast20: p.bestLast20.filter(isBest), worstLast20: p.worstLast20.filter((e) => !isBest(e)) };
+}
+const sameForm = (a: unknown, b: unknown) => JSON.stringify(formPanels(a)) === JSON.stringify(formPanels(b));
 
 const PREFIX = "__PanelsCache__";
 const T0 = Date.now();
@@ -118,7 +137,7 @@ async function edgeCases(sportIds: Record<string, string>) {
   await prisma.user.create({ data: { id: edgeUser, supabaseId: `${PREFIX}edge-sb`, email: `${PREFIX}edge@example.invalid` } });
   try {
     const cid = (k: string) => `${PREFIX}e-${k}`;
-    for (const [k, name] of [["tie", "Tie Tim"], ["pend", "Pending Pam"], ["none", "No Picks Nina"], ["edge", "Edge Ed"], ["zero", "Zero Zed"]]) {
+    for (const [k, name] of [["tie", "Tie Tim"], ["pend", "Pending Pam"], ["none", "No Picks Nina"], ["edge", "Edge Ed"], ["zero", "Zero Zed"], ["slump", "Slump Sal"]]) {
       await prisma.capper.create({ data: { id: cid(k), userId: edgeUser, name, source: "OTHER" } });
     }
     const base = {
@@ -172,20 +191,18 @@ async function edgeCases(sportIds: Record<string, string>) {
     // behave the same way on the SQL path.
     [ "LOSS", "WIN", "WIN", "WIN" ].forEach((s, i) => mk("zero", s as "WIN" | "LOSS", { odds: i === 1 ? 0 : -120 }));
 
+    // Slump Sal: 4-8 over 12 decided picks (33%), never on a streak, recent 10 at 40% -
+    // the only capper under the Best / Worst line.
+    ["LOSS", "LOSS", "WIN", "LOSS", "LOSS", "WIN", "LOSS", "LOSS", "WIN", "LOSS", "LOSS", "WIN"].reverse().forEach((s) => mk("slump", s as "WIN" | "LOSS", {}));
+
     await prisma.pick.createMany({ data: rows });
 
     const a = await getCapperPanels(edgeUser);
     const b = await getCapperPanelsLegacy(edgeUser);
-    const strip = (x: CapperPanels) => {
-      const g = JSON.parse(JSON.stringify(x, (_k, v) => (typeof v === "number" && !Number.isFinite(v) ? String(v) : v))) as CapperPanels;
-      for (const list of [g.hotStreaks, g.coolingOff]) for (const e of list) {
-        const s = e.stats as unknown as Record<string, unknown>;
-        delete s.longestWinStreak;
-        delete s.longestLossStreak;
-      }
-      return g;
-    };
-    check("edge fixture: SQL panels == legacy (ties, pending-only, no picks, cutoff edge, zero odds)", JSON.stringify(strip(a)) === JSON.stringify(strip(b)), process.env.PANELS_DEBUG ? JSON.stringify(strip(a)) + "\nVS\n" + JSON.stringify(strip(b)) : "");
+    check("edge fixture: SQL form panels == legacy (ties, pending-only, no picks, cutoff edge, zero odds)", sameForm(a, b), process.env.PANELS_DEBUG ? JSON.stringify(formPanels(a)) + "\nVS\n" + JSON.stringify(formPanels(b)) : "");
+    const best = new Set(a.bestLast20.map((e) => e.name));
+    check("edge fixture: the sub-50% capper is in Worst only, and Best / Worst never share a capper", a.worstLast20.map((e) => e.name).join() === "Slump Sal" && !best.has("Slump Sal") && a.worstLast20.every((e) => !best.has(e.name)), JSON.stringify([a.bestLast20, a.worstLast20]));
+    check("edge fixture: Best is 50%+ only, Worst under 50% only", a.bestLast20.length > 0 && a.bestLast20.every((e) => e.recentWinPct >= 50) && a.worstLast20.every((e) => e.recentWinPct < 50));
     const names = new Set([...a.bestLast20, ...a.hotStreaks, ...a.coolingOff, ...a.rising, ...a.fallingOff].map((e) => e.name));
     check("edge fixture: the tie capper reaches a panel (the tie-break is actually exercised)", names.has("Tie Tim"));
     check("edge fixture: capper with no picks never appears", !names.has("No Picks Nina"));
@@ -220,10 +237,12 @@ async function main() {
     { key: "fall", name: "Falling Fred" },
     { key: "idle", name: "Idle Ivan" },
     { key: "nfl", name: "Nfl Nate" },
+    // A test capper: /cappers leaves these out, so the streak panels must too.
+    { key: "test", name: "Test Tess", isTest: true },
   ];
   const capperId = (k: string) => `${PREFIX}c-${k}`;
   for (const c of cappers) {
-    await prisma.capper.create({ data: { id: capperId(c.key), userId, name: c.name, source: "OTHER", colorTag: c.key === "hot" ? "#ff0000" : null } });
+    await prisma.capper.create({ data: { id: capperId(c.key), userId, name: c.name, source: "OTHER", colorTag: c.key === "hot" ? "#ff0000" : null, isTest: c.isTest ?? false } });
   }
 
   const rows: Row[] = [
@@ -239,6 +258,8 @@ async function main() {
     ...picksFor(userId, capperId("idle"), sportIds.MLB, [W, W, W, L, W, W], { postedAgoDays: 30 }),
     // NFL-only capper with pushes and a pending pick, also mixed in MLB elsewhere above.
     ...picksFor(userId, capperId("nfl"), sportIds.NFL, [W, P, W, W, L, W, X, W, W, P, W, L, W], { postedAgoDays: 1 }),
+    // Test Tess: five straight wins - too few picks for any recent-form panel.
+    ...picksFor(userId, capperId("test"), sportIds.MLB, [W, W, W, W, W], { postedAgoDays: 1 }),
     // Hot also has a couple of NFL picks so a sportName filter changes its numbers.
     ...picksFor(userId, capperId("hot"), sportIds.NFL, [L, W], { postedAgoDays: 1 }),
   ];
@@ -269,26 +290,14 @@ async function main() {
     if (process.env.PANELS_DEBUG) {
       console.log("DEBUG unfiltered=" + JSON.stringify(unfiltered));
     }
-    // The goldens predate the stats narrowing - see the header.
-    const withoutLongestStreaks = (golden: unknown): unknown => {
-      const g = JSON.parse(JSON.stringify(golden)) as CapperPanels;
-      for (const list of [g.hotStreaks, g.coolingOff]) {
-        for (const e of list) {
-          const s = e.stats as unknown as Record<string, unknown>;
-          delete s.longestWinStreak;
-          delete s.longestLossStreak;
-        }
-      }
-      return g;
-    };
-    check("unfiltered output identical to original implementation", JSON.stringify(unfiltered) === JSON.stringify(withoutLongestStreaks(GOLDEN_UNFILTERED)));
-    check("sportName=MLB output identical to original implementation", JSON.stringify(sportMlb) === JSON.stringify(withoutLongestStreaks(GOLDEN_SPORT_MLB)));
+    check("unfiltered form panels identical to original implementation", sameForm(unfiltered, GOLDEN_UNFILTERED));
+    check("sportName=MLB form panels identical to original implementation", sameForm(sportMlb, GOLDEN_SPORT_MLB));
 
     const panelHasEntries = (p: typeof unfiltered) =>
       p.hotStreaks.length > 0 && p.coolingOff.length > 0 && p.rising.length > 0 && p.fallingOff.length > 0 && p.bestLast20.length > 0;
-    check("fixture exercises hot, cooling, rising, falling-off and best/worst panels", panelHasEntries(unfiltered));
+    check("fixture exercises hot, cooling, rising, falling-off and best panels", panelHasEntries(unfiltered));
     check(
-      "inactive capper is excluded and NFL filter changes the numbers",
+      "inactive capper is excluded and the MLB filter changes the numbers",
       !unfiltered.bestLast20.some((e) => e.name === "Idle Ivan") &&
         JSON.stringify(unfiltered) !== JSON.stringify(sportMlb)
     );
@@ -297,10 +306,25 @@ async function main() {
     const legacyUnfiltered = await getCapperPanelsLegacy(userId);
     const legacyMlb = await getCapperPanelsLegacy(userId, { sportName: "MLB" });
     const legacyNfl = await getCapperPanelsLegacy(userId, { sportName: "NFL" });
-    const strip = (x: CapperPanels) => withoutLongestStreaks(x);
-    check("unfiltered == legacy raw-pick implementation", JSON.stringify(unfiltered) === JSON.stringify(strip(legacyUnfiltered)));
-    check("sportName=MLB == legacy", JSON.stringify(sportMlb) === JSON.stringify(strip(legacyMlb)));
-    check("sportName=NFL == legacy", JSON.stringify(await getCapperPanels(userId, { sportName: "NFL" })) === JSON.stringify(strip(legacyNfl)));
+    check("unfiltered form panels == legacy raw-pick implementation", sameForm(unfiltered, legacyUnfiltered));
+    check("sportName=MLB form panels == legacy", sameForm(sportMlb, legacyMlb));
+    check("sportName=NFL form panels == legacy", sameForm(await getCapperPanels(userId, { sportName: "NFL" }), legacyNfl));
+
+    // 4. Hot streaks / Cooling off ARE /cappers' Hot Hand / Coldest at "This week".
+    const [hot, cold] = await Promise.all([getPanelRows({ userId, panel: "hottest", window: "week" }), getPanelRows({ userId, panel: "coldest", window: "week" })]);
+    check("hot streaks == /cappers Hot Hand (This week), same rows in the same order", JSON.stringify(unfiltered.hotStreaks) === JSON.stringify(hot), JSON.stringify([unfiltered.hotStreaks, hot]));
+    check("cooling off == /cappers Coldest (This week), same rows in the same order", JSON.stringify(unfiltered.coolingOff) === JSON.stringify(cold), JSON.stringify([unfiltered.coolingOff, cold]));
+    check(
+      "hot streaks: Rising Rita 8, Hot Hand 3 - 3+ only, the test capper's 5 left out",
+      unfiltered.hotStreaks.map((e) => e.name + " " + e.streak).join() === "Rising Rita 8,Hot Hand 3",
+      JSON.stringify(unfiltered.hotStreaks)
+    );
+    check(
+      "cooling off: Falling Fred 10, Cold Cat 4, each with the units lost across the run",
+      unfiltered.coolingOff.map((e) => e.name + " " + e.streak).join() === "Falling Fred 10,Cold Cat 4" && unfiltered.coolingOff.every((e) => typeof e.units === "number" && e.units < 0),
+      JSON.stringify(unfiltered.coolingOff)
+    );
+    check("streak panels are never sport-scoped (as on /cappers)", JSON.stringify([sportMlb.hotStreaks, sportMlb.coolingOff]) === JSON.stringify([unfiltered.hotStreaks, unfiltered.coolingOff]));
 
     // Query shape. The panels must never fetch pick rows: measured from the
     // findMany spy, reset before the legacy calls above.

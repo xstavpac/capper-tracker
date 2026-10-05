@@ -1,5 +1,4 @@
 import {
-  weightedRoiScore,
   round2,
   ALL_TIME_WINDOW,
   RANKING_MIN_SAMPLE,
@@ -9,17 +8,20 @@ import {
 } from "@/server/data/stats";
 import { getCappersForUser } from "@/server/data/cappers";
 import { statsFromRows } from "@/server/data/pick-aggregates-cappers-adapter";
-import { queryWindowTotals, queryCurrentStreaks, queryRecentForm } from "@/server/data/capper-list-aggregates";
+import { queryWindowTotals, queryRecentForm } from "@/server/data/capper-list-aggregates";
+import { getStreakPanels } from "@/server/data/cappers-page-aggregates";
+import type { StreakEntry } from "@/lib/cappers-panels";
 import { cachedByTag } from "@/server/data/cached";
 import { cacheKeys } from "@/lib/cache-keys";
 
-// Cappers with no picks logged (datePosted) in this window drop off every
-// panel below, and reappear the moment they log a new one - confirmed with
-// the user as panels-only (the main ranked list has no activity cutoff).
+// Cappers with no picks logged (datePosted) in this window drop off the four
+// recent-form panels below, and reappear the moment they log a new one - confirmed
+// with the user as panels-only (the main ranked list has no activity cutoff). The
+// two streak panels have /cappers' own eligibility instead (see CapperPanels).
 export const ACTIVITY_WINDOW_DAYS = 14;
 
-// Same win-streak-badge threshold used in the main ranked list's flame/
-// snowflake badge - a single win/loss isn't a "streak" worth surfacing here.
+// Read only by the frozen capper-panels-legacy.ts now: the streak panels here are
+// /cappers' Hot Hand / Coldest, with that page's own minimum (lib/cappers-panels.ts).
 export const STREAK_PANEL_MIN = 2;
 
 // Trending: recent-5-vs-previous-5 momentum, confirmed by an independent
@@ -60,9 +62,12 @@ export const FALLING_OFF_THRESHOLD_PTS = 10;
 // two weighted-ranking mechanisms. Ranks the panel only - the displayed
 // record/win% is always the raw recent rate, never the shrunk score.
 export const RECENT_FORM_SHRINKAGE_K = 10;
+// The line between Best and Worst Last-20: the app-wide win% color rule (getRecordColor).
+export const BEST_LAST20_MIN_WIN_PCT = 50;
 
 type PanelCapperBase = { capperId: string; name: string; colorTag: string | null };
 
+// The streak row of the frozen capper-panels-legacy.ts (LegacyCapperPanels); not produced here.
 export type StreakPanelEntry = PanelCapperBase & {
   streakCount: number;
   weightedScore: number;
@@ -93,13 +98,21 @@ export type BestLast20Entry = PanelCapperBase & {
 };
 
 export type CapperPanels = {
-  hotStreaks: StreakPanelEntry[];
-  coolingOff: StreakPanelEntry[];
+  // /cappers' Hot Hand and Coldest at "This week" (getStreakPanels): the same rows in
+  // the same order, so the dashboard and /cappers always name the same cappers with
+  // the same streaks. Unlike the panels below they exclude test cappers, have no
+  // 14-day activity cutoff and are never sport-scoped.
+  hotStreaks: StreakEntry[];
+  coolingOff: StreakEntry[];
   rising: RisingPanelEntry[];
   fallingOff: FallingOffPanelEntry[];
+  // Best: recent win% at or above BEST_LAST20_MIN_WIN_PCT; Worst: below it. One pool
+  // split in two, so no capper is ever in both.
   bestLast20: BestLast20Entry[];
   worstLast20: BestLast20Entry[];
 };
+// What capper-panels-legacy.ts returns: the pre-swap streak rows, and Worst as Best reversed.
+export type LegacyCapperPanels = Omit<CapperPanels, "hotStreaks" | "coolingOff"> & { hotStreaks: StreakPanelEntry[]; coolingOff: StreakPanelEntry[] };
 
 // Win% over a slice of decided picks, pushes excluded from the denominator -
 // same convention computeStats' winPct uses. Null (not 0) when the slice has
@@ -109,14 +122,15 @@ function windowWinPct({ wins, losses }: { wins: number; losses: number }): numbe
   return wins + losses > 0 ? round2((wins / (wins + losses)) * 100) : null;
 }
 
-export const EMPTY_PANELS: CapperPanels = {
+// `satisfies`, not an annotation: the empty arrays then also fit LegacyCapperPanels.
+export const EMPTY_PANELS = {
   hotStreaks: [],
   coolingOff: [],
   rising: [],
   fallingOff: [],
   bestLast20: [],
   worstLast20: [],
-};
+} satisfies CapperPanels;
 
 // Only a league scope survives as a filter: the bet-category filter the original
 // signature also carried was never set by any caller and is gone.
@@ -125,9 +139,10 @@ export type CapperPanelsFilter = { sportName?: string };
 // The cache slot is chosen by this string alone (cachedByTag's callback text is
 // identical for every user/filter), so every input that changes the result must
 // appear here. Distinct from cacheKeys.dashboard - that one is only the shared
-// invalidation tag.
+// invalidation tag. "v2": the streak rows changed shape, and an entry cached by the
+// previous deploy must not be read as the new one.
 export function capperPanelsCacheKey(userId: string, filter?: CapperPanelsFilter): string {
-  return `capper-panels:${userId}:${filter?.sportName ?? ""}`;
+  return `capper-panels:v2:${userId}:${filter?.sportName ?? ""}`;
 }
 
 // Reads only Pick rows (plus the roster), so it shares getDashboardSummary's
@@ -155,27 +170,24 @@ const RECENT_FORM_SLICES = {
 } as const;
 
 // Data source: the database summarizes (capper-list-aggregates.ts - lifetime
-// totals and streaks from the same queries /cappers uses, plus queryRecentForm for
-// the last-N slices and the last-posted instant) and this function only applies
-// the thresholds. The pick history is never fetched.
+// totals from the same query /cappers uses, plus queryRecentForm for the last-N
+// slices and the last-posted instant; getStreakPanels for the two streak panels)
+// and this function only applies the thresholds. The pick history is never fetched.
 async function computeCapperPanels(userId: string, filter?: CapperPanelsFilter): Promise<CapperPanels> {
   const cappers = await getCappersForUser(userId, filter);
   if (cappers.length === 0) return EMPTY_PANELS;
 
   const now = new Date();
-  const [totalRows, streakRows, formRows] = await Promise.all([
+  const [totalRows, streaks, formRows] = await Promise.all([
     queryWindowTotals({ userId, sportName: filter?.sportName, windows: [ALL_TIME_WINDOW], now }),
-    queryCurrentStreaks({ userId, sportName: filter?.sportName, windows: [ALL_TIME_WINDOW], now }),
+    getStreakPanels({ userId, now }),
     queryRecentForm({ userId, sportName: filter?.sportName, slices: RECENT_FORM_SLICES }),
   ]);
   const totalsByCapper = new Map(totalRows.map((r) => [r.capperId!, r]));
-  const streakByCapper = new Map(streakRows.map((r) => [r.capperId, r]));
   const formByCapper = new Map(formRows.map((r) => [r.capperId, r]));
 
   const activityCutoff = new Date(now.getTime() - ACTIVITY_WINDOW_DAYS * 86400000);
 
-  const hotStreaks: StreakPanelEntry[] = [];
-  const coolingOff: StreakPanelEntry[] = [];
   const rising: RisingPanelEntry[] = [];
   const fallingOff: FallingOffPanelEntry[] = [];
   const bestLast20: BestLast20Entry[] = [];
@@ -189,14 +201,8 @@ async function computeCapperPanels(userId: string, filter?: CapperPanelsFilter):
     if (!isActive) continue;
 
     const base: PanelCapperBase = { capperId: capper.id, name: capper.name, colorTag: capper.colorTag };
-    const stats = statsFromRows(totalsByCapper.get(capper.id), streakByCapper.get(capper.id));
+    const stats = statsFromRows(totalsByCapper.get(capper.id), undefined);
     const decidedCount = stats.wins + stats.losses + stats.pushes;
-
-    if (stats.currentStreak.count >= STREAK_PANEL_MIN) {
-      const entry: StreakPanelEntry = { ...base, streakCount: stats.currentStreak.count, weightedScore: weightedRoiScore(stats), stats };
-      if (stats.currentStreak.type === "WIN") hotStreaks.push(entry);
-      else if (stats.currentStreak.type === "LOSS") coolingOff.push(entry);
-    }
 
     const { recent5, previous5, recent8, previous8, recentDrop, recentForm } = form.slices;
 
@@ -263,15 +269,19 @@ async function computeCapperPanels(userId: string, filter?: CapperPanelsFilter):
     }
   }
 
-  hotStreaks.sort((a, b) => b.streakCount - a.streakCount || b.weightedScore - a.weightedScore);
-  coolingOff.sort((a, b) => b.streakCount - a.streakCount);
   rising.sort((a, b) => b.risePts - a.risePts);
   fallingOff.sort((a, b) => b.dropPts - a.dropPts);
+  // One recent-form pool, split on the displayed win%: Best is the half at or above
+  // the line (best first), Worst the half below it (worst first).
   bestLast20.sort((a, b) => b.weightedScore - a.weightedScore);
-  // Same recent-form pool as Best Last-20, just sorted the other way -
-  // small pools can genuinely overlap (e.g. only 2 eligible cappers means
-  // the "worst" is also someone's "best"), same as any top-N/bottom-N pair.
-  const worstLast20 = [...bestLast20].sort((a, b) => a.weightedScore - b.weightedScore);
+  const isBest = (e: BestLast20Entry) => e.recentWinPct >= BEST_LAST20_MIN_WIN_PCT;
 
-  return { hotStreaks, coolingOff, rising, fallingOff, bestLast20, worstLast20 };
+  return {
+    hotStreaks: streaks.hottest,
+    coolingOff: streaks.coldest,
+    rising,
+    fallingOff,
+    bestLast20: bestLast20.filter(isBest),
+    worstLast20: bestLast20.filter((e) => !isBest(e)).sort((a, b) => a.weightedScore - b.weightedScore),
+  };
 }

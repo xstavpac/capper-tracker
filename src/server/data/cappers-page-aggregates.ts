@@ -444,6 +444,26 @@ export async function getPanelRows(q: { userId: string; panel: PanelKey; window:
   }));
 }
 
+// Hot Hand and Coldest at the default "This week" window, in ONE statement: the dashboard's Hot streaks
+// and Cooling off. Same SQL and roster as the page (panelSql), so the rows are the /cappers rows.
+export async function getStreakPanels(q: { userId: string; now?: Date }): Promise<{ hottest: StreakEntry[]; coldest: StreakEntry[] }> {
+  const range = panelRange(DEFAULT_PANEL_WINDOW, q.now ?? new Date());
+  const rows = await prisma.$queryRaw<{ out: { hot: any[]; cold: any[] } }[]>(Prisma.sql`
+    WITH roster AS (SELECT id, name, "colorTag", "isFavorite" FROM cappers WHERE "userId" = ${q.userId} AND NOT "isTest"),
+    hot AS (${panelSql("hottest", q.userId, range)}),
+    cold AS (${panelSql("coldest", q.userId, range)})
+    SELECT jsonb_build_object(
+      'hot', COALESCE((SELECT jsonb_agg(to_jsonb(o)) FROM hot o), '[]'::jsonb),
+      'cold', COALESCE((SELECT jsonb_agg(to_jsonb(o)) FROM cold o), '[]'::jsonb)
+    ) AS out
+  `);
+  const out = rows[0]?.out;
+  return {
+    hottest: (out?.hot ?? []).map((h) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, streak: Number(h.streak) })),
+    coldest: (out?.cold ?? []).map((h) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, streak: Number(h.streak), units: Number(h.units) })),
+  };
+}
+
 export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
   const now = q.now ?? new Date();
   const range = scorecardWindowRange(q.window, now);

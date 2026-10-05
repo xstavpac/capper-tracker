@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { getRecordColor, type CategoryBreakdownItem, type PickCategoryKey } from "@/server/data/stats";
-import { EnergyCountUp, EnergyRecordCountUp } from "@/components/dashboard/energy-surge";
 
 export type CategoryLeaderboardEntry = {
   capperId: string;
@@ -22,15 +21,6 @@ const TEXT_CLASSES: Record<ReturnType<typeof getRecordColor>, string> = {
   green: "text-emerald-700 dark:text-emerald-300",
   red: "text-red-700 dark:text-red-300",
 };
-// EnergySurge's tone drives its flash/ring color, not this panel's own
-// green/red tint - mapped from the same getRecordColor result rather than
-// introducing a second win/loss color scheme. getRecordColor never returns
-// anything else, so "neutral" is unused here (kept only because the prop
-// itself is a three-way union shared with the hero stats).
-const RECORD_COLOR_TONE: Record<ReturnType<typeof getRecordColor>, "up" | "down"> = {
-  green: "up",
-  red: "down",
-};
 
 // All-time record by pick category (favorite/underdog, over/under, spread,
 // F5 ML, NRFI) - answers "am I better off following favorites or dogs,
@@ -39,27 +29,17 @@ const RECORD_COLOR_TONE: Record<ReturnType<typeof getRecordColor>, "up" | "down"
 //
 // `leaderboards` is optional and opt-in: pass it (Live page) to make tiles
 // clickable, expanding a "top cappers in this category" panel below the
-// grid; omit it (Dashboard, capper detail page) and tiles stay the plain,
+// grid; omit it (capper detail page) and tiles stay the plain,
 // non-interactive cards they've always been. Keeps this one component
 // reusable everywhere the breakdown shows up without forcing interactivity
 // where "top cappers" wouldn't make sense (e.g. on a single capper's own
 // page).
-//
-// `animateIn` is the same kind of opt-in, for the Dashboard specifically:
-// when true, each tile's record/win% counts up via the same EnergyCountUp/
-// EnergyRecordCountUp the hero stats already use (ring pulses + lightning-
-// bolt flash, then the count-up), so this panel joins their synchronized
-// load-in beat instead of rendering static. Omit it (Live page, capper
-// detail page) and tiles render exactly as they always have - plain
-// numbers, no animation.
 export function CategoryBreakdown({
   items,
   leaderboards,
-  animateIn = false,
 }: {
   items: CategoryBreakdownItem[];
   leaderboards?: Partial<Record<PickCategoryKey, CategoryLeaderboardEntry[]>>;
-  animateIn?: boolean;
 }) {
   const [activeKey, setActiveKey] = useState<PickCategoryKey | null>(null);
 
@@ -103,31 +83,13 @@ export function CategoryBreakdown({
               }
             >
               <div className={"text-xs " + TEXT_CLASSES[color]}>{item.label}</div>
-              {animateIn ? (
-                <>
-                  <div className="mt-1 text-sm font-medium text-foreground">
-                    <EnergyRecordCountUp
-                      wins={item.wins}
-                      losses={item.losses}
-                      pushes={item.pushes > 0 ? item.pushes : undefined}
-                      tone={RECORD_COLOR_TONE[color]}
-                    />
-                  </div>
-                  <div className={"mt-0.5 text-sm font-semibold " + TEXT_CLASSES[color]}>
-                    <EnergyCountUp value={item.winPct} suffix="%" tone={RECORD_COLOR_TONE[color]} />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="mt-1 text-sm font-medium text-foreground">
-                    {item.wins}-{item.losses}
-                    {item.pushes > 0 ? "-" + item.pushes : ""}
-                  </div>
-                  <div className={"mt-0.5 text-sm font-semibold " + TEXT_CLASSES[color]}>
-                    {Math.round(item.winPct)}%
-                  </div>
-                </>
-              )}
+              <div className="mt-1 text-sm font-medium text-foreground">
+                {item.wins}-{item.losses}
+                {item.pushes > 0 ? "-" + item.pushes : ""}
+              </div>
+              <div className={"mt-0.5 text-sm font-semibold " + TEXT_CLASSES[color]}>
+                {Math.round(item.winPct)}%
+              </div>
             </div>
           );
         })}

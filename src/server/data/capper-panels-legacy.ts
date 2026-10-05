@@ -27,7 +27,7 @@ import {
   FALLING_OFF_THRESHOLD_PTS,
   RECENT_FORM_SHRINKAGE_K,
   EMPTY_PANELS,
-  type CapperPanels,
+  type LegacyCapperPanels,
   type CapperPanelsFilter,
   type StreakPanelEntry,
   type RisingPanelEntry,
@@ -43,7 +43,7 @@ function windowWinPct(picks: { status: string }[]): number | null {
   return wins + losses > 0 ? round2((wins / (wins + losses)) * 100) : null;
 }
 
-export async function getCapperPanelsLegacy(userId: string, filter?: CapperPanelsFilter): Promise<CapperPanels> {
+export async function getCapperPanelsLegacy(userId: string, filter?: CapperPanelsFilter): Promise<LegacyCapperPanels> {
   const cappers = await getCappersForUser(userId, filter);
   if (cappers.length === 0) return EMPTY_PANELS;
 
