@@ -13,7 +13,7 @@ import { CappersLeaderboardCard } from "@/components/dashboard/cappers-leaderboa
 
 const LEAGUES = LIVE_SPORTS.map((s) => s.label);
 // The Add capper button as it sits in the dark banner.
-const ADD_BUTTON = "h-10 shrink-0 rounded-[10px] bg-brand-600 px-[18px] text-[13px] font-bold text-white transition hover:bg-brand-700";
+const ADD_BUTTON = "h-9 shrink-0 rounded-lg bg-brand-600 px-3.5 text-[13px] font-medium text-white transition hover:bg-brand-700";
 
 export default async function CappersPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const user = await requireUser();
@@ -38,7 +38,7 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
   const cappersWithCounts = suspectedDuplicates.length > 0 ? await getCappersWithPickCounts(user.id) : [];
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-3.5">
+    <div className="mx-auto max-w-[1280px] space-y-3 tabular-nums">
       <CappersHeader params={params} controls={data.capperCount > 0}>
         <CapperForm atLimit={false} triggerClassName={ADD_BUTTON + (data.capperCount > 0 ? "" : " ml-auto")} />
       </CappersHeader>
@@ -53,7 +53,7 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
           <CappersStatCards stats={data.overview} capperCount={data.capperCount} />
           {/* Three across on a wide screen (Most Active | Rising Fast | Hot Hand, then Most Consistent |
               Biggest Winners | Coldest), fewer as the width shrinks, one per row on a phone. */}
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))] items-stretch gap-3.5">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))] items-stretch gap-3">
             <CapperPanel panel="active" initial={data.mostActive} weekPct={data.overview.picksThisWeekPct} />
             <FormPanel panel="rising" rows={data.rising} />
             <CapperPanel panel="hottest" initial={data.hottest} />

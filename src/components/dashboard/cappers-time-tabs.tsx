@@ -5,7 +5,7 @@ import { RANGE_OPTIONS, cappersHref, type CappersParams } from "@/lib/cappers-pa
 // scroll={false}: a soft navigation that swaps the data in place instead of jumping to the top.
 export function CappersTimeTabs({ params }: { params: CappersParams }) {
   return (
-    <nav aria-label="Time range" className="flex flex-wrap gap-1 rounded-xl border border-[#263048] bg-[#1A2236] p-1 xl:mx-auto">
+    <nav aria-label="Time range" className="flex flex-wrap gap-0.5 rounded-lg border border-white/10 bg-white/[0.04] p-[3px] xl:mx-auto">
       {RANGE_OPTIONS.map((r) => {
         const active = r.key === params.range;
         return (
@@ -15,8 +15,7 @@ export function CappersTimeTabs({ params }: { params: CappersParams }) {
             scroll={false}
             aria-current={active ? "page" : undefined}
             className={
-              "rounded-[9px] px-3 py-2 text-[12.5px] transition min-[1700px]:px-3.5 " +
-              (active ? "bg-brand-600 font-bold text-white" : "font-semibold text-[#C9D0E0] hover:text-white")
+              "rounded-md px-2.5 py-1.5 text-[13px] font-medium transition " + (active ? "bg-white/[0.14] text-white" : "text-white/60 hover:text-white")
             }
           >
             {r.label}
