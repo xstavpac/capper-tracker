@@ -26,13 +26,13 @@ export function CappersSearch({ params }: { params: CappersParams }) {
   }
 
   return (
-    <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[10px] border border-[#263048] bg-[#1A2236] px-3 focus-within:border-brand-500 sm:w-[132px] sm:flex-none min-[1700px]:w-[190px]">
+    <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[10px] border border-[#263048] bg-[#1A2236] px-2.5 focus-within:border-brand-500 sm:w-[168px] sm:flex-none min-[1700px]:w-[190px]">
       <SearchIcon className="h-[15px] w-[15px] shrink-0 text-[#A3ACC2]" />
       <input
         type="search"
         value={query}
         onChange={(e) => onSearch(e.target.value)}
-        placeholder="Search cappers..."
+        placeholder="Search cappers"
         aria-label="Search cappers"
         className="w-full min-w-0 border-none bg-transparent text-[13px] text-white outline-none placeholder:text-[#A3ACC2]"
       />

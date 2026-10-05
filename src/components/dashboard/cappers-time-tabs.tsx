@@ -15,7 +15,7 @@ export function CappersTimeTabs({ params }: { params: CappersParams }) {
             scroll={false}
             aria-current={active ? "page" : undefined}
             className={
-              "rounded-[9px] px-2 py-2 text-[12.5px] font-medium capitalize transition min-[1700px]:px-3.5 " + (active ? "bg-brand-600 text-white" : "text-[#C9D0E0] hover:text-white")
+              "rounded-[9px] px-[7px] py-2 text-[12.5px] font-medium capitalize transition min-[1700px]:px-3.5 " + (active ? "bg-brand-600 text-white" : "text-[#C9D0E0] hover:text-white")
             }
           >
             {r.label}

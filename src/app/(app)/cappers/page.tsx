@@ -15,8 +15,10 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 // This page's own typeface, applied to its wrapper only (self-hosted by next/font at build time).
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], display: "swap", fallback: ["system-ui", "sans-serif"] });
 // The page's soft neutral backdrop, painted over the shared layout's content padding (p-4 / md:p-8)
-// rather than changing that layout. The top is only pulled up when nothing sits above the page.
-const BACKDROP = "-mx-4 -mb-4 bg-[#F5F6FA] px-4 pb-4 pt-4 first:-mt-4 dark:bg-transparent md:-mx-8 md:-mb-8 md:rounded-[11px] md:px-8 md:pb-8 md:pt-8 md:first:-mt-8";
+// rather than changing that layout, and at least as tall as that content area (the viewport less the
+// ticker and the layout gutter) so a short page is not half white. The top is only pulled up when
+// nothing sits above the page.
+const BACKDROP = "-mx-4 -mb-4 bg-[#F5F6FA] px-4 pb-4 pt-4 first:-mt-4 dark:bg-transparent md:-mx-8 md:-mb-8 md:min-h-[calc(100vh-68px)] md:rounded-[11px] md:px-8 md:pb-8 md:pt-8 md:first:-mt-8";
 
 const LEAGUES = LIVE_SPORTS.map((s) => s.label);
 // The Add capper button as it sits in the dark banner.

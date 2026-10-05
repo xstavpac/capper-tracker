@@ -166,7 +166,7 @@ const FOOTER_TEXT = "min-w-0 flex-1 text-[12.5px] font-medium text-[#3A4152] dar
 const FOOTER_LINK = "shrink-0 whitespace-nowrap text-[12.5px] font-semibold hover:underline";
 const STRONG = "font-semibold text-foreground";
 
-function PanelShell({ panel, control, footer, children }: { panel: AnyPanel; control: ReactNode; footer: ReactNode; children: ReactNode }) {
+function PanelShell({ panel, control, footer, busy, children }: { panel: AnyPanel; control: ReactNode; footer: ReactNode; busy?: boolean; children: ReactNode }) {
   const t = THEME[panel];
   return (
     <section className={"flex h-full flex-col rounded-[18px] border p-[18px] " + t.card}>
@@ -178,7 +178,7 @@ function PanelShell({ panel, control, footer, children }: { panel: AnyPanel; con
       {/* Under the whole header row, so it never has to share a line with the control. */}
       <p className={"mt-0.5 truncate pl-[38px] text-xs font-medium " + t.subtitleClass}>{t.subtitle}</p>
       <div className="mt-3 flex flex-1 flex-col">{children}</div>
-      {footer && <div className="mt-3 flex items-center gap-2.5 border-t border-[#0F1420]/[0.08] px-0.5 pt-3 dark:border-white/10">{footer}</div>}
+      {footer && <div className={"mt-3 flex items-center gap-2.5 border-t border-[#0F1420]/[0.08] px-0.5 pt-3 transition-opacity dark:border-white/10 " + (busy ? "opacity-60" : "")}>{footer}</div>}
     </section>
   );
 }
@@ -199,6 +199,9 @@ function Message({ children, error }: { children: ReactNode; error?: boolean }) 
 export function CapperPanel({ panel, initial, weekPct }: { panel: PanelKey; initial: PanelRows; weekPct?: number | null }) {
   const [win, setWin] = useState<PanelWindow>(DEFAULT_PANEL_WINDOW);
   const [rows, setRows] = useState<PanelRows>(initial);
+  // The window the rows on screen belong to. It trails `win` while a fetch is in flight, so the
+  // footer and the empty message never describe the new window with the old window's rows.
+  const [shown, setShown] = useState<PanelWindow>(DEFAULT_PANEL_WINDOW);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
   const cache = useRef(new Map<PanelWindow, PanelRows>([[DEFAULT_PANEL_WINDOW, initial]]));
   const abort = useRef<AbortController | null>(null);
@@ -207,6 +210,7 @@ export function CapperPanel({ panel, initial, weekPct }: { panel: PanelKey; init
   useEffect(() => {
     cache.current = new Map([[DEFAULT_PANEL_WINDOW, initial]]);
     setRows(initial);
+    setShown(DEFAULT_PANEL_WINDOW);
     setWin(DEFAULT_PANEL_WINDOW);
     setState("idle");
   }, [initial]);
@@ -219,6 +223,7 @@ export function CapperPanel({ panel, initial, weekPct }: { panel: PanelKey; init
     const hit = cache.current.get(next);
     if (hit) {
       setRows(hit);
+      setShown(next);
       setState("idle");
       return;
     }
@@ -231,6 +236,7 @@ export function CapperPanel({ panel, initial, weekPct }: { panel: PanelKey; init
       const body = (await res.json()) as { rows: PanelRows };
       cache.current.set(next, body.rows);
       setRows(body.rows);
+      setShown(next);
       setState("idle");
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
@@ -243,6 +249,7 @@ export function CapperPanel({ panel, initial, weekPct }: { panel: PanelKey; init
   return (
     <PanelShell
       panel={panel}
+      busy={state === "loading"}
       control={
         <div className="relative shrink-0">
           <label htmlFor={selectId} className="sr-only">
@@ -265,7 +272,7 @@ export function CapperPanel({ panel, initial, weekPct }: { panel: PanelKey; init
       }
       footer={
         !ready ? undefined : panel === "active" ? (
-          <ActiveFooter rows={rows as ActiveEntry[]} win={win} weekPct={weekPct ?? null} />
+          <ActiveFooter rows={rows as ActiveEntry[]} win={shown} weekPct={weekPct ?? null} />
         ) : panel === "hottest" ? (
           <HottestFooter rows={rows as StreakEntry[]} />
         ) : panel === "winners" ? (
@@ -279,7 +286,7 @@ export function CapperPanel({ panel, initial, weekPct }: { panel: PanelKey; init
         {state === "error" ? (
           <Message error>Couldn&apos;t load this panel. Try another window or refresh.</Message>
         ) : rows.length === 0 ? (
-          <Message>{EMPTY[panel](win)}</Message>
+          <Message>{EMPTY[panel](shown)}</Message>
         ) : panel === "active" ? (
           <ActiveRows rows={rows as ActiveEntry[]} />
         ) : panel === "hottest" ? (
