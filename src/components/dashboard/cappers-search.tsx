@@ -26,7 +26,7 @@ export function CappersSearch({ params }: { params: CappersParams }) {
   }
 
   return (
-    <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[10px] border border-[#263048] bg-[#1A2236] px-3 focus-within:border-brand-500 sm:w-[170px] sm:flex-none min-[1700px]:w-[190px]">
+    <label className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[10px] border border-[#263048] bg-[#1A2236] px-3 focus-within:border-brand-500 sm:w-[132px] sm:flex-none min-[1700px]:w-[190px]">
       <SearchIcon className="h-[15px] w-[15px] shrink-0 text-[#A3ACC2]" />
       <input
         type="search"
