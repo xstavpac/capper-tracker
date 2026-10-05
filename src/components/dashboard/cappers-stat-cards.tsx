@@ -53,7 +53,7 @@ function StatCard({
   className?: string;
 }) {
   return (
-    <div className={"flex items-center gap-3 rounded-2xl bg-white p-4 shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none min-[1700px]:gap-3.5 " + (className ?? "")}>
+    <div className={"flex items-center gap-3 rounded-2xl bg-white px-4 py-[13px] shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none min-[1700px]:gap-3.5 " + (className ?? "")}>
       <span className={"flex h-10 w-10 shrink-0 items-center justify-center rounded-full " + iconClass}>{icon}</span>
       <div className="min-w-0 flex-1">
         <p className={"truncate text-[10.5px] font-semibold uppercase tracking-[0.07em] " + MUTED}>{label}</p>
