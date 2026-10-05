@@ -16,10 +16,10 @@ export function DashboardCategoryCards({ items }: { items: CategoryBreakdownItem
         const decided = wins + losses > 0;
         const good = getRecordColor(winPct) === "green";
         return (
-          <li key={key} className="rounded-2xl bg-white px-4 py-[13px] shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none">
+          <li key={key} className="flex flex-col rounded-2xl bg-white px-4 py-[13px] shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none">
             <p className={"truncate text-[10.5px] font-semibold uppercase tracking-[0.07em] " + MUTED}>{PICK_CATEGORY_LABELS[key]}</p>
             {/* The win % drops under a long record rather than crowding it. */}
-            <div className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-2">
+            <div className="mb-2 mt-0.5 flex flex-wrap items-baseline justify-between gap-x-2">
               <p className="whitespace-nowrap text-lg font-semibold leading-[1.3] tracking-[-0.02em] tabular-nums text-foreground">{wins + "–" + losses + (pushes > 0 ? "–" + pushes : "")}</p>
               {decided ? (
                 <p className={"text-sm font-semibold tabular-nums " + (good ? GREEN : RED)}>{Math.round(winPct) + "%"}</p>
@@ -30,7 +30,8 @@ export function DashboardCategoryCards({ items }: { items: CategoryBreakdownItem
                 </p>
               )}
             </div>
-            <div aria-hidden className="mt-2 h-1 overflow-hidden rounded-md bg-[#E3E8F5] dark:bg-white/10">
+            {/* Pinned to the bottom, so the bars in a row line up when one card wraps and its neighbour does not. */}
+            <div aria-hidden className="mt-auto h-1 shrink-0 overflow-hidden rounded-md bg-[#E3E8F5] dark:bg-white/10">
               {decided && <div className={"h-full rounded-md " + (good ? "bg-[#22C55E]" : "bg-[#EF4444]")} style={{ width: Math.min(100, Math.max(0, winPct)) + "%" }} />}
             </div>
           </li>
