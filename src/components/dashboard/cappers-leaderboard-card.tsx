@@ -112,12 +112,19 @@ export function CappersLeaderboardCard({
   return (
     <div id="leaderboard" className="scroll-mt-4 rounded-card bg-card p-5 shadow-soft">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-foreground max-sm:w-full">Capper leaderboard</h2>
-        {/* Phone only: the search and the Add control, which the banner carries from `sm` up. The
-            open form takes the row under the search. */}
-        <div className="flex w-full flex-wrap items-center gap-2 sm:hidden">
-          <CappersSearch params={params} variant="leaderboard" />
-          <CapperForm atLimit={false} triggerLabel="+ Add" triggerClassName="h-11 shrink-0 rounded-lg bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700" />
+        <h2 className="w-full text-base font-semibold text-foreground">Capper leaderboard</h2>
+        {/* The search and the Add control. The open form takes the row under the search. */}
+        <div className="flex w-full flex-wrap items-center gap-2">
+          <CappersSearch params={params} />
+          <CapperForm
+            atLimit={false}
+            triggerLabel={
+              <>
+                + Add<span className="max-sm:hidden"> Capper</span>
+              </>
+            }
+            triggerClassName="h-11 shrink-0 rounded-lg bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700 sm:h-10"
+          />
         </div>
         <FavoritesToggle params={params} />
       </div>
