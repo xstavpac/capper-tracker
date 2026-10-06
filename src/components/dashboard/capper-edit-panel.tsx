@@ -87,7 +87,7 @@ export function CapperEditPanel({
       <button
         type="button"
         onClick={() => setMode("menu")}
-        className="min-h-10 rounded-[10px] border border-[#E5E9F2] bg-white px-4 text-[13px] font-bold text-foreground transition hover:bg-[#F8FAFD] dark:border-border dark:bg-card dark:hover:bg-muted"
+        className="min-h-10 rounded-[10px] border border-[#E5E9F2] bg-white px-4 text-[13px] font-medium text-foreground transition hover:bg-[#F8FAFD] dark:border-border dark:bg-card dark:hover:bg-muted"
       >
         Edit capper
       </button>

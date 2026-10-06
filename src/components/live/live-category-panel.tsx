@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { getRecordColor, type CategoryBreakdownItem, type CategoryLeaderboardEntry, type PickCategoryKey } from "@/server/data/stats";
-import { CategoryCard } from "@/components/dashboard/category-card";
+import { CATEGORY_GRID, CategoryCard } from "@/components/dashboard/category-card";
 import { GREEN, PanelShell, RED, TINTS } from "@/components/dashboard/panel-shell";
 import { TargetIcon } from "@/components/dashboard/cappers-icons";
 
@@ -31,7 +31,7 @@ export function LiveCategoryPanel({
       theme={{ ...TINTS.neutral, title: sportLabel + " record by category", subtitle: "All-time, by market", icon: <TargetIcon className="h-[17px] w-[17px] stroke-[2.2]" /> }}
       footer={undefined}
     >
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 min-[1100px]:grid-cols-4 min-[1500px]:grid-cols-6">
+      <div className={CATEGORY_GRID}>
         {items.map((item) => (
           <CategoryCard
             key={item.key}
@@ -40,6 +40,7 @@ export function LiveCategoryPanel({
             losses={item.losses}
             pushes={item.pushes}
             winPct={item.winPct}
+            graded={item.count}
             tinted
             active={item.key === activeKey}
             onToggle={() => setActiveKey((current) => (current === item.key ? null : item.key))}

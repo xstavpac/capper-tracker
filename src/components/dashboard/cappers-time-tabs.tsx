@@ -57,7 +57,7 @@ export function CappersTimeTabs({ params }: { params: CappersParams }) {
         })}
       </nav>
       {/* Hints that the row scrolls: fades into the banner's background. */}
-      <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-7 bg-gradient-to-r from-transparent to-[#011948] sm:hidden" />
+      <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-7 bg-gradient-to-r from-transparent to-banner sm:hidden" />
     </div>
   );
 }

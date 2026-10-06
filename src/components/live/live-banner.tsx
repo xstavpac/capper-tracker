@@ -23,7 +23,7 @@ export function LiveBanner({ activeSport, isGrid }: { activeSport: string; isGri
   ];
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-[#011948] shadow-[0_10px_28px_rgba(3,11,41,0.28)] [container-type:inline-size] sm:rounded-[20px]">
+    <div className="relative overflow-hidden rounded-2xl bg-banner shadow-[0_10px_28px_rgba(3,11,41,0.28)] [container-type:inline-size] sm:rounded-[20px]">
       <LiveBannerRow leagues={leagues} league={activeSport} views={views} view={view}>
         <ParlaySlipButton dark />
       </LiveBannerRow>

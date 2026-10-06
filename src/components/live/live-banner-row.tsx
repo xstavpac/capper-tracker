@@ -168,7 +168,7 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
             className="relative ml-4 flex h-[34px] w-[34px] flex-none items-center justify-center rounded-full border-2 border-[#3B82F6] bg-[rgba(3,11,41,0.6)] text-[#9AD8FF] shadow-[0_0_14px_rgba(59,130,246,0.75),inset_0_0_10px_rgba(59,130,246,0.45)] [@container_(min-width:640px)]:ml-0 [@container_(min-width:640px)]:h-11 [@container_(min-width:640px)]:w-11"
           >
             <LiveIcon className="h-[18px] w-[18px] [@container_(min-width:640px)]:h-[22px] [@container_(min-width:640px)]:w-[22px]" />
-            <span aria-hidden className="absolute -right-0.5 -top-0.5 h-[9px] w-[9px] rounded-full border-2 border-[#011948] bg-[#EF4444] shadow-[0_0_7px_rgba(239,68,68,0.9)] [@container_(min-width:640px)]:h-[11px] [@container_(min-width:640px)]:w-[11px]" />
+            <span aria-hidden className="absolute -right-0.5 -top-0.5 h-[9px] w-[9px] rounded-full border-2 border-banner bg-[#EF4444] shadow-[0_0_7px_rgba(239,68,68,0.9)] [@container_(min-width:640px)]:h-[11px] [@container_(min-width:640px)]:w-[11px]" />
           </span>
           <span aria-hidden className="flex flex-1 justify-center [@container_(min-width:640px)]:ml-4 [@container_(min-width:640px)]:flex-none">
             <span className="h-[26px] w-0.5 rounded-full bg-[#22D3EE] shadow-[0_0_6px_rgba(34,211,238,0.8)] [@container_(min-width:640px)]:h-8" />
@@ -196,7 +196,7 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
           })}
         </nav>
         {/* Hints that the row scrolls: fades into the banner's background. */}
-        <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-7 bg-gradient-to-r from-transparent to-[#011948] [@container_(min-width:640px)]:hidden" />
+        <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-7 bg-gradient-to-r from-transparent to-banner [@container_(min-width:640px)]:hidden" />
       </div>
 
       <div ref={controlsRef} className={CONTROLS}>

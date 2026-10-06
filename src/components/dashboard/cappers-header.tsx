@@ -15,7 +15,7 @@ export function CappersHeader({ params, controls = true }: { params: CappersPara
     <PageBanner
       src={cappersBanner}
       title="Cappers"
-      className="bg-[#011948]"
+      className="bg-banner"
       phone={{ height: 56, circle: { left: 119, right: 297, centerY: 110 }, word: { start: 401, end: 1018, top: 48, bottom: 190 } }}
       cropClassName="sm:w-[514px] lg:w-[555px]"
       glow="art"
