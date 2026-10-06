@@ -14,6 +14,8 @@ import {
   findMarketSpreadLine,
   findMarketTotalLine,
   findFavoredSide,
+  createRequestOddsLoader,
+  type OddsLoader,
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
@@ -93,9 +95,9 @@ type ResolvableItem = {
   gameNumber: 1 | 2 | null;
 };
 
-function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2 | null) {
-  if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1], { gameNumber });
-  if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0], { gameNumber });
+function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2 | null, getOdds: OddsLoader) {
+  if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1], { gameNumber, getOdds });
+  if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0], { gameNumber, getOdds });
   return Promise.resolve({ game: null, doubleheaderBothLegsFinal: false });
 }
 
@@ -112,7 +114,11 @@ function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2
 // into homeTeam and "-" into awayTeam, which silently created picks that
 // could never be graded or re-matched, since the real opponent was never
 // captured anywhere on the row - see the Porter PICKS/Cardinals incident).
-async function resolveGameAndOdds(item: ResolvableItem): Promise<{
+//
+// getOdds is the calling action's one createRequestOddsLoader(): every line in
+// the request shares it, so each sport's OddsSnapshot is read at most once per
+// request however many lines (and lookups per line) need it.
+async function resolveGameAndOdds(item: ResolvableItem, getOdds: OddsLoader): Promise<{
   homeTeam: string;
   awayTeam: string;
   gameTime: Date;
@@ -180,12 +186,12 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
     // otherwise hand lookupGame two nicknames that both resolve to the same
     // team, which it reads as a two-team matchup and fails.
     const nicknames = [...new Set(item.teamNicknames.map((n) => TEAM_NICKNAME_CANONICAL[n] ?? n))];
-    let lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber);
+    let lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber, getOdds);
     // One retry before giving up - covers a transient miss/blip against the
     // live schedule source rather than treating it as a genuine non-match.
     if (!lookup.game) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber);
+      lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber, getOdds);
     }
     const game = lookup.game;
     doubleheaderBothLegsFinal = lookup.doubleheaderBothLegsFinal;
@@ -231,7 +237,7 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
         // MONEYLINE only; SPREAD's fav/dog already comes correctly off the line
         // sign. One getOddsForSport read, memoized within the request (and
         // already triggered above for any no-explicit-odds pick in the batch).
-        mlFavoredSide = await findFavoredSide(liveSportKey, game);
+        mlFavoredSide = await findFavoredSide(liveSportKey, game, getOdds);
       }
 
       if (!item.hasExplicitOdds && item.betType === "PLAYER_PROP") {
@@ -253,7 +259,7 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
         if (parsedProp && parsedProp.propMarket === "TD") {
           if (isAnytimeTdPick(item.description)) {
             const tdName = stripTeamNamesFromPlayerName(parsedProp.playerName, [game.homeTeam, game.awayTeam], item.sportName);
-            const tdPrice = tdName ? await resolvePropOdds(liveSportKey, game, { playerName: tdName, propMarket: "TD" }) : null;
+            const tdPrice = tdName ? await resolvePropOdds(liveSportKey, game, { playerName: tdName, propMarket: "TD" }, getOdds) : null;
             if (tdPrice !== null) {
               odds = tdPrice;
             }
@@ -268,12 +274,17 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
           // match "Chiefs Travis Kelce" here.
           const playerName = stripTeamNamesFromPlayerName(parsedProp.playerName, [game.homeTeam, game.awayTeam], item.sportName);
           const propPrice = playerName
-            ? await resolvePropOdds(liveSportKey, game, {
-                playerName,
-                propMarket: parsedProp.propMarket,
-                side: parsedLine.direction === "OVER" ? "Over" : "Under",
-                point: parsedLine.line,
-              })
+            ? await resolvePropOdds(
+                liveSportKey,
+                game,
+                {
+                  playerName,
+                  propMarket: parsedProp.propMarket,
+                  side: parsedLine.direction === "OVER" ? "Over" : "Under",
+                  point: parsedLine.line,
+                },
+                getOdds
+              )
             : null;
           if (propPrice !== null) {
             odds = propPrice;
@@ -302,7 +313,7 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
         // one; team-total picks keep whatever odds the capper typed (or the
         // -110 default), same as before this bet type existed.
         const marketPrice =
-          side && item.betType !== "TEAM_TOTAL" ? await findMarketPrice(liveSportKey, game, item.betType, side) : null;
+          side && item.betType !== "TEAM_TOTAL" ? await findMarketPrice(liveSportKey, game, item.betType, side, getOdds) : null;
         if (marketPrice !== null) {
           odds = marketPrice;
         }
@@ -348,13 +359,14 @@ export async function previewBulkImportMatches(
   items: ResolvableItem[]
 ): Promise<{ odds: Record<number, number>; games: Record<number, PreviewMatchedGame> }> {
   await requireUser();
+  const getOdds = createRequestOddsLoader();
 
   const enriched: Record<number, number> = {};
   const games: Record<number, PreviewMatchedGame> = {};
   await Promise.all(
     items.map(async (item, i) => {
       if (item.hasExplicitOdds) return;
-      const { odds, matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item);
+      const { odds, matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item, getOdds);
       if (matched && odds !== item.odds) enriched[i] = odds;
       if (matched) games[i] = { homeTeam, awayTeam, gameTime: gameTime.toISOString() };
     })
@@ -379,6 +391,7 @@ export type MissingTotalLineResult = {
 // actual (possibly alternate) line, which must never be overridden.
 export async function previewMissingTotalLines(items: ResolvableItem[]): Promise<Record<number, MissingTotalLineResult>> {
   await requireUser();
+  const getOdds = createRequestOddsLoader();
 
   const results: Record<number, MissingTotalLineResult> = {};
   await Promise.all(
@@ -389,13 +402,14 @@ export async function previewMissingTotalLines(items: ResolvableItem[]): Promise
       const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
       if (!liveSportKey || !RESOLVABLE_SPORT_KEYS.includes(liveSportKey)) return;
 
-      const { matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item);
+      const { matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item, getOdds);
       if (!matched) return;
 
       const point = await findMarketTotalLine(
         liveSportKey,
         { homeTeam, awayTeam, commenceTime: gameTime.toISOString() },
-        item.totalSide
+        item.totalSide,
+        getOdds
       );
       if (point === null) return;
 
@@ -437,6 +451,7 @@ export type { DuplicateFlag };
 // position in the input array so the caller can remap into `parsed` indices.
 export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Promise<Record<number, DuplicateFlag>> {
   const user = await requireUser();
+  const getOdds = createRequestOddsLoader();
 
   const existingCappers = await prisma.capper.findMany({ where: { userId: user.id } });
   const capperByNormalizedName = new Map(existingCappers.map((c) => [normalizeName(c.name), c]));
@@ -472,7 +487,7 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
       // resolveGameAndOdds; unresolved items fall back to placeholder
       // homeTeam/awayTeam values that aren't safe to match on).
       const { homeTeam, awayTeam, gameTime, odds, matched, pickedSide, mlFavoredSide } =
-        await resolveGameAndOdds(item);
+        await resolveGameAndOdds(item, getOdds);
       if (!matched) return null;
 
       // odds (not item.odds) - for a pick with no explicit price, item.odds
@@ -626,6 +641,7 @@ export async function bulkImportPicksAction(
   skippedDuplicates: SkippedDuplicateItem[] = []
 ): Promise<BulkImportResult> {
   const user = await requireUser();
+  const getOdds = createRequestOddsLoader();
 
   // Before ANY write: the loop below find-or-creates cappers and sports as it
   // resolves items, so an over-cap import must be refused up front to leave
@@ -677,7 +693,7 @@ export async function bulkImportPicksAction(
         mlFavoredSide,
         resolvedGameNumber,
         doubleheaderBothLegsFinal,
-      } = await resolveGameAndOdds(item);
+      } = await resolveGameAndOdds(item, getOdds);
       if (resolvable && !matched) {
         // Don't persist this item at all - homeTeam/awayTeam/gameTime from
         // resolveGameAndOdds are just placeholders when matched is false,
@@ -835,7 +851,7 @@ export type BulkImportParlaysResult =
 // TEAM_TOTAL leg has no real market source at all, same limitation as a
 // normal single TEAM_TOTAL pick) - line stays null here, and the caller
 // falls back to extractLine(betType, description) same as a normal pick.
-async function resolveLegAndOdds(item: ResolvableItem): Promise<{
+async function resolveLegAndOdds(item: ResolvableItem, getOdds: OddsLoader): Promise<{
   homeTeam: string;
   awayTeam: string;
   gameTime: Date;
@@ -847,7 +863,7 @@ async function resolveLegAndOdds(item: ResolvableItem): Promise<{
   mlFavoredSide: "HOME" | "AWAY" | null;
   lineUnresolved: boolean;
 }> {
-  const base = await resolveGameAndOdds(item);
+  const base = await resolveGameAndOdds(item, getOdds);
   if (!base.matched || (item.betType !== "SPREAD" && item.betType !== "TOTAL")) {
     return { ...base, line: null, lineUnresolved: false };
   }
@@ -861,9 +877,9 @@ async function resolveLegAndOdds(item: ResolvableItem): Promise<{
     // rule resolveGameAndOdds itself already follows; without a determined
     // side there's no live spread line to look up for it.
     const side = base.pickedSide === "HOME" ? "home" : base.pickedSide === "AWAY" ? "away" : null;
-    line = side ? await findMarketSpreadLine(liveSportKey, game, side) : null;
+    line = side ? await findMarketSpreadLine(liveSportKey, game, side, getOdds) : null;
   } else {
-    line = item.totalSide ? await findMarketTotalLine(liveSportKey, game, item.totalSide) : null;
+    line = item.totalSide ? await findMarketTotalLine(liveSportKey, game, item.totalSide, getOdds) : null;
   }
 
   return { ...base, line, lineUnresolved: line === null };
@@ -871,6 +887,7 @@ async function resolveLegAndOdds(item: ResolvableItem): Promise<{
 
 export async function bulkImportParlaysAction(items: BulkImportParlayItem[]): Promise<BulkImportParlaysResult> {
   const user = await requireUser();
+  const getOdds = createRequestOddsLoader();
 
   const existingCappers = await prisma.capper.findMany({ where: { userId: user.id } });
   const capperCache = new Map<string, string>();
@@ -887,7 +904,7 @@ export async function bulkImportParlaysAction(items: BulkImportParlayItem[]): Pr
       let rejected = false;
 
       for (const legItem of item.legs) {
-        const resolved = await resolveLegAndOdds(legItem);
+        const resolved = await resolveLegAndOdds(legItem, getOdds);
         if ((resolved.resolvable && !resolved.matched) || resolved.lineUnresolved) {
           rejected = true;
           break;
