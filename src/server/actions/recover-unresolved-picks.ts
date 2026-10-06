@@ -4,7 +4,7 @@ import { requireUser } from "@/server/auth";
 import { parseCatalog, parseSupportedMlbProp } from "@/lib/parse-catalog";
 import type { LiveTeam } from "@/lib/live-team-fallback";
 import { recoverUnresolvedLines, type RecoverUnresolvedResult } from "@/lib/recover-unresolved-lines";
-import { parsePlayerProp, isPassingTdsText } from "@/lib/bet-line";
+import { parsePlayerProp } from "@/lib/bet-line";
 import { getLiveScoresForSport, getOddsForSport, LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { getCachedNflRoster } from "@/server/data/nfl-roster-cache";
 import { getCachedNhlRoster } from "@/server/data/nhl-roster-cache";
@@ -25,7 +25,9 @@ import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 // bulk-import paste never triggers a live ESPN roster request. Neither
 // fallback ever invents a team or player: a line resolves only on an
 // EXACT-ONE match, everything else - including a collision between two or
-// more candidates - stays unresolved.
+// more candidates - stays unresolved. The one collision that is not a dead
+// end is a bare surname shared by 2+ rostered players: it comes back as a pick
+// awaiting the user's "which player?" answer, never as a guess.
 //
 // A player-prop-shaped line is routed to the roster fallback ONLY, never
 // the team-name fallback below: a bare player prop was never a team pick to
@@ -50,15 +52,25 @@ export type { RecoverUnresolvedResult };
 // Every distinct team name currently on the live schedule (ESPN) or the
 // pregame odds board (Odds API snapshot) for a resolvable sport - the same
 // two feeds resolveGameForNickname / lookupGame already match picks against.
-async function gatherLiveTeamNames(): Promise<LiveTeam[]> {
+//
+// `completeSports` lists the sport labels whose slate is trustworthy enough to
+// choose between two players sharing a surname (see SlateContext in
+// player-roster-fallback.ts): both feeds answered and neither came back empty.
+// The score feed only spans ~yesterday..tomorrow and the odds board only lists
+// games not yet started, so losing either one can hide a team that does have
+// a game this week - and "only one candidate is playing" would then be false.
+async function gatherLiveTeamNames(): Promise<{ teams: LiveTeam[]; completeSports: string[] }> {
   const out: LiveTeam[] = [];
+  const completeSports: string[] = [];
   await Promise.all(
     RESOLVABLE_SPORT_KEYS.map(async (key) => {
       const label = LIVE_SPORTS.find((s) => s.key === key)?.label ?? key;
+      let failed = false;
       const [scores, odds] = await Promise.all([
-        getLiveScoresForSport(key).catch(() => []),
-        getOddsForSport(key).catch(() => []),
+        getLiveScoresForSport(key).catch(() => ((failed = true), [])),
+        getOddsForSport(key).catch(() => ((failed = true), [])),
       ]);
+      if (!failed && scores.length > 0 && odds.length > 0) completeSports.push(label);
       for (const g of scores) {
         if (g.homeTeam) out.push({ sport: label, name: g.homeTeam });
         if (g.awayTeam) out.push({ sport: label, name: g.awayTeam });
@@ -69,7 +81,7 @@ async function gatherLiveTeamNames(): Promise<LiveTeam[]> {
       }
     })
   );
-  return out;
+  return { teams: out, completeSports };
 }
 
 export async function recoverUnresolvedPicksAction(
@@ -99,22 +111,15 @@ export async function recoverUnresolvedPicksAction(
   const { picks, unresolved, unresolvedCapperNames } = parseCatalog(text, knownCapperNames, rosterFullNames, feedTeams);
   if (unresolved.length === 0) return { recovered: [], stillUnresolved: [], reasons: {} };
 
-  // Partition once, up front, so live-team data is fetched at most once (and
-  // only when a line that could actually use it exists) - the roster is
-  // already in hand from the fetch above.
-  const isPlayerProp = new Set(unresolved.filter((line) => parsePlayerProp(line) !== null));
-
-  // Passing-TDs lines need the live slate too: it breaks a QB surname tie and backs the "has a game in the
-  // window" check (see resolvePassingTdQuarterback), even in a paste made entirely of player props.
-  const needsLiveTeams = isPlayerProp.size < unresolved.length || unresolved.some(isPassingTdsText);
-  const liveTeams = needsLiveTeams ? await gatherLiveTeamNames() : [];
+  // Always fetched once there is anything unresolved: team lines match against
+  // it, and any player-prop line may turn out to be a shared surname, which
+  // only a complete slate is allowed to settle (see gatherLiveTeamNames).
+  const { teams: liveTeams, completeSports } = await gatherLiveTeamNames();
 
   // `picks` - the lines parseCatalog already resolved outright on its first
-  // pass over this same paste - is passed through as paste-local
-  // disambiguation context for a bare-surname player-prop collision (see
-  // recover-unresolved-lines.ts's pasteTeamMentions and player-roster-
-  // fallback.ts's header comment). Only ever consulted when isPlayerProp is
-  // non-empty; harmless to pass otherwise.
+  // pass over this same paste - is passed through as paste context for MLB
+  // props only (recover-unresolved-lines.ts's mlbPasteTeamMentions). It never
+  // decides which NFL/NHL player a bare surname means.
   // The NHL roster is read only when some unresolved line is an NHL prop, so a
   // paste with none pays no extra query. A failed read (table not migrated yet,
   // transient DB error) degrades to "NHL lines stay unresolved" - it must never
@@ -141,5 +146,5 @@ export async function recoverUnresolvedPicksAction(
     }
   }
 
-  return recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, roster, picks, nhlRoster, mlbRoster);
+  return recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, roster, picks, nhlRoster, mlbRoster, completeSports);
 }

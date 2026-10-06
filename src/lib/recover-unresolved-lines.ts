@@ -28,10 +28,18 @@ import {
   withGameNumberSuffix,
   detectUnsupportedPropLine,
   parseSupportedMlbProp,
+  playerAmbiguityKey,
+  type AmbiguousOption,
   type ParsedPick,
 } from "@/lib/parse-catalog";
 import { resolveLineAgainstLiveTeams, parseFallbackBetText, type LiveTeam, type LineResolution } from "@/lib/live-team-fallback";
-import { resolvePlayerPropAgainstRoster, resolvePassingTdQuarterback } from "@/lib/player-roster-fallback";
+import {
+  resolvePlayerPropAgainstRoster,
+  resolvePassingTdQuarterback,
+  stripNameSuffix,
+  type PlayerCandidate,
+  type SlateContext,
+} from "@/lib/player-roster-fallback";
 import { resolveMlbPropAgainstRoster } from "@/lib/mlb-roster-fallback";
 import { parsePlayerProp, isPassingTdsText } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
@@ -39,12 +47,34 @@ import { UNSUPPORTED_PROP_REASONS } from "@/lib/unsupported-prop-vocab";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 
 export type RecoverUnresolvedResult = {
+  // Includes picks still awaiting a "which player?" answer (a bare surname 2+
+  // rostered players share): those carry `ambiguous`/`ambiguousKey` and flow
+  // through the same prompt as an ambiguous team name.
   recovered: ParsedPick[];
   stillUnresolved: string[];
   // Specific, user-facing reason for a stillUnresolved line, keyed by the exact line text. Only set
   // where the resolver knows why (today: passing-TDs QB resolution); other lines keep the generic message.
   reasons: Record<string, string>;
 };
+
+// "49ers" from "San Francisco 49ers" - the team's nickname, for a prompt
+// button. Every NFL nickname is the last word of the full name; the NHL has
+// four two-word ones.
+const TWO_WORD_NICKNAME = /(Maple Leafs|Blue Jackets|Red Wings|Golden Knights)$/;
+function shortTeamName(team: string): string {
+  return TWO_WORD_NICKNAME.exec(team)?.[1] ?? team.split(/\s+/).pop() ?? team;
+}
+
+// One prompt option per candidate player: "Christian McCaffrey — 49ers RB".
+// `nickname` is the full team name lowercased, the same value a resolved
+// roster hit puts in teamNicknames.
+export function playerAmbiguityOptions(sport: string, matches: PlayerCandidate[]): AmbiguousOption[] {
+  return matches.map((m) => ({
+    label: m.playerName + " — " + shortTeamName(m.team) + " " + m.position,
+    sport,
+    nickname: m.team.toLowerCase(),
+  }));
+}
 
 export function recoverUnresolvedLines(
   unresolved: string[],
@@ -56,7 +86,11 @@ export function recoverUnresolvedLines(
   // unresolved exactly as before NHL props existed.
   nhlRoster: RosterPlayer[] = [],
   // Cached MLB 40-man roster. Same default: empty means MLB lines stay unresolved as before.
-  mlbRoster: RosterPlayer[] = []
+  mlbRoster: RosterPlayer[] = [],
+  // Sport labels ("NFL", "NHL") whose slate in `liveTeams` is known complete -
+  // see SlateContext. A sport not listed here (the default) never has its
+  // slate used to choose between players sharing a surname.
+  slateCompleteSports: string[] = []
 ): RecoverUnresolvedResult {
   const recovered: ParsedPick[] = [];
   const stillUnresolved: string[] = [];
@@ -87,7 +121,7 @@ export function recoverUnresolvedLines(
   // Every non-player-prop unresolved line's own team-fallback resolution,
   // computed up front (once, and reused below in the main loop) so that a
   // team pick appearing AFTER a player-prop line in the raw paste still
-  // counts as paste context for it - see pasteTeamMentions just below. Pure
+  // counts as paste context for an MLB prop - see mlbPasteTeamMentions below. Pure
   // and cheap (no network call - resolveLineAgainstLiveTeams only matches
   // against the liveTeams already fetched), so resolving each of these lines
   // twice costs nothing beyond this function's own runtime.
@@ -97,28 +131,47 @@ export function recoverUnresolvedLines(
     nonPlayerPropResolutions.set(line, resolveLineAgainstLiveTeams(line, liveTeams));
   }
 
-  // Paste-local disambiguation context for the roster fallback's bare-
-  // surname tier only (see player-roster-fallback.ts's `pasteTeamMentions`
-  // param) - NFL team names/nicknames already established elsewhere in THIS
-  // SAME paste: from a pick parseCatalog resolved outright on its first pass
-  // (`resolvedPicks`), or from another line this same recovery pass resolves
-  // (`nonPlayerPropResolutions` above). Independent of `relevantNflTeams`
-  // below, which comes from the live schedule/odds board instead - a
-  // genuinely different source, so both are tried.
-  const pasteTeamMentions = [
-    ...resolvedPicks.filter((p) => p.sportName === "NFL").flatMap((p) => p.teamNicknames),
-    ...[...nonPlayerPropResolutions.values()]
-      .filter((r) => r.status === "resolved" && r.sport === "NFL")
-      .map((r) => (r as Extract<LineResolution, { status: "resolved" }>).nickname),
-  ];
+  const slateFor = (sport: string): SlateContext => ({
+    teams: liveTeams.filter((t) => t.sport === sport).map((t) => t.name),
+    complete: slateCompleteSports.includes(sport),
+  });
 
-  const nhlPasteTeamMentions = [
-    ...resolvedPicks.filter((p) => p.sportName === "NHL").flatMap((p) => p.teamNicknames),
-    ...[...nonPlayerPropResolutions.values()]
-      .filter((r) => r.status === "resolved" && r.sport === "NHL")
-      .map((r) => (r as Extract<LineResolution, { status: "resolved" }>).nickname),
-  ];
+  // A bare surname shared by 2+ rostered players that the slate could not
+  // settle: recovered as a pick awaiting the user's choice. The description
+  // stays unparsed - resolveAmbiguousPick re-parses it once a player is chosen,
+  // same as an ambiguous-team pick.
+  const awaitingPlayerChoice = (
+    capperName: string,
+    sport: "NFL" | "NHL",
+    line: string,
+    lineForParsing: string,
+    gameNumber: ParsedPick["gameNumber"],
+    typedName: string,
+    matches: PlayerCandidate[]
+  ): ParsedPick => {
+    const parsed = parsePickText(lineForParsing);
+    return {
+      capperName,
+      sportName: sport,
+      description: withGameNumberSuffix(lineForParsing, gameNumber),
+      betType: parsed.betType,
+      odds: parsed.odds ?? -110,
+      hasExplicitOdds: parsed.odds !== null,
+      totalSide: parsed.totalSide,
+      units: parsed.units,
+      period: parsed.period,
+      raw: line,
+      ambiguous: playerAmbiguityOptions(sport, matches),
+      ambiguousKey: playerAmbiguityKey(sport, stripNameSuffix(typedName), matches.map((m) => m.externalPlayerId)),
+      ambiguousBetType: parsed.betType,
+      ambiguousLine: null,
+      teamNicknames: [],
+      gameNumber,
+    };
+  };
 
+  // MLB only (mlb-roster-fallback.ts). The NFL/NHL resolver no longer takes
+  // paste context at all - see player-roster-fallback.ts.
   const mlbPasteTeamMentions = [
     ...resolvedPicks.filter((p) => p.sportName === "MLB").flatMap((p) => p.teamNicknames),
     ...[...nonPlayerPropResolutions.values()]
@@ -139,9 +192,17 @@ export function recoverUnresolvedLines(
 
     if (isNhlProp.has(line)) {
       // Same conservative policy as the NFL branch below: resolves only on
-      // EXACTLY ONE distinct NHL player; ambiguous/unresolved stay unresolved.
-      const relevantNhlTeams = liveTeams.filter((t) => t.sport === "NHL").map((t) => t.name);
-      const res = resolvePlayerPropAgainstRoster(line, nhlRoster, relevantNhlTeams, nhlPasteTeamMentions, "NHL");
+      // EXACTLY ONE distinct NHL player; a shared surname asks the user.
+      const res = resolvePlayerPropAgainstRoster(line, nhlRoster, slateFor("NHL"), "NHL");
+      // A sport-less points/assists line gets its sport only from a UNIQUE NHL
+      // roster hit (see isNhlProp above); a shared surname is no such evidence,
+      // so that line stays unresolved instead of prompting with NHL players.
+      const sportIsEvident = detectUnsupportedPropLine(line)?.reason !== UNSUPPORTED_PROP_REASONS.GENERIC;
+      if (res.status === "ambiguous" && res.tier === "surname" && sportIsEvident) {
+        const typed = parseNhlPlayerProp(line)!.playerName;
+        recovered.push(awaitingPlayerChoice(capperName, "NHL", line, lineForParsing, gameNumber, typed, res.matches));
+        continue;
+      }
       if (res.status !== "resolved") {
         stillUnresolved.push(line);
         continue;
@@ -200,18 +261,19 @@ export function recoverUnresolvedLines(
     }
 
     if (isPlayerProp.has(line)) {
-      // Only ever narrows a bare-surname collision - never affects the
-      // exact/fuzzy full-name tiers. Empty (no live teams fetched this pass,
-      // e.g. a catalog made entirely of player-prop lines - see
-      // recover-unresolved-picks.ts) just means the surname tier can't break
-      // a tie via the slate and falls back to reporting `ambiguous`, same as
-      // before this existed - no new network call is made to populate it.
-      const relevantNflTeams = liveTeams.filter((t) => t.sport === "NFL").map((t) => t.name);
+      // The slate only ever breaks a bare-surname collision, and only when
+      // complete - it never affects the exact/fuzzy full-name tiers. A
+      // collision it can't settle goes to the user, never to a guess.
+      const typed = parsePlayerProp(line)!.playerName;
       let team: string;
       if (isPassingTdsText(line)) {
-        // QB-only market: resolves against quarterbacks and reports WHY it failed (ambiguous QBs, a
-        // non-QB, an unknown name, no game in the window) instead of the generic unresolved message.
-        const qb = resolvePassingTdQuarterback(line, roster, relevantNflTeams, pasteTeamMentions);
+        // QB-only market: resolves against quarterbacks and reports WHY it failed (a non-QB, an unknown
+        // name, no game in the window) instead of the generic unresolved message.
+        const qb = resolvePassingTdQuarterback(line, roster, slateFor("NFL"));
+        if (qb?.status === "ambiguous") {
+          recovered.push(awaitingPlayerChoice(capperName, "NFL", line, lineForParsing, gameNumber, typed, qb.matches));
+          continue;
+        }
         if (qb?.status !== "resolved") {
           stillUnresolved.push(line);
           if (qb) reasons[line] = qb.reason;
@@ -219,11 +281,14 @@ export function recoverUnresolvedLines(
         }
         team = qb.team;
       } else {
-        const res = resolvePlayerPropAgainstRoster(line, roster, relevantNflTeams, pasteTeamMentions);
+        const res = resolvePlayerPropAgainstRoster(line, roster, slateFor("NFL"));
+        if (res.status === "ambiguous" && res.tier === "surname") {
+          recovered.push(awaitingPlayerChoice(capperName, "NFL", line, lineForParsing, gameNumber, typed, res.matches));
+          continue;
+        }
         if (res.status !== "resolved") {
-          // "ambiguous" (2+ distinct players matching) is deliberately treated
-          // the same as "unresolved" here, same policy as the team-name
-          // fallback below - never guessed.
+          // A full-name collision (2+ distinct players with the same exact or
+          // fuzzy name) is deliberately treated the same as "unresolved".
           stillUnresolved.push(line);
           continue;
         }

@@ -18,14 +18,10 @@
 //     narrows to exactly one distinct player.
 //   - two or more distinct players matching at any tier - a genuine
 //     same-name (or same-surname) collision across teams, or a fuzzy match
-//     too loose to trust - reports `ambiguous`, which the caller treats
-//     exactly the same as unresolved. This mirrors
-//     recoverUnresolvedPicksAction's own existing policy for team-name
-//     collisions ("a collision is exactly the case where we must NOT
-//     guess") - never guessed here either, and a single typed token is
-//     never treated as "close enough" on its own merit: it still has to
-//     land on exactly one roster player (optionally narrowed by
-//     `relevantTeams`, see below) or it stays ambiguous/unresolved.
+//     too loose to trust - reports `ambiguous`, never a guess. A single
+//     typed token is never treated as "close enough" on its own merit: it
+//     still has to land on exactly one roster player (see "Shared surnames"
+//     below for the one automatic tiebreak) or it stays ambiguous.
 //   - this is only ever invoked for a line parsePlayerProp already
 //     recognizes as one of the app's supported player-prop markets
 //     (passing/rushing/receiving yards, receptions, TD) - a line with none
@@ -42,35 +38,47 @@
 // QB/RB/WR/TE - without that restriction "Gibbs" could just as easily land
 // on a linebacker or long-snapper who could never actually be the subject of
 // a supported prop, inflating collisions that don't reflect real ambiguity.
-// `relevantTeams`, when the caller has it (e.g. the live NFL schedule/odds
-// board already fetched for the team-name fallback in the same recovery
-// pass), is used ONLY to break a genuine multi-surname tie - not to
-// pre-filter the roster before matching - so a team on a bye week (absent
-// from that list) never loses an otherwise-unambiguous match.
 //
-// `pasteTeamMentions` (2026-09, later - the "Allen anytime touchdown"/"Moore
-// over 62.5 receiving yards" case) is a second, independent narrowing source
-// tried only after `relevantTeams` fails to narrow the tie: team names (or
-// nicknames - "chiefs", not just "Kansas City Chiefs") already established
-// elsewhere in the SAME PASTE the capper typed this line in - either from a
-// pick parseCatalog resolved outright on its first pass, or from another
-// line this same recovery pass itself resolves. A capper who already named
-// the Bills somewhere in this paste has effectively already told us which
-// Allen they mean, even with no live-schedule data at all. Matched with
-// `endsWith` (a live team's full name always ends with its bare nickname -
-// "kansas city chiefs".endsWith("chiefs")) rather than exact equality, since
-// paste mentions can be either form. Same guarantee as `relevantTeams`:
-// narrows only when it lands on exactly one distinct player, otherwise the
-// collision stays `ambiguous` exactly as before this existed.
+// Shared surnames (2026-10, the "McCaffrey over 38.5 receiving yards" case -
+// Christian, 49ers RB, vs Luke, Commanders WR): a bare surname that matches
+// 2+ roster players is never guessed. It resolves automatically in exactly
+// one situation - `slate` is COMPLETE (see SlateContext) and exactly one
+// candidate's team has a game on it (the other is on a bye) - and otherwise
+// reports `ambiguous` with tier "surname", which the caller
+// (recover-unresolved-lines.ts) turns into the import's "which one?" prompt.
+// The slate only ever breaks a tie - it is never used to pre-filter the
+// roster - so a team on a bye never loses an otherwise-unambiguous match.
+//
+// There is deliberately NO paste-context tiebreak. An earlier version also
+// narrowed by team names found elsewhere in the same paste ("Commanders -3"
+// two lines up); that is exactly what imported the McCaffrey pick above as
+// Luke/Commanders. A team named in another pick says nothing about which
+// player this line means.
 import { parsePlayerProp } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { normalizeName, isLikelyDuplicateName } from "@/lib/fuzzy-match";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 
+export type PlayerCandidate = { playerName: string; team: string; position: string; externalPlayerId: string };
+
+// `tier` says where the collision happened. Only "surname" (one typed word
+// shared by 2+ players) is something the user can settle by choosing; an
+// exact/fuzzy full-name collision stays unresolved, as it always has.
 export type PlayerPropResolution =
   | { status: "resolved"; sport: "NFL" | "NHL"; team: string; playerName: string; via: "exact" | "fuzzy" | "surname" }
-  | { status: "ambiguous"; matches: { playerName: string; team: string }[] }
+  | { status: "ambiguous"; tier: "exact" | "fuzzy" | "surname"; matches: PlayerCandidate[] }
   | { status: "unresolved" };
+
+// Every team with a game in the import's matching window (the live scoreboard
+// plus the posted odds board, the same two feeds a pick is matched to a game
+// from). `complete` is false whenever either feed failed or came back empty:
+// a partial slate can make a team look like it has no game, so it must not be
+// used to choose between players.
+export type SlateContext = { teams: string[]; complete: boolean };
+
+function toCandidates(players: RosterPlayer[]): PlayerCandidate[] {
+  return players.map((p) => ({ playerName: p.playerName, team: p.team, position: p.position, externalPlayerId: p.externalPlayerId }));
+}
 
 // ESPN's roster displayName includes a generational suffix when the player
 // has one ("Kenneth Walker III" - confirmed live) that a capper typing a
@@ -130,8 +138,7 @@ export function isKnownFullPlayerName(name: string, knownFullNames: Iterable<str
 export function resolvePlayerPropAgainstRoster(
   line: string,
   roster: RosterPlayer[],
-  relevantTeams?: string[],
-  pasteTeamMentions?: string[],
+  slate?: SlateContext,
   // Which league's parser/roster this call is for. The parsed MARKET decides the
   // sport upstream (recover-unresolved-lines.ts passes the NHL roster only for
   // an NHL market), so an NFL and an NHL player sharing a name can never collide.
@@ -148,7 +155,7 @@ export function resolvePlayerPropAgainstRoster(
     return { status: "resolved", sport, team: exact[0].team, playerName: exact[0].playerName, via: "exact" };
   }
   if (exact.length > 1) {
-    return { status: "ambiguous", matches: exact.map((p) => ({ playerName: p.playerName, team: p.team })) };
+    return { status: "ambiguous", tier: "exact", matches: toCandidates(exact) };
   }
 
   const fuzzy = distinctPlayers(roster.filter((p) => isLikelyDuplicateName(stripNameSuffix(p.playerName), typedName)));
@@ -156,7 +163,7 @@ export function resolvePlayerPropAgainstRoster(
     return { status: "resolved", sport, team: fuzzy[0].team, playerName: fuzzy[0].playerName, via: "fuzzy" };
   }
   if (fuzzy.length > 1) {
-    return { status: "ambiguous", matches: fuzzy.map((p) => ({ playerName: p.playerName, team: p.team })) };
+    return { status: "ambiguous", tier: "fuzzy", matches: toCandidates(fuzzy) };
   }
 
   // Bare-surname tier - only for a single typed token, and only after both
@@ -172,21 +179,15 @@ export function resolvePlayerPropAgainstRoster(
       return { status: "resolved", sport, team: bySurname[0].team, playerName: bySurname[0].playerName, via: "surname" };
     }
     if (bySurname.length > 1) {
-      if (relevantTeams && relevantTeams.length > 0) {
-        const narrowed = bySurname.filter((p) => relevantTeams.includes(p.team));
-        if (narrowed.length === 1) {
-          return { status: "resolved", sport, team: narrowed[0].team, playerName: narrowed[0].playerName, via: "surname" };
+      // The one automatic tiebreak: a complete slate on which exactly one
+      // candidate's team plays. Anything else is the user's call.
+      if (slate?.complete) {
+        const playing = bySurname.filter((p) => slate.teams.includes(p.team));
+        if (playing.length === 1) {
+          return { status: "resolved", sport, team: playing[0].team, playerName: playing[0].playerName, via: "surname" };
         }
       }
-      if (pasteTeamMentions && pasteTeamMentions.length > 0) {
-        const narrowedByPaste = bySurname.filter((p) =>
-          pasteTeamMentions.some((mention) => p.team.toLowerCase().endsWith(mention.toLowerCase()))
-        );
-        if (narrowedByPaste.length === 1) {
-          return { status: "resolved", sport, team: narrowedByPaste[0].team, playerName: narrowedByPaste[0].playerName, via: "surname" };
-        }
-      }
-      return { status: "ambiguous", matches: bySurname.map((p) => ({ playerName: p.playerName, team: p.team })) };
+      return { status: "ambiguous", tier: "surname", matches: toCandidates(bySurname) };
     }
   }
 
@@ -195,15 +196,16 @@ export function resolvePlayerPropAgainstRoster(
 
 // Passing touchdowns (PASS_TDS) are a QB-only market, so a typed name resolves against the roster's
 // quarterbacks only: "Watson" is Deshaun Watson (QB), never WR Christian Watson. Same exact -> fuzzy ->
-// bare-surname tiers (and the same live-slate / paste-mention tie-breaks) as resolvePlayerPropAgainstRoster,
-// run on the QB subset - so when two QBs share a surname, the one whose team has a game in the live window
-// (or was named elsewhere in the paste) wins, and a tie that survives both is "ambiguous", never guessed.
+// bare-surname tiers (and the same complete-slate tie-break) as resolvePlayerPropAgainstRoster, run on the
+// QB subset - so when two QBs share a surname, the only one whose team has a game on a complete slate wins,
+// and any other tie is "ambiguous" (the caller asks the user which quarterback), never guessed.
 //
 // Unlike the generic resolver this one says WHY it failed (a specific, user-facing reason naming the
 // player) instead of just "unresolved", and applies the "has a game in the window" check when the live
 // slate is known: a QB whose team isn't on the NFL schedule/odds board can't be matched to a game anyway.
 export type PassTdResolution =
   | { status: "resolved"; team: string; playerName: string; via: "exact" | "fuzzy" | "surname" }
+  | { status: "ambiguous"; matches: PlayerCandidate[] }
   | { status: "failed"; reason: string };
 
 function describeQuarterbacks(matches: { playerName: string; team: string }[]): string {
@@ -213,18 +215,17 @@ function describeQuarterbacks(matches: { playerName: string; team: string }[]): 
 export function resolvePassingTdQuarterback(
   line: string,
   roster: RosterPlayer[],
-  relevantTeams?: string[],
-  pasteTeamMentions?: string[]
+  slate?: SlateContext
 ): PassTdResolution | null {
   const prop = parsePlayerProp(line);
   if (!prop || prop.propMarket !== "PASS_TDS") return null;
   const typed = prop.playerName;
   const quarterbacks = roster.filter((p) => p.position === "QB");
 
-  const res = resolvePlayerPropAgainstRoster(line, quarterbacks, relevantTeams, pasteTeamMentions);
+  const res = resolvePlayerPropAgainstRoster(line, quarterbacks, slate);
   if (res.status === "resolved") {
-    // Only enforceable when the slate was actually fetched; an empty list means "unknown", not "no games".
-    if (relevantTeams && relevantTeams.length > 0 && !relevantTeams.includes(res.team)) {
+    // Only enforceable on a complete slate; a failed or partial one means "unknown", not "no games".
+    if (slate?.complete && !slate.teams.includes(res.team)) {
       return {
         status: "failed",
         reason:
@@ -234,6 +235,8 @@ export function resolvePassingTdQuarterback(
     return { status: "resolved", team: res.team, playerName: res.playerName, via: res.via };
   }
   if (res.status === "ambiguous") {
+    // A shared QB surname is the user's to settle; a full-name collision still just fails with its reason.
+    if (res.tier === "surname") return { status: "ambiguous", matches: res.matches };
     return {
       status: "failed",
       reason:

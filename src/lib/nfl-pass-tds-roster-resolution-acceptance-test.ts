@@ -32,9 +32,11 @@ const ROSTER: RosterPlayer[] = [
 ];
 const slate = (...teams: string[]): LiveTeam[] => teams.map((name) => ({ sport: "NFL", name }));
 
-function run(line: string, live: LiveTeam[] = []) {
-  return recoverUnresolvedLines([line], ["Capper"], live, ROSTER);
+// A slate with NFL teams on it is treated as complete (both feeds answered) unless a case says otherwise.
+function run(line: string, live: LiveTeam[] = [], complete = live.some((t) => t.sport === "NFL")) {
+  return recoverUnresolvedLines([line], ["Capper"], live, ROSTER, [], [], [], complete ? ["NFL"] : []);
 }
+const offered = (r: ReturnType<typeof run>) => r.recovered.map((p) => p.ambiguous?.map((o) => o.label));
 function resolvedTo(line: string, live: LiveTeam[] = []) {
   const r = run(line, live);
   return r.recovered.length === 1 ? { team: r.recovered[0].teamNicknames[0], sport: r.recovered[0].sportName, desc: r.recovered[0].description } : { still: r.stillUnresolved, reason: r.reasons[line] };
@@ -78,22 +80,26 @@ check("same full name at two positions -> the QB", (resolvedTo("Josh Allen over 
 // ---- two QBs sharing a surname ----
 {
   const line = "Jones over 1.5 passing TDs";
+  const bothJones = [["Daniel Jones — Colts QB", "Mac Jones — 49ers QB"]];
   const none = run(line);
-  check("no slate info: ambiguous -> asks for first name, lists both", none.reasons[line], '"Jones" matches more than one quarterback (Daniel Jones (Indianapolis Colts), Mac Jones (San Francisco 49ers)) - add the first name to say which one');
-  check("ambiguous is not recovered (never guess)", none.recovered.length, 0);
+  check("no slate info: asks which quarterback, offering both (never guessed)", offered(none), bothJones);
+  check("...and is not left as an unresolved line", [none.stillUnresolved, none.reasons[line]], [[], undefined]);
   check("only one of the two has a game this window -> that one", (resolvedTo(line, slate("Indianapolis Colts", "Tennessee Titans")) as any).team, "indianapolis colts");
   check("the other one has the game -> the other one", (resolvedTo(line, slate("San Francisco 49ers", "Seattle Seahawks")) as any).team, "san francisco 49ers");
-  check("both play this window -> still ambiguous, error asks for a first name", /add the first name/.test(run(line, slate("Indianapolis Colts", "San Francisco 49ers")).reasons[line] ?? ""), true);
-  // Paste context ("Colts ..." named elsewhere in the paste) also breaks the tie.
+  check("both play this window -> asks which quarterback", offered(run(line, slate("Indianapolis Colts", "San Francisco 49ers"))), bothJones);
+  check("a slate not known to be complete never breaks the tie", offered(run(line, slate("Indianapolis Colts", "Tennessee Titans"), false)), bothJones);
+  // Paste context ("Colts ..." named elsewhere in the paste) does NOT break the tie.
   const withPaste = recoverUnresolvedLines([line], ["Capper"], [], ROSTER, [
     { capperName: "Capper", sportName: "NFL", description: "Colts -3", betType: "SPREAD", odds: -110, hasExplicitOdds: false, totalSide: null, units: 1, period: "FULL_GAME", raw: "Colts -3", teamNicknames: ["colts"], gameNumber: null } as any,
   ]);
-  check("paste mention of the Colts picks Daniel Jones", withPaste.recovered[0]?.teamNicknames[0], "indianapolis colts");
+  check("a paste mention of the Colts does not pick Daniel Jones", offered(withPaste), bothJones);
   check("full first name needs no tie-break", (resolvedTo("Mac Jones over 1.5 passing TDs") as any).team, "san francisco 49ers");
 }
 {
   const r = run("Hurts over 0.5 passing TDs");
-  check("two QBs, same full name, no slate -> ambiguous (never guessed)", [r.recovered.length, /more than one quarterback/.test(r.reasons["Hurts over 0.5 passing TDs"] ?? "")], [0, true]);
+  check("two QBs sharing a surname AND a first name, bare surname -> asks which (never guessed)", offered(r), [["Jalen Hurts — Eagles QB", "Jalen Hurts — Bears QB"]]);
+  const full = run("Jalen Hurts over 0.5 passing TDs");
+  check("the same two typed in full -> not recovered, reason lists both", [full.recovered.length, /more than one quarterback/.test(full.reasons["Jalen Hurts over 0.5 passing TDs"] ?? "")], [0, true]);
 }
 
 // ---- no game in the window ----

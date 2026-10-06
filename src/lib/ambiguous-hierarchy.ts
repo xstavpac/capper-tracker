@@ -2,6 +2,7 @@ import {
   type ParsedPick,
   type AmbiguousOption,
   ambiguousOptionsFor,
+  isPlayerAmbiguityKey,
   matchingSportsForPickContext,
   resolveAmbiguousPick,
 } from "@/lib/parse-catalog";
@@ -242,7 +243,13 @@ export async function runAmbiguousHierarchy(
   // the feed is unavailable: `scheduleResults` stays empty and every key
   // falls through to the calendar step, exactly as if the check had come
   // back inconclusive.
-  const keysNeedingResolution = uniqueKeys.filter((key) => !decided.has(key));
+  //
+  // A shared-surname player key (isPlayerAmbiguityKey) stops at step 1: only
+  // the user's own answer may choose between two real players. Steps 2-5 are
+  // all about telling leagues apart and have nothing to say about it - both
+  // McCaffreys having a game today is exactly why the question was asked.
+  const teamKeys = uniqueKeys.filter((key) => !isPlayerAmbiguityKey(key));
+  const keysNeedingResolution = teamKeys.filter((key) => !decided.has(key));
   let scheduleResults: Record<string, boolean> = {};
   let scheduleCheckFailed = false;
   // Every key's own withGameToday subset, captured even when inconclusive
@@ -322,7 +329,7 @@ export async function runAmbiguousHierarchy(
   // check could not settle. Resolves only when exactly one candidate is in
   // its calendar season window right now.
   const seasonSignalByKey = new Map<string, AmbiguousOption[]>();
-  for (const key of uniqueKeys) {
+  for (const key of teamKeys) {
     if (decided.has(key)) continue;
     const options = ambiguousOptionsFor(key);
     const inSeason = options.filter((o) => isSportLabelInSeason(o.sport, now));
@@ -356,7 +363,7 @@ export async function runAmbiguousHierarchy(
   const contextDecided = new Map<string, Decision>(); // keyed by `${ambiguousKey}::${capperName}`
   for (const { p, idx } of ambiguousEntries) {
     const key = p.ambiguousKey!;
-    if (decided.has(key)) continue;
+    if (decided.has(key) || isPlayerAmbiguityKey(key)) continue;
     const scopeKey = key + "::" + p.capperName;
     if (contextDecided.has(scopeKey)) continue; // this capper's key already established by an earlier pick of theirs
     const options = ambiguousOptionsFor(key);
@@ -431,6 +438,7 @@ export async function runAmbiguousHierarchy(
   for (const { p, idx } of ambiguousEntries) {
     const key = p.ambiguousKey!;
     if (!picks[idx].ambiguous) continue; // already resolved above
+    if (isPlayerAmbiguityKey(key)) continue;
 
     const options = ambiguousOptionsFor(key);
     const plausible = filterPlausibleCandidates(options, p.ambiguousBetType, p.ambiguousLine);
