@@ -7,7 +7,8 @@
 // parsers directly (surname/roster matching happens server-side, so the list
 // uses full names). "Asks you" rows must parse AND come back ambiguous;
 // "Not yet" rows must not produce a gradable pick. No network, no database.
-import { parseCatalog } from "./parse-catalog";
+import { parseCatalog, parsePickText, resolveAmbiguousPick } from "./parse-catalog";
+import { extractLine } from "./bet-line";
 import { parsePlayerProp, parseTouchdownProp, isAnytimeTdPick } from "./bet-line";
 import { parseMlbPlayerProp } from "./mlb-prop";
 import { parseNhlPlayerProp } from "./nhl-prop";
@@ -88,6 +89,78 @@ function checkExample(row: FormatRow, example: string) {
   }
 }
 
+// A capper's own price is read with or without parentheses. The rule under
+// test: a trailing signed whole number of 100+ is the price; in a spread the
+// first signed number is the line and the second the price; a line alone is
+// never a price; units are never a price.
+function checkOddsForms() {
+  // [text, bet type, odds (null = none in the text), line, units]
+  const cases: [string, string, number | null, number | null, number][] = [
+    ["Yankees ML -132", "MONEYLINE", -132, null, 1],
+    ["Yankees ML +145", "MONEYLINE", 145, null, 1],
+    ["Yankees ML (-132)", "MONEYLINE", -132, null, 1],
+    ["Giants +6.5 -110", "SPREAD", -110, 6.5, 1],
+    ["Giants +6.5 (-110)", "SPREAD", -110, 6.5, 1],
+    ["Giants +6.5", "SPREAD", null, 6.5, 1],
+    ["Over 8.5 -115", "TOTAL", -115, 8.5, 1],
+    ["Detroit -6.5", "SPREAD", null, -6.5, 1],
+    ["Yankees ML -132 2u", "MONEYLINE", -132, null, 2],
+    ["Yankees ML -132 1.5 units", "MONEYLINE", -132, null, 1.5],
+    // Below 100 is not an American price, and a lone signed number is the bet itself.
+    ["Yankees ML -50", "MONEYLINE", null, null, 1],
+    ["Yankees -132", "SPREAD", null, -132, 1],
+  ];
+  for (const [text, betType, odds, line, units] of cases) {
+    const parsed = parsePickText(text);
+    check(
+      `odds form "${text}" -> bet type / odds / line / units`,
+      [parsed.betType, parsed.odds, extractLine(parsed.betType, parsed.cleanDescription), parsed.units],
+      [betType, odds, line, units]
+    );
+  }
+  // A price read from the text is dropped from the stored bet text, like a parenthesised one.
+  check('"Giants +6.5 -110" keeps only the line in its description', parsePickText("Giants +6.5 -110").cleanDescription, "Giants +6.5");
+
+  // End to end through parseCatalog, where the team resolves on its own.
+  const endToEnd: [string, string, number, boolean, number][] = [
+    ["Yankees ML -132", "MONEYLINE", -132, true, 1],
+    ["Yankees ML +145", "MONEYLINE", 145, true, 1],
+    ["Yankees ML (-132)", "MONEYLINE", -132, true, 1],
+    ["Yankees ML -132 2u", "MONEYLINE", -132, true, 2],
+    ["NFL Giants +6.5 -110", "SPREAD", -110, true, 1],
+    ["NFL Giants +6.5 (-110)", "SPREAD", -110, true, 1],
+    ["NFL Giants +6.5", "SPREAD", -110, false, 1],
+    ["Dodgers over 8.5 -115", "TOTAL", -115, true, 1],
+  ];
+  for (const [text, betType, odds, explicit, units] of endToEnd) {
+    const p = catalogLine(text).picks[0];
+    check(
+      `catalog "${text}" -> bet type / odds / explicit / units`,
+      [p?.betType, p?.odds, p?.hasExplicitOdds, p?.units],
+      [betType, odds, explicit, units]
+    );
+  }
+
+  // "Giants +6.5 -110" asks which Giants first; the price is read once it's answered.
+  const giants = catalogLine("Giants +6.5 -110").picks[0];
+  check('"Giants +6.5 -110" still asks which Giants, on the 6.5 line', [(giants?.ambiguous?.length ?? 0) > 1, giants?.ambiguousLine], [true, 6.5]);
+  const nfl = giants?.ambiguous?.find((o) => o.sport === "NFL");
+  if (giants && nfl) {
+    const resolved = resolveAmbiguousPick(giants, nfl);
+    check(
+      '"Giants +6.5 -110" answered NFL -> spread +6.5 at -110',
+      [resolved.betType, resolved.odds, resolved.hasExplicitOdds, extractLine(resolved.betType, resolved.description)],
+      ["SPREAD", -110, true, 6.5]
+    );
+  } else {
+    check('"Giants +6.5 -110" offers an NFL option', Boolean(nfl), true);
+  }
+
+  // "Detroit -6.5" stays a spread with no price, before and after it's answered.
+  const detroit = catalogLine("Detroit -6.5").picks[0];
+  check('"Detroit -6.5" -> spread, no price', [detroit?.betType, detroit?.hasExplicitOdds, detroit?.ambiguousLine], ["SPREAD", false, -6.5]);
+}
+
 function main() {
   const supportedExamples = new Set<string>();
   for (const group of SUPPORTED_PICK_FORMATS) {
@@ -118,6 +191,8 @@ function main() {
   const tipExample = /\(([^)]+)\)/.exec(FORMAT_FOOTER_TIP)?.[1] ?? "";
   const tipPick = catalogLine(tipExample).picks[0];
   check(`footer tip "${tipExample}" resolves without asking`, [tipPick?.sportName, Boolean(tipPick?.ambiguous)], ["NFL", false]);
+
+  checkOddsForms();
 
   console.log(`\n${failures === 0 ? "ALL PASS" : failures + " FAILURE(S)"}`);
   if (failures > 0) process.exit(1);
