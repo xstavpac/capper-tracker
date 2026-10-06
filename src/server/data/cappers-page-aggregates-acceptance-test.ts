@@ -19,8 +19,8 @@ import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, currentStreak, 
 import * as adapter from "@/server/data/pick-aggregates-cappers-adapter";
 import type { LeaderboardEntry } from "@/server/data/cappers";
 import { getCappersPageData, sparklineTone, SPARKLINE_MIN_PICKS, STANDOUT_MIN_GRADED, STAT_WEEKS, getPanelRows, consistencyScore, consistencyTier, type ActiveEntry, type CapperSparkline, type PanelWindow, type StreakEntry } from "@/server/data/cappers-page-aggregates";
-import { risingSeries } from "@/lib/cappers-panels";
-// Hot Hand, Coldest and Rising Fast moved to /dashboard: the page-statement checks for them run
+import { trendSeries } from "@/lib/cappers-panels";
+// Hot Hand and Coldest moved to /dashboard: the page-statement checks for them run
 // against its panels statement (the same SQL fragments).
 import { computeCapperPanels } from "@/server/data/capper-panels";
 import { sparklineLabel } from "@/components/dashboard/capper-sparkline";
@@ -641,7 +641,7 @@ async function main() {
   same("hottest: dashboard statement == dropdown fetch (week)", dashS1.hottest, await streakOf(S1.u, "hottest"));
   same("coldest: dashboard statement == dropdown fetch (week)", dashS1.coldest, await streakOf(S1.u, "coldest"));
   const pageS1 = await getCappersPageData({ userId: S1.u, window: "ALL", min: 0, sort: "roi", fav: false, q: "", page: 1 });
-  check("/cappers no longer carries the moved panels", !("hottest" in pageS1) && !("coldest" in pageS1) && !("rising" in pageS1));
+  check("/cappers no longer carries the moved panels", !("hottest" in pageS1) && !("coldest" in pageS1) && !("falling" in pageS1));
   // Every streak length agrees with the JS definition (stats.ts currentStreak) over the picks of the capper.
   for (const [name, id] of Object.entries(S1.ids)) {
     const picks = await prisma.pick.findMany({ where: { capperId: id } });
@@ -735,11 +735,11 @@ async function main() {
   same("weekly series do not follow the time tab", pageS5tab.overview.weekly, o5.weekly);
   check("active cappers delta does not follow the time tab", pageS5tab.overview.activeCappersDelta === 6);
 
-  // 6. Rising Fast points + results + baseline; Most Consistent deviation, confidence score and tier.
+  // 6. Falling off points + results + baseline; Most Consistent deviation, confidence score and tier.
   const reps = (n: number, s: PickSpec["status"]) => Array.from({ length: n }, () => s);
   const block = (wins: number) => [...reps(wins, W), ...reps(10 - wins, L)];
   const S6 = await scenario("form", [
-    // Recent 10: 8-2 (80%). Baseline 30: alternating W/L (50%). Score +30 points.
+    // Recent 10: 8-2 (80%). Baseline 30: alternating W/L (50%). +30 points: beating their norm, so not falling.
     { name: "Riser", specs: (c) => seq(c, [...reps(8, W), L, L, ...Array.from({ length: 30 }, (_, i) => (i % 2 === 0 ? W : L))], { odds: 100 }) },
     { name: "Flat", specs: (c) => seq(c, [...block(6), ...block(6), ...block(6), ...block(6), ...block(6)], { odds: 100 }) },
     { name: "Wavy", specs: (c) => seq(c, [...block(5), ...block(7), ...block(5), ...block(7), ...block(5)], { odds: 100 }) },
@@ -748,13 +748,13 @@ async function main() {
   const dashS6 = await computeCapperPanels(S6.u);
   // Wavy: last 10 at 50% against 60% over the 40 before; Flat is exactly on its norm, so in neither.
   same("falling: the capper under their baseline, with the negative score", dashS6.falling.map((e) => e.name + " " + e.pts), ["Wavy -10"]);
-  same("rising: only the capper beating their baseline, with the score in points", dashS6.rising.map((e) => e.name + " +" + e.pts), ["Riser +30"]);
-  same("rising: results = the last 10 decided picks, oldest first", dashS6.rising[0]?.results, [false, false, true, true, true, true, true, true, true, true]);
-  same("rising: baseline = the win rate of the picks before those, as a fraction", dashS6.rising[0]?.baseline, 0.5);
-  const lineS6 = risingSeries(dashS6.rising[0]?.results ?? [], dashS6.rising[0]?.baseline ?? 0);
-  same("rising: chart line starts at 0 and adds (result - baseline) x 10 per pick", lineS6, [0, -5, -10, -5, 0, 5, 10, 15, 20, 25, 30]);
-  check("rising: the line's last point is the displayed points", Math.round(lineS6[lineS6.length - 1]) === dashS6.rising[0]?.pts);
-  same("rising: a baseline that is not a round fraction still ends on the score", Math.round(risingSeries([true, true, false, true, true, true, true, false, true, true], 0.51)[10]), 29);
+  same("falling: results = the last 10 decided picks, oldest first", dashS6.falling[0]?.results, [false, false, false, false, false, true, true, true, true, true]);
+  same("falling: baseline = the win rate of the picks before those, as a fraction", dashS6.falling[0]?.baseline, 0.6);
+  const lineS6 = trendSeries(dashS6.falling[0]?.results ?? [], dashS6.falling[0]?.baseline ?? 0);
+  same("falling: chart line starts at 0 and adds (result - baseline) x 10 per pick", lineS6.map((v) => Math.round(v)), [0, -6, -12, -18, -24, -30, -26, -22, -18, -14, -10]);
+  check("falling: the line's last point is the displayed points", Math.round(lineS6[lineS6.length - 1]) === dashS6.falling[0]?.pts);
+  same("a chart line that starts at 0 and adds (result - baseline) x 10 per pick", trendSeries([false, false, true, true, true, true, true, true, true, true], 0.5), [0, -5, -10, -5, 0, 5, 10, 15, 20, 25, 30]);
+  same("a baseline that is not a round fraction still ends on the score", Math.round(trendSeries([true, true, false, true, true, true, true, false, true, true], 0.51)[10]), 29);
   same("consistent: steadiest first, blocks oldest first", pageS6.consistent.map((e) => e.name + " " + e.blocks.join(",")), ["Flat 60,60,60,60,60", "Wavy 50,70,50,70,50"]);
   same("consistent: population standard deviation of the block win %s", pageS6.consistent.map((e) => e.sd), [0, Math.sqrt(96)]);
   same("consistent: confidence = clamp(round(100 - 2.5 * sd)) and its tier", pageS6.consistent.map((e) => consistencyScore(e.sd) + " " + consistencyTier(consistencyScore(e.sd))), ["100 Elite", "76 Steady"]);

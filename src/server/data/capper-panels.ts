@@ -1,23 +1,25 @@
 // The /dashboard panels ("right now": streaks and recent form), all from ONE statement:
-//   Hot Hand | Rising Fast | Best last 20
-//   Coldest  | Falling off | Worst last 20
-// Hot Hand, Coldest and Rising Fast are the panels that used to sit on /cappers, built from the same
-// SQL fragments (cappers-page-aggregates.ts: panelSql, formLookupCte, formTrendCte) on the same
-// roster (test cappers left out). Falling off is Rising Fast's mirror, from the same bounded read.
-// Best / Worst last 20 read each active capper's newest 20 graded picks; this file applies their
-// thresholds. No pick row ever reaches JS.
+//   Hot Hand | League Savant | Best last 20
+//   Coldest  | Falling off   | Worst last 20
+// Hot Hand and Coldest are the panels that used to sit on /cappers, built from the same SQL fragments
+// (cappers-page-aggregates.ts: panelSql, formLookupCte, fallingCte) on the same roster (test cappers
+// left out). League Savant is league-savant.ts's CTEs. Best / Worst last 20 read each active
+// capper's newest 20 graded picks; this file applies their thresholds. No pick row ever reaches JS.
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { round2, SCORECARD_WIN_THRESHOLD, DASHBOARD_REPORTS_CACHE_TTL_SECONDS } from "@/server/data/stats";
 import { ORDER_GRADED_DESC } from "@/server/data/capper-list-aggregates";
-import { formLookupCte, formTrendCte, panelRange, panelSql, risingEntriesFromRows, streakEntriesFromRows } from "@/server/data/cappers-page-aggregates";
-import { DEFAULT_PANEL_WINDOW, LAST20_PANEL_COUNT, type RisingEntry, type StreakEntry } from "@/lib/cappers-panels";
+import { fallingCte, fallingEntriesFromRows, formLookupCte, panelRange, panelSql, streakEntriesFromRows } from "@/server/data/cappers-page-aggregates";
+import { SAVANT_OUTPUTS, savantCtes, savantFromRows, type SavantFeed } from "@/server/data/league-savant";
+import { LIVE_SPORTS } from "@/server/data/odds";
+import { DEFAULT_PANEL_WINDOW, LAST20_PANEL_COUNT, type FallingEntry, type StreakEntry } from "@/lib/cappers-panels";
+import type { LeagueSavant } from "@/lib/league-savant";
 import { cachedByTag } from "@/server/data/cached";
 import { cacheKeys } from "@/lib/cache-keys";
 
 // Best / Worst last 20 only: cappers with no picks logged (datePosted) in this window drop off, and
 // reappear the moment they log a new one. (Hot Hand / Coldest have their own "This week" eligibility;
-// Rising Fast / Falling off have none.)
+// Falling off has none.)
 export const ACTIVITY_WINDOW_DAYS = 14;
 
 // Best/Worst Last-20's window - "last 20 graded picks" is the panel's own name.
@@ -50,9 +52,10 @@ export type CapperPanels = {
   // through /api/cappers/panel, as it always has).
   hottest: StreakEntry[];
   coldest: StreakEntry[];
-  rising: RisingEntry[];
-  // Rising Fast's mirror: `pts` is negative, most negative first.
-  falling: RisingEntry[];
+  // Each in-season league's best cappers this season (league-savant.ts).
+  savant: LeagueSavant;
+  // `pts` is negative, most negative first.
+  falling: FallingEntry[];
   // Best: recent win% at or above BEST_LAST20_MIN_WIN_PCT, best first; Worst: below it, worst
   // first. One pool split in two, so no capper is ever in both. At most LAST20_PANEL_COUNT each
   // (the card shows LAST20_COLLAPSED_COUNT until "See more").
@@ -63,10 +66,10 @@ export type CapperPanels = {
 // The cache slot is chosen by this string alone (cachedByTag's callback text is
 // identical for every user), so every input that changes the result must
 // appear here. Distinct from cacheKeys.dashboard - that one is only the shared
-// invalidation tag. "v3": the shape changed, and an entry cached by a previous
+// invalidation tag. "v4": the shape changed, and an entry cached by a previous
 // deploy must not be read as the new one.
 export function capperPanelsCacheKey(userId: string): string {
-  return `capper-panels:v3:${userId}`;
+  return `capper-panels:v4:${userId}`;
 }
 
 // Reads only Pick rows (plus the roster), so it shares getDashboardSummary's
@@ -77,7 +80,8 @@ export async function getCapperPanels(userId: string): Promise<CapperPanels> {
 }
 
 // The one statement. Exported so tests and measurements run exactly what production runs.
-export function buildCapperPanelsQuery(userId: string, now: Date): Prisma.Sql {
+// `feeds`: the leagues the game feed knows, by feed key; a parameter only so tests can name their own.
+export function buildCapperPanelsQuery(userId: string, now: Date, feeds: readonly SavantFeed[] = LIVE_SPORTS): Prisma.Sql {
   const weekRange = panelRange(DEFAULT_PANEL_WINDOW, now);
   const activityCutoff = new Date(now.getTime() - ACTIVITY_WINDOW_DAYS * 86400000);
   const ctes: [string, Prisma.Sql][] = [
@@ -85,8 +89,7 @@ export function buildCapperPanelsQuery(userId: string, now: Date): Prisma.Sql {
     ["hot", panelSql("hottest", userId, weekRange)],
     ["cold", panelSql("coldest", userId, weekRange)],
     formLookupCte(userId),
-    formTrendCte("rising"),
-    formTrendCte("falling"),
+    fallingCte(),
     // Each active roster capper's newest RECENT_FORM_WINDOW graded picks (WIN / LOSS / PUSH), most
     // recently graded first, as W / L / P counts. One small row per capper with enough of them.
     [
@@ -110,8 +113,9 @@ export function buildCapperPanelsQuery(userId: string, now: Date): Prisma.Sql {
           AND EXISTS (SELECT 1 FROM picks p WHERE p."userId" = ${userId} AND p."capperId" = r.id AND p."datePosted" >= ${activityCutoff.toISOString()}::timestamp)
       `,
     ],
+    ...savantCtes(userId, now, feeds),
   ];
-  const outputs = ["hot", "cold", "rising", "falling", "l20"];
+  const outputs = ["hot", "cold", "falling", "l20", ...SAVANT_OUTPUTS];
   return Prisma.sql`
     WITH ${Prisma.join(
       ctes.map(([name, sql]) => Prisma.sql`${Prisma.raw(name)} AS (${sql})`),
@@ -124,9 +128,9 @@ export function buildCapperPanelsQuery(userId: string, now: Date): Prisma.Sql {
   `;
 }
 
-// `now` is a parameter only so tests can pin it; production passes nothing.
-export async function computeCapperPanels(userId: string, now: Date = new Date()): Promise<CapperPanels> {
-  const rows = await prisma.$queryRaw<{ out: Record<string, any[]> }[]>(buildCapperPanelsQuery(userId, now));
+// `now` and `feeds` are parameters only so tests can pin them; production passes neither.
+export async function computeCapperPanels(userId: string, now: Date = new Date(), feeds: readonly SavantFeed[] = LIVE_SPORTS): Promise<CapperPanels> {
+  const rows = await prisma.$queryRaw<{ out: Record<string, any[]> }[]>(buildCapperPanelsQuery(userId, now, feeds));
   const out = rows[0]?.out ?? {};
 
   const pool: BestLast20Entry[] = (out.l20 ?? []).map((r) => {
@@ -149,8 +153,8 @@ export async function computeCapperPanels(userId: string, now: Date = new Date()
   return {
     hottest: streakEntriesFromRows(out.hot, false),
     coldest: streakEntriesFromRows(out.cold, true),
-    rising: risingEntriesFromRows(out.rising),
-    falling: risingEntriesFromRows(out.falling),
+    savant: savantFromRows(out.sv_leagues, out.savant),
+    falling: fallingEntriesFromRows(out.falling),
     bestLast20: pool.filter(isBest).sort((a, b) => b.weightedScore - a.weightedScore || byName(a, b)).slice(0, LAST20_PANEL_COUNT),
     worstLast20: pool.filter((e) => !isBest(e)).sort((a, b) => a.weightedScore - b.weightedScore || byName(a, b)).slice(0, LAST20_PANEL_COUNT),
   };
