@@ -24,6 +24,8 @@ import type { PickStatus } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { windowTotalsSelect, zeroOddsWinUnitsWon, type WindowTotals } from "@/server/data/capper-list-aggregates";
 import { startOfEasternDay } from "@/lib/dates";
+import { cacheKeys } from "@/lib/cache-keys";
+import { cachedByTag } from "@/server/data/cached";
 import {
   CAPPER_RECENT_LIST_ORDER_BY,
   CAPPER_RECENT_ORDER_BY,
@@ -369,7 +371,35 @@ export function capperPageFromBundle(bundle: Record<string, unknown[]>, params: 
 
 // A `?sport=` the capper has no pick in comes back as selectedSport null with an EMPTY recent list
 // (the SQL filtered on it); the page redirects to All Sports rather than render that.
-export async function getCapperPageData(userId: string, capperId: string, params: CapperPageParams, now: Date = new Date()): Promise<CapperPageView> {
+//
+// Cached per (user, capper, sport, window, recent limit) in the shared Data
+// Cache for CAPPER_PAGE_CACHE_TTL_SECONDS, tagged with the user's dashboard tag
+// - every mutation of that user's picks or cappers already revalidates it
+// (docs/cache-invalidation-contract.md). The cached value is the statement's
+// own jsonb bundle plus the instant it was built for: the mapping below is
+// relative to `now` (windows, "recent"), so a cached bundle is always mapped
+// with the SAME instant its query used, never a later one. A caller that pins
+// `now` (the acceptance tests) is not cached.
+const CAPPER_PAGE_CACHE_TTL_SECONDS = 60;
+
+export function capperPageCacheParams(params: CapperPageParams): string {
+  return JSON.stringify([params.sport ?? "", params.window, params.recentLimit]);
+}
+
+export async function getCapperPageData(userId: string, capperId: string, params: CapperPageParams, now?: Date): Promise<CapperPageView> {
+  const load = async () => {
+    const at = now ?? new Date();
+    return { bundle: await queryCapperPageBundle(userId, capperId, params, at), nowMs: at.getTime() };
+  };
+  const { bundle, nowMs } = now
+    ? await load()
+    : await cachedByTag(cacheKeys.capperPage(userId, capperId, capperPageCacheParams(params)), CAPPER_PAGE_CACHE_TTL_SECONDS, load, [
+        cacheKeys.dashboard(userId),
+      ]);
+  return capperPageFromBundle(bundle, params, new Date(nowMs));
+}
+
+function queryCapperPageBundle(userId: string, capperId: string, params: CapperPageParams, now: Date): Promise<Record<string, unknown[]>> {
   const recent: BundlePart = {
     name: "recent",
     select: capperRecentListSelect({
@@ -382,5 +412,5 @@ export async function getCapperPageData(userId: string, capperId: string, params
     orderBy: CAPPER_RECENT_LIST_ORDER_BY,
   };
   const query = buildCapperDetailBundleQuery(userId, capperId, { window: params.window, categoryWindow: params.window }, now, recent);
-  return capperPageFromBundle(await queryPageBundle(query), params, now);
+  return queryPageBundle(query);
 }

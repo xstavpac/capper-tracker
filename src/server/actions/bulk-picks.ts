@@ -954,6 +954,9 @@ export async function bulkImportParlaysAction(items: BulkImportParlayItem[]): Pr
     }
   }
 
+  // Parlays themselves are in no cached read, but this import can create
+  // cappers, and the cached roster / cappers bundle carry the capper list.
+  revalidateTag(cacheKeys.dashboard(user.id));
   revalidatePath("/picks");
   revalidatePath("/dashboard");
 

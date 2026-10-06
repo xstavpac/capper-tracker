@@ -48,6 +48,9 @@ export async function createCapperAction(formData: FormData): Promise<CreateCapp
     return { success: false, error: message };
   }
 
+  // A new capper changes the cached roster and /cappers bundle (capper count,
+  // new-this-month, the merge tool's list) even with no picks yet.
+  revalidatePickStats(user.id);
   revalidatePath("/cappers");
   revalidatePath("/dashboard");
   return { success: true };

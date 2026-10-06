@@ -19,6 +19,8 @@
 // matches the displayed ROI / units, with NaN - which has no order - last.
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { cacheKeys } from "@/lib/cache-keys";
+import { cachedByTag } from "@/server/data/cached";
 import {
   round2,
   weightedRoiScore,
@@ -676,10 +678,38 @@ function entryOf(r: EntryRow, window: ScorecardWindow, streak: StreakRow | undef
   return { capperId: r.cid, name: r.name, colorTag: r.colorTag, stats, weightedScore: weightedRoiScore(stats), specialist, isFavorite: r.isFavorite };
 }
 
+// How long one user's /cappers bundle (and capper-detail bundle, see
+// capper-detail.ts) may be served from the shared cache. Same value and same
+// invalidation as the dashboard's cached reads.
+export const CAPPER_PAGES_CACHE_TTL_SECONDS = 60;
+
+// Every input that changes the statement, in a fixed order.
+export function cappersPageCacheParams(q: CappersPageQuery): string {
+  return JSON.stringify([q.window, q.league ?? "", q.min, q.sort, q.fav, q.page]);
+}
+
+// The one statement, cached per (user, filters) in the shared Data Cache and
+// tagged with the user's dashboard tag - which every mutation of that user's
+// picks or cappers already revalidates (docs/cache-invalidation-contract.md).
+// What is cached is the statement's own jsonb result, not CappersPageData: the
+// cache stores JSON, and the mapped result holds Maps.
+//
+// Not cached: a search (`q` is free text - unbounded keys, and rarely repeated)
+// and a caller that pins `now` (the acceptance tests).
+async function loadCappersPageBundle(q: CappersPageQuery): Promise<Record<string, any[]>> {
+  const run = async () => {
+    const now = q.now ?? new Date();
+    const rows = await prisma.$queryRaw<{ out: Record<string, any[]> }[]>(buildCappersPageQuery({ ...q, now }));
+    return rows[0]?.out ?? {};
+  };
+  if (q.q !== "" || q.now) return run();
+  return cachedByTag(cacheKeys.cappersPage(q.userId, cappersPageCacheParams(q)), CAPPER_PAGES_CACHE_TTL_SECONDS, run, [
+    cacheKeys.dashboard(q.userId),
+  ]);
+}
+
 export async function getCappersPageData(q: CappersPageQuery): Promise<CappersPageData> {
-  const now = q.now ?? new Date();
-  const rows = await prisma.$queryRaw<{ out: Record<string, any[]> }[]>(buildCappersPageQuery({ ...q, now }));
-  const out = rows[0]?.out ?? {};
+  const out = await loadCappersPageBundle(q);
   const ov = out.ov?.[0] ?? {};
 
   const streaks = new Map<string, StreakRow>((out.st ?? []).map((s: StreakRow) => [s.capperId, s]));
