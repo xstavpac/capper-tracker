@@ -283,7 +283,8 @@ export async function runAmbiguousHierarchy(
   // every undecided key. Nothing is dropped unless the lookup answered AND
   // found at least one active league - a failed or empty lookup must never
   // cost a pick its options - and a key is never left with no candidate.
-  const undecidedKeys = uniqueKeys.filter((key) => !decided.has(key));
+  // Team keys only: a shared-surname player key stops at step 1 (see step 2).
+  const undecidedKeys = uniqueKeys.filter((key) => !decided.has(key) && !isPlayerAmbiguityKey(key));
   if (deps.runLeagueActivityCheck && undecidedKeys.length > 0) {
     const sports = Array.from(new Set(undecidedKeys.flatMap((key) => optionsFor(key).map((o) => o.sport))));
     let activity: Record<string, boolean> = {};
