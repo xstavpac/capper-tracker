@@ -5,7 +5,14 @@ import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
 import { persistFinalScores, gradePendingPicks, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 
-// Page-load grading for /picks and /live/[gameId].
+// On-view grading for /picks and /live/[gameId].
+//
+// It does NOT run during the page render any more. The page decides, from rows
+// it already loaded, whether the viewer has a pending pick whose game is over
+// (lib/gradeable-picks.ts); only then does it mount GradeDuePicks, which calls
+// gradeDuePicksAction after paint, and the action calls gradeUserPagePicks
+// below. Everything in this file is unchanged by that move - same gate, same
+// throttle, same grading - it is only called from the action now.
 //
 // The grade-picks cron (every 15 min) is what grades everyone's picks; this is
 // the opportunistic fast path that lets a viewer see a pick graded within
@@ -135,20 +142,23 @@ export function throttledPersistFinalScores(
 // pending pick in do any work; persist and grade are separate best-effort
 // steps, so a persist failure (score source down, one bad upsert rejecting the
 // batch) never skips grading against GameResult rows that already exist.
+// Resolves the number of picks whose status actually changed, so the caller
+// knows whether anything on screen is now stale.
 export async function gradeUserPagePicks(
   userId: string,
   sportKeys: readonly string[] = RESOLVABLE_SPORT_KEYS,
   deps: PageGradingDeps = defaultDeps,
   windowSeconds: number = PAGE_PERSIST_THROTTLE_SECONDS
-): Promise<void> {
+): Promise<number> {
   let due: Set<string>;
   try {
     due = await deps.dueSportNames(userId, new Date(deps.now()));
   } catch {
-    return; // Best-effort, same as before - don't block the page.
+    return 0; // Best-effort, same as before.
   }
-  if (due.size === 0) return;
+  if (due.size === 0) return 0;
 
+  let graded = 0;
   await Promise.all(
     sportKeys.map(async (sportKey) => {
       const sportName = LIVE_SPORTS.find((s) => s.key === sportKey)?.label;
@@ -159,10 +169,12 @@ export async function gradeUserPagePicks(
         // Live score sources are best-effort - fall through and grade against what's persisted.
       }
       try {
-        await deps.grade(userId, sportName, sportKey);
+        const result = (await deps.grade(userId, sportName, sportKey)) as { graded?: unknown } | null | undefined;
+        if (typeof result?.graded === "number") graded += result.graded;
       } catch {
         // Best-effort.
       }
     })
   );
+  return graded;
 }

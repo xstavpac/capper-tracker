@@ -8,7 +8,9 @@ import {
   getFeedStatusesForPicks,
 } from "@/server/data/picks-summary";
 import { getCappersForUser } from "@/server/data/cappers";
-import { gradeUserPagePicks } from "@/server/data/page-grading";
+import { GradeDuePicks } from "@/components/picks/grade-due-picks";
+import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
+import { gradeablePicks } from "@/lib/gradeable-picks";
 import { getParlaysForUser } from "@/server/data/parlays";
 import { LegStatusButtons } from "@/components/dashboard/leg-status-buttons";
 import { RowDeleteButton } from "@/components/dashboard/row-delete-button";
@@ -132,10 +134,6 @@ export default async function PicksPage({
 }) {
   const user = await requireUser();
 
-  // Grades this user's due pending picks before render - only sports where they
-  // have one, with the score persist throttled fleet-wide (see page-grading.ts).
-  await gradeUserPagePicks(user.id);
-
   const betTypeFilter = (searchParams.betType as BetTypeFilterKey) || undefined;
   const { startDateKey, endDateKey, isRange } = resolveDateFilter(searchParams);
 
@@ -195,6 +193,22 @@ export default async function PicksPage({
       .filter((p) => p.status === "PENDING" && !finalScores.has(p.id))
       .map((p) => ({ id: p.id, sportName: p.sport.name, homeTeam: p.homeTeam, awayTeam: p.awayTeam, gameTime: p.gameTime })),
     now
+  );
+
+  // Grading is not part of this render. If a pending pick on screen belongs to a
+  // game that is already over, GradeDuePicks (below) grades after paint and
+  // refreshes only when a status actually changed - see lib/gradeable-picks.ts.
+  const gradeable = gradeablePicks(
+    picks.map((p) => {
+      const sportKey = LIVE_SPORTS.find((s) => s.label === p.sport.name)?.key ?? null;
+      return {
+        id: p.id,
+        sportKey: sportKey && RESOLVABLE_SPORT_KEYS.includes(sportKey) ? sportKey : null,
+        status: p.status,
+        hasFinalResult: finalScores.has(p.id),
+        feedStatus: feedStatuses.get(p.id)?.status ?? null,
+      };
+    })
   );
 
   // Precomputed for every sport (plus "" for "All sports") so the filter bar
@@ -311,6 +325,7 @@ export default async function PicksPage({
   return (
     <div className="mx-auto max-w-5xl">
       <ImageBanner src={picksBanner} title="Picks" priority />
+      {gradeable.sportKeys.length > 0 && <GradeDuePicks sportKeys={gradeable.sportKeys} dueKey={gradeable.dueKey} />}
       <div className="mb-5">
         <DateNavigator
           dateKey={startDateKey}

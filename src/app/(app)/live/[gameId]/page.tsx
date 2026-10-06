@@ -7,7 +7,8 @@ import {
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
-import { gradeUserPagePicks } from "@/server/data/page-grading";
+import { GradeDuePicks } from "@/components/picks/grade-due-picks";
+import { gradeablePicks } from "@/lib/gradeable-picks";
 import { getPicksForGame } from "@/server/data/picks";
 import { getTeamRecordAsOf, type TeamRecord } from "@/server/data/team-record";
 import { getMlbLiveGameState } from "@/server/data/live-game-state";
@@ -82,15 +83,6 @@ export default async function GameDetailPage({
         </div>
       </div>
     );
-  }
-
-  // A game can go final without the user ever visiting /picks (which is the
-  // only other place grading normally runs) - grade this one sport here too,
-  // so a finished game's picks don't sit stuck on PENDING while its card
-  // already shows FINAL. Scoped to just this game's sport (not the full
-  // RESOLVABLE_SPORT_KEYS loop /picks does) since only one sport is in view.
-  if (RESOLVABLE_SPORT_KEYS.includes(sportMeta.key)) {
-    await gradeUserPagePicks(user.id, [sportMeta.key]);
   }
 
   const odds = await getOddsForSport(sportMeta.key);
@@ -251,8 +243,23 @@ export default async function GameDetailPage({
     score: score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? null,
   };
 
+  // A game can go final without the user ever visiting /picks. Grading is not
+  // part of this render: once this game is final and the viewer still has a
+  // pending pick on it, GradeDuePicks grades after paint (this game's sport
+  // only) and refreshes if a status changed - see lib/gradeable-picks.ts.
+  const gradeable = gradeablePicks(
+    matchedPicks.map((p) => ({
+      id: p.id,
+      sportKey: RESOLVABLE_SPORT_KEYS.includes(sportMeta.key) ? sportMeta.key : null,
+      status: p.status,
+      hasFinalResult: false,
+      feedStatus: isFinal ? "final" : isLive ? "live" : null,
+    }))
+  );
+
   return (
     <div className="mx-auto max-w-2xl">
+      {gradeable.sportKeys.length > 0 && <GradeDuePicks sportKeys={gradeable.sportKeys} dueKey={gradeable.dueKey} />}
       <Link href={backToLiveHref(sportMeta.key, searchParams.view)} className="text-sm text-brand-600">
         &larr; Back to Live
       </Link>

@@ -265,15 +265,57 @@ async function main() {
       /page-grading/.test(src("src/server/data/grading.ts")),
       false
     );
+    // Grading is out of the render path: the pages only decide whether to mount
+    // the after-paint trigger, and the action is the one caller of gradeUserPagePicks.
     for (const page of ["src/app/(app)/picks/page.tsx", "src/app/(app)/live/[gameId]/page.tsx"]) {
       const s = src(page);
-      expect(`${page}: uses gradeUserPagePicks`, /gradeUserPagePicks\(/.test(s), true);
+      expect(`${page}: does not grade during render`, /gradeUserPagePicks|page-grading/.test(s), false);
+      expect(`${page}: decides the trigger with gradeablePicks`, /gradeablePicks\(/.test(s), true);
+      expect(`${page}: mounts GradeDuePicks only when something is gradeable`, /gradeable\.sportKeys\.length > 0 && <GradeDuePicks /.test(s), true);
       expect(
         `${page}: no direct persistFinalScores / gradePendingPicks / regradeFuzzyMatchedPicks`,
         /persistFinalScores|gradePendingPicks|regradeFuzzyMatchedPicks/.test(s),
         false
       );
     }
+    const action = src("src/server/actions/grade-due-picks.ts");
+    expect("gradeDuePicksAction: requires a signed-in user", /await requireUser\(\)/.test(action), true);
+    expect("gradeDuePicksAction: calls gradeUserPagePicks for that user", /gradeUserPagePicks\(user\.id, requested\)/.test(action), true);
+    expect(
+      "gradeDuePicksAction: client sport keys only narrow RESOLVABLE_SPORT_KEYS",
+      /RESOLVABLE_SPORT_KEYS\.filter\(\(k\) => sportKeys\.includes\(k\)\)/.test(action),
+      true
+    );
+    expect(
+      "gradeDuePicksAction: busts the dashboard tag only when a status changed",
+      /if \(graded > 0\) revalidateTag\(cacheKeys\.dashboard\(user\.id\)\)/.test(action),
+      true
+    );
+  }
+
+  // ---- 13. gradeUserPagePicks reports how many picks changed status ----
+  {
+    nextScenario();
+    const { deps } = makeDeps({
+      due: ["MLB", "NFL"],
+      grade: async (_u, sportName) => (sportName === "MLB" ? { graded: 3, notMatched: 1 } : { graded: 2, notMatched: 0 }),
+    });
+    expect("returns the summed graded count", await gradeUserPagePicks("u1", [MLB, NFL, NBA], deps, WINDOW), 5);
+  }
+  {
+    nextScenario();
+    const { deps } = makeDeps({ due: [] });
+    expect("returns 0 when nothing is due", await gradeUserPagePicks("u1", [MLB], deps, WINDOW), 0);
+  }
+  {
+    nextScenario();
+    const { deps } = makeDeps({
+      due: ["MLB"],
+      grade: async () => {
+        throw new Error("grade failed");
+      },
+    });
+    expect("returns 0 when grading throws (best-effort)", await gradeUserPagePicks("u1", [MLB], deps, WINDOW), 0);
   }
 
   if (failures > 0) {

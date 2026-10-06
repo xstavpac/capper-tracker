@@ -39,8 +39,9 @@ revalidateTag(cacheKeys.dashboard(userId));
 
 The `stats` server actions do this through the shared `revalidatePickStats(userId)`
 helper (`server/actions/picks.ts`, `server/actions/cappers.ts`). The 60 s TTL
-is a backstop for the one path that structurally cannot tag (opportunistic
-page-load grading, which runs during render where `revalidateTag` throws).
+is a backstop only; every path below tags. (On-view grading used to be the
+exception: it ran during render, where `revalidateTag` throws. It now runs in
+a server action after paint - see P9.)
 
 Tag correctness is by construction: the string passed to `revalidateTag` and
 the string the cache registers are the same `cacheKeys.*(userId)` call.
@@ -58,7 +59,7 @@ the string the cache registers are the same `cacheKeys.*(userId)` call.
 | P6 | `deleteCapperAction` → `deleteCapper` (`capper.delete` → `Pick.onDelete: Cascade`) | N picks deleted | ✅ `revalidatePickStats(user.id)` in the action |
 | **P7** | **`deletePickAction` → `deletePick` (`pick.deleteMany { id, userId }`)** | **1 pick deleted** | **✅ `revalidatePickStats(user.id)` in the action** |
 | P8 | Cron `GET /api/cron/grade-picks` → `gradeAllPendingPicks` + `regradeAllFuzzyMatchedPicks` (`pick.update` ×N, all users) | N picks | ✅ per-`changedUserId` `revalidateTag` loop in the route — only users whose pick status actually changed, never a global flush |
-| P9 | Page-load grading: `/picks` + `/live/[gameId]` render → `gradePendingPicks` + `regradeFuzzyMatchedPicks` | few picks | ⚠️ **relies on the 60 s TTL** — `revalidateTag` is illegal during render; opportunistic and best-effort, and the page it runs on is not cached |
+| P9 | On-view grading: `/picks` + `/live/[gameId]` mount `GradeDuePicks` when a loaded pending pick's game is over (`lib/gradeable-picks.ts`) → `gradeDuePicksAction` → `gradeUserPagePicks` → `gradePendingPicks` | few picks | ✅ `revalidateTag` in the action, only when a status actually changed. Not part of the render any more. |
 | P10 | `prisma/seed-dev.ts` (`pick.deleteMany` + `pick.create`) | — | N/A — local dev script, never prod, no running server |
 | P11 | `.scratch-reinsert-recovery.mjs` (`pick.createMany`) | — | N/A — historical one-off operator script |
 
