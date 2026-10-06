@@ -5,6 +5,17 @@
 // (odds, liveScores - see ttl-memo.ts).
 export const cacheKeys = {
   dashboard: (userId: string) => `dashboard:${userId}`,
+  // Per-user reads that are invalidated by exactly the mutations the dashboard
+  // is (any change to the user's picks or cappers), so they carry their own key
+  // and the dashboard(userId) TAG - see docs/cache-invalidation-contract.md.
+  // `params` is every input that changes the result, already serialized.
+  cappersPage: (userId: string, params: string) => `cappers-page:${userId}:${params}`,
+  capperPage: (userId: string, capperId: string, params: string) => `capper-page:${userId}:${capperId}:${params}`,
+  cappersWithPickCounts: (userId: string) => `cappers-with-pick-counts:${userId}`,
+  // Every feature flag with the users it is switched on for - one entry shared
+  // by all users (see feature-flags.ts). Nothing writes flags at request time
+  // (they are flipped in SQL), so there is no revalidateTag for it: TTL only.
+  featureFlags: () => "feature-flags:all",
   // One /cappers panel at one window for one user (the dropdown fetch, api/cappers/panel).
   cappersPanel: (userId: string, panel: string, window: string) => `cappers-panel:${userId}:${panel}:${window}`,
   // Dated: the underlying OddsSnapshot row is itself (sportKey, fetchDate)-

@@ -5,7 +5,7 @@ import { ParlayPoolProvider } from "@/components/parlay/parlay-pool-context";
 import { ParlaySlipNotice } from "@/components/parlay/parlay-slip-notice";
 import { getLiveTickerGames } from "@/server/data/live-ticker";
 import { requireUser } from "@/server/auth";
-import { isFeatureEnabledForUser, ZONE_MODEL_FLAG_KEY, IMPORT_SKIPPED_LINES_FLAG_KEY } from "@/server/data/feature-flags";
+import { getNavFeatureFlags, ZONE_MODEL_FLAG_KEY, IMPORT_SKIPPED_LINES_FLAG_KEY } from "@/server/data/feature-flags";
 
 // Every route under here needs a live, per-request session - never
 // statically prerender them. Without this, Next's build-time trial-render
@@ -16,10 +16,12 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const [user, tickerGames] = await Promise.all([requireUser(), getLiveTickerGames()]);
-  const [showZoneModel, showImportSkippedLines] = await Promise.all([
-    isFeatureEnabledForUser(ZONE_MODEL_FLAG_KEY, user.id),
-    isFeatureEnabledForUser(IMPORT_SKIPPED_LINES_FLAG_KEY, user.id),
-  ]);
+  // Sidebar visibility only, from the shared flag snapshot (no per-request
+  // query). The gated pages do their own uncached check - see feature-flags.ts.
+  const [showZoneModel, showImportSkippedLines] = await getNavFeatureFlags(
+    [ZONE_MODEL_FLAG_KEY, IMPORT_SKIPPED_LINES_FLAG_KEY],
+    user.id
+  );
 
   return (
     <ThemeProvider initialTheme={user.themePreference}>

@@ -2,6 +2,8 @@
 import { Prisma, type Source } from "@prisma/client";
 import { findOrCreateCapper, findCapperNameCollision } from "@/server/data/capper-find-or-create";
 import { normalizeName, duplicateNameDistance } from "@/lib/fuzzy-match";
+import { cacheKeys } from "@/lib/cache-keys";
+import { cachedByTag } from "@/server/data/cached";
 import {
   computeStats,
   computeSpecialistTag,
@@ -297,7 +299,17 @@ export type CapperSummary = { id: string; name: string; pickCount: number };
 
 // Every one of a user's cappers with their pick count, alphabetical - backs
 // the merge tool's manual "pick any two cappers" selector.
+//
+// Cached per user in the shared Data Cache (60 s), tagged with the user's
+// dashboard tag: it changes only when the user's cappers or picks do, and every
+// such mutation revalidates that tag (docs/cache-invalidation-contract.md).
 export async function getCappersWithPickCounts(userId: string): Promise<CapperSummary[]> {
+  return cachedByTag(cacheKeys.cappersWithPickCounts(userId), 60, () => loadCappersWithPickCounts(userId), [
+    cacheKeys.dashboard(userId),
+  ]);
+}
+
+async function loadCappersWithPickCounts(userId: string): Promise<CapperSummary[]> {
   const cappers = await prisma.capper.findMany({
     where: { userId },
     // Only what CapperSummary carries: the full capper row (photo, notes, source, ...) was
