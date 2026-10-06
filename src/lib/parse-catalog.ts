@@ -2739,6 +2739,8 @@ const NAME_SHAPE = /^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/;
 
 // A full personal name and nothing else: two to four words, letters only.
 const ROSTER_NAME_SHAPE = /^[A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*){1,3}$/;
+// A name of any length, surname alone included ("Gibbs").
+const BARE_NAME_SHAPE = /^[A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*){0,3}$/;
 
 // Text that is only a market, line, odds or stake - no team or player in it
 // ("+21.5", "Moneyline", "Over 8.5 -110 (2u)").
@@ -2979,8 +2981,15 @@ export function parseCatalog(
     // A bare player name is the subject of a prop whose market sits on the
     // next line ("James Cook" / "Touchdown"): the two are read as one line.
     // With no such next line there is no bet to read - surfaced, never a header.
-    if (barePlayer) {
-      const player = line.replace(/^[^\w]+/, "").trim();
+    //
+    // The join does not depend on the roster (it can be missing: a failed
+    // fetch, an unloaded table, a player outside it): any bare name directly
+    // above a market that names no subject of its own is that market's
+    // subject, since a capper's header is followed by picks that do name one.
+    // A bare name with a complete pick under it is only known to be a player
+    // from the roster; without it that line is a header, as it always was.
+    const player = line.replace(/^[^\w]+/, "").trim();
+    if (barePlayer || (BARE_NAME_SHAPE.test(player) && !bareSubject && !hasBetSignal(player))) {
       const next = rawLines[i + 1];
       const joined = next ? `${player} ${next}` : "";
       const joinedProp = joined ? parseNflNhlPlayerProp(joined) ?? parseSupportedMlbProp(joined) : null;
@@ -2988,6 +2997,8 @@ export function parseCatalog(
         rawLines[i + 1] = joined;
         continue;
       }
+    }
+    if (barePlayer) {
       unresolved.push(player);
       unresolvedCapperNames.push(currentCapper || "Unknown");
       continue;

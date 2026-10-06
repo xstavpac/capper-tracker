@@ -212,8 +212,31 @@ expect(
   run("Porter Picks\nJames Cook Touchdown").unresolved,
   [["Porter Picks", "James Cook Touchdown"]]
 );
+// The roster can be missing in production (failed fetch, unloaded table) and
+// only holds NFL QB/RB/WR/TE. The join must not depend on it.
 expect(
-  "with no roster available a bare name is still read as a header (nothing identifies it as a player)",
+  'with no roster: "James Cook" / "Touchdown" still join into one line under the active capper',
+  run("Porter Picks\nYankees ML\nJames Cook\nTouchdown\nDodgers ML", [], null),
+  only(
+    [
+      ["Porter Picks", "MLB", "MONEYLINE", "Yankees ML", ["yankees"]],
+      ["Porter Picks", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]],
+    ],
+    [["Porter Picks", "James Cook Touchdown"]]
+  )
+);
+expect(
+  "with no roster: a bare surname above a yardage market joins too, even opening a block",
+  run("Porter Picks\nYankees ML\n\nGibbs\nOver 65.5 Rushing Yards", [], null).unresolved,
+  [["Porter Picks", "Gibbs Over 65.5 Rushing Yards"]]
+);
+expect(
+  "with no roster: a header above a pick that names its own player is still a header",
+  run("Porter Picks\nYankees ML\n\nBambino Bets\nJames Cook Touchdown", [], null).unresolved,
+  [["Bambino Bets", "James Cook Touchdown"]]
+);
+expect(
+  "with no roster available a bare name above a complete pick is still read as a header (nothing identifies it as a player)",
   run("Porter Picks\nYankees ML\n\nJosh Allen\nDodgers ML", [], null).picks.map((p) => p[0]),
   ["Porter Picks", "Josh Allen"]
 );
