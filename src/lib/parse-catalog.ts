@@ -1858,6 +1858,24 @@ export function parsePickText(description: string): {
   let cleanDescription = description.replace(/\([^)]*\)/g, "");
   if (bareUnitPhrase) cleanDescription = cleanDescription.replace(bareUnitPhrase, "");
   cleanDescription = cleanDescription.replace(/\s{2,}/g, " ").trim();
+  // Odds written without parentheses: "Yankees ML -132", "Giants +6.5 -110",
+  // "Over 8.5 -115". Only when no parenthesised price was found (that form
+  // keeps winning), and only a TRAILING signed whole number that is a valid
+  // American price (|value| >= 100) - so a spread line ("Detroit -6.5") can
+  // never be read as odds. In "Giants +6.5 -110" the first signed number is
+  // the line and this second one the price. With nothing else naming the bet
+  // ("Yankees -132") it is a moneyline price, not a 132-point spread: once the
+  // price is removed, the bare team name falls to the MONEYLINE default below.
+  // Units were stripped above, so "Yankees ML -132 2u" ends in the price here.
+  // Removed from the description the same way a parenthesised price is, so
+  // the stored bet text carries only the line.
+  if (odds === null) {
+    const trailing = cleanDescription.match(/^(.*\S)\s+([+-]\d{3,})$/);
+    if (trailing && Math.abs(parseInt(trailing[2], 10)) >= 100) {
+      odds = parseInt(trailing[2], 10);
+      cleanDescription = trailing[1];
+    }
+  }
   // Which slice of the game this pick is scoped to: F5 / first half (both map
   // to FIRST_HALF), second half, an individual quarter (NFL/NBA/WNBA/NCAAF),
   // or an individual period (NHL). One shared classifier (bet-line.ts) so the

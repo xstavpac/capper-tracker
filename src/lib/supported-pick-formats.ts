@@ -86,9 +86,8 @@ export const SUPPORTED_PICK_FORMATS: FormatGroup[] = [
       },
       {
         market: "With the capper's own odds",
-        examples: ["Yankees ML (-132)"],
+        examples: ["Yankees ML -132", "Yankees ML (-132)"],
         status: "supported",
-        note: "odds go in parentheses",
         check: { via: "catalog", betType: "MONEYLINE", sport: "MLB", explicitOdds: -132 },
       },
       {

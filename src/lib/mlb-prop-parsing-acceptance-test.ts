@@ -149,7 +149,7 @@ const EXPLICIT: [string, string][] = [
   ["MLB Logan Webb u17.5 outs recorded", "Logan Webb u17.5 outs recorded"],
   ["MLB Aaron Judge 2+ total bases", "Aaron Judge Over 1.5 total bases"],
   ["MLB Juan Soto 1+ hits", "Juan Soto Over 0.5 hits"],
-  ["MLB Juan Soto 1+ BB -120", "Juan Soto Over 0.5 BB -120"],
+  ["MLB Juan Soto 1+ BB -120", "Juan Soto Over 0.5 BB"], // trailing -120 is read as the odds, not kept in the bet text
   ["MLB Kyle Schwarber 1+ runs scored", "Kyle Schwarber Over 0.5 runs scored"],
   ["MLB Pete Alonso 2+ RBI", "Pete Alonso Over 1.5 RBI"],
   ["MLB Aaron Judge to hit a home run", "Aaron Judge Over 0.5 Home Runs"],
