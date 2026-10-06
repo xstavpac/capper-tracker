@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { getRecordColor, type CategoryBreakdownItem, type PickCategoryKey } from "@/server/data/stats";
-import type { CategoryLeaderboardEntry } from "@/components/dashboard/category-breakdown";
+import { getRecordColor, type CategoryBreakdownItem, type CategoryLeaderboardEntry, type PickCategoryKey } from "@/server/data/stats";
 import { CategoryCard } from "@/components/dashboard/category-card";
 import { GREEN, PanelShell, RED, TINTS } from "@/components/dashboard/panel-shell";
 import { TargetIcon } from "@/components/dashboard/cappers-icons";

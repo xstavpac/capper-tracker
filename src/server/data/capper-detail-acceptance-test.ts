@@ -14,7 +14,7 @@
 // unless DATABASE_URL is local.
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, type ScorecardWindow } from "@/server/data/stats";
+import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, unitsWonOnBet, type ScorecardWindow } from "@/server/data/stats";
 import { capperRecentPicksRange, getCapperDetailData, getCapperPageData, type CapperDetailParams } from "@/server/data/capper-detail";
 import { computeCapperDetailLegacy, firstDiff, loadLegacyCapperPicks } from "@/server/data/capper-detail-legacy";
 import { getCappersWithPickCounts } from "@/server/data/cappers";
@@ -354,6 +354,26 @@ async function main() {
     check("page view: every sport x window equals legacy, sports sum to All Sports, recents are the selection's newest", bad === 0, `${bad} differ; first: ${first}`);
     const unknown = await getCapperPageData(userId, capperId, { sport: "Curling", window: "ALL", recentLimit: 10 }, NOW);
     check("page view: a sport the capper lacks resolves to All Sports (null)", unknown.selectedSport === null);
+
+    // The banner's two additions: the PENDING count, and the best market - the tile with the most
+    // net units per (graded + 20), re-derived here from the raw picks' stored category.
+    const allTime = await getCapperPageData(userId, capperId, { window: "ALL", recentLimit: 10 }, NOW);
+    check("page view: pending count is the capper's PENDING picks", allTime.pendingPickCount === rows.filter((p) => p.status === "PENDING").length && allTime.pendingPickCount > 0, String(allTime.pendingPickCount));
+    let bestBad = "";
+    for (const sport of [undefined, ...allTime.sports]) {
+      const v = sport === undefined ? allTime : await getCapperPageData(userId, capperId, { sport, window: "ALL", recentLimit: 10 }, NOW);
+      const scored = v.tiles.map((t) => {
+        const net = rows
+          .filter((p) => p.category === t.key && (sport === undefined || p.sport.name === sport))
+          .reduce((a, p) => a + (p.status === "WIN" ? unitsWonOnBet(p.units, p.odds) : p.status === "LOSS" ? -p.units : 0), 0);
+        return { key: t.key, score: net / (t.count + 20) };
+      });
+      const expected = scored.reduce<(typeof scored)[number] | null>((b, s) => (b === null || s.score > b.score ? s : b), null);
+      if (v.tiles.length === 0 || v.bestMarket?.key !== expected?.key || !v.tiles.includes(v.bestMarket!)) bestBad ||= `${sport}: ${v.bestMarket?.key} vs ${expected?.key}`;
+    }
+    check("page view: best market is the tile with the most net units per (graded + 20), All Sports and each sport", bestBad === "", bestBad);
+    const none = await getCapperPageData(userId, `${PREFIX}capper-pending`, { window: "ALL", recentLimit: 10 }, NOW);
+    check("page view: no graded picks -> no best market, 5 pending", none.bestMarket === null && none.pendingPickCount === 5);
   }
   {
     // A second capper of the same user must never leak into the first's numbers.
