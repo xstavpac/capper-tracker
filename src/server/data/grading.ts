@@ -821,7 +821,9 @@ function rowFor<T extends { espnPlayerId: string | null; playerName: string; tea
 // anytime-TD market (kept as broad as it always was: any player with any
 // stat line is gradeable).
 //
-// A name that matches nobody in the box score is not automatically "not found":
+// A name that matches nobody in the box score and 2+ players on the cached
+// roster (a bare shared surname) stays PENDING with a reason naming them.
+// Otherwise a name that matches nobody in the box score is not automatically "not found":
 // if the cached roster resolves it (exact or bare-surname only - never a fuzzy
 // hit) to EXACTLY ONE real ESPN id, that player is on one of this game's two
 // teams, the game is explicitly final with a complete box score, and that id
@@ -875,6 +877,17 @@ async function locateNflPlayer(
       (r) => r.externalPlayerId,
       { getLastName: (r) => r.lastName, allowFuzzy: false }
     );
+    // A name 2+ rostered players share (a bare "McCaffrey") that this game's
+    // own box score didn't settle: never pick one, and say why it's stuck.
+    if (rosterHit.status === "many") {
+      return fail(
+        '"' +
+          playerName +
+          '" matches more than one rostered player (' +
+          rosterHit.items.map((r) => r.playerName + ", " + r.team + " " + r.position).join("; ") +
+          ") and this game's box score doesn't settle which - grade it manually"
+      );
+    }
     if (rosterHit.status !== "one" || !rosterHit.item.externalPlayerId) return notFound();
     const rp = rosterHit.item;
 

@@ -202,7 +202,10 @@ function main() {
   check("goalie saves resolves", recovered1("Arturs Silovs over 23.5 saves"),
     { sport: "NHL", betType: "PLAYER_PROP", team: "pittsburgh penguins", desc: "Arturs Silovs over 23.5 saves", still: 0 });
   check("first goal scorer resolves", recovered1("Koivunen first goal scorer").sport, "NHL");
-  check("surname collision (two Johnsons) stays unresolved", recovered1("Johnson over 2.5 shots on goal"), { still: 1 });
+  check("surname collision (two Johnsons) asks which player, never guessed",
+    recover("Johnson over 2.5 shots on goal").recovered.map((x) => [x.teamNicknames, x.ambiguous?.map((o) => o.label)]),
+    [[[], ["Jack Johnson — Sabres D", "Erik Johnson — Bruins D"]]]);
+  check("...but a sport-less points line with a shared surname stays unresolved (no NHL evidence)", recovered1("Johnson over 0.5 points"), { still: 1 });
   check("full name disambiguates the collision", recovered1("Jack Johnson over 2.5 shots on goal").team, "buffalo sabres");
   check("unknown player stays unresolved", recovered1("Zed Nobody over 2.5 shots on goal"), { still: 1 });
   check("points with a unique NHL roster hit is recovered as NHL", recovered1("Malkin over 0.5 points").sport, "NHL");

@@ -1,7 +1,14 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
-import { parseCatalog, resolveAmbiguousPick, type AmbiguousOption, type ParsedPick, type ParsedParlay } from "@/lib/parse-catalog";
+import {
+  parseCatalog,
+  resolveAmbiguousPick,
+  isPlayerAmbiguityKey,
+  type AmbiguousOption,
+  type ParsedPick,
+  type ParsedParlay,
+} from "@/lib/parse-catalog";
 import { autoResolveAmbiguousPicks } from "@/lib/resolve-ambiguous-catalog";
 import { importRowCapError } from "@/lib/import-limits";
 import {
@@ -737,14 +744,25 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
               {ambiguousGroups.map(({ key, options, sampleRaw, count }) => (
                 <div key={"amb-" + key} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
                   <div className="font-medium">
-                    "{sampleRaw}"{count > 1 && " (+" + (count - 1) + " more " + key + " pick" + (count - 1 === 1 ? "" : "s") + " in this paste)"}
+                    "{sampleRaw}"
+                    {count > 1 &&
+                      " (+" +
+                        (count - 1) +
+                        " more " +
+                        (isPlayerAmbiguityKey(key) ? "" : key + " ") +
+                        "pick" +
+                        (count - 1 === 1 ? "" : "s") +
+                        (isPlayerAmbiguityKey(key) ? " with this name" : "") +
+                        " in this paste)"}
                   </div>
                   <div className="mt-0.5">
                     {options.length === 1
                       ? "Line plausibility narrowed this to " +
                         options[0].label +
                         ", but another signal disagreed - confirm below."
-                      : "Ambiguous team - could mean " + options.map((o) => o.label).join(" or ") + "."}
+                      : isPlayerAmbiguityKey(key)
+                        ? "More than one player has this name - which one?"
+                        : "Ambiguous team - could mean " + options.map((o) => o.label).join(" or ") + "."}
                   </div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {options.map((opt) => (
@@ -759,9 +777,13 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                     ))}
                   </div>
                   <div className="mt-1 text-amber-600 dark:text-amber-400">
-                    {count > 1
-                      ? "Answering once resolves every " + key + " pick in this paste."
-                      : "Or edit the text above to specify the city, then preview again."}
+                    {isPlayerAmbiguityKey(key)
+                      ? count > 1
+                        ? "Answering once resolves every pick with this name in this paste."
+                        : "Or edit the text above to add the first name, then preview again."
+                      : count > 1
+                        ? "Answering once resolves every " + key + " pick in this paste."
+                        : "Or edit the text above to specify the city, then preview again."}
                   </div>
                 </div>
               ))}
@@ -1084,8 +1106,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
           {result.skippedAmbiguous.length > 0 && (
             <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
               Skipped {result.skippedAmbiguous.length} pick
-              {result.skippedAmbiguous.length === 1 ? "" : "s"} with an ambiguous team name - they
-              were NOT imported (the &quot;which team?&quot; prompt was left unanswered):
+              {result.skippedAmbiguous.length === 1 ? "" : "s"} with an ambiguous team or player name - they
+              were NOT imported (the &quot;which one?&quot; prompt was left unanswered):
               <ul className="mt-1 list-disc pl-4">
                 {result.skippedAmbiguous.map((d, i) => (
                   <li key={i}>{d}</li>

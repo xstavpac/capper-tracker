@@ -97,7 +97,7 @@ export function indexNflBoxScore(espnSummaryResponse: unknown): NflBoxIndex | nu
 
 export type NameMatch<T> =
   | { status: "one"; item: T; tier: "exact" | "fuzzy" | "surname" }
-  | { status: "many" }
+  | { status: "many"; items: T[] }
   | { status: "none" };
 
 function lastWord(full: string): string {
@@ -137,7 +137,7 @@ export function matchNflPlayerName<T>(
   for (const { tier, hits } of tiers) {
     const d = distinct(hits);
     if (d.length === 1) return { status: "one", item: d[0], tier };
-    if (d.length > 1) return { status: "many" };
+    if (d.length > 1) return { status: "many", items: d };
   }
   return { status: "none" };
 }

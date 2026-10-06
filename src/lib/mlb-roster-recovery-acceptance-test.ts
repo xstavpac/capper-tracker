@@ -5,8 +5,9 @@
 //
 // Pins: roster extraction (use-name first names, every position kept, ids as strings); the name matcher's
 // tiers (accent folding, middle initials, first-name short forms, bare surnames) and its refusal to guess
-// a collision (TWO real Max Muncys, TWO real Jose Fermins); position-aware resolution; team-context-only
-// tie-breaking; the cross-sport guard for "hits"; and the recovery pass wiring.
+// a collision (TWO real Max Muncys, TWO real Jose Fermins); position-aware resolution; the shared-name rule
+// (a complete slate with exactly one candidate's team on it, otherwise the "which player?" prompt - never
+// paste context); the cross-sport guard for "hits"; and the recovery pass wiring.
 import fs from "node:fs";
 import path from "node:path";
 import { extractMlbRosterPlayers, MLB_TEAM_IDS } from "@/server/data/mlb-roster";
@@ -75,8 +76,9 @@ check("typo tolerated (one edit) by the fuzzy tier", m("Shohei Ohtanni"), ["one"
 check("a different first name with the same surname is NOT matched (Zack Muncy)", m("Zack Muncy"), ["none"]);
 
 // ---- position-aware resolution -------------------------------------------------------------------------------------------
-const res = (line: string, relevant: string[] = [], paste: string[] = [], other: RosterPlayer[][] = []) => {
-  const r = resolveMlbPropAgainstRoster(line, roster, relevant, paste, other);
+// `slateTeams` is a COMPLETE MLB slate unless `complete` says otherwise; omitted means no slate at all.
+const res = (line: string, slateTeams?: string[], other: RosterPlayer[][] = [], complete = true) => {
+  const r = resolveMlbPropAgainstRoster(line, roster, slateTeams ? { teams: slateTeams, complete } : undefined, other);
   return r.status === "resolved" ? ["resolved", r.playerName, r.team] : r.status === "ambiguous" ? ["ambiguous", r.matches.map((x) => x.team).sort()] : ["unresolved"];
 };
 check("alias + recovery: 'Michael Trout 2+ hits' resolves the Angels' Mike Trout", res("Michael Trout 2+ hits"), ["resolved", "Mike Trout", "Los Angeles Angels"]);
@@ -88,22 +90,31 @@ check("two-way player resolves on both sides (TWP fits pitcher and hitter market
 check("hitter market resolves a hitter (Jeremy Pena)", res("Jeremy Pena 1+ hits"), ["resolved", "Jeremy Peña", "Houston Astros"]);
 check("accent-free typed + every market shape resolves (Velazquez TB / HR / RBI)", ["Nelson Velazquez o3.5 TB", "Nelson Velazquez to hit a home run", "Nelson Velazquez 2+ RBI"].map((l) => res(l)[0]), ["resolved", "resolved", "resolved"]);
 
-// ---- collisions need team context, and only what the capper/board actually supplied --------------------------------
-check("Max Muncy with no context -> ambiguous (never guessed)", res("Max Muncy 1+ hits"), ["ambiguous", ["Athletics", "Los Angeles Dodgers"]]);
-check("bare 'Muncy' with no context -> ambiguous", res("Muncy over 0.5 walks")[0], "ambiguous");
-check("paste context (the capper named the Dodgers elsewhere in the paste) breaks the tie", res("Max Muncy 1+ hits", [], ["dodgers"]), ["resolved", "Max Muncy", "Los Angeles Dodgers"]);
-check("paste context with the Athletics picks the Athletics' Muncy", res("Max Muncy 1+ hits", [], ["athletics"]), ["resolved", "Max Muncy", "Athletics"]);
-check("the live slate breaks the tie when only ONE Muncy's team plays", res("Max Muncy 1+ hits", ["Athletics", "Houston Astros"]), ["resolved", "Max Muncy", "Athletics"]);
-check("the live slate does NOT break it when both teams play", res("Max Muncy 1+ hits", ["Athletics", "Los Angeles Dodgers"]), ["ambiguous", ["Athletics", "Los Angeles Dodgers"]]);
-check("paste context naming neither Muncy's team leaves it ambiguous", res("Max Muncy 1+ hits", [], ["astros"])[0], "ambiguous");
+// ---- a shared name is never guessed: only a complete slate with exactly one candidate's team on it settles it ----
+check("Max Muncy with no slate -> ambiguous (never guessed)", res("Max Muncy 1+ hits"), ["ambiguous", ["Athletics", "Los Angeles Dodgers"]]);
+check("bare 'Muncy' with no slate -> ambiguous", res("Muncy over 0.5 walks")[0], "ambiguous");
+check("complete slate, only the Athletics play -> the Athletics' Muncy", res("Max Muncy 1+ hits", ["Athletics", "Houston Astros"]), ["resolved", "Max Muncy", "Athletics"]);
+check("complete slate, only the Dodgers play -> the Dodgers' Muncy", res("Muncy 1+ hits", ["Los Angeles Dodgers", "Houston Astros"]), ["resolved", "Max Muncy", "Los Angeles Dodgers"]);
+check("complete slate, both teams play -> ambiguous", res("Max Muncy 1+ hits", ["Athletics", "Los Angeles Dodgers"]), ["ambiguous", ["Athletics", "Los Angeles Dodgers"]]);
+check("complete slate, neither team plays -> ambiguous", res("Max Muncy 1+ hits", ["Houston Astros"])[0], "ambiguous");
+check("the same one-team slate NOT known to be complete -> ambiguous (a failed/partial lookup decides nothing)", res("Max Muncy 1+ hits", ["Athletics", "Houston Astros"], [], false), ["ambiguous", ["Athletics", "Los Angeles Dodgers"]]);
+{
+  const r = resolveMlbPropAgainstRoster("Max Muncy 1+ hits", roster);
+  check("a shared name is reported as a question for the user, with each candidate's position and id", r.status === "ambiguous" ? [r.reason, r.typedName, r.matches.every((x) => x.position && x.externalPlayerId)] : r.status, ["shared-name", "Max Muncy", true]);
+}
 check("Jose Fermin: two real players (Angels P, Cardinals LF) - the market's position picks the one that fits", [res("Jose Fermin over 0.5 Ks"), res("Jose Fermin 1+ hits")], [["resolved", "José Fermin", "Los Angeles Angels"], ["resolved", "José Fermín", "St. Louis Cardinals"]]);
 
 // ---- cross-sport guard: bare hits/runs need roster evidence, and a name in another sport's roster is unsafe ----------------
 const nhlLike: RosterPlayer[] = [{ playerName: "Jeremy Pena", firstName: "Jeremy", lastName: "Pena", team: "Pittsburgh Penguins", position: "C", externalPlayerId: "nhl-1" }];
-check("hits: a name that ALSO matches the NHL roster is ambiguous between sports", res("Jeremy Pena 1+ hits", [], [], [nhlLike]), ["ambiguous", ["Houston Astros"]]);
-check("runs: same guard", res("Jeremy Pena over 0.5 runs", [], [], [nhlLike])[0], "ambiguous");
-check("unambiguous MLB vocabulary (total bases) is not blocked by another sport's roster", res("Jeremy Pena o1.5 TB", [], [], [nhlLike]), ["resolved", "Jeremy Peña", "Houston Astros"]);
-check("hits with a name only MLB has resolves", res("Jeremy Pena 1+ hits", [], [], [[]]), ["resolved", "Jeremy Peña", "Houston Astros"]);
+check("hits: a name that ALSO matches the NHL roster is ambiguous between sports", res("Jeremy Pena 1+ hits", undefined, [nhlLike]), ["ambiguous", ["Houston Astros"]]);
+check("runs: same guard", res("Jeremy Pena over 0.5 runs", undefined, [nhlLike])[0], "ambiguous");
+check("unambiguous MLB vocabulary (total bases) is not blocked by another sport's roster", res("Jeremy Pena o1.5 TB", undefined, [nhlLike]), ["resolved", "Jeremy Peña", "Houston Astros"]);
+check("hits with a name only MLB has resolves", res("Jeremy Pena 1+ hits", undefined, [[]]), ["resolved", "Jeremy Peña", "Houston Astros"]);
+{
+  const nhlMuncy: RosterPlayer[] = [{ playerName: "Max Muncy", firstName: "Max", lastName: "Muncy", team: "Pittsburgh Penguins", position: "C", externalPlayerId: "nhl-2" }];
+  const r = resolveMlbPropAgainstRoster("Max Muncy 1+ hits", roster, { teams: ["Athletics"], complete: true }, [nhlMuncy]);
+  check("a shared name that is ALSO in another sport's roster is a cross-sport dead end, not a player question", r.status === "ambiguous" ? r.reason : r.status, "cross-sport");
+}
 check("a non-MLB line is unresolved", res("Josh Allen over 275.5 passing yards"), ["unresolved"]);
 
 // ---- the recovery pass ------------------------------------------------------------------------------------------------------
@@ -121,15 +132,25 @@ check("a non-MLB line is unresolved", res("Josh Allen over 275.5 passing yards")
     out.recovered.map((p) => [p.capperName, p.sportName, p.betType, p.description, p.teamNicknames]),
     [
       ["Krash", "MLB", "PLAYER_PROP", "Chris Sale over 5.5 Ks", ["atlanta braves"]],
+      ["Krash", "MLB", "PLAYER_PROP", "Max Muncy 1+ hits", []],
       ["Krash", "MLB", "PLAYER_PROP", "Jeremy Pena Over 0.5 hits", ["houston astros"]],
     ]
   );
-  check("still unresolved: the Muncy collision, the hitter-on-a-K line, and the pitcher not in the sampled teams", out.stillUnresolved, ["Max Muncy 1+ hits", "Trea Turner over 1.5 Ks", "Skenes o17.5 outs"]);
+  const muncyLabels = ["Max Muncy — Athletics 3B", "Max Muncy — Dodgers 3B"];
+  check("the Muncy collision is recovered as a pick asking which player (full name, team, position)", out.recovered.filter((p) => p.ambiguous).map((p) => p.ambiguous!.map((o) => o.label).sort()), [muncyLabels]);
+  check("still unresolved: the hitter-on-a-K line and the pitcher not in the sampled teams", out.stillUnresolved, ["Trea Turner over 1.5 Ks", "Skenes o17.5 outs"]);
 
-  // Paste context: a Dodgers pick elsewhere in the paste resolves Muncy.
+  // Paste context: a Dodgers pick elsewhere in the paste no longer chooses the Muncy.
   const ctx = parseCatalog(["Krash", "MLB Dodgers ML", "Max Muncy 1+ hits"].join("\n"));
   const out2 = recoverUnresolvedLines(ctx.unresolved, ctx.unresolvedCapperNames, [], [], ctx.picks, [], roster);
-  check("paste-local team mention (Dodgers ML in the same paste) resolves the Muncy collision", out2.recovered.map((p) => [p.sportName, p.teamNicknames]), [["MLB", ["los angeles dodgers"]]]);
+  check("a team named elsewhere in the paste (Dodgers ML) does not choose the player -> still asks", out2.recovered.map((p) => [p.sportName, p.teamNicknames, p.ambiguous?.map((o) => o.label).sort()]), [["MLB", [], muncyLabels]]);
+
+  // The slate, through the recovery pass: complete with one candidate's team -> resolved; not complete -> asks.
+  const dodgersOnly = [{ sport: "MLB", name: "Los Angeles Dodgers" }, { sport: "MLB", name: "Houston Astros" }];
+  const out2b = recoverUnresolvedLines(ctx.unresolved, ctx.unresolvedCapperNames, dodgersOnly, [], ctx.picks, [], roster, ["MLB"]);
+  check("recovery: complete MLB slate with only the Dodgers on it -> the Dodgers' Muncy", out2b.recovered.map((p) => [p.teamNicknames, p.ambiguous]), [[["los angeles dodgers"], undefined]]);
+  const out2c = recoverUnresolvedLines(ctx.unresolved, ctx.unresolvedCapperNames, dodgersOnly, [], ctx.picks, [], roster, ["NFL"]);
+  check("recovery: the same slate when only another sport's slate is complete -> still asks", out2c.recovered.map((p) => Boolean(p.ambiguous)), [true]);
 
   // No MLB roster (table empty / read failed): lines stay unresolved exactly as before MLB props existed.
   const out3 = recoverUnresolvedLines(parsed.unresolved, parsed.unresolvedCapperNames, [], [], parsed.picks, [], []);

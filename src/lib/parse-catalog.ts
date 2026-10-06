@@ -2019,6 +2019,24 @@ export function ambiguousOptionsFor(key: string): AmbiguousOption[] {
   return AMBIGUOUS_NICKNAMES[key] ?? [];
 }
 
+// A second kind of ambiguity sharing the same prompt: a bare player surname
+// that 2+ rostered players share ("McCaffrey" - see player-roster-fallback.ts).
+// Its options are players, not AMBIGUOUS_NICKNAMES teams, and live on the
+// pick's own `ambiguous` list. The key names the sport, the typed surname and
+// the exact candidate set, so one answer covers every pick in the paste asking
+// the same question and never one whose candidates differ (the QB-only
+// passing-TDs market sees a subset). Nothing but the user (or their earlier
+// answer in this import) may settle one - see runAmbiguousHierarchy.
+const PLAYER_AMBIGUITY_PREFIX = "player|";
+
+export function playerAmbiguityKey(sport: string, typedName: string, candidateIds: string[]): string {
+  return PLAYER_AMBIGUITY_PREFIX + sport + "|" + typedName.trim().toLowerCase() + "|" + [...candidateIds].sort().join(",");
+}
+
+export function isPlayerAmbiguityKey(key: string): boolean {
+  return key.startsWith(PLAYER_AMBIGUITY_PREFIX);
+}
+
 // Sport-specific betting terminology, used as one signal (not the sole
 // determining factor - see inferSportFromPickContext) when a team name is
 // ambiguous between two sports that are both in season with both teams

@@ -121,9 +121,10 @@ console.log("\n########## PART C: intentional same-name ambiguity - never guesse
   const r = resolvePlayerPropAgainstRoster("Marcus Johnson Over 45.5 Receiving Yards", ambiguousRoster);
   check("a name matching two distinct players on two different teams stays 'ambiguous', not guessed", r, {
     status: "ambiguous",
+    tier: "exact",
     matches: [
-      { playerName: "Marcus Johnson", team: "Kansas City Chiefs" },
-      { playerName: "Marcus Johnson", team: "Denver Broncos" },
+      { playerName: "Marcus Johnson", team: "Kansas City Chiefs", position: "WR", externalPlayerId: "9000001" },
+      { playerName: "Marcus Johnson", team: "Denver Broncos", position: "WR", externalPlayerId: "9000002" },
     ],
   });
 }
@@ -160,24 +161,28 @@ console.log("\n########## PART D: bare-surname tier ('Gibbs over 65.5 rushing ya
   const r3 = resolvePlayerPropAgainstRoster("Gibbs over 65.5 rushing yards", twoGibbsRoster);
   check("D3: two distinct players sharing a surname stays 'ambiguous', not guessed", r3, {
     status: "ambiguous",
+    tier: "surname",
     matches: [
-      { playerName: "Jahmyr Gibbs", team: "Detroit Lions" },
-      { playerName: "Marcus Gibbs", team: "Denver Broncos" },
+      { playerName: "Jahmyr Gibbs", team: "Detroit Lions", position: "RB", externalPlayerId: "4429795" },
+      { playerName: "Marcus Gibbs", team: "Denver Broncos", position: "WR", externalPlayerId: "9000003" },
     ],
   });
 
-  // Same collision as D3, but now with slate context available (the Lions
-  // are on the live board this week and the Broncos aren't) - the tie
-  // breaks via relevantTeams instead of staying ambiguous, per the
-  // "restrict to relevant/current slate teams when possible" behavior.
-  const r4 = resolvePlayerPropAgainstRoster("Gibbs over 65.5 rushing yards", twoGibbsRoster, ["Detroit Lions"]);
-  check("D3b: the same collision resolves when slate context narrows it to exactly one team", r4, {
+  // Same collision as D3, but now with a COMPLETE slate on which only the
+  // Lions play (the Broncos are on a bye) - the one automatic tiebreak.
+  const r4 = resolvePlayerPropAgainstRoster("Gibbs over 65.5 rushing yards", twoGibbsRoster, { teams: ["Detroit Lions"], complete: true });
+  check("D3b: the same collision resolves when a complete slate has exactly one candidate's team on it", r4, {
     status: "resolved",
     sport: "NFL",
     team: "Detroit Lions",
     playerName: "Jahmyr Gibbs",
     via: "surname",
   });
+
+  // The identical slate, but not known to be complete (a feed failed or came
+  // back empty): the Broncos may simply be missing from it, so it decides nothing.
+  const r4b = resolvePlayerPropAgainstRoster("Gibbs over 65.5 rushing yards", twoGibbsRoster, { teams: ["Detroit Lions"], complete: false });
+  check("D3c: an incomplete slate never breaks the tie", r4b.status, "ambiguous");
 
   // A single typed word still isn't "always enough" on its own - a
   // multi-word typed name that fails both full-name tiers is a real miss
