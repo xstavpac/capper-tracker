@@ -27,6 +27,9 @@ export const cacheKeys = {
   // today. Its own key (it must not collide with the full-blob or ticker entries) but
   // TAGGED with odds(sportKey, fetchDate) - see yesterdayOddsCacheParams (odds.ts).
   yesterdayOdds: (sportKey: string, fetchDate: string) => `yesterday-odds:${sportKey}:${fetchDate}`,
+  // The "who fetches from the Odds API when today's row is missing" claim (see
+  // odds-seed-claim.ts) - with a time bucket appended, the claim entry itself.
+  oddsSeedClaim: (sportKey: string, fetchDate: string) => `odds-seed-claim:${sportKey}:${fetchDate}`,
   liveScores: (sportKey: string) => `live-scores:${sportKey}`,
   // Page-load persistFinalScores throttle (see page-grading.ts): the memo key
   // per sport, and - with a time bucket appended - the window-claim entry.
