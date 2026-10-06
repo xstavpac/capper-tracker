@@ -56,7 +56,7 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
           <CappersStatCards stats={data.overview} capperCount={data.capperCount} />
           {/* The track-record panels. Three across from a ~1500px screen; from ~1100px Most Active and
               Most Consistent sit side by side with Biggest Winners full width under them; one per row
-              below that. (Hot Hand, Coldest and Rising Fast are on /dashboard.) */}
+              below that. (Hot Hand and Coldest are on /dashboard.) */}
           <div className="grid grid-cols-1 items-stretch gap-3.5 min-[1100px]:grid-cols-2 min-[1500px]:grid-cols-3">
             <CapperPanel panel="active" initial={data.mostActive} weekPct={data.overview.picksThisWeekPct} />
             <FormPanel panel="consistent" rows={data.consistent} />

@@ -1,9 +1,9 @@
-// The /dashboard panels statement (capper-panels.ts): Hot Hand, Coldest, Rising Fast, Falling off,
-// Best / Worst last 20.
+// The /dashboard panels statement (capper-panels.ts): Hot Hand, Coldest, Falling off, Best / Worst
+// last 20. (League Savant, the sixth, has its own: league-savant-acceptance-test.ts.)
 //
-//   1. Rising Fast and Falling off against a plain-JS re-derivation from the raw pick rows (no SQL
-//      shared with the implementation), plus the rules spelled out: Falling off is Rising Fast's
-//      mirror, a score that rounds to 0 points is in neither, a short baseline is in neither.
+//   1. Falling off against a plain-JS re-derivation from the raw pick rows (no SQL shared with the
+//      implementation), plus the rules spelled out: negative scores only, a score that rounds to 0
+//      points is not in it, a short baseline is not in it.
 //   2. Best / Worst last 20 against a re-derivation: the 14-day activity gate, the 10-pick minimum,
 //      pushes in the denominator, the 50% split (nobody in both), ten rows at most.
 //   3. Hot Hand / Coldest ARE the /cappers panels: equal to getPanelRows at "This week".
@@ -17,7 +17,7 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { computeCapperPanels, getCapperPanels, capperPanelsCacheKey, ACTIVITY_WINDOW_DAYS, type BestLast20Entry } from "@/server/data/capper-panels";
 import { getPanelRows } from "@/server/data/cappers-page-aggregates";
-import { risingSeries, type RisingEntry } from "@/lib/cappers-panels";
+import { trendSeries, type FallingEntry } from "@/lib/cappers-panels";
 import { cacheKeys } from "@/lib/cache-keys";
 
 function hostOf(url: string | undefined): string {
@@ -111,13 +111,10 @@ function trendReference(cappers: { id: string; name: string; isTest: boolean }[]
       return [{ id: c.id, name: c.name, bn: base.length, score, pts: roundAway(Number((score * 100).toFixed(7))), results: rec.map((p) => p.status === "WIN").reverse(), baseline: bw / base.length }];
     });
   const tie = (a: (typeof rows)[number], b: (typeof rows)[number]) => b.bn - a.bn || (a.id < b.id ? -1 : 1);
-  return {
-    rising: rows.filter((r) => r.pts >= 1).sort((a, b) => b.score - a.score || tie(a, b)).slice(0, 5),
-    falling: rows.filter((r) => r.pts <= -1).sort((a, b) => a.score - b.score || tie(a, b)).slice(0, 5),
-  };
+  return { all: rows, falling: rows.filter((r) => r.pts <= -1).sort((a, b) => a.score - b.score || tie(a, b)).slice(0, 5) };
 }
 const trendLine = (rows: { name: string; pts: number }[]) => rows.map((r) => r.name + " " + r.pts);
-function sameTrend(label: string, got: RisingEntry[], want: ReturnType<typeof trendReference>["rising"]) {
+function sameTrend(label: string, got: FallingEntry[], want: ReturnType<typeof trendReference>["falling"]) {
   same(label + ": cappers and points, in order", trendLine(got), trendLine(want));
   same(label + ": the last 10 results, oldest first", got.map((r) => r.results), want.map((r) => r.results));
   check(label + ": baseline win rate", got.length === want.length && got.every((r, i) => Math.abs(r.baseline - want[i].baseline) < 1e-8));
@@ -160,6 +157,7 @@ async function main() {
   // key -> [name, picks oldest -> newest, options]
   const fixture: Record<string, { name: string; results: Result[]; isTest?: boolean; postedAgoDays?: number }> = {
     // Trend: a 40-pick 50% baseline, then the last 10.
+    // Beating their norm: not falling.
     riser: { name: "Riser", results: [...spread(40, 20), ...recent(8)] }, // +30
     riser2: { name: "Riser small", results: [...spread(40, 20), ...recent(6)] }, // +10
     f0: { name: "Faller 0", results: [...spread(40, 20), ...recent(0)] }, // -50
@@ -203,34 +201,32 @@ async function main() {
     const panels = await computeCapperPanels(userId, now);
     const oneStatement = statements;
     (prisma as unknown as { $queryRaw: unknown }).$queryRaw = original;
-    same("the six panels come from ONE statement", oneStatement, 1);
+    same("the six panels (League Savant among them) come from ONE statement", oneStatement, 1);
 
     const cappers = (await prisma.capper.findMany({ where: { userId }, select: { id: true, name: true, isTest: true } })) as { id: string; name: string; isTest: boolean }[];
     const picks = (await prisma.pick.findMany({ where: { userId }, select: { id: true, capperId: true, status: true, gameTime: true, gradedAt: true, createdAt: true, datePosted: true } })) as RawPick[];
 
-    // 1. Rising Fast / Falling off.
+    // 1. Falling off.
     const ref = trendReference(cappers, picks);
-    sameTrend("rising == re-derivation from the raw picks", panels.rising, ref.rising);
     sameTrend("falling == re-derivation from the raw picks", panels.falling, ref.falling);
-    same("rising: best first", trendLine(panels.rising), ["Riser 30", "Riser small 10"]);
     same(
       "falling: most negative first, a tie going to the larger baseline, five at most (the sixth faller is cut)",
       trendLine(panels.falling),
       ["Faller 0 -50", "Deep faller -50", "Faller 1 -40", "Faller 2 -30", "Faller 3 -20"]
     );
-    check("falling: every score is negative, every rising score positive", panels.falling.every((r) => r.pts <= -1) && panels.rising.every((r) => r.pts >= 1));
+    check("falling: every score is negative", panels.falling.every((r) => r.pts <= -1));
     check(
-      "falling: the chart line starts at 0 and ends on the (negative) score, like Rising Fast's",
-      [...panels.falling, ...panels.rising].every((r) => {
-        const line = risingSeries(r.results, r.baseline);
+      "falling: the chart line starts at 0 and ends on the (negative) score",
+      panels.falling.every((r) => {
+        const line = trendSeries(r.results, r.baseline);
         return line[0] === 0 && Math.round(line[line.length - 1]) === r.pts;
       })
     );
-    const trendNames = new Set([...panels.rising, ...panels.falling].map((r) => r.name));
-    check("a score that rounds to 0 points is in neither panel (no +0 / -0 pts)", !trendNames.has("Hair") && ref.rising.every((r) => r.name !== "Hair"));
-    check("exactly on their norm: in neither panel", !trendNames.has("Flat"));
-    check("a 29-pick baseline is one short: in neither panel", !trendNames.has("Short base"));
-    check("nobody is in both Rising Fast and Falling off", panels.rising.every((r) => !panels.falling.some((f) => f.capperId === r.capperId)));
+    const trendNames = new Set(panels.falling.map((r) => r.name));
+    check("a score that rounds to 0 points is not in the panel (no -0 pts)", !trendNames.has("Hair") && ref.all.some((r) => r.name === "Hair" && r.pts === 0));
+    check("exactly on their norm: not in the panel", !trendNames.has("Flat"));
+    check("a 29-pick baseline is one short: not in the panel", !trendNames.has("Short base") && ref.all.every((r) => r.name !== "Short base"));
+    check("a capper beating their norm is not in the panel", !trendNames.has("Riser") && !trendNames.has("Riser small") && ref.all.some((r) => r.name === "Riser" && r.pts === 30));
 
     // 2. Best / Worst last 20.
     const l20 = last20Reference(cappers, picks, now.getTime());
@@ -250,9 +246,12 @@ async function main() {
     check("hot hand: the five-win streak is there; coldest: the four-loss one, with its units", panels.hottest.some((e) => e.name === "Hot five" && e.streak === 5) && panels.coldest.some((e) => e.name === "Cold four" && e.streak === 4 && e.units === -4), JSON.stringify([panels.hottest, panels.coldest]));
 
     // 4. Test cappers, the empty roster, the cache.
-    const everyone = [...panels.hottest, ...panels.coldest, ...panels.rising, ...panels.falling, ...panels.bestLast20, ...panels.worstLast20, ...all20.map((s) => ({ name: s }))];
+    const everyone = [...panels.hottest, ...panels.coldest, ...panels.falling, ...panels.bestLast20, ...panels.worstLast20, ...panels.savant.leagues.flatMap((l) => l.rows), ...all20.map((s) => ({ name: s }))];
     check("the test capper appears in no panel", !everyone.some((e) => e.name.startsWith("Test Tess")));
-    same("a user with no cappers: six empty panels", await computeCapperPanels(emptyUser), { hottest: [], coldest: [], rising: [], falling: [], bestLast20: [], worstLast20: [] });
+    // League Savant still lists the leagues in season (they come from the game feed), each with no rows.
+    const { savant: emptySavant, ...emptyRest } = await computeCapperPanels(emptyUser);
+    same("a user with no cappers: five empty panels", emptyRest, { hottest: [], coldest: [], falling: [], bestLast20: [], worstLast20: [] });
+    check("a user with no cappers: no League Savant rows in any league", emptySavant.leagues.every((l) => l.rows.length === 0));
     same("getCapperPanels (cachedByTag wrapper) == computeCapperPanels", await getCapperPanels(userId), await computeCapperPanels(userId));
     const keys = [capperPanelsCacheKey("u1"), capperPanelsCacheKey("u2")];
     check("cache keys are unique per user and never the dashboard tag", new Set(keys).size === 2 && !keys.includes(cacheKeys.dashboard("u1")) && !keys.includes(cacheKeys.dashboard("u2")));

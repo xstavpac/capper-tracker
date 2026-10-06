@@ -9,7 +9,7 @@ import {
   consistencyScore,
   consistencyTier,
   ptsLabel,
-  risingSeries,
+  trendSeries,
   type ActiveEntry,
   type ConsistencyTier,
   type ConsistentEntry,
@@ -17,7 +17,7 @@ import {
   type PanelKey,
   type PanelRows,
   type PanelWindow,
-  type RisingEntry,
+  type FallingEntry,
   type StreakEntry,
   type WinnerEntry,
 } from "@/lib/cappers-panels";
@@ -50,24 +50,16 @@ const EMPTY: Record<PanelKey, (w: PanelWindow) => string> = {
   coldest: (w) => "No cappers on a 3+ game losing streak " + WINDOW_PHRASE[w] + ".",
 };
 const FORM_EMPTY: Record<FormPanelKey, string> = {
-  rising: "Nobody is outperforming their usual form yet.",
   falling: "Nobody is underperforming their usual form.",
   consistent: "No capper has 50 decided picks with a steady 50%+ record yet.",
 };
 // Windowless panels say what they read where the others have their window dropdown.
-const FORM_SUBLABEL: Record<FormPanelKey, string> = { rising: "Last 10 vs prior 90", falling: "Last 10 vs prior 90", consistent: "Last 50 picks" };
+const FORM_SUBLABEL: Record<FormPanelKey, string> = { falling: "Last 10 vs prior 90", consistent: "Last 50 picks" };
 
 // Each panel's hue (TINTS, panel-shell.tsx) with its own title, subtitle and header icon.
 const ICON = "h-[17px] w-[17px]";
 const THEME: Record<AnyPanel, PanelTheme> = {
   active: { ...TINTS.blue, title: "Most Active", subtitle: "Who's putting in the work", icon: <UsersIcon className={ICON + " stroke-[1.8]"} /> },
-  rising: {
-    ...TINTS.green,
-    title: "Rising Fast",
-    subtitle: "Momentum is building",
-    icon: <TrendingUpIcon className={ICON + " stroke-[2.4]"} />,
-    iconWrap: "rounded-lg bg-[#DCF7E6] text-[#15803D] dark:bg-emerald-500/15 dark:text-emerald-400",
-  },
   falling: { ...TINTS.rose, title: "Falling off", subtitle: "Momentum is fading", icon: <TrendingDownIcon className={ICON + " stroke-[2.4]"} />, iconWrap: "rounded-lg bg-[#FFDDE7] text-[#BE123C] dark:bg-rose-500/15 dark:text-rose-400" },
   hottest: { ...TINTS.orange, title: "Hot Hand", subtitle: "Current win streaks lighting up", icon: <FlameFilledIcon className={ICON} /> },
   consistent: { ...TINTS.violet, title: "Most Consistent", subtitle: "Confidence score · last 50 picks", icon: <TargetIcon className={ICON + " stroke-[2.2]"} /> },
@@ -463,34 +455,29 @@ function ColdestFooter({ rows, href }: { rows: StreakEntry[]; href: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Windowless panels (Rising Fast, Falling off, Most Consistent)
+// Windowless panels (Falling off, Most Consistent)
 // ---------------------------------------------------------------------------
 
 // No dropdown and no fetch: the server renders the rows once.
-export function FormPanel({ panel, rows, leaderboardHref = LEADERBOARD_HREF }: { panel: FormPanelKey; rows: RisingEntry[] | ConsistentEntry[]; leaderboardHref?: string }) {
+export function FormPanel({ panel, rows, leaderboardHref = LEADERBOARD_HREF }: { panel: FormPanelKey; rows: FallingEntry[] | ConsistentEntry[]; leaderboardHref?: string }) {
   const ready = rows.length > 0;
-  const down = panel === "falling";
   return (
     <PanelShell
       theme={THEME[panel]}
       control={<span className={CONTROL + " shrink-0 whitespace-nowrap px-2.5 py-[5px] " + THEME[panel].control}>{FORM_SUBLABEL[panel]}</span>}
-      footer={!ready ? undefined : panel === "consistent" ? <ConsistentFooter rows={rows as ConsistentEntry[]} href={leaderboardHref} /> : <RisingFooter rows={rows as RisingEntry[]} down={down} />}
+      footer={!ready ? undefined : panel === "consistent" ? <ConsistentFooter rows={rows as ConsistentEntry[]} href={leaderboardHref} /> : <FallingFooter rows={rows as FallingEntry[]} />}
     >
-      {!ready ? <Message>{FORM_EMPTY[panel]}</Message> : panel === "consistent" ? <ConsistentRows rows={rows as ConsistentEntry[]} /> : <RisingChart rows={rows as RisingEntry[]} down={down} />}
+      {!ready ? <Message>{FORM_EMPTY[panel]}</Message> : panel === "consistent" ? <ConsistentRows rows={rows as ConsistentEntry[]} /> : <FallingChart rows={rows as FallingEntry[]} />}
     </PanelShell>
   );
 }
 
 const AXIS_TEXT = "text-[11px] font-medium leading-none tabular-nums text-[#5B6275] dark:text-muted-foreground";
 // Line colors by rank; the legend swatches match. #1 takes the panel's own hue.
-const LINE_COLORS = ["#16A34A", "#2563EB", "#F59E0B", "#A855F7", "#06B6D4"];
-const LINE_COLORS_DOWN = ["#E11D48", ...LINE_COLORS.slice(1)];
+const LINE_COLORS = ["#E11D48", "#2563EB", "#F59E0B", "#A855F7", "#06B6D4"];
 const signedPts = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v));
-// What sets Falling off's chart apart from Rising Fast's: #1's label chip, its legend row and the points' color.
-const TREND = {
-  up: { colors: LINE_COLORS, chip: "bg-[#15803D]", lead: "bg-[#DCF3E4] dark:bg-emerald-500/15", pts: GREEN },
-  down: { colors: LINE_COLORS_DOWN, chip: "bg-[#BE123C]", lead: "bg-[#FFE1E9] dark:bg-rose-500/15", pts: "text-[#BE123C] dark:text-rose-400" },
-};
+// The chart's rose: #1's label chip, its legend row and the points' color.
+const TREND = { colors: LINE_COLORS, chip: "bg-[#BE123C]", lead: "bg-[#FFE1E9] dark:bg-rose-500/15", pts: "text-[#BE123C] dark:text-rose-400" };
 
 // The axis for the lines' range. It bottoms out at the lowest point rounded down to a 10 and tops out at
 // the highest rounded up to a gridline; gridlines are the smallest round step that gives at most five
@@ -511,39 +498,36 @@ function ptsAxis(values: number[]): { lo: number; hi: number; ticks: number[] } 
 const PLOT_MIN_H = 116;
 const LABEL_H = 13;
 
-// "Wins above their norm" for the top risers: each line starts at 0 and, pick by pick over the last 10
-// decided picks, adds what the result beat the capper's own baseline win rate by (risingSeries). A
-// riser's line climbs, and ends on exactly their score. 0 is the norm line.
-// `down` is Falling off, "wins below their norm": the same chart upside down - the lines sink to a
-// negative score, the axis is the mirror image, and #1 is drawn in the panel's rose.
-function RisingChart({ rows, down = false }: { rows: RisingEntry[]; down?: boolean }) {
-  const look = down ? TREND.down : TREND.up;
-  const lines = rows.map((r) => risingSeries(r.results, r.baseline));
+// "Wins below their norm" for the top fallers: each line starts at 0 and, pick by pick over the last 10
+// decided picks, adds what the result beat the capper's own baseline win rate by (trendSeries). A
+// faller's line sinks, and ends on exactly their (negative) score. 0 is the norm line, at the top:
+// the axis is ptsAxis's upside down.
+function FallingChart({ rows }: { rows: FallingEntry[] }) {
+  const look = TREND;
+  const lines = rows.map((r) => trendSeries(r.results, r.baseline));
   const n = Math.max(2, ...lines.map((l) => l.length));
-  const up = ptsAxis(down ? lines.flat().map((v) => -v) : lines.flat());
-  const { lo, hi, ticks } = down ? { lo: -up.hi, hi: -up.lo, ticks: up.ticks.map((t) => -t) } : up;
+  const up = ptsAxis(lines.flat().map((v) => -v));
+  const { lo, hi, ticks } = { lo: -up.hi, hi: -up.lo, ticks: up.ticks.map((t) => -t) };
   const x = (i: number) => (i / (n - 1)) * 100;
   const y = (v: number) => ((hi - v) / (hi - lo)) * 100;
   const points = (l: number[]) => l.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(2)).join(" ");
   const ends = lines.map((l) => l[l.length - 1] ?? 0);
-  // Every line gets its "+X pts" in the right margin where the panel is wide enough and no two labels
+  // Every line gets its "−X pts" in the right margin where the panel is wide enough and no two labels
   // would touch; otherwise only #1 is labelled, on the plot.
   const minGap = (LABEL_H / PLOT_MIN_H) * (hi - lo);
   const sortedEnds = [...ends].sort((p, q) => p - q);
   const allLabels = rows.length > 1 && sortedEnds.every((v, i) => i === 0 || v - sortedEnds[i - 1] >= minGap);
   const ranked = rows.map((r, i) => ({ r, i })).reverse(); // drawn last-to-first so #1 sits on top
   const label =
-    "Wins " +
-    (down ? "below" : "above") +
-    " their norm across the last " +
+    "Wins below their norm across the last " +
     (n - 1) +
     " decided picks, in points: each line starts at 0 and ends on the capper's score. " +
-    rows.map((r) => r.name + " " + (down ? "−" : "+") + Math.abs(r.pts)).join("; ") +
+    rows.map((r) => r.name + " −" + Math.abs(r.pts)).join("; ") +
     ".";
-  // #1's label sits level with its dot when the line arrives moving away from the norm, and on the far
-  // side of the dot (under it rising, over it falling) when the last pick went the other way.
+  // #1's label sits level with its dot when the line arrives moving away from the norm, and over the
+  // dot when the last pick went the other way.
   const prev = lines[0][lines[0].length - 2] ?? 0;
-  const leadLabelShift = (down ? prev > ends[0] : prev < ends[0]) ? "translateY(-50%)" : down ? "translateY(calc(-100% - 9px))" : "translateY(9px)";
+  const leadLabelShift = prev > ends[0] ? "translateY(-50%)" : "translateY(calc(-100% - 9px))";
   return (
     <div className="flex flex-1 flex-col gap-2.5 min-[400px]:flex-row">
       {/* At least ~140px tall, and as tall as the panel's row makes it: no gap above or below. */}
@@ -585,7 +569,7 @@ function RisingChart({ rows, down = false }: { rows: RisingEntry[]; down?: boole
             ))}
           </svg>
           <span aria-hidden className="absolute h-[11px] w-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[2.5px] bg-white dark:bg-[#0B1220]" style={{ left: x(lines[0].length - 1) + "%", top: y(ends[0]) + "%", borderColor: look.colors[0] }} />
-          {/* #1's label on the plot, clear of its line: left of the dot when the line climbs into it, under it when the last pick lost. Hidden where the margin labels show. */}
+          {/* #1's label on the plot, clear of its line: left of the dot when the line sinks into it, over it when the last pick won. Hidden where the margin labels show. */}
           <span
             aria-hidden
             className={"absolute right-3.5 whitespace-nowrap rounded-md " + look.chip + " px-1.5 py-[3px] text-[11px] font-semibold leading-none tabular-nums text-white " + (allLabels ? "min-[1280px]:max-[1499px]:hidden min-[1700px]:hidden" : "")}
@@ -628,18 +612,16 @@ function RisingChart({ rows, down = false }: { rows: RisingEntry[]; down?: boole
   );
 }
 
-function RisingFooter({ rows, down }: { rows: RisingEntry[]; down: boolean }) {
-  const look = down ? TREND.down : TREND.up;
-  const Icon = down ? TrendingDownIcon : TrendingUpIcon;
+function FallingFooter({ rows }: { rows: FallingEntry[] }) {
   return (
     <>
-      <Icon className={"h-[18px] w-[18px] shrink-0 stroke-[2.4] " + look.pts} />
+      <TrendingDownIcon className={"h-[18px] w-[18px] shrink-0 stroke-[2.4] " + TREND.pts} />
       <FooterLine name={rows[0].name}>
         {/* One string: split text nodes are not kerned across the join. */}
-        {down ? "is trending down " : "is trending up "}
-        <span className={"font-semibold tabular-nums " + look.pts}>{ptsLabel(rows[0].pts)}</span>
+        {"is trending down "}
+        <span className={"font-semibold tabular-nums " + TREND.pts}>{ptsLabel(rows[0].pts)}</span>
       </FooterLine>
-      <Link href={capperHref(rows[0].capperId)} className={"shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white hover:brightness-95 " + (down ? "bg-[#E11D48]" : "bg-[#16A34A]")}>
+      <Link href={capperHref(rows[0].capperId)} className="shrink-0 whitespace-nowrap rounded-lg bg-[#E11D48] px-2.5 py-1.5 text-xs font-semibold text-white hover:brightness-95">
         View trend →
       </Link>
     </>

@@ -49,8 +49,8 @@ import {
   STREAK_LOOKBACK,
   STREAK_PANEL_MIN,
   FORM_LOOKBACK,
-  RISING_RECENT,
-  RISING_MIN_BASELINE,
+  TREND_RECENT,
+  TREND_MIN_BASELINE,
   FORM_TREND_MIN_PTS,
   CONSISTENT_PICKS,
   CONSISTENT_BLOCKS,
@@ -58,7 +58,7 @@ import {
   FORM_PANEL_COUNT,
   type ActiveEntry,
   type ConsistentEntry,
-  type RisingEntry,
+  type FallingEntry,
   type PanelKey,
   type PanelRows,
   type PanelWindow,
@@ -153,8 +153,8 @@ export type CappersPageData = {
   sparklines: Map<string, CapperSparkline>;
   // Standout cards: each card's graded picks across the page's selected window (n = all of them).
   topSparklines: Map<string, CapperSparkline>;
-  // The page's three panels. Hot Hand, Coldest and Rising Fast live on /dashboard (capper-panels.ts),
-  // built from the same fragments below (panelSql, formLookupCte, formTrendCte).
+  // The page's three panels. Hot Hand, Coldest and Falling off live on /dashboard (capper-panels.ts),
+  // built from the same fragments below (panelSql, formLookupCte, fallingCte).
   mostActive: ActiveEntry[];
   winners: WinnerEntry[];
   consistent: ConsistentEntry[];
@@ -338,20 +338,19 @@ function streakPanelSql(kind: "WIN" | "LOSS", userId: string, range: { start: Da
   `;
 }
 
-// Rising Fast / Falling off / Most Consistent all read ONE bounded lookup of each roster capper's newest
+// Falling off / Most Consistent both read ONE bounded lookup of each roster capper's newest
 // FORM_LOOKBACK decided picks (WIN / LOSS only; push, cancelled and pending are not decided), newest
 // first in ORDER_DESC via the same LATERAL index-ordered LIMIT the streak panels use
 // (picks_user_capper_streak_idx). They read the `roster` CTE, so they share the other panels' capper
 // eligibility (test accounts left out), and ignore any time window. Each returns one [name, sql] CTE:
 //   formLookupCte   dl (cid, win, gt, rn)  rn 1 = newest; gt = gameTime.
-//   formTrendCte    rising / falling. recent = rn 1..RISING_RECENT, baseline = rn > RISING_RECENT (never
-//                   the combined set). Needs exactly RISING_RECENT recent + >= RISING_MIN_BASELINE
-//                   baseline; score = recent win% - baseline win%. Rising keeps scores that round to
-//                   +FORM_TREND_MIN_PTS points or more, best first; falling those that round to
+//   fallingCte      falling. recent = rn 1..TREND_RECENT, baseline = rn > TREND_RECENT (never the
+//                   combined set). Needs exactly TREND_RECENT recent + >= TREND_MIN_BASELINE
+//                   baseline; score = recent win% - baseline win%. Keeps scores that round to
 //                   -FORM_TREND_MIN_PTS or less, worst first; ties by larger baseline, then id.
-//                   Rows carry pts (the score in whole percentage points, negative on falling),
-//                   baseline (the baseline win rate as a fraction) and results (the recent picks' win
-//                   flags, oldest first), all read from dl: the chart is drawn from those (risingSeries).
+//                   Rows carry pts (the score in whole percentage points, negative), baseline (the
+//                   baseline win rate as a fraction) and results (the recent picks' win flags,
+//                   oldest first), all read from dl: the chart is drawn from those (trendSeries).
 //   consistentCte   the newest CONSISTENT_PICKS (all required) as CONSISTENT_BLOCKS equal blocks, oldest
 //                   first; mean block win% >= CONSISTENT_MIN_MEAN_PCT. Ranked by population standard
 //                   deviation of the block win%s ascending, then higher mean, then id.
@@ -376,33 +375,31 @@ export function formLookupCte(userId: string): [string, Prisma.Sql] {
   ];
 }
 
-export function formTrendCte(direction: "rising" | "falling"): [string, Prisma.Sql] {
+export function fallingCte(): [string, Prisma.Sql] {
   const score = Prisma.sql`round(s.rw::numeric / s.rn_n - s.bw::numeric / s.bn, 9)`;
-  const keep = direction === "rising" ? Prisma.sql`round(${score} * 100) >= ${FORM_TREND_MIN_PTS}::int` : Prisma.sql`round(${score} * 100) <= -${FORM_TREND_MIN_PTS}::int`;
-  const dir = direction === "rising" ? Prisma.sql`DESC` : Prisma.sql`ASC`;
   return [
-    direction,
+    "falling",
     Prisma.sql`
       SELECT t.cid AS "capperId", t.name, t."colorTag", round(t.score * 100)::int AS pts, t.baseline::float8 AS baseline,
-        (SELECT array_agg(d.win ORDER BY d.rn DESC) FROM dl d WHERE d.cid = t.cid AND d.rn <= ${RISING_RECENT}::int) AS results
+        (SELECT array_agg(d.win ORDER BY d.rn DESC) FROM dl d WHERE d.cid = t.cid AND d.rn <= ${TREND_RECENT}::int) AS results
       FROM (
         SELECT s.cid, r.name, r."colorTag", s.bn, round(s.bw::numeric / s.bn, 9) AS baseline,
           ${score} AS score
         FROM (
           SELECT cid,
-            count(*) FILTER (WHERE rn <= ${RISING_RECENT}::int) AS rn_n,
-            count(*) FILTER (WHERE rn <= ${RISING_RECENT}::int AND win) AS rw,
-            count(*) FILTER (WHERE rn > ${RISING_RECENT}::int) AS bn,
-            count(*) FILTER (WHERE rn > ${RISING_RECENT}::int AND win) AS bw
+            count(*) FILTER (WHERE rn <= ${TREND_RECENT}::int) AS rn_n,
+            count(*) FILTER (WHERE rn <= ${TREND_RECENT}::int AND win) AS rw,
+            count(*) FILTER (WHERE rn > ${TREND_RECENT}::int) AS bn,
+            count(*) FILTER (WHERE rn > ${TREND_RECENT}::int AND win) AS bw
           FROM dl GROUP BY cid
         ) s
         JOIN roster r ON r.id = s.cid
-        WHERE s.rn_n = ${RISING_RECENT}::int AND s.bn >= ${RISING_MIN_BASELINE}::int
-          AND ${keep}
-        ORDER BY score ${dir}, s.bn DESC, r.id COLLATE "C"
+        WHERE s.rn_n = ${TREND_RECENT}::int AND s.bn >= ${TREND_MIN_BASELINE}::int
+          AND round(${score} * 100) <= -${FORM_TREND_MIN_PTS}::int
+        ORDER BY score ASC, s.bn DESC, r.id COLLATE "C"
         LIMIT ${FORM_PANEL_COUNT}
       ) t
-      ORDER BY t.score ${dir}, t.bn DESC, t.cid COLLATE "C"
+      ORDER BY t.score ASC, t.bn DESC, t.cid COLLATE "C"
     `,
   ];
 }
@@ -439,7 +436,7 @@ export function consistentCte(): [string, Prisma.Sql] {
 // jsonb rows -> typed rows, shared by the page statement, the dropdown fetch and the dashboard.
 export const streakEntriesFromRows = (rows: any[] | undefined, withUnits: boolean): StreakEntry[] =>
   (rows ?? []).map((h) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, streak: Number(h.streak), ...(withUnits ? { units: Number(h.units) } : {}) }));
-export const risingEntriesFromRows = (rows: any[] | undefined): RisingEntry[] =>
+export const fallingEntriesFromRows = (rows: any[] | undefined): FallingEntry[] =>
   (rows ?? []).map((h) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, pts: Number(h.pts), results: (h.results ?? []).map(Boolean), baseline: Number(h.baseline) }));
 
 // One panel at one window, as its own small statement (the dropdown's fetch). Same SQL as the page.

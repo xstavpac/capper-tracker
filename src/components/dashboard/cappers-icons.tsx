@@ -24,6 +24,14 @@ export const UsersIcon = ({ className }: P) => (
   </svg>
 );
 
+// A medal on its ribbon.
+export const AwardIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <circle cx="12" cy="8" r="6" />
+    <path d="M15.477 12.89L17 22l-5 -3l-5 3l1.523 -9.11" />
+  </svg>
+);
+
 export const ActivityIcon = ({ className }: P) => (
   <svg {...svgProps(className)}>
     <path d="M3 12h4l3 8l4 -16l3 8h4" />
