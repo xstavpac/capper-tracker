@@ -28,7 +28,7 @@
 //     on nobody scoring a TD in the game at all).
 import { revalidateTag } from "next/cache";
 import type { OddsGame, OddsApiCredits } from "@/server/data/odds";
-import { ODDS_API_BASE_URL, readOddsApiCredits, resolveOddsGame } from "@/server/data/odds";
+import { ODDS_API_BASE_URL, readOddsApiCredits, resolveOddsGame, type OddsLoader } from "@/server/data/odds";
 import { getLatestCreditUsageLevel, persistOddsApiUsage } from "@/server/data/odds-api-usage";
 import { prisma } from "@/lib/prisma";
 import { easternDateKey } from "@/lib/dates";
@@ -338,9 +338,10 @@ export function resolvePropOddsFromGame(game: OddsGame, prop: PlayerPropOddsQuer
 export async function resolvePropOdds(
   sportKey: string,
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
-  prop: PlayerPropOddsQuery
+  prop: PlayerPropOddsQuery,
+  getOdds?: OddsLoader
 ): Promise<number | null> {
-  const oddsGame = await resolveOddsGame(sportKey, game);
+  const oddsGame = await resolveOddsGame(sportKey, game, getOdds);
   if (!oddsGame) return null;
   return resolvePropOddsFromGame(oddsGame, prop);
 }

@@ -183,6 +183,33 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
   return result.games;
 }
 
+// How a resolver gets a sport's odds games. Every resolver below defaults to
+// getOddsForSport; a caller resolving many things in one request passes one
+// createRequestOddsLoader() instead.
+export type OddsLoader = (sportKey: string) => Promise<OddsGame[]>;
+
+// One odds read per sport for the life of the returned loader. A catalog import
+// resolves every pasted line concurrently and each line asks for its sport's
+// odds up to three times (game match, pricing, props); the shared cache only
+// helps a later call once an earlier one has finished AND its entry was stored,
+// so the import holds the promise itself instead of depending on that. Lazy: a
+// sport is read only if some line actually needs it, exactly as before. A
+// rejected read is dropped so the next line retries, as each line used to.
+// The games are shared between every caller - read-only.
+export function createRequestOddsLoader(load: OddsLoader = getOddsForSport): OddsLoader {
+  const bySport = new Map<string, Promise<OddsGame[]>>();
+  return (sportKey) => {
+    const held = bySport.get(sportKey);
+    if (held) return held;
+    const pending = load(sportKey);
+    bySport.set(sportKey, pending);
+    pending.catch(() => {
+      if (bySport.get(sportKey) === pending) bySport.delete(sportKey);
+    });
+    return pending;
+  };
+}
+
 // What the layout ticker renders from the odds side: which games are on
 // today's slate (id, teams, start time - matchScoreToGame's inputs). It never
 // looks at a bookmaker or a price.
@@ -493,14 +520,22 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsFetchResul
   });
   if (existing) {
     const cachedGames = existing.data as unknown as OddsGame[];
-    // Temporary diagnostic for the 2026-08-21 live-page-empty incident -
-    // distinguishes "cache hit but the day's snapshot was empty" (e.g. the
-    // 4am seed fetch itself failed and got written as [] - it shouldn't per
-    // the empty-fetch-doesn't-write logic below, but this catches it if that
-    // assumption is ever wrong) from "cache hit, genuinely has games."
+    // Logged on every real Postgres read of the day's row, i.e. whenever the
+    // shared cache in front of this function missed. (It used to be labelled
+    // "cache hit" - the row existed - which read as the opposite.) gameCount
+    // is the 2026-08-21 live-page-empty diagnostic: it tells "the row exists
+    // but holds no games" (a failed seed written as [] - it shouldn't be, per
+    // the empty-fetch-doesn't-write logic below) from "the row has games".
+    // `bytes` is the serialized size of `data`, the bulk of what the read
+    // transferred.
     console.log(
-      "[getOddsForSport] cache hit",
-      JSON.stringify({ sportKey, fetchDate, gameCount: cachedGames.length })
+      "[getOddsForSport] snapshot read from db",
+      JSON.stringify({
+        sportKey,
+        fetchDate,
+        gameCount: cachedGames.length,
+        bytes: Buffer.byteLength(JSON.stringify(existing.data)),
+      })
     );
     return { games: cachedGames, status: "cached", credits: null, fetchDate };
   }
@@ -1922,6 +1957,9 @@ export type ResolveGameOpts = {
   // previously-flagged doubleheader pick - see pickBestScheduleCandidate's
   // own comment for how this is used (and when it's ignored).
   gameNumber?: 1 | 2 | null;
+  // Where the odds feed comes from - see createRequestOddsLoader. Defaults to
+  // getOddsForSport.
+  getOdds?: OddsLoader;
 };
 
 // Async wrapper around resolveScheduleGameFromFeeds. The score feed is fetched
@@ -1955,7 +1993,7 @@ async function fetchFeedOrEmpty<T>(label: string, fetch: () => Promise<T[]>): Pr
 async function resolveScheduleGame(
   sportKey: string,
   teamMatches: (g: { homeTeam: string; awayTeam: string }) => boolean,
-  { referenceTime = new Date(), nearTermOnly = false, gameNumber = null }: ResolveGameOpts
+  { referenceTime = new Date(), nearTermOnly = false, gameNumber = null, getOdds = getOddsForSport }: ResolveGameOpts
 ): Promise<ScheduleCandidateResult> {
   const scoreGames = await fetchFeedOrEmpty("score", () => getLiveScoresForSport(sportKey));
 
@@ -1964,7 +2002,7 @@ async function resolveScheduleGame(
   const scoreHasUpcoming = scoreGames.some(
     (g) => teamMatches(g) && g.status !== "final" && withinResolveWindow(g.commenceTime, referenceTime)
   );
-  const oddsGames = scoreHasUpcoming ? [] : await fetchFeedOrEmpty("odds", () => getOddsForSport(sportKey));
+  const oddsGames = scoreHasUpcoming ? [] : await fetchFeedOrEmpty("odds", () => getOdds(sportKey));
   const scheduleGames =
     scoreHasUpcoming || sportKey !== "americanfootball_ncaaf"
       ? []
@@ -2049,9 +2087,10 @@ export function matchScoreToGame(
 // would, rather than re-implementing this resolution step.
 export async function resolveOddsGame(
   sportKey: string,
-  game: { homeTeam: string; awayTeam: string; commenceTime: string }
+  game: { homeTeam: string; awayTeam: string; commenceTime: string },
+  getOdds: OddsLoader = getOddsForSport
 ): Promise<OddsGame | null> {
-  const oddsGames = await getOddsForSport(sportKey);
+  const oddsGames = await getOdds(sportKey);
   const candidates = oddsGames.filter(
     (g) => teamNamesMatch(g.homeTeam, game.homeTeam) && teamNamesMatch(g.awayTeam, game.awayTeam)
   );
@@ -2090,9 +2129,10 @@ export function favoredSideFromOddsGame(oddsGame: OddsGame): "HOME" | "AWAY" | n
 // near-pick'em where the odds sign alone can't.
 export async function findFavoredSide(
   sportKey: string,
-  game: { homeTeam: string; awayTeam: string; commenceTime: string }
+  game: { homeTeam: string; awayTeam: string; commenceTime: string },
+  getOdds: OddsLoader = getOddsForSport
 ): Promise<"HOME" | "AWAY" | null> {
-  const oddsGame = await resolveOddsGame(sportKey, game);
+  const oddsGame = await resolveOddsGame(sportKey, game, getOdds);
   return oddsGame ? favoredSideFromOddsGame(oddsGame) : null;
 }
 
@@ -2103,7 +2143,8 @@ export async function findMarketPrice(
   sportKey: string,
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
   betType: "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP" | "NRFI",
-  side: "home" | "away" | "over" | "under"
+  side: "home" | "away" | "over" | "under",
+  getOdds: OddsLoader = getOddsForSport
 ): Promise<number | null> {
   // No odds-API market exists for NRFI, so it falls through to null (default -110)
   // same as PLAYER_PROP - only h2h/spreads/totals have a real market to look up.
@@ -2111,7 +2152,7 @@ export async function findMarketPrice(
     betType === "MONEYLINE" ? "h2h" : betType === "SPREAD" ? "spreads" : betType === "TOTAL" ? "totals" : null;
   if (!marketKey) return null;
 
-  const oddsGame = await resolveOddsGame(sportKey, game);
+  const oddsGame = await resolveOddsGame(sportKey, game, getOdds);
   if (!oddsGame) return null;
 
   const outcomeName =
@@ -2142,9 +2183,10 @@ export async function findMarketPrice(
 export async function findMarketSpreadLine(
   sportKey: string,
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
-  side: "home" | "away"
+  side: "home" | "away",
+  getOdds: OddsLoader = getOddsForSport
 ): Promise<number | null> {
-  const oddsGame = await resolveOddsGame(sportKey, game);
+  const oddsGame = await resolveOddsGame(sportKey, game, getOdds);
   if (!oddsGame) return null;
 
   const outcomeName = side === "home" ? oddsGame.homeTeam : oddsGame.awayTeam;
@@ -2161,9 +2203,10 @@ export async function findMarketSpreadLine(
 export async function findMarketTotalLine(
   sportKey: string,
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
-  side: "over" | "under"
+  side: "over" | "under",
+  getOdds: OddsLoader = getOddsForSport
 ): Promise<number | null> {
-  const oddsGame = await resolveOddsGame(sportKey, game);
+  const oddsGame = await resolveOddsGame(sportKey, game, getOdds);
   if (!oddsGame) return null;
 
   const outcomeName = side === "over" ? "Over" : "Under";
