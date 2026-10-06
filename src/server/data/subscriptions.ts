@@ -157,7 +157,23 @@ export type AtomicCreateResult =
 // theoretical edge case (it would mean the user-creation invariant was
 // violated elsewhere), not a case this function tries to paper over.
 export async function createPicksWithEntitlementCheck(userId: string, rows: PickInsertData[]): Promise<AtomicCreateResult> {
-  if (rows.length === 0) return { allowed: true, created: [] };
+  return insertPicksWithEntitlementCheck(userId, rows.length, async () => rows);
+}
+
+// The same gate + insert, for a caller whose rows are not final until it has
+// written something else they depend on. `buildRows` runs INSIDE the
+// transaction, after the row lock and the pick-limit check have passed, on the
+// transaction's own client - so whatever it creates (the bulk import's new
+// cappers and sports, see import-refs.ts) commits with the picks or rolls back
+// with them, and is never created at all for an import the limit refuses.
+// `rowCount` is what the limit is checked against; buildRows must return
+// exactly that many rows. Everything buildRows does must go through `tx`.
+export async function insertPicksWithEntitlementCheck(
+  userId: string,
+  rowCount: number,
+  buildRows: (tx: Prisma.TransactionClient) => Promise<PickInsertData[]>
+): Promise<AtomicCreateResult> {
+  if (rowCount === 0) return { allowed: true, created: [] };
 
   return prisma.$transaction(async (tx) => {
     const locked = await tx.$queryRaw<{ plan: string; status: string; currentPeriodEnd: Date | null; cancelAtPeriodEnd: boolean }[]>`
@@ -167,7 +183,7 @@ export async function createPicksWithEntitlementCheck(userId: string, rows: Pick
 
     if (tier === "FREE") {
       const pickCount = await tx.pick.count({ where: { userId } });
-      if (pickCount + rows.length > FREE_PICK_LIMIT) {
+      if (pickCount + rowCount > FREE_PICK_LIMIT) {
         const remaining = Math.max(0, FREE_PICK_LIMIT - pickCount);
         return {
           allowed: false,
@@ -176,10 +192,10 @@ export async function createPicksWithEntitlementCheck(userId: string, rows: Pick
           limit: FREE_PICK_LIMIT,
           remaining,
           message:
-            rows.length === 1
+            rowCount === 1
               ? "Free plan is limited to " + FREE_PICK_LIMIT + " tracked picks. Upgrade to Basic for unlimited tracking."
               : "This would add " +
-                rows.length +
+                rowCount +
                 " picks, but your Free plan only has " +
                 remaining +
                 " slot" +
@@ -193,6 +209,11 @@ export async function createPicksWithEntitlementCheck(userId: string, rows: Pick
                 " or fewer picks.",
         };
       }
+    }
+
+    const rows = await buildRows(tx);
+    if (rows.length !== rowCount) {
+      throw new Error("insertPicksWithEntitlementCheck: buildRows returned " + rows.length + " rows, expected " + rowCount);
     }
 
     // Every pick is stamped with its pickCategory here, once, at insert - this

@@ -5,8 +5,13 @@ import { requireUser } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
 import { cacheKeys } from "@/lib/cache-keys";
 import { importRowCapError } from "@/lib/import-limits";
-import { findOrCreateCapper } from "@/server/data/capper-find-or-create";
-import { createPicksWithEntitlementCheck, type PickInsertData } from "@/server/data/subscriptions";
+import { insertPicksWithEntitlementCheck } from "@/server/data/subscriptions";
+import {
+  resolveImportRefs,
+  resolveOrCreateCapperId,
+  resolveOrCreateSportId,
+  type PendingPickInsert,
+} from "@/server/data/import-refs";
 import {
   resolveGameForNickname,
   resolveGameForTeams,
@@ -102,6 +107,9 @@ type ResolvableItem = {
   gameNumber: 1 | 2 | null;
 };
 
+// How long a line with no matching game waits before its one second look.
+const UNMATCHED_RETRY_DELAY_MS = 1000;
+
 function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2 | null, getOdds: OddsLoader) {
   if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1], { gameNumber, getOdds });
   if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0], { gameNumber, getOdds });
@@ -125,7 +133,16 @@ function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2
 // getOdds is the calling action's one createRequestOddsLoader(): every line in
 // the request shares it, so each sport's OddsSnapshot is read at most once per
 // request however many lines (and lookups per line) need it.
-async function resolveGameAndOdds(item: ResolvableItem, getOdds: OddsLoader): Promise<{
+//
+// retryOnMiss: a line with no matching game waits 1 s and looks once more
+// (below). That is right for the callers that resolve every line concurrently -
+// the waits overlap, so a paste costs 1 s at most. The pick import turns it off
+// and does one retry for the whole batch instead (see bulkImportPicksAction).
+async function resolveGameAndOdds(
+  item: ResolvableItem,
+  getOdds: OddsLoader,
+  { retryOnMiss = true }: { retryOnMiss?: boolean } = {}
+): Promise<{
   homeTeam: string;
   awayTeam: string;
   gameTime: Date;
@@ -196,8 +213,8 @@ async function resolveGameAndOdds(item: ResolvableItem, getOdds: OddsLoader): Pr
     let lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber, getOdds);
     // One retry before giving up - covers a transient miss/blip against the
     // live schedule source rather than treating it as a genuine non-match.
-    if (!lookup.game) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (!lookup.game && retryOnMiss) {
+      await new Promise((resolve) => setTimeout(resolve, UNMATCHED_RETRY_DELAY_MS));
       lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber, getOdds);
     }
     const game = lookup.game;
@@ -590,56 +607,6 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
   );
 }
 
-type CapperRef = { id: string; name: string };
-
-// Shared by bulkImportPicksAction and bulkImportParlaysAction - both do the
-// exact same "find by normalized name, else create" resolution and must stay
-// in sync, or a capper created via one import path within the same paste
-// could fail to match the other's cache lookup.
-async function resolveOrCreateCapperId(
-  userId: string,
-  capperName: string,
-  existingCappers: CapperRef[],
-  cache: Map<string, string>
-): Promise<string> {
-  const normalizedName = normalizeName(capperName);
-  // An empty normalized name (emoji-only / punctuation-only) matches nothing by
-  // that rule - and must not share a cache key - so it goes straight to
-  // findOrCreateCapper, whose index-expression rule tells such names apart.
-  const cacheKey = normalizedName === "" ? "raw:" + capperName.trim().toLowerCase() : normalizedName;
-  let capperId = cache.get(cacheKey);
-  if (!capperId) {
-    const existing =
-      normalizedName === "" ? undefined : existingCappers.find((c) => normalizeName(c.name) === normalizedName);
-    if (existing) {
-      capperId = existing.id;
-    } else {
-      // Race-safe find-or-create: a concurrent create of the same name returns
-      // the existing row instead of throwing.
-      const { capper } = await findOrCreateCapper(userId, capperName, { source: "OTHER", customSource: "Catalog import" });
-      capperId = capper.id;
-      if (!existingCappers.some((c) => c.id === capper.id)) existingCappers.push(capper);
-    }
-    cache.set(cacheKey, capperId);
-  }
-  return capperId;
-}
-
-// Shared by bulkImportPicksAction and bulkImportParlaysAction.
-async function resolveOrCreateSportId(sportName: string, cache: Map<string, string>): Promise<string> {
-  const key = sportName.toLowerCase();
-  let sportId = cache.get(key);
-  if (!sportId) {
-    let sport = await prisma.sport.findFirst({ where: { name: { equals: sportName, mode: "insensitive" } } });
-    if (!sport) {
-      sport = await prisma.sport.create({ data: { name: sportName } });
-    }
-    sportId = sport.id;
-    cache.set(key, sportId);
-  }
-  return sportId;
-}
-
 export async function bulkImportPicksAction(
   items: BulkImportItem[],
   skippedDuplicates: SkippedDuplicateItem[] = []
@@ -647,16 +614,41 @@ export async function bulkImportPicksAction(
   const user = await requireUser();
   const getOdds = createRequestOddsLoader();
 
-  // Before ANY write: the loop below find-or-creates cappers and sports as it
-  // resolves items, so an over-cap import must be refused up front to leave
-  // nothing behind. See import-limits.ts for the number and its reasoning.
+  // Refused before any work. See import-limits.ts for the number and its reasoning.
   const capError = importRowCapError(items.length);
   if (capError) return { success: false, error: capError };
 
-  const existingCappers = await prisma.capper.findMany({ where: { userId: user.id } });
+  // Nothing is written until the single transaction at the end: this function
+  // resolves every item first (no database), then cappers, sports and picks are
+  // created together or not at all. It used to find-or-create each item's
+  // capper and sport as it went, so an import that timed out part-way, threw,
+  // or was refused by the pick limit left cappers behind with no picks.
+  //
+  // Resolution: every item at once, not one after another. Each lookup reads
+  // the same cached schedule/odds feeds, so the items do not wait on each
+  // other - and neither do their retries: a line with no matching game used to
+  // sleep 1 s and look again, serially, so a paste of N unmatched lines (a day-
+  // old card) took N seconds before anything else happened. Now every miss gets
+  // ONE shared wait and one more look, with a fresh odds loader so a failed
+  // odds read is not just replayed.
+  type Resolution = Awaited<ReturnType<typeof resolveGameAndOdds>>;
+  type Outcome = { ok: true; resolved: Resolution } | { ok: false; err: unknown };
+  const resolveOne = (item: BulkImportItem, loader: OddsLoader): Promise<Outcome> =>
+    resolveGameAndOdds(item, loader, { retryOnMiss: false }).then(
+      (resolved): Outcome => ({ ok: true, resolved }),
+      (err: unknown): Outcome => ({ ok: false, err })
+    );
+  const outcomes = await Promise.all(items.map((item) => resolveOne(item, getOdds)));
+  const missed = outcomes.flatMap((o, i) => (o.ok && o.resolved.resolvable && !o.resolved.matched ? [i] : []));
+  if (missed.length > 0) {
+    await new Promise((resolve) => setTimeout(resolve, UNMATCHED_RETRY_DELAY_MS));
+    const retryOdds = createRequestOddsLoader();
+    const second = await Promise.all(missed.map((i) => resolveOne(items[i], retryOdds)));
+    missed.forEach((i, k) => {
+      outcomes[i] = second[k];
+    });
+  }
 
-  const capperCache = new Map<string, string>();
-  const sportCache = new Map<string, string>();
   const errors: string[] = [];
   const unmatchedGames: string[] = [];
   const doubleheaderBothFinal: string[] = [];
@@ -668,7 +660,7 @@ export async function bulkImportPicksAction(
   // individually and are simply never queued - that's a different kind of
   // per-item failure than the billing gate below, which is all-or-nothing
   // across whatever DID resolve.
-  const toInsert: PickInsertData[] = [];
+  const toInsert: PendingPickInsert[] = [];
   // Every item dropped below, for the skipped-line log - written once, in one
   // batch, after the loop. Pure bookkeeping: nothing here affects the result.
   const skippedLog: SkippedLineEntry[] = skippedDuplicates.map((d) => ({
@@ -681,10 +673,16 @@ export async function bulkImportPicksAction(
   const logSkip = (item: BulkImportItem, stage: SkippedLineEntry["stage"], reason: string) =>
     skippedLog.push({ stage, capperName: item.capperName, rawText: item.raw ?? item.description, guessedSport: item.sportName, reason });
 
-  for (const item of items) {
+  // In input order, so errors / unmatched lists / the skipped-line log read
+  // exactly as they did when resolution itself was serial.
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     try {
-      const capperId = await resolveOrCreateCapperId(user.id, item.capperName, existingCappers, capperCache);
-      const sportId = await resolveOrCreateSportId(item.sportName, sportCache);
+      // The capper is only created in the transaction below, so its one
+      // per-item failure (findOrCreateCapper's own rule) is checked here.
+      if (!item.capperName.trim()) throw new Error("Capper name is required.");
+      const outcome = outcomes[i];
+      if (!outcome.ok) throw outcome.err;
 
       const {
         homeTeam,
@@ -697,7 +695,7 @@ export async function bulkImportPicksAction(
         mlFavoredSide,
         resolvedGameNumber,
         doubleheaderBothLegsFinal,
-      } = await resolveGameAndOdds(item, getOdds);
+      } = outcome.resolved;
       if (resolvable && !matched) {
         // Don't persist this item at all - homeTeam/awayTeam/gameTime from
         // resolveGameAndOdds are just placeholders when matched is false,
@@ -750,8 +748,8 @@ export async function bulkImportPicksAction(
       const playerProp = item.betType === "PLAYER_PROP" ? parseAnyPlayerProp(item.description) : null;
 
       toInsert.push({
-        capperId,
-        sportId,
+        capperName: item.capperName,
+        sportName: item.sportName,
         homeTeam,
         awayTeam,
         betType: item.betType,
@@ -781,7 +779,9 @@ export async function bulkImportPicksAction(
   // fail the import. Awaited (not fire-and-forget) so serverless doesn't
   // freeze the function mid-write.
   const [result] = await Promise.all([
-    createPicksWithEntitlementCheck(user.id, toInsert),
+    // Cappers and sports are found or created INSIDE the transaction, after
+    // the pick-limit gate - a refused or failed import creates neither.
+    insertPicksWithEntitlementCheck(user.id, toInsert.length, (tx) => resolveImportRefs(tx, user.id, toInsert)),
     recordImportSkippedLines(user.id, skippedLog),
   ]);
 
