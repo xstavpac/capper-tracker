@@ -27,6 +27,7 @@ import {
   ChevronRightIcon,
   CrownIcon,
   FlameFilledIcon,
+  FlameIcon,
   ListIcon,
   ShieldCheckIcon,
   SnowflakeIcon,
@@ -241,26 +242,64 @@ const STREAK_DOTS = 10;
 // Smaller on a phone and in the three-column range where the sidebar leaves each panel at its narrowest.
 const DOT = "h-2 w-2 rounded-full max-[399px]:h-1.5 max-[399px]:w-1.5 min-[1500px]:max-[1699px]:h-1.5 min-[1500px]:max-[1699px]:w-1.5";
 const DOT_GAP = "gap-[3px] max-[399px]:gap-0.5 min-[1500px]:max-[1699px]:gap-0.5";
-// #1 is a dark featured row (the same in both themes); the rest are rows with a dot trail. A dot per
-// win up to STREAK_DOTS, then "+N" for the wins beyond it, so a longer run always draws a longer strip.
+// A #1 streak this long turns the featured row into the black-and-gold "generational run" strip.
+const GENERATIONAL_STREAK = 10;
+// The featured row's two looks: white with orange accents (an orange wash in the dark theme), and
+// the black-and-gold strip for a generational run, which is the same in both themes.
+const LEAD_LOOK = {
+  hot: {
+    strip:
+      "border-[#FBE1CF] bg-white shadow-[0_1px_3px_rgba(194,65,12,0.08)] hover:bg-[#FFFAF6] " +
+      "dark:border-[rgba(234,88,12,0.35)] dark:bg-[rgba(234,88,12,0.10)] dark:shadow-none dark:hover:bg-[rgba(234,88,12,0.10)] dark:hover:brightness-110",
+    chip: "border-[#EA580C] bg-[#EA580C] text-white",
+    crown: "border-[#FFEDD5] bg-[#FFEDD5] text-[#EA580C] dark:border-transparent dark:bg-[rgba(234,88,12,0.18)] dark:text-[#FB923C]",
+    name: "text-[#0F172A] dark:text-[#F8FAFC]",
+    wins: "text-[#C2410C] dark:text-[#FB923C]",
+    label: "text-[#9A3412] dark:text-[#FDBA74]",
+  },
+  generational: {
+    strip: "border-[#4A3A1E] bg-[#1C1917] hover:brightness-110",
+    chip: "border-[#E8A33A] bg-[#3A2A12] text-[#FFC65C]",
+    crown: "border-[#8A6A2E] bg-[#2A2013] text-[#FFC65C]",
+    name: "text-white",
+    wins: "text-[#F5B301]",
+    label: "text-[#FCD34D]",
+  },
+};
+// #1 is a featured row; the rest are rows with a dot trail. A dot per win up to STREAK_DOTS, then "+N"
+// for the wins beyond it, so a longer run always draws a longer strip.
 function HottestRows({ rows }: { rows: StreakEntry[] }) {
   const [lead, ...rest] = rows;
   const lit = Math.min(lead.streak, STREAK_DOTS);
+  const generational = lead.streak >= GENERATIONAL_STREAK;
+  const look = generational ? LEAD_LOOK.generational : LEAD_LOOK.hot;
   // The "+N" slot is kept on every row once any row needs it, so the strips stay aligned.
   const overflow = rest.some((e) => e.streak > STREAK_DOTS);
   return (
     <>
-      <Link href={capperHref(lead.capperId)} className="flex items-center gap-2.5 rounded-[14px] border border-[#4A3A1E] bg-[#17130E] px-3 py-2 transition hover:brightness-110">
-        <span className="rounded-[9px] border border-[#E8A33A] bg-[#3A2A12] px-2 py-1.5 text-[13px] font-semibold leading-none tabular-nums text-[#FFC65C]">#1</span>
-        <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#8A6A2E] bg-[#2A2013] text-[#FFC65C]">
+      <Link href={capperHref(lead.capperId)} className={"flex items-center gap-2.5 rounded-[14px] border px-3 py-2 transition " + look.strip}>
+        <span className={"rounded-[9px] border px-2 py-1.5 text-[13px] font-semibold leading-none tabular-nums " + look.chip}>#1</span>
+        <span aria-hidden className={"flex h-8 w-8 shrink-0 items-center justify-center rounded-full border " + look.crown}>
           <CrownIcon className="h-[18px] w-[18px]" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold leading-tight tracking-[0.02em] text-white">{lead.name}</span>
-          <span className="block whitespace-nowrap text-sm font-semibold leading-tight tabular-nums text-[#FFC65C]">{lead.streak} WINS</span>
+          <span className={"block truncate text-sm font-semibold leading-tight tracking-[0.02em] " + look.name}>{lead.name}</span>
+          {/* The pill wraps under "N WINS" where the row is too narrow for both. It never shrinks: on
+              a phone it is wider than this column and runs on under the streak dots, which sit at the
+              top of the row to leave it that line. */}
+          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <span className={"whitespace-nowrap text-sm font-semibold leading-tight tabular-nums " + look.wins}>{lead.streak} WINS</span>
+            {generational && (
+              <span className="relative inline-flex shrink-0 items-center gap-[3px] overflow-hidden whitespace-nowrap rounded-full border border-[#FDE68A] bg-[linear-gradient(90deg,#F59E0B_0%,#FDE68A_50%,#F59E0B_100%)] px-1.5 py-[3px] text-[9.5px] font-extrabold uppercase leading-none tracking-[0.08em] text-[#1C1917] shadow-[0_0_10px_rgba(253,224,71,0.55),0_0_2px_rgba(253,224,71,0.9)]">
+                <FlameIcon className="h-[9px] w-[9px] shrink-0 stroke-[2.6]" />
+                Generational run
+                <span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-1/2 animate-pill-shimmer bg-[linear-gradient(100deg,transparent_0%,rgba(255,255,255,0.75)_50%,transparent_100%)] motion-reduce:hidden" />
+              </span>
+            )}
+          </span>
         </span>
-        <span className="flex shrink-0 flex-col items-end gap-1">
-          <span className="flex items-center gap-1 text-[10px] font-medium leading-none text-[#D9CBB4]">
+        <span className={"flex shrink-0 flex-col items-end gap-1 " + (generational ? "self-start" : "")}>
+          <span className={"flex items-center gap-1 text-[10px] font-medium leading-none " + look.label}>
             Current streak
             <FlameFilledIcon className="h-[11px] w-[11px]" />
           </span>
