@@ -127,6 +127,13 @@ export const PlusIcon = ({ className }: P) => (
   </svg>
 );
 
+export const ClipboardIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <rect x="5" y="4" width="14" height="17" rx="2" />
+    <path d="M9 4a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v1a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1zM9 12h6M9 16h4" />
+  </svg>
+);
+
 export const ListIcon = ({ className }: P) => (
   <svg {...svgProps(className)}>
     <rect x="4" y="4" width="16" height="16" rx="3" />

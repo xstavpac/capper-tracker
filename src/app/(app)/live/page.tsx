@@ -8,11 +8,9 @@ import { GridLiveBoard } from "@/components/live/grid-live-board";
 import { orderBoardGames } from "@/components/live/live-scoreboard-ordering";
 import { resolveGridLiveSelection } from "@/lib/grid-live-selection";
 import { LiveCategoryPanel } from "@/components/live/live-category-panel";
-import { ParlaySlipButton } from "@/components/parlay/parlay-slip-button";
 import { easternDateKey } from "@/lib/dates";
 import { ThemedPage } from "@/components/dashboard/themed-page";
-import { PILL_GROUP, PageHeaderBar, pill } from "@/components/dashboard/page-header-bar";
-import { LiveIcon } from "@/components/dashboard/cappers-icons";
+import { LiveBanner } from "@/components/live/live-banner";
 
 const EMPTY = "rounded-[18px] bg-white p-10 text-center shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none";
 
@@ -108,33 +106,9 @@ export default async function LivePage({
 
   return (
     <ThemedPage>
-      {/* The shared dark banner: league pills (plain links, like the view toggle - see isGrid above),
-          then the Feed/Grid toggle and the Parlay slip control on the right. */}
-      <PageHeaderBar icon={<LiveIcon className="h-[19px] w-[19px]" />} iconClass="rounded-[11px] bg-red-600" title="Live" tagline="Powered by The Odds API">
-        <nav aria-label="League" className={PILL_GROUP + " xl:mx-auto"}>
-          {LIVE_SPORTS.map((s) => (
-            <a
-              key={s.key}
-              href={"/live?sport=" + s.key + (isGrid ? "&view=advanced" : "&view=feed")}
-              aria-current={activeSport === s.key ? "page" : undefined}
-              className={pill(activeSport === s.key) + " px-3 min-[1700px]:px-3.5"}
-            >
-              {s.label}
-            </a>
-          ))}
-        </nav>
-        <div className="flex flex-wrap items-center gap-2.5 ml-auto">
-          <nav aria-label="View" className={PILL_GROUP}>
-            <a href={"/live?sport=" + activeSport + "&view=feed"} aria-current={!isGrid ? "page" : undefined} className={pill(!isGrid) + " px-3"}>
-              Feed
-            </a>
-            <a href={"/live?sport=" + activeSport + "&view=advanced"} aria-current={isGrid ? "page" : undefined} className={pill(isGrid) + " px-3"}>
-              Grid
-            </a>
-          </nav>
-          <ParlaySlipButton dark />
-        </div>
-      </PageHeaderBar>
+      {/* The banner: league chips (plain links, like the view toggle - see isGrid above), the
+          Feed/Grid toggle and the Parlay slip control. */}
+      <LiveBanner activeSport={activeSport} isGrid={isGrid} />
 
       {sportCategoryBreakdown.length > 0 && (
         <LiveCategoryPanel sportLabel={sportLabel} items={sportCategoryBreakdown} leaderboards={sportCategoryLeaderboards} />
