@@ -16,7 +16,7 @@
 import {
   getOddsForSport,
   getYesterdayOddsForSport,
-  getLiveScoresForSport,
+  getClientScoresForSport,
   type OddsGame,
   type ScoreGame,
 } from "@/server/data/odds";
@@ -44,7 +44,9 @@ export async function getLiveBoardData(
   const [allOdds, yesterdayOdds, scores] = await Promise.all([
     getOddsForSport(activeSport),
     getYesterdayOddsForSport(activeSport),
-    getLiveScoresForSport(activeSport),
+    // The browser-bound view: `scores` is returned to live/page.tsx, which
+    // hands it to client components as props.
+    getClientScoresForSport(activeSport),
   ]);
 
   // Same board-slate scoping as live/page.tsx: the next slate (today plus a

@@ -108,6 +108,19 @@ export type ScoreGame = {
   // start-time-order fallback - see that function's own comment.
   gameNumber?: number | null;
   doubleHeaderStatus?: "Y" | "S" | "N" | null;
+  // NCAAF only (see getNcaafLiveScores) - ESPN's own split of each team's
+  // display name: the school ("Montana State") and its short form ("Montana
+  // St"). Catalog import derives team recognition for schools outside the
+  // hand-kept list from these (lib/feed-teams.ts). Absent for every other sport.
+  homeLocation?: string;
+  awayLocation?: string;
+  homeShortName?: string;
+  awayShortName?: string;
+  // NCAAF only: an FCS-vs-FCS game, on the feed for import matching and
+  // grading alone. The odds feed has no line for it, so /live has no card to
+  // put its score on - toClientScores drops it before anything is sent to a
+  // browser.
+  fcsOnly?: true;
 };
 
 export const LIVE_SPORTS = [
@@ -850,7 +863,7 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
 
 // Maps one ESPN scoreboard event to our ScoreGame shape - shared by every
 // per-date fetch getEspnScores fans out (see below).
-function espnEventToScoreGame(e: any): ScoreGame {
+function espnEventToScoreGame(e: any, options: { teamDetail?: boolean } = {}): ScoreGame {
   const competitors = e.competitions?.[0]?.competitors ?? [];
   const home = competitors.find((c: any) => c.homeAway === "home");
   const away = competitors.find((c: any) => c.homeAway === "away");
@@ -875,6 +888,14 @@ function espnEventToScoreGame(e: any): ScoreGame {
     innings: null,
     period: status === "live" ? (e.status?.period ?? null) : null,
     clock: status === "live" ? (e.status?.displayClock ?? null) : null,
+    ...(options.teamDetail
+      ? {
+          homeLocation: home?.team?.location,
+          awayLocation: away?.team?.location,
+          homeShortName: home?.team?.shortDisplayName,
+          awayShortName: away?.team?.shortDisplayName,
+        }
+      : {}),
   } as ScoreGame;
 }
 
@@ -949,7 +970,10 @@ async function getEspnScoresForDate(
 // resolveScheduleGameFromFeeds still had them) but broke catalog-import
 // matching and grading for every completed game, since a finished game has
 // no odds-feed fallback to hide behind.
-async function getEspnScores(sportPath: string, options: { groups?: string } = {}): Promise<ScoreGame[]> {
+async function getEspnScores(
+  sportPath: string,
+  options: { groups?: string; teamDetail?: boolean } = {}
+): Promise<ScoreGame[]> {
   const fmt = (d: Date) => easternDateKey(d).replace(/-/g, "");
   const dateKeys = [
     fmt(new Date(Date.now() - 86400000)),
@@ -987,7 +1011,7 @@ async function getEspnScores(sportPath: string, options: { groups?: string } = {
     const id = String(e.id);
     if (seen.has(id)) continue;
     seen.add(id);
-    games.push(espnEventToScoreGame(e));
+    games.push(espnEventToScoreGame(e, options));
   }
   return games;
 }
@@ -1005,13 +1029,105 @@ export function getNflLiveScores(): Promise<ScoreGame[]> {
 }
 
 // Same shared ESPN scoreboard helper as every other ESPN-backed sport above,
-// just a different sport path - confirmed live (real FBS week-1 coverage,
-// same response shape) before adding this during the NCAAF ecosystem
-// investigation. groups=80 pins it to FBS (see getEspnScores' note) - the
-// one sport where the default response is both truncated and
-// division-mixed.
-export function getNcaafLiveScores(): Promise<ScoreGame[]> {
-  return getEspnScores("football/college-football", { groups: "80" });
+// just a different sport path. College football is the one sport where the
+// default response is both truncated and division-mixed, so the division is
+// always named: groups=80 is FBS, groups=81 is FCS.
+//
+// Both are fetched and merged. FBS-only (how this ran until 2026-10) left
+// every FCS-vs-FCS game out of the one feed that catalog-import matching,
+// live scores and grading all read, so a pick on one ("Montana State -14.5",
+// "Rhode Island Moneyline") could never match a game. An FBS-vs-FCS game is in
+// both groups under the same event id, hence the dedupe. The FCS fetch fails
+// soft: an error there must not blank the FBS slate.
+export function mergeScoreGamesById(...lists: ScoreGame[][]): ScoreGame[] {
+  const seen = new Set<string>();
+  const out: ScoreGame[] = [];
+  for (const g of lists.flat()) {
+    if (seen.has(g.id)) continue;
+    seen.add(g.id);
+    out.push(g);
+  }
+  return out;
+}
+
+export async function getNcaafLiveScores(): Promise<ScoreGame[]> {
+  const [fbs, fcs] = await Promise.all([
+    getEspnScores("football/college-football", { groups: "80", teamDetail: true }),
+    getEspnScores("football/college-football", { groups: "81", teamDetail: true }).catch((err: unknown) => {
+      console.error("[getNcaafLiveScores] FCS fetch failed - serving FBS only", err instanceof Error ? err.message : err);
+      return [] as ScoreGame[];
+    }),
+  ]);
+  const fbsIds = new Set(fbs.map((g) => g.id));
+  return mergeScoreGamesById(
+    fbs,
+    fcs.map((g) => (fbsIds.has(g.id) ? g : { ...g, fcsOnly: true as const }))
+  );
+}
+
+// The score feed as a browser should get it: no FCS-only games (see
+// ScoreGame.fcsOnly) and none of the import-only team fields. For NCAAF this
+// is exactly the FBS slate the feed held before it carried FCS; for every
+// other sport it is the feed unchanged.
+export function toClientScores(games: ScoreGame[]): ScoreGame[] {
+  return games
+    .filter((g) => !g.fcsOnly)
+    .map(({ homeLocation, awayLocation, homeShortName, awayShortName, fcsOnly, ...rest }) => rest);
+}
+
+// getLiveScoresForSport for anything that ends up in a response or in client
+// component props (/live, the score polls, the ticker). Same shared cache
+// underneath - this only trims what is sent.
+export async function getClientScoresForSport(sportKey: string): Promise<ScoreGame[]> {
+  return toClientScores(await getLiveScoresForSport(sportKey));
+}
+
+// FCS games from two days out through the import resolve window
+// (MAX_RESOLVE_DATE_DRIFT_DAYS), as schedule-only previews. An FBS game posted
+// days ahead resolves through the odds feed; an FCS-vs-FCS game has no odds
+// line, so without this a pick dropped before the game enters the
+// yesterday..tomorrow score feed has nothing to match (and its teams nothing
+// to be recognized from). Schedule data only - never live status or scores -
+// so it is cached far longer than the score feed. A failed date is treated as
+// "no games that day" (see getEspnScoresForDate). Server-side only: nothing
+// sends these to a browser.
+const NCAAF_SCHEDULE_TTL_SECONDS = 1800;
+const NCAAF_SCHEDULE_CACHE_KEY = "ncaaf-fcs-upcoming-schedule";
+
+async function fetchNcaafUpcomingFcsGames(): Promise<ScoreGame[]> {
+  if (!isSportInSeason("americanfootball_ncaaf")) return [];
+  const dateKeys: string[] = [];
+  for (let day = 2; day <= MAX_RESOLVE_DATE_DRIFT_DAYS; day++) {
+    dateKeys.push(easternDateKey(new Date(Date.now() + day * 86400000)).replace(/-/g, ""));
+  }
+  const perDate = await Promise.all(
+    dateKeys.map((dateKey) => getEspnScoresForDate("football/college-football", dateKey, { groups: "81" }))
+  );
+  return mergeScoreGamesById(
+    perDate.flat().map((e) => ({ ...espnEventToScoreGame(e, { teamDetail: true }), fcsOnly: true as const }))
+  );
+}
+
+// Same two cache layers as getLiveScoresForSport (see dataCachedLiveScores):
+// the Data Cache shares one fetch across every serverless instance, the
+// process-local memo sits in front of it, and outside a Next request context
+// (scripts, tsx tests) it calls straight through.
+export async function getNcaafUpcomingFcsGames(): Promise<ScoreGame[]> {
+  return memoizeWithTtl(
+    NCAAF_SCHEDULE_CACHE_KEY,
+    () => {
+      const run = unstable_cache(fetchNcaafUpcomingFcsGames, [NCAAF_SCHEDULE_CACHE_KEY], {
+        revalidate: NCAAF_SCHEDULE_TTL_SECONDS,
+        tags: [NCAAF_SCHEDULE_CACHE_KEY],
+      });
+      return run().catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("incrementalCache")) return fetchNcaafUpcomingFcsGames();
+        throw err;
+      });
+    },
+    { ttlMs: NCAAF_SCHEDULE_TTL_SECONDS * 1000 }
+  );
 }
 
 // Same shared ESPN scoreboard helper again, sport path "hockey/nhl".
@@ -1762,7 +1878,12 @@ export function resolveScheduleGameFromFeeds(
   oddsGames: OddsGame[],
   teamMatches: (g: { homeTeam: string; awayTeam: string }) => boolean,
   referenceTime: Date,
-  gameNumber: 1 | 2 | null = null
+  gameNumber: 1 | 2 | null = null,
+  // Schedule-only games past the score feed's window that have no odds line
+  // (see getNcaafUpcomingFcsGames). Same standing as the odds feed: consulted
+  // only when the score feed has no same-day or upcoming match. A game the
+  // odds feed also lists is taken from the odds feed, not doubled.
+  scheduleGames: ScoreGame[] = []
 ): ScheduleCandidateResult {
   const inWindow = (g: { commenceTime: string }) => withinResolveWindow(g.commenceTime, referenceTime);
 
@@ -1775,7 +1896,14 @@ export function resolveScheduleGameFromFeeds(
   if (scoresUpcoming.length > 0) return pickBestScheduleCandidate(scoresUpcoming, referenceTime, gameNumber);
 
   const fromOdds = oddsGames.filter((g) => teamMatches(g) && inWindow(g)).map(oddsGameToScheduleGame);
-  if (fromOdds.length > 0) return pickBestScheduleCandidate(fromOdds, referenceTime, gameNumber);
+  const fromSchedule = scheduleGames.filter(
+    (g) =>
+      teamMatches(g) &&
+      inWindow(g) &&
+      !fromOdds.some((o) => teamNamesMatch(o.homeTeam, g.homeTeam) && teamNamesMatch(o.awayTeam, g.awayTeam))
+  );
+  const ahead = [...fromOdds, ...fromSchedule];
+  if (ahead.length > 0) return pickBestScheduleCandidate(ahead, referenceTime, gameNumber);
 
   return pickBestScheduleCandidate(fromScores, referenceTime, gameNumber);
 }
@@ -1837,7 +1965,11 @@ async function resolveScheduleGame(
     (g) => teamMatches(g) && g.status !== "final" && withinResolveWindow(g.commenceTime, referenceTime)
   );
   const oddsGames = scoreHasUpcoming ? [] : await fetchFeedOrEmpty("odds", () => getOddsForSport(sportKey));
-  return resolveScheduleGameFromFeeds(scoreGames, oddsGames, teamMatches, referenceTime, gameNumber);
+  const scheduleGames =
+    scoreHasUpcoming || sportKey !== "americanfootball_ncaaf"
+      ? []
+      : await fetchFeedOrEmpty("schedule", () => getNcaafUpcomingFcsGames());
+  return resolveScheduleGameFromFeeds(scoreGames, oddsGames, teamMatches, referenceTime, gameNumber, scheduleGames);
 }
 
 // Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw

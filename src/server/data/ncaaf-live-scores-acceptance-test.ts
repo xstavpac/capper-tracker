@@ -4,7 +4,9 @@
 // No test framework in this repo (see grading-correctness-acceptance-test.ts).
 // console.logs PASS/FAIL, exits non-zero on any failure.
 //
-// getNcaafLiveScores is getEspnScores("football/college-football", { groups: "80" }).
+// getNcaafLiveScores is getEspnScores("football/college-football") for BOTH
+// divisions - groups=80 (FBS) and groups=81 (FCS) - merged by event id (see
+// the 2026-10 note at the bottom of this header).
 // The 2026-09 catalog-import investigation flagged that the old call - a bare
 // 3-day `dates=` range with NO `limit` and NO `groups` - risks a silently
 // TRUNCATED response on a busy Saturday (60-90 FBS games across Fri+Sat+Sun,
@@ -33,8 +35,19 @@
 // plus a basic parse check (post/in/pre -> final/live/preview, displayName
 // and date passthrough) and a check that an FCS-vs-FBS "money game" present
 // in the response is still parsed (it rides in as the FBS team's game).
+//
+// 2026-10: the feed was FBS-only, so an FCS-vs-FCS game was in no feed and a
+// pick on one could never match or grade. The FCS group is now fetched
+// alongside: 3 dates x 2 groups = 6 requests, an FBS-vs-FCS game (present in
+// both groups) appears once, and an FCS fetch failure leaves the FBS slate.
+//
+// Follow-up (same PR): FCS-only games are server-side only. toClientScores -
+// what every browser-bound read goes through - must return exactly the FBS
+// slate in exactly the pre-FCS shape. And the ESPN fan-out is per server cache
+// window, not per caller: many concurrent readers trigger one set of fetches.
 
-import { getNcaafLiveScores } from "./odds";
+import { getNcaafLiveScores, getLiveScoresForSport, getClientScoresForSport, toClientScores } from "./odds";
+import { isSportInSeason } from "@/lib/sport-seasons";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -89,19 +102,117 @@ const FIXTURE = {
   ],
 };
 
+// What groups=81 returns: one FCS-vs-FCS game, plus the FBS-vs-FCS money game
+// again under the same event id.
+const FCS_FIXTURE = {
+  events: [
+    {
+      id: "401868120",
+      date: "2026-09-05T20:00:00Z",
+      status: { type: { state: "post", detail: "Final", shortDetail: "Final" } },
+      competitions: [
+        {
+          competitors: [
+            {
+              homeAway: "home",
+              team: { displayName: "Montana State Bobcats", location: "Montana State", shortDisplayName: "Montana St" },
+              score: "38",
+            },
+            { homeAway: "away", team: { displayName: "Idaho Vandals", location: "Idaho", shortDisplayName: "Idaho" }, score: "20" },
+          ],
+        },
+      ],
+    },
+    FIXTURE.events[2],
+  ],
+};
+
 async function main() {
   const realFetch = globalThis.fetch;
   const calledUrls: string[] = [];
+  let fcsFails = false;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
-    calledUrls.push(String(input));
-    return { ok: true, json: async () => FIXTURE } as Response;
+    const url = String(input);
+    calledUrls.push(url);
+    const isFcs = /[?&]groups=81(&|$)/.test(url);
+    if (isFcs && fcsFails) throw new Error("network down");
+    return { ok: true, json: async () => (isFcs ? FCS_FIXTURE : FIXTURE) } as Response;
   }) as typeof fetch;
 
   try {
-    const games = await getNcaafLiveScores();
+    const allGames = await getNcaafLiveScores();
 
-    check("fetches exactly 3 dates (yesterday/today/tomorrow), not one range request", calledUrls.length, 3);
-    for (const url of calledUrls) {
+    check("fetches 3 dates (yesterday/today/tomorrow) per division, not one range request", calledUrls.length, 6);
+    check("3 requests carry groups=80 (FBS)", calledUrls.filter((u) => /[?&]groups=80(&|$)/.test(u)).length, 3);
+    check("3 requests carry groups=81 (FCS)", calledUrls.filter((u) => /[?&]groups=81(&|$)/.test(u)).length, 3);
+    check("FBS games first, then the FCS-only game; the game in both groups once", allGames.map((g) => g.id), [
+      "401752700",
+      "401752701",
+      "401752702",
+      "401868120",
+    ]);
+    const fcsGame = allGames.find((g) => g.id === "401868120")!;
+    check("FCS-vs-FCS game: final with both sides and scores", [fcsGame.status, fcsGame.homeTeam, fcsGame.awayTeam, fcsGame.scores], [
+      "final",
+      "Montana State Bobcats",
+      "Idaho Vandals",
+      [
+        { name: "Montana State Bobcats", score: "38" },
+        { name: "Idaho Vandals", score: "20" },
+      ],
+    ]);
+    check(
+      "school and short form pass through for team recognition",
+      [fcsGame.homeLocation, fcsGame.homeShortName, fcsGame.awayLocation, fcsGame.awayShortName],
+      ["Montana State", "Montana St", "Idaho", "Idaho"]
+    );
+
+    check("only the FCS-vs-FCS game is tagged fcsOnly", allGames.filter((g) => g.fcsOnly).map((g) => g.id), ["401868120"]);
+
+    // What a browser gets: the FBS-only fetch, mapped the way it was before
+    // the feed carried FCS (no school / short-form fields, no fcsOnly).
+    const clientView = toClientScores(allGames);
+    check("client view drops the FCS-only game, keeps the FBS-vs-FCS one", clientView.map((g) => g.id), [
+      "401752700",
+      "401752701",
+      "401752702",
+    ]);
+    check(
+      "client view carries no import-only fields",
+      clientView.flatMap((g) => Object.keys(g)).filter((k) => /Location|ShortName|fcsOnly/.test(k)),
+      []
+    );
+    check(
+      "client view keys are exactly the pre-FCS ScoreGame shape",
+      Object.keys(clientView[0]),
+      ["id", "homeTeam", "awayTeam", "status", "scores", "commenceTime", "inningHalf", "inningOrdinal", "innings", "period", "clock"]
+    );
+
+    // Fan-out: 25 concurrent readers (full feed and client view mixed), then
+    // 5 more inside the TTL, share ONE refresh - 6 ESPN requests in total (3
+    // dates x 2 divisions), not 6 per reader.
+    if (isSportInSeason("americanfootball_ncaaf")) {
+      const before = calledUrls.length;
+      const readers = await Promise.all(
+        Array.from({ length: 25 }, (_, i) =>
+          i % 2 ? getLiveScoresForSport("americanfootball_ncaaf") : getClientScoresForSport("americanfootball_ncaaf")
+        )
+      );
+      for (let i = 0; i < 5; i++) await getClientScoresForSport("americanfootball_ncaaf");
+      check("30 readers inside one TTL window -> one refresh (6 ESPN requests)", calledUrls.length - before, 6);
+      check("full-feed readers see 4 games, client-view readers 3", [readers[1].length, readers[0].length], [4, 3]);
+    }
+
+    fcsFails = true;
+    check("an FCS fetch failure still serves the FBS slate", (await getNcaafLiveScores()).map((g) => g.id), [
+      "401752700",
+      "401752701",
+      "401752702",
+    ]);
+    fcsFails = false;
+
+    const games = allGames.filter((g) => g.id !== "401868120");
+    for (const url of calledUrls.filter((u) => /[?&]groups=80(&|$)/.test(u))) {
       check(`fetch hit ESPN's football/college-football scoreboard path (${url})`, url.includes("/sports/football/college-football/scoreboard"), true);
       check(`request carries NO limit param - ESPN caps busy-Saturday responses at 25 events whenever limit is set above ~500 (${url})`, /[?&]limit=/.test(url), false);
       check(`request carries groups=80 (${url})`, /[?&]groups=80(&|$)/.test(url), true);
@@ -112,7 +223,7 @@ async function main() {
     // dates apart) - real distinct per-date responses obviously wouldn't
     // repeat the same ids, but the dedupe-by-id in getEspnScores means this
     // stub still exercises the "parsed all 3 events" shape correctly.
-    check("parsed all 3 events (deduped across the 3 per-date fetches)", games.length, 3);
+    check("parsed all 3 FBS events (deduped across the 3 per-date fetches)", games.length, 3);
 
     const jmu = games.find((g) => g.id === "401752700")!;
     check("in-progress game: status is live", jmu.status, "live");

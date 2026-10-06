@@ -9,6 +9,7 @@ import {
   type SegmentPeriod,
 } from "@/lib/bet-line";
 import { isKnownFullPlayerName } from "@/lib/player-roster-fallback";
+import { findFeedTeamHits, type FeedTeam } from "@/lib/feed-teams";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { parseMlbPlayerProp, normalizeMlbNPlus } from "@/lib/mlb-prop";
 import {
@@ -2143,6 +2144,9 @@ const NCAAF_TRAILING_TOKEN_OK =
 // them as evidence of a DIFFERENT, longer school ("North Carolina A&T").
 const INSTITUTIONAL_SUFFIX = /^(university|college|univ)$/i;
 
+const NCAAF_LEADING_COMPASS =
+  /(?:^|[^\w])(north|south|east|west|northern|southern|eastern|western|central|southeast|southeastern|northeast|northeastern|southwest|southwestern|northwest|northwestern)\s+$/i;
+
 // Returns every distinct team nickname found in the text, longest-match-first
 // (matches the order TEAM_SPORT_ENTRIES is sorted in). Lets a caller pin an
 // exact matchup when a pick names both teams, e.g. "Dodgers Cubs under 8.5".
@@ -2184,6 +2188,11 @@ export function findTeamNicknames(text: string, sportName: string): string[] {
   // Clemson") is left alone.
   if (sportName === "NCAAF" && kept.length === 1) {
     const only = kept[0];
+    // Same guard on the other side: a compass word directly in front
+    // ("Southern Illinois", "Eastern Kentucky") names a different school than
+    // the one matched. A listed school that starts with one ("Northern
+    // Illinois") was matched whole and never reaches here.
+    if (NCAAF_LEADING_COMPASS.test(text.slice(0, only.start))) return [];
     const after = text.slice(only.end).replace(/^[\s.:-]+/, "");
     const nextWord = after.match(/^([A-Za-z][A-Za-z&.'-]*)/)?.[1];
     if (nextWord && !NCAAF_TRAILING_TOKEN_OK.test(nextWord)) {
@@ -2207,6 +2216,61 @@ export function findTeamNicknames(text: string, sportName: string): string[] {
   }
 
   return kept.map((h) => h.phrase);
+}
+
+// Every hand-kept team phrase found in the text, with where it sits and which
+// sport it names (null for an AMBIGUOUS_NICKNAMES key, which names several).
+function staticTeamSpans(lower: string): { start: number; end: number; sport: string | null }[] {
+  const phrases: [string, string | null][] = [
+    ...TEAM_SPORT_ENTRIES.map(([phrase, sport]): [string, string | null] => [phrase, sport]),
+    ...NCAAF_SCHOOLS.map(([, canonical]): [string, string | null] => [canonical, "NCAAF"]),
+    ...Object.keys(AMBIGUOUS_NICKNAMES).map((key): [string, string | null] => [key, null]),
+  ];
+  const spans: { start: number; end: number; sport: string | null }[] = [];
+  for (const [phrase, sport] of phrases) {
+    const m = teamPhraseRegex(phrase).exec(lower);
+    if (m) spans.push({ start: m.index, end: m.index + m[0].length, sport });
+  }
+  return spans;
+}
+
+// Team nicknames for a line the live game feed (feed-teams.ts) reads better
+// than the lists above do - above all an FCS school, which the lists
+// deliberately don't carry, but also a listed school written in a form the
+// lists miss ("Ohio St"). Returns null whenever the hand-kept lists should
+// decide, so a line they already read in full parses exactly as it did before
+// this existed.
+//
+// The longest name wins, across both sources: a feed match inside (or equal
+// to) a listed phrase is dropped ("Montana" inside "Montana State", "Georgia"
+// against the listed "georgia"), and a listed phrase inside a feed match is
+// ignored ("Illinois" inside "Illinois State", "Rams" inside "Rhode Island
+// Rams"). A listed team of another sport left standing
+// next to the feed match means the line isn't clearly college football, so the
+// lists decide. Each nickname returned for a feed team is its full feed name,
+// lowercased - the game resolver's endsWith check matches it exactly.
+export function feedTeamNicknames(text: string, feedTeams: FeedTeam[]): string[] | null {
+  if (feedTeams.length === 0) return null;
+  // Player props are resolved by name against a roster, never by a team word.
+  if (parseNflNhlPlayerProp(text) ?? parseSupportedMlbProp(text)) return null;
+
+  const lower = text.toLowerCase();
+  const statics = staticTeamSpans(lower);
+  const hits = findFeedTeamHits(text, feedTeams).filter(
+    (h) => !statics.some((s) => s.start <= h.start && s.end >= h.end)
+  );
+  if (hits.length === 0) return null;
+
+  const inFeedHit = (start: number, end: number) => hits.some((h) => h.start <= start && h.end >= end);
+  if (statics.some((s) => !inFeedHit(s.start, s.end) && s.sport !== null && s.sport !== "NCAAF")) return null;
+
+  const listed = findTeamNicknames(text, "NCAAF").flatMap((phrase) => {
+    const m = teamPhraseRegex(phrase).exec(lower);
+    return m && !inFeedHit(m.index, m.index + m[0].length) ? [{ start: m.index, nickname: phrase }] : [];
+  });
+  return [...hits.map((h) => ({ start: h.start, nickname: h.team.name.toLowerCase() })), ...listed]
+    .sort((a, b) => a.start - b.start)
+    .map((n) => n.nickname);
 }
 
 // Player-based (not team-based) picks - e.g. tennis moneylines like "Tallon
@@ -2314,13 +2378,13 @@ const SPORTS_PLACE_NAMES = new Set<string>([]);
 // phantom-ATP fallback as SPORTS_PLACE_NAMES guards against above (a bare
 // Title Case school name before a spread/ML/total reads as a tennis
 // player's surname). Unlike SPORTS_PLACE_NAMES this isn't a pro-franchise
-// locality - it's a real team name with nowhere to go: both of this app's
-// NCAAF sources (ESPN's scoreboard, The Odds API) are FBS-only upstream
-// (docs/resolver-team-gap-followups.md #3), so adding these to
-// NCAAF_SCHOOLS would not make them resolvable to a real game - there is
-// no live schedule/odds data for an FCS game to match against. Routing to
-// `unresolved` ("add manually") instead of a false ATP tag is the fix here,
-// not adding these to a team list that can't actually grade them.
+// locality - it's a real team name. When this was added both NCAAF sources
+// were FBS-only, so an FCS school had no game to match. Since 2026-10 the
+// score feed carries FCS (docs/resolver-team-gap-followups.md #3) and a
+// school with a game on it is recognized from the feed before this is ever
+// reached (feedTeamNicknames); this guard still covers the same names when
+// the feed has no game for them, routing to `unresolved` ("add manually")
+// instead of a false ATP tag.
 //
 // This list is NOT a general "every FCS school" registry - it's the
 // specific instances confirmed in a real capper's rejected batch (2026-09).
@@ -2669,7 +2733,11 @@ export function parseCatalog(
   // function stays sync/pure either way; omitting it (the default) reproduces
   // this function's exact pre-guard behavior for every caller that has no
   // roster data available (or whose fetch hasn't resolved yet).
-  rosterFullNames?: Iterable<string>
+  rosterFullNames?: Iterable<string>,
+  // Optional teams from the live NCAAF game feed (feed-teams.ts), so a school
+  // outside the hand-kept list - every FCS school - resolves when it has a game
+  // on the feed. Same contract as rosterFullNames: omitted, nothing changes.
+  feedTeams?: FeedTeam[]
 ): {
   picks: ParsedPick[];
   parlays: ParsedParlay[];
@@ -2724,6 +2792,27 @@ export function parseCatalog(
   // allowNicknameFallback) so a header like "Tigers Kitchen" can't be
   // misread as a Tigers pick just because it contains a team nickname.
   let precededByBlank = true;
+
+  // A team read from the feed (see feedTeamNicknames) settles the sport for a line the
+  // lists left sport-less or read as another sport by nickname alone. A line
+  // carrying an explicit league code is left as written.
+  const withFeedSport = (text: string, detected: ReturnType<typeof detectSport>): ReturnType<typeof detectSport> => {
+    if (!feedTeams || detected.sportName === "NCAAF" || detected.rest !== text) return detected;
+    return feedTeamNicknames(text, feedTeams) ? { sportName: "NCAAF", rest: text, leadingText: "" } : detected;
+  };
+  const nicknamesFor = (rest: string, sportName: string): string[] => {
+    if (sportName !== "NCAAF" || !feedTeams) return findTeamNicknames(rest, sportName);
+    const viaFeed = feedTeamNicknames(rest, feedTeams);
+    if (viaFeed) return viaFeed;
+    const listed = findTeamNicknames(rest, sportName);
+    if (listed.length > 0) return listed;
+    // The lists settled the sport but named no team (a full name whose accent
+    // the school keys miss: "Hawai'i Rainbow Warriors"). A full feed name is
+    // unambiguous on its own.
+    return findFeedTeamHits(rest, feedTeams)
+      .filter((h) => h.via === "name")
+      .map((h) => h.team.name.toLowerCase());
+  };
 
   for (const line of rawLines) {
     if (currentCapper !== droppedHeaderValue) trustedCapper = currentCapper;
@@ -2791,7 +2880,7 @@ export function parseCatalog(
         unresolvedCapperNames.push(inlineMatch);
         continue;
       }
-      const detected = detectSport(remainder);
+      const detected = withFeedSport(remainder, detectSport(remainder));
       if (!detected.sportName) {
         const pairResolved = resolveAmbiguousPair(remainder);
         if (pairResolved) {
@@ -2905,7 +2994,7 @@ export function parseCatalog(
         units: parsed.units,
         period: parsed.period,
         raw: line,
-        teamNicknames: findTeamNicknames(detected.rest, detected.sportName),
+        teamNicknames: nicknamesFor(detected.rest, detected.sportName),
         gameNumber: inlineGameNumber,
       });
       continue;
@@ -2934,7 +3023,9 @@ export function parseCatalog(
       unresolvedCapperNames.push(currentCapper || "Unknown");
       continue;
     }
-    const detected = detectSport(pickText, !afterBlank || looksLikePick(pickText));
+    const allowNicknames = !afterBlank || looksLikePick(pickText);
+    const detectedByLists = detectSport(pickText, allowNicknames);
+    const detected = allowNicknames ? withFeedSport(pickText, detectedByLists) : detectedByLists;
 
     // A brand-new capper's first-ever line, written as "Name - pick" with an
     // explicit trailing/inline league code ("BAMBINO - Juwan Johnson
@@ -3032,7 +3123,7 @@ export function parseCatalog(
         units: parsed.units,
         period: parsed.period,
         raw: strippedText,
-        teamNicknames: findTeamNicknames(effectiveRest, detected.sportName),
+        teamNicknames: nicknamesFor(effectiveRest, detected.sportName),
         gameNumber: headerGameNumber,
       });
       continue;

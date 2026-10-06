@@ -1,4 +1,4 @@
-import { getLiveScoresForSport } from "@/server/data/odds";
+import { getClientScoresForSport } from "@/server/data/odds";
 import { requireUser } from "@/server/auth";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +23,6 @@ export async function GET(request: Request) {
     return Response.json({ error: "missing sport" }, { status: 400 });
   }
 
-  const scores = await getLiveScoresForSport(sportKey);
+  const scores = await getClientScoresForSport(sportKey);
   return Response.json({ scores });
 }

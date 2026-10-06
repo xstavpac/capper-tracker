@@ -77,6 +77,7 @@ const PURE_DESPITE_PRISMA_IMPORT = new Set([
   "src/server/data/odds-usage-log-failure-acceptance-test.ts",
   "src/server/data/team-record-acceptance-test.ts",
   "src/server/data/situational-snapshot-acceptance-test.ts",
+  "src/server/data/fcs-import-acceptance-test.ts",
 ]);
 
 function walk(dir) {

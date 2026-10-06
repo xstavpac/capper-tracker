@@ -1,6 +1,6 @@
 import {
   getTickerOddsForSport,
-  getLiveScoresForSport,
+  getClientScoresForSport,
   matchScoreToGame,
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
@@ -100,7 +100,7 @@ export async function getLiveTickerGames(): Promise<TickerGame[]> {
   const perSport = await Promise.all(
     RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
       const sportLabel = LIVE_SPORTS.find((s) => s.key === sportKey)?.label ?? sportKey;
-      const [allOdds, scores] = await Promise.all([getTickerOddsForSport(sportKey), getLiveScoresForSport(sportKey)]);
+      const [allOdds, scores] = await Promise.all([getTickerOddsForSport(sportKey), getClientScoresForSport(sportKey)]);
       return buildTickerGamesForSport(sportKey, sportLabel, allOdds, scores, now);
     })
   );
@@ -122,7 +122,7 @@ export type LiveScoresBySport = Record<string, ScoreGame[]>;
 // client treats a missing sport as "no update, keep what's shown", where an
 // empty array would read as "the feed says no games".
 export async function getAllLiveScores(
-  fetchScores: (sportKey: string) => Promise<ScoreGame[]> = getLiveScoresForSport
+  fetchScores: (sportKey: string) => Promise<ScoreGame[]> = getClientScoresForSport
 ): Promise<{ scoresBySport: LiveScoresBySport; failed: string[] }> {
   const settled = await Promise.allSettled(RESOLVABLE_SPORT_KEYS.map((sportKey) => fetchScores(sportKey)));
   const scoresBySport: LiveScoresBySport = {};
