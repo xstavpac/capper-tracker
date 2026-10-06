@@ -126,12 +126,13 @@ export type PickInsertData = {
 //    adds a few network round trips, so ~1-2 s is the expected ceiling at 1,000
 //    rows and less at the 500-row import cap (import-limits.ts). 15 s is 7x+
 //    headroom over that, and still short enough that a wedged transaction does
-//    not hold the user's subscription row lock - or the instance's single
-//    connection (connection_limit=1) - for long. The old per-row inserts took
-//    N round trips inside the default 5 s and could not finish a large import.
-//  - maxWait 10 s: with connection_limit=1 a transaction waits for the one
-//    connection while other work on the instance finishes; the 2 s default is
-//    shorter than the pool's own 10 s wait.
+//    not hold the user's subscription row lock - or one of the instance's few
+//    pooled connections (connection_limit on DATABASE_URL, see
+//    docs/c4-grading-throughput.md section 7) - for long. The old per-row inserts
+//    took N round trips inside the default 5 s and could not finish a large import.
+//  - maxWait 10 s: the per-instance pool is small, so a transaction can wait for
+//    a connection while other work on the instance finishes; the 2 s default is
+//    shorter than the pool's own wait (pool_timeout).
 const ENTITLEMENT_TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
 
 export type AtomicCreateResult =
@@ -231,7 +232,8 @@ export async function createPicksWithEntitlementCheck(userId: string, rows: Pick
     };
     // ONE INSERT ... RETURNING for the whole batch (Prisma >= 5.14), instead of
     // one statement per row. The per-row version issued N statements through the
-    // transaction's single connection (connection_limit=1 in production), so a
+    // transaction's one connection (a transaction always runs on a single
+    // connection, whatever connection_limit is), so a
     // large import held the subscription row lock for N round trips and could
     // outlive Prisma's default 5 s interactive-transaction timeout. Rows come
     // back in input order. The stamp is still spread into every row.
@@ -247,11 +249,13 @@ export async function createPicksWithEntitlementCheck(userId: string, rows: Pick
 
 // `db` defaults to the shared client but accepts an interactive-transaction
 // client so the Stripe webhook handler can run this read/write inside the
-// same transaction that claims the event id (see stripe-webhook.ts). With
-// `connection_limit=1` in production, a call to the bare `prisma` singleton
-// from inside a `$transaction` callback would deadlock waiting for the one
-// connection the transaction already holds - so every DB call the webhook
-// makes mid-transaction must be threaded through `tx`, not just the writes.
+// same transaction that claims the event id (see stripe-webhook.ts). A call to
+// the bare `prisma` singleton from inside a `$transaction` callback runs on a
+// different connection: it is outside the transaction (not rolled back with it),
+// and when the per-instance pool is exhausted (always, at connection_limit=1) it
+// deadlocks waiting for a connection the transaction holds - so every DB call
+// the webhook makes mid-transaction must be threaded through `tx`, not just the
+// writes.
 type SubscriptionDb = Prisma.TransactionClient | typeof prisma;
 
 export async function findUserIdByStripeCustomerId(

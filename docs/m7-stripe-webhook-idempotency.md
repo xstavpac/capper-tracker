@@ -103,10 +103,12 @@ The route (`route.ts`) is now just: verify signature → `applyStripeWebhookEven
 - **The Stripe API call is hoisted out of the transaction** — never hold a DB
   transaction open across a network round-trip. `checkout.session.completed`
   fetches the Subscription first, then transacts.
-- **`connection_limit=1`:** every DB call *inside* the `$transaction` callback
-  goes through `tx`, never the bare `prisma` singleton — a singleton call
-  mid-transaction would deadlock waiting for the one connection the
-  transaction already holds. `findUserIdByStripeCustomerId` /
+- **Small per-instance pool (`connection_limit=1` when this was written; see
+  the 2026-10-06 note in `c4-grading-throughput.md` §7):** every DB call
+  *inside* the `$transaction` callback goes through `tx`, never the bare
+  `prisma` singleton — a singleton call mid-transaction runs outside the
+  transaction, and with the pool exhausted it deadlocks waiting for a
+  connection the transaction already holds. This rule holds at any limit. `findUserIdByStripeCustomerId` /
   `setStripeCustomerId` / `syncSubscriptionFromStripe` therefore each take an
   optional `db` param (defaults to `prisma`).
 - **Interactive transactions are proven against this pooler:**

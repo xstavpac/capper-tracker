@@ -182,6 +182,21 @@ Assume a **realistic mixed user base**, not a bulk-importer-heavy skew.
 
 ## 7. Production facts — resolved and still-unresolved
 
+> **Update 2026-10-06 — `connection_limit` is being raised for launch.** The
+> launch-concurrency audit found that one connection per Fluid instance is the
+> first thing to fail under load (Prisma P2024 pool timeouts once an instance
+> has more than `pool_timeout` of statements queued). The planned production
+> setting is `pgbouncer=true&connection_limit=3&pool_timeout=20` (5 after the
+> Supabase compute upgrade), applied by the owner once the Supavisor pool size,
+> max client connections and port (6543, transaction mode) are confirmed.
+> Constraint: `instances × connection_limit` must stay under Supavisor's max
+> client connections; real parallelism is capped by its pool size. Everything
+> below that says "`connection_limit = 1`" or "writes are serial" describes the
+> configuration at the time of writing: once the limit is raised, an instance
+> runs up to `connection_limit` statements in parallel, so
+> `BULK_GRADE_CONCURRENCY` and each page's `Promise.all` become partly real
+> concurrency. Re-measure `grade-picks-run` after the change.
+
 ### Resolved (Verified — owner-confirmed 2026-08-31)
 
 | Fact | Value | Implication |

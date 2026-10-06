@@ -1,6 +1,7 @@
 // Everything the /cappers page shows, computed in the database in ONE statement (design:
 // docs/design/dashboard-capper-detail-egress.md §3 - composable CTE fragments under
-// connection_limit=1, where every extra statement is another serial round trip).
+// a small per-instance connection pool, where every extra statement is another
+// round trip queued behind the rest of the instance's work).
 //
 // The database filters, ranks, searches and paginates; the app receives only what is drawn:
 // one page of leaderboard rows (LIMIT 20), the top-4 cards, the three panels' five rows, the overview

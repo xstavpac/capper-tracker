@@ -1,5 +1,7 @@
 # `fetchPicksByCapper` egress reduction — design
 
+> **Note (2026-10-06):** this design was written when production ran `connection_limit=1`. The limit is being raised for launch (see `docs/c4-grading-throughput.md` §7); statements on one instance then queue behind a small pool instead of running strictly one at a time. The one-statement designs here are unaffected.
+
 Status: **design only** — no implementation code, no migrations, no schema
 changes, no production access. Scope is `fetchPicksByCapper`
 (`src/server/data/picks.ts:415`) and its two callers,
