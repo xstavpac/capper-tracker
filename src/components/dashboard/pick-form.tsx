@@ -16,8 +16,28 @@ const BET_TYPES = [
   { value: "NRFI", label: "NRFI / YRFI" },
 ];
 
-export function PickForm({ cappers, sports, atLimit }: { cappers: Capper[]; sports: Sport[]; atLimit?: boolean }) {
-  const [isOpen, setIsOpen] = useState(false);
+export function PickForm({
+  cappers,
+  sports,
+  atLimit,
+  open,
+  onOpenChange,
+}: {
+  cappers: Capper[];
+  sports: Sport[];
+  atLimit?: boolean;
+  // Optional controlled mode: the caller renders its own trigger (the Catalog
+  // Import header button) and this renders nothing until `open` is true.
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const controlled = open !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = controlled ? open : internalOpen;
+  function setIsOpen(next: boolean) {
+    if (!controlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  }
   const [sportId, setSportId] = useState(sports[0]?.id ?? "");
   const [betType, setBetType] = useState("SPREAD");
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +46,9 @@ export function PickForm({ cappers, sports, atLimit }: { cappers: Capper[]; spor
 
   const selectedSport = sports.find((s) => s.id === sportId);
 
-  if (atLimit && !isOpen) {
+  if (controlled && !isOpen) return null;
+
+  if (atLimit && (controlled || !isOpen)) {
     return (
       <div className="rounded-card bg-amber-50 p-4 shadow-soft dark:bg-amber-500/10">
         <p className="text-sm text-amber-800 dark:text-amber-300">

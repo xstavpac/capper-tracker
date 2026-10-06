@@ -332,17 +332,34 @@ async function resolveGameAndOdds(item: ResolvableItem): Promise<{
 // bulkImportPicksAction uses, without persisting anything, so the preview
 // matches what actually gets saved.
 export async function previewBulkImportOdds(items: ResolvableItem[]): Promise<Record<number, number>> {
+  return (await previewBulkImportMatches(items)).odds;
+}
+
+// The game a preview row resolved to - gameTime as an ISO string so it
+// crosses the server-action boundary unchanged.
+export type PreviewMatchedGame = { homeTeam: string; awayTeam: string; gameTime: string };
+
+// previewBulkImportOdds plus the matchup each row resolved to, for the Match
+// results panel's "Away @ Home - time" sub-line. Purely additive: `games` is
+// read off the SAME resolveGameAndOdds result the odds come from - no extra
+// lookup. A row with the capper's own odds is still never resolved here (as
+// before), so it has no entry and the panel falls back to its own text.
+export async function previewBulkImportMatches(
+  items: ResolvableItem[]
+): Promise<{ odds: Record<number, number>; games: Record<number, PreviewMatchedGame> }> {
   await requireUser();
 
   const enriched: Record<number, number> = {};
+  const games: Record<number, PreviewMatchedGame> = {};
   await Promise.all(
     items.map(async (item, i) => {
       if (item.hasExplicitOdds) return;
-      const { odds, matched } = await resolveGameAndOdds(item);
+      const { odds, matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item);
       if (matched && odds !== item.odds) enriched[i] = odds;
+      if (matched) games[i] = { homeTeam, awayTeam, gameTime: gameTime.toISOString() };
     })
   );
-  return enriched;
+  return { odds: enriched, games };
 }
 
 export type MissingTotalLineResult = {
