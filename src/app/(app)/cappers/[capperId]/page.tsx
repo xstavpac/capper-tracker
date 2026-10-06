@@ -165,7 +165,6 @@ export default async function CapperDetailPage({
           currentStreak={currentStreak}
           momentum={momentum}
           bestMarket={bestMarket}
-          sports={sports}
           trackedSinceMs={trackedSinceMs}
           lastPickMs={lastPickMs}
           pickCount={associatedPickCount}
