@@ -529,7 +529,7 @@ model OddsApiUsageLog {
 
 // Where in the catalog-import pipeline a line was lost (see ImportSkippedLine).
 enum ImportSkipStage {
-  PARSE_SILENT // parseCatalog dropped it without a trace (read as a capper header, or discarded after a known-capper prefix)
+  PARSE_SILENT // parseCatalog read it as a capper header though it looks like a pick (older rows: also lines discarded after a known-capper prefix)
   PARSE_UNRESOLVED // parseCatalog listed it as unresolved and the recovery pass never ran (it threw)
   PROP_UNSUPPORTED // declined as an unsupported MLB/NHL player prop (wiring pending fix/mlb-nhl-prop-line-safety)
   RECOVERY_UNRESOLVED // still unresolved after the live-schedule / roster recovery pass

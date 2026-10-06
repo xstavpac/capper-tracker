@@ -52,7 +52,7 @@ export async function recordImportSkippedLines(userId: string, entries: SkippedL
 // failed to turn into a pick. The client only supplies text; the stage is
 // decided in parseSkippedLineEntries.
 export type ParseSkippedLinesPayload = {
-  // parseCatalog's droppedAsHeaders + droppedInline: consumed silently.
+  // parseCatalog's droppedAsHeaders: consumed silently.
   silent: { text: string; capperName: string; reason: string }[];
   // The lines left in the manual "couldn't be identified" list.
   unresolved: { text: string; capperName: string }[];

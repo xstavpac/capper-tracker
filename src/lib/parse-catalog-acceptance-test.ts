@@ -427,7 +427,9 @@ function main() {
     // opponents (PART Q - the Alabama State / Troy schedule-match bug).
     // 176 -> 178: "n texas"/"n. texas" added as North Texas abbreviations
     // (PART W - the N. Texas mis-resolving-to-Longhorns bug).
-    check("NCAAF list: 178 keys (138 FBS schools + capper-shorthand aliases + FCS money-game opponents)", keys.length, 178);
+    // 178 -> 179: "unc" added as a North Carolina abbreviation (the "UNC
+    // +21.5" skip-log line - capper-name-collision-acceptance-test.ts).
+    check("NCAAF list: 179 keys (138 FBS schools + capper-shorthand aliases + FCS money-game opponents)", keys.length, 179);
     check("NCAAF list: no duplicate keys", new Set(keys).size, keys.length);
 
     // (a) Every key resolves to NCAAF from realistic capper text (the key +

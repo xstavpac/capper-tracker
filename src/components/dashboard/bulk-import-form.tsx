@@ -229,7 +229,6 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       unresolved,
       unresolvedCapperNames,
       droppedAsHeaders,
-      droppedInline,
     } = parseCatalog(text, existingCapperNames, rosterFullNames, feedTeams);
     setParlays(parlayItems);
     // Last-resort pass: hand the lines parseCatalog couldn't place to the
@@ -263,10 +262,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     unresolved.forEach((line, i) => {
       if (!capperForUnresolved.has(line)) capperForUnresolved.set(line, unresolvedCapperNames[i] ?? "Unknown");
     });
-    const silent = [
-      ...droppedAsHeaders.map((l) => ({ ...l, reason: "Read as a capper header but looks like a pick" })),
-      ...droppedInline.map((l) => ({ ...l, reason: "Discarded after a saved capper's name; no sport/team/player resolved" })),
-    ];
+    const silent = droppedAsHeaders.map((l) => ({ ...l, reason: "Read as a capper header but looks like a pick" }));
     if (silent.length > 0 || unresolvedAfter.length > 0) {
       void logParseSkippedLinesAction({
         silent,
