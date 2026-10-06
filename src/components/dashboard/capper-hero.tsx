@@ -100,7 +100,6 @@ export function CapperHero({
   currentStreak,
   momentum,
   bestMarket,
-  sports,
   trackedSinceMs,
   lastPickMs,
   pickCount,
@@ -114,7 +113,6 @@ export function CapperHero({
   currentStreak: Streak;
   momentum: MomentumBreakdown;
   bestMarket: CategoryBreakdownItem | null;
-  sports: string[];
   trackedSinceMs: number | null;
   lastPickMs: number | null;
   pickCount: number;
@@ -147,7 +145,7 @@ export function CapperHero({
               {winPctText}
             </span>
           </div>
-          <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
               <h1 className="min-w-0 break-words text-2xl font-bold leading-tight tracking-[-0.01em]">{name}</h1>
               {summary.netUnits !== 0 && (
@@ -179,15 +177,6 @@ export function CapperHero({
                   Last pick {formatRelativeTime(new Date(lastPickMs), nowMs)}
                 </span>
               </p>
-            )}
-            {sports.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {sports.map((s) => (
-                  <span key={s} className="rounded-md border border-white/[0.14] bg-white/[0.08] px-1.5 py-[3px] text-[11px] font-medium uppercase leading-none tracking-[0.06em]">
-                    {s}
-                  </span>
-                ))}
-              </div>
             )}
           </div>
         </div>
