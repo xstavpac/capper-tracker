@@ -116,9 +116,13 @@ async function main() {
       createdMlb = (await prisma.sport.create({ data: { name: "MLB" } })).id;
     }
     const { bulkImportPicksAction } = await import("@/server/actions/bulk-picks");
-    const mk = (capperName: string, i: number) => ({
+    // A sport with no score source: its picks are stored as written, so the
+    // import really inserts them. (Cappers are created in the insert
+    // transaction now - a capper whose every line is dropped is not created.)
+    const BULK_SPORT = `${TAG}-nosource`;
+    const mk = (capperName: string, i: number, sportName = BULK_SPORT) => ({
       capperName,
-      sportName: "MLB",
+      sportName,
       description: `Nowhere Nobody -1.5 #${i}`,
       betType: "SPREAD" as const,
       odds: -110,
@@ -135,7 +139,7 @@ async function main() {
     let out: { success?: boolean } = {};
     let actionError: string | null = null;
     try {
-      out = (await bulkImportPicksAction(names.map(mk) as never)) as { success?: boolean };
+      out = (await bulkImportPicksAction(names.map((n, i) => mk(n, i)) as never)) as { success?: boolean };
     } catch (e) {
       actionError = e instanceof Error ? e.message : String(e);
       if (!/static generation store missing/.test(actionError)) throw e;
@@ -146,6 +150,17 @@ async function main() {
     check("bulk import with duplicate names mid-batch does not throw/abort", actionError !== null || out.success === true, JSON.stringify(out).slice(0, 200));
     check("...and created exactly the two distinct cappers", devCappers.length === 2, devCappers.map((x) => x.name).join("|"));
     if (dev && devCappers.length) await prisma.capper.deleteMany({ where: { id: { in: devCappers.map((x) => x.id) } } });
+    await prisma.sport.deleteMany({ where: { name: BULK_SPORT } });
+
+    // A capper whose only lines match no game (MLB, no team in the text) has
+    // nothing inserted, so the import no longer leaves an empty capper behind.
+    try {
+      await bulkImportPicksAction([mk(`${TAG} Unmatched`, 99, "MLB")] as never);
+    } catch (e) {
+      if (!/static generation store missing/.test(e instanceof Error ? e.message : String(e))) throw e;
+    }
+    const orphan = dev ? await prisma.capper.count({ where: { userId: dev.id, name: { contains: `${TAG} Unmatched` } } }) : 0;
+    check("a capper whose every line is unmatched is not created", orphan === 0, String(orphan));
 
     // 8
     const u3 = await mkUser("u3");
