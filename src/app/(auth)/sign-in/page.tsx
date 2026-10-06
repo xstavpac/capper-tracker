@@ -27,9 +27,13 @@ function SignInForm() {
     setError(null);
     setLoading(provider);
     const supabase = createSupabaseBrowserClient();
+    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(callbackUrl)}`;
+    // TEMP DIAGNOSTIC - localhost OAuth redirect investigation, worktree-only,
+    // not committed. Remove once the redirect-chain question is resolved.
+    console.log("[OAUTH-DIAG] sign-in redirectTo passed to signInWithOAuth:", redirectTo);
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(callbackUrl)}` },
+      options: { redirectTo },
     });
     if (oauthError) {
       setError(oauthError.message);
