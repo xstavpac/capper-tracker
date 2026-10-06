@@ -45,6 +45,9 @@ export const CONSISTENT_PICKS = 50;
 export const CONSISTENT_BLOCKS = 5;
 export const CONSISTENT_MIN_MEAN_PCT = 50;
 export const FORM_PANEL_COUNT = 5;
+// Best / Worst last 20 (/dashboard): the rows a card shows, and the rows "See more" opens it to.
+export const LAST20_COLLAPSED_COUNT = 5;
+export const LAST20_PANEL_COUNT = 10;
 
 export type FormPanelKey = "rising" | "falling" | "consistent";
 
