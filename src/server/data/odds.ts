@@ -11,6 +11,7 @@ import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
 import { cachedByTag } from "@/server/data/cached";
 import { persistOddsApiUsage } from "@/server/data/odds-api-usage";
 import { getYesterdayBoardGames } from "@/server/data/odds-projections";
+import { OddsSnapshotMissingError, readSnapshotOrSeed, type OddsSeedDeps } from "@/server/data/odds-seed-claim";
 
 // Live scores are current-ish data polled every 25s per open /live tab -
 // keep the window tight. Odds change at most every 4h (the backfill cron)
@@ -175,12 +176,26 @@ const BASE_URL = ODDS_API_BASE_URL;
 // Here there's no write to match - worst case an extremely rare request
 // exactly at the Eastern midnight boundary builds a key for the wrong day,
 // which self-corrects on the very next request either way.
+//
+// Missing row: the cached read never fetches from the Odds API itself (it
+// throws OddsSnapshotMissingError, which is never stored). readSnapshotOrSeed
+// decides which one request across the fleet does the fetch - see
+// odds-seed-claim.ts. Everyone else gets [] for that request.
 export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
   const fetchDate = easternDateKey(new Date());
-  const result = await cachedByTag(cacheKeys.odds(sportKey, fetchDate), ODDS_CACHE_TTL_SECONDS, () =>
-    getOddsForSportUncached(sportKey)
-  );
-  return result.games;
+  return readSnapshotOrSeed<OddsGame, OddsGame[]>({
+    sportKey,
+    fetchDate,
+    read: async () =>
+      (
+        await cachedByTag(cacheKeys.odds(sportKey, fetchDate), ODDS_CACHE_TTL_SECONDS, () =>
+          getOddsForSportUncached(sportKey, { fetchIfMissing: false })
+        )
+      ).games,
+    fromSeeded: (games) => games,
+    empty: [],
+    deps: oddsSeedDeps,
+  });
 }
 
 // How a resolver gets a sport's odds games. Every resolver below defaults to
@@ -209,6 +224,41 @@ export function createRequestOddsLoader(load: OddsLoader = getOddsForSport): Odd
     return pending;
   };
 }
+
+// The cross-instance "who seeds today's row" claim: a token in the shared Next
+// Data Cache, one per (sport, date, time bucket). Same shape and same accepted
+// costs as page-grading.ts's claimWindowViaDataCache. Outside a Next request
+// context (scripts, tsx tests) cachedByTag just runs the callback, so every
+// call claims and only the per-instance attempt memo throttles.
+async function claimOddsSeedViaDataCache(
+  sportKey: string,
+  fetchDate: string,
+  bucket: number,
+  windowSeconds: number
+): Promise<boolean> {
+  let claimed = false;
+  await cachedByTag(
+    `${cacheKeys.oddsSeedClaim(sportKey, fetchDate)}:${bucket}`,
+    windowSeconds,
+    async () => {
+      claimed = true;
+      return true;
+    },
+    [cacheKeys.oddsSeedClaim(sportKey, fetchDate)]
+  );
+  return claimed;
+}
+
+const oddsSeedDeps: OddsSeedDeps<OddsGame> = {
+  now: Date.now,
+  claimWindow: claimOddsSeedViaDataCache,
+  // "cached" here means another instance wrote the row between our read and our
+  // fetch - the row exists either way. Anything else left it missing.
+  seed: async (sportKey) => {
+    const { games, status } = await getOddsForSportUncached(sportKey);
+    return status === "seeded" || status === "cached" ? games : null;
+  },
+};
 
 // What the layout ticker renders from the odds side: which games are on
 // today's slate (id, teams, start time - matchScoreToGame's inputs). It never
@@ -268,12 +318,10 @@ async function getTickerOddsUncached(sportKey: string, fetchDate: string): Promi
   `);
   if (rows.length > 0) return rows[0].games;
 
-  // No snapshot for today yet: identical to what the ticker always did - the
-  // full path, which may fetch from the Odds API and seed today's row (that is
-  // the pre-existing "a page load that beats the cron" behavior, and it only
-  // happens on this first-of-the-day read).
-  const { games } = await getOddsForSportUncached(sportKey);
-  return games.map((g) => ({ id: g.id, homeTeam: g.homeTeam, awayTeam: g.awayTeam, commenceTime: g.commenceTime }));
+  // No snapshot for today yet. Thrown, not returned as []: this runs inside the
+  // ticker's cache callback, and a stored empty slate would outlive the seed by
+  // the whole 10-minute TTL. getTickerOddsForSport handles it.
+  throw new OddsSnapshotMissingError(sportKey, fetchDate);
 }
 
 // The layout ticker's odds read (every authenticated document load, 5-6
@@ -283,10 +331,22 @@ async function getTickerOddsUncached(sportKey: string, fetchDate: string): Promi
 // full-blob entry, so callers that genuinely need the whole blob (live pages,
 // grading) fill it themselves; it is still at most one blob read per 60s per
 // sport, only when something actually needs it.
+//
+// Missing row: a page load that beats the cron still seeds today's row, as it
+// always has, but through the same claim as getOddsForSport - the two share one
+// attempt per sport, so the ticker and a page's own odds read never both fetch.
 export async function getTickerOddsForSport(sportKey: string): Promise<TickerOddsGame[]> {
   const fetchDate = easternDateKey(new Date());
   const p = tickerOddsCacheParams(sportKey, fetchDate);
-  return cachedByTag(p.key, p.ttlSeconds, () => getTickerOddsUncached(sportKey, fetchDate), p.tags);
+  return readSnapshotOrSeed<OddsGame, TickerOddsGame[]>({
+    sportKey,
+    fetchDate,
+    read: () => cachedByTag(p.key, p.ttlSeconds, () => getTickerOddsUncached(sportKey, fetchDate), p.tags),
+    fromSeeded: (games) =>
+      games.map((g) => ({ id: g.id, homeTeam: g.homeTeam, awayTeam: g.awayTeam, commenceTime: g.commenceTime })),
+    empty: [],
+    deps: oddsSeedDeps,
+  });
 }
 
 // True only for a status that means a fresh OddsSnapshot row was actually
@@ -500,7 +560,14 @@ export async function fetchMergedOddsListing(
 // racing new Date() call.
 type OddsFetchResult = { games: OddsGame[]; status: OddsFetchStatus; credits: OddsApiCredits | null; fetchDate: string };
 
-async function getOddsForSportUncached(sportKey: string): Promise<OddsFetchResult> {
+// fetchIfMissing: false is the cached read's mode - it reads the row and, when
+// there is none, throws OddsSnapshotMissingError instead of fetching (see
+// odds-seed-claim.ts for why the read must not fetch, and must not return []).
+// The default (true) is the full path the crons and the claim winner use.
+async function getOddsForSportUncached(
+  sportKey: string,
+  { fetchIfMissing = true }: { fetchIfMissing?: boolean } = {}
+): Promise<OddsFetchResult> {
   // Computed first, before the season check - it's a pure local date
   // computation (no DB/network), so moving it ahead of the "out-of-season
   // never touches the cache table or the network at all" guarantee below
@@ -539,6 +606,7 @@ async function getOddsForSportUncached(sportKey: string): Promise<OddsFetchResul
     );
     return { games: cachedGames, status: "cached", credits: null, fetchDate };
   }
+  if (!fetchIfMissing) throw new OddsSnapshotMissingError(sportKey, fetchDate);
 
   const apiKey = process.env.ODDS_API_KEY;
   if (!apiKey) {
