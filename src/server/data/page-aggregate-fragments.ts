@@ -6,8 +6,9 @@
 // Shape (design doc §3.0): every block is an exported `Prisma.Sql` SELECT builder
 // (no WITH of its own at the top level a page has to know about) plus a row mapper.
 // A page composes the blocks it needs as CTEs of ONE statement (buildPageBundleQuery
-// -> one jsonb) because under connection_limit=1 statements serialize, so one
-// statement per block would just re-create today's round-trip count. Every fragment
+// -> one jsonb) because the per-instance connection pool is small (connection_limit
+// on DATABASE_URL), so statements queue and one statement per block would just
+// re-create today's round-trip count. Every fragment
 // returns raw totals/rows only; ROI, winPct, round2, labels and the sort stay in
 // stats.ts, applied by the mappers here calling the same functions the JS path uses.
 //
