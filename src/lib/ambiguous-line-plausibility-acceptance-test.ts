@@ -8,7 +8,7 @@
 // ambiguous-hierarchy-acceptance-test.ts's PART F instead.
 //
 // One case here deliberately uses a SYNTHETIC 3-candidate list (MLB + NFL +
-// NHL) rather than a real AMBIGUOUS_NICKNAMES key: every real MLB/KBO
+// NBA) rather than a real AMBIGUOUS_NICKNAMES key: every real MLB/KBO
 // collision today (giants, bears, twins, lions, eagles, tigers) gives MLB
 // and KBO the identical run-line bound, so a real 3-way collision like
 // "giants" can only ever filter down to 1 remaining candidate or leave all
@@ -88,12 +88,13 @@ console.log("\n########## No line to filter on ##########");
 
 console.log("\n########## Synthetic 3-candidate mix: narrows to exactly 2 of 3 (not a real AMBIGUOUS_NICKNAMES key) ##########");
 {
-  const NHL_OPTION: AmbiguousOption = { label: "Some Team (NHL)", sport: "NHL", nickname: "some team" };
-  const mixed = [MLB_GIANTS, NFL_GIANTS, NHL_OPTION];
-  // NHL has no bound in this table any more than NFL does - only the
-  // MLB candidate is implausible for a +6.5 spread, so exactly 2 of the 3
-  // survive: NFL and NHL, MLB dropped.
-  check("+6.5 spread against MLB+NFL+NHL -> drops only MLB, leaves 2", sports(filterPlausibleCandidates(mixed, "SPREAD", 6.5)), ["NFL", "NHL"]);
+  const NBA_OPTION: AmbiguousOption = { label: "Some Team (NBA)", sport: "NBA", nickname: "some team" };
+  const mixed = [MLB_GIANTS, NFL_GIANTS, NBA_OPTION];
+  // A +6.5 spread is well inside NBA's bound and NFL has none - only the
+  // MLB candidate is implausible, so exactly 2 of the 3 survive. (This used
+  // an NHL candidate while NHL was unbounded; NHL now has a puck-line bound
+  // and would be dropped too - see ambiguity-impossible-options-acceptance-test.ts.)
+  check("+6.5 spread against MLB+NFL+NBA -> drops only MLB, leaves 2", sports(filterPlausibleCandidates(mixed, "SPREAD", 6.5)), ["NBA", "NFL"]);
 }
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

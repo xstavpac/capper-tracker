@@ -27,7 +27,15 @@ import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
 // overlap for ~5 months every year, so the calendar can't tell them apart at
 // all during that window. The hierarchy is now:
 //   1. memory      - already answered earlier in this same import
-//   2. schedule    - exactly one candidate has a game today (primary signal)
+//   1b. league activity - a candidate whose league has no game on the feeds
+//                    within LEAGUE_ACTIVITY_WINDOW_DAYS of the import is
+//                    dropped before anything else looks at it. Not a
+//                    signal to weigh: it removes an impossible option, for
+//                    every bet type (it is the only filter a moneyline
+//                    gets), and every later step works from what is left.
+//                    One candidate left resolves the key. Skipped entirely
+//                    when the lookup fails or finds no active league.
+//   2. schedule   - exactly one candidate has a game today (primary signal)
 //   3. season      - calendar fallback: exactly one candidate is in season
 //                    (used only when the schedule check was inconclusive or
 //                    the feed errored out)
@@ -88,7 +96,25 @@ import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
 // but don't manufacture a prompt just because a second signal never fired"
 // principle the schedule-check tiebreaker uses elsewhere in this hierarchy.
 
-export type ResolutionMethod = "schedule" | "season" | "pick_context" | "remembered" | "user" | "plausibility";
+export type ResolutionMethod =
+  | "schedule"
+  | "season"
+  | "pick_context"
+  | "remembered"
+  | "user"
+  | "plausibility"
+  | "league_activity";
+
+// How far either side of the import a league's nearest game may be for the
+// league to still count as a candidate.
+export const LEAGUE_ACTIVITY_WINDOW_DAYS = 7;
+
+// Injected feed lookup for step 1b. Given candidate sport labels, returns
+// label -> whether that league has a game within LEAGUE_ACTIVITY_WINDOW_DAYS
+// of `referenceDate`. A label left OUT of the result means "couldn't tell"
+// (no feed for that league, or its read failed) and is never dropped. May
+// reject - the whole step is then skipped.
+export type LeagueActivityChecker = (sports: string[], referenceDate: Date) => Promise<Record<string, boolean>>;
 
 export type ScheduleCheckQuery = { nickname: string; sport: string };
 
@@ -113,6 +139,9 @@ export type HierarchyDeps = {
   // inconclusive, so the near-term decision stands as it did before this
   // tiebreaker existed.
   runWideScheduleCheck: ScheduleChecker;
+  // Step 1b's feed lookup. Optional: without it no candidate is ever dropped
+  // for league inactivity, exactly as before the step existed.
+  runLeagueActivityCheck?: LeagueActivityChecker;
   // Overridable reference date for the season (calendar) fallback - defaults
   // to now. Tests pin it so the calendar-fallback path is deterministic.
   now?: Date;
@@ -222,6 +251,20 @@ export async function runAmbiguousHierarchy(
     countByKey.set(p.ambiguousKey!, (countByKey.get(p.ambiguousKey!) ?? 0) + 1);
   }
 
+  // A key's candidates: the static table's, or - for a key built from the
+  // game feed (a mascot two feed teams share, see parseCatalog) - the list
+  // the pick itself carries. Step 1b narrows an entry; every later step
+  // reads the narrowed list.
+  const baseOptionsByKey = new Map<string, AmbiguousOption[]>();
+  for (const { p } of ambiguousEntries) {
+    const key = p.ambiguousKey!;
+    if (baseOptionsByKey.has(key)) continue;
+    const listed = ambiguousOptionsFor(key);
+    baseOptionsByKey.set(key, listed.length > 0 ? listed : p.ambiguous!);
+  }
+  const optionsByKey = new Map(baseOptionsByKey);
+  const optionsFor = (key: string): AmbiguousOption[] => optionsByKey.get(key) ?? [];
+
   const decided = new Map<string, Decision>();
 
   // ---- Step 1: memory - anything already answered earlier in this import.
@@ -233,6 +276,56 @@ export async function runAmbiguousHierarchy(
         method: "remembered",
         reason: "already resolved earlier in this import",
       });
+    }
+  }
+
+  // ---- Step 1b: league activity. One lookup for every candidate league of
+  // every undecided key. Nothing is dropped unless the lookup answered AND
+  // found at least one active league - a failed or empty lookup must never
+  // cost a pick its options - and a key is never left with no candidate.
+  // Team keys only: a shared-surname player key stops at step 1 (see step 2).
+  const undecidedKeys = uniqueKeys.filter((key) => !decided.has(key) && !isPlayerAmbiguityKey(key));
+  if (deps.runLeagueActivityCheck && undecidedKeys.length > 0) {
+    const sports = Array.from(new Set(undecidedKeys.flatMap((key) => optionsFor(key).map((o) => o.sport))));
+    let activity: Record<string, boolean> = {};
+    try {
+      activity = await deps.runLeagueActivityCheck(sports, now);
+    } catch (err) {
+      // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+      console.log(
+        "[catalog-disambiguation] league activity check failed, keeping every candidate:",
+        err instanceof Error ? err.message : err
+      );
+    }
+    if (Object.values(activity).some(Boolean)) {
+      for (const key of undecidedKeys) {
+        const options = optionsFor(key);
+        const active = options.filter((o) => activity[o.sport] !== false);
+        if (active.length === 0 || active.length === options.length) continue;
+        optionsByKey.set(key, active);
+        const dropped = Array.from(new Set(options.filter((o) => !active.includes(o)).map((o) => o.sport)));
+        // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+        console.log("[catalog-disambiguation] dropped leagues with no games within the window:", key, dropped);
+        for (const { p, idx } of ambiguousEntries) {
+          if (p.ambiguousKey === key) picks[idx] = { ...picks[idx], ambiguous: active };
+        }
+        // One candidate left resolves the key - but only on a league the
+        // lookup positively saw games for. A lone survivor the lookup
+        // couldn't speak to (KBO, CFL: no feed) is left to the steps below.
+        if (active.length === 1 && activity[active[0].sport] === true) {
+          decided.set(key, {
+            choice: active[0],
+            method: "league_activity",
+            reason:
+              active[0].sport +
+              " is the only candidate league with a game within " +
+              LEAGUE_ACTIVITY_WINDOW_DAYS +
+              " days (none for " +
+              dropped.join(", ") +
+              ")",
+          });
+        }
+      }
     }
   }
 
@@ -258,7 +351,7 @@ export async function runAmbiguousHierarchy(
   const scheduleSignalByKey = new Map<string, AmbiguousOption[]>();
   if (keysNeedingResolution.length > 0) {
     const queries = keysNeedingResolution.flatMap((key) =>
-      ambiguousOptionsFor(key).map((o) => ({ nickname: o.nickname, sport: o.sport }))
+      optionsFor(key).map((o) => ({ nickname: o.nickname, sport: o.sport }))
     );
     try {
       scheduleResults = await deps.runScheduleCheck(queries);
@@ -277,7 +370,7 @@ export async function runAmbiguousHierarchy(
     // round-trip instead of one per key.
     const tentativeWinners = new Map<string, AmbiguousOption>();
     for (const key of keysNeedingResolution) {
-      const options = ambiguousOptionsFor(key);
+      const options = optionsFor(key);
       const withGameToday = options.filter((o) => scheduleResults[o.nickname + "|" + o.sport]);
       if (!scheduleCheckFailed) scheduleSignalByKey.set(key, withGameToday);
       if (withGameToday.length === 1) tentativeWinners.set(key, withGameToday[0]);
@@ -288,7 +381,7 @@ export async function runAmbiguousHierarchy(
     if (tentativeWinners.size > 0) {
       const runnerUpQueries: ScheduleCheckQuery[] = [];
       for (const [key, winner] of tentativeWinners) {
-        for (const o of ambiguousOptionsFor(key)) {
+        for (const o of optionsFor(key)) {
           if (o.sport === winner.sport && o.nickname === winner.nickname) continue;
           runnerUpQueries.push({ nickname: o.nickname, sport: o.sport });
         }
@@ -305,7 +398,7 @@ export async function runAmbiguousHierarchy(
       }
 
       for (const [key, winner] of tentativeWinners) {
-        const runnerUpHasRealGame = ambiguousOptionsFor(key).some(
+        const runnerUpHasRealGame = optionsFor(key).some(
           (o) => !(o.sport === winner.sport && o.nickname === winner.nickname) && wideResults[o.nickname + "|" + o.sport]
         );
         if (runnerUpHasRealGame) {
@@ -331,7 +424,7 @@ export async function runAmbiguousHierarchy(
   const seasonSignalByKey = new Map<string, AmbiguousOption[]>();
   for (const key of teamKeys) {
     if (decided.has(key)) continue;
-    const options = ambiguousOptionsFor(key);
+    const options = optionsFor(key);
     const inSeason = options.filter((o) => isSportLabelInSeason(o.sport, now));
     seasonSignalByKey.set(key, inSeason);
     if (inSeason.length === 1) {
@@ -366,7 +459,7 @@ export async function runAmbiguousHierarchy(
     if (decided.has(key) || isPlayerAmbiguityKey(key)) continue;
     const scopeKey = key + "::" + p.capperName;
     if (contextDecided.has(scopeKey)) continue; // this capper's key already established by an earlier pick of theirs
-    const options = ambiguousOptionsFor(key);
+    const options = optionsFor(key);
     const inSeason = options.filter((o) => isSportLabelInSeason(o.sport, now));
     const candidates = inSeason.length > 0 ? inSeason : options;
     const consideredSports = candidates.map((o) => o.sport);
@@ -393,8 +486,10 @@ export async function runAmbiguousHierarchy(
   // schedule + "Indiana -44") is NOT auto-resolved by it - it's left
   // ambiguous and falls to step 5 below, where that same bound has already
   // removed the implausible candidate from its candidate list. Only the
-  // "schedule" method is gated: remembered answers (which include user
-  // answers) and season/pick_context decisions always apply as before.
+  // "schedule" method is gated, plus step 1b's "league_activity" (the one
+  // league left can still be the wrong one for this pick's line): remembered
+  // answers (which include user answers) and season/pick_context decisions
+  // always apply as before.
   const appliedCountByKey = new Map<string, number>();
   const contextLog = new Map<string, { key: string; sport: string; count: number }>();
   for (const { p, idx } of ambiguousEntries) {
@@ -402,12 +497,13 @@ export async function runAmbiguousHierarchy(
     const globalDecision = decided.get(key);
     if (globalDecision) {
       if (
-        globalDecision.method === "schedule" &&
-        filterPlausibleCandidates([globalDecision.choice], p.ambiguousBetType, p.ambiguousLine).length === 0
+        (globalDecision.method === "schedule" || globalDecision.method === "league_activity") &&
+        filterPlausibleCandidates([globalDecision.choice], p.ambiguousBetType, p.ambiguousLine, p.ambiguousPartialGame)
+          .length === 0
       ) {
         // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
         console.log(
-          "[catalog-disambiguation] schedule decision rejected by line plausibility, falling through:",
+          "[catalog-disambiguation] " + globalDecision.method + " decision rejected by line plausibility, falling through:",
           key,
           globalDecision.choice.sport,
           p.ambiguousLine
@@ -440,13 +536,19 @@ export async function runAmbiguousHierarchy(
     if (!picks[idx].ambiguous) continue; // already resolved above
     if (isPlayerAmbiguityKey(key)) continue;
 
-    const options = ambiguousOptionsFor(key);
-    const plausible = filterPlausibleCandidates(options, p.ambiguousBetType, p.ambiguousLine);
+    const options = optionsFor(key);
+    const plausible = filterPlausibleCandidates(options, p.ambiguousBetType, p.ambiguousLine, p.ambiguousPartialGame);
 
-    if (plausible.length === 0 || plausible.length === options.length) {
-      // Nothing to narrow (no line, or every candidate is plausible) -
-      // existing fallback: leave the pick exactly as parseCatalog produced
-      // it, full candidate list intact.
+    if (plausible.length === 0) {
+      // The line fits none of the candidates left - nothing here is
+      // trustworthy enough to hide an option on, step 1b's narrowing
+      // included, so the pick goes back to its full candidate list.
+      picks[idx] = { ...p, ambiguous: baseOptionsByKey.get(key) ?? options };
+      continue;
+    }
+    if (plausible.length === options.length) {
+      // Nothing to narrow (no line, or every candidate is plausible) - the
+      // pick keeps the candidate list it already has.
       continue;
     }
 
@@ -560,4 +662,16 @@ export async function runAmbiguousHierarchy(
   }
 
   return { picks, logs, stillAmbiguous, decisions };
+}
+
+// Whether any of a feed's games starts within LEAGUE_ACTIVITY_WINDOW_DAYS of
+// `referenceDate`, either side - the per-league question step 1b asks. Kept
+// here, with the window it applies, so the server action that reads the feeds
+// (checkAmbiguousLeagueActivity) and the tests share one definition.
+export function hasGameWithinActivityWindow(games: { commenceTime: string }[], referenceDate: Date): boolean {
+  const windowMs = LEAGUE_ACTIVITY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  return games.some((g) => {
+    const start = new Date(g.commenceTime).getTime();
+    return Number.isFinite(start) && Math.abs(start - referenceDate.getTime()) <= windowMs;
+  });
 }
