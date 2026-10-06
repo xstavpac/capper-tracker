@@ -58,9 +58,9 @@ export type RecoverUnresolvedResult = {
 };
 
 // "49ers" from "San Francisco 49ers" - the team's nickname, for a prompt
-// button. Every NFL nickname is the last word of the full name; the NHL has
-// four two-word ones.
-const TWO_WORD_NICKNAME = /(Maple Leafs|Blue Jackets|Red Wings|Golden Knights)$/;
+// button. Every NFL nickname is the last word of the full name; the NHL and
+// MLB have a few two-word ones.
+const TWO_WORD_NICKNAME = /(Maple Leafs|Blue Jackets|Red Wings|Golden Knights|Red Sox|White Sox|Blue Jays)$/;
 function shortTeamName(team: string): string {
   return TWO_WORD_NICKNAME.exec(team)?.[1] ?? team.split(/\s+/).pop() ?? team;
 }
@@ -81,13 +81,17 @@ export function recoverUnresolvedLines(
   unresolvedCapperNames: string[],
   liveTeams: LiveTeam[],
   roster: RosterPlayer[],
-  resolvedPicks: ParsedPick[] = [],
+  // No longer consulted (2026-10): these are the picks parseCatalog resolved
+  // on its first pass, once used as "paste context" to choose between players
+  // sharing a name. A team named in another pick must not decide that. Kept
+  // only so the argument order stays stable for callers.
+  _resolvedPicks: ParsedPick[] = [],
   // Cached NHL roster. Optional/empty by default, in which case NHL lines stay
   // unresolved exactly as before NHL props existed.
   nhlRoster: RosterPlayer[] = [],
   // Cached MLB 40-man roster. Same default: empty means MLB lines stay unresolved as before.
   mlbRoster: RosterPlayer[] = [],
-  // Sport labels ("NFL", "NHL") whose slate in `liveTeams` is known complete -
+  // Sport labels ("NFL", "NHL", "MLB") whose slate in `liveTeams` is known complete -
   // see SlateContext. A sport not listed here (the default) never has its
   // slate used to choose between players sharing a surname.
   slateCompleteSports: string[] = []
@@ -118,13 +122,9 @@ export function recoverUnresolvedLines(
     unresolved.filter((line) => !isPlayerProp.has(line) && !isNhlProp.has(line) && parseSupportedMlbProp(line) !== null)
   );
 
-  // Every non-player-prop unresolved line's own team-fallback resolution,
-  // computed up front (once, and reused below in the main loop) so that a
-  // team pick appearing AFTER a player-prop line in the raw paste still
-  // counts as paste context for an MLB prop - see mlbPasteTeamMentions below. Pure
-  // and cheap (no network call - resolveLineAgainstLiveTeams only matches
-  // against the liveTeams already fetched), so resolving each of these lines
-  // twice costs nothing beyond this function's own runtime.
+  // Every non-player-prop unresolved line's own team-fallback resolution.
+  // Pure and cheap (no network call - resolveLineAgainstLiveTeams only matches
+  // against the liveTeams already fetched).
   const nonPlayerPropResolutions = new Map<string, LineResolution>();
   for (const line of unresolved) {
     if (isPlayerProp.has(line) || isNhlProp.has(line) || isMlbProp.has(line) || detectUnsupportedPropLine(line)) continue;
@@ -142,7 +142,7 @@ export function recoverUnresolvedLines(
   // same as an ambiguous-team pick.
   const awaitingPlayerChoice = (
     capperName: string,
-    sport: "NFL" | "NHL",
+    sport: "NFL" | "NHL" | "MLB",
     line: string,
     lineForParsing: string,
     gameNumber: ParsedPick["gameNumber"],
@@ -169,15 +169,6 @@ export function recoverUnresolvedLines(
       gameNumber,
     };
   };
-
-  // MLB only (mlb-roster-fallback.ts). The NFL/NHL resolver no longer takes
-  // paste context at all - see player-roster-fallback.ts.
-  const mlbPasteTeamMentions = [
-    ...resolvedPicks.filter((p) => p.sportName === "MLB").flatMap((p) => p.teamNicknames),
-    ...[...nonPlayerPropResolutions.values()]
-      .filter((r) => r.status === "resolved" && r.sport === "MLB")
-      .map((r) => (r as Extract<LineResolution, { status: "resolved" }>).nickname),
-  ];
 
   for (let i = 0; i < unresolved.length; i++) {
     const line = unresolved[i];
@@ -226,10 +217,14 @@ export function recoverUnresolvedLines(
     }
 
     if (isMlbProp.has(line)) {
-      // Same conservative policy: resolves only on EXACTLY ONE position-fitting MLB player, with team
-      // context (paste mentions, then the live MLB slate) used only to break a collision.
-      const relevantMlbTeams = liveTeams.filter((t) => t.sport === "MLB").map((t) => t.name);
-      const res = resolveMlbPropAgainstRoster(line, mlbRoster, relevantMlbTeams, mlbPasteTeamMentions, [nhlRoster]);
+      // Same conservative policy: resolves only on EXACTLY ONE position-fitting MLB player. A name
+      // 2+ of them share asks the user unless a complete slate has exactly one of their teams on it;
+      // a name that is ambiguous between SPORTS stays unresolved.
+      const res = resolveMlbPropAgainstRoster(line, mlbRoster, slateFor("MLB"), [nhlRoster]);
+      if (res.status === "ambiguous" && res.reason === "shared-name") {
+        recovered.push(awaitingPlayerChoice(capperName, "MLB", line, lineForParsing, gameNumber, res.typedName, res.matches));
+        continue;
+      }
       if (res.status !== "resolved") {
         stillUnresolved.push(line);
         continue;

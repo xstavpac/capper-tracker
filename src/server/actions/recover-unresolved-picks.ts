@@ -116,10 +116,6 @@ export async function recoverUnresolvedPicksAction(
   // only a complete slate is allowed to settle (see gatherLiveTeamNames).
   const { teams: liveTeams, completeSports } = await gatherLiveTeamNames();
 
-  // `picks` - the lines parseCatalog already resolved outright on its first
-  // pass over this same paste - is passed through as paste context for MLB
-  // props only (recover-unresolved-lines.ts's mlbPasteTeamMentions). It never
-  // decides which NFL/NHL player a bare surname means.
   // The NHL roster is read only when some unresolved line is an NHL prop, so a
   // paste with none pays no extra query. A failed read (table not migrated yet,
   // transient DB error) degrades to "NHL lines stay unresolved" - it must never

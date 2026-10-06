@@ -8,9 +8,15 @@
 // never be guessed: it resolves on its own only when a COMPLETE slate has
 // exactly one candidate's team on it, and otherwise asks the user.
 //
+// MLB follows the same rule (section 8), against the real 40-man sample roster,
+// which has two real Max Muncys (Dodgers and Athletics).
+//
 // Pure - no network, no database, no auth. Runs the real pipeline end to end:
 // parseCatalog -> recoverUnresolvedLines -> runAmbiguousHierarchy (with a fake
 // schedule checker) -> resolveAmbiguousPick.
+import fs from "node:fs";
+import path from "node:path";
+import { extractMlbRosterPlayers, MLB_TEAM_IDS } from "@/server/data/mlb-roster";
 import { parseCatalog, resolveAmbiguousPick, isPlayerAmbiguityKey, type ParsedPick } from "@/lib/parse-catalog";
 import { recoverUnresolvedLines } from "@/lib/recover-unresolved-lines";
 import { runAmbiguousHierarchy, type ScheduleChecker } from "@/lib/ambiguous-hierarchy";
@@ -171,6 +177,64 @@ async function main() {
     const again = importPaste("Godfather\n" + MCCAFFREY, BOTH_PLAYING, COMPLETE);
     const remembered = await runAmbiguousHierarchy([...again.recovered], { [a.ambiguousKey!]: christian }, deps);
     check("7l: an answer given earlier in this import is reapplied on re-parse", remembered.picks.map((p) => [p.teamNicknames, p.ambiguous]), [[["san francisco 49ers"], undefined]]);
+  }
+
+  console.log("\n########## 8: MLB follows the same rule (two real Max Muncys) ##########");
+  {
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "server", "data", "__fixtures__", "mlb-roster-sample.json"), "utf8")) as Record<string, unknown>;
+    const mlbRoster: RosterPlayer[] = Object.entries(raw).flatMap(([id, resp]) => extractMlbRosterPlayers(MLB_TEAM_IDS.find(([t]) => t === id)![1], resp));
+    const mlb = (...teams: string[]): LiveTeam[] => teams.map((name) => ({ sport: "MLB", name }));
+    const DODGERS = "Los Angeles Dodgers";
+    const BOTH = mlb(DODGERS, "Athletics", "Houston Astros");
+    const ONLY_DODGERS = mlb(DODGERS, "Houston Astros");
+    const MLB_COMPLETE = ["MLB"];
+    const MUNCY = "Muncy 1+ hits";
+    const MUNCY_LABELS = ["Max Muncy — Athletics 3B", "Max Muncy — Dodgers 3B"];
+    const importMlb = (paste: string, live: LiveTeam[], completeSports: string[]) => {
+      const parsed = parseCatalog(paste, ["Godfather", "Krash"]);
+      return { firstPass: parsed.picks, ...recoverUnresolvedLines(parsed.unresolved, parsed.unresolvedCapperNames, live, [], parsed.picks, [], mlbRoster, completeSports) };
+    };
+    const shown = (r: ReturnType<typeof importMlb>, raw: string) => {
+      const pick = r.recovered.find((x) => x.raw === raw);
+      return pick ? (pick.ambiguous ? { asks: pick.ambiguous.map((o) => o.label).sort() } : { team: pick.teamNicknames[0] }) : "not recovered";
+    };
+
+    check("8a: both teams playing -> prompt, each option with full name, team and position", shown(importMlb("Godfather\n" + MUNCY, BOTH, MLB_COMPLETE), MUNCY), { asks: MUNCY_LABELS });
+    check("8b: only the Dodgers play (complete slate) -> the Dodgers' Muncy", shown(importMlb("Godfather\n" + MUNCY, ONLY_DODGERS, MLB_COMPLETE), MUNCY), { team: "los angeles dodgers" });
+    check("8c: only the Athletics play (complete slate) -> the Athletics' Muncy", shown(importMlb("Godfather\n" + MUNCY, mlb("Athletics", "Houston Astros"), MLB_COMPLETE), MUNCY), { team: "athletics" });
+    {
+      const r = importMlb("Godfather\nMLB Dodgers ML\n" + MUNCY, BOTH, MLB_COMPLETE);
+      check("8d sanity: the Dodgers pick itself resolved on the first pass", r.firstPass.map((x) => x.sportName), ["MLB"]);
+      check("8d: a paste that names the Dodgers elsewhere -> still prompts", shown(r, MUNCY), { asks: MUNCY_LABELS });
+      check("8e: same with no slate at all", shown(importMlb("Godfather\nMLB Dodgers ML\n" + MUNCY, [], []), MUNCY), { asks: MUNCY_LABELS });
+    }
+    check("8f: slate lookup failure -> prompt", shown(importMlb("Godfather\n" + MUNCY, [], []), MUNCY), { asks: MUNCY_LABELS });
+    check("8g: partial slate listing only the Dodgers -> prompt, not the Dodgers' Muncy", shown(importMlb("Godfather\n" + MUNCY, ONLY_DODGERS, []), MUNCY), { asks: MUNCY_LABELS });
+    check("8h: the NFL slate being complete says nothing about MLB", shown(importMlb("Godfather\n" + MUNCY, ONLY_DODGERS, ["NFL"]), MUNCY), { asks: MUNCY_LABELS });
+
+    for (const [label, live, complete] of [["both playing", BOTH, MLB_COMPLETE], ["no slate", [], []], ["Dodgers absent from a complete slate", mlb("Athletics"), MLB_COMPLETE]] as [string, LiveTeam[], string[]][]) {
+      check("8i: unshared full name unchanged - Shohei Ohtani -> Dodgers (" + label + ")", shown(importMlb("Godfather\nShohei Ohtani 1+ hits", live, complete), "Shohei Ohtani 1+ hits"), { team: "los angeles dodgers" });
+      check("8j: unique surname unchanged - Ohtani -> Dodgers (" + label + ")", shown(importMlb("Godfather\nOhtani 1+ hits", live, complete), "Ohtani 1+ hits"), { team: "los angeles dodgers" });
+    }
+    check("8k: a full name two real players share ('Max Muncy') asks too", shown(importMlb("Godfather\nMax Muncy 1+ hits", BOTH, MLB_COMPLETE), "Max Muncy 1+ hits"), { asks: MUNCY_LABELS });
+
+    // One answer, identical picks; the hierarchy never answers for the user.
+    const r = importMlb("Godfather\n" + MUNCY + "\nKrash\nMuncy over 0.5 walks\nMax Muncy 1+ hits", BOTH, MLB_COMPLETE);
+    const [a, b, full] = [MUNCY, "Muncy over 0.5 walks", "Max Muncy 1+ hits"].map((raw) => r.recovered.find((x) => x.raw === raw)!);
+    check("8l: two bare-Muncy picks share one question; the full-name pick is its own", [a.ambiguousKey === b.ambiguousKey, a.ambiguousKey !== full.ambiguousKey, isPlayerAmbiguityKey(a.ambiguousKey!)], [true, true, true]);
+    const auto = await runAmbiguousHierarchy([...r.recovered], {}, deps);
+    check("8m: the automatic hierarchy leaves all three asking and records no decision", [auto.picks.filter((x) => x.ambiguous).length, auto.decisions], [3, {}]);
+    const dodgersMuncy = a.ambiguous!.find((o) => o.label === "Max Muncy — Dodgers 3B")!;
+    const answered = r.recovered.map((x) => (x.ambiguousKey === a.ambiguousKey ? resolveAmbiguousPick(x, dodgersMuncy) : x));
+    check(
+      "8n: answering resolves both bare-Muncy picks to the Dodgers as MLB props, and not the full-name one",
+      answered.map((x) => [x.capperName, x.sportName, x.betType, x.description, x.teamNicknames, Boolean(x.ambiguous)]),
+      [
+        ["Godfather", "MLB", "PLAYER_PROP", "Muncy Over 0.5 hits", ["los angeles dodgers"], false],
+        ["Krash", "MLB", "PLAYER_PROP", "Muncy over 0.5 walks", ["los angeles dodgers"], false],
+        ["Krash", "MLB", "PLAYER_PROP", "Max Muncy 1+ hits", [], true],
+      ]
+    );
   }
 
   if (failures > 0) {
