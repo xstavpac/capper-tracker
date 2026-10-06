@@ -116,6 +116,11 @@ export type ScoreGame = {
   awayLocation?: string;
   homeShortName?: string;
   awayShortName?: string;
+  // NCAAF only: an FCS-vs-FCS game, on the feed for import matching and
+  // grading alone. The odds feed has no line for it, so /live has no card to
+  // put its score on - toClientScores drops it before anything is sent to a
+  // browser.
+  fcsOnly?: true;
 };
 
 export const LIVE_SPORTS = [
@@ -1053,7 +1058,28 @@ export async function getNcaafLiveScores(): Promise<ScoreGame[]> {
       return [] as ScoreGame[];
     }),
   ]);
-  return mergeScoreGamesById(fbs, fcs);
+  const fbsIds = new Set(fbs.map((g) => g.id));
+  return mergeScoreGamesById(
+    fbs,
+    fcs.map((g) => (fbsIds.has(g.id) ? g : { ...g, fcsOnly: true as const }))
+  );
+}
+
+// The score feed as a browser should get it: no FCS-only games (see
+// ScoreGame.fcsOnly) and none of the import-only team fields. For NCAAF this
+// is exactly the FBS slate the feed held before it carried FCS; for every
+// other sport it is the feed unchanged.
+export function toClientScores(games: ScoreGame[]): ScoreGame[] {
+  return games
+    .filter((g) => !g.fcsOnly)
+    .map(({ homeLocation, awayLocation, homeShortName, awayShortName, fcsOnly, ...rest }) => rest);
+}
+
+// getLiveScoresForSport for anything that ends up in a response or in client
+// component props (/live, the score polls, the ticker). Same shared cache
+// underneath - this only trims what is sent.
+export async function getClientScoresForSport(sportKey: string): Promise<ScoreGame[]> {
+  return toClientScores(await getLiveScoresForSport(sportKey));
 }
 
 // FCS games from two days out through the import resolve window
@@ -1063,22 +1089,42 @@ export async function getNcaafLiveScores(): Promise<ScoreGame[]> {
 // yesterday..tomorrow score feed has nothing to match (and its teams nothing
 // to be recognized from). Schedule data only - never live status or scores -
 // so it is cached far longer than the score feed. A failed date is treated as
-// "no games that day" (see getEspnScoresForDate).
+// "no games that day" (see getEspnScoresForDate). Server-side only: nothing
+// sends these to a browser.
 const NCAAF_SCHEDULE_TTL_SECONDS = 1800;
+const NCAAF_SCHEDULE_CACHE_KEY = "ncaaf-fcs-upcoming-schedule";
 
+async function fetchNcaafUpcomingFcsGames(): Promise<ScoreGame[]> {
+  if (!isSportInSeason("americanfootball_ncaaf")) return [];
+  const dateKeys: string[] = [];
+  for (let day = 2; day <= MAX_RESOLVE_DATE_DRIFT_DAYS; day++) {
+    dateKeys.push(easternDateKey(new Date(Date.now() + day * 86400000)).replace(/-/g, ""));
+  }
+  const perDate = await Promise.all(
+    dateKeys.map((dateKey) => getEspnScoresForDate("football/college-football", dateKey, { groups: "81" }))
+  );
+  return mergeScoreGamesById(
+    perDate.flat().map((e) => ({ ...espnEventToScoreGame(e, { teamDetail: true }), fcsOnly: true as const }))
+  );
+}
+
+// Same two cache layers as getLiveScoresForSport (see dataCachedLiveScores):
+// the Data Cache shares one fetch across every serverless instance, the
+// process-local memo sits in front of it, and outside a Next request context
+// (scripts, tsx tests) it calls straight through.
 export async function getNcaafUpcomingFcsGames(): Promise<ScoreGame[]> {
   return memoizeWithTtl(
-    "ncaaf-fcs-upcoming-schedule",
-    async () => {
-      if (!isSportInSeason("americanfootball_ncaaf")) return [];
-      const dateKeys: string[] = [];
-      for (let day = 2; day <= MAX_RESOLVE_DATE_DRIFT_DAYS; day++) {
-        dateKeys.push(easternDateKey(new Date(Date.now() + day * 86400000)).replace(/-/g, ""));
-      }
-      const perDate = await Promise.all(
-        dateKeys.map((dateKey) => getEspnScoresForDate("football/college-football", dateKey, { groups: "81" }))
-      );
-      return mergeScoreGamesById(perDate.flat().map((e) => espnEventToScoreGame(e, { teamDetail: true })));
+    NCAAF_SCHEDULE_CACHE_KEY,
+    () => {
+      const run = unstable_cache(fetchNcaafUpcomingFcsGames, [NCAAF_SCHEDULE_CACHE_KEY], {
+        revalidate: NCAAF_SCHEDULE_TTL_SECONDS,
+        tags: [NCAAF_SCHEDULE_CACHE_KEY],
+      });
+      return run().catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("incrementalCache")) return fetchNcaafUpcomingFcsGames();
+        throw err;
+      });
     },
     { ttlMs: NCAAF_SCHEDULE_TTL_SECONDS * 1000 }
   );

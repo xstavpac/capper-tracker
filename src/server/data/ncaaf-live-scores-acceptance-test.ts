@@ -40,8 +40,14 @@
 // pick on one could never match or grade. The FCS group is now fetched
 // alongside: 3 dates x 2 groups = 6 requests, an FBS-vs-FCS game (present in
 // both groups) appears once, and an FCS fetch failure leaves the FBS slate.
+//
+// Follow-up (same PR): FCS-only games are server-side only. toClientScores -
+// what every browser-bound read goes through - must return exactly the FBS
+// slate in exactly the pre-FCS shape. And the ESPN fan-out is per server cache
+// window, not per caller: many concurrent readers trigger one set of fetches.
 
-import { getNcaafLiveScores } from "./odds";
+import { getNcaafLiveScores, getLiveScoresForSport, getClientScoresForSport, toClientScores } from "./odds";
+import { isSportInSeason } from "@/lib/sport-seasons";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -160,6 +166,42 @@ async function main() {
       [fcsGame.homeLocation, fcsGame.homeShortName, fcsGame.awayLocation, fcsGame.awayShortName],
       ["Montana State", "Montana St", "Idaho", "Idaho"]
     );
+
+    check("only the FCS-vs-FCS game is tagged fcsOnly", allGames.filter((g) => g.fcsOnly).map((g) => g.id), ["401868120"]);
+
+    // What a browser gets: the FBS-only fetch, mapped the way it was before
+    // the feed carried FCS (no school / short-form fields, no fcsOnly).
+    const clientView = toClientScores(allGames);
+    check("client view drops the FCS-only game, keeps the FBS-vs-FCS one", clientView.map((g) => g.id), [
+      "401752700",
+      "401752701",
+      "401752702",
+    ]);
+    check(
+      "client view carries no import-only fields",
+      clientView.flatMap((g) => Object.keys(g)).filter((k) => /Location|ShortName|fcsOnly/.test(k)),
+      []
+    );
+    check(
+      "client view keys are exactly the pre-FCS ScoreGame shape",
+      Object.keys(clientView[0]),
+      ["id", "homeTeam", "awayTeam", "status", "scores", "commenceTime", "inningHalf", "inningOrdinal", "innings", "period", "clock"]
+    );
+
+    // Fan-out: 25 concurrent readers (full feed and client view mixed), then
+    // 5 more inside the TTL, share ONE refresh - 6 ESPN requests in total (3
+    // dates x 2 divisions), not 6 per reader.
+    if (isSportInSeason("americanfootball_ncaaf")) {
+      const before = calledUrls.length;
+      const readers = await Promise.all(
+        Array.from({ length: 25 }, (_, i) =>
+          i % 2 ? getLiveScoresForSport("americanfootball_ncaaf") : getClientScoresForSport("americanfootball_ncaaf")
+        )
+      );
+      for (let i = 0; i < 5; i++) await getClientScoresForSport("americanfootball_ncaaf");
+      check("30 readers inside one TTL window -> one refresh (6 ESPN requests)", calledUrls.length - before, 6);
+      check("full-feed readers see 4 games, client-view readers 3", [readers[1].length, readers[0].length], [4, 3]);
+    }
 
     fcsFails = true;
     check("an FCS fetch failure still serves the FBS slate", (await getNcaafLiveScores()).map((g) => g.id), [

@@ -1,4 +1,4 @@
-import { getLiveScoresForSport, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
+import { getClientScoresForSport, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,6 @@ export async function GET(request: Request) {
     return Response.json({ error: "unknown sport" }, { status: 400 });
   }
 
-  const scores = await getLiveScoresForSport(sportKey);
+  const scores = await getClientScoresForSport(sportKey);
   return Response.json({ scores });
 }
