@@ -1,4 +1,4 @@
-// Dormant — UI removed Oct 2026, no callers.
+// Dormant — UI removed Oct 2026, no callers. GET returns 410 Gone.
 import { requireUser } from "@/server/auth";
 import { getMlbPace } from "@/server/data/mlb-pace-data";
 import { getNflPace } from "@/server/data/nfl-pace-data";
@@ -27,7 +27,15 @@ function circuitOpenResponse(retryAfterMs: number): Response {
   );
 }
 
-export async function GET(request: Request) {
+// Returns 410 before auth, cache or Prisma, so a direct hit can never trigger
+// upstream or DB work while the UI is removed. The original handler is kept
+// below, unexported, for a future revival.
+export async function GET() {
+  return Response.json({ error: "gone" }, { status: 410 });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function dormantGET(request: Request) {
   let user;
   try {
     user = await requireUser();
