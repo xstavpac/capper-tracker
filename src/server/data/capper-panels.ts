@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { round2, SCORECARD_WIN_THRESHOLD, DASHBOARD_REPORTS_CACHE_TTL_SECONDS } from "@/server/data/stats";
 import { ORDER_GRADED_DESC } from "@/server/data/capper-list-aggregates";
 import { formLookupCte, formTrendCte, panelRange, panelSql, risingEntriesFromRows, streakEntriesFromRows } from "@/server/data/cappers-page-aggregates";
-import { DEFAULT_PANEL_WINDOW, FORM_PANEL_COUNT, type RisingEntry, type StreakEntry } from "@/lib/cappers-panels";
+import { DEFAULT_PANEL_WINDOW, LAST20_PANEL_COUNT, type RisingEntry, type StreakEntry } from "@/lib/cappers-panels";
 import { cachedByTag } from "@/server/data/cached";
 import { cacheKeys } from "@/lib/cache-keys";
 
@@ -54,7 +54,8 @@ export type CapperPanels = {
   // Rising Fast's mirror: `pts` is negative, most negative first.
   falling: RisingEntry[];
   // Best: recent win% at or above BEST_LAST20_MIN_WIN_PCT, best first; Worst: below it, worst
-  // first. One pool split in two, so no capper is ever in both. At most FORM_PANEL_COUNT each.
+  // first. One pool split in two, so no capper is ever in both. At most LAST20_PANEL_COUNT each
+  // (the card shows LAST20_COLLAPSED_COUNT until "See more").
   bestLast20: BestLast20Entry[];
   worstLast20: BestLast20Entry[];
 };
@@ -150,7 +151,7 @@ export async function computeCapperPanels(userId: string, now: Date = new Date()
     coldest: streakEntriesFromRows(out.cold, true),
     rising: risingEntriesFromRows(out.rising),
     falling: risingEntriesFromRows(out.falling),
-    bestLast20: pool.filter(isBest).sort((a, b) => b.weightedScore - a.weightedScore || byName(a, b)).slice(0, FORM_PANEL_COUNT),
-    worstLast20: pool.filter((e) => !isBest(e)).sort((a, b) => a.weightedScore - b.weightedScore || byName(a, b)).slice(0, FORM_PANEL_COUNT),
+    bestLast20: pool.filter(isBest).sort((a, b) => b.weightedScore - a.weightedScore || byName(a, b)).slice(0, LAST20_PANEL_COUNT),
+    worstLast20: pool.filter((e) => !isBest(e)).sort((a, b) => a.weightedScore - b.weightedScore || byName(a, b)).slice(0, LAST20_PANEL_COUNT),
   };
 }

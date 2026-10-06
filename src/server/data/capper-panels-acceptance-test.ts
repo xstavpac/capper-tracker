@@ -5,7 +5,7 @@
 //      shared with the implementation), plus the rules spelled out: Falling off is Rising Fast's
 //      mirror, a score that rounds to 0 points is in neither, a short baseline is in neither.
 //   2. Best / Worst last 20 against a re-derivation: the 14-day activity gate, the 10-pick minimum,
-//      pushes in the denominator, the 50% split (nobody in both), five rows at most.
+//      pushes in the denominator, the 50% split (nobody in both), ten rows at most.
 //   3. Hot Hand / Coldest ARE the /cappers panels: equal to getPanelRows at "This week".
 //   4. Test cappers appear nowhere; the whole thing is one statement; cache keys.
 //
@@ -141,8 +141,8 @@ function last20Reference(cappers: { id: string; name: string; isTest: boolean }[
     });
   const name = (a: { name: string }, b: { name: string }) => (a.name < b.name ? -1 : 1);
   return {
-    best: pool.filter((e) => e.pct >= 50).sort((a, b) => b.score - a.score || name(a, b)).slice(0, 5),
-    worst: pool.filter((e) => e.pct < 50).sort((a, b) => a.score - b.score || name(a, b)).slice(0, 5),
+    best: pool.filter((e) => e.pct >= 50).sort((a, b) => b.score - a.score || name(a, b)).slice(0, 10),
+    worst: pool.filter((e) => e.pct < 50).sort((a, b) => a.score - b.score || name(a, b)).slice(0, 10),
   };
 }
 const last20Line = (rows: BestLast20Entry[]) => rows.map((e) => `${e.name} ${e.wins}-${e.losses}-${e.pushes} ${e.recentWinPct}`);
@@ -236,7 +236,7 @@ async function main() {
     const l20 = last20Reference(cappers, picks, now.getTime());
     same("best last 20 == re-derivation", last20Line(panels.bestLast20), l20.best.map((e) => `${e.name} ${e.rec} ${e.pct}`));
     same("worst last 20 == re-derivation", last20Line(panels.worstLast20), l20.worst.map((e) => `${e.name} ${e.rec} ${e.pct}`));
-    check("best is 50%+ only, worst under 50% only, five rows at most each", panels.bestLast20.length > 0 && panels.worstLast20.length > 0 && panels.bestLast20.every((e) => e.recentWinPct >= 50) && panels.worstLast20.every((e) => e.recentWinPct < 50) && panels.bestLast20.length <= 5 && panels.worstLast20.length <= 5);
+    check("best is 50%+ only, worst under 50% only, ten rows at most each", panels.bestLast20.length > 0 && panels.worstLast20.length > 0 && panels.bestLast20.every((e) => e.recentWinPct >= 50) && panels.worstLast20.every((e) => e.recentWinPct < 50) && panels.bestLast20.length <= 10 && panels.worstLast20.length <= 10);
     check("nobody is in both Best and Worst", panels.bestLast20.every((e) => !panels.worstLast20.some((x) => x.capperId === e.capperId)));
     check("exactly 50% counts as Best", l20.best.some((e) => e.pct === 50) === panels.bestLast20.some((e) => e.recentWinPct === 50) && [...l20.best, ...l20.worst].some((e) => e.name === "Flat"));
     const all20 = await computeAllLast20(userId, now);
