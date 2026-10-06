@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   parseCatalog,
   resolveAmbiguousPick,
@@ -14,17 +14,19 @@ import { importRowCapError } from "@/lib/import-limits";
 import {
   bulkImportPicksAction,
   bulkImportParlaysAction,
-  previewBulkImportOdds,
+  previewBulkImportMatches,
   checkDuplicatePicksAction,
   previewMissingTotalLines,
   type MissingTotalLineResult,
+  type PreviewMatchedGame,
   type BulkImportParlayLegItem,
 } from "@/server/actions/bulk-picks";
 import { logParseSkippedLinesAction } from "@/server/actions/import-skipped-lines";
 import { recoverUnresolvedPicksAction } from "@/server/actions/recover-unresolved-picks";
 import { getNflRosterFullNamesAction } from "@/server/actions/get-nfl-roster-names";
 import { getImportFeedTeamsAction } from "@/server/actions/get-import-feed-teams";
-import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
+import { LightningIcon } from "@/components/dashboard/drop-catalog-button";
+import { CommonFormatsCard } from "@/components/import/supported-formats";
 import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
 import { isSkippedAsDuplicate, importButtonLabel } from "@/lib/duplicate-pick-detection";
 import {
@@ -35,6 +37,7 @@ import {
   unresolvedReasonBreakdown,
 } from "@/lib/bulk-import-summary";
 import { betTypeLabel } from "@/lib/bet-line";
+import { capperInitials, formatOdds } from "@/lib/pick-display";
 
 // Sentinel stored in capperFuzzyChoices when the user explicitly confirms a
 // name really is a new capper, not a typo of an existing one - distinct from
@@ -42,19 +45,7 @@ import { betTypeLabel } from "@/lib/bet-line";
 // suggestion prompt showing.
 const CONFIRMED_NEW = "__new__";
 
-const CAPPER_ACCENTS = [
-  "border-l-sky-400",
-  "border-l-emerald-400",
-  "border-l-amber-400",
-  "border-l-fuchsia-400",
-  "border-l-rose-400",
-  "border-l-indigo-400",
-  "border-l-teal-400",
-  "border-l-orange-400",
-];
-
 export function BulkImportForm({ existingCapperNames }: { existingCapperNames: string[] }) {
-  const [showTips, setShowTips] = useState(false);
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<ParsedPick[] | null>(null);
   // MLP (moneyline parlay) lines parseCatalog split into 2 legs - kept
@@ -80,7 +71,13 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // matched a team playing right now, not the curated lists.
   const [recoveredIndices, setRecoveredIndices] = useState<Set<number>>(new Set());
   const [enrichedOdds, setEnrichedOdds] = useState<Record<number, number>>({});
+  // The game each row resolved to, from the same preview call as enrichedOdds
+  // (same idx keying) - drives the "Away @ Home - time" sub-line. Absent when a
+  // row has the capper's own odds (never resolved in preview) or no game matched.
+  const [matchedGames, setMatchedGames] = useState<Record<number, PreviewMatchedGame>>({});
   const [loadingOdds, setLoadingOdds] = useState(false);
+  // The line-number gutter, moved in step with the textarea's own scroll.
+  const gutterRef = useRef<HTMLDivElement>(null);
   const [importing, setImporting] = useState(false);
   // A whole-import refusal (over the per-import row cap) - distinct from `result`,
   // which reports a run that went through. Nothing was written when this is set.
@@ -219,6 +216,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   async function handleParse() {
     setResult(null);
     setEnrichedOdds({});
+    setMatchedGames({});
     setDuplicateFlags({});
     setDuplicateChoices({});
     setTotalLineFlags({});
@@ -308,7 +306,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   function fetchOddsFor(entries: { p: ParsedPick; idx: number }[]) {
     if (entries.length === 0) return;
     setLoadingOdds(true);
-    previewBulkImportOdds(
+    previewBulkImportMatches(
       entries.map((e) => ({
         sportName: e.p.sportName,
         betType: e.p.betType,
@@ -320,10 +318,18 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         gameNumber: e.p.gameNumber,
       }))
     )
-      .then((odds) => {
+      .then(({ odds, games }) => {
         setEnrichedOdds((prev) => {
           const next = { ...prev };
           for (const [posKey, value] of Object.entries(odds)) {
+            const globalIdx = entries[Number(posKey)]?.idx;
+            if (globalIdx !== undefined) next[globalIdx] = value;
+          }
+          return next;
+        });
+        setMatchedGames((prev) => {
+          const next = { ...prev };
+          for (const [posKey, value] of Object.entries(games)) {
             const globalIdx = entries[Number(posKey)]?.idx;
             if (globalIdx !== undefined) next[globalIdx] = value;
           }
@@ -424,7 +430,6 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const validEntries = allEntries.filter((e) => !e.p.ambiguous);
   const ambiguousEntries = allEntries.filter((e) => e.p.ambiguous);
   const validPicks = validEntries.map((e) => e.p);
-  const ambiguousPicks = ambiguousEntries.map((e) => e.p);
   // Reason labels/counts for the "couldn't be identified" list - derived in
   // lib/bulk-import-summary.ts (the count itself stays totalSkipped's
   // unresolvedLines.length).
@@ -457,12 +462,6 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const skippedDuplicateEntries = validEntries.filter((e) => isPendingOrSkippedDuplicate(e.idx));
   const dedupeLabel = (p: ParsedPick) =>
     resolvedCapperName(p.capperName) + " - " + p.sportName + " - " + p.description;
-  const unresolvedDuplicateCount = validEntries.filter(
-    (e) => duplicateFlags[e.idx] && duplicateChoices[e.idx] === undefined
-  ).length;
-  const unresolvedTotalLineCount = validEntries.filter(
-    (e) => totalLineFlags[e.idx] && totalLineChoices[e.idx] === undefined
-  ).length;
 
   // One prompt per unique ambiguous team name in this paste, not per pick -
   // groups every entry sharing an ambiguousKey (e.g. every "Cardinals" pick)
@@ -485,14 +484,6 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     .filter((name) => !(name in capperFuzzyChoices))
     .map((name) => ({ name, suggestion: fuzzySuggestionFor(name) }))
     .filter((e): e is { name: string; suggestion: string } => e.suggestion !== null);
-
-  const capperAccent = new Map<string, string>();
-  for (const p of validPicks) {
-    const resolved = resolvedCapperName(p.capperName);
-    if (!capperAccent.has(resolved)) {
-      capperAccent.set(resolved, CAPPER_ACCENTS[capperAccent.size % CAPPER_ACCENTS.length]);
-    }
-  }
 
   async function handleImport() {
     // Runs even at 0 included picks as long as there's something to report -
@@ -633,533 +624,758 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     }
   }
 
-  return (
-    <div className="rounded-card bg-card p-5 shadow-soft">
-      <h3 className="mb-1 text-sm font-medium text-foreground">Betting Catalog Import</h3>
-      <p className="mb-2 text-xs text-muted-foreground">Paste capper names and picks below - we&apos;ll detect the rest.</p>
+  // ---- Presentation only below: everything above decides what imports. ----
 
-      <button
-        type="button"
-        onClick={() => setShowTips((v) => !v)}
-        className="mb-3 flex items-center gap-1 text-xs font-medium text-muted-foreground transition hover:text-foreground"
-      >
-        <span className={"inline-block transition-transform " + (showTips ? "rotate-90" : "")}>&rsaquo;</span>
-        Formatting tips
-      </button>
-      {showTips && (
-        <p className="mb-3 text-xs text-muted-foreground">
-          Capper name lines followed by their picks - we auto-detect sport, bet type, odds, and
-          units for each pick. Leave a blank line between different cappers&apos; picks. Cappers
-          already in your saved list are recognized automatically, even if their name contains a
-          team name. For a brand-new capper whose name happens to collide with a team name (e.g.
-          &quot;Tigers Fan Picks&quot;), prefix it with * the first time, e.g. &quot;*Tigers Fan
-          Picks&quot;, so it&apos;s read as a name instead of a pick.
-        </p>
-      )}
+  // 1 = paste, 2 = reviewing a dropped catalog, 3 = an import went through.
+  // A pick-limit refusal keeps the preview (and so step 2) in place.
+  const step = parsed ? 2 : result && !result.pickLimitBlocked ? 3 : 1;
 
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={10}
-        placeholder={
-          "Vegas John\nCubs moneyline\nWhite Sox -1.5\n\nHigh Roller Hank\nYankees ML\nDodgers under 8.5"
+  // Every pick in the paste (resolved and still-ambiguous alike) under its
+  // capper, in first-appearance order.
+  type Entry = { p: ParsedPick; idx: number };
+  const capperGroups: { name: string; rawNames: string[]; entries: Entry[] }[] = [];
+  {
+    const byName = new Map<string, (typeof capperGroups)[number]>();
+    for (const e of allEntries) {
+      const name = resolvedCapperName(e.p.capperName);
+      let group = byName.get(name);
+      if (!group) {
+        group = { name, rawNames: [], entries: [] };
+        byName.set(name, group);
+        capperGroups.push(group);
+      }
+      if (!group.rawNames.includes(e.p.capperName)) group.rawNames.push(e.p.capperName);
+      group.entries.push(e);
+    }
+  }
+
+  // An ambiguous name is asked once per paste (resolveAmbiguousGroup answers
+  // every pick sharing the key) - the question sits on the first affected row
+  // in panel order, the rest point back up to it.
+  const ambiguousGroupByKey = new Map(ambiguousGroups.map((g) => [g.key, g]));
+  const promptRowForKey = new Map<string, number>();
+  for (const group of capperGroups) {
+    for (const e of group.entries) {
+      const key = e.p.ambiguous ? e.p.ambiguousKey : undefined;
+      if (key && !promptRowForKey.has(key)) promptRowForKey.set(key, e.idx);
+    }
+  }
+
+  function needsReview(e: Entry): boolean {
+    if (e.p.ambiguous) return true;
+    const dupPending = Boolean(duplicateFlags[e.idx]) && duplicateChoices[e.idx] === undefined;
+    const totalPending = Boolean(totalLineFlags[e.idx]) && totalLineChoices[e.idx] === undefined;
+    return dupPending || totalPending;
+  }
+  const readyCount = includedPicks.length + parlays.length;
+  const reviewCount = allEntries.filter(needsReview).length;
+  const canImport = !(includedPicks.length === 0 && skippedDuplicateEntries.length === 0 && parlays.length === 0);
+
+  const lineCount = Math.max(text.split("\n").length, EDITOR_ROWS);
+
+  function handleClear() {
+    setText("");
+    setParsed(null);
+    setParlays([]);
+    setUnresolvedLines([]);
+    setUnresolvedReasons({});
+    setResult(null);
+    setImportError(null);
+    if (gutterRef.current) gutterRef.current.style.transform = "";
+  }
+
+  function renderRow(e: Entry) {
+    const { p, idx } = e;
+    const isAmbiguous = Boolean(p.ambiguous);
+    const ambiguousKey = isAmbiguous ? p.ambiguousKey : undefined;
+    const ambiguousGroup = ambiguousKey ? ambiguousGroupByKey.get(ambiguousKey) : undefined;
+    const dupFlag = duplicateFlags[idx];
+    const dupChoice = duplicateChoices[idx];
+    const totalFlag = totalLineFlags[idx];
+    const totalChoice = totalLineChoices[idx];
+    const review = needsReview(e);
+    const skipped = !review && (isPendingOrSkippedDuplicate(idx) || isPendingOrRejectedTotalLine(idx));
+    const realOdds = enrichedOdds[idx];
+    const displayOdds = realOdds ?? p.odds;
+    const game = matchedGames[idx];
+    const subLine = game
+      ? p.sportName + " · " + game.awayTeam + " @ " + game.homeTeam + " · " + formatGameTime(game.gameTime)
+      : (p.sportName || "League not set") + " · " + betTypeLabel(p.betType) + " · " + p.units + "u";
+
+    return (
+      <li
+        key={idx}
+        className={
+          "rounded-lg border px-3 py-2.5 " +
+          (review
+            ? "border-amber-400 bg-amber-50/60 dark:border-amber-500/60 dark:bg-amber-500/5"
+            : "border-border-subtle bg-card")
         }
-        className="w-full rounded-lg border border-border bg-card px-3 py-2 font-mono text-xs text-foreground focus:border-brand-400 focus:outline-none"
-      />
-
-      <button onClick={handleParse} disabled={!text.trim() || resolving} className={"mt-3 " + dropCatalogButtonClass}>
-        <LightningIcon />
-        {resolving ? "Resolving..." : "Drop Catalog"}
-      </button>
-
-      <div className="mt-3 flex items-start gap-2 rounded-lg bg-brand-50 px-3 py-2.5 text-[13px] text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">
-        <svg
-          viewBox="0 0 24 24"
-          className="mt-0.5 h-4 w-4 shrink-0"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 11v5" />
-          <path d="M12 8h.01" />
-        </svg>
-        <span>Once your catalog is loaded, you&apos;ll find the picks on the Live tab, grouped under their respective games.</span>
-      </div>
-
-      <div className="mt-4 max-w-[260px]">
-        <img
-          src="/example-picks.png"
-          alt="Example of picks grouped by game on the Live tab"
-          className="h-auto w-full rounded-lg border border-border"
-        />
-      </div>
-
-      {parsed && (
-        <div ref={resultsRef} className="mt-4">
-          <div className="mb-2 text-sm font-medium text-muted-foreground">
-            {validPicks.length} pick{validPicks.length === 1 ? "" : "s"} found
-            {parlays.length > 0 && " - " + parlays.length + " parlay" + (parlays.length === 1 ? "" : "s") + " (mlp)"}
-            {ambiguousPicks.length > 0 &&
-              " - " + ambiguousPicks.length + " need clarification"}
-            {unresolvedDuplicateCount > 0 &&
-              " - " + unresolvedDuplicateCount + " flagged as possible duplicate" + (unresolvedDuplicateCount === 1 ? "" : "s")}
-            {unresolvedTotalLineCount > 0 &&
-              " - " + unresolvedTotalLineCount + " missing a total number" + (unresolvedTotalLineCount === 1 ? "" : "s")}
-            {unresolvedLines.length > 0 &&
-              " - " + unresolvedLines.length + " line" + (unresolvedLines.length === 1 ? "" : "s") + " couldn't be identified"}
-            {loadingOdds && <span className="ml-2 font-normal text-muted-foreground">Looking up real odds...</span>}
-          </div>
-
-          {unresolvedLines.length > 0 && (
-            <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-              <div className="font-medium">
-                {unresolvedLines.length} line{unresolvedLines.length === 1 ? "" : "s"} looked like{" "}
-                {unresolvedLines.length === 1 ? "a pick" : "picks"} but couldn&apos;t be matched to a
-                sport or team - not imported and not attributed to any capper. Add these manually:
-              </div>
-              <ul className="mt-1 list-disc pl-4">
-                {unresolvedEntries.map((entry, i) => (
-                  <li key={i}>
-                    {entry.text}
-                    {entry.reason && (
-                      <span className="ml-1 font-medium text-amber-700 dark:text-amber-400">- {entry.reason}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              {unresolvedBreakdown.length > 0 && (
-                <div className="mt-1.5 text-amber-700 dark:text-amber-400">
-                  {unresolvedBreakdown.map((b) => b.count + " - " + b.reason).join("; ")}
-                </div>
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className={"break-words text-sm font-medium text-foreground" + (skipped ? " line-through opacity-70" : "")}>
+              {isAmbiguous ? p.raw : p.description}
+            </div>
+            <div className="mt-0.5 break-words text-xs text-muted-foreground">
+              {subLine}
+              {recoveredIndices.has(idx) && (
+                <span className="ml-1.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
+                  matched to live schedule
+                </span>
               )}
             </div>
-          )}
-
-          {ambiguousGroups.length > 0 && (
-            <div className="mb-3 space-y-2">
-              {ambiguousGroups.map(({ key, options, sampleRaw, count }) => (
-                <div key={"amb-" + key} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-                  <div className="font-medium">
-                    "{sampleRaw}"
-                    {count > 1 &&
-                      " (+" +
-                        (count - 1) +
-                        " more " +
-                        (isPlayerAmbiguityKey(key) ? "" : key + " ") +
-                        "pick" +
-                        (count - 1 === 1 ? "" : "s") +
-                        (isPlayerAmbiguityKey(key) ? " with this name" : "") +
-                        " in this paste)"}
-                  </div>
-                  <div className="mt-0.5">
-                    {options.length === 1
-                      ? "Line plausibility narrowed this to " +
-                        options[0].label +
-                        ", but another signal disagreed - confirm below."
-                      : isPlayerAmbiguityKey(key)
-                        ? "More than one player has this name - which one?"
-                        : "Ambiguous team - could mean " + options.map((o) => o.label).join(" or ") + "."}
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {options.map((opt) => (
-                      <button
-                        key={opt.label}
-                        type="button"
-                        onClick={() => resolveAmbiguousGroup(key, opt)}
-                        className="rounded-full border border-amber-300 bg-card px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-1 text-amber-600 dark:text-amber-400">
-                    {isPlayerAmbiguityKey(key)
-                      ? count > 1
-                        ? "Answering once resolves every pick with this name in this paste."
-                        : "Or edit the text above to add the first name, then preview again."
-                      : count > 1
-                        ? "Answering once resolves every " + key + " pick in this paste."
-                        : "Or edit the text above to specify the city, then preview again."}
-                  </div>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <StatusBadge kind={review ? "review" : skipped ? "skipped" : "ready"} />
+            {!isAmbiguous && (
+              <div className="text-right font-mono text-xs text-foreground">
+                {formatOdds(displayOdds)}
+                <div className="font-sans text-[11px] text-muted-foreground">
+                  {game ? p.units + "u" : null}
+                  {game && realOdds !== undefined ? " · " : null}
+                  {realOdds !== undefined ? "market price" : null}
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
+        </div>
 
-          {pendingFuzzySuggestions.length > 0 && (
-            <div className="mb-3 space-y-2">
-              {pendingFuzzySuggestions.map(({ name, suggestion }) => (
-                <div key={"fuzzy-" + name} className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-                  <div className="font-medium">"{name}" isn&apos;t an exact match for any saved capper.</div>
-                  <div className="mt-0.5">
-                    Did you mean <span className="font-medium">{suggestion}</span>?
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCapperFuzzyChoices((prev) => ({ ...prev, [name]: suggestion }));
-                        checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name));
-                      }}
-                      className="rounded-full border border-amber-300 bg-card px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
-                    >
-                      Yes, same as {suggestion}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCapperFuzzyChoices((prev) => ({ ...prev, [name]: CONFIRMED_NEW }));
-                        checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name));
-                      }}
-                      className="rounded-full border border-amber-300 bg-card px-2.5 py-1 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
-                    >
-                      No, "{name}" is a different capper
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="max-h-80 overflow-y-auto rounded-lg border border-border-subtle">
+        {ambiguousKey && ambiguousGroup && promptRowForKey.get(ambiguousKey) === idx && (
+          <div className="mt-2 text-xs text-amber-900 dark:text-amber-200">
             <div>
-              {validEntries.map(({ p, idx }, i) => {
-                const realOdds = enrichedOdds[idx];
-                const displayOdds = realOdds ?? p.odds;
-                const resolvedName = resolvedCapperName(p.capperName);
-                const wasFuzzyMatched = resolvedName !== p.capperName;
-                // A heavier divider below the last pick in each capper's group (not
-                // between every pick) - the color accent alone was easy to miss at a
-                // glance in a large catalog, this makes the group boundary itself clear.
-                const isGroupEnd =
-                  validEntries[i + 1] && resolvedCapperName(validEntries[i + 1].p.capperName) !== resolvedName;
-                const dupFlag = duplicateFlags[idx];
-                const dupChoice = duplicateChoices[idx];
-                const totalFlag = totalLineFlags[idx];
-                const totalChoice = totalLineChoices[idx];
-                const excluded = isPendingOrSkippedDuplicate(idx) || isPendingOrRejectedTotalLine(idx);
-                return (
-                  <div
-                    key={idx}
-                    className={
-                      // Explicit per-row bottom border instead of the parent's divide-y utility -
-                      // divide-y sets the border-color shorthand (all 4 sides) on every row but the
-                      // first, which was silently stomping this per-capper border-l accent color.
-                      "border-l-4 px-3 py-2 text-xs last:border-b-0 " +
-                      (isGroupEnd ? "border-b-2 border-b-border" : "border-b border-b-border-subtle") +
-                      " " +
-                      capperAccent.get(resolvedName) +
-                      (excluded ? " opacity-50" : "")
-                    }
-                  >
-                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
-                      <div className="min-w-0">
-                        <span className="font-medium">{resolvedName}</span>
-                        {wasFuzzyMatched && (
-                          <span className="ml-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400">
-                            matched from "{p.capperName}"
+              {ambiguousGroup.options.length === 1
+                ? "Line plausibility narrowed this to " +
+                  ambiguousGroup.options[0].label +
+                  ", but another signal disagreed - confirm below."
+                : isPlayerAmbiguityKey(ambiguousKey)
+                  ? "More than one player has this name - which one?"
+                  : "Ambiguous team - could mean " + ambiguousGroup.options.map((o) => o.label).join(" or ") + "."}
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {ambiguousGroup.options.map((opt) => (
+                <button
+                  key={opt.label}
+                  type="button"
+                  onClick={() => resolveAmbiguousGroup(ambiguousKey, opt)}
+                  className={promptButtonClass}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-1.5 text-amber-800 dark:text-amber-300">
+              {ambiguousGroup.count > 1
+                ? isPlayerAmbiguityKey(ambiguousKey)
+                  ? "Answering once resolves all " + ambiguousGroup.count + " picks with this name in this paste."
+                  : "Answering once resolves all " + ambiguousGroup.count + " " + ambiguousKey + " picks in this paste."
+                : isPlayerAmbiguityKey(ambiguousKey)
+                  ? "Or edit the text to add the first name, then drop again."
+                  : "Or edit the text to specify the city, then drop again."}{" "}
+              Left unanswered, it won&apos;t be imported.
+            </div>
+          </div>
+        )}
+        {ambiguousKey && promptRowForKey.get(ambiguousKey) !== idx && (
+          <div className="mt-1.5 text-xs text-amber-900 dark:text-amber-200">
+            Waiting on {ambiguousKeyLabel(ambiguousKey)} - answer above.
+          </div>
+        )}
+
+        {dupFlag && (
+          <div className="mt-2 text-xs text-amber-900 dark:text-amber-200">
+            <div>Possible duplicate: {dupFlag.message}</div>
+            {dupChoice === undefined && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "skip" }))}
+                  className={promptButtonClass}
+                >
+                  Skip this pick
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "import" }))}
+                  className={promptButtonClass}
+                >
+                  Import anyway
+                </button>
+                <span className="text-amber-800 dark:text-amber-300">Left unanswered, it&apos;s skipped.</span>
+              </div>
+            )}
+            {dupChoice === "skip" && (
+              <div className="flex flex-wrap items-center gap-x-2">
+                <span className="font-medium">Skipped - won&apos;t be imported.</span>
+                <button
+                  type="button"
+                  onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "import" }))}
+                  className={promptLinkClass}
+                >
+                  Import anyway
+                </button>
+              </div>
+            )}
+            {dupChoice === "import" && (
+              <div className="flex flex-wrap items-center gap-x-2">
+                <span className="font-medium">Will import despite the duplicate.</span>
+                <button
+                  type="button"
+                  onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "skip" }))}
+                  className={promptLinkClass}
+                >
+                  Skip instead
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {totalFlag && (
+          <div className="mt-2 text-xs text-amber-900 dark:text-amber-200">
+            <div>
+              {totalFlag.reason === "missing"
+                ? "No number found in this pick's text."
+                : "Couldn't read a valid number in this pick's text."}{" "}
+              Today&apos;s market total for this game is <span className="font-semibold">{totalFlag.inferredLine}</span>.
+            </div>
+            {totalChoice === undefined && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "confirm" }))}
+                  className={promptButtonClass}
+                >
+                  Use {totalFlag.inferredLine}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "reject" }))}
+                  className={promptButtonClass}
+                >
+                  Skip this pick
+                </button>
+                <span className="text-amber-800 dark:text-amber-300">Left unanswered, it&apos;s skipped.</span>
+              </div>
+            )}
+            {totalChoice === "confirm" && (
+              <div className="flex flex-wrap items-center gap-x-2">
+                <span className="font-medium">Will import with {totalFlag.inferredLine} filled in.</span>
+                <button
+                  type="button"
+                  onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "reject" }))}
+                  className={promptLinkClass}
+                >
+                  Skip instead
+                </button>
+              </div>
+            )}
+            {totalChoice === "reject" && (
+              <div className="flex flex-wrap items-center gap-x-2">
+                <span className="font-medium">Skipped - won&apos;t be imported.</span>
+                <button
+                  type="button"
+                  onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "confirm" }))}
+                  className={promptLinkClass}
+                >
+                  Use {totalFlag.inferredLine} instead
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </li>
+    );
+  }
+
+  return (
+    <div>
+      <ol className="mb-5 flex flex-wrap items-center gap-2" aria-label="Import steps">
+        {STEPS.map((label, i) => {
+          const n = i + 1;
+          const state = n === step ? "active" : n < step ? "done" : "upcoming";
+          return (
+            <li key={label} className="flex items-center gap-2">
+              {i > 0 && (
+                <svg viewBox="0 0 24 24" className="h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m9 6 6 6-6 6" />
+                </svg>
+              )}
+              <span
+                aria-current={state === "active" ? "step" : undefined}
+                className={
+                  "inline-flex items-center gap-2 rounded-full border py-1.5 pl-1.5 pr-3.5 text-sm font-medium " +
+                  (state === "active"
+                    ? "border-brand-600 bg-brand-600 text-white"
+                    : state === "done"
+                      ? "border-brand-200 bg-brand-50 text-brand-800 dark:border-brand-500/40 dark:bg-brand-500/10 dark:text-brand-200"
+                      : "border-border bg-card text-muted-foreground")
+                }
+              >
+                <span
+                  className={
+                    "flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold " +
+                    (state === "active"
+                      ? "bg-white text-brand-700"
+                      : state === "done"
+                        ? "bg-brand-600 text-white"
+                        : "bg-muted text-foreground")
+                  }
+                >
+                  {n}
+                </span>
+                {label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+
+      <div className="flex flex-wrap items-start gap-5">
+        {/* Left: editor */}
+        <section aria-labelledby="catalog-editor-title" className={cardClass + " min-w-0 flex-[1_1_420px] p-5"}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 id="catalog-editor-title" className="text-base font-semibold text-foreground">
+                <label htmlFor="catalog-text">Paste your catalog</label>
+              </h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Capper name on its own line, picks underneath. Blank line between cappers.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={!text && !parsed && !result}
+              className="inline-flex min-h-[44px] shrink-0 items-center rounded-full border border-border px-4 text-sm font-medium text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="mt-3 flex overflow-hidden rounded-lg border border-border bg-card transition focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/30">
+            <div aria-hidden="true" className="relative w-10 shrink-0 select-none overflow-hidden border-r border-border-subtle bg-muted/60">
+              <div ref={gutterRef} className="absolute inset-x-0 top-0 py-2 pr-2 text-right font-mono text-xs leading-6 text-muted-foreground">
+                {Array.from({ length: lineCount }, (_, i) => (
+                  <div key={i}>{i + 1}</div>
+                ))}
+              </div>
+            </div>
+            <textarea
+              id="catalog-text"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onScroll={(e) => {
+                if (gutterRef.current) gutterRef.current.style.transform = "translateY(-" + e.currentTarget.scrollTop + "px)";
+              }}
+              rows={EDITOR_ROWS}
+              wrap="off"
+              spellCheck={false}
+              placeholder={
+                "Vegas John\nCubs moneyline\nWhite Sox -1.5\n\nHigh Roller Hank\nYankees ML\nDodgers under 8.5"
+              }
+              className="block min-w-0 flex-1 resize-y overflow-auto whitespace-pre bg-transparent px-3 py-2 font-mono text-[13px] leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none"
+            />
+          </div>
+
+          {(parsed || (result && !result.pickLimitBlocked)) && (
+            <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Catalog summary">
+              {parsed && (
+                <>
+                  <Chip tone="green">{readyCount} ready</Chip>
+                  {reviewCount > 0 && <Chip tone="amber">{reviewCount} need review</Chip>}
+                </>
+              )}
+              {!parsed && result && !result.pickLimitBlocked && (
+                <>
+                  <Chip tone="green">{result.imported} saved</Chip>
+                  {result.parlaysImported > 0 && (
+                    <Chip tone="green">
+                      {result.parlaysImported} parlay{result.parlaysImported === 1 ? "" : "s"} saved
+                    </Chip>
+                  )}
+                  {result.totalSkipped > 0 && <Chip tone="amber">{result.totalSkipped} skipped</Chip>}
+                  {result.unmatchedParlays.length > 0 && (
+                    <Chip tone="amber">
+                      {result.unmatchedParlays.length} parlay{result.unmatchedParlays.length === 1 ? "" : "s"} unmatched
+                    </Chip>
+                  )}
+                </>
+              )}
+            </ul>
+          )}
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="flex min-w-0 flex-1 basis-56 items-start gap-2 text-[13px] text-muted-foreground">
+              <svg
+                viewBox="0 0 24 24"
+                className="mt-0.5 h-4 w-4 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 11v5" />
+                <path d="M12 8h.01" />
+              </svg>
+              <span>Imported picks appear on the Live tab, grouped under their games.</span>
+            </p>
+            <button
+              type="button"
+              onClick={handleParse}
+              disabled={!text.trim() || resolving}
+              className="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-full bg-brand-600 px-6 text-sm font-semibold text-white shadow-soft transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <LightningIcon />
+              {resolving ? "Resolving..." : "Drop Catalog"}
+            </button>
+          </div>
+        </section>
+
+        {/* Right: match results + common formats */}
+        <div className="flex min-w-0 flex-[1_1_380px] flex-col gap-5">
+          <section ref={resultsRef} aria-labelledby="match-results-title" className={cardClass + " scroll-mt-4 p-5"}>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <h2 id="match-results-title" className="text-base font-semibold text-foreground">
+                Match results
+              </h2>
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                {parsed
+                  ? readyCount + " ready · " + reviewCount + " need review"
+                  : result && !result.pickLimitBlocked
+                    ? result.imported + " of " + (result.imported + result.totalSkipped) + " saved · just now"
+                    : null}
+                {parsed && loadingOdds && <span className="ml-2">Looking up real odds...</span>}
+              </p>
+            </div>
+
+            {importError && (
+              <div role="alert" className="mt-3 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800 dark:bg-red-500/10 dark:text-red-300">
+                <div className="font-semibold">Import not started</div>
+                <p className="mt-1">{importError}</p>
+              </div>
+            )}
+
+            {result?.pickLimitBlocked && (
+              <div role="alert" className="mt-3 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-200">
+                <div className="font-semibold">Import paused - Free plan limit reached</div>
+                <p className="mt-1">{result.pickLimitBlocked.message}</p>
+                <a
+                  href="/pricing"
+                  className="mt-2 inline-flex min-h-[44px] items-center rounded-full bg-amber-700 px-4 text-sm font-medium text-white transition hover:bg-amber-800"
+                >
+                  Upgrade to Basic for unlimited picks
+                </a>
+              </div>
+            )}
+
+            {!parsed && !result && !importError && (
+              <p className="mt-3 rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+                {resolving ? "Matching your catalog..." : "Drop your catalog to see matches here."}
+              </p>
+            )}
+
+            {parsed && (
+              <div className="mt-3 space-y-4">
+                {capperGroups.length === 0 && parlays.length === 0 && (
+                  <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                    No picks found in this paste.
+                  </p>
+                )}
+
+                {capperGroups.map((group) => {
+                  const fuzzy = pendingFuzzySuggestions.filter((s) => group.rawNames.includes(s.name));
+                  const matchedFrom = group.rawNames.filter((n) => n !== group.name);
+                  const isNew = matchedFrom.length === 0 && !existingLower.includes(group.name.toLowerCase());
+                  return (
+                    <div key={group.name}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          aria-hidden="true"
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-800 dark:bg-brand-500/15 dark:text-brand-200"
+                        >
+                          {capperInitials(group.name)}
+                        </span>
+                        <h3 className="min-w-0 break-words text-sm font-semibold text-foreground">{group.name}</h3>
+                        {matchedFrom.map((raw) => (
+                          <span
+                            key={raw}
+                            className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
+                          >
+                            matched from &quot;{raw}&quot;
                           </span>
-                        )}
-                        {!wasFuzzyMatched && !existingLower.includes(p.capperName.toLowerCase()) && (
-                          <span className="ml-1 rounded-full bg-brand-50 px-1.5 py-0.5 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
+                        ))}
+                        {isNew && (
+                          <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
                             new
                           </span>
                         )}
-                        {recoveredIndices.has(idx) && (
-                          <span className="ml-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                            matched to live schedule
-                          </span>
-                        )}
-                        <span className="ml-2 text-muted-foreground">
-                          {p.sportName} - {p.description}
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {group.entries.length} pick{group.entries.length === 1 ? "" : "s"}
                         </span>
                       </div>
-                      <div className="text-muted-foreground sm:shrink-0">
-                        {betTypeLabel(p.betType)} - {displayOdds > 0 ? "+" : ""}
-                        {displayOdds}
-                        {realOdds !== undefined && <span className="ml-1 text-emerald-600 dark:text-emerald-400">(real)</span>}
-                        {" - " + p.units + "u"}
-                      </div>
-                    </div>
-                    {dupFlag && (
-                      <div className="mt-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-                        <div>Possible duplicate: {dupFlag.message}</div>
-                        {dupChoice === undefined && (
-                          <div className="mt-1 flex flex-wrap gap-1.5">
+
+                      {fuzzy.map(({ name, suggestion }) => (
+                        <div
+                          key={"fuzzy-" + name}
+                          className="mt-2 rounded-lg border border-amber-400 bg-amber-50/60 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-500/5 dark:text-amber-200"
+                        >
+                          <div>
+                            <span className="font-semibold">&quot;{name}&quot;</span> isn&apos;t an exact match for any saved
+                            capper. Did you mean <span className="font-semibold">{suggestion}</span>?
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
                             <button
                               type="button"
-                              onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "skip" }))}
-                              className="rounded-full border border-amber-300 bg-card px-2 py-0.5 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
+                              onClick={() => {
+                                setCapperFuzzyChoices((prev) => ({ ...prev, [name]: suggestion }));
+                                checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name));
+                              }}
+                              className={promptButtonClass}
                             >
-                              Skip this pick
+                              Yes, same as {suggestion}
                             </button>
                             <button
                               type="button"
-                              onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "import" }))}
-                              className="rounded-full border border-amber-300 bg-card px-2 py-0.5 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
+                              onClick={() => {
+                                setCapperFuzzyChoices((prev) => ({ ...prev, [name]: CONFIRMED_NEW }));
+                                checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name));
+                              }}
+                              className={promptButtonClass}
                             >
-                              Import anyway
+                              No, &quot;{name}&quot; is a different capper
                             </button>
                           </div>
-                        )}
-                        {dupChoice === "skip" && (
-                          <div className="mt-1 flex items-center gap-1.5 text-[11px]">
-                            <span className="font-medium">Skipped - won&apos;t be imported.</span>
-                            <button
-                              type="button"
-                              onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "import" }))}
-                              className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
-                            >
-                              Import anyway
-                            </button>
-                          </div>
-                        )}
-                        {dupChoice === "import" && (
-                          <div className="mt-1 flex items-center gap-1.5 text-[11px]">
-                            <span className="font-medium">Will import despite the duplicate.</span>
-                            <button
-                              type="button"
-                              onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "skip" }))}
-                              className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
-                            >
-                              Skip instead
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {totalFlag && (
-                      <div className="mt-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-                        <div>
-                          {totalFlag.reason === "missing"
-                            ? "No number found in this pick's text."
-                            : "Couldn't read a valid number in this pick's text."}{" "}
-                          Today&apos;s market total for this game is{" "}
-                          <span className="font-medium">{totalFlag.inferredLine}</span>.
                         </div>
-                        {totalChoice === undefined && (
-                          <div className="mt-1 flex flex-wrap gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "confirm" }))}
-                              className="rounded-full border border-amber-300 bg-card px-2 py-0.5 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
-                            >
-                              Use {totalFlag.inferredLine}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "reject" }))}
-                              className="rounded-full border border-amber-300 bg-card px-2 py-0.5 text-[11px] font-medium text-amber-800 transition hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900/30"
-                            >
-                              Skip this pick
-                            </button>
+                      ))}
+
+                      <ul className="mt-2 space-y-1.5">{group.entries.map(renderRow)}</ul>
+                    </div>
+                  );
+                })}
+
+                {parlays.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {parlays.length} parlay{parlays.length === 1 ? "" : "s"} (MLP)
+                    </h3>
+                    <ul className="mt-2 space-y-1.5">
+                      {parlays.map((parlay, i) => (
+                        <li key={"parlay-" + i} className="rounded-lg border border-border-subtle bg-card px-3 py-2.5">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="break-words text-sm font-medium text-foreground">
+                                {parlay.legs[0].description} + {parlay.legs[1].description}
+                              </div>
+                              <div className="mt-0.5 text-xs text-muted-foreground">
+                                {resolvedCapperName(parlay.capperName)} · {parlay.sportName} · MLP · {parlay.units}u
+                              </div>
+                            </div>
+                            <StatusBadge kind="ready" />
                           </div>
-                        )}
-                        {totalChoice === "confirm" && (
-                          <div className="mt-1 flex items-center gap-1.5 text-[11px]">
-                            <span className="font-medium">Will import with {totalFlag.inferredLine} filled in.</span>
-                            <button
-                              type="button"
-                              onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "reject" }))}
-                              className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
-                            >
-                              Skip instead
-                            </button>
+                          <div className="mt-1 text-[11px] text-muted-foreground">
+                            Real line/odds for each leg are resolved from today&apos;s schedule at import - not the
+                            numbers above.
                           </div>
-                        )}
-                        {totalChoice === "reject" && (
-                          <div className="mt-1 flex items-center gap-1.5 text-[11px]">
-                            <span className="font-medium">Skipped - won&apos;t be imported.</span>
-                            <button
-                              type="button"
-                              onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "confirm" }))}
-                              className="font-medium underline hover:text-amber-900 dark:hover:text-amber-100"
-                            >
-                              Use {totalFlag.inferredLine} instead
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                )}
 
-          {parlays.length > 0 && (
-            <div className="mt-3 max-h-60 overflow-y-auto rounded-lg border border-border-subtle">
-              {parlays.map((parlay, i) => {
-                const resolvedName = resolvedCapperName(parlay.capperName);
-                return (
-                  <div
-                    key={"parlay-" + i}
-                    className="border-b border-b-border-subtle px-3 py-2 text-xs last:border-b-0"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{resolvedName}</span>
-                      <span className="text-muted-foreground">
-                        {parlay.sportName} - MLP - {parlay.units}u
-                      </span>
+                {unresolvedLines.length > 0 && (
+                  <details className="rounded-lg border border-amber-400 bg-amber-50/60 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-500/5 dark:text-amber-200">
+                    <summary className={summaryClass}>
+                      {unresolvedLines.length} couldn&apos;t read
+                    </summary>
+                    <div className="px-3 pb-3">
+                      <p>
+                        {unresolvedLines.length === 1 ? "This line looked like a pick" : "These lines looked like picks"} but
+                        couldn&apos;t be matched to a sport or team - not imported and not attributed to any capper. Add{" "}
+                        {unresolvedLines.length === 1 ? "it" : "them"} manually:
+                      </p>
+                      <ul className="mt-1.5 space-y-1">
+                        {unresolvedEntries.map((entry, i) => (
+                          <li key={i}>
+                            <span className="break-words font-mono">{entry.text}</span>
+                            {entry.reason && <span className="ml-1 font-semibold">- {entry.reason}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                      {unresolvedBreakdown.length > 0 && (
+                        <p className="mt-1.5 font-medium">
+                          {unresolvedBreakdown.map((b) => b.count + " - " + b.reason).join("; ")}
+                        </p>
+                      )}
                     </div>
-                    <div className="mt-0.5 text-muted-foreground">
-                      {parlay.legs[0].description} + {parlay.legs[1].description}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-muted-foreground">
-                      Real line/odds for each leg are resolved from today&apos;s schedule at import - not
-                      the numbers above.
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  </details>
+                )}
 
-          <button
-            onClick={handleImport}
-            disabled={
-              importing || (includedPicks.length === 0 && skippedDuplicateEntries.length === 0 && parlays.length === 0)
-            }
-            className="mt-3 rounded-full bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700 disabled:opacity-50"
-          >
-            {importing
-              ? "Importing..."
-              : importButtonLabel(includedPicks.length, skippedDuplicateEntries.length) +
-                (parlays.length > 0 ? " + " + parlays.length + " parlay" + (parlays.length === 1 ? "" : "s") : "")}
-          </button>
-        </div>
-      )}
+                <button
+                  type="button"
+                  onClick={handleImport}
+                  disabled={importing || !canImport}
+                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand-600 px-5 text-sm font-semibold text-white shadow-soft transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {importing
+                    ? "Importing..."
+                    : importButtonLabel(includedPicks.length, skippedDuplicateEntries.length) +
+                      (parlays.length > 0 ? " + " + parlays.length + " parlay" + (parlays.length === 1 ? "" : "s") : "")}
+                </button>
+              </div>
+            )}
 
-      {importError && (
-        <div className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800 dark:bg-red-500/10 dark:text-red-300">
-          <div className="font-medium">Import not started</div>
-          <p className="mt-1">{importError}</p>
-        </div>
-      )}
+            {result && !result.pickLimitBlocked && (
+              <div className="mt-3 space-y-2">
+                <p className="rounded-lg bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                  Imported {result.imported} pick{result.imported === 1 ? "" : "s"}
+                  {result.parlaysImported > 0 &&
+                    " and " + result.parlaysImported + " parlay" + (result.parlaysImported === 1 ? "" : "s")}
+                  .{result.totalSkipped > 0 && " " + result.totalSkipped + " skipped."}{" "}
+                  <a href="/live" className="font-semibold underline">
+                    View on the Live tab
+                  </a>
+                </p>
 
-      {result?.pickLimitBlocked && (
-        <div className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-          <div className="font-medium">Import paused - Free plan limit reached</div>
-          <p className="mt-1">{result.pickLimitBlocked.message}</p>
-          <a
-            href="/pricing"
-            className="mt-2 inline-block rounded-full bg-amber-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-amber-700"
-          >
-            Upgrade to Basic for unlimited picks
-          </a>
-        </div>
-      )}
+                {(result.errors.length > 0 || result.parlayErrors.length > 0) && (
+                  <ul role="alert" className="list-disc rounded-lg bg-red-50 py-2.5 pl-8 pr-3 text-xs text-red-800 dark:bg-red-500/10 dark:text-red-300">
+                    {[...result.errors, ...result.parlayErrors].map((e, i) => (
+                      <li key={i}>{e}</li>
+                    ))}
+                  </ul>
+                )}
 
-      {result && !result.pickLimitBlocked && (
-        <div className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
-          Imported {result.imported} pick{result.imported === 1 ? "" : "s"}
-          {result.parlaysImported > 0 &&
-            " and " + result.parlaysImported + " parlay" + (result.parlaysImported === 1 ? "" : "s")}
-          .
-          {result.totalSkipped > 0 && " " + result.totalSkipped + " skipped."}
-          {result.errors.length > 0 && (
-            <ul className="mt-1 list-disc pl-4 text-xs text-red-600 dark:text-red-400">
-              {result.errors.map((e, i) => (
-                <li key={i}>{e}</li>
-              ))}
-            </ul>
-          )}
-          {result.unmatchedGames.length > 0 && (
-            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-              Couldn&apos;t match {result.unmatchedGames.length} pick
-              {result.unmatchedGames.length === 1 ? "" : "s"} to today&apos;s schedule - they
-              were NOT imported. Double-check the matchup and add them manually:
-              <ul className="mt-1 list-disc pl-4">
-                {result.unmatchedGames.map((g, i) => (
-                  <li key={i}>{g}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {result.doubleheaderBothFinal.length > 0 && (
-            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-              Doubleheader — both games final, add manually ({result.doubleheaderBothFinal.length} pick
-              {result.doubleheaderBothFinal.length === 1 ? "" : "s"}):
-              <ul className="mt-1 list-disc pl-4">
-                {result.doubleheaderBothFinal.map((g, i) => (
-                  <li key={i}>{g}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {result.skippedDuplicates.length > 0 && (
-            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-              Skipped {result.skippedDuplicates.length} pick
-              {result.skippedDuplicates.length === 1 ? "" : "s"} as a possible duplicate - they
-              were NOT imported (either you chose Skip, or the prompt was left unanswered):
-              <ul className="mt-1 list-disc pl-4">
-                {result.skippedDuplicates.map((d, i) => (
-                  <li key={i}>{d}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {result.skippedAmbiguous.length > 0 && (
-            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-              Skipped {result.skippedAmbiguous.length} pick
-              {result.skippedAmbiguous.length === 1 ? "" : "s"} with an ambiguous team or player name - they
-              were NOT imported (the &quot;which one?&quot; prompt was left unanswered):
-              <ul className="mt-1 list-disc pl-4">
-                {result.skippedAmbiguous.map((d, i) => (
-                  <li key={i}>{d}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {result.skippedTotalLinePending.length > 0 && (
-            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-              Skipped {result.skippedTotalLinePending.length} pick
-              {result.skippedTotalLinePending.length === 1 ? "" : "s"} missing a total number - they
-              were NOT imported (the suggested market line was left unconfirmed or rejected):
-              <ul className="mt-1 list-disc pl-4">
-                {result.skippedTotalLinePending.map((d, i) => (
-                  <li key={i}>{d}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {result.skippedUnresolvedLines.length > 0 && (
-            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-              {result.skippedUnresolvedLines.length} line
-              {result.skippedUnresolvedLines.length === 1 ? "" : "s"} couldn&apos;t be matched to a
-              sport or team - not imported and not attributed to any capper:
-              <ul className="mt-1 list-disc pl-4">
-                {result.skippedUnresolvedLines.map((l, i) => (
-                  <li key={i}>{l}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {result.unmatchedParlays.length > 0 && (
-            <div className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-              Couldn&apos;t match {result.unmatchedParlays.length} parlay
-              {result.unmatchedParlays.length === 1 ? "" : "s"} - one or both legs couldn&apos;t be
-              resolved to today&apos;s schedule/odds. They were NOT imported:
-              <ul className="mt-1 list-disc pl-4">
-                {result.unmatchedParlays.map((g, i) => (
-                  <li key={i}>{g}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {result.parlayErrors.length > 0 && (
-            <ul className="mt-1 list-disc pl-4 text-xs text-red-600 dark:text-red-400">
-              {result.parlayErrors.map((e, i) => (
-                <li key={i}>{e}</li>
-              ))}
-            </ul>
-          )}
+                <ResultGroup
+                  items={result.unmatchedGames}
+                  title={(n) => n + " couldn't match to today's schedule"}
+                  note="They were NOT imported. Double-check the matchup and add them manually."
+                />
+                <ResultGroup
+                  items={result.doubleheaderBothFinal}
+                  title={(n) => n + " doubleheader pick" + (n === 1 ? "" : "s") + " - both games final"}
+                  note="Both games were already final, so there was nothing left to match. Add manually."
+                />
+                <ResultGroup
+                  items={result.skippedDuplicates}
+                  title={(n) => n + " skipped as a possible duplicate"}
+                  note="They were NOT imported (either you chose Skip, or the prompt was left unanswered)."
+                />
+                <ResultGroup
+                  items={result.skippedAmbiguous}
+                  title={(n) => n + " skipped with an ambiguous team or player name"}
+                  note={'They were NOT imported (the "which one?" prompt was left unanswered).'}
+                />
+                <ResultGroup
+                  items={result.skippedTotalLinePending}
+                  title={(n) => n + " skipped missing a total number"}
+                  note="They were NOT imported (the suggested market line was left unconfirmed or rejected)."
+                />
+                <ResultGroup
+                  items={result.skippedUnresolvedLines}
+                  title={(n) => n + " couldn't read"}
+                  note="Couldn't be matched to a sport or team - not imported and not attributed to any capper."
+                  mono
+                />
+                <ResultGroup
+                  items={result.unmatchedParlays}
+                  title={(n) => n + " parlay" + (n === 1 ? "" : "s") + " couldn't match"}
+                  note="One or both legs couldn't be resolved to today's schedule/odds. They were NOT imported."
+                />
+              </div>
+            )}
+          </section>
+
+          <CommonFormatsCard />
         </div>
-      )}
+      </div>
     </div>
+  );
+}
+
+const STEPS = ["Paste catalog", "Review matches", "Live on the board"];
+const EDITOR_ROWS = 12;
+
+const cardClass = "rounded-card border border-border bg-card shadow-soft";
+
+// Review-prompt choices: real buttons, 44px tall for touch.
+const promptButtonClass =
+  "inline-flex min-h-[44px] items-center rounded-full border border-amber-500 bg-card px-3.5 text-left text-xs font-semibold text-amber-900 transition hover:bg-amber-100 dark:border-amber-600 dark:text-amber-200 dark:hover:bg-amber-900/30";
+const promptLinkClass =
+  "inline-flex min-h-[44px] items-center font-semibold underline hover:text-amber-950 dark:hover:text-amber-100";
+const summaryClass = "flex min-h-[44px] cursor-pointer items-center px-3 text-sm font-semibold";
+
+function formatGameTime(iso: string): string {
+  return (
+    new Date(iso).toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    }) + " ET"
+  );
+}
+
+// "giants" -> "Giants"; a shared player surname has no readable key of its own.
+function ambiguousKeyLabel(key: string): string {
+  if (isPlayerAmbiguityKey(key)) return "this player's name";
+  return key.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function StatusBadge({ kind }: { kind: "ready" | "review" | "skipped" }) {
+  const styles = {
+    ready: "bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300",
+    review: "bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200",
+    skipped: "border border-border bg-card text-muted-foreground",
+  }[kind];
+  return (
+    <span className={"rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide " + styles}>{kind}</span>
+  );
+}
+
+function Chip({ tone, children }: { tone: "green" | "amber"; children: ReactNode }) {
+  return (
+    <li
+      className={
+        "rounded-full px-2.5 py-1 text-xs font-semibold " +
+        (tone === "green"
+          ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
+          : "bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300")
+      }
+    >
+      {children}
+    </li>
+  );
+}
+
+// One collapsed "N <why it wasn't imported>" group in the post-import summary.
+function ResultGroup({
+  items,
+  title,
+  note,
+  mono = false,
+}: {
+  items: string[];
+  title: (count: number) => string;
+  note: string;
+  mono?: boolean;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <details className="rounded-lg border border-amber-400 bg-amber-50/60 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-500/5 dark:text-amber-200">
+      <summary className={summaryClass}>{title(items.length)}</summary>
+      <div className="px-3 pb-3">
+        <p>{note}</p>
+        <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+          {items.map((item, i) => (
+            <li key={i} className={"break-words" + (mono ? " font-mono" : "")}>
+              {item}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
   );
 }
