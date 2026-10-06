@@ -79,3 +79,38 @@ export function orderTeamSections(
   if (away.picks.length === 0 && home.picks.length > 0) return [home, away];
   return [away, home];
 }
+
+// Which desktop column each non-team group (Totals, Other markets) sits in:
+// GameDetailPanel's two columns stack independently, each headed by a team,
+// and these groups go under whichever column is shorter so they fill the gap
+// beneath a short team instead of waiting for the taller one to end. Placed
+// one at a time, Totals first, each into the column that is shorter at that
+// point - so a lopsided game gets both under the short team (Totals, then
+// Other markets), and a balanced one gets one each. A tie goes left. Height
+// is pick count, with an empty section counting as one (its empty-state line
+// is about a card tall); every pick card in this panel is the same shape, so
+// a measured height would say the same thing and need a layout pass to say it.
+// Empty groups are not placed (GameDetailPanel hides them).
+export type NonTeamSectionColumn = "left" | "right" | null;
+
+export function placeNonTeamSections(
+  leftPickCount: number,
+  rightPickCount: number,
+  totalsPickCount: number,
+  otherPickCount: number
+): { totals: NonTeamSectionColumn; other: NonTeamSectionColumn } {
+  let left = Math.max(leftPickCount, 1);
+  let right = Math.max(rightPickCount, 1);
+  const place = (pickCount: number): NonTeamSectionColumn => {
+    if (pickCount === 0) return null;
+    if (left <= right) {
+      left += pickCount;
+      return "left";
+    }
+    right += pickCount;
+    return "right";
+  };
+  const totals = place(totalsPickCount);
+  const other = place(otherPickCount);
+  return { totals, other };
+}

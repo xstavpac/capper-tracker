@@ -10,7 +10,7 @@
 //   npx tsx src/components/live/grid-live-team-panel-data-acceptance-test.ts
 //
 // Exits non-zero if any assertion fails.
-import { buildGridLiveGamePanelData, orderTeamSections } from "./grid-live-team-panel-data";
+import { buildGridLiveGamePanelData, orderTeamSections, placeNonTeamSections } from "./grid-live-team-panel-data";
 import type { ExpanderPick } from "./game-picks-expander";
 import { OTHER_GROUP_LABEL, TOTALS_GROUP_LABEL } from "@/lib/pick-team-group";
 
@@ -117,6 +117,31 @@ const picks = [homePick, awayPick, otherPick, totalTeam, totalPeriod, totalFull]
     orderTeamSections(twoPicks, onePick).map((s) => s.teamLabel),
     ["Cubs", "Pirates"]
   );
+}
+
+{
+  expect("lopsided (1 vs 22): Totals and Other markets both go under the short left team", placeNonTeamSections(1, 22, 5, 3), {
+    totals: "left",
+    other: "left",
+  });
+  expect("lopsided the other way (15 vs 7): both go under the short right team", placeNonTeamSections(15, 7, 3, 2), {
+    totals: "right",
+    other: "right",
+  });
+  expect("balanced (8 vs 8): Totals left, Other markets right", placeNonTeamSections(8, 8, 4, 4), {
+    totals: "left",
+    other: "right",
+  });
+  expect("Totals overtakes the taller column: Other markets goes to the other one", placeNonTeamSections(3, 6, 9, 2), {
+    totals: "left",
+    other: "right",
+  });
+  expect("no Totals: Other markets alone goes under the shorter column", placeNonTeamSections(7, 15, 0, 4), {
+    totals: null,
+    other: "left",
+  });
+  expect("neither group has picks: nothing is placed", placeNonTeamSections(7, 15, 0, 0), { totals: null, other: null });
+  expect("an empty team section counts as one card, not zero", placeNonTeamSections(1, 0, 2, 0), { totals: "left", other: null });
 }
 
 if (failures > 0) {
