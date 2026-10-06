@@ -9,7 +9,6 @@ import {
 } from "@/server/data/odds";
 import { gradeUserPagePicks } from "@/server/data/page-grading";
 import { getPicksForGame } from "@/server/data/picks";
-import { getGamePulsePanelRows } from "@/server/data/game-pulse";
 import { getTeamRecordAsOf, type TeamRecord } from "@/server/data/team-record";
 import { getMlbLiveGameState } from "@/server/data/live-game-state";
 import { getNflLiveGameState } from "@/server/data/nfl-live-game-state";
@@ -19,11 +18,6 @@ import { formatPickLabel } from "@/lib/bet-line";
 import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
 import { getTeamColor } from "@/lib/team-colors";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
-import { GamePulsePanel } from "@/components/live/game-pulse-panel";
-import { GameMomentumPanel } from "@/components/live/game-momentum-panel";
-import { NflGameMomentumPanel } from "@/components/live/nfl-game-momentum-panel";
-import { GamePacePanel } from "@/components/live/game-pace-panel";
-import { NflGamePacePanel } from "@/components/live/nfl-game-pace-panel";
 import { GameHeadToHeadHeader, type HeadToHeadSide } from "@/components/live/game-head-to-head-header";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 
@@ -123,33 +117,18 @@ export default async function GameDetailPage({
   const isLive = score?.status === "live";
   const isFinal = score?.status === "final";
 
-  // MLB and NFL both get the live Momentum gauge instead of Game Pulse
-  // (Phase 1 investigation: Game Pulse does no live fetching at all, so it
-  // couldn't be extended into this - Momentum needed its own per-game
-  // live-state layer, see live-game-state.ts / nfl-live-game-state.ts).
-  // Every other sport is unchanged and out of scope for this round.
+  // MLB and NFL get the head-to-head header and the richer picks list below;
+  // every other sport keeps the plain two-row header and picks table.
   const isMlb = sportMeta.key === "baseball_mlb";
   const isNfl = sportMeta.key === "americanfootball_nfl";
-
-  // Historical situational rates for both teams, independent of this game's
-  // own live/final state - unlike the old tile badge this replaces (which
-  // only ever evaluated a currently-live game's own innings), the panel
-  // shows each team's track record regardless of whether this particular
-  // game has started yet. Every other (non-MLB, non-NFL) sport falls
-  // through to the MLB rate lookup, which harmlessly returns all-"not
-  // enough data" rows for a non-MLB team name - unchanged from before this
-  // sport branch existed. Skipped entirely for MLB/NFL, which no longer
-  // render this panel.
-  const pulseRows = isMlb || isNfl ? null : await getGamePulsePanelRows(game.homeTeam, game.awayTeam);
 
   // Head-to-head header data (MLB/NFL only - see the render below). Team
   // records reuse getTeamRecordAsOf exactly as it already exists elsewhere
   // (team-record.ts) - its day-before-this-game cutoff already means "this
   // team's record entering this game", which is exactly what a header needs,
   // so no new record reader was written for this. The live situation line
-  // reuses the SAME cached live-state fetchers Momentum already polls
-  // (getMlbLiveGameState / getNflLiveGameState) - this adds no new upstream
-  // fetch, just one more (cached) reader of it for the header's SSR render.
+  // reuses the cached live-state fetchers (getMlbLiveGameState /
+  // getNflLiveGameState) for the header's SSR render.
   let awayRecordText: string | null = null;
   let homeRecordText: string | null = null;
   let situationText: string | null = null;
@@ -344,59 +323,22 @@ export default async function GameDetailPage({
         )}
       </div>
 
-      {isMlb ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <GameMomentumPanel
-            gamePk={score?.id ?? game.id}
-            homeTeam={game.homeTeam}
-            awayTeam={game.awayTeam}
-            gameDate={game.commenceTime}
-            isLive={isLive}
-            isFinal={isFinal}
-          />
-          <GamePacePanel
-            gamePk={score?.id ?? game.id}
-            homeTeam={game.homeTeam}
-            awayTeam={game.awayTeam}
-            gameDate={game.commenceTime}
-            isLive={isLive}
-            isFinal={isFinal}
-          />
-        </div>
-      ) : isNfl ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <NflGameMomentumPanel
-            eventId={score?.id ?? game.id}
-            homeTeam={game.homeTeam}
-            awayTeam={game.awayTeam}
-            gameDate={game.commenceTime}
-            isLive={isLive}
-            isFinal={isFinal}
-          />
-          <NflGamePacePanel
-            eventId={score?.id ?? game.id}
-            homeTeam={game.homeTeam}
-            awayTeam={game.awayTeam}
-            gameDate={game.commenceTime}
-            isLive={isLive}
-            isFinal={isFinal}
-          />
-        </div>
-      ) : (
-        <GamePulsePanel rows={pulseRows!} homeTeam={game.homeTeam} awayTeam={game.awayTeam} sportLabel={sportMeta.label} />
-      )}
-
       {isMlb || isNfl ? (
         // Same card shell (rounded-card bg-card shadow-soft p-4) the /live
         // tab already wraps this component in (live-scoreboard.tsx) - the
         // component itself supplies its own internal spacing (mt-3 on its
         // toggle button), so this wrapper only needs to match that card
         // treatment, not add any layout of its own. GamePicksExpander
-        // itself renders null for zero picks (same as on /live) - guarded
-        // here too, so an empty game never leaves a blank card shell behind.
-        expanderPicks.length > 0 && (
+        // itself renders null for zero picks (same as on /live), so an empty
+        // game gets the same "no picks" card the other sports show instead
+        // of a bare header.
+        expanderPicks.length > 0 ? (
           <div className="mt-4 rounded-card bg-card p-4 shadow-soft">
             <GamePicksExpander picks={expanderPicks} />
+          </div>
+        ) : (
+          <div className="mt-4 rounded-card bg-card shadow-soft">
+            <p className="px-5 py-8 text-center text-sm text-muted-foreground">No logged picks for this game.</p>
           </div>
         )
       ) : (

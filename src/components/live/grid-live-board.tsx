@@ -176,7 +176,7 @@ export function GridLiveBoard({
   // above) to Feed Live's own game-card page. Deliberately not folded
   // into handleSelectGame: that one exists specifically to AVOID a
   // navigation on every game click (see file header), while this is opening
-  // a genuinely different view (Momentum/Pace, head-to-head header) that
+  // a genuinely different view (head-to-head header, full picks list) that
   // Grid's in-panel GameDetailPanel has no equivalent for.
   // Carries an explicit view=advanced so the detail page's "Back to Live"
   // link can mirror it back out and land the user on Grid again, rather

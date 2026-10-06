@@ -1,3 +1,4 @@
+// Dormant — UI removed Oct 2026, no callers.
 import { requireUser } from "@/server/auth";
 import { getMlbMomentum } from "@/server/data/mlb-momentum-data";
 import { getNflMomentum } from "@/server/data/nfl-momentum-data";

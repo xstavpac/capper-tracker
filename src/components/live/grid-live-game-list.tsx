@@ -36,8 +36,8 @@ export function GridLiveGameList({
   activeSport: string;
   selectedGameId: string | null;
   onSelectGame: (gameId: string) => void;
-  // Double-click only - opens Feed Live's full game-card page (Momentum/
-  // Pace tracking, head-to-head header), which Grid's own in-panel
+  // Double-click only - opens Feed Live's full game-card page (head-to-head
+  // header, full picks list), which Grid's own in-panel
   // GameDetailPanel doesn't have room for and isn't meant to duplicate.
   // Single click stays a plain in-panel selection (onSelectGame above) - see
   // this file's header comment on why that's a client-state update, not a

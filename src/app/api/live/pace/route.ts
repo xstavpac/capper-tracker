@@ -1,3 +1,4 @@
+// Dormant — UI removed Oct 2026, no callers.
 import { requireUser } from "@/server/auth";
 import { getMlbPace } from "@/server/data/mlb-pace-data";
 import { getNflPace } from "@/server/data/nfl-pace-data";
