@@ -76,8 +76,6 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // row has the capper's own odds (never resolved in preview) or no game matched.
   const [matchedGames, setMatchedGames] = useState<Record<number, PreviewMatchedGame>>({});
   const [loadingOdds, setLoadingOdds] = useState(false);
-  // The line-number gutter, moved in step with the textarea's own scroll.
-  const gutterRef = useRef<HTMLDivElement>(null);
   const [importing, setImporting] = useState(false);
   // A whole-import refusal (over the per-import row cap) - distinct from `result`,
   // which reports a run that went through. Nothing was written when this is set.
@@ -671,8 +669,6 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const reviewCount = allEntries.filter(needsReview).length;
   const canImport = !(includedPicks.length === 0 && skippedDuplicateEntries.length === 0 && parlays.length === 0);
 
-  const lineCount = Math.max(text.split("\n").length, EDITOR_ROWS);
-
   function handleClear() {
     setText("");
     setParsed(null);
@@ -681,7 +677,6 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setUnresolvedReasons({});
     setResult(null);
     setImportError(null);
-    if (gutterRef.current) gutterRef.current.style.transform = "";
   }
 
   function renderRow(e: Entry) {
@@ -954,20 +949,10 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
           </div>
 
           <div className="mt-3 flex overflow-hidden rounded-lg border border-border bg-card transition focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/30">
-            <div aria-hidden="true" className="relative w-10 shrink-0 select-none overflow-hidden border-r border-border-subtle bg-muted/60">
-              <div ref={gutterRef} className="absolute inset-x-0 top-0 py-2 pr-2 text-right font-mono text-xs leading-6 text-muted-foreground">
-                {Array.from({ length: lineCount }, (_, i) => (
-                  <div key={i}>{i + 1}</div>
-                ))}
-              </div>
-            </div>
             <textarea
               id="catalog-text"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              onScroll={(e) => {
-                if (gutterRef.current) gutterRef.current.style.transform = "translateY(-" + e.currentTarget.scrollTop + "px)";
-              }}
               rows={EDITOR_ROWS}
               wrap="off"
               spellCheck={false}
