@@ -244,16 +244,18 @@ const DOT = "h-2 w-2 rounded-full max-[399px]:h-1.5 max-[399px]:w-1.5 min-[1500p
 const DOT_GAP = "gap-[3px] max-[399px]:gap-0.5 min-[1500px]:max-[1699px]:gap-0.5";
 // A #1 streak this long turns the featured row into the black-and-gold "generational run" strip.
 const GENERATIONAL_STREAK = 10;
-// The featured row's two looks, each the same in both themes: white with orange accents, and the
-// black-and-gold strip for a generational run.
+// The featured row's two looks: white with orange accents (an orange wash in the dark theme), and
+// the black-and-gold strip for a generational run, which is the same in both themes.
 const LEAD_LOOK = {
   hot: {
-    strip: "border-[#FBE1CF] bg-white shadow-[0_1px_3px_rgba(194,65,12,0.08)] hover:bg-[#FFFAF6]",
+    strip:
+      "border-[#FBE1CF] bg-white shadow-[0_1px_3px_rgba(194,65,12,0.08)] hover:bg-[#FFFAF6] " +
+      "dark:border-[rgba(234,88,12,0.35)] dark:bg-[rgba(234,88,12,0.10)] dark:shadow-none dark:hover:bg-[rgba(234,88,12,0.10)] dark:hover:brightness-110",
     chip: "border-[#EA580C] bg-[#EA580C] text-white",
-    crown: "border-[#FFEDD5] bg-[#FFEDD5] text-[#EA580C]",
-    name: "text-[#0F172A]",
-    wins: "text-[#C2410C]",
-    label: "text-[#9A3412]",
+    crown: "border-[#FFEDD5] bg-[#FFEDD5] text-[#EA580C] dark:border-transparent dark:bg-[rgba(234,88,12,0.18)] dark:text-[#FB923C]",
+    name: "text-[#0F172A] dark:text-[#F8FAFC]",
+    wins: "text-[#C2410C] dark:text-[#FB923C]",
+    label: "text-[#9A3412] dark:text-[#FDBA74]",
   },
   generational: {
     strip: "border-[#4A3A1E] bg-[#1C1917] hover:brightness-110",
