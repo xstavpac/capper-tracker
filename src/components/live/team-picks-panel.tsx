@@ -4,7 +4,7 @@ import { useEffect, useState, type Ref } from "react";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PickCard } from "@/components/live/pick-card";
-import { orderTeamSections, type GridLiveGamePanelData, type GridLiveTeamSideData } from "@/components/live/grid-live-team-panel-data";
+import { orderTeamSections, placeNonTeamSections, type GridLiveGamePanelData, type GridLiveTeamSideData } from "@/components/live/grid-live-team-panel-data";
 import { LiveProgressBar } from "@/components/live/live-progress-bar";
 import type { LiveGameProgress } from "@/lib/live-game-progress";
 import { LocalGameTime } from "@/components/local-game-time";
@@ -37,7 +37,8 @@ function TeamPickSection({
   picks,
   tone,
   headerRef,
-}: GridLiveTeamSideData & { headerRef?: Ref<HTMLDivElement> }) {
+  orderClass,
+}: GridLiveTeamSideData & { headerRef?: Ref<HTMLDivElement>; orderClass: string }) {
   const violet = tone === "violet";
   const [loading, setLoading] = useState(false);
   const [records, setRecords] = useState<CapperLeagueRecords | null>(null);
@@ -67,10 +68,12 @@ function TeamPickSection({
   return (
     // One tinted box per group: a wash of the team's color (same hex + low-alpha formula as
     // GamePicksExpander's team-group header), neutral gray for Totals or an unmapped team, violet for
-    // Other markets. break-inside-avoid keeps a group whole in GameDetailPanel's column layout.
+    // Other markets. orderClass is the group's place in the single-column (mobile) order - see
+    // GameDetailPanel.
     <div
       className={
-        "mb-3 break-inside-avoid rounded-[14px] border p-2.5 " +
+        orderClass +
+        " mb-3 rounded-[14px] border p-2.5 " +
         (violet ? TINTS.violet.card : teamColor ? "dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]" : "border-[#E3E6EE] bg-[#F5F6FA] dark:border-border dark:bg-white/[0.04]")
       }
       style={!violet && teamColor ? { backgroundColor: teamColor + "14", borderColor: teamColor + "47" } : undefined}
@@ -144,6 +147,18 @@ export function GameDetailPanel({
   firstHeaderRef?: Ref<HTMLDivElement>;
 }) {
   const [first, second] = orderTeamSections(data.away, data.home);
+  const placement = placeNonTeamSections(first.picks.length, second.picks.length, data.totals.picks.length, data.other.picks.length);
+  const column = (side: "left" | "right") => (
+    <div className="contents min-[1200px]:block min-[1200px]:min-w-0">
+      {side === "left" ? (
+        <TeamPickSection key="first" {...first} headerRef={firstHeaderRef} orderClass="order-1" />
+      ) : (
+        <TeamPickSection key="second" {...second} orderClass="order-2" />
+      )}
+      {placement.totals === side && <TeamPickSection key="totals" {...data.totals} orderClass="order-3" />}
+      {placement.other === side && <TeamPickSection key="other" {...data.other} orderClass="order-4" />}
+    </div>
+  );
   return (
     <section className={"rounded-[18px] border p-3.5 " + TINTS.neutral.card}>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -158,19 +173,20 @@ export function GameDetailPanel({
         </p>
       </div>
       {progress && <LiveProgressBar pct={progress.pct} label={progress.label} />}
-      {/* The groups, in the same order as before (leading team, other team, then Totals and Other
-          markets - the same TOTALS and OTHER groups GamePicksExpander shows, each hidden when empty),
-          as one grid: a single column on mobile, and on desktop a 2x2 - the two teams side by side,
-          then Totals | Other markets beneath. items-start lets each group keep its own height. The 2x2
-          starts at 1200px rather than lg: because from lg: the app sidebar and the Games list sit beside
-          this panel, leaving it ~290px at 1024 (two 140px columns); 1200px is where each column reaches
-          the ~230px a pick card needs. Rows are spaced by each group's own bottom margin (hence gap-x
-          only); -mb-3 takes the last row's back. */}
+      {/* The groups (leading team, other team, then Totals and Other markets - the same TOTALS and
+          OTHER groups GamePicksExpander shows, each hidden when empty). On desktop, two columns that
+          stack independently: the leading team heads the left one, the other team the right, and
+          Totals / Other markets sit under whichever is shorter (placeNonTeamSections) - no shared row
+          heights, so a short team never leaves a gap waiting for the tall one to end. Below 1200px the
+          two column wrappers are display: contents, so every group is a direct item of the one-column
+          grid and the order-N classes put them back in the fixed order whichever column holds them.
+          Two columns start at 1200px rather than lg: because from lg: the app sidebar and the Games
+          list sit beside this panel, leaving it ~290px at 1024 (two 140px columns); 1200px is where
+          each column reaches the ~230px a pick card needs. Groups are spaced by their own bottom
+          margin (hence gap-x only); -mb-3 takes the last one's back. */}
       <div className="-mb-3 mt-3 grid grid-cols-1 items-start gap-x-3 min-[1200px]:grid-cols-2">
-        <TeamPickSection {...first} headerRef={firstHeaderRef} />
-        <TeamPickSection {...second} />
-        {data.totals.picks.length > 0 && <TeamPickSection {...data.totals} />}
-        {data.other.picks.length > 0 && <TeamPickSection {...data.other} />}
+        {column("left")}
+        {column("right")}
       </div>
     </section>
   );
