@@ -38,7 +38,7 @@ export function CapperUnitsChart({ data }: { data: UnitsChartPoint[] }) {
     offset: 10,
     fill,
     fontSize: 11,
-    fontWeight: 800,
+    fontWeight: 600,
   });
 
   return (

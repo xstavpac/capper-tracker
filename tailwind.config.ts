@@ -32,6 +32,8 @@ const config: Config = {
           800: "#1e40af",
           900: "#1e3a8a",
         },
+        // The navy of the /cappers and /live banners and the capper page's hero. The same in both themes.
+        banner: "#011948",
         // Semantic tokens backed by the CSS variables in globals.css - swap
         // values per-theme there rather than adding dark: variants per usage.
         background: "rgb(var(--background) / <alpha-value>)",

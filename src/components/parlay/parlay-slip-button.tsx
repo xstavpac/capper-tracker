@@ -78,7 +78,7 @@ export function ParlaySlipButton({ dark = false }: { dark?: boolean }) {
           onClick={confirmAdd}
           className={
             dark
-              ? BANNER_BUTTON + "border-white bg-white font-semibold text-[#011948] hover:bg-[#D3DEFA]"
+              ? BANNER_BUTTON + "border-white bg-white font-semibold text-banner hover:bg-[#D3DEFA]"
               : "rounded-full bg-brand-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700"
           }
         >
