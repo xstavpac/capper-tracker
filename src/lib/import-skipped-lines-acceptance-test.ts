@@ -54,7 +54,6 @@ async function main() {
   const out = parseCatalog(PASTE, []);
   const proplines = PASTE.split("\n").filter((l) => l !== "KRASH" && l !== "RBS");
   expect("paste yields 0 droppedAsHeaders", out.droppedAsHeaders.length, 0);
-  expect("paste yields 0 droppedInline", out.droppedInline.length, 0);
   expect("all 6 prop lines are unresolved, with their exact text", out.unresolved, proplines);
   expect("first three attributed to KRASH, last three to RBS", out.unresolvedCapperNames, ["KRASH", "KRASH", "KRASH", "RBS", "RBS", "RBS"]);
   expect("KRASH, RBS never appear as unresolved lines", out.unresolved.some((l) => l === "KRASH" || l === "RBS"), false);
@@ -62,7 +61,7 @@ async function main() {
 
   // The parse-time log entries for that paste: 6 PROP_UNSUPPORTED rows, none PARSE_SILENT.
   const pasteEntries = parseSkippedLineEntries({
-    silent: [...out.droppedAsHeaders, ...out.droppedInline].map((d) => ({ text: d.text, capperName: d.capperName, reason: "n/a" })),
+    silent: out.droppedAsHeaders.map((d) => ({ text: d.text, capperName: d.capperName, reason: "n/a" })),
     unresolved: out.unresolved.map((text, i) => ({ text, capperName: out.unresolvedCapperNames[i] })),
     recoveryRan: true,
   });
@@ -103,7 +102,7 @@ async function main() {
   expect("plain capper header is not dropped", parseCatalog("Bambino Bets\nYankees ML", []).droppedAsHeaders, []);
   expect("header with a digit (\"Sharp Guru 2\") is a (tolerated) false positive", parseCatalog("Sharp Guru 2\nYankees ML", []).droppedAsHeaders.length, 1);
   const inline = parseCatalog(`Sharp Sam Some Guy 2+ wins`, ["Sharp Sam"]);
-  expect("line after a saved capper's name that resolves to nothing is droppedInline", inline.droppedInline, [{ text: "Sharp Sam Some Guy 2+ wins", capperName: "Sharp Sam" }]);
+  expect("line after a saved capper's name that resolves to nothing is unresolved, not discarded", [inline.unresolved, inline.unresolvedCapperNames], [["Sharp Sam Some Guy 2+ wins"], ["Sharp Sam"]]);
 
   // ---- marketHint ----
   expect("hint: shots on goal", computeMarketHint("Ivan Demidov 2+ shots on goal"), "shots on goal");
