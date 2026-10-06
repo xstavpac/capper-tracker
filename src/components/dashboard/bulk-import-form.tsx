@@ -16,6 +16,7 @@ import {
 import { logParseSkippedLinesAction } from "@/server/actions/import-skipped-lines";
 import { recoverUnresolvedPicksAction } from "@/server/actions/recover-unresolved-picks";
 import { getNflRosterFullNamesAction } from "@/server/actions/get-nfl-roster-names";
+import { getImportFeedTeamsAction } from "@/server/actions/get-import-feed-teams";
 import { dropCatalogButtonClass, LightningIcon } from "@/components/dashboard/drop-catalog-button";
 import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
 import { isSkippedAsDuplicate, importButtonLabel } from "@/lib/duplicate-pick-detection";
@@ -216,7 +217,12 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setTotalLineFlags({});
     setTotalLineChoices({});
     setResolving(true);
-    const rosterFullNames = await getRosterFullNames();
+    // Teams known only from the live NCAAF game feed (FCS schools) - see
+    // getImportFeedTeamsAction. A failed fetch parses without them.
+    const [rosterFullNames, feedTeams] = await Promise.all([
+      getRosterFullNames(),
+      getImportFeedTeamsAction().catch(() => undefined),
+    ]);
     const {
       picks: items,
       parlays: parlayItems,
@@ -224,7 +230,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       unresolvedCapperNames,
       droppedAsHeaders,
       droppedInline,
-    } = parseCatalog(text, existingCapperNames, rosterFullNames);
+    } = parseCatalog(text, existingCapperNames, rosterFullNames, feedTeams);
     setParlays(parlayItems);
     // Last-resort pass: hand the lines parseCatalog couldn't place to the
     // server, which checks them against the real team names on today's live

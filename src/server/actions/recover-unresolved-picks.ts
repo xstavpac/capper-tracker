@@ -9,6 +9,7 @@ import { getLiveScoresForSport, getOddsForSport, LIVE_SPORTS, RESOLVABLE_SPORT_K
 import { getCachedNflRoster } from "@/server/data/nfl-roster-cache";
 import { getCachedNhlRoster } from "@/server/data/nhl-roster-cache";
 import { getCachedMlbRoster } from "@/server/data/mlb-roster-cache";
+import { getImportFeedTeams } from "@/server/data/import-feed-teams";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 
 // Last-resort resolver for catalog lines the browser-side parser left in its
@@ -91,7 +92,11 @@ export async function recoverUnresolvedPicksAction(
   const roster = await getCachedNflRoster();
   const rosterFullNames = roster.map((p) => p.playerName);
 
-  const { picks, unresolved, unresolvedCapperNames } = parseCatalog(text, knownCapperNames, rosterFullNames);
+  // Same feed-derived teams the client's own parse was given (see
+  // getImportFeedTeamsAction), so both passes agree on which lines are unresolved.
+  const feedTeams = await getImportFeedTeams();
+
+  const { picks, unresolved, unresolvedCapperNames } = parseCatalog(text, knownCapperNames, rosterFullNames, feedTeams);
   if (unresolved.length === 0) return { recovered: [], stillUnresolved: [], reasons: {} };
 
   // Partition once, up front, so live-team data is fetched at most once (and

@@ -73,7 +73,17 @@ for `basketball_nba`), re-run the same cross-check: pull every unique
 confirm it resolves to `NBA` (or a correctly-handled ambiguous prompt, like
 "Cavaliers" already does).
 
-## 3. FCS-vs-FCS college games are absent from both NCAAF feeds (known gap, no action)
+## 3. FCS-vs-FCS college games are absent from both NCAAF feeds - FIXED 2026-10
+
+**Fixed:** `getNcaafLiveScores` now fetches ESPN's FCS group (`groups=81`)
+alongside FBS (`groups=80`) and merges them by event id, so FCS games are in
+the one feed import matching, live scores and grading read. Teams on that
+feed are recognized at import from the feed's own team data
+(`src/lib/feed-teams.ts`), not a hand-kept FCS list, and a week-ahead FCS
+schedule (`getNcaafUpcomingFcsGames`) covers picks posted before the game
+enters the score feed's window. The Odds API side is unchanged: an
+FCS-vs-FCS game still has no odds line, so it keeps the posted price and has
+no card on /live. The original write-up follows for context.
 
 Confirmed 2026-08-29 against both live APIs: an all-FCS matchup (the trigger
 case was Jackson State @ Tennessee State, a SWAC game) appears in **neither**
