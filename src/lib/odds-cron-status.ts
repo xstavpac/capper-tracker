@@ -22,7 +22,7 @@ export type OddsFetchStatus = "off_season" | "cached" | "no_api_key" | "fetch_fa
 // One sport's outcome from backfillOddsForSport. Most runs are
 // `nothing_missing` for every sport - that is the healthy steady state.
 //   no_base_row - today's seed snapshot doesn't exist yet (symptom of a
-//                 failed/late seed when seen hours after the 8am cron)
+//                 failed/late seed when seen hours after the daily seed cron)
 //   all_started - every cached game has started, nothing left to add (healthy)
 export type BackfillStatus =
   | "off_season"
@@ -63,7 +63,7 @@ export function classifyRefreshOddsRun(
 // result is NOT a warning. Only a real fetch failure is an error.
 // `no_base_row` for an in-season sport means today's seed never landed; this
 // cron runs every 4h so it's the only thing that catches a seed that failed
-// after the 8am window - surfaced as a warning.
+// after the daily seed window - surfaced as a warning.
 export function classifyBackfillOddsRun(results: { status: BackfillStatus }[]): CronRunVerdict {
   if (results.some((r) => FETCH_FAILURE_STATUSES.has(r.status))) return verdict("error");
   if (results.some((r) => r.status === "no_base_row")) return verdict("warning");

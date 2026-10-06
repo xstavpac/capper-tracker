@@ -267,7 +267,7 @@ export type TickerOddsGame = Pick<OddsGame, "id" | "homeTeam" | "awayTeam" | "co
 
 // How long a slim ticker entry may live before a read re-checks the DB. The
 // fields it holds (which games exist today, their teams and start times) only
-// change when an OddsSnapshot write path runs - the 4am seed, the every-4h
+// change when an OddsSnapshot write path runs - the daily seed, the every-4h
 // backfill adding a late game, an NFL prop enrichment - and every one of those
 // calls revalidateTag on the tag this entry carries, so it is invalidated the
 // moment the data can have changed. The TTL is therefore only the backstop for
@@ -815,7 +815,7 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
   // this file. Skipping here avoids an API call - and its Odds API credit
   // cost (markets x regions, not free) - that's guaranteed to find nothing.
   // Only skips when there's at least one cached game for today AND all of
-  // them have started: an empty todayGames list (e.g. the 4am seed fetch
+  // them have started: an empty todayGames list (e.g. the daily seed fetch
   // found nothing posted yet) must NOT skip, since that's exactly the
   // "genuinely still missing" case this function exists to catch - the
   // original doubleheader-nightcap incident this was built for.
@@ -850,7 +850,7 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
     // The raw endpoint has no date bound - it's whatever the API currently
     // has odds posted for, which by evening already includes tomorrow's
     // slate. getOddsForSport gets away without this filter because its one
-    // fetch always runs at 4am ET, hours before any future day's lines are
+    // fetch always runs early in the ET day, hours before any future day's lines are
     // posted - but this function runs all day, so without this it would
     // "backfill" every future day's entire slate into today's row on every
     // run. Confirmed live: an unfiltered run at ~8pm ET pulled in 16 of
