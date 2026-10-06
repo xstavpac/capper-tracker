@@ -4,7 +4,7 @@ import { classifyBackfillOddsRun } from "@/lib/odds-cron-status";
 export const dynamic = "force-dynamic";
 
 // Vercel Cron hits this every 4 hours, around the clock. The once-daily seed
-// fetch (/api/cron/refresh-odds) runs at 4am ET specifically to lock in
+// fetch (/api/cron/refresh-odds) runs just after midnight ET specifically to lock in
 // pregame lines before any game starts - but a game whose sportsbook lines
 // simply aren't posted yet at that hour (a doubleheader nightcap, a
 // weather-rescheduled game, anything late) is silently skipped, and
@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 // empty result is suspicious). Only a real Odds API failure (fetch_failed /
 // no_api_key) is an "error" (HTTP 500). `no_base_row` for an in-season sport
 // means today's seed never landed - surfaced as a "warning" here because this
-// cron runs hours after the 8am seed and is the only thing that would catch
+// cron runs hours after the daily seed and is the only thing that would catch
 // a seed that failed after the fact.
 export async function GET(req: Request) {
   const cronSecret = process.env.CRON_SECRET;

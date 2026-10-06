@@ -4,8 +4,15 @@ import { classifyRefreshOddsRun } from "@/lib/odds-cron-status";
 
 export const dynamic = "force-dynamic";
 
-// Vercel Cron hits this once daily, early enough that none of that day's
-// games have started yet. This seeds the day's OddsSnapshot cache (see
+// Vercel Cron hits this once daily at 05:05 UTC - 00:05 ET in winter (EST),
+// 01:05 ET in summer (EDT) - early enough that none of that day's games have
+// started yet. The snapshot row is keyed by Eastern date, so it does not exist
+// from midnight ET until something seeds it; running just after midnight keeps
+// that gap to minutes (it was 4 hours when this ran at 08:00 UTC), and the
+// claim in odds-seed-claim.ts covers a page load that still gets there first.
+// One run a day on purpose: seedNflPropOddsForToday below has no "already done
+// today" guard, so a second run would buy the NFL prop odds twice.
+// This seeds the day's OddsSnapshot cache (see
 // getOddsForSport) with pregame lines, instead of letting whoever visits
 // /live first - possibly after games are already underway - capture
 // in-play pricing that then stays cached for the rest of the day.
