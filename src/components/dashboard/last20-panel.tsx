@@ -49,17 +49,8 @@ function Rows({ rows, first }: { rows: Last20Row[]; first: number }) {
 export function Last20Panel({ panel, rows, leaderboardHref }: { panel: "best" | "worst"; rows: Last20Row[]; leaderboardHref: string }) {
   const t = LAST20[panel];
   const [open, setOpen] = useState(false);
-  // True while the rows are still sliding shut, so the panels grid (dashboard-panels.tsx) keeps its
-  // cards at their own heights until this one is back to its collapsed height.
-  const [closing, setClosing] = useState(false);
   const moreId = useId();
   const more = rows.slice(LAST20_COLLAPSED_COUNT);
-
-  function toggle() {
-    // No transition runs under reduced motion, so no transitionend would ever clear `closing`.
-    if (open && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) setClosing(true);
-    setOpen(!open);
-  }
 
   return (
     <PanelShell
@@ -69,7 +60,7 @@ export function Last20Panel({ panel, rows, leaderboardHref }: { panel: "best" | 
         rows.length > 0 && (
           <>
             {more.length > 0 && (
-              <button type="button" onClick={toggle} aria-expanded={open} aria-controls={moreId} className={FOOTER_LINK + " flex h-full items-center gap-1 " + t.accent}>
+              <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={moreId} className={FOOTER_LINK + " flex h-full items-center gap-1 " + t.accent}>
                 {open ? "Show less" : "See more"}
                 <ChevronDownIcon className={"h-3.5 w-3.5 stroke-[2.4] transition-transform duration-200 motion-reduce:transition-none " + (open ? "rotate-180" : "")} />
               </button>
@@ -91,11 +82,7 @@ export function Last20Panel({ panel, rows, leaderboardHref }: { panel: "best" | 
           {more.length > 0 && (
             // 0fr -> 1fr animates the height without measuring it. Hidden (and so out of the tab
             // order) once shut: `visibility` flips at the start of opening and the end of closing.
-            <div
-              data-expanded={open || closing}
-              onTransitionEnd={(e) => e.target === e.currentTarget && e.propertyName === "grid-template-rows" && setClosing(false)}
-              className={"grid transition-[grid-template-rows,visibility] duration-200 ease-out motion-reduce:transition-none " + (open ? "visible grid-rows-[1fr]" : "invisible grid-rows-[0fr]")}
-            >
+            <div className={"grid transition-[grid-template-rows,visibility] duration-200 ease-out motion-reduce:transition-none " + (open ? "visible grid-rows-[1fr]" : "invisible grid-rows-[0fr]")}>
               <ol id={moreId} start={LAST20_COLLAPSED_COUNT + 1} className="flex min-h-0 flex-col gap-0.5 overflow-hidden pt-0.5">
                 <Rows rows={more} first={LAST20_COLLAPSED_COUNT + 1} />
               </ol>

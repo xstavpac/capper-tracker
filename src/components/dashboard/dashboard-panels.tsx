@@ -25,12 +25,13 @@ const last20Rows = (rows: BestLast20Entry[]): Last20Row[] =>
 // each pair sits side by side, and on a phone each panel is followed by its opposite.
 // Hot Hand, Coldest and Rising Fast are the /cappers panels themselves (capper-panel.tsx), window
 // dropdowns included; Falling off is Rising Fast's mirror.
-// Cards in a row share its height until a Best / Worst last 20 card is opened ("See more"): from then
-/// on each keeps its own height (h-auto undoes PanelShell's h-full) and the two rows stop
-// sharing one height, so only the opened card, and only its row, grows.
+// Every card is its own height (items-start; h-auto undoes PanelShell's h-full) with one shared
+// minimum from two across up: the height of a full five-row card, so collapsed cards line up. Opening
+// a Best / Worst last 20 card ("See more") then grows that card, and its row, and nothing else. One
+// across (a phone) there is no minimum: a short card would only carry empty space.
 export function DashboardPanels({ panels }: { panels: CapperPanels }) {
   return (
-    <div className="grid grid-cols-1 items-stretch gap-3.5 has-[[data-expanded=true]]:items-start [&:has([data-expanded=true])>*]:h-auto min-[1100px]:grid-cols-2 min-[1500px]:grid-flow-col min-[1500px]:grid-cols-3 min-[1500px]:grid-rows-2 min-[1500px]:has-[[data-expanded=true]]:grid-rows-[repeat(2,auto)]">
+    <div className="grid grid-cols-1 items-start gap-3.5 [&>*]:h-auto min-[1100px]:grid-cols-2 min-[1100px]:[&>*]:min-h-[340px] min-[1500px]:grid-flow-col min-[1500px]:grid-cols-3 min-[1500px]:grid-rows-[repeat(2,auto)]">
       <CapperPanel panel="hottest" initial={panels.hottest} leaderboardHref={LEADERBOARD} />
       <CapperPanel panel="coldest" initial={panels.coldest} leaderboardHref={LEADERBOARD} />
       <FormPanel panel="rising" rows={panels.rising} />
