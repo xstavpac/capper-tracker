@@ -133,7 +133,7 @@ export function buildCapperDetailBundleQuery(userId: string, capperId: string, p
         name: "sportTotals",
         select: onlyWindow(windowTotalsSelect({ userId, capperIds: [capperId], groupBySport: true }), params.categoryWindow),
       },
-      { name: "tiles", select: categoryTilesSelect({ ...scope, groupBySport: true }) },
+      { name: "tiles", select: categoryTilesSelect({ ...scope, groupBySport: true, withUnits: true }) },
       { name: "firstKeys", select: sportFirstKeysSelect(scope) },
       recent ?? { name: "recent", select: capperRecentPicksSelect(scope), orderBy: CAPPER_RECENT_ORDER_BY },
       { name: "series", select: decidedSeriesSelect(scope), orderBy: DECIDED_SERIES_ORDER_BY },
@@ -282,6 +282,7 @@ export type CapperPageView = {
   trackedSinceMs: number | null;
   lastPickMs: number | null;
   associatedPickCount: number;
+  pendingPickCount: number;
   // Every sport the capper has a pick in (any status), A-Z.
   sports: string[];
   selectedSport: string | null; // null = All Sports
@@ -289,6 +290,7 @@ export type CapperPageView = {
   summary: CapperRecordView;
   chartData: UnitsChartPoint[];
   tiles: CategoryBreakdownItem[]; // All Sports: the core six; a sport: its own chip set
+  bestMarket: CategoryBreakdownItem | null; // one of `tiles` (bestMarketOf); null when there are none
   recentPicks: (CapperRecentPickView & { sport: string })[];
   hasMoreRecent: boolean;
 };
@@ -306,6 +308,21 @@ export function clampRecentLimit(raw: number): number {
   return Number.isFinite(raw) ? Math.min(Math.max(Math.floor(raw), CAPPER_RECENT_PAGE_SIZE), CAPPER_RECENT_MAX) : CAPPER_RECENT_PAGE_SIZE;
 }
 
+// Shrinks a market's net units toward zero until it has a real sample: netUnits / (graded + this).
+const BEST_MARKET_PRIOR_PICKS = 20;
+
+// The tile with the most sample-adjusted units. No minimum sample: any graded tile can win, and
+// the page shows its real record and graded count next to it. Ties keep the tiles' own order.
+export function bestMarketOf(
+  tiles: CategoryBreakdownItem[],
+  rows: Pick<CategoryTileRow, "category" | "unitsWon" | "unitsLost">[]
+): CategoryBreakdownItem | null {
+  const netUnits = new Map<string, number>();
+  for (const r of rows) netUnits.set(r.category, (netUnits.get(r.category) ?? 0) + (r.unitsWon ?? 0) - (r.unitsLost ?? 0));
+  const score = (t: CategoryBreakdownItem) => (netUnits.get(t.key) ?? 0) / (t.count + BEST_MARKET_PRIOR_PICKS);
+  return tiles.reduce<CategoryBreakdownItem | null>((best, t) => (best === null || score(t) > score(best) ? t : best), null);
+}
+
 // Pure: the same bundle (with the page's recent part) -> what the page renders.
 export function capperPageFromBundle(bundle: Record<string, unknown[]>, params: CapperPageParams, now: Date): CapperPageView {
   const sports = sportFirstKeysFromBundle(bundle.firstKeys ?? [])
@@ -313,13 +330,14 @@ export function capperPageFromBundle(bundle: Record<string, unknown[]>, params: 
     .sort((a, b) => a.localeCompare(b));
   const selectedSport = params.sport !== undefined && sports.includes(params.sport) ? params.sport : null;
   const detail = capperDetailFromBundle(bundle, { window: params.window, categoryWindow: params.window }, now);
+  const tileRows = categoryTileRowsFromBundle(bundle.tiles ?? []);
   const section =
     selectedSport === null
       ? null
       : sportSection(
           {
             series: narrowSeriesFromRows(bundle.series ?? []),
-            tiles: categoryTileRowsFromBundle(bundle.tiles ?? []),
+            tiles: tileRows,
             sportTotals: (bundle.sportTotals ?? []) as WindowTotals[],
           },
           selectedSport,
@@ -327,17 +345,23 @@ export function capperPageFromBundle(bundle: Record<string, unknown[]>, params: 
           now
         );
   const recent = capperRecentListFromRows(bundle.recent ?? []);
+  const tiles = section ? section.breakdown : detail.universalBreakdown;
   return {
     currentStreak: detail.currentStreak,
     momentum: detail.momentum,
     trackedSinceMs: detail.trackedSinceMs,
     lastPickMs: detail.lastPickMs,
     associatedPickCount: detail.associatedPickCount,
+    pendingPickCount: capperPickMetaFromBundle(bundle.meta ?? []).pending,
     sports,
     selectedSport,
     summary: section ? (section.stats ?? recordFromTotals(undefined)) : detail.stats,
     chartData: section ? section.chartData : detail.chartData,
-    tiles: section ? section.breakdown : detail.universalBreakdown,
+    tiles,
+    bestMarket: bestMarketOf(
+      tiles,
+      tileRows.filter((t) => t.window === params.window && (selectedSport === null || t.sport === selectedSport))
+    ),
     recentPicks: recent.slice(0, params.recentLimit),
     hasMoreRecent: recent.length > params.recentLimit,
   };

@@ -111,19 +111,29 @@ export type CategoryTileRow = {
   wins: number;
   losses: number;
   pushes: number;
+  // Only with `withUnits` (the capper page's best-market ranking): net units = unitsWon - unitsLost.
+  unitsWon?: number;
+  unitsLost?: number;
 };
 
 // Decided picks with a stored category, grouped per (window [, sport], category). Reads
 // the `w` CTE (windowsCte). The STORED Pick.category only - never runtime pickCategory().
 // `chipSet` pushes the dashboard's DEFAULT_CHIP_SET down (passed in from the JS constant
 // so the keys live in one place); the capper page omits it because chip sets vary per
-// sport and chipSetForLeague stays in JS. Counts only - no money, so no float concerns.
+// sport and chipSetForLeague stays in JS. Counts only, unless `withUnits` asks for the two unit
+// sums as well (the capper page; a WIN at odds = 0 adds nothing, as WIN_UNITS is NULL there).
 export function categoryTilesSelect(scope: {
   userId: string;
   capperId?: string;
   groupBySport?: boolean;
   chipSet?: string[];
+  withUnits?: boolean;
 }): Prisma.Sql {
+  const units = scope.withUnits
+    ? Prisma.sql`,
+      COALESCE(sum(${WIN_UNITS}) FILTER (WHERE p.status = 'WIN'), 0)::float8 AS "unitsWon",
+      COALESCE(sum(p.units) FILTER (WHERE p.status = 'LOSS'), 0)::float8 AS "unitsLost"`
+    : Prisma.empty;
   const sportSelect = scope.groupBySport ? Prisma.sql`s.name AS "sport",` : Prisma.empty;
   const sportJoin = scope.groupBySport ? Prisma.sql`JOIN sports s ON s.id = p."sportId"` : Prisma.empty;
   const capper = scope.capperId ? Prisma.sql`AND p."capperId" = ${scope.capperId}` : Prisma.empty;
@@ -138,7 +148,7 @@ export function categoryTilesSelect(scope: {
       p.category AS "category",
       (count(*) FILTER (WHERE p.status = 'WIN'))::int AS "wins",
       (count(*) FILTER (WHERE p.status = 'LOSS'))::int AS "losses",
-      (count(*) FILTER (WHERE p.status = 'PUSH'))::int AS "pushes"
+      (count(*) FILTER (WHERE p.status = 'PUSH'))::int AS "pushes"${units}
     FROM picks p
     JOIN w ON ${IN_WINDOW}
     ${sportJoin}
@@ -158,6 +168,7 @@ export function categoryTileRowsFromBundle(rows: unknown[]): CategoryTileRow[] {
     wins: Number(r.wins),
     losses: Number(r.losses),
     pushes: Number(r.pushes),
+    ...(r.unitsWon !== undefined ? { unitsWon: Number(r.unitsWon), unitsLost: Number(r.unitsLost) } : {}),
   }));
 }
 
@@ -645,14 +656,15 @@ export function narrowSeriesFromRows(rows: unknown[]): NarrowSeriesPick[] {
   }));
 }
 
-export type CapperPickMeta = { count: number; trackedSinceMs: number | null; lastPickMs: number | null };
+export type CapperPickMeta = { count: number; pending: number; trackedSinceMs: number | null; lastPickMs: number | null };
 
 // Design doc §4.2: tracked-since / last-pick / pick count over ALL of the capper's picks (every
 // status - the decided series cannot supply these). One row always (an aggregate with no GROUP BY);
-// count = associatedPickCount, min/max are datePosted as epoch ms (NULL when the capper has no picks).
+// count = associatedPickCount, pending = its PENDING picks, min/max are datePosted as epoch ms (NULL when the capper has no picks).
 export function capperPickMetaSelect(scope: { userId: string; capperId: string }): Prisma.Sql {
   return Prisma.sql`
     SELECT count(*)::int AS "count",
+           (count(*) FILTER (WHERE p.status = 'PENDING'))::int AS "pending",
            round(extract(epoch FROM min(p."datePosted")) * 1000)::bigint AS "trackedSince",
            round(extract(epoch FROM max(p."datePosted")) * 1000)::bigint AS "lastPick"
     FROM picks p
@@ -664,6 +676,7 @@ export function capperPickMetaFromBundle(rows: unknown[]): CapperPickMeta {
   const r = (rows[0] ?? {}) as Record<string, unknown>;
   return {
     count: Number(r.count ?? 0),
+    pending: Number(r.pending ?? 0),
     trackedSinceMs: r.trackedSince === null || r.trackedSince === undefined ? null : Number(r.trackedSince),
     lastPickMs: r.lastPick === null || r.lastPick === undefined ? null : Number(r.lastPick),
   };

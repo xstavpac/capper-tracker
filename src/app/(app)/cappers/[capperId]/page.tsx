@@ -4,17 +4,31 @@ import { requireUser } from "@/server/auth";
 import { getCapperById, getCappersWithPickCounts } from "@/server/data/cappers";
 import { CapperEditPanel } from "@/components/dashboard/capper-edit-panel";
 import { CAPPER_RECENT_PAGE_SIZE, clampRecentLimit, getCapperPageData } from "@/server/data/capper-detail";
-import { formatPickLabel, betTypeLabel } from "@/lib/bet-line";
 import { SCORECARD_WINDOWS, SCORECARD_WINDOW_LABELS, type ScorecardWindow } from "@/server/data/stats";
-import { UnitsChart } from "@/components/dashboard/units-chart";
-import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
-import { CategoryBreakdown } from "@/components/dashboard/category-breakdown";
-import { MomentumPanel } from "@/components/dashboard/momentum-panel";
-import { ChipRow } from "@/components/dashboard/chip-row";
-import { StreakBadge } from "@/components/dashboard/capper-panels";
-import { formatEastern, formatRelativeTime } from "@/lib/dates";
+import { CapperHero } from "@/components/dashboard/capper-hero";
+import { CapperUnitsChart } from "@/components/dashboard/capper-units-chart";
+import { MarketTile } from "@/components/dashboard/market-tile";
+import { RecentPickRow } from "@/components/dashboard/recent-pick-row";
+import { leagueColorVars } from "@/lib/league-colors";
+import { formatSignedUnits, unitsExtremes } from "@/lib/units-extremes";
 
 const ALL_SPORTS_LABEL = "All Sports";
+
+// The time control's own short labels; the chart's subtitle keeps the app's full ones.
+const RANGE_LABELS: Record<ScorecardWindow, string> = {
+  TODAY: "Today",
+  YESTERDAY: "Yesterday",
+  LAST_7: "7D",
+  LAST_30: "30D",
+  LAST_60: "60D",
+  ALL: "All time",
+};
+
+// The soft backdrop, painted over the shared layout's content padding (p-4 / md:p-8) the way
+// /cappers and /dashboard do it (themed-page.tsx), without their typeface.
+const BACKDROP = "-mx-4 -mb-4 bg-[#F3F5FA] px-4 pb-4 pt-4 first:-mt-4 dark:bg-transparent md:-mx-8 md:-mb-8 md:min-h-[calc(100vh-68px)] md:rounded-[11px] md:px-6 md:pb-6 md:pt-6 md:first:-mt-8";
+const CARD = "border border-[#E5E9F2] bg-white dark:border-border dark:bg-card";
+const NO_SCROLLBAR = "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
 // The avatar's text: the first character of every word ("Picks 4 Dayz" -> "P4D"), or a short
 // one-word name whole ("P4D"); a long single word falls back to its first two letters.
@@ -29,17 +43,19 @@ function avatarInitials(name: string): string {
     .toUpperCase();
 }
 
-function StatCard({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
-  const toneClass =
-    tone === "up"
-      ? "text-emerald-600 dark:text-emerald-400"
-      : tone === "down"
-        ? "text-red-600 dark:text-red-400"
-        : "text-foreground";
+function ChartStat({ label, value, tone, large }: { label: string; value: number; tone: "up" | "down"; large?: boolean }) {
   return (
-    <div className="min-w-0 rounded-card bg-card p-3 shadow-soft sm:p-4">
-      <div className="text-xs text-muted-foreground sm:text-sm">{label}</div>
-      <div className={"mt-1 whitespace-nowrap text-lg font-semibold sm:text-2xl " + toneClass}>{value}</div>
+    <div className="text-right">
+      <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#64748B] dark:text-muted-foreground">{label}</div>
+      <div
+        className={
+          "font-extrabold leading-tight tabular-nums " +
+          (large ? "text-[26px] " : "text-lg ") +
+          (tone === "up" ? "text-[#059669] dark:text-emerald-400" : "text-[#DC2626] dark:text-red-400")
+        }
+      >
+        {formatSignedUnits(value, 1)}
+      </div>
     </div>
   );
 }
@@ -76,10 +92,10 @@ export default async function CapperDetailPage({
     : "ALL";
   const recent = clampRecentLimit(Number(searchParams.recent));
 
-  // ONE statement for everything below the header (getCapperPageData). The sport + time selection
-  // scopes the whole Performance section (summary, chart, tiles, recent picks); the streak and
-  // momentum above it are always all sports, all time. Nothing is cached - every chip re-renders
-  // this server component.
+  // ONE statement for everything below the top row (getCapperPageData). The sport + time selection
+  // scopes the banner's record, the chart, the tiles and the recent picks; the streak and the
+  // momentum card are always all sports, all time. Nothing is cached - every tab re-renders this
+  // server component.
   const [detail, allCappers] = await Promise.all([
     getCapperPageData(user.id, params.capperId, { sport: searchParams.sport, window, recentLimit: recent }),
     getCappersWithPickCounts(user.id),
@@ -93,11 +109,13 @@ export default async function CapperDetailPage({
     summary,
     chartData,
     tiles,
+    bestMarket,
     recentPicks,
     hasMoreRecent,
     trackedSinceMs,
     lastPickMs,
     associatedPickCount,
+    pendingPickCount,
   } = detail;
 
   // A ?sport= this capper has no pick in: All Sports, on a clean URL.
@@ -105,37 +123,21 @@ export default async function CapperDetailPage({
     redirect("/cappers/" + capper.id + pageHref({ sport: null, window, recent: CAPPER_RECENT_PAGE_SIZE }).replace(/\?$/, ""));
   }
 
-  const initials = avatarInitials(capper.name);
   const sportLabel = selectedSport ?? ALL_SPORTS_LABEL;
+  const extremes = unitsExtremes(chartData.map((d) => d.cumulativeUnits));
+  const nowUnits = chartData.length > 0 ? chartData[chartData.length - 1].cumulativeUnits : 0;
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div
-            className={
-              "flex h-12 w-12 flex-none items-center justify-center rounded-full font-medium text-white " +
-              (initials.length > 3 ? "text-xs" : initials.length > 2 ? "text-sm" : "text-base")
-            }
-            style={{ backgroundColor: capper.colorTag ?? "#3B82F6" }}
-          >
-            {initials}
-          </div>
-          <div className="min-w-0">
-            <h1 className="break-words text-2xl font-semibold leading-tight">{capper.name}</h1>
-            {trackedSinceMs !== null && lastPickMs !== null && (
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Tracked since {formatEastern(new Date(trackedSinceMs), { month: "short", day: "numeric" })}
-                {" · "}
-                {associatedPickCount} {associatedPickCount === 1 ? "pick" : "picks"}
-                {" · "}
-                Last pick {formatRelativeTime(new Date(lastPickMs), Date.now())}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <StreakBadge streak={currentStreak} />
+    <div className={BACKDROP}>
+      <div className="mx-auto max-w-[1120px] space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <nav aria-label="Breadcrumb" className="min-w-0 text-[13px] font-semibold text-[#64748B] dark:text-muted-foreground">
+            <Link href="/cappers" className="hover:underline">
+              Cappers
+            </Link>
+            <span aria-hidden> / </span>
+            <span className="text-[#0F172A] dark:text-foreground">{capper.name}</span>
+          </nav>
           <CapperEditPanel
             capperId={capper.id}
             currentName={capper.name}
@@ -143,118 +145,134 @@ export default async function CapperDetailPage({
             associatedPickCount={associatedPickCount}
           />
         </div>
-      </div>
 
-      <MomentumPanel breakdown={momentum} currentStreak={currentStreak} />
+        <CapperHero
+          name={capper.name}
+          initials={avatarInitials(capper.name)}
+          color={capper.colorTag ?? "#3B82F6"}
+          summary={summary}
+          currentStreak={currentStreak}
+          momentum={momentum}
+          bestMarket={bestMarket}
+          sports={sports}
+          trackedSinceMs={trackedSinceMs}
+          lastPickMs={lastPickMs}
+          pickCount={associatedPickCount}
+          pendingCount={pendingPickCount}
+          nowMs={Date.now()}
+        />
 
-      <div className="mt-6">
-        <div className="mb-2 text-sm font-medium text-muted-foreground">Performance</div>
-        {/* The ONE filter bar: everything below it reads this sport + time selection. */}
-        <div className="flex flex-col gap-2">
-          <ChipRow
-            label="Sport"
-            chips={[null, ...sports].map((s) => ({
-              key: s ?? "ALL",
-              label: s ?? ALL_SPORTS_LABEL,
-              href: pageHref({ sport: s, window, recent: CAPPER_RECENT_PAGE_SIZE }),
-              active: s === selectedSport,
-            }))}
-          />
-          <ChipRow
-            label="Time range"
-            chips={SCORECARD_WINDOWS.map((w) => ({
-              key: w,
-              label: SCORECARD_WINDOW_LABELS[w],
-              href: pageHref({ sport: selectedSport, window: w, recent: CAPPER_RECENT_PAGE_SIZE }),
-              active: w === window,
-            }))}
-          />
+        {/* The ONE filter bar: the banner's record and everything below read this sport + time selection.
+            scroll={false}: a soft navigation that swaps the data in place instead of jumping to the top. */}
+        <div className={"flex flex-wrap items-center justify-between gap-2 rounded-2xl p-2.5 " + CARD}>
+          <nav aria-label="Sport" className="flex min-w-0 flex-wrap gap-1">
+            {[null, ...sports].map((s) => {
+              const active = s === selectedSport;
+              return (
+                <Link
+                  key={s ?? "ALL"}
+                  href={pageHref({ sport: s, window, recent: CAPPER_RECENT_PAGE_SIZE })}
+                  scroll={false}
+                  aria-current={active ? "page" : undefined}
+                  className={
+                    "flex h-10 flex-none items-center gap-2 whitespace-nowrap rounded-[10px] px-3.5 text-[13px] font-bold transition-colors " +
+                    (active ? "bg-[#0B1736] text-white dark:bg-white dark:text-[#0B1736]" : "text-[#475569] hover:bg-[#F1F4F9] dark:text-muted-foreground dark:hover:bg-white/[0.06]")
+                  }
+                >
+                  <span
+                    aria-hidden
+                    className={"h-2 w-2 rounded-sm " + (active ? "bg-white dark:bg-[#0B1736]" : "bg-[var(--league)] dark:bg-[var(--league-dark)]")}
+                    style={leagueColorVars(s ?? "")}
+                  />
+                  {s ?? ALL_SPORTS_LABEL}
+                </Link>
+              );
+            })}
+          </nav>
+          <nav aria-label="Time range" className={"flex max-w-full gap-0.5 overflow-x-auto rounded-xl bg-[#F1F4F9] p-1 dark:bg-white/[0.06] " + NO_SCROLLBAR}>
+            {SCORECARD_WINDOWS.map((w) => {
+              const active = w === window;
+              return (
+                <Link
+                  key={w}
+                  href={pageHref({ sport: selectedSport, window: w, recent: CAPPER_RECENT_PAGE_SIZE })}
+                  scroll={false}
+                  aria-current={active ? "page" : undefined}
+                  aria-label={SCORECARD_WINDOW_LABELS[w]}
+                  className={
+                    "flex h-8 flex-none items-center whitespace-nowrap rounded-[9px] px-3 text-[13px] font-bold transition-colors " +
+                    (active
+                      ? "bg-white text-[#0F172A] shadow-[0_1px_2px_rgba(15,23,42,0.12)] dark:bg-white/[0.14] dark:text-foreground dark:shadow-none"
+                      : "text-[#64748B] hover:text-[#0F172A] dark:text-muted-foreground dark:hover:text-foreground")
+                  }
+                >
+                  {RANGE_LABELS[w]}
+                </Link>
+              );
+            })}
+          </nav>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-4">
-          <StatCard label="Record" value={summary.wins + "-" + summary.losses + "-" + summary.pushes} />
-          <StatCard
-            label="ROI"
-            value={(summary.roi >= 0 ? "+" : "") + summary.roi + "%"}
-            tone={summary.roi >= 0 ? "up" : "down"}
-          />
-          <StatCard
-            label="Net units"
-            value={(summary.netUnits >= 0 ? "+" : "") + summary.netUnits + "u"}
-            tone={summary.netUnits >= 0 ? "up" : "down"}
-          />
-        </div>
-
-        <div className="mt-4 rounded-card bg-card p-5 shadow-soft">
-          <div className="mb-2 text-sm font-medium text-muted-foreground">
-            Units over time ({sportLabel} · {SCORECARD_WINDOW_LABELS[window]})
+        <section className={"rounded-[20px] p-4 sm:p-6 " + CARD}>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+            <div>
+              <h2 className="text-lg font-extrabold text-foreground">Units over time</h2>
+              <p className="text-[13px] text-[#64748B] dark:text-muted-foreground">
+                {sportLabel} · {SCORECARD_WINDOW_LABELS[window]}
+              </p>
+            </div>
+            {extremes && (
+              <div className="flex items-end gap-5 sm:gap-7">
+                <ChartStat label="Peak" value={chartData[extremes.peak].cumulativeUnits} tone="up" />
+                <ChartStat label="Low" value={chartData[extremes.low].cumulativeUnits} tone="down" />
+                <ChartStat label="Now" value={nowUnits} tone={nowUnits >= 0 ? "up" : "down"} large />
+              </div>
+            )}
           </div>
-          <UnitsChart data={chartData} perPick />
-        </div>
+          <CapperUnitsChart data={chartData} />
+        </section>
 
-        <div className="mt-4">
+        <section>
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-1">
+            <h2 className="text-lg font-extrabold text-foreground">Market breakdown</h2>
+            <p className="text-[13px] text-[#64748B] dark:text-muted-foreground">
+              {selectedSport ? selectedSport + " markets" : "Core 6 · pick a league for its own market tiles"}
+            </p>
+          </div>
           {tiles.length > 0 ? (
-            <CategoryBreakdown items={tiles} />
-          ) : (
-            <p className="rounded-card bg-card p-6 text-center text-sm text-muted-foreground shadow-soft">
-              No graded picks in this window.
-            </p>
-          )}
-        </div>
-
-        <div className="mt-4 rounded-card bg-card shadow-soft">
-          <div className="border-b border-border-subtle px-5 py-3 text-sm font-medium text-muted-foreground">
-            {selectedSport ? "Recent " + selectedSport + " picks" : "Recent picks"}
-          </div>
-          {recentPicks.length === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-              {window !== "ALL"
-                ? "No " + (selectedSport ? selectedSport + " " : "") + "picks in this window."
-                : selectedSport
-                  ? "No " + selectedSport + " picks logged for this capper yet."
-                  : "No picks logged for this capper yet."}
-            </p>
-          ) : (
-            <div className="divide-y divide-border-subtle">
-              {recentPicks.map((pick) => (
-                <div key={pick.id} className="flex items-center justify-between gap-3 px-5 py-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <span className="min-w-0">
-                        {pick.awayTeam} @ {pick.homeTeam}
-                      </span>
-                      {!selectedSport && (
-                        <span className="flex-none rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          {pick.sport}
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">
-                      {[
-                        formatPickLabel(pick.betDetail, pick.betType, pick.line) ?? betTypeLabel(pick.betType),
-                        (pick.odds > 0 ? "+" : "") + pick.odds,
-                        pick.units + "u",
-                        formatEastern(pick.gameTime, { month: "short", day: "numeric" }),
-                      ].join(" · ")}
-                    </div>
-                  </div>
-                  <PickStatusButtons pickId={pick.id} status={pick.status} />
-                </div>
+            <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))]">
+              {tiles.map((item) => (
+                <MarketTile key={item.key} item={item} />
               ))}
             </div>
+          ) : (
+            <p className={"rounded-[18px] p-6 text-center text-sm text-muted-foreground " + CARD}>No graded picks in this window.</p>
           )}
-          {hasMoreRecent && (
-            <div className="border-t border-border-subtle px-5 py-3 text-center">
+        </section>
+
+        <section className={"overflow-hidden rounded-[20px] " + CARD}>
+          <div className="flex items-center justify-between gap-3 border-b border-[#E5E9F2] px-4 py-4 dark:border-border sm:px-6">
+            <h2 className="text-lg font-extrabold text-foreground">{selectedSport ? "Recent " + selectedSport + " picks" : "Recent picks"}</h2>
+            {hasMoreRecent && (
               <Link
                 href={pageHref({ sport: selectedSport, window, recent: recent + CAPPER_RECENT_PAGE_SIZE })}
                 scroll={false}
-                className="rounded-full bg-card px-4 py-1.5 text-xs font-medium text-muted-foreground shadow-soft hover:bg-muted"
+                className="flex-none text-[13px] font-bold text-brand-600 hover:underline dark:text-brand-400"
               >
-                Show more
+                Show more →
               </Link>
+            )}
+          </div>
+          {recentPicks.length === 0 ? (
+            <p className="px-5 py-10 text-center text-sm text-muted-foreground">No recent {selectedSport ? selectedSport + " " : ""}picks in this range</p>
+          ) : (
+            <div className="divide-y divide-[#EEF1F6] dark:divide-border">
+              {recentPicks.map((pick) => (
+                <RecentPickRow key={pick.id} pick={pick} />
+              ))}
             </div>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );

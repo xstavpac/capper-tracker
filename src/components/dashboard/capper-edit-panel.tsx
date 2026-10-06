@@ -87,9 +87,9 @@ export function CapperEditPanel({
       <button
         type="button"
         onClick={() => setMode("menu")}
-        className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted"
+        className="min-h-10 rounded-[10px] border border-[#E5E9F2] bg-white px-4 text-[13px] font-bold text-foreground transition hover:bg-[#F8FAFD] dark:border-border dark:bg-card dark:hover:bg-muted"
       >
-        Edit
+        Edit capper
       </button>
     );
   }
