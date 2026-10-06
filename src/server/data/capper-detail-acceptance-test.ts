@@ -15,7 +15,7 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, type ScorecardWindow } from "@/server/data/stats";
-import { getCapperDetailData, type CapperDetailParams } from "@/server/data/capper-detail";
+import { capperRecentPicksRange, getCapperDetailData, getCapperPageData, type CapperDetailParams } from "@/server/data/capper-detail";
 import { computeCapperDetailLegacy, firstDiff, loadLegacyCapperPicks } from "@/server/data/capper-detail-legacy";
 import { getCappersWithPickCounts } from "@/server/data/cappers";
 
@@ -314,6 +314,46 @@ async function main() {
     await insertAll(randomSpecs(capperId, 400, 21).map((s) => row(userId, s)));
     const { view } = await compareCapper("random mixed history (400 picks, all statuses, gradedAt gaps, ties, 3 sports)", userId, capperId);
     check("mixed: tabs, tiles, recents and streak all present", view.sportTabs.length >= 2 && view.universalBreakdown.length > 0 && view.recentPicks.length === 10);
+  }
+  {
+    // The page view (one sport + time selection): All Sports is the legacy all-sports view, a sport is
+    // that sport's section, the per-sport records add up to All Sports, and the recent list is the
+    // newest picks of the selection (any status, game inside capperRecentPicksRange).
+    const capperId = `${PREFIX}capper-mixed`;
+    const rows = await loadLegacyCapperPicks(userId, capperId);
+    const newestFirst = [...rows].reverse();
+    let bad = 0;
+    let first = "";
+    const fail = (what: string) => {
+      bad++;
+      if (!first) first = what;
+    };
+    for (const w of SCORECARD_WINDOWS) {
+      const all = await getCapperPageData(userId, capperId, { window: w, recentLimit: 10 }, NOW);
+      const legacyAll = computeCapperDetailLegacy(rows, params(w, w), NOW);
+      if (firstDiff({ s: all.summary, c: all.chartData, t: all.tiles }, { s: legacyAll.stats, c: legacyAll.chartData, t: legacyAll.universalBreakdown })) fail(`${w} All Sports`);
+      if (all.sports.join() !== "MLB,NFL,NHL" || all.selectedSport !== null) fail(`${w} sports`);
+      const range = capperRecentPicksRange(w, NOW);
+      const inRange = (p: (typeof rows)[number]) => !range || (p.gameTime >= range.start && p.gameTime < range.end);
+      const sum = { wins: 0, losses: 0, pushes: 0 };
+      for (const sport of [undefined, ...all.sports]) {
+        const limit = sport === "NFL" ? 20 : 10;
+        const v = sport === undefined ? all : await getCapperPageData(userId, capperId, { sport, window: w, recentLimit: limit }, NOW);
+        const expected = newestFirst.filter((p) => (sport === undefined || p.sport.name === sport) && inRange(p));
+        if (v.recentPicks.map((p) => p.id).join() !== expected.slice(0, limit).map((p) => p.id).join() || v.hasMoreRecent !== expected.length > limit) fail(`${w} ${sport} recents`);
+        if (sport === undefined) continue;
+        const legacy = computeCapperDetailLegacy(rows, params(w, w, sport), NOW);
+        const zero = { wins: 0, losses: 0, pushes: 0, roi: 0, netUnits: 0 };
+        if (legacy.selectedCategorySport !== sport || firstDiff({ s: v.summary, c: v.chartData, t: v.tiles }, { s: legacy.activeSportStats ?? zero, c: legacy.activeSportChartData, t: legacy.activeCategoryBreakdown })) fail(`${w} ${sport}`);
+        sum.wins += v.summary.wins;
+        sum.losses += v.summary.losses;
+        sum.pushes += v.summary.pushes;
+      }
+      if (sum.wins !== all.summary.wins || sum.losses !== all.summary.losses || sum.pushes !== all.summary.pushes) fail(`${w} sum of sports`);
+    }
+    check("page view: every sport x window equals legacy, sports sum to All Sports, recents are the selection's newest", bad === 0, `${bad} differ; first: ${first}`);
+    const unknown = await getCapperPageData(userId, capperId, { sport: "Curling", window: "ALL", recentLimit: 10 }, NOW);
+    check("page view: a sport the capper lacks resolves to All Sports (null)", unknown.selectedSport === null);
   }
   {
     // A second capper of the same user must never leak into the first's numbers.

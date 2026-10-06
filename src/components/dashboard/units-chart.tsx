@@ -30,7 +30,19 @@ function roundAxis(values: number[]): { domain: [number, number]; ticks: number[
 // `themed` is the chart as it sits in a /dashboard panel (panel-shell.tsx): that
 // theme's grid / axis / line colors, the page's own typeface, and a y axis on
 // round values with the break-even line marked.
-export function UnitsChart({ data, compact = false, themed = false }: { data: UnitsChartPoint[]; compact?: boolean; themed?: boolean }) {
+// `perPick` is the capper page's chart: straight segments between picks, and an x axis that
+// labels each date once (the series has one point per pick, so several points share a date).
+export function UnitsChart({
+  data,
+  compact = false,
+  themed = false,
+  perPick = false,
+}: {
+  data: UnitsChartPoint[];
+  compact?: boolean;
+  themed?: boolean;
+  perPick?: boolean;
+}) {
   // Recharts renders raw SVG with colors set via inline props, not Tailwind
   // classes - a `dark:` variant can't reach them, so this needs to know the
   // live theme and pick hex values itself (kept close to the border-subtle/
@@ -52,13 +64,23 @@ export function UnitsChart({ data, compact = false, themed = false }: { data: Un
   const lineColor = themed && isDark ? "#60a5fa" : "#2563eb";
   const tick = { fontSize: 11, fill: tickColor, ...(themed ? { fontFamily: "inherit", fontWeight: 500 } : {}) };
   const axis = themed ? roundAxis(data.map((d) => d.cumulativeUnits)) : null;
+  // perPick: x is the point's index, ticked only where a new date starts.
+  const rows = perPick ? data.map((d, i) => ({ ...d, i })) : data;
+  const dateStarts = perPick ? rows.flatMap((d, i) => (i === 0 || d.date !== data[i - 1].date ? [i] : [])) : undefined;
 
   return (
     <div className={heightClass}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+        <LineChart data={rows} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
           <CartesianGrid strokeDasharray={themed ? undefined : "3 3"} vertical={!themed} stroke={gridColor} />
-          <XAxis dataKey="date" tick={tick} axisLine={false} tickLine={false} minTickGap={themed ? 28 : undefined} />
+          <XAxis
+            dataKey={perPick ? "i" : "date"}
+            tick={tick}
+            axisLine={false}
+            tickLine={false}
+            minTickGap={themed ? 28 : perPick ? 16 : undefined}
+            {...(perPick ? { ticks: dateStarts, tickFormatter: (i: number) => data[i]?.date ?? "" } : {})}
+          />
           <YAxis
             tick={tick}
             axisLine={false}
@@ -75,9 +97,10 @@ export function UnitsChart({ data, compact = false, themed = false }: { data: Un
               color: isDark ? "#f9fafb" : "#111827",
             }}
             formatter={(value: number) => [value.toFixed(2) + "u", "Cumulative units"]}
+            {...(perPick ? { labelFormatter: (i: number) => data[i]?.date ?? "" } : {})}
           />
           <Line
-            type="monotone"
+            type={perPick ? "linear" : "monotone"}
             dataKey="cumulativeUnits"
             stroke={lineColor}
             strokeWidth={2}
