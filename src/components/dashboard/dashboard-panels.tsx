@@ -26,10 +26,11 @@ const last20Rows = (rows: BestLast20Entry[]): Last20Row[] =>
 // Hot Hand, Coldest and Rising Fast are the /cappers panels themselves (capper-panel.tsx), window
 // dropdowns included; Falling off is Rising Fast's mirror.
 // Cards in a row share its height until a Best / Worst last 20 card is opened ("See more"): from then
-/// on each keeps its own height (h-auto undoes PanelShell's h-full), so only the opened card grows.
+/// on each keeps its own height (h-auto undoes PanelShell's h-full) and the two rows stop
+// sharing one height, so only the opened card, and only its row, grows.
 export function DashboardPanels({ panels }: { panels: CapperPanels }) {
   return (
-    <div className="grid grid-cols-1 items-stretch gap-3.5 has-[[data-expanded=true]]:items-start [&:has([data-expanded=true])>*]:h-auto min-[1100px]:grid-cols-2 min-[1500px]:grid-flow-col min-[1500px]:grid-cols-3 min-[1500px]:grid-rows-2">
+    <div className="grid grid-cols-1 items-stretch gap-3.5 has-[[data-expanded=true]]:items-start [&:has([data-expanded=true])>*]:h-auto min-[1100px]:grid-cols-2 min-[1500px]:grid-flow-col min-[1500px]:grid-cols-3 min-[1500px]:grid-rows-2 min-[1500px]:has-[[data-expanded=true]]:grid-rows-[repeat(2,auto)]">
       <CapperPanel panel="hottest" initial={panels.hottest} leaderboardHref={LEADERBOARD} />
       <CapperPanel panel="coldest" initial={panels.coldest} leaderboardHref={LEADERBOARD} />
       <FormPanel panel="rising" rows={panels.rising} />
