@@ -977,7 +977,7 @@ const NCAAF_SCHOOLS: [string, string][] = [
   ["louisville", "louisville cardinals"],
   ["pittsburgh", "pittsburgh panthers"], ["pitt", "pittsburgh panthers"],
   ["smu", "smu mustangs"],
-  ["north carolina", "north carolina tar heels"],
+  ["north carolina", "north carolina tar heels"], ["unc", "north carolina tar heels"],
   ["duke", "duke blue devils"],
   ["virginia tech", "virginia tech hokies"],
   ["syracuse", "syracuse orange"], ["cuse", "syracuse orange"],
@@ -2503,6 +2503,69 @@ const RECOGNIZED_TEAM_PHRASES = new Set<string>([
   ...Object.keys(AMBIGUOUS_NICKNAMES),
 ]);
 
+// Letters, digits and "&" only, accents folded - so case, spacing and
+// punctuation never decide whether two spellings name the same team
+// ("St. Louis" / "St Louis", "RedSox" / "Red Sox", "Hawai'i" / "Hawaii").
+function teamPhraseKey(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9&]/g, "");
+}
+
+// Localities cappers put in front of a nickname that are not AMBIGUOUS_NICKNAMES
+// city keys ("LA Dodgers", "NY Yankees", "New Jersey Devils", "KT Wiz"). Only
+// ever read as a prefix to a recognized nickname, never as a team on their own.
+const EXTRA_TEAM_LOCALITIES = [
+  "la", "ny", "sf", "kc", "tb", "nj", "okc", "philly", "new jersey", "oakland", "connecticut",
+  "kt", "ssg", "nc", "kiwoom", "doosan", "lg", "lotte", "samsung", "hanwha", "kia", "bc",
+];
+
+const TEAM_NICKNAME_KEYS = new Set([...RECOGNIZED_TEAM_PHRASES].map(teamPhraseKey));
+const TEAM_FULL_NAME_KEYS = new Set(
+  [
+    ...NCAAF_SCHOOLS.map(([, canonical]) => canonical),
+    ...Object.values(AMBIGUOUS_NICKNAMES).flatMap((options) => options.map((o) => o.nickname)),
+  ].map(teamPhraseKey)
+);
+const TEAM_LOCALITY_KEYS = [...AMBIGUOUS_CITY_KEYS, ...EXTRA_TEAM_LOCALITIES].map(teamPhraseKey);
+
+// True when `text`, taken whole, names a team: a nickname, slang alias,
+// abbreviation, school or city key from the lists above ("Rays", "Dbacks",
+// "TBL", "UNC", "Tampa Bay"), a full name ("Tampa Bay Rays", "LA Dodgers",
+// "North Carolina Tar Heels"), or a team on the live game feed (every FCS
+// school with a game - see feed-teams.ts). parseCatalog uses it to keep a
+// saved capper who is named like a team from claiming that team's bets, and
+// scripts/report-team-named-cappers.ts lists those cappers.
+export function isTeamPhrase(text: string, feedTeams: FeedTeam[] = []): boolean {
+  const key = teamPhraseKey(text).replace(/^the(?=.)/, "");
+  if (!key) return false;
+  if (TEAM_NICKNAME_KEYS.has(key) || TEAM_FULL_NAME_KEYS.has(key)) return true;
+  if (TEAM_LOCALITY_KEYS.some((loc) => key.length > loc.length && key.startsWith(loc) && TEAM_NICKNAME_KEYS.has(key.slice(loc.length)))) {
+    return true;
+  }
+  return feedTeams.some((t) => [t.name, t.location, t.shortName, t.mascot].some((k) => k !== undefined && teamPhraseKey(k) === key));
+}
+
+// Whether the team phrase a line opens with (its first `prefixLength`
+// characters) is one of the teams in the bet the line parsed to: some team
+// read inside that prefix plays in the bet's sport. "Tampa Bay Rays vs Yankees
+// ML" (MLB) uses it; "Marshall: Yankees ML" (MLB, Marshall is NCAAF) does not.
+function leadingTeamIsInBet(line: string, prefixLength: number, sportName: string, feedTeams: FeedTeam[] = []): boolean {
+  const lower = line.toLowerCase();
+  const leading = (phrase: string) => {
+    const m = teamPhraseRegex(phrase).exec(lower);
+    return m !== null && m.index < prefixLength;
+  };
+  return (
+    TEAM_SPORT_ENTRIES.some(([phrase, sport]) => sport === sportName && leading(phrase)) ||
+    (sportName === "NCAAF" && NCAAF_SCHOOLS.some(([, canonical]) => leading(canonical))) ||
+    Object.entries(AMBIGUOUS_NICKNAMES).some(([key, options]) => options.some((o) => o.sport === sportName) && leading(key)) ||
+    findFeedTeamHits(line, feedTeams).some((h) => h.team.sport === sportName && h.start < prefixLength)
+  );
+}
+
 // `rosterFullNames`, when the caller has it, is the same optional NFL-roster
 // full-name list threaded through findAmbiguousNickname (see its own header
 // comment) - not a second roster fetch. Two NFL-specific signals gate the
@@ -2674,6 +2737,17 @@ const RECORD_PATTERN = /\b\d+-\d+\b/;
 // name - 1 to 4 capitalized words, no digits.
 const NAME_SHAPE = /^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/;
 
+// A full personal name and nothing else: two to four words, letters only.
+const ROSTER_NAME_SHAPE = /^[A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*){1,3}$/;
+
+// Text that is only a market, line, odds or stake - no team or player in it
+// ("+21.5", "Moneyline", "Over 8.5 -110 (2u)").
+function hasNoSubject(text: string): boolean {
+  return !/[a-z]/i.test(
+    text.replace(/\b(?:ml|money\s*line|over|under|o|u|pk|pick'?em|spread|run\s*line|puck\s*line|total|team|tt|f5|1h|2h|1st|2nd|first|second|half|five|alt|units?)\b/gi, " ")
+  );
+}
+
 // A capper announcing their own category-specific record ("Bambino 19-0
 // NRFI Run", "Sharp Sam 12-2 ML Run", "Vegas John 8-1 ATS heater") trips
 // looksLikePick via the very keyword it's meant to signal a REAL pick with
@@ -2721,8 +2795,8 @@ function extractCapperNameFromTagline(text: string): string | null {
 }
 
 // A line parseCatalog consumed without producing a pick or surfacing it in
-// `unresolved` - see parseCatalog's droppedAsHeaders / droppedInline. Feeds
-// the import skipped-line log only; never affects parse results.
+// `unresolved` - see parseCatalog's droppedAsHeaders. Feeds the import
+// skipped-line log only; never affects parse results.
 export type DroppedLine = { text: string; capperName: string };
 
 export function parseCatalog(
@@ -2749,9 +2823,6 @@ export function parseCatalog(
   // capperName is the last header NOT itself in this list. Expect false
   // positives ("KRASH 12-2").
   droppedAsHeaders: DroppedLine[];
-  // Lines that began with a saved capper's name, resolved to no sport/team/
-  // player, and were discarded without a trace.
-  droppedInline: DroppedLine[];
 } {
   const sortedNames = [...knownCapperNames].sort((a, b) => b.length - a.length);
   const rawLines = text.split("\n").map((l) => l.trim());
@@ -2779,7 +2850,6 @@ export function parseCatalog(
   const unresolvedCapperNames: string[] = [];
   let currentCapper = "";
   const droppedAsHeaders: DroppedLine[] = [];
-  const droppedInline: DroppedLine[] = [];
   // Attribution for droppedAsHeaders: the last capper header that wasn't
   // itself a dropped pick-like line. A dropped line still overwrites
   // currentCapper (behavior unchanged), so without this a run of dropped
@@ -2814,13 +2884,60 @@ export function parseCatalog(
       .map((h) => h.team.name.toLowerCase());
   };
 
-  for (const line of rawLines) {
+  // A whole line (or a saved capper's name) that is an NFL roster player's
+  // full name. Needs the roster; without it nothing is ever read as a player.
+  const isRosterPlayer = (name: string): boolean =>
+    rosterFullNames !== undefined && ROSTER_NAME_SHAPE.test(name.trim()) && isKnownFullPlayerName(name.trim(), rosterFullNames);
+
+  // Anything that makes text after a saved capper's name a bet rather than
+  // the rest of a longer capper name: a team, a player, a market, a line, odds.
+  const hasBetSignal = (rest: string): boolean =>
+    looksLikePick(rest) ||
+    looksPickLikeHeader(rest) ||
+    detectSport(rest).sportName !== "" ||
+    findAmbiguousNickname(rest) !== undefined ||
+    (feedTeams !== undefined && findFeedTeamHits(rest, feedTeams).length > 0) ||
+    isRosterPlayer(rest);
+
+  // A line opening with a saved capper's name that is also a team or a roster
+  // player: true when the line, read whole with no capper prefix, is a bet
+  // about that team / player. The team or player then wins over the capper.
+  const subjectLeadsBet = (line: string, name: string, nameIsTeam: boolean): boolean => {
+    const probe = parseCatalog(`Probe\n${line}`, [], rosterFullNames, feedTeams);
+    const pick = probe.picks[0];
+    if (!nameIsTeam) {
+      const prop = parseNflNhlPlayerProp(line) ?? parseSupportedMlbProp(line);
+      return pick !== undefined && prop !== null && normalizeName(prop.playerName).includes(normalizeName(name));
+    }
+    if (pick?.ambiguousKey) {
+      const m = teamPhraseRegex(pick.ambiguousKey).exec(line.toLowerCase());
+      return m !== null && m.index < name.length;
+    }
+    const sportName = pick?.sportName ?? probe.parlays[0]?.sportName;
+    return sportName !== undefined && leadingTeamIsInBet(line, name.length, sportName, feedTeams ?? []);
+  };
+
+  // The generic "unrecognized line -> capper name" read.
+  const readAsCapperHeader = (line: string) => {
+    const name = line.replace(/^[^\w]+/, "").trim();
+    if (!name) return;
+    const normalized = normalizeName(name);
+    const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
+    currentCapper = existingMatch ?? name;
+    if (!existingMatch && looksPickLikeHeader(line)) {
+      droppedAsHeaders.push({ text: line, capperName: trustedCapper || "Unknown" });
+      droppedHeaderValue = currentCapper;
+    }
+  };
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
     if (currentCapper !== droppedHeaderValue) trustedCapper = currentCapper;
     if (!line) {
       precededByBlank = true;
       continue;
     }
-    const afterBlank = precededByBlank;
+    let afterBlank = precededByBlank;
     precededByBlank = false;
 
     // "*Name" always forces this line to be read as a capper name, no matter
@@ -2843,23 +2960,80 @@ export function parseCatalog(
     // knows their name and doesn't need to guess from words in the text. The
     // "*" prefix above is only needed for a brand-new, not-yet-saved capper
     // whose name happens to collide with a team nickname the first time.
+    //
+    // The exception is a line that is, whole, a team or a roster player
+    // ("Tampa Bay Rays", "James Cook"): that names a bet's subject, so it is
+    // never a capper header - not even when a saved capper has that name
+    // (most do only because such a line was once misread as a header).
+    // "*Name" above stays the way to head a block with a capper who really
+    // is named like a team.
+    const barePlayer = isRosterPlayer(line.replace(/^[^\w]+/, ""));
+    const bareSubject = barePlayer || isTeamPhrase(line, feedTeams);
     const normalizedLine = normalizeName(line);
-    const savedNameMatch = knownCapperNames.find((n) => normalizeName(n) === normalizedLine);
+    const savedNameMatch = bareSubject ? undefined : knownCapperNames.find((n) => normalizeName(n) === normalizedLine);
     if (savedNameMatch) {
       currentCapper = savedNameMatch;
       continue;
     }
 
+    // A bare player name is the subject of a prop whose market sits on the
+    // next line ("James Cook" / "Touchdown"): the two are read as one line.
+    // With no such next line there is no bet to read - surfaced, never a header.
+    if (barePlayer) {
+      const player = line.replace(/^[^\w]+/, "").trim();
+      const next = rawLines[i + 1];
+      const joined = next ? `${player} ${next}` : "";
+      const joinedProp = joined ? parseNflNhlPlayerProp(joined) ?? parseSupportedMlbProp(joined) : null;
+      if (joinedProp && normalizeName(joinedProp.playerName) === normalizeName(player)) {
+        rawLines[i + 1] = joined;
+        continue;
+      }
+      unresolved.push(player);
+      unresolvedCapperNames.push(currentCapper || "Unknown");
+      continue;
+    }
+
     const lower = line.toLowerCase();
-    const inlineMatch = sortedNames.find((name) => {
-      const nameLower = name.toLowerCase();
-      return (
-        lower === nameLower ||
-        (lower.startsWith(nameLower) && /[\s:.-]/.test(line[name.length] ?? " "))
-      );
-    });
+    const savedPrefix = bareSubject
+      ? undefined
+      : sortedNames.find((name) => {
+          const nameLower = name.toLowerCase();
+          return (
+            lower === nameLower ||
+            (lower.startsWith(nameLower) && /[\s:.-]/.test(line[name.length] ?? " "))
+          );
+        });
+
+    // What a saved capper's name at the start of a line means depends on the
+    // name and on what follows it:
+    //   - the name is itself a team or a roster player ("Tampa Bay Rays
+    //     Moneyline", "UNC +21.5"): the line is that team's / player's bet
+    //     whenever it reads as one, and belongs to the capper already active;
+    //   - nothing bet-like follows ("Sharp University" with SHARP saved): the
+    //     whole line is a different, longer capper name;
+    //   - otherwise it is that capper's pick, as before.
+    let inlineMatch = savedPrefix;
+    let subjectNamed = false;
+    if (savedPrefix) {
+      const following = line.slice(savedPrefix.length).replace(/^[\s:.-]+/, "").trim();
+      const nameIsTeam = isTeamPhrase(savedPrefix, feedTeams);
+      subjectNamed = nameIsTeam || isRosterPlayer(savedPrefix);
+      if (following && subjectNamed && subjectLeadsBet(line, savedPrefix, nameIsTeam)) {
+        inlineMatch = undefined;
+        afterBlank = false;
+      } else if (following && isBoilerplateLabel(following)) {
+        currentCapper = savedPrefix;
+        continue;
+      } else if (following && !hasBetSignal(following)) {
+        readAsCapperHeader(line);
+        continue;
+      }
+    }
 
     if (inlineMatch) {
+      // An unresolved line under a capper named like a team or player stays
+      // with the capper already active - the name was more likely the bet's subject.
+      const inlineOwner = subjectNamed ? currentCapper || "Unknown" : inlineMatch;
       const rawRemainder = line.slice(inlineMatch.length).replace(/^[\s:.-]+/, "").trim();
       const { gameNumber: inlineGameNumber, rest: remainder } = extractGameNumber(rawRemainder);
       if (!remainder) {
@@ -2877,7 +3051,7 @@ export function parseCatalog(
         (parseSupportedMlbProp(remainder) && !detectSport(remainder).sportName)
       ) {
         unresolved.push(line);
-        unresolvedCapperNames.push(inlineMatch);
+        unresolvedCapperNames.push(inlineOwner);
         continue;
       }
       const detected = withFeedSport(remainder, detectSport(remainder));
@@ -2963,7 +3137,13 @@ export function parseCatalog(
             gameNumber: inlineGameNumber,
           });
         } else {
-          droppedInline.push({ text: line, capperName: inlineMatch });
+          // Nothing resolved: surfaced for manual review, never discarded. A
+          // bare line/market after an abbreviation-shaped name ("KC -3") is
+          // more likely that team's bet than that capper's, so it stays with
+          // the active capper and the live-schedule recovery pass can place it.
+          const teamShaped = !/\s/.test(inlineMatch) && looksLikeTeamAbbreviation(inlineMatch) && hasNoSubject(remainder);
+          unresolved.push(line);
+          unresolvedCapperNames.push(teamShaped ? currentCapper || "Unknown" : inlineOwner);
         }
         continue;
       }
@@ -3240,17 +3420,16 @@ export function parseCatalog(
       }
     }
 
-    const name = line.replace(/^[^\w]+/, "").trim();
-    if (name) {
-      const normalized = normalizeName(name);
-      const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
-      currentCapper = existingMatch ?? name;
-      if (!existingMatch && looksPickLikeHeader(line)) {
-        droppedAsHeaders.push({ text: line, capperName: trustedCapper || "Unknown" });
-        droppedHeaderValue = currentCapper;
-      }
+    // A bare team name that did not read as a bet (it opens a block, where a
+    // nickname alone is not trusted as a pick) is surfaced, never a header.
+    if (bareSubject) {
+      unresolved.push(strippedText);
+      unresolvedCapperNames.push(currentCapper || "Unknown");
+      continue;
     }
+
+    readAsCapperHeader(line);
   }
 
-  return { picks: results, parlays, unresolved, unresolvedCapperNames, droppedAsHeaders, droppedInline };
+  return { picks: results, parlays, unresolved, unresolvedCapperNames, droppedAsHeaders };
 }
