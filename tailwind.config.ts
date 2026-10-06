@@ -83,6 +83,14 @@ const config: Config = {
           "0%, 100%": { opacity: "1", transform: "scale(1)" },
           "50%": { opacity: "0.55", transform: "scale(1.35)" },
         },
+        // The light band that crosses the Hot Hand "GENERATIONAL RUN" pill
+        // (capper-panel.tsx). The band is half the pill's width; it crosses in
+        // the first third of the cycle and rests off the right edge for the
+        // remainder, so the sweep comes round about every 4s.
+        "pill-shimmer": {
+          "0%": { transform: "translateX(-120%)" },
+          "32%, 100%": { transform: "translateX(320%)" },
+        },
         "fill-bar": {
           from: { transform: "scaleX(0)" },
           to: { transform: "scaleX(var(--fill, 1))" },
@@ -221,6 +229,7 @@ const config: Config = {
         "glow-pulse": "glow-pulse 2.2s ease-in-out infinite",
         "glow-pulse-compact": "glow-pulse-compact 2.2s ease-in-out infinite",
         "streak-pulse": "streak-pulse 1.3s ease-in-out infinite",
+        "pill-shimmer": "pill-shimmer 4s ease-in-out infinite",
         "fill-bar": "fill-bar 0.8s ease-out",
         "trend-surge-up": "trend-surge-up 1.6s ease-in-out infinite",
         "trend-surge-down": "trend-surge-down 1.6s ease-in-out infinite",
