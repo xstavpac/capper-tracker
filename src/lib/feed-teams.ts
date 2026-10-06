@@ -45,6 +45,11 @@ type FeedGame = {
 
 const MIN_MASCOT_LENGTH = 4;
 
+// The part of a team's feed name after its school ("Bobcats").
+function mascotOf(t: FeedTeam): string {
+  return t.name.slice(t.location.length).trim();
+}
+
 // Every distinct team in a feed's games. A team with no school split (the feed
 // didn't send one) is skipped - there is nothing safe to derive a key from.
 export function buildFeedTeams(sport: string, games: FeedGame[]): FeedTeam[] {
@@ -66,7 +71,6 @@ export function buildFeedTeams(sport: string, games: FeedGame[]): FeedTeam[] {
   }
 
   const teams = [...byName.values()];
-  const mascotOf = (t: FeedTeam) => t.name.slice(t.location.length).trim();
   const mascotCount = new Map<string, number>();
   for (const t of teams) {
     const key = fold(mascotOf(t));
@@ -116,6 +120,30 @@ function standsAlone(folded: string, start: number, end: number): boolean {
   const after = folded.slice(end).match(/^\s+([a-z][\w&'-]*)/)?.[1];
   if (after && !AFTER_OK.test(after)) return false;
   return true;
+}
+
+// A bare mascot that two or more teams in the feed share ("Bobcats": Montana
+// State and Ohio) - the one mascot buildFeedTeams gives to neither, so
+// findFeedTeamHits never matches it. Returns every team sharing it, in feed
+// order, for the caller to ask which was meant. Same stand-alone rule as any
+// other mascot match; text naming two different shared mascots returns null.
+export function findSharedMascotTeams(text: string, teams: FeedTeam[]): { mascot: string; teams: FeedTeam[] } | null {
+  const folded = fold(text);
+  const groups = new Map<string, FeedTeam[]>();
+  for (const t of teams) {
+    if (t.mascot) continue;
+    const mascot = mascotOf(t);
+    if (mascot.length < MIN_MASCOT_LENGTH) continue;
+    const key = t.sport + "|" + fold(mascot);
+    groups.set(key, [...(groups.get(key) ?? []), t]);
+  }
+
+  const matched = [...groups.values()].filter((group) => {
+    if (group.length < 2) return false;
+    const m = keyRegex(mascotOf(group[0])).exec(folded);
+    return m !== null && standsAlone(folded, m.index, m.index + m[0].length);
+  });
+  return matched.length === 1 ? { mascot: mascotOf(matched[0][0]), teams: matched[0] } : null;
 }
 
 // Every feed team named in `text`, in text order. One hit per team (its

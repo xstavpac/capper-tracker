@@ -4,12 +4,13 @@ import {
   parsePlayerProp,
   parseNflNhlPlayerProp,
   pickPeriodFromText,
+  betScope,
   extractLine,
   normalizeNPlusPlayerProp,
   type SegmentPeriod,
 } from "@/lib/bet-line";
 import { isKnownFullPlayerName } from "@/lib/player-roster-fallback";
-import { findFeedTeamHits, type FeedTeam } from "@/lib/feed-teams";
+import { findFeedTeamHits, findSharedMascotTeams, type FeedTeam } from "@/lib/feed-teams";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { parseMlbPlayerProp, normalizeMlbNPlus } from "@/lib/mlb-prop";
 import {
@@ -52,6 +53,10 @@ export type ParsedPick = {
   // through unfiltered.
   ambiguousBetType?: ParsedPick["betType"];
   ambiguousLine?: number | null;
+  // True when the same text scopes the bet to part of a game ("1P", "F5",
+  // "1st half"). The plausibility filter needs it: a full-game total's
+  // minimum doesn't apply to a slice of the game.
+  ambiguousPartialGame?: boolean;
   // Team nicknames found in the raw text, e.g. from "Over 9.5 (Angels/Orioles)"
   // or "Cardinals vs Panthers". Captured before parens/odds get stripped out of
   // `description`, so game resolution still has both teams even for bets (like
@@ -1921,9 +1926,15 @@ export function parsePickText(description: string): {
 // instead of re-parsing raw text itself. Called at the two ambiguous-branch
 // push sites below; sport-independent, so it doesn't need to wait for the
 // pick to actually resolve to a league.
-function lineForPlausibility(text: string): { betType: ParsedPick["betType"]; line: number | null } {
+//
+// partialGame is deliberately wider than a pick's `period`: it also counts a
+// segment grading can't score (betScope's UNSUPPORTED_SEGMENT, which `period`
+// collapses to FULL_GAME) and the bare "1P"/"2P"/"3P" shorthand betScope
+// doesn't read. Erring toward "partial" only ever keeps an option on the list.
+function lineForPlausibility(text: string): { betType: ParsedPick["betType"]; line: number | null; partialGame: boolean } {
   const { betType } = parsePickText(text);
-  return { betType, line: extractLine(betType, text) };
+  const partialGame = betScope(text) !== "FULL_GAME" || /\b[1-3]p\b/i.test(text);
+  return { betType, line: extractLine(betType, text), partialGame };
 }
 
 // Re-parses an ambiguous pick's original text now that the user has picked a
@@ -2904,6 +2915,45 @@ export function parseCatalog(
       .map((h) => h.team.name.toLowerCase());
   };
 
+  // A line nothing else could place whose only team word is a mascot two or
+  // more feed teams share ("Bobcats ML" with Montana State and Ohio both on
+  // the feed): an ambiguous pick whose options are those teams, by full feed
+  // name, instead of an unresolved line. Same shape as a findAmbiguousNickname
+  // pick; the key is the mascot, the options are built from the feed.
+  const sharedMascotPick = (
+    pickText: string,
+    capperName: string,
+    raw: string,
+    gameNumber: ParsedPick["gameNumber"]
+  ): ParsedPick | undefined => {
+    if (!feedTeams || (parseNflNhlPlayerProp(pickText) ?? parseSupportedMlbProp(pickText))) return undefined;
+    const shared = findSharedMascotTeams(pickText, feedTeams);
+    if (!shared) return undefined;
+    const forPlausibility = lineForPlausibility(pickText);
+    return {
+      capperName,
+      sportName: "",
+      description: withGameNumberSuffix(pickText, gameNumber),
+      betType: "SPREAD",
+      odds: -110,
+      hasExplicitOdds: false,
+      units: 1,
+      period: "FULL_GAME",
+      raw,
+      ambiguous: shared.teams.map((t) => ({
+        label: t.name + " (" + t.sport + ")",
+        sport: t.sport,
+        nickname: t.name.toLowerCase(),
+      })),
+      ambiguousKey: shared.mascot.toLowerCase(),
+      ambiguousBetType: forPlausibility.betType,
+      ambiguousLine: forPlausibility.line,
+      ambiguousPartialGame: forPlausibility.partialGame,
+      teamNicknames: [],
+      gameNumber,
+    };
+  };
+
   // A whole line (or a saved capper's name) that is an NFL roster player's
   // full name. Needs the roster; without it nothing is ever read as a player.
   const isRosterPlayer = (name: string): boolean =>
@@ -3122,6 +3172,7 @@ export function parseCatalog(
             ambiguousKey: found.key,
             ambiguousBetType: forPlausibility.betType,
             ambiguousLine: forPlausibility.line,
+            ambiguousPartialGame: forPlausibility.partialGame,
             teamNicknames: [],
             gameNumber: inlineGameNumber,
           });
@@ -3166,6 +3217,11 @@ export function parseCatalog(
             gameNumber: inlineGameNumber,
           });
         } else {
+          const sharedMascot = sharedMascotPick(remainder, inlineMatch, line, inlineGameNumber);
+          if (sharedMascot) {
+            results.push(sharedMascot);
+            continue;
+          }
           // Nothing resolved: surfaced for manual review, never discarded. A
           // bare line/market after an abbreviation-shaped name ("KC -3") is
           // more likely that team's bet than that capper's, so it stays with
@@ -3380,6 +3436,7 @@ export function parseCatalog(
           ambiguousKey: found.key,
           ambiguousBetType: forPlausibility.betType,
           ambiguousLine: forPlausibility.line,
+          ambiguousPartialGame: forPlausibility.partialGame,
           teamNicknames: [],
           gameNumber: headerGameNumber,
         });
@@ -3440,6 +3497,12 @@ export function parseCatalog(
           const normalized = normalizeName(taglineName);
           const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
           currentCapper = existingMatch ?? taglineName;
+          continue;
+        }
+
+        const sharedMascot = sharedMascotPick(pickText, currentCapper || "Unknown", strippedText, headerGameNumber);
+        if (sharedMascot) {
+          results.push(sharedMascot);
           continue;
         }
 

@@ -1,9 +1,15 @@
 "use server";
 
 import { requireUser } from "@/server/auth";
-import { resolveGameForNickname, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
+import {
+  resolveGameForNickname,
+  getLiveScoresForSport,
+  getOddsForSport,
+  getNcaafUpcomingFcsGames,
+  RESOLVABLE_SPORT_KEYS,
+} from "@/server/data/odds";
 import { SPORT_LABEL_TO_KEY } from "@/lib/sport-seasons";
-import type { ScheduleCheckQuery } from "@/lib/ambiguous-hierarchy";
+import { hasGameWithinActivityWindow, type ScheduleCheckQuery } from "@/lib/ambiguous-hierarchy";
 
 export type { ScheduleCheckQuery };
 
@@ -76,5 +82,47 @@ export async function checkAmbiguousTeamWideSchedules(queries: ScheduleCheckQuer
       );
     })
   );
+  return result;
+}
+
+// Step 1b of the hierarchy (see ambiguous-hierarchy.ts): for each candidate
+// league, whether it has a game within LEAGUE_ACTIVITY_WINDOW_DAYS of the
+// import, read from the same two feeds the import matches games against - the
+// score feed first, then the posted-schedule odds feed (and, for NCAAF, the
+// week-ahead FCS schedule), which is only read when the score feed shows
+// nothing in the window.
+//
+// A league is reported `false` only when its feeds were read and hold no game
+// in the window. A league with no feed wired up (KBO, CFL) or whose read threw
+// is left out of the result - "couldn't tell", which the hierarchy never drops.
+export async function checkAmbiguousLeagueActivity(
+  sports: string[],
+  referenceIso: string
+): Promise<Record<string, boolean>> {
+  await requireUser();
+
+  const referenceDate = new Date(referenceIso);
+  const result: Record<string, boolean> = {};
+  await Promise.all(
+    sports.map(async (sport) => {
+      const sportKey = SPORT_LABEL_TO_KEY[sport];
+      if (!sportKey || !RESOLVABLE_SPORT_KEYS.includes(sportKey)) return;
+      try {
+        let active = hasGameWithinActivityWindow(await getLiveScoresForSport(sportKey), referenceDate);
+        if (!active) active = hasGameWithinActivityWindow(await getOddsForSport(sportKey), referenceDate);
+        if (!active && sportKey === "americanfootball_ncaaf") {
+          active = hasGameWithinActivityWindow(await getNcaafUpcomingFcsGames(), referenceDate);
+        }
+        result[sport] = active;
+      } catch (err) {
+        console.log(
+          "[catalog-disambiguation] league activity read failed, leaving the league undecided:",
+          sport,
+          err instanceof Error ? err.message : err
+        );
+      }
+    })
+  );
+  console.log("[catalog-disambiguation] league activity:", result);
   return result;
 }

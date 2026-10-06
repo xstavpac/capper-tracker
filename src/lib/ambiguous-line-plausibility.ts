@@ -19,14 +19,14 @@
 // this module's - see its own "cross-check" step.
 //
 // Scoped ONLY to the leagues actually involved in a confirmed
-// AMBIGUOUS_NICKNAMES run-line collision today - MLB and KBO (both use the
-// same +/-1.5 run-line convention) versus NFL, whose spreads/totals run far
-// wider and are deliberately left unbounded here. This is NOT a
-// comprehensive per-league table for every sport parse-catalog.ts tracks,
-// and it is NOT a betting model - it exists solely to catch a bet line that
-// is flatly impossible for a given league, not to model realistic-but-
-// unusual lines. See the PR description for the bound values themselves and
-// which are estimates versus confirmed conventions.
+// AMBIGUOUS_NICKNAMES line-shape collision today - the fixed-handicap leagues
+// (MLB/KBO run line, NHL puck line) and the basketball / college-football
+// ranges - versus NFL, whose spreads/totals are deliberately left unbounded
+// here. This is NOT a comprehensive per-league table for every sport
+// parse-catalog.ts tracks, and it is NOT a betting model - it exists solely
+// to catch a bet line that is flatly impossible for a given league, not to
+// model realistic-but-unusual lines. See the PR description for the bound
+// values themselves and which are estimates versus confirmed conventions.
 import type { AmbiguousOption, ParsedPick } from "@/lib/parse-catalog";
 
 // Real MLB/KBO run lines are, in practice, always exactly +/-1.5 pre-game -
@@ -41,6 +41,10 @@ import type { AmbiguousOption, ParsedPick } from "@/lib/parse-catalog";
 const SPREAD_MAGNITUDE_BOUND: Partial<Record<string, number>> = {
   MLB: 2.5,
   KBO: 2.5,
+  // NHL puck lines are +/-1.5, with +/-2.5 as the common alternate - the same
+  // fixed-handicap shape as a run line. A "+7.5" or "+15.5" next to an NHL
+  // candidate is a football/basketball spread.
+  NHL: 2.5,
   // WNBA spreads realistically top out in the mid-teens; a -44 (a real
   // misresolution of an Indiana Hoosiers pick to the Fever) is essentially
   // impossible. DOMAIN ESTIMATE, not backtested - same caveat as above.
@@ -54,12 +58,16 @@ const SPREAD_MAGNITUDE_BOUND: Partial<Record<string, number>> = {
   NCAAF: 65,
 };
 
-// MLB/KBO full-game totals conventionally cluster roughly 6.5-11 runs.
+// MLB/KBO full-game totals conventionally cluster roughly 6.5-11 runs; the
+// max leaves room for a Coors Field number.
 // DOMAIN ESTIMATE, not backtested against this app's own historical odds
 // data - same caveat as SPREAD_MAGNITUDE_BOUND above.
 const TOTAL_LINE_BOUND: Partial<Record<string, { min: number; max: number }>> = {
-  MLB: { min: 4, max: 13 },
-  KBO: { min: 4, max: 13 },
+  MLB: { min: 4, max: 14.5 },
+  KBO: { min: 4, max: 14.5 },
+  // NHL full-game totals sit at 5.5-6.5 almost every night; 4.5 and 8.5 are
+  // the outer alternates.
+  NHL: { min: 4.5, max: 8.5 },
   // WNBA full-game totals cluster roughly 150-175; NCAAF roughly 40-65 with
   // rare shootouts higher. Estimates, set well outside the normal range.
   WNBA: { min: 120, max: 200 },
@@ -81,10 +89,18 @@ const TOTAL_LINE_BOUND: Partial<Record<string, { min: number; max: number }>> = 
 // any league not involved in a confirmed cross-league line-shape collision) is
 // never filtered out by this function - it has no known realistic range
 // here to compare against, so it's left as plausible rather than guessed at.
+//
+// The total MINIMUM is a full-game, both-teams number, so it is only applied
+// to a full-game TOTAL: a team total ("Panthers TT o2.5") or a partial-game
+// total ("1P o1.5", "F5 u4.5") is legitimately far below it, and applying it
+// would drop the very league the pick is about. The maximum still applies to
+// both - no slice of a game outscores the whole game. `partialGame` is the
+// pick's own ambiguousPartialGame; omitted means a full-game bet.
 export function filterPlausibleCandidates(
   candidates: AmbiguousOption[],
   betType: ParsedPick["betType"] | undefined,
-  line: number | null | undefined
+  line: number | null | undefined,
+  partialGame = false
 ): AmbiguousOption[] {
   if (line === null || line === undefined || betType === undefined) return candidates;
 
@@ -96,9 +112,10 @@ export function filterPlausibleCandidates(
   }
 
   if (betType === "TOTAL" || betType === "TEAM_TOTAL") {
+    const minApplies = betType === "TOTAL" && !partialGame;
     return candidates.filter((c) => {
       const range = TOTAL_LINE_BOUND[c.sport];
-      return range === undefined || (line >= range.min && line <= range.max);
+      return range === undefined || ((!minApplies || line >= range.min) && line <= range.max);
     });
   }
 
