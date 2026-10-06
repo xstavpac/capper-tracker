@@ -21,8 +21,7 @@ export async function getCachedNflRoster(): Promise<RosterPlayer[]> {
   }));
 }
 
-// One hour, same window as historical-input-cache.ts's
-// HISTORICAL_INPUT_CACHE_TTL_SECONDS - the closest precedent for a table
+// One hour - long enough for a table
 // this slow-moving (a manual/one-time rerun, not a live feed). Wrapped with
 // cachedByTag (Next's shared Data Cache, with the bare-script/tsx-test
 // fallback that helper already provides) rather than getCachedNflRoster's
