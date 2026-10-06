@@ -1793,24 +1793,6 @@ export function withGameNumberSuffix(description: string, gameNumber: 1 | 2 | nu
   return gameNumber === null ? description : `${description} (G${gameNumber})`;
 }
 
-// Whether pick text already identifies its bet without a trailing number: a
-// moneyline / spread / total / first-inning keyword, an over-under number, a
-// signed line, or a recognized player prop. parsePickText uses it to tell a
-// trailing American price ("Giants +6.5 -110") from a lone signed number that
-// is the bet itself ("Yankees -132").
-function hasBetQualifier(text: string): boolean {
-  return (
-    /\bML\b/i.test(text) ||
-    /money\s*line/i.test(text) ||
-    /[+-]\d+(\.\d+)?/.test(text) ||
-    /\b(over|under|total)\b/i.test(text) ||
-    /\b[ou]\s*\d+(\.\d+)?\b/i.test(text) ||
-    /\b(spread|run\s*line|puck\s*line|point\s*spread)\b/i.test(text) ||
-    /\b[NY]RFI\b/i.test(text) ||
-    Boolean(parseNflNhlPlayerProp(text) || parseSupportedMlbProp(text))
-  );
-}
-
 // Exported for player-roster-fallback.ts's recover-unresolved-picks
 // integration: a roster-resolved bare player-prop line ("Patrick Mahomes
 // Over 225 Passing Yards") needs the exact same betType/odds/units/period
@@ -1880,15 +1862,16 @@ export function parsePickText(description: string): {
   // "Over 8.5 -115". Only when no parenthesised price was found (that form
   // keeps winning), and only a TRAILING signed whole number that is a valid
   // American price (|value| >= 100) - so a spread line ("Detroit -6.5") can
-  // never be read as odds. The rest of the text must already say what the bet
-  // is (see hasBetQualifier): in "Giants +6.5 -110" the first signed number is
-  // the line and this second one the price, while a bare "Yankees -132" keeps
-  // its existing reading. Units were stripped above, so "Yankees ML -132 2u"
-  // ends in the price here. Removed from the description the same way a
-  // parenthesised price is, so the stored bet text carries only the line.
+  // never be read as odds. In "Giants +6.5 -110" the first signed number is
+  // the line and this second one the price. With nothing else naming the bet
+  // ("Yankees -132") it is a moneyline price, not a 132-point spread: once the
+  // price is removed, the bare team name falls to the MONEYLINE default below.
+  // Units were stripped above, so "Yankees ML -132 2u" ends in the price here.
+  // Removed from the description the same way a parenthesised price is, so
+  // the stored bet text carries only the line.
   if (odds === null) {
     const trailing = cleanDescription.match(/^(.*\S)\s+([+-]\d{3,})$/);
-    if (trailing && Math.abs(parseInt(trailing[2], 10)) >= 100 && hasBetQualifier(trailing[1])) {
+    if (trailing && Math.abs(parseInt(trailing[2], 10)) >= 100) {
       odds = parseInt(trailing[2], 10);
       cleanDescription = trailing[1];
     }

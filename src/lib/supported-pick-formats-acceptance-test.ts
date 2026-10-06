@@ -106,9 +106,13 @@ function checkOddsForms() {
     ["Detroit -6.5", "SPREAD", null, -6.5, 1],
     ["Yankees ML -132 2u", "MONEYLINE", -132, null, 2],
     ["Yankees ML -132 1.5 units", "MONEYLINE", -132, null, 1.5],
-    // Below 100 is not an American price, and a lone signed number is the bet itself.
+    // Below 100 is not an American price.
     ["Yankees ML -50", "MONEYLINE", null, null, 1],
-    ["Yankees -132", "SPREAD", null, -132, 1],
+    // No "ML": a whole number of 100+ right after the team is still a moneyline price...
+    ["Yankees -132", "MONEYLINE", -132, null, 1],
+    ["Yankees +145", "MONEYLINE", 145, null, 1],
+    // ...while a real run line keeps its line, with the price after it.
+    ["Yankees -1.5 -132", "SPREAD", -132, -1.5, 1],
   ];
   for (const [text, betType, odds, line, units] of cases) {
     const parsed = parsePickText(text);
@@ -131,6 +135,8 @@ function checkOddsForms() {
     ["NFL Giants +6.5 (-110)", "SPREAD", -110, true, 1],
     ["NFL Giants +6.5", "SPREAD", -110, false, 1],
     ["Dodgers over 8.5 -115", "TOTAL", -115, true, 1],
+    ["Yankees -132", "MONEYLINE", -132, true, 1],
+    ["Yankees -1.5 -132", "SPREAD", -132, true, 1],
   ];
   for (const [text, betType, odds, explicit, units] of endToEnd) {
     const p = catalogLine(text).picks[0];
