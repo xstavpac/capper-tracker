@@ -1,4 +1,4 @@
-import { RANKING_MIN_SAMPLE, getRecordColor, type MomentumBreakdown, type MomentumRow } from "@/server/data/stats";
+import { getRecordColor, type MomentumBreakdown, type MomentumRow } from "@/server/data/stats";
 
 // The bucket the capper's actual current streak falls into - e.g. currently on
 // a 5-game loss streak is the "After 4+ L" row (5 collapses into the same 4+
@@ -24,7 +24,9 @@ export function MomentumPanel({
   currentStreak: { type: "WIN" | "LOSS" | "NONE"; count: number };
 }) {
   const row = currentStreakRow(breakdown, currentStreak);
-  const enoughData = row !== undefined && row.sampleSize >= RANKING_MIN_SAMPLE;
+  // No minimum sample here (unlike the rankings' RANKING_MIN_SAMPLE): one decided pick in the
+  // bucket is enough to show its real record.
+  const hasHistory = row !== undefined && row.sampleSize > 0;
 
   return (
     <div className="mt-4 rounded-card bg-card shadow-soft">
@@ -33,7 +35,7 @@ export function MomentumPanel({
         <span className="text-xs font-normal">All sports · All time</span>
       </div>
 
-      {row && enoughData ? (
+      {row && hasHistory ? (
         <div className="flex items-center justify-between gap-4 rounded-b-card bg-brand-50 px-5 py-3 dark:bg-brand-500/10">
           <span className="flex items-center gap-2 text-sm font-medium text-foreground">
             After {row.length} {currentStreak.type === "WIN" ? "W" : "L"}
