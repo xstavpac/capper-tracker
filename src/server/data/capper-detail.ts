@@ -23,12 +23,16 @@
 import type { PickStatus } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { windowTotalsSelect, zeroOddsWinUnitsWon, type WindowTotals } from "@/server/data/capper-list-aggregates";
+import { startOfEasternDay } from "@/lib/dates";
 import {
+  CAPPER_RECENT_LIST_ORDER_BY,
   CAPPER_RECENT_ORDER_BY,
   DECIDED_SERIES_ORDER_BY,
   buildPageBundleQuery,
   capperPickMetaFromBundle,
   capperPickMetaSelect,
+  capperRecentListFromRows,
+  capperRecentListSelect,
   capperRecentPicksFromRows,
   capperRecentPicksSelect,
   categoryTileRowsFromBundle,
@@ -38,6 +42,9 @@ import {
   queryPageBundle,
   sportFirstKeysFromBundle,
   sportFirstKeysSelect,
+  type BundlePart,
+  type CategoryTileRow,
+  type NarrowSeriesPick,
 } from "@/server/data/page-aggregate-fragments";
 import {
   DEFAULT_CHIP_SET,
@@ -50,6 +57,7 @@ import {
   currentStreak,
   filterPicksByGameWindow,
   recordStatsFromTotals,
+  scorecardWindowRange,
   type CategoryBreakdownItem,
   type MomentumBreakdown,
   type OddsRangeStat,
@@ -114,7 +122,8 @@ function onlyWindow(select: Prisma.Sql, window: ScorecardWindow): Prisma.Sql {
 }
 
 // The one statement. Exported so the measurement script runs exactly what production runs.
-export function buildCapperDetailBundleQuery(userId: string, capperId: string, params: CapperDetailParams, now: Date) {
+// `recent` replaces the default recent part (the page's own list - getCapperPageData).
+export function buildCapperDetailBundleQuery(userId: string, capperId: string, params: CapperDetailParams, now: Date, recent?: BundlePart) {
   const scope = { userId, capperId };
   return buildPageBundleQuery({
     windows: { windows: windowsForCapperDetail(params), now },
@@ -126,7 +135,7 @@ export function buildCapperDetailBundleQuery(userId: string, capperId: string, p
       },
       { name: "tiles", select: categoryTilesSelect({ ...scope, groupBySport: true }) },
       { name: "firstKeys", select: sportFirstKeysSelect(scope) },
-      { name: "recent", select: capperRecentPicksSelect(scope), orderBy: CAPPER_RECENT_ORDER_BY },
+      recent ?? { name: "recent", select: capperRecentPicksSelect(scope), orderBy: CAPPER_RECENT_ORDER_BY },
       { name: "series", select: decidedSeriesSelect(scope), orderBy: DECIDED_SERIES_ORDER_BY },
       { name: "meta", select: capperPickMetaSelect(scope) },
     ],
@@ -144,6 +153,32 @@ function recordFromTotals(t: WindowTotals | undefined): CapperRecordView {
     unitsRisked: t?.unitsRisked ?? 0,
   });
   return { wins: r.wins, losses: r.losses, pushes: r.pushes, roi: r.roi, netUnits: r.netUnits };
+}
+
+// One sport's tiles / record / chart for a window.
+function sportSection(
+  parts: { series: NarrowSeriesPick[]; tiles: CategoryTileRow[]; sportTotals: WindowTotals[] },
+  sport: string,
+  window: ScorecardWindow,
+  now: Date
+) {
+  const total = parts.sportTotals.find((t) => t.sport === sport);
+  return {
+    breakdown: categoryBreakdownFromCounts(
+      parts.tiles.filter((t) => t.window === window && t.sport === sport),
+      chipSetForLeague(sport)
+    ),
+    // A row exists only when the sport has >= 1 pick (any status) in the window - the JS path's
+    // `activeSportPicksInWindow.length > 0`.
+    stats: total ? recordFromTotals(total) : null,
+    chartData: computeUnitsChartData(
+      filterPicksByGameWindow(
+        parts.series.filter((p) => p.sport.name === sport),
+        window,
+        now
+      )
+    ),
+  };
 }
 
 // Pure: bundle rows -> the page's view. `now` must be the instant the bundle's SQL windows used.
@@ -176,8 +211,10 @@ export function capperDetailFromBundle(bundle: Record<string, unknown[]>, params
       DEFAULT_CHIP_SET
     );
 
-  const sportTotal = ((bundle.sportTotals ?? []) as WindowTotals[]).find((t) => t.sport === selectedCategorySport);
-  const sportSeries = series.filter((p) => p.sport.name === selectedCategorySport);
+  const active =
+    selectedCategorySport === undefined
+      ? null
+      : sportSection({ series, tiles, sportTotals: (bundle.sportTotals ?? []) as WindowTotals[] }, selectedCategorySport, params.categoryWindow, now);
   const recent = capperRecentPicksFromRows(bundle.recent ?? [], selectedCategorySport);
 
   return {
@@ -189,17 +226,9 @@ export function capperDetailFromBundle(bundle: Record<string, unknown[]>, params
     chartData: computeUnitsChartData(filterPicksByGameWindow(series, params.window, now)),
     sportTabs: tabs.map((s) => s.sportName),
     selectedCategorySport,
-    activeCategoryBreakdown:
-      selectedCategorySport === undefined
-        ? []
-        : categoryBreakdownFromCounts(
-            tiles.filter((t) => t.window === params.categoryWindow && t.sport === selectedCategorySport),
-            chipSetForLeague(selectedCategorySport)
-          ),
-    // A row exists only when the sport has >= 1 pick (any status) in the window - the JS path's
-    // `activeSportPicksInWindow.length > 0`.
-    activeSportStats: sportTotal ? recordFromTotals(sportTotal) : null,
-    activeSportChartData: computeUnitsChartData(filterPicksByGameWindow(sportSeries, params.categoryWindow, now)),
+    activeCategoryBreakdown: active?.breakdown ?? [],
+    activeSportStats: active?.stats ?? null,
+    activeSportChartData: active?.chartData ?? [],
     recentPicks: recent.picks.map((p) => ({
       id: p.id,
       awayTeam: p.awayTeam,
@@ -230,4 +259,104 @@ export async function getCapperDetailData(
 ): Promise<CapperDetailView> {
   const bundle = await queryPageBundle(buildCapperDetailBundleQuery(userId, capperId, params, now));
   return capperDetailFromBundle(bundle, params, now);
+}
+
+// ---------------------------------------------------------------------------
+// The page: ONE sport + time selection drives the summary, chart, tiles and recent picks.
+// ---------------------------------------------------------------------------
+
+export const CAPPER_RECENT_PAGE_SIZE = 10;
+const CAPPER_RECENT_MAX = 500;
+
+export type CapperPageParams = {
+  // The raw `?sport=` value; undefined (or a sport the capper has no pick in) is All Sports.
+  sport?: string;
+  window: ScorecardWindow;
+  recentLimit: number;
+};
+
+export type CapperPageView = {
+  // All sports, all time - never scoped by the selection.
+  currentStreak: CapperDetailView["currentStreak"];
+  momentum: MomentumBreakdown;
+  trackedSinceMs: number | null;
+  lastPickMs: number | null;
+  associatedPickCount: number;
+  // Every sport the capper has a pick in (any status), A-Z.
+  sports: string[];
+  selectedSport: string | null; // null = All Sports
+  // The selection:
+  summary: CapperRecordView;
+  chartData: UnitsChartPoint[];
+  tiles: CategoryBreakdownItem[]; // All Sports: the core six; a sport: its own chip set
+  recentPicks: (CapperRecentPickView & { sport: string })[];
+  hasMoreRecent: boolean;
+};
+
+// The recent list's game-time range for a window. Unlike the record windows it has no gradedAt
+// gate and runs to the end of the Eastern day rather than to `now`, so tonight's ungraded picks
+// are listed under Today / Last N days. YESTERDAY is the same day the record uses.
+export function capperRecentPicksRange(window: ScorecardWindow, now: Date): { start: Date; end: Date } | null {
+  const range = scorecardWindowRange(window, now);
+  if (!range || window === "YESTERDAY") return range;
+  return { start: range.start, end: startOfEasternDay(new Date(startOfEasternDay(now).getTime() + 36 * 3600000)) };
+}
+
+export function clampRecentLimit(raw: number): number {
+  return Number.isFinite(raw) ? Math.min(Math.max(Math.floor(raw), CAPPER_RECENT_PAGE_SIZE), CAPPER_RECENT_MAX) : CAPPER_RECENT_PAGE_SIZE;
+}
+
+// Pure: the same bundle (with the page's recent part) -> what the page renders.
+export function capperPageFromBundle(bundle: Record<string, unknown[]>, params: CapperPageParams, now: Date): CapperPageView {
+  const sports = sportFirstKeysFromBundle(bundle.firstKeys ?? [])
+    .map((k) => k.sport)
+    .sort((a, b) => a.localeCompare(b));
+  const selectedSport = params.sport !== undefined && sports.includes(params.sport) ? params.sport : null;
+  const detail = capperDetailFromBundle(bundle, { window: params.window, categoryWindow: params.window }, now);
+  const section =
+    selectedSport === null
+      ? null
+      : sportSection(
+          {
+            series: narrowSeriesFromRows(bundle.series ?? []),
+            tiles: categoryTileRowsFromBundle(bundle.tiles ?? []),
+            sportTotals: (bundle.sportTotals ?? []) as WindowTotals[],
+          },
+          selectedSport,
+          params.window,
+          now
+        );
+  const recent = capperRecentListFromRows(bundle.recent ?? []);
+  return {
+    currentStreak: detail.currentStreak,
+    momentum: detail.momentum,
+    trackedSinceMs: detail.trackedSinceMs,
+    lastPickMs: detail.lastPickMs,
+    associatedPickCount: detail.associatedPickCount,
+    sports,
+    selectedSport,
+    summary: section ? (section.stats ?? recordFromTotals(undefined)) : detail.stats,
+    chartData: section ? section.chartData : detail.chartData,
+    tiles: section ? section.breakdown : detail.universalBreakdown,
+    recentPicks: recent.slice(0, params.recentLimit),
+    hasMoreRecent: recent.length > params.recentLimit,
+  };
+}
+
+// A `?sport=` the capper has no pick in comes back as selectedSport null with an EMPTY recent list
+// (the SQL filtered on it); the page redirects to All Sports rather than render that.
+export async function getCapperPageData(userId: string, capperId: string, params: CapperPageParams, now: Date = new Date()): Promise<CapperPageView> {
+  const recent: BundlePart = {
+    name: "recent",
+    select: capperRecentListSelect({
+      userId,
+      capperId,
+      sport: params.sport,
+      range: capperRecentPicksRange(params.window, now),
+      limit: params.recentLimit + 1,
+    }),
+    orderBy: CAPPER_RECENT_LIST_ORDER_BY,
+  };
+  const query = buildCapperDetailBundleQuery(userId, capperId, { window: params.window, categoryWindow: params.window }, now, recent);
+  return capperPageFromBundle(await queryPageBundle(query), params, now);
 }

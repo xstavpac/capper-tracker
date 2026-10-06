@@ -435,6 +435,48 @@ export function capperRecentPicksFromRows(
   };
 }
 
+export type CapperRecentListRow = Omit<CapperRecentRow, "rs" | "ra">;
+
+// The capper page's recent-picks list: the newest `limit` picks (all statuses) of the capper,
+// optionally of one sport and/or with a game inside [range.start, range.end). Bounds are bound
+// instants (capperRecentPicksRange), not the `w` CTE: the list's window has no gradedAt gate.
+export function capperRecentListSelect(scope: {
+  userId: string;
+  capperId: string;
+  sport?: string;
+  range: { start: Date; end: Date } | null;
+  limit: number;
+}): Prisma.Sql {
+  const sport = scope.sport ? Prisma.sql`AND s.name = ${scope.sport}` : Prisma.empty;
+  const range = scope.range
+    ? Prisma.sql`AND p."gameTime" >= ${scope.range.start.toISOString()}::timestamp AND p."gameTime" < ${scope.range.end.toISOString()}::timestamp`
+    : Prisma.empty;
+  return Prisma.sql`
+    SELECT row_number() OVER (ORDER BY ${ORDER_DESC})::int AS "rn",
+           p.id AS "id", p."awayTeam" AS "awayTeam", p."homeTeam" AS "homeTeam",
+           p."betDetail" AS "betDetail", p."betType"::text AS "betType", p.line AS "line",
+           p.odds AS "odds", p.units AS "units",
+           round(extract(epoch FROM p."gameTime") * 1000)::bigint AS "gameTime",
+           p.status::text AS "status", s.name AS "sport"
+    FROM picks p
+    JOIN sports s ON s.id = p."sportId"
+    WHERE p."userId" = ${scope.userId} AND p."capperId" = ${scope.capperId} ${sport} ${range}
+    ORDER BY ${ORDER_DESC}
+    LIMIT ${scope.limit}::int
+  `;
+}
+export const CAPPER_RECENT_LIST_ORDER_BY = Prisma.sql`"rn"`;
+
+export function capperRecentListFromRows(rows: unknown[]): (Omit<CapperRecentListRow, "gameTime"> & { gameTime: Date })[] {
+  return (rows as (CapperRecentListRow & { rn?: number })[]).map(({ rn: _rn, ...r }) => ({
+    ...r,
+    line: r.line === null ? null : Number(r.line),
+    odds: Number(r.odds),
+    units: Number(r.units),
+    gameTime: new Date(Number(r.gameTime)),
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // 3.e Pending counts
 // ---------------------------------------------------------------------------
