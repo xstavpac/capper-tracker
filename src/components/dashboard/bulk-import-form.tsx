@@ -191,11 +191,11 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   function jumpToQuestion(id: string, answered = false) {
     if (answered) setAnsweredOpen(true);
     // After React has rendered the (possibly just-opened) answered list.
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       const el = document.getElementById(id) ?? actionAreaRef.current;
       el?.focus({ preventScroll: true });
       scrollToElement(el, "center");
-    });
+    }, 0);
   }
 
   // Roster full names for parseCatalog's findAmbiguousNickname player-prop
@@ -1196,10 +1196,18 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                                 key={g.key}
                                 id={ambiguousQuestionId(g.key)}
                                 text={g.sampleRaw}
-                                meta={capperSummary(g.cappers) + (g.count > 1 ? " · " + g.count + " picks" : "")}
+                                meta={
+                                  capperSummary(g.cappers) +
+                                  (g.count > 1 ? " · " + g.count + " picks" : "") +
+                                  " · " +
+                                  (g.options.length === 1
+                                    ? ambiguousReason(g)
+                                    : isPlayerAmbiguityKey(g.key)
+                                      ? "More than one player has this name"
+                                      : "Ambiguous team")
+                                }
                               >
-                                <div className="mt-1.5">{ambiguousReason(g)}</div>
-                                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                                   {g.options.map((opt) => (
                                     <button
                                       key={opt.label}
@@ -1211,7 +1219,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                                     </button>
                                   ))}
                                 </div>
-                                <div className="mt-1.5 text-amber-800 dark:text-amber-300">
+                                <div className="mt-1 text-amber-800 dark:text-amber-300">
                                   {g.count > 1
                                     ? isPlayerAmbiguityKey(g.key)
                                       ? "Answering once resolves all " + g.count + " picks with this name in this paste."
@@ -1248,9 +1256,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                                 key={idx}
                                 id={duplicateQuestionId(idx)}
                                 text={p.description}
-                                meta={resolvedCapperName(p.capperName) + " · " + p.sportName}
+                                meta={resolvedCapperName(p.capperName) + " · " + p.sportName + " · " + duplicateFlags[idx].message}
                               >
-                                <div className="mt-1.5">Possible duplicate: {duplicateFlags[idx].message}</div>
                                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                                   <button
                                     type="button"
