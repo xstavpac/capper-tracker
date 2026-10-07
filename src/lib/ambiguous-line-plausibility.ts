@@ -21,8 +21,9 @@
 // Scoped ONLY to the leagues actually involved in a confirmed
 // AMBIGUOUS_NICKNAMES line-shape collision today - the fixed-handicap leagues
 // (MLB/KBO run line, NHL puck line) and the basketball / college-football
-// ranges - versus NFL, whose spreads/totals are deliberately left unbounded
-// here. This is NOT a comprehensive per-league table for every sport
+// ranges - plus NFL totals (a 6.5 or 8.5 "over" is a hockey/baseball number,
+// never a football one). NFL SPREADS are deliberately left unbounded here.
+// This is NOT a comprehensive per-league table for every sport
 // parse-catalog.ts tracks, and it is NOT a betting model - it exists solely
 // to catch a bet line that is flatly impossible for a given league, not to
 // model realistic-but-unusual lines. See the PR description for the bound
@@ -74,6 +75,19 @@ const TOTAL_LINE_BOUND: Partial<Record<string, { min: number; max: number }>> = 
   // NBA full-game totals cluster roughly 200-245.
   NBA: { min: 180, max: 280 },
   NCAAF: { min: 20, max: 100 },
+  // NFL full-game totals run roughly 33-56; the lowest closing totals on
+  // record sit around 28-30 and the highest in the low 60s. Set well outside
+  // that: the point is that an "over 6.5" / "over 8.5" is never an NFL game.
+  NFL: { min: 24, max: 75 },
+};
+
+// Full-game TEAM total floor, for the leagues where one is safe to state. An
+// NFL team total is roughly 10-35; alternates reach lower, but nothing is
+// posted near a hockey team total (2.5-3.5). Leagues absent here have no
+// team-total floor - only the game maximum above applies to them.
+// DOMAIN ESTIMATE, same caveat as the tables above.
+const TEAM_TOTAL_MIN: Partial<Record<string, number>> = {
+  NFL: 6,
 };
 
 // `line` is the pick's own already-parsed numeric spread/total (ParsedPick's
@@ -85,17 +99,22 @@ const TOTAL_LINE_BOUND: Partial<Record<string, { min: number; max: number }>> = 
 // unchanged, on purpose: the silent-wrong-resolution risk for a moneyline
 // pick is Bug 7's pick_context issue, a separate fix.
 //
-// A candidate whose sport has no entry in the bound tables above (NFL, or
-// any league not involved in a confirmed cross-league line-shape collision) is
-// never filtered out by this function - it has no known realistic range
+// A candidate whose sport has no entry in the relevant bound table above (an
+// NFL spread, or any league not involved in a confirmed cross-league
+// line-shape collision) is never filtered out by this function - it has no known realistic range
 // here to compare against, so it's left as plausible rather than guessed at.
 //
 // The total MINIMUM is a full-game, both-teams number, so it is only applied
 // to a full-game TOTAL: a team total ("Panthers TT o2.5") or a partial-game
 // total ("1P o1.5", "F5 u4.5") is legitimately far below it, and applying it
 // would drop the very league the pick is about. The maximum still applies to
-// both - no slice of a game outscores the whole game. `partialGame` is the
-// pick's own ambiguousPartialGame; omitted means a full-game bet.
+// both - no slice of a game outscores the whole game. A full-game team total
+// has its own, lower floor where TEAM_TOTAL_MIN lists one. `partialGame` is
+// the pick's own ambiguousPartialGame; omitted means a full-game bet.
+//
+// `betType` must be the pick's own parsed bet type (ambiguousBetType), never
+// the stored ParsedPick.betType: an unresolved ambiguous pick stores a SPREAD
+// placeholder there, and a 6.5 "over" checked as a spread would pass for NFL.
 export function filterPlausibleCandidates(
   candidates: AmbiguousOption[],
   betType: ParsedPick["betType"] | undefined,
@@ -112,10 +131,12 @@ export function filterPlausibleCandidates(
   }
 
   if (betType === "TOTAL" || betType === "TEAM_TOTAL") {
-    const minApplies = betType === "TOTAL" && !partialGame;
     return candidates.filter((c) => {
       const range = TOTAL_LINE_BOUND[c.sport];
-      return range === undefined || ((!minApplies || line >= range.min) && line <= range.max);
+      if (range !== undefined && line > range.max) return false;
+      if (partialGame) return true;
+      const min = betType === "TOTAL" ? range?.min : TEAM_TOTAL_MIN[c.sport];
+      return min === undefined || line >= min;
     });
   }
 

@@ -61,7 +61,8 @@ console.log("########## Spread magnitude bounds ##########");
 
 console.log("\n########## Total line bounds ##########");
 {
-  check("total of 8.5 (real MLB/KBO total) -> nothing dropped", sports(filterPlausibleCandidates(GIANTS, "TOTAL", 8.5)), sports(GIANTS));
+  // NFL totals are bounded too: 8.5 is a baseball number, never a football one.
+  check("total of 8.5 (real MLB/KBO total) -> NFL dropped, MLB/KBO remain", sports(filterPlausibleCandidates(GIANTS, "TOTAL", 8.5)), ["KBO", "MLB"]);
 }
 {
   check("total of 45.5 (real NFL total, implausible for MLB/KBO) -> only NFL remains", sports(filterPlausibleCandidates(GIANTS, "TOTAL", 45.5)), ["NFL"]);

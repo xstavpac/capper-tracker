@@ -125,11 +125,14 @@ async function main() {
     const both = { prompt: ["Carolina Panthers (NFL)", "Florida Panthers (NHL)"] };
     check("Panthers -1.5 (puck line) keeps NHL", await outcome("Panthers -1.5", active), both);
     check("Panthers +2.5 (alt puck line) keeps NHL", await outcome("Panthers +2.5", active), both);
-    check("Panthers o5.5 keeps NHL", await outcome("Panthers o5.5", active), both);
-    check("Panthers u8.5 (max) keeps NHL", await outcome("Panthers u8.5", active), both);
+    // A hockey total is no NFL total, so these now settle on NHL outright
+    // (PART G) rather than merely keeping it on the prompt.
+    const nhlPanthers = { resolved: "NHL florida panthers", method: "plausibility" };
+    check("Panthers o5.5 keeps NHL", await outcome("Panthers o5.5", active), nhlPanthers);
+    check("Panthers u8.5 (max) keeps NHL", await outcome("Panthers u8.5", active), nhlPanthers);
     // The total minimum is a full-game number: a team total or a period total
     // sits below it and must not cost the pick its NHL option.
-    check("Panthers TT o2.5 (team total) keeps NHL", await outcome("Panthers TT o2.5", active), both);
+    check("Panthers TT o2.5 (team total) keeps NHL", await outcome("Panthers TT o2.5", active), nhlPanthers);
     check("Panthers 1P o1.5 (period total) keeps NHL", await outcome("Panthers 1P o1.5", active), both);
     check("Panthers 1st period over 1.5 stays NHL (hockey wording decides it)", await outcome("Panthers 1st period over 1.5", active), {
       resolved: "NHL florida panthers",
@@ -145,7 +148,13 @@ async function main() {
     check("NHL team total 9 is not (the max still applies)", filterPlausibleCandidates(nhl, "TEAM_TOTAL", 9).length, 0);
     const nfl = [{ label: "x", sport: "NFL", nickname: "x" }];
     check("NFL stays unbounded (spread 40)", filterPlausibleCandidates(nfl, "SPREAD", 40).length, 1);
-    check("NFL stays unbounded (total 3)", filterPlausibleCandidates(nfl, "TOTAL", 3).length, 1);
+    check("NFL total 24 is plausible", filterPlausibleCandidates(nfl, "TOTAL", 24).length, 1);
+    check("NFL total 23.5 is not", filterPlausibleCandidates(nfl, "TOTAL", 23.5).length, 0);
+    check("NFL total 75 is plausible", filterPlausibleCandidates(nfl, "TOTAL", 75).length, 1);
+    check("NFL total 75.5 is not", filterPlausibleCandidates(nfl, "TOTAL", 75.5).length, 0);
+    check("NFL team total 6 is plausible", filterPlausibleCandidates(nfl, "TEAM_TOTAL", 6).length, 1);
+    check("NFL team total 5.5 is not", filterPlausibleCandidates(nfl, "TEAM_TOTAL", 5.5).length, 0);
+    check("NFL partial-game total 3 is plausible (no floor on a quarter/half)", filterPlausibleCandidates(nfl, "TOTAL", 3, true).length, 1);
   }
 
   console.log("\n########## PART B: MLB / KBO total max 14.5 ##########");
@@ -322,6 +331,114 @@ async function main() {
     });
     check("a shared mascot inside a longer name is not a hit", await outcome("Bobcats Brewing ML", {}, feedTeams), {
       unresolved: ["Bobcats Brewing ML"],
+    });
+  }
+
+  console.log("\n########## PART G: over/under lines are checked against TOTAL bounds, NFL included ##########");
+  {
+    const active = { runLeagueActivityCheck: fakeActivity(ALL_ACTIVE) };
+    const playing = (...keys: string[]) => ({
+      ...active,
+      runScheduleCheck: fakeSchedule(keys),
+      runWideScheduleCheck: fakeSchedule(keys),
+    });
+    const bothJets = playing("new york jets|NFL", "winnipeg jets|NHL");
+
+    // The unresolved pick stores a SPREAD placeholder; the line is checked
+    // against the bet type parsed from its own text, not that placeholder.
+    const jets = parseCatalog("Capper\nJets over 6.5").picks[0];
+    check(
+      "Jets over 6.5: stored market is the SPREAD placeholder, plausibility reads TOTAL 6.5",
+      { stored: jets.betType, checkedAs: jets.ambiguousBetType, line: jets.ambiguousLine },
+      { stored: "SPREAD", checkedAs: "TOTAL", line: 6.5 }
+    );
+    check(
+      "a 6.5 TOTAL drops NFL; the same 6.5 as a SPREAD drops NHL instead",
+      {
+        total: filterPlausibleCandidates(jets.ambiguous!, "TOTAL", 6.5).map((o) => o.sport),
+        spread: filterPlausibleCandidates(jets.ambiguous!, "SPREAD", 6.5).map((o) => o.sport),
+      },
+      { total: ["NHL"], spread: ["NFL"] }
+    );
+
+    check("Jets over 6.5, both Jets play today -> NHL, no prompt", await outcome("Jets over 6.5", bothJets), {
+      resolved: "NHL winnipeg jets",
+      method: "plausibility",
+    });
+    check("Jets over 6.5, neither plays today -> NHL, no prompt", await outcome("Jets over 6.5", active), {
+      resolved: "NHL winnipeg jets",
+      method: "plausibility",
+    });
+    check("Jets over 44.5 -> NFL, no prompt", await outcome("Jets over 44.5", bothJets), {
+      resolved: "NFL new york jets",
+      method: "plausibility",
+    });
+    check("Jets u5.5 -> NHL, no prompt", await outcome("Jets u5.5", bothJets), {
+      resolved: "NHL winnipeg jets",
+      method: "plausibility",
+    });
+    // Unchanged from #196: +6.5 is past the NHL puck-line bound, so the line
+    // leaves NFL alone and nothing disagrees.
+    check("Jets +6.5 -> NFL (NHL puck line is +/-1.5)", await outcome("Jets +6.5", bothJets), {
+      resolved: "NFL new york jets",
+      method: "plausibility",
+    });
+    check("Jets +1.5 -> plausible for both, still a prompt", await outcome("Jets +1.5", bothJets), {
+      prompt: ["New York Jets (NFL)", "Winnipeg Jets (NHL)"],
+    });
+    const cardinalsDay = playing("arizona cardinals|NFL", "st. louis cardinals|MLB");
+    check("Cardinals over 47.5 -> NFL, no prompt", await outcome("Cardinals over 47.5", cardinalsDay), {
+      resolved: "NFL arizona cardinals",
+      method: "plausibility",
+    });
+    // Pick context already read this as baseball before NFL totals were
+    // bounded; the line now agrees with it.
+    check("Cardinals over 8.5 -> MLB, no prompt", await outcome("Cardinals over 8.5", cardinalsDay), {
+      resolved: "MLB st. louis cardinals",
+      method: "pick_context",
+    });
+
+    // Another signal disagreeing still prompts: only the NFL Jets play today,
+    // and the line says NHL.
+    check("Jets over 6.5, only the NFL Jets play today -> conflict, prompt", await outcome("Jets over 6.5", playing("new york jets|NFL")), {
+      prompt: ["Winnipeg Jets (NHL)"],
+    });
+
+    // Giants: the line drops NFL but leaves MLB and KBO. The schedule then
+    // settles it among those two - and only when it can.
+    const giantsDay = playing("new york giants|NFL", "san francisco giants|MLB");
+    check("Giants over 8.5, NFL and MLB both play today -> MLB, no prompt", await outcome("Giants over 8.5", giantsDay), {
+      resolved: "MLB san francisco giants",
+      method: "plausibility",
+    });
+    check("Giants over 8.5, nobody plays today -> NFL dropped, MLB / KBO prompt", await outcome("Giants over 8.5", active), {
+      prompt: ["San Francisco Giants (MLB)", "Lotte Giants (KBO)"],
+    });
+    check(
+      "Giants over 8.5, the other survivor has a game later this week -> prompt",
+      await outcome("Giants over 8.5", { ...giantsDay, runWideScheduleCheck: fakeSchedule(["lotte giants|KBO"]) }),
+      { prompt: ["San Francisco Giants (MLB)", "Lotte Giants (KBO)"] }
+    );
+    check("Giants over 44.5 -> NFL, no prompt", await outcome("Giants over 44.5", giantsDay), {
+      resolved: "NFL new york giants",
+      method: "plausibility",
+    });
+
+    // Team totals and partial-game totals.
+    check("Jets TT over 2.5 -> NHL (below any NFL team total)", await outcome("Jets TT over 2.5", bothJets), {
+      resolved: "NHL winnipeg jets",
+      method: "plausibility",
+    });
+    check("Jets TT over 20.5 -> NFL", await outcome("Jets TT over 20.5", bothJets), {
+      resolved: "NFL new york jets",
+      method: "plausibility",
+    });
+    check("Jets 1H over 20.5 -> NFL (the NFL game minimum is not applied to a half)", await outcome("Jets 1H over 20.5", bothJets), {
+      resolved: "NFL new york jets",
+      method: "plausibility",
+    });
+    check("Jets 1Q over 6.5 -> plausible for both, still a prompt", await outcome("Jets 1Q over 6.5", bothJets), {
+      prompt: ["New York Jets (NFL)", "Winnipeg Jets (NHL)"],
     });
   }
 
