@@ -33,6 +33,9 @@ import {
   isPendingOrRejectedTotalLine as isPendingOrRejectedTotalLineShared,
   partitionReviewEntries,
   totalSkipped,
+  pendingSkipCounts,
+  importActionLabel,
+  type ReviewPickState,
   describeUnresolvedLines,
   unresolvedReasonBreakdown,
 } from "@/lib/bulk-import-summary";
@@ -149,22 +152,51 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const [totalLineFlags, setTotalLineFlags] = useState<Record<number, MissingTotalLineResult>>({});
   const [totalLineChoices, setTotalLineChoices] = useState<Record<number, "confirm" | "reject">>({});
 
-  // Scrolls the results section into view right after a fresh Drop Catalog
-  // parse - on mobile especially, the example image between the form and the
-  // results pushes them far enough below the fold that clicking "Drop
-  // Catalog" could look like nothing happened at all. Keyed on its own
-  // counter (bumped once per handleParse call) rather than on `parsed`
-  // itself, since `parsed` also updates later from unrelated interactions
-  // (resolving an ambiguous team, confirming a fuzzy capper match) that
-  // shouldn't yank the user's scroll position back down every time.
+  // Scrolls to the bottom action area (the "Needs your answer" panel and the
+  // Import button) right after a fresh Drop Catalog parse - with a large
+  // paste that is a long way below the fold, and it is the only place the
+  // user has anything left to do. Keyed on its own counter rather than on
+  // `parsed` itself, since `parsed` also updates later from unrelated
+  // interactions (resolving an ambiguous team, confirming a fuzzy capper
+  // match) that shouldn't yank the user's scroll position every time. Bumped
+  // once when the parse lands and once more if the duplicate / total-line
+  // checks then add questions, since those grow the panel downward.
   const resultsRef = useRef<HTMLDivElement>(null);
+  const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const actionAreaRef = useRef<HTMLDivElement>(null);
+  const parseSeqRef = useRef(0);
   const [scrollTrigger, setScrollTrigger] = useState(0);
+  // Bumped whenever an import attempt reports back (success, pick-limit
+  // pause or refusal): the outcome renders at the top of the Match results
+  // card, the Import button that produced it sits at the bottom.
+  const [outcomeTrigger, setOutcomeTrigger] = useState(0);
+  // The panel's "Answered" list, opened on demand ("Change below" on a row).
+  const [answeredOpen, setAnsweredOpen] = useState(false);
 
   useEffect(() => {
-    if (scrollTrigger > 0) {
-      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    if (scrollTrigger === 0) return;
+    const area = actionAreaRef.current;
+    if (!area) return;
+    // Taller than the screen: land on its first question, not its last.
+    scrollToElement(area, area.getBoundingClientRect().height > window.innerHeight ? "start" : "end");
   }, [scrollTrigger]);
+
+  useEffect(() => {
+    if (outcomeTrigger === 0) return;
+    resultsHeadingRef.current?.focus({ preventScroll: true });
+    scrollToElement(resultsRef.current, "start");
+  }, [outcomeTrigger]);
+
+  // "Answer below" on a row: bring that question into view and focus it.
+  function jumpToQuestion(id: string, answered = false) {
+    if (answered) setAnsweredOpen(true);
+    // After React has rendered the (possibly just-opened) answered list.
+    setTimeout(() => {
+      const el = document.getElementById(id) ?? actionAreaRef.current;
+      el?.focus({ preventScroll: true });
+      scrollToElement(el, "center");
+    }, 0);
+  }
 
   // Roster full names for parseCatalog's findAmbiguousNickname player-prop
   // guard (see that function's own comment in parse-catalog.ts) - fetched
@@ -219,7 +251,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setDuplicateChoices({});
     setTotalLineFlags({});
     setTotalLineChoices({});
+    setAnsweredOpen(false);
     setResolving(true);
+    const parseSeq = ++parseSeqRef.current;
     // Teams known only from the live NCAAF game feed (FCS schools) - see
     // getImportFeedTeamsAction. A failed fetch parses without them.
     const [rosterFullNames, feedTeams] = await Promise.all([
@@ -288,8 +322,13 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     }
     const resolvedEntries = outcome.picks.map((p, idx) => ({ p, idx })).filter((e) => !e.p.ambiguous);
     fetchOddsFor(resolvedEntries);
-    checkDuplicatesFor(resolvedEntries);
-    checkTotalLinesFor(resolvedEntries);
+    // Questions these two checks raise land in the panel after the first
+    // scroll - follow it down once more if any did (and no newer parse has
+    // started since).
+    void Promise.allSettled([checkDuplicatesFor(resolvedEntries), checkTotalLinesFor(resolvedEntries)]).then((checks) => {
+      const raised = checks.some((c) => c.status === "fulfilled" && c.value > 0);
+      if (raised && parseSeqRef.current === parseSeq) setScrollTrigger((v) => v + 1);
+    });
   }
 
   // The parser is client-side only and can't see live odds, so every pick
@@ -345,9 +384,10 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // saved capper this pick's name actually refers to. Same index-remapping
   // as fetchOddsFor: results come back keyed by position within `entries`,
   // remapped here to each pick's real position in `parsed`.
-  function checkDuplicatesFor(entries: { p: ParsedPick; idx: number }[]) {
-    if (entries.length === 0) return;
-    checkDuplicatePicksAction(
+  // Resolves to how many picks were flagged.
+  function checkDuplicatesFor(entries: { p: ParsedPick; idx: number }[]): Promise<number> {
+    if (entries.length === 0) return Promise.resolve(0);
+    return checkDuplicatePicksAction(
       entries.map((e) => ({
         capperName: resolvedCapperName(e.p.capperName),
         sportName: e.p.sportName,
@@ -369,6 +409,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         }
         return next;
       });
+      return Object.keys(flags).length;
     });
   }
 
@@ -377,9 +418,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // as fetchOddsFor/checkDuplicatesFor. Server-side (previewMissingTotalLines)
   // already skips anything with a real number already present, so this never
   // second-guesses a capper's own (possibly alternate) line.
-  function checkTotalLinesFor(entries: { p: ParsedPick; idx: number }[]) {
-    if (entries.length === 0) return;
-    previewMissingTotalLines(
+  function checkTotalLinesFor(entries: { p: ParsedPick; idx: number }[]): Promise<number> {
+    if (entries.length === 0) return Promise.resolve(0);
+    return previewMissingTotalLines(
       entries.map((e) => ({
         sportName: e.p.sportName,
         betType: e.p.betType,
@@ -399,6 +440,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         }
         return next;
       });
+      return Object.keys(flags).length;
     });
   }
 
@@ -458,20 +500,33 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // "Skip" and the never-answered default alike. Drives both the pre-import
   // button hint and the post-import summary.
   const skippedDuplicateEntries = validEntries.filter((e) => isPendingOrSkippedDuplicate(e.idx));
+  // Every resolved pick's review state, in the shape lib/bulk-import-summary.ts
+  // partitions - the one input behind both the Import button's count and the
+  // post-import skip summary.
+  const reviewStates: ReviewPickState[] = validEntries.map((e) => ({
+    idx: e.idx,
+    hasDuplicateFlag: Boolean(duplicateFlags[e.idx]),
+    duplicateChoice: duplicateChoices[e.idx],
+    hasTotalLineFlag: Boolean(totalLineFlags[e.idx]),
+    totalLineChoice: totalLineChoices[e.idx],
+  }));
   const dedupeLabel = (p: ParsedPick) =>
     resolvedCapperName(p.capperName) + " - " + p.sportName + " - " + p.description;
 
   // One prompt per unique ambiguous team name in this paste, not per pick -
   // groups every entry sharing an ambiguousKey (e.g. every "Cardinals" pick)
   // behind a single question with a count, instead of asking 12 times.
-  const ambiguousGroups: { key: string; options: AmbiguousOption[]; sampleRaw: string; count: number }[] = [];
+  const ambiguousGroups: { key: string; options: AmbiguousOption[]; sampleRaw: string; count: number; cappers: string[] }[] = [];
   {
-    const byKey = new Map<string, { options: AmbiguousOption[]; sampleRaw: string; count: number }>();
+    const byKey = new Map<string, { options: AmbiguousOption[]; sampleRaw: string; count: number; cappers: string[] }>();
     for (const { p } of ambiguousEntries) {
       const key = p.ambiguousKey!;
+      const capper = resolvedCapperName(p.capperName);
       const existing = byKey.get(key);
-      if (existing) existing.count += 1;
-      else byKey.set(key, { options: p.ambiguous!, sampleRaw: p.raw, count: 1 });
+      if (existing) {
+        existing.count += 1;
+        if (!existing.cappers.includes(capper)) existing.cappers.push(capper);
+      } else byKey.set(key, { options: p.ambiguous!, sampleRaw: p.raw, count: 1, cappers: [capper] });
     }
     for (const [key, v] of byKey.entries()) ambiguousGroups.push({ key, ...v });
   }
@@ -503,15 +558,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     // skippedDuplicateEntries (see partitionReviewEntries) - a pick flagged
     // for both reasons at once must land in exactly one category, or the
     // toast total would double-count it.
-    const { totalLinePendingIdx } = partitionReviewEntries(
-      validEntries.map((e) => ({
-        idx: e.idx,
-        hasDuplicateFlag: Boolean(duplicateFlags[e.idx]),
-        duplicateChoice: duplicateChoices[e.idx],
-        hasTotalLineFlag: Boolean(totalLineFlags[e.idx]),
-        totalLineChoice: totalLineChoices[e.idx],
-      }))
-    );
+    const { totalLinePendingIdx } = partitionReviewEntries(reviewStates);
     const totalLinePendingIdxSet = new Set(totalLinePendingIdx);
     const skippedTotalLinePending = validEntries
       .filter((e) => totalLinePendingIdxSet.has(e.idx))
@@ -522,6 +569,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     const capError = importRowCapError(includedEntries.length);
     if (capError) {
       setImportError(capError);
+      setOutcomeTrigger((v) => v + 1);
       return;
     }
     setImporting(true);
@@ -558,6 +606,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     if (!res.success) {
       setImporting(false);
       setImportError(res.error);
+      setOutcomeTrigger((v) => v + 1);
       return;
     }
     const parlayRes =
@@ -619,6 +668,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         setUnresolvedReasons({});
         setText("");
       }
+      setOutcomeTrigger((v) => v + 1);
     }
   }
 
@@ -647,17 +697,19 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     }
   }
 
-  // An ambiguous name is asked once per paste (resolveAmbiguousGroup answers
-  // every pick sharing the key) - the question sits on the first affected row
-  // in panel order, the rest point back up to it.
+  // Every question is asked in the "Needs your answer" panel above the Import
+  // button, and only there - a row in the list just points down to it. An
+  // ambiguous name is one question per paste (resolveAmbiguousGroup answers
+  // every pick sharing the key); a duplicate / missing total is one per pick.
   const ambiguousGroupByKey = new Map(ambiguousGroups.map((g) => [g.key, g]));
-  const promptRowForKey = new Map<string, number>();
-  for (const group of capperGroups) {
-    for (const e of group.entries) {
-      const key = e.p.ambiguous ? e.p.ambiguousKey : undefined;
-      if (key && !promptRowForKey.has(key)) promptRowForKey.set(key, e.idx);
-    }
-  }
+  const duplicateEntries = validEntries.filter((e) => duplicateFlags[e.idx]);
+  const totalLineEntries = validEntries.filter((e) => totalLineFlags[e.idx]);
+  const pendingDuplicates = duplicateEntries.filter((e) => duplicateChoices[e.idx] === undefined);
+  const pendingTotalLines = totalLineEntries.filter((e) => totalLineChoices[e.idx] === undefined);
+  const answeredDuplicates = duplicateEntries.filter((e) => duplicateChoices[e.idx] !== undefined);
+  const answeredTotalLines = totalLineEntries.filter((e) => totalLineChoices[e.idx] !== undefined);
+  const questionCount = ambiguousGroups.length + pendingDuplicates.length + pendingTotalLines.length;
+  const answeredCount = answeredDuplicates.length + answeredTotalLines.length;
 
   function needsReview(e: Entry): boolean {
     if (e.p.ambiguous) return true;
@@ -668,6 +720,24 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const readyCount = includedPicks.length + parlays.length;
   const reviewCount = allEntries.filter(needsReview).length;
   const canImport = !(includedPicks.length === 0 && skippedDuplicateEntries.length === 0 && parlays.length === 0);
+  const skipCounts = pendingSkipCounts(reviewStates, ambiguousEntries.length);
+
+  function setAllPendingDuplicates(choice: "import" | "skip") {
+    setDuplicateChoices((prev) => {
+      const next = { ...prev };
+      for (const e of pendingDuplicates) next[e.idx] = choice;
+      return next;
+    });
+  }
+
+  function ambiguousReason(group: (typeof ambiguousGroups)[number]): string {
+    if (group.options.length === 1) {
+      return "Line plausibility narrowed this to " + group.options[0].label + ", but another signal disagreed - confirm it.";
+    }
+    return isPlayerAmbiguityKey(group.key)
+      ? "More than one player has this name - which one?"
+      : "Ambiguous team - could mean " + group.options.map((o) => o.label).join(" or ") + ".";
+  }
 
   function handleClear() {
     setText("");
@@ -736,147 +806,50 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
           </div>
         </div>
 
-        {ambiguousKey && ambiguousGroup && promptRowForKey.get(ambiguousKey) === idx && (
-          <div className="mt-2 text-xs text-amber-900 dark:text-amber-200">
-            <div>
-              {ambiguousGroup.options.length === 1
-                ? "Line plausibility narrowed this to " +
-                  ambiguousGroup.options[0].label +
-                  ", but another signal disagreed - confirm below."
-                : isPlayerAmbiguityKey(ambiguousKey)
-                  ? "More than one player has this name - which one?"
-                  : "Ambiguous team - could mean " + ambiguousGroup.options.map((o) => o.label).join(" or ") + "."}
-            </div>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {ambiguousGroup.options.map((opt) => (
-                <button
-                  key={opt.label}
-                  type="button"
-                  onClick={() => resolveAmbiguousGroup(ambiguousKey, opt)}
-                  className={promptButtonClass}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <div className="mt-1.5 text-amber-800 dark:text-amber-300">
-              {ambiguousGroup.count > 1
-                ? isPlayerAmbiguityKey(ambiguousKey)
-                  ? "Answering once resolves all " + ambiguousGroup.count + " picks with this name in this paste."
-                  : "Answering once resolves all " + ambiguousGroup.count + " " + ambiguousKey + " picks in this paste."
-                : isPlayerAmbiguityKey(ambiguousKey)
-                  ? "Or edit the text to add the first name, then drop again."
-                  : "Or edit the text to specify the city, then drop again."}{" "}
-              Left unanswered, it won&apos;t be imported.
-            </div>
-          </div>
-        )}
-        {ambiguousKey && promptRowForKey.get(ambiguousKey) !== idx && (
-          <div className="mt-1.5 text-xs text-amber-900 dark:text-amber-200">
-            Waiting on {ambiguousKeyLabel(ambiguousKey)} - answer above.
+        {ambiguousKey && ambiguousGroup && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 text-xs text-amber-900 dark:text-amber-200">
+            <span>{ambiguousReason(ambiguousGroup)}</span>
+            <button type="button" onClick={() => jumpToQuestion(ambiguousQuestionId(ambiguousKey))} className={promptLinkClass}>
+              Answer below ↓
+            </button>
           </div>
         )}
 
         {dupFlag && (
-          <div className="mt-2 text-xs text-amber-900 dark:text-amber-200">
-            <div>Possible duplicate: {dupFlag.message}</div>
-            {dupChoice === undefined && (
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "skip" }))}
-                  className={promptButtonClass}
-                >
-                  Skip this pick
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "import" }))}
-                  className={promptButtonClass}
-                >
-                  Import anyway
-                </button>
-                <span className="text-amber-800 dark:text-amber-300">Left unanswered, it&apos;s skipped.</span>
-              </div>
-            )}
-            {dupChoice === "skip" && (
-              <div className="flex flex-wrap items-center gap-x-2">
-                <span className="font-medium">Skipped - won&apos;t be imported.</span>
-                <button
-                  type="button"
-                  onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "import" }))}
-                  className={promptLinkClass}
-                >
-                  Import anyway
-                </button>
-              </div>
-            )}
-            {dupChoice === "import" && (
-              <div className="flex flex-wrap items-center gap-x-2">
-                <span className="font-medium">Will import despite the duplicate.</span>
-                <button
-                  type="button"
-                  onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "skip" }))}
-                  className={promptLinkClass}
-                >
-                  Skip instead
-                </button>
-              </div>
-            )}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 text-xs text-amber-900 dark:text-amber-200">
+            <span>
+              Possible duplicate: {dupFlag.message}
+              {dupChoice === "skip" && <span className="font-medium"> Skipped - won&apos;t be imported.</span>}
+              {dupChoice === "import" && <span className="font-medium"> Will import despite the duplicate.</span>}
+            </span>
+            <button
+              type="button"
+              onClick={() => jumpToQuestion(duplicateQuestionId(idx), dupChoice !== undefined)}
+              className={promptLinkClass}
+            >
+              {dupChoice === undefined ? "Answer below ↓" : "Change below ↓"}
+            </button>
           </div>
         )}
 
         {totalFlag && (
-          <div className="mt-2 text-xs text-amber-900 dark:text-amber-200">
-            <div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 text-xs text-amber-900 dark:text-amber-200">
+            <span>
               {totalFlag.reason === "missing"
                 ? "No number found in this pick's text."
-                : "Couldn't read a valid number in this pick's text."}{" "}
-              Today&apos;s market total for this game is <span className="font-semibold">{totalFlag.inferredLine}</span>.
-            </div>
-            {totalChoice === undefined && (
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "confirm" }))}
-                  className={promptButtonClass}
-                >
-                  Use {totalFlag.inferredLine}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "reject" }))}
-                  className={promptButtonClass}
-                >
-                  Skip this pick
-                </button>
-                <span className="text-amber-800 dark:text-amber-300">Left unanswered, it&apos;s skipped.</span>
-              </div>
-            )}
-            {totalChoice === "confirm" && (
-              <div className="flex flex-wrap items-center gap-x-2">
-                <span className="font-medium">Will import with {totalFlag.inferredLine} filled in.</span>
-                <button
-                  type="button"
-                  onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "reject" }))}
-                  className={promptLinkClass}
-                >
-                  Skip instead
-                </button>
-              </div>
-            )}
-            {totalChoice === "reject" && (
-              <div className="flex flex-wrap items-center gap-x-2">
-                <span className="font-medium">Skipped - won&apos;t be imported.</span>
-                <button
-                  type="button"
-                  onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "confirm" }))}
-                  className={promptLinkClass}
-                >
-                  Use {totalFlag.inferredLine} instead
-                </button>
-              </div>
-            )}
+                : "Couldn't read a valid number in this pick's text."}
+              {totalChoice === "confirm" && (
+                <span className="font-medium"> Will import with {totalFlag.inferredLine} filled in.</span>
+              )}
+              {totalChoice === "reject" && <span className="font-medium"> Skipped - won&apos;t be imported.</span>}
+            </span>
+            <button
+              type="button"
+              onClick={() => jumpToQuestion(totalLineQuestionId(idx), totalChoice !== undefined)}
+              className={promptLinkClass}
+            >
+              {totalChoice === undefined ? "Answer below ↓" : "Change below ↓"}
+            </button>
           </div>
         )}
       </li>
@@ -1024,7 +997,12 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         <div className="flex min-w-0 flex-[1_1_380px] flex-col gap-5">
           <section ref={resultsRef} aria-labelledby="match-results-title" className={cardClass + " scroll-mt-4 p-5"}>
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <h2 id="match-results-title" className="text-base font-semibold text-foreground">
+              <h2
+                id="match-results-title"
+                ref={resultsHeadingRef}
+                tabIndex={-1}
+                className="rounded text-base font-semibold text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+              >
                 Match results
               </h2>
               <p className="text-sm text-muted-foreground" aria-live="polite">
@@ -1199,31 +1177,261 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                   </details>
                 )}
 
-                <button
-                  type="button"
-                  onClick={handleImport}
-                  disabled={importing || !canImport}
-                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand-600 px-5 text-sm font-semibold text-white shadow-soft transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {importing
-                    ? "Importing..."
-                    : importButtonLabel(includedPicks.length, skippedDuplicateEntries.length) +
-                      (parlays.length > 0 ? " + " + parlays.length + " parlay" + (parlays.length === 1 ? "" : "s") : "")}
-                </button>
+                <div ref={actionAreaRef} className="scroll-mt-4 space-y-3">
+                  {(questionCount > 0 || answeredCount > 0) && (
+                    <section
+                      aria-labelledby="needs-answer-title"
+                      className="rounded-lg border border-amber-400 bg-amber-50/60 p-3 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-500/5 dark:text-amber-200"
+                    >
+                      <h3 id="needs-answer-title" className="text-sm font-semibold">
+                        {questionCount > 0 ? "Needs your answer (" + questionCount + ")" : "All questions answered"}
+                      </h3>
+
+                      {ambiguousGroups.length > 0 && (
+                        <div className="mt-3">
+                          <h4 className={questionGroupTitleClass}>Ambiguous team or player ({ambiguousGroups.length})</h4>
+                          <ul className="mt-1.5 space-y-1.5">
+                            {ambiguousGroups.map((g) => (
+                              <QuestionItem
+                                key={g.key}
+                                id={ambiguousQuestionId(g.key)}
+                                text={g.sampleRaw}
+                                meta={
+                                  capperSummary(g.cappers) +
+                                  (g.count > 1 ? " · " + g.count + " picks" : "") +
+                                  " · " +
+                                  (g.options.length === 1
+                                    ? ambiguousReason(g)
+                                    : isPlayerAmbiguityKey(g.key)
+                                      ? "More than one player has this name"
+                                      : "Ambiguous team")
+                                }
+                              >
+                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                  {g.options.map((opt) => (
+                                    <button
+                                      key={opt.label}
+                                      type="button"
+                                      onClick={() => resolveAmbiguousGroup(g.key, opt)}
+                                      className={promptButtonClass}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="mt-1 text-amber-800 dark:text-amber-300">
+                                  {g.count > 1
+                                    ? isPlayerAmbiguityKey(g.key)
+                                      ? "Answering once resolves all " + g.count + " picks with this name in this paste."
+                                      : "Answering once resolves all " + g.count + " " + g.key + " picks in this paste."
+                                    : isPlayerAmbiguityKey(g.key)
+                                      ? "Or edit the text to add the first name, then drop again."
+                                      : "Or edit the text to specify the city, then drop again."}{" "}
+                                  Left unanswered, it won&apos;t be imported.
+                                </div>
+                              </QuestionItem>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {pendingDuplicates.length > 0 && (
+                        <div className="mt-3">
+                          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                            <h4 className={questionGroupTitleClass}>Possible duplicates ({pendingDuplicates.length})</h4>
+                            {pendingDuplicates.length > 1 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                <button type="button" onClick={() => setAllPendingDuplicates("skip")} className={promptButtonClass}>
+                                  Skip all duplicates
+                                </button>
+                                <button type="button" onClick={() => setAllPendingDuplicates("import")} className={promptButtonClass}>
+                                  Import all
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          <ul className="mt-1.5 space-y-1.5">
+                            {pendingDuplicates.map(({ p, idx }) => (
+                              <QuestionItem
+                                key={idx}
+                                id={duplicateQuestionId(idx)}
+                                text={p.description}
+                                meta={resolvedCapperName(p.capperName) + " · " + p.sportName + " · " + duplicateFlags[idx].message}
+                              >
+                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "skip" }))}
+                                    className={promptButtonClass}
+                                  >
+                                    Skip
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDuplicateChoices((prev) => ({ ...prev, [idx]: "import" }))}
+                                    className={promptButtonClass}
+                                  >
+                                    Import anyway
+                                  </button>
+                                  <span className="text-amber-800 dark:text-amber-300">Left unanswered, it&apos;s skipped.</span>
+                                </div>
+                              </QuestionItem>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {pendingTotalLines.length > 0 && (
+                        <div className="mt-3">
+                          <h4 className={questionGroupTitleClass}>Missing total number ({pendingTotalLines.length})</h4>
+                          <ul className="mt-1.5 space-y-1.5">
+                            {pendingTotalLines.map(({ p, idx }) => {
+                              const flag = totalLineFlags[idx];
+                              return (
+                                <QuestionItem
+                                  key={idx}
+                                  id={totalLineQuestionId(idx)}
+                                  text={p.description}
+                                  meta={resolvedCapperName(p.capperName) + " · " + p.sportName}
+                                >
+                                  <div className="mt-1.5">
+                                    {flag.reason === "missing"
+                                      ? "No number found in this pick's text."
+                                      : "Couldn't read a valid number in this pick's text."}{" "}
+                                    Today&apos;s market total for this game is{" "}
+                                    <span className="font-semibold">{flag.inferredLine}</span>.
+                                  </div>
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "confirm" }))}
+                                      className={promptButtonClass}
+                                    >
+                                      Use {flag.inferredLine}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setTotalLineChoices((prev) => ({ ...prev, [idx]: "reject" }))}
+                                      className={promptButtonClass}
+                                    >
+                                      Skip this pick
+                                    </button>
+                                    <span className="text-amber-800 dark:text-amber-300">Left unanswered, it&apos;s skipped.</span>
+                                  </div>
+                                </QuestionItem>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      )}
+
+                      {answeredCount > 0 && (
+                        <div className={questionCount > 0 ? "mt-3" : "mt-1"}>
+                          <button
+                            type="button"
+                            aria-expanded={answeredOpen}
+                            aria-controls="answered-questions"
+                            onClick={() => setAnsweredOpen((open) => !open)}
+                            className={promptLinkClass}
+                          >
+                            {answeredOpen ? "Hide" : "Show"} answered ({answeredCount})
+                          </button>
+                          {answeredOpen && (
+                            <ul id="answered-questions" className="space-y-1.5">
+                              {answeredDuplicates.map(({ p, idx }) => {
+                                const willImport = duplicateChoices[idx] === "import";
+                                return (
+                                  <QuestionItem
+                                    key={"dup-" + idx}
+                                    id={duplicateQuestionId(idx)}
+                                    text={p.description}
+                                    meta={resolvedCapperName(p.capperName) + " · " + p.sportName}
+                                  >
+                                    <div className="flex flex-wrap items-center gap-x-2">
+                                      <span className="font-medium">
+                                        {willImport ? "Will import despite the duplicate." : "Skipped - won't be imported."}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setDuplicateChoices((prev) => ({ ...prev, [idx]: willImport ? "skip" : "import" }))
+                                        }
+                                        className={promptLinkClass}
+                                      >
+                                        {willImport ? "Skip instead" : "Import anyway"}
+                                      </button>
+                                    </div>
+                                  </QuestionItem>
+                                );
+                              })}
+                              {answeredTotalLines.map(({ p, idx }) => {
+                                const line = totalLineFlags[idx].inferredLine;
+                                const confirmed = totalLineChoices[idx] === "confirm";
+                                return (
+                                  <QuestionItem
+                                    key={"total-" + idx}
+                                    id={totalLineQuestionId(idx)}
+                                    text={p.description}
+                                    meta={resolvedCapperName(p.capperName) + " · " + p.sportName}
+                                  >
+                                    <div className="flex flex-wrap items-center gap-x-2">
+                                      <span className="font-medium">
+                                        {confirmed ? "Will import with " + line + " filled in." : "Skipped - won't be imported."}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setTotalLineChoices((prev) => ({ ...prev, [idx]: confirmed ? "reject" : "confirm" }))
+                                        }
+                                        className={promptLinkClass}
+                                      >
+                                        {confirmed ? "Skip instead" : "Use " + line + " instead"}
+                                      </button>
+                                    </div>
+                                  </QuestionItem>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </section>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleImport}
+                    disabled={importing || !canImport}
+                    className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand-600 px-5 py-2 text-center text-sm font-semibold text-white shadow-soft transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {importing
+                      ? "Importing..."
+                      : importActionLabel(
+                          importButtonLabel(includedPicks.length, 0) +
+                            (parlays.length > 0 ? " + " + parlays.length + " parlay" + (parlays.length === 1 ? "" : "s") : ""),
+                          skipCounts
+                        )}
+                  </button>
+                </div>
               </div>
             )}
 
             {result && !result.pickLimitBlocked && (
               <div className="mt-3 space-y-2">
-                <p className="rounded-lg bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
-                  Imported {result.imported} pick{result.imported === 1 ? "" : "s"}
-                  {result.parlaysImported > 0 &&
-                    " and " + result.parlaysImported + " parlay" + (result.parlaysImported === 1 ? "" : "s")}
-                  .{result.totalSkipped > 0 && " " + result.totalSkipped + " skipped."}{" "}
-                  <a href="/live" className="font-semibold underline">
+                <div className="rounded-lg bg-emerald-50 px-3 py-3 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                  <p>
+                    Imported {result.imported} pick{result.imported === 1 ? "" : "s"}
+                    {result.parlaysImported > 0 &&
+                      " and " + result.parlaysImported + " parlay" + (result.parlaysImported === 1 ? "" : "s")}
+                    .{result.totalSkipped > 0 && " " + result.totalSkipped + " skipped."}
+                  </p>
+                  <a
+                    href="/live"
+                    className="mt-2.5 inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand-600 px-6 text-sm font-semibold text-white shadow-soft transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 sm:w-auto"
+                  >
                     View on the Live tab
                   </a>
-                </p>
+                </div>
 
                 {(result.errors.length > 0 || result.parlayErrors.length > 0) && (
                   <ul role="alert" className="list-disc rounded-lg bg-red-50 py-2.5 pl-8 pr-3 text-xs text-red-800 dark:bg-red-500/10 dark:text-red-300">
@@ -1303,10 +1511,41 @@ function formatGameTime(iso: string): string {
   );
 }
 
-// "giants" -> "Giants"; a shared player surname has no readable key of its own.
-function ambiguousKeyLabel(key: string): string {
-  if (isPlayerAmbiguityKey(key)) return "this player's name";
-  return key.replace(/\b\w/g, (c) => c.toUpperCase());
+// Jumps instead of gliding for anyone who asked for reduced motion.
+function scrollToElement(el: HTMLElement | null, block: ScrollLogicalPosition) {
+  if (!el) return;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block });
+}
+
+// DOM ids of the questions in the "Needs your answer" panel - what a row's
+// "Answer below" link scrolls to.
+const ambiguousQuestionId = (key: string) => "review-q-ambiguous-" + key.replace(/[^a-z0-9]+/gi, "-");
+const duplicateQuestionId = (idx: number) => "review-q-duplicate-" + idx;
+const totalLineQuestionId = (idx: number) => "review-q-total-" + idx;
+
+const questionGroupTitleClass = "text-xs font-semibold uppercase tracking-wide";
+
+// "Vegas John" / "Vegas John + 2 more cappers".
+function capperSummary(cappers: string[]): string {
+  if (cappers.length <= 1) return cappers[0] ?? "";
+  return cappers[0] + " + " + (cappers.length - 1) + " more capper" + (cappers.length === 2 ? "" : "s");
+}
+
+// One question in the "Needs your answer" panel. Focusable so a row's
+// "Answer below" link can land on it.
+function QuestionItem({ id, text, meta, children }: { id: string; text: string; meta: string; children: ReactNode }) {
+  return (
+    <li
+      id={id}
+      tabIndex={-1}
+      className="scroll-mt-4 rounded-lg border border-amber-300 bg-card px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-amber-500/40"
+    >
+      <div className="break-words text-sm font-medium text-foreground">{text}</div>
+      <div className="mt-0.5 break-words text-xs text-muted-foreground">{meta}</div>
+      {children}
+    </li>
+  );
 }
 
 function StatusBadge({ kind }: { kind: "ready" | "review" | "skipped" }) {

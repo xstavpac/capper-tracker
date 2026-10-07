@@ -12,6 +12,8 @@ import {
   isPendingOrRejectedTotalLine,
   partitionReviewEntries,
   totalSkipped,
+  pendingSkipCounts,
+  importActionLabel,
   describeUnresolvedLines,
   unresolvedReasonBreakdown,
   type ReviewPickState,
@@ -175,6 +177,53 @@ console.log("\n########## describeUnresolvedLines / unresolvedReasonBreakdown ##
     totalSkipped({ unresolvedLines: lines, ambiguousUnanswered: [], totalLinePending: [], duplicates: [], serverSkipped: 0 }),
     5
   );
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## pendingSkipCounts / importActionLabel: the Import button's own count ##########");
+{
+  const entries: ReviewPickState[] = [
+    entry({ idx: 0 }), // imports
+    entry({ idx: 1, hasDuplicateFlag: true }), // duplicate, unanswered
+    entry({ idx: 2, hasDuplicateFlag: true, duplicateChoice: "skip" }), // duplicate, user chose Skip
+    entry({ idx: 3, hasDuplicateFlag: true, duplicateChoice: "import" }), // imports
+    entry({ idx: 4, hasTotalLineFlag: true }), // total line, unanswered
+    entry({ idx: 5, hasTotalLineFlag: true, totalLineChoice: "reject" }), // total line, user chose Skip
+    entry({ idx: 6, hasTotalLineFlag: true, totalLineChoice: "confirm" }), // imports
+    entry({ idx: 7, hasDuplicateFlag: true, hasTotalLineFlag: true }), // both unanswered - counted once
+    entry({ idx: 8, hasDuplicateFlag: true, duplicateChoice: "import", hasTotalLineFlag: true }), // total line still open
+  ];
+  const counts = pendingSkipCounts(entries, 2);
+  check("unanswered = 2 ambiguous + 4 open questions; decided = 2 explicit skips", counts, { unanswered: 6, decided: 2 });
+
+  // Same numbers the post-import summary reports for these categories.
+  const { includedIdx, duplicateSkipIdx, totalLinePendingIdx } = partitionReviewEntries(entries);
+  check("included is everything else", includedIdx, [0, 3, 6]);
+  check(
+    "unanswered + decided equals totalSkipped for the same paste",
+    counts.unanswered + counts.decided,
+    totalSkipped({
+      unresolvedLines: [],
+      ambiguousUnanswered: ["a", "b"],
+      totalLinePending: totalLinePendingIdx.map(String),
+      duplicates: duplicateSkipIdx.map(String),
+      serverSkipped: 0,
+    })
+  );
+  check("nothing flagged, nothing ambiguous", pendingSkipCounts([entry({ idx: 0 })], 0), { unanswered: 0, decided: 0 });
+
+  check("label: nothing skipped", importActionLabel("Import 142 picks", { unanswered: 0, decided: 0 }), "Import 142 picks");
+  check(
+    "label: unanswered",
+    importActionLabel("Import 139 picks", { unanswered: 3, decided: 0 }),
+    "Import 139 picks · 3 unanswered will be skipped"
+  );
+  check(
+    "label: unanswered and decided",
+    importActionLabel("Import 135 picks", { unanswered: 3, decided: 4 }),
+    "Import 135 picks · 3 unanswered will be skipped · 4 skipped"
+  );
+  check("label: decided only", importActionLabel("Import 0 picks", { unanswered: 0, decided: 12 }), "Import 0 picks · 12 skipped");
 }
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

@@ -69,6 +69,41 @@ export function partitionReviewEntries(entries: ReviewPickState[]): {
   return { includedIdx, duplicateSkipIdx, totalLinePendingIdx };
 }
 
+// Pre-import view of the same partition, for the Import button: of the picks
+// that won't be submitted, how many are still waiting on an answer
+// ("unanswered" - a question the user hasn't touched) versus already decided
+// by the user (an explicit Skip / rejected line). `ambiguousUnanswered` is
+// the count of picks still behind a "which one?" question - never in
+// `entries`, same as in totalSkipped below. unanswered + decided is exactly
+// what the post-import summary will report for these categories.
+export function pendingSkipCounts(
+  entries: ReviewPickState[],
+  ambiguousUnanswered: number
+): { unanswered: number; decided: number } {
+  const { duplicateSkipIdx, totalLinePendingIdx } = partitionReviewEntries(entries);
+  const skipped = new Set([...duplicateSkipIdx, ...totalLinePendingIdx]);
+  let unanswered = ambiguousUnanswered;
+  let decided = 0;
+  for (const e of entries) {
+    if (!skipped.has(e.idx)) continue;
+    const open =
+      (e.hasDuplicateFlag && e.duplicateChoice === undefined) || (e.hasTotalLineFlag && e.totalLineChoice === undefined);
+    if (open) unanswered += 1;
+    else decided += 1;
+  }
+  return { unanswered, decided };
+}
+
+// Import button copy: what will import, then what won't and why, so neither
+// the unanswered default nor an explicit skip is silent at the point of
+// clicking. `importing` is the already-built "Import N picks (+ M parlays)".
+export function importActionLabel(importing: string, counts: { unanswered: number; decided: number }): string {
+  const parts = [importing];
+  if (counts.unanswered > 0) parts.push(counts.unanswered + " unanswered will be skipped");
+  if (counts.decided > 0) parts.push(counts.decided + " skipped");
+  return parts.join(" · ");
+}
+
 // Every category of "this pick is not going to be imported," captured at the
 // moment the user clicks Import - each array already holds one human-
 // readable label per skipped pick, the same labels the itemized breakdown

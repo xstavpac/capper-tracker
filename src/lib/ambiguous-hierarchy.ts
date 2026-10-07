@@ -58,7 +58,13 @@ import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
 //                    inconclusive) evidence steps 2-4 already gathered for
 //                    this same key/pick before trusting it alone - see
 //                    "cross-check" below. A narrowed-but-still-2+ list is
-//                    never auto-resolved; it's surfaced with the implausible
+//                    never resolved on the line alone: the schedule question
+//                    is asked again of just the survivors ("Giants over 8.5"
+//                    drops NFL; of MLB and KBO only the MLB Giants play
+//                    today), and it resolves only if exactly one of them has
+//                    a game today, none of the others has one later on the
+//                    posted schedule, and season / pick context don't
+//                    disagree. Otherwise it's surfaced with the implausible
 //                    option(s) already dropped.
 //   6. still ambiguous - surface for a manual choice
 //
@@ -530,7 +536,45 @@ export async function runAmbiguousHierarchy(
   // `decided.has(key)` because step 4's pick_context decisions are no longer
   // key-level (they're `${key}::${capperName}`-scoped), so a pick can be
   // resolved by step 4 without its bare key ever landing in `decided`.
-  const plausibilityLog = new Map<string, { key: string; sport: string; count: number; relationship: SignalRelationship }>();
+  //
+  // Pre-pass: a line that drops some candidates but leaves 2+ ("Giants over
+  // 8.5" drops NFL, leaving MLB and KBO) gets the schedule question asked
+  // again of the survivors only - step 2 called it inconclusive because the
+  // dropped league was playing too. A lone survivor with a game today is
+  // tentative until the same wide tiebreaker step 2 uses clears the other
+  // survivors, batched here into one round-trip.
+  const playingSurvivorByPickIdx = new Map<number, AmbiguousOption>();
+  const survivorRunnerUpQueries: ScheduleCheckQuery[] = [];
+  for (const { p, idx } of ambiguousEntries) {
+    const key = p.ambiguousKey!;
+    if (!picks[idx].ambiguous || isPlayerAmbiguityKey(key) || scheduleCheckFailed) continue;
+    const options = optionsFor(key);
+    const plausible = filterPlausibleCandidates(options, p.ambiguousBetType, p.ambiguousLine, p.ambiguousPartialGame);
+    if (plausible.length < 2 || plausible.length === options.length) continue;
+    const playing = plausible.filter((o) => scheduleResults[o.nickname + "|" + o.sport]);
+    if (playing.length !== 1) continue;
+    playingSurvivorByPickIdx.set(idx, playing[0]);
+    for (const o of plausible) {
+      if (o !== playing[0]) survivorRunnerUpQueries.push({ nickname: o.nickname, sport: o.sport });
+    }
+  }
+  let survivorWideResults: Record<string, boolean> = {};
+  if (survivorRunnerUpQueries.length > 0) {
+    try {
+      survivorWideResults = await deps.runWideScheduleCheck(survivorRunnerUpQueries);
+    } catch (err) {
+      // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+      console.log(
+        "[catalog-disambiguation] wide schedule tiebreaker check failed, trusting the near-term match:",
+        err instanceof Error ? err.message : err
+      );
+    }
+  }
+
+  const plausibilityLog = new Map<
+    string,
+    { key: string; sport: string; count: number; relationship: SignalRelationship; viaSchedule: boolean }
+  >();
   for (const { p, idx } of ambiguousEntries) {
     const key = p.ambiguousKey!;
     if (!picks[idx].ambiguous) continue; // already resolved above
@@ -538,6 +582,15 @@ export async function runAmbiguousHierarchy(
 
     const options = optionsFor(key);
     const plausible = filterPlausibleCandidates(options, p.ambiguousBetType, p.ambiguousLine, p.ambiguousPartialGame);
+    const seasonAndContext = (winner: AmbiguousOption): SignalRelationship[] => {
+      const contextSignal = contextSignalByPickIdx.get(idx);
+      return [
+        relationshipToWinner(seasonSignalByKey.get(key), options, winner),
+        contextSignal
+          ? contextRelationshipToWinner(contextSignal.matched, contextSignal.consideredSports, winner.sport)
+          : "NO_SIGNAL",
+      ];
+    };
 
     if (plausible.length === 0) {
       // The line fits none of the candidates left - nothing here is
@@ -553,8 +606,21 @@ export async function runAmbiguousHierarchy(
     }
 
     if (plausible.length >= 2) {
-      // Narrowed, but not down to one - never auto-resolve; just drop the
-      // implausible option(s) from what gets shown.
+      // Narrowed, but not down to one. The line alone never picks between
+      // the survivors; it resolves only when exactly one of them has a game
+      // today (see the pre-pass above), no other survivor has a real game
+      // just outside the window, and season / pick context don't disagree.
+      // Otherwise just drop the implausible option(s) from what gets shown.
+      const playing = playingSurvivorByPickIdx.get(idx);
+      const runnerUpHasRealGame = plausible.some((o) => o !== playing && survivorWideResults[o.nickname + "|" + o.sport]);
+      if (playing && !runnerUpHasRealGame && !seasonAndContext(playing).includes("CONFLICTS")) {
+        picks[idx] = resolveAmbiguousPick(p, playing);
+        const logKey = key + "::" + playing.sport + "::schedule";
+        const existing = plausibilityLog.get(logKey);
+        if (existing) existing.count += 1;
+        else plausibilityLog.set(logKey, { key, sport: playing.sport, count: 1, relationship: "AGREES", viaSchedule: true });
+        continue;
+      }
       picks[idx] = { ...p, ambiguous: plausible };
       continue;
     }
@@ -562,14 +628,21 @@ export async function runAmbiguousHierarchy(
     // Narrowed to exactly one - cross-check against whatever partial
     // evidence steps 2-4 already gathered for this key/pick before trusting
     // it alone.
+    //
+    // The schedule only counts against the winner when it points at a
+    // candidate the line still allows. Here the line allows nobody else, so
+    // a schedule that names only excluded leagues ("Jets over 44.5" on a
+    // night only the NHL Jets play; "Indiana -44" with only the Fever on the
+    // board) says nothing about this pick: the schedule can agree with the
+    // winner or be silent, never conflict. A real schedule disagreement
+    // needs 2+ plausible candidates and is handled in the branch above.
     const winner = plausible[0];
-    const scheduleState = relationshipToWinner(scheduleSignalByKey.get(key), options, winner);
-    const seasonState = relationshipToWinner(seasonSignalByKey.get(key), options, winner);
-    const contextSignal = contextSignalByPickIdx.get(idx);
-    const contextState = contextSignal
-      ? contextRelationshipToWinner(contextSignal.matched, contextSignal.consideredSports, winner.sport)
-      : "NO_SIGNAL";
-    const relationship = overallRelationship([scheduleState, seasonState, contextState]);
+    const scheduleSurvivors = scheduleSignalByKey.get(key);
+    const scheduleState: SignalRelationship =
+      scheduleSurvivors && scheduleSurvivors.includes(winner)
+        ? relationshipToWinner(scheduleSurvivors, options, winner)
+        : "NO_SIGNAL";
+    const relationship = overallRelationship([scheduleState, ...seasonAndContext(winner)]);
 
     if (relationship === "CONFLICTS") {
       // Another signal actively disagrees - don't guess between them, show
@@ -582,7 +655,7 @@ export async function runAmbiguousHierarchy(
     const logKey = key + "::" + winner.sport;
     const existing = plausibilityLog.get(logKey);
     if (existing) existing.count += 1;
-    else plausibilityLog.set(logKey, { key, sport: winner.sport, count: 1, relationship });
+    else plausibilityLog.set(logKey, { key, sport: winner.sport, count: 1, relationship, viaSchedule: false });
   }
 
   // One log line per key (not per pick - a Cardinals decision that applied
@@ -615,7 +688,7 @@ export async function runAmbiguousHierarchy(
       pickCount: count,
     });
   }
-  for (const { key, sport, count, relationship } of plausibilityLog.values()) {
+  for (const { key, sport, count, relationship, viaSchedule } of plausibilityLog.values()) {
     const relationshipReason =
       relationship === "AGREES"
         ? "another hierarchy signal independently agreed"
@@ -624,7 +697,9 @@ export async function runAmbiguousHierarchy(
       ambiguousName: key,
       resolvedSport: sport,
       method: "plausibility",
-      reason: sport + " is the only candidate whose line is realistic for that league (" + relationshipReason + ")",
+      reason: viaSchedule
+        ? sport + " is the only candidate with a game today among those whose line is realistic"
+        : sport + " is the only candidate whose line is realistic for that league (" + relationshipReason + ")",
       pickCount: count,
     });
   }
