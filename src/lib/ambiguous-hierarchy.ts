@@ -628,8 +628,20 @@ export async function runAmbiguousHierarchy(
     // Narrowed to exactly one - cross-check against whatever partial
     // evidence steps 2-4 already gathered for this key/pick before trusting
     // it alone.
+    //
+    // The schedule only counts against the winner when it points at a
+    // candidate the line still allows. Here the line allows nobody else, so
+    // a schedule that names only excluded leagues ("Jets over 44.5" on a
+    // night only the NHL Jets play; "Indiana -44" with only the Fever on the
+    // board) says nothing about this pick: the schedule can agree with the
+    // winner or be silent, never conflict. A real schedule disagreement
+    // needs 2+ plausible candidates and is handled in the branch above.
     const winner = plausible[0];
-    const scheduleState = relationshipToWinner(scheduleSignalByKey.get(key), options, winner);
+    const scheduleSurvivors = scheduleSignalByKey.get(key);
+    const scheduleState: SignalRelationship =
+      scheduleSurvivors && scheduleSurvivors.includes(winner)
+        ? relationshipToWinner(scheduleSurvivors, options, winner)
+        : "NO_SIGNAL";
     const relationship = overallRelationship([scheduleState, ...seasonAndContext(winner)]);
 
     if (relationship === "CONFLICTS") {

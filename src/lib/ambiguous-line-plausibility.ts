@@ -82,12 +82,13 @@ const TOTAL_LINE_BOUND: Partial<Record<string, { min: number; max: number }>> = 
 };
 
 // Full-game TEAM total floor, for the leagues where one is safe to state. An
-// NFL team total is roughly 10-35; alternates reach lower, but nothing is
-// posted near a hockey team total (2.5-3.5). Leagues absent here have no
-// team-total floor - only the game maximum above applies to them.
+// NFL team total is roughly 13-35 and effectively never posted below 10,
+// well clear of a hockey team total (2.5-3.5, alternates to 6.5). Leagues
+// absent here have no team-total floor - only the game maximum above
+// applies to them.
 // DOMAIN ESTIMATE, same caveat as the tables above.
 const TEAM_TOTAL_MIN: Partial<Record<string, number>> = {
-  NFL: 6,
+  NFL: 10,
 };
 
 // `line` is the pick's own already-parsed numeric spread/total (ParsedPick's

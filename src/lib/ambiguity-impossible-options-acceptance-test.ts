@@ -152,8 +152,9 @@ async function main() {
     check("NFL total 23.5 is not", filterPlausibleCandidates(nfl, "TOTAL", 23.5).length, 0);
     check("NFL total 75 is plausible", filterPlausibleCandidates(nfl, "TOTAL", 75).length, 1);
     check("NFL total 75.5 is not", filterPlausibleCandidates(nfl, "TOTAL", 75.5).length, 0);
-    check("NFL team total 6 is plausible", filterPlausibleCandidates(nfl, "TEAM_TOTAL", 6).length, 1);
-    check("NFL team total 5.5 is not", filterPlausibleCandidates(nfl, "TEAM_TOTAL", 5.5).length, 0);
+    check("NFL team total 10 is plausible", filterPlausibleCandidates(nfl, "TEAM_TOTAL", 10).length, 1);
+    check("NFL team total 9.5 is not", filterPlausibleCandidates(nfl, "TEAM_TOTAL", 9.5).length, 0);
+    check("NFL partial-game team total 3.5 is plausible (no floor on a quarter/half)", filterPlausibleCandidates(nfl, "TEAM_TOTAL", 3.5, true).length, 1);
     check("NFL partial-game total 3 is plausible (no floor on a quarter/half)", filterPlausibleCandidates(nfl, "TOTAL", 3, true).length, 1);
   }
 
@@ -398,11 +399,31 @@ async function main() {
       method: "pick_context",
     });
 
-    // Another signal disagreeing still prompts: only the NFL Jets play today,
-    // and the line says NHL.
-    check("Jets over 6.5, only the NFL Jets play today -> conflict, prompt", await outcome("Jets over 6.5", playing("new york jets|NFL")), {
-      prompt: ["Winnipeg Jets (NHL)"],
+    // A schedule that names only a league the line has excluded is not a
+    // conflict: the pick resolves on its line on any day of the week.
+    check("Jets over 6.5 on an NFL-only day -> NHL, no prompt", await outcome("Jets over 6.5", playing("new york jets|NFL")), {
+      resolved: "NHL winnipeg jets",
+      method: "plausibility",
     });
+    check("Jets over 44.5 on an NHL-only day -> NFL, no prompt", await outcome("Jets over 44.5", playing("winnipeg jets|NHL")), {
+      resolved: "NFL new york jets",
+      method: "plausibility",
+    });
+    // ...including when the other team's game is only later in the week
+    // (the schedule tiebreaker falls through, as it does on a real Wednesday).
+    check(
+      "Jets over 44.5, NHL Jets tonight and NFL Jets on Sunday -> NFL, no prompt",
+      await outcome("Jets over 44.5", {
+        ...playing("winnipeg jets|NHL"),
+        runWideScheduleCheck: fakeSchedule(["winnipeg jets|NHL", "new york jets|NFL"]),
+      }),
+      { resolved: "NFL new york jets", method: "plausibility" }
+    );
+    check(
+      "Indiana -44, only the Fever on the board -> NCAAF, no prompt",
+      await outcome("Indiana -44", playing("indiana fever|WNBA")),
+      { resolved: "NCAAF indiana hoosiers", method: "plausibility" }
+    );
 
     // Giants: the line drops NFL but leaves MLB and KBO. The schedule then
     // settles it among those two - and only when it can.
@@ -419,6 +440,17 @@ async function main() {
       await outcome("Giants over 8.5", { ...giantsDay, runWideScheduleCheck: fakeSchedule(["lotte giants|KBO"]) }),
       { prompt: ["San Francisco Giants (MLB)", "Lotte Giants (KBO)"] }
     );
+    // A REAL conflict still prompts: the line leaves two plausible leagues
+    // (MLB, KBO), the schedule points at one of them (only the Lotte Giants
+    // play today) and the other has a game in the near window too.
+    check(
+      "Giants over 8.5, only KBO plays today and MLB plays later this week -> real conflict, prompt",
+      await outcome("Giants over 8.5", {
+        ...playing("lotte giants|KBO"),
+        runWideScheduleCheck: fakeSchedule(["lotte giants|KBO", "san francisco giants|MLB"]),
+      }),
+      { prompt: ["San Francisco Giants (MLB)", "Lotte Giants (KBO)"] }
+    );
     check("Giants over 44.5 -> NFL, no prompt", await outcome("Giants over 44.5", giantsDay), {
       resolved: "NFL new york giants",
       method: "plausibility",
@@ -429,6 +461,18 @@ async function main() {
       resolved: "NHL winnipeg jets",
       method: "plausibility",
     });
+    check("Jets team total over 6.5 -> NFL excluded (floor 10), NHL", await outcome("Jets team total over 6.5", bothJets), {
+      resolved: "NHL winnipeg jets",
+      method: "plausibility",
+    });
+    check(
+      "a 6.5 team total excludes NFL; a 10.5 one excludes NHL",
+      {
+        low: filterPlausibleCandidates(jets.ambiguous!, "TEAM_TOTAL", 6.5).map((o) => o.sport),
+        high: filterPlausibleCandidates(jets.ambiguous!, "TEAM_TOTAL", 10.5).map((o) => o.sport),
+      },
+      { low: ["NHL"], high: ["NFL"] }
+    );
     check("Jets TT over 20.5 -> NFL", await outcome("Jets TT over 20.5", bothJets), {
       resolved: "NFL new york jets",
       method: "plausibility",
