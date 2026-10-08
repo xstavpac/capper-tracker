@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { PickOddsSource } from "@/lib/odds-source";
 import { Prisma, type BetType, type Period, type PickedSide, type PropMarket } from "@prisma/client";
 import {
   FREE_PICK_LIMIT,
@@ -116,6 +117,9 @@ export type PickInsertData = {
   // resolveGameAndOdds' resolvedGameNumber). Omitted (column default null)
   // for every other caller and every non-doubleheader pick.
   gameNumber?: number | null;
+  // Where `odds` came from (lib/odds-source.ts). Set by bulkImportPicksAction
+  // and createPick; a caller that omits it leaves the column null (unknown).
+  oddsSource?: PickOddsSource | null;
 };
 
 // Explicit interactive-transaction bounds for the entitlement + insert transaction

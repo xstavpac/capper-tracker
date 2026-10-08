@@ -75,6 +75,15 @@ enum PickedSide {
   AWAY
 }
 
+// Where a pick's stored odds came from (see lib/odds-source.ts). The importer
+// stores -110 for a line with no price; this is what tells a real -110 from
+// that placeholder.
+enum OddsSource {
+  STATED // the capper's own price (on the imported line, or typed into the manual form)
+  MARKET // no price on the line - filled from the odds feed at import
+  DEFAULTED // no price on the line and none from the feed - the -110 placeholder
+}
+
 // The specific stat a PLAYER_PROP pick is about. NFL-specific for now
 // (deliberately not designed to also cover MLB props yet - that's a
 // separate, unscoped decision for whenever MLB prop grading is built). TD
@@ -302,6 +311,9 @@ model Pick {
   betType    BetType
   betDetail  String? // e.g. "Lakers -4.5" or free-text player prop
   odds       Int // American odds, e.g. -110, +150
+  oddsSource OddsSource? // where `odds` came from, set once at insert. null for every pick created before this
+    // column existed (never backfilled - the answer was not recorded) - read null as "unknown", not as any
+    // one of the three values. Nothing reads this yet.
   line       Float? // spread/total number, e.g. -4.5 or 8.5 - lets favorite/underdog be derived for Spread bets
   period     Period     @default(FULL_GAME)
   sportsbook String?
