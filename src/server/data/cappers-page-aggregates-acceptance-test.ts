@@ -728,6 +728,12 @@ async function main() {
   check("active cappers delta is week over week on the ALL tab too", o5.activeCappersDelta === 6, String(o5.activeCappersDelta));
   same("weekly tracked cappers: roster size at each week's end, by date added", o5.weekly.tracked, [0, 0, 1, 1, 1, 2, 2, 8]);
   check("tracked: last point == capper count; new this month excludes the one added 40 days ago", o5.weekly.tracked[7] === pageS5.capperCount && o5.newCappersThisMonth === 7, pageS5.capperCount + " " + o5.newCappersThisMonth);
+  // `now` (the reader's clock) can run a few ms behind the clock that stamped createdAt: the newest
+  // point is still the whole roster, never the cappers "added before now".
+  const newestS5 = await prisma.capper.aggregate({ where: { userId: S5.u, isTest: false }, _max: { createdAt: true } });
+  const pageS5behind = await getCappersPageData({ userId: S5.u, window: "ALL", min: 0, sort: "roi", fav: false, q: "", page: 1, now: new Date(newestS5._max.createdAt!.getTime() - 5) });
+  same("weekly tracked cappers: `now` 5 ms before the newest capper was added -> the last point is still the roster size", pageS5behind.overview.weekly.tracked, [0, 0, 1, 1, 1, 2, 2, 8]);
+  check("tracked: last point == capper count with `now` behind the newest createdAt", pageS5behind.overview.weekly.tracked[7] === pageS5behind.capperCount, pageS5behind.overview.weekly.tracked[7] + " " + pageS5behind.capperCount);
   same("weekly ROI: pooled over the picks graded with a game that week", o5.weekly.roi, [0, 0, 0, 0, 0, 0, 50, 0]);
   same("weekly net units: +6 and -2 a week ago (the same picks as that week's 50% ROI), +1 and -1 this week; the test account's wins nowhere", o5.weekly.net, [0, 0, 0, 0, 0, 0, 4, 0]);
   same("net units card: the all-time pooled net and record", [o5.netUnits, o5.record], [4, { wins: 8, losses: 4, pushes: 0 }]);
