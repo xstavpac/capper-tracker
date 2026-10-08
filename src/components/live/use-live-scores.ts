@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, createElement, useContext, useEffect, useState, type ReactNode } from "react";
 import type { ScoreGame } from "@/server/data/odds";
 
 // Extracted from live-scoreboard.tsx as a pure refactor (behavior unchanged)
@@ -51,4 +51,35 @@ export function useLiveScores(activeSport: string, initialScores: ScoreGame[]): 
   }, [activeSport]);
 
   return scores;
+}
+
+// One poll for the whole /live page. live/page.tsx mounts this once around the
+// category panel and the board, so the panel's slate counts and the board's
+// cards read the same scores on the same tick instead of each running its own
+// interval.
+const LiveScoresContext = createContext<ScoreGame[] | null>(null);
+
+export function LiveScoresProvider({
+  activeSport,
+  initialScores,
+  children,
+}: {
+  activeSport: string;
+  initialScores: ScoreGame[];
+  children: ReactNode;
+}) {
+  const scores = useLiveScores(activeSport, initialScores);
+  return createElement(LiveScoresContext.Provider, { value: scores }, children);
+}
+
+export function useSharedLiveScores(): ScoreGame[] {
+  const scores = useContext(LiveScoresContext);
+  if (scores === null) throw new Error("useSharedLiveScores must be used inside LiveScoresProvider");
+  return scores;
+}
+
+// For the category panel, which also renders when no board (and so no
+// provider, and no poll) is mounted: null means "no board on the page".
+export function useSharedLiveScoresIfAny(): ScoreGame[] | null {
+  return useContext(LiveScoresContext);
 }

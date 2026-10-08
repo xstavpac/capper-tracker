@@ -10,7 +10,7 @@ import { getTeamColor } from "@/lib/team-colors";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 import { TeamColorBar } from "@/components/live/team-color-bar";
 import { BoardPulsePanel } from "@/components/live/board-pulse-panel";
-import { useLiveScores } from "@/components/live/use-live-scores";
+import { useSharedLiveScores } from "@/components/live/use-live-scores";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -46,7 +46,7 @@ export function LiveScoreboard({
   matchedPicksByGame: ExpanderPick[][];
   showBoardPulse: boolean;
 }) {
-  const scores = useLiveScores(activeSport, initialScores);
+  const scores = useSharedLiveScores();
 
   // Recomputed on every render (not memoized) since `scores` is client state
   // that changes on each poll tick - a game that goes live or finishes must

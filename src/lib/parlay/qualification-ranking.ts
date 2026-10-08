@@ -16,6 +16,7 @@ import { classifyPair, describePick, type ParlayCandidate, type PickInput, type 
 import { pickCategory, type CategoryBreakdownItem } from "@/server/data/stats";
 import { categoryRecordKey } from "@/server/data/picks";
 import type { BetType, Period } from "@prisma/client";
+import { wilsonLowerBound } from "@/lib/wilson-lower-bound";
 
 // One flat leg shape, reused for the primary, every candidate, and every
 // same-game pick fed to the headcount check - mirrors build-my-picks.ts's
@@ -70,16 +71,8 @@ function toPickCategoryInput(leg: ParlayLeg) {
 // Only orders candidates that already passed the Section 3 gate below - it
 // never decides eligibility and never substitutes for the gate.
 // ---------------------------------------------------------------------------
-export function wilsonLowerBound(wins: number, losses: number, z = 1.96): number {
-  const decided = wins + losses;
-  if (decided <= 0) return 0;
-  const p = wins / decided;
-  const n = decided;
-  const z2 = z * z;
-  const numerator = p + z2 / (2 * n) - z * Math.sqrt((p * (1 - p)) / n + z2 / (4 * n * n));
-  const denominator = 1 + z2 / n;
-  return numerator / denominator;
-}
+// Lives in lib/wilson-lower-bound.ts (import-free, so client code can share it).
+export { wilsonLowerBound };
 
 // ---------------------------------------------------------------------------
 // Section 3: the 55% market-specific qualification gate. Exactly the same

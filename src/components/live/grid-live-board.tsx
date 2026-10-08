@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { OddsGame, ScoreGame } from "@/server/data/odds";
 import { orderBoardGames, matchScoreToGame } from "@/components/live/live-scoreboard-ordering";
 import { easternDateKey } from "@/lib/dates";
-import { useLiveScores } from "@/components/live/use-live-scores";
+import { useSharedLiveScores } from "@/components/live/use-live-scores";
 import { resolveGridLiveSelection, type GridLiveSelection } from "@/lib/grid-live-selection";
 import { buildGridLiveGamePanelData } from "@/components/live/grid-live-team-panel-data";
 import { GridLiveGameList } from "@/components/live/grid-live-game-list";
@@ -57,7 +57,7 @@ export function GridLiveBoard({
   initialSelection: GridLiveSelection;
 }) {
   const router = useRouter();
-  const scores = useLiveScores(activeSport, initialScores);
+  const scores = useSharedLiveScores();
   const [selection, setSelection] = useState(initialSelection);
 
   // Mobile stacks the panel below the game list (see this component's
