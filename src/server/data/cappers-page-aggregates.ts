@@ -119,8 +119,10 @@ export type OverviewStats = {
   newCappersThisMonth: number;
   // One value per rolling week (STAT_WEEKS of them, oldest first), independent of the time tab:
   // roster size at each week's end (the CURRENT roster by date added - deleted / merged cappers
-  // leave no history), cappers with a pick posted that week, picks posted that week, and the pooled
-  // ROI and net units of the picks graded with a game that week.
+  // leave no history; the newest point is the roster size itself, so it always equals the headline
+  // count even when `now` and a capper's createdAt come from clocks a few ms apart), cappers with a
+  // pick posted that week, picks posted that week, and the pooled ROI and net units of the picks
+  // graded with a game that week.
   weekly: { tracked: number[]; active: number[]; picks: number[]; roi: number[]; net: number[] };
   picksThisWeek: number;
   // Percent change vs the 7 days before; null when last week had no picks.
@@ -624,7 +626,7 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
         (SELECT count(*) FROM roster)::int AS "capperCount",
         (SELECT count(*) FROM roster WHERE "isFavorite")::int AS "favCount",
         (SELECT count(*) FROM roster WHERE "createdAt" >= ${ts(new Date(now.getTime() - 30 * DAY_MS))})::int AS "newMonth",
-        (SELECT jsonb_agg((SELECT count(*) FROM roster r WHERE r."createdAt" < e.t)::int ORDER BY e.k) FROM (VALUES ${weekEnds}) e(k, t)) AS wk_tracked,
+        (SELECT jsonb_agg((SELECT count(*) FROM roster r WHERE e.k = ${STAT_WEEKS - 1}::int OR r."createdAt" < e.t)::int ORDER BY e.k) FROM (VALUES ${weekEnds}) e(k, t)) AS wk_tracked,
         (SELECT cur FROM ag WHERE g = 3) AS cur,
         (SELECT jsonb_agg(jsonb_build_array(dw, n, nc)) FROM ag WHERE g = 1 AND dw IS NOT NULL) AS wk_posted,
         (SELECT jsonb_agg(jsonb_build_array(gw, uw, ul, ur)) FROM ag WHERE g = 2 AND gw IS NOT NULL) AS wk_graded,
