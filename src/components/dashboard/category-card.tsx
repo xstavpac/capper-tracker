@@ -8,6 +8,7 @@ import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
 // and up, soft red with a red border below - and colors the market name to match; without it
 // (/dashboard) the card is the neutral white stat-card surface.
 // `onToggle` makes the card a button; `active` rings the one that is open.
+// `note` (/live) is one more small line under the record; `muted` dims a card that has nothing to open.
 
 // The grid a set of tinted cards sits in (/live's panel and the capper page's market breakdown): two
 // across on a phone, up to six from 1500px.
@@ -29,6 +30,8 @@ export function CategoryCard({
   tinted,
   active,
   onToggle,
+  note,
+  muted,
 }: {
   label: string;
   wins: number;
@@ -40,6 +43,8 @@ export function CategoryCard({
   tinted?: boolean;
   active?: boolean;
   onToggle?: () => void;
+  note?: string;
+  muted?: boolean;
 }) {
   const decided = wins + losses > 0;
   const good = getRecordColor(winPct) === "green";
@@ -64,6 +69,7 @@ export function CategoryCard({
         "flex h-full flex-col rounded-2xl px-4 py-[13px] " +
         (tinted && decided ? TINT[good ? "green" : "red"] : NEUTRAL + (tinted ? " border border-[#E6E8EF] dark:border-border" : "")) +
         (active ? " ring-2 ring-brand-500 dark:ring-brand-400" : "") +
+        (muted ? " opacity-60" : "") +
         (onToggle ? " cursor-pointer select-none outline-none transition hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-brand-400 dark:hover:brightness-110" : "")
       }
     >
@@ -80,7 +86,8 @@ export function CategoryCard({
           </p>
         )}
       </div>
-      {graded !== undefined && <p className={"-mt-0.5 mb-2 text-[11px] font-medium leading-4 tabular-nums " + MUTED}>{graded} graded</p>}
+      {graded !== undefined && <p className={"-mt-0.5 text-[11px] font-medium leading-4 tabular-nums " + (note === undefined ? "mb-2 " : "") + MUTED}>{graded} graded</p>}
+      {note !== undefined && <p className="mb-2 truncate text-[11px] font-semibold leading-4 tabular-nums text-foreground">{note}</p>}
       {/* Pinned to the bottom, so the bars in a row line up when one card wraps and its neighbour does not. */}
       <div aria-hidden className={"mt-auto h-1 shrink-0 overflow-hidden rounded-md " + (tinted && decided ? "bg-[#0F1420]/[0.08] dark:bg-white/10" : "bg-[#E3E8F5] dark:bg-white/10")}>
         {decided && <div className={"h-full rounded-md " + (good ? "bg-[#22C55E]" : "bg-[#EF4444]")} style={{ width: Math.min(100, Math.max(0, winPct)) + "%" }} />}
