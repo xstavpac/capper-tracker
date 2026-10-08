@@ -12,6 +12,7 @@ import { GridLiveGameList } from "@/components/live/grid-live-game-list";
 import { GameDetailPanel } from "@/components/live/team-picks-panel";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getLiveGameProgress } from "@/lib/live-game-progress";
+import { useRegisterLiveGameJump } from "@/components/live/live-game-jump";
 
 // Grid Live's client shell: a compact game list beside a fixed
 // game-detail picks panel. Data assembly (odds, scores, picks, team-group
@@ -171,6 +172,10 @@ export function GridLiveBoard({
     router.replace("/live?sport=" + activeSport + "&view=advanced&gameId=" + gameId, { scroll: false });
     setScrollTrigger((t) => t + 1);
   }
+
+  // A row in the category panel above selects its game exactly as a click in
+  // the game list does.
+  useRegisterLiveGameJump(handleSelectGame);
 
   // Double-click only - a real navigation (router.push, not the replace()
   // above) to Feed Live's own game-card page. Deliberately not folded

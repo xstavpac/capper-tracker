@@ -1,22 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import type { CategoryBreakdownItem, LeagueRecordCard, PickCategoryKey } from "@/server/data/stats";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import { CATEGORY_GRID, CategoryCard } from "@/components/dashboard/category-card";
 import { PanelShell, TINTS } from "@/components/dashboard/panel-shell";
 import { TargetIcon } from "@/components/dashboard/cappers-icons";
 import { useSharedLiveScoresIfAny } from "@/components/live/use-live-scores";
+import { useLiveGameJump } from "@/components/live/live-game-jump";
 import { easternDateKey } from "@/lib/dates";
 import {
   LIVE_CATEGORY_REVEAL_STEP,
   buildCategoryTiles,
-  drivingRecordText,
-  formatPickOdds,
+  categoryPickRows,
   rankCategoryPicks,
   revealState,
   slateCountText,
+  slateEmptyText,
   slateListHeader,
   slatePicksByCategory,
   visibleGameIndexes,
@@ -28,9 +28,11 @@ type Records = Record<string, LeagueRecordCard | null>;
 
 // /live's "record by category" panel: the league's markets as tinted CategoryCards in one white panel.
 // Each card shows the market's all-time record and how many picks on the board right now are in it;
-// opening one lists those picks, one line each, ordered by the track record of the capper behind each
-// (lib/live-category-picks.ts). The pool is the board's own - same games, same scores, same poll - so
-// a card's count is always the length of the list it opens.
+// opening one lists those picks, one line each (rank, pick, capper), ordered by the track record of the
+// capper behind each (lib/live-category-picks.ts); a row takes the viewer to its game. A card with no
+// picks on the board looks the same and opens to a single "No ... picks today" line. The pool is the
+// board's own - same games, same scores, same poll - so a card's count is always the length of the
+// list it opens.
 export function LiveCategoryPanel({
   sportLabel,
   chipSet,
@@ -46,6 +48,7 @@ export function LiveCategoryPanel({
   picks: LiveCategoryPick[];
 }) {
   const scores = useSharedLiveScoresIfAny();
+  const jumpToGame = useLiveGameJump();
   const [activeKey, setActiveKey] = useState<PickCategoryKey | null>(null);
   const [requested, setRequested] = useState(LIVE_CATEGORY_REVEAL_STEP);
   const [records, setRecords] = useState<Records | null>(null);
@@ -62,17 +65,17 @@ export function LiveCategoryPanel({
     [chipSet, items, byCategory]
   );
 
-  // A tile whose last pick left the board (its game went final) closes itself.
-  const activeTile = tiles.find((t) => t.key === activeKey && t.slateCount > 0);
+  // An open tile whose last pick leaves the board (its game went final) stays open, on the empty line.
+  const activeTile = tiles.find((t) => t.key === activeKey);
   const activePicks = activeTile ? (byCategory.get(activeTile.key) ?? []) : [];
-  const ranked = records ? rankCategoryPicks(activePicks, sportLabel, records) : [];
+  const rows = records ? categoryPickRows(rankCategoryPicks(activePicks, sportLabel, records), games) : [];
 
-  // One request for every tile's picks, on the first open. Every later open,
+  // One request for every tile's picks, on the first open of a tile that has any. Every later open,
   // and every "Show more", is a slice of what is already here. It runs again
   // only if the open tile holds a pick the loaded records never asked about (a
   // pick imported since, arriving with a server refresh).
   const recordKey = (p: LiveCategoryPick) => p.capperId + "|" + sportLabel + "|" + p.category;
-  const needsLoad = activeTile !== undefined && !failed && (records === null || activePicks.some((p) => records[recordKey(p)] === undefined));
+  const needsLoad = activePicks.length > 0 && !failed && (records === null || activePicks.some((p) => records[recordKey(p)] === undefined));
 
   async function loadRecords() {
     setLoading(true);
@@ -109,7 +112,7 @@ export function LiveCategoryPanel({
     setFailed(false);
   }
 
-  const reveal = revealState(requested, ranked.length);
+  const reveal = revealState(requested, rows.length);
 
   return (
     <PanelShell
@@ -128,14 +131,19 @@ export function LiveCategoryPanel({
             graded={tile.wins + tile.losses + tile.pushes}
             note={slateCountText(sportLabel, tile.slateCount)}
             tinted
-            muted={tile.slateCount === 0}
             active={tile.key === activeTile?.key}
-            onToggle={tile.slateCount > 0 ? () => toggle(tile.key) : undefined}
+            onToggle={() => toggle(tile.key)}
           />
         ))}
       </div>
 
-      {activeTile && (
+      {activeTile && activePicks.length === 0 && (
+        <p className="mt-3 rounded-[14px] border border-[#E6E8EF] bg-[#FAFBFD] px-3.5 py-3 text-[13px] font-medium text-muted-foreground dark:border-border dark:bg-white/[0.03]">
+          {slateEmptyText(sportLabel, activeTile.label)}
+        </p>
+      )}
+
+      {activeTile && activePicks.length > 0 && (
         <div className="mt-3 rounded-[14px] border border-[#E6E8EF] bg-[#FAFBFD] px-3.5 py-3 dark:border-border dark:bg-white/[0.03]">
           <div className="mb-1 text-[13px] font-semibold text-[#5B6275] dark:text-muted-foreground">{slateListHeader(sportLabel, activeTile.label)}</div>
           {records === null ? (
@@ -154,24 +162,23 @@ export function LiveCategoryPanel({
           ) : (
             <>
               <ol className="divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
-                {ranked.slice(0, reveal.shown).map(({ pick, record }, i) => {
-                  const recordText = drivingRecordText(record, sportLabel, activeTile.label);
-                  return (
-                    <li key={pick.pickId} className="flex items-center gap-2 py-2 text-[13px] sm:gap-3">
-                      <span className="w-5 shrink-0 text-right font-medium tabular-nums text-muted-foreground">{i + 1}</span>
-                      <span title={pick.betDetail} className="min-w-0 flex-[1.4] truncate font-semibold text-foreground">
-                        {pick.betDetail}
+                {rows.slice(0, reveal.shown).map((row) => (
+                  <li key={row.pickId}>
+                    <button
+                      type="button"
+                      onClick={() => jumpToGame(row.gameId)}
+                      className="-mx-2 flex min-h-[44px] w-[calc(100%+1rem)] cursor-pointer items-center gap-2 rounded-[9px] px-2 text-left text-[13px] transition-colors hover:bg-[#EEF1F7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 active:bg-[#E6E9F2] dark:hover:bg-white/[0.06] dark:active:bg-white/10 sm:min-h-[36px] sm:gap-3"
+                    >
+                      <span className="w-5 shrink-0 text-right font-medium tabular-nums text-muted-foreground">{row.rank}</span>
+                      <span title={row.pick} className="min-w-0 flex-[1.4] truncate font-semibold text-foreground">
+                        {row.pick}
                       </span>
-                      <span className="shrink-0 font-semibold tabular-nums text-foreground">{formatPickOdds(pick.odds)}</span>
-                      <Link href={"/cappers/" + pick.capperId} title={pick.capperName} className="min-w-0 flex-1 truncate font-medium text-foreground hover:underline">
-                        {pick.capperName}
-                      </Link>
-                      <span title={recordText} className="min-w-0 max-w-[38%] shrink truncate text-right font-medium tabular-nums text-[#5B6275] dark:text-muted-foreground">
-                        {recordText}
+                      <span title={row.capper} className="min-w-0 flex-1 truncate font-medium text-foreground">
+                        {row.capper}
                       </span>
-                    </li>
-                  );
-                })}
+                    </button>
+                  </li>
+                ))}
               </ol>
               {reveal.more > 0 && (
                 <div className="mt-2 flex items-center gap-3">
