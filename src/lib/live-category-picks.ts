@@ -4,8 +4,9 @@
 // The unit is the PICK. One capper can appear several times, and the same pick
 // from several cappers is several rows - nothing is collapsed.
 //
-// This is a SORT ORDER, not a grade. The Wilson value below never leaves this
-// module's comparator; a row shows only the record it was ranked on.
+// This is a SORT ORDER, not a grade. Neither the Wilson value below nor the
+// record it was computed from is shown: a row is rank, pick, capper, and it
+// sends the viewer to its game.
 //
 // Pure and client-safe (type-only imports from server modules).
 import type { PickStatus } from "@prisma/client";
@@ -29,14 +30,13 @@ export type LiveCategoryPick = {
   gameIndex: number;
   category: PickCategoryKey | null;
   betDetail: string;
-  odds: number;
   capperId: string;
   capperName: string;
   status: PickStatus;
   gameTime: string;
 };
 
-export type LiveCategoryGame = { homeTeam: string; awayTeam: string; commenceTime: string };
+export type LiveCategoryGame = { id: string; homeTeam: string; awayTeam: string; commenceTime: string };
 
 // The games the board is showing right now: the same orderBoardGames call, on
 // the same scores, the Feed and Grid boards make - so a tile's count can never
@@ -64,7 +64,7 @@ export function slatePicksByCategory(
 
 export type DrivingRecord = { wins: number; losses: number; pushes: number; source: "LEAGUE" | "ALL_TIME" };
 
-// The record a pick is ranked on, and the one its row shows.
+// The record a pick is ranked on.
 export function drivingRecord(card: LeagueRecordCard | null | undefined): DrivingRecord | null {
   if (!card) return null;
   if (card.league.count >= LIVE_LEAGUE_SPLIT_MIN_SAMPLE) {
@@ -110,19 +110,18 @@ export function rankCategoryPicks(
   return rows.map(({ pick, record }) => ({ pick, record }));
 }
 
-export const NO_RECORD_TEXT = "No record";
+export type LiveCategoryRow = { pickId: string; rank: number; pick: string; capper: string; gameId: string };
 
-// "14–9 MLB Fav ML" when the league record drove the rank, "31–14 Fav ML" when
-// the all-time one did. W–L–P when there are pushes, like the cards.
-export function drivingRecordText(record: DrivingRecord | null, leagueName: string, categoryLabel: string): string {
-  if (!record) return NO_RECORD_TEXT;
-  const wl = record.wins + "–" + record.losses + (record.pushes > 0 ? "–" + record.pushes : "");
-  return wl + " " + (record.source === "LEAGUE" ? leagueName.toUpperCase() + " " : "") + categoryLabel;
-}
-
-// Same form as the game card's price: "+120" / "-112".
-export function formatPickOdds(odds: number): string {
-  return (odds > 0 ? "+" : "") + odds;
+// What a row shows - rank, pick, capper - and the game it opens. `games` is the
+// board's game list, the one `gameIndex` points into.
+export function categoryPickRows(ranked: RankedLivePick[], games: LiveCategoryGame[]): LiveCategoryRow[] {
+  return ranked.map(({ pick }, i) => ({
+    pickId: pick.pickId,
+    rank: i + 1,
+    pick: pick.betDetail,
+    capper: pick.capperName,
+    gameId: games[pick.gameIndex].id,
+  }));
 }
 
 // Football boards hold a Thursday-to-Monday week, so "today" would be wrong.
@@ -134,6 +133,11 @@ export function slateCountText(leagueName: string, count: number): string {
 
 export function slateListHeader(leagueName: string, categoryLabel: string): string {
   return (WEEKLY_SLATE_LEAGUES.has(leagueName.toUpperCase()) ? "This Week's " : "Today's ") + categoryLabel + " Picks";
+}
+
+// The one line a tile with no slate picks opens to.
+export function slateEmptyText(leagueName: string, categoryLabel: string): string {
+  return "No " + categoryLabel + " picks " + (WEEKLY_SLATE_LEAGUES.has(leagueName.toUpperCase()) ? "this week" : "today");
 }
 
 // The progressive reveal: `requested` rows are asked for (5, 10, 15, ...),

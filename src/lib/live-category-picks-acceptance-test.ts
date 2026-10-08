@@ -7,9 +7,11 @@
 //      one), otherwise none
 //   3. the order - Wilson lower bound, then decided picks, game time, pick id;
 //      no-record picks last; duplicates and repeat cappers kept as rows
-//   4. the row text and the weekly-league wording
+//   4. the row - rank, pick, capper, and the game it opens - and the
+//      weekly-league wording
 //   5. the "Show N more" / "X of Y" maths
 //   6. the tiles, incl. the 0-0 tile for a category with picks but no history
+//   7. the 0-pick tile: still a tile, counts 0, opens to one line, no button
 // Run with:
 //   npx tsx src/lib/live-category-picks-acceptance-test.ts
 //
@@ -19,15 +21,16 @@ import type { ScoreGame } from "@/server/data/odds";
 import {
   LIVE_LEAGUE_SPLIT_MIN_SAMPLE,
   buildCategoryTiles,
+  categoryPickRows,
   drivingRecord,
-  drivingRecordText,
-  formatPickOdds,
   rankCategoryPicks,
   revealState,
   slateCountText,
+  slateEmptyText,
   slateListHeader,
   slatePicksByCategory,
   visibleGameIndexes,
+  type DrivingRecord,
   type LiveCategoryPick,
 } from "./live-category-picks";
 
@@ -58,12 +61,13 @@ const pick = (over: Partial<LiveCategoryPick> & { capperId: string }): LiveCateg
   gameIndex: 0,
   category: "FAV_ML",
   betDetail: "Padres ML",
-  odds: -112,
   capperName: over.capperId,
   status: "PENDING",
   gameTime: "2026-08-29T19:00:00-04:00",
   ...over,
 });
+// The record a pick was ranked on, for the order assertions only - no row shows it.
+const rankedOn = (r: DrivingRecord | null) => (r ? r.wins + "-" + r.losses + " " + r.source : "none");
 const key = (capperId: string, category: PickCategoryKey = "FAV_ML", league = "MLB") => capperId + "|" + league + "|" + category;
 
 // ---- 1. the pool ----
@@ -71,10 +75,10 @@ const key = (capperId: string, category: PickCategoryKey = "FAV_ML", league = "M
 {
   const TODAY = "2026-08-29";
   const games = [
-    { homeTeam: "Padres", awayTeam: "Giants", commenceTime: "2026-08-29T19:00:00-04:00" }, // upcoming
-    { homeTeam: "Dodgers", awayTeam: "Rockies", commenceTime: "2026-08-29T13:00:00-04:00" }, // final
-    { homeTeam: "Mets", awayTeam: "Braves", commenceTime: "2026-08-29T16:00:00-04:00" }, // live
-    { homeTeam: "Cubs", awayTeam: "Reds", commenceTime: "2026-08-28T22:00:00-04:00" }, // last night, not live
+    { id: "g-padres", homeTeam: "Padres", awayTeam: "Giants", commenceTime: "2026-08-29T19:00:00-04:00" }, // upcoming
+    { id: "g-dodgers", homeTeam: "Dodgers", awayTeam: "Rockies", commenceTime: "2026-08-29T13:00:00-04:00" }, // final
+    { id: "g-mets", homeTeam: "Mets", awayTeam: "Braves", commenceTime: "2026-08-29T16:00:00-04:00" }, // live
+    { id: "g-cubs", homeTeam: "Cubs", awayTeam: "Reds", commenceTime: "2026-08-28T22:00:00-04:00" }, // last night, not live
   ];
   const score = (i: number, status: ScoreGame["status"]) => ({ ...games[i], status }) as ScoreGame;
   const visible = visibleGameIndexes(games, [score(1, "final"), score(2, "live")], TODAY);
@@ -141,15 +145,15 @@ expect("no card -> no record", [drivingRecord(null), drivingRecord(undefined)], 
   const ranked = rankCategoryPicks(picks, "MLB", records);
   expect(
     "Wilson order: established records first (27-17 edges 71-58), 2-0 below them, no-record last; repeat capper and duplicate pick kept",
-    ranked.map((r) => r.pick.capperId + " " + drivingRecordText(r.record, "MLB", "Fav ML")),
+    ranked.map((r) => r.pick.capperId + " " + rankedOn(r.record)),
     [
-      "leo 27–17–2 Fav ML",
-      "gus 71–58 MLB Fav ML",
-      "gus 71–58 MLB Fav ML",
-      "vinny 14–9 MLB Fav ML",
-      "coin-flip 25–23 MLB Fav ML",
-      "hot-2-0 2–0 Fav ML",
-      "none No record",
+      "leo 27-17 ALL_TIME",
+      "gus 71-58 LEAGUE",
+      "gus 71-58 LEAGUE",
+      "vinny 14-9 LEAGUE",
+      "coin-flip 25-23 LEAGUE",
+      "hot-2-0 2-0 ALL_TIME",
+      "none none",
     ]
   );
   expect("every pick is a row", ranked.length, picks.length);
@@ -185,13 +189,36 @@ expect("no card -> no record", [drivingRecord(null), drivingRecord(undefined)], 
   expect("a losing record still ranks above no record; no-record picks by game time", noRec.map((r) => r.pick.capperId), ["r", "n2", "n1"]);
 }
 
-// ---- 4. row text ----
+// ---- 4. the row ----
 
-expect("league record names the league", drivingRecordText({ wins: 14, losses: 9, pushes: 0, source: "LEAGUE" }, "mlb", "Fav ML"), "14–9 MLB Fav ML");
-expect("all-time record does not", drivingRecordText({ wins: 31, losses: 14, pushes: 0, source: "ALL_TIME" }, "MLB", "Fav ML"), "31–14 Fav ML");
-expect("pushes show as W–L–P", drivingRecordText({ wins: 27, losses: 17, pushes: 2, source: "ALL_TIME" }, "NFL", "Fav ML"), "27–17–2 Fav ML");
-expect("no record", drivingRecordText(null, "MLB", "Fav ML"), "No record");
-expect("odds", [formatPickOdds(-112), formatPickOdds(120)], ["-112", "+120"]);
+{
+  const games = [
+    { id: "g-padres", homeTeam: "Padres", awayTeam: "Giants", commenceTime: "2026-08-29T19:00:00-04:00" },
+    { id: "g-dodgers", homeTeam: "Dodgers", awayTeam: "Rockies", commenceTime: "2026-08-29T22:00:00-04:00" },
+  ];
+  const picks = [
+    pick({ capperId: "nr", capperName: "New Guy", betDetail: "Dodgers ML", gameIndex: 1 }),
+    pick({ capperId: "sp", capperName: "Sean Perry", betDetail: "Dodgers ML", gameIndex: 1 }),
+    pick({ capperId: "vn", capperName: "Vinny", gameIndex: 0 }),
+    pick({ capperId: "dv", capperName: "Darth Vader", gameIndex: 0 }),
+  ];
+  const rows = categoryPickRows(
+    rankCategoryPicks(picks, "MLB", {
+      [key("dv")]: card([40, 12], [40, 12]),
+      [key("vn")]: card([14, 9], [14, 9]),
+      [key("sp")]: card([11, 9], [4, 2]),
+      [key("nr")]: null,
+    }),
+    games
+  );
+  expect(
+    "a row reads rank, pick, capper; the no-record pick is last with nothing said about it",
+    rows.map((r) => r.rank + " " + r.pick + " " + r.capper),
+    ["1 Padres ML Darth Vader", "2 Padres ML Vinny", "3 Dodgers ML Sean Perry", "4 Dodgers ML New Guy"]
+  );
+  expect("a row carries nothing else to show - no odds, no record", Object.keys(rows[0]).sort(), ["capper", "gameId", "pick", "pickId", "rank"]);
+  expect("each row opens its own pick's game", rows.map((r) => r.gameId), ["g-padres", "g-padres", "g-dodgers", "g-dodgers"]);
+}
 expect(
   "tile count wording: daily leagues say Today, football says This week",
   ["MLB", "NBA", "NHL", "WNBA", "NFL", "NCAAF"].map((l) => slateCountText(l, 47)),
@@ -245,6 +272,43 @@ expect("list header", [slateListHeader("MLB", "Fav ML"), slateListHeader("NFL", 
       ["NRFI", "0-0", 3],
     ]
   );
+}
+
+// ---- 7. the 0-pick tile ----
+
+{
+  const chipSet: { key: PickCategoryKey; label: string }[] = [
+    { key: "FAV_ML", label: "Fav ML" },
+    { key: "DOG_ML", label: "Dog ML" },
+  ];
+  const breakdown = [
+    { key: "FAV_ML" as const, wins: 972, losses: 893, pushes: 2, winPct: 52.1 },
+    { key: "DOG_ML" as const, wins: 40, losses: 60, pushes: 0, winPct: 40 },
+  ];
+  const byCategory = slatePicksByCategory([pick({ capperId: "a" })], new Set([0]));
+  const tiles = buildCategoryTiles(chipSet, breakdown, new Map(Array.from(byCategory, ([k, list]) => [k, list.length])));
+  const empty = tiles.find((t) => t.key === "DOG_ML");
+  expect(
+    "a 0-pick tile is the same tile as any other - its record intact, nothing marking it apart but the count",
+    [Object.keys(empty ?? {}).sort(), empty],
+    [Object.keys(tiles[0]).sort(), { key: "DOG_ML", label: "Dog ML", wins: 40, losses: 60, pushes: 0, winPct: 40, slateCount: 0 }]
+  );
+  expect("it says 0 picks", [slateCountText("MLB", 0), slateCountText("NFL", 0)], ["Today: 0 picks", "This week: 0 picks"]);
+  expect(
+    "it opens to one line: today for daily leagues, this week for football",
+    ["MLB", "NBA", "NHL", "WNBA", "NFL", "NCAAF", "nfl"].map((l) => slateEmptyText(l, "Dog ML")),
+    [
+      "No Dog ML picks today",
+      "No Dog ML picks today",
+      "No Dog ML picks today",
+      "No Dog ML picks today",
+      "No Dog ML picks this week",
+      "No Dog ML picks this week",
+      "No Dog ML picks this week",
+    ]
+  );
+  const opened = byCategory.get("DOG_ML") ?? [];
+  expect("it has no rows and no Show-more button", [opened.length, revealState(5, opened.length).more], [0, 0]);
 }
 
 if (failures > 0) {

@@ -8,7 +8,7 @@ import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
 // and up, soft red with a red border below - and colors the market name to match; without it
 // (/dashboard) the card is the neutral white stat-card surface.
 // `onToggle` makes the card a button; `active` rings the one that is open.
-// `note` (/live) is one more small line under the record; `muted` dims a card that has nothing to open.
+// `note` (/live) is one more small line under the record.
 
 // The grid a set of tinted cards sits in (/live's panel and the capper page's market breakdown): two
 // across on a phone, up to six from 1500px.
@@ -31,7 +31,6 @@ export function CategoryCard({
   active,
   onToggle,
   note,
-  muted,
 }: {
   label: string;
   wins: number;
@@ -44,7 +43,6 @@ export function CategoryCard({
   active?: boolean;
   onToggle?: () => void;
   note?: string;
-  muted?: boolean;
 }) {
   const decided = wins + losses > 0;
   const good = getRecordColor(winPct) === "green";
@@ -69,7 +67,6 @@ export function CategoryCard({
         "flex h-full flex-col rounded-2xl px-4 py-[13px] " +
         (tinted && decided ? TINT[good ? "green" : "red"] : NEUTRAL + (tinted ? " border border-[#E6E8EF] dark:border-border" : "")) +
         (active ? " ring-2 ring-brand-500 dark:ring-brand-400" : "") +
-        (muted ? " opacity-60" : "") +
         (onToggle ? " cursor-pointer select-none outline-none transition hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-brand-400 dark:hover:brightness-110" : "")
       }
     >

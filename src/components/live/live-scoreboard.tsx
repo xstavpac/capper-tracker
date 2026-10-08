@@ -11,6 +11,7 @@ import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-pic
 import { TeamColorBar } from "@/components/live/team-color-bar";
 import { BoardPulsePanel } from "@/components/live/board-pulse-panel";
 import { useSharedLiveScores } from "@/components/live/use-live-scores";
+import { liveGameCardId, scrollToGameCard, useRegisterLiveGameJump } from "@/components/live/live-game-jump";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -47,6 +48,7 @@ export function LiveScoreboard({
   showBoardPulse: boolean;
 }) {
   const scores = useSharedLiveScores();
+  useRegisterLiveGameJump(scrollToGameCard);
 
   // Recomputed on every render (not memoized) since `scores` is client state
   // that changes on each poll tick - a game that goes live or finishes must
@@ -113,7 +115,7 @@ export function LiveScoreboard({
           const isLive = score?.status === "live";
 
           return (
-            <div key={game.id} className="rounded-card bg-card p-4 shadow-soft transition-shadow hover:shadow-md">
+            <div key={game.id} id={liveGameCardId(game.id)} className="rounded-card bg-card p-4 shadow-soft transition-shadow hover:shadow-md">
               {/* LiveScoreboard only ever renders in Feed mode (live/page.tsx
                   gates it on !isGrid), so this link always carries an
                   explicit view=feed - the detail page's own "Back to Live"

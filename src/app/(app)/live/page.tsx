@@ -12,6 +12,7 @@ import { easternDateKey } from "@/lib/dates";
 import { ThemedPage } from "@/components/dashboard/themed-page";
 import { LiveBanner } from "@/components/live/live-banner";
 import { LiveScoresProvider } from "@/components/live/use-live-scores";
+import { LiveGameJumpProvider } from "@/components/live/live-game-jump";
 import type { LiveCategoryPick } from "@/lib/live-category-picks";
 
 const EMPTY = "rounded-[18px] bg-white p-10 text-center shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none";
@@ -44,15 +45,14 @@ export default async function LivePage({
 
   // The category panel's slice of the board: just what a one-line pick row and
   // the board's own visibility rule need, not a second copy of every
-  // ExpanderPick. gameIndex ties a pick to its card.
-  const categoryPanelGames = odds.map((g) => ({ homeTeam: g.homeTeam, awayTeam: g.awayTeam, commenceTime: g.commenceTime }));
+  // ExpanderPick. gameIndex ties a pick to its card, which its row opens.
+  const categoryPanelGames = odds.map((g) => ({ id: g.id, homeTeam: g.homeTeam, awayTeam: g.awayTeam, commenceTime: g.commenceTime }));
   const categoryPanelPicks: LiveCategoryPick[] = expanderPicksByGame.flatMap((gamePicks, gameIndex) =>
     gamePicks.map((p) => ({
       pickId: p.pickId,
       gameIndex,
       category: p.category,
       betDetail: p.betDetail,
-      odds: p.odds,
       capperId: p.capperId,
       capperName: p.capperName,
       status: p.status,
@@ -152,6 +152,8 @@ export default async function LivePage({
 
       {showGrid || showFeed ? (
         <LiveScoresProvider key={activeSport} activeSport={activeSport} initialScores={scores}>
+          {/* A category-panel row sends the viewer to its game on whichever board is mounted. */}
+          <LiveGameJumpProvider>
           {categoryPanel}
           {/* Grid Live's board fills the themed page's width; Feed's LiveScoreboard keeps its own
               max-w-5xl wrapper below. */}
@@ -179,6 +181,7 @@ export default async function LivePage({
               />
             </div>
           )}
+          </LiveGameJumpProvider>
         </LiveScoresProvider>
       ) : (
         <>
