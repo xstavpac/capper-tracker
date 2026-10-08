@@ -76,7 +76,8 @@ export async function createPick(
   // (see createPicksWithEntitlementCheck for why a plain count-then-create
   // isn't safe here). Single-pick creation is just the N=1 case of the same
   // batch path bulk import uses.
-  const result = await createPicksWithEntitlementCheck(userId, [data]);
+  // The manual form's price is always the one the user typed.
+  const result = await createPicksWithEntitlementCheck(userId, [{ ...data, oddsSource: "STATED" }]);
   if (!result.allowed) {
     throw new Error(result.message);
   }

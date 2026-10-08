@@ -25,6 +25,7 @@ import {
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
 import { resolvePropOdds } from "@/server/data/nfl-prop-odds";
+import { resolvePickPrice, type PickOddsSource } from "@/lib/odds-source";
 import { extractLine, parsePlayerPropLine, parsePlayerProp, parseAnyPlayerProp, isAnytimeTdPick } from "@/lib/bet-line";
 import { isInvalidOdds } from "@/lib/pick-validation";
 import { TEAM_NICKNAME_CANONICAL, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
@@ -147,6 +148,8 @@ async function resolveGameAndOdds(
   awayTeam: string;
   gameTime: Date;
   odds: number;
+  // Where `odds` came from - stored on Pick.oddsSource (see lib/odds-source.ts).
+  oddsSource: PickOddsSource;
   resolvable: boolean; // sport has a real score source wired up at all
   matched: boolean; // and a specific game was actually found in it
   // Which side of homeTeam/awayTeam this pick is actually on, captured once
@@ -186,7 +189,9 @@ async function resolveGameAndOdds(
   let homeTeam = item.description;
   let awayTeam = "-";
   let gameTime = new Date();
-  let odds = item.odds;
+  // A price read from the odds feed for a line that has none of its own. Every
+  // lookup below runs only when !item.hasExplicitOdds.
+  let feedPrice: number | null = null;
   let matched = false;
   let pickedSide: "HOME" | "AWAY" | null = null;
   let mlFavoredSide: "HOME" | "AWAY" | null = null;
@@ -285,7 +290,7 @@ async function resolveGameAndOdds(
             const tdName = stripTeamNamesFromPlayerName(parsedProp.playerName, [game.homeTeam, game.awayTeam], item.sportName);
             const tdPrice = tdName ? await resolvePropOdds(liveSportKey, game, { playerName: tdName, propMarket: "TD" }, getOdds) : null;
             if (tdPrice !== null) {
-              odds = tdPrice;
+              feedPrice = tdPrice;
             }
           }
         } else if (parsedProp && parsedLine) {
@@ -311,7 +316,7 @@ async function resolveGameAndOdds(
               )
             : null;
           if (propPrice !== null) {
-            odds = propPrice;
+            feedPrice = propPrice;
           }
         }
       } else if (!item.hasExplicitOdds) {
@@ -339,17 +344,20 @@ async function resolveGameAndOdds(
         const marketPrice =
           side && item.betType !== "TEAM_TOTAL" ? await findMarketPrice(liveSportKey, game, item.betType, side, getOdds) : null;
         if (marketPrice !== null) {
-          odds = marketPrice;
+          feedPrice = marketPrice;
         }
       }
     }
   }
+
+  const { odds, oddsSource } = resolvePickPrice(item, feedPrice);
 
   return {
     homeTeam,
     awayTeam,
     gameTime,
     odds,
+    oddsSource,
     resolvable,
     matched,
     pickedSide,
@@ -689,6 +697,7 @@ export async function bulkImportPicksAction(
         awayTeam,
         gameTime,
         odds,
+        oddsSource,
         resolvable,
         matched,
         pickedSide,
@@ -755,6 +764,7 @@ export async function bulkImportPicksAction(
         betType: item.betType,
         betDetail: item.description,
         odds,
+        oddsSource,
         line: extractedLine ?? item.inferredLine ?? null,
         period: item.period,
         units: item.units,
