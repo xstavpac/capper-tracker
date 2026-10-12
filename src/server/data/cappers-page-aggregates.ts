@@ -45,7 +45,7 @@ import {
 import { round2HalfUpSql } from "@/server/data/page-aggregate-fragments";
 import { statsFromRows, specialistTagsFromCandidateRows } from "@/server/data/pick-aggregates-cappers-adapter";
 import type { FavoriteCappersSummary, LeaderboardEntry } from "@/server/data/cappers";
-import { PAGE_SIZE, type CappersSortKey } from "@/lib/cappers-page-params";
+import { PAGE_SIZE, type CappersSortKey, type SortDir } from "@/lib/cappers-page-params";
 import { startOfEasternDay } from "@/lib/dates";
 import {
   DEFAULT_PANEL_WINDOW,
@@ -140,6 +140,8 @@ export type CappersPageQuery = {
   league?: string;
   min: number;
   sort: CappersSortKey;
+  // High to low when omitted.
+  dir?: SortDir;
   fav: boolean;
   q: string;
   page: number;
@@ -227,14 +229,18 @@ function entryCtes(name: string, totals: string, sportRoster: boolean, window: S
 }
 
 // Sort keys are a fixed whitelist (never user text); every ranking ends in the same total-order
-// tie-break as the old JS: units, then name, then id.
-// NaN has no place in an order, so it sorts last (Postgres would otherwise put it first when descending).
-const SORT_SQL: Record<CappersSortKey, Prisma.Sql> = {
-  roi: Prisma.sql`(roi_r = 'NaN'::float8), roi_r DESC`,
-  win: Prisma.sql`win_pct DESC`,
-  units: Prisma.sql`(net_r = 'NaN'::float8), net_r DESC`,
-  record: Prisma.sql`(wins - losses) DESC, wins DESC`,
+// tie-break: units, then name, then id. This is the SQL twin of compareCappers
+// (lib/cappers-table-sort.ts), which the acceptance test holds it to.
+// `missing` is a capper with nothing to show in the column (no graded picks, no win or loss for
+// Win %, or NaN, which has no place in an order): those sort last in either direction.
+const SORT_SQL: Record<CappersSortKey, { missing: Prisma.Sql; desc: Prisma.Sql; asc: Prisma.Sql }> = {
+  roi: { missing: Prisma.sql`(decided = 0 OR roi_r = 'NaN'::float8)`, desc: Prisma.sql`roi_r DESC`, asc: Prisma.sql`roi_r ASC` },
+  win: { missing: Prisma.sql`(wins + losses = 0)`, desc: Prisma.sql`win_pct DESC`, asc: Prisma.sql`win_pct ASC` },
+  units: { missing: Prisma.sql`(decided = 0 OR net_r = 'NaN'::float8)`, desc: Prisma.sql`net_r DESC`, asc: Prisma.sql`net_r ASC` },
+  // Net record, then fewer losses (6-0 above 10-4).
+  record: { missing: Prisma.sql`(decided = 0)`, desc: Prisma.sql`(wins - losses) DESC, losses ASC`, asc: Prisma.sql`(wins - losses) ASC, losses DESC` },
 };
+const sortSql = (sort: CappersSortKey, dir: SortDir = "desc") => Prisma.sql`${SORT_SQL[sort].missing}, ${SORT_SQL[sort][dir]}`;
 const TIE_BREAK = Prisma.sql`(net_r = 'NaN'::float8), net_r DESC, lower(name) COLLATE "C", name COLLATE "C", cid COLLATE "C"`;
 
 // A panel window as an instant range. "Today" is the Eastern calendar day so far; the others roll.
@@ -491,7 +497,7 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
   add(
     "fil",
     Prisma.sql`
-      SELECT e_k.*, row_number() OVER (ORDER BY ${SORT_SQL[q.sort]}, ${TIE_BREAK}) AS rn, count(*) OVER () AS total
+      SELECT e_k.*, row_number() OVER (ORDER BY ${sortSql(q.sort, q.dir)}, ${TIE_BREAK}) AS rn, count(*) OVER () AS total
       FROM e_k WHERE ${Prisma.join(filters, " AND ")}
     `
   );
@@ -687,7 +693,7 @@ export const CAPPER_PAGES_CACHE_TTL_SECONDS = 60;
 
 // Every input that changes the statement, in a fixed order.
 export function cappersPageCacheParams(q: CappersPageQuery): string {
-  return JSON.stringify([q.window, q.league ?? "", q.min, q.sort, q.fav, q.page]);
+  return JSON.stringify([q.window, q.league ?? "", q.min, q.sort, q.dir ?? "desc", q.fav, q.page]);
 }
 
 // The one statement, cached per (user, filters) in the shared Data Cache and

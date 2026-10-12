@@ -28,6 +28,7 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
     league: params.league,
     min: params.min,
     sort: params.sort,
+    dir: params.dir,
     fav: params.fav,
     q: params.q,
     page: params.page,
