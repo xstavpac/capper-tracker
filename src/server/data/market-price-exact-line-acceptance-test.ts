@@ -12,9 +12,15 @@
 // A line with no entry in the result keeps what it had: the capper's own price
 // when stated, else the -110 placeholder marked DEFAULTED (resolvePickPrice).
 //
+// Parlay legs go through the real parlay import action. A leg's line is the
+// live market line, not the number in its text (see resolveLegAndOdds), so its
+// price has to be read at that live line.
+//
 // No database and no network: prisma.oddsSnapshot.findUnique and
 // prisma.user.findUnique are swapped for stubs, and global fetch returns an
 // empty score feed, so every line is matched and priced off the odds snapshot.
+// The parlay section also stubs the capper / sport reads and captures
+// prisma.parlayBet.create instead of writing.
 //
 // Run with:
 //   npx tsx src/server/data/market-price-exact-line-acceptance-test.ts
@@ -83,6 +89,44 @@ const FIXTURE: Record<string, OddsGame[]> = {
             { key: "spreads", outcomes: [{ name: HOME, price: -120, point: -3 }, { name: AWAY, price: 100, point: 3 }] },
             { key: "totals", outcomes: [{ name: "Over", price: -102, point: 48 }, { name: "Under", price: -118, point: 48 }] },
           ],
+        },
+      ],
+    },
+    // Bills @ Chiefs: the first book hangs no spread at all, so the live spread
+    // line is the second book's.
+    {
+      id: "nfl-buf-kc",
+      sportKey: NFL,
+      homeTeam: "Kansas City Chiefs",
+      awayTeam: "Buffalo Bills",
+      commenceTime: at(27),
+      bookmakers: [
+        {
+          key: "bookA",
+          title: "Book A",
+          markets: [{ key: "h2h", outcomes: [{ name: "Kansas City Chiefs", price: -135 }, { name: "Buffalo Bills", price: 115 }] }],
+        },
+        {
+          key: "bookB",
+          title: "Book B",
+          markets: [
+            { key: "spreads", outcomes: [{ name: "Kansas City Chiefs", price: -122, point: -2.5 }, { name: "Buffalo Bills", price: 102, point: 2.5 }] },
+          ],
+        },
+      ],
+    },
+    // Packers @ Bears: moneyline only - no spread anywhere on the feed.
+    {
+      id: "nfl-gb-chi",
+      sportKey: NFL,
+      homeTeam: "Chicago Bears",
+      awayTeam: "Green Bay Packers",
+      commenceTime: at(29),
+      bookmakers: [
+        {
+          key: "bookA",
+          title: "Book A",
+          markets: [{ key: "h2h", outcomes: [{ name: "Chicago Bears", price: -125 }, { name: "Green Bay Packers", price: 105 }] }],
         },
       ],
     },
@@ -221,7 +265,7 @@ async function main() {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const react = require("react") as { cache?: unknown };
   react.cache ??= <T,>(fn: T) => fn;
-  const { previewBulkImportMatches } = await import("@/server/actions/bulk-picks");
+  const { previewBulkImportMatches, bulkImportParlaysAction } = await import("@/server/actions/bulk-picks");
 
   // A capper's own price rides along: never resolved, never replaced.
   const stated: Item = {
@@ -250,6 +294,68 @@ async function main() {
   check("the same alternate total with the capper's own price keeps it", preview.odds[items.length] ?? null, null);
   check("...and is STATED", resolvePickPrice(stated, null), { odds: -125, oddsSource: "STATED" });
   check("the exact main line is MARKET at the feed price", resolvePickPrice(items[1], preview.odds[1] ?? null), { odds: -105, oddsSource: "MARKET" });
+
+  // ---- parlay legs ----
+  type CreatedLeg = { betDetail: string; odds: number; line: number | null };
+  const created: CreatedLeg[][] = [];
+  const db = prisma as unknown as Record<string, Record<string, unknown>>;
+  db.capper.findMany = async () => [{ id: "capper-leg-test", name: "Leg Tester" }];
+  db.capper.findFirst = async () => ({ id: "capper-leg-test" });
+  db.sport.findFirst = async () => ({ id: "sport-nfl" });
+  db.parlayBet.create = async (args: unknown) => {
+    created.push((args as { data: { legs: { create: CreatedLeg[] } } }).data.legs.create);
+    return { id: "parlay-" + created.length };
+  };
+
+  const leg = (
+    description: string,
+    betType: Item["betType"],
+    teamNicknames: string[],
+    extra: Partial<Item> = {}
+  ): Item => ({ sportName: "NFL", betType, hasExplicitOdds: false, odds: -110, teamNicknames, description, gameNumber: null, period: "FULL_GAME", ...extra });
+
+  const parlays = [
+    {
+      capperName: "Leg Tester",
+      units: 1,
+      legs: [
+        // The number in a leg's text is a label; the live line is -3.5 / 47.5.
+        leg("Cowboys -9", "SPREAD", ["cowboys"]),
+        leg("Buccaneers Cowboys Over 40", "TOTAL", ["buccaneers", "cowboys"], { totalSide: "over" }),
+      ],
+    },
+    {
+      capperName: "Leg Tester",
+      units: 1,
+      legs: [
+        leg("Chiefs -1", "SPREAD", ["chiefs"]),
+        leg("Cowboys 1H -3.5", "SPREAD", ["cowboys"], { period: "FIRST_HALF" }),
+        leg("Buccaneers +3.5 +105", "SPREAD", ["buccaneers"], { hasExplicitOdds: true, odds: 105 }),
+      ],
+    },
+    // A spread leg on a game with no spread on the feed: no line, no parlay.
+    { capperName: "Leg Tester", units: 1, legs: [leg("Bears -3", "SPREAD", ["bears"]), leg("Cowboys ML", "MONEYLINE", ["cowboys"])] },
+  ];
+  let parlayResult: unknown;
+  try {
+    parlayResult = await bulkImportParlaysAction(parlays as never);
+  } catch (err) {
+    // revalidateTag / revalidatePath have no Next request to run in here; they
+    // are the action's last step, after every parlay has been resolved.
+    parlayResult = err instanceof Error ? err.message : String(err);
+  }
+  const legOf = (detail: string) => {
+    const found = created.flat().find((l) => l.betDetail === detail);
+    return found ? { line: found.line, odds: found.odds } : null;
+  };
+  if (created.length !== 2) console.log("parlay import result:", JSON.stringify(parlayResult));
+  check("two of the three parlays were created", created.length, 2);
+  check("leg at the main line (first book's -3.5): priced there, whatever its text says", legOf("Cowboys -9"), { line: -3.5, odds: -108 });
+  check("total leg at the main line (47.5): the Over price", legOf("Buccaneers Cowboys Over 40"), { line: 47.5, odds: -105 });
+  check("leg whose spread only the second book hangs (-2.5): the second book's price", legOf("Chiefs -1"), { line: -2.5, odds: -122 });
+  check("1H leg: no full-game price, stays at the placeholder", legOf("Cowboys 1H -3.5"), { line: -3.5, odds: -110 });
+  check("leg with the capper's own price keeps it", legOf("Buccaneers +3.5 +105"), { line: 3.5, odds: 105 });
+  check("leg with no line on the feed: the whole parlay is rejected, nothing priced", legOf("Bears -3"), null);
 
   check("the Odds API was never called", oddsApiCalls, 0);
 
