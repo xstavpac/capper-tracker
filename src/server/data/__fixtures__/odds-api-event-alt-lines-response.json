@@ -1,0 +1,238 @@
+{
+  "id": "e6d00eedd87d367e510314bd8cab8f6f",
+  "sport_key": "americanfootball_nfl",
+  "sport_title": "NFL",
+  "commence_time": "2026-10-13T00:15:00Z",
+  "home_team": "Los Angeles Rams",
+  "away_team": "Buffalo Bills",
+  "bookmakers": [
+    {
+      "key": "draftkings",
+      "title": "DraftKings",
+      "markets": [
+        {
+          "key": "alternate_spreads",
+          "last_update": "2026-10-12T17:26:56Z",
+          "outcomes": [
+            {
+              "name": "Buffalo Bills",
+              "price": 730,
+              "point": -14.5
+            },
+            {
+              "name": "Buffalo Bills",
+              "price": 495,
+              "point": -10.5
+            },
+            {
+              "name": "Buffalo Bills",
+              "price": -292,
+              "point": 10.5
+            },
+            {
+              "name": "Buffalo Bills",
+              "price": -446,
+              "point": 14.5
+            },
+            {
+              "name": "Los Angeles Rams",
+              "price": -1880,
+              "point": 14.5
+            },
+            {
+              "name": "Los Angeles Rams",
+              "price": -920,
+              "point": 10.5
+            },
+            {
+              "name": "Los Angeles Rams",
+              "price": 208,
+              "point": -10.5
+            },
+            {
+              "name": "Los Angeles Rams",
+              "price": 296,
+              "point": -14.5
+            }
+          ]
+        },
+        {
+          "key": "alternate_totals",
+          "last_update": "2026-10-12T17:26:56Z",
+          "outcomes": [
+            {
+              "name": "Over",
+              "price": -2600,
+              "point": 35.5
+            },
+            {
+              "name": "Over",
+              "price": -670,
+              "point": 41.5
+            },
+            {
+              "name": "Over",
+              "price": -106,
+              "point": 55.5
+            },
+            {
+              "name": "Under",
+              "price": 830,
+              "point": 35.5
+            },
+            {
+              "name": "Under",
+              "price": 401,
+              "point": 41.5
+            },
+            {
+              "name": "Under",
+              "price": -125,
+              "point": 55.5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "fanduel",
+      "title": "FanDuel",
+      "markets": [
+        {
+          "key": "alternate_spreads",
+          "last_update": "2026-10-12T17:27:03Z",
+          "outcomes": [
+            {
+              "name": "Buffalo Bills",
+              "price": -650,
+              "point": 14.5
+            },
+            {
+              "name": "Buffalo Bills",
+              "price": -390,
+              "point": 10.5
+            },
+            {
+              "name": "Buffalo Bills",
+              "price": 700,
+              "point": -10.5
+            },
+            {
+              "name": "Buffalo Bills",
+              "price": 1060,
+              "point": -14.5
+            },
+            {
+              "name": "Los Angeles Rams",
+              "price": 420,
+              "point": -14.5
+            },
+            {
+              "name": "Los Angeles Rams",
+              "price": 280,
+              "point": -10.5
+            },
+            {
+              "name": "Los Angeles Rams",
+              "price": -1450,
+              "point": 10.5
+            },
+            {
+              "name": "Los Angeles Rams",
+              "price": -3500,
+              "point": 14.5
+            }
+          ]
+        },
+        {
+          "key": "alternate_totals",
+          "last_update": "2026-10-12T17:27:03Z",
+          "outcomes": [
+            {
+              "name": "Over",
+              "price": -20000,
+              "point": 27.5
+            },
+            {
+              "name": "Over",
+              "price": -2500,
+              "point": 35.5
+            },
+            {
+              "name": "Over",
+              "price": -670,
+              "point": 41.5
+            },
+            {
+              "name": "Over",
+              "price": 102,
+              "point": 55.5
+            },
+            {
+              "name": "Under",
+              "price": 2500,
+              "point": 27.5
+            },
+            {
+              "name": "Under",
+              "price": 900,
+              "point": 35.5
+            },
+            {
+              "name": "Under",
+              "price": 430,
+              "point": 41.5
+            },
+            {
+              "name": "Under",
+              "price": -130,
+              "point": 55.5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "betrivers",
+      "title": "BetRivers",
+      "markets": [
+        {
+          "key": "alternate_spreads",
+          "last_update": "2026-10-12T17:26:33Z",
+          "outcomes": [
+            {
+              "name": "Buffalo Bills",
+              "price": -375,
+              "point": 10.5
+            },
+            {
+              "name": "Buffalo Bills",
+              "price": -770,
+              "point": 14.5
+            },
+            {
+              "name": "Buffalo Bills",
+              "price": -835,
+              "point": 15
+            },
+            {
+              "name": "Los Angeles Rams",
+              "price": 255,
+              "point": -10.5
+            },
+            {
+              "name": "Los Angeles Rams",
+              "price": 420,
+              "point": -14.5
+            },
+            {
+              "name": "Los Angeles Rams",
+              "price": 450,
+              "point": -15
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

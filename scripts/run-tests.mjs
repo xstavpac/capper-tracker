@@ -86,6 +86,7 @@ const PURE_DESPITE_PRISMA_IMPORT = new Set([
   "src/server/data/nhl-anytime-goal-import-acceptance-test.ts",
   "src/server/data/nhl-goal-scorer-odds-fetch-acceptance-test.ts",
   "src/server/data/nhl-three-way-moneyline-acceptance-test.ts",
+  "src/server/data/alt-line-odds-on-demand-acceptance-test.ts",
 ]);
 
 function walk(dir) {

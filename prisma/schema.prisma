@@ -542,6 +542,26 @@ model OddsApiUsageLog {
   @@map("odds_api_usage_log")
 }
 
+// One row per (event, alternate market, Eastern day) the import has asked the
+// Odds API for - see server/data/alt-line-odds.ts. The row is both the claim
+// (created BEFORE the request, so the unique key stops a second buyer) and the
+// cache: `bookmakers` is the event response's bookmakers, cut down to that one
+// market. null means nothing to price from: the request is still in flight, or
+// it came back with no bookmaker offering the market. A row is deleted only
+// when its request failed outright (nothing was bought), so it can be retried.
+model OddsAltLineFetch {
+  id         String   @id @default(cuid())
+  eventId    String // the Odds API event id (OddsGame.id)
+  marketKey  String // "alternate_totals" | "alternate_spreads"
+  fetchDate  String // Eastern day key, same as OddsSnapshot.fetchDate
+  sportKey   String
+  bookmakers Json?
+  createdAt  DateTime @default(now())
+
+  @@unique([eventId, marketKey, fetchDate])
+  @@map("odds_alt_line_fetches")
+}
+
 // Where in the catalog-import pipeline a line was lost (see ImportSkippedLine).
 enum ImportSkipStage {
   PARSE_SILENT // parseCatalog read it as a capper header though it looks like a pick (older rows: also lines discarded after a known-capper prefix)
