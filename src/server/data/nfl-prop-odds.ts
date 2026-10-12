@@ -214,20 +214,45 @@ export function normalizePlayerPropLines(game: OddsGame): PlayerPropLine[] {
 // bundling doesn't reduce credit cost vs. eight separate 1-market calls, but
 // it does mean one round-trip instead of eight, and matches how the
 // provider's own docs show this endpoint used.
-const PROP_MARKETS_PARAM = NFL_PROP_MARKET_KEYS.join(",");
+//
+// What differs per sport is an EventPropFetchTarget: which sport the usage row
+// and log lines are filed under, which Odds API sport key goes in the URL, and
+// which markets are requested. NFL_EVENT_PROP_TARGET reproduces the request
+// this file has always made, byte for byte; nhl-goal-scorer-odds.ts supplies
+// the only other one.
+export type EventPropFetchTarget = {
+  // The app's own sport key - odds_api_usage_log.sportKey and the credit log line.
+  sportKey: string;
+  // The Odds API sport key for this game's event URL.
+  requestSportKey: (game: OddsGame) => string;
+  marketKeys: readonly string[];
+  logTag: string;
+};
+
+const NFL_EVENT_PROP_TARGET: EventPropFetchTarget = {
+  sportKey: NFL_SPORT_KEY,
+  requestSportKey: () => NFL_SPORT_KEY,
+  marketKeys: NFL_PROP_MARKET_KEYS,
+  logTag: "[nfl-prop-odds]",
+};
 
 async function fetchOneEventPropOdds(
-  eventId: string,
-  apiKey: string
+  game: OddsGame,
+  apiKey: string,
+  target: EventPropFetchTarget
 ): Promise<{ bookmakers: OddsGame["bookmakers"] | null; credits: OddsApiCredits | null; ok: boolean }> {
+  const eventId = game.id;
+  const requestSportKey = target.requestSportKey(game);
   const url =
     ODDS_API_BASE_URL +
-    "/sports/americanfootball_nfl/events/" +
+    "/sports/" +
+    requestSportKey +
+    "/events/" +
     eventId +
     "/odds?apiKey=" +
     apiKey +
     "&regions=us&markets=" +
-    PROP_MARKETS_PARAM +
+    target.marketKeys.join(",") +
     "&oddsFormat=american";
 
   let res: Response;
@@ -235,18 +260,18 @@ async function fetchOneEventPropOdds(
     res = await fetch(url, { cache: "no-store" });
   } catch (err) {
     console.error(
-      "[nfl-prop-odds] upstream fetch threw",
+      target.logTag + " upstream fetch threw",
       JSON.stringify({ eventId, error: err instanceof Error ? err.message : String(err) })
     );
     return { bookmakers: null, credits: null, ok: false };
   }
 
-  const credits = readOddsApiCredits(res, { sportKey: "americanfootball_nfl", requestSportKey: "americanfootball_nfl" });
+  const credits = readOddsApiCredits(res, { sportKey: target.sportKey, requestSportKey });
 
   if (!res.ok) {
     const bodyText = await res.text().catch(() => "<unreadable body>");
     console.error(
-      "[nfl-prop-odds] upstream fetch failed",
+      target.logTag + " upstream fetch failed",
       JSON.stringify({ eventId, status: res.status, statusText: res.statusText, body: bodyText.slice(0, 500) })
     );
     return { bookmakers: null, credits, ok: false };
@@ -270,6 +295,13 @@ const PLAYER_PROP_ODDS_MARKET_KEYS: Partial<Record<PlayerPropMarket, NflPropMark
   RUSH_REC_YDS: "player_rush_reception_yds",
   PASS_RUSH_YDS: "player_pass_rush_yds",
 };
+
+// Narrows a parseAnyPlayerProp market to the ones this map prices. An NHL or
+// MLB line market has no entry (nothing is fetched for it), so it was never
+// priced; this just says so in the type.
+export function isNflOddsPropMarket(market: string): market is PlayerPropMarket {
+  return market in PLAYER_PROP_ODDS_MARKET_KEYS;
+}
 
 // side/point are the Over/Under+line identity; TD (anytime-TD, one-sided "Yes"
 // with no line) has neither, so they're optional and ignored for it - every
@@ -407,6 +439,18 @@ export type NflPropFetchSummary = {
 // it's exactly what the 95% stop-lower-priority gate below exists to catch
 // if it runs hotter than expected.
 export async function fetchAndMergeNflPropOdds(games: OddsGame[], apiKey: string): Promise<NflPropFetchSummary> {
+  return fetchAndMergeEventPropOdds(games, apiKey, NFL_EVENT_PROP_TARGET);
+}
+
+// The loop itself, shared by every sport with an event-level prop fetch: the
+// credit gate, one request per game, the merge, and one odds_api_usage_log row
+// per call that came back with usage headers. Which games to pass in is the
+// caller's decision.
+export async function fetchAndMergeEventPropOdds(
+  games: OddsGame[],
+  apiKey: string,
+  target: EventPropFetchTarget
+): Promise<NflPropFetchSummary> {
   let result = [...games];
   let eventsFetched = 0;
   let eventsSkippedCreditGate = 0;
@@ -424,7 +468,7 @@ export async function fetchAndMergeNflPropOdds(games: OddsGame[], apiKey: string
       continue;
     }
 
-    const { bookmakers, credits, ok } = await fetchOneEventPropOdds(game.id, apiKey);
+    const { bookmakers, credits, ok } = await fetchOneEventPropOdds(game, apiKey, target);
     if (!ok || !bookmakers) {
       eventsFailed++;
       continue;
@@ -435,8 +479,8 @@ export async function fetchAndMergeNflPropOdds(games: OddsGame[], apiKey: string
 
     if (credits) {
       const { level: newLevel } = await persistOddsApiUsage({
-        sportKey: "americanfootball_nfl",
-        marketsRequested: [...NFL_PROP_MARKET_KEYS],
+        sportKey: target.sportKey,
+        marketsRequested: [...target.marketKeys],
         eventsRequested: 1,
         credits,
       });
@@ -446,7 +490,7 @@ export async function fetchAndMergeNflPropOdds(games: OddsGame[], apiKey: string
 
   if (eventsSkippedCreditGate > 0) {
     console.error(
-      "[nfl-prop-odds] skipped events - credit usage >=95%, lower-priority markets paused",
+      target.logTag + " skipped events - credit usage >=95%, lower-priority markets paused",
       JSON.stringify({ eventsSkippedCreditGate, eventsFetched, eventsFailed })
     );
   }
