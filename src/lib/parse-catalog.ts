@@ -5,6 +5,7 @@ import {
   parseNflNhlPlayerProp,
   pickPeriodFromText,
   betScope,
+  betScopeToken,
   extractLine,
   normalizeNPlusPlayerProp,
   type SegmentPeriod,
@@ -1033,6 +1034,11 @@ const NCAAF_SCHOOLS: [string, string][] = [
   ["kent state", "kent state golden flashes"],
   ["massachusetts", "massachusetts minutemen"], ["umass", "massachusetts minutemen"],
   ["miami (oh)", "miami (oh) redhawks"], ["miami oh", "miami (oh) redhawks"], ["miami ohio", "miami (oh) redhawks"], ["miami, oh", "miami (oh) redhawks"], ["miami, ohio", "miami (oh) redhawks"],
+  // Every spelling that names the Ohio school has to be a key of its own:
+  // without one, "Miami (Ohio)" / "Miami of Ohio" read as bare "miami" (the
+  // Hurricanes) plus "ohio" (the Bobcats), two teams neither of which is the
+  // RedHawks. Bare "miami" is never a key for this school.
+  ["miami (ohio)", "miami (oh) redhawks"], ["miami of ohio", "miami (oh) redhawks"], ["miami redhawks", "miami (oh) redhawks"],
   ["ohio", "ohio bobcats"],
   ["sacramento state", "sacramento state hornets"],
   ["toledo", "toledo rockets"],
@@ -1043,7 +1049,7 @@ const NCAAF_SCHOOLS: [string, string][] = [
   ["nevada", "nevada wolf pack"],
   ["new mexico", "new mexico lobos"],
   ["north dakota state", "north dakota state bison"],
-  ["northern illinois", "northern illinois huskies"],
+  ["northern illinois", "northern illinois huskies"], ["niu", "northern illinois huskies"],
   ["san jose state", "san josé state spartans"], ["san jose st", "san josé state spartans"],
   ["unlv", "unlv rebels"],
   ["utep", "utep miners"],
@@ -1800,6 +1806,21 @@ export function withGameNumberSuffix(description: string, gameNumber: 1 | 2 | nu
 // re-read through this one function rather than a second, parallel
 // implementation - same "one function, re-read wherever needed" pattern as
 // parseTouchdownProp/extractLine elsewhere in this app.
+// School keys spelled with a parenthetical of their own ("miami (oh)").
+const PAREN_TEAM_PHRASES = NCAAF_SCHOOLS.map(([key]) => key).filter((key) => key.includes("("));
+
+// True when the parenthetical at [start, end) is part of a team's name rather
+// than a note about the bet - the "(Ohio)" in "Miami (Ohio) -3". parsePickText
+// keeps these: dropping one leaves the stored text saying bare "Miami", which
+// names a different team.
+function isTeamNameParenthetical(text: string, start: number, end: number): boolean {
+  const lower = text.toLowerCase();
+  return PAREN_TEAM_PHRASES.some((phrase) => {
+    const m = teamPhraseRegex(phrase).exec(lower);
+    return m !== null && m.index <= start && m.index + m[0].length >= end;
+  });
+}
+
 export function parsePickText(description: string): {
   betType: ParsedPick["betType"];
   odds: number | null;
@@ -1855,7 +1876,16 @@ export function parsePickText(description: string): {
     }
   }
 
-  let cleanDescription = description.replace(/\([^)]*\)/g, "");
+  // Parentheticals are dropped from the stored text (units, a price, a tag
+  // like "POTD"), except one that is part of a team's name. A period written
+  // in one ("Liberty Flames -3.5 (1H)") is read here, before it's gone, and
+  // put back below.
+  let parenScopeToken: string | null = null;
+  let cleanDescription = description.replace(/\([^)]*\)/g, (paren, offset: number) => {
+    if (isTeamNameParenthetical(description, offset, offset + paren.length)) return paren;
+    parenScopeToken ??= betScopeToken(paren.slice(1, -1));
+    return "";
+  });
   if (bareUnitPhrase) cleanDescription = cleanDescription.replace(bareUnitPhrase, "");
   cleanDescription = cleanDescription.replace(/\s{2,}/g, " ").trim();
   // Odds written without parentheses: "Yankees ML -132", "Giants +6.5 -110",
@@ -1875,6 +1905,13 @@ export function parsePickText(description: string): {
       odds = parseInt(trailing[2], 10);
       cleanDescription = trailing[1];
     }
+  }
+  // A period that was only in a parenthetical goes back on the end, bare, so
+  // the stored text still names it: grading and resolveAmbiguousPick both
+  // re-read the period from this text. After the price check above, which
+  // needs the price to be the last thing in the text.
+  if (parenScopeToken && betScope(cleanDescription) === "FULL_GAME") {
+    cleanDescription = cleanDescription + " " + parenScopeToken;
   }
   // Which slice of the game this pick is scoped to: F5 / first half (both map
   // to FIRST_HALF), second half, an individual quarter (NFL/NBA/WNBA/NCAAF),
@@ -2183,7 +2220,7 @@ function resolveAmbiguousPair(text: string): { sportName: string; teamNicknames:
 // NOT one of these (and not part of the school's own name) means the capper
 // typed a longer school name we only prefix-matched.
 const NCAAF_TRAILING_TOKEN_OK =
-  /^(ml|moneyline|money|line|pk|pick|tt|f5|ats|vs|v|at|over|under|o|u|spread|spreads|total|totals|runline|puckline|first|second|1h|2h|1q|2q|3q|4q|half|reg|alt|team)$/i;
+  /^(ml|moneyline|money|line|pk|pick|tt|f5|ats|vs|v|at|over|under|o|u|spread|spreads|total|totals|runline|puckline|first|second|1h|2h|h1|fh|1q|2q|3q|4q|half|reg|alt|team)$/i;
 
 // Generic words that formalize a school's name without changing which
 // school it is - "West Virginia University", "Miami College". The NCAAF

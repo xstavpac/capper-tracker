@@ -187,12 +187,11 @@ export function betTypeOptionsForChipSet(chipSet: PickCategoryKey[] | null): Set
 // football sport's first-half picks share the same F5_SPREAD/F5_MONEYLINE/
 // F5_TOTAL filter keys (see betTypeFilterCategory above, which buckets any
 // sport's period===FIRST_HALF pick the same way) but must never be LABELED
-// "F5" anywhere on the page. `chipSet === null` keeps the original "F5"
-// label - that case isn't scoped to one sport's vocabulary, and every sport
-// that actually has first-half data reaches this from MLB or NFL/NCAAF
-// (never both at once), so there's no real ambiguity being papered over.
-export function firstHalfLabelPrefixForChipSet(chipSet: PickCategoryKey[] | null): "F5" | "1H" {
-  if (!chipSet) return "F5";
+// "F5" anywhere on the page. `chipSet === null` ("All sports") mixes both:
+// the same option then filters football first halves and baseball first
+// fives together, so it's labeled with both terms rather than either one.
+export function firstHalfLabelPrefixForChipSet(chipSet: PickCategoryKey[] | null): "F5" | "1H" | "1H / F5" {
+  if (!chipSet) return "1H / F5";
   return chipSet.some((k) => F5_INNINGS_CATEGORY_KEYS.includes(k)) ? "F5" : "1H";
 }
 
