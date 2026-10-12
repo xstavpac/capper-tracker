@@ -152,7 +152,7 @@ async function main() {
   check("Auto-Generate: the stepper reaches 20", legs() === CAP, `legs=${legs()}`);
   check("Auto-Generate: no limit message at 20", !says(CAP_MESSAGE));
 
-  await click(button("Auto-Generate"));
+  await click(button("Generate parlay"));
   check("Auto-Generate: asks the server for 20 legs", autoCalls.join() === String(CAP), `calls=[${autoCalls.join()}]`);
   check("Auto-Generate: the 20-leg parlay is shown", says("Parlay A — 20-leg parlay"));
 
@@ -164,7 +164,7 @@ async function main() {
   check("Auto-Generate: stepping back to 19 clears the message", legs() === CAP - 1 && !says(CAP_MESSAGE), `legs=${legs()}`);
 
   autoRejects = true;
-  await click(button("Auto-Generate"));
+  await click(button("Generate parlay"));
   check('Auto-Generate: a "20 legs max" refusal from the server is shown as that', says(CAP_MESSAGE) && !says("leg parlay"), `text has message=${says(CAP_MESSAGE)}`);
 
   // ---------------------------------------------------------------------
@@ -213,7 +213,7 @@ async function main() {
   check("My Picks: starts at 2 legs of 20 in-scope picks", legs() === 2 && ctx.maxLegCount === CAP, `legs=${legs()} max=${ctx.maxLegCount}`);
   await clickTimes(more, CAP - 2);
   check("My Picks: the stepper reaches 20", legs() === CAP && ctx.legCount === CAP, `legs=${legs()}`);
-  await click(button("Build My Picks"));
+  await click(button("My Picks"));
   check("My Picks: the 20-leg parlay is built", says("20-leg parlay"));
   check("My Picks: no limit message at 20", !says(CAP_MESSAGE));
 

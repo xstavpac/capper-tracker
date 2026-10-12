@@ -142,6 +142,12 @@ export const ClipboardIcon = ({ className }: P) => (
   </svg>
 );
 
+export const BoltIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <path d="M13 3l-8 11h6l-1 7l8 -11h-6z" />
+  </svg>
+);
+
 export const ListIcon = ({ className }: P) => (
   <svg {...svgProps(className)}>
     <rect x="4" y="4" width="16" height="16" rx="3" />

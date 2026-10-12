@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { LiveIcon } from "@/components/dashboard/cappers-icons";
+import { BANNER_CONTROLS, BANNER_ICON, BANNER_ROW, BannerBrand } from "@/components/ui/navy-banner";
 
 // The fade's width, and how far the row is padded so the last chip scrolls clear of it.
 const FADE = 28;
@@ -21,18 +22,10 @@ const COMPACT = { px: 12, font: 13 };
 // count, Confirm button and discard prompt make the controls wider, which only measuring can tell
 // (`tier` below), so each step down is written out twice, as literal classes Tailwind can see: once
 // for its own range of widths, and once for a wider card that has to take it anyway.
-const ROW =
-  "[@container_(min-width:640px)]:flex [@container_(min-width:640px)]:items-center [@container_(min-width:640px)]:justify-between [@container_(min-width:640px)]:gap-x-5 [@container_(min-width:640px)]:pl-6 [@container_(min-width:640px)]:pr-7 " +
-  "[@container_(min-width:640px)_and_(max-width:863.9px)]:flex-wrap";
+const ROW = BANNER_ROW + " [@container_(min-width:640px)_and_(max-width:863.9px)]:flex-wrap";
 const ROW_TWO = " [@container_(min-width:640px)]:flex-wrap";
 const ROW_COMPACT = " [@container_(min-width:864px)_and_(max-width:1109.9px)]:[--seg-px:12px] [@container_(min-width:864px)_and_(max-width:1109.9px)]:[--seg-text:13px]";
 const ROW_COMPACT_WIDE = " [@container_(min-width:1110px)]:[--seg-px:12px] [@container_(min-width:1110px)]:[--seg-text:13px]";
-
-// Stacked, the line sits in what is left of the first column, between the ring and the word.
-const BRAND =
-  "relative grid grid-cols-[1fr_auto_1fr] [@container_(min-width:640px)]:h-[84px] [@container_(min-width:640px)]:flex-none [@container_(min-width:640px)]:grid-cols-[auto_auto] [@container_(min-width:640px)]:content-center";
-// The blue light on a stacked card's edges, over the title's rows only (see live-banner.tsx).
-const GLOW = "pointer-events-none absolute inset-y-0 w-[70px] [@container_(min-width:640px)]:hidden ";
 
 const LEAGUES =
   "relative min-w-0 border-t border-[rgba(59,130,246,0.18)] [@container_(min-width:640px)]:border-t-0 " +
@@ -55,7 +48,6 @@ const OFF = "font-medium text-[#D3DEFA] hover:text-white ";
 const CHIP_ON = ON + "[@container_(max-width:639.9px)]:border-[#2563EB]";
 const CHIP_OFF = OFF + "[@container_(max-width:639.9px)]:border-[rgba(96,140,255,0.28)] [@container_(max-width:639.9px)]:bg-[rgba(30,58,138,0.35)]";
 
-const CONTROLS = "flex flex-wrap items-center justify-between gap-x-2 gap-y-2 px-3 pb-3 pt-1 [@container_(min-width:640px)]:ml-auto [@container_(min-width:640px)]:flex-none [@container_(min-width:640px)]:gap-3 [@container_(min-width:640px)]:p-0";
 const VIEWS = "flex flex-none rounded-full border border-[rgba(96,140,255,0.2)] bg-[rgba(30,58,138,0.25)] p-[3px] [@container_(min-width:640px)]:gap-1 [@container_(min-width:640px)]:p-1";
 const SEGMENT = "flex h-7 items-center whitespace-nowrap rounded-full px-3.5 text-[12.5px] transition " + SIZE;
 
@@ -66,7 +58,7 @@ const num = (s: string) => parseFloat(s) || 0;
 // A click the router takes, not one the browser does (a new tab or window).
 const plainClick = (e: MouseEvent) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
-// The /live banner's content: the title, the league chips, then the view toggle and the Parlay
+// The /live banner's content: the title (BannerBrand, shared with /parlay), the league chips, then the view toggle and the Parlay
 // slip (`children`). The leagues and the views are links: both are query params the page reads
 // on the server. They navigate client-side (next/link), so the layout above the page, and the
 // Parlay slip it holds (ParlayPoolProvider), stays mounted from one league to the next. Not
@@ -166,24 +158,13 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
 
   return (
     <div ref={rowRef} className={ROW + (two ? ROW_TWO : "") + (two ? "" : ROW_COMPACT) + (wide ? ROW_COMPACT_WIDE : "")}>
-      <div className={BRAND}>
-        <div ref={ringRef} className="flex h-[52px] items-center [@container_(min-width:640px)]:h-auto [@container_(min-width:640px)]:pr-4">
-          <span
-            className="relative ml-4 flex h-[34px] w-[34px] flex-none items-center justify-center rounded-full border-2 border-[#3B82F6] bg-[rgba(3,11,41,0.6)] text-[#9AD8FF] shadow-[0_0_14px_rgba(59,130,246,0.75),inset_0_0_10px_rgba(59,130,246,0.45)] [@container_(min-width:640px)]:ml-0 [@container_(min-width:640px)]:h-11 [@container_(min-width:640px)]:w-11"
-          >
-            <LiveIcon className="h-[18px] w-[18px] [@container_(min-width:640px)]:h-[22px] [@container_(min-width:640px)]:w-[22px]" />
-            <span aria-hidden className="absolute -right-0.5 -top-0.5 h-[9px] w-[9px] rounded-full border-2 border-banner bg-[#EF4444] shadow-[0_0_7px_rgba(239,68,68,0.9)] [@container_(min-width:640px)]:h-[11px] [@container_(min-width:640px)]:w-[11px]" />
-          </span>
-          <span aria-hidden className="flex flex-1 justify-center [@container_(min-width:640px)]:ml-4 [@container_(min-width:640px)]:flex-none">
-            <span className="h-[26px] w-0.5 rounded-full bg-[#22D3EE] shadow-[0_0_6px_rgba(34,211,238,0.8)] [@container_(min-width:640px)]:h-8" />
-          </span>
-        </div>
-        <h1 ref={titleRef} className="self-center text-[34px] font-extrabold leading-none tracking-[-0.8px] text-white [text-shadow:0_0_14px_rgba(96,165,250,0.55)]">
-          Live
-        </h1>
-        <span aria-hidden className={GLOW + "left-0 bg-[linear-gradient(270deg,rgba(37,99,235,0)_0%,rgba(37,99,235,0.2)_70%,rgba(56,189,248,0.38)_100%)]"} />
-        <span aria-hidden className={GLOW + "right-0 bg-[linear-gradient(90deg,rgba(37,99,235,0)_0%,rgba(37,99,235,0.2)_70%,rgba(56,189,248,0.38)_100%)]"} />
-      </div>
+      <BannerBrand
+        icon={<LiveIcon className={BANNER_ICON} />}
+        badge={<span aria-hidden className="absolute -right-0.5 -top-0.5 h-[9px] w-[9px] rounded-full border-2 border-banner bg-[#EF4444] shadow-[0_0_7px_rgba(239,68,68,0.9)] [@container_(min-width:640px)]:h-[11px] [@container_(min-width:640px)]:w-[11px]" />}
+        title="Live"
+        ringRef={ringRef}
+        titleRef={titleRef}
+      />
 
       <div className={LEAGUES + (two ? LEAGUES_TWO : "")}>
         <nav ref={navRef} aria-label="League" className={NAV}>
@@ -210,7 +191,7 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
         <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-7 bg-gradient-to-r from-transparent to-banner [@container_(min-width:640px)]:hidden" />
       </div>
 
-      <div ref={controlsRef} className={CONTROLS}>
+      <div ref={controlsRef} className={BANNER_CONTROLS}>
         <nav ref={viewsRef} aria-label="View" className={VIEWS}>
           {views.map((v) => (
             <Link

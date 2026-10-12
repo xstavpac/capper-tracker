@@ -97,7 +97,9 @@ async function main() {
 
   const text = () => container.textContent ?? "";
   const buttons = () => Array.from(container.querySelectorAll<HTMLButtonElement>("button"));
-  const buildButton = () => buttons().find((b) => /^Build/.test(b.textContent ?? ""));
+  // The My Picks segment: its label ("My Picks", or "Building…" mid-build) over its sub-label.
+  const buildButton = () => buttons().find((b) => (b.textContent ?? "").endsWith("from your slip"));
+  const buildLabel = () => buildButton()?.firstElementChild?.textContent;
   const click = (el: Element | undefined) => act(async () => {
     (el as HTMLElement | undefined)?.click();
     await settle();
@@ -117,7 +119,7 @@ async function main() {
   unhandled = 0;
   await click(buildButton());
   check("failed build: the failure is handled", unhandled === 0, `unhandled rejections=${unhandled}`);
-  check('failed build: the button is back to "Build My Picks", not stuck on "Building…"', buildButton()?.textContent === "Build My Picks", `button="${buildButton()?.textContent}"`);
+  check('failed build: the button is back to "My Picks", not stuck on "Building…"', buildLabel() === "My Picks", `button="${buildLabel()}"`);
   check("failed build: the button can be pressed again", buildButton()?.disabled === false);
   check("failed build: an error is shown", text().includes(BUILD_ERROR));
   check("failed build: no parlay is shown", !text().includes("leg parlay"));
@@ -129,7 +131,7 @@ async function main() {
   await click(buildButton());
   check("retry: the parlay is built", text().includes("3-leg parlay"), `button="${buildButton()?.textContent}"`);
   check("retry: the error is gone", !text().includes(BUILD_ERROR));
-  check("retry: the button is idle again", buildButton()?.textContent === "Build My Picks" && buildButton()?.disabled === false);
+  check("retry: the button is idle again", buildLabel() === "My Picks" && buildButton()?.disabled === false);
 
   // Equal records: the legs come out by pick id, not in the slip's own order (p3, p1, p2).
   const heading = Array.from(container.querySelectorAll("h3")).find((el) => (el.textContent ?? "").includes("leg parlay"));

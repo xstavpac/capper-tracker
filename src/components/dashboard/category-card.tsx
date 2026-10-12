@@ -20,6 +20,17 @@ const TINT = {
   red: "border border-[#F0BCBC] bg-[#FFF1F1] dark:border-red-500/45 dark:bg-red-500/10",
 };
 
+// The thin win % bar: green at a winning record, red below, empty while nothing is decided.
+// `className` is its place in the card and its track's color.
+export function WinPctBar({ winPct, decided, className }: { winPct: number; decided: boolean; className: string }) {
+  return (
+    <div aria-hidden className={"h-1 shrink-0 overflow-hidden rounded-md " + className}>
+      {decided && <div className={"h-full rounded-md " + (getRecordColor(winPct) === "green" ? "bg-[#22C55E]" : "bg-[#EF4444]")} style={{ width: Math.min(100, Math.max(0, winPct)) + "%" }} />}
+    </div>
+  );
+}
+export const WIN_PCT_TRACK = "bg-[#E3E8F5] dark:bg-white/10";
+
 export function CategoryCard({
   label,
   wins,
@@ -86,9 +97,7 @@ export function CategoryCard({
       {graded !== undefined && <p className={"-mt-0.5 text-[11px] font-medium leading-4 tabular-nums " + (note === undefined ? "mb-2 " : "") + MUTED}>{graded} graded</p>}
       {note !== undefined && <p className="mb-2 truncate text-[11px] font-semibold leading-4 tabular-nums text-foreground">{note}</p>}
       {/* Pinned to the bottom, so the bars in a row line up when one card wraps and its neighbour does not. */}
-      <div aria-hidden className={"mt-auto h-1 shrink-0 overflow-hidden rounded-md " + (tinted && decided ? "bg-[#0F1420]/[0.08] dark:bg-white/10" : "bg-[#E3E8F5] dark:bg-white/10")}>
-        {decided && <div className={"h-full rounded-md " + (good ? "bg-[#22C55E]" : "bg-[#EF4444]")} style={{ width: Math.min(100, Math.max(0, winPct)) + "%" }} />}
-      </div>
+      <WinPctBar winPct={winPct} decided={decided} className={"mt-auto " + (tinted && decided ? "bg-[#0F1420]/[0.08] dark:bg-white/10" : WIN_PCT_TRACK)} />
     </div>
   );
 }
