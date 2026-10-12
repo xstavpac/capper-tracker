@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { mergeCappersAction, dismissDuplicatePairAction } from "@/server/actions/cappers";
+import { MergeDuplicateList } from "@/components/dashboard/merge-duplicate-notice";
+import type { MergeDuplicateLine } from "@/lib/merge-duplicate-report";
 
 type CapperSummary = { id: string; name: string; pickCount: number };
 type SuspectedDuplicatePair = { capperA: CapperSummary; capperB: CapperSummary; distance: number };
@@ -29,6 +31,8 @@ export function MergeCappersPanel({
   const [manualPrimaryId, setManualPrimaryId] = useState("");
   const [manualDuplicateId, setManualDuplicateId] = useState("");
   const [message, setMessage] = useState<{ text: string; tone: "success" | "error" } | null>(null);
+  // Picks the last merge left duplicated under the surviving capper.
+  const [mergeDuplicates, setMergeDuplicates] = useState<MergeDuplicateLine[]>([]);
   const [isMerging, startTransition] = useTransition();
   const [dismissingKey, setDismissingKey] = useState<string | null>(null);
 
@@ -37,6 +41,7 @@ export function MergeCappersPanel({
   // just a starting suggestion, the confirm step lets the user swap.
   function reviewSuggestedPair(a: CapperSummary, b: CapperSummary) {
     setMessage(null);
+    setMergeDuplicates([]);
     setPending(a.pickCount >= b.pickCount ? { primary: a, duplicate: b } : { primary: b, duplicate: a });
   }
 
@@ -44,6 +49,7 @@ export function MergeCappersPanel({
   // keep - respect that instead of re-deriving it from pick counts.
   function reviewManualPair(primary: CapperSummary, duplicate: CapperSummary) {
     setMessage(null);
+    setMergeDuplicates([]);
     setPending({ primary, duplicate });
   }
 
@@ -62,6 +68,7 @@ export function MergeCappersPanel({
           text: `Merged "${result.duplicateName}" into "${result.primaryName}" - ${result.mergedPickCount} pick${result.mergedPickCount === 1 ? "" : "s"} moved.`,
           tone: "success",
         });
+        setMergeDuplicates(result.duplicatePicks);
         setPending(null);
         setManualPrimaryId("");
         setManualDuplicateId("");
@@ -113,6 +120,8 @@ export function MergeCappersPanel({
           {message.text}
         </div>
       )}
+
+      <MergeDuplicateList duplicates={mergeDuplicates} />
 
       {pending && (
         <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-500/10">

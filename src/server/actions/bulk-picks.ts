@@ -5,13 +5,8 @@ import { requireUser } from "@/server/auth";
 import { prisma } from "@/lib/prisma";
 import { cacheKeys } from "@/lib/cache-keys";
 import { importRowCapError } from "@/lib/import-limits";
-import { insertPicksWithEntitlementCheck } from "@/server/data/subscriptions";
-import {
-  resolveImportRefs,
-  resolveOrCreateCapperId,
-  resolveOrCreateSportId,
-  type PendingPickInsert,
-} from "@/server/data/import-refs";
+import { insertPicksDeduped, sportKeyForName, type DedupInsertResult, type DedupPickRow } from "@/server/data/pick-dedup";
+import { resolveOrCreateCapperId, resolveOrCreateSportId } from "@/server/data/import-refs";
 import {
   resolveGameForNickname,
   resolveGameForTeams,
@@ -32,7 +27,13 @@ import { TEAM_NICKNAME_CANONICAL, stripTeamNamesFromPlayerName } from "@/lib/par
 import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
-import { computeDuplicateFlags, dedupCategory, type ResolvedDupCandidate, type DuplicateFlag } from "@/lib/duplicate-pick-detection";
+import {
+  computeDuplicateFlags,
+  dedupCategory,
+  isComparableBet,
+  type ResolvedDupCandidate,
+  type DuplicateFlag,
+} from "@/lib/duplicate-pick-detection";
 import {
   EXISTING_PICK_SELECT,
   dbDuplicateLabel,
@@ -69,6 +70,10 @@ export type BulkImportItem = {
   // The pick's exact pasted line, for the import skipped-line log only -
   // never used for resolution. Falls back to `description` when absent.
   raw?: string;
+  // The review screen's explicit "Import anyway" on a pick it flagged as a
+  // possible duplicate. Without it the server refuses a duplicate, whatever
+  // the client did or did not flag (see insertPicksDeduped).
+  overrideDuplicate?: boolean;
 };
 
 // A pick the user (or the default) excluded as a possible duplicate. These
@@ -89,6 +94,10 @@ export type BulkImportResult =
       // this genuinely needs manual entry, not a "double-check the matchup"
       // schedule-mismatch message. Disjoint from unmatchedGames.
       doubleheaderBothFinal: string[];
+      // Picks the server-side duplicate check refused: already logged for this
+      // capper and game (or sent twice in this import) with no "Import anyway"
+      // on them. Not inserted.
+      duplicatesSkipped: string[];
       // Set only when the ENTIRE batch was rejected by the Free-plan pick
       // limit (never a partial import) - distinct from `errors`, which is
       // per-item failures unrelated to billing (bad data, unresolved game,
@@ -526,13 +535,15 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
         pickedSide,
         mlFavoredSide,
       });
-      // Can't determine a comparable side for this bet (e.g. a player prop,
-      // or a first-half spread) - don't guess at a match either way.
-      if (!category) return null;
       // TEAM_TOTAL-only widening - see dedupCategory's own comment. A no-op
       // for every other bet type (pickCategory's output already differs by
       // side there).
-      const dedupKey = dedupCategory(category, item.betType, item.description, pickedSide);
+      const dedupKey = category ? dedupCategory(category, item.betType, item.description, pickedSide) : null;
+      // Can't determine a comparable side for this bet (e.g. a total with no
+      // over/under in its text) - don't guess at a match either way. A
+      // moneyline with a known picked team is still comparable without a
+      // category (see isSameBet).
+      if (!isComparableBet({ betType: item.betType, category: dedupKey, pickedSide })) return null;
 
       return {
         index,
@@ -546,6 +557,9 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
         category: dedupKey,
         period,
         description: item.description,
+        sportKey: sportKeyForName(item.sportName),
+        betType: item.betType,
+        pickedSide,
       };
     })
   );
@@ -593,6 +607,9 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
       gameTimeMs: r.gameTimeMs,
       period: r.period,
       dedupKey: r.category,
+      sportKey: r.sportKey,
+      betType: r.betType,
+      pickedSide: r.pickedSide,
     });
   }
   const where = existingPicksWhere(user.id, Array.from(dbCandidates.values()), MAX_GAME_TIME_DRIFT_MS);
@@ -668,7 +685,7 @@ export async function bulkImportPicksAction(
   // individually and are simply never queued - that's a different kind of
   // per-item failure than the billing gate below, which is all-or-nothing
   // across whatever DID resolve.
-  const toInsert: PendingPickInsert[] = [];
+  const toInsert: DedupPickRow[] = [];
   // Every item dropped below, for the skipped-line log - written once, in one
   // batch, after the loop. Pure bookkeeping: nothing here affects the result.
   const skippedLog: SkippedLineEntry[] = skippedDuplicates.map((d) => ({
@@ -774,6 +791,8 @@ export async function bulkImportPicksAction(
         playerName: playerProp?.playerName,
         propMarket: playerProp?.propMarket,
         gameNumber: resolvedGameNumber,
+        overrideDuplicate: item.overrideDuplicate === true,
+        raw: item.raw,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "failed";
@@ -788,12 +807,32 @@ export async function bulkImportPicksAction(
   // latency, and never throws (see recordImportSkippedLines), so it can't
   // fail the import. Awaited (not fire-and-forget) so serverless doesn't
   // freeze the function mid-write.
-  const [result] = await Promise.all([
-    // Cappers and sports are found or created INSIDE the transaction, after
-    // the pick-limit gate - a refused or failed import creates neither.
-    insertPicksWithEntitlementCheck(user.id, toInsert.length, (tx) => resolveImportRefs(tx, user.id, toInsert)),
+  //
+  // insertPicksDeduped is where duplicates are decided - under a per-user
+  // lock, in the same transaction as the insert, against the database and the
+  // earlier rows of this request. What the review screen flagged is a preview;
+  // a duplicate is inserted only if its own row says overrideDuplicate.
+  // Cappers and sports are found or created INSIDE that transaction, after the
+  // pick-limit gate - a refused or failed import creates neither.
+  // If the check (or anything else in the transaction) fails, nothing was
+  // inserted: say so rather than throw an opaque server-action error.
+  type InsertOutcome = { ok: true; result: DedupInsertResult } | { ok: false; err: unknown };
+  const [outcome] = await Promise.all([
+    insertPicksDeduped(user.id, toInsert).then(
+      (result): InsertOutcome => ({ ok: true, result }),
+      (err: unknown): InsertOutcome => ({ ok: false, err })
+    ),
     recordImportSkippedLines(user.id, skippedLog),
   ]);
+  if (!outcome.ok) {
+    console.error("[bulkImportPicksAction] duplicate check / insert failed - nothing imported", outcome.err);
+    return {
+      success: false,
+      error: "The import could not be checked for duplicates and saved, so nothing was imported. Please try again.",
+    };
+  }
+  const result = outcome.result;
+  const duplicatesSkipped = result.skippedDuplicates.map((d) => d.capperName + " - " + d.label);
 
   // Bust this user's cached Dashboard aggregations by tag (see
   // getDashboardSummary) - revalidatePath does not reliably evict
@@ -811,6 +850,7 @@ export async function bulkImportPicksAction(
       errors,
       unmatchedGames,
       doubleheaderBothFinal,
+      duplicatesSkipped,
       pickLimitBlocked: { message: result.message, remaining: result.remaining },
     };
   }
@@ -822,6 +862,7 @@ export async function bulkImportPicksAction(
     errors,
     unmatchedGames,
     doubleheaderBothFinal,
+    duplicatesSkipped,
   };
 }
 

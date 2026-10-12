@@ -22,6 +22,7 @@
 
 import type { BetType } from "@prisma/client";
 import { parseAnyPlayerProp, type AnyPlayerPropMarket } from "@/lib/bet-line";
+import { teamNamesMatch } from "@/lib/team-name-match";
 
 export type DuplicateFlag = { message: string };
 
@@ -80,6 +81,52 @@ export function dedupCategory(
   return category;
 }
 
+// What makes two picks "the same bet on the same game" - the ONE definition
+// shared by the import preview (checkDuplicatePicksAction), the server-side
+// check that actually decides what is inserted (server/data/pick-dedup.ts) and
+// the capper-merge report. The capper is compared by the caller.
+export type BetIdentity = {
+  homeTeam: string;
+  awayTeam: string;
+  gameTimeMs: number;
+  // The Odds API sport key ("americanfootball_ncaaf") - turns on that league's
+  // cross-feed alias rows in teamNamesMatch. Without it only accent / "St."
+  // folding applies.
+  sportKey?: string;
+  period: string; // Pick.period
+  betType?: BetType;
+  // dedupCategory(pickCategory(...)) - null when pickCategory can't name a side
+  // (a pick'em moneyline, a total with no over/under in its text).
+  category: string | null;
+  pickedSide?: "HOME" | "AWAY" | null;
+};
+
+// False when a pick has nothing to compare on, so it can never be called a
+// duplicate of anything (and nothing of it).
+export function isComparableBet(b: Pick<BetIdentity, "betType" | "category" | "pickedSide">): boolean {
+  return b.category !== null || (b.betType === "MONEYLINE" && Boolean(b.pickedSide));
+}
+
+// Same game: both team names agree across feed spellings (the score feed and
+// the Odds API spell some teams differently, and one game can be resolved from
+// either depending on how far ahead it is imported - an exact string compare
+// let those through), home matched to home, within the game-time tolerance.
+// Same bet: same game segment, then
+//   - a MONEYLINE whose picked team is known on both sides is compared on that
+//     team alone. FAV_ML / DOG_ML is derived from the price, and the price can
+//     cross from favourite to underdog between two imports of the same pick.
+//   - everything else on the side-aware category.
+export function isSameBet(a: BetIdentity, b: BetIdentity, maxGameTimeDriftMs: number): boolean {
+  if (a.period !== b.period) return false;
+  if (Math.abs(a.gameTimeMs - b.gameTimeMs) > maxGameTimeDriftMs) return false;
+  const sportKey = a.sportKey ?? b.sportKey;
+  if (!teamNamesMatch(a.homeTeam, b.homeTeam, sportKey) || !teamNamesMatch(a.awayTeam, b.awayTeam, sportKey)) return false;
+  if (a.betType === "MONEYLINE" && b.betType === "MONEYLINE" && a.pickedSide && b.pickedSide) {
+    return a.pickedSide === b.pickedSide;
+  }
+  return a.category !== null && a.category === b.category;
+}
+
 // A batch item already resolved to a real scheduled game + a comparable
 // side-aware category. Items that couldn't be resolved that far are simply
 // absent from the array passed in.
@@ -93,7 +140,14 @@ export type ResolvedDupCandidate = {
   homeTeam: string;
   awayTeam: string;
   gameTimeMs: number;
-  category: string; // pickCategory key - SPREAD_PLUS, FAV_ML, OVER, ...
+  // pickCategory key - SPREAD_PLUS, FAV_ML, OVER, ... null only for a moneyline
+  // that is compared on its picked team instead (see isSameBet).
+  category: string | null;
+  // The three below feed isSameBet; optional so a caller that has none of them
+  // gets the category-only comparison.
+  sportKey?: string;
+  betType?: BetType;
+  pickedSide?: "HOME" | "AWAY" | null;
   // The pick's game-segment scope (Pick.period). pickCategory only forks
   // OVER/UNDER/ML/SPREAD by period for FIRST_HALF, so without comparing this
   // too a "Q1 over 12.5" and a full-game "over 54.5" on the same matchup both
@@ -126,15 +180,7 @@ export function computeDuplicateFlags(
         message: r.capperName + " already has a " + r.dbDuplicateLabel + " pick logged for this game.",
       };
     } else {
-      const earlier = seen.find(
-        (e) =>
-          e.capperKey === r.capperKey &&
-          e.category === r.category &&
-          e.period === r.period &&
-          e.homeTeam === r.homeTeam &&
-          e.awayTeam === r.awayTeam &&
-          Math.abs(e.gameTimeMs - r.gameTimeMs) <= maxGameTimeDriftMs
-      );
+      const earlier = seen.find((e) => e.capperKey === r.capperKey && isSameBet(e, r, maxGameTimeDriftMs));
       if (earlier) {
         flags[r.index] = {
           message: r.capperName + ' already has "' + earlier.description + '" earlier in this paste - same game, same bet.',
@@ -147,6 +193,19 @@ export function computeDuplicateFlags(
   return flags;
 }
 
+// The capper name a pick is checked and imported under: the saved capper the
+// user confirmed a fuzzy match to, otherwise the pasted name. `choices` is
+// keyed by the pasted name; `confirmedNew` is the form's "no, a new capper"
+// marker. Pure so a caller that has just CHANGED a choice can pass the new map:
+// the form's own state is not updated until the next render, and re-running the
+// duplicate check from the same click with the old map sent the pasted name -
+// which matches no saved capper, so those picks were never compared with the
+// database at all.
+export function resolveCapperName(choices: Record<string, string>, rawCapperName: string, confirmedNew: string): string {
+  const choice = choices[rawCapperName];
+  return choice && choice !== confirmedNew ? choice : rawCapperName;
+}
+
 export type DuplicateChoice = "import" | "skip";
 
 // A flagged duplicate is left OUT of the import unless the user explicitly
@@ -155,6 +214,46 @@ export type DuplicateChoice = "import" | "skip";
 // end-of-import summary now names.
 export function isSkippedAsDuplicate(hasFlag: boolean, choice: DuplicateChoice | undefined): boolean {
   return hasFlag && choice !== "import";
+}
+
+// The review screen's duplicate check is only a preview (the server decides
+// what is inserted), but the import must not go ahead without it: while it
+// runs the Import button is disabled, and a check that errored or timed out
+// blocks the import with an error instead of letting every line through
+// unflagged, which is what it used to do.
+export type DuplicateCheckStatus = "idle" | "checking" | "failed";
+
+export function duplicateCheckStatus(pendingChecks: number, failed: boolean): DuplicateCheckStatus {
+  if (pendingChecks > 0) return "checking";
+  return failed ? "failed" : "idle";
+}
+
+export function duplicateCheckBlocksImport(status: DuplicateCheckStatus): boolean {
+  return status !== "idle";
+}
+
+export const DUPLICATE_CHECK_FAILED_MESSAGE =
+  "The duplicate check failed, so nothing can be imported yet. Retry the check - importing without it could save picks twice.";
+
+// How long the review screen waits for the duplicate check before treating it
+// as failed.
+export const DUPLICATE_CHECK_TIMEOUT_MS = 45_000;
+
+// Rejects if `work` has not settled within `ms`.
+export function withTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
 }
 
 // Button copy: the count of picks that WILL import, plus - when there are any

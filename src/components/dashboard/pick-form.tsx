@@ -41,6 +41,9 @@ export function PickForm({
   const [sportId, setSportId] = useState(sports[0]?.id ?? "");
   const [betType, setBetType] = useState("SPREAD");
   const [error, setError] = useState<string | null>(null);
+  // The server refused the pick as already logged for this capper and game -
+  // the error then carries an explicit "Add anyway".
+  const [duplicateRefused, setDuplicateRefused] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -91,6 +94,7 @@ export function PickForm({
 
   async function handleSubmit(formData: FormData) {
     setError(null);
+    setDuplicateRefused(false);
     setSubmitting(true);
 
     // The datetime-local input's value (e.g. "2026-09-20T13:00") has no
@@ -110,6 +114,7 @@ export function PickForm({
 
     if (!result.success) {
       setError(result.error);
+      setDuplicateRefused(result.duplicate === true);
       return;
     }
 
@@ -147,7 +152,24 @@ export function PickForm({
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">{error}</div>
+        <div className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
+          {error}
+          {duplicateRefused && (
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => {
+                if (!formRef.current) return;
+                const formData = new FormData(formRef.current);
+                formData.set("allowDuplicate", "1");
+                void handleSubmit(formData);
+              }}
+              className="ml-2 font-medium underline underline-offset-2 disabled:opacity-50"
+            >
+              Add anyway
+            </button>
+          )}
+        </div>
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -20,7 +20,8 @@ import { easternDateRange } from "@/lib/dates";
 import { nrfiSide, betScope, periodLabel } from "@/lib/bet-line";
 import { findMatchingGameResult, resolveOutcome, resolvePlayerProp, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { FREE_PICK_LIMIT } from "@/lib/entitlements";
-import { getEntitlementsForUser, createPicksWithEntitlementCheck } from "@/server/data/subscriptions";
+import { getEntitlementsForUser } from "@/server/data/subscriptions";
+import { insertPicksDeduped } from "@/server/data/pick-dedup";
 
 // Kept for compatibility with the one existing call site's naming
 // (picks/page.tsx expects pickCount/pickLimit/atLimit) - `unlimited` covers
@@ -46,6 +47,15 @@ export async function getSportsWithLeagues() {
   });
 }
 
+// Thrown by createPick when the pick is already logged for this capper and
+// game and the caller did not pass allowDuplicate.
+export class DuplicatePickError extends Error {
+  constructor(public readonly existingLabel: string) {
+    super('This capper already has "' + existingLabel + '" logged for this game. Nothing was added.');
+    this.name = "DuplicatePickError";
+  }
+}
+
 export async function createPick(
   userId: string,
   data: {
@@ -63,25 +73,40 @@ export async function createPick(
     units: number;
     gameTime: Date;
     notes?: string;
-  }
+  },
+  // The form's explicit "Add anyway" on a pick the server called a duplicate.
+  { allowDuplicate = false }: { allowDuplicate?: boolean } = {}
 ) {
-  const capper = await prisma.capper.findFirst({
-    where: { id: data.capperId, userId },
-  });
+  const [capper, sport] = await Promise.all([
+    prisma.capper.findFirst({ where: { id: data.capperId, userId } }),
+    prisma.sport.findUnique({ where: { id: data.sportId }, select: { name: true } }),
+  ]);
   if (!capper) {
     throw new Error("Capper not found.");
+  }
+  if (!sport) {
+    throw new Error("Sport not found.");
   }
 
   // The actual authorization gate - locks this user's Subscription row and
   // checks the Free-plan limit atomically with the insert itself, so two
   // concurrent creates for the same user can't both slip past the check
-  // (see createPicksWithEntitlementCheck for why a plain count-then-create
+  // (see insertPicksInTransaction for why a plain count-then-create
   // isn't safe here). Single-pick creation is just the N=1 case of the same
   // batch path bulk import uses.
   // The manual form's price is always the one the user typed.
-  const result = await createPicksWithEntitlementCheck(userId, [{ ...data, oddsSource: "STATED" }]);
+  //
+  // Same server-side duplicate check as the catalog import, in the same
+  // transaction as the gate and the insert (see insertPicksDeduped): a pick
+  // already logged for this capper and game is refused unless allowDuplicate.
+  const result = await insertPicksDeduped(userId, [
+    { ...data, oddsSource: "STATED", capperName: capper.name, sportName: sport.name, overrideDuplicate: allowDuplicate },
+  ]);
   if (!result.allowed) {
     throw new Error(result.message);
+  }
+  if (result.skippedDuplicates.length > 0) {
+    throw new DuplicatePickError(result.skippedDuplicates[0].existingLabel);
   }
   return result.created[0];
 }

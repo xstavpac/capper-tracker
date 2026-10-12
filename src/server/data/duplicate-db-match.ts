@@ -24,12 +24,13 @@
 // duplicate-db-match-acceptance-test.ts.
 import type { Pick as PickRow, Prisma } from "@prisma/client";
 import { betTypeLabel } from "@/lib/bet-line";
-import { dedupCategory } from "@/lib/duplicate-pick-detection";
+import { dedupCategory, isComparableBet, isSameBet, type BetIdentity } from "@/lib/duplicate-pick-detection";
 import { pickCategory } from "@/server/data/stats";
 
 // Exactly the columns the match below reads - the full row (notes, timestamps,
 // grading fields...) used to be fetched for every candidate.
 export const EXISTING_PICK_SELECT = {
+  id: true,
   capperId: true,
   sportId: true,
   homeTeam: true,
@@ -60,8 +61,14 @@ export type DbDupCandidate = {
   awayTeam: string;
   gameTimeMs: number;
   period: string;
-  // dedupCategory(...) of the pasted pick.
-  dedupKey: string;
+  // dedupCategory(...) of the pasted pick. null only for a moneyline with no
+  // readable favourite/underdog side, which is compared on pickedSide instead.
+  dedupKey: string | null;
+  // What isSameBet needs beyond the category (see its comment). Optional: a
+  // caller without them gets the category-only comparison.
+  sportKey?: string;
+  betType?: ExistingPickRow["betType"];
+  pickedSide?: "HOME" | "AWAY" | null;
 };
 
 // The one WHERE for the whole paste, or null when no pasted pick can have a
@@ -83,33 +90,61 @@ export function existingPicksWhere(
   };
 }
 
-// The label of the first logged pick that is the same bet as `candidate`, or
-// null. `rows` may be the whole paste's superset read - everything the old
-// per-pick WHERE filtered on is re-checked here.
+// A logged pick as isSameBet sees it. Categorized under the pasted pick's own
+// sport label (what pickCategory needs to tell F5 from a first half), as before.
+// p.propMarket/p.playerName are the row's own stored columns (set at import
+// time) - passed straight through so dedupCategory doesn't re-derive them from
+// betDetail; null for any row predating those columns, which it re-parses.
+export function existingBetIdentity(p: ExistingPickRow, sportName: string, sportKey?: string): BetIdentity {
+  const pCategory = pickCategory({ ...p, sportName });
+  const knownPlayerProp = p.propMarket && p.playerName ? { propMarket: p.propMarket, playerName: p.playerName } : null;
+  return {
+    homeTeam: p.homeTeam,
+    awayTeam: p.awayTeam,
+    gameTimeMs: p.gameTime.getTime(),
+    sportKey,
+    period: p.period,
+    betType: p.betType,
+    category: pCategory ? dedupCategory(pCategory, p.betType, p.betDetail, p.pickedSide, knownPlayerProp) : null,
+    pickedSide: p.pickedSide,
+  };
+}
+
+// The first logged pick that is the same bet as `candidate`, or null. `rows`
+// may be the whole paste's superset read - capper and sport are re-checked
+// here, and isSameBet re-checks the game (team names across feed spellings,
+// game-time window), the game segment and the bet.
+// Scoped to sportId so "same game" matches what getPicksForGame (picks.ts)
+// considers the same game - without that scope, a same-named team in a
+// different sport could flag a duplicate the game's own expander never shows.
+export function findDbDuplicate(rows: ExistingPickRow[], candidate: DbDupCandidate, driftMs: number): ExistingPickRow | null {
+  const wanted: BetIdentity = {
+    homeTeam: candidate.homeTeam,
+    awayTeam: candidate.awayTeam,
+    gameTimeMs: candidate.gameTimeMs,
+    sportKey: candidate.sportKey,
+    period: candidate.period,
+    betType: candidate.betType,
+    category: candidate.dedupKey,
+    pickedSide: candidate.pickedSide,
+  };
+  if (!isComparableBet(wanted)) return null;
+  return (
+    rows.find((p) => {
+      if (p.capperId !== candidate.capperId || p.sportId !== candidate.sportId) return false;
+      return isSameBet(existingBetIdentity(p, candidate.sportName, candidate.sportKey), wanted, driftMs);
+    }) ?? null
+  );
+}
+
+export function existingPickLabel(p: Pick<ExistingPickRow, "betDetail" | "betType">): string {
+  return p.betDetail || betTypeLabel(p.betType);
+}
+
+// The label of the first logged pick that is the same bet as `candidate`, or null.
 export function dbDuplicateLabel(rows: ExistingPickRow[], candidate: DbDupCandidate, driftMs: number): string | null {
-  const dbDup = rows.find((p) => {
-    if (p.capperId !== candidate.capperId || p.sportId !== candidate.sportId) return false;
-    if (p.homeTeam !== candidate.homeTeam || p.awayTeam !== candidate.awayTeam) return false;
-    if (Math.abs(p.gameTime.getTime() - candidate.gameTimeMs) > driftMs) return false;
-    // Scoped to sportId above so "same game" here matches what
-    // getPicksForGame (picks.ts) considers the same game - without that
-    // scope, a same-named team in a different sport (or a stale/mis-resolved
-    // row) could flag a duplicate that the game's own expander would never
-    // actually show, since getPicksForGame always filters by sportId too.
-    // period is compared explicitly (not just via pickCategory): a Q1 /
-    // 2nd-half / period pick shares the plain OVER/UNDER/ML/SPREAD category
-    // with its full-game counterpart.
-    if (p.period !== candidate.period) return false;
-    const pCategory = pickCategory({ ...p, sportName: candidate.sportName });
-    if (!pCategory) return false;
-    // p.propMarket/p.playerName are the row's own stored columns (set at
-    // import time) - pass them through directly so dedupCategory doesn't need
-    // to re-derive them from betDetail; null for any row predating those
-    // columns, which dedupCategory falls back to re-parsing.
-    const knownPlayerProp = p.propMarket && p.playerName ? { propMarket: p.propMarket, playerName: p.playerName } : null;
-    return dedupCategory(pCategory, p.betType, p.betDetail, p.pickedSide, knownPlayerProp) === candidate.dedupKey;
-  });
-  return dbDup ? dbDup.betDetail || betTypeLabel(dbDup.betType) : null;
+  const dbDup = findDbDuplicate(rows, candidate, driftMs);
+  return dbDup ? existingPickLabel(dbDup) : null;
 }
 
 // Sport ids for the paste's sport names, matched case-insensitively as the old

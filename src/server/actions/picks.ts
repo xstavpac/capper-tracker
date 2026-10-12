@@ -2,7 +2,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { requireUser } from "@/server/auth";
-import { createPick, updatePickStatus, deletePick, getCapperLeagueRecords, type CapperLeagueRecords } from "@/server/data/picks";
+import { createPick, DuplicatePickError, updatePickStatus, deletePick, getCapperLeagueRecords, type CapperLeagueRecords } from "@/server/data/picks";
 import type { PickCategoryKey } from "@/server/data/stats";
 import { cacheKeys } from "@/lib/cache-keys";
 import type { BetType, PickStatus, Period } from "@prisma/client";
@@ -16,7 +16,9 @@ function revalidatePickStats(userId: string) {
   revalidateTag(cacheKeys.dashboard(userId));
 }
 
-export type ActionResult = { success: true } | { success: false; error: string };
+// duplicate: the server refused the pick as already logged - the form offers
+// "Add anyway", which resubmits with allowDuplicate.
+export type ActionResult = { success: true } | { success: false; error: string; duplicate?: true };
 
 export async function createPickAction(formData: FormData): Promise<ActionResult> {
   const user = await requireUser();
@@ -35,6 +37,7 @@ export async function createPickAction(formData: FormData): Promise<ActionResult
   const sportsbook = (formData.get("sportsbook") as string)?.trim() || undefined;
   const gameTimeRaw = formData.get("gameTime") as string;
   const notes = (formData.get("notes") as string)?.trim() || undefined;
+  const allowDuplicate = formData.get("allowDuplicate") === "1";
 
   if (!capperId || !sportId || !homeTeam || !awayTeam || !betType) {
     return { success: false, error: "Please fill in all required fields." };
@@ -73,8 +76,11 @@ export async function createPickAction(formData: FormData): Promise<ActionResult
       sportsbook,
       gameTime: new Date(gameTimeRaw),
       notes,
-    });
+    }, { allowDuplicate });
   } catch (err) {
+    if (err instanceof DuplicatePickError) {
+      return { success: false, error: err.message, duplicate: true };
+    }
     const message = err instanceof Error ? err.message : "Something went wrong.";
     return { success: false, error: message };
   }
