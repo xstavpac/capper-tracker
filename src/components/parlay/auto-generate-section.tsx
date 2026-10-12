@@ -223,6 +223,7 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
                 subtitle={RESULT_SUBTITLE}
                 plain
                 priceLegs={parlayA!.legs.map((leg) => leg.top.pick)}
+                sendLegs={parlayA!.legs.map((leg) => leg.top.pick)}
               >
                 <ol className={LEG_LIST}>
                   {parlayA!.legs.map((leg, i) => (

@@ -113,7 +113,7 @@ function BuildNotes({ skipped, unverified }: { skipped: SkippedPick[]; unverifie
 
 function BuildMyPicksResult({ result }: { result: BuiltParlay }) {
   return (
-    <ResultBlock title={`My Picks — ${result.legs.length}-leg parlay`} priceLegs={result.legs}>
+    <ResultBlock title={`My Picks — ${result.legs.length}-leg parlay`} priceLegs={result.legs} sendLegs={result.legs}>
       <ol className={LEG_LIST}>
         {result.legs.map((leg, i) => {
           const record = bestAvailableRecord(leg, result.records);
