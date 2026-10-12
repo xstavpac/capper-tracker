@@ -61,10 +61,10 @@ export function dedupCategory(
     return category + ":" + (pickedSide ?? "UNK") + ":" + overUnder;
   }
   if (betType === "PLAYER_PROP") {
-    // pickCategory deliberately collapses EVERY player-prop market into one
-    // "TD_PROP" bucket (see its own comment - a documented tradeoff for
-    // stats/leaderboard tiles, untouched here) - so without this, a bare
-    // "TD_PROP" category alone false-positives ANY two player props on the
+    // pickCategory collapses most player-prop markets into one "TD_PROP"
+    // bucket (only yardage / receptions have their own key - see its own
+    // comment) and never tells players apart - so without this, a bare
+    // category alone false-positives ANY two player props on the
     // same game against each other regardless of player or market (the
     // "Cam Skattebo TD" / "Darnell Mooney receiving yards" / "Isaiah Likely
     // receptions" report - three different players, three different markets,

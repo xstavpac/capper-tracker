@@ -61,13 +61,19 @@ const GOLDEN: [string, Partial<Input> & { betType: Input["betType"] }, string | 
   ["TOTAL NFL first half under", { betType: "TOTAL", period: "FIRST_HALF", sportName: "NFL", betDetail: "1H Under 21.5" }, "FIRST_HALF_UNDER"],
   ["TOTAL NBA second quarter over", { betType: "TOTAL", period: "SECOND_QUARTER", sportName: "NBA", betDetail: "Q2 Over 55.5" }, "SECOND_QUARTER_OVER"],
   ["TOTAL NBA second quarter no direction (null)", { betType: "TOTAL", period: "SECOND_QUARTER", sportName: "NBA", betDetail: "55.5" }, null],
-  ["PLAYER_PROP propMarket set", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "REC_YDS", betDetail: "anything" }, "TD_PROP"],
+  ["PLAYER_PROP propMarket TD", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "TD", betDetail: "anything" }, "TD_PROP"],
+  ["PLAYER_PROP propMarket PASS_YDS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "PASS_YDS", betDetail: "anything" }, "PASS_YDS_PROP"],
+  ["PLAYER_PROP propMarket RUSH_YDS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "RUSH_YDS", betDetail: "anything" }, "RUSH_YDS_PROP"],
+  ["PLAYER_PROP propMarket REC_YDS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "REC_YDS", betDetail: "anything" }, "REC_YDS_PROP"],
+  ["PLAYER_PROP propMarket RECEPTIONS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "RECEPTIONS", betDetail: "anything" }, "RECEPTIONS_PROP"],
+  ["PLAYER_PROP propMarket with no key of its own", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "RUSH_REC_YDS", betDetail: "anything" }, "TD_PROP"],
+  ["PLAYER_PROP legacy passing-yards text", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "Joe Burrow Over 250 Passing Yards" }, "PASS_YDS_PROP"],
   ["PLAYER_PROP legacy TD text", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "Puka Nacua Anytime TD" }, "TD_PROP"],
   ["PLAYER_PROP unparseable (null)", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "??" }, null],
 ];
 
 // The expected values above were captured at this version.
-expect("PICK_CATEGORY_VERSION matches the version the golden table was captured at", PICK_CATEGORY_VERSION, 1);
+expect("PICK_CATEGORY_VERSION matches the version the golden table was captured at", PICK_CATEGORY_VERSION, 2);
 for (const [label, overrides, expected] of GOLDEN) {
   expect(`pickCategory: ${label}`, pickCategory({ ...base, ...overrides } as Input), expected);
 }

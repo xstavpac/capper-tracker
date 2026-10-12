@@ -31,9 +31,9 @@ export type MatrixCase = { group: string; input: MatrixInput };
 
 const PERIODS = Object.values(Period);
 const BET_TYPES = Object.values(BetType);
-// NHL and MLB markets (added 2026-10) are deliberately not swept: pickCategory only tests
-// propMarket for truthiness (-> TD_PROP), so they add no branch, and keeping the
-// axis at the NFL values keeps the pinned golden table valid without a regen.
+// NHL and MLB markets (added 2026-10) are deliberately not swept: they have no category of
+// their own (any market outside STAT_PROP_CATEGORY -> TD_PROP), so they add no branch, and
+// keeping the axis at the NFL values keeps the pinned golden table valid without a regen.
 const NON_NFL_PROP_MARKETS = new Set<string>([
   "ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "ASSISTS", "SAVES",
   "STRIKEOUTS", "OUTS_RECORDED", "TOTAL_BASES", "HITS", "WALKS", "RUNS", "RBIS", "HOME_RUNS",

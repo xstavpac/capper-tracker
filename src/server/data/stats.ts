@@ -650,6 +650,9 @@ export type PickCategoryKey =
   // real home. MLB first-half spread stays F5_SPREAD_MINUS/PLUS below.
   | "FIRST_HALF_SPREAD"
   | "TD_PROP"
+  // Yardage / receptions props: one key per market, never summed into TD_PROP
+  // (see pickCategory's PLAYER_PROP branch).
+  | StatPropCategoryKey
   | "NRFI"
   | "YRFI"
   | "F5_SPREAD_MINUS"
@@ -679,6 +682,21 @@ export type PickCategoryKey =
   // ALL_CATEGORY_KEYS, so the /live game-card snippet shows a segment pick
   // its own record instead of a conflated one.
   | SegmentCategoryKey;
+
+// The player-prop markets with a category of their own, keyed by PropMarket.
+// Every other market (touchdowns and the ones not split out yet) is TD_PROP.
+const STAT_PROP_CATEGORY = {
+  PASS_YDS: "PASS_YDS_PROP",
+  RUSH_YDS: "RUSH_YDS_PROP",
+  REC_YDS: "REC_YDS_PROP",
+  RECEPTIONS: "RECEPTIONS_PROP",
+} as const;
+export type StatPropCategoryKey = (typeof STAT_PROP_CATEGORY)[keyof typeof STAT_PROP_CATEGORY];
+export const STAT_PROP_CATEGORY_KEYS: StatPropCategoryKey[] = Object.values(STAT_PROP_CATEGORY);
+
+function playerPropCategory(market: string): PickCategoryKey {
+  return (STAT_PROP_CATEGORY as Record<string, StatPropCategoryKey>)[market] ?? "TD_PROP";
+}
 
 export const SEGMENT_CATEGORY_PERIODS = [
   "SECOND_HALF",
@@ -779,6 +797,10 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   FIRST_HALF_UNDER: "1st Half Under",
   FIRST_HALF_SPREAD: "1st Half Spread",
   TD_PROP: "Player Props",
+  PASS_YDS_PROP: "Passing Yards",
+  RUSH_YDS_PROP: "Rushing Yards",
+  REC_YDS_PROP: "Receiving Yards",
+  RECEPTIONS_PROP: "Receptions",
   NRFI: "NRFI",
   YRFI: "YRFI",
   F5_SPREAD_MINUS: "F5 Spread -",
@@ -831,6 +853,10 @@ export const PICK_CATEGORY_MARKET_NOUN: Record<PickCategoryKey, string> = {
   FIRST_HALF_UNDER: "first-half under",
   FIRST_HALF_SPREAD: "first-half spread",
   TD_PROP: "player prop",
+  PASS_YDS_PROP: "passing yards",
+  RUSH_YDS_PROP: "rushing yards",
+  REC_YDS_PROP: "receiving yards",
+  RECEPTIONS_PROP: "receptions",
   NRFI: "NRFI",
   YRFI: "YRFI",
   F5_SPREAD_MINUS: "first-5 favorite spread",
@@ -909,6 +935,7 @@ export const NFL_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_SPREAD",
   ...QUARTER_SECOND_HALF_CATEGORY_KEYS,
   "TD_PROP",
+  ...STAT_PROP_CATEGORY_KEYS,
   "TEAM_TOTAL",
 ];
 
@@ -1014,6 +1041,7 @@ export const ALL_CATEGORY_KEYS: PickCategoryKey[] = [
   "FIRST_HALF_UNDER",
   "FIRST_HALF_SPREAD",
   "TD_PROP",
+  ...STAT_PROP_CATEGORY_KEYS,
   ...SEGMENT_CATEGORY_KEYS,
 ];
 
@@ -1054,7 +1082,7 @@ type PickCategoryInput = {
 // value - so until that backfill runs they reflect the old classification.
 // pick-category-version-acceptance-test.ts pins pickCategory's outputs so changing
 // them without bumping this fails a test.
-export const PICK_CATEGORY_VERSION = 1;
+export const PICK_CATEGORY_VERSION = 2;
 
 export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
   if (pick.betType === "NRFI") {
@@ -1143,26 +1171,21 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
   }
 
   if (pick.betType === "PLAYER_PROP") {
-    // Every structured market this app recognizes (PASS_YDS/RUSH_YDS/
-    // REC_YDS/RECEPTIONS/TD - see the PropMarket enum) still shares this one
-    // TD_PROP tile - there's no per-market leaderboard/tile split yet (that's
-    // future work once grading supports the non-TD markets too; see PR 3).
-    // What changed here is trusting a real signal instead of a blind
-    // "betType === PLAYER_PROP => TD_PROP" assumption: propMarket, when set,
-    // is trusted directly (a plain enum check - no PLAYER_PROP betType ever
-    // implies TD on its own). When it's null (every row predating this PR,
-    // and any manually-entered PLAYER_PROP pick, which never runs through
-    // parsePlayerProp at all), betDetail is re-parsed with the same shared
-    // parser as import time. Confirmed against real cases: legacy TD text
-    // ("Puka Nacua Anytime TD") still resolves TD_PROP exactly as before;
-    // legacy/manual non-TD prop text ("Josh Allen Over 275.5 Passing Yards"
-    // entered by hand before this PR existed) now also resolves TD_PROP,
-    // via the same fallback parse, instead of always doing so unconditionally
-    // regardless of content; and malformed/unparseable PLAYER_PROP text (a
-    // manual entry with no recognizable market in it) returns null - it was
-    // never really a TD prop, so it shouldn't silently count as one.
-    if (pick.propMarket) return "TD_PROP";
-    return parsePlayerProp(pick.betDetail ?? "") ? "TD_PROP" : null;
+    // Passing / rushing / receiving yards and receptions each have their own
+    // key (STAT_PROP_CATEGORY): "Joe Burrow Over 250 Passing Yards" is not a
+    // touchdown prop and must not be counted in the TD_PROP record. Every
+    // other market (TD, and the combined-yards, passing-TD, NHL and MLB ones,
+    // which have no key of their own yet) still lands in TD_PROP.
+    // propMarket, when set, is trusted directly. When it's null (rows
+    // predating the column, and any manually-entered PLAYER_PROP pick, which
+    // never runs through parsePlayerProp at all), betDetail is re-parsed with
+    // the same shared parser as import time, so legacy TD text ("Puka Nacua
+    // Anytime TD") still resolves TD_PROP and legacy yardage text resolves
+    // its own key. Malformed/unparseable PLAYER_PROP text (a manual entry
+    // with no recognizable market in it) returns null - it was never really
+    // a TD prop, so it shouldn't silently count as one.
+    const market = pick.propMarket ?? parsePlayerProp(pick.betDetail ?? "")?.propMarket;
+    return market ? playerPropCategory(market) : null;
   }
 
   return null;
@@ -1185,6 +1208,10 @@ const SPECIALIST_LABELS: Record<PickCategoryKey, string> = {
   FIRST_HALF_UNDER: "First-half unders specialist",
   FIRST_HALF_SPREAD: "First-half spread specialist",
   TD_PROP: "Player-prop specialist",
+  PASS_YDS_PROP: "Passing-yards specialist",
+  RUSH_YDS_PROP: "Rushing-yards specialist",
+  REC_YDS_PROP: "Receiving-yards specialist",
+  RECEPTIONS_PROP: "Receptions specialist",
   NRFI: "NRFI specialist",
   YRFI: "YRFI specialist",
   F5_SPREAD_MINUS: "F5 favorite spread specialist",
