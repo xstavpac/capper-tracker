@@ -52,12 +52,12 @@ import picksBanner from "../../../../public/banners/picks.png";
 // itself and stay client-safe, so it takes an already-resolved chip set
 // instead of a sportName). The two thin wrappers below just do that
 // resolution. `undefined` (no sportId filter selected) resolves to `null` -
-// every option is relevant then, and the first-half label stays "F5".
+// every option is relevant then, and the first-half label is "1H / F5".
 function chipSetForSport(sportName: string | undefined): PickCategoryKey[] | null {
   return sportName ? chipSetForLeague(sportName) : null;
 }
 
-function firstHalfLabelPrefix(sportName: string | undefined): "F5" | "1H" {
+function firstHalfLabelPrefix(sportName: string | undefined): "F5" | "1H" | "1H / F5" {
   return firstHalfLabelPrefixForChipSet(chipSetForSport(sportName));
 }
 

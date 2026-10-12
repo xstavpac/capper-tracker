@@ -429,7 +429,9 @@ function main() {
     // (PART W - the N. Texas mis-resolving-to-Longhorns bug).
     // 178 -> 179: "unc" added as a North Carolina abbreviation (the "UNC
     // +21.5" skip-log line - capper-name-collision-acceptance-test.ts).
-    check("NCAAF list: 179 keys (138 FBS schools + capper-shorthand aliases + FCS money-game opponents)", keys.length, 179);
+    // 179 -> 183: "niu", and "miami (ohio)"/"miami of ohio"/"miami redhawks"
+    // for Miami (OH) (import-parser-gaps-acceptance-test.ts).
+    check("NCAAF list: 183 keys (138 FBS schools + capper-shorthand aliases + FCS money-game opponents)", keys.length, 183);
     check("NCAAF list: no duplicate keys", new Set(keys).size, keys.length);
 
     // (a) Every key resolves to NCAAF from realistic capper text (the key +

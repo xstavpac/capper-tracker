@@ -278,6 +278,13 @@ const BET_SCOPE_RULES: [RegExp, BetScope][] = [
   [/\b1st[\s.-]*half\b/, "FIRST_HALF"],
   [/\bfirst[\s.-]*half\b/, "FIRST_HALF"],
   [/\b1h\b/, "FIRST_HALF"],
+  // More first-half shorthands cappers write: "H1", "FH", "1st H", "1 half".
+  // The bare "1" form refuses a sign, digit or decimal point in front of it,
+  // so a line's own number ("+1 half point", "21 half") is never read as it.
+  [/\bh1\b/, "FIRST_HALF"],
+  [/\bfh\b/, "FIRST_HALF"],
+  [/\b1st[\s.-]*h\b/, "FIRST_HALF"],
+  [/(?<![+\-.\d])1[\s-]*half\b/, "FIRST_HALF"],
   // ---- A single inning outside MLB's own F5/NRFI paths: no score source ----
   [
     /\b(1st|2nd|3rd|4th|5th|6th|7th|8th|9th|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth)\s+inning\b/,
@@ -291,6 +298,19 @@ export function betScope(betDetail: string | null): BetScope {
     if (re.test(t)) return scope;
   }
   return "FULL_GAME";
+}
+
+// The scope token exactly as the capper wrote it ("1H", "1st Half", "Q3"), or
+// null for a full-game text. Lets a caller that is about to discard part of a
+// pick's text (parsePickText's parentheticals) carry the token over, so the
+// stored betDetail still names the segment betScope reads it back from.
+export function betScopeToken(text: string): string | null {
+  const t = text.toLowerCase();
+  for (const [re] of BET_SCOPE_RULES) {
+    const m = re.exec(t);
+    if (m) return text.slice(m.index, m.index + m[0].length);
+  }
+  return null;
 }
 
 // The Period a freshly-imported pick with this text should be stored as -
