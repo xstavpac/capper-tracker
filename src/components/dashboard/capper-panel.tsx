@@ -9,6 +9,7 @@ import {
   FALLING_EMPTY,
   FALLING_REQUIREMENT,
   FALLING_SUBLABEL,
+  TODAYS_WINNERS_NO_GRADED,
   consistencyScore,
   consistencyTier,
   pctLabel,
@@ -55,8 +56,9 @@ const EMPTY: Record<PanelKey, (w: PanelWindow) => string> = {
   winners: (w) => "No cappers in the green " + WINDOW_PHRASE[w] + ".",
   coldest: (w) => (w === "yesterday" ? "No cappers were on a 3+ game losing streak as of yesterday." : "No cappers on a 3+ game losing streak " + WINDOW_PHRASE[w] + "."),
 };
-// An empty Yesterday whose day had no graded pick at all (the dropdown fetch says so).
-const NO_GRADED = "No graded picks yesterday.";
+// An empty window whose day had no graded pick at all (the dropdown fetch says so: Yesterday, and
+// Biggest Winners' Today).
+const noGradedMessage = (w: PanelWindow) => (w === "today" ? TODAYS_WINNERS_NO_GRADED : "No graded picks yesterday.");
 const FORM_EMPTY: Record<FormPanelKey, string> = {
   falling: FALLING_EMPTY,
   consistent: "No capper has 50 decided picks with a steady 50%+ record yet.",
@@ -99,7 +101,7 @@ export function CapperPanel({ panel, initial, weekPct, leaderboardHref = LEADERB
   // footer and the empty message never describe the new window with the old window's rows.
   const [shown, setShown] = useState<PanelWindow>(DEFAULT_PANEL_WINDOW);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
-  // The shown window had no graded pick at all (only ever reported for an empty Yesterday).
+  // The shown window had no graded pick at all (only ever reported for an empty Yesterday or Today).
   const [noGraded, setNoGraded] = useState(false);
   const cache = useRef(new Map<PanelWindow, Fetched>([[DEFAULT_PANEL_WINDOW, { rows: initial }]]));
   const abort = useRef<AbortController | null>(null);
@@ -187,7 +189,7 @@ export function CapperPanel({ panel, initial, weekPct, leaderboardHref = LEADERB
         {state === "error" ? (
           <Message error>Couldn&apos;t load this panel. Try another window or refresh.</Message>
         ) : rows.length === 0 ? (
-          <Message>{noGraded ? NO_GRADED : EMPTY[panel](shown)}</Message>
+          <Message>{noGraded ? noGradedMessage(shown) : EMPTY[panel](shown)}</Message>
         ) : panel === "active" ? (
           <ActiveRows rows={rows as ActiveEntry[]} />
         ) : panel === "hottest" ? (
@@ -368,11 +370,16 @@ function HottestFooter({ rows, href }: { rows: StreakEntry[]; href: string }) {
 const MEDAL = ["bg-[#F5B301] text-[#3A2A00]", "bg-[#C5CBD6] text-[#1F2633]", "bg-[#D08A4E] text-white"];
 // Record column: "12-3 80%" on one line where the panel is wide enough, win % under the W-L where it
 // is not (a phone, and the narrow three-column range).
-const RECORD_COL = "w-[74px] max-[479px]:w-10 min-[1500px]:max-[1699px]:w-10";
-const RECORD_PART = "max-[479px]:block min-[1500px]:max-[1699px]:block";
+// `wide`: a card that spans the page (Today's Winners), so only a phone is narrow, and the record has
+// room for the window's pushes ("12-3-1").
+const RECORD = {
+  panel: { col: "w-[74px] max-[479px]:w-10 min-[1500px]:max-[1699px]:w-10", part: "max-[479px]:block min-[1500px]:max-[1699px]:block", pct: "max-[479px]:ml-0 min-[1500px]:max-[1699px]:ml-0" },
+  wide: { col: "w-[96px] max-[479px]:w-12", part: "max-[479px]:block", pct: "max-[479px]:ml-0" },
+};
 const UNITS_COL = "w-[60px] min-[1500px]:max-[1699px]:w-14";
 const VIEW_COL = "w-11 min-[1500px]:max-[1699px]:w-10";
-function WinnerRows({ rows }: { rows: WinnerEntry[] }) {
+export function WinnerRows({ rows, wide = false }: { rows: WinnerEntry[]; wide?: boolean }) {
+  const { col: RECORD_COL, part: RECORD_PART, pct: RECORD_PCT } = wide ? RECORD.wide : RECORD.panel;
   return (
     <>
       <div aria-hidden className="flex items-center gap-2.5 min-[1500px]:max-[1699px]:gap-1.5 border-b border-[#0F1420]/[0.08] px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-[#5B6275] dark:border-white/10 dark:text-muted-foreground">
@@ -392,8 +399,8 @@ function WinnerRows({ rows }: { rows: WinnerEntry[] }) {
                 <Name>{e.name}</Name>
               </Link>
               <span className={RECORD_COL + " shrink-0 whitespace-nowrap text-xs font-medium leading-tight tabular-nums text-foreground"}>
-                <span className={RECORD_PART}>{e.wins + "–" + e.losses}</span>
-                {decided > 0 && <span className={RECORD_PART + " ml-1 font-semibold text-[#5B6275] max-[479px]:ml-0 min-[1500px]:max-[1699px]:ml-0 dark:text-muted-foreground"}>{Math.round((e.wins / decided) * 100) + "%"}</span>}
+                <span className={RECORD_PART}>{e.wins + "–" + e.losses + (wide && e.pushes > 0 ? "–" + e.pushes : "")}</span>
+                {decided > 0 && <span className={RECORD_PART + " ml-1 font-semibold text-[#5B6275] dark:text-muted-foreground " + RECORD_PCT}>{Math.round((e.wins / decided) * 100) + "%"}</span>}
               </span>
               <span className={UNITS_COL + " shrink-0 text-right text-sm font-semibold tracking-[-0.01em] tabular-nums " + GREEN}>{units(e.netUnits)}</span>
               <Link
@@ -411,7 +418,7 @@ function WinnerRows({ rows }: { rows: WinnerEntry[] }) {
   );
 }
 
-function WinnersFooter({ rows, href }: { rows: WinnerEntry[]; href: string }) {
+export function WinnersFooter({ rows, href }: { rows: WinnerEntry[]; href: string }) {
   const total = rows.reduce((sum, e) => sum + e.netUnits, 0);
   return (
     <>

@@ -248,7 +248,7 @@ const TIE_BREAK = Prisma.sql`(net_r = 'NaN'::float8), net_r DESC, lower(name) CO
 //              totalPicks: the window's picks across the whole roster, not just these five.
 //   winners  - net units over graded picks posted in the window: net units > 0, odds-0 win left
 //              out. No minimum number of graded picks: one winning pick lists a capper, and every
-//              row carries the window's wins / losses, so the sample is on screen.
+//              row carries the window's wins / losses / pushes, so the sample is on screen.
 //   hottest / coldest - current WIN / LOSS streak (see streakPanelSql).
 // A closed range (Yesterday) also stops at its end: picks posted since are not in it.
 export function panelSql(panel: PanelKey, userId: string, range: PanelRange): Prisma.Sql {
@@ -268,15 +268,16 @@ export function panelSql(panel: PanelKey, userId: string, range: PanelRange): Pr
   // ties use the page's tie order (TIE_BREAK). A non-finite value (odds = 0 win) has no label to
   // draw, so it is left out.
   return Prisma.sql`
-    SELECT h.cid AS "capperId", h.name, h."colorTag", h.net_r AS "netUnits", h.wins, h.losses
+    SELECT h.cid AS "capperId", h.name, h."colorTag", h.net_r AS "netUnits", h.wins, h.losses, h.pushes
     FROM (
-      SELECT g.cid, r.name, r."colorTag", ${round2HalfUpSql(Prisma.sql`g.net_raw`)} AS net_r, g.wins, g.losses
+      SELECT g.cid, r.name, r."colorTag", ${round2HalfUpSql(Prisma.sql`g.net_raw`)} AS net_r, g.wins, g.losses, g.pushes
       FROM (
-        SELECT a.cid, a.wins, a.losses, ${uwEffSql("a")} - a."unitsLost" AS net_raw
+        SELECT a.cid, a.wins, a.losses, a.pushes, ${uwEffSql("a")} - a."unitsLost" AS net_raw
         FROM (
           SELECT p."capperId" AS cid,
             (count(*) FILTER (WHERE p.status = 'WIN'))::int AS wins,
             (count(*) FILTER (WHERE p.status = 'LOSS'))::int AS losses,
+            (count(*) FILTER (WHERE p.status = 'PUSH'))::int AS pushes,
             COALESCE(sum(${WIN_UNITS}) FILTER (WHERE p.status = 'WIN' AND p.odds <> 0), 0)::float8 AS "unitsWon",
             COALESCE(sum(p.units) FILTER (WHERE p.status = 'LOSS'), 0)::float8 AS "unitsLost",
             COALESCE(bit_or(CASE WHEN p.units > 0 THEN 1 WHEN p.units < 0 THEN 2 ELSE 4 END) FILTER (WHERE p.status = 'WIN' AND p.odds = 0), 0)::int AS "zeroOddsWinFlags"
@@ -463,7 +464,7 @@ export async function getPanelRows(q: { userId: string; panel: PanelKey; window:
   return rows.map((r) => ({
     ...r,
     ...(r.pickCount === undefined ? {} : { pickCount: Number(r.pickCount), totalPicks: Number(r.totalPicks) }),
-    ...(r.netUnits === undefined ? {} : { netUnits: Number(r.netUnits), wins: Number(r.wins), losses: Number(r.losses) }),
+    ...(r.netUnits === undefined ? {} : { netUnits: Number(r.netUnits), wins: Number(r.wins), losses: Number(r.losses), pushes: Number(r.pushes) }),
     ...(r.streak === undefined ? {} : { streak: Number(r.streak) }),
     ...(r.units === undefined ? {} : { units: Number(r.units) }),
   }));
@@ -816,7 +817,7 @@ export async function getCappersPageData(q: CappersPageQuery): Promise<CappersPa
     sparklines,
     topSparklines,
     mostActive: (out.ma ?? []).map((m: ActiveEntry) => ({ capperId: m.capperId, name: m.name, colorTag: m.colorTag, pickCount: Number(m.pickCount), totalPicks: Number(m.totalPicks) })),
-    winners: (out.win ?? []).map((h: WinnerEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, netUnits: Number(h.netUnits), wins: Number(h.wins), losses: Number(h.losses) })),
+    winners: (out.win ?? []).map((h: WinnerEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, netUnits: Number(h.netUnits), wins: Number(h.wins), losses: Number(h.losses), pushes: Number(h.pushes) })),
     consistent: (out.consistent ?? []).map((h: ConsistentEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, blocks: (h.blocks ?? []).map(Number), sd: Number(h.sd) })),
     favSummary,
   };
