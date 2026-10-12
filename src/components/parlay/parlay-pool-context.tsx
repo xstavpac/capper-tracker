@@ -19,6 +19,10 @@
 // always come from current data and any leg that has started, been graded, or
 // been deleted is pruned (with a one-time notice).
 //
+// League scope: every league with a pick in the slip is ON unless the user
+// switched it off. Confirming a new pick from a league switches that league
+// back on; nothing else does. Only the switched-off leagues are stored.
+//
 // The slip holds at most MAX_PARLAY_LEGS picks (lib/parlay/leg-cap.ts).
 // confirmAdd refuses a selection that would take it past that - it adds
 // nothing and says so, rather than adding only the picks that fit.
@@ -30,14 +34,16 @@ import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 
 export type PooledPick = ExpanderPick;
 
-const MLB_LEAGUE_NAME = "MLB";
 const STORAGE_PREFIX = "parlay-pool:";
 const LEGACY_UNSCOPED_KEY = "parlay-pool";
 const REVALIDATE_MIN_INTERVAL_MS = 60_000;
 
 type PersistedState = {
   pool: PooledPick[];
-  leagueScope: Record<string, boolean>;
+  // Leagues the user switched off. Optional: a slip saved before this existed
+  // has a `leagueScope` map instead, which is not read - its "off" entries
+  // were the old MLB-only default, not the user's choice.
+  excludedLeagues?: string[];
   legCount: number;
   // The in-progress add-mode selection. Optional: a slip saved before these
   // were persisted has neither.
@@ -97,7 +103,7 @@ export function clearParlaySlips() {
 
 export function ParlayPoolProvider({ userId, children }: { userId: string; children: React.ReactNode }) {
   const [pool, setPool] = useState<PooledPick[]>([]);
-  const [leagueScope, setLeagueScope] = useState<Record<string, boolean>>({});
+  const [excludedLeagues, setExcludedLeagues] = useState<string[]>([]);
   const [legCount, setLegCountState] = useState(2);
   const [addMode, setAddMode] = useState(false);
   const [checkedPicks, setCheckedPicks] = useState<Map<string, PooledPick>>(new Map());
@@ -141,7 +147,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
       if (raw) {
         const parsed = JSON.parse(raw) as PersistedState;
         stored = parsed.pool ?? [];
-        setLeagueScope(parsed.leagueScope ?? {});
+        setExcludedLeagues(Array.isArray(parsed.excludedLeagues) ? parsed.excludedLeagues : []);
         if (parsed.legCount) setLegCountState(parsed.legCount);
         if (parsed.addMode) setAddMode(true);
         if (Array.isArray(parsed.checkedPicks) && parsed.checkedPicks.length > 0) {
@@ -195,12 +201,12 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   useEffect(() => {
     if (!hydrated) return;
     try {
-      const data: PersistedState = { pool, leagueScope, legCount, addMode, checkedPicks: Array.from(checkedPicks.values()) };
+      const data: PersistedState = { pool, excludedLeagues, legCount, addMode, checkedPicks: Array.from(checkedPicks.values()) };
       window.localStorage.setItem(storageKey(userId), JSON.stringify(data));
     } catch {
       // Best-effort persistence only - a full localStorage or a private window is not fatal.
     }
-  }, [userId, pool, leagueScope, legCount, addMode, checkedPicks, hydrated]);
+  }, [userId, pool, excludedLeagues, legCount, addMode, checkedPicks, hydrated]);
 
   // Re-check the live pool against the DB. Only legs that were in the pool
   // when the request went out are touched, so a pick added mid-flight is left alone.
@@ -293,16 +299,12 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     setPool((prev) => {
       const existingIds = new Set(prev.map((p) => p.pickId));
       const additions = Array.from(checkedPicks.values()).filter((p) => !existingIds.has(p.pickId));
-      // MLB defaults on, every other league defaults off - only set on FIRST
-      // appearance of a league in the pool so a user's own later toggle is
-      // never clobbered by a repeat add from the same league.
-      setLeagueScope((prevScope) => {
-        const nextScope = { ...prevScope };
-        for (const p of additions) {
-          if (!(p.leagueName in nextScope)) nextScope[p.leagueName] = p.leagueName === MLB_LEAGUE_NAME;
-        }
-        return nextScope;
-      });
+      // A new pick switches its league on, even one the user had switched
+      // off. A pick already in the slip is not new and changes nothing.
+      const added = new Set(additions.map((p) => p.leagueName));
+      setExcludedLeagues((prevExcluded) =>
+        prevExcluded.some((l) => added.has(l)) ? prevExcluded.filter((l) => !added.has(l)) : prevExcluded
+      );
       return [...prev, ...additions];
     });
     setCheckedPicks(new Map());
@@ -317,13 +319,10 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
 
   const leaguesInPool = useMemo(() => Array.from(new Set(pool.map((p) => p.leagueName))), [pool]);
 
-  const isLeagueInScope = useCallback(
-    (league: string) => leagueScope[league] ?? league === MLB_LEAGUE_NAME,
-    [leagueScope]
-  );
+  const isLeagueInScope = useCallback((league: string) => !excludedLeagues.includes(league), [excludedLeagues]);
 
   const toggleLeague = useCallback((league: string) => {
-    setLeagueScope((prev) => ({ ...prev, [league]: !(prev[league] ?? league === MLB_LEAGUE_NAME) }));
+    setExcludedLeagues((prev) => (prev.includes(league) ? prev.filter((l) => l !== league) : [...prev, league]));
   }, []);
 
   // A slip saved before the cap existed can hold more than MAX_PARLAY_LEGS

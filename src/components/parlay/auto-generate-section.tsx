@@ -1,12 +1,13 @@
 "use client";
 
-// Auto-Generate: builds Parlay A from today's unstarted games (one leg per
+// Auto-Generate: builds Parlay A from today's unstarted games - this week's
+// for NFL/NCAAF, see auto-generate-window.ts - (one leg per
 // game - each game's best pick from the user's own cappers, ranked by the
 // same market record My Picks ranks by), and shows its Hedge and Contrarian
 // variants as tabs beside it. All selection happens server-side in
 // autoGenerateParlayAction; this component only holds the controls and
 // renders the result. Its scope/leg-count state is local - it never touches
-// the Parlay Pool or My Picks' scope.
+// the Parlay Pool or My Picks' scope. Every league starts on.
 import { useEffect, useState } from "react";
 import { autoGenerateParlayAction, type AutoGenerateResult } from "@/server/actions/parlay-generator";
 import { CONTROL, FOOTER_LINK, FOOTER_TEXT, PanelShell, TINTS } from "@/components/dashboard/panel-shell";
@@ -14,21 +15,20 @@ import { BoltIcon, ListChecksIcon } from "@/components/dashboard/cappers-icons";
 import { LABEL, LegStepper, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Tabs } from "@/components/parlay/parlay-controls";
 import { LEG_LIST, LegRow, ResultBlock, SwapBlock, formatOdds, rankedRecordText } from "@/components/parlay/swap-result";
 import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
+import { autoGenerateWindowText } from "@/lib/parlay/auto-generate-window";
 import type { AutoLeg, SwapMode } from "@/lib/parlay/auto-generate";
-
-const DEFAULT_IN_SCOPE_LEAGUE = "MLB";
 
 const ICON = "h-[17px] w-[17px] stroke-[2.2]";
 const AUTO = {
   ...TINTS.neutral,
   title: "Auto-Generate",
-  subtitle: "One leg per game from today's unstarted games, using only your tracked cappers' picks.",
+  subtitle: "One leg per game from today's unstarted games (this week's for NFL and NCAAF), using only your tracked cappers' picks.",
   icon: <BoltIcon className={ICON} />,
 };
 const RESULT_SUBTITLE = "Each game's top pick from your cappers, ranked by their record in that market";
 
-// What the last generate found, for the page's stat tiles: how many of
-// today's unstarted games have a pick, and in which leagues it looked.
+// What the last generate found, for the page's stat tiles: how many
+// unstarted games in the window have a pick, and in which leagues it looked.
 export type GeneratedSummary = { gamesWithPicks: number; leagues: string[] };
 
 type ResultTab = "PRIMARY" | SwapMode;
@@ -71,7 +71,7 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
   const [shortfallConfirmed, setShortfallConfirmed] = useState(false);
   const [tab, setTab] = useState<ResultTab>("PRIMARY");
 
-  const isInScope = (league: string) => scope[league] ?? league === DEFAULT_IN_SCOPE_LEAGUE;
+  const isInScope = (league: string) => scope[league] ?? true;
   const inScopeLeagues = leagues.filter(isInScope);
   const scopeKey = inScopeLeagues.join(",");
 
@@ -158,7 +158,8 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
 
         {parlayA && parlayA.available === 0 && (
           <p className="mt-4 text-sm text-muted-foreground">
-            No games left today with picks from your cappers in {result!.leaguesSearched.join(", ")}.
+            No games left {autoGenerateWindowText(result!.leaguesSearched)} with picks from your cappers in{" "}
+            {result!.leaguesSearched.join(", ")}.
           </p>
         )}
 
@@ -168,8 +169,9 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
               Only {parlayA.available} game{parlayA.available === 1 ? "" : "s"} available
             </h3>
             <p className="mt-1 text-xs font-medium text-muted-foreground">
-              You asked for {parlayA.requested} legs, but only {parlayA.available} of today&apos;s unstarted games have
-              picks from your cappers. Each game can give one leg.
+              You asked for {parlayA.requested} legs, but only {parlayA.available} unstarted game
+              {parlayA.available === 1 ? "" : "s"} {autoGenerateWindowText(result!.leaguesSearched)}{" "}
+              {parlayA.available === 1 ? "has" : "have"} picks from your cappers. Each game can give one leg.
             </p>
             <button type="button" onClick={() => setShortfallConfirmed(true)} className={PILL_PRIMARY + " mt-3"}>
               Build with {parlayA.available} leg{parlayA.available === 1 ? "" : "s"}

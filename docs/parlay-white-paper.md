@@ -54,11 +54,11 @@ The Parlay Generator is universal across supported leagues. Before choosing a le
 | Several toggled on | MLB + NFL on, NBA off | User-tagged picks from exactly those leagues — e.g. MLB and NFL together, with NBA excluded |
 | Every tagged league on | MLB + NFL + NBA all on | User-tagged picks across every league the bettor has tagged — the result of every toggle being on, not a distinct "All Leagues" mode. |
 
-MLB defaults to on; every other tagged league defaults to off. That's a deliberate default, not just a starting state: it means someone who has tagged picks in three sports doesn't get an unexpectedly huge cross-league parlay the first time they open the builder — they have to actively opt other leagues in. MLB defaults on because that's where BettingView's capper/data coverage is currently deepest.
+Every tagged league defaults to on: adding a pick from a league switches that league on, and a league that already has picks in the slip starts on. A league the bettor switches off stays off, across reloads, until they add a new pick from it. (Until October 2026 MLB defaulted on and every other league off.)
 
 > **Hard invariant: scope restricts the pool — it never expands the search.** No toggle configuration authorizes the generator to scan the full sports slate for new primary legs; toggling leagues on only widens the eligible pool to the user's tagged picks in those leagues. Auto Hedge and Contrarian may still reach outside the user's tagged selections, but only within the leagues currently toggled on and only according to their own qualification rules (Sections 3–5) — never into an untagged league, and never into a tagged league whose toggle is off.
 
-**Example:** the bettor tags 10 MLB games and 4 NFL games. MLB is toggled on by default; the bettor also switches NFL on and asks for a 5-leg parlay. The generator selects from those 14 tagged games. It does not independently introduce an NBA or NHL game the bettor never tagged, and it excludes any tagged league whose toggle is left off.
+**Example:** the bettor tags 10 MLB games and 4 NFL games. Both leagues are on by default; the bettor asks for a 5-leg parlay. The generator selects from those 14 tagged games. It does not independently introduce an NBA or NHL game the bettor never tagged, and it excludes any tagged league whose toggle is left off.
 
 **Scope applies to every generated parlay.** The selected scope constrains Primary, Auto Hedge, and Contrarian outputs alike — no generated alternate can cross outside the chosen scope.
 
@@ -89,7 +89,9 @@ My Picks always works for any supported league, since it never requires an alter
 
 Auto-Generate is a separate entry point, not a fourth construction mode — there is no tagged pool involved, so the invariants in Section 2.2 about protecting the user's selections don't apply here. Every leg in an Auto-Generate output is held to the ordinary qualification gate (Section 3) with no exception, because there's no user-supplied pick to exempt.
 
-**Input:** scope (the same per-league toggles as Section 2.1) and leg count. No pick-tagging step.
+**Input:** scope (per-league toggles, every league on by default) and leg count. No pick-tagging step.
+
+**Window:** each league's unstarted games today. NFL and NCAAF use the current football week instead — the same slate the Live board shows for them (the next game day plus four days).
 
 **Construction:** BettingView runs the full pipeline — qualification (Section 3), relationship classification (Section 4), confidence/Wilson scoring (Section 7's Step 1 formula, reused here), and conflict validation (Section 9) — across every qualifying candidate in the chosen scope, then ranks the eligible set. Primary is the top-N ranked candidates that fill the requested leg count without violating the no-conflicting-legs constraint (one selection per game, no opposing sides, etc.).
 

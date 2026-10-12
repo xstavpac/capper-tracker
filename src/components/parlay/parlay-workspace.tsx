@@ -12,12 +12,13 @@ import { useParlayPool } from "@/components/parlay/parlay-pool-context";
 import { AutoGenerateSection, type GeneratedSummary } from "@/components/parlay/auto-generate-section";
 import { ParlayPoolSection } from "@/components/parlay/parlay-pool-section";
 import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
+import { autoGenerateWindowText } from "@/lib/parlay/auto-generate-window";
 
 const ICON = "h-[17px] w-[17px] stroke-[2.2]";
 
 // Three numbers the page already has: the slip's picks, how many of them are
 // in a league that is switched on, and - once a parlay has been generated -
-// how many of today's unstarted games had a pick. Nothing is read for these.
+// how many unstarted games in its window had a pick. Nothing is read for these.
 function ParlayStatCards({ generated }: { generated: GeneratedSummary | null }) {
   const { pool, leaguesInPool, isLeagueInScope } = useParlayPool();
   const inScope = pool.filter((p) => isLeagueInScope(p.leagueName)).length;
@@ -46,7 +47,7 @@ function ParlayStatCards({ generated }: { generated: GeneratedSummary | null }) 
         iconClass={TINTS.green.iconWrap}
         color="#16A34A"
         value={generated ? String(generated.gamesWithPicks) : "—"}
-        sub={generated ? "today in " + generated.leagues.join(", ") : "shown after you generate"}
+        sub={generated ? autoGenerateWindowText(generated.leagues) + " in " + generated.leagues.join(", ") : "shown after you generate"}
       />
     </div>
   );
