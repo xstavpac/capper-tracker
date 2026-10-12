@@ -91,8 +91,9 @@ export function favoriteOrUnderdog(pick: {
   betType: BetTypeLike;
   odds: number;
   line: number | null;
-  pickedSide?: SideLike | null;
-  mlFavoredSide?: SideLike | null;
+  // "DRAW" (a 3-way moneyline on the draw) is on neither side of the market.
+  pickedSide?: SideLike | "DRAW" | null;
+  mlFavoredSide?: SideLike | "DRAW" | null;
 }): "FAVORITE" | "UNDERDOG" | null {
   if (pick.betType === "MONEYLINE") {
     if (pick.mlFavoredSide && pick.pickedSide) {
@@ -228,7 +229,11 @@ export type SegmentPeriod =
   | "FOURTH_QUARTER"
   | "FIRST_PERIOD"
   | "SECOND_PERIOD"
-  | "THIRD_PERIOD";
+  | "THIRD_PERIOD"
+  // Hockey 3-way moneyline (periods 1-3 combined). Never produced by betScope
+  // below - the wording is only read that way on an NHL moneyline, which this
+  // sport-blind text scan can't know (see lib/nhl-three-way.ts).
+  | "REGULATION";
 
 export type BetScope = SegmentPeriod | "UNSUPPORTED_SEGMENT";
 
@@ -345,6 +350,8 @@ export function periodLabel(period: string): string {
       return "2nd period";
     case "THIRD_PERIOD":
       return "3rd period";
+    case "REGULATION":
+      return "regulation (3-way)";
     default:
       return "full game";
   }

@@ -74,6 +74,7 @@ const PERIOD_BADGE: Record<string, string> = {
   FIRST_PERIOD: "P1",
   SECOND_PERIOD: "P2",
   THIRD_PERIOD: "P3",
+  REGULATION: "3-Way",
 };
 function periodBadgeLabel(period: string, sportName: string | undefined): string | null {
   if (period === "FIRST_HALF") return firstHalfLabelPrefix(sportName);

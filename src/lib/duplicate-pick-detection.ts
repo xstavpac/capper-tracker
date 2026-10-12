@@ -52,7 +52,7 @@ export function dedupCategory(
   category: string,
   betType: BetType,
   betDetail: string | null,
-  pickedSide: "HOME" | "AWAY" | null | undefined,
+  pickedSide: "HOME" | "AWAY" | "DRAW" | null | undefined,
   knownPlayerProp?: KnownPlayerProp | null
 ): string {
   if (betType === "TEAM_TOTAL") {
@@ -98,7 +98,7 @@ export type BetIdentity = {
   // dedupCategory(pickCategory(...)) - null when pickCategory can't name a side
   // (a pick'em moneyline, a total with no over/under in its text).
   category: string | null;
-  pickedSide?: "HOME" | "AWAY" | null;
+  pickedSide?: "HOME" | "AWAY" | "DRAW" | null;
 };
 
 // False when a pick has nothing to compare on, so it can never be called a
@@ -147,7 +147,7 @@ export type ResolvedDupCandidate = {
   // gets the category-only comparison.
   sportKey?: string;
   betType?: BetType;
-  pickedSide?: "HOME" | "AWAY" | null;
+  pickedSide?: "HOME" | "AWAY" | "DRAW" | null;
   // The pick's game-segment scope (Pick.period). pickCategory only forks
   // OVER/UNDER/ML/SPREAD by period for FIRST_HALF, so without comparing this
   // too a "Q1 over 12.5" and a full-game "over 54.5" on the same matchup both

@@ -22,6 +22,7 @@ import { indexNflBoxScore, isOffensePlayer, matchNflPlayerName, type BoxPlayer }
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 import { closestByTime, sameEasternDay } from "@/lib/dates";
 import { isPreseasonGame } from "@/lib/sport-seasons";
+import { gradeThreeWay, threeWayWording } from "@/lib/nhl-three-way";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import {
   extractLine,
@@ -721,6 +722,14 @@ function segmentScore(period: string, game: GradableGameResult): SegmentScore | 
       return at(2);
     case "FOURTH_QUARTER":
       return at(3);
+    case "REGULATION": {
+      // Hockey regulation time: periods 1-3 only. ESPN appends overtime as a
+      // 4th entry and the shootout as a 5th, which are exactly what a 3-way
+      // bet excludes. All three periods must be present.
+      const p = [at(0), at(1), at(2)];
+      if (!p[0] || !p[1] || !p[2]) return null;
+      return { home: p[0].home + p[1].home + p[2].home, away: p[0].away + p[1].away + p[2].away };
+    }
     default:
       return null;
   }
@@ -763,6 +772,23 @@ export function resolveOutcome(
   //    the right Period, so this only ever hits legacy rows.
   const scope = betScope(pick.betDetail);
   if (scope === "UNSUPPORTED_SEGMENT") return null;
+
+  // Hockey 3-way moneyline (lib/nhl-three-way.ts): graded on the regulation
+  // score alone, and a level score is a result, not a push - the draw wins and
+  // both teams lose. Only ever a MONEYLINE; anything else stored with this
+  // period, or text that also names a single period, is left PENDING.
+  if (pick.period === "REGULATION") {
+    if (pick.betType !== "MONEYLINE" || scope !== "FULL_GAME") return null;
+    const reg = segmentScore("REGULATION", game);
+    if (!reg) return null;
+    const onDraw = pick.pickedSide === "DRAW" || (!pick.pickedSide && threeWayWording(pick.betDetail) === "DRAW");
+    if (onDraw) return gradeThreeWay("DRAW", reg.home, reg.away);
+    // A team pick: gradePick's own side resolution (the stored pickedSide, or
+    // its text match for a row without one), then a level score is a LOSS.
+    const twoWay = runGrade(reg.home, reg.away);
+    return twoWay === "PUSH" ? "LOSS" : twoWay;
+  }
+
   if (scope !== "FULL_GAME" && scope !== pick.period) return null;
 
   const seg = segmentScore(pick.period, game);

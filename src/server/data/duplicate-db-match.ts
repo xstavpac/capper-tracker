@@ -68,7 +68,7 @@ export type DbDupCandidate = {
   // caller without them gets the category-only comparison.
   sportKey?: string;
   betType?: ExistingPickRow["betType"];
-  pickedSide?: "HOME" | "AWAY" | null;
+  pickedSide?: "HOME" | "AWAY" | "DRAW" | null;
 };
 
 // The one WHERE for the whole paste, or null when no pasted pick can have a

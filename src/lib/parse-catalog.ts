@@ -1,5 +1,6 @@
 import { normalizeName } from "@/lib/fuzzy-match";
 import { looksPickLikeHeader } from "@/lib/market-hint";
+import { withRegulationPeriod, threeWayToken, threeWayWording } from "@/lib/nhl-three-way";
 import {
   parsePlayerProp,
   parseNflNhlPlayerProp,
@@ -1881,9 +1882,13 @@ export function parsePickText(description: string): {
   // in one ("Liberty Flames -3.5 (1H)") is read here, before it's gone, and
   // put back below.
   let parenScopeToken: string | null = null;
+  // Same for hockey 3-way wording ("Oilers ML (regulation)"): without it the
+  // stored text would read as a plain 2-way moneyline.
+  let parenThreeWayToken: string | null = null;
   let cleanDescription = description.replace(/\([^)]*\)/g, (paren, offset: number) => {
     if (isTeamNameParenthetical(description, offset, offset + paren.length)) return paren;
     parenScopeToken ??= betScopeToken(paren.slice(1, -1));
+    parenThreeWayToken ??= threeWayToken(paren.slice(1, -1));
     return "";
   });
   if (bareUnitPhrase) cleanDescription = cleanDescription.replace(bareUnitPhrase, "");
@@ -1912,6 +1917,9 @@ export function parsePickText(description: string): {
   // needs the price to be the last thing in the text.
   if (parenScopeToken && betScope(cleanDescription) === "FULL_GAME") {
     cleanDescription = cleanDescription + " " + parenScopeToken;
+  }
+  if (parenThreeWayToken && !threeWayWording(cleanDescription)) {
+    cleanDescription = cleanDescription + " " + parenThreeWayToken;
   }
   // Which slice of the game this pick is scoped to: F5 / first half (both map
   // to FIRST_HALF), second half, an individual quarter (NFL/NBA/WNBA/NCAAF),
@@ -2015,7 +2023,14 @@ export function resolveAmbiguousPick(pick: ParsedPick, choice: AmbiguousOption):
     hasExplicitOdds: parsed.odds !== null,
     totalSide: parsed.totalSide,
     units: parsed.units,
-    period: parsed.period,
+    // The sport is only known now, so this is where an ambiguous line's 3-way
+    // wording can first be read (see withRegulationPeriod).
+    period: withRegulationPeriod({
+      sportName: choice.sport,
+      betType: parsed.betType,
+      period: parsed.period,
+      description: parsed.cleanDescription,
+    }),
     teamNicknames: [choice.nickname],
     ambiguous: undefined,
     ambiguousKey: undefined,
@@ -3577,6 +3592,12 @@ export function parseCatalog(
 
     readAsCapperHeader(line);
   }
+
+  // Hockey 3-way moneyline: an NHL moneyline worded as a regulation-time bet
+  // is its own market (lib/nhl-three-way.ts). Done here, once, because the
+  // period is read from the text before the line's sport is known.
+  for (const pick of results) pick.period = withRegulationPeriod(pick);
+  for (const parlay of parlays) for (const leg of parlay.legs) leg.period = withRegulationPeriod(leg);
 
   return { picks: results, parlays, unresolved, unresolvedCapperNames, droppedAsHeaders };
 }

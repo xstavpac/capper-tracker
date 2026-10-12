@@ -1,17 +1,29 @@
-// NHL anytime-goal-scorer odds: the one NHL player-prop market the Odds API is
-// asked for. Same event-level endpoint and the same fetch/merge/usage-log loop
-// as the NFL props (fetchAndMergeEventPropOdds in nfl-prop-odds.ts), with two
-// differences that keep it cheap:
-//   - one market per call (player_goal_scorer_anytime), so a call costs at
-//     most 1 credit (cost = markets returned x regions);
-//   - only today's games starting within NHL_GOAL_SCORER_LOOKAHEAD_MS that
-//     don't already carry the market are requested, so a game is bought once,
-//     on the day it is played, not on every day it sits on the upcoming slate.
+// NHL event-level odds: the two NHL markets the Odds API's per-event endpoint
+// is asked for - player_goal_scorer_anytime (anytime goal scorer) and h2h_3_way
+// (the 3-way, regulation-time moneyline). Same endpoint and the same
+// fetch/merge/usage-log loop as the NFL props (fetchAndMergeEventPropOdds in
+// nfl-prop-odds.ts), kept cheap two ways:
+//   - both markets go in ONE request per game, and a game is only asked for
+//     the markets it doesn't carry yet. Cost = markets returned x regions, so
+//     at most 2 credits per game, however many runs it takes to get both;
+//   - only today's games starting within NHL_GOAL_SCORER_LOOKAHEAD_MS are
+//     requested, so a game is bought on the day it is played, not on every
+//     day it sits on the upcoming slate.
 //
 // Two runs a day call seedNhlGoalScorerOddsForToday: the refresh-odds cron just
 // after midnight ET, and /api/cron/nhl-goal-scorer-odds at 16:30 UTC for games
-// whose market wasn't posted yet at midnight. A call that returns no market
-// costs nothing, and a game that already has it is never asked for again.
+// still missing a market. A market that isn't returned costs nothing, and one
+// a game already has is never asked for again.
+//
+// h2h_3_way confirmed live 2026-10-12 against a real event (Vegas Golden
+// Knights @ Minnesota Wild, commence_time 2026-10-13T00:10:00Z) via
+// GET /v4/sports/icehockey_nhl/events/{eventId}/odds
+//   ?regions=us&markets=h2h_3_way&oddsFormat=american
+// (x-requests-last: 1). All 7 bookmakers returned exactly three outcomes:
+// `{ name: "<home team>", price }`, `{ name: "<away team>", price }`,
+// `{ name: "Draw", price }` - full team names as in the h2h market, no
+// `point`, no `description`. Trimmed capture saved at
+// __fixtures__/odds-api-event-nhl-3way-response.json.
 //
 // Outcome shape confirmed live 2026-10-12 against a real event (Ottawa Senators
 // @ New Jersey Devils, commence_time 2026-10-12T23:10:00Z) via
@@ -40,6 +52,13 @@ import { isLikelyDuplicateName } from "@/lib/fuzzy-match";
 const NHL_SPORT_KEY = "icehockey_nhl";
 
 export const NHL_ANYTIME_GOAL_MARKET_KEY = "player_goal_scorer_anytime";
+export const NHL_THREE_WAY_MARKET_KEY = "h2h_3_way";
+export const NHL_EVENT_MARKET_KEYS = [NHL_ANYTIME_GOAL_MARKET_KEY, NHL_THREE_WAY_MARKET_KEY] as const;
+
+// The event-level markets no bookmaker on this game carries yet.
+export function missingNhlEventMarkets(game: OddsGame): string[] {
+  return NHL_EVENT_MARKET_KEYS.filter((key) => !game.bookmakers.some((b) => b.markets.some((m) => m.key === key)));
+}
 
 // The refresh-odds cron runs just after midnight ET, so 24 hours covers that
 // day's whole slate (the latest West Coast start is about 22.5 hours out) and
@@ -51,7 +70,7 @@ const NHL_GOAL_SCORER_TARGET: EventPropFetchTarget = {
   // A preseason game is listed under "icehockey_nhl_preseason" and its event
   // URL needs that same key; OddsGame.sportKey is the key the listing came from.
   requestSportKey: (game) => (game.sportKey.startsWith(NHL_SPORT_KEY) ? game.sportKey : NHL_SPORT_KEY),
-  marketKeys: [NHL_ANYTIME_GOAL_MARKET_KEY],
+  marketKeys: missingNhlEventMarkets,
   logTag: "[nhl-goal-scorer-odds]",
 };
 
@@ -84,9 +103,36 @@ export async function resolveAnytimeGoalOdds(
   return resolveAnytimeGoalOddsFromGame(oddsGame, playerName);
 }
 
-// Which games to buy the market for: played today (Eastern), not started,
-// starting within the lookahead, and not already carrying it (so a later run
-// the same day spends nothing on them). "Today" matters for the afternoon run:
+// 3-way moneyline price for one outcome: the home team, the away team, or the
+// draw. First bookmaker with a complete 3-way market (one that lists a "Draw")
+// wins. Read from h2h_3_way ONLY - the 2-way h2h price includes overtime and
+// the shootout and is never a substitute.
+export function resolveThreeWayOddsFromGame(game: OddsGame, side: "HOME" | "AWAY" | "DRAW"): number | null {
+  const outcomeName = side === "HOME" ? game.homeTeam : side === "AWAY" ? game.awayTeam : "Draw";
+  for (const bookmaker of game.bookmakers) {
+    const market = bookmaker.markets.find((m) => m.key === NHL_THREE_WAY_MARKET_KEY);
+    if (!market || !market.outcomes.some((o) => o.name === "Draw")) continue;
+    const outcome = market.outcomes.find((o) => o.name === outcomeName);
+    if (outcome) return outcome.price;
+  }
+  return null;
+}
+
+export async function resolveThreeWayOdds(
+  sportKey: string,
+  game: { homeTeam: string; awayTeam: string; commenceTime: string },
+  side: "HOME" | "AWAY" | "DRAW",
+  getOdds?: OddsLoader
+): Promise<number | null> {
+  if (sportKey !== NHL_SPORT_KEY) return null;
+  const oddsGame = await resolveOddsGame(sportKey, game, getOdds);
+  if (!oddsGame) return null;
+  return resolveThreeWayOddsFromGame(oddsGame, side);
+}
+
+// Which games to make a request for: played today (Eastern), not started,
+// starting within the lookahead, and still missing at least one of the two
+// markets (so a later run the same day spends nothing on a complete game). "Today" matters for the afternoon run:
 // 24 hours from then reaches tomorrow's matinees, which tomorrow's own row
 // would buy again.
 export function nhlGamesNeedingGoalScorerOdds(games: OddsGame[], now: Date): OddsGame[] {
@@ -97,7 +143,7 @@ export function nhlGamesNeedingGoalScorerOdds(games: OddsGame[], now: Date): Odd
     const startMs = start.getTime();
     if (!(startMs > nowMs) || startMs - nowMs > NHL_GOAL_SCORER_LOOKAHEAD_MS) return false;
     if (easternDateKey(start) !== today) return false;
-    return !g.bookmakers.some((b) => b.markets.some((m) => m.key === NHL_ANYTIME_GOAL_MARKET_KEY));
+    return missingNhlEventMarkets(g).length > 0;
   });
 }
 

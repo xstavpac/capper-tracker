@@ -70,8 +70,8 @@ export async function GET(req: Request) {
     })
   );
 
-  // NHL anytime-goal-scorer odds - same kind of follow-up step, for the games
-  // starting within 24 hours only (see nhl-goal-scorer-odds.ts). Never affects
+  // NHL event-level odds (anytime goal scorer + the 3-way moneyline) - same
+  // kind of follow-up step, for today's games only (see nhl-goal-scorer-odds.ts). Never affects
   // `ok`/`httpStatus` either, including when it throws: the game-lines seed
   // above has already succeeded or failed on its own.
   let nhlGoalScorer: { status: string; eventsFetched: number; eventsSkippedCreditGate: number; eventsFailed: number };
