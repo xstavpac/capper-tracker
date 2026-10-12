@@ -155,6 +155,7 @@ type Item = {
   teamNicknames: string[];
   description: string;
   gameNumber: 1 | 2 | null;
+  period: "FULL_GAME";
 };
 
 const TEAMS: Record<string, [string, string][]> = {
@@ -165,8 +166,8 @@ const TEAMS: Record<string, [string, string][]> = {
 };
 
 const items: Item[] = [];
-const add = (item: Omit<Item, "hasExplicitOdds" | "odds" | "gameNumber">) =>
-  items.push({ hasExplicitOdds: false, odds: -110, gameNumber: null, ...item });
+const add = (item: Omit<Item, "hasExplicitOdds" | "odds" | "gameNumber" | "period">) =>
+  items.push({ hasExplicitOdds: false, odds: -110, gameNumber: null, period: "FULL_GAME", ...item });
 for (let round = 0; round < 3; round++) {
   for (const [sportName, pairs] of Object.entries(TEAMS)) {
     for (const [home, away] of pairs) {
@@ -186,7 +187,7 @@ for (let round = 0; round < 3; round++) {
 // own odds (never resolved), and a sport with no score source at all.
 add({ sportName: "NFL", betType: "MONEYLINE", teamNicknames: ["unicorns"], description: "unicorns ML" });
 add({ sportName: "NHL", betType: "SPREAD", teamNicknames: ["unicorns"], description: "unicorns -1.5" });
-items.push({ sportName: "MLB", betType: "MONEYLINE", hasExplicitOdds: true, odds: 145, teamNicknames: ["cubs"], description: "cubs ML +145", gameNumber: null });
+items.push({ sportName: "MLB", betType: "MONEYLINE", hasExplicitOdds: true, odds: 145, teamNicknames: ["cubs"], description: "cubs ML +145", gameNumber: null, period: "FULL_GAME" });
 add({ sportName: "Cricket", betType: "MONEYLINE", teamNicknames: ["kiwis"], description: "kiwis ML" });
 
 const SPORTS_IN_PASTE = Object.keys(FIXTURE).length;
@@ -244,9 +245,12 @@ async function main() {
         byTeams: await odds.resolveGameForTeams(sportKey, home, away),
         oddsGameId: (await odds.resolveOddsGame(sportKey, ref))?.id ?? null,
         favored: await odds.findFavoredSide(sportKey, ref),
-        mlHome: await odds.findMarketPrice(sportKey, ref, "MONEYLINE", "home"),
-        spreadAway: await odds.findMarketPrice(sportKey, ref, "SPREAD", "away"),
-        totalOver: await odds.findMarketPrice(sportKey, ref, "TOTAL", "over"),
+        mlHome: await odds.findMarketPrice(sportKey, ref, "MONEYLINE", "home", { line: null, period: "FULL_GAME" }),
+        spreadAway: await odds.findMarketPrice(sportKey, ref, "SPREAD", "away", { line: 3.5, period: "FULL_GAME" }),
+        totalOver: await odds.findMarketPrice(sportKey, ref, "TOTAL", "over", {
+          line: await odds.findMarketTotalLine(sportKey, ref, "over"),
+          period: "FULL_GAME",
+        }),
         spreadLine: await odds.findMarketSpreadLine(sportKey, ref, "home"),
         totalLine: await odds.findMarketTotalLine(sportKey, ref, "under"),
       };

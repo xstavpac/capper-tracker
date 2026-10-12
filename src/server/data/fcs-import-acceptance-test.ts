@@ -190,7 +190,7 @@ async function main() {
   (prisma.oddsSnapshot as { findUnique: unknown }).findUnique = async () => ({ data: snapshot });
   try {
     const fcsGame = { homeTeam: "Rhode Island Rams", awayTeam: "Brown Bears", commenceTime: KICKOFF };
-    check("FCS game: no market price", await findMarketPrice("americanfootball_ncaaf", fcsGame, "MONEYLINE", "home"), null);
+    check("FCS game: no market price", await findMarketPrice("americanfootball_ncaaf", fcsGame, "MONEYLINE", "home", { line: null, period: "FULL_GAME" }), null);
     check("FCS game: no favored side", await findFavoredSide("americanfootball_ncaaf", fcsGame), null);
     const posted = parseOne("Rhode Island -3.5 (-105)");
     check("posted price is on the parsed pick", [posted?.odds, posted?.hasExplicitOdds], [-105, true]);

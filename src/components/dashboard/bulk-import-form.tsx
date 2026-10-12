@@ -371,6 +371,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         teamNicknames: e.p.teamNicknames,
         description: e.p.description,
         gameNumber: e.p.gameNumber,
+        period: e.p.period,
       }))
     )
       .then(({ odds, games }) => {

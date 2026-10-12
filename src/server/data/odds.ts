@@ -2211,18 +2211,35 @@ export async function findFavoredSide(
 // Looks up the real market price for a resolved game (see
 // resolveGameForNickname), so bulk-imported picks that didn't state an
 // explicit price can use the actual line instead of a hardcoded -110.
+//
+// Only ever the price of the bet the pick actually is - null otherwise, never
+// a neighbouring market's price:
+//   - h2h/spreads/totals are full-game markets, so a pick on any other period
+//     (1H, a quarter, F5, ...) has no price here.
+//   - SPREAD/TOTAL match the pick's own line exactly against the outcome's
+//     point ("Over 35.5" is not priced off a 47.5 main total). Books don't all
+//     hang the same number, so every bookmaker is checked for that exact line,
+//     not just the first one listing the market. A pick with no line has no
+//     price.
 export async function findMarketPrice(
   sportKey: string,
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
   betType: "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP" | "NRFI",
   side: "home" | "away" | "over" | "under",
+  // line: the pick's signed spread ("-3.5") or its total; ignored for MONEYLINE.
+  pick: { line: number | null; period: string },
   getOdds: OddsLoader = getOddsForSport
 ): Promise<number | null> {
+  if (pick.period !== "FULL_GAME") return null;
+
   // No odds-API market exists for NRFI, so it falls through to null (default -110)
   // same as PLAYER_PROP - only h2h/spreads/totals have a real market to look up.
   const marketKey =
     betType === "MONEYLINE" ? "h2h" : betType === "SPREAD" ? "spreads" : betType === "TOTAL" ? "totals" : null;
   if (!marketKey) return null;
+
+  const needsLine = marketKey !== "h2h";
+  if (needsLine && pick.line === null) return null;
 
   const oddsGame = await resolveOddsGame(sportKey, game, getOdds);
   if (!oddsGame) return null;
@@ -2232,7 +2249,7 @@ export async function findMarketPrice(
 
   for (const bookmaker of oddsGame.bookmakers) {
     const market = bookmaker.markets.find((m) => m.key === marketKey);
-    const outcome = market?.outcomes.find((o) => o.name === outcomeName);
+    const outcome = market?.outcomes.find((o) => o.name === outcomeName && (!needsLine || o.point === pick.line));
     if (outcome) return outcome.price;
   }
 

@@ -115,6 +115,11 @@ type ResolvableItem = {
   teamNicknames: string[];
   description: string;
   gameNumber: 1 | 2 | null;
+  // Both feed the market-price lookup only (see findMarketPrice): the feed's
+  // h2h/spreads/totals price a full-game bet at one exact line, so a pick on
+  // any other period, or with no period sent at all, gets no feed price.
+  period?: Period;
+  inferredLine?: number;
 };
 
 // How long a line with no matching game waits before its one second look.
@@ -329,20 +334,20 @@ async function resolveGameAndOdds(
           }
         }
       } else if (!item.hasExplicitOdds) {
-        // Unchanged from before pickedSide existed - always resolves to
-        // "home" or "away" for a non-TOTAL bet, same as it always has, for
-        // the market-price lookup only. Deliberately NOT reused for
-        // pickedSide above: this always picks a side even when ambiguous,
-        // which is fine for "which market price to fetch" (worst case, a
-        // same-mascot pick's auto-filled odds come from the wrong side's
-        // price) but not for the DB field grading depends on to decide
-        // WIN/LOSS, which must stay null rather than guess.
+        // A non-TOTAL bet is priced off the same side pickedSide captured
+        // above, and not at all when that is null (a same-mascot matchup, a
+        // line naming both teams, a nickname ending neither team's name): a
+        // price read off a guessed side is the other team's price. This used
+        // to fall back to "away" whenever the first nickname didn't end the
+        // home team's name.
         const side =
           item.betType === "TOTAL" || item.betType === "TEAM_TOTAL"
             ? item.totalSide
-            : game.homeTeam.toLowerCase().endsWith(nicknames[0])
+            : pickedSide === "HOME"
             ? "home"
-            : "away";
+            : pickedSide === "AWAY"
+            ? "away"
+            : null;
 
         // No real market exists for team totals in this app's cached odds
         // (getOddsForSport only fetches h2h/spreads/totals) - findMarketPrice
@@ -350,8 +355,13 @@ async function resolveGameAndOdds(
         // does for NRFI, so this is a no-op price lookup rather than a real
         // one; team-total picks keep whatever odds the capper typed (or the
         // -110 default), same as before this bet type existed.
+        // The pick's own line, same derivation the import stores on Pick.line -
+        // the price has to be for that exact number (see findMarketPrice).
+        const line = extractLine(item.betType, item.description) ?? item.inferredLine ?? null;
         const marketPrice =
-          side && item.betType !== "TEAM_TOTAL" ? await findMarketPrice(liveSportKey, game, item.betType, side, getOdds) : null;
+          side && item.betType !== "TEAM_TOTAL"
+            ? await findMarketPrice(liveSportKey, game, item.betType, side, { line, period: item.period ?? "UNKNOWN" }, getOdds)
+            : null;
         if (marketPrice !== null) {
           feedPrice = marketPrice;
         }
@@ -937,7 +947,17 @@ async function resolveLegAndOdds(item: ResolvableItem, getOdds: OddsLoader): Pro
     line = item.totalSide ? await findMarketTotalLine(liveSportKey, game, item.totalSide, getOdds) : null;
   }
 
-  return { ...base, line, lineUnresolved: line === null };
+  // base.odds was priced against the number in the leg's own text, which here
+  // is only a label (see above) - the leg's real line is the live one just
+  // looked up, so that is the line its price has to be read at.
+  let odds = base.odds;
+  if (!item.hasExplicitOdds && line !== null) {
+    const side = item.betType === "SPREAD" ? (base.pickedSide === "HOME" ? "home" : "away") : item.totalSide!;
+    const price = await findMarketPrice(liveSportKey, game, item.betType, side, { line, period: item.period ?? "UNKNOWN" }, getOdds);
+    odds = price ?? item.odds;
+  }
+
+  return { ...base, odds, line, lineUnresolved: line === null };
 }
 
 export async function bulkImportParlaysAction(items: BulkImportParlayItem[]): Promise<BulkImportParlaysResult> {
