@@ -21,6 +21,7 @@ import {
 } from "@/server/data/odds";
 import { resolvePropOdds, isNflOddsPropMarket } from "@/server/data/nfl-prop-odds";
 import { resolveAnytimeGoalOdds, resolveThreeWayOdds } from "@/server/data/nhl-goal-scorer-odds";
+import { findAltLinePrice } from "@/server/data/alt-line-odds";
 import { resolvePickPrice, type PickOddsSource } from "@/lib/odds-source";
 import { extractLine, parsePlayerPropLine, parseAnyPlayerProp, isAnytimeTdPick } from "@/lib/bet-line";
 import { nhlAnytimeGoalSide } from "@/lib/nhl-prop";
@@ -156,10 +157,16 @@ function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2
 // (below). That is right for the callers that resolve every line concurrently -
 // the waits overlap, so a paste costs 1 s at most. The pick import turns it off
 // and does one retry for the whole batch instead (see bulkImportPicksAction).
+//
+// altLines: a full-game SPREAD or TOTAL at a line the snapshot doesn't carry
+// may buy the event's alternate market from the Odds API (alt-line-odds.ts -
+// once per event and market per day, bounded wait). On for the import and for
+// the preview that shows what the import will store; off for the callers that
+// only want the matched game.
 async function resolveGameAndOdds(
   item: ResolvableItem,
   getOdds: OddsLoader,
-  { retryOnMiss = true }: { retryOnMiss?: boolean } = {}
+  { retryOnMiss = true, altLines = false }: { retryOnMiss?: boolean; altLines?: boolean } = {}
 ): Promise<{
   homeTeam: string;
   awayTeam: string;
@@ -391,10 +398,23 @@ async function resolveGameAndOdds(
         // The pick's own line, same derivation the import stores on Pick.line -
         // the price has to be for that exact number (see findMarketPrice).
         const line = extractLine(item.betType, item.description) ?? item.inferredLine ?? null;
-        const marketPrice =
+        let marketPrice =
           side && item.betType !== "TEAM_TOTAL"
             ? await findMarketPrice(liveSportKey, game, item.betType, side, { line, period: item.period ?? "UNKNOWN" }, getOdds)
             : null;
+        // The snapshot has each book's main line only. A pick at any other
+        // number is priced from the event's alternate market, same exact-line
+        // rule; no match there either leaves it unpriced as before.
+        if (
+          marketPrice === null &&
+          altLines &&
+          side &&
+          line !== null &&
+          item.period === "FULL_GAME" &&
+          (item.betType === "SPREAD" || item.betType === "TOTAL")
+        ) {
+          marketPrice = await findAltLinePrice(liveSportKey, game, item.betType, side, line, getOdds);
+        }
         if (marketPrice !== null) {
           feedPrice = marketPrice;
         }
@@ -450,7 +470,7 @@ export async function previewBulkImportMatches(
   await Promise.all(
     items.map(async (item, i) => {
       if (item.hasExplicitOdds) return;
-      const { odds, matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item, getOdds);
+      const { odds, matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item, getOdds, { altLines: true });
       if (matched && odds !== item.odds) enriched[i] = odds;
       if (matched) games[i] = { homeTeam, awayTeam, gameTime: gameTime.toISOString() };
     })
@@ -702,7 +722,7 @@ export async function bulkImportPicksAction(
   type Resolution = Awaited<ReturnType<typeof resolveGameAndOdds>>;
   type Outcome = { ok: true; resolved: Resolution } | { ok: false; err: unknown };
   const resolveOne = (item: BulkImportItem, loader: OddsLoader): Promise<Outcome> =>
-    resolveGameAndOdds(item, loader, { retryOnMiss: false }).then(
+    resolveGameAndOdds(item, loader, { retryOnMiss: false, altLines: true }).then(
       (resolved): Outcome => ({ ok: true, resolved }),
       (err: unknown): Outcome => ({ ok: false, err })
     );
