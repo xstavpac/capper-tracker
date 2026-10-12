@@ -13,6 +13,7 @@ import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
 import { TINTS } from "@/components/dashboard/panel-shell";
 import { WIN_PCT_TRACK, WinPctBar } from "@/components/dashboard/category-card";
 import { LABEL } from "@/components/parlay/parlay-controls";
+import { SendToFanDuel, type SendLeg } from "@/components/parlay/send-to-fanduel";
 import { rankBasisLabel, swapRecordLabel } from "@/lib/parlay/pick-record";
 import { combineOdds, formatAmericanOdds, formatDecimalOdds, formatPayout, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
 import type { RankedPick, SwapLeg, SwapParlay } from "@/lib/parlay/auto-generate";
@@ -193,12 +194,13 @@ export function CombinedPrice({ legs }: { legs: CombineLeg[] }) {
 
 // The legs a swap parlay actually plays: each leg's swap, or its original
 // pick where nothing replaced it.
-export function swapPriceLegs(parlay: SwapParlay): CombineLeg[] {
+export function swapPriceLegs(parlay: SwapParlay): ExpanderPick[] {
   return parlay.legs.map((l) => (l.swap ?? l.original).pick);
 }
 
 // A built parlay: its name, a line about it, its combined price (when
-// `priceLegs` is given), then its legs. `plain` is for a
+// `priceLegs` is given), then its legs, then "Send to FanDuel" for the legs in
+// `sendLegs`. `plain` is for a
 // result that already has a card of its own; otherwise it is a tinted block
 // inside the card that built it.
 export function ResultBlock({
@@ -206,12 +208,14 @@ export function ResultBlock({
   subtitle,
   plain,
   priceLegs,
+  sendLegs,
   children,
 }: {
   title: string;
   subtitle?: string;
   plain?: boolean;
   priceLegs?: CombineLeg[];
+  sendLegs?: SendLeg[];
   children: ReactNode;
 }) {
   return (
@@ -220,13 +224,14 @@ export function ResultBlock({
       {subtitle && <p className={"text-xs font-medium " + TINTS.blue.subtitleClass}>{subtitle}</p>}
       {priceLegs && <CombinedPrice legs={priceLegs} />}
       {children}
+      {sendLegs && <SendToFanDuel legs={sendLegs} />}
     </div>
   );
 }
 
 export function SwapBlock({ parlay, plain }: { parlay: SwapParlay; plain?: boolean }) {
   return (
-    <ResultBlock title={swapTitle(parlay)} subtitle={swapSubtitle(parlay)} plain={plain} priceLegs={swapPriceLegs(parlay)}>
+    <ResultBlock title={swapTitle(parlay)} subtitle={swapSubtitle(parlay)} plain={plain} priceLegs={swapPriceLegs(parlay)} sendLegs={swapPriceLegs(parlay)}>
       <SwapLegs parlay={parlay} />
     </ResultBlock>
   );
