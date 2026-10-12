@@ -216,7 +216,12 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
           />
           <div className="mt-3">
             {tab === "PRIMARY" && (
-              <ResultBlock title={`Parlay A — ${parlayA!.legs.length}-leg parlay`} subtitle={RESULT_SUBTITLE} plain>
+              <ResultBlock
+                title={`Parlay A — ${parlayA!.legs.length}-leg parlay`}
+                subtitle={RESULT_SUBTITLE}
+                plain
+                priceLegs={parlayA!.legs.map((leg) => leg.top.pick)}
+              >
                 <ol className={LEG_LIST}>
                   {parlayA!.legs.map((leg, i) => (
                     <ParlayALeg key={leg.gameId} n={i + 1} leg={leg} />

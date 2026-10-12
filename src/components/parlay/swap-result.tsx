@@ -14,6 +14,7 @@ import { TINTS } from "@/components/dashboard/panel-shell";
 import { WIN_PCT_TRACK, WinPctBar } from "@/components/dashboard/category-card";
 import { LABEL } from "@/components/parlay/parlay-controls";
 import { rankBasisLabel, swapRecordLabel } from "@/lib/parlay/pick-record";
+import { combineOdds, formatAmericanOdds, formatDecimalOdds, formatPayout, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
 import type { RankedPick, SwapLeg, SwapParlay } from "@/lib/parlay/auto-generate";
 
 export function marketNoun(category: PickCategoryKey | null): string {
@@ -134,14 +135,90 @@ export function SwapLegs({ parlay }: { parlay: SwapParlay }) {
   );
 }
 
-// A built parlay: its name, a line about it, then its legs. `plain` is for a
+const plural = (n: number) => (n === 1 ? "" : "s");
+
+function PriceCell({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className={LABEL}>{label}</dt>
+      <dd className="mt-0.5 text-[15px] font-bold tabular-nums leading-snug text-foreground [overflow-wrap:anywhere]">
+        {value}
+        {sub && <span className="ml-1 text-xs font-medium text-muted-foreground">{sub}</span>}
+      </dd>
+    </div>
+  );
+}
+
+// The price of the parlay as built: combined American and decimal odds, and
+// what a $1 stake returns (lib/parlay/combine-odds.ts - display only, rounded
+// here and nowhere earlier). Two honest exceptions, both said in words:
+//   - a leg with no price at all: there is no number, so "unavailable" is
+//     shown instead of one;
+//   - a leg priced at the importer's -110 placeholder: the numbers are shown,
+//     each marked "≈", with how many legs are placeholders.
+export function CombinedPrice({ legs }: { legs: CombineLeg[] }) {
+  const combined = combineOdds(legs);
+  if (combined.legCount === 0) return null;
+  const box = "mt-2.5 rounded-[12px] border border-[#E6E8EF] bg-white px-3.5 py-2.5 dark:border-border dark:bg-card";
+  if (combined.status === "UNAVAILABLE") {
+    return (
+      <div className={box}>
+        <p className={LABEL}>Combined odds</p>
+        <p className="mt-0.5 text-sm font-semibold text-foreground">Unavailable</p>
+        <p className="text-xs font-medium text-muted-foreground">
+          {combined.unavailableLegs > 0
+            ? `${combined.unavailableLegs} leg${plural(combined.unavailableLegs)} ${combined.unavailableLegs === 1 ? "has" : "have"} no price, so this parlay can't be priced.`
+            : "This parlay's price is too large to show."}
+        </p>
+      </div>
+    );
+  }
+  const approx = combined.estimated ? "≈ " : "";
+  return (
+    <div className={box}>
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-3">
+        <PriceCell label={combined.estimated ? "Combined odds (estimate)" : "Combined odds"} value={approx + formatAmericanOdds(combined.american)} />
+        <PriceCell label="Decimal" value={approx + formatDecimalOdds(combined.decimal)} />
+        <PriceCell label="Payout" value={approx + formatPayout(payoutOn(combined))} sub="on $1" />
+      </dl>
+      {combined.estimated && (
+        <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+          Estimate: {combined.defaultedLegs} of {combined.legCount} leg{plural(combined.legCount)} had no posted price and{" "}
+          {combined.defaultedLegs === 1 ? "is" : "are"} counted at a placeholder -110.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// The legs a swap parlay actually plays: each leg's swap, or its original
+// pick where nothing replaced it.
+export function swapPriceLegs(parlay: SwapParlay): CombineLeg[] {
+  return parlay.legs.map((l) => (l.swap ?? l.original).pick);
+}
+
+// A built parlay: its name, a line about it, its combined price (when
+// `priceLegs` is given), then its legs. `plain` is for a
 // result that already has a card of its own; otherwise it is a tinted block
 // inside the card that built it.
-export function ResultBlock({ title, subtitle, plain, children }: { title: string; subtitle?: string; plain?: boolean; children: ReactNode }) {
+export function ResultBlock({
+  title,
+  subtitle,
+  plain,
+  priceLegs,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  plain?: boolean;
+  priceLegs?: CombineLeg[];
+  children: ReactNode;
+}) {
   return (
     <div className={plain ? "" : "mt-4 rounded-[14px] border px-3.5 pb-1 pt-3 " + TINTS.blue.card}>
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       {subtitle && <p className={"text-xs font-medium " + TINTS.blue.subtitleClass}>{subtitle}</p>}
+      {priceLegs && <CombinedPrice legs={priceLegs} />}
       {children}
     </div>
   );
@@ -149,7 +226,7 @@ export function ResultBlock({ title, subtitle, plain, children }: { title: strin
 
 export function SwapBlock({ parlay, plain }: { parlay: SwapParlay; plain?: boolean }) {
   return (
-    <ResultBlock title={swapTitle(parlay)} subtitle={swapSubtitle(parlay)} plain={plain}>
+    <ResultBlock title={swapTitle(parlay)} subtitle={swapSubtitle(parlay)} plain={plain} priceLegs={swapPriceLegs(parlay)}>
       <SwapLegs parlay={parlay} />
     </ResultBlock>
   );

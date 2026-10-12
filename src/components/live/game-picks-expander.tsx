@@ -5,6 +5,7 @@ import type { PickStatus } from "@prisma/client";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
+import type { PickOddsSource } from "@/lib/odds-source";
 import { OTHER_GROUP_LABEL, TOTALS_GROUP_LABEL, sortTotalsPicks } from "@/lib/pick-team-group";
 import { PickCard } from "@/components/live/pick-card";
 import { TotalsSideList } from "@/components/live/totals-side-list";
@@ -61,6 +62,12 @@ export type ExpanderPick = {
   // contrarianHeadcountPasses). Optional because pooled picks persisted to
   // localStorage before this field existed won't carry it.
   datePosted?: string;
+  // Where `odds` came from (lib/odds-source.ts). Read only by the Parlay
+  // Generator's combined price, which marks itself an estimate when a leg's
+  // price is the DEFAULTED -110 placeholder (lib/parlay/combine-odds.ts).
+  // Optional for the same reason as datePosted; null on a pick stored before
+  // the column existed. Missing and null both mean "unknown".
+  oddsSource?: PickOddsSource | null;
 };
 
 // Fixed AWAY -> HOME -> TOTALS -> OTHER ordering (matches how the game card
