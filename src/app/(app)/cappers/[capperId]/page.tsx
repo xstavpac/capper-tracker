@@ -112,7 +112,7 @@ export default async function CapperDetailPage({
     summary,
     chartData,
     tiles,
-    bestMarket,
+    bestMarkets,
     recentPicks,
     hasMoreRecent,
     trackedSinceMs,
@@ -166,7 +166,7 @@ export default async function CapperDetailPage({
           summary={summary}
           currentStreak={currentStreak}
           momentum={momentum}
-          bestMarket={bestMarket}
+          bestMarkets={bestMarkets}
           sports={sports}
           trackedSinceMs={trackedSinceMs}
           lastPickMs={lastPickMs}

@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { StreakBadge } from "@/components/dashboard/capper-panels";
 import { formatEastern, formatRelativeTime } from "@/lib/dates";
 import { formatSignedUnits } from "@/lib/units-extremes";
-import { getRecordColor, winPctOf, type CategoryBreakdownItem, type MomentumBreakdown, type MomentumRow } from "@/server/data/stats";
-import type { CapperRecordView } from "@/server/data/capper-detail";
+import { getRecordColor, winPctOf, type MomentumBreakdown, type MomentumRow } from "@/server/data/stats";
+import { bestMarketStats, type BestMarketStat, type BestMarkets, type CapperRecordView } from "@/server/data/capper-detail";
 
 type Streak = { type: "WIN" | "LOSS" | "NONE"; count: number };
 
@@ -67,9 +67,9 @@ function MomentumCard({ breakdown, currentStreak }: { breakdown: MomentumBreakdo
   );
 }
 
-// `wraps` is for a value made of words (the best market's name): it breaks onto a second line
+// `wraps` is for a value made of words (a market's name): it breaks onto a second line
 // rather than being cut off.
-function StatCell({ label, value, sub, tone, wraps, className = "" }: { label: string; value: ReactNode; sub?: string; tone?: "up" | "down"; wraps?: boolean; className?: string }) {
+function StatCell({ label, value, sub, tone, wraps, className = "" }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "up" | "down"; wraps?: boolean; className?: string }) {
   return (
     // The banner's navy under the same faint white wash as the momentum card (opaque, to cover the grid's own).
     <div className={"min-w-0 bg-banner bg-[linear-gradient(rgb(255_255_255/0.06),rgb(255_255_255/0.06))] px-4 py-[9px] " + className}>
@@ -77,6 +77,40 @@ function StatCell({ label, value, sub, tone, wraps, className = "" }: { label: s
       <div className={"mt-0.5 text-xl font-semibold leading-tight tabular-nums " + (wraps ? "" : "truncate ") + (tone === "up" ? UP : tone === "down" ? DOWN : "text-white")}>{value}</div>
       {sub && <div className="truncate text-xs tabular-nums text-white/60">{sub}</div>}
     </div>
+  );
+}
+
+// One market stat: the market's name with the figure the stat is about (net units, or the win %),
+// then the other figure and the record - which is the sample, so nothing is hidden for being small.
+// A single "Best market" leads with the name alone and lists units, win % and record under it.
+function MarketCell({ stat, single, className }: { stat: BestMarketStat; single: boolean; className: string }) {
+  const m = stat.market;
+  const units = <span className={m.netUnits > 0 ? UP : m.netUnits < 0 ? DOWN : undefined}>{formatSignedUnits(m.netUnits, 2)}</span>;
+  const pct = m.wins + m.losses > 0 ? <span className={getRecordColor(m.winPct) === "green" ? UP : DOWN}>{Math.round(m.winPct) + "%"}</span> : null;
+  const record = m.wins + "-" + m.losses + (m.pushes > 0 ? "-" + m.pushes : "");
+  const lead = stat.lead === "units" ? units : pct;
+  const rest = single ? [units, pct] : [stat.lead === "units" ? pct : units];
+  return (
+    <StatCell
+      className={className}
+      label={stat.label}
+      wraps
+      value={
+        single ? (
+          m.label
+        ) : (
+          <>
+            {m.label} <span className="whitespace-nowrap">{lead}</span>
+          </>
+        )
+      }
+      sub={
+        <>
+          {rest.map((figure, i) => figure && <span key={i}>{figure} · </span>)}
+          {record}
+        </>
+      }
+    />
   );
 }
 
@@ -99,7 +133,7 @@ export function CapperHero({
   summary,
   currentStreak,
   momentum,
-  bestMarket,
+  bestMarkets,
   sports,
   trackedSinceMs,
   lastPickMs,
@@ -113,7 +147,7 @@ export function CapperHero({
   summary: CapperRecordView;
   currentStreak: Streak;
   momentum: MomentumBreakdown;
-  bestMarket: CategoryBreakdownItem | null;
+  bestMarkets: BestMarkets | null;
   sports: string[];
   trackedSinceMs: number | null;
   lastPickMs: number | null;
@@ -124,7 +158,10 @@ export function CapperHero({
   const graded = summary.wins + summary.losses > 0;
   const winPct = winPctOf(summary.wins, summary.losses);
   const winPctText = graded ? winPct.toFixed(1) + "%" : "—";
-  const bestGraded = bestMarket !== null && bestMarket.wins + bestMarket.losses > 0;
+  const marketStats = bestMarkets ? bestMarketStats(bestMarkets) : [];
+  // Five cells end on a wide one (it fills its row); six (two market stats) fill every row evenly.
+  const paired = marketStats.length === 2;
+  const lastCell = paired ? "" : "col-span-2 [@container_(min-width:900px)]:col-span-1";
 
   return (
     <div className="rounded-[18px] bg-banner px-3.5 py-3.5 text-white shadow-[0_8px_24px_rgba(3,11,41,0.22)] [container-type:inline-size] sm:px-[22px]">
@@ -195,18 +232,20 @@ export function CapperHero({
       </div>
 
       {/* The dividers are the grid's 1px gaps over the container's wash. The last cell fills its row. */}
-      <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-white/[0.14] [@container_(min-width:560px)]:grid-cols-3 [@container_(min-width:900px)]:grid-cols-5">
+      <div
+        className={
+          "mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-white/[0.14] [@container_(min-width:560px)]:grid-cols-3 " +
+          (paired ? "[@container_(min-width:900px)]:grid-cols-6" : "[@container_(min-width:900px)]:grid-cols-5")
+        }
+      >
         <StatCell label="Record" value={summary.wins + "-" + summary.losses + "-" + summary.pushes} />
         <StatCell label="Win rate" value={winPctText} />
         <StatCell label="ROI" value={(summary.roi > 0 ? "+" : summary.roi < 0 ? "−" : "") + Math.abs(summary.roi) + "%"} tone={summary.roi >= 0 ? "up" : "down"} />
         <StatCell label="Net units" value={(summary.netUnits > 0 ? "+" : summary.netUnits < 0 ? "−" : "") + Math.abs(summary.netUnits) + "u"} tone={summary.netUnits >= 0 ? "up" : "down"} />
-        <StatCell
-          className="col-span-2 [@container_(min-width:900px)]:col-span-1"
-          label="Best market"
-          wraps
-          value={bestMarket ? bestMarket.label + (bestGraded ? " " + Math.round(bestMarket.winPct) + "%" : "") : "—"}
-          sub={bestMarket ? bestMarket.wins + "-" + bestMarket.losses + (bestMarket.pushes > 0 ? "-" + bestMarket.pushes : "") + " · " + bestMarket.count + " graded" : undefined}
-        />
+        {marketStats.length === 0 && <StatCell className={lastCell} label="Best market" wraps value="—" />}
+        {marketStats.map((stat) => (
+          <MarketCell key={stat.label} stat={stat} single={!paired} className={lastCell} />
+        ))}
       </div>
     </div>
   );
