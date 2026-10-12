@@ -237,8 +237,8 @@ const SORT_SQL: Record<CappersSortKey, { missing: Prisma.Sql; desc: Prisma.Sql; 
   roi: { missing: Prisma.sql`(decided = 0 OR roi_r = 'NaN'::float8)`, desc: Prisma.sql`roi_r DESC`, asc: Prisma.sql`roi_r ASC` },
   win: { missing: Prisma.sql`(wins + losses = 0)`, desc: Prisma.sql`win_pct DESC`, asc: Prisma.sql`win_pct ASC` },
   units: { missing: Prisma.sql`(decided = 0 OR net_r = 'NaN'::float8)`, desc: Prisma.sql`net_r DESC`, asc: Prisma.sql`net_r ASC` },
-  // Wins first, then fewer losses.
-  record: { missing: Prisma.sql`(decided = 0)`, desc: Prisma.sql`wins DESC, losses ASC`, asc: Prisma.sql`wins ASC, losses DESC` },
+  // Net record, then fewer losses (6-0 above 10-4).
+  record: { missing: Prisma.sql`(decided = 0)`, desc: Prisma.sql`(wins - losses) DESC, losses ASC`, asc: Prisma.sql`(wins - losses) ASC, losses DESC` },
 };
 const sortSql = (sort: CappersSortKey, dir: SortDir = "desc") => Prisma.sql`${SORT_SQL[sort].missing}, ${SORT_SQL[sort][dir]}`;
 const TIE_BREAK = Prisma.sql`(net_r = 'NaN'::float8), net_r DESC, lower(name) COLLATE "C", name COLLATE "C", cid COLLATE "C"`;

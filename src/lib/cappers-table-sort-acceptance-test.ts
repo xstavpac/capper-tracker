@@ -5,8 +5,8 @@
 //  - Each of Record / Win % / ROI / Units orders on the numbers behind the row, high to low and
 //    low to high - including the cases a formatted-string sort gets wrong ("9%" vs "10%",
 //    "+12.5%" vs "−3%", "9-1" vs "10-5").
-//  - Record: wins first, then losses as the tie-break (fewer losses ranks higher), reversed as a
-//    whole when the direction flips; pushes never enter it.
+//  - Record: the net record (wins minus losses), then fewer losses on an equal net (6-0 above
+//    10-4), reversed as a whole when the direction flips; pushes never enter it.
 //  - A capper with nothing to show in the column (no graded picks, pushes only for Win %, a NaN
 //    ROI / units) is last in BOTH directions, while Infinity / -Infinity stay ordinary values.
 //  - Ties fall to net units, then name, then id, the same way in both directions.
@@ -58,12 +58,13 @@ function main() {
     check("units: low to high", order(rows, "units", "asc"), ["c", "a", "b", "d"]);
   }
 
-  // ---- Record: wins, then losses ----
+  // ---- Record: net record (wins minus losses), then fewer losses ----
   {
-    const rows = [capper("9-1", 9, 1), capper("10-5", 10, 5), capper("10-2", 10, 2), capper("10-8", 10, 8), capper("3-0", 3, 0)];
-    check("record: wins first ('10-5' above '9-1'), fewer losses breaks a wins tie", order(rows, "record"), ["10-2", "10-5", "10-8", "9-1", "3-0"]);
-    check("record: low to high reverses wins AND the losses tie-break", order(rows, "record", "asc"), ["3-0", "9-1", "10-8", "10-5", "10-2"]);
-    check("record: sort values are [wins, -losses]", sortValues(capper("x", 10, 5), "record"), [10, -5]);
+    const rows = [capper("10-4", 10, 4), capper("3-0", 3, 0), capper("9-1", 9, 1), capper("12-9", 12, 9), capper("6-0", 6, 0), capper("10-5", 10, 5), capper("2-7", 2, 7)];
+    check("record: net first ('9-1' above '10-4'), fewer losses breaks an equal net ('6-0' above '10-4')", order(rows, "record"), ["9-1", "6-0", "10-4", "10-5", "3-0", "12-9", "2-7"]);
+    check("record: low to high reverses the net AND the losses tie-break", order(rows, "record", "asc"), ["2-7", "12-9", "3-0", "10-5", "10-4", "6-0", "9-1"]);
+    check("record: sort values are [wins - losses, -losses]", sortValues(capper("x", 10, 4), "record"), [6, -4]);
+    check("record: more wins alone does not rank higher (the old wins-first order)", order([capper("10-8", 10, 8), capper("6-0", 6, 0)], "record"), ["6-0", "10-8"]);
   }
   {
     // Same wins and losses: pushes do not decide it, the tie-break (net units, then name) does.

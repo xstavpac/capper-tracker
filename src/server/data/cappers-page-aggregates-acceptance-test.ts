@@ -460,6 +460,23 @@ async function main() {
   const topShown = top3.top.map((e) => e.stats.roi);
   check("odds 0: Standout leaves out non-finite units, rest ordered by net units", top3.top.every((e) => Number.isFinite(e.stats.netUnits) && e.stats.netUnits > 0) && top3.top.every((e, i) => i === 0 || top3.top[i - 1].stats.netUnits >= e.stats.netUnits), JSON.stringify(topShown));
 
+  // ============ Sort: Record is the net record, then fewer losses ============
+  // 9-1 (net 8) leads; 6-0 and 10-4 are both net 6 and the one with fewer losses is higher; a
+  // capper with no graded picks is last in both directions.
+  const UR = await makeUser("record");
+  const rec: Record<string, string> = {};
+  const recPicks: PickSpec[] = [];
+  for (const [k, w, l] of [["10-4", 10, 4], ["6-0", 6, 0], ["9-1", 9, 1], ["2-7", 2, 7]] as const) {
+    rec[k] = await makeCapper(UR, k, "Rec " + k);
+    for (let i = 0; i < w + l; i++) recPicks.push({ capperId: rec[k], status: i < w ? "WIN" : "LOSS", odds: -110, units: 1, gameTime: ago(500 + i) });
+  }
+  rec.none = await makeCapper(UR, "none", "Rec none");
+  await addPicks(UR, recPicks);
+  for (const [dir, expected] of [["desc", ["9-1", "6-0", "10-4", "2-7", "none"]], ["asc", ["2-7", "10-4", "6-0", "9-1", "none"]]] as const) {
+    const got = (await getCappersPageData({ userId: UR, window: "ALL", min: 0, sort: "record", dir, fav: false, q: "", page: 1 })).rows.map((e) => e.name.slice(4));
+    same(`record ${dir}: net record, then fewer losses, no picks last`, got, expected);
+  }
+
   // ============ Winners this week ============
   // Independent reference straight from the raw picks: datePosted in the last 7 days (Most active's
   // window), graded (WIN/LOSS/PUSH) only, >= 5 graded, net units = sum(win units) - sum(loss units)

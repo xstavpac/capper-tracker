@@ -15,13 +15,14 @@ export type SortableCapper = {
 // What a column sorts on, most significant number first - or null when the capper has nothing to
 // show in it: no graded picks at all, no win or loss to take a Win % of, or a NaN (an odds-0 win
 // can make ROI and units NaN, which has no place in an order).
-// Record is wins, then losses as the tie-break with fewer losses ranking higher.
+// Record is the net record (wins minus losses); on an equal net, fewer losses ranks higher, so
+// 6-0 is above 10-4.
 export function sortValues(e: SortableCapper, key: CappersSortKey): number[] | null {
   const { wins, losses, pushes, winPct, roi, netUnits } = e.stats;
   if (wins + losses + pushes === 0) return null;
   switch (key) {
     case "record":
-      return [wins, -losses];
+      return [wins - losses, -losses];
     case "win":
       return wins + losses > 0 ? [winPct] : null;
     case "roi":
