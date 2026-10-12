@@ -68,9 +68,26 @@ function restoreFetch() {
   globalThis.fetch = realFetch;
 }
 
+// Frozen clock: "today" is an Eastern calendar day, so the run times below are
+// real ones - the midnight run (05:05 UTC = 01:05 EDT) and the afternoon run
+// (16:30 UTC = 12:30 PM EDT) of 2026-10-13.
 const HOUR = 3600000;
+const MIDNIGHT_RUN = Date.parse("2026-10-13T05:05:00Z");
+const AFTERNOON_RUN = Date.parse("2026-10-13T16:30:00Z");
+let clock = MIDNIGHT_RUN;
+const RealDate = Date;
+class FakeDate extends RealDate {
+  constructor(...args: unknown[]) {
+    if (args.length === 0) super(clock);
+    else super(...(args as [string]));
+  }
+  static now() {
+    return clock;
+  }
+}
+(globalThis as { Date: unknown }).Date = FakeDate;
 const now = new Date();
-const inHours = (h: number) => new Date(now.getTime() + h * HOUR).toISOString();
+const inHours = (h: number) => new Date(MIDNIGHT_RUN + h * HOUR).toISOString();
 
 function nhlGame(id: string, commenceTime: string, sportKey = "icehockey_nhl"): OddsGame {
   return {
@@ -104,6 +121,27 @@ async function main() {
   expect("resolve: a No-only listing is never read as the Yes price", resolveAnytimeGoalOddsFromGame(sampleGame, "Evan Bouchard"), null);
   expect("resolve: a game with no goal-scorer market -> null", resolveAnytimeGoalOddsFromGame(nhlGame("x", inHours(5)), "Connor McDavid"), null);
 
+  // The same matcher against the REAL response captured 2026-10-12 (Ottawa
+  // Senators @ New Jersey Devils, trimmed to two bookmakers x eight outcomes).
+  const live = JSON.parse(readFileSync(join(__dirname, "__fixtures__", "odds-api-event-nhl-goal-scorer-response.json"), "utf8"));
+  const liveGame: OddsGame = {
+    id: live.id,
+    sportKey: live.sport_key,
+    homeTeam: live.home_team,
+    awayTeam: live.away_team,
+    commenceTime: live.commence_time,
+    bookmakers: live.bookmakers,
+  };
+  const liveOutcomes = (live.bookmakers as OddsGame["bookmakers"]).flatMap((b) => b.markets.flatMap((m) => m.outcomes));
+  expect(
+    "live capture: every outcome is { name: 'Yes', description, price } with no point",
+    liveOutcomes.every((o) => o.name === "Yes" && !!o.description && typeof o.price === "number" && o.point === undefined),
+    true
+  );
+  expect("live capture: Jack Hughes -> draftkings +145", resolveAnytimeGoalOddsFromGame(liveGame, "Jack Hughes"), 145);
+  expect("live capture: 'Tim Stutzle' typed without the umlaut matches 'Tim Stützle'", resolveAnytimeGoalOddsFromGame(liveGame, "Tim Stutzle"), 225);
+  expect("live capture: Luke Hughes is not in the trimmed capture and is not priced as Jack Hughes", resolveAnytimeGoalOddsFromGame(liveGame, "Luke Hughes"), null);
+
   // =====================================================================
   // 2. nhlGamesNeedingGoalScorerOdds - the 24-hour window
   // =====================================================================
@@ -121,6 +159,15 @@ async function main() {
     "window: only not-started games inside 24h that lack the market qualify",
     nhlGamesNeedingGoalScorerOdds(slate, now).map((g) => g.id),
     ["tonight", "lateTonight"]
+  );
+  // The afternoon run: 24 hours from 12:30 PM ET reaches tomorrow's matinee,
+  // which must wait for tomorrow's own row.
+  const tomorrowMatinee = nhlGame("tomorrowMatinee", "2026-10-14T16:00:00Z");
+  const boughtAtMidnight = { ...nhlGame("tonight", inHours(19)), bookmakers: sample.bookmakers };
+  expect(
+    "window (afternoon run): only today's games still lacking the market - not one bought at midnight, not tomorrow's matinee",
+    nhlGamesNeedingGoalScorerOdds([boughtAtMidnight, nhlGame("lateTonight", inHours(22.5)), tomorrowMatinee], new Date(AFTERNOON_RUN)).map((g) => g.id),
+    ["lateTonight"]
   );
 
   // =====================================================================
@@ -222,6 +269,35 @@ async function main() {
   const second = await seedNhlGoalScorerOddsForToday();
   expect("seed: re-running over the enriched row makes zero calls", [second.status, fetchCalls.length], ["no_games_to_fetch", 0]);
   restoreFetch();
+
+  // 3e2. The afternoon run: one game was posted at midnight and one was not
+  //      (its midnight call came back with no bookmakers). Only the missing
+  //      one is asked for again; tomorrow's matinee is left for tomorrow.
+  clock = AFTERNOON_RUN;
+  usageWrites = [];
+  updated = null;
+  patch("oddsSnapshot.findUnique", async () => ({ data: [boughtAtMidnight, nhlGame("lateTonight", inHours(22.5)), tomorrowMatinee] }));
+  stubEventOddsFetch({
+    lateTonight: { ok: true, headers: { "x-requests-remaining": "18997", "x-requests-used": "1003" }, body: { ...sample, id: "lateTonight" } },
+  });
+  const afternoon = await seedNhlGoalScorerOddsForToday();
+  expect("afternoon run: one call, for the game still missing the market", [afternoon.status, afternoon.eventsFetched, fetchCalls.length], ["seeded", 1, 1]);
+  expect("afternoon run: logged to odds_api_usage_log like the midnight run", usageWrites.map((w) => [w.sportKey, w.marketsRequested, w.eventsRequested]), [["icehockey_nhl", "player_goal_scorer_anytime", 1]]);
+  expect(
+    "afternoon run: the late game is now priced, the others are untouched",
+    [hasGoalMarket(((updated ?? []) as OddsGame[])[1]), ((updated ?? []) as OddsGame[])[0], ((updated ?? []) as OddsGame[])[2]],
+    [true, boughtAtMidnight, tomorrowMatinee]
+  );
+  restoreFetch();
+
+  // An empty response (books haven't posted): the call succeeded and the game
+  // simply still lacks the market, so the next run asks again.
+  patch("oddsSnapshot.findUnique", async () => ({ data: [nhlGame("lateTonight", inHours(22.5))] }));
+  stubEventOddsFetch({ lateTonight: { ok: true, headers: { "x-requests-remaining": "18997", "x-requests-used": "1003" }, body: { id: "lateTonight", bookmakers: [] } } });
+  await seedNhlGoalScorerOddsForToday();
+  expect("empty response: the game still qualifies for the next run", nhlGamesNeedingGoalScorerOdds((updated ?? []) as OddsGame[], new Date(AFTERNOON_RUN)).map((g) => g.id), ["lateTonight"]);
+  restoreFetch();
+  clock = MIDNIGHT_RUN;
 
   // 3f. Credit gate at >=95%: nothing fetched, nothing written.
   writes = 0;

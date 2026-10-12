@@ -4,15 +4,25 @@
 // differences that keep it cheap:
 //   - one market per call (player_goal_scorer_anytime), so a call costs at
 //     most 1 credit (cost = markets returned x regions);
-//   - only games starting within NHL_GOAL_SCORER_LOOKAHEAD_MS that don't
-//     already carry the market are requested, so a game is bought once, on the
-//     day it is played, not on every day it sits on the upcoming slate.
+//   - only today's games starting within NHL_GOAL_SCORER_LOOKAHEAD_MS that
+//     don't already carry the market are requested, so a game is bought once,
+//     on the day it is played, not on every day it sits on the upcoming slate.
 //
-// Outcome shape is ASSUMED, not captured live: this reads the market the way
-// player_anytime_td is confirmed to look (name "Yes", player in `description`,
-// no `point` - see nfl-prop-odds.ts's header), which is how the provider's docs
-// describe its other yes/no scorer markets. If a book sends something else the
-// lookup below simply finds no match and the pick keeps its own price.
+// Two runs a day call seedNhlGoalScorerOddsForToday: the refresh-odds cron just
+// after midnight ET, and /api/cron/nhl-goal-scorer-odds at 16:30 UTC for games
+// whose market wasn't posted yet at midnight. A call that returns no market
+// costs nothing, and a game that already has it is never asked for again.
+//
+// Outcome shape confirmed live 2026-10-12 against a real event (Ottawa Senators
+// @ New Jersey Devils, commence_time 2026-10-12T23:10:00Z) via
+// GET /v4/sports/icehockey_nhl/events/{eventId}/odds
+//   ?regions=us&markets=player_goal_scorer_anytime&oddsFormat=american
+// (x-requests-last: 1, i.e. exactly 1 credit). All 7 bookmakers (draftkings,
+// fanatics, fanduel, williamhill_us, betrivers, bovada, betmgm) returned 32-34
+// outcomes shaped `{ name: "Yes", description: "<player>", price }` - the same
+// shape as player_anytime_td (see nfl-prop-odds.ts's header): no "No" outcome,
+// no `point`, and no team or "no scorer" entries. Trimmed capture saved at
+// __fixtures__/odds-api-event-nhl-goal-scorer-response.json.
 import { revalidateTag } from "next/cache";
 import type { OddsGame } from "@/server/data/odds";
 import { resolveOddsGame, type OddsLoader } from "@/server/data/odds";
@@ -74,14 +84,19 @@ export async function resolveAnytimeGoalOdds(
   return resolveAnytimeGoalOddsFromGame(oddsGame, playerName);
 }
 
-// Which of the day's games to buy the market for: not started, starting within
-// the lookahead, and not already carrying it (so a second run the same day
-// spends nothing).
+// Which games to buy the market for: played today (Eastern), not started,
+// starting within the lookahead, and not already carrying it (so a later run
+// the same day spends nothing on them). "Today" matters for the afternoon run:
+// 24 hours from then reaches tomorrow's matinees, which tomorrow's own row
+// would buy again.
 export function nhlGamesNeedingGoalScorerOdds(games: OddsGame[], now: Date): OddsGame[] {
   const nowMs = now.getTime();
+  const today = easternDateKey(now);
   return games.filter((g) => {
-    const startMs = new Date(g.commenceTime).getTime();
+    const start = new Date(g.commenceTime);
+    const startMs = start.getTime();
     if (!(startMs > nowMs) || startMs - nowMs > NHL_GOAL_SCORER_LOOKAHEAD_MS) return false;
+    if (easternDateKey(start) !== today) return false;
     return !g.bookmakers.some((b) => b.markets.some((m) => m.key === NHL_ANYTIME_GOAL_MARKET_KEY));
   });
 }
@@ -90,9 +105,10 @@ export function nhlGamesNeedingGoalScorerOdds(games: OddsGame[], now: Date): Odd
 // every request failed) - the row is left as it was.
 export type NhlGoalScorerSeedStatus = NflPropSeedStatus | "nothing_fetched";
 
-// Called by the refresh-odds cron right after the NFL prop step. Reads today's
-// NHL OddsSnapshot row (written by the bulk seed earlier in the same run) and
-// adds the goal-scorer market to the games that qualify.
+// Called by the refresh-odds cron right after the NFL prop step, and again by
+// /api/cron/nhl-goal-scorer-odds in the afternoon. Reads today's NHL
+// OddsSnapshot row (written by the bulk seed) and adds the goal-scorer market
+// to the games that qualify.
 export async function seedNhlGoalScorerOddsForToday(): Promise<NflPropFetchSummary & { status: NhlGoalScorerSeedStatus }> {
   const none = { games: [] as OddsGame[], eventsFetched: 0, eventsSkippedCreditGate: 0, eventsFailed: 0 };
   const apiKey = process.env.ODDS_API_KEY;

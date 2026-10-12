@@ -9,6 +9,10 @@
       "schedule": "0 */4 * * *"
     },
     {
+      "path": "/api/cron/nhl-goal-scorer-odds",
+      "schedule": "30 16 * * *"
+    },
+    {
       "path": "/api/cron/refresh-scores",
       "schedule": "55 6 * * *"
     },

@@ -1,0 +1,114 @@
+{
+  "id": "bddca6412454c40a2860b4e2e3e85968",
+  "sport_key": "icehockey_nhl",
+  "sport_title": "NHL",
+  "commence_time": "2026-10-12T23:10:00Z",
+  "home_team": "New Jersey Devils",
+  "away_team": "Ottawa Senators",
+  "bookmakers": [
+    {
+      "key": "draftkings",
+      "title": "DraftKings",
+      "markets": [
+        {
+          "key": "player_goal_scorer_anytime",
+          "last_update": "2026-10-12T10:22:45Z",
+          "outcomes": [
+            {
+              "name": "Yes",
+              "description": "Jack Hughes",
+              "price": 145
+            },
+            {
+              "name": "Yes",
+              "description": "Nico Hischier",
+              "price": 190
+            },
+            {
+              "name": "Yes",
+              "description": "Tim Stützle",
+              "price": 225
+            },
+            {
+              "name": "Yes",
+              "description": "Drake Batherson",
+              "price": 230
+            },
+            {
+              "name": "Yes",
+              "description": "Timo Meier",
+              "price": 235
+            },
+            {
+              "name": "Yes",
+              "description": "Dylan Cozens",
+              "price": 235
+            },
+            {
+              "name": "Yes",
+              "description": "Jesper Bratt",
+              "price": 290
+            },
+            {
+              "name": "Yes",
+              "description": "Luke Evangelista",
+              "price": 290
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "fanduel",
+      "title": "FanDuel",
+      "markets": [
+        {
+          "key": "player_goal_scorer_anytime",
+          "last_update": "2026-10-12T10:23:12Z",
+          "outcomes": [
+            {
+              "name": "Yes",
+              "description": "Jack Hughes",
+              "price": 150
+            },
+            {
+              "name": "Yes",
+              "description": "Nico Hischier",
+              "price": 190
+            },
+            {
+              "name": "Yes",
+              "description": "Drake Batherson",
+              "price": 210
+            },
+            {
+              "name": "Yes",
+              "description": "Tim Stützle",
+              "price": 220
+            },
+            {
+              "name": "Yes",
+              "description": "Timo Meier",
+              "price": 240
+            },
+            {
+              "name": "Yes",
+              "description": "Jesper Bratt",
+              "price": 250
+            },
+            {
+              "name": "Yes",
+              "description": "Dylan Cozens",
+              "price": 270
+            },
+            {
+              "name": "Yes",
+              "description": "Luke Evangelista",
+              "price": 290
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
