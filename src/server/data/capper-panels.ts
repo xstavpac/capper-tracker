@@ -54,7 +54,7 @@ export type CapperPanels = {
   coldest: StreakEntry[];
   // Each in-season league's best cappers this season (league-savant.ts).
   savant: LeagueSavant;
-  // `pts` is negative, most negative first.
+  // `pct` (the decline as a percentage of the capper's norm) is negative, steepest first.
   falling: FallingEntry[];
   // Best: recent win% at or above BEST_LAST20_MIN_WIN_PCT, best first; Worst: below it, worst
   // first. One pool split in two, so no capper is ever in both. At most LAST20_PANEL_COUNT each
@@ -66,10 +66,10 @@ export type CapperPanels = {
 // The cache slot is chosen by this string alone (cachedByTag's callback text is
 // identical for every user), so every input that changes the result must
 // appear here. Distinct from cacheKeys.dashboard - that one is only the shared
-// invalidation tag. "v4": the shape changed, and an entry cached by a previous
+// invalidation tag. "v5": the shape changed, and an entry cached by a previous
 // deploy must not be read as the new one.
 export function capperPanelsCacheKey(userId: string): string {
-  return `capper-panels:v4:${userId}`;
+  return `capper-panels:v5:${userId}`;
 }
 
 // Reads only Pick rows (plus the roster), so it shares getDashboardSummary's

@@ -354,10 +354,15 @@ function streakPanelSql(kind: "WIN" | "LOSS", userId: string, range: PanelRange)
 //   fallingCte      falling. recent = rn 1..TREND_RECENT, baseline = rn > TREND_RECENT (never the
 //                   combined set). Needs exactly TREND_RECENT recent + >= TREND_MIN_BASELINE
 //                   baseline; score = recent win% - baseline win%. Keeps scores that round to
-//                   -FORM_TREND_MIN_PTS or less, worst first; ties by larger baseline, then id.
-//                   Rows carry pts (the score in whole percentage points, negative), baseline (the
-//                   baseline win rate as a fraction) and results (the recent picks' win flags,
-//                   oldest first), all read from dl: the chart is drawn from those (trendSeries).
+//                   -FORM_TREND_MIN_PTS or less. Ranked by rel = score / baseline win% (the decline
+//                   as a share of the capper's own norm), steepest first, BEFORE the cut to
+//                   FORM_PANEL_COUNT; ties by larger baseline, then id. A kept row's baseline is
+//                   never 0 (its score is negative); NULLIF only keeps the division defined for
+//                   the rows the filter drops.
+//                   Rows carry pct (rel in whole percent, negative), pts (the score in whole
+//                   percentage points, negative), baseline (the baseline win rate as a fraction)
+//                   and results (the recent picks' win flags, oldest first), all read from dl:
+//                   the chart is drawn from those (trendSeries).
 //   consistentCte   the newest CONSISTENT_PICKS (all required) as CONSISTENT_BLOCKS equal blocks, oldest
 //                   first; mean block win% >= CONSISTENT_MIN_MEAN_PCT. Ranked by population standard
 //                   deviation of the block win%s ascending, then higher mean, then id.
@@ -387,11 +392,12 @@ export function fallingCte(): [string, Prisma.Sql] {
   return [
     "falling",
     Prisma.sql`
-      SELECT t.cid AS "capperId", t.name, t."colorTag", round(t.score * 100)::int AS pts, t.baseline::float8 AS baseline,
+      SELECT t.cid AS "capperId", t.name, t."colorTag", round(t.rel * 100)::int AS pct, round(t.score * 100)::int AS pts, t.baseline::float8 AS baseline,
         (SELECT array_agg(d.win ORDER BY d.rn DESC) FROM dl d WHERE d.cid = t.cid AND d.rn <= ${TREND_RECENT}::int) AS results
       FROM (
         SELECT s.cid, r.name, r."colorTag", s.bn, round(s.bw::numeric / s.bn, 9) AS baseline,
-          ${score} AS score
+          ${score} AS score,
+          round(s.rw::numeric * s.bn / NULLIF(s.rn_n * s.bw, 0) - 1, 9) AS rel
         FROM (
           SELECT cid,
             count(*) FILTER (WHERE rn <= ${TREND_RECENT}::int) AS rn_n,
@@ -403,10 +409,10 @@ export function fallingCte(): [string, Prisma.Sql] {
         JOIN roster r ON r.id = s.cid
         WHERE s.rn_n = ${TREND_RECENT}::int AND s.bn >= ${TREND_MIN_BASELINE}::int
           AND round(${score} * 100) <= -${FORM_TREND_MIN_PTS}::int
-        ORDER BY score ASC, s.bn DESC, r.id COLLATE "C"
+        ORDER BY rel ASC, s.bn DESC, r.id COLLATE "C"
         LIMIT ${FORM_PANEL_COUNT}
       ) t
-      ORDER BY t.score ASC, t.bn DESC, t.cid COLLATE "C"
+      ORDER BY t.rel ASC, t.bn DESC, t.cid COLLATE "C"
     `,
   ];
 }
@@ -444,7 +450,7 @@ export function consistentCte(): [string, Prisma.Sql] {
 export const streakEntriesFromRows = (rows: any[] | undefined, withUnits: boolean): StreakEntry[] =>
   (rows ?? []).map((h) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, streak: Number(h.streak), ...(withUnits ? { units: Number(h.units) } : {}) }));
 export const fallingEntriesFromRows = (rows: any[] | undefined): FallingEntry[] =>
-  (rows ?? []).map((h) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, pts: Number(h.pts), results: (h.results ?? []).map(Boolean), baseline: Number(h.baseline) }));
+  (rows ?? []).map((h) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, pct: Number(h.pct), pts: Number(h.pts), results: (h.results ?? []).map(Boolean), baseline: Number(h.baseline) }));
 
 // One panel at one window, as its own small statement (the dropdown's fetch). Same SQL as the page.
 export async function getPanelRows(q: { userId: string; panel: PanelKey; window: PanelWindow; now?: Date }): Promise<PanelRows> {

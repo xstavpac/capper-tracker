@@ -2,8 +2,9 @@
 // last 20. (League Savant, the sixth, has its own: league-savant-acceptance-test.ts.)
 //
 //   1. Falling off against a plain-JS re-derivation from the raw pick rows (no SQL shared with the
-//      implementation), plus the rules spelled out: negative scores only, a score that rounds to 0
-//      points is not in it, a short baseline is not in it.
+//      implementation), plus the rules spelled out: ranked by the decline as a percentage of the
+//      capper's own norm (not by points), 0-10 is -100% whatever the norm, negative scores only, a
+//      score that rounds to 0 points is not in it, a short baseline is not in it.
 //   2. Best / Worst last 20 against a re-derivation: the 14-day activity gate, the 10-pick minimum,
 //      pushes in the denominator, the 50% split (nobody in both), ten rows at most.
 //   3. Hot Hand / Coldest ARE the /cappers panels: equal to getPanelRows at "This week".
@@ -108,14 +109,18 @@ function trendReference(cappers: { id: string; name: string; isTest: boolean }[]
       const rw = rec.filter((p) => p.status === "WIN").length;
       const bw = base.filter((p) => p.status === "WIN").length;
       const score = rw / 10 - bw / base.length;
-      return [{ id: c.id, name: c.name, bn: base.length, score, pts: roundAway(Number((score * 100).toFixed(7))), results: rec.map((p) => p.status === "WIN").reverse(), baseline: bw / base.length }];
+      // The decline as a share of the baseline win rate (9 places, so equal shares tie). A baseline of
+      // 0 has no share to be: such a capper is never below it, so never in the panel.
+      const rel = bw === 0 ? 0 : Number((score / (bw / base.length)).toFixed(9));
+      return [{ id: c.id, name: c.name, bn: base.length, score, rel, pct: roundAway(Number((rel * 100).toFixed(7))), pts: roundAway(Number((score * 100).toFixed(7))), results: rec.map((p) => p.status === "WIN").reverse(), baseline: bw / base.length }];
     });
   const tie = (a: (typeof rows)[number], b: (typeof rows)[number]) => b.bn - a.bn || (a.id < b.id ? -1 : 1);
-  return { all: rows, falling: rows.filter((r) => r.pts <= -1).sort((a, b) => a.score - b.score || tie(a, b)).slice(0, 5) };
+  return { all: rows, falling: rows.filter((r) => r.pts <= -1).sort((a, b) => a.rel - b.rel || tie(a, b)).slice(0, 5) };
 }
-const trendLine = (rows: { name: string; pts: number }[]) => rows.map((r) => r.name + " " + r.pts);
+// "Faller 1 -80% (-40 pts)".
+const trendLine = (rows: { name: string; pct: number; pts: number }[]) => rows.map((r) => `${r.name} ${r.pct}% (${r.pts} pts)`);
 function sameTrend(label: string, got: FallingEntry[], want: ReturnType<typeof trendReference>["falling"]) {
-  same(label + ": cappers and points, in order", trendLine(got), trendLine(want));
+  same(label + ": cappers, percentages and points, in order", trendLine(got), trendLine(want));
   same(label + ": the last 10 results, oldest first", got.map((r) => r.results), want.map((r) => r.results));
   check(label + ": baseline win rate", got.length === want.length && got.every((r, i) => Math.abs(r.baseline - want[i].baseline) < 1e-8));
 }
@@ -156,17 +161,24 @@ async function main() {
 
   // key -> [name, picks oldest -> newest, options]
   const fixture: Record<string, { name: string; results: Result[]; isTest?: boolean; postedAgoDays?: number }> = {
-    // Trend: a 40-pick 50% baseline, then the last 10.
+    // Trend: a 40-pick 50% baseline, then the last 10. Points, then the percentage of their norm.
     // Beating their norm: not falling.
     riser: { name: "Riser", results: [...spread(40, 20), ...recent(8)] }, // +30
     riser2: { name: "Riser small", results: [...spread(40, 20), ...recent(6)] }, // +10
-    f0: { name: "Faller 0", results: [...spread(40, 20), ...recent(0)] }, // -50
-    f1: { name: "Faller 1", results: [...spread(40, 20), ...recent(1)] }, // -40
-    f2: { name: "Faller 2", results: [...spread(40, 20), ...recent(2)] }, // -30
-    f3: { name: "Faller 3", results: [...spread(40, 20), ...recent(3)] }, // -20
-    f4: { name: "Faller 4", results: [...spread(40, 20), ...recent(4)] }, // -10: the sixth faller, off the list
-    // -50 too, but on a 30-pick baseline: ties with Faller 0 on score, loses on baseline size.
+    f0: { name: "Faller 0", results: [...spread(40, 20), ...recent(0)] }, // -50 pts, -100%
+    f1: { name: "Faller 1", results: [...spread(40, 20), ...recent(1)] }, // -40 pts, -80%
+    f2: { name: "Faller 2", results: [...spread(40, 20), ...recent(2)] }, // -30 pts, -60%
+    f3: { name: "Faller 3", results: [...spread(40, 20), ...recent(3)] }, // -20 pts, -40%: the sixth faller, off the list
+    f4: { name: "Faller 4", results: [...spread(40, 20), ...recent(4)] }, // -10 pts, -20%
+    // -50 pts like Faller 0, but from a normal 60% to 10%: -83%, so behind Faller 0 and ahead of Faller 1.
     deep: { name: "Deep faller", results: [...spread(30, 18), ...recent(1)] },
+    // The two that points and percentages rank differently.
+    // 0-10 from a normal 20%: only -20 pts (sixth by points), but -100%. Ties with Faller 0 on the
+    // percentage and the baseline size, and loses on id.
+    low: { name: "Low base", results: [...spread(40, 8), ...recent(0)] },
+    // 5-5 from a normal 80%: -30 pts (level with Faller 2 by points), but only -37.5%: off the list.
+    // No run at the end, so not on a streak.
+    high: { name: "High base", results: [...spread(40, 32), L, W, L, W, L, W, L, W, L, W] },
     flat: { name: "Flat", results: [...spread(40, 20), ...recent(5)] }, // exactly on their norm
     // 3 of 10 against 26 of 87 (29.885%): +0.115 points, which rounds to 0 - in neither panel.
     hair: { name: "Hair", results: [...spread(87, 26), ...recent(3)] },
@@ -210,19 +222,26 @@ async function main() {
     const ref = trendReference(cappers, picks);
     sameTrend("falling == re-derivation from the raw picks", panels.falling, ref.falling);
     same(
-      "falling: most negative first, a tie going to the larger baseline, five at most (the sixth faller is cut)",
+      "falling: the steepest PERCENTAGE decline first (not the most points), a tie going to the larger baseline then the id, five at most",
       trendLine(panels.falling),
-      ["Faller 0 -50", "Deep faller -50", "Faller 1 -40", "Faller 2 -30", "Faller 3 -20"]
+      ["Faller 0 -100% (-50 pts)", "Low base -100% (-20 pts)", "Deep faller -83% (-50 pts)", "Faller 1 -80% (-40 pts)", "Faller 2 -60% (-30 pts)"]
     );
-    check("falling: every score is negative", panels.falling.every((r) => r.pts <= -1));
+    check("falling: every decline is negative, in percent and in points", panels.falling.every((r) => r.pct <= -1 && r.pts <= -1));
+    check("falling: 0-10 is -100% whatever the norm (a normal 50% and a normal 20%)", panels.falling.filter((r) => r.results.every((w) => !w)).map((r) => r.pct).join() === "-100,-100");
     check(
-      "falling: the chart line starts at 0 and ends on the (negative) score",
+      "falling: the chart line starts at 0 and ends on the labelled (negative) percentage",
       panels.falling.every((r) => {
         const line = trendSeries(r.results, r.baseline);
-        return line[0] === 0 && Math.round(line[line.length - 1]) === r.pts;
+        return line[0] === 0 && Math.abs(line[line.length - 1] - r.pct) <= 0.5 + 1e-6;
       })
     );
     const trendNames = new Set(panels.falling.map((r) => r.name));
+    const refOf = (name: string) => ref.all.find((r) => r.name === name);
+    check(
+      "ranked before the cut to five: -20 pts from a low norm is in, -30 pts from a high norm is out, and so is the -40% Faller 3",
+      trendNames.has("Low base") && !trendNames.has("High base") && !trendNames.has("Faller 3") && refOf("Low base")?.pts === -20 && refOf("High base")?.pts === -30 && refOf("High base")?.pct === -38 && refOf("Faller 3")?.pct === -40,
+      JSON.stringify([refOf("Low base"), refOf("High base"), refOf("Faller 3")].map((r) => r && [r.name, r.pct, r.pts]))
+    );
     check("a score that rounds to 0 points is not in the panel (no -0 pts)", !trendNames.has("Hair") && ref.all.some((r) => r.name === "Hair" && r.pts === 0));
     check("exactly on their norm: not in the panel", !trendNames.has("Flat"));
     check("a 29-pick baseline is one short: not in the panel", !trendNames.has("Short base") && ref.all.every((r) => r.name !== "Short base"));
