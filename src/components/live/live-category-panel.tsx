@@ -128,7 +128,6 @@ export function LiveCategoryPanel({
             losses={tile.losses}
             pushes={tile.pushes}
             winPct={tile.winPct}
-            graded={tile.wins + tile.losses + tile.pushes}
             note={slateCountText(sportLabel, tile.slateCount)}
             tinted
             active={tile.key === activeTile?.key}
