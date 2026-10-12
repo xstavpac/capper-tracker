@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import Link from "next/link";
 import { LiveIcon } from "@/components/dashboard/cappers-icons";
 
 // The fade's width, and how far the row is padded so the last chip scrolls clear of it.
@@ -62,9 +63,14 @@ type Tab = { key: string; label: string; href: string };
 
 const num = (s: string) => parseFloat(s) || 0;
 
+// A click the router takes, not one the browser does (a new tab or window).
+const plainClick = (e: MouseEvent) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+
 // The /live banner's content: the title, the league chips, then the view toggle and the Parlay
-// slip (`children`). The leagues and the views are plain links: both are query params the page
-// reads on the server.
+// slip (`children`). The leagues and the views are links: both are query params the page reads
+// on the server. They navigate client-side (next/link), so the layout above the page, and the
+// Parlay slip it holds (ParlayPoolProvider), stays mounted from one league to the next. Not
+// prefetched: each is a full per-user board.
 export function LiveBannerRow({ leagues, league, views, view, children }: { leagues: Tab[]; league: string; views: Tab[]; view: string; children: ReactNode }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
@@ -75,6 +81,16 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
   const viewsRef = useRef<HTMLElement>(null);
   // The widest row that fits, measured. Until then the classes go by the card's width alone.
   const [tier, setTier] = useState<"full" | "compact" | "two" | null>(null);
+  // The chip just clicked, lit at once: a client-side navigation shows nothing until the server
+  // answers. Cleared when the page it asked for arrives.
+  const [pendingLeague, setPendingLeague] = useState<string | null>(null);
+  const [pendingView, setPendingView] = useState<string | null>(null);
+  useEffect(() => {
+    setPendingLeague(null);
+    setPendingView(null);
+  }, [league, view]);
+  const shownLeague = pendingLeague ?? league;
+  const shownView = pendingView ?? view;
 
   useEffect(() => {
     const row = rowRef.current;
@@ -174,9 +190,19 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
           {leagues.map((l) => {
             const on = l.key === league;
             return (
-              <a key={l.key} ref={on ? activeRef : undefined} href={l.href} aria-current={on ? "page" : undefined} className={CHIP + (two ? CHIP_TWO : "") + (on ? CHIP_ON : CHIP_OFF)}>
+              <Link
+                key={l.key}
+                ref={on ? activeRef : undefined}
+                href={l.href}
+                prefetch={false}
+                onClick={(e) => {
+                  if (plainClick(e)) setPendingLeague(l.key);
+                }}
+                aria-current={on ? "page" : undefined}
+                className={CHIP + (two ? CHIP_TWO : "") + (l.key === shownLeague ? CHIP_ON : CHIP_OFF)}
+              >
                 <span>{l.label}</span>
-              </a>
+              </Link>
             );
           })}
         </nav>
@@ -187,9 +213,18 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
       <div ref={controlsRef} className={CONTROLS}>
         <nav ref={viewsRef} aria-label="View" className={VIEWS}>
           {views.map((v) => (
-            <a key={v.key} href={v.href} aria-current={v.key === view ? "page" : undefined} className={SEGMENT + (v.key === view ? ON : OFF)}>
+            <Link
+              key={v.key}
+              href={v.href}
+              prefetch={false}
+              onClick={(e) => {
+                if (plainClick(e)) setPendingView(v.key);
+              }}
+              aria-current={v.key === view ? "page" : undefined}
+              className={SEGMENT + (v.key === shownView ? ON : OFF)}
+            >
               <span>{v.label}</span>
-            </a>
+            </Link>
           ))}
         </nav>
         {children}
