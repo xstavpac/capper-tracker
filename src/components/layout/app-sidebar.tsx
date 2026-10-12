@@ -88,16 +88,6 @@ function ParlayIcon({ className }: { className?: string }) {
   );
 }
 
-function SharpMoneyIcon({ className }: { className?: string }) {
-  return (
-    <svg {...iconProps(className)}>
-      <circle cx="12" cy="12" r="8.5" />
-      <circle cx="12" cy="12" r="4.5" />
-      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
 function ChartsIcon({ className }: { className?: string }) {
   return (
     <svg {...iconProps(className)}>
@@ -140,7 +130,6 @@ type NavItem = {
 const BASE_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
   { href: "/cappers", label: "Cappers", icon: CappersIcon },
-  { href: "/sharp-money", label: "Sharp Money", icon: SharpMoneyIcon },
   { href: "/picks", label: "Picks", icon: PicksIcon },
   { href: "/charts", label: "Charts", icon: ChartsIcon },
   { href: "/pricing", label: "Plans & Billing", icon: PricingIcon },

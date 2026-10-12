@@ -6,17 +6,15 @@ import { LiveIcon } from "@/components/dashboard/cappers-icons";
 // The fade's width, and how far the row is padded so the last chip scrolls clear of it.
 const FADE = 28;
 
-const CREDIT = "Powered by The Odds API";
-
 // A segment's side padding and text size, in px, in the full row and in the compact one. The
 // classes below say the same (--seg-px, --seg-text); these are for measuring.
 const FULL = { px: 18, font: 14 };
 const COMPACT = { px: 12, font: 13 };
 
 // The banner's layout follows the card's width (a size container, see live-banner.tsx):
-//   under 640px      stacked, as on a phone: title, credit, league chips, then the controls
+//   under 640px      stacked, as on a phone: title, league chips, then the controls
 //   640px to 864px   two rows: title and controls, then the leagues at full width
-//   864px to 1110px  one compact row: no credit, narrower segments
+//   864px to 1110px  one compact row: narrower segments
 //   from 1110px      one full row
 // 864px and 1110px are where the compact and the full row fit with the Parlay slip at rest. Its
 // count, Confirm button and discard prompt make the controls wider, which only measuring can tell
@@ -31,12 +29,7 @@ const ROW_COMPACT_WIDE = " [@container_(min-width:1110px)]:[--seg-px:12px] [@con
 
 // Stacked, the line sits in what is left of the first column, between the ring and the word.
 const BRAND =
-  "relative grid grid-cols-[1fr_auto_1fr] [@container_(min-width:640px)]:h-[84px] [@container_(min-width:640px)]:flex-none [@container_(min-width:640px)]:grid-cols-[auto_auto] [@container_(min-width:640px)]:content-center [@container_(min-width:640px)]:gap-y-1.5";
-const CREDIT_TEXT =
-  "col-span-3 whitespace-nowrap pb-2.5 text-center text-[9.5px] font-bold uppercase tracking-[2px] text-[#BFD3FF] " +
-  "[@container_(min-width:640px)]:col-span-1 [@container_(min-width:640px)]:col-start-2 [@container_(min-width:640px)]:pb-0 [@container_(min-width:640px)]:text-left [@container_(min-width:640px)]:text-[10px] [@container_(min-width:640px)]:tracking-[2.4px]";
-const CREDIT_COMPACT = " [@container_(min-width:864px)_and_(max-width:1109.9px)]:sr-only";
-const CREDIT_COMPACT_WIDE = " [@container_(min-width:1110px)]:sr-only";
+  "relative grid grid-cols-[1fr_auto_1fr] [@container_(min-width:640px)]:h-[84px] [@container_(min-width:640px)]:flex-none [@container_(min-width:640px)]:grid-cols-[auto_auto] [@container_(min-width:640px)]:content-center";
 // The blue light on a stacked card's edges, over the title's rows only (see live-banner.tsx).
 const GLOW = "pointer-events-none absolute inset-y-0 w-[70px] [@container_(min-width:640px)]:hidden ";
 
@@ -76,7 +69,6 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
   const rowRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const creditRef = useRef<HTMLParagraphElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const activeRef = useRef<HTMLAnchorElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
@@ -88,11 +80,10 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
     const row = rowRef.current;
     const ring = ringRef.current;
     const title = titleRef.current;
-    const credit = creditRef.current;
     const nav = navRef.current;
     const controls = controlsRef.current;
     const viewsNav = viewsRef.current;
-    if (!row || !ring || !title || !credit || !nav || !controls || !viewsNav) return;
+    if (!row || !ring || !title || !nav || !controls || !viewsNav) return;
 
     // A label's width per px of text size, kept so every tier measures the same whichever one is
     // showing: the labels are drawn at the current tier's size.
@@ -119,8 +110,7 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
       const titleWidth = title.getBoundingClientRect().width;
       // Everything in the controls but the view toggle: the Parlay slip, whatever it is showing.
       const rest = controls.getBoundingClientRect().width - viewsNav.getBoundingClientRect().width + 2 * num(r.columnGap);
-      // The credit is one unwrapped line, so its scroll width is its text's, hidden or not.
-      const full = ringWidth + Math.max(titleWidth, credit.scrollWidth) + groupWidth(nav, FULL) + groupWidth(viewsNav, FULL) + rest;
+      const full = ringWidth + titleWidth + groupWidth(nav, FULL) + groupWidth(viewsNav, FULL) + rest;
       const compact = ringWidth + titleWidth + groupWidth(nav, COMPACT) + groupWidth(viewsNav, COMPACT) + rest;
       setTier(full <= room ? "full" : compact <= room ? "compact" : "two");
     };
@@ -161,10 +151,8 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
   return (
     <div ref={rowRef} className={ROW + (two ? ROW_TWO : "") + (two ? "" : ROW_COMPACT) + (wide ? ROW_COMPACT_WIDE : "")}>
       <div className={BRAND}>
-        <div ref={ringRef} className="flex h-[52px] items-center [@container_(min-width:640px)]:row-span-2 [@container_(min-width:640px)]:h-auto [@container_(min-width:640px)]:pr-4">
-          {/* The credit is still here when the compact row has no room for its line. */}
+        <div ref={ringRef} className="flex h-[52px] items-center [@container_(min-width:640px)]:h-auto [@container_(min-width:640px)]:pr-4">
           <span
-            title={CREDIT}
             className="relative ml-4 flex h-[34px] w-[34px] flex-none items-center justify-center rounded-full border-2 border-[#3B82F6] bg-[rgba(3,11,41,0.6)] text-[#9AD8FF] shadow-[0_0_14px_rgba(59,130,246,0.75),inset_0_0_10px_rgba(59,130,246,0.45)] [@container_(min-width:640px)]:ml-0 [@container_(min-width:640px)]:h-11 [@container_(min-width:640px)]:w-11"
           >
             <LiveIcon className="h-[18px] w-[18px] [@container_(min-width:640px)]:h-[22px] [@container_(min-width:640px)]:w-[22px]" />
@@ -177,9 +165,6 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
         <h1 ref={titleRef} className="self-center text-[34px] font-extrabold leading-none tracking-[-0.8px] text-white [text-shadow:0_0_14px_rgba(96,165,250,0.55)]">
           Live
         </h1>
-        <p ref={creditRef} className={CREDIT_TEXT + (two ? "" : CREDIT_COMPACT) + (wide ? CREDIT_COMPACT_WIDE : "")}>
-          {CREDIT}
-        </p>
         <span aria-hidden className={GLOW + "left-0 bg-[linear-gradient(270deg,rgba(37,99,235,0)_0%,rgba(37,99,235,0.2)_70%,rgba(56,189,248,0.38)_100%)]"} />
         <span aria-hidden className={GLOW + "right-0 bg-[linear-gradient(90deg,rgba(37,99,235,0)_0%,rgba(37,99,235,0.2)_70%,rgba(56,189,248,0.38)_100%)]"} />
       </div>

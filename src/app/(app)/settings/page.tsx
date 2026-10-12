@@ -32,6 +32,33 @@ export default async function SettingsPage() {
       <div className="mb-6">
         <ThemeToggle />
       </div>
+
+      {/* Data-source attribution. The nflverse credit is a CC-BY-4.0 license
+          requirement, not optional - it must name the source, link the
+          license, and indicate the data is adapted (we join/derive rather
+          than reproduce verbatim). Here rather than on one feature page so it
+          stays put whichever pages show the data. */}
+      <p className="text-xs text-muted-foreground">
+        MLB team stats via the MLB Stats API. NFL team stats derived from{" "}
+        <a
+          href="https://github.com/nflverse/nflverse-data"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-foreground"
+        >
+          nflverse
+        </a>{" "}
+        data, licensed{" "}
+        <a
+          href="https://creativecommons.org/licenses/by/4.0/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-foreground"
+        >
+          CC-BY-4.0
+        </a>
+        .
+      </p>
     </div>
   );
 }
