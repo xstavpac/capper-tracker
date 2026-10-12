@@ -68,11 +68,14 @@ enum Period {
   FIRST_PERIOD
   SECOND_PERIOD
   THIRD_PERIOD
+  REGULATION // hockey 3-way moneyline: the result after 60 minutes (periods 1-3), overtime and shootout excluded.
+    // A game level after regulation is a draw - see lib/nhl-three-way.ts. NHL MONEYLINE picks only.
 }
 
 enum PickedSide {
   HOME
   AWAY
+  DRAW // only on a 3-way (period REGULATION) moneyline pick on the draw. Never set on mlFavoredSide.
 }
 
 // Where a pick's stored odds came from (see lib/odds-source.ts). The importer

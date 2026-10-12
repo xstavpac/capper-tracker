@@ -1,0 +1,82 @@
+{
+  "id": "fcf3af0dc532d226597dc5a8a2d55f78",
+  "sport_key": "icehockey_nhl",
+  "sport_title": "NHL",
+  "commence_time": "2026-10-13T00:10:00Z",
+  "home_team": "Minnesota Wild",
+  "away_team": "Vegas Golden Knights",
+  "bookmakers": [
+    {
+      "key": "draftkings",
+      "title": "DraftKings",
+      "markets": [
+        {
+          "key": "h2h_3_way",
+          "last_update": "2026-10-12T10:38:56Z",
+          "outcomes": [
+            {
+              "name": "Minnesota Wild",
+              "price": 140
+            },
+            {
+              "name": "Vegas Golden Knights",
+              "price": 140
+            },
+            {
+              "name": "Draw",
+              "price": 300
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "fanduel",
+      "title": "FanDuel",
+      "markets": [
+        {
+          "key": "h2h_3_way",
+          "last_update": "2026-10-12T10:39:38Z",
+          "outcomes": [
+            {
+              "name": "Minnesota Wild",
+              "price": 130
+            },
+            {
+              "name": "Vegas Golden Knights",
+              "price": 155
+            },
+            {
+              "name": "Draw",
+              "price": 330
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "betmgm",
+      "title": "BetMGM",
+      "markets": [
+        {
+          "key": "h2h_3_way",
+          "last_update": "2026-10-12T10:39:51Z",
+          "outcomes": [
+            {
+              "name": "Minnesota Wild",
+              "price": 135
+            },
+            {
+              "name": "Vegas Golden Knights",
+              "price": 150
+            },
+            {
+              "name": "Draw",
+              "price": 300
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
-// Proof for nhl-goal-scorer-odds.ts: which NHL games the goal-scorer market is
-// bought for, what the request looks like, what it logs to odds_api_usage_log,
-// and that the NFL request built by the same shared loop is unchanged.
+// Proof for nhl-goal-scorer-odds.ts: which NHL games the two event-level
+// markets (anytime goal scorer, 3-way moneyline) are bought for, what the
+// request looks like, what it logs to odds_api_usage_log, and that the NFL
+// request built by the same shared loop is unchanged.
 //
 // prisma.oddsSnapshot / prisma.oddsApiUsageLog and global fetch are stubbed
 // throughout - no real network call, no real DB. NEVER remove the "unexpected
@@ -16,6 +17,8 @@ import {
   NHL_GOAL_SCORER_LOOKAHEAD_MS,
   nhlGamesNeedingGoalScorerOdds,
   resolveAnytimeGoalOddsFromGame,
+  missingNhlEventMarkets as missingMarkets,
+  resolveThreeWayOddsFromGame,
   seedNhlGoalScorerOddsForToday,
 } from "@/server/data/nhl-goal-scorer-odds";
 import { fetchAndMergeNflPropOdds } from "@/server/data/nfl-prop-odds";
@@ -101,6 +104,15 @@ function nhlGame(id: string, commenceTime: string, sportKey = "icehockey_nhl"): 
 }
 
 const sample = JSON.parse(readFileSync(join(__dirname, "__fixtures__", "odds-api-event-nhl-goal-scorer-sample.json"), "utf8"));
+// The sample's bookmakers with a 3-way market added to each: a game that
+// carries both event-level markets, and what a request for both returns.
+const both: OddsGame["bookmakers"] = (sample.bookmakers as OddsGame["bookmakers"]).map((b) => ({
+  ...b,
+  markets: [
+    ...b.markets,
+    { key: "h2h_3_way", outcomes: [{ name: "Edmonton Oilers", price: 115 }, { name: "Calgary Flames", price: 210 }, { name: "Draw", price: 310 }] },
+  ],
+}));
 const hasGoalMarket = (g: OddsGame | undefined) => !!g?.bookmakers.some((b) => b.markets.some((m) => m.key === "player_goal_scorer_anytime"));
 
 async function main() {
@@ -142,11 +154,50 @@ async function main() {
   expect("live capture: 'Tim Stutzle' typed without the umlaut matches 'Tim Stützle'", resolveAnytimeGoalOddsFromGame(liveGame, "Tim Stutzle"), 225);
   expect("live capture: Luke Hughes is not in the trimmed capture and is not priced as Jack Hughes", resolveAnytimeGoalOddsFromGame(liveGame, "Luke Hughes"), null);
 
+  // The 3-way moneyline against the REAL h2h_3_way response captured
+  // 2026-10-12 (Vegas Golden Knights @ Minnesota Wild, three bookmakers kept).
+  const live3 = JSON.parse(readFileSync(join(__dirname, "__fixtures__", "odds-api-event-nhl-3way-response.json"), "utf8"));
+  const twoWay = { key: "h2h", outcomes: [{ name: live3.home_team, price: -125 }, { name: live3.away_team, price: 105 }] };
+  const live3Game: OddsGame = {
+    id: live3.id,
+    sportKey: live3.sport_key,
+    homeTeam: live3.home_team,
+    awayTeam: live3.away_team,
+    commenceTime: live3.commence_time,
+    bookmakers: (live3.bookmakers as OddsGame["bookmakers"]).map((b) => ({ ...b, markets: [twoWay, ...b.markets] })),
+  };
+  expect(
+    "3-way live capture: every market is exactly home / away / Draw",
+    (live3.bookmakers as OddsGame["bookmakers"]).every((b) =>
+      b.markets.every((m) => m.key === "h2h_3_way" && JSON.stringify(m.outcomes.map((o) => o.name)) === JSON.stringify([live3.home_team, live3.away_team, "Draw"]))
+    ),
+    true
+  );
+  expect(
+    "3-way: home / away / draw prices from the first bookmaker",
+    [resolveThreeWayOddsFromGame(live3Game, "HOME"), resolveThreeWayOddsFromGame(live3Game, "AWAY"), resolveThreeWayOddsFromGame(live3Game, "DRAW")],
+    [140, 140, 300]
+  );
+  const twoWayOnly: OddsGame = { ...live3Game, bookmakers: live3Game.bookmakers.map((b) => ({ ...b, markets: [twoWay] })) };
+  expect(
+    "3-way: a game with only the 2-way h2h market has no 3-way price - never the 2-way one",
+    [resolveThreeWayOddsFromGame(twoWayOnly, "HOME"), resolveThreeWayOddsFromGame(twoWayOnly, "AWAY"), resolveThreeWayOddsFromGame(twoWayOnly, "DRAW")],
+    [null, null, null]
+  );
+  const noDrawFirst: OddsGame = {
+    ...live3Game,
+    bookmakers: [
+      { key: "odd", title: "Odd", markets: [{ key: "h2h_3_way", outcomes: [{ name: live3.home_team, price: -999 }, { name: live3.away_team, price: 999 }] }] },
+      ...live3Game.bookmakers,
+    ],
+  };
+  expect("3-way: a market with no Draw outcome is not a 3-way market and is skipped", resolveThreeWayOddsFromGame(noDrawFirst, "HOME"), 140);
+
   // =====================================================================
   // 2. nhlGamesNeedingGoalScorerOdds - the 24-hour window
   // =====================================================================
   expect("window: the lookahead is 24 hours", NHL_GOAL_SCORER_LOOKAHEAD_MS, 24 * HOUR);
-  const alreadyHas = { ...nhlGame("hasIt", inHours(6)), bookmakers: sample.bookmakers };
+  const alreadyHas = { ...nhlGame("hasIt", inHours(6)), bookmakers: both };
   const slate = [
     nhlGame("started", inHours(-1)),
     nhlGame("tonight", inHours(19)),
@@ -163,10 +214,15 @@ async function main() {
   // The afternoon run: 24 hours from 12:30 PM ET reaches tomorrow's matinee,
   // which must wait for tomorrow's own row.
   const tomorrowMatinee = nhlGame("tomorrowMatinee", "2026-10-14T16:00:00Z");
-  const boughtAtMidnight = { ...nhlGame("tonight", inHours(19)), bookmakers: sample.bookmakers };
+  const boughtAtMidnight = { ...nhlGame("tonight", inHours(19)), bookmakers: both };
+  // The usual midnight result: the 3-way moneyline is up, the goal scorers are not.
+  const threeWayOnly = {
+    ...nhlGame("lateTonight", inHours(22.5)),
+    bookmakers: both.map((b) => ({ ...b, markets: b.markets.filter((m) => m.key === "h2h_3_way") })),
+  };
   expect(
     "window (afternoon run): only today's games still lacking the market - not one bought at midnight, not tomorrow's matinee",
-    nhlGamesNeedingGoalScorerOdds([boughtAtMidnight, nhlGame("lateTonight", inHours(22.5)), tomorrowMatinee], new Date(AFTERNOON_RUN)).map((g) => g.id),
+    nhlGamesNeedingGoalScorerOdds([boughtAtMidnight, threeWayOnly, tomorrowMatinee], new Date(AFTERNOON_RUN)).map((g) => g.id),
     ["lateTonight"]
   );
 
@@ -227,8 +283,8 @@ async function main() {
     return { id: "row", ...data };
   });
   stubEventOddsFetch({
-    tonight: { ok: true, headers: { "x-requests-remaining": "18999", "x-requests-used": "1001" }, body: { ...sample, id: "tonight" } },
-    lateTonight: { ok: true, headers: { "x-requests-remaining": "18998", "x-requests-used": "1002" }, body: { ...sample, id: "lateTonight" } },
+    tonight: { ok: true, headers: { "x-requests-remaining": "18999", "x-requests-used": "1001" }, body: { ...sample, id: "tonight", bookmakers: both } },
+    lateTonight: { ok: true, headers: { "x-requests-remaining": "18998", "x-requests-used": "1002" }, body: { ...sample, id: "lateTonight", bookmakers: both } },
     // No route for started / tomorrow / nextWeek / hasIt - a request for any of them throws.
   });
   const happy = await seedNhlGoalScorerOddsForToday();
@@ -236,16 +292,16 @@ async function main() {
   expect("seed: happy path status and counts", [happy.status, happy.eventsFetched, happy.eventsFailed], ["seeded", 2, 0]);
   expect("seed: one request per game inside the window, none for the rest", fetchCalls.length, 2);
   expect(
-    "seed: the request asks the NHL event endpoint for player_goal_scorer_anytime and nothing else",
+    "seed: ONE request per game asks the NHL event endpoint for both markets and nothing else",
     fetchCalls[0],
-    "https://api.the-odds-api.com/v4/sports/icehockey_nhl/events/tonight/odds?apiKey=REDACTED&regions=us&markets=player_goal_scorer_anytime&oddsFormat=american"
+    "https://api.the-odds-api.com/v4/sports/icehockey_nhl/events/tonight/odds?apiKey=REDACTED&regions=us&markets=player_goal_scorer_anytime,h2h_3_way&oddsFormat=american"
   );
   expect(
-    "seed: one odds_api_usage_log row per call, filed under NHL with the one market",
+    "seed: one odds_api_usage_log row per call, filed under NHL with the markets asked for",
     usageWrites.map((w) => [w.sportKey, w.marketsRequested, w.eventsRequested, w.creditsUsed, w.creditsRemaining]),
     [
-      ["icehockey_nhl", "player_goal_scorer_anytime", 1, 1001, 18999],
-      ["icehockey_nhl", "player_goal_scorer_anytime", 1, 1002, 18998],
+      ["icehockey_nhl", "player_goal_scorer_anytime,h2h_3_way", 1, 1001, 18999],
+      ["icehockey_nhl", "player_goal_scorer_anytime,h2h_3_way", 1, 1002, 18998],
     ]
   );
   const persisted = (updated ?? []) as OddsGame[];
@@ -260,7 +316,7 @@ async function main() {
     persisted.filter((g) => g.id !== "tonight" && g.id !== "lateTonight"),
     slate.filter((g) => g.id !== "tonight" && g.id !== "lateTonight")
   );
-  expect("seed: a fetched game keeps its game-lines market", persisted.find((g) => g.id === "tonight")?.bookmakers[0].markets.map((m) => m.key), ["h2h", "player_goal_scorer_anytime"]);
+  expect("seed: a fetched game keeps its game-lines market", persisted.find((g) => g.id === "tonight")?.bookmakers[0].markets.map((m) => m.key), ["h2h", "player_goal_scorer_anytime", "h2h_3_way"]);
   expect("seed: and is now priced", resolveAnytimeGoalOddsFromGame(persisted.find((g) => g.id === "tonight") as OddsGame, "Connor McDavid"), 105);
 
   // 3e. A second run the same day over the enriched row buys nothing.
@@ -270,19 +326,27 @@ async function main() {
   expect("seed: re-running over the enriched row makes zero calls", [second.status, fetchCalls.length], ["no_games_to_fetch", 0]);
   restoreFetch();
 
-  // 3e2. The afternoon run: one game was posted at midnight and one was not
-  //      (its midnight call came back with no bookmakers). Only the missing
-  //      one is asked for again; tomorrow's matinee is left for tomorrow.
+  // 3e2. The afternoon run: one game got both markets at midnight, one got
+  //      only the 3-way moneyline (goal scorers weren't posted yet). Only the
+  //      incomplete game is asked for again, and only for the market it still
+  //      lacks - the 3-way moneyline it already has is not bought twice.
+  //      Tomorrow's matinee is left for tomorrow.
   clock = AFTERNOON_RUN;
   usageWrites = [];
   updated = null;
-  patch("oddsSnapshot.findUnique", async () => ({ data: [boughtAtMidnight, nhlGame("lateTonight", inHours(22.5)), tomorrowMatinee] }));
+  patch("oddsSnapshot.findUnique", async () => ({ data: [boughtAtMidnight, threeWayOnly, tomorrowMatinee] }));
   stubEventOddsFetch({
     lateTonight: { ok: true, headers: { "x-requests-remaining": "18997", "x-requests-used": "1003" }, body: { ...sample, id: "lateTonight" } },
   });
   const afternoon = await seedNhlGoalScorerOddsForToday();
   expect("afternoon run: one call, for the game still missing the market", [afternoon.status, afternoon.eventsFetched, fetchCalls.length], ["seeded", 1, 1]);
+  expect("afternoon run: asks only for the market the game still lacks", fetchCalls[0].includes("&markets=player_goal_scorer_anytime&"), true);
   expect("afternoon run: logged to odds_api_usage_log like the midnight run", usageWrites.map((w) => [w.sportKey, w.marketsRequested, w.eventsRequested]), [["icehockey_nhl", "player_goal_scorer_anytime", 1]]);
+  expect(
+    "afternoon run: the game now carries both markets, its 3-way price untouched",
+    [missingMarkets(((updated ?? []) as OddsGame[])[1]), resolveThreeWayOddsFromGame({ ...((updated ?? []) as OddsGame[])[1] }, "DRAW")],
+    [[], 310]
+  );
   expect(
     "afternoon run: the late game is now priced, the others are untouched",
     [hasGoalMarket(((updated ?? []) as OddsGame[])[1]), ((updated ?? []) as OddsGame[])[0], ((updated ?? []) as OddsGame[])[2]],
