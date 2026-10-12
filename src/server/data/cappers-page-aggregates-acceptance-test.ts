@@ -25,7 +25,8 @@ import { trendSeries } from "@/lib/cappers-panels";
 import { computeCapperPanels } from "@/server/data/capper-panels";
 import { sparklineLabel } from "@/components/dashboard/capper-sparkline";
 import { comparePicksChronological } from "@/lib/pick-order";
-import { MIN_PICKS_OPTIONS, PAGE_SIZE, SORT_OPTIONS, type CappersSortKey } from "@/lib/cappers-page-params";
+import { MIN_PICKS_OPTIONS, PAGE_SIZE, SORT_OPTIONS, type CappersSortKey, type SortDir } from "@/lib/cappers-page-params";
+import { compareCappers } from "@/lib/cappers-table-sort";
 
 function hostOf(url: string | undefined): string {
   try {
@@ -165,22 +166,9 @@ const stripStats = (e: LeaderboardEntry) => {
 };
 const decided = (e: LeaderboardEntry) => e.stats.wins + e.stats.losses + e.stats.pushes;
 const cmpStr = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-const SORTERS: Record<CappersSortKey, (a: LeaderboardEntry, b: LeaderboardEntry) => number> = {
-  roi: (a, b) => b.stats.roi - a.stats.roi,
-  win: (a, b) => b.stats.winPct - a.stats.winPct,
-  units: (a, b) => b.stats.netUnits - a.stats.netUnits,
-  record: (a, b) => b.stats.wins - b.stats.losses - (a.stats.wins - a.stats.losses) || b.stats.wins - a.stats.wins,
-};
-function rank(entries: LeaderboardEntry[], sort: CappersSortKey) {
-  return [...entries].sort(
-    (a, b) =>
-      SORTERS[sort](a, b) ||
-      b.stats.netUnits - a.stats.netUnits ||
-      cmpStr(a.name.toLowerCase(), b.name.toLowerCase()) ||
-      cmpStr(a.name, b.name) ||
-      cmpStr(a.capperId, b.capperId)
-  );
-}
+// The leaderboard's order is compareCappers (unit-tested in lib/cappers-table-sort-acceptance-test.ts);
+// the SQL has to produce exactly it.
+const rank = (entries: LeaderboardEntry[], sort: CappersSortKey, dir: SortDir = "desc") => [...entries].sort(compareCappers(sort, dir));
 
 // Independent sparkline reference straight from the raw picks (comparePicksChronological is the JS
 // twin of the SQL order).
@@ -297,13 +285,20 @@ async function main() {
   console.log(`main fixture: ${await prisma.pick.count({ where: { userId: U } })} picks, ${await prisma.capper.count({ where: { userId: U } })} cappers\n`);
 
   const leagues: (string | undefined)[] = [undefined, "MLB", "NFL"];
-  const combos: { min: number; sort: CappersSortKey; fav: boolean; q: string }[] = [
+  const combos: { min: number; sort: CappersSortKey; dir?: SortDir; fav: boolean; q: string }[] = [
     { min: 10, sort: "roi", fav: false, q: "" },
     { min: 0, sort: "record", fav: false, q: "" },
     { min: 5, sort: "win", fav: false, q: "" },
     { min: 20, sort: "units", fav: false, q: "" },
     { min: 0, sort: "roi", fav: true, q: "" },
     { min: 0, sort: "units", fav: false, q: "ALPHA" },
+    // Low to high (a second click on the header). min 0 keeps the cappers with no graded picks in,
+    // which have to stay at the bottom.
+    { min: 0, sort: "roi", dir: "asc", fav: false, q: "" },
+    { min: 0, sort: "win", dir: "asc", fav: false, q: "" },
+    { min: 0, sort: "units", dir: "asc", fav: false, q: "" },
+    { min: 0, sort: "record", dir: "asc", fav: false, q: "" },
+    { min: 0, sort: "win", fav: false, q: "" },
   ];
 
   for (const window of SCORECARD_WINDOWS as ScorecardWindow[]) {
@@ -316,15 +311,16 @@ async function main() {
         const q = c.q.trim().toLowerCase();
         const expectedAll = rank(
           oldEntries.filter((e) => decided(e) >= c.min && (!c.fav || e.isFavorite) && (!q || e.name.toLowerCase().includes(q))),
-          c.sort
+          c.sort,
+          c.dir
         );
         const last = Math.max(1, Math.ceil(expectedAll.length / PAGE_SIZE));
         const pages = last === 1 ? [1] : [1, 2, last];
         for (const page of pages) {
-          const got = await getCappersPageData({ userId: U, window, league, min: c.min, sort: c.sort, fav: c.fav, q: c.q, page });
+          const got = await getCappersPageData({ userId: U, window, league, min: c.min, sort: c.sort, dir: c.dir, fav: c.fav, q: c.q, page });
           const expected = expectedAll.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-          same(`rows [${label}] min=${c.min} sort=${c.sort} fav=${c.fav} q="${c.q}" p${page}/${last} (${expected.length} rows)`, got.rows.map(stripStats), expected.map(stripStats));
-          check(`total [${label}] min=${c.min} sort=${c.sort} fav=${c.fav} q="${c.q}"`, got.total === expectedAll.length, `${got.total} vs ${expectedAll.length}`);
+          same(`rows [${label}] min=${c.min} sort=${c.sort} ${c.dir ?? "desc"} fav=${c.fav} q="${c.q}" p${page}/${last} (${expected.length} rows)`, got.rows.map(stripStats), expected.map(stripStats));
+          check(`total [${label}] min=${c.min} sort=${c.sort} ${c.dir ?? "desc"} fav=${c.fav} q="${c.q}"`, got.total === expectedAll.length, `${got.total} vs ${expectedAll.length}`);
         }
       }
 

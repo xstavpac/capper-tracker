@@ -48,7 +48,7 @@ export function CappersLeaderboardControls({ params, leagues }: { params: Capper
           </option>
         ))}
       </select>
-      <select aria-label="Sort by" value={params.sort} onChange={(e) => go({ sort: e.target.value as CappersSortKey })} className={selectClass}>
+      <select aria-label="Sort by" value={params.sort} onChange={(e) => go({ sort: e.target.value as CappersSortKey, dir: "desc" })} className={selectClass}>
         {SORT_OPTIONS.map((s) => (
           <option key={s.key} value={s.key}>
             {"Sort: " + s.label}

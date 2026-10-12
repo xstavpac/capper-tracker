@@ -112,12 +112,13 @@ async function main() {
       { league: "MLB" },
       { min: 10 },
       { sort: "netUnits" as CappersPageQuery["sort"] },
+      { dir: "asc" },
       { fav: true },
       { page: 2 },
     ];
     const baseKey = cappersPageCacheParams(base);
     expect(
-      "/cappers key changes with window, league, min, sort, fav and page",
+      "/cappers key changes with window, league, min, sort, dir, fav and page",
       variants.map((v) => cappersPageCacheParams({ ...base, ...v }) !== baseKey),
       variants.map(() => true)
     );

@@ -22,6 +22,8 @@ export const SORT_OPTIONS = [
   { key: "record", label: "Record" },
 ] as const;
 export type CappersSortKey = (typeof SORT_OPTIONS)[number]["key"];
+// "desc" is high to low, the default for every column.
+export type SortDir = "desc" | "asc";
 
 export const PAGE_SIZE = 20;
 
@@ -31,6 +33,7 @@ export type CappersParams = {
   league?: string;
   min: number;
   sort: CappersSortKey;
+  dir: SortDir;
   fav: boolean;
   q: string;
   page: number;
@@ -51,6 +54,7 @@ export function parseCappersParams(raw: Raw, leagues: string[]): CappersParams {
     league: league && leagues.includes(league) ? league : undefined,
     min: first(raw.min) !== undefined && MIN_PICKS_OPTIONS.includes(minRaw) ? minRaw : DEFAULT_MIN_PICKS,
     sort,
+    dir: first(raw.dir) === "asc" ? "asc" : "desc",
     fav: first(raw.fav) === "1",
     q: (first(raw.q) ?? "").slice(0, 80),
     page: page >= 1 ? page : 1,
@@ -66,6 +70,7 @@ export function cappersHref(params: CappersParams, overrides: Partial<CappersPar
   if (next.league) qs.set("league", next.league);
   if (next.min !== DEFAULT_MIN_PICKS) qs.set("min", String(next.min));
   if (next.sort !== "roi") qs.set("sort", next.sort);
+  if (next.dir === "asc") qs.set("dir", "asc");
   if (next.fav) qs.set("fav", "1");
   if (next.q.trim()) qs.set("q", next.q.trim());
   if (next.page > 1) qs.set("page", String(next.page));

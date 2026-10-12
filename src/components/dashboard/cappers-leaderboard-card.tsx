@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { LeaderboardEntry, FavoriteCappersSummary } from "@/server/data/cappers";
 import type { CapperSparkline as Series } from "@/server/data/cappers-page-aggregates";
 import { RANKING_MIN_SAMPLE } from "@/server/data/stats";
-import { PAGE_SIZE, cappersHref, type CappersParams } from "@/lib/cappers-page-params";
+import { PAGE_SIZE, cappersHref, type CappersParams, type CappersSortKey } from "@/lib/cappers-page-params";
+import { nextSort } from "@/lib/cappers-table-sort";
 import { CapperSparkline, sparklineLabel } from "@/components/dashboard/capper-sparkline";
 import { CappersLeaderboardControls, FavoritesToggle } from "@/components/dashboard/cappers-leaderboard-controls";
 import { CappersSearch } from "@/components/dashboard/cappers-search";
@@ -38,6 +39,23 @@ function Badges({ entry }: { entry: LeaderboardEntry }) {
       )}
       {entry.specialist && <Pill className="bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">{entry.specialist.label}</Pill>}
     </span>
+  );
+}
+
+// A column header that sorts the leaderboard: a link, like every other control on the page.
+function SortHeader({ params, sortKey, className, children }: { params: CappersParams; sortKey: CappersSortKey; className: string; children: React.ReactNode }) {
+  const active = params.sort === sortKey;
+  return (
+    <th className={className} aria-sort={active ? (params.dir === "asc" ? "ascending" : "descending") : undefined}>
+      <Link href={cappersHref(params, nextSort(params, sortKey))} scroll={false} className="inline-flex items-center gap-1 hover:text-foreground">
+        {children}
+        {active && (
+          <span aria-hidden="true" className="text-[9px] leading-none">
+            {params.dir === "asc" ? "▲" : "▼"}
+          </span>
+        )}
+      </Link>
+    </th>
   );
 }
 
@@ -164,10 +182,18 @@ export function CappersLeaderboardCard({
                 <th className="w-10 max-[480px]:w-6 px-3 py-2 max-[480px]:px-1">#</th>
                 <th className="px-3 py-2 max-[480px]:px-1">Capper</th>
                 <th className="px-3 py-2 max-[480px]:hidden">Last 20</th>
-                <th className="px-3 py-2 max-[480px]:hidden">Record</th>
-                <th className="px-3 py-2 max-[480px]:px-1">Win</th>
-                <th className="px-3 py-2 max-[480px]:px-1">ROI</th>
-                <th className="px-3 py-2 max-[480px]:px-1">Units</th>
+                <SortHeader params={params} sortKey="record" className="px-3 py-2 max-[480px]:hidden">
+                  Record
+                </SortHeader>
+                <SortHeader params={params} sortKey="win" className="px-3 py-2 max-[480px]:px-1">
+                  Win
+                </SortHeader>
+                <SortHeader params={params} sortKey="roi" className="px-3 py-2 max-[480px]:px-1">
+                  ROI
+                </SortHeader>
+                <SortHeader params={params} sortKey="units" className="px-3 py-2 max-[480px]:px-1">
+                  Units
+                </SortHeader>
                 <th className="w-8 px-3 py-2 max-[480px]:px-1" />
               </tr>
             </thead>
