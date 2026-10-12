@@ -89,7 +89,8 @@ export function FooterLine({ name, children }: { name: string; children: ReactNo
   );
 }
 
-export function PanelShell({ theme: t, control, footer, busy, children }: { theme: PanelTheme; control?: ReactNode; footer: ReactNode; busy?: boolean; children: ReactNode }) {
+// `wrapSubtitle` lets a subtitle that is a full sentence run onto a second line rather than end in an ellipsis.
+export function PanelShell({ theme: t, control, footer, busy, wrapSubtitle, children }: { theme: PanelTheme; control?: ReactNode; footer: ReactNode; busy?: boolean; wrapSubtitle?: boolean; children: ReactNode }) {
   return (
     <section className={"flex h-full flex-col rounded-[18px] border p-3.5 " + t.card}>
       <div className="flex items-center gap-3">
@@ -98,7 +99,7 @@ export function PanelShell({ theme: t, control, footer, busy, children }: { them
         {control}
       </div>
       {/* Under the whole header row, so it never has to share a line with the control. */}
-      <p className={"-mt-px truncate pl-[38px] text-xs font-medium leading-4 " + t.subtitleClass}>{t.subtitle}</p>
+      <p className={"-mt-px pl-[38px] text-xs font-medium leading-4 " + (wrapSubtitle ? "" : "truncate ") + t.subtitleClass}>{t.subtitle}</p>
       <div className="mt-2.5 flex flex-1 flex-col">{children}</div>
       {footer && <div className={"mt-2 flex h-10 items-center gap-2.5 border-t border-[#0F1420]/[0.08] px-0.5 transition-opacity dark:border-white/10 " + (busy ? "opacity-60" : "")}>{footer}</div>}
     </section>

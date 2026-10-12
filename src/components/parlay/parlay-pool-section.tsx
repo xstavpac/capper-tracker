@@ -1,20 +1,22 @@
 "use client";
 
 // My Picks: the Parlay Generator's simplest construction mode. Lists the
-// pool grouped by league with a per-league scope toggle, a leg-count
+// pool grouped by game with a per-league scope chip, a leg-count
 // stepper bounded by how many in-scope picks exist (and by MAX_PARLAY_LEGS,
 // see lib/parlay/leg-cap.ts), and a build action that
 // selects the best-winPct qualifying combination from exactly the pooled,
 // in-scope picks - no substitutions, alternates, or picks from outside the
 // pool.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { CapperLeagueRecords } from "@/server/data/picks";
-import { PickCard } from "@/components/live/pick-card";
 import { useParlayPool, type PooledPick } from "@/components/parlay/parlay-pool-context";
-import { ScopeToggle, LegStepper } from "@/components/parlay/parlay-controls";
-import { SwapColumn } from "@/components/parlay/swap-result";
-import { rankPoolPicks } from "@/lib/parlay/pick-record";
+import { Message, PanelShell, TINTS } from "@/components/dashboard/panel-shell";
+import { ClipboardIcon } from "@/components/dashboard/cappers-icons";
+import { LABEL, LegStepper, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, SEGMENT_GROUP, SEGMENT_OFF, SEGMENT_ON } from "@/components/parlay/parlay-controls";
+import { LEG_LIST, LegRow, ResultBlock, SwapBlock, formatGameTime, formatOdds, rankedRecordText } from "@/components/parlay/swap-result";
+import { bestAvailableRecord, formatRecord, rankPoolPicks } from "@/lib/parlay/pick-record";
 import {
   selectConflictFreeLegs,
   type BuildCandidate,
@@ -24,11 +26,20 @@ import {
 import type { SwapMode } from "@/lib/parlay/auto-generate";
 import { generatePoolSwapAction, type PoolSwapResult } from "@/server/actions/parlay-pool-generator";
 
-function LeagueToggle({ league }: { league: string }) {
+const MY_PICKS = {
+  ...TINTS.neutral,
+  title: "My Picks",
+  subtitle: "Build a parlay from exactly the picks in your slip.",
+  icon: <ClipboardIcon className="h-[17px] w-[17px] stroke-[2.2]" />,
+};
+
+function LeagueChip({ league, count }: { league: string; count: number }) {
   const { isLeagueInScope, toggleLeague } = useParlayPool();
   const inScope = isLeagueInScope(league);
   return (
-    <ScopeToggle
+    <ScopeChip
+      label={league}
+      count={count}
       inScope={inScope}
       onToggle={() => toggleLeague(league)}
       ariaLabel={(inScope ? "Remove " : "Include ") + league + " picks from the leg-count build"}
@@ -74,6 +85,8 @@ type BuiltParlay = {
   unverified: UnverifiedPair[];
   requested: number;
   shortfall: number;
+  // The records the legs were ranked on, for each leg's record line.
+  records: CapperLeagueRecords;
 };
 
 // Skipped/uncertainty notes are always rendered as plain visible text, never
@@ -83,14 +96,14 @@ type BuiltParlay = {
 function BuildNotes({ skipped, unverified }: { skipped: SkippedPick[]; unverified: UnverifiedPair[] }) {
   if (skipped.length === 0 && unverified.length === 0) return null;
   return (
-    <div className="mt-3 space-y-1 border-t border-border-subtle pt-3">
+    <div className="space-y-1 border-t border-[#0F1420]/[0.08] py-2.5 dark:border-white/10">
       {skipped.map((s) => (
-        <p key={s.pickId} className="text-[12px] text-muted-foreground">
+        <p key={s.pickId} className="text-xs font-medium text-muted-foreground">
           {s.note}
         </p>
       ))}
       {unverified.map((u) => (
-        <p key={`${u.pickId}-${u.withPickId}`} className="text-[12px] text-amber-700 dark:text-amber-400">
+        <p key={`${u.pickId}-${u.withPickId}`} className="text-xs font-medium text-amber-700 dark:text-amber-400">
           {u.note}
         </p>
       ))}
@@ -100,28 +113,15 @@ function BuildNotes({ skipped, unverified }: { skipped: SkippedPick[]; unverifie
 
 function BuildMyPicksResult({ result }: { result: BuiltParlay }) {
   return (
-    <div className="mt-4 rounded-card border border-brand-200 bg-brand-50/60 p-4 dark:border-brand-800 dark:bg-brand-500/10">
-      <h3 className="mb-2 text-sm font-semibold text-foreground">
-        My Picks &mdash; {result.legs.length}-leg parlay
-      </h3>
-      <div className="space-y-1.5">
-        {result.legs.map((leg) => (
-          <div key={leg.pickId} className="rounded-[7px] border border-border-subtle bg-card px-2.5 py-2 text-[12px]">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium text-foreground">{leg.capperName}</span>
-              <span className="text-muted-foreground">
-                {leg.odds > 0 ? "+" : ""}
-                {leg.odds}
-              </span>
-            </div>
-            <div className="mt-0.5 text-muted-foreground">
-              {leg.gameLabel} &middot; {leg.betDetail}
-            </div>
-          </div>
-        ))}
-      </div>
+    <ResultBlock title={`My Picks — ${result.legs.length}-leg parlay`}>
+      <ol className={LEG_LIST}>
+        {result.legs.map((leg, i) => {
+          const record = bestAvailableRecord(leg, result.records);
+          return <LegRow key={leg.pickId} n={i + 1} pick={leg} recordText={rankedRecordText({ record, pick: leg })} winPct={record?.winPct ?? null} />;
+        })}
+      </ol>
       <BuildNotes skipped={result.skipped} unverified={result.unverified} />
-    </div>
+    </ResultBlock>
   );
 }
 
@@ -135,17 +135,13 @@ function BuildMyPicksResult({ result }: { result: BuiltParlay }) {
 type ShortfallLike = { legs: unknown[]; skipped: SkippedPick[]; unverified: UnverifiedPair[]; requested: number };
 function ShortfallNotice({ result, onBuildAnyway }: { result: ShortfallLike; onBuildAnyway: () => void }) {
   return (
-    <div className="mt-4 rounded-card border border-amber-300 bg-amber-50/60 p-4 dark:border-amber-800 dark:bg-amber-500/10">
-      <h3 className="text-sm font-semibold text-foreground">
+    <div className="mt-4 rounded-[14px] border border-amber-300 bg-amber-50/60 p-3.5 dark:border-amber-800 dark:bg-amber-500/10">
+      <h3 className="mb-2 text-sm font-semibold text-foreground">
         Only {result.legs.length} of {result.requested} legs available without conflicts
       </h3>
       <BuildNotes skipped={result.skipped} unverified={result.unverified} />
-      <div className="mt-3 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onBuildAnyway}
-          className="rounded-full bg-brand-600 px-4 py-1.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700"
-        >
+      <div className="mt-1 flex items-center gap-2">
+        <button type="button" onClick={onBuildAnyway} className={PILL_PRIMARY}>
           Build with {result.legs.length} leg{result.legs.length === 1 ? "" : "s"}
         </button>
       </div>
@@ -219,7 +215,7 @@ function useSwapBuild(mode: SwapMode) {
 
 function SwapModeResult({ mode, swap }: { mode: SwapMode; swap: ReturnType<typeof useSwapBuild> }) {
   const { result, error, shortfallConfirmed, setShortfallConfirmed } = swap;
-  if (error) return <p className="mt-4 text-xs text-red-600 dark:text-red-400">{error}</p>;
+  if (error) return <p className="mt-4 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>;
   if (!result) return null;
   const isShort = result.shortfall > 0;
   if (result.parlayA.legs.length === 0) {
@@ -237,14 +233,42 @@ function SwapModeResult({ mode, swap }: { mode: SwapMode; swap: ReturnType<typeo
       />
     );
   }
+  return <SwapBlock parlay={result.swap} />;
+}
+
+// One of the three builds, as a segment: its name over what it builds from.
+// Lit while its parlay is on screen. Each calls its own builder.
+function BuildSegment({
+  label,
+  sub,
+  busy,
+  active,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  sub: string;
+  busy: boolean;
+  active: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
   return (
-    <div className="mt-4">
-      <SwapColumn parlay={result.swap} records={result.records} />
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className={"flex min-h-11 flex-col items-center justify-center rounded-xl px-1.5 py-1 leading-tight transition disabled:opacity-50 sm:px-4 " + (active ? SEGMENT_ON : SEGMENT_OFF)}
+    >
+      <span className="whitespace-nowrap text-[13px] font-semibold">{busy ? "Building…" : label}</span>
+      <span className={"whitespace-nowrap text-[10.5px] font-medium " + (active ? "text-white/80" : "text-muted-foreground")}>{sub}</span>
+    </button>
   );
 }
 
-export function ParlayPoolSection() {
+// `action` is the header's link (the page's "+ Add picks from Live").
+export function ParlayPoolSection({ action }: { action?: ReactNode }) {
   const { pool, leaguesInPool, isLeagueInScope, removeFromPool, legCount, maxLegCount } = useParlayPool();
   const [records, setRecords] = useState<CapperLeagueRecords | null>(null);
   const [loadingRecords, setLoadingRecords] = useState(false);
@@ -326,6 +350,7 @@ export function ParlayPoolSection() {
         unverified: selection.unverified,
         requested: selection.requested,
         shortfall: selection.shortfall,
+        records: freshRecords,
       });
       setShortfallConfirmed(false);
     } catch {
@@ -349,92 +374,129 @@ export function ParlayPoolSection() {
 
   if (pool.length === 0) {
     return (
-      <div className="rounded-card bg-card p-6 text-center shadow-soft">
-        <p className="text-sm text-muted-foreground">
-          Your Parlay slip is empty. Use the Parlay slip button on Live (or below) to add picks.
-        </p>
-      </div>
+      <PanelShell theme={MY_PICKS} control={action} footer={undefined} wrapSubtitle>
+        <Message>Your Parlay slip is empty. Use the Parlay slip button on Live (or below) to add picks.</Message>
+      </PanelShell>
     );
   }
 
-  return (
-    <div className="space-y-5">
-      {recordsError && (
-        <p className="text-xs text-red-600 dark:text-red-400">Couldn&apos;t load your cappers&apos; records for these picks.</p>
-      )}
-      {leaguesInPool.map((league) => (
-        <div key={league}>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold text-foreground">{league}</h3>
-            <LeagueToggle league={league} />
-          </div>
-          <div className="space-y-1.5">
-            {pool
-              .filter((p) => p.leagueName === league)
-              .map((p) => (
-                <PickCard
-                  key={p.pickId}
-                  pick={p}
-                  records={records}
-                  loading={loadingRecords}
-                  onRemove={() => removeFromPool(p.pickId)}
-                />
-              ))}
-          </div>
-        </div>
-      ))}
+  // The slip's games, in the order their first pick was added.
+  const games = Array.from(new Set(pool.map((p) => p.gameId))).map((gameId) => pool.filter((p) => p.gameId === gameId));
 
-      <div className="rounded-card bg-card p-4 shadow-soft">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <LegCountStepper />
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={buildMyPicks}
-              disabled={maxLegCount === 0 || building}
-              className="rounded-full bg-brand-600 px-4 py-1.5 text-sm font-medium text-white shadow-soft hover:bg-brand-700 disabled:opacity-50"
-            >
-              {building ? "Building…" : "Build My Picks"}
-            </button>
-            <button
-              type="button"
-              onClick={hedge.build}
-              disabled={maxLegCount === 0 || hedge.building}
-              className="rounded-full bg-muted px-4 py-1.5 text-sm font-medium text-foreground shadow-soft hover:bg-muted/70 disabled:opacity-50"
-            >
-              {hedge.building ? "Building…" : "Auto Hedge"}
-            </button>
-            <button
-              type="button"
-              onClick={contrarian.build}
-              disabled={maxLegCount === 0 || contrarian.building}
-              className="rounded-full bg-muted px-4 py-1.5 text-sm font-medium text-foreground shadow-soft hover:bg-muted/70 disabled:opacity-50"
-            >
-              {contrarian.building ? "Building…" : "Contrarian"}
-            </button>
-            <button
-              type="button"
-              onClick={clearBuilt}
-              disabled={!hasBuiltResult}
-              className="rounded-full bg-muted px-4 py-1.5 text-sm font-medium text-foreground shadow-soft hover:bg-muted/70 disabled:opacity-50"
-            >
-              Clear
-            </button>
-          </div>
-        </div>
-        {maxLegCount === 0 && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Every pooled league is excluded from scope - toggle at least one on above to build a parlay.
-          </p>
-        )}
-        {buildError && <p className="mt-4 text-xs text-red-600 dark:text-red-400">{buildError}</p>}
-        {buildResult && buildResult.shortfall > 0 && !shortfallConfirmed && (
-          <ShortfallNotice result={buildResult} onBuildAnyway={() => setShortfallConfirmed(true)} />
-        )}
-        {buildResult && (buildResult.shortfall === 0 || shortfallConfirmed) && <BuildMyPicksResult result={buildResult} />}
-        <SwapModeResult mode="AUTO_HEDGE" swap={hedge} />
-        <SwapModeResult mode="CONTRARIAN" swap={contrarian} />
+  return (
+    <PanelShell theme={MY_PICKS} control={action} footer={undefined} wrapSubtitle>
+      {recordsError && (
+        <p className="mb-2.5 text-xs font-medium text-red-600 dark:text-red-400">Couldn&apos;t load your cappers&apos; records for these picks.</p>
+      )}
+      <p className={LABEL}>League scope</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {leaguesInPool.map((league) => (
+          <LeagueChip key={league} league={league} count={pool.filter((p) => p.leagueName === league).length} />
+        ))}
       </div>
-    </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {games.map((picks) => {
+          const game = picks[0];
+          const inScope = isLeagueInScope(game.leagueName);
+          return (
+            <div
+              key={game.gameId}
+              className={"rounded-[14px] border border-[#E6E8EF] bg-white dark:border-border dark:bg-card " + (inScope ? "" : "opacity-60")}
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-[#0F1420]/[0.06] px-3.5 py-2.5 dark:border-white/10">
+                <p className="min-w-0 text-sm font-semibold text-foreground">{game.gameLabel}</p>
+                <p className={LABEL}>
+                  {game.leagueName} · {formatGameTime(game.gameTime)}
+                  {!inScope && " · excluded"}
+                </p>
+              </div>
+              <ul className="divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
+                {picks.map((p) => {
+                  const record = records ? bestAvailableRecord(p, records) : null;
+                  return (
+                    <li key={p.pickId} className="flex items-center gap-2.5 py-1 pl-3.5 pr-1">
+                      {/* The team's color (neutral for a total or a team with no color yet). */}
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: p.teamColor ?? "rgb(var(--muted-foreground))" }}
+                        aria-hidden="true"
+                      />
+                      <div className="min-w-0 flex-1 py-1">
+                        <p className="text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{p.betDetail}</p>
+                        <p className="text-xs font-medium text-muted-foreground">
+                          <Link href={"/cappers/" + p.capperId} className="text-foreground hover:underline">
+                            {p.capperName}
+                          </Link>
+                          {loadingRecords ? " · Loading record…" : records ? " · " + (record ? formatRecord(record) : "No record yet") : ""}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{formatOdds(p.odds)}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeFromPool(p.pickId)}
+                        aria-label={"Remove " + p.capperName + " pick from Parlay slip"}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-foreground/[0.035] hover:text-foreground"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-4 w-4" aria-hidden="true">
+                          <path d="M6 6l12 12M18 6L6 18" />
+                        </svg>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <LegCountStepper />
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <div role="group" aria-label="Build a parlay" className={"grid flex-1 grid-cols-3 gap-1 " + SEGMENT_GROUP}>
+            <BuildSegment
+              label="My Picks"
+              sub="from your slip"
+              busy={building}
+              active={buildResult !== null}
+              disabled={maxLegCount === 0 || building}
+              onClick={buildMyPicks}
+            />
+            <BuildSegment
+              label="Auto Hedge"
+              sub="primary + hedge"
+              busy={hedge.building}
+              active={hedge.result !== null}
+              disabled={maxLegCount === 0 || hedge.building}
+              onClick={hedge.build}
+            />
+            <BuildSegment
+              label="Contrarian"
+              sub="when available"
+              busy={contrarian.building}
+              active={contrarian.result !== null}
+              disabled={maxLegCount === 0 || contrarian.building}
+              onClick={contrarian.build}
+            />
+          </div>
+          <button type="button" onClick={clearBuilt} disabled={!hasBuiltResult} className={PILL_OUTLINE}>
+            Clear
+          </button>
+        </div>
+      </div>
+      {maxLegCount === 0 && (
+        <p className="mt-2 text-xs font-medium text-muted-foreground">
+          Every pooled league is excluded from scope - toggle at least one on above to build a parlay.
+        </p>
+      )}
+      {buildError && <p className="mt-4 text-xs font-medium text-red-600 dark:text-red-400">{buildError}</p>}
+      {buildResult && buildResult.shortfall > 0 && !shortfallConfirmed && (
+        <ShortfallNotice result={buildResult} onBuildAnyway={() => setShortfallConfirmed(true)} />
+      )}
+      {buildResult && (buildResult.shortfall === 0 || shortfallConfirmed) && <BuildMyPicksResult result={buildResult} />}
+      <SwapModeResult mode="AUTO_HEDGE" swap={hedge} />
+      <SwapModeResult mode="CONTRARIAN" swap={contrarian} />
+    </PanelShell>
   );
 }

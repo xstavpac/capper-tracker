@@ -1,15 +1,20 @@
 "use client";
 
-// Shared Hedge/Contrarian swap-result rendering, extracted from
-// auto-generate-section.tsx so Auto-Generate and the pool-driven
+// The Parlay Generator's shared result rendering: one row per leg, and the
+// Hedge/Contrarian swap result built from the same SwapParlay shape
+// (lib/parlay/auto-generate.ts) - so Auto-Generate and the pool-driven
 // Select-Your-Own-Picks flow (parlay-pool-section.tsx) render an identical
-// result from the same SwapParlay shape (lib/parlay/auto-generate.ts) -
-// one UI, whichever primary pool produced it.
-import type { CapperLeagueRecords } from "@/server/data/picks";
-import { PICK_CATEGORY_MARKET_NOUN, type PickCategoryKey } from "@/server/data/stats";
-import { PickCard } from "@/components/live/pick-card";
-import { swapRecordLabel } from "@/lib/parlay/pick-record";
-import type { SwapLeg, SwapParlay } from "@/lib/parlay/auto-generate";
+// result, whichever primary pool produced it.
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { getRecordColor, PICK_CATEGORY_LABELS, PICK_CATEGORY_MARKET_NOUN, type PickCategoryKey } from "@/server/data/stats";
+import type { ExpanderPick } from "@/components/live/game-picks-expander";
+import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
+import { TINTS } from "@/components/dashboard/panel-shell";
+import { WIN_PCT_TRACK, WinPctBar } from "@/components/dashboard/category-card";
+import { LABEL } from "@/components/parlay/parlay-controls";
+import { rankBasisLabel, swapRecordLabel } from "@/lib/parlay/pick-record";
+import type { RankedPick, SwapLeg, SwapParlay } from "@/lib/parlay/auto-generate";
 
 export function marketNoun(category: PickCategoryKey | null): string {
   return category ? PICK_CATEGORY_MARKET_NOUN[category] : "this market";
@@ -19,12 +24,63 @@ export function formatGameTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-export function GameHeader({ label, time }: { label: string; time?: string }) {
+export const formatOdds = (odds: number) => (odds > 0 ? "+" : "") + odds;
+
+// The exact record a leg was ranked on, always shown - including a thin
+// sample, and including when the capper has no history at all. The basis
+// suffix (rankBasisLabel) is what keeps this readable next to a Hedge/
+// Contrarian swap's record, which is always all-leagues-only - without it
+// the two look directly comparable when they aren't (see pick-record.ts).
+export function rankedRecordText({ record, pick }: Pick<RankedPick, "record"> & { pick: Pick<ExpanderPick, "leagueName" | "category"> }): string {
+  return record
+    ? rankBasisLabel(record, { leagueName: pick.leagueName, marketNoun: marketNoun(pick.category) })
+    : "No record yet - ranked last";
+}
+
+export const LEG_LIST = "divide-y divide-[#0F1420]/[0.06] dark:divide-white/10";
+
+// One leg: its number, the game, the pick, who made it in which market, the
+// record it was chosen on (with a bar of its win %) and the odds. `winPct` is
+// null when there is no record to draw. `children` is anything more the leg
+// has to say (why a swap left it unchanged, its game's next picks).
+export function LegRow({
+  n,
+  pick,
+  recordText,
+  winPct,
+  children,
+}: {
+  n: number;
+  pick: ExpanderPick;
+  recordText: string;
+  winPct: number | null;
+  children?: ReactNode;
+}) {
+  const tone = winPct === null ? MUTED : getRecordColor(winPct) === "green" ? GREEN : RED;
   return (
-    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-      {label}
-      {time ? " · " + formatGameTime(time) : ""}
-    </p>
+    <li className="flex gap-3 py-3">
+      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-banner text-xs font-bold tabular-nums text-white">{n}</span>
+      <div className="min-w-0 flex-1">
+        <p className={LABEL}>
+          {pick.leagueName} · {pick.gameLabel} · {formatGameTime(pick.gameTime)}
+        </p>
+        <div className="mt-0.5 flex items-baseline justify-between gap-3">
+          <p className="min-w-0 text-[15px] font-bold leading-snug text-foreground [overflow-wrap:anywhere]">{pick.betDetail}</p>
+          <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatOdds(pick.odds)}</p>
+        </div>
+        <p className="text-xs font-medium text-muted-foreground">
+          <Link href={"/cappers/" + pick.capperId} className="text-foreground hover:underline">
+            {pick.capperName}
+          </Link>
+          {pick.category && " · " + PICK_CATEGORY_LABELS[pick.category]}
+        </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <p className={"text-[11.5px] font-semibold tabular-nums " + tone}>{recordText}</p>
+          <WinPctBar winPct={winPct ?? 0} decided={winPct !== null} className={"w-24 " + WIN_PCT_TRACK} />
+        </div>
+        {children}
+      </div>
+    </li>
   );
 }
 
@@ -33,60 +89,68 @@ const SWAP_COPY = {
   CONTRARIAN: { title: "Contrarian", verb: "flipped", noAlternate: "no capper on the other side clears 55% in this market" },
 } as const;
 
-export function SwapLegView({ leg, mode, records }: { leg: SwapLeg; mode: SwapParlay["mode"]; records: CapperLeagueRecords }) {
-  const copy = SWAP_COPY[mode];
+export function swapTitle(parlay: SwapParlay): string {
+  return `${SWAP_COPY[parlay.mode].title} — ${parlay.legs.length}-leg parlay`;
+}
+export function swapSubtitle(parlay: SwapParlay): string {
+  return `${parlay.swapCount} of ${parlay.legs.length} legs ${SWAP_COPY[parlay.mode].verb}`;
+}
+
+const NOTE = "mt-1.5 text-[11.5px] font-medium text-muted-foreground";
+
+function SwapLegRow({ n, leg, mode }: { n: number; leg: SwapLeg; mode: SwapParlay["mode"] }) {
   if (!leg.swap) {
     const reason =
-      leg.unchangedReason === "NOT_MAJORITY" ? "your pick's side isn't the majority of your cappers" : copy.noAlternate;
+      leg.unchangedReason === "NOT_MAJORITY" ? "your pick's side isn't the majority of your cappers" : SWAP_COPY[mode].noAlternate;
     return (
-      <div className="space-y-1">
-        <GameHeader label={leg.gameLabel} />
-        <p className="pl-1 text-[11px]">
-          <span className="rounded-full bg-muted px-1.5 py-0.5 font-semibold text-muted-foreground">Unchanged</span>{" "}
-          <span className="text-muted-foreground">{reason}</span>
+      <LegRow n={n} pick={leg.original.pick} recordText={rankedRecordText(leg.original)} winPct={leg.original.record?.winPct ?? null}>
+        <p className={NOTE}>
+          <span className="rounded-full bg-muted px-1.5 py-0.5 font-semibold">Unchanged</span> {reason}
         </p>
-        <PickCard pick={leg.original.pick} records={records} loading={false} />
-      </div>
+      </LegRow>
     );
   }
-  const { swap } = leg;
+  const { swap, original } = leg;
   return (
-    <div className="space-y-1">
-      <GameHeader label={leg.gameLabel} />
-      <p className="pl-1 text-[11px] text-foreground">
-        <span className="text-muted-foreground line-through">{leg.original.pick.betDetail}</span> &rarr;{" "}
-        <span className="font-semibold">{swap.pick.betDetail}</span> &middot; {swap.pick.capperName}{" "}
-        <span className="font-semibold">{swapRecordLabel(swap.record, marketNoun(swap.pick.category))}</span>
+    <LegRow n={n} pick={swap.pick} recordText={swapRecordLabel(swap.record, marketNoun(swap.pick.category))} winPct={swap.record.winPct}>
+      <p className={NOTE}>
+        Replaces <span className="line-through">{original.pick.betDetail}</span> · {original.pick.capperName}
       </p>
-      <PickCard pick={swap.pick} records={records} loading={false} />
-    </div>
+    </LegRow>
   );
 }
 
-export function ResultColumn({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+export function SwapLegs({ parlay }: { parlay: SwapParlay }) {
   return (
-    <div className="rounded-card border border-brand-200 bg-brand-50/60 p-4 dark:border-brand-800 dark:bg-brand-500/10">
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      <p className="mb-3 text-xs text-muted-foreground">{subtitle}</p>
-      <div className="space-y-4">{children}</div>
-    </div>
-  );
-}
-
-export function SwapColumn({ parlay, records }: { parlay: SwapParlay; records: CapperLeagueRecords }) {
-  const copy = SWAP_COPY[parlay.mode];
-  return (
-    <ResultColumn
-      title={`${copy.title} — ${parlay.legs.length}-leg parlay`}
-      subtitle={`${parlay.swapCount} of ${parlay.legs.length} legs ${copy.verb}`}
-    >
-      {parlay.legs.map((leg) => (
+    <ol className={LEG_LIST}>
+      {parlay.legs.map((leg, i) => (
         // Keyed by the primary's own pickId, not gameId - Auto-Generate's
         // parlayA has one leg per game so either would be unique, but the
         // pool-driven primary can have two legs from the same game (a
         // side + a total, say), so gameId alone would collide.
-        <SwapLegView key={leg.original.pick.pickId} leg={leg} mode={parlay.mode} records={records} />
+        <SwapLegRow key={leg.original.pick.pickId} n={i + 1} leg={leg} mode={parlay.mode} />
       ))}
-    </ResultColumn>
+    </ol>
+  );
+}
+
+// A built parlay: its name, a line about it, then its legs. `plain` is for a
+// result that already has a card of its own; otherwise it is a tinted block
+// inside the card that built it.
+export function ResultBlock({ title, subtitle, plain, children }: { title: string; subtitle?: string; plain?: boolean; children: ReactNode }) {
+  return (
+    <div className={plain ? "" : "mt-4 rounded-[14px] border px-3.5 pb-1 pt-3 " + TINTS.blue.card}>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      {subtitle && <p className={"text-xs font-medium " + TINTS.blue.subtitleClass}>{subtitle}</p>}
+      {children}
+    </div>
+  );
+}
+
+export function SwapBlock({ parlay, plain }: { parlay: SwapParlay; plain?: boolean }) {
+  return (
+    <ResultBlock title={swapTitle(parlay)} subtitle={swapSubtitle(parlay)} plain={plain}>
+      <SwapLegs parlay={parlay} />
+    </ResultBlock>
   );
 }
