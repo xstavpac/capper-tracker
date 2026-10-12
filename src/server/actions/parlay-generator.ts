@@ -1,6 +1,8 @@
 "use server";
 
-// Auto-Generate (Parlay A + Hedge + Contrarian) for /parlay. Loads data only
+// Auto-Generate (Parlay A + Hedge + Contrarian) for /parlay, over each
+// league's unstarted games in its window (auto-generate-window.ts: today, or
+// the football week for NFL/NCAAF). Loads data only
 // through what Live already uses (getLiveBoardData, getCapperLeagueRecords,
 // getCapperCategoryRecords - all scoped to the signed-in user's own picks
 // and cappers) and hands it to the pure builders in auto-generate.ts. Runs
@@ -10,8 +12,8 @@ import { LIVE_SPORTS } from "@/server/data/odds";
 import { getLiveBoardData } from "@/server/data/live-board-picks";
 import { getCapperCategoryRecords, getCapperLeagueRecords, type CapperLeagueRecords } from "@/server/data/picks";
 import type { PickCategoryKey } from "@/server/data/stats";
-import { easternDateKey } from "@/lib/dates";
 import { legCapRejection, type LegCapRejection } from "@/lib/parlay/leg-cap";
+import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
 import {
   buildAutoParlay,
   buildSwapParlay,
@@ -43,7 +45,6 @@ export async function autoGenerateParlayAction(
   const sports = LIVE_SPORTS.filter((s) => leagues.includes(s.label));
 
   const now = new Date();
-  const todayKey = easternDateKey(now);
   const games: GeneratorGame[] = [];
 
   // Sequential, not Promise.all: each league's board load runs its own
@@ -51,9 +52,13 @@ export async function autoGenerateParlayAction(
   // pressure getPicksForGames' own comment warns about.
   for (const sport of sports) {
     const { odds, expanderPicksByGame } = await getLiveBoardData(user.id, sport.key, sport.label);
+    const inWindow = autoGenerateWindow(
+      sport.label,
+      odds.map((g) => g.commenceTime),
+      now
+    );
     odds.forEach((game, i) => {
-      const start = new Date(game.commenceTime);
-      if (easternDateKey(start) !== todayKey || start.getTime() <= now.getTime()) return;
+      if (!inWindow(game.commenceTime)) return;
       const picks = expanderPicksByGame[i].filter(
         (p): p is GeneratorPick => p.status === "PENDING" && typeof p.datePosted === "string"
       );
