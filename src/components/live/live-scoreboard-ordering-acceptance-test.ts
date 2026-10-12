@@ -86,14 +86,27 @@ const ids = (rows: { id: string }[]) => rows.map((r) => r.id);
 }
 
 {
-  // A yesterday game that never went live (postponed / stale in the
-  // snapshot) is not carried over.
+  // A yesterday game with no live score to go on (postponed, stale in the
+  // snapshot, or a score that never matched it) is carried only until
+  // UNMATCHED_CARRYOVER_VISIBLE_HOURS (8) after its start - it used to be
+  // dropped at midnight, which is what took a still-in-progress game with a
+  // mismatched team name off the board (live-carryover-acceptance-test.ts).
+  // Both started 7 PM; in start order they sort ahead of today's 1 PM game.
   const board = [
     g("today-1pm", "2026-08-29T13:00:00-04:00", "preview"),
     g("yesterday-ppd", "2026-08-28T19:00:00-04:00", "preview"),
     g("yesterday-no-score", "2026-08-28T19:00:00-04:00"),
   ];
-  expect("carried-over games that aren't live are dropped", ids(orderBoardGames(board, TODAY)), ["today-1pm"]);
+  expect(
+    "carried-over games that aren't live stay through 8h after their start",
+    ids(orderBoardGames(board, TODAY, new Date("2026-08-29T02:59:00-04:00"))),
+    ["yesterday-ppd", "yesterday-no-score", "today-1pm"]
+  );
+  expect(
+    "...and are dropped from then on",
+    ids(orderBoardGames(board, TODAY, new Date("2026-08-29T03:00:00-04:00"))),
+    ["today-1pm"]
+  );
 }
 
 // ---- Rule 3: forward window capped to the next slate ----

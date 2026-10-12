@@ -10,6 +10,7 @@ import {
 import { sameEasternDay } from "@/lib/dates";
 import { shortTeamName } from "@/lib/pick-team-group";
 import { getTeamColor } from "@/lib/team-colors";
+import { teamNamesMatch } from "@/lib/team-name-match";
 
 export type TickerGame = {
   id: string;
@@ -54,7 +55,7 @@ export function buildTickerGamesForSport(
   });
 
   return todaysOdds.map((game): TickerGame => {
-    const score = matchScoreToGame(scores, game);
+    const score = matchScoreToGame(scores, game, sportKey);
     return {
       id: game.id,
       sportKey,
@@ -65,8 +66,8 @@ export function buildTickerGamesForSport(
       awayShort: shortTeamName(game.awayTeam, sportLabel),
       commenceTime: game.commenceTime,
       status: score?.status ?? "preview",
-      homeScore: parseScore(score, game.homeTeam),
-      awayScore: parseScore(score, game.awayTeam),
+      homeScore: parseScore(score, game.homeTeam, sportKey),
+      awayScore: parseScore(score, game.awayTeam, sportKey),
       inningHalf: score?.inningHalf ?? null,
       inningOrdinal: score?.inningOrdinal ?? null,
       accentColor: getTeamColor(sportKey, game.homeTeam) ?? "#64748B",
@@ -135,8 +136,14 @@ export async function getAllLiveScores(
   return { scoresBySport, failed };
 }
 
-function parseScore(score: { scores: { name: string; score: string }[] | null } | undefined, teamName: string): number | null {
-  const raw = score?.scores?.find((s) => s.name === teamName)?.score;
+// teamNamesMatch, not ===: scores[].name is score-source-spelled, teamName is
+// the odds game's - same cross-source join as matchScoreToGame.
+function parseScore(
+  score: { scores: { name: string; score: string }[] | null } | undefined,
+  teamName: string,
+  sportKey: string
+): number | null {
+  const raw = score?.scores?.find((s) => teamNamesMatch(s.name, teamName, sportKey))?.score;
   if (raw === undefined) return null;
   const n = parseInt(raw, 10);
   return Number.isNaN(n) ? null : n;

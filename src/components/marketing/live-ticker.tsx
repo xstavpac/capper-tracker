@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { TickerGame } from "@/server/data/live-ticker";
 import { closestByTime } from "@/lib/dates";
+import { teamNamesMatch } from "@/lib/team-name-match";
 import { LocalGameTime } from "@/components/local-game-time";
 import { useSafePoll } from "@/lib/use-safe-poll";
 
@@ -30,9 +31,14 @@ type ScoreUpdate = {
 // ScoreGame - duplicated rather than imported for the same reason
 // live-scoreboard.tsx duplicates it: server/data/odds.ts has a module-level
 // prisma import that must never reach a "use client" bundle, even
-// transitively.
+// transitively. teamNamesMatch (with the game's own league), not ===: updates
+// are score-source-spelled, the game is odds-source-spelled. With === a team
+// the two sources spell differently got its first server-rendered score and
+// then never another update.
 function matchUpdate(updates: ScoreUpdate[], game: TickerGame): ScoreUpdate | undefined {
-  const candidates = updates.filter((u) => u.homeTeam === game.homeTeam && u.awayTeam === game.awayTeam);
+  const candidates = updates.filter(
+    (u) => teamNamesMatch(u.homeTeam, game.homeTeam, game.sportKey) && teamNamesMatch(u.awayTeam, game.awayTeam, game.sportKey)
+  );
   if (candidates.length === 0) return undefined;
   if (candidates.length === 1) return candidates[0];
 
@@ -40,8 +46,8 @@ function matchUpdate(updates: ScoreUpdate[], game: TickerGame): ScoreUpdate | un
   return closestByTime(candidates, (u) => new Date(u.commenceTime).getTime(), gameStart);
 }
 
-function parseScore(update: ScoreUpdate | undefined, teamName: string): number | null {
-  const raw = update?.scores?.find((s) => s.name === teamName)?.score;
+function parseScore(update: ScoreUpdate | undefined, teamName: string, sportKey: string): number | null {
+  const raw = update?.scores?.find((s) => teamNamesMatch(s.name, teamName, sportKey))?.score;
   if (raw === undefined) return null;
   const n = parseInt(raw, 10);
   return Number.isNaN(n) ? null : n;
@@ -70,8 +76,8 @@ function applyScoreUpdates(games: TickerGame[], scoresBySport: Record<string, Sc
     return {
       ...game,
       status: update.status,
-      homeScore: parseScore(update, game.homeTeam),
-      awayScore: parseScore(update, game.awayTeam),
+      homeScore: parseScore(update, game.homeTeam, game.sportKey),
+      awayScore: parseScore(update, game.awayTeam, game.sportKey),
       inningHalf: update.inningHalf,
       inningOrdinal: update.inningOrdinal,
     };
