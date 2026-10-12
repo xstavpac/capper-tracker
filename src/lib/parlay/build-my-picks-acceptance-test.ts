@@ -141,5 +141,23 @@ function mk(overrides: Partial<BuildCandidate>): BuildCandidate {
   check("ATP same-match pair: unverified note names both picks", result.unverified[0]?.note, "Couldn't verify Match Over 22.5 and Djokovic ML don't conflict");
 }
 
+// ============================================================================
+// Opposite sides of ONE game whose two picks were stored with different times
+// (one at the kickoff, one at the time it was imported) -> still a conflict.
+// ============================================================================
+{
+  const yankeesML = mk({ pickId: "a", label: "Capper A — Yankees ML", betDetail: "Yankees ML" });
+  const redSoxML = mk({ pickId: "b", label: "Capper B — Red Sox ML", betDetail: "Red Sox ML", gameTime: new Date("2026-09-01T15:12:44Z") });
+  const result = selectConflictFreeLegs([yankeesML, redSoxML], 5);
+  check("one game, different stored times: only the higher-ranked side is kept", result.legs.map((l) => l.pickId), ["a"]);
+  check("one game, different stored times: the other side is skipped as a conflict", result.skipped[0]?.reason, "conflict");
+  check("one game, different stored times: skip note", result.skipped[0]?.note, "Skipped Capper B — Red Sox ML — conflicts with Capper A — Yankees ML in your parlay");
+
+  // The same two picks carrying their game ids: a doubleheader's two games stay two games.
+  const game1 = mk({ pickId: "a", label: "Yankees ML (game 1)", betDetail: "Yankees ML", gameId: "evt1" });
+  const game2 = mk({ pickId: "b", label: "Red Sox ML (game 2)", betDetail: "Red Sox ML", gameId: "evt2", gameTime: new Date("2026-09-01T19:05:00Z") });
+  check("doubleheader, different game ids: both allowed", selectConflictFreeLegs([game1, game2], 5).legs.map((l) => l.pickId), ["a", "b"]);
+}
+
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);

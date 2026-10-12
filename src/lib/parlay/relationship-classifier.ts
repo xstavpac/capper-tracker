@@ -14,6 +14,7 @@
 import { derivePickTeamName } from "@/lib/pick-side";
 import { extractLine, nrfiSide } from "@/lib/bet-line";
 import { deriveTeamTotalTarget } from "@/lib/team-total-target";
+import { sameEasternDay } from "@/lib/dates";
 
 export type Family = "SIDE" | "TOTAL";
 export type Level = "GAME" | "TEAM" | "FIRST_INNING";
@@ -31,6 +32,9 @@ export type GameInput = {
   awayTeam: string;
   gameTime: Date;
   sportName: string;
+  // The board game this pick is shown under (live-board-picks.ts), when the
+  // caller has one. Optional: a pick read straight from the DB has none.
+  gameId?: string | null;
 };
 
 export type PickDescription = {
@@ -179,8 +183,21 @@ function ruleOutcome(rule: Rule): PairOutcome {
 
 export type ParlayCandidate = { pick: PickInput; game: GameInput };
 
+// Two picks are on the same game when they carry the same game id. Without an
+// id on both, it's the same sport, the same two teams and the same Eastern
+// calendar day. Never the exact start time: a pick's stored time is not
+// reliably its game's (an import that matched no game stores the import
+// time), so two picks on one game routinely disagree by hours. The id, when
+// both have one, is what tells two legs of a doubleheader apart; the date
+// fallback can't, and treats them as one game.
 function sameGame(a: GameInput, b: GameInput): boolean {
-  return a.homeTeam === b.homeTeam && a.awayTeam === b.awayTeam && a.gameTime.getTime() === b.gameTime.getTime();
+  if (a.gameId && b.gameId) return a.gameId === b.gameId;
+  return (
+    a.sportName === b.sportName &&
+    a.homeTeam === b.homeTeam &&
+    a.awayTeam === b.awayTeam &&
+    sameEasternDay(a.gameTime, b.gameTime)
+  );
 }
 
 // scope = period alone for SIDE (no level); period + level for TOTAL.

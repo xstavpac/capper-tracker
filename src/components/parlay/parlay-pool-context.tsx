@@ -15,9 +15,9 @@
 // still building - the confirmed legs and the add-mode selection both. The
 // stored legs are only a list of pick ids to look up, though: on hydrate and
 // on every tab focus they are revalidated against the DB
-// (getSlipPickStatesAction), so status/odds/game time always come from current
-// data and any leg that has started, been graded, or been deleted is pruned
-// (with a one-time notice).
+// (getSlipPickStatesAction), so status, odds and whether the game has started
+// always come from current data and any leg that has started, been graded, or
+// been deleted is pruned (with a one-time notice).
 //
 // The slip holds at most MAX_PARLAY_LEGS picks (lib/parlay/leg-cap.ts).
 // confirmAdd refuses a selection that would take it past that - it adds

@@ -4,7 +4,7 @@
 // with "20 legs max" before any data is read - not built as 20, not built as 21.
 //
 // The real actions run. Only what they load from is replaced: the signed-in
-// user, the live board, and the record lookups. The clock is fixed at noon
+// user, the pick rows, the live board, and the record lookups. The clock is fixed at noon
 // Eastern so Auto-Generate's own "today, unstarted" rule always sees the
 // fixture slate. The numbers are written out here on purpose, not imported
 // from lib/parlay/leg-cap.ts: this file states the rule, the code has to meet it.
@@ -56,11 +56,23 @@ const SLATE = Array.from({ length: SLATE_SIZE }, (_, i) => pick(i + 1));
 
 let boardLoads = 0;
 let recordLoads = 0;
+let rowLoads = 0;
 function stub(relativePath: string, exports: Record<string, unknown>) {
   const path = require.resolve(relativePath);
   require.cache[path] = { id: path, filename: path, loaded: true, exports } as unknown as NodeJS.Module;
 }
 stub("../auth", { requireUser: async () => ({ id: "user-1" }) });
+// The slip's own rows: every SLATE pick is this user's pending MLB pick.
+stub("../../lib/prisma", {
+  prisma: {
+    pick: {
+      findMany: async ({ where }: { where: { id: { in: string[] } } }) => {
+        rowLoads++;
+        return SLATE.filter((p) => where.id.in.includes(p.pickId)).map((p) => ({ id: p.pickId, status: "PENDING", sport: { name: "MLB" } }));
+      },
+    },
+  },
+});
 stub("../data/odds", { LIVE_SPORTS: [{ key: "baseball_mlb", label: "MLB" }] });
 stub("../data/live-board-picks", {
   getLiveBoardData: async () => {
@@ -86,7 +98,8 @@ stub("../data/picks", {
 async function main() {
   const { autoGenerateParlayAction } = await import("./parlay-generator");
   const { generatePoolSwapAction } = await import("./parlay-pool-generator");
-  const loads = () => boardLoads + recordLoads;
+  const loads = () => boardLoads + recordLoads + rowLoads;
+  const ids = (n: number) => SLATE.slice(0, n).map((p) => p.pickId);
   const describe = (r: object) => JSON.stringify(r).slice(0, 120);
 
   // ---------------------------------------------------------------------
@@ -118,7 +131,7 @@ async function main() {
   // ---------------------------------------------------------------------
   const labels = { AUTO_HEDGE: "Auto Hedge", CONTRARIAN: "Contrarian" } as const;
   for (const mode of ["AUTO_HEDGE", "CONTRARIAN"] as const) {
-    const swap20 = await generatePoolSwapAction(SLATE.slice(0, CAP), CAP, mode);
+    const swap20 = await generatePoolSwapAction(ids(CAP), CAP, mode);
     check(
       `${labels[mode]}: 20 legs requested, 20 legs built`,
       !("error" in swap20) && swap20.requested === CAP && swap20.parlayA.legs.length === CAP && swap20.swap.legs.length === CAP && swap20.shortfall === 0,
@@ -126,7 +139,7 @@ async function main() {
     );
 
     before = loads();
-    const swap21 = await generatePoolSwapAction(SLATE.slice(0, CAP + 1), CAP + 1, mode);
+    const swap21 = await generatePoolSwapAction(ids(CAP + 1), CAP + 1, mode);
     check(
       `${labels[mode]}: 21 legs is rejected with "20 legs max"`,
       "error" in swap21 && swap21.error === CAP_MESSAGE,

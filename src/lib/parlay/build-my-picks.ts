@@ -35,6 +35,7 @@ export type BuildCandidate = {
   awayTeam: string;
   gameTime: Date;
   sportName: string;
+  gameId?: string | null;
 };
 
 export type SkippedPick = {
@@ -64,7 +65,7 @@ export type BuildResult = {
 function toCandidate(c: BuildCandidate): ParlayCandidate {
   return {
     pick: { betType: c.betType, period: c.period, betDetail: c.betDetail, line: c.line },
-    game: { homeTeam: c.homeTeam, awayTeam: c.awayTeam, gameTime: c.gameTime, sportName: c.sportName },
+    game: { homeTeam: c.homeTeam, awayTeam: c.awayTeam, gameTime: c.gameTime, sportName: c.sportName, gameId: c.gameId },
   };
 }
 
