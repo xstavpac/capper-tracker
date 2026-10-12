@@ -375,7 +375,7 @@ export function ParlayPoolSection({ action }: { action?: ReactNode }) {
   if (pool.length === 0) {
     return (
       <PanelShell theme={MY_PICKS} control={action} footer={undefined} wrapSubtitle>
-        <Message>Your Parlay slip is empty. Use the Parlay slip button on Live (or below) to add picks.</Message>
+        <Message>Your Parlay slip is empty. Use the Parlay slip button in the banner above, or on Live, to add picks.</Message>
       </PanelShell>
     );
   }
