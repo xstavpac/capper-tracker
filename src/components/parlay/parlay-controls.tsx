@@ -5,6 +5,8 @@
 // My Picks (backed by the Parlay Pool context) and Auto-Generate (its own
 // local state, so it never changes the user's pool scope) render the
 // identical control.
+import { useState } from "react";
+import { MAX_PARLAY_LEGS, MAX_PARLAY_LEGS_MESSAGE } from "@/lib/parlay/leg-cap";
 
 export function ScopeToggle({
   inScope,
@@ -52,13 +54,22 @@ export function LegStepper({
   onChange: (n: number) => void;
   note: string;
 }) {
+  // `max` is what the caller can supply right now (a pool's in-scope picks,
+  // or the cap itself); MAX_PARLAY_LEGS is the ceiling no caller goes past.
+  // Below the cap "+" just disables at `max`. At the cap it stays live, so
+  // asking for one more is answered with the limit rather than with nothing.
+  const [overCap, setOverCap] = useState(false);
+  const atCap = value >= MAX_PARLAY_LEGS;
   return (
     <div className="flex items-center gap-3">
       <span className="text-sm font-medium text-foreground">Legs</span>
       <div className="flex items-center gap-1 rounded-full border border-border-subtle">
         <button
           type="button"
-          onClick={() => onChange(value - 1)}
+          onClick={() => {
+            setOverCap(false);
+            onChange(value - 1);
+          }}
           disabled={value <= 1}
           aria-label="Fewer legs"
           className="flex h-7 w-7 items-center justify-center text-foreground disabled:opacity-30"
@@ -68,8 +79,8 @@ export function LegStepper({
         <span className="w-6 text-center text-sm font-semibold text-foreground">{value}</span>
         <button
           type="button"
-          onClick={() => onChange(value + 1)}
-          disabled={value >= max}
+          onClick={() => (atCap ? setOverCap(true) : onChange(value + 1))}
+          disabled={value >= max && !atCap}
           aria-label="More legs"
           className="flex h-7 w-7 items-center justify-center text-foreground disabled:opacity-30"
         >
@@ -77,6 +88,11 @@ export function LegStepper({
         </button>
       </div>
       <span className="text-xs text-muted-foreground">{note}</span>
+      {overCap && atCap && (
+        <span role="alert" className="text-xs font-medium text-amber-700 dark:text-amber-400">
+          {MAX_PARLAY_LEGS_MESSAGE}
+        </span>
+      )}
     </div>
   );
 }

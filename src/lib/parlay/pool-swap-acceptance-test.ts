@@ -93,7 +93,7 @@ function categoryRecords(entries: [string, PickCategoryKey, number, number][]): 
 // ============================================================================
 // buildPoolPrimary: ranks by win%, applies Section 9 conflict validation
 // (same rule My Picks uses), and honors whatever leg count is requested -
-// no fixed ceiling like Auto-Generate's AUTO_GENERATE_MAX_LEGS.
+// MAX_PARLAY_LEGS is enforced by its callers, not here.
 // ============================================================================
 {
   const p1 = mk(G1, "p1", "capA", "MONEYLINE", "Yankees ML", -150); // 70% - highest ranked
