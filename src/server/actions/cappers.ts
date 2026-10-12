@@ -2,7 +2,15 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { requireUser } from "@/server/auth";
-import { createCapper, mergeCappers, renameCapper, deleteCapper, dismissDuplicatePair, toggleFavoriteCapper } from "@/server/data/cappers";
+import {
+  createCapper,
+  mergeCappers,
+  renameCapper,
+  deleteCapper,
+  dismissDuplicatePair,
+  toggleFavoriteCapper,
+  type MergeCappersResult,
+} from "@/server/data/cappers";
 import { cacheKeys } from "@/lib/cache-keys";
 import type { Source } from "@prisma/client";
 
@@ -57,7 +65,7 @@ export async function createCapperAction(formData: FormData): Promise<CreateCapp
 }
 
 export type MergeCappersActionResult =
-  | { success: true; mergedPickCount: number; primaryName: string; duplicateName: string }
+  | ({ success: true } & MergeCappersResult)
   | { success: false; error: string };
 
 // Reassigns every pick from the duplicate capper to the primary one, then

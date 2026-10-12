@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ImportSkipStage" ADD VALUE 'DUPLICATE_OVERRIDDEN';

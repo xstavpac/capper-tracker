@@ -28,7 +28,16 @@ import { getImportFeedTeamsAction } from "@/server/actions/get-import-feed-teams
 import { LightningIcon } from "@/components/dashboard/drop-catalog-button";
 import { CommonFormatsCard } from "@/components/import/supported-formats";
 import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
-import { isSkippedAsDuplicate, importButtonLabel } from "@/lib/duplicate-pick-detection";
+import {
+  isSkippedAsDuplicate,
+  importButtonLabel,
+  duplicateCheckStatus,
+  duplicateCheckBlocksImport,
+  resolveCapperName,
+  withTimeout,
+  DUPLICATE_CHECK_FAILED_MESSAGE,
+  DUPLICATE_CHECK_TIMEOUT_MS,
+} from "@/lib/duplicate-pick-detection";
 import {
   isPendingOrRejectedTotalLine as isPendingOrRejectedTotalLineShared,
   partitionReviewEntries,
@@ -107,6 +116,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     // the preview is cleared so the outcome names them, the same way
     // unmatchedGames does for schedule misses.
     skippedDuplicates: string[];
+    // Picks the SERVER refused as duplicates (see insertPicksDeduped) that the
+    // preview had not flagged - already logged by the time the import ran.
+    serverDuplicates: string[];
     // Lines the client parser never turned into a pick at all - captured
     // client-side the same way skippedDuplicates is, since the pre-submit
     // "couldn't be identified" section disappears once `parsed` is cleared.
@@ -142,6 +154,11 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // "Skip" (confirms exclusion) or "Import anyway".
   const [duplicateFlags, setDuplicateFlags] = useState<Record<number, { message: string }>>({});
   const [duplicateChoices, setDuplicateChoices] = useState<Record<number, "import" | "skip">>({});
+  // The duplicate check is a preview, but Import waits for it: how many checks
+  // are still running for the current parse, and whether one of them errored or
+  // timed out. Either one blocks the import (see duplicateCheckBlocksImport).
+  const [dupChecksPending, setDupChecksPending] = useState(0);
+  const [dupCheckFailed, setDupCheckFailed] = useState(false);
   // Same idx-keyed indirection as duplicateFlags/duplicateChoices - presence
   // in totalLineFlags means this TOTAL pick's own text had no parseable
   // number and a real market line was found to propose instead. Absent from
@@ -232,8 +249,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // The name actually used at import/preview time - the fuzzy match's target
   // once confirmed, otherwise the raw parsed name unchanged.
   function resolvedCapperName(rawCapperName: string): string {
-    const choice = capperFuzzyChoices[rawCapperName];
-    return choice && choice !== CONFIRMED_NEW ? choice : rawCapperName;
+    return resolveCapperName(capperFuzzyChoices, rawCapperName, CONFIRMED_NEW);
   }
 
   // parseCatalog itself stays a pure sync function (unchanged) - everything
@@ -249,6 +265,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setMatchedGames({});
     setDuplicateFlags({});
     setDuplicateChoices({});
+    setDupChecksPending(0);
+    setDupCheckFailed(false);
     setTotalLineFlags({});
     setTotalLineChoices({});
     setAnsweredOpen(false);
@@ -385,11 +403,26 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // as fetchOddsFor: results come back keyed by position within `entries`,
   // remapped here to each pick's real position in `parsed`.
   // Resolves to how many picks were flagged.
-  function checkDuplicatesFor(entries: { p: ParsedPick; idx: number }[]): Promise<number> {
+  //
+  // `fuzzyChoices` is the capper-name choices to check under. A caller that
+  // has just set a choice passes the NEW map - capperFuzzyChoices itself is
+  // still the old one until the next render (see resolveCapperName).
+  //
+  // Import stays disabled while any of these is running, and a check that
+  // errors or times out blocks the import until it is retried - it never
+  // resolves to "no duplicates". Results of a check started for an earlier
+  // parse are dropped.
+  function checkDuplicatesFor(
+    entries: { p: ParsedPick; idx: number }[],
+    fuzzyChoices: Record<string, string> = capperFuzzyChoices
+  ): Promise<number> {
     if (entries.length === 0) return Promise.resolve(0);
-    return checkDuplicatePicksAction(
+    const parseSeq = parseSeqRef.current;
+    const current = () => parseSeqRef.current === parseSeq;
+    setDupChecksPending((n) => n + 1);
+    const check = checkDuplicatePicksAction(
       entries.map((e) => ({
-        capperName: resolvedCapperName(e.p.capperName),
+        capperName: resolveCapperName(fuzzyChoices, e.p.capperName, CONFIRMED_NEW),
         sportName: e.p.sportName,
         betType: e.p.betType,
         odds: e.p.odds,
@@ -400,17 +433,39 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         period: e.p.period,
         gameNumber: e.p.gameNumber,
       }))
-    ).then((flags) => {
-      setDuplicateFlags((prev) => {
-        const next = { ...prev };
-        for (const [posKey, flag] of Object.entries(flags)) {
-          const globalIdx = entries[Number(posKey)]?.idx;
-          if (globalIdx !== undefined) next[globalIdx] = flag;
+    );
+    return withTimeout(check, DUPLICATE_CHECK_TIMEOUT_MS, "The duplicate check timed out.")
+      .then(
+        (flags) => {
+          if (!current()) return 0;
+          setDuplicateFlags((prev) => {
+            const next = { ...prev };
+            // A re-check replaces these picks' earlier answer (their capper may
+            // have just changed), it does not add to it.
+            for (const e of entries) delete next[e.idx];
+            for (const [posKey, flag] of Object.entries(flags)) {
+              const globalIdx = entries[Number(posKey)]?.idx;
+              if (globalIdx !== undefined) next[globalIdx] = flag;
+            }
+            return next;
+          });
+          return Object.keys(flags).length;
+        },
+        (err) => {
+          console.error("[bulk-import] duplicate check failed", err);
+          if (current()) setDupCheckFailed(true);
+          return 0;
         }
-        return next;
+      )
+      .finally(() => {
+        if (current()) setDupChecksPending((n) => Math.max(0, n - 1));
       });
-      return Object.keys(flags).length;
-    });
+  }
+
+  // Re-runs the duplicate check for every pick after a failure.
+  function retryDuplicateCheck() {
+    setDupCheckFailed(false);
+    void checkDuplicatesFor(validEntries);
   }
 
   // Flags TOTAL picks with no parseable number in their own text and shows
@@ -539,6 +594,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     .filter((e): e is { name: string; suggestion: string } => e.suggestion !== null);
 
   async function handleImport() {
+    // Never import on a duplicate check that is still running or that failed.
+    if (duplicateCheckBlocksImport(dupCheckStatus)) return;
     // Runs even at 0 included picks as long as there's something to report -
     // re-pasting an already-imported catalog leaves nothing to import but
     // still needs the "all N skipped as duplicates" outcome shown.
@@ -595,6 +652,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         inferredLine: totalLineChoices[idx] === "confirm" ? totalLineFlags[idx]?.inferredLine : undefined,
         gameNumber: p.gameNumber,
         raw: p.raw,
+        // The explicit "Import anyway" on a pick the preview flagged. The
+        // server refuses any duplicate that does not carry it.
+        overrideDuplicate: Boolean(duplicateFlags[idx]) && duplicateChoices[idx] === "import",
       })),
       skippedDuplicateEntries.map((e) => ({
         capperName: resolvedCapperName(e.p.capperName),
@@ -650,6 +710,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         unmatchedGames: res.unmatchedGames,
         doubleheaderBothFinal: res.doubleheaderBothFinal,
         skippedDuplicates,
+        serverDuplicates: res.duplicatesSkipped,
         skippedUnresolvedLines,
         skippedAmbiguous,
         skippedTotalLinePending,
@@ -719,7 +780,10 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   }
   const readyCount = includedPicks.length + parlays.length;
   const reviewCount = allEntries.filter(needsReview).length;
-  const canImport = !(includedPicks.length === 0 && skippedDuplicateEntries.length === 0 && parlays.length === 0);
+  const dupCheckStatus = duplicateCheckStatus(dupChecksPending, dupCheckFailed);
+  const canImport =
+    !(includedPicks.length === 0 && skippedDuplicateEntries.length === 0 && parlays.length === 0) &&
+    !duplicateCheckBlocksImport(dupCheckStatus);
   const skipCounts = pendingSkipCounts(reviewStates, ambiguousEntries.length);
 
   function setAllPendingDuplicates(choice: "import" | "skip") {
@@ -1094,8 +1158,11 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                             <button
                               type="button"
                               onClick={() => {
-                                setCapperFuzzyChoices((prev) => ({ ...prev, [name]: suggestion }));
-                                checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name));
+                                // Checked under the NEW choice - the state set
+                                // here is not visible until the next render.
+                                const nextChoices = { ...capperFuzzyChoices, [name]: suggestion };
+                                setCapperFuzzyChoices(nextChoices);
+                                checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name), nextChoices);
                               }}
                               className={promptButtonClass}
                             >
@@ -1104,8 +1171,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                             <button
                               type="button"
                               onClick={() => {
-                                setCapperFuzzyChoices((prev) => ({ ...prev, [name]: CONFIRMED_NEW }));
-                                checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name));
+                                const nextChoices = { ...capperFuzzyChoices, [name]: CONFIRMED_NEW };
+                                setCapperFuzzyChoices(nextChoices);
+                                checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name), nextChoices);
                               }}
                               className={promptButtonClass}
                             >
@@ -1398,6 +1466,14 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                     </section>
                   )}
 
+                  {dupCheckStatus === "failed" && (
+                    <div role="alert" className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10 dark:text-red-400">
+                      {DUPLICATE_CHECK_FAILED_MESSAGE}
+                      <button type="button" onClick={retryDuplicateCheck} className="ml-2 font-medium underline underline-offset-2">
+                        Retry duplicate check
+                      </button>
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={handleImport}
@@ -1406,6 +1482,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                   >
                     {importing
                       ? "Importing..."
+                      : dupCheckStatus === "checking"
+                      ? "Checking for duplicates…"
                       : importActionLabel(
                           importButtonLabel(includedPicks.length, 0) +
                             (parlays.length > 0 ? " + " + parlays.length + " parlay" + (parlays.length === 1 ? "" : "s") : ""),
@@ -1455,6 +1533,11 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                   items={result.skippedDuplicates}
                   title={(n) => n + " skipped as a possible duplicate"}
                   note="They were NOT imported (either you chose Skip, or the prompt was left unanswered)."
+                />
+                <ResultGroup
+                  items={result.serverDuplicates}
+                  title={(n) => n + " refused as already logged"}
+                  note="They were NOT imported: the same capper already has the same bet on the same game. Paste them again and choose Import anyway if you really want a second copy."
                 />
                 <ResultGroup
                   items={result.skippedAmbiguous}

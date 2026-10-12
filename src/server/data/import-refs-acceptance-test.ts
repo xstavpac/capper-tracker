@@ -237,10 +237,19 @@ async function main() {
           .split("\n")
           .filter((l) => !l.trim().startsWith("//"))
           .join("\n");
-      const txStart = fn.indexOf("const [result] = await Promise.all([");
+      const txStart = fn.indexOf("const [outcome] = await Promise.all([");
       const beforeTx = code(fn.slice(0, txStart));
       check("8 nothing is written before the transaction", !/prisma\.|resolveOrCreateCapperId|resolveOrCreateSportId|findOrCreateCapper/.test(beforeTx));
-      check("8 refs are resolved on the transaction client", /insertPicksWithEntitlementCheck\(user\.id, toInsert\.length, \(tx\) => resolveImportRefs\(tx, user\.id, toInsert\)\)/.test(fn));
+      // The insert (and its duplicate check) is insertPicksDeduped, which resolves
+      // the refs on its own transaction client, after the pick-limit gate.
+      const dedup = readFileSync("src/server/data/pick-dedup.ts", "utf8");
+      check(
+        "8 refs are resolved on the transaction client",
+        txStart > 0 &&
+          /insertPicksDeduped\(user\.id, toInsert\)/.test(fn) &&
+          /insertPicksInTransaction\(tx, userId, survivors\.length, async \(db\) => \{/.test(dedup) &&
+          /resolveImportRefs\(db, userId, /.test(dedup)
+      );
       check("8 every item is resolved concurrently, without its own retry wait", /Promise\.all\(items\.map\(\(item\) => resolveOne\(item, getOdds\)\)\)/.test(fn) && /retryOnMiss: false/.test(fn));
       check("8 exactly one wait in the whole action", (fn.match(/setTimeout\(/g) ?? []).length === 1);
       const loop = code(fn.slice(fn.indexOf("for (let i = 0; i < items.length; i++)"), txStart));

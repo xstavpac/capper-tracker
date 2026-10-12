@@ -546,6 +546,7 @@ enum ImportSkipStage {
   PROP_UNSUPPORTED // declined as an unsupported MLB/NHL player prop (wiring pending fix/mlb-nhl-prop-line-safety)
   RECOVERY_UNRESOLVED // still unresolved after the live-schedule / roster recovery pass
   DUPLICATE_SKIPPED // flagged as a duplicate and excluded from the import
+  DUPLICATE_OVERRIDDEN // a duplicate the user explicitly chose to import anyway - the pick WAS inserted (see pick-dedup.ts)
   GAME_UNMATCHED // no scheduled game could be resolved for the pick
   TOTAL_NO_LINE // a TOTAL with no number and no confirmed inferred line
   INVALID_ODDS // resolved odds were zero / non-numeric

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { renameCapperAction, deleteCapperAction, mergeCappersAction } from "@/server/actions/cappers";
+import { mergeDuplicateStorageKey } from "@/lib/merge-duplicate-report";
 
 type CapperSummary = { id: string; name: string; pickCount: number };
 type Mode = "closed" | "menu" | "rename" | "merge" | "merge-confirm" | "delete";
@@ -59,6 +60,15 @@ export function CapperEditPanel({
       // editing is the one being folded away, the picked target is kept.
       const result = await mergeCappersAction(mergeTargetId, capperId);
       if (result.success) {
+        // Picks the merge left duplicated under the surviving capper are
+        // reported on its page (MergeDuplicateNotice) - nothing is deleted.
+        if (result.duplicatePicks.length > 0) {
+          try {
+            window.sessionStorage.setItem(mergeDuplicateStorageKey(mergeTargetId), JSON.stringify(result.duplicatePicks));
+          } catch {
+            // No storage: the merge still succeeded, only the notice is lost.
+          }
+        }
         // This capper no longer exists once the merge completes - land on
         // the surviving capper's page instead of a now-dead route.
         router.push("/cappers/" + mergeTargetId);

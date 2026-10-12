@@ -100,8 +100,9 @@ function walk(dir: string, exts: string[], out: string[] = []): string[] {
 const rel = (f: string) => relative(repoRoot, f).split("\\").join("/");
 
 const STAMPED_FILE = "src/server/data/subscriptions.ts";
-// createPicksWithEntitlementCheck is a thin wrapper over this one; the insert itself lives here.
-const STAMPED_FUNCTION = "export async function insertPicksWithEntitlementCheck";
+// createPicksWithEntitlementCheck / insertPicksWithEntitlementCheck and the
+// duplicate-checked insertPicksDeduped (pick-dedup.ts) all end here; the insert itself lives here.
+const STAMPED_FUNCTION = "export async function insertPicksInTransaction";
 
 const srcFiles = walk(join(repoRoot, "src"), [".ts", ".tsx", ".mjs", ".js"]).filter((f) => !/-test\.ts$/.test(f));
 check(`scanned ${srcFiles.length} non-test source files under src/`, srcFiles.length > 100);
@@ -124,14 +125,14 @@ for (const file of srcFiles) {
     if (start >= 0 && end > start && h.index > start && h.index < end) {
       stampedHits++;
       const stmt = src.slice(h.index, src.indexOf(";", h.index));
-      if (!/\.\.\.stamp\b/.test(stmt)) offenders.push(`${rel(file)}:${h.line}  the create in insertPicksWithEntitlementCheck does not spread \`...stamp\``);
+      if (!/\.\.\.stamp\b/.test(stmt)) offenders.push(`${rel(file)}:${h.line}  the create in insertPicksInTransaction does not spread \`...stamp\``);
     } else {
-      offenders.push(`${rel(file)}:${h.line}  ${h.text}  [outside insertPicksWithEntitlementCheck]`);
+      offenders.push(`${rel(file)}:${h.line}  ${h.text}  [outside insertPicksInTransaction]`);
     }
   }
 }
 check(`no pick creation in src/ outside the stamped path`, offenders.length === 0, "\n    " + offenders.join("\n    "));
-check("the stamped path still exists: exactly one creation, inside insertPicksWithEntitlementCheck, spreading ...stamp", stampedHits === 1, `found ${stampedHits}`);
+check("the stamped path still exists: exactly one creation, inside insertPicksInTransaction, spreading ...stamp", stampedHits === 1, `found ${stampedHits}`);
 check(
   "the stamped path computes the stamp with pickCategory() at PICK_CATEGORY_VERSION",
   (() => {

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireUser } from "@/server/auth";
 import { getCapperById, getCappersWithPickCounts } from "@/server/data/cappers";
 import { CapperEditPanel } from "@/components/dashboard/capper-edit-panel";
+import { MergeDuplicateNotice } from "@/components/dashboard/merge-duplicate-notice";
 import { CAPPER_RECENT_PAGE_SIZE, clampRecentLimit, getCapperPageData } from "@/server/data/capper-detail";
 import { SCORECARD_WINDOWS, SCORECARD_WINDOW_LABELS, type ScorecardWindow } from "@/server/data/stats";
 import { CapperHero } from "@/components/dashboard/capper-hero";
@@ -141,6 +142,7 @@ export default async function CapperDetailPage({
     // The typeface and backdrop of /cappers, /dashboard and /live; the content keeps its own narrower column.
     <ThemedPage>
       <div className="mx-auto max-w-[1120px] space-y-3.5">
+        <MergeDuplicateNotice capperId={capper.id} />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <nav aria-label="Breadcrumb" className="min-w-0 text-[13px] font-medium text-[#64748B] dark:text-muted-foreground">
             <Link href="/cappers" className="hover:underline">

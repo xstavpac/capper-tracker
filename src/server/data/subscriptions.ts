@@ -137,7 +137,7 @@ export type PickInsertData = {
 //  - maxWait 10 s: the per-instance pool is small, so a transaction can wait for
 //    a connection while other work on the instance finishes; the 2 s default is
 //    shorter than the pool's own wait (pool_timeout).
-const ENTITLEMENT_TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
+export const ENTITLEMENT_TX_OPTIONS = { maxWait: 10_000, timeout: 15_000 };
 
 export type AtomicCreateResult =
   | { allowed: true; created: { id: string }[] }
@@ -179,95 +179,107 @@ export async function insertPicksWithEntitlementCheck(
 ): Promise<AtomicCreateResult> {
   if (rowCount === 0) return { allowed: true, created: [] };
 
-  return prisma.$transaction(async (tx) => {
-    const locked = await tx.$queryRaw<{ plan: string; status: string; currentPeriodEnd: Date | null; cancelAtPeriodEnd: boolean }[]>`
-      SELECT "plan", "status", "currentPeriodEnd", "cancelAtPeriodEnd" FROM "subscriptions" WHERE "userId" = ${userId} FOR UPDATE
-    `;
-    const tier = resolveEffectiveTier(toSubscriptionState(locked[0] ?? null));
+  return prisma.$transaction((tx) => insertPicksInTransaction(tx, userId, rowCount, buildRows), ENTITLEMENT_TX_OPTIONS);
+}
 
-    if (tier === "FREE") {
-      const pickCount = await tx.pick.count({ where: { userId } });
-      if (pickCount + rowCount > FREE_PICK_LIMIT) {
-        const remaining = Math.max(0, FREE_PICK_LIMIT - pickCount);
-        return {
-          allowed: false,
-          tier,
-          pickCount,
-          limit: FREE_PICK_LIMIT,
-          remaining,
-          message:
-            rowCount === 1
-              ? "Free plan is limited to " + FREE_PICK_LIMIT + " tracked picks. Upgrade to Basic for unlimited tracking."
-              : "This would add " +
-                rowCount +
-                " picks, but your Free plan only has " +
-                remaining +
-                " slot" +
-                (remaining === 1 ? "" : "s") +
-                " left (" +
-                pickCount +
-                "/" +
-                FREE_PICK_LIMIT +
-                " used). Nothing was imported - upgrade to Basic for unlimited tracking, or import " +
-                remaining +
-                " or fewer picks.",
-        };
-      }
+// The gate + insert itself, on a transaction the caller already holds - so a
+// caller with its own work to do first (the duplicate check in pick-dedup.ts,
+// which must read and insert under one lock) runs it in the same transaction.
+export async function insertPicksInTransaction(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  rowCount: number,
+  buildRows: (tx: Prisma.TransactionClient) => Promise<PickInsertData[]>
+): Promise<AtomicCreateResult> {
+  if (rowCount === 0) return { allowed: true, created: [] };
+
+  const locked = await tx.$queryRaw<{ plan: string; status: string; currentPeriodEnd: Date | null; cancelAtPeriodEnd: boolean }[]>`
+    SELECT "plan", "status", "currentPeriodEnd", "cancelAtPeriodEnd" FROM "subscriptions" WHERE "userId" = ${userId} FOR UPDATE
+  `;
+  const tier = resolveEffectiveTier(toSubscriptionState(locked[0] ?? null));
+
+  if (tier === "FREE") {
+    const pickCount = await tx.pick.count({ where: { userId } });
+    if (pickCount + rowCount > FREE_PICK_LIMIT) {
+      const remaining = Math.max(0, FREE_PICK_LIMIT - pickCount);
+      return {
+        allowed: false,
+        tier,
+        pickCount,
+        limit: FREE_PICK_LIMIT,
+        remaining,
+        message:
+          rowCount === 1
+            ? "Free plan is limited to " + FREE_PICK_LIMIT + " tracked picks. Upgrade to Basic for unlimited tracking."
+            : "This would add " +
+              rowCount +
+              " picks, but your Free plan only has " +
+              remaining +
+              " slot" +
+              (remaining === 1 ? "" : "s") +
+              " left (" +
+              pickCount +
+              "/" +
+              FREE_PICK_LIMIT +
+              " used). Nothing was imported - upgrade to Basic for unlimited tracking, or import " +
+              remaining +
+              " or fewer picks.",
+      };
     }
+  }
 
-    const rows = await buildRows(tx);
-    if (rows.length !== rowCount) {
-      throw new Error("insertPicksWithEntitlementCheck: buildRows returned " + rows.length + " rows, expected " + rowCount);
-    }
+  const rows = await buildRows(tx);
+  if (rows.length !== rowCount) {
+    throw new Error("insertPicksWithEntitlementCheck: buildRows returned " + rows.length + " rows, expected " + rowCount);
+  }
 
-    // Every pick is stamped with its pickCategory here, once, at insert - this
-    // is the only place a Pick row is created (createPick and bulk import both
-    // land here), and nothing afterwards changes a category input (grading only
-    // touches status/gradedAt/gradedViaFuzzyMatch), so the stored value stays
-    // exact. Lets the /cappers aggregates GROUP BY category in SQL instead of
-    // re-deriving it per pick in JS (see capper-list-aggregates.ts). One sport
-    // lookup per batch, inside the same transaction.
-    const sports = await tx.sport.findMany({
-      where: { id: { in: Array.from(new Set(rows.map((r) => r.sportId))) } },
-      select: { id: true, name: true },
-    });
-    const sportNameById = new Map(sports.map((s) => [s.id, s.name]));
+  // Every pick is stamped with its pickCategory here, once, at insert - this
+  // is the only place a Pick row is created (createPick and bulk import both
+  // land here), and nothing afterwards changes a category input (grading only
+  // touches status/gradedAt/gradedViaFuzzyMatch), so the stored value stays
+  // exact. Lets the /cappers aggregates GROUP BY category in SQL instead of
+  // re-deriving it per pick in JS (see capper-list-aggregates.ts). One sport
+  // lookup per batch, inside the same transaction.
+  const sports = await tx.sport.findMany({
+    where: { id: { in: Array.from(new Set(rows.map((r) => r.sportId))) } },
+    select: { id: true, name: true },
+  });
+  const sportNameById = new Map(sports.map((s) => [s.id, s.name]));
 
-    // A sportId with no matching sport can't be stamped (and the insert below
-    // will fail its foreign key anyway) - leave it at the unstamped default
-    // rather than guess a sport for the category.
-    const stamp = (row: PickInsertData) => {
-      const sportName = sportNameById.get(row.sportId);
-      return sportName
-        ? {
-            category: pickCategory({
-              betType: row.betType,
-              period: row.period ?? "FULL_GAME",
-              betDetail: row.betDetail ?? null,
-              odds: row.odds,
-              line: row.line ?? null,
-              sportName,
-              pickedSide: row.pickedSide ?? null,
-              mlFavoredSide: row.mlFavoredSide ?? null,
-              propMarket: row.propMarket ?? null,
-            }),
-            categoryVersion: PICK_CATEGORY_VERSION,
-          }
-        : {};
-    };
-    // ONE INSERT ... RETURNING for the whole batch (Prisma >= 5.14), instead of
-    // one statement per row. The per-row version issued N statements through the
-    // transaction's one connection (a transaction always runs on a single
-    // connection, whatever connection_limit is), so a
-    // large import held the subscription row lock for N round trips and could
-    // outlive Prisma's default 5 s interactive-transaction timeout. Rows come
-    // back in input order. The stamp is still spread into every row.
-    const created = await tx.pick.createManyAndReturn({
-      data: rows.map((row) => ({ ...row, userId, status: "PENDING" as const, ...stamp(row) })),
-      select: { id: true },
-    });
-    return { allowed: true, created };
-  }, ENTITLEMENT_TX_OPTIONS);
+  // A sportId with no matching sport can't be stamped (and the insert below
+  // will fail its foreign key anyway) - leave it at the unstamped default
+  // rather than guess a sport for the category.
+  const stamp = (row: PickInsertData) => {
+    const sportName = sportNameById.get(row.sportId);
+    return sportName
+      ? {
+          category: pickCategory({
+            betType: row.betType,
+            period: row.period ?? "FULL_GAME",
+            betDetail: row.betDetail ?? null,
+            odds: row.odds,
+            line: row.line ?? null,
+            sportName,
+            pickedSide: row.pickedSide ?? null,
+            mlFavoredSide: row.mlFavoredSide ?? null,
+            propMarket: row.propMarket ?? null,
+          }),
+          categoryVersion: PICK_CATEGORY_VERSION,
+        }
+      : {};
+  };
+  // ONE INSERT ... RETURNING for the whole batch (Prisma >= 5.14), instead of
+  // one statement per row. The per-row version issued N statements through the
+  // transaction's one connection (a transaction always runs on a single
+  // connection, whatever connection_limit is), so a
+  // large import held the subscription row lock for N round trips and could
+  // outlive Prisma's default 5 s interactive-transaction timeout. Rows come
+  // back in input order. The stamp is still spread into every row.
+  const created = await tx.pick.createManyAndReturn({
+    data: rows.map((row) => ({ ...row, userId, status: "PENDING" as const, ...stamp(row) })),
+    select: { id: true },
+  });
+  return { allowed: true, created };
 }
 
 // --- Stripe-facing helpers (used by the webhook handler and checkout action) ---

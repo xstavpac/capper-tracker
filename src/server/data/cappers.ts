@@ -1,6 +1,9 @@
 ﻿import { prisma } from "@/lib/prisma";
 import { Prisma, type Source } from "@prisma/client";
 import { findOrCreateCapper, findCapperNameCollision } from "@/server/data/capper-find-or-create";
+import { findMergeDuplicates, lockUserPickInserts, type MergeDuplicatePick } from "@/server/data/pick-dedup";
+import { EXISTING_PICK_SELECT } from "@/server/data/duplicate-db-match";
+import { ENTITLEMENT_TX_OPTIONS } from "@/server/data/subscriptions";
 import { normalizeName, duplicateNameDistance } from "@/lib/fuzzy-match";
 import { cacheKeys } from "@/lib/cache-keys";
 import { cachedByTag } from "@/server/data/cached";
@@ -390,7 +393,14 @@ export async function dismissDuplicatePair(userId: string, capperIdA: string, ca
   });
 }
 
-export type MergeCappersResult = { mergedPickCount: number; primaryName: string; duplicateName: string };
+export type MergeCappersResult = {
+  mergedPickCount: number;
+  primaryName: string;
+  duplicateName: string;
+  // Moved picks that are now the same bet as one the surviving capper already
+  // had. Reported only - see mergeCappers.
+  duplicatePicks: MergeDuplicatePick[];
+};
 
 // Reassigns every pick from `duplicateId` to `primaryId`, then deletes the
 // now-empty duplicate capper - both userId-scoped so one user can't merge or
@@ -400,6 +410,14 @@ export type MergeCappersResult = { mergedPickCount: number; primaryName: string;
 // preserving it. Wrapped in a transaction so a failure partway through never
 // leaves picks reassigned but the duplicate row still sitting there (or vice
 // versa).
+//
+// Both cappers can hold the same pick (that is usually why they are being
+// merged), and moving the picks then leaves the survivor with it twice. Those
+// pairs are DETECTED and REPORTED in duplicatePicks - nothing is deleted,
+// skipped or changed because of them; what to do with them is the user's call.
+// The read, the reassign and the delete share one transaction under the
+// per-user pick-insert lock, so an import running at the same moment cannot
+// add a pick between the report and the move.
 export async function mergeCappers(userId: string, primaryId: string, duplicateId: string): Promise<MergeCappersResult> {
   if (primaryId === duplicateId) {
     throw new Error("Can't merge a capper into itself.");
@@ -413,12 +431,18 @@ export async function mergeCappers(userId: string, primaryId: string, duplicateI
     throw new Error("One or both cappers weren't found.");
   }
 
-  const [{ count }] = await prisma.$transaction([
-    prisma.pick.updateMany({ where: { userId, capperId: duplicateId }, data: { capperId: primaryId } }),
-    prisma.capper.delete({ where: { id: duplicateId } }),
-  ]);
+  const { count, duplicatePicks } = await prisma.$transaction(async (tx) => {
+    await lockUserPickInserts(tx, userId);
+    const select = { ...EXISTING_PICK_SELECT, sport: { select: { name: true } } };
+    const keptPicks = await tx.pick.findMany({ where: { userId, capperId: primaryId }, select, orderBy: { id: "asc" } });
+    const movedPicks = await tx.pick.findMany({ where: { userId, capperId: duplicateId }, select, orderBy: { id: "asc" } });
+    const duplicatePicks = findMergeDuplicates(keptPicks, movedPicks);
+    const { count } = await tx.pick.updateMany({ where: { userId, capperId: duplicateId }, data: { capperId: primaryId } });
+    await tx.capper.delete({ where: { id: duplicateId } });
+    return { count, duplicatePicks };
+  }, ENTITLEMENT_TX_OPTIONS);
 
-  return { mergedPickCount: count, primaryName: primary.name, duplicateName: duplicate.name };
+  return { mergedPickCount: count, primaryName: primary.name, duplicateName: duplicate.name, duplicatePicks };
 }
 
 // Plain rename, no merge semantics - updateMany (not update) so the where

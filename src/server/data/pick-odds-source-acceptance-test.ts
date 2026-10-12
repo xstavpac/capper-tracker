@@ -119,7 +119,9 @@ async function main() {
     const res = await createPicksWithEntitlementCheck(user.id, rows);
     check("db: batch insert allowed", res.allowed, true);
 
-    await createPick(user.id, { ...base, betDetail: "manual", odds: -110 });
+    // Another day's game: on the same game it would be the same bet as the rows
+    // above, which createPick now refuses (see pick-dedup.ts).
+    await createPick(user.id, { ...base, gameTime: new Date("2026-06-02T17:00:00.000Z"), betDetail: "manual", odds: -110 });
 
     const stored = await prisma.pick.findMany({ where: { userId: user.id }, select: { betDetail: true, odds: true, oddsSource: true } });
     const byDetail = stored.map((p) => p.betDetail + ":" + p.oddsSource).sort();

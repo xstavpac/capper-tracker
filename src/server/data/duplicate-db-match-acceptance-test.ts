@@ -279,7 +279,7 @@ function main() {
     expect(
       "the select covers every column the match reads",
       Object.keys(EXISTING_PICK_SELECT).sort(),
-      ["awayTeam", "betDetail", "betType", "capperId", "gameTime", "homeTeam", "line", "mlFavoredSide", "odds", "period", "pickedSide", "playerName", "propMarket", "sportId"]
+      ["awayTeam", "betDetail", "betType", "capperId", "gameTime", "homeTeam", "id", "line", "mlFavoredSide", "odds", "period", "pickedSide", "playerName", "propMarket", "sportId"]
     );
   }
 
