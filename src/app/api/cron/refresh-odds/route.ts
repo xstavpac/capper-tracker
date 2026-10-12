@@ -1,5 +1,6 @@
 import { seedOddsSnapshot, LIVE_SPORTS } from "@/server/data/odds";
 import { seedNflPropOddsForToday } from "@/server/data/nfl-prop-odds";
+import { seedNhlGoalScorerOddsForToday } from "@/server/data/nhl-goal-scorer-odds";
 import { classifyRefreshOddsRun } from "@/lib/odds-cron-status";
 
 export const dynamic = "force-dynamic";
@@ -69,12 +70,32 @@ export async function GET(req: Request) {
     })
   );
 
+  // NHL anytime-goal-scorer odds - same kind of follow-up step, for the games
+  // starting within 24 hours only (see nhl-goal-scorer-odds.ts). Never affects
+  // `ok`/`httpStatus` either, including when it throws: the game-lines seed
+  // above has already succeeded or failed on its own.
+  let nhlGoalScorer: { status: string; eventsFetched: number; eventsSkippedCreditGate: number; eventsFailed: number };
+  try {
+    const seeded = await seedNhlGoalScorerOddsForToday();
+    nhlGoalScorer = {
+      status: seeded.status,
+      eventsFetched: seeded.eventsFetched,
+      eventsSkippedCreditGate: seeded.eventsSkippedCreditGate,
+      eventsFailed: seeded.eventsFailed,
+    };
+  } catch (err) {
+    console.error("[refresh-odds-run] nhl-goal-scorer threw", JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+    nhlGoalScorer = { status: "error", eventsFetched: 0, eventsSkippedCreditGate: 0, eventsFailed: 0 };
+  }
+  console.log("[refresh-odds-run] nhl-goal-scorer", JSON.stringify(nhlGoalScorer));
+
   return Response.json(
     {
       ok,
       status,
       creditsRemaining,
       results: perSport,
+      nhlGoalScorer,
       nflProps: {
         status: nflProps.status,
         eventsFetched: nflProps.eventsFetched,

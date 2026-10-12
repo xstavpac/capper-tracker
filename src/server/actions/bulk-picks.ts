@@ -19,9 +19,11 @@ import {
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
-import { resolvePropOdds } from "@/server/data/nfl-prop-odds";
+import { resolvePropOdds, isNflOddsPropMarket } from "@/server/data/nfl-prop-odds";
+import { resolveAnytimeGoalOdds } from "@/server/data/nhl-goal-scorer-odds";
 import { resolvePickPrice, type PickOddsSource } from "@/lib/odds-source";
-import { extractLine, parsePlayerPropLine, parsePlayerProp, parseAnyPlayerProp, isAnytimeTdPick } from "@/lib/bet-line";
+import { extractLine, parsePlayerPropLine, parseAnyPlayerProp, isAnytimeTdPick } from "@/lib/bet-line";
+import { nhlAnytimeGoalSide } from "@/lib/nhl-prop";
 import { isInvalidOdds } from "@/lib/pick-validation";
 import { TEAM_NICKNAME_CANONICAL, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
@@ -292,7 +294,10 @@ async function resolveGameAndOdds(
         // same way playerProp does further down in bulkImportPicksAction -
         // never a separate/parallel parse, same "one function, re-read
         // wherever needed" pattern as parseTouchdownProp/extractLine.
-        const parsedProp = parsePlayerProp(item.description);
+        // parseAnyPlayerProp, not the NFL-only parsePlayerProp: it reads NFL
+        // text exactly as that one does (NFL is tried first) and also names
+        // the NHL markets, of which anytime goal is the one the feed prices.
+        const parsedProp = parseAnyPlayerProp(item.description);
         const parsedLine = parsePlayerPropLine(item.description);
         // Anytime TD is the one market with no Over/Under line (one-sided
         // "Yes", see nfl-prop-odds.ts), so it's priced without parsedLine -
@@ -307,7 +312,18 @@ async function resolveGameAndOdds(
               feedPrice = tdPrice;
             }
           }
-        } else if (parsedProp && parsedLine) {
+        } else if (parsedProp && parsedProp.propMarket === "ANYTIME_GOAL") {
+          // The NHL twin of anytime TD: one-sided "Yes", no line. Only for an
+          // NHL game and only the Yes side - the feed's Yes price is not the
+          // price of "No Goal Scorer".
+          if (liveSportKey === "icehockey_nhl" && nhlAnytimeGoalSide(item.description) === "YES") {
+            const goalName = stripTeamNamesFromPlayerName(parsedProp.playerName, [game.homeTeam, game.awayTeam], item.sportName);
+            const goalPrice = goalName ? await resolveAnytimeGoalOdds(liveSportKey, game, goalName, getOdds) : null;
+            if (goalPrice !== null) {
+              feedPrice = goalPrice;
+            }
+          }
+        } else if (parsedProp && parsedLine && isNflOddsPropMarket(parsedProp.propMarket)) {
           // parsePlayerProp leaves a capper-included team nickname in the
           // player name untouched (e.g. "Chiefs Travis Kelce" from "Chiefs
           // Travis Kelce Over 42.5 Receiving Yards" - it's needed for game
