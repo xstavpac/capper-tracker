@@ -41,7 +41,7 @@ import {
   type SlateContext,
 } from "@/lib/player-roster-fallback";
 import { resolveMlbPropAgainstRoster } from "@/lib/mlb-roster-fallback";
-import { parsePlayerProp, isPassingTdsText } from "@/lib/bet-line";
+import { parsePlayerProp, isPassingTdsText, pickPeriodFromText } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { withRegulationPeriod } from "@/lib/nhl-three-way";
 import { UNSUPPORTED_PROP_REASONS } from "@/lib/unsupported-prop-vocab";
@@ -327,7 +327,10 @@ export function recoverUnresolvedLines(
       hasExplicitOdds: bet.hasExplicitOdds,
       totalSide: bet.totalSide,
       units: bet.units,
-      period: "FULL_GAME",
+      // Read from the text like every other import path. Stored as FULL_GAME,
+      // a "first quarter" line could never grade: the grader re-reads the
+      // quarter from the text and declines the mismatch.
+      period: pickPeriodFromText(lineForParsing),
       raw: line,
       teamNicknames: [res.nickname],
       gameNumber,

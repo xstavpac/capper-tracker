@@ -159,6 +159,37 @@ export function betTypeLabel(betType: string): string {
   }
 }
 
+// Shorthand a capper mistyped or ran together, rewritten to the form every
+// reader of a pick's text already understands. Applied to each catalog line
+// before it is parsed, so the stored betDetail carries the corrected text:
+//   - NRFI / YRFI with the middle letters transposed ("NFRI", "NRIF", "NFIR",
+//     "YFRI", ...). None of these is a word or a team code, and unread they
+//     left a two-team line with no market at all, which defaults to MONEYLINE.
+//   - "TTO 3.5" / "TTU 3.5" (team total over/under) -> "TT over 3.5", since
+//     the over/under side is re-read from the words "over"/"under".
+export function normalizeMarketShorthand(text: string): string {
+  return text
+    .replace(/\b([ny])(?:fri|rif|fir)\b/gi, (_m, side: string) => side.toUpperCase() + "RFI")
+    .replace(/\btt([ou])\s*(?=\.?\d)/gi, (_m, side: string) => "TT " + (side.toLowerCase() === "o" ? "over " : "under "));
+}
+
+// Explicit, safe-only signals that a total is about ONE team's own score
+// (TEAM_TOTAL), not the combined game total - the "team total" phrase
+// (also "team-total" / "team totals"), or the standalone "TT" shorthand real
+// cappers use ("Twins TT o5.5 -125"). Deliberately does NOT infer team-total
+// from a team name merely being present in the text - a real game total's
+// text often names a team too, just to identify the game ("Dodgers/Padres
+// Over 8.5"), not as the bet's actual subject - confirmed unreliable during
+// the Team Total investigation. "TT" is matched as its own word only (never
+// a substring of another word like "MATT"/"ATTACK"). Only ever called from
+// within a branch that has already matched an over/under/total keyword (see
+// parsePickText, parseFallbackBetText), so a bare "TT" with no total signal
+// at all (e.g. a capper's own initials) can never misclassify an
+// otherwise-MONEYLINE pick.
+export function isTeamTotalText(text: string): boolean {
+  return /\bteam[\s-]*totals?\b/i.test(text) || /\bTT\b/i.test(text);
+}
+
 export type NrfiSide = "NO_RUN" | "YES_RUN";
 
 // The NRFI/YRFI side of an NRFI-betType pick, derived from betDetail free
@@ -169,9 +200,11 @@ export type NrfiSide = "NO_RUN" | "YES_RUN";
 // between "how it graded" and "which tile it counts toward". Returns null
 // for text that matches neither phrasing (shouldn't happen for a real
 // NRFI-betType pick); callers fall back to treating it as NRFI rather than
-// dropping it, matching this function's pre-split behavior.
+// dropping it, matching this function's pre-split behavior. Reads a
+// transposed "NFRI"/"YFRI" too (normalizeMarketShorthand), so a row stored
+// before the importer corrected those still names its side.
 export function nrfiSide(betDetail: string | null): NrfiSide | null {
-  const detail = (betDetail ?? "").toLowerCase();
+  const detail = normalizeMarketShorthand(betDetail ?? "").toLowerCase();
   if (detail.includes("nrfi") || detail.includes("no run")) return "NO_RUN";
   if (detail.includes("yrfi") || detail.includes("yes run") || detail.includes("run 1st")) return "YES_RUN";
   return null;
@@ -242,10 +275,19 @@ export type BetScope = SegmentPeriod | "UNSUPPORTED_SEGMENT";
 // inning fallback is last. Every pattern is word-boundaried and lower-cased.
 const BET_SCOPE_RULES: [RegExp, BetScope][] = [
   // ---- Quarters (NFL / NBA / WNBA / NCAAF) ----
-  [/\b(1st|first)[\s.-]*(quarter|qtr)\b/, "FIRST_QUARTER"],
-  [/\b(2nd|second)[\s.-]*(quarter|qtr)\b/, "SECOND_QUARTER"],
-  [/\b(3rd|third)[\s.-]*(quarter|qtr)\b/, "THIRD_QUARTER"],
-  [/\b(4th|fourth)[\s.-]*(quarter|qtr)\b/, "FOURTH_QUARTER"],
+  // "1st Q" / "first Q" and the "quater" misspelling count too: unread, the
+  // pick was a full-game bet to both the importer and the grader.
+  [/\b(1st|first)[\s.-]*(quarter|quater|qtr|q)\b/, "FIRST_QUARTER"],
+  [/\b(2nd|second)[\s.-]*(quarter|quater|qtr|q)\b/, "SECOND_QUARTER"],
+  [/\b(3rd|third)[\s.-]*(quarter|quater|qtr|q)\b/, "THIRD_QUARTER"],
+  [/\b(4th|fourth)[\s.-]*(quarter|quater|qtr|q)\b/, "FOURTH_QUARTER"],
+  // "1QTR" / "1 qtr" / "1 quarter". Same guard as the bare "1 half" form
+  // below: no sign, digit or decimal point in front, so a line's own number
+  // is never read as the quarter.
+  [/(?<![+\-.\d])1[\s-]*(quarter|qtr)\b/, "FIRST_QUARTER"],
+  [/(?<![+\-.\d])2[\s-]*(quarter|qtr)\b/, "SECOND_QUARTER"],
+  [/(?<![+\-.\d])3[\s-]*(quarter|qtr)\b/, "THIRD_QUARTER"],
+  [/(?<![+\-.\d])4[\s-]*(quarter|qtr)\b/, "FOURTH_QUARTER"],
   [/\b(quarter|qtr)\s*1\b/, "FIRST_QUARTER"],
   [/\b(quarter|qtr)\s*2\b/, "SECOND_QUARTER"],
   [/\b(quarter|qtr)\s*3\b/, "THIRD_QUARTER"],
