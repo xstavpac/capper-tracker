@@ -4,6 +4,7 @@ import { getTeamColor } from "@/lib/team-colors";
 import { TeamColorBar } from "@/components/live/team-color-bar";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getLiveGameProgress } from "@/lib/live-game-progress";
+import { teamScore } from "@/components/live/live-scoreboard-ordering";
 import { LiveProgressBar, LiveProgressLabel } from "@/components/live/live-progress-bar";
 import { TINTS } from "@/components/dashboard/panel-shell";
 import { CalendarIcon } from "@/components/dashboard/cappers-icons";
@@ -118,7 +119,7 @@ export function GridLiveGameList({
                 <span className="truncate text-[13px] font-semibold text-foreground">{game.awayTeam}</span>
               </span>
               <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">
-                {score?.scores?.find((s) => s.name === game.awayTeam)?.score ?? ""}
+                {teamScore(score, game.awayTeam, activeSport) ?? ""}
               </span>
             </div>
             <div className="mt-1 flex items-center justify-between gap-2">
@@ -127,7 +128,7 @@ export function GridLiveGameList({
                 <span className="truncate text-[13px] font-semibold text-foreground">{game.homeTeam}</span>
               </span>
               <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">
-                {score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? ""}
+                {teamScore(score, game.homeTeam, activeSport) ?? ""}
               </span>
             </div>
             {isSelected && progress && (

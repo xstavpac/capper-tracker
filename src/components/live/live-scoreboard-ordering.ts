@@ -19,9 +19,17 @@
 //     snapshot. The Live tab is for games you can still watch or bet; final
 //     scores are already carried separately by the live score ticker, and a
 //     full slate of finished games grouped at the bottom was just clutter. A
-//     game carried onto today's board from a past odds snapshot (its start
-//     date is before `todayKey`) is kept only while its score status is
-//     "live"; a game that starts today is kept until it goes Final.
+//     game that starts today is kept until it goes Final. A game carried onto
+//     today's board from a past odds snapshot (its start date is before
+//     `todayKey`) is kept:
+//       - while its matched score is "live", however long that takes
+//         (overtime, extra innings, a delay) - only an explicit Final ends it;
+//       - otherwise (no score matched to it at all, or one that still says
+//         it hasn't started) until UNMATCHED_CARRYOVER_VISIBLE_HOURS after
+//         kickoff. Before this bound existed the rule was "live or gone", so a
+//         game whose score never matched (a cross-source team-name mismatch)
+//         vanished at midnight ET mid-game - San Jose State vs Wyoming,
+//         2026-10-09, during overtime.
 //
 //  2. Order - live games (0) sort above not-yet-started games (1). Within a
 //     tier, soonest start time first. This is what keeps a still-live early
@@ -38,6 +46,7 @@
 //     together on one board, and to still show *something* on an off-day
 //     (the anchor is the next game day, not today).
 import { easternDateKey, addDaysToDateKey, closestByTime } from "@/lib/dates";
+import { teamNamesMatch } from "@/lib/team-name-match";
 import type { ScoreGame } from "@/server/data/odds";
 
 type OrderableGame = { game: { commenceTime: string }; score?: Pick<ScoreGame, "status"> };
@@ -49,17 +58,44 @@ type OrderableGame = { game: { commenceTime: string }; score?: Pick<ScoreGame, "
 // client-safe module already) rather than re-duplicated per client component
 // - both live-scoreboard.tsx and the Grid Live board import this same
 // copy instead of each carrying their own.
+//
+// teamNamesMatch, not ===, exactly like the server copy: `scores` is
+// score-source-spelled (ESPN) and `game` is odds-source-spelled (The Odds
+// API). This copy used === until 2026-10, so the two disagreed for every team
+// the sources spell differently (live-matcher-parity-acceptance-test.ts now
+// holds them together). Pass sportKey so the league's alias rows apply.
 export function matchScoreToGame(
   scores: ScoreGame[],
-  game: { homeTeam: string; awayTeam: string; commenceTime: string }
+  game: { homeTeam: string; awayTeam: string; commenceTime: string },
+  sportKey?: string
 ): ScoreGame | undefined {
-  const candidates = scores.filter((s) => s.homeTeam === game.homeTeam && s.awayTeam === game.awayTeam);
+  const candidates = scores.filter(
+    (s) => teamNamesMatch(s.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(s.awayTeam, game.awayTeam, sportKey)
+  );
   if (candidates.length === 0) return undefined;
   if (candidates.length === 1) return candidates[0];
 
   const gameStart = new Date(game.commenceTime).getTime();
   return closestByTime(candidates, (s) => new Date(s.commenceTime).getTime(), gameStart);
 }
+
+// One team's score string off a matched ScoreGame, or null. `scores[].name` is
+// score-source-spelled and `teamName` comes from the odds game, so this needs
+// the same cross-source comparison as the match itself - with === a matched
+// game still rendered a blank score for the team the sources spell differently.
+export function teamScore(
+  score: { scores: { name: string; score: string }[] | null } | null | undefined,
+  teamName: string,
+  sportKey?: string
+): string | null {
+  return score?.scores?.find((s) => teamNamesMatch(s.name, teamName, sportKey))?.score ?? null;
+}
+
+// How long after kickoff a carried-over game with no live score to go on stays
+// on the board (rule 1). Long enough to cover any real game plus overtime and
+// a delay; short enough that a postponed or never-matched game from last
+// night is gone by morning.
+export const UNMATCHED_CARRYOVER_VISIBLE_HOURS = 8;
 
 export const SLATE_LOOKAHEAD_DAYS = 4;
 
@@ -89,18 +125,23 @@ export function slateCutoffKey(
 
 // `todayKey` is passed in (not read from the clock here) so the caller
 // controls it - the component passes easternDateKey(new Date()) fresh on
-// every render, tests pass a fixed day.
-export function orderBoardGames<T extends OrderableGame>(games: T[], todayKey: string): T[] {
+// every render, tests pass a fixed day. `now` is only read for the unmatched
+// carry-over bound (rule 1); tests pass a fixed instant.
+export function orderBoardGames<T extends OrderableGame>(games: T[], todayKey: string, now: Date = new Date()): T[] {
   const cutoffKey = slateCutoffKey(
     games.map(({ game }) => game.commenceTime),
     todayKey
   );
+  const unmatchedCarryoverMs = UNMATCHED_CARRYOVER_VISIBLE_HOURS * 60 * 60 * 1000;
 
   const visible = games.filter(({ game, score }) => {
     if (score?.status === "final") return false; // finished - off the board entirely; the score ticker still carries the final
-    const key = easternDateKey(new Date(game.commenceTime));
+    const start = new Date(game.commenceTime);
+    const key = easternDateKey(start);
     if (key > cutoffKey) return false; // a later slate the book merely has early lines for
-    return key >= todayKey || score?.status === "live"; // today onward, or a still-live carry-over
+    if (key >= todayKey) return true; // today onward
+    if (score?.status === "live") return true; // a still-live carry-over - stays until its score says Final
+    return now.getTime() - start.getTime() < unmatchedCarryoverMs; // a carry-over with no live score to go on
   });
 
   return [...visible].sort((a, b) => {

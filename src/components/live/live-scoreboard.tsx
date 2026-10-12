@@ -5,7 +5,7 @@ import type { OddsGame, ScoreGame } from "@/server/data/odds";
 import { computeBoardPulse, type BoardPulseGame } from "@/lib/board-pulse";
 import { easternDateKey } from "@/lib/dates";
 import { LocalGameTime } from "@/components/local-game-time";
-import { orderBoardGames, matchScoreToGame } from "@/components/live/live-scoreboard-ordering";
+import { orderBoardGames, matchScoreToGame, teamScore } from "@/components/live/live-scoreboard-ordering";
 import { getTeamColor } from "@/lib/team-colors";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 import { TeamColorBar } from "@/components/live/team-color-bar";
@@ -59,7 +59,7 @@ export function LiveScoreboard({
   const gamesWithScores = odds.map((game, gameIndex) => ({
     game,
     gameIndex,
-    score: matchScoreToGame(scores, game),
+    score: matchScoreToGame(scores, game, activeSport),
   }));
   const sortedGames = orderBoardGames(gamesWithScores, easternDateKey(new Date()));
 
@@ -70,13 +70,13 @@ export function LiveScoreboard({
   // still resolves a final game's score from the same poll; it's just hidden
   // from the rendered board below.
   const boardPulseGames: BoardPulseGame[] = boardPulseOdds.map((game) => {
-    const score = matchScoreToGame(scores, game);
+    const score = matchScoreToGame(scores, game, activeSport);
     const homePrice = findMarketAcrossBooks(game, "h2h")?.outcomes.find((o) => o.name === game.homeTeam)?.price ?? null;
     const awayPrice = findMarketAcrossBooks(game, "h2h")?.outcomes.find((o) => o.name === game.awayTeam)?.price ?? null;
     const totalLine = findMarketAcrossBooks(game, "totals")?.outcomes.find((o) => o.name === "Over")?.point ?? null;
 
-    const homeScore = parseScore(score, game.homeTeam);
-    const awayScore = parseScore(score, game.awayTeam);
+    const homeScore = parseScore(score, game.homeTeam, activeSport);
+    const awayScore = parseScore(score, game.awayTeam, activeSport);
 
     return {
       id: game.id,
@@ -149,7 +149,7 @@ export function LiveScoreboard({
                       <span className="truncate text-sm font-medium">{game.awayTeam}</span>
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground">
-                      {score?.scores?.find((s) => s.name === game.awayTeam)?.score ?? ""}
+                      {teamScore(score, game.awayTeam, activeSport) ?? ""}
                     </span>
                   </div>
                   <div className="text-right text-xs text-muted-foreground">
@@ -163,7 +163,7 @@ export function LiveScoreboard({
                       <span className="truncate text-sm font-medium">{game.homeTeam}</span>
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground">
-                      {score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? ""}
+                      {teamScore(score, game.homeTeam, activeSport) ?? ""}
                     </span>
                   </div>
                   <div className="text-right text-xs text-muted-foreground">
@@ -196,9 +196,9 @@ function findMarketAcrossBooks(game: OddsGame, key: string) {
   return undefined;
 }
 
-function parseScore(score: ScoreGame | undefined, teamName: string): number | null {
-  const raw = score?.scores?.find((s) => s.name === teamName)?.score;
-  if (raw === undefined) return null;
+function parseScore(score: ScoreGame | undefined, teamName: string, sportKey: string): number | null {
+  const raw = teamScore(score, teamName, sportKey);
+  if (raw === null) return null;
   const n = parseInt(raw, 10);
   return Number.isNaN(n) ? null : n;
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireUser } from "@/server/auth";
 import {
   getOddsForSport,
+  getYesterdayOddsForSport,
   getLiveScoresForSport,
   matchScoreToGame,
   LIVE_SPORTS,
@@ -21,6 +22,7 @@ import { getTeamColor } from "@/lib/team-colors";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { GameHeadToHeadHeader, type HeadToHeadSide } from "@/components/live/game-head-to-head-header";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
+import { teamScore } from "@/components/live/live-scoreboard-ordering";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -86,7 +88,14 @@ export default async function GameDetailPage({
   }
 
   const odds = await getOddsForSport(sportMeta.key);
-  const game = odds.find((g) => g.id === params.gameId);
+  // Today's snapshot first; then last night's, which is where a game the board
+  // carried over past midnight ET lives (see getLiveBoardData). Without the
+  // fallback every carried-over card on /live linked to the "isn't in today's
+  // odds" message below. The yesterday read is the slimmed board projection
+  // (first book + the first h2h/spreads/totals), which is all this page reads.
+  const game =
+    odds.find((g) => g.id === params.gameId) ??
+    (await getYesterdayOddsForSport(sportMeta.key)).find((g) => g.id === params.gameId);
 
   if (!game) {
     return (
@@ -105,7 +114,7 @@ export default async function GameDetailPage({
   }
 
   const scores = await getLiveScoresForSport(sportMeta.key);
-  const score = matchScoreToGame(scores, game);
+  const score = matchScoreToGame(scores, game, sportMeta.key);
   const isLive = score?.status === "live";
   const isFinal = score?.status === "final";
 
@@ -232,7 +241,7 @@ export default async function GameDetailPage({
     sportKey: sportMeta.key,
     recordText: awayRecordText,
     oddsText: awayH2h ? "ML " + formatOdds(awayH2h.price) + (awaySpread ? " · " + (awaySpread.point! > 0 ? "+" : "") + awaySpread.point : "") : null,
-    score: score?.scores?.find((s) => s.name === game.awayTeam)?.score ?? null,
+    score: teamScore(score, game.awayTeam, sportMeta.key),
   };
   const homeSide: HeadToHeadSide = {
     fullName: game.homeTeam,
@@ -240,7 +249,7 @@ export default async function GameDetailPage({
     sportKey: sportMeta.key,
     recordText: homeRecordText,
     oddsText: homeH2h ? "ML " + formatOdds(homeH2h.price) + (homeSpread ? " · " + (homeSpread.point! > 0 ? "+" : "") + homeSpread.point : "") : null,
-    score: score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? null,
+    score: teamScore(score, game.homeTeam, sportMeta.key),
   };
 
   // A game can go final without the user ever visiting /picks. Grading is not
@@ -301,7 +310,7 @@ export default async function GameDetailPage({
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">{game.awayTeam}</span>
                 <span className="text-xs text-muted-foreground">
-                  {score?.scores?.find((s) => s.name === game.awayTeam)?.score ?? ""}
+                  {teamScore(score, game.awayTeam, sportMeta.key) ?? ""}
                 </span>
               </div>
               <div className="text-right text-xs text-muted-foreground">
@@ -312,7 +321,7 @@ export default async function GameDetailPage({
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">{game.homeTeam}</span>
                 <span className="text-xs text-muted-foreground">
-                  {score?.scores?.find((s) => s.name === game.homeTeam)?.score ?? ""}
+                  {teamScore(score, game.homeTeam, sportMeta.key) ?? ""}
                 </span>
               </div>
               <div className="text-right text-xs text-muted-foreground">

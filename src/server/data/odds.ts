@@ -2130,13 +2130,16 @@ export async function resolveGameForTeams(
 // commenceTime - same repeat-matchup problem resolveGameForNickname solves.
 // teamNamesMatch, not ===: `scores` is score-source-spelled (ESPN) and `game`
 // is odds-source-spelled (The Odds API), which disagree for a few teams (see
-// team-name-match.ts).
+// team-name-match.ts). sportKey turns on that league's alias rows there; the
+// client copy (live-scoreboard-ordering.ts) must stay identical to this one -
+// live-matcher-parity-acceptance-test.ts fails if they drift.
 export function matchScoreToGame(
   scores: ScoreGame[],
-  game: { homeTeam: string; awayTeam: string; commenceTime: string }
+  game: { homeTeam: string; awayTeam: string; commenceTime: string },
+  sportKey?: string
 ): ScoreGame | undefined {
   const candidates = scores.filter(
-    (s) => teamNamesMatch(s.homeTeam, game.homeTeam) && teamNamesMatch(s.awayTeam, game.awayTeam)
+    (s) => teamNamesMatch(s.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(s.awayTeam, game.awayTeam, sportKey)
   );
   if (candidates.length === 0) return undefined;
   if (candidates.length === 1) return candidates[0];

@@ -116,7 +116,7 @@ export default async function LivePage({
   const initialSelection = isGrid
     ? resolveGridLiveSelection(
         orderBoardGames(
-          odds.map((game) => ({ game, score: matchScoreToGame(scores, game) })),
+          odds.map((game) => ({ game, score: matchScoreToGame(scores, game, activeSport) })),
           todayKey
         ).map(({ game }) => game.id),
         searchParams.gameId ?? null
@@ -131,6 +131,7 @@ export default async function LivePage({
 
   const categoryPanel = (
     <LiveCategoryPanel
+      sportKey={activeSport}
       sportLabel={sportLabel}
       chipSet={leagueChipSet.map((key) => ({ key, label: PICK_CATEGORY_LABELS[key] }))}
       items={sportCategoryBreakdown}

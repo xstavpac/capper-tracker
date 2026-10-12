@@ -38,9 +38,54 @@ export function normalizeTeamName(name: string): string {
     .toLowerCase();
 }
 
+// Names the folding above cannot reconcile: the two sources use genuinely
+// different words for the same team ("App State" vs "Appalachian State"), or
+// differ by a character normalizeTeamName deliberately keeps (an apostrophe).
+// One table, keyed by The Odds API sport key, each row
+// [score-feed spelling, Odds API spelling]. Every spelling here was read off
+// the real feeds on 2026-10-12 (ESPN's team list and scoreboards; The Odds
+// API's /participants list), not written from memory.
+//
+// Scoped per league on purpose: a row only ever applies when the caller says
+// which league it is comparing within, so an alias can never join teams across
+// sports. And each row is a whole-name pair, never a prefix or a nickname:
+// "Louisiana Ragin' Cajuns" aliases to "Louisiana Ragin Cajuns" and to nothing
+// else, so it cannot match "Louisiana Tech Bulldogs" or "UL Monroe Warhawks".
+//
+// Montréal/Montreal and "St Louis"/"St. Louis" (NHL) are NOT here - the
+// folding above already reconciles them, re-verified against the same feeds.
+export const CROSS_SOURCE_TEAM_ALIASES: Record<string, readonly (readonly [scoreFeed: string, oddsApi: string])[]> = {
+  americanfootball_ncaaf: [
+    ["Sam Houston Bearkats", "Sam Houston State Bearkats"],
+    ["App State Mountaineers", "Appalachian State Mountaineers"],
+    ["Massachusetts Minutemen", "UMass Minutemen"],
+    ["Louisiana Ragin' Cajuns", "Louisiana Ragin Cajuns"],
+    ["Southern Miss Golden Eagles", "Southern Mississippi Golden Eagles"],
+    ["Hawai'i Rainbow Warriors", "Hawaii Rainbow Warriors"],
+  ],
+  basketball_nba: [["LA Clippers", "Los Angeles Clippers"]],
+};
+
+// sportKey -> normalized spelling -> the normalized Odds API spelling it stands for.
+const ALIAS_LOOKUP: Record<string, Map<string, string>> = Object.fromEntries(
+  Object.entries(CROSS_SOURCE_TEAM_ALIASES).map(([sportKey, rows]) => [
+    sportKey,
+    new Map(rows.map(([scoreFeed, oddsApi]) => [normalizeTeamName(scoreFeed), normalizeTeamName(oddsApi)])),
+  ])
+);
+
 // Whether two team names refer to the same team, tolerating the cross-source
 // spelling differences documented above. For names that already agree
 // exactly (the overwhelming majority) this is identical to `a === b`.
-export function teamNamesMatch(a: string, b: string): boolean {
-  return normalizeTeamName(a) === normalizeTeamName(b);
+//
+// sportKey (The Odds API key, e.g. "americanfootball_ncaaf") turns on that
+// league's alias rows. Without it only the folding applies - the behaviour
+// every caller had before the alias table existed.
+export function teamNamesMatch(a: string, b: string, sportKey?: string): boolean {
+  const na = normalizeTeamName(a);
+  const nb = normalizeTeamName(b);
+  if (na === nb) return true;
+  const aliases = sportKey ? ALIAS_LOOKUP[sportKey] : undefined;
+  if (!aliases) return false;
+  return (aliases.get(na) ?? na) === (aliases.get(nb) ?? nb);
 }

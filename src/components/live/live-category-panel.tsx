@@ -34,12 +34,16 @@ type Records = Record<string, LeagueRecordCard | null>;
 // board's own - same games, same scores, same poll - so a card's count is always the length of the
 // list it opens.
 export function LiveCategoryPanel({
+  sportKey,
   sportLabel,
   chipSet,
   items,
   games,
   picks,
 }: {
+  // The Odds API sport key - the board matches scores to games with it
+  // (league-scoped team aliases), so the count here must too.
+  sportKey: string;
   sportLabel: string;
   chipSet: { key: PickCategoryKey; label: string }[];
   items: CategoryBreakdownItem[];
@@ -57,8 +61,8 @@ export function LiveCategoryPanel({
 
   // No shared scores means no board is mounted, so no card is showing a pick.
   const byCategory = useMemo(
-    () => slatePicksByCategory(picks, scores ? visibleGameIndexes(games, scores, easternDateKey(new Date())) : new Set<number>()),
-    [picks, games, scores]
+    () => slatePicksByCategory(picks, scores ? visibleGameIndexes(games, scores, easternDateKey(new Date()), sportKey) : new Set<number>()),
+    [picks, games, scores, sportKey]
   );
   const tiles = useMemo(
     () => buildCategoryTiles(chipSet, items, new Map(Array.from(byCategory, ([key, list]) => [key, list.length]))),

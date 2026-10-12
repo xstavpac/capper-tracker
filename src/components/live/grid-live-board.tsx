@@ -134,9 +134,9 @@ export function GridLiveBoard({
       odds.map((game, gameIndex) => ({
         game,
         gameIndex,
-        score: matchScoreToGame(scores, game),
+        score: matchScoreToGame(scores, game, activeSport),
       })),
-    [odds, scores]
+    [odds, scores, activeSport]
   );
   const sortedGames = useMemo(
     () => orderBoardGames(gamesWithScores, easternDateKey(new Date())),

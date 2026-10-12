@@ -41,8 +41,13 @@ export type LiveCategoryGame = { id: string; homeTeam: string; awayTeam: string;
 // The games the board is showing right now: the same orderBoardGames call, on
 // the same scores, the Feed and Grid boards make - so a tile's count can never
 // disagree with the cards.
-export function visibleGameIndexes(games: LiveCategoryGame[], scores: ScoreGame[], todayKey: string): Set<number> {
-  const withScores = games.map((game, gameIndex) => ({ game, gameIndex, score: matchScoreToGame(scores, game) }));
+export function visibleGameIndexes(
+  games: LiveCategoryGame[],
+  scores: ScoreGame[],
+  todayKey: string,
+  sportKey?: string
+): Set<number> {
+  const withScores = games.map((game, gameIndex) => ({ game, gameIndex, score: matchScoreToGame(scores, game, sportKey) }));
   return new Set(orderBoardGames(withScores, todayKey).map((g) => g.gameIndex));
 }
 
