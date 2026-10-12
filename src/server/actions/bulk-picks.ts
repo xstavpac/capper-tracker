@@ -20,10 +20,11 @@ import {
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
 import { resolvePropOdds, isNflOddsPropMarket } from "@/server/data/nfl-prop-odds";
-import { resolveAnytimeGoalOdds } from "@/server/data/nhl-goal-scorer-odds";
+import { resolveAnytimeGoalOdds, resolveThreeWayOdds } from "@/server/data/nhl-goal-scorer-odds";
 import { resolvePickPrice, type PickOddsSource } from "@/lib/odds-source";
 import { extractLine, parsePlayerPropLine, parseAnyPlayerProp, isAnytimeTdPick } from "@/lib/bet-line";
 import { nhlAnytimeGoalSide } from "@/lib/nhl-prop";
+import { threeWayWording } from "@/lib/nhl-three-way";
 import { isInvalidOdds } from "@/lib/pick-validation";
 import { TEAM_NICKNAME_CANONICAL, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
 import { normalizeName } from "@/lib/fuzzy-match";
@@ -180,7 +181,8 @@ async function resolveGameAndOdds(
   // branch reads the SAME pickedHome/pickedAway they do, so without this a
   // team-total pick would only ever get the weaker mascot/school text-match
   // fallback at grading time, never the authoritative side captured here.
-  pickedSide: "HOME" | "AWAY" | null;
+  // "DRAW" only for a 3-way (period REGULATION) moneyline on the draw.
+  pickedSide: "HOME" | "AWAY" | "DRAW" | null;
   // Which side the real h2h market had as the moneyline favorite, for MONEYLINE
   // picks only (see schema.prisma's Pick.mlFavoredSide and favoriteOrUnderdog).
   // null for every non-MONEYLINE pick and whenever the game couldn't be matched
@@ -209,7 +211,7 @@ async function resolveGameAndOdds(
   // lookup below runs only when !item.hasExplicitOdds.
   let feedPrice: number | null = null;
   let matched = false;
-  let pickedSide: "HOME" | "AWAY" | null = null;
+  let pickedSide: "HOME" | "AWAY" | "DRAW" | null = null;
   let mlFavoredSide: "HOME" | "AWAY" | null = null;
   let resolvedGameNumber: 1 | 2 | null = null;
   let doubleheaderBothLegsFinal = false;
@@ -274,6 +276,13 @@ async function resolveGameAndOdds(
         const homeMatch = game.homeTeam.toLowerCase().endsWith(nicknames[0]);
         const awayMatch = game.awayTeam.toLowerCase().endsWith(nicknames[0]);
         pickedSide = homeMatch && !awayMatch ? "HOME" : awayMatch && !homeMatch ? "AWAY" : null;
+      }
+
+      // A 3-way moneyline on the draw is on neither team, however many of
+      // them the line names.
+      const isThreeWay = item.betType === "MONEYLINE" && item.period === "REGULATION";
+      if (isThreeWay && threeWayWording(item.description) === "DRAW") {
+        pickedSide = "DRAW";
       }
 
       if (item.betType === "MONEYLINE") {
@@ -348,6 +357,14 @@ async function resolveGameAndOdds(
           if (propPrice !== null) {
             feedPrice = propPrice;
           }
+        }
+      } else if (!item.hasExplicitOdds && isThreeWay) {
+        // Priced from h2h_3_way and nothing else. The 2-way h2h price includes
+        // overtime and the shootout - a different bet - so there is no
+        // fallback to it: no 3-way price means the line keeps its own.
+        const threeWayPrice = pickedSide ? await resolveThreeWayOdds(liveSportKey, game, pickedSide, getOdds) : null;
+        if (threeWayPrice !== null) {
+          feedPrice = threeWayPrice;
         }
       } else if (!item.hasExplicitOdds) {
         // A non-TOTAL bet is priced off the same side pickedSide captured
@@ -940,7 +957,7 @@ async function resolveLegAndOdds(item: ResolvableItem, getOdds: OddsLoader): Pro
   line: number | null;
   resolvable: boolean;
   matched: boolean;
-  pickedSide: "HOME" | "AWAY" | null;
+  pickedSide: "HOME" | "AWAY" | "DRAW" | null;
   mlFavoredSide: "HOME" | "AWAY" | null;
   lineUnresolved: boolean;
 }> {

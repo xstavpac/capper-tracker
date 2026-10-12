@@ -92,7 +92,7 @@ check("a stated price is never replaced by the feed's", resolvePickPrice({ odds:
   check("wiring: resolveGameAndOdds found", start >= 0 && end > start, true);
   check("wiring: its odds + oddsSource come from one resolvePickPrice(item, feedPrice) call", (resolver.match(/const \{ odds, oddsSource \} = resolvePickPrice\(item, feedPrice\);/g) ?? []).length, 1);
   check("wiring: nothing else in the resolver assigns odds", /(^|[^.\w])odds\s*=[^=]/m.test(resolver.replace("const { odds, oddsSource } = resolvePickPrice(item, feedPrice);", "")), false);
-  check("wiring: four feed lookups set feedPrice", (resolver.match(/feedPrice = \w+Price;/g) ?? []).length, 4);
+  check("wiring: five feed lookups set feedPrice", (resolver.match(/feedPrice = \w+Price;/g) ?? []).length, 5);
   check("wiring: the import row carries oddsSource", /toInsert\.push\(\{[^}]*\bodds,\n\s*oddsSource,/.test(src), true);
 }
 

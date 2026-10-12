@@ -4,11 +4,13 @@ export const dynamic = "force-dynamic";
 
 // Vercel Cron hits this once daily at 16:30 UTC - 12:30 PM ET in summer (EDT),
 // 11:30 AM ET in winter (EST), ahead of the earliest matinee starts. It is the
-// second NHL goal-scorer run of the day: the refresh-odds cron already ran the
+// second run of the day for the NHL event-level markets (anytime goal scorer
+// and the 3-way moneyline; the path keeps its original name): the refresh-odds cron already ran the
 // same step just after midnight ET, and a game whose books hadn't posted the
-// market by then came back empty. This asks again, only for today's games that
-// still don't carry it (see nhlGamesNeedingGoalScorerOdds), so a game bought at
-// midnight is never bought twice and an empty response costs nothing. Same 95%
+// market by then came back without it. This asks again, only for today's games
+// still missing one and only for the market each is missing (see
+// nhlGamesNeedingGoalScorerOdds), so nothing bought at midnight is bought
+// twice and a market that still isn't posted costs nothing. Same 95%
 // credit gate and odds_api_usage_log row per call as the midnight run.
 //
 // Informational like the refresh-odds step it repeats: a skip, a credit-gate

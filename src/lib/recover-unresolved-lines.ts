@@ -43,6 +43,7 @@ import {
 import { resolveMlbPropAgainstRoster } from "@/lib/mlb-roster-fallback";
 import { parsePlayerProp, isPassingTdsText } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
+import { withRegulationPeriod } from "@/lib/nhl-three-way";
 import { UNSUPPORTED_PROP_REASONS } from "@/lib/unsupported-prop-vocab";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 
@@ -332,6 +333,9 @@ export function recoverUnresolvedLines(
       gameNumber,
     });
   }
+
+  // Same hockey 3-way read parseCatalog applies to the lines it placed itself.
+  for (const pick of recovered) pick.period = withRegulationPeriod(pick);
 
   return { recovered, stillUnresolved, reasons };
 }
