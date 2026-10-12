@@ -5,8 +5,8 @@
 //   npx tsx src/server/data/nhl-prop-category-acceptance-test.ts
 //
 // pickCategory's behavior for every EXISTING input is unchanged by NHL props
-// (its null-propMarket text fallback still uses the NFL parser only), so
-// PICK_CATEGORY_VERSION stays 1 - asserted below. Picks imported as NHL props
+// (its null-propMarket text fallback still uses the NFL parser only), so they
+// needed no PICK_CATEGORY_VERSION bump. Picks imported as NHL props
 // always carry propMarket (bulk-picks stores it), so they take the
 // propMarket-set branch.
 import { PropMarket } from "@prisma/client";
@@ -62,9 +62,11 @@ check("legacy null-propMarket MLB text stays uncategorized (unchanged)", pickCat
 // NFL text parser, so NHL text on such a row stays uncategorized - exactly as before
 // NHL props existed (no stored category changes, hence no version bump).
 check("legacy null-propMarket NHL text stays uncategorized (unchanged)", pickCategory(input(null, "Sidney Crosby over 3.5 shots on goal")), null);
-check("legacy null-propMarket NFL text still TD_PROP (unchanged)", pickCategory(input(null, "Josh Allen Over 275.5 Passing Yards", "NFL")), "TD_PROP");
-check("NFL markets still TD_PROP", NFL_MARKETS.map((m) => pickCategory(input(m as PropMarket, null, "NFL"))), NFL_MARKETS.map(() => "TD_PROP"));
-check("PICK_CATEGORY_VERSION unchanged", PICK_CATEGORY_VERSION, 1);
+// The NFL yardage / receptions markets have their own category (version 2); the rest are TD_PROP.
+const NFL_STAT_PROP: Record<string, string> = { PASS_YDS: "PASS_YDS_PROP", RUSH_YDS: "RUSH_YDS_PROP", REC_YDS: "REC_YDS_PROP", RECEPTIONS: "RECEPTIONS_PROP" };
+check("legacy null-propMarket NFL text takes the market's own category", pickCategory(input(null, "Josh Allen Over 275.5 Passing Yards", "NFL")), "PASS_YDS_PROP");
+check("NFL markets: yardage / receptions their own category, the rest TD_PROP", NFL_MARKETS.map((m) => pickCategory(input(m as PropMarket, null, "NFL"))), NFL_MARKETS.map((m) => NFL_STAT_PROP[m] ?? "TD_PROP"));
+check("PICK_CATEGORY_VERSION", PICK_CATEGORY_VERSION, 2);
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

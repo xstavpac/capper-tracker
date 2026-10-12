@@ -702,7 +702,7 @@ async function main() {
   same("write path: MLB first-half ML stamped F5_ML", byBet("MONEYLINE", "MLB").category, "F5_ML");
   same("write path: NFL first-half ML stamped FIRST_HALF_ML", byBet("MONEYLINE", "NFL").category, "FIRST_HALF_ML");
   same("write path: TOTAL with no over/under stamped null (a real result, still versioned)", [byBet("TOTAL", "MLB").category, byBet("TOTAL", "MLB").categoryVersion], [null, PICK_CATEGORY_VERSION]);
-  same("write path: player prop with propMarket stamped TD_PROP", byBet("PLAYER_PROP", "NFL").category, "TD_PROP");
+  same("write path: receiving-yards prop stamped REC_YDS_PROP, not TD_PROP", byBet("PLAYER_PROP", "NFL").category, "REC_YDS_PROP");
   check("write path: every stamped row equals pickCategory(row) at the current version", written.every((p) => p.categoryVersion === PICK_CATEGORY_VERSION && p.category === pickCategory({ ...p, sportName: p.sport.name })));
 
   console.log(`\n${assertions} assertions, ${failures} failed.`);
