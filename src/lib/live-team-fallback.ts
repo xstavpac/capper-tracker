@@ -34,6 +34,7 @@
 // never touched this file (2026-09 follow-up).
 
 import { normalizeForGrouping, teamPhraseRegex, isPlayerPropSurnameCollision } from "@/lib/parse-catalog";
+import { isTeamTotalText } from "@/lib/bet-line";
 
 export type LiveTeam = {
   // The sport LABEL as parse-catalog / LIVE_SPORTS use it ("NCAAF", "NFL", ...).
@@ -188,7 +189,7 @@ export function resolveLineAgainstLiveTeams(line: string, liveTeams: LiveTeam[])
 // still handles the spread/total number from `description` downstream.
 
 export type BetTextParts = {
-  betType: "MONEYLINE" | "SPREAD" | "TOTAL";
+  betType: "MONEYLINE" | "SPREAD" | "TOTAL" | "TEAM_TOTAL";
   odds: number;
   hasExplicitOdds: boolean;
   totalSide?: "over" | "under";
@@ -203,7 +204,9 @@ export function parseFallbackBetText(line: string): BetTextParts {
   else if (/\bunder\b|\bu\s*\d/.test(lower)) totalSide = "under";
 
   let betType: BetTextParts["betType"];
-  if (totalSide) betType = "TOTAL";
+  // Same team-total test the main parser uses, so "VMI team total over 20.5"
+  // is one team's score here too, not the combined game total.
+  if (totalSide) betType = isTeamTotalText(line) ? "TEAM_TOTAL" : "TOTAL";
   else if (/\bml\b|\bmoney\s*line\b/.test(lower)) betType = "MONEYLINE";
   else betType = "SPREAD"; // an unresolved line that looksLikePick with no over/under/ML is a spread
 

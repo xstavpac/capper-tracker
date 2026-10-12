@@ -5,6 +5,8 @@ import {
   parsePlayerProp,
   parseNflNhlPlayerProp,
   pickPeriodFromText,
+  isTeamTotalText,
+  normalizeMarketShorthand,
   betScope,
   betScopeToken,
   extractLine,
@@ -1716,23 +1718,6 @@ function detectSport(text: string, allowNicknameFallback = true): { sportName: s
   return { sportName: "", rest: text, leadingText: "" };
 }
 
-// Explicit, safe-only signals that a total is about ONE team's own score
-// (TEAM_TOTAL), not the combined game total - the literal "team total"
-// phrase, or the standalone "TT" shorthand real cappers use ("Twins TT
-// o5.5 -125"). Deliberately does NOT infer team-total from a team name
-// merely being present in the text - a real game total's text often names a
-// team too, just to identify the game ("Dodgers/Padres Over 8.5"), not as
-// the bet's actual subject - confirmed unreliable during the Team Total
-// investigation. "TT" is matched as its own word only (never a substring of
-// another word like "MATT"/"ATTACK"), same word-boundary care as the
-// o3.5/u45.5 shorthand below. Only ever called from within a branch that has
-// already matched an over/under/total keyword (see parsePickText), so a
-// bare "TT" with no total signal at all (e.g. a capper's own initials) can
-// never misclassify an otherwise-MONEYLINE pick.
-function isTeamTotalText(text: string): boolean {
-  return /\bteam\s*total\b/i.test(text) || /\bTT\b/i.test(text);
-}
-
 // Doubleheader game-number markers a capper writes inline with the pick
 // itself ("Cubs Game Two Moneyline", "Yankees G2 ML", "Red Sox nightcap ML",
 // "Cubs 2nd game -1.5"). Every pattern is anchored to an explicit
@@ -1834,6 +1819,9 @@ export function parsePickText(description: string): {
   // markets only - see normalizeNPlusPlayerProp), so the stored betDetail
   // carries the over/under line that grading and odds lookup read.
   description = normalizeNPlusPlayerProp(description);
+  // "NFRI" -> "NRFI", "TTO 3.5" -> "TT over 3.5". parseCatalog already does
+  // this per line; repeated here for the callers that hand in their own text.
+  description = normalizeMarketShorthand(description);
   // MLB N+ ("2+ hits" -> "Over 1.5 hits", "to hit a home run" -> "Over 0.5 Home Runs") only for a
   // line the importer positively identifies as an MLB prop - never a team's "8+ runs".
   if (parseSupportedMlbProp(description)) description = normalizeMlbNPlus(description);
@@ -2926,7 +2914,7 @@ export function parseCatalog(
   droppedAsHeaders: DroppedLine[];
 } {
   const sortedNames = [...knownCapperNames].sort((a, b) => b.length - a.length);
-  const rawLines = text.split("\n").map((l) => l.trim());
+  const rawLines = text.split("\n").map((l) => normalizeMarketShorthand(l.trim()));
 
   const results: ParsedPick[] = [];
   const parlays: ParsedParlay[] = [];
