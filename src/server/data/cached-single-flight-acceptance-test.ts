@@ -275,7 +275,7 @@ async function main() {
     const priced = {
       oddsGame: (await resolveOddsGame(NFL, ref))?.id,
       favored: await findFavoredSide(NFL, ref),
-      ml: await findMarketPrice(NFL, ref, "MONEYLINE", "away"),
+      ml: await findMarketPrice(NFL, ref, "MONEYLINE", "away", { line: null, period: "FULL_GAME" }),
       spread: await findMarketSpreadLine(NFL, ref, "home"),
       total: await findMarketTotalLine(NFL, ref, "over"),
       prop: await resolvePropOdds(NFL, ref, { playerName: "Travis Kelce", propMarket: "REC_YDS", side: "Over", point: 42.5 } as never),
