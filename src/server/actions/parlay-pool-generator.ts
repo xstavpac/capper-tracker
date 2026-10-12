@@ -16,6 +16,7 @@ import { getCapperCategoryRecords, getCapperLeagueRecords, type CapperLeagueReco
 import type { PickCategoryKey } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { buildPoolPrimary, excludeSelectedPicks } from "@/lib/parlay/pool-swap";
+import { legCapRejection, type LegCapRejection } from "@/lib/parlay/leg-cap";
 import type { SkippedPick, UnverifiedPair } from "@/lib/parlay/build-my-picks";
 import {
   buildSwapParlay,
@@ -40,15 +41,18 @@ export type PoolSwapResult = {
 
 // `pool` is the pool picks the caller wants considered - already filtered to
 // in-scope leagues by the caller (ParlayPoolSection), same convention as
-// buildMyPicks() there. No fixed leg ceiling: bounded only by however many
-// conflict-free legs the pool can supply (see build-my-picks.ts) - unlike
-// Auto-Generate's AUTO_GENERATE_MAX_LEGS, which doesn't apply to this path.
+// buildMyPicks() there. Bounded by however many conflict-free legs the pool
+// can supply (see build-my-picks.ts) and by MAX_PARLAY_LEGS, the same ceiling
+// Auto-Generate has: more than that is refused outright, never built smaller
+// than asked (see leg-cap.ts).
 export async function generatePoolSwapAction(
   pool: ExpanderPick[],
   legCount: number,
   mode: SwapMode
-): Promise<PoolSwapResult> {
+): Promise<PoolSwapResult | LegCapRejection> {
   const user = await requireUser();
+  const rejection = legCapRejection(legCount);
+  if (rejection) return rejection;
   const requested = Math.max(1, Math.floor(legCount) || 1);
 
   // GeneratorPick requires datePosted: string; a pool pick persisted to

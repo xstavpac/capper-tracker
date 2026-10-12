@@ -2,7 +2,8 @@
 
 // My Picks: the Parlay Generator's simplest construction mode. Lists the
 // pool grouped by league with a per-league scope toggle, a leg-count
-// stepper bounded by how many in-scope picks exist, and a build action that
+// stepper bounded by how many in-scope picks exist (and by MAX_PARLAY_LEGS,
+// see lib/parlay/leg-cap.ts), and a build action that
 // selects the best-winPct qualifying combination from exactly the pooled,
 // in-scope picks - no substitutions, alternates, or picks from outside the
 // pool.
@@ -195,6 +196,10 @@ function useSwapBuild(mode: SwapMode) {
     setError(null);
     try {
       const next = await generatePoolSwapAction(inScope, legCount, mode);
+      if ("error" in next) {
+        setError(next.error);
+        return;
+      }
       setResult(next);
       setShortfallConfirmed(false);
     } catch {
