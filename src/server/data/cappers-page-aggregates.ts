@@ -248,7 +248,7 @@ const TIE_BREAK = Prisma.sql`(net_r = 'NaN'::float8), net_r DESC, lower(name) CO
 //              totalPicks: the window's picks across the whole roster, not just these five.
 //   winners  - net units over graded picks posted in the window: net units > 0, odds-0 win left
 //              out. No minimum number of graded picks: one winning pick lists a capper, and every
-//              row carries the window's wins / losses, so the sample is on screen.
+//              row carries the window's wins / losses / pushes, so the sample is on screen.
 //   hottest / coldest - current WIN / LOSS streak (see streakPanelSql).
 // A closed range (Yesterday) also stops at its end: picks posted since are not in it.
 export function panelSql(panel: PanelKey, userId: string, range: PanelRange): Prisma.Sql {
@@ -268,15 +268,16 @@ export function panelSql(panel: PanelKey, userId: string, range: PanelRange): Pr
   // ties use the page's tie order (TIE_BREAK). A non-finite value (odds = 0 win) has no label to
   // draw, so it is left out.
   return Prisma.sql`
-    SELECT h.cid AS "capperId", h.name, h."colorTag", h.net_r AS "netUnits", h.wins, h.losses
+    SELECT h.cid AS "capperId", h.name, h."colorTag", h.net_r AS "netUnits", h.wins, h.losses, h.pushes
     FROM (
-      SELECT g.cid, r.name, r."colorTag", ${round2HalfUpSql(Prisma.sql`g.net_raw`)} AS net_r, g.wins, g.losses
+      SELECT g.cid, r.name, r."colorTag", ${round2HalfUpSql(Prisma.sql`g.net_raw`)} AS net_r, g.wins, g.losses, g.pushes
       FROM (
-        SELECT a.cid, a.wins, a.losses, ${uwEffSql("a")} - a."unitsLost" AS net_raw
+        SELECT a.cid, a.wins, a.losses, a.pushes, ${uwEffSql("a")} - a."unitsLost" AS net_raw
         FROM (
           SELECT p."capperId" AS cid,
             (count(*) FILTER (WHERE p.status = 'WIN'))::int AS wins,
             (count(*) FILTER (WHERE p.status = 'LOSS'))::int AS losses,
+            (count(*) FILTER (WHERE p.status = 'PUSH'))::int AS pushes,
             COALESCE(sum(${WIN_UNITS}) FILTER (WHERE p.status = 'WIN' AND p.odds <> 0), 0)::float8 AS "unitsWon",
             COALESCE(sum(p.units) FILTER (WHERE p.status = 'LOSS'), 0)::float8 AS "unitsLost",
             COALESCE(bit_or(CASE WHEN p.units > 0 THEN 1 WHEN p.units < 0 THEN 2 ELSE 4 END) FILTER (WHERE p.status = 'WIN' AND p.odds = 0), 0)::int AS "zeroOddsWinFlags"
@@ -354,10 +355,15 @@ function streakPanelSql(kind: "WIN" | "LOSS", userId: string, range: PanelRange)
 //   fallingCte      falling. recent = rn 1..TREND_RECENT, baseline = rn > TREND_RECENT (never the
 //                   combined set). Needs exactly TREND_RECENT recent + >= TREND_MIN_BASELINE
 //                   baseline; score = recent win% - baseline win%. Keeps scores that round to
-//                   -FORM_TREND_MIN_PTS or less, worst first; ties by larger baseline, then id.
-//                   Rows carry pts (the score in whole percentage points, negative), baseline (the
-//                   baseline win rate as a fraction) and results (the recent picks' win flags,
-//                   oldest first), all read from dl: the chart is drawn from those (trendSeries).
+//                   -FORM_TREND_MIN_PTS or less. Ranked by rel = score / baseline win% (the decline
+//                   as a share of the capper's own norm), steepest first, BEFORE the cut to
+//                   FORM_PANEL_COUNT; ties by larger baseline, then id. A kept row's baseline is
+//                   never 0 (its score is negative); NULLIF only keeps the division defined for
+//                   the rows the filter drops.
+//                   Rows carry pct (rel in whole percent, negative), pts (the score in whole
+//                   percentage points, negative), baseline (the baseline win rate as a fraction)
+//                   and results (the recent picks' win flags, oldest first), all read from dl:
+//                   the chart is drawn from those (trendSeries).
 //   consistentCte   the newest CONSISTENT_PICKS (all required) as CONSISTENT_BLOCKS equal blocks, oldest
 //                   first; mean block win% >= CONSISTENT_MIN_MEAN_PCT. Ranked by population standard
 //                   deviation of the block win%s ascending, then higher mean, then id.
@@ -387,11 +393,12 @@ export function fallingCte(): [string, Prisma.Sql] {
   return [
     "falling",
     Prisma.sql`
-      SELECT t.cid AS "capperId", t.name, t."colorTag", round(t.score * 100)::int AS pts, t.baseline::float8 AS baseline,
+      SELECT t.cid AS "capperId", t.name, t."colorTag", round(t.rel * 100)::int AS pct, round(t.score * 100)::int AS pts, t.baseline::float8 AS baseline,
         (SELECT array_agg(d.win ORDER BY d.rn DESC) FROM dl d WHERE d.cid = t.cid AND d.rn <= ${TREND_RECENT}::int) AS results
       FROM (
         SELECT s.cid, r.name, r."colorTag", s.bn, round(s.bw::numeric / s.bn, 9) AS baseline,
-          ${score} AS score
+          ${score} AS score,
+          round(s.rw::numeric * s.bn / NULLIF(s.rn_n * s.bw, 0) - 1, 9) AS rel
         FROM (
           SELECT cid,
             count(*) FILTER (WHERE rn <= ${TREND_RECENT}::int) AS rn_n,
@@ -403,10 +410,10 @@ export function fallingCte(): [string, Prisma.Sql] {
         JOIN roster r ON r.id = s.cid
         WHERE s.rn_n = ${TREND_RECENT}::int AND s.bn >= ${TREND_MIN_BASELINE}::int
           AND round(${score} * 100) <= -${FORM_TREND_MIN_PTS}::int
-        ORDER BY score ASC, s.bn DESC, r.id COLLATE "C"
+        ORDER BY rel ASC, s.bn DESC, r.id COLLATE "C"
         LIMIT ${FORM_PANEL_COUNT}
       ) t
-      ORDER BY t.score ASC, t.bn DESC, t.cid COLLATE "C"
+      ORDER BY t.rel ASC, t.bn DESC, t.cid COLLATE "C"
     `,
   ];
 }
@@ -444,7 +451,7 @@ export function consistentCte(): [string, Prisma.Sql] {
 export const streakEntriesFromRows = (rows: any[] | undefined, withUnits: boolean): StreakEntry[] =>
   (rows ?? []).map((h) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, streak: Number(h.streak), ...(withUnits ? { units: Number(h.units) } : {}) }));
 export const fallingEntriesFromRows = (rows: any[] | undefined): FallingEntry[] =>
-  (rows ?? []).map((h) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, pts: Number(h.pts), results: (h.results ?? []).map(Boolean), baseline: Number(h.baseline) }));
+  (rows ?? []).map((h) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, pct: Number(h.pct), pts: Number(h.pts), results: (h.results ?? []).map(Boolean), baseline: Number(h.baseline) }));
 
 // One panel at one window, as its own small statement (the dropdown's fetch). Same SQL as the page.
 export async function getPanelRows(q: { userId: string; panel: PanelKey; window: PanelWindow; now?: Date }): Promise<PanelRows> {
@@ -457,7 +464,7 @@ export async function getPanelRows(q: { userId: string; panel: PanelKey; window:
   return rows.map((r) => ({
     ...r,
     ...(r.pickCount === undefined ? {} : { pickCount: Number(r.pickCount), totalPicks: Number(r.totalPicks) }),
-    ...(r.netUnits === undefined ? {} : { netUnits: Number(r.netUnits), wins: Number(r.wins), losses: Number(r.losses) }),
+    ...(r.netUnits === undefined ? {} : { netUnits: Number(r.netUnits), wins: Number(r.wins), losses: Number(r.losses), pushes: Number(r.pushes) }),
     ...(r.streak === undefined ? {} : { streak: Number(r.streak) }),
     ...(r.units === undefined ? {} : { units: Number(r.units) }),
   }));
@@ -810,7 +817,7 @@ export async function getCappersPageData(q: CappersPageQuery): Promise<CappersPa
     sparklines,
     topSparklines,
     mostActive: (out.ma ?? []).map((m: ActiveEntry) => ({ capperId: m.capperId, name: m.name, colorTag: m.colorTag, pickCount: Number(m.pickCount), totalPicks: Number(m.totalPicks) })),
-    winners: (out.win ?? []).map((h: WinnerEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, netUnits: Number(h.netUnits), wins: Number(h.wins), losses: Number(h.losses) })),
+    winners: (out.win ?? []).map((h: WinnerEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, netUnits: Number(h.netUnits), wins: Number(h.wins), losses: Number(h.losses), pushes: Number(h.pushes) })),
     consistent: (out.consistent ?? []).map((h: ConsistentEntry) => ({ capperId: h.capperId, name: h.name, colorTag: h.colorTag, blocks: (h.blocks ?? []).map(Number), sd: Number(h.sd) })),
     favSummary,
   };

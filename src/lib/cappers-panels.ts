@@ -4,8 +4,17 @@ import type { ActivityEntry } from "@/server/data/cappers";
 import { startOfEasternDay } from "@/lib/dates";
 
 // Biggest Winners: net units over the panel window (the old "Hottest this week").
-// wins / losses are the same window's record.
-export type WinnerEntry = { capperId: string; name: string; colorTag: string | null; netUnits: number; wins: number; losses: number };
+// wins / losses / pushes are the same window's record.
+export type WinnerEntry = { capperId: string; name: string; colorTag: string | null; netUnits: number; wins: number; losses: number; pushes: number };
+
+// Today's Winners (/dashboard): Biggest Winners locked to "Today", re-fetched through
+// /api/cappers/panel while the tab is visible. Longer than the route's 60 s cache, so every refresh
+// reads the day as it stands; at most 60 / 3 = 20 scheduled refreshes per viewer per hour.
+export const TODAYS_WINNERS_REFRESH_MS = 3 * 60_000;
+// Why the card is empty: nothing graded yet, or graded picks but nobody ahead on the day.
+export const TODAYS_WINNERS_NO_GRADED = "No graded picks yet today.";
+export const TODAYS_WINNERS_NONE_UP = "No cappers in the green today.";
+export const todaysWinnersEmpty = (graded: boolean | undefined) => (graded === false ? TODAYS_WINNERS_NO_GRADED : TODAYS_WINNERS_NONE_UP);
 
 // Most Active: totalPicks is the window's picks across the whole roster (the same on every row).
 export type ActiveEntry = ActivityEntry & { totalPicks: number };
@@ -56,11 +65,20 @@ export type PanelRows = ActiveEntry[] | WinnerEntry[] | StreakEntry[];
 // Decided picks are examined newest first in the canonical ORDER_DESC, at most FORM_LOOKBACK per capper.
 export const FORM_LOOKBACK = 100;
 // Falling off: recent = newest TREND_RECENT; baseline = the picks BEFORE those (never the combined set),
-// needing at least TREND_MIN_BASELINE of them. Score = recent win% - baseline win%, negative only,
-// most negative first. It must round to at least FORM_TREND_MIN_PTS points, so a "−0" never shows.
+// needing at least TREND_MIN_BASELINE of them. The card shows and ranks by the decline as a percentage
+// of the capper's own baseline: (recent win% - baseline win%) / baseline win%, negative only, steepest
+// first. The gap itself must round to at least FORM_TREND_MIN_PTS percentage points, so a capper level
+// with their norm ("58% → 58%") never shows.
 export const TREND_RECENT = 10;
 export const TREND_MIN_BASELINE = 30;
 export const FORM_TREND_MIN_PTS = 1;
+// What the card says about those rules, so none of them is hidden: the windows it compares, the decided
+// picks a capper needs before they can appear at all, and an empty state that only speaks for the
+// cappers who qualify.
+export const FALLING_MIN_DECIDED = TREND_RECENT + TREND_MIN_BASELINE;
+export const FALLING_SUBLABEL = "Last " + TREND_RECENT + " vs prior up to " + (FORM_LOOKBACK - TREND_RECENT);
+export const FALLING_REQUIREMENT = "Needs " + FALLING_MIN_DECIDED + "+ decided picks";
+export const FALLING_EMPTY = "No qualifying capper is below their normal form.";
 // Most Consistent: the newest CONSISTENT_PICKS decided picks (all required) in CONSISTENT_BLOCKS
 // sequential blocks; the mean block win% must be at least CONSISTENT_MIN_MEAN_PCT.
 export const CONSISTENT_PICKS = 50;
@@ -73,20 +91,37 @@ export const LAST20_PANEL_COUNT = 10;
 
 export type FormPanelKey = "falling" | "consistent";
 
-// A Falling off row (`pts` is negative).
-// `pts`: the score in whole percentage points (recent win% - baseline win%). `results`: the newest
-// TREND_RECENT decided picks, oldest first, true = win. `baseline`: the baseline win rate as a
-// fraction (0-1), the same one `pts` is measured against.
-export type FallingEntry = { capperId: string; name: string; colorTag: string | null; pts: number; results: boolean[]; baseline: number };
+// A Falling off row (`pct` and `pts` are negative).
+// `pct`: the decline as a whole percentage of the baseline, (recent win% - baseline win%) / baseline
+// win%: what the card shows and ranks by. 0 wins in the recent picks is always -100. `pts`: the same
+// gap in whole percentage points (recent win% - baseline win%), which only decides who is in.
+// `results`: the newest TREND_RECENT decided picks, oldest first, true = win. `baseline`: the baseline
+// win rate as a fraction (0-1), the one both are measured against; never 0 on a row (nobody is below 0%).
+export type FallingEntry = { capperId: string; name: string; colorTag: string | null; pct: number; pts: number; results: boolean[]; baseline: number };
 
-// "+12 pts" / "−12 pts".
-export const ptsLabel = (pts: number) => (pts < 0 ? "−" : "+") + Math.abs(pts) + " pts";
+// "−31%" / "+12%".
+export const pctLabel = (pct: number) => (pct < 0 ? "−" : "+") + Math.abs(pct) + "%";
 
-// Falling off's chart line ("wins below their norm"): 0 before the first of the recent picks, then after
-// each pick the running sum of (result - baseline) in points, where a win is 1 and a loss is 0. One pick
-// is worth 100 / TREND_RECENT points, so the last value is recent win% - baseline win%: the score.
+// A win rate (a fraction) as a whole percent: "58%".
+export const ratePct = (rate: number) => Math.round(rate * 100) + "%";
+// The win rate of the recent picks, as a fraction.
+export const recentRate = (results: boolean[]) => (results.length === 0 ? 0 : results.filter(Boolean).length / results.length);
+// "58% → 40%": the capper's normal win rate, then the recent picks'.
+export const rateShift = (results: boolean[], baseline: number) => ratePct(baseline) + " → " + ratePct(recentRate(results));
+
+// The decline as a percentage of the baseline, unrounded: (recent - baseline) / baseline x 100. A
+// baseline of 0 has nothing to be a percentage of (and no row has one): 0.
+export function declinePct(results: boolean[], baseline: number): number {
+  return baseline > 0 ? ((recentRate(results) - baseline) / baseline) * 100 : 0;
+}
+
+// Falling off's chart line ("win% against their norm"): 0 before the first of the recent picks, then
+// after each pick the running sum of (result - baseline) / baseline in percent, where a win is 1 and a
+// loss is 0 and each pick is 1 / TREND_RECENT of the window. So the last value is declinePct: the
+// percentage on the row's label. A baseline of 0 draws flat (see declinePct).
 export function trendSeries(results: boolean[], baseline: number): number[] {
-  const perPick = 100 / TREND_RECENT;
+  if (!(baseline > 0)) return [0, ...results.map(() => 0)];
+  const perPick = 100 / TREND_RECENT / baseline;
   let sum = 0;
   return [0, ...results.map((win) => (sum += ((win ? 1 : 0) - baseline) * perPick))];
 }

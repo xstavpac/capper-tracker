@@ -6,9 +6,15 @@ import {
   DEFAULT_PANEL_WINDOW,
   PANEL_WINDOWS,
   PANEL_WINDOW_LABELS,
+  FALLING_EMPTY,
+  FALLING_REQUIREMENT,
+  FALLING_SUBLABEL,
+  TODAYS_WINNERS_NO_GRADED,
   consistencyScore,
   consistencyTier,
-  ptsLabel,
+  pctLabel,
+  ratePct,
+  rateShift,
   trendSeries,
   type ActiveEntry,
   type ConsistencyTier,
@@ -50,20 +56,21 @@ const EMPTY: Record<PanelKey, (w: PanelWindow) => string> = {
   winners: (w) => "No cappers in the green " + WINDOW_PHRASE[w] + ".",
   coldest: (w) => (w === "yesterday" ? "No cappers were on a 3+ game losing streak as of yesterday." : "No cappers on a 3+ game losing streak " + WINDOW_PHRASE[w] + "."),
 };
-// An empty Yesterday whose day had no graded pick at all (the dropdown fetch says so).
-const NO_GRADED = "No graded picks yesterday.";
+// An empty window whose day had no graded pick at all (the dropdown fetch says so: Yesterday, and
+// Biggest Winners' Today).
+const noGradedMessage = (w: PanelWindow) => (w === "today" ? TODAYS_WINNERS_NO_GRADED : "No graded picks yesterday.");
 const FORM_EMPTY: Record<FormPanelKey, string> = {
-  falling: "Nobody is underperforming their usual form.",
+  falling: FALLING_EMPTY,
   consistent: "No capper has 50 decided picks with a steady 50%+ record yet.",
 };
 // Windowless panels say what they read where the others have their window dropdown.
-const FORM_SUBLABEL: Record<FormPanelKey, string> = { falling: "Last 10 vs prior 90", consistent: "Last 50 picks" };
+const FORM_SUBLABEL: Record<FormPanelKey, string> = { falling: FALLING_SUBLABEL, consistent: "Last 50 picks" };
 
 // Each panel's hue (TINTS, panel-shell.tsx) with its own title, subtitle and header icon.
 const ICON = "h-[17px] w-[17px]";
 const THEME: Record<AnyPanel, PanelTheme> = {
   active: { ...TINTS.blue, title: "Most Active", subtitle: "Who's putting in the work", icon: <UsersIcon className={ICON + " stroke-[1.8]"} /> },
-  falling: { ...TINTS.rose, title: "Falling off", subtitle: "Momentum is fading", icon: <TrendingDownIcon className={ICON + " stroke-[2.4]"} />, iconWrap: "rounded-lg bg-[#FFDDE7] text-[#BE123C] dark:bg-rose-500/15 dark:text-rose-400" },
+  falling: { ...TINTS.rose, title: "Falling off", subtitle: "Fading form · " + FALLING_REQUIREMENT.toLowerCase(), icon: <TrendingDownIcon className={ICON + " stroke-[2.4]"} />, iconWrap: "rounded-lg bg-[#FFDDE7] text-[#BE123C] dark:bg-rose-500/15 dark:text-rose-400" },
   hottest: { ...TINTS.orange, title: "Hot Hand", subtitle: "Current win streaks lighting up", icon: <FlameFilledIcon className={ICON} /> },
   consistent: { ...TINTS.violet, title: "Most Consistent", subtitle: "Confidence score · last 50 picks", icon: <TargetIcon className={ICON + " stroke-[2.2]"} /> },
   winners: { ...TINTS.green, title: "Biggest Winners", subtitle: "Top profit (units won)", icon: <TrophyFilledIcon className={ICON} /> },
@@ -94,7 +101,7 @@ export function CapperPanel({ panel, initial, weekPct, leaderboardHref = LEADERB
   // footer and the empty message never describe the new window with the old window's rows.
   const [shown, setShown] = useState<PanelWindow>(DEFAULT_PANEL_WINDOW);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
-  // The shown window had no graded pick at all (only ever reported for an empty Yesterday).
+  // The shown window had no graded pick at all (only ever reported for an empty Yesterday or Today).
   const [noGraded, setNoGraded] = useState(false);
   const cache = useRef(new Map<PanelWindow, Fetched>([[DEFAULT_PANEL_WINDOW, { rows: initial }]]));
   const abort = useRef<AbortController | null>(null);
@@ -182,7 +189,7 @@ export function CapperPanel({ panel, initial, weekPct, leaderboardHref = LEADERB
         {state === "error" ? (
           <Message error>Couldn&apos;t load this panel. Try another window or refresh.</Message>
         ) : rows.length === 0 ? (
-          <Message>{noGraded ? NO_GRADED : EMPTY[panel](shown)}</Message>
+          <Message>{noGraded ? noGradedMessage(shown) : EMPTY[panel](shown)}</Message>
         ) : panel === "active" ? (
           <ActiveRows rows={rows as ActiveEntry[]} />
         ) : panel === "hottest" ? (
@@ -363,11 +370,16 @@ function HottestFooter({ rows, href }: { rows: StreakEntry[]; href: string }) {
 const MEDAL = ["bg-[#F5B301] text-[#3A2A00]", "bg-[#C5CBD6] text-[#1F2633]", "bg-[#D08A4E] text-white"];
 // Record column: "12-3 80%" on one line where the panel is wide enough, win % under the W-L where it
 // is not (a phone, and the narrow three-column range).
-const RECORD_COL = "w-[74px] max-[479px]:w-10 min-[1500px]:max-[1699px]:w-10";
-const RECORD_PART = "max-[479px]:block min-[1500px]:max-[1699px]:block";
+// `wide`: a card that spans the page (Today's Winners), so only a phone is narrow, and the record has
+// room for the window's pushes ("12-3-1").
+const RECORD = {
+  panel: { col: "w-[74px] max-[479px]:w-10 min-[1500px]:max-[1699px]:w-10", part: "max-[479px]:block min-[1500px]:max-[1699px]:block", pct: "max-[479px]:ml-0 min-[1500px]:max-[1699px]:ml-0" },
+  wide: { col: "w-[96px] max-[479px]:w-12", part: "max-[479px]:block", pct: "max-[479px]:ml-0" },
+};
 const UNITS_COL = "w-[60px] min-[1500px]:max-[1699px]:w-14";
 const VIEW_COL = "w-11 min-[1500px]:max-[1699px]:w-10";
-function WinnerRows({ rows }: { rows: WinnerEntry[] }) {
+export function WinnerRows({ rows, wide = false }: { rows: WinnerEntry[]; wide?: boolean }) {
+  const { col: RECORD_COL, part: RECORD_PART, pct: RECORD_PCT } = wide ? RECORD.wide : RECORD.panel;
   return (
     <>
       <div aria-hidden className="flex items-center gap-2.5 min-[1500px]:max-[1699px]:gap-1.5 border-b border-[#0F1420]/[0.08] px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-[#5B6275] dark:border-white/10 dark:text-muted-foreground">
@@ -387,8 +399,8 @@ function WinnerRows({ rows }: { rows: WinnerEntry[] }) {
                 <Name>{e.name}</Name>
               </Link>
               <span className={RECORD_COL + " shrink-0 whitespace-nowrap text-xs font-medium leading-tight tabular-nums text-foreground"}>
-                <span className={RECORD_PART}>{e.wins + "–" + e.losses}</span>
-                {decided > 0 && <span className={RECORD_PART + " ml-1 font-semibold text-[#5B6275] max-[479px]:ml-0 min-[1500px]:max-[1699px]:ml-0 dark:text-muted-foreground"}>{Math.round((e.wins / decided) * 100) + "%"}</span>}
+                <span className={RECORD_PART}>{e.wins + "–" + e.losses + (wide && e.pushes > 0 ? "–" + e.pushes : "")}</span>
+                {decided > 0 && <span className={RECORD_PART + " ml-1 font-semibold text-[#5B6275] dark:text-muted-foreground " + RECORD_PCT}>{Math.round((e.wins / decided) * 100) + "%"}</span>}
               </span>
               <span className={UNITS_COL + " shrink-0 text-right text-sm font-semibold tracking-[-0.01em] tabular-nums " + GREEN}>{units(e.netUnits)}</span>
               <Link
@@ -406,7 +418,7 @@ function WinnerRows({ rows }: { rows: WinnerEntry[] }) {
   );
 }
 
-function WinnersFooter({ rows, href }: { rows: WinnerEntry[]; href: string }) {
+export function WinnersFooter({ rows, href }: { rows: WinnerEntry[]; href: string }) {
   const total = rows.reduce((sum, e) => sum + e.netUnits, 0);
   return (
     <>
@@ -488,14 +500,14 @@ export function FormPanel({ panel, rows, leaderboardHref = LEADERBOARD_HREF }: {
 const AXIS_TEXT = "text-[11px] font-medium leading-none tabular-nums text-[#5B6275] dark:text-muted-foreground";
 // Line colors by rank; the legend swatches match. #1 takes the panel's own hue.
 const LINE_COLORS = ["#E11D48", "#2563EB", "#F59E0B", "#A855F7", "#06B6D4"];
-const signedPts = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v));
+const signedPct = (v: number) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v)) + "%";
 // The chart's rose: #1's label chip, its legend row and the points' color.
 const TREND = { colors: LINE_COLORS, chip: "bg-[#BE123C]", lead: "bg-[#FFE1E9] dark:bg-rose-500/15", pts: "text-[#BE123C] dark:text-rose-400" };
 
 // The axis for the lines' range. It bottoms out at the lowest point rounded down to a 10 and tops out at
 // the highest rounded up to a gridline; gridlines are the smallest round step that gives at most five
-// bands, drawn at its multiples (0 always among them). A dip of under half a point past a 10 (two
-// losses against a 51% norm reach -10.2) does not buy a whole extra band: it is under a pixel.
+// bands, drawn at its multiples (0 always among them). A dip of under half a percent past a 10 (a win
+// and two losses against a 50.5% norm reach -10.2) does not buy a whole extra band: it is under a pixel.
 function ptsAxis(values: number[]): { lo: number; hi: number; ticks: number[] } {
   const lo = Math.floor((Math.min(0, ...values) + 0.5) / 10) * 10;
   const max = Math.max(0, ...values);
@@ -511,10 +523,10 @@ function ptsAxis(values: number[]): { lo: number; hi: number; ticks: number[] } 
 const PLOT_MIN_H = 116;
 const LABEL_H = 13;
 
-// "Wins below their norm" for the top fallers: each line starts at 0 and, pick by pick over the last 10
-// decided picks, adds what the result beat the capper's own baseline win rate by (trendSeries). A
-// faller's line sinks, and ends on exactly their (negative) score. 0 is the norm line, at the top:
-// the axis is ptsAxis's upside down.
+// "Win% against their norm" for the top fallers: each line starts at 0 and, pick by pick over the last 10
+// decided picks, adds what the result beat the capper's own baseline win rate by, as a percentage of
+// that baseline (trendSeries). A faller's line sinks, and ends on the (negative) percentage on their
+// label. 0 is the norm line, at the top: the axis is ptsAxis's upside down.
 function FallingChart({ rows }: { rows: FallingEntry[] }) {
   const look = TREND;
   const lines = rows.map((r) => trendSeries(r.results, r.baseline));
@@ -525,17 +537,17 @@ function FallingChart({ rows }: { rows: FallingEntry[] }) {
   const y = (v: number) => ((hi - v) / (hi - lo)) * 100;
   const points = (l: number[]) => l.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(2)).join(" ");
   const ends = lines.map((l) => l[l.length - 1] ?? 0);
-  // Every line gets its "−X pts" in the right margin where the panel is wide enough and no two labels
+  // Every line gets its "−X%" in the right margin where the panel is wide enough and no two labels
   // would touch; otherwise only #1 is labelled, on the plot.
   const minGap = (LABEL_H / PLOT_MIN_H) * (hi - lo);
   const sortedEnds = [...ends].sort((p, q) => p - q);
   const allLabels = rows.length > 1 && sortedEnds.every((v, i) => i === 0 || v - sortedEnds[i - 1] >= minGap);
   const ranked = rows.map((r, i) => ({ r, i })).reverse(); // drawn last-to-first so #1 sits on top
   const label =
-    "Wins below their norm across the last " +
+    "Win rate against their norm across the last " +
     (n - 1) +
-    " decided picks, in points: each line starts at 0 and ends on the capper's score. " +
-    rows.map((r) => r.name + " −" + Math.abs(r.pts)).join("; ") +
+    " decided picks, as a percentage of that norm: each line starts at 0 and ends on the capper's decline. " +
+    rows.map((r) => r.name + " down " + Math.abs(r.pct) + "% (" + rateShift(r.results, r.baseline) + ")").join("; ") +
     ".";
   // #1's label sits level with its dot when the line arrives moving away from the norm, and over the
   // dot when the last pick went the other way.
@@ -545,7 +557,7 @@ function FallingChart({ rows }: { rows: FallingEntry[] }) {
     <div className="flex flex-1 flex-col gap-2.5 min-[400px]:flex-row">
       {/* At least ~140px tall, and as tall as the panel's row makes it: no gap above or below. */}
       <div role="img" aria-label={label} className="relative min-h-[144px] w-full min-w-0 flex-1">
-        <div className={"absolute bottom-5 left-[34px] top-2 " + (allLabels ? "right-2 min-[1280px]:max-[1499px]:right-[54px] min-[1700px]:right-[54px]" : "right-2")}>
+        <div className={"absolute bottom-5 left-[42px] top-2 " + (allLabels ? "right-2 min-[1280px]:max-[1499px]:right-[54px] min-[1700px]:right-[54px]" : "right-2")}>
           {ticks.map((t) => (
             <span key={t} aria-hidden className={"absolute right-full mr-1.5 -translate-y-1/2 text-right " + (t === 0 ? "text-[11px] font-semibold leading-none text-[#3A4152] dark:text-foreground/80" : AXIS_TEXT)} style={{ top: y(t) + "%" }}>
               {/* 0 is the norm line. Its label sits in the axis margin: every line starts at the line's left end, so a label on the plot would be crossed. */}
@@ -556,7 +568,7 @@ function FallingChart({ rows }: { rows: FallingEntry[] }) {
                   norm
                 </>
               ) : (
-                signedPts(t)
+                signedPct(t)
               )}
             </span>
           ))}
@@ -588,7 +600,7 @@ function FallingChart({ rows }: { rows: FallingEntry[] }) {
             className={"absolute right-3.5 whitespace-nowrap rounded-md " + look.chip + " px-1.5 py-[3px] text-[11px] font-semibold leading-none tabular-nums text-white " + (allLabels ? "min-[1280px]:max-[1499px]:hidden min-[1700px]:hidden" : "")}
             style={{ top: y(ends[0]) + "%", transform: leadLabelShift }}
           >
-            {ptsLabel(rows[0].pts)}
+            {pctLabel(rows[0].pct)}
           </span>
           {allLabels &&
             rows.map((r, i) => (
@@ -598,12 +610,12 @@ function FallingChart({ rows }: { rows: FallingEntry[] }) {
                 className={"absolute left-full ml-2 hidden -translate-y-1/2 whitespace-nowrap text-[11px] leading-none tabular-nums min-[1280px]:max-[1499px]:block min-[1700px]:block " + (i === 0 ? "font-bold" : "font-semibold")}
                 style={{ top: y(ends[i]) + "%", color: look.colors[i] }}
               >
-                {ptsLabel(r.pts)}
+                {pctLabel(r.pct)}
               </span>
             ))}
         </div>
         {/* Picks back from the newest: the lines start before the first of them, at 0. */}
-        <span aria-hidden className={"absolute bottom-0 left-[34px] " + AXIS_TEXT}>
+        <span aria-hidden className={"absolute bottom-0 left-[42px] " + AXIS_TEXT}>
           {n - 1 + " picks ago"}
         </span>
         <span aria-hidden className={"absolute bottom-0 text-[11px] font-semibold leading-none text-foreground " + (allLabels ? "right-2 min-[1280px]:max-[1499px]:right-[54px] min-[1700px]:right-[54px]" : "right-2")}>
@@ -616,7 +628,11 @@ function FallingChart({ rows }: { rows: FallingEntry[] }) {
             <Link href={capperHref(r.capperId)} className={"flex h-8 items-center gap-[7px] rounded-lg px-1.5 transition-colors " + (i === 0 ? look.lead : "hover:bg-foreground/[0.035]")}>
               <span aria-hidden className={"w-[11px] shrink-0 rounded-full " + (i === 0 ? "h-1" : "h-[3px]")} style={{ backgroundColor: look.colors[i] }} />
               <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{r.name}</span>
-              <span className={"whitespace-nowrap text-xs font-semibold tabular-nums " + look.pts}>{ptsLabel(r.pts)}</span>
+              {/* The decline, and under it the two win rates it is made of: their norm, then the last 10. */}
+              <span className="flex shrink-0 flex-col items-end gap-[3px] whitespace-nowrap tabular-nums">
+                <span className={"text-xs font-semibold leading-none " + look.pts}>{pctLabel(r.pct)}</span>
+                <span className="text-[10px] font-medium leading-none text-[#5B6275] dark:text-muted-foreground">{rateShift(r.results, r.baseline)}</span>
+              </span>
             </Link>
           </li>
         ))}
@@ -631,8 +647,9 @@ function FallingFooter({ rows }: { rows: FallingEntry[] }) {
       <TrendingDownIcon className={"h-[18px] w-[18px] shrink-0 stroke-[2.4] " + TREND.pts} />
       <FooterLine name={rows[0].name}>
         {/* One string: split text nodes are not kerned across the join. */}
-        {"is trending down "}
-        <span className={"font-semibold tabular-nums " + TREND.pts}>{ptsLabel(rows[0].pts)}</span>
+        {"is down "}
+        <span className={"font-semibold tabular-nums " + TREND.pts}>{Math.abs(rows[0].pct) + "%"}</span>
+        {" from their normal " + ratePct(rows[0].baseline)}
       </FooterLine>
       <Link href={capperHref(rows[0].capperId)} className="shrink-0 whitespace-nowrap rounded-lg bg-[#E11D48] px-2.5 py-1.5 text-xs font-semibold text-white hover:brightness-95">
         View trend →

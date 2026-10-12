@@ -11,7 +11,7 @@ import { getLiveBoardData } from "@/server/data/live-board-picks";
 import { getCapperCategoryRecords, getCapperLeagueRecords, type CapperLeagueRecords } from "@/server/data/picks";
 import type { PickCategoryKey } from "@/server/data/stats";
 import { easternDateKey } from "@/lib/dates";
-import { AUTO_GENERATE_MAX_LEGS } from "@/lib/parlay/auto-generate-config";
+import { legCapRejection, type LegCapRejection } from "@/lib/parlay/leg-cap";
 import {
   buildAutoParlay,
   buildSwapParlay,
@@ -30,9 +30,16 @@ export type AutoGenerateResult = {
   leaguesSearched: string[];
 };
 
-export async function autoGenerateParlayAction(leagues: string[], legCount: number): Promise<AutoGenerateResult> {
+// More than MAX_PARLAY_LEGS legs is refused outright (see leg-cap.ts) - never
+// built smaller than asked.
+export async function autoGenerateParlayAction(
+  leagues: string[],
+  legCount: number
+): Promise<AutoGenerateResult | LegCapRejection> {
   const user = await requireUser();
-  const requested = Math.max(1, Math.min(AUTO_GENERATE_MAX_LEGS, Math.floor(legCount) || 1));
+  const rejection = legCapRejection(legCount);
+  if (rejection) return rejection;
+  const requested = Math.max(1, Math.floor(legCount) || 1);
   const sports = LIVE_SPORTS.filter((s) => leagues.includes(s.label));
 
   const now = new Date();

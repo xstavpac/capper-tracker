@@ -14,7 +14,7 @@ import { PickCard } from "@/components/live/pick-card";
 import { ScopeToggle, LegStepper } from "@/components/parlay/parlay-controls";
 import { GameHeader, ResultColumn, SwapColumn, marketNoun } from "@/components/parlay/swap-result";
 import { rankBasisLabel } from "@/lib/parlay/pick-record";
-import { AUTO_GENERATE_MAX_LEGS } from "@/lib/parlay/auto-generate-config";
+import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import type { AutoLeg, RankedPick } from "@/lib/parlay/auto-generate";
 
 const DEFAULT_IN_SCOPE_LEAGUE = "MLB";
@@ -91,6 +91,10 @@ export function AutoGenerateSection({ leagues }: { leagues: string[] }) {
     setError(null);
     try {
       const next = await autoGenerateParlayAction(inScopeLeagues, legCount);
+      if ("error" in next) {
+        setError(next.error);
+        return;
+      }
       setResult(next);
       setShortfallConfirmed(false);
       setShowHedge(false);
@@ -132,9 +136,9 @@ export function AutoGenerateSection({ leagues }: { leagues: string[] }) {
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <LegStepper
           value={legCount}
-          max={AUTO_GENERATE_MAX_LEGS}
-          onChange={(n) => setLegCountState(Math.max(1, Math.min(n, AUTO_GENERATE_MAX_LEGS)))}
-          note={`one per game · up to ${AUTO_GENERATE_MAX_LEGS}`}
+          max={MAX_PARLAY_LEGS}
+          onChange={(n) => setLegCountState(Math.max(1, Math.min(n, MAX_PARLAY_LEGS)))}
+          note={`one per game · up to ${MAX_PARLAY_LEGS}`}
         />
         <div className="flex flex-wrap gap-2">
           <button

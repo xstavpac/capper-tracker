@@ -15,13 +15,18 @@
 // still building - the confirmed legs and the add-mode selection both. The
 // stored legs are only a list of pick ids to look up, though: on hydrate and
 // on every tab focus they are revalidated against the DB
-// (getSlipPickStatesAction), so status/odds/game time always come from current
-// data and any leg that has started, been graded, or been deleted is pruned
-// (with a one-time notice).
+// (getSlipPickStatesAction), so status, odds and whether the game has started
+// always come from current data and any leg that has started, been graded, or
+// been deleted is pruned (with a one-time notice).
+//
+// The slip holds at most MAX_PARLAY_LEGS picks (lib/parlay/leg-cap.ts).
+// confirmAdd refuses a selection that would take it past that - it adds
+// nothing and says so, rather than adding only the picks that fit.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getSlipPickStatesAction } from "@/server/actions/parlay-slip";
 import { reconcileSlip, type PrunedLeg } from "@/lib/parlay/slip-reconcile";
+import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 
 export type PooledPick = ExpanderPick;
 
@@ -51,6 +56,10 @@ type ParlayPoolContextValue = {
   toggleChecked: (pick: PooledPick) => void;
   confirmAdd: () => void;
   discardAdd: () => void;
+  // How many picks the last confirmAdd was over MAX_PARLAY_LEGS by - set when
+  // it was refused, null otherwise. Cleared as soon as the selection changes.
+  overCapBy: number | null;
+  dismissOverCap: () => void;
 
   leaguesInPool: string[];
   isLeagueInScope: (league: string) => boolean;
@@ -92,6 +101,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   const [legCount, setLegCountState] = useState(2);
   const [addMode, setAddMode] = useState(false);
   const [checkedPicks, setCheckedPicks] = useState<Map<string, PooledPick>>(new Map());
+  const [overCapBy, setOverCapBy] = useState<number | null>(null);
   // Guards the persist effect below - without it, that effect's own first
   // run (on mount, before hydration below has applied) fires with the
   // empty initial state and immediately overwrites a real saved pool with
@@ -100,6 +110,9 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   const [notice, setNotice] = useState<PrunedLeg[] | null>(null);
   const poolRef = useRef<PooledPick[]>([]);
   poolRef.current = pool;
+  // Stored legs still being checked against the DB on hydrate: not in `pool`
+  // yet, but about to be, so confirmAdd counts them toward the cap.
+  const uncheckedStoredRef = useRef<Set<string>>(new Set());
   const lastCheckRef = useRef(0);
   const inFlightRef = useRef(false);
   // Pick ids already reported in a notice this session, so the same leg is
@@ -146,6 +159,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     // before it lands. Its answer replaces only the stored legs it was asked
     // about - anything confirmed in the meantime stays.
     const storedIds = new Set(stored.map((p) => p.pickId));
+    uncheckedStoredRef.current = storedIds;
     const withConfirmedSince = (checked: PooledPick[]) => (prev: PooledPick[]) =>
       [...checked, ...prev.filter((p) => !storedIds.has(p.pickId))];
     (async () => {
@@ -156,6 +170,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
         // Offline / server error - handled below.
       }
       if (cancelled) return;
+      uncheckedStoredRef.current = new Set();
       if (states) {
         const { kept, pruned } = reconcileSlip(stored, states);
         setPool(withConfirmedSince(kept));
@@ -172,6 +187,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     })();
     return () => {
       cancelled = true;
+      uncheckedStoredRef.current = new Set();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-hydrate when the signed-in user changes
   }, [userId]);
@@ -244,12 +260,16 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     setPool((prev) => prev.filter((p) => p.pickId !== pickId));
   }, []);
 
+  const dismissOverCap = useCallback(() => setOverCapBy(null), []);
+
   const enterAddMode = useCallback(() => {
     setCheckedPicks(new Map());
+    setOverCapBy(null);
     setAddMode(true);
   }, []);
 
   const toggleChecked = useCallback((pick: PooledPick) => {
+    setOverCapBy(null);
     setCheckedPicks((prev) => {
       const next = new Map(prev);
       if (next.has(pick.pickId)) next.delete(pick.pickId);
@@ -259,6 +279,17 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   }, []);
 
   const confirmAdd = useCallback(() => {
+    const held = new Set(poolRef.current.map((p) => p.pickId));
+    uncheckedStoredRef.current.forEach((id) => held.add(id));
+    const adding = Array.from(checkedPicks.values()).filter((p) => !held.has(p.pickId));
+    const over = held.size + adding.length - MAX_PARLAY_LEGS;
+    if (adding.length > 0 && over > 0) {
+      // Stay in add mode with the selection intact, so the user can untick
+      // down to the cap instead of starting over.
+      setOverCapBy(over);
+      return;
+    }
+    setOverCapBy(null);
     setPool((prev) => {
       const existingIds = new Set(prev.map((p) => p.pickId));
       const additions = Array.from(checkedPicks.values()).filter((p) => !existingIds.has(p.pickId));
@@ -279,6 +310,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   }, [checkedPicks]);
 
   const discardAdd = useCallback(() => {
+    setOverCapBy(null);
     setCheckedPicks(new Map());
     setAddMode(false);
   }, []);
@@ -294,8 +326,10 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     setLeagueScope((prev) => ({ ...prev, [league]: !(prev[league] ?? league === MLB_LEAGUE_NAME) }));
   }, []);
 
+  // A slip saved before the cap existed can hold more than MAX_PARLAY_LEGS
+  // picks; it still builds at most that many legs.
   const maxLegCount = useMemo(
-    () => pool.filter((p) => isLeagueInScope(p.leagueName)).length,
+    () => Math.min(pool.filter((p) => isLeagueInScope(p.leagueName)).length, MAX_PARLAY_LEGS),
     [pool, isLeagueInScope]
   );
 
@@ -316,6 +350,8 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     toggleChecked,
     confirmAdd,
     discardAdd,
+    overCapBy,
+    dismissOverCap,
     leaguesInPool,
     isLeagueInScope,
     toggleLeague,

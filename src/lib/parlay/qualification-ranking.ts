@@ -38,12 +38,13 @@ export type ParlayLeg = {
   awayTeam: string;
   gameTime: Date;
   sportName: string;
+  gameId?: string | null;
 };
 
 function toParlayCandidate(leg: ParlayLeg): ParlayCandidate {
   return {
     pick: { betType: leg.betType, period: leg.period, betDetail: leg.betDetail, line: leg.line },
-    game: { homeTeam: leg.homeTeam, awayTeam: leg.awayTeam, gameTime: leg.gameTime, sportName: leg.sportName },
+    game: { homeTeam: leg.homeTeam, awayTeam: leg.awayTeam, gameTime: leg.gameTime, sportName: leg.sportName, gameId: leg.gameId },
   };
 }
 

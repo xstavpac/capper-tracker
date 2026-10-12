@@ -20,6 +20,7 @@ import * as adapter from "@/server/data/pick-aggregates-cappers-adapter";
 import type { LeaderboardEntry } from "@/server/data/cappers";
 import { getCappersPageData, sparklineTone, SPARKLINE_MIN_PICKS, STANDOUT_MIN_GRADED, STAT_WEEKS, getPanelRows, panelWindowHasGraded, consistencyScore, consistencyTier, type ActiveEntry, type CapperSparkline, type PanelWindow, type StreakEntry, type WinnerEntry } from "@/server/data/cappers-page-aggregates";
 import { trendSeries, yesterdayRange } from "@/lib/cappers-panels";
+import { startOfEasternDay } from "@/lib/dates";
 // Hot Hand and Coldest moved to /dashboard: the page-statement checks for them run
 // against its panels statement (the same SQL fragments).
 import { computeCapperPanels } from "@/server/data/capper-panels";
@@ -485,20 +486,21 @@ async function main() {
   async function referenceWinners(userId: string) {
     const since = Date.now() - 7 * 86400000;
     const picks = await prisma.pick.findMany({ where: { userId, datePosted: { gte: new Date(since) }, status: { in: ["WIN", "LOSS", "PUSH"] } }, include: { capper: true } });
-    const by = new Map<string, { name: string; n: number; net: number; wins: number; losses: number }>();
+    const by = new Map<string, { name: string; n: number; net: number; wins: number; losses: number; pushes: number }>();
     for (const p of picks) {
-      const e = by.get(p.capperId) ?? by.set(p.capperId, { name: p.capper.name, n: 0, net: 0, wins: 0, losses: 0 }).get(p.capperId)!;
+      const e = by.get(p.capperId) ?? by.set(p.capperId, { name: p.capper.name, n: 0, net: 0, wins: 0, losses: 0, pushes: 0 }).get(p.capperId)!;
       e.n++;
       if (p.status === "WIN") e.wins++;
       if (p.status === "LOSS") e.losses++;
+      if (p.status === "PUSH") e.pushes++;
       e.net += p.status === "WIN" ? p.units * (p.odds > 0 ? p.odds / 100 : 100 / Math.abs(p.odds)) : p.status === "LOSS" ? -p.units : 0;
     }
     return [...by.entries()]
-      .map(([capperId, e]) => ({ capperId, name: e.name, n: e.n, netUnits: r2(e.net), wins: e.wins, losses: e.losses }))
+      .map(([capperId, e]) => ({ capperId, name: e.name, n: e.n, netUnits: r2(e.net), wins: e.wins, losses: e.losses, pushes: e.pushes }))
       .filter((e) => e.netUnits > 0)
       .sort((a, b) => b.netUnits - a.netUnits || cmpStr(a.name.toLowerCase(), b.name.toLowerCase()) || cmpStr(a.name, b.name) || cmpStr(a.capperId, b.capperId))
       .slice(0, 5)
-      .map(({ capperId, name, netUnits, wins, losses }) => ({ capperId, name, colorTag: null as string | null, netUnits, wins, losses }));
+      .map(({ capperId, name, netUnits, wins, losses, pushes }) => ({ capperId, name, colorTag: null as string | null, netUnits, wins, losses, pushes }));
   }
   const winnersOf = async (userId: string, o: { window?: ScorecardWindow; league?: string } = {}) =>
     (await getCappersPageData({ userId, window: o.window ?? "ALL", league: o.league, min: 0, sort: "roi", fav: false, q: "", page: 1 })).winners;
@@ -736,6 +738,34 @@ async function main() {
   same("most active [today]: unchanged, today's picks only", (await panelOf<ActiveEntry>(Y1.u, "active", "today")).map((e) => e.name + " " + e.pickCount + "/" + e.totalPicks), ["Today only 2/2"]);
   check("yesterday had graded picks", (await gradedOf(Y1.u, "winners")) && (await gradedOf(Y1.u, "hottest")));
 
+  // ---- Today's Winners (/dashboard): Biggest Winners at "Today", as the card's fetch reads it -----
+  const todayLine = async (userId: string, now = NOWY) => ((await getPanelRows({ userId, panel: "winners", window: "today", now })) as WinnerEntry[]).map((e) => e.name + " " + e.netUnits + " " + e.wins + "-" + e.losses + "-" + e.pushes);
+  const gradedToday = (userId: string) => panelWindowHasGraded({ userId, panel: "winners", window: "today", now: NOWY });
+  const TW = await scenario("todaywin", [
+    { name: "T small", specs: (c) => [one(c, W, TS.getTime() + 2 * HOUR, { odds: -200 })] }, // +0.5
+    { name: "T big", specs: (c) => [one(c, W, TS.getTime() + HOUR, { odds: 300 })] }, // +3.0 on one pick
+    { name: "T mixed", specs: (c) => [one(c, W, TS.getTime() + HOUR), one(c, W, TS.getTime() + 2 * HOUR), one(c, L, TS.getTime() + 3 * HOUR), one(c, P, TS.getTime() + 4 * HOUR)] }, // +1.0, 2-1-1
+    // Pending picks are in neither the record nor the units, however large.
+    { name: "T pending", specs: (c) => [one(c, W, TS.getTime() + HOUR, { units: 0.25 }), one(c, "PENDING", TS.getTime() + 2 * HOUR, { units: 50, odds: 900 }), one(c, "PENDING", TS.getTime() + 3 * HOUR, { units: 50 })] }, // +0.25, 1-0
+    { name: "T pending only", specs: (c) => [one(c, "PENDING", TS.getTime() + HOUR, { units: 50, odds: 900 })] },
+    // The day starts at Eastern midnight: a win at that instant is today's, one 1 ms earlier is not.
+    { name: "T edge", specs: (c) => [one(c, W, TS.getTime(), { odds: 200 }), one(c, W, TS.getTime() - 1, { odds: 900 })] }, // +2.0, 1-0
+    { name: "T yesterday", specs: (c) => [one(c, W, TS.getTime() - 1, { odds: 900 }), one(c, W, YS.getTime() + HOUR, { odds: 900 })] },
+    { name: "T loser", specs: (c) => [one(c, L, TS.getTime() + HOUR)] },
+  ]);
+  same(
+    "today's winners: ranked by net units, graded picks only (pending in neither record nor units), today's Eastern day only, pushes on the row",
+    await todayLine(TW.u),
+    ["T big 3 1-0-0", "T edge 2 1-0-0", "T mixed 1 2-1-1", "T small 0.5 1-0-0", "T pending 0.25 1-0-0"]
+  );
+  check("today's winners: the day has graded picks", await gradedToday(TW.u));
+  same("today's winners: 1 ms before the next Eastern midnight it is still the same day", await todayLine(TW.u, new Date(startOfEasternDay(new Date(TS.getTime() + 36 * HOUR)).getTime() - 1)), await todayLine(TW.u));
+  same("today's winners: at the next Eastern midnight the day starts over, empty", await todayLine(TW.u, startOfEasternDay(new Date(TS.getTime() + 36 * HOUR))), []);
+  const TP = await scenario("todaypending", [{ name: "Pending today", specs: (c) => [one(c, "PENDING", TS.getTime() + HOUR), one(c, W, TS.getTime() - 1)] }]);
+  same("today's winners: only pending picks today -> empty, and no graded picks today (yesterday's win is not one)", [await todayLine(TP.u), await gradedToday(TP.u)], [[], false]);
+  const TL = await scenario("todayloss", [{ name: "Lost today", specs: (c) => [one(c, L, TS.getTime() + HOUR), one(c, P, TS.getTime() + 2 * HOUR)] }]);
+  same("today's winners: a losing day lists nobody, but the day did have graded picks", [await todayLine(TL.u), await gradedToday(TL.u)], [[], true]);
+
   // Hot Hand / Coldest read gameTime: eligible with a graded game yesterday, and the run is the one
   // standing when yesterday ended (today's games neither extend nor break it).
   const twoDaysAgo = (c: string, status: PickSpec["status"]) => [one(c, status, YS.getTime() - 5 * HOUR), one(c, status, YS.getTime() - 4 * HOUR)];
@@ -838,7 +868,7 @@ async function main() {
   same("weekly series do not follow the time tab", pageS5tab.overview.weekly, o5.weekly);
   check("active cappers delta does not follow the time tab", pageS5tab.overview.activeCappersDelta === 6);
 
-  // 6. Falling off points + results + baseline; Most Consistent deviation, confidence score and tier.
+  // 6. Falling off percentage + points + results + baseline; Most Consistent deviation, confidence score and tier.
   const reps = (n: number, s: PickSpec["status"]) => Array.from({ length: n }, () => s);
   const block = (wins: number) => [...reps(wins, W), ...reps(10 - wins, L)];
   const S6 = await scenario("form", [
@@ -851,13 +881,14 @@ async function main() {
   const dashS6 = await computeCapperPanels(S6.u);
   // Wavy: last 10 at 50% against 60% over the 40 before; Flat is exactly on its norm, so in neither.
   same("falling: the capper under their baseline, with the negative score", dashS6.falling.map((e) => e.name + " " + e.pts), ["Wavy -10"]);
+  same("falling: the decline as a percentage of their norm (10 points of 60%)", dashS6.falling.map((e) => e.name + " " + e.pct), ["Wavy -17"]);
   same("falling: results = the last 10 decided picks, oldest first", dashS6.falling[0]?.results, [false, false, false, false, false, true, true, true, true, true]);
   same("falling: baseline = the win rate of the picks before those, as a fraction", dashS6.falling[0]?.baseline, 0.6);
   const lineS6 = trendSeries(dashS6.falling[0]?.results ?? [], dashS6.falling[0]?.baseline ?? 0);
-  same("falling: chart line starts at 0 and adds (result - baseline) x 10 per pick", lineS6.map((v) => Math.round(v)), [0, -6, -12, -18, -24, -30, -26, -22, -18, -14, -10]);
-  check("falling: the line's last point is the displayed points", Math.round(lineS6[lineS6.length - 1]) === dashS6.falling[0]?.pts);
-  same("a chart line that starts at 0 and adds (result - baseline) x 10 per pick", trendSeries([false, false, true, true, true, true, true, true, true, true], 0.5), [0, -5, -10, -5, 0, 5, 10, 15, 20, 25, 30]);
-  same("a baseline that is not a round fraction still ends on the score", Math.round(trendSeries([true, true, false, true, true, true, true, false, true, true], 0.51)[10]), 29);
+  same("falling: chart line starts at 0 and adds (result - baseline) / baseline x 10 per pick", lineS6.map((v) => Math.round(v)), [0, -10, -20, -30, -40, -50, -43, -37, -30, -23, -17]);
+  check("falling: the line's last point is the displayed percentage", Math.round(lineS6[lineS6.length - 1]) === dashS6.falling[0]?.pct);
+  same("a chart line that starts at 0 and adds (result - baseline) / baseline x 10 per pick", trendSeries([false, false, true, true, true, true, true, true, true, true], 0.5), [0, -10, -20, -10, 0, 10, 20, 30, 40, 50, 60]);
+  same("a baseline that is not a round fraction still ends on the percentage", Math.round(trendSeries([true, true, false, true, true, true, true, false, true, true], 0.51)[10]), 57);
   same("consistent: steadiest first, blocks oldest first", pageS6.consistent.map((e) => e.name + " " + e.blocks.join(",")), ["Flat 60,60,60,60,60", "Wavy 50,70,50,70,50"]);
   same("consistent: population standard deviation of the block win %s", pageS6.consistent.map((e) => e.sd), [0, Math.sqrt(96)]);
   same("consistent: confidence = clamp(round(100 - 2.5 * sd)) and its tier", pageS6.consistent.map((e) => consistencyScore(e.sd) + " " + consistencyTier(consistencyScore(e.sd))), ["100 Elite", "76 Steady"]);

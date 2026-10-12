@@ -288,5 +288,24 @@ function record(wins: number, losses: number, opts: Partial<CategoryBreakdownIte
   check("purity call 2: same capperId, independent call with a non-qualifying record (40%) - excluded, no leakage from call 1", call2Result, []);
 }
 
+// ============================================================================
+// A primary whose stored time is not its game's kickoff (imported with no
+// matched game, so it holds the import time) still finds its game's
+// alternates: same game is teams + sport + date, not the exact time.
+// ============================================================================
+{
+  const primary = mkLeg({ pickId: "primary", capperId: "primaryCapper", gameTime: new Date("2026-09-01T15:12:44Z") });
+  const total = mkLeg({ pickId: "alt-total", capperId: "capC", betType: "TOTAL", betDetail: "Over 8.5", line: 8.5, odds: -110 });
+  const oppML = mkLeg({ pickId: "alt-opp", capperId: "capB", betDetail: "Red Sox ML", odds: -120 });
+  const sameSide = mkLeg({ pickId: "extraYank", capperId: "extraYankCapper", betDetail: "Yankees ML", odds: -140 });
+  const records: Record<string, CategoryBreakdownItem | null> = {
+    "capC|OVER": record(6, 4, { key: "OVER", winPct: 60 }),
+    "capB|FAV_ML": record(6, 4, { key: "FAV_ML", winPct: 60 }),
+  };
+  const sameGame = [total, oppML, sameSide];
+  check("stored time differs from the game's: AUTO_HEDGE still finds the alternate", rankCandidates(primary, [total, oppML], "AUTO_HEDGE", records, sameGame).map((r) => r.leg.pickId), ["alt-total"]);
+  check("stored time differs from the game's: CONTRARIAN still finds the alternate", rankCandidates(primary, [total, oppML], "CONTRARIAN", records, sameGame).map((r) => r.leg.pickId), ["alt-opp"]);
+}
+
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);

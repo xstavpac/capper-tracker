@@ -7,7 +7,8 @@
 // the same carried-over still-live-from-yesterday games, and the same
 // per-pick team-group/color classification, and drift between copies of
 // that logic would show up as picks appearing for one caller but not
-// another for the same game.
+// another for the same game. The per-pick mapping itself is toExpanderPick
+// (expander-pick.ts).
 //
 // Deliberately excludes anything page-specific: Board Pulse's fixed
 // today-only slate, the sport-category breakdown panel, and Grid's
@@ -21,10 +22,7 @@ import {
   type ScoreGame,
 } from "@/server/data/odds";
 import { getPicksForGames } from "@/server/data/picks";
-import { pickCategory, betTypeLabel } from "@/server/data/stats";
-import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
-import { getTeamColor } from "@/lib/team-colors";
-import { formatPickLabel } from "@/lib/bet-line";
+import { toExpanderPick } from "@/server/data/expander-pick";
 import { type ExpanderPick } from "@/components/live/game-picks-expander";
 import { slateCutoffKey } from "@/components/live/live-scoreboard-ordering";
 import { easternDateKey } from "@/lib/dates";
@@ -81,53 +79,9 @@ export async function getLiveBoardData(
     }))
   );
 
-  const expanderPicksByGame: ExpanderPick[][] = matchedPicksByGame.map((matchedPicks, gameIndex) => {
-    const game = odds[gameIndex];
-    // "Away @ Home" using the same short names the pick card's team-group
-    // header already shows - the Parlay Pool's only use for this is a
-    // human-readable label next to a pooled pick, not a lookup key (pickId
-    // already is one).
-    const gameLabel = shortTeamName(game.awayTeam, sportLabel) + " @ " + shortTeamName(game.homeTeam, sportLabel);
-    return matchedPicks.map((p) => {
-      const teamGroup = classifyPickTeamGroup(p, game, sportLabel);
-      return {
-        pickId: p.id,
-        capperId: p.capperId,
-        capperName: p.capper.name,
-        capperColorTag: p.capper.colorTag,
-        capperIsFavorite: p.capper.isFavorite,
-        category: pickCategory({ ...p, sportName: sportLabel }),
-        leagueName: sportLabel,
-        gameId: game.id,
-        gameLabel,
-        betDetail: formatPickLabel(p.betDetail, p.betType, p.line) ?? betTypeLabel(p.betType),
-        odds: p.odds,
-        units: p.units,
-        status: p.status,
-        betType: p.betType,
-        period: p.period,
-        rawBetDetail: p.betDetail,
-        line: p.line,
-        homeTeam: game.homeTeam,
-        awayTeam: game.awayTeam,
-        gameTime: game.commenceTime,
-        teamGroup,
-        teamLabel:
-          teamGroup === "AWAY"
-            ? shortTeamName(game.awayTeam, sportLabel)
-            : teamGroup === "HOME"
-              ? shortTeamName(game.homeTeam, sportLabel)
-              : "",
-        teamColor:
-          teamGroup === "AWAY"
-            ? getTeamColor(activeSport, game.awayTeam)
-            : teamGroup === "HOME"
-              ? getTeamColor(activeSport, game.homeTeam)
-              : null,
-        datePosted: p.datePosted.toISOString(),
-      };
-    });
-  });
+  const expanderPicksByGame: ExpanderPick[][] = matchedPicksByGame.map((matchedPicks, gameIndex) =>
+    matchedPicks.map((p) => toExpanderPick(p, odds[gameIndex], activeSport, sportLabel))
+  );
 
   return { odds, scores, expanderPicksByGame };
 }

@@ -414,5 +414,43 @@ checkSymmetric(
   { outcome: "INACTIVE" }
 );
 
+// ============================================================================
+// Same game is the game's identity - its id, or its teams + sport + Eastern
+// date - never its stored start time. A pick's stored time is its game's
+// kickoff only when the import matched a game; otherwise it is the import time.
+// ============================================================================
+const R2: PairOutcome = { outcome: "RULE", rule: "R2", category: "OPPOSING", mode: "CONTRARIAN" };
+const R3: PairOutcome = { outcome: "RULE", rule: "R3", category: "OPPOSING", mode: "CONTRARIAN" };
+const yankeesML = pick({ betType: "MONEYLINE", betDetail: "Yankees ML" });
+const redSoxML = pick({ betType: "MONEYLINE", betDetail: "Red Sox ML" });
+// GAME again, as stored on a pick imported that morning with no matched game.
+const GAME_STORED_AT_IMPORT: GameInput = { ...GAME, gameTime: new Date("2026-09-01T15:12:44Z") };
+
+checkSymmetric("opposite sides of one game, different stored times -> R2", yankeesML, redSoxML, R2, GAME, GAME_STORED_AT_IMPORT);
+checkSymmetric(
+  "over vs under on one game's total, different stored times -> R3",
+  pick({ betType: "TOTAL", betDetail: "Over 8.5", line: 8.5 }),
+  pick({ betType: "TOTAL", betDetail: "Under 8.5", line: 8.5 }),
+  R3,
+  GAME,
+  GAME_STORED_AT_IMPORT
+);
+// 10:30pm Eastern on Sept 1 is already Sept 2 in UTC.
+checkSymmetric("same Eastern day across UTC midnight -> same game", yankeesML, redSoxML, R2, GAME, { ...GAME, gameTime: new Date("2026-09-02T02:30:00Z") });
+checkSymmetric("same teams and day, different sport -> NOT_SAME_GAME", yankeesML, redSoxML, { outcome: "NOT_SAME_GAME" }, GAME, { ...GAME_STORED_AT_IMPORT, sportName: "NFL" });
+checkSymmetric("same teams and day, home and away swapped -> NOT_SAME_GAME", yankeesML, redSoxML, { outcome: "NOT_SAME_GAME" }, GAME, { ...GAME_STORED_AT_IMPORT, homeTeam: GAME.awayTeam, awayTeam: GAME.homeTeam });
+
+// A game id on both picks decides it outright.
+checkSymmetric("same game id, stored a day apart -> same game", yankeesML, redSoxML, R2, { ...GAME, gameId: "evt1" }, { ...REMATCH_GAME, gameId: "evt1" });
+checkSymmetric(
+  "different game ids, same teams and day (a doubleheader) -> NOT_SAME_GAME",
+  yankeesML,
+  redSoxML,
+  { outcome: "NOT_SAME_GAME" },
+  { ...GAME, gameId: "evt1" },
+  { ...GAME_STORED_AT_IMPORT, gameId: "evt2" }
+);
+checkSymmetric("an id on only one pick falls back to teams + sport + date", yankeesML, redSoxML, R2, { ...GAME, gameId: "evt1" }, GAME_STORED_AT_IMPORT);
+
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);

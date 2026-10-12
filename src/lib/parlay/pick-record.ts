@@ -39,6 +39,33 @@ export function bestAvailableRecord(pick: RecordInput, records: CapperLeagueReco
   return null;
 }
 
+// The Parlay Generator's one ordering: win% desc, then more graded picks,
+// then pick id - so equal records never fall back to whatever order the
+// picks happened to arrive in. A pick with no record at all ranks below
+// every pick that has one - it still shows, it just can't outrank a real
+// record.
+export function compareByRecord(
+  a: { pickId: string; record: RankRecord | null },
+  b: { pickId: string; record: RankRecord | null }
+): number {
+  if (a.record && !b.record) return -1;
+  if (!a.record && b.record) return 1;
+  if (a.record && b.record) {
+    if (b.record.winPct !== a.record.winPct) return b.record.winPct - a.record.winPct;
+    if (b.record.n !== a.record.n) return b.record.n - a.record.n;
+  }
+  return a.pickId < b.pickId ? -1 : a.pickId > b.pickId ? 1 : 0;
+}
+
+// The slip's picks, best first - what My Picks and the pool's Auto Hedge /
+// Contrarian both build their primary legs from, so the two always agree.
+export function rankPoolPicks<T extends RecordInput & { pickId: string }>(picks: T[], records: CapperLeagueRecords): T[] {
+  return picks
+    .map((pick) => ({ pick, pickId: pick.pickId, record: bestAvailableRecord(pick, records) }))
+    .sort(compareByRecord)
+    .map((r) => r.pick);
+}
+
 // "68% (21–10)" - the display form used next to every generated leg.
 export function formatRecord(r: { wins: number; losses: number; winPct: number }): string {
   return `${Math.round(r.winPct)}% (${r.wins}–${r.losses})`;

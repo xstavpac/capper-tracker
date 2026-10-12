@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { useParlayPool } from "@/components/parlay/parlay-pool-context";
 import { ClipboardIcon } from "@/components/dashboard/cappers-icons";
+import { MAX_PARLAY_LEGS_MESSAGE } from "@/lib/parlay/leg-cap";
 
 // `dark` is the look for the navy page banner (/live): pills, 34px, or 44px where the banner is 640px wide or more.
 // The default is the light-surface look (/parlay).
@@ -14,7 +15,7 @@ const BANNER_PILL = "flex h-[34px] items-center rounded-full border text-[12.5px
 const BANNER_BUTTON = BANNER_PILL + "flex-none px-3.5 [@container_(min-width:640px)]:px-[18px] ";
 const BANNER_IDLE = "border-[rgba(96,140,255,0.28)] bg-[rgba(30,58,138,0.35)] font-medium text-[#D3DEFA]";
 export function ParlaySlipButton({ dark = false }: { dark?: boolean }) {
-  const { pool, addMode, checkedPicks, enterAddMode, confirmAdd, discardAdd } = useParlayPool();
+  const { pool, addMode, checkedPicks, enterAddMode, confirmAdd, discardAdd, overCapBy, dismissOverCap } = useParlayPool();
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
   const checkedCount = checkedPicks.size;
@@ -32,6 +33,25 @@ export function ParlaySlipButton({ dark = false }: { dark?: boolean }) {
     // Leaving add mode with unconfirmed checks discards them - warn first
     // rather than silently wiping the selection.
     setConfirmingDiscard(true);
+  }
+
+  // Confirm was refused: the selection would take the slip past the cap.
+  // Nothing was added and the ticks are still there to trim.
+  if (overCapBy !== null) {
+    return (
+      <div role="alert" className={dark ? BANNER_PILL + BANNER_IDLE + " ml-auto min-w-0 max-w-full gap-1 pl-3 pr-1.5 [@container_(min-width:640px)]:gap-2 [@container_(min-width:640px)]:pl-[18px] [@container_(min-width:640px)]:pr-2" : "flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-soft"}>
+        <span className={dark ? "truncate" : "text-muted-foreground"}>
+          <span className={"font-semibold " + (dark ? "text-white" : "text-foreground")}>{MAX_PARLAY_LEGS_MESSAGE}</span>
+          {" · untick " + overCapBy}
+        </span>
+        <button
+          onClick={dismissOverCap}
+          className={"rounded-full py-1 text-xs font-medium " + (dark ? "flex-none px-2 text-[#D3DEFA] hover:bg-white/10 hover:text-white [@container_(min-width:640px)]:px-2.5" : "px-2.5 text-muted-foreground hover:bg-muted")}
+        >
+          OK
+        </button>
+      </div>
+    );
   }
 
   if (confirmingDiscard) {

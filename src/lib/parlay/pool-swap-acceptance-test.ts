@@ -93,7 +93,7 @@ function categoryRecords(entries: [string, PickCategoryKey, number, number][]): 
 // ============================================================================
 // buildPoolPrimary: ranks by win%, applies Section 9 conflict validation
 // (same rule My Picks uses), and honors whatever leg count is requested -
-// no fixed ceiling like Auto-Generate's AUTO_GENERATE_MAX_LEGS.
+// MAX_PARLAY_LEGS is enforced by its callers, not here.
 // ============================================================================
 {
   const p1 = mk(G1, "p1", "capA", "MONEYLINE", "Yankees ML", -150); // 70% - highest ranked
@@ -202,6 +202,30 @@ function categoryRecords(entries: [string, PickCategoryKey, number, number][]): 
   check("started/missing-game leg stays unchanged", hedge.legs[0]?.swap, null);
   check("started/missing-game leg's original pick is untouched", hedge.legs[0]?.original.pick.pickId, "p1");
   check("started/missing-game leg reason is NO_ALTERNATE", hedge.legs[0]?.unchangedReason, "NO_ALTERNATE");
+}
+
+// ============================================================================
+// Equal records never fall back to the order the picks arrived in: win%
+// first, then more graded picks, then pick id.
+// ============================================================================
+{
+  const g = (n: number): GameTeams => ({ gameId: "tie" + n, homeTeam: "TieHome" + n, awayTeam: "TieAway" + n });
+  const small = mk(g(1), "a-small", "capS", "MONEYLINE", "TieHome1 ML", -120); // 60%, 10 graded
+  const bigB = mk(g(2), "c-big", "capB", "MONEYLINE", "TieHome2 ML", -120); // 60%, 20 graded
+  const bigA = mk(g(3), "b-big", "capA", "MONEYLINE", "TieHome3 ML", -120); // 60%, 20 graded
+  const top = mk(g(4), "z-top", "capT", "MONEYLINE", "TieHome4 ML", -120); // 70%
+  const records = leagueRecords([
+    [small, 6, 4],
+    [bigB, 12, 8],
+    [bigA, 12, 8],
+    [top, 7, 3],
+  ]);
+  const order = (pool: GeneratorPick[]) => buildPoolPrimary(pool, records, 4).parlayA.legs.map((l) => l.top.pick.pickId);
+  const expected = ["z-top", "b-big", "c-big", "a-small"];
+  check("tie-break: win%, then more graded picks, then pick id", order([small, bigB, bigA, top]), expected);
+  check("tie-break: the same legs in the same order whatever order the slip is in", order([top, bigA, bigB, small]), expected);
+  check("tie-break: ...including reversed", order([bigA, top, small, bigB]), expected);
+  check("tie-break: fewer legs than picks takes the same front of that order", buildPoolPrimary([small, bigB, bigA, top], records, 2).parlayA.legs.map((l) => l.top.pick.pickId), ["z-top", "b-big"]);
 }
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
