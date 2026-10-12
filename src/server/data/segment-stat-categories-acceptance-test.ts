@@ -106,7 +106,7 @@ check("FIRST_HALF_SPREAD is in the NFL / NCAAF / NBA chip sets", ["NFL", "NCAAF"
 
 // ---------------------------------------------------------------------------
 console.log("\n########## labels + key set ##########");
-check("32 segment category keys (8 periods x ML/OVER/UNDER/SPREAD)", SEGMENT_CATEGORY_KEYS.length, 32);
+check("36 segment category keys (9 periods x ML/OVER/UNDER/SPREAD)", SEGMENT_CATEGORY_KEYS.length, 36);
 check("FIRST_QUARTER_OVER chip label", PICK_CATEGORY_LABELS["FIRST_QUARTER_OVER"], "Q1 Over");
 check("SECOND_HALF_ML chip label", PICK_CATEGORY_LABELS["SECOND_HALF_ML"], "2H ML");
 check("THIRD_PERIOD_UNDER chip label", PICK_CATEGORY_LABELS["THIRD_PERIOD_UNDER"], "P3 Under");
@@ -117,7 +117,7 @@ check("segment keys are in ALL_CATEGORY_KEYS", SEGMENT_CATEGORY_KEYS.every((k) =
 // null here is a hard crash, not a silent miss). Regression guard for the
 // side-set drift that broke the SPREAD addition.
 check(
-  "splitSegmentCategoryKey round-trips all 32 segment keys, none null",
+  "splitSegmentCategoryKey round-trips all 36 segment keys, none null",
   SEGMENT_CATEGORY_KEYS.every((k) => {
     const s = splitSegmentCategoryKey(k);
     return s !== null && `${s.period}_${s.side}` === k;

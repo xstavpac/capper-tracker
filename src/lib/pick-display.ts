@@ -14,7 +14,7 @@ export type LedgerPickInput = {
   betDetail: string | null;
   line: number | null;
   period: string;
-  pickedSide: "HOME" | "AWAY" | null;
+  pickedSide: "HOME" | "AWAY" | "DRAW" | null;
   odds: number;
   status: string;
   gameTime: Date;
@@ -34,6 +34,7 @@ const PERIOD_TAG: Record<string, string> = {
   FIRST_PERIOD: "P1",
   SECOND_PERIOD: "P2",
   THIRD_PERIOD: "P3",
+  REGULATION: "3-Way",
 };
 
 // Sports whose first-half period is the "F5" innings split (see

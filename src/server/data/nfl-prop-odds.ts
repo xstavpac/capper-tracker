@@ -225,21 +225,24 @@ export type EventPropFetchTarget = {
   sportKey: string;
   // The Odds API sport key for this game's event URL.
   requestSportKey: (game: OddsGame) => string;
-  marketKeys: readonly string[];
+  // The markets to request for this game. A function lets a caller ask only
+  // for what the game doesn't carry yet.
+  marketKeys: (game: OddsGame) => readonly string[];
   logTag: string;
 };
 
 const NFL_EVENT_PROP_TARGET: EventPropFetchTarget = {
   sportKey: NFL_SPORT_KEY,
   requestSportKey: () => NFL_SPORT_KEY,
-  marketKeys: NFL_PROP_MARKET_KEYS,
+  marketKeys: () => NFL_PROP_MARKET_KEYS,
   logTag: "[nfl-prop-odds]",
 };
 
 async function fetchOneEventPropOdds(
   game: OddsGame,
   apiKey: string,
-  target: EventPropFetchTarget
+  target: EventPropFetchTarget,
+  marketKeys: readonly string[]
 ): Promise<{ bookmakers: OddsGame["bookmakers"] | null; credits: OddsApiCredits | null; ok: boolean }> {
   const eventId = game.id;
   const requestSportKey = target.requestSportKey(game);
@@ -252,7 +255,7 @@ async function fetchOneEventPropOdds(
     "/odds?apiKey=" +
     apiKey +
     "&regions=us&markets=" +
-    target.marketKeys.join(",") +
+    marketKeys.join(",") +
     "&oddsFormat=american";
 
   let res: Response;
@@ -468,7 +471,8 @@ export async function fetchAndMergeEventPropOdds(
       continue;
     }
 
-    const { bookmakers, credits, ok } = await fetchOneEventPropOdds(game, apiKey, target);
+    const marketKeys = target.marketKeys(game);
+    const { bookmakers, credits, ok } = await fetchOneEventPropOdds(game, apiKey, target, marketKeys);
     if (!ok || !bookmakers) {
       eventsFailed++;
       continue;
@@ -480,7 +484,7 @@ export async function fetchAndMergeEventPropOdds(
     if (credits) {
       const { level: newLevel } = await persistOddsApiUsage({
         sportKey: target.sportKey,
-        marketsRequested: [...target.marketKeys],
+        marketsRequested: [...marketKeys],
         eventsRequested: 1,
         credits,
       });

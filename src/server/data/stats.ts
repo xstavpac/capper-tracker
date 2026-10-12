@@ -685,6 +685,9 @@ export const SEGMENT_CATEGORY_PERIODS = [
   "FIRST_PERIOD",
   "SECOND_PERIOD",
   "THIRD_PERIOD",
+  // Hockey 3-way moneyline. Only REGULATION_ML is ever assigned; a 3-way
+  // record must not be summed into the 2-way FAV_ML / DOG_ML numbers.
+  "REGULATION",
 ] as const;
 export type SegmentCategoryPeriod = (typeof SEGMENT_CATEGORY_PERIODS)[number];
 type SegmentCategorySide = "ML" | "OVER" | "UNDER" | "SPREAD";
@@ -716,6 +719,7 @@ const SEGMENT_PERIOD_SHORT: Record<SegmentCategoryPeriod, string> = {
   FIRST_PERIOD: "P1",
   SECOND_PERIOD: "P2",
   THIRD_PERIOD: "P3",
+  REGULATION: "3-Way",
 };
 // Sentence phrasing for the "specialist" tag ("2nd quarter overs specialist").
 const SEGMENT_PERIOD_LONG: Record<SegmentCategoryPeriod, string> = {
@@ -727,6 +731,7 @@ const SEGMENT_PERIOD_LONG: Record<SegmentCategoryPeriod, string> = {
   FIRST_PERIOD: "1st period",
   SECOND_PERIOD: "2nd period",
   THIRD_PERIOD: "3rd period",
+  REGULATION: "regulation",
 };
 const SEGMENT_SIDE_CHIP: Record<SegmentCategorySide, string> = { ML: "ML", OVER: "Over", UNDER: "Under", SPREAD: "Spread" };
 
@@ -878,7 +883,10 @@ const QUARTER_SECOND_HALF_CATEGORY_KEYS: PickCategoryKey[] = (
 // NHL is the one league with a hockey-period score source.
 const HOCKEY_PERIOD_CATEGORY_KEYS: PickCategoryKey[] = (
   ["FIRST_PERIOD", "SECOND_PERIOD", "THIRD_PERIOD"] as const
-).flatMap((p) => [`${p}_ML`, `${p}_OVER`, `${p}_UNDER`, `${p}_SPREAD`] as PickCategoryKey[]);
+)
+  .flatMap((p) => [`${p}_ML`, `${p}_OVER`, `${p}_UNDER`, `${p}_SPREAD`] as PickCategoryKey[])
+  // The 3-way (regulation-time) moneyline: one tile, moneyline only.
+  .concat(["REGULATION_ML"]);
 
 // NFL's own chip set, same idea as MLB_CHIP_SET - first-half ML/over/under
 // (real box-score data, see persistFinalScores' supportsFirstHalf) plus
