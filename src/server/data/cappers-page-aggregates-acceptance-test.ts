@@ -479,8 +479,8 @@ async function main() {
 
   // ============ Winners this week ============
   // Independent reference straight from the raw picks: datePosted in the last 7 days (Most active's
-  // window), graded (WIN/LOSS/PUSH) only, >= 5 graded, net units = sum(win units) - sum(loss units)
-  // with a push at 0, rounded to 2dp, > 0; ordered units desc, then the page's tie order.
+  // window), graded (WIN/LOSS/PUSH) only, no minimum number of them, net units = sum(win units) -
+  // sum(loss units) with a push at 0, rounded to 2dp, > 0; ordered units desc, then the page's tie order.
   const r2 = (n: number) => Math.round(n * 100) / 100;
   async function referenceWinners(userId: string) {
     const since = Date.now() - 7 * 86400000;
@@ -495,7 +495,7 @@ async function main() {
     }
     return [...by.entries()]
       .map(([capperId, e]) => ({ capperId, name: e.name, n: e.n, netUnits: r2(e.net), wins: e.wins, losses: e.losses }))
-      .filter((e) => e.n >= 5 && e.netUnits > 0)
+      .filter((e) => e.netUnits > 0)
       .sort((a, b) => b.netUnits - a.netUnits || cmpStr(a.name.toLowerCase(), b.name.toLowerCase()) || cmpStr(a.name, b.name) || cmpStr(a.capperId, b.capperId))
       .slice(0, 5)
       .map(({ capperId, name, netUnits, wins, losses }) => ({ capperId, name, colorTag: null as string | null, netUnits, wins, losses }));
@@ -509,7 +509,7 @@ async function main() {
   const L = "LOSS" as const;
   const P = "PUSH" as const;
 
-  // Fixture A: eight qualifiers (only the top 5 are returned), ties, and every exclusion rule.
+  // Fixture A: eleven qualifiers (only the top 5 are returned), ties, and every exclusion rule.
   const UH = await makeUser("hot");
   const h: Record<string, string> = {};
   const hotNames: Record<string, string> = {
@@ -524,10 +524,10 @@ async function main() {
     ...seq(h.d, [W, W, W, L, L], { odds: 200, units: 0.5 }), // 3*1 - 1 = +2.0
     ...seq(h.tieB, [W, L, L, W, W], { odds: 100 }), // +1.0
     ...seq(h.tieA, [W, L, L, W, W], { odds: 100 }), // +1.0 (same as Bravo tie: name order decides)
-    ...seq(h.pushy, [W, W, W, P, P], { odds: 100 }), // pushes count toward the 5 and add 0: +3.0
-    ...seq(h.lucky, [W, W, W, W], { odds: 1000, units: 5 }), // +200 but only 4 graded -> excluded
-    ...seq(h.pending, [W, W, W, W, "PENDING", "PENDING", "PENDING"], { odds: 100 }), // 4 graded + pending -> excluded
-    ...seq(h.cancelled, [W, W, W, W, "CANCELLED", "CANCELLED"], { odds: 100 }), // 4 graded + cancelled -> excluded
+    ...seq(h.pushy, [W, W, W, P, P], { odds: 100 }), // pushes add 0: +3.0
+    ...seq(h.lucky, [W], { odds: 1000, units: 5 }), // one graded pick, +50: no minimum, so it tops the list at 1-0
+    ...seq(h.pending, [W, "PENDING", "PENDING", "PENDING"], { odds: 100, units: 0.5 }), // +0.5: qualifies, below the top 5
+    ...seq(h.cancelled, [W, "CANCELLED", "CANCELLED"], { odds: 100, units: 0.5 }), // +0.5: qualifies, below the top 5
     ...seq(h.stale, [W, W, W, W, W, W], { odds: 100, startMin: 8 * DAY + 60 }), // posted 8+ days ago -> outside the window
     ...seq(h.cold, [W, L, L, L, L], { odds: 100 }), // negative
     ...seq(h.zero, [W, L, W, L, P], { odds: 100 }), // exactly 0
@@ -541,25 +541,23 @@ async function main() {
 
   const gotH = await winnersOf(UH);
   same("winners: equals the raw-pick reference (top 5, ordered by units, page tie order)", gotH, await referenceWinners(UH));
-  check("winners: exactly 5 rows although 7 cappers qualify", gotH.length === 5, String(gotH.length));
+  check("winners: exactly 5 rows although 11 cappers qualify", gotH.length === 5, String(gotH.length));
   check(
-    "winners: ordered by net units, ties by name (Fav 5.0, Hot C 4.0, then Hot A / Pushy at 3.0, Hot B 2.64)",
-    gotH.map((e) => e.name).join("|") === "Fav ignored|Hot C|Hot A|Pushy|Hot B",
+    "winners: ordered by net units, ties by name (Lucky 50.0 on one pick, Fav 5.0, Hot C 4.0, then Hot A / Pushy at 3.0)",
+    gotH.map((e) => e.name).join("|") === "Lucky|Fav ignored|Hot C|Hot A|Pushy",
     gotH.map((e) => e.name + " " + e.netUnits).join("|")
   );
-  same("winners: units values (exact, 2dp)", gotH.map((e) => e.netUnits), [5, 4, 3, 3, 2.64]);
+  same("winners: units values (exact, 2dp)", gotH.map((e) => e.netUnits), [50, 5, 4, 3, 3]);
+  same("winners: no minimum graded picks - one winning pick lists a capper, with its real 1-0 record", gotH.filter((e) => e.name === "Lucky").map((e) => e.netUnits + " " + e.wins + "-" + e.losses), ["50 1-0"]);
   const nameSet = new Set(gotH.map((e) => e.name));
   for (const [why, name] of [
-    ["min 5 graded picks", "Lucky"],
-    ["pending picks are not graded", "Pending"],
-    ["cancelled picks are not graded", "Cancelled"],
     ["picks posted before the 7-day window", "Stale"],
     ["datePosted (not gameTime) decides the window", "Posted late"],
     ["net units < 0", "Cold"],
     ["net units = 0", "Zero"],
   ] as const)
     check(`winners: "${name}" excluded (${why})`, !nameSet.has(name));
-  check("winners: a push adds 0 units and counts as a graded pick (3 wins + 2 pushes = +3.0, eligible)", gotH.find((e) => e.name === "Pushy")?.netUnits === 3);
+  check("winners: a push adds 0 units (3 wins + 2 pushes = +3.0)", gotH.find((e) => e.name === "Pushy")?.netUnits === 3);
 
   // Tie rule at the cut: three cappers on exactly +1.0 compete for the one remaining slot.
   const UT = await makeUser("hottie");
@@ -581,21 +579,23 @@ async function main() {
   // Fewer than 5 qualify -> fewer rows; none qualify -> empty list (the panel shows its muted empty state).
   const UF = await makeUser("hotfew");
   const ff: Record<string, string> = {};
-  for (const k of ["a", "b", "loser", "few"]) ff[k] = await makeCapper(UF, k, "Few " + k);
+  for (const k of ["a", "b", "loser", "few", "pend"]) ff[k] = await makeCapper(UF, k, "Few " + k);
   await addPicks(UF, [
     ...seq(ff.a, [W, W, W, W, W]),
     ...seq(ff.b, [W, W, W, W, L]),
     ...seq(ff.loser, [L, L, L, L, L]),
-    ...seq(ff.few, [W, W]), // too few picks
+    ...seq(ff.few, [W, W]), // two picks are enough: +2.0
+    ...seq(ff.pend, [W, "PENDING", "CANCELLED"]), // pending and cancelled picks are not graded: +1.0 at 1-0
   ]);
   const gotF = await winnersOf(UF);
   same("winners: fewer than 5 qualify -> only those rows", gotF, await referenceWinners(UF));
-  check("winners: fewer-than-5 case returns exactly the 2 winners, best first", gotF.map((e) => e.name + " " + e.netUnits).join("|") === "Few a 5|Few b 3", gotF.map((e) => e.name + " " + e.netUnits).join("|"));
+  const lineF = gotF.map((e) => e.name + " " + e.netUnits + " " + e.wins + "-" + e.losses).join("|");
+  check("winners: fewer-than-5 case returns exactly the 4 winners, best first, each with its real record (pending / cancelled picks in neither)", lineF === "Few a 5 5-0|Few b 3 4-1|Few few 2 2-0|Few pend 1 1-0", lineF);
 
   const UN = await makeUser("hotnone");
   const nn = await makeCapper(UN, "n1", "Nobody wins");
   const nn2 = await makeCapper(UN, "n2", "Lucky small");
-  await addPicks(UN, [...seq(nn, [L, L, L, L, L, W]), ...seq(nn2, [W, W, W, W])]);
+  await addPicks(UN, [...seq(nn, [L, L, L, L, L, W]), ...seq(nn2, [W, L])]); // -4.0 and exactly 0
   check("winners: no winning capper -> empty list", (await winnersOf(UN)).length === 0);
   check("winners: a user with no picks at all -> empty list", (await winnersOf(await makeUser("hotempty"))).length === 0);
 
@@ -606,7 +606,9 @@ async function main() {
   // Same units as elsewhere: these cappers have all their picks inside the week, so the ALL-time
   // leaderboard's displayed net units (the number every other card shows) must equal the Winners value.
   const allTime = new Map((await adapter.getCapperLeaderboardTable(UH, "ALL")).map((e) => [e.capperId, e.stats.netUnits]));
-  for (const e of gotH) check(`winners units == leaderboard units (${e.name})`, allTime.get(e.capperId) === e.netUnits, `${e.netUnits} vs ${allTime.get(e.capperId)}`);
+  // ("Lucky" is the exception: its loss 12 days ago is in the all-time number and not in the week's.)
+  for (const e of gotH.filter((w) => w.name !== "Lucky")) check(`winners units == leaderboard units (${e.name})`, allTime.get(e.capperId) === e.netUnits, `${e.netUnits} vs ${allTime.get(e.capperId)}`);
+  check("winners: a loss before the window is not in the week's units (Lucky: +50 this week, +49 all time)", allTime.get(h.lucky) === 49, String(allTime.get(h.lucky)));
 
   // An odds = 0 win poisons the displayed units (Infinity / NaN); such a value has no bar or "+X.Xu", so it is left out.
   const U0 = await makeUser("hotodds0");
@@ -718,7 +720,19 @@ async function main() {
     (await panelOf<ActiveEntry>(Y1.u, "active", "yesterday")).map((e) => e.name + " " + e.pickCount + "/" + e.totalPicks),
     ["Y edge in 2/5", "Y loser 1/5", "Y pending 1/5", "Y winner 1/5"]
   );
-  same("winners [today]: its 5-graded minimum is unchanged (2 wins today do not list)", await panelOf<WinnerEntry>(Y1.u, "winners", "today"), []);
+  same(
+    "winners [today]: no minimum either (2 wins today list at 2-0), and only today's picks",
+    (await panelOf<WinnerEntry>(Y1.u, "winners", "today")).map((e) => e.name + " " + e.netUnits + " " + e.wins + "-" + e.losses),
+    ["Today only 10 2-0"]
+  );
+  same(
+    "winners [week] / [30d]: no minimum, every capper in the green with the window's own record",
+    [await panelOf<WinnerEntry>(Y1.u, "winners", "week"), await panelOf<WinnerEntry>(Y1.u, "winners", "30d")].map((rows) => rows.map((e) => e.name + " " + e.netUnits + " " + e.wins + "-" + e.losses)),
+    [
+      ["Today only 10 2-0", "Two days ago 5 1-0", "Y edge in 2 1-1", "Y winner 1 1-0"],
+      ["Today only 10 2-0", "Two days ago 5 1-0", "Y edge in 2 1-1", "Y winner 1 1-0"],
+    ]
+  );
   same("most active [today]: unchanged, today's picks only", (await panelOf<ActiveEntry>(Y1.u, "active", "today")).map((e) => e.name + " " + e.pickCount + "/" + e.totalPicks), ["Today only 2/2"]);
   check("yesterday had graded picks", (await gradedOf(Y1.u, "winners")) && (await gradedOf(Y1.u, "hottest")));
 
@@ -786,7 +800,7 @@ async function main() {
   check("streak panels: a five-row response is small", JSON.stringify(await streakOf(S4.u, "coldest")).length < 2048);
 
   // ---- Redesign fields ---------------------------------------------------------------------------
-  same("winners: the window's wins-losses ride on each row", gotH.map((e) => e.name + " " + e.wins + "-" + e.losses), ["Fav ignored 5-0", "Hot C 5-1", "Hot A 3-3", "Pushy 3-0", "Hot B 4-1"]);
+  same("winners: the window's wins-losses ride on each row", gotH.map((e) => e.name + " " + e.wins + "-" + e.losses), ["Lucky 1-0", "Fav ignored 5-0", "Hot C 5-1", "Hot A 3-3", "Pushy 3-0"]);
 
   // 5. Most Active total + the stat cards' weekly series. Newest first: "A" 2-1 this week and 0-2 the
   // week before; "H" lost an hour ago after six straight wins 8 days back; six more cappers with one

@@ -89,11 +89,6 @@ export const STANDOUT_MIN_GRADED: Record<ScorecardWindow, number> = {
 const STANDOUT_SPARKLINE_MAX_POINTS = 60;
 export const MOST_ACTIVE_COUNT = 5;
 export const HOTTEST_COUNT = 5;
-// Graded picks a capper needs in the week to be eligible for Hottest (one lucky bet can't top it).
-export const HOTTEST_MIN_GRADED = 5;
-// Biggest Winners' minimum graded picks per panel window. "Yesterday" has none: one graded pick lists
-// a capper, with the day's real record beside the units.
-export const WINNERS_MIN_GRADED: Record<PanelWindow, number> = { today: HOTTEST_MIN_GRADED, yesterday: 1, week: HOTTEST_MIN_GRADED, "30d": HOTTEST_MIN_GRADED };
 const DAY_MS = 86400000;
 // The stat cards' sparklines: this many rolling 7-day buckets ending now, oldest first.
 export const STAT_WEEKS = 8;
@@ -251,12 +246,12 @@ const TIE_BREAK = Prisma.sql`(net_r = 'NaN'::float8), net_r DESC, lower(name) CO
 // statement has one, and getPanelRows builds one. Returns at most 5 rows, never a pick row.
 //   active   - picks posted (datePosted) in the window, any status. Every row also carries
 //              totalPicks: the window's picks across the whole roster, not just these five.
-//   winners  - net units over graded picks posted in the window: >= `minGraded` graded picks
-//              (WINNERS_MIN_GRADED), net units > 0, odds-0 win left out. This is the old "Hottest
-//              this week". Rows carry the window's wins / losses too.
+//   winners  - net units over graded picks posted in the window: net units > 0, odds-0 win left
+//              out. No minimum number of graded picks: one winning pick lists a capper, and every
+//              row carries the window's wins / losses, so the sample is on screen.
 //   hottest / coldest - current WIN / LOSS streak (see streakPanelSql).
 // A closed range (Yesterday) also stops at its end: picks posted since are not in it.
-export function panelSql(panel: PanelKey, userId: string, range: PanelRange, minGraded: number = HOTTEST_MIN_GRADED): Prisma.Sql {
+export function panelSql(panel: PanelKey, userId: string, range: PanelRange): Prisma.Sql {
   if (panel === "hottest" || panel === "coldest") return streakPanelSql(panel === "hottest" ? "WIN" : "LOSS", userId, range);
   const postedBefore = range.closed ? Prisma.sql`AND p."datePosted" < ${ts(range.end)}` : Prisma.empty;
   if (panel === "active") {
@@ -280,7 +275,6 @@ export function panelSql(panel: PanelKey, userId: string, range: PanelRange, min
         SELECT a.cid, a.wins, a.losses, ${uwEffSql("a")} - a."unitsLost" AS net_raw
         FROM (
           SELECT p."capperId" AS cid,
-            (count(*) FILTER (WHERE p.status IN ('WIN', 'LOSS', 'PUSH')))::int AS graded,
             (count(*) FILTER (WHERE p.status = 'WIN'))::int AS wins,
             (count(*) FILTER (WHERE p.status = 'LOSS'))::int AS losses,
             COALESCE(sum(${WIN_UNITS}) FILTER (WHERE p.status = 'WIN' AND p.odds <> 0), 0)::float8 AS "unitsWon",
@@ -290,7 +284,6 @@ export function panelSql(panel: PanelKey, userId: string, range: PanelRange, min
           WHERE p."userId" = ${userId} AND p."datePosted" >= ${ts(range.start)} ${postedBefore}
           GROUP BY p."capperId"
         ) a
-        WHERE a.graded >= ${minGraded}
       ) g
       JOIN roster r ON r.id = g.cid
     ) h
@@ -458,7 +451,7 @@ export async function getPanelRows(q: { userId: string; panel: PanelKey; window:
   const range = panelRange(q.window, q.now ?? new Date());
   const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
     WITH roster AS (SELECT id, name, "colorTag", "isFavorite" FROM cappers WHERE "userId" = ${q.userId} AND NOT "isTest"),
-    pnl AS (${panelSql(q.panel, q.userId, range, WINNERS_MIN_GRADED[q.window])})
+    pnl AS (${panelSql(q.panel, q.userId, range)})
     SELECT * FROM pnl
   `);
   return rows.map((r) => ({
