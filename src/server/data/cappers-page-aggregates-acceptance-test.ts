@@ -838,7 +838,7 @@ async function main() {
   same("weekly series do not follow the time tab", pageS5tab.overview.weekly, o5.weekly);
   check("active cappers delta does not follow the time tab", pageS5tab.overview.activeCappersDelta === 6);
 
-  // 6. Falling off points + results + baseline; Most Consistent deviation, confidence score and tier.
+  // 6. Falling off percentage + points + results + baseline; Most Consistent deviation, confidence score and tier.
   const reps = (n: number, s: PickSpec["status"]) => Array.from({ length: n }, () => s);
   const block = (wins: number) => [...reps(wins, W), ...reps(10 - wins, L)];
   const S6 = await scenario("form", [
@@ -851,13 +851,14 @@ async function main() {
   const dashS6 = await computeCapperPanels(S6.u);
   // Wavy: last 10 at 50% against 60% over the 40 before; Flat is exactly on its norm, so in neither.
   same("falling: the capper under their baseline, with the negative score", dashS6.falling.map((e) => e.name + " " + e.pts), ["Wavy -10"]);
+  same("falling: the decline as a percentage of their norm (10 points of 60%)", dashS6.falling.map((e) => e.name + " " + e.pct), ["Wavy -17"]);
   same("falling: results = the last 10 decided picks, oldest first", dashS6.falling[0]?.results, [false, false, false, false, false, true, true, true, true, true]);
   same("falling: baseline = the win rate of the picks before those, as a fraction", dashS6.falling[0]?.baseline, 0.6);
   const lineS6 = trendSeries(dashS6.falling[0]?.results ?? [], dashS6.falling[0]?.baseline ?? 0);
-  same("falling: chart line starts at 0 and adds (result - baseline) x 10 per pick", lineS6.map((v) => Math.round(v)), [0, -6, -12, -18, -24, -30, -26, -22, -18, -14, -10]);
-  check("falling: the line's last point is the displayed points", Math.round(lineS6[lineS6.length - 1]) === dashS6.falling[0]?.pts);
-  same("a chart line that starts at 0 and adds (result - baseline) x 10 per pick", trendSeries([false, false, true, true, true, true, true, true, true, true], 0.5), [0, -5, -10, -5, 0, 5, 10, 15, 20, 25, 30]);
-  same("a baseline that is not a round fraction still ends on the score", Math.round(trendSeries([true, true, false, true, true, true, true, false, true, true], 0.51)[10]), 29);
+  same("falling: chart line starts at 0 and adds (result - baseline) / baseline x 10 per pick", lineS6.map((v) => Math.round(v)), [0, -10, -20, -30, -40, -50, -43, -37, -30, -23, -17]);
+  check("falling: the line's last point is the displayed percentage", Math.round(lineS6[lineS6.length - 1]) === dashS6.falling[0]?.pct);
+  same("a chart line that starts at 0 and adds (result - baseline) / baseline x 10 per pick", trendSeries([false, false, true, true, true, true, true, true, true, true], 0.5), [0, -10, -20, -10, 0, 10, 20, 30, 40, 50, 60]);
+  same("a baseline that is not a round fraction still ends on the percentage", Math.round(trendSeries([true, true, false, true, true, true, true, false, true, true], 0.51)[10]), 57);
   same("consistent: steadiest first, blocks oldest first", pageS6.consistent.map((e) => e.name + " " + e.blocks.join(",")), ["Flat 60,60,60,60,60", "Wavy 50,70,50,70,50"]);
   same("consistent: population standard deviation of the block win %s", pageS6.consistent.map((e) => e.sd), [0, Math.sqrt(96)]);
   same("consistent: confidence = clamp(round(100 - 2.5 * sd)) and its tier", pageS6.consistent.map((e) => consistencyScore(e.sd) + " " + consistencyTier(consistencyScore(e.sd))), ["100 Elite", "76 Steady"]);
