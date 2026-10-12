@@ -5,7 +5,7 @@ import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays, APP
 import { isSportInSeason, oddsApiRequestKeys } from "@/lib/sport-seasons";
 import type { OddsFetchStatus, BackfillStatus } from "@/lib/odds-cron-status";
 import { findSameDayDuplicateEvents, warnSameDayDuplicateEvents } from "@/lib/odds-duplicate-events";
-import { teamNamesMatch } from "@/lib/team-name-match";
+import { teamNamesMatch, teamNameEndsWith } from "@/lib/team-name-match";
 import { cacheKeys } from "@/lib/cache-keys";
 import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
 import { cachedByTag } from "@/server/data/cached";
@@ -2094,9 +2094,11 @@ export async function resolveGameForNickname(
   nickname: string,
   opts: ResolveGameOpts = {}
 ): Promise<ScheduleCandidateResult> {
+  // teamNameEndsWith, not a bare endsWith: the nickname is score-feed-spelled,
+  // and the game may come from the odds feed (see team-name-match.ts).
   return resolveScheduleGame(
     sportKey,
-    (g) => g.homeTeam.toLowerCase().endsWith(nickname) || g.awayTeam.toLowerCase().endsWith(nickname),
+    (g) => teamNameEndsWith(g.homeTeam, nickname, sportKey) || teamNameEndsWith(g.awayTeam, nickname, sportKey),
     opts
   );
 }
@@ -2114,11 +2116,10 @@ export async function resolveGameForTeams(
   return resolveScheduleGame(
     sportKey,
     (g) => {
-      const home = g.homeTeam.toLowerCase();
-      const away = g.awayTeam.toLowerCase();
+      const ends = (team: string, nickname: string) => teamNameEndsWith(team, nickname, sportKey);
       return (
-        (home.endsWith(nicknameA) && away.endsWith(nicknameB)) ||
-        (home.endsWith(nicknameB) && away.endsWith(nicknameA))
+        (ends(g.homeTeam, nicknameA) && ends(g.awayTeam, nicknameB)) ||
+        (ends(g.homeTeam, nicknameB) && ends(g.awayTeam, nicknameA))
       );
     },
     opts

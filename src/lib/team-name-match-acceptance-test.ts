@@ -18,7 +18,7 @@
 // rows scoped to one league (CROSS_SOURCE_TEAM_ALIASES), applied only when the
 // caller passes that league's sport key - see the last sections below.
 
-import { normalizeTeamName, teamNamesMatch, CROSS_SOURCE_TEAM_ALIASES } from "./team-name-match";
+import { normalizeTeamName, teamNamesMatch, teamNameEndsWith, CROSS_SOURCE_TEAM_ALIASES } from "./team-name-match";
 
 let failures = 0;
 
@@ -87,6 +87,17 @@ check("normalizeTeamName leaves an already-clean name alone", normalizeTeamName(
     [NCAAF, "Louisiana Ragin' Cajuns", "Louisiana Ragin Cajuns"],
     [NCAAF, "Southern Miss Golden Eagles", "Southern Mississippi Golden Eagles"],
     [NCAAF, "Hawai'i Rainbow Warriors", "Hawaii Rainbow Warriors"],
+    [NCAAF, "Youngstown State Penguins", "Youngstown St Penguins"],
+    [NCAAF, "The Citadel Bulldogs", "Citadel Bulldogs"],
+    [NCAAF, "Nicholls Colonels", "Nicholls State Colonels"],
+    [NCAAF, "Houston Christian Huskies", "Houston Baptist Huskies"],
+    [NCAAF, "SE Louisiana Lions", "Southeastern Louisiana Lions"],
+    [NCAAF, "Southern Jaguars", "Southern University Jaguars"],
+    [NCAAF, "Gardner-Webb Runnin' Bulldogs", "Gardner-Webb Runnin Bulldogs"],
+    [NCAAF, "Grambling Tigers", "Grambling State Tigers"],
+    [NCAAF, "William & Mary Tribe", "William and Mary Tribe"],
+    [NCAAF, "Long Island University Sharks", "LIU Sharks"],
+    [NCAAF, "McNeese Cowboys", "McNeese State Cowboys"],
     [NBA, "LA Clippers", "Los Angeles Clippers"],
   ];
   for (const [sportKey, scoreFeed, oddsApi] of pairs) {
@@ -132,6 +143,35 @@ check("normalizeTeamName leaves an already-clean name alone", normalizeTeamName(
   check("App State does not match Arizona State", teamNamesMatch("App State Mountaineers", "Arizona State Sun Devils", NCAAF), false);
   check("Southern Miss does not match Ole Miss", teamNamesMatch("Southern Miss Golden Eagles", "Ole Miss Rebels", NCAAF), false);
   check("Southern Miss does not match Mississippi State", teamNamesMatch("Southern Mississippi Golden Eagles", "Mississippi State Bulldogs", NCAAF), false);
+  check("SE Louisiana does not match Louisiana", [
+    teamNamesMatch("SE Louisiana Lions", "Louisiana Ragin Cajuns", NCAAF),
+    teamNamesMatch("Southeastern Louisiana Lions", "Louisiana Ragin' Cajuns", NCAAF),
+  ], [false, false]);
+  check("SE Louisiana does not match Louisiana Tech", teamNamesMatch("Southeastern Louisiana Lions", "Louisiana Tech Bulldogs", NCAAF), false);
+  check("Southern does not match Southern Miss", teamNamesMatch("Southern Jaguars", "Southern Mississippi Golden Eagles", NCAAF), false);
+  check("Southern University does not match Georgia Southern", teamNamesMatch("Southern University Jaguars", "Georgia Southern Eagles", NCAAF), false);
+  check("Southern Jaguars does not match South Alabama Jaguars", teamNamesMatch("Southern Jaguars", "South Alabama Jaguars", NCAAF), false);
+  check("Houston Christian does not match Houston", teamNamesMatch("Houston Baptist Huskies", "Houston Cougars", NCAAF), false);
+  check("Houston Christian does not match Northern Illinois / UConn / Washington Huskies", [
+    teamNamesMatch("Houston Christian Huskies", "Northern Illinois Huskies", NCAAF),
+    teamNamesMatch("Houston Christian Huskies", "UConn Huskies", NCAAF),
+    teamNamesMatch("Houston Christian Huskies", "Washington Huskies", NCAAF),
+  ], [false, false, false]);
+  check("The Citadel does not match the other Bulldogs", [
+    teamNamesMatch("Citadel Bulldogs", "Georgia Bulldogs", NCAAF),
+    teamNamesMatch("The Citadel Bulldogs", "Louisiana Tech Bulldogs", NCAAF),
+    teamNamesMatch("Citadel Bulldogs", "Gardner-Webb Runnin Bulldogs", NCAAF),
+  ], [false, false, false]);
+  check("Grambling does not match the other Tigers", [
+    teamNamesMatch("Grambling Tigers", "LSU Tigers", NCAAF),
+    teamNamesMatch("Grambling State Tigers", "Jackson State Tigers", NCAAF),
+  ], [false, false]);
+  check("McNeese does not match Wyoming / Oklahoma State Cowboys", [
+    teamNamesMatch("McNeese Cowboys", "Wyoming Cowboys", NCAAF),
+    teamNamesMatch("McNeese State Cowboys", "Oklahoma State Cowboys", NCAAF),
+  ], [false, false]);
+  check("Nicholls does not match Eastern Kentucky Colonels", teamNamesMatch("Nicholls State Colonels", "Eastern Kentucky Colonels", NCAAF), false);
+  check("Youngstown St does not match Kent State", teamNamesMatch("Youngstown St Penguins", "Kent State Golden Flashes", NCAAF), false);
   check("LA Clippers does not match Los Angeles Lakers", teamNamesMatch("LA Clippers", "Los Angeles Lakers", NBA), false);
   check("Los Angeles Clippers does not match Los Angeles Lakers", teamNamesMatch("Los Angeles Clippers", "Los Angeles Lakers", NBA), false);
 
@@ -141,6 +181,51 @@ check("normalizeTeamName leaves an already-clean name alone", normalizeTeamName(
     const spellings = rows.flat().map(normalizeTeamName);
     check(`${sportKey}: no spelling appears in two alias rows`, new Set(spellings).size, spellings.length);
   }
+}
+
+// ---- teamNameEndsWith: a feed's team name answers to a nickname phrase ----
+// The nicknames are what catalog import passes: the score feed's full name,
+// lowercased, accent and apostrophe kept.
+{
+  const NCAAF = "americanfootball_ncaaf";
+  // [nickname, score-feed game name, Odds API game name]
+  const both: [string, string, string][] = [
+    ["app state mountaineers", "App State Mountaineers", "Appalachian State Mountaineers"],
+    ["sam houston bearkats", "Sam Houston Bearkats", "Sam Houston State Bearkats"],
+    ["massachusetts minutemen", "Massachusetts Minutemen", "UMass Minutemen"],
+    ["louisiana ragin' cajuns", "Louisiana Ragin' Cajuns", "Louisiana Ragin Cajuns"],
+    ["southern miss golden eagles", "Southern Miss Golden Eagles", "Southern Mississippi Golden Eagles"],
+    ["hawai'i rainbow warriors", "Hawai'i Rainbow Warriors", "Hawaii Rainbow Warriors"],
+    ["san josé state spartans", "San José State Spartans", "San Jose State Spartans"],
+    ["mcneese cowboys", "McNeese Cowboys", "McNeese State Cowboys"],
+    ["william & mary tribe", "William & Mary Tribe", "William and Mary Tribe"],
+  ];
+  for (const [nickname, scoreFeed, oddsApi] of both) {
+    check(`"${nickname}" finds the score feed's "${scoreFeed}"`, teamNameEndsWith(scoreFeed, nickname, NCAAF), true);
+    check(`"${nickname}" finds the Odds API's "${oddsApi}"`, teamNameEndsWith(oddsApi, nickname, NCAAF), true);
+  }
+  check("...and the Odds API's own spelling as the nickname finds the score feed's game", teamNameEndsWith("App State Mountaineers", "appalachian state mountaineers", NCAAF), true);
+
+  // What it was before, for names with nothing to reconcile.
+  check("bare mascot still matches as a suffix", teamNameEndsWith("Chicago White Sox", "white sox", "baseball_mlb"), true);
+  check("full lowercased live name still matches itself", teamNameEndsWith("VMI Keydets", "vmi keydets", NCAAF), true);
+  check("a different team does not match", teamNameEndsWith("Chicago Cubs", "white sox", "baseball_mlb"), false);
+  check("no league key: the accent/apostrophe fold still applies", teamNameEndsWith("San Jose State Spartans", "san josé state spartans"), true);
+  check("no league key: alias rows do not", teamNameEndsWith("Appalachian State Mountaineers", "app state mountaineers"), false);
+  check("wrong league key: alias rows do not", teamNameEndsWith("Appalachian State Mountaineers", "app state mountaineers", "basketball_nba"), false);
+  check("empty nickname matches nothing", teamNameEndsWith("Wyoming Cowboys", "", NCAAF), false);
+  check("LA Clippers answers to 'los angeles clippers' (NBA)", teamNameEndsWith("LA Clippers", "los angeles clippers", "basketball_nba"), true);
+
+  // Louisiana again, on this path.
+  for (const nick of ["louisiana ragin' cajuns", "louisiana ragin cajuns"]) {
+    check(`"${nick}" does not find Louisiana Tech`, teamNameEndsWith("Louisiana Tech Bulldogs", nick, NCAAF), false);
+    check(`"${nick}" does not find UL Monroe`, teamNameEndsWith("UL Monroe Warhawks", nick, NCAAF), false);
+    check(`"${nick}" does not find SE Louisiana`, [teamNameEndsWith("SE Louisiana Lions", nick, NCAAF), teamNameEndsWith("Southeastern Louisiana Lions", nick, NCAAF)], [false, false]);
+  }
+  check("'louisiana tech bulldogs' does not find Louisiana", [
+    teamNameEndsWith("Louisiana Ragin' Cajuns", "louisiana tech bulldogs", NCAAF),
+    teamNameEndsWith("Louisiana Ragin Cajuns", "louisiana tech bulldogs", NCAAF),
+  ], [false, false]);
 }
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

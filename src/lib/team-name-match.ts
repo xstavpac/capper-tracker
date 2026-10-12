@@ -56,12 +56,25 @@ export function normalizeTeamName(name: string): string {
 // folding above already reconciles them, re-verified against the same feeds.
 export const CROSS_SOURCE_TEAM_ALIASES: Record<string, readonly (readonly [scoreFeed: string, oddsApi: string])[]> = {
   americanfootball_ncaaf: [
+    // FBS
     ["Sam Houston Bearkats", "Sam Houston State Bearkats"],
     ["App State Mountaineers", "Appalachian State Mountaineers"],
     ["Massachusetts Minutemen", "UMass Minutemen"],
     ["Louisiana Ragin' Cajuns", "Louisiana Ragin Cajuns"],
     ["Southern Miss Golden Eagles", "Southern Mississippi Golden Eagles"],
     ["Hawai'i Rainbow Warriors", "Hawaii Rainbow Warriors"],
+    // FCS (they reach the board as an FBS team's opponent)
+    ["Youngstown State Penguins", "Youngstown St Penguins"],
+    ["The Citadel Bulldogs", "Citadel Bulldogs"],
+    ["Nicholls Colonels", "Nicholls State Colonels"],
+    ["Houston Christian Huskies", "Houston Baptist Huskies"],
+    ["SE Louisiana Lions", "Southeastern Louisiana Lions"],
+    ["Southern Jaguars", "Southern University Jaguars"],
+    ["Gardner-Webb Runnin' Bulldogs", "Gardner-Webb Runnin Bulldogs"],
+    ["Grambling Tigers", "Grambling State Tigers"],
+    ["William & Mary Tribe", "William and Mary Tribe"],
+    ["Long Island University Sharks", "LIU Sharks"],
+    ["McNeese Cowboys", "McNeese State Cowboys"],
   ],
   basketball_nba: [["LA Clippers", "Los Angeles Clippers"]],
 };
@@ -71,6 +84,14 @@ const ALIAS_LOOKUP: Record<string, Map<string, string>> = Object.fromEntries(
   Object.entries(CROSS_SOURCE_TEAM_ALIASES).map(([sportKey, rows]) => [
     sportKey,
     new Map(rows.map(([scoreFeed, oddsApi]) => [normalizeTeamName(scoreFeed), normalizeTeamName(oddsApi)])),
+  ])
+);
+
+// sportKey -> normalized spelling -> both spellings of that row, as written.
+const ROW_LOOKUP: Record<string, Map<string, readonly string[]>> = Object.fromEntries(
+  Object.entries(CROSS_SOURCE_TEAM_ALIASES).map(([sportKey, rows]) => [
+    sportKey,
+    new Map(rows.flatMap((row) => row.map((spelling): [string, readonly string[]] => [normalizeTeamName(spelling), row]))),
   ])
 );
 
@@ -88,4 +109,33 @@ export function teamNamesMatch(a: string, b: string, sportKey?: string): boolean
   const aliases = sportKey ? ALIAS_LOOKUP[sportKey] : undefined;
   if (!aliases) return false;
   return (aliases.get(na) ?? na) === (aliases.get(nb) ?? nb);
+}
+
+// normalizeTeamName plus apostrophes dropped - for comparing a team name with
+// a nickname phrase rather than with another full name. The nickname tables
+// (parse-catalog.ts) hold the score feed's spelling lowercased, accent and
+// apostrophe included ("san josé state spartans", "hawai'i rainbow warriors"),
+// while the Odds API writes neither.
+function foldTeamText(text: string): string {
+  return normalizeTeamName(text).replace(/['’]/g, "");
+}
+
+// Whether a feed's team name ends with a nickname phrase - the test catalog
+// import uses to find a pick's game (resolveGameForNickname / resolveGameForTeams
+// in odds.ts), which used to be a bare `name.toLowerCase().endsWith(nickname)`.
+// That only ever recognised one feed's spelling: the nickname is the score
+// feed's ("app state mountaineers"), so a game only the Odds API lists yet -
+// a pick posted days before kickoff - never matched for a team the two feeds
+// spell differently ("Appalachian State Mountaineers"). Here the name is tried
+// under every spelling its league's alias row gives it, and both sides are
+// folded, so either feed's game answers to either feed's nickname.
+//
+// Still a suffix test on a whole alias row: "Louisiana Tech Bulldogs" has no
+// row and does not end with "louisiana ragin' cajuns", so it cannot answer to
+// Louisiana's nickname.
+export function teamNameEndsWith(teamName: string, nickname: string, sportKey?: string): boolean {
+  const nick = foldTeamText(nickname);
+  if (!nick) return false;
+  const row = sportKey ? ROW_LOOKUP[sportKey]?.get(normalizeTeamName(teamName)) : undefined;
+  return [teamName, ...(row ?? [])].some((spelling) => foldTeamText(spelling).endsWith(nick));
 }

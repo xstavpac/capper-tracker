@@ -1,6 +1,8 @@
 ﻿import { prisma } from "@/lib/prisma";
 import type { BetType, PickStatus, Period } from "@prisma/client";
-import { findTeamNickname, teamPhraseRegex } from "@/lib/parse-catalog";
+import { findTeamNickname, teamPhraseRegex, normalizeForGrouping } from "@/lib/parse-catalog";
+import { teamNamesMatch } from "@/lib/team-name-match";
+import { SPORT_LABEL_TO_KEY } from "@/lib/sport-seasons";
 import {
   winPctOf,
   ALL_CATEGORY_KEYS,
@@ -275,7 +277,7 @@ export async function getPicksForUser(userId: string) {
   });
 }
 
-// Shared by getPicksForGame and getPicksForGames - tries an exact home/away
+// Shared by getPicksForGame and getPicksForGames - tries a home/away
 // team-name match first (reliable for picks resolved to a real schedule game
 // - see resolveGameForNickname), then falls back to a nickname text search
 // against betDetail/homeTeam/awayTeam for picks with free-text team data
@@ -296,7 +298,18 @@ export function matchPicksToGame<
   const withinDrift = (picks: T[]) =>
     picks.filter((p) => Math.abs(p.gameTime.getTime() - game.commenceTime.getTime()) <= MAX_GAME_TIME_DRIFT_MS);
 
-  const exact = withinDrift(candidates.filter((p) => p.homeTeam === game.homeTeam && p.awayTeam === game.awayTeam));
+  // teamNamesMatch with the league's alias rows, not ===: a pick's teams are
+  // stored as the feed that resolved it spelled them (usually ESPN), the card
+  // is Odds-API-spelled. With === a pick on "App State Mountaineers" never
+  // reached the "Appalachian State Mountaineers" card - and the nickname
+  // fallback below could not save it, since that card's nickname is
+  // "appalachian state" and the pick says "app state".
+  const sportKey = SPORT_LABEL_TO_KEY[sportName];
+  const exact = withinDrift(
+    candidates.filter(
+      (p) => teamNamesMatch(p.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(p.awayTeam, game.awayTeam, sportKey)
+    )
+  );
   if (exact.length > 0) return exact;
 
   // Fuzzy fallback for picks whose homeTeam/awayTeam is raw text, or is
@@ -311,15 +324,24 @@ export function matchPicksToGame<
   // no longer matches inside "buffaloes". If either side's nickname can't be
   // resolved, the matchup can't be confirmed - skip the fuzzy branch (the
   // exact branch above still applies).
-  const homeNickname = findTeamNickname(game.homeTeam, sportName);
-  const awayNickname = findTeamNickname(game.awayTeam, sportName);
+  //
+  // Accents, apostrophes and periods are folded out of both the nickname and
+  // the pick's text (normalizeForGrouping - the same fold the card's team
+  // grouping uses), so "san jose state" finds a pick stored as "San José State
+  // Spartans" and "hawaii" finds "Hawai'i Rainbow Warriors". The card's name is
+  // tried as written first; a nickname key that itself carries punctuation
+  // ("st. louis cardinals") only matches that way.
+  const nicknameFor = (team: string) =>
+    findTeamNickname(team, sportName) ?? findTeamNickname(normalizeForGrouping(team), sportName);
+  const homeNickname = nicknameFor(game.homeTeam);
+  const awayNickname = nicknameFor(game.awayTeam);
   if (!homeNickname || !awayNickname) return [];
-  const homeRe = teamPhraseRegex(homeNickname);
-  const awayRe = teamPhraseRegex(awayNickname);
+  const homeRe = teamPhraseRegex(normalizeForGrouping(homeNickname));
+  const awayRe = teamPhraseRegex(normalizeForGrouping(awayNickname));
 
   return withinDrift(
     candidates.filter((p) => {
-      const text = ((p.betDetail ?? "") + " " + p.homeTeam + " " + p.awayTeam).toLowerCase();
+      const text = normalizeForGrouping((p.betDetail ?? "") + " " + p.homeTeam + " " + p.awayTeam);
       return homeRe.test(text) && awayRe.test(text);
     })
   );
