@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireUser } from "@/server/auth";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { ParlaySlipButton } from "@/components/parlay/parlay-slip-button";
@@ -40,9 +41,9 @@ export default async function ParlayPage() {
       <ParlayPoolSection />
 
       <div className="mt-8">
-        <a href="/live" className="text-sm font-medium text-red-600 hover:underline">
+        <Link href="/live" className="text-sm font-medium text-red-600 hover:underline">
           + Add picks from Live
-        </a>
+        </Link>
       </div>
     </div>
   );

@@ -85,7 +85,8 @@ export default async function LivePage({
   const showBoardPulse = activeSport === "baseball_mlb";
 
   // The view toggle, like the sport tabs, is a plain query param on this
-  // same route - not client-router state, and not localStorage/cookie
+  // same route (reached by a client-side navigation - see
+  // live-banner-row.tsx) - not client-only state, and not localStorage/cookie
   // persisted anywhere - per the app-wide convention (sport tabs, the Picks
   // page's filters) of representing selection as a URL a Server Component
   // reads, rather than inventing a new client-only mechanism for this one
@@ -131,6 +132,8 @@ export default async function LivePage({
 
   const categoryPanel = (
     <LiveCategoryPanel
+      // A league switch no longer reloads the page, so the open tile is dropped here instead.
+      key={activeSport}
       sportKey={activeSport}
       sportLabel={sportLabel}
       chipSet={leagueChipSet.map((key) => ({ key, label: PICK_CATEGORY_LABELS[key] }))}
@@ -147,7 +150,7 @@ export default async function LivePage({
 
   return (
     <ThemedPage>
-      {/* The banner: league chips (plain links, like the view toggle - see isGrid above), the
+      {/* The banner: league chips (links, like the view toggle - see isGrid above), the
           Feed/Grid toggle and the Parlay slip control. */}
       <LiveBanner activeSport={activeSport} isGrid={isGrid} />
 

@@ -9,13 +9,15 @@
 //
 // One provider (mounted in (app)/layout.tsx, alongside ThemeProvider) covers
 // every page, so the pool and any in-progress "add mode" selection survive a
-// client-side nav between /live and /parlay without a remount. It's also
-// persisted to localStorage (scoped by userId) purely so an accidental
-// refresh doesn't silently wipe a slip the user was still building. The stored
-// legs are only a list of pick ids to look up, though: on hydrate and on every
-// tab focus they are revalidated against the DB (getSlipPickStatesAction), so
-// status/odds/game time always come from current data and any leg that has
-// started, been graded, or been deleted is pruned (with a one-time notice).
+// client-side nav between /live and /parlay (or between leagues on /live)
+// without a remount. It's also persisted to localStorage (scoped by userId)
+// purely so an accidental refresh doesn't silently wipe a slip the user was
+// still building - the confirmed legs and the add-mode selection both. The
+// stored legs are only a list of pick ids to look up, though: on hydrate and
+// on every tab focus they are revalidated against the DB
+// (getSlipPickStatesAction), so status/odds/game time always come from current
+// data and any leg that has started, been graded, or been deleted is pruned
+// (with a one-time notice).
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getSlipPickStatesAction } from "@/server/actions/parlay-slip";
@@ -32,6 +34,10 @@ type PersistedState = {
   pool: PooledPick[];
   leagueScope: Record<string, boolean>;
   legCount: number;
+  // The in-progress add-mode selection. Optional: a slip saved before these
+  // were persisted has neither.
+  addMode?: boolean;
+  checkedPicks?: PooledPick[];
 };
 
 type ParlayPoolContextValue = {
@@ -111,8 +117,8 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   // browser gets its own, empty pool rather than inheriting the previous
   // user's). The stored pool is NOT put on screen until it has been checked
   // against the DB, so a stale leg never flashes as Pending or counts in the
-  // nav badge. addMode/checkedPicks are deliberately NOT persisted - that's
-  // in-progress UI state, not a saved selection.
+  // nav badge. addMode/checkedPicks come back as they were saved: they are an
+  // unconfirmed selection, checked like any other leg once confirmed.
   useEffect(() => {
     let cancelled = false;
     let stored: PooledPick[] = [];
@@ -124,6 +130,10 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
         stored = parsed.pool ?? [];
         setLeagueScope(parsed.leagueScope ?? {});
         if (parsed.legCount) setLegCountState(parsed.legCount);
+        if (parsed.addMode) setAddMode(true);
+        if (Array.isArray(parsed.checkedPicks) && parsed.checkedPicks.length > 0) {
+          setCheckedPicks(new Map(parsed.checkedPicks.map((p) => [p.pickId, p])));
+        }
       }
     } catch {
       // Corrupt/unavailable storage - start from an empty pool rather than fail the page.
@@ -132,6 +142,12 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
       setHydrated(true);
       return;
     }
+    // The check below takes a round-trip, and the user can confirm picks
+    // before it lands. Its answer replaces only the stored legs it was asked
+    // about - anything confirmed in the meantime stays.
+    const storedIds = new Set(stored.map((p) => p.pickId));
+    const withConfirmedSince = (checked: PooledPick[]) => (prev: PooledPick[]) =>
+      [...checked, ...prev.filter((p) => !storedIds.has(p.pickId))];
     (async () => {
       let states: Awaited<ReturnType<typeof getSlipPickStatesAction>> | null = null;
       try {
@@ -142,14 +158,14 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
       if (cancelled) return;
       if (states) {
         const { kept, pruned } = reconcileSlip(stored, states);
-        setPool(kept);
+        setPool(withConfirmedSince(kept));
         reportPruned(pruned);
       } else {
         // Couldn't reach the DB: show only what can't already be known stale
         // (still pending, not started per the client clock). The next focus
         // revalidation replaces these with real values.
         const now = Date.now();
-        setPool(stored.filter((p) => p.status === "PENDING" && new Date(p.gameTime).getTime() > now));
+        setPool(withConfirmedSince(stored.filter((p) => p.status === "PENDING" && new Date(p.gameTime).getTime() > now)));
       }
       lastCheckRef.current = Date.now();
       setHydrated(true);
@@ -163,12 +179,12 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   useEffect(() => {
     if (!hydrated) return;
     try {
-      const data: PersistedState = { pool, leagueScope, legCount };
+      const data: PersistedState = { pool, leagueScope, legCount, addMode, checkedPicks: Array.from(checkedPicks.values()) };
       window.localStorage.setItem(storageKey(userId), JSON.stringify(data));
     } catch {
       // Best-effort persistence only - a full localStorage or a private window is not fatal.
     }
-  }, [userId, pool, leagueScope, legCount, hydrated]);
+  }, [userId, pool, leagueScope, legCount, addMode, checkedPicks, hydrated]);
 
   // Re-check the live pool against the DB. Only legs that were in the pool
   // when the request went out are touched, so a pick added mid-flight is left alone.

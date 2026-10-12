@@ -10,8 +10,8 @@ const GLOW =
 const BAR = "pointer-events-none absolute inset-y-0 w-[3px] bg-[linear-gradient(180deg,#38BDF8,#2563EB)] shadow-[0_0_14px_2px_rgba(56,189,248,0.7)] ";
 
 // The /live banner: the same navy card as the /cappers and /dashboard banners, drawn here rather
-// than from an image. Dark in both themes. The league and the view are plain links (query params
-// the page reads on the server); a league link keeps the view and drops any selected game.
+// than from an image. Dark in both themes. The league and the view are links (query params the
+// page reads on the server); a league link keeps the view and drops any selected game.
 // The layout follows the card's width (a size container), not the screen's: beside the sidebar the
 // card is far narrower than the screen. See live-banner-row.tsx.
 export function LiveBanner({ activeSport, isGrid }: { activeSport: string; isGrid: boolean }) {
