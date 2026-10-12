@@ -59,6 +59,7 @@ import {
   currentStreak,
   filterPicksByGameWindow,
   recordStatsFromTotals,
+  round2,
   scorecardWindowRange,
   type CategoryBreakdownItem,
   type MomentumBreakdown,
@@ -292,7 +293,7 @@ export type CapperPageView = {
   summary: CapperRecordView;
   chartData: UnitsChartPoint[];
   tiles: CategoryBreakdownItem[]; // All Sports: the core six; a sport: its own chip set
-  bestMarket: CategoryBreakdownItem | null; // one of `tiles` (bestMarketOf); null when there are none
+  bestMarkets: BestMarkets | null; // picked from `tiles` (bestMarketsOf); null when there are none
   recentPicks: (CapperRecentPickView & { sport: string })[];
   hasMoreRecent: boolean;
 };
@@ -310,19 +311,59 @@ export function clampRecentLimit(raw: number): number {
   return Number.isFinite(raw) ? Math.min(Math.max(Math.floor(raw), CAPPER_RECENT_PAGE_SIZE), CAPPER_RECENT_MAX) : CAPPER_RECENT_PAGE_SIZE;
 }
 
-// Shrinks a market's net units toward zero until it has a real sample: netUnits / (graded + this).
-const BEST_MARKET_PRIOR_PICKS = 20;
+// A market-breakdown tile plus its net units (2dp, the figure the banner prints).
+export type MarketStat = CategoryBreakdownItem & { netUnits: number };
 
-// The tile with the most sample-adjusted units. No minimum sample: any graded tile can win, and
-// the page shows its real record and graded count next to it. Ties keep the tiles' own order.
-export function bestMarketOf(
+// The banner's two picks from the tiles. `highestWinPct` is null only when no tile has a win or a
+// loss (pushes only); it may be the same market as `mostProfitable`.
+export type BestMarkets = { mostProfitable: MarketStat; highestWinPct: MarketStat | null };
+
+// The first tile nothing later beats: `order` lists what to compare, most important first, so a
+// full tie keeps the tiles' own (chip set) order.
+function topMarket(tiles: MarketStat[], order: ((t: MarketStat) => number)[]): MarketStat | null {
+  const beats = (a: MarketStat, b: MarketStat) => {
+    for (const value of order) if (value(a) !== value(b)) return value(a) > value(b);
+    return false;
+  };
+  return tiles.reduce<MarketStat | null>((best, t) => (best === null || beats(t, best) ? t : best), null);
+}
+
+// The tiles' most profitable market (plain net units) and their highest win % (wins / (wins +
+// losses), so a tile with pushes only has none). No sample adjustment and no minimum sample: any
+// graded tile can win either, and the banner prints its real record next to it. Ties - most
+// profitable: higher win %, then more graded picks; highest win %: more graded picks, then more
+// units; then the tiles' own order. `rows` are the tiles' own SQL rows (same window and sport).
+export function bestMarketsOf(
   tiles: CategoryBreakdownItem[],
   rows: Pick<CategoryTileRow, "category" | "unitsWon" | "unitsLost">[]
-): CategoryBreakdownItem | null {
+): BestMarkets | null {
   const netUnits = new Map<string, number>();
   for (const r of rows) netUnits.set(r.category, (netUnits.get(r.category) ?? 0) + (r.unitsWon ?? 0) - (r.unitsLost ?? 0));
-  const score = (t: CategoryBreakdownItem) => (netUnits.get(t.key) ?? 0) / (t.count + BEST_MARKET_PRIOR_PICKS);
-  return tiles.reduce<CategoryBreakdownItem | null>((best, t) => (best === null || score(t) > score(best) ? t : best), null);
+  const markets = tiles.map((t) => ({ ...t, netUnits: round2(netUnits.get(t.key) ?? 0) }));
+  const units = (t: MarketStat) => t.netUnits;
+  const winPct = (t: MarketStat) => t.winPct;
+  const graded = (t: MarketStat) => t.count;
+  const mostProfitable = topMarket(markets, [units, winPct, graded]);
+  if (mostProfitable === null) return null;
+  return {
+    mostProfitable,
+    highestWinPct: topMarket(
+      markets.filter((t) => t.wins + t.losses > 0),
+      [winPct, graded, units]
+    ),
+  };
+}
+
+// The banner's market stats: one "Best market" when the same market wins both (or nothing has a
+// win %), else the two side by side. `lead` is the figure the stat is about.
+export type BestMarketStat = { label: "Best market" | "Most profitable" | "Highest win %"; lead: "units" | "winPct"; market: MarketStat };
+export function bestMarketStats(best: BestMarkets): BestMarketStat[] {
+  const { mostProfitable, highestWinPct } = best;
+  if (highestWinPct === null || highestWinPct.key === mostProfitable.key) return [{ label: "Best market", lead: "units", market: mostProfitable }];
+  return [
+    { label: "Most profitable", lead: "units", market: mostProfitable },
+    { label: "Highest win %", lead: "winPct", market: highestWinPct },
+  ];
 }
 
 // Pure: the same bundle (with the page's recent part) -> what the page renders.
@@ -360,7 +401,7 @@ export function capperPageFromBundle(bundle: Record<string, unknown[]>, params: 
     summary: section ? (section.stats ?? recordFromTotals(undefined)) : detail.stats,
     chartData: section ? section.chartData : detail.chartData,
     tiles,
-    bestMarket: bestMarketOf(
+    bestMarkets: bestMarketsOf(
       tiles,
       tileRows.filter((t) => t.window === params.window && (selectedSport === null || t.sport === selectedSport))
     ),

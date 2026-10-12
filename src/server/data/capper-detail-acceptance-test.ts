@@ -14,7 +14,7 @@
 // unless DATABASE_URL is local.
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, unitsWonOnBet, type ScorecardWindow } from "@/server/data/stats";
+import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, round2, scorecardWindowRange, unitsWonOnBet, type ScorecardWindow } from "@/server/data/stats";
 import { capperRecentPicksRange, getCapperDetailData, getCapperPageData, type CapperDetailParams } from "@/server/data/capper-detail";
 import { computeCapperDetailLegacy, firstDiff, loadLegacyCapperPicks } from "@/server/data/capper-detail-legacy";
 import { getCappersWithPickCounts } from "@/server/data/cappers";
@@ -333,7 +333,7 @@ async function main() {
       const legacyAll = computeCapperDetailLegacy(rows, params(w, w), NOW);
       if (firstDiff({ s: all.summary, c: all.chartData, t: all.tiles }, { s: legacyAll.stats, c: legacyAll.chartData, t: legacyAll.universalBreakdown })) fail(`${w} All Sports`);
       if (all.sports.join() !== "MLB,NFL,NHL" || all.selectedSport !== null) fail(`${w} sports`);
-      const range = capperRecentPicksRange(w, NOW);
+      const range = scorecardWindowRange(w, NOW);
       const inRange = (p: (typeof rows)[number]) => !range || (p.gameTime >= range.start && p.gameTime < range.end);
       const sum = { wins: 0, losses: 0, pushes: 0 };
       for (const sport of [undefined, ...all.sports]) {
@@ -355,25 +355,44 @@ async function main() {
     const unknown = await getCapperPageData(userId, capperId, { sport: "Curling", window: "ALL", recentLimit: 10 }, NOW);
     check("page view: a sport the capper lacks resolves to All Sports (null)", unknown.selectedSport === null);
 
-    // The banner's two additions: the PENDING count, and the best market - the tile with the most
-    // net units per (graded + 20), re-derived here from the raw picks' stored category.
+    // The banner's additions: the PENDING count, and the two market stats - the tile with the most
+    // plain net units and the tile with the best wins / (wins + losses) - re-derived here from the
+    // raw picks' stored category, with nothing adjusted for sample size.
     const allTime = await getCapperPageData(userId, capperId, { window: "ALL", recentLimit: 10 }, NOW);
     check("page view: pending count is the capper's PENDING picks", allTime.pendingPickCount === rows.filter((p) => p.status === "PENDING").length && allTime.pendingPickCount > 0, String(allTime.pendingPickCount));
     let bestBad = "";
-    for (const sport of [undefined, ...allTime.sports]) {
-      const v = sport === undefined ? allTime : await getCapperPageData(userId, capperId, { sport, window: "ALL", recentLimit: 10 }, NOW);
-      const scored = v.tiles.map((t) => {
-        const net = rows
-          .filter((p) => p.category === t.key && (sport === undefined || p.sport.name === sport))
-          .reduce((a, p) => a + (p.status === "WIN" ? unitsWonOnBet(p.units, p.odds) : p.status === "LOSS" ? -p.units : 0), 0);
-        return { key: t.key, score: net / (t.count + 20) };
-      });
-      const expected = scored.reduce<(typeof scored)[number] | null>((b, s) => (b === null || s.score > b.score ? s : b), null);
-      if (v.tiles.length === 0 || v.bestMarket?.key !== expected?.key || !v.tiles.includes(v.bestMarket!)) bestBad ||= `${sport}: ${v.bestMarket?.key} vs ${expected?.key}`;
+    let bestCases = 0;
+    for (const w of ["ALL", "LAST_30"] as const) {
+      const range = scorecardWindowRange(w, NOW);
+      for (const sport of [undefined, ...allTime.sports]) {
+        const v = sport === undefined && w === "ALL" ? allTime : await getCapperPageData(userId, capperId, { sport, window: w, recentLimit: 10 }, NOW);
+        const scored = v.tiles.map((t) => {
+          const net = rows
+            .filter((p) => p.category === t.key && (sport === undefined || p.sport.name === sport))
+            .filter((p) => range === null || (p.gradedAt !== null && p.gameTime >= range.start && p.gameTime < range.end))
+            .reduce((a, p) => a + (p.status === "WIN" ? unitsWonOnBet(p.units, p.odds) : p.status === "LOSS" ? -p.units : 0), 0);
+          return { ...t, netUnits: round2(net) };
+        });
+        const top = (xs: typeof scored, by: ((t: (typeof scored)[number]) => number)[]) =>
+          xs.reduce<(typeof scored)[number] | null>((b, t) => {
+            if (b === null) return t;
+            const d = by.map((f) => f(t) - f(b)).find((x) => x !== 0) ?? 0;
+            return d > 0 ? t : b;
+          }, null);
+        const profit = top(scored, [(t) => t.netUnits, (t) => t.winPct, (t) => t.count]);
+        const pct = top(
+          scored.filter((t) => t.wins + t.losses > 0),
+          [(t) => t.winPct, (t) => t.count, (t) => t.netUnits]
+        );
+        bestCases++;
+        const got = v.bestMarkets;
+        if (v.tiles.length === 0 ? got !== null : firstDiff({ p: got?.mostProfitable, w: got?.highestWinPct }, { p: profit, w: pct }))
+          bestBad ||= `${w} ${sport}: ${got?.mostProfitable.key}/${got?.highestWinPct?.key} vs ${profit?.key}/${pct?.key}`;
+      }
     }
-    check("page view: best market is the tile with the most net units per (graded + 20), All Sports and each sport", bestBad === "", bestBad);
+    check(`page view: most profitable / highest win % are the tiles' own records with plain net units (${bestCases} sport x window cases)`, bestBad === "" && bestCases > 4, bestBad);
     const none = await getCapperPageData(userId, `${PREFIX}capper-pending`, { window: "ALL", recentLimit: 10 }, NOW);
-    check("page view: no graded picks -> no best market, 5 pending", none.bestMarket === null && none.pendingPickCount === 5);
+    check("page view: no graded picks -> no best markets, 5 pending", none.bestMarkets === null && none.pendingPickCount === 5);
   }
   {
     // A second capper of the same user must never leak into the first's numbers.
