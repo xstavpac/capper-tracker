@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { Pick, PickStatus, PickedSide } from "@prisma/client";
 import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, parsePlayerProp, betTypeLabel, type OddsBucketKey } from "@/lib/bet-line";
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
+import { yesterdayRange } from "@/lib/cappers-panels";
 import { comparePicksChronological, comparePicksChronologicalDesc } from "@/lib/pick-order";
 
 // Re-exported for existing importers (betTypeLabel moved to lib/bet-line.ts
@@ -585,12 +586,15 @@ export function filterPicksByGameWindow<T extends { gameTime: Date; gradedAt: Da
 // as query parameters, so the two can't disagree on what "Last 7 days" or
 // "Yesterday" (Eastern day boundaries, dates.ts) means. `now` is passed in so
 // a caller building several windows uses one instant for all of them.
+// YESTERDAY is the previous Eastern calendar day (yesterdayRange, the same
+// range the /cappers panel cards use), not the 24 hours before today's
+// midnight: the day a clock change falls on is 23 or 25 hours long.
 export function scorecardWindowRange(window: ScorecardWindow, now: Date): { start: Date; end: Date } | null {
   if (window === "ALL") return null;
 
   const startOfToday = startOfEasternDay(now);
   if (window === "TODAY") return { start: startOfToday, end: now };
-  if (window === "YESTERDAY") return { start: new Date(startOfToday.getTime() - 86400000), end: startOfToday };
+  if (window === "YESTERDAY") return yesterdayRange(now);
   return { start: new Date(now.getTime() - WINDOW_DAYS_BACK[window]! * 86400000), end: now };
 }
 

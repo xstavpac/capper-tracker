@@ -132,6 +132,10 @@ export function categoryPickRows(ranked: RankedLivePick[], games: LiveCategoryGa
 // Football boards hold a Thursday-to-Monday week, so "today" would be wrong.
 const WEEKLY_SLATE_LEAGUES = new Set(["NFL", "NCAAF"]);
 
+export function isWeeklySlateLeague(leagueName: string): boolean {
+  return WEEKLY_SLATE_LEAGUES.has(leagueName.toUpperCase());
+}
+
 export function slateCountText(leagueName: string, count: number): string {
   return (WEEKLY_SLATE_LEAGUES.has(leagueName.toUpperCase()) ? "This week" : "Today") + ": " + count + " pick" + (count === 1 ? "" : "s");
 }
