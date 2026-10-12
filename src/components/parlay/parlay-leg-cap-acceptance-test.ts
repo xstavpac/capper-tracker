@@ -31,7 +31,7 @@ const CAP_MESSAGE = "20 legs max";
 type States = Record<string, SlipPickState>;
 const FUTURE = "2099-01-01T00:00:00.000Z";
 const pending = (ids: string[]): States =>
-  Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, gameTime: FUTURE, started: false }]));
+  Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, kickoff: FUTURE, started: false }]));
 
 function pick(i: number): ExpanderPick {
   const home = "Home" + i;
@@ -77,8 +77,8 @@ stub("../../server/actions/parlay-generator", {
 });
 const swapCalls: { picks: number; legCount: number; mode: string }[] = [];
 stub("../../server/actions/parlay-pool-generator", {
-  generatePoolSwapAction: async (pool: ExpanderPick[], legCount: number, mode: string) => {
-    swapCalls.push({ picks: pool.length, legCount, mode });
+  generatePoolSwapAction: async (pickIds: string[], legCount: number, mode: string) => {
+    swapCalls.push({ picks: pickIds.length, legCount, mode });
     return { error: CAP_MESSAGE };
   },
 });

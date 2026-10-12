@@ -14,7 +14,7 @@ import { PickCard } from "@/components/live/pick-card";
 import { useParlayPool, type PooledPick } from "@/components/parlay/parlay-pool-context";
 import { ScopeToggle, LegStepper } from "@/components/parlay/parlay-controls";
 import { SwapColumn } from "@/components/parlay/swap-result";
-import { bestAvailableRecord } from "@/lib/parlay/pick-record";
+import { rankPoolPicks } from "@/lib/parlay/pick-record";
 import {
   selectConflictFreeLegs,
   type BuildCandidate,
@@ -23,13 +23,6 @@ import {
 } from "@/lib/parlay/build-my-picks";
 import type { SwapMode } from "@/lib/parlay/auto-generate";
 import { generatePoolSwapAction, type PoolSwapResult } from "@/server/actions/parlay-pool-generator";
-
-// Ranks a pooled pick by the same win% already shown on its own card - see
-// bestAvailableRecord (shared with Auto-Generate). No new scoring model:
-// this is the number already on screen for every pick in the pool.
-function bestAvailableWinPct(pick: PooledPick, records: CapperLeagueRecords): number {
-  return bestAvailableRecord(pick, records)?.winPct ?? -1;
-}
 
 function LeagueToggle({ league }: { league: string }) {
   const { isLeagueInScope, toggleLeague } = useParlayPool();
@@ -71,6 +64,7 @@ function toBuildCandidate(p: PooledPick): BuildCandidate {
     awayTeam: p.awayTeam,
     gameTime: new Date(p.gameTime),
     sportName: p.leagueName,
+    gameId: p.gameId,
   };
 }
 
@@ -195,7 +189,12 @@ function useSwapBuild(mode: SwapMode) {
     setBuilding(true);
     setError(null);
     try {
-      const next = await generatePoolSwapAction(inScope, legCount, mode);
+      // Ids only: the server reads each pick itself (parlay-pool-generator.ts).
+      const next = await generatePoolSwapAction(
+        inScope.map((p) => p.pickId),
+        legCount,
+        mode
+      );
       if ("error" in next) {
         setError(next.error);
         return;
@@ -249,7 +248,9 @@ export function ParlayPoolSection() {
   const { pool, leaguesInPool, isLeagueInScope, removeFromPool, legCount, maxLegCount } = useParlayPool();
   const [records, setRecords] = useState<CapperLeagueRecords | null>(null);
   const [loadingRecords, setLoadingRecords] = useState(false);
+  const [recordsError, setRecordsError] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [buildError, setBuildError] = useState<string | null>(null);
   const [buildResult, setBuildResult] = useState<BuiltParlay | null>(null);
   // Section 9: a shortfall (fewer conflict-free legs than requested) is never
   // silently built - the user must explicitly confirm building the smaller
@@ -263,17 +264,27 @@ export function ParlayPoolSection() {
 
   useEffect(() => {
     let cancelled = false;
+    setRecordsError(false);
     if (pool.length === 0) {
       setRecords(null);
       return;
     }
     setLoadingRecords(true);
     const entries = pool.map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category }));
-    getLeagueRecordsAction(entries).then((result) => {
-      if (cancelled) return;
-      setRecords(result);
-      setLoadingRecords(false);
-    });
+    getLeagueRecordsAction(entries).then(
+      (result) => {
+        if (cancelled) return;
+        setRecords(result);
+        setLoadingRecords(false);
+      },
+      () => {
+        // The cards still render, just without their records - never left
+        // showing "loading" for a request that is no longer in flight.
+        if (cancelled) return;
+        setLoadingRecords(false);
+        setRecordsError(true);
+      }
+    );
     return () => {
       cancelled = true;
     };
@@ -287,6 +298,7 @@ export function ParlayPoolSection() {
   // stands in for scope here without threading the raw scope map through.
   useEffect(() => {
     setBuildResult(null);
+    setBuildError(null);
     setShortfallConfirmed(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- poolKey stands in for pool membership
   }, [poolKey, legCount, maxLegCount]);
@@ -295,34 +307,45 @@ export function ParlayPoolSection() {
     const inScope = pool.filter((p) => isLeagueInScope(p.leagueName));
     if (inScope.length === 0) return;
     setBuilding(true);
-    const entries = inScope.map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category }));
-    const freshRecords = await getLeagueRecordsAction(entries);
-    // The ranking itself is untouched by conflict validation - only which
-    // ranked picks get selected changes (Section 9). byId maps the
-    // classifier's minimal candidates back to their full pooled pick for
-    // rendering (odds, gameLabel, etc.).
-    const ranked = [...inScope].sort((a, b) => bestAvailableWinPct(b, freshRecords) - bestAvailableWinPct(a, freshRecords));
-    const byId = new Map(ranked.map((p) => [p.pickId, p]));
-    const selection = selectConflictFreeLegs(ranked.map(toBuildCandidate), legCount);
-    setBuildResult({
-      legs: selection.legs.map((c) => byId.get(c.pickId)!),
-      skipped: selection.skipped,
-      unverified: selection.unverified,
-      requested: selection.requested,
-      shortfall: selection.shortfall,
-    });
-    setShortfallConfirmed(false);
-    setBuilding(false);
+    setBuildError(null);
+    try {
+      const entries = inScope.map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category }));
+      const freshRecords = await getLeagueRecordsAction(entries);
+      // Ranked by the same record already shown on each pick's own card
+      // (rankPoolPicks, shared with the pool's Auto Hedge / Contrarian). The
+      // ranking itself is untouched by conflict validation - only which
+      // ranked picks get selected changes (Section 9). byId maps the
+      // classifier's minimal candidates back to their full pooled pick for
+      // rendering (odds, gameLabel, etc.).
+      const ranked = rankPoolPicks(inScope, freshRecords);
+      const byId = new Map(ranked.map((p) => [p.pickId, p]));
+      const selection = selectConflictFreeLegs(ranked.map(toBuildCandidate), legCount);
+      setBuildResult({
+        legs: selection.legs.map((c) => byId.get(c.pickId)!),
+        skipped: selection.skipped,
+        unverified: selection.unverified,
+        requested: selection.requested,
+        shortfall: selection.shortfall,
+      });
+      setShortfallConfirmed(false);
+    } catch {
+      setBuildResult(null);
+      setBuildError("Couldn't build this parlay right now - try again.");
+    } finally {
+      setBuilding(false);
+    }
   }
 
   function clearBuilt() {
     setBuildResult(null);
+    setBuildError(null);
     setShortfallConfirmed(false);
     hedge.clear();
     contrarian.clear();
   }
 
-  const hasBuiltResult = buildResult !== null || hedge.result !== null || contrarian.result !== null;
+  const hasBuiltResult =
+    buildResult !== null || buildError !== null || hedge.result !== null || contrarian.result !== null;
 
   if (pool.length === 0) {
     return (
@@ -336,6 +359,9 @@ export function ParlayPoolSection() {
 
   return (
     <div className="space-y-5">
+      {recordsError && (
+        <p className="text-xs text-red-600 dark:text-red-400">Couldn&apos;t load your cappers&apos; records for these picks.</p>
+      )}
       {leaguesInPool.map((league) => (
         <div key={league}>
           <div className="mb-2 flex items-center justify-between gap-2">
@@ -401,6 +427,7 @@ export function ParlayPoolSection() {
             Every pooled league is excluded from scope - toggle at least one on above to build a parlay.
           </p>
         )}
+        {buildError && <p className="mt-4 text-xs text-red-600 dark:text-red-400">{buildError}</p>}
         {buildResult && buildResult.shortfall > 0 && !shortfallConfirmed && (
           <ShortfallNotice result={buildResult} onBuildAnyway={() => setShortfallConfirmed(true)} />
         )}

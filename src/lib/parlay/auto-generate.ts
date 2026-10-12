@@ -16,7 +16,7 @@
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import type { CategoryBreakdownItem } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
-import { bestAvailableRecord, type RankRecord } from "@/lib/parlay/pick-record";
+import { bestAvailableRecord, compareByRecord, type RankRecord } from "@/lib/parlay/pick-record";
 import { contrarianHeadcountPasses, rankCandidates, type ParlayLeg } from "@/lib/parlay/qualification-ranking";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
 
@@ -52,17 +52,9 @@ export type AutoParlay = {
   legs: AutoLeg[];
 };
 
-// Win% desc, then bigger sample, then pick id (so equal records never
-// depend on input order). A pick with no record at all ranks below every
-// pick that has one - it still shows, it just can't outrank a real record.
+// Win% desc, then bigger sample, then pick id - see compareByRecord.
 export function compareRankedPicks(a: RankedPick, b: RankedPick): number {
-  if (a.record && !b.record) return -1;
-  if (!a.record && b.record) return 1;
-  if (a.record && b.record) {
-    if (b.record.winPct !== a.record.winPct) return b.record.winPct - a.record.winPct;
-    if (b.record.n !== a.record.n) return b.record.n - a.record.n;
-  }
-  return a.pick.pickId < b.pick.pickId ? -1 : a.pick.pickId > b.pick.pickId ? 1 : 0;
+  return compareByRecord({ pickId: a.pick.pickId, record: a.record }, { pickId: b.pick.pickId, record: b.record });
 }
 
 export function rankGamePicks(picks: GeneratorPick[], records: CapperLeagueRecords): RankedPick[] {
@@ -100,6 +92,7 @@ export function toParlayLeg(p: GeneratorPick): ParlayLeg {
     awayTeam: p.awayTeam,
     gameTime: new Date(p.gameTime),
     sportName: p.leagueName,
+    gameId: p.gameId,
   };
 }
 

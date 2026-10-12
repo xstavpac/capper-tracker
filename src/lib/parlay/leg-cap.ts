@@ -11,10 +11,17 @@ export const MAX_PARLAY_LEGS = 20;
 
 export const MAX_PARLAY_LEGS_MESSAGE = `${MAX_PARLAY_LEGS} legs max`;
 
-// What a server action returns instead of its result when the request is over
-// the cap. Returned, not thrown: a production build strips a thrown error's
+// The most slip picks one Auto Hedge / Contrarian request may name. Above the
+// leg cap on purpose - a slip saved before the cap existed can hold more than
+// MAX_PARLAY_LEGS picks and still builds from all of them - but bounded, so
+// the request's size is never the client's to choose.
+export const MAX_POOL_REQUEST_PICKS = 100;
+
+// What a server action returns instead of its result when it refuses the
+// request. Returned, not thrown: a production build strips a thrown error's
 // message before it reaches the client, and this one has to be shown.
-export type LegCapRejection = { error: string };
+export type ParlayRejection = { error: string };
+export type LegCapRejection = ParlayRejection;
 
 export function legCapRejection(legCount: number): LegCapRejection | null {
   return Math.floor(legCount) > MAX_PARLAY_LEGS ? { error: MAX_PARLAY_LEGS_MESSAGE } : null;

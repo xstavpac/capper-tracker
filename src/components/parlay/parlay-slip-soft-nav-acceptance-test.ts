@@ -44,7 +44,7 @@ require.cache[actionPath] = {
 
 const FUTURE = "2099-01-01T00:00:00.000Z";
 const pending = (ids: string[]): States =>
-  Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, gameTime: FUTURE, started: false }]));
+  Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, kickoff: FUTURE, started: false }]));
 
 const LEAGUES = [
   { key: "americanfootball_nfl", label: "NFL" },
@@ -322,7 +322,7 @@ async function main() {
   await click(box("nfl2"));
   await click(button("Confirm"));
   await act(async () => {
-    settle.resolve({ nfl1: { status: "WIN", odds: -110, gameTime: FUTURE, started: true } });
+    settle.resolve({ nfl1: { status: "WIN", odds: -110, kickoff: FUTURE, started: true } });
     await tick();
   });
   check("confirm during hydrate: a stored leg that has since been graded is still pruned", poolIds() === "nfl2" && ctx.notice?.[0]?.result === "Won", `pool=${poolIds()} notice=${ctx.notice?.[0]?.result}`);

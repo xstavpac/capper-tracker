@@ -14,13 +14,9 @@
 //
 // Pure - no DB access.
 import { selectConflictFreeLegs, type BuildCandidate, type SkippedPick, type UnverifiedPair } from "@/lib/parlay/build-my-picks";
-import { bestAvailableRecord } from "@/lib/parlay/pick-record";
+import { bestAvailableRecord, rankPoolPicks } from "@/lib/parlay/pick-record";
 import type { AutoLeg, AutoParlay, GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CapperLeagueRecords } from "@/server/data/picks";
-
-function bestAvailableWinPct(pick: GeneratorPick, records: CapperLeagueRecords): number {
-  return bestAvailableRecord(pick, records)?.winPct ?? -1;
-}
 
 // Same rawBetDetail/game-fields mapping parlay-pool-section.tsx's own
 // toBuildCandidate uses for My Picks - kept identical so a pick ranks and
@@ -37,6 +33,7 @@ function toBuildCandidate(p: GeneratorPick): BuildCandidate {
     awayTeam: p.awayTeam,
     gameTime: new Date(p.gameTime),
     sportName: p.leagueName,
+    gameId: p.gameId,
   };
 }
 
@@ -56,7 +53,7 @@ export type PoolPrimary = {
 // in-scope Parlay Pool) - this function does no league-scope filtering of
 // its own, same convention as selectConflictFreeLegs.
 export function buildPoolPrimary(pool: GeneratorPick[], records: CapperLeagueRecords, legCount: number): PoolPrimary {
-  const ranked = [...pool].sort((a, b) => bestAvailableWinPct(b, records) - bestAvailableWinPct(a, records));
+  const ranked = rankPoolPicks(pool, records);
   const byId = new Map(ranked.map((p) => [p.pickId, p]));
   const selection = selectConflictFreeLegs(ranked.map(toBuildCandidate), legCount);
   const legs: AutoLeg[] = selection.legs.map((c) => {
