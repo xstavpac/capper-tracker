@@ -61,5 +61,6 @@ export function toExpanderPick(
           ? getTeamColor(activeSport, game.homeTeam)
           : null,
     datePosted: p.datePosted.toISOString(),
+    oddsSource: p.oddsSource,
   };
 }
