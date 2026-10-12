@@ -42,13 +42,16 @@ import { CONTROL, FOOTER_LINK, FOOTER_TEXT, FooterLine, GREEN, Message, Name, Pa
 type AnyPanel = PanelKey | FormPanelKey;
 
 // What each window reads in a sentence ("... this week").
-const WINDOW_PHRASE: Record<PanelWindow, string> = { today: "today", week: "this week", "30d": "in the last 30 days" };
+const WINDOW_PHRASE: Record<PanelWindow, string> = { today: "today", yesterday: "yesterday", week: "this week", "30d": "in the last 30 days" };
+// Yesterday is over: nothing is "yet" to come, and its streaks are the ones standing when it ended.
 const EMPTY: Record<PanelKey, (w: PanelWindow) => string> = {
-  active: (w) => "No picks logged " + WINDOW_PHRASE[w] + " yet.",
-  hottest: (w) => "No cappers on a 3+ game win streak " + WINDOW_PHRASE[w] + ".",
+  active: (w) => "No picks logged " + WINDOW_PHRASE[w] + (w === "yesterday" ? "." : " yet."),
+  hottest: (w) => (w === "yesterday" ? "No cappers were on a 3+ game win streak as of yesterday." : "No cappers on a 3+ game win streak " + WINDOW_PHRASE[w] + "."),
   winners: (w) => "No cappers in the green " + WINDOW_PHRASE[w] + ".",
-  coldest: (w) => "No cappers on a 3+ game losing streak " + WINDOW_PHRASE[w] + ".",
+  coldest: (w) => (w === "yesterday" ? "No cappers were on a 3+ game losing streak as of yesterday." : "No cappers on a 3+ game losing streak " + WINDOW_PHRASE[w] + "."),
 };
+// An empty Yesterday whose day had no graded pick at all (the dropdown fetch says so).
+const NO_GRADED = "No graded picks yesterday.";
 const FORM_EMPTY: Record<FormPanelKey, string> = {
   falling: "Nobody is underperforming their usual form.",
   consistent: "No capper has 50 decided picks with a steady 50%+ record yet.",
@@ -80,6 +83,10 @@ const LEADERBOARD_HREF = "#leaderboard";
 // panel (GET /api/cappers/panel), never the whole page. Fetched windows are kept in memory so flipping
 // back is free. `weekPct` (Most Active only): picks this week against last week, in percent.
 // `leaderboardHref`: the footer's "View all" target, for a panel shown away from /cappers.
+// One window's rows as the dropdown fetch returns them. `graded` (an empty Yesterday only): whether
+// that day had any graded pick.
+type Fetched = { rows: PanelRows; graded?: boolean };
+
 export function CapperPanel({ panel, initial, weekPct, leaderboardHref = LEADERBOARD_HREF }: { panel: PanelKey; initial: PanelRows; weekPct?: number | null; leaderboardHref?: string }) {
   const [win, setWin] = useState<PanelWindow>(DEFAULT_PANEL_WINDOW);
   const [rows, setRows] = useState<PanelRows>(initial);
@@ -87,13 +94,22 @@ export function CapperPanel({ panel, initial, weekPct, leaderboardHref = LEADERB
   // footer and the empty message never describe the new window with the old window's rows.
   const [shown, setShown] = useState<PanelWindow>(DEFAULT_PANEL_WINDOW);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
-  const cache = useRef(new Map<PanelWindow, PanelRows>([[DEFAULT_PANEL_WINDOW, initial]]));
+  // The shown window had no graded pick at all (only ever reported for an empty Yesterday).
+  const [noGraded, setNoGraded] = useState(false);
+  const cache = useRef(new Map<PanelWindow, Fetched>([[DEFAULT_PANEL_WINDOW, { rows: initial }]]));
   const abort = useRef<AbortController | null>(null);
+  const show = (w: PanelWindow, f: Fetched) => {
+    setRows(f.rows);
+    setNoGraded(f.graded === false);
+    setShown(w);
+    setState("idle");
+  };
 
   // A new server render (time tab, filter or navigation) hands down fresh "This week" rows.
   useEffect(() => {
-    cache.current = new Map([[DEFAULT_PANEL_WINDOW, initial]]);
+    cache.current = new Map([[DEFAULT_PANEL_WINDOW, { rows: initial }]]);
     setRows(initial);
+    setNoGraded(false);
     setShown(DEFAULT_PANEL_WINDOW);
     setWin(DEFAULT_PANEL_WINDOW);
     setState("idle");
@@ -106,9 +122,7 @@ export function CapperPanel({ panel, initial, weekPct, leaderboardHref = LEADERB
     abort.current?.abort();
     const hit = cache.current.get(next);
     if (hit) {
-      setRows(hit);
-      setShown(next);
-      setState("idle");
+      show(next, hit);
       return;
     }
     const ctl = new AbortController();
@@ -117,11 +131,9 @@ export function CapperPanel({ panel, initial, weekPct, leaderboardHref = LEADERB
     try {
       const res = await fetch("/api/cappers/panel?panel=" + panel + "&window=" + next, { signal: ctl.signal });
       if (!res.ok) throw new Error(String(res.status));
-      const body = (await res.json()) as { rows: PanelRows };
-      cache.current.set(next, body.rows);
-      setRows(body.rows);
-      setShown(next);
-      setState("idle");
+      const body = (await res.json()) as Fetched;
+      cache.current.set(next, body);
+      show(next, body);
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
       setState("error");
@@ -170,11 +182,11 @@ export function CapperPanel({ panel, initial, weekPct, leaderboardHref = LEADERB
         {state === "error" ? (
           <Message error>Couldn&apos;t load this panel. Try another window or refresh.</Message>
         ) : rows.length === 0 ? (
-          <Message>{EMPTY[panel](shown)}</Message>
+          <Message>{noGraded ? NO_GRADED : EMPTY[panel](shown)}</Message>
         ) : panel === "active" ? (
           <ActiveRows rows={rows as ActiveEntry[]} />
         ) : panel === "hottest" ? (
-          <HottestRows rows={rows as StreakEntry[]} />
+          <HottestRows rows={rows as StreakEntry[]} past={shown === "yesterday"} />
         ) : panel === "winners" ? (
           <WinnerRows rows={rows as WinnerEntry[]} />
         ) : (
@@ -210,7 +222,7 @@ function ActiveRows({ rows }: { rows: ActiveEntry[] }) {
   );
 }
 
-const TOTAL_LABEL: Record<PanelWindow, string> = { today: "Total picks today", week: "Total picks this week", "30d": "Total picks, last 30 days" };
+const TOTAL_LABEL: Record<PanelWindow, string> = { today: "Total picks today", yesterday: "Total picks yesterday", week: "Total picks this week", "30d": "Total picks, last 30 days" };
 // The window's picks across the whole roster. The change against the week before exists only for
 // "This week" (the page's overview number), so the other windows show the total alone.
 function ActiveFooter({ rows, win, weekPct, href }: { rows: ActiveEntry[]; win: PanelWindow; weekPct: number | null; href: string }) {
@@ -259,8 +271,9 @@ const LEAD_LOOK = {
   },
 };
 // #1 is a featured row; the rest are rows with a dot trail. A dot per win up to STREAK_DOTS, then "+N"
-// for the wins beyond it, so a longer run always draws a longer strip.
-function HottestRows({ rows }: { rows: StreakEntry[] }) {
+// for the wins beyond it, so a longer run always draws a longer strip. `past`: the runs are the ones
+// standing when a closed window (Yesterday) ended, not the current ones.
+function HottestRows({ rows, past }: { rows: StreakEntry[]; past: boolean }) {
   const [lead, ...rest] = rows;
   const lit = Math.min(lead.streak, STREAK_DOTS);
   const generational = lead.streak >= GENERATIONAL_STREAK;
@@ -292,7 +305,7 @@ function HottestRows({ rows }: { rows: StreakEntry[] }) {
         </span>
         <span className={"flex shrink-0 flex-col items-end gap-1 " + (generational ? "self-start" : "")}>
           <span className={"flex items-center gap-1 text-[10px] font-medium leading-none " + look.label}>
-            Current streak
+            {past ? "As of yesterday" : "Current streak"}
             <FlameFilledIcon className="h-[11px] w-[11px]" />
           </span>
           <span aria-hidden className={"flex items-center " + DOT_GAP}>

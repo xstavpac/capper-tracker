@@ -46,7 +46,6 @@ import { round2HalfUpSql } from "@/server/data/page-aggregate-fragments";
 import { statsFromRows, specialistTagsFromCandidateRows } from "@/server/data/pick-aggregates-cappers-adapter";
 import type { FavoriteCappersSummary, LeaderboardEntry } from "@/server/data/cappers";
 import { PAGE_SIZE, type CappersSortKey, type SortDir } from "@/lib/cappers-page-params";
-import { startOfEasternDay } from "@/lib/dates";
 import {
   DEFAULT_PANEL_WINDOW,
   STREAK_LOOKBACK,
@@ -59,10 +58,12 @@ import {
   CONSISTENT_BLOCKS,
   CONSISTENT_MIN_MEAN_PCT,
   FORM_PANEL_COUNT,
+  panelRange,
   type ActiveEntry,
   type ConsistentEntry,
   type FallingEntry,
   type PanelKey,
+  type PanelRange,
   type PanelRows,
   type PanelWindow,
   type StreakEntry,
@@ -90,6 +91,9 @@ export const MOST_ACTIVE_COUNT = 5;
 export const HOTTEST_COUNT = 5;
 // Graded picks a capper needs in the week to be eligible for Hottest (one lucky bet can't top it).
 export const HOTTEST_MIN_GRADED = 5;
+// Biggest Winners' minimum graded picks per panel window. "Yesterday" has none: one graded pick lists
+// a capper, with the day's real record beside the units.
+export const WINNERS_MIN_GRADED: Record<PanelWindow, number> = { today: HOTTEST_MIN_GRADED, yesterday: 1, week: HOTTEST_MIN_GRADED, "30d": HOTTEST_MIN_GRADED };
 const DAY_MS = 86400000;
 // The stat cards' sparklines: this many rolling 7-day buckets ending now, oldest first.
 export const STAT_WEEKS = 8;
@@ -243,26 +247,22 @@ const SORT_SQL: Record<CappersSortKey, { missing: Prisma.Sql; desc: Prisma.Sql; 
 const sortSql = (sort: CappersSortKey, dir: SortDir = "desc") => Prisma.sql`${SORT_SQL[sort].missing}, ${SORT_SQL[sort][dir]}`;
 const TIE_BREAK = Prisma.sql`(net_r = 'NaN'::float8), net_r DESC, lower(name) COLLATE "C", name COLLATE "C", cid COLLATE "C"`;
 
-// A panel window as an instant range. "Today" is the Eastern calendar day so far; the others roll.
-export function panelRange(w: PanelWindow, now: Date): { start: Date; end: Date } {
-  if (w === "today") return { start: startOfEasternDay(now), end: now };
-  return { start: new Date(now.getTime() - (w === "week" ? 7 : 30) * DAY_MS), end: now };
-}
-
 // The SELECT for one panel, reading a `roster` CTE (id, name, "colorTag", "isFavorite") - the page's
 // statement has one, and getPanelRows builds one. Returns at most 5 rows, never a pick row.
 //   active   - picks posted (datePosted) in the window, any status. Every row also carries
 //              totalPicks: the window's picks across the whole roster, not just these five.
-//   winners  - net units over graded picks posted in the window: >= HOTTEST_MIN_GRADED graded picks,
-//              net units > 0, odds-0 win left out. This is the old "Hottest this week". Rows carry
-//              the window's wins / losses too.
+//   winners  - net units over graded picks posted in the window: >= `minGraded` graded picks
+//              (WINNERS_MIN_GRADED), net units > 0, odds-0 win left out. This is the old "Hottest
+//              this week". Rows carry the window's wins / losses too.
 //   hottest / coldest - current WIN / LOSS streak (see streakPanelSql).
-export function panelSql(panel: PanelKey, userId: string, range: { start: Date; end: Date }): Prisma.Sql {
+// A closed range (Yesterday) also stops at its end: picks posted since are not in it.
+export function panelSql(panel: PanelKey, userId: string, range: PanelRange, minGraded: number = HOTTEST_MIN_GRADED): Prisma.Sql {
   if (panel === "hottest" || panel === "coldest") return streakPanelSql(panel === "hottest" ? "WIN" : "LOSS", userId, range);
+  const postedBefore = range.closed ? Prisma.sql`AND p."datePosted" < ${ts(range.end)}` : Prisma.empty;
   if (panel === "active") {
     return Prisma.sql`
       SELECT r.id AS "capperId", r.name, r."colorTag", m.n AS "pickCount", (sum(m.n) OVER ())::int AS "totalPicks"
-      FROM (SELECT p."capperId" AS cid, count(*)::int AS n FROM picks p WHERE p."userId" = ${userId} AND p."datePosted" >= ${ts(range.start)} GROUP BY p."capperId") m
+      FROM (SELECT p."capperId" AS cid, count(*)::int AS n FROM picks p WHERE p."userId" = ${userId} AND p."datePosted" >= ${ts(range.start)} ${postedBefore} GROUP BY p."capperId") m
       JOIN roster r ON r.id = m.cid
       ORDER BY m.n DESC, r."isFavorite" DESC, r.name, r.id
       LIMIT ${MOST_ACTIVE_COUNT}
@@ -287,10 +287,10 @@ export function panelSql(panel: PanelKey, userId: string, range: { start: Date; 
             COALESCE(sum(p.units) FILTER (WHERE p.status = 'LOSS'), 0)::float8 AS "unitsLost",
             COALESCE(bit_or(CASE WHEN p.units > 0 THEN 1 WHEN p.units < 0 THEN 2 ELSE 4 END) FILTER (WHERE p.status = 'WIN' AND p.odds = 0), 0)::int AS "zeroOddsWinFlags"
           FROM picks p
-          WHERE p."userId" = ${userId} AND p."datePosted" >= ${ts(range.start)}
+          WHERE p."userId" = ${userId} AND p."datePosted" >= ${ts(range.start)} ${postedBefore}
           GROUP BY p."capperId"
         ) a
-        WHERE a.graded >= ${HOTTEST_MIN_GRADED}
+        WHERE a.graded >= ${minGraded}
       ) g
       JOIN roster r ON r.id = g.cid
     ) h
@@ -308,7 +308,10 @@ export function panelSql(panel: PanelKey, userId: string, range: { start: Date; 
 // per capper by a LATERAL index-ordered LIMIT (picks_user_capper_streak_idx).
 // Ranked longest run first, then larger |units| over the run (Hottest: net win units; Coldest: units
 // lost; odds-0 picks contribute nothing), then name. Coldest returns its units negated.
-function streakPanelSql(kind: "WIN" | "LOSS", userId: string, range: { start: Date; end: Date }): Prisma.Sql {
+// A closed range (Yesterday) reads the streak as it stood when the window ended: games since then
+// neither extend nor break it.
+function streakPanelSql(kind: "WIN" | "LOSS", userId: string, range: PanelRange): Prisma.Sql {
+  const asOf = range.closed ? Prisma.sql`AND p."gameTime" < ${ts(range.end)}` : Prisma.empty;
   const units = kind === "WIN" ? WIN_UNITS : Prisma.sql`p.units`;
   const lostUnits = kind === "LOSS" ? Prisma.sql`, -${round2HalfUpSql(Prisma.sql`s.u`)} AS units` : Prisma.empty;
   return Prisma.sql`
@@ -325,7 +328,7 @@ function streakPanelSql(kind: "WIN" | "LOSS", userId: string, range: { start: Da
       CROSS JOIN LATERAL (
         SELECT p.status::text AS st, p.units, p.odds, p."gameTime", p."createdAt", p.id
         FROM picks p
-        WHERE p."userId" = ${userId} AND p."capperId" = el.cid AND p.status IN ('WIN', 'LOSS')
+        WHERE p."userId" = ${userId} AND p."capperId" = el.cid AND p.status IN ('WIN', 'LOSS') ${asOf}
         ORDER BY ${ORDER_DESC}
         LIMIT ${STREAK_LOOKBACK}
       ) q
@@ -455,7 +458,7 @@ export async function getPanelRows(q: { userId: string; panel: PanelKey; window:
   const range = panelRange(q.window, q.now ?? new Date());
   const rows = await prisma.$queryRaw<any[]>(Prisma.sql`
     WITH roster AS (SELECT id, name, "colorTag", "isFavorite" FROM cappers WHERE "userId" = ${q.userId} AND NOT "isTest"),
-    pnl AS (${panelSql(q.panel, q.userId, range)})
+    pnl AS (${panelSql(q.panel, q.userId, range, WINNERS_MIN_GRADED[q.window])})
     SELECT * FROM pnl
   `);
   return rows.map((r) => ({
@@ -465,6 +468,25 @@ export async function getPanelRows(q: { userId: string; panel: PanelKey; window:
     ...(r.streak === undefined ? {} : { streak: Number(r.streak) }),
     ...(r.units === undefined ? {} : { units: Number(r.units) }),
   }));
+}
+
+// Did the roster have any graded pick (WIN / LOSS / PUSH) in a panel's window? Read with the panel's
+// own date: datePosted for Most Active and Biggest Winners, gameTime (and a gradedAt) for the streak
+// panels. It tells an empty panel's "no graded picks" apart from "graded picks, but nobody qualifies".
+export async function panelWindowHasGraded(q: { userId: string; panel: PanelKey; window: PanelWindow; now?: Date }): Promise<boolean> {
+  const range = panelRange(q.window, q.now ?? new Date());
+  const streak = q.panel === "hottest" || q.panel === "coldest";
+  const col = Prisma.raw(streak ? `p."gameTime"` : `p."datePosted"`);
+  const rows = await prisma.$queryRaw<{ graded: boolean }[]>(Prisma.sql`
+    SELECT EXISTS (
+      SELECT 1 FROM picks p
+      WHERE p."userId" = ${q.userId} AND p.status IN ('WIN', 'LOSS', 'PUSH')
+        ${streak ? Prisma.sql`AND p."gradedAt" IS NOT NULL` : Prisma.empty}
+        AND ${col} >= ${ts(range.start)} ${streak || range.closed ? Prisma.sql`AND ${col} < ${ts(range.end)}` : Prisma.empty}
+        AND p."capperId" IN (SELECT id FROM cappers WHERE "userId" = ${q.userId} AND NOT "isTest")
+    ) AS graded
+  `);
+  return Boolean(rows[0]?.graded);
 }
 
 export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {

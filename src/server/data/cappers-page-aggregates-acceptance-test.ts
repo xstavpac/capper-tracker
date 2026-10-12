@@ -18,8 +18,8 @@ import type { Prisma } from "@prisma/client";
 import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, currentStreak, type ScorecardWindow } from "@/server/data/stats";
 import * as adapter from "@/server/data/pick-aggregates-cappers-adapter";
 import type { LeaderboardEntry } from "@/server/data/cappers";
-import { getCappersPageData, sparklineTone, SPARKLINE_MIN_PICKS, STANDOUT_MIN_GRADED, STAT_WEEKS, getPanelRows, consistencyScore, consistencyTier, type ActiveEntry, type CapperSparkline, type PanelWindow, type StreakEntry } from "@/server/data/cappers-page-aggregates";
-import { trendSeries } from "@/lib/cappers-panels";
+import { getCappersPageData, sparklineTone, SPARKLINE_MIN_PICKS, STANDOUT_MIN_GRADED, STAT_WEEKS, getPanelRows, panelWindowHasGraded, consistencyScore, consistencyTier, type ActiveEntry, type CapperSparkline, type PanelWindow, type StreakEntry, type WinnerEntry } from "@/server/data/cappers-page-aggregates";
+import { trendSeries, yesterdayRange } from "@/lib/cappers-panels";
 // Hot Hand and Coldest moved to /dashboard: the page-statement checks for them run
 // against its panels statement (the same SQL fragments).
 import { computeCapperPanels } from "@/server/data/capper-panels";
@@ -687,6 +687,76 @@ async function main() {
     { name: "Two days ago", specs: (c) => seq(c, [W, W, W], { odds: 100, startMin: 2 * DAY }) },
   ]);
   same("hottest [today]: needs a graded pick since Eastern midnight", line(await streakOf(S2t.u, "hottest", "today")), ["Today hot:3"]);
+
+  // ---- Yesterday: the previous Eastern calendar day, on all four panels -----------------------------
+  // `now` is pinned to 10 hours into today's Eastern day; YS / TS are yesterday's and today's Eastern
+  // midnights (yesterdayRange, unit-tested in lib/cappers-panels-acceptance-test.ts).
+  const { start: YS, end: TS } = yesterdayRange(new Date(T0));
+  const NOWY = new Date(TS.getTime() + 10 * 3600000);
+  const HOUR = 3600000;
+  const one = (capperId: string, status: PickSpec["status"], t: number, o: { odds?: number; units?: number } = {}): PickSpec => ({ capperId, status, odds: o.odds ?? 100, units: o.units ?? 1, gameTime: new Date(t) });
+  const panelOf = async <T,>(userId: string, panel: "active" | "winners" | "hottest" | "coldest", window: PanelWindow) => (await getPanelRows({ userId, panel, window, now: NOWY })) as T[];
+  const gradedOf = (userId: string, panel: "active" | "winners" | "hottest" | "coldest") => panelWindowHasGraded({ userId, panel, window: "yesterday", now: NOWY });
+
+  // Most Active / Biggest Winners read datePosted.
+  const Y1 = await scenario("yday", [
+    { name: "Y winner", specs: (c) => [one(c, W, YS.getTime() + HOUR)] }, // one graded pick: +1.0, 1-0
+    // Both edges of the day: a win at yesterday's Eastern midnight and a loss 1 ms before today's.
+    { name: "Y edge in", specs: (c) => [one(c, W, YS.getTime(), { odds: 300 }), one(c, L, TS.getTime() - 1)] }, // +3 - 1 = +2.0, 1-1
+    { name: "Y loser", specs: (c) => [one(c, L, YS.getTime() + 2 * HOUR)] },
+    { name: "Y pending", specs: (c) => [one(c, "PENDING", YS.getTime() + 3 * HOUR)] },
+    { name: "Today only", specs: (c) => [one(c, W, TS.getTime(), { odds: 500 }), one(c, W, TS.getTime() + HOUR, { odds: 500 })] }, // today's Eastern midnight is today
+    { name: "Two days ago", specs: (c) => [one(c, W, YS.getTime() - 1, { odds: 500 })] }, // 1 ms before yesterday began
+  ]);
+  same(
+    "winners [yesterday]: only picks posted on yesterday's Eastern day, both edges in, no minimum graded picks, real record",
+    (await panelOf<WinnerEntry>(Y1.u, "winners", "yesterday")).map((e) => e.name + " " + e.netUnits + " " + e.wins + "-" + e.losses),
+    ["Y edge in 2 1-1", "Y winner 1 1-0"]
+  );
+  same(
+    "most active [yesterday]: picks posted yesterday (any status), with the day's roster total; today's and older picks left out",
+    (await panelOf<ActiveEntry>(Y1.u, "active", "yesterday")).map((e) => e.name + " " + e.pickCount + "/" + e.totalPicks),
+    ["Y edge in 2/5", "Y loser 1/5", "Y pending 1/5", "Y winner 1/5"]
+  );
+  same("winners [today]: its 5-graded minimum is unchanged (2 wins today do not list)", await panelOf<WinnerEntry>(Y1.u, "winners", "today"), []);
+  same("most active [today]: unchanged, today's picks only", (await panelOf<ActiveEntry>(Y1.u, "active", "today")).map((e) => e.name + " " + e.pickCount + "/" + e.totalPicks), ["Today only 2/2"]);
+  check("yesterday had graded picks", (await gradedOf(Y1.u, "winners")) && (await gradedOf(Y1.u, "hottest")));
+
+  // Hot Hand / Coldest read gameTime: eligible with a graded game yesterday, and the run is the one
+  // standing when yesterday ended (today's games neither extend nor break it).
+  const twoDaysAgo = (c: string, status: PickSpec["status"]) => [one(c, status, YS.getTime() - 5 * HOUR), one(c, status, YS.getTime() - 4 * HOUR)];
+  const Y2 = await scenario("ystreak", [
+    { name: "Was hot", specs: (c) => [one(c, W, YS.getTime() + HOUR), one(c, W, YS.getTime() + 2 * HOUR), one(c, W, YS.getTime() + 3 * HOUR), one(c, L, TS.getTime() + HOUR)] }, // lost today
+    { name: "Hot through", specs: (c) => [...twoDaysAgo(c, W), one(c, W, YS.getTime() + HOUR), one(c, W, TS.getTime() + HOUR)] }, // 3 as of yesterday, 4 now
+    { name: "Edge last", specs: (c) => [...twoDaysAgo(c, W), one(c, W, TS.getTime() - 1)] }, // a game 1 ms before today's Eastern midnight
+    { name: "Edge first", specs: (c) => [...twoDaysAgo(c, W), one(c, W, TS.getTime())] }, // a game at today's Eastern midnight: no game yesterday
+    { name: "Today only hot", specs: (c) => [one(c, W, TS.getTime() + HOUR), one(c, W, TS.getTime() + 2 * HOUR), one(c, W, TS.getTime() + 3 * HOUR)] },
+    { name: "Old hot", specs: (c) => [...twoDaysAgo(c, W), one(c, W, YS.getTime() - 1)] }, // last game 1 ms before yesterday began
+    { name: "Was cold", specs: (c) => [one(c, L, YS.getTime() + HOUR, { units: 2 }), one(c, L, YS.getTime() + 2 * HOUR, { units: 2 }), one(c, L, YS.getTime() + 3 * HOUR, { units: 2 }), one(c, W, TS.getTime() + HOUR)] }, // won today
+  ]);
+  same(
+    "hottest [yesterday]: a graded game yesterday is required, and the run is as of the end of yesterday (3, not today's 4; today's loss does not break it)",
+    line(await panelOf<StreakEntry>(Y2.u, "hottest", "yesterday")),
+    ["Edge last:3", "Hot through:3", "Was hot:3"]
+  );
+  same("coldest [yesterday]: the skid standing when yesterday ended, with its units lost", line(await panelOf<StreakEntry>(Y2.u, "coldest", "yesterday")), ["Was cold:3:-6"]);
+  const hotWeek = line(await panelOf<StreakEntry>(Y2.u, "hottest", "week"));
+  check("hottest [week]: unchanged, the CURRENT run (4 with today's win; today's loss ends 'Was hot')", hotWeek[0] === "Hot through:4" && !hotWeek.some((r) => r.startsWith("Was hot")), hotWeek.join("|"));
+  same("coldest [week]: unchanged, 'Was cold' won today so nobody is on a skid", await panelOf<StreakEntry>(Y2.u, "coldest", "week"), []);
+
+  // Empty states: no graded pick yesterday at all, against graded picks but nobody qualifying.
+  const Y3 = await scenario("yempty", [{ name: "Pending yesterday", specs: (c) => [one(c, "PENDING", YS.getTime() + HOUR), one(c, W, TS.getTime() + HOUR)] }]);
+  same("winners [yesterday]: nothing graded -> empty", await panelOf<WinnerEntry>(Y3.u, "winners", "yesterday"), []);
+  same("hottest [yesterday]: nothing graded -> empty", await panelOf<StreakEntry>(Y3.u, "hottest", "yesterday"), []);
+  same("coldest [yesterday]: nothing graded -> empty", await panelOf<StreakEntry>(Y3.u, "coldest", "yesterday"), []);
+  same("most active [yesterday]: the pending pick still counts as logged", (await panelOf<ActiveEntry>(Y3.u, "active", "yesterday")).map((e) => e.name + " " + e.pickCount + "/" + e.totalPicks), ["Pending yesterday 1/1"]);
+  same("no graded picks yesterday (a pending pick yesterday and a win today are not one)", [await gradedOf(Y3.u, "winners"), await gradedOf(Y3.u, "hottest"), await gradedOf(Y3.u, "coldest")], [false, false, false]);
+  const Y4 = await scenario("yloss", [{ name: "Lost yesterday", specs: (c) => [one(c, L, YS.getTime() + HOUR)] }]);
+  same("winners [yesterday]: a losing day lists nobody...", await panelOf<WinnerEntry>(Y4.u, "winners", "yesterday"), []);
+  same("...but the day did have graded picks", [await gradedOf(Y4.u, "winners"), await gradedOf(Y4.u, "hottest")], [true, true]);
+  const Y5 = await makeUser("ynone");
+  same("a user with no picks: every panel empty yesterday", [await panelOf(Y5, "active", "yesterday"), await panelOf(Y5, "winners", "yesterday"), await panelOf(Y5, "hottest", "yesterday"), await panelOf(Y5, "coldest", "yesterday")], [[], [], [], []]);
+  check("a user with no picks: no graded picks yesterday", !(await gradedOf(Y5, "winners")));
 
   // 3. Ties on length: larger units first, then name (case-insensitive, then bytewise).
   const S3 = await scenario("streaktie", [

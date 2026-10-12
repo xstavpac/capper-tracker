@@ -1,5 +1,5 @@
 import { requireUser } from "@/server/auth";
-import { getPanelRows } from "@/server/data/cappers-page-aggregates";
+import { getPanelRows, panelWindowHasGraded } from "@/server/data/cappers-page-aggregates";
 import { PANEL_KEYS, PANEL_WINDOWS, type PanelKey, type PanelWindow } from "@/lib/cappers-panels";
 import { cachedByTag } from "@/server/data/cached";
 import { cacheKeys } from "@/lib/cache-keys";
@@ -12,6 +12,8 @@ export const dynamic = "force-dynamic";
 // query and in the cache key), so nothing crosses accounts; `private, no-store` keeps any shared
 // cache from holding it either. The server cache is a 60 s backstop against a user flipping the
 // dropdown back and forth; its callback is a pure read, so it has no side effects.
+// An empty "Yesterday" also says whether the day had any graded pick (`graded`), so the panel can tell
+// "no graded picks yesterday" from "graded picks, but nobody qualifies".
 const PANEL_REVALIDATE_SECONDS = 60;
 const perUserLimiter = new RateLimiter({ name: "cappers-panel-per-user", limit: 60, windowMs: 60_000 });
 
@@ -37,5 +39,11 @@ export async function GET(request: Request) {
   const rows = await cachedByTag(cacheKeys.cappersPanel(userId, panel!, window!), PANEL_REVALIDATE_SECONDS, () =>
     getPanelRows({ userId, panel: panel as PanelKey, window: window as PanelWindow })
   );
-  return Response.json({ rows }, { headers: { "cache-control": "private, no-store" } });
+  const graded =
+    window === "yesterday" && panel !== "active" && rows.length === 0
+      ? await cachedByTag(cacheKeys.cappersPanel(userId, panel!, window + ":graded"), PANEL_REVALIDATE_SECONDS, () =>
+          panelWindowHasGraded({ userId, panel: panel as PanelKey, window: window as PanelWindow })
+        )
+      : undefined;
+  return Response.json({ rows, graded }, { headers: { "cache-control": "private, no-store" } });
 }

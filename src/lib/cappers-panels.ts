@@ -1,6 +1,7 @@
 // Shared (client-safe) contract of the /cappers panels: keys, windows, row shapes. The SQL lives in
 // server/data/cappers-page-aggregates.ts; the dropdown route is app/api/cappers/panel/route.ts.
 import type { ActivityEntry } from "@/server/data/cappers";
+import { startOfEasternDay } from "@/lib/dates";
 
 // Biggest Winners: net units over the panel window (the old "Hottest this week").
 // wins / losses are the same window's record.
@@ -15,10 +16,32 @@ export type StreakEntry = { capperId: string; name: string; colorTag: string | n
 
 export type PanelKey = "active" | "hottest" | "winners" | "coldest";
 export const PANEL_KEYS: readonly PanelKey[] = ["active", "hottest", "winners", "coldest"];
-export type PanelWindow = "today" | "week" | "30d";
-export const PANEL_WINDOWS: readonly PanelWindow[] = ["today", "week", "30d"];
+export type PanelWindow = "today" | "yesterday" | "week" | "30d";
+export const PANEL_WINDOWS: readonly PanelWindow[] = ["today", "yesterday", "week", "30d"];
 export const DEFAULT_PANEL_WINDOW: PanelWindow = "week";
-export const PANEL_WINDOW_LABELS: Record<PanelWindow, string> = { today: "Today", week: "This week", "30d": "Last 30 days" };
+export const PANEL_WINDOW_LABELS: Record<PanelWindow, string> = { today: "Today", yesterday: "Yesterday", week: "This week", "30d": "Last 30 days" };
+
+// A panel window as an instant range [start, end). `closed`: the window ended before `now`, so the
+// panels bound it above as well as below.
+export type PanelRange = { start: Date; end: Date; closed?: boolean };
+
+const DAY_MS = 86400000;
+// The previous Eastern CALENDAR day: Eastern midnight to Eastern midnight (the same boundary "Today"
+// starts on), never the 24 hours before `now`. The start is found by stepping back into the previous
+// day and taking ITS midnight, not by subtracting 24 hours: the day a clock change falls on is 23 or
+// 25 hours long.
+export function yesterdayRange(now: Date): { start: Date; end: Date } {
+  const end = startOfEasternDay(now);
+  return { start: startOfEasternDay(new Date(end.getTime() - DAY_MS / 2)), end };
+}
+
+// "Today" is the Eastern calendar day so far, "Yesterday" the whole Eastern calendar day before it;
+// the others roll back from `now`.
+export function panelRange(w: PanelWindow, now: Date): PanelRange {
+  if (w === "today") return { start: startOfEasternDay(now), end: now };
+  if (w === "yesterday") return { ...yesterdayRange(now), closed: true };
+  return { start: new Date(now.getTime() - (w === "week" ? 7 : 30) * DAY_MS), end: now };
+}
 
 // A streak panel needs at least this long a run to appear.
 export const STREAK_PANEL_MIN = 3;
