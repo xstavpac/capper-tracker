@@ -7,6 +7,7 @@ import type { PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import { OTHER_GROUP_LABEL, TOTALS_GROUP_LABEL, sortTotalsPicks } from "@/lib/pick-team-group";
 import { PickCard } from "@/components/live/pick-card";
+import { TotalsSideList } from "@/components/live/totals-side-list";
 
 export type ExpanderPick = {
   pickId: string;
@@ -192,7 +193,11 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
                   &mdash; {group.picks.length} pick{group.picks.length === 1 ? "" : "s"}
                 </span>
               </div>
-              <div className="space-y-1.5">{group.picks.map((p) => renderPickCard(p))}</div>
+              {group.teamGroup === "TOTALS" ? (
+                <TotalsSideList picks={group.picks} renderPick={renderPickCard} />
+              ) : (
+                <div className="space-y-1.5">{group.picks.map((p) => renderPickCard(p))}</div>
+              )}
             </div>
           ))}
         </div>

@@ -4,6 +4,7 @@ import { useEffect, useState, type Ref } from "react";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PickCard } from "@/components/live/pick-card";
+import { TotalsSideList } from "@/components/live/totals-side-list";
 import { orderTeamSections, placeNonTeamSections, type GridLiveGamePanelData, type GridLiveTeamSideData } from "@/components/live/grid-live-team-panel-data";
 import { LiveProgressBar } from "@/components/live/live-progress-bar";
 import type { LiveGameProgress } from "@/lib/live-game-progress";
@@ -38,7 +39,8 @@ function TeamPickSection({
   tone,
   headerRef,
   orderClass,
-}: GridLiveTeamSideData & { headerRef?: Ref<HTMLDivElement>; orderClass: string }) {
+  splitBySide = false,
+}: GridLiveTeamSideData & { headerRef?: Ref<HTMLDivElement>; orderClass: string; splitBySide?: boolean }) {
   const violet = tone === "violet";
   const [loading, setLoading] = useState(false);
   const [records, setRecords] = useState<CapperLeagueRecords | null>(null);
@@ -107,6 +109,12 @@ function TeamPickSection({
 
       {picks.length === 0 ? (
         <p className="py-4 text-center text-[13px] font-medium text-muted-foreground">No logged picks for {teamLabel}.</p>
+      ) : splitBySide ? (
+        // Totals only: Over and Under as two labelled blocks in this one column.
+        <TotalsSideList
+          picks={picks}
+          renderPick={(pick) => <PickCard key={pick.pickId} pick={pick} records={records} loading={loading} selectable />}
+        />
       ) : (
         <div className="space-y-1.5">
           {picks.map((pick) => (
@@ -155,7 +163,7 @@ export function GameDetailPanel({
       ) : (
         <TeamPickSection key="second" {...second} orderClass="order-2" />
       )}
-      {placement.totals === side && <TeamPickSection key="totals" {...data.totals} orderClass="order-3" />}
+      {placement.totals === side && <TeamPickSection key="totals" {...data.totals} orderClass="order-3" splitBySide />}
       {placement.other === side && <TeamPickSection key="other" {...data.other} orderClass="order-4" />}
     </div>
   );

@@ -1,4 +1,5 @@
 import { findGroupingNickname, teamGroupAliases, teamPhraseRegex, normalizeForGrouping } from "@/lib/parse-catalog";
+import { totalSideFromText, type TotalSide } from "@/lib/bet-line";
 import type { PickedSide } from "@prisma/client";
 
 export type PickTeamGroup = "AWAY" | "HOME" | "TOTALS" | "OTHER";
@@ -94,4 +95,23 @@ export function shortTeamName(fullName: string, sportName: string): string {
     .split(" ")
     .map((w) => w[0].toUpperCase() + w.slice(1))
     .join(" ");
+}
+
+// The Totals group's two options, kept in one column but as separate labelled
+// blocks: every Over pick, then every Under pick, each keeping the order it
+// came in (sortTotalsPicks' full-game / period / team-total ranks). The side
+// is read by totalSideFromText - the same read grading and the display label
+// use - off the pick's stored text when there is one, since the display label
+// is derived from it. A pick whose text names neither side goes in a trailing
+// unlabelled block rather than being guessed into one. Empty blocks are left out.
+export type TotalsSideGroup<T> = { side: TotalSide | null; label: string | null; tag: string | null; picks: T[] };
+
+export function groupTotalsBySide<T extends { betDetail: string; rawBetDetail?: string | null }>(picks: T[]): TotalsSideGroup<T>[] {
+  const sideOf = (p: T) => totalSideFromText(p.rawBetDetail ?? p.betDetail) ?? totalSideFromText(p.betDetail);
+  const groups: TotalsSideGroup<T>[] = [
+    { side: "OVER", label: "Over", tag: "O", picks: picks.filter((p) => sideOf(p) === "OVER") },
+    { side: "UNDER", label: "Under", tag: "U", picks: picks.filter((p) => sideOf(p) === "UNDER") },
+    { side: null, label: null, tag: null, picks: picks.filter((p) => sideOf(p) === null) },
+  ];
+  return groups.filter((g) => g.picks.length > 0);
 }
