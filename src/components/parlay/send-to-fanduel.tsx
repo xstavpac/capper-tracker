@@ -11,7 +11,7 @@
 // the link doesn't hold all of them, that is said outright, per game.
 import { useEffect, useState } from "react";
 import { LABEL, PILL_OUTLINE, PILL_PRIMARY } from "@/components/parlay/parlay-controls";
-import type { FanDuelLegResult, FanDuelLinkResponse, FanDuelSentLine } from "@/lib/parlay/fanduel-link";
+import { notSentDisplay, type FanDuelLegResult, type FanDuelLinkResponse, type FanDuelSentLine } from "@/lib/parlay/fanduel-link";
 import { incompleteSameGameGroups } from "@/lib/parlay/same-game-display";
 
 // gameId / gameLabel are what group legs by game for the same-game notice; a
@@ -24,14 +24,6 @@ const formatOdds = (odds: number) => (odds > 0 ? "+" : "") + odds;
 const formatLine = (line: number, side: FanDuelSentLine["side"]) => (side ? side + " " + line : (line > 0 ? "+" : "") + line);
 
 const isSent = (leg: FanDuelLegResult) => leg.status === "matched" || leg.status === "adjusted";
-
-const NOT_SENT_LABEL: Record<Exclude<FanDuelLegResult["status"], "matched" | "adjusted">, string> = {
-  started: "Started",
-  not_found: "Not found",
-  ambiguous: "Ambiguous",
-  unsupported: "Not supported",
-  error: "Unavailable",
-};
 
 function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string }) {
   if (leg.status === "matched" || leg.status === "adjusted") {
@@ -60,11 +52,12 @@ function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string 
       </li>
     );
   }
+  const notSent = notSentDisplay(leg);
   return (
     <li className="py-1.5">
       <p className="text-[13px] font-medium text-muted-foreground [overflow-wrap:anywhere]">{betDetail}</p>
       <p className="text-xs font-medium text-muted-foreground">
-        <span className="rounded-full bg-muted px-1.5 py-0.5 font-semibold">{NOT_SENT_LABEL[leg.status]}</span> {leg.reason}
+        <span className="rounded-full bg-muted px-1.5 py-0.5 font-semibold">{notSent.label}</span> {notSent.reason}
       </p>
     </li>
   );

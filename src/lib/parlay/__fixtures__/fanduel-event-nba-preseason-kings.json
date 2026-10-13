@@ -1,0 +1,13 @@
+{
+  "id": "f23d7eb3edb5927af26f540b18442d15",
+  "sport_key": "basketball_nba_preseason",
+  "commence_time": "2026-10-14T02:00:00Z",
+  "home_team": "Sacramento Kings",
+  "away_team": "Portland Trail Blazers",
+  "bookmakers": [{ "key": "fanduel", "markets": [
+    { "key": "h2h", "sid": null, "outcomes": [
+      {"name":"Portland Trail Blazers","price":-150,"sid":"237480","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615692824&selectionId=237480"},
+      {"name":"Sacramento Kings","price":122,"sid":"237470","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615692824&selectionId=237470"}
+    ] }
+  ] }]
+}

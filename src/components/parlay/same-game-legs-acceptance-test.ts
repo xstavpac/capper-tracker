@@ -97,8 +97,11 @@ async function main() {
   // "Send to FanDuel": p1 is found at its own line; p2 and p3 go at FanDuel's
   // nearest line (p3's is the harder one to win); s1 can't be sent.
   let fanDuelBody: { pickIds: string[] } | null = null;
+  // Set for the second tap: legs with no usable status or reason at all.
+  let fanDuelLegs: ((pickId: string, i: number) => unknown) | null = null;
   g.fetch = async (_url: string, init: { body: string }) => {
     fanDuelBody = JSON.parse(init.body);
+    if (fanDuelLegs) return { ok: true, json: async () => ({ url: null, legs: fanDuelBody!.pickIds.map(fanDuelLegs!) }) };
     const legs = fanDuelBody!.pickIds.map((pickId) =>
       pickId === "s1"
         ? { pickId, status: "unsupported", reason: "This bet type can't be sent yet.", pickOdds: -110, fanDuelOdds: null, sentLine: null }
@@ -198,6 +201,27 @@ async function main() {
   check("only the leg whose sent line is harder to win is marked 'Worse line'", worseTags.length === 1 && (worseTags[0].closest("li")?.textContent ?? "").includes("Leg-P3"), String(worseTags.length));
   check("the worse line reads out both lines and says why", text().includes("Sent as Under 3.5 · pick Under 4.5 · harder to win than your pick"));
   check("and is called out again above the Open FanDuel link", text().includes("1 leg is going at a line that is harder to win than your pick."));
+
+  // A not-sent leg never renders an empty chip or no sentence - not for a
+  // status the page doesn't know, and not for a missing or blank reason.
+  const bare = [
+    { status: "some_future_status", reason: null },
+    { status: "not_found", reason: "" },
+    { status: "error" },
+    { status: "unsupported", reason: "   " },
+    { status: "ambiguous", reason: null },
+  ];
+  fanDuelLegs = (pickId, i) => ({ pickId, pickOdds: -110, fanDuelOdds: null, sentLine: null, ...bare[i] });
+  await click(button("Check FanDuel again"));
+  const chips = Array.from(container.querySelectorAll("li span.bg-muted"));
+  const emptyRows = chips.filter((chip) => {
+    const label = (chip.textContent ?? "").trim();
+    const sentence = (chip.parentElement?.textContent ?? "").trim().slice(label.length).trim();
+    return label === "" || sentence === "";
+  });
+  check("5 legs with no usable status or reason: each still renders a labelled chip and a sentence", chips.length === 5 && emptyRows.length === 0, chips.length + " chips, " + emptyRows.length + " empty");
+  check("an unknown status reads 'Not sent' and asks for a reload", text().includes("Not sent") && text().includes("reload the page and check again"));
+  fanDuelLegs = null;
 
   // ---------------------------------------------------------------------
   // 4. Max 3, still short after same-game legs
