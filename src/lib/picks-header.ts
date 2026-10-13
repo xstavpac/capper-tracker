@@ -1,5 +1,5 @@
-// Pure helpers behind the /picks header (stat bar, top/coldest strip, sport
-// chips, date arrows). Everything is computed from rows the page already
+// Pure helpers behind the /picks header (stat cards, sport chips,
+// date arrows). Everything is computed from rows the page already
 // loaded - no queries. Display-only: never touches grading or import.
 // Client-safe (no prisma import).
 import { winUnits } from "@/lib/pick-display";
@@ -44,68 +44,6 @@ export function cumulativeUnitsSeries(picks: HeaderPick[]): number[] | null {
   if (settled.length < 2) return null;
   let run = 0;
   return settled.map((p) => (run += unitsDelta(p)));
-}
-
-export type CapperLine = {
-  capperId: string;
-  name: string;
-  wins: number;
-  losses: number;
-  pushes: number;
-  units: number;
-};
-
-// Top / coldest cappers among those with >= 2 settled picks. Top = most units,
-// coldest = fewest; ties broken by record (wins - losses, then win rate) and
-// then name so the result is deterministic. `top` is null unless that capper
-// is actually positive and `coldest` unless negative, so a lone -2u capper is
-// only ever Coldest. The whole thing is null when neither half qualifies or
-// the view is a single capper.
-export function topAndColdest(
-  picks: HeaderPick[],
-  singleCapperFiltered: boolean
-): { top: CapperLine | null; coldest: CapperLine | null } | null {
-  if (singleCapperFiltered) return null;
-  const by = new Map<string, CapperLine & { settled: number }>();
-  for (const p of picks) {
-    if (!SETTLED.has(p.status)) continue;
-    const c = by.get(p.capperId) ?? {
-      capperId: p.capperId,
-      name: p.capperName,
-      wins: 0,
-      losses: 0,
-      pushes: 0,
-      units: 0,
-      settled: 0,
-    };
-    c.settled++;
-    if (p.status === "WIN") c.wins++;
-    else if (p.status === "LOSS") c.losses++;
-    else c.pushes++;
-    c.units += unitsDelta(p);
-    by.set(p.capperId, c);
-  }
-  const eligible: CapperLine[] = [...by.values()]
-    .filter((c) => c.settled >= 2)
-    .map((c) => ({
-      capperId: c.capperId,
-      name: c.name,
-      wins: c.wins,
-      losses: c.losses,
-      pushes: c.pushes,
-      units: Math.round(c.units * 100) / 100,
-    }));
-  if (eligible.length === 0) return null;
-  // Positive when a has the better record than b.
-  const recordCmp = (a: CapperLine, b: CapperLine) =>
-    a.wins - a.losses - (b.wins - b.losses) ||
-    (winRatePct(a.wins, a.losses) ?? 0) - (winRatePct(b.wins, b.losses) ?? 0) ||
-    b.name.localeCompare(a.name);
-  const best = [...eligible].sort((a, b) => b.units - a.units || recordCmp(b, a))[0];
-  const worst = [...eligible].sort((a, b) => a.units - b.units || recordCmp(a, b))[0];
-  const top = best.units > 0 ? best : null;
-  const coldest = worst.units < 0 ? worst : null;
-  return top || coldest ? { top, coldest } : null;
 }
 
 export type SportChip = { id: string; name: string; count: number };

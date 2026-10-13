@@ -18,10 +18,10 @@ import { deleteParlayAction } from "@/server/actions/parlays";
 import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
 import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
 import { PicksFilterBar } from "@/components/picks/picks-filter-bar";
-import { PickLedger, type LedgerRow } from "@/components/picks/pick-ledger";
-import { PicksSummaryStrip, TopColdestStrip } from "@/components/picks/picks-summary-strip";
+import { PickLedger, type LedgerRow, type LedgerSectionSummary } from "@/components/picks/pick-ledger";
+import { PicksSummaryStrip } from "@/components/picks/picks-summary-strip";
 import { DateNavigator } from "@/components/picks/date-navigator";
-import { cumulativeUnitsSeries, sportChipLayout, topAndColdest, type HeaderPick } from "@/lib/picks-header";
+import { cumulativeUnitsSeries, sportChipLayout, type HeaderPick } from "@/lib/picks-header";
 import {
   betTypeFilterCategory,
   firstHalfLabelPrefixForChipSet,
@@ -43,6 +43,8 @@ import {
 import { formatPickLabel } from "@/lib/bet-line";
 import type { PickStatus } from "@prisma/client";
 import { ImageBanner } from "@/components/ui/ImageBanner";
+import { ThemedPage } from "@/components/dashboard/themed-page";
+import { TINTS } from "@/components/dashboard/panel-shell";
 import picksBanner from "../../../../public/banners/picks.png";
 
 // betTypeOptionsForChipSet/firstHalfLabelPrefixForChipSet/
@@ -285,10 +287,25 @@ export default async function PicksPage({
   const hints = consensusHints(ledgerPicks);
   const livePicks = ledgerPicks.filter((p) => p.phase === "live").length;
   const laterPicks = ledgerPicks.filter((p) => p.phase === "pending").length;
-  const topCold = topAndColdest(headerPicks, Boolean(filters.capperId));
+
+  // The Settled header's own record and net units (same units math as each row's Won / Lost pill).
+  const sectionSummary = (rows: typeof ledgerPicks): LedgerSectionSummary => {
+    const t = { wins: 0, losses: 0, pushes: 0, netUnits: 0 };
+    for (const { source: p } of rows) {
+      if (p.status === "WIN") {
+        t.wins++;
+        t.netUnits += winUnits(p.units, p.odds);
+      } else if (p.status === "LOSS") {
+        t.losses++;
+        t.netUnits -= p.units;
+      } else if (p.status === "PUSH") t.pushes++;
+    }
+    return { ...t, netUnits: Math.round(t.netUnits * 100) / 100 };
+  };
 
   const sections = splitIntoSections(ledgerPicks).map((section) => ({
     key: section.key,
+    summary: section.key === "settled" ? sectionSummary(section.picks) : undefined,
     rows: section.picks.map((lp): LedgerRow => {
       const p = lp.source;
       const rec = capperRecords.get(p.capperId);
@@ -306,6 +323,7 @@ export default async function PicksPage({
         gameTimeIso: p.gameTime.toISOString(),
         label: buildPickLabel(lp),
         tag: marketTag({ betType: p.betType, period: p.period, sportName: p.sport.name, betDetail: p.betDetail }),
+        capperId: p.capperId,
         capperName: p.capper.name,
         capperInitials: capperInitials(p.capper.name),
         capperRecord: rec ? rec.wins + "-" + rec.losses : null,
@@ -324,108 +342,108 @@ export default async function PicksPage({
   }));
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <ImageBanner src={picksBanner} title="Picks" priority />
-      {gradeable.sportKeys.length > 0 && <GradeDuePicks sportKeys={gradeable.sportKeys} dueKey={gradeable.dueKey} />}
-      <div className="mb-5">
-        <DateNavigator
-          dateKey={startDateKey}
-          label={subtitleDate}
-          isRange={isRange}
-          countText={picks.length + " pick" + (picks.length === 1 ? "" : "s")}
-        />
-      </div>
+    <ThemedPage>
+      <div className="mx-auto max-w-5xl">
+        <ImageBanner src={picksBanner} title="Picks" priority />
+        {gradeable.sportKeys.length > 0 && <GradeDuePicks sportKeys={gradeable.sportKeys} dueKey={gradeable.dueKey} />}
+        <div className="space-y-3.5">
+          <DateNavigator
+            dateKey={startDateKey}
+            label={subtitleDate}
+            isRange={isRange}
+            isToday={dateIsDefault}
+            countText={picks.length + " pick" + (picks.length === 1 ? "" : "s")}
+          />
 
-      <PicksSummaryStrip
-        summary={summary}
-        series={cumulativeUnitsSeries(headerPicks)}
-        live={livePicks}
-        later={laterPicks}
-      />
-      {topCold && (
-        <TopColdestStrip
-          top={topCold.top}
-          coldest={topCold.coldest}
-          topLabel={!isRange && startDateKey === todayKey ? "Top today" : "Top"}
-        />
-      )}
+          <PicksSummaryStrip
+            summary={summary}
+            series={cumulativeUnitsSeries(headerPicks)}
+            live={livePicks}
+            later={laterPicks}
+          />
 
-      <PicksFilterBar
-        cappers={cappers.map((c) => ({ value: c.id, label: c.name }))}
-        sportChips={sportChips}
-        betTypeOptionsBySportId={optionsBySportId}
-        todayKey={todayKey}
-        dateLabel={dateChipLabel}
-        dateIsDefault={dateIsDefault}
-        dateStart={startDateKey}
-        dateEnd={endDateKey}
-        isRange={isRange}
-      />
+          <PicksFilterBar
+            cappers={cappers.map((c) => ({ value: c.id, label: c.name }))}
+            sportChips={sportChips}
+            betTypeOptionsBySportId={optionsBySportId}
+            todayKey={todayKey}
+            dateLabel={dateChipLabel}
+            dateIsDefault={dateIsDefault}
+            dateStart={startDateKey}
+            dateEnd={endDateKey}
+            isRange={isRange}
+          />
 
-      {picks.length === 0 ? (
-        <div className="rounded-card bg-card p-10 text-center shadow-soft">
-          <p className="text-sm text-muted-foreground">
-            {hasActiveFilters
-              ? "No picks match these filters."
-              : "No picks for this day yet."}
-          </p>
+          {picks.length === 0 ? (
+            <div className={"rounded-[18px] border p-10 text-center " + TINTS.neutral.card}>
+              <p className="text-[13px] font-medium text-muted-foreground">
+                {hasActiveFilters ? "No picks match these filters." : "No picks for this day yet."}
+              </p>
+            </div>
+          ) : (
+            // Keyed by the day, so a new day starts from its own defaults (Settled open or closed, 25 rows).
+            <PickLedger
+              key={startDateKey + ":" + endDateKey}
+              sections={sections}
+              showDate={isRange}
+              collapseSettled={dateIsDefault && sections.some((s) => s.key !== "settled")}
+            />
+          )}
         </div>
-      ) : (
-        <PickLedger sections={sections} showDate={isRange} />
-      )}
 
-      {parlays.length > 0 && (
-        <div className="mt-8">
-          <h2 className="mb-3 text-lg font-semibold">Parlays</h2>
-          <div className="space-y-3">
-            {parlays.map((parlay) => {
-              const statusColor =
-                parlay.status === "WIN"
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : parlay.status === "LOSS"
-                    ? "text-red-600 dark:text-red-400"
-                    : parlay.status === "PENDING"
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-muted-foreground";
-              return (
-                <div key={parlay.id} className="rounded-card bg-card shadow-soft">
-                  <div className="flex items-center justify-between border-b border-border-subtle px-5 py-3">
-                    <div className="text-sm font-medium">
-                      {parlay.capper.name} - {parlay.legs.length}-leg parlay - {parlay.units}u
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={"text-sm font-medium " + statusColor}>{parlay.status}</span>
-                      <RowDeleteButton onConfirm={deleteParlayAction.bind(null, parlay.id)} itemLabel="parlay" />
-                    </div>
-                  </div>
-                  <div className="divide-y divide-border-subtle">
-                    {parlay.legs.map((leg) => (
-                      <div key={leg.id} className="flex items-center justify-between px-5 py-2.5">
-                        <div>
-                          <div className="text-xs font-medium text-foreground">
-                            {leg.awayTeam} @ {leg.homeTeam}
-                            {periodBadgeLabel(leg.period, leg.sport.name) && (
-                              <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:bg-purple-500/15 dark:text-purple-400">
-                                {periodBadgeLabel(leg.period, leg.sport.name)}
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-0.5 text-[11px] text-muted-foreground">
-                            {formatPickLabel(leg.betDetail, leg.betType, leg.line) ?? leg.betType} -{" "}
-                            {leg.odds > 0 ? "+" : ""}
-                            {leg.odds}
-                          </div>
-                        </div>
-                        <LegStatusButtons legId={leg.id} status={leg.status} />
+        {parlays.length > 0 && (
+          <div className="mt-8">
+            <h2 className="mb-3 text-lg font-semibold">Parlays</h2>
+            <div className="space-y-3">
+              {parlays.map((parlay) => {
+                const statusColor =
+                  parlay.status === "WIN"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : parlay.status === "LOSS"
+                      ? "text-red-600 dark:text-red-400"
+                      : parlay.status === "PENDING"
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-muted-foreground";
+                return (
+                  <div key={parlay.id} className="rounded-card bg-card shadow-soft">
+                    <div className="flex items-center justify-between border-b border-border-subtle px-5 py-3">
+                      <div className="text-sm font-medium">
+                        {parlay.capper.name} - {parlay.legs.length}-leg parlay - {parlay.units}u
                       </div>
-                    ))}
+                      <div className="flex items-center gap-2">
+                        <span className={"text-sm font-medium " + statusColor}>{parlay.status}</span>
+                        <RowDeleteButton onConfirm={deleteParlayAction.bind(null, parlay.id)} itemLabel="parlay" />
+                      </div>
+                    </div>
+                    <div className="divide-y divide-border-subtle">
+                      {parlay.legs.map((leg) => (
+                        <div key={leg.id} className="flex items-center justify-between px-5 py-2.5">
+                          <div>
+                            <div className="text-xs font-medium text-foreground">
+                              {leg.awayTeam} @ {leg.homeTeam}
+                              {periodBadgeLabel(leg.period, leg.sport.name) && (
+                                <span className="ml-2 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:bg-purple-500/15 dark:text-purple-400">
+                                  {periodBadgeLabel(leg.period, leg.sport.name)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-0.5 text-[11px] text-muted-foreground">
+                              {formatPickLabel(leg.betDetail, leg.betType, leg.line) ?? leg.betType} -{" "}
+                              {leg.odds > 0 ? "+" : ""}
+                              {leg.odds}
+                            </div>
+                          </div>
+                          <LegStatusButtons legId={leg.id} status={leg.status} />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </ThemedPage>
   );
 }
