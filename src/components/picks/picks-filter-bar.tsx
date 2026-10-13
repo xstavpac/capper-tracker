@@ -18,9 +18,12 @@ const RESULT_OPTIONS: Option[] = [
 ];
 
 const chipBase =
-  "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition disabled:opacity-60";
-const chipIdle = "border-border bg-card text-foreground hover:bg-muted";
-const chipActive = "border-brand-500/40 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300";
+  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[13px] font-medium transition disabled:opacity-60";
+const chipIdle = "border-[#DADDE5] bg-white text-foreground hover:bg-[#F5F6FA] dark:border-border dark:bg-card dark:hover:bg-muted";
+// A selected sport is the filled chip (brand-700, #1d4ed8); a dropdown holding a value keeps the white
+// pill and takes the same blue on its border and text.
+const chipActive = "border-brand-700 bg-brand-700 text-white hover:bg-brand-800";
+const menuActive = "border-brand-700 bg-white text-brand-700 hover:bg-brand-50 dark:bg-card dark:text-brand-300 dark:hover:bg-muted";
 
 function Caret() {
   return (
@@ -62,7 +65,7 @@ function ChipMenu({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className={chipBase + " " + (active ? chipActive : chipIdle)}
+        className={chipBase + " " + (active ? menuActive : chipIdle)}
       >
         {label}
         <Caret />
@@ -179,7 +182,7 @@ export function PicksFilterBar({
   const anyActive = Boolean(capperId || sportId || betType || status || !dateIsDefault);
 
   return (
-    <div className={"mb-5 flex flex-wrap items-center gap-2 " + (pending ? "opacity-70" : "")}>
+    <div className={"flex flex-wrap items-center gap-2 " + (pending ? "opacity-70" : "")}>
       <button
         type="button"
         aria-pressed={!sportId}
@@ -187,7 +190,7 @@ export function PicksFilterBar({
         className={chipBase + " " + (!sportId ? chipActive : chipIdle)}
       >
         All sports
-        <span className="text-xs opacity-70">{sportChips.total}</span>
+        <span className="text-xs tabular-nums opacity-80">{sportChips.total}</span>
       </button>
 
       {sportChips.visible.map((s) => (
@@ -200,7 +203,7 @@ export function PicksFilterBar({
         >
           <SportIcon name={s.name} />
           {s.name}
-          <span className="text-xs opacity-70">{s.count}</span>
+          <span className="text-xs tabular-nums opacity-80">{s.count}</span>
         </button>
       ))}
 
@@ -230,7 +233,7 @@ export function PicksFilterBar({
         </ChipMenu>
       )}
 
-      <span className="mx-1 hidden h-5 w-px bg-border sm:block" aria-hidden="true" />
+      <span className="mx-1 hidden h-5 w-px bg-[#DADDE5] dark:bg-border sm:block" aria-hidden="true" />
 
       <ChipMenu label={dateLabel} active={!dateIsDefault}>
         {(close) => (
@@ -314,7 +317,7 @@ export function PicksFilterBar({
         <button
           type="button"
           onClick={() => startTransition(() => router.push(pathname))}
-          className="px-1 text-sm text-muted-foreground hover:text-foreground"
+          className="px-1 text-[13px] font-medium text-[#5B6275] hover:text-foreground dark:text-muted-foreground"
         >
           Clear
         </button>
