@@ -1,6 +1,6 @@
 "use server";
 
-// Auto-Generate (Parlay A + Hedge + Contrarian) for /parlay, over each
+// Auto-Generate (Parlay A + its same-game fill + Hedge + Contrarian) for /parlay, over each
 // league's unstarted games in its window (auto-generate-window.ts: today, or
 // the football week for NFL/NCAAF). Loads data only
 // through what Live already uses (getLiveBoardData, getCapperLeagueRecords,
@@ -16,15 +16,23 @@ import { legCapRejection, type LegCapRejection } from "@/lib/parlay/leg-cap";
 import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
 import {
   buildAutoParlay,
+  buildSameGameLegs,
   buildSwapParlay,
+  toMaxLegsPerGame,
   type AutoParlay,
   type GeneratorGame,
   type GeneratorPick,
+  type SameGameFill,
   type SwapParlay,
 } from "@/lib/parlay/auto-generate";
+import { doubleheaderGameIds } from "@/lib/parlay/doubleheader";
 
 export type AutoGenerateResult = {
   parlayA: AutoParlay;
+  // Extra legs from games already in Parlay A - empty unless the request's
+  // "max legs per game" is 2 or 3 AND there were fewer games than legs asked
+  // for. Hedge and Contrarian are built from Parlay A alone and never see these.
+  sameGame: SameGameFill;
   hedge: SwapParlay;
   contrarian: SwapParlay;
   // For PickCard's record block on every rendered pick.
@@ -36,7 +44,8 @@ export type AutoGenerateResult = {
 // built smaller than asked.
 export async function autoGenerateParlayAction(
   leagues: string[],
-  legCount: number
+  legCount: number,
+  maxLegsPerGame: number = 1
 ): Promise<AutoGenerateResult | LegCapRejection> {
   const user = await requireUser();
   const rejection = legCapRejection(legCount);
@@ -51,12 +60,15 @@ export async function autoGenerateParlayAction(
   // picks query, and firing all of them at once is the connection-pool
   // pressure getPicksForGames' own comment warns about.
   for (const sport of sports) {
-    const { odds, expanderPicksByGame } = await getLiveBoardData(user.id, sport.key, sport.label);
+    const { odds, scores, expanderPicksByGame } = await getLiveBoardData(user.id, sport.key, sport.label);
     const inWindow = autoGenerateWindow(
       sport.label,
       odds.map((g) => g.commenceTime),
       now
     );
+    // From the whole board, not just the window: the other game of a
+    // doubleheader may already be under way.
+    const doubleheaders = doubleheaderGameIds(odds, scores);
     odds.forEach((game, i) => {
       if (!inWindow(game.commenceTime)) return;
       const picks = expanderPicksByGame[i].filter(
@@ -68,6 +80,7 @@ export async function autoGenerateParlayAction(
         gameTime: game.commenceTime,
         leagueName: sport.label,
         picks,
+        doubleheader: doubleheaders.has(game.id),
       });
     });
   }
@@ -89,6 +102,7 @@ export async function autoGenerateParlayAction(
   const parlayA = buildAutoParlay(games, records, requested);
   return {
     parlayA,
+    sameGame: buildSameGameLegs(parlayA, games, categoryRecords, toMaxLegsPerGame(maxLegsPerGame)),
     hedge: buildSwapParlay(parlayA, games, "AUTO_HEDGE", categoryRecords),
     contrarian: buildSwapParlay(parlayA, games, "CONTRARIAN", categoryRecords),
     records,

@@ -5,12 +5,16 @@
 // it found - FanDuel's current price beside the pick's own, and any leg that
 // couldn't be sent with why - with a link that opens FanDuel's betslip holding
 // the legs that matched. Nothing is fetched until the button is tapped, and
-// only the legs' pick ids are sent.
+// only the legs' pick ids are sent. When two or more legs are on one game and
+// the link doesn't hold all of them, that is said outright, per game.
 import { useEffect, useState } from "react";
 import { LABEL, PILL_OUTLINE, PILL_PRIMARY } from "@/components/parlay/parlay-controls";
 import type { FanDuelLegResult, FanDuelLinkResponse } from "@/lib/parlay/fanduel-link";
+import { incompleteSameGameGroups } from "@/lib/parlay/same-game-display";
 
-export type SendLeg = { pickId: string; betDetail: string };
+// gameId / gameLabel are what group legs by game for the same-game notice; a
+// leg without them is simply in no group.
+export type SendLeg = { pickId: string; betDetail: string; gameId?: string; gameLabel?: string };
 
 const formatOdds = (odds: number) => (odds > 0 ? "+" : "") + odds;
 
@@ -80,6 +84,7 @@ export function SendToFanDuel({ legs }: { legs: SendLeg[] }) {
   const betDetailById = new Map(legs.map((l) => [l.pickId, l.betDetail]));
   const sent = result?.legs.filter((l) => l.status === "matched") ?? [];
   const notSent = result?.legs.filter((l) => l.status !== "matched") ?? [];
+  const brokenGroups = result ? incompleteSameGameGroups(legs, new Set(sent.map((l) => l.pickId))) : [];
 
   return (
     <div className="border-t border-[#0F1420]/[0.08] py-3 dark:border-white/10">
@@ -111,6 +116,18 @@ export function SendToFanDuel({ legs }: { legs: SendLeg[] }) {
                 ))}
               </ul>
             </>
+          )}
+          {brokenGroups.length > 0 && (
+            <div role="alert" className="mt-2 rounded-[10px] border border-amber-300 bg-amber-50/60 px-3 py-2 dark:border-amber-800 dark:bg-amber-500/10">
+              <p className="text-xs font-semibold text-foreground">Same-game legs not fully sent</p>
+              <ul className="mt-0.5 text-xs font-medium text-muted-foreground">
+                {brokenGroups.map((g) => (
+                  <li key={g.gameId}>
+                    {g.gameLabel || "One game"}: {g.sent} of {g.total} legs {g.sent === 1 ? "is" : "are"} in the FanDuel link.
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           {result.url && (
             <a href={result.url} target="_blank" rel="noopener noreferrer" className={PILL_PRIMARY + " mt-2.5"}>

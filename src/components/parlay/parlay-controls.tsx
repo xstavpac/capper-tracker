@@ -119,6 +119,42 @@ export function LegStepper({
   );
 }
 
+// A short row of numbered choices, one on ("Max legs per game": 1 / 2 / 3).
+export function NumberSegments<T extends number>({
+  label,
+  options,
+  value,
+  onChange,
+  note,
+}: {
+  label: string;
+  options: readonly T[];
+  value: T;
+  onChange: (n: T) => void;
+  note?: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <span className={LABEL}>{label}</span>
+      <div role="radiogroup" aria-label={label} className="flex items-center gap-0.5 rounded-full border border-[#DADDE5] bg-white p-0.5 dark:border-border dark:bg-card">
+        {options.map((n) => (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={n === value}
+            onClick={() => onChange(n)}
+            className={"flex h-10 w-10 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums transition " + (n === value ? SEGMENT_ON : SEGMENT_OFF)}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+      {note && <span className="text-xs font-medium text-muted-foreground">{note}</span>}
+    </div>
+  );
+}
+
 // Which of a generated parlay's variants is shown. `note` is a small count beside the label.
 export function Tabs<T extends string>({
   label,

@@ -13,14 +13,26 @@
 //
 // Parlay A is never modified. Hedge/Contrarian are new objects that carry
 // each Parlay A pick unchanged when it has no qualifying alternate.
-import type { CapperLeagueRecords } from "@/server/data/picks";
+import { categoryRecordKey, type CapperLeagueRecords } from "@/server/data/picks";
 import type { CategoryBreakdownItem } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { bestAvailableRecord, compareByRecord, type RankRecord } from "@/lib/parlay/pick-record";
-import { contrarianHeadcountPasses, rankCandidates, type ParlayLeg } from "@/lib/parlay/qualification-ranking";
+import {
+  compareByWilson,
+  contrarianHeadcountPasses,
+  qualifies,
+  rankCandidates,
+  toParlayCandidate,
+  wilsonLowerBound,
+  type ParlayLeg,
+} from "@/lib/parlay/qualification-ranking";
+import { sameGameConflict } from "@/lib/parlay/same-game-rules";
+import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
 
-export type GeneratorPick = ExpanderPick & { datePosted: string };
+// gameNumber is the pick row's own doubleheader game number (Pick.gameNumber),
+// null or absent when the pick never said which game it is on.
+export type GeneratorPick = ExpanderPick & { datePosted: string; gameNumber?: number | null };
 
 export type GeneratorGame = {
   gameId: string;
@@ -28,6 +40,9 @@ export type GeneratorGame = {
   gameTime: string;
   leagueName: string;
   picks: GeneratorPick[];
+  // True when the same two teams play another game the same day. Only the
+  // same-game fill reads it (see sureOfGame).
+  doubleheader?: boolean;
 };
 
 export type RankedPick = { pick: GeneratorPick; record: RankRecord | null };
@@ -156,4 +171,101 @@ export function buildSwapParlay(
     };
   });
   return { mode, legs, swapCount: legs.filter((l) => l.swap !== null).length };
+}
+
+// ---------------------------------------------------------------------------
+// Same-game fill ("Max legs per game" 2 or 3). Runs after Parlay A and never
+// changes it: Parlay A is still exactly one leg per game, and these are extra
+// legs from games Parlay A already has.
+//
+// Only fills a shortfall - it adds legs when Parlay A came up short of the
+// requested count because there weren't enough games, and stops at that count.
+// A candidate is any other pick on a Parlay A game that:
+//   - clears the Section 3 gate (qualifies: 55%+ on the capper's all-leagues
+//     record in the pick's own market - the record Hedge/Contrarian gate on,
+//     not the record Parlay A ranks by). No pass for being on a game that is
+//     already in the parlay.
+//   - breaks no same-game rule (same-game-rules.ts) against any leg already
+//     taken from its game.
+// Candidates across all games are taken strongest first by Wilson lower bound
+// (compareByWilson). A rejected candidate is skipped and the walk goes on - it
+// never blocks the rest of its game or any other game. Nothing is padded:
+// when no candidate is left the parlay stays short.
+// ---------------------------------------------------------------------------
+export type MaxLegsPerGame = 1 | 2 | 3;
+
+export function toMaxLegsPerGame(value: unknown): MaxLegsPerGame {
+  return value === 2 || value === 3 ? value : 1;
+}
+
+export type SameGameLeg = {
+  gameId: string;
+  gameLabel: string;
+  gameTime: string;
+  pick: GeneratorPick;
+  // The record that qualified it - all leagues, this pick's market.
+  record: { wins: number; losses: number; n: number; winPct: number };
+  wilsonLowerBound: number;
+};
+
+export type SameGameFill = {
+  maxLegsPerGame: MaxLegsPerGame;
+  // In the order they were added: strongest first.
+  legs: SameGameLeg[];
+};
+
+// On a doubleheader the board tells the two games apart, but a pick with no
+// game number of its own was put on one of them by start time alone. Two legs
+// are never paired on such a game unless both say which game they are on.
+function sureOfGame(game: GeneratorGame, pick: GeneratorPick): boolean {
+  return !game.doubleheader || pick.gameNumber != null;
+}
+
+export function buildSameGameLegs(
+  parlayA: AutoParlay,
+  games: GeneratorGame[],
+  categoryRecords: Record<string, CategoryBreakdownItem | null>,
+  maxLegsPerGame: MaxLegsPerGame
+): SameGameFill {
+  const fill: SameGameFill = { maxLegsPerGame, legs: [] };
+  const room = Math.min(parlayA.requested, MAX_PARLAY_LEGS) - parlayA.legs.length;
+  if (maxLegsPerGame <= 1 || room <= 0) return fill;
+
+  const gameById = new Map(games.map((g) => [g.gameId, g]));
+  const taken = new Map<string, GeneratorPick[]>();
+  const candidates: SameGameLeg[] = [];
+
+  for (const leg of parlayA.legs) {
+    const game = gameById.get(leg.gameId);
+    if (!game) continue;
+    taken.set(leg.gameId, [leg.top.pick]);
+    if (!sureOfGame(game, leg.top.pick)) continue;
+    for (const pick of game.picks) {
+      if (pick.pickId === leg.top.pick.pickId || !pick.category || !sureOfGame(game, pick)) continue;
+      const record = categoryRecords[categoryRecordKey(pick.capperId, pick.category)] ?? null;
+      if (!record || !qualifies(record)) continue;
+      const { wins, losses, winPct } = record;
+      candidates.push({
+        gameId: leg.gameId,
+        gameLabel: leg.gameLabel,
+        gameTime: leg.gameTime,
+        pick,
+        record: { wins, losses, n: wins + losses, winPct },
+        wilsonLowerBound: wilsonLowerBound(wins, losses),
+      });
+    }
+  }
+
+  candidates.sort((a, b) => compareByWilson({ ...a, pickId: a.pick.pickId }, { ...b, pickId: b.pick.pickId }));
+
+  const asCandidate = (p: GeneratorPick) => toParlayCandidate(toParlayLeg(p));
+  for (const candidate of candidates) {
+    if (fill.legs.length >= room) break;
+    const inGame = taken.get(candidate.gameId)!;
+    if (inGame.length >= maxLegsPerGame) continue;
+    if (inGame.some((p) => sameGameConflict(asCandidate(candidate.pick), asCandidate(p)) !== null)) continue;
+    inGame.push(candidate.pick);
+    fill.legs.push(candidate);
+  }
+  return fill;
 }

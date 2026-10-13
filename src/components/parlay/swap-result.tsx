@@ -44,18 +44,21 @@ export const LEG_LIST = "divide-y divide-[#0F1420]/[0.06] dark:divide-white/10";
 // One leg: its number, the game, the pick, who made it in which market, the
 // record it was chosen on (with a bar of its win %) and the odds. `winPct` is
 // null when there is no record to draw. `children` is anything more the leg
-// has to say (why a swap left it unchanged, its game's next picks).
+// has to say (why a swap left it unchanged, its game's next picks). `tag` is a
+// small badge beside the game ("SGP" on a leg whose game has another leg).
 export function LegRow({
   n,
   pick,
   recordText,
   winPct,
+  tag,
   children,
 }: {
   n: number;
   pick: ExpanderPick;
   recordText: string;
   winPct: number | null;
+  tag?: string;
   children?: ReactNode;
 }) {
   const tone = winPct === null ? MUTED : getRecordColor(winPct) === "green" ? GREEN : RED;
@@ -65,6 +68,11 @@ export function LegRow({
       <div className="min-w-0 flex-1">
         <p className={LABEL}>
           {pick.leagueName} · {pick.gameLabel} · {formatGameTime(pick.gameTime)}
+          {tag && (
+            <span className="ml-1.5 rounded-full bg-[#E6ECFF] px-1.5 py-px text-[10px] font-bold text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
+              {tag}
+            </span>
+          )}
         </p>
         <div className="mt-0.5 flex items-baseline justify-between gap-3">
           <p className="min-w-0 text-[15px] font-bold leading-snug text-foreground [overflow-wrap:anywhere]">{pick.betDetail}</p>
@@ -157,7 +165,10 @@ function PriceCell({ label, value, sub }: { label: string; value: string; sub?: 
 //     shown instead of one;
 //   - a leg priced at the importer's -110 placeholder: the numbers are shown,
 //     each marked "≈", with how many legs are placeholders.
-export function CombinedPrice({ legs }: { legs: CombineLeg[] }) {
+// And one more when `sameGame` is set (the parlay has two or more legs on one
+// game): the same math, marked "Est." and "≈", because legs on one game are not
+// independent and a sportsbook prices them together, lower.
+export function CombinedPrice({ legs, sameGame }: { legs: CombineLeg[]; sameGame?: boolean }) {
   const combined = combineOdds(legs);
   if (combined.legCount === 0) return null;
   const box = "mt-2.5 rounded-[12px] border border-[#E6E8EF] bg-white px-3.5 py-2.5 dark:border-border dark:bg-card";
@@ -174,14 +185,20 @@ export function CombinedPrice({ legs }: { legs: CombineLeg[] }) {
       </div>
     );
   }
-  const approx = combined.estimated ? "≈ " : "";
+  const approx = combined.estimated || sameGame ? "≈ " : "";
+  const label = sameGame ? "Est. combined odds" : combined.estimated ? "Combined odds (estimate)" : "Combined odds";
   return (
     <div className={box}>
       <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-3">
-        <PriceCell label={combined.estimated ? "Combined odds (estimate)" : "Combined odds"} value={approx + formatAmericanOdds(combined.american)} />
+        <PriceCell label={label} value={approx + formatAmericanOdds(combined.american)} />
         <PriceCell label="Decimal" value={approx + formatDecimalOdds(combined.decimal)} />
         <PriceCell label="Payout" value={approx + formatPayout(payoutOn(combined))} sub="on $1" />
       </dl>
+      {sameGame && (
+        <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+          Estimate: sportsbooks price same-game parlays lower than independent legs.
+        </p>
+      )}
       {combined.estimated && (
         <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">
           Estimate: {combined.defaultedLegs} of {combined.legCount} leg{plural(combined.legCount)} had no posted price and{" "}
@@ -200,7 +217,8 @@ export function swapPriceLegs(parlay: SwapParlay): ExpanderPick[] {
 
 // A built parlay: its name, a line about it, its combined price (when
 // `priceLegs` is given), then its legs, then "Send to FanDuel" for the legs in
-// `sendLegs`. `plain` is for a
+// `sendLegs`. `sameGamePrice` marks the price an estimate (see CombinedPrice).
+// `plain` is for a
 // result that already has a card of its own; otherwise it is a tinted block
 // inside the card that built it.
 export function ResultBlock({
@@ -208,6 +226,7 @@ export function ResultBlock({
   subtitle,
   plain,
   priceLegs,
+  sameGamePrice,
   sendLegs,
   children,
 }: {
@@ -215,6 +234,7 @@ export function ResultBlock({
   subtitle?: string;
   plain?: boolean;
   priceLegs?: CombineLeg[];
+  sameGamePrice?: boolean;
   sendLegs?: SendLeg[];
   children: ReactNode;
 }) {
@@ -222,7 +242,7 @@ export function ResultBlock({
     <div className={plain ? "" : "mt-4 rounded-[14px] border px-3.5 pb-1 pt-3 " + TINTS.blue.card}>
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       {subtitle && <p className={"text-xs font-medium " + TINTS.blue.subtitleClass}>{subtitle}</p>}
-      {priceLegs && <CombinedPrice legs={priceLegs} />}
+      {priceLegs && <CombinedPrice legs={priceLegs} sameGame={sameGamePrice} />}
       {children}
       {sendLegs && <SendToFanDuel legs={sendLegs} />}
     </div>
