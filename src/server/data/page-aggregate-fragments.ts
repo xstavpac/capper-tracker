@@ -22,6 +22,7 @@
 //
 // Ordering everywhere is the canonical (gameTime, createdAt, id COLLATE "C")
 // tie-break (ORDER / ORDER_DESC), the same total order the JS sorts in pick-order.ts use.
+import "server-only";
 import { Prisma } from "@prisma/client";
 import type { PickStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";

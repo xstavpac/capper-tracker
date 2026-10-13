@@ -17,6 +17,7 @@
 // the old JS sort exactly. A WIN at odds = 0 makes the old JS units Infinity/NaN (see
 // zeroOddsWinUnitsWon); the sort keys apply the same poisoning (uw_eff below), so the order always
 // matches the displayed ROI / units, with NaN - which has no order - last.
+import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { cacheKeys } from "@/lib/cache-keys";

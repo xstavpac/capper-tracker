@@ -43,6 +43,7 @@
 //   node --import tsx scripts/t2-harness/qualification-ranking-acceptance-check.ts
 //
 // Prints ONE JSON object as the last line of stdout.
+import "../server-only-stub.cjs"; // first: the data modules below import "server-only"
 import { prisma } from "@/lib/prisma";
 import { pickCategory } from "@/server/data/stats";
 import type { CategoryBreakdownItem } from "@/server/data/stats";

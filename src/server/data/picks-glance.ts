@@ -1,5 +1,6 @@
 // Read-only aggregates for the /picks "at a glance" row. Every card is ranked and cut to
 // GLANCE_COUNT rows in the database: nothing here returns a pick row to the app.
+import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { easternDateRange } from "@/lib/dates";

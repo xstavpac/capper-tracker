@@ -8,6 +8,7 @@
 // heaviest user. Exit code 1 on any displayed-value diff.
 //   DATABASE_URL=postgresql://postgres@localhost:5432/<snapshot db> \
 //     node --import tsx scripts/t2-harness/units-series-parity.ts [--user-id=<cuid>]
+import "../server-only-stub.cjs"; // first: the data modules below import "server-only"
 import { prisma } from "@/lib/prisma";
 import { compareUnitsSeriesParity } from "@/server/data/units-series-parity";
 import { assertNotProd } from "./lib/prod-guard.mjs";

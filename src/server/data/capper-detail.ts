@@ -20,6 +20,7 @@
 // No cache (Q8/Q9): `now` is taken per request and used for the SQL windows AND the JS window
 // filters. capper-detail-legacy.ts is the frozen JS path this replaces;
 // capper-detail-acceptance-test.ts and scripts/t2-harness/capper-detail-parity.ts hold the two equal.
+import "server-only";
 import type { PickStatus } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { windowTotalsSelect, zeroOddsWinUnitsWon, type WindowTotals } from "@/server/data/capper-list-aggregates";

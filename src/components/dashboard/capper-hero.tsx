@@ -1,15 +1,11 @@
-import type { ReactNode } from "react";
 import { StreakBadge } from "@/components/dashboard/capper-panels";
+import { DOWN, LABEL, StatCell, UP } from "@/components/dashboard/stat-cell";
 import { formatEastern, formatRelativeTime } from "@/lib/dates";
 import { formatSignedUnits } from "@/lib/units-extremes";
 import { getRecordColor, winPctOf, type MomentumBreakdown, type MomentumRow } from "@/server/data/stats";
 import { bestMarketStats, type BestMarketStat, type BestMarkets, type CapperRecordView } from "@/server/data/capper-detail";
 
 type Streak = { type: "WIN" | "LOSS" | "NONE"; count: number };
-
-const UP = "text-[#34D399]";
-const DOWN = "text-[#FCA5A5]";
-const LABEL = "font-medium uppercase tracking-[0.08em] text-white/60";
 
 // The bucket the capper's actual current streak falls into - e.g. currently on
 // a 5-game loss streak is the "After 4+ L" row (5 collapses into the same 4+
@@ -63,19 +59,6 @@ function MomentumCard({ breakdown, currentStreak }: { breakdown: MomentumBreakdo
       ) : (
         <p className="text-[13px] text-white/70">Not enough history yet</p>
       )}
-    </div>
-  );
-}
-
-// `wraps` is for a value made of words (a market's name): it breaks onto a second line
-// rather than being cut off.
-export function StatCell({ label, value, sub, tone, wraps, className = "" }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "up" | "down"; wraps?: boolean; className?: string }) {
-  return (
-    // The banner's navy under the same faint white wash as the momentum card (opaque, to cover the grid's own).
-    <div className={"min-w-0 bg-banner bg-[linear-gradient(rgb(255_255_255/0.06),rgb(255_255_255/0.06))] px-4 py-[9px] " + className}>
-      <div className={"text-[11px] " + LABEL}>{label}</div>
-      <div className={"mt-0.5 text-xl font-semibold leading-tight tabular-nums " + (wraps ? "" : "truncate ") + (tone === "up" ? UP : tone === "down" ? DOWN : "text-white")}>{value}</div>
-      {sub && <div className="truncate text-xs tabular-nums text-white/60">{sub}</div>}
     </div>
   );
 }

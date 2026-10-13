@@ -12,7 +12,7 @@ import { useFullscreen, FULLSCREEN_CHART_HEIGHT, FULLSCREEN_SURFACE_CLASS } from
 import { FullscreenButton } from "@/components/charts/fullscreen-button";
 import { BANNER_CONTROLS, BANNER_GLOW, BANNER_ICON, BANNER_ROW, BannerBrand, NavyBanner } from "@/components/ui/navy-banner";
 import { CONTROL, GREEN, Message, PanelShell, RED, TINTS } from "@/components/dashboard/panel-shell";
-import { StatCell } from "@/components/dashboard/capper-hero";
+import { StatCell } from "@/components/dashboard/stat-cell";
 import { ChartsIcon, TrendingUpIcon } from "@/components/dashboard/cappers-icons";
 import { leagueColorVars } from "@/lib/league-colors";
 import { addDaysToDateKey, easternDateKey } from "@/lib/dates";
