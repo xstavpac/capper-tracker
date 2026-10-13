@@ -15,7 +15,8 @@ function expect(label: string, actual: unknown, expected: unknown) {
   if (a !== e) failures++;
 }
 
-// 3 wins in the last 10 for every capper, in a different order each, against a different norm.
+// 3 wins in the last 10 for every capper, in a different order each, against a different norm. No drop lands
+// on a y-axis tick label (multiples of 20 here), which reads the same as a drop.
 const row = (n: number, name: string, baseline: number, pct: number, wins: number[]): FallingEntry => ({
   capperId: "c" + n,
   name,
@@ -29,7 +30,7 @@ const ROWS: FallingEntry[] = [
   row(1, "Alpha Picks", 0.71, -58, [0, 1, 2]),
   row(2, "Bravo Bets", 0.6, -50, [0, 4, 9]),
   row(3, "Charlie Locks", 0.55, -45, [2, 3, 8]),
-  row(4, "Delta Plays", 0.5, -40, [1, 5, 6]),
+  row(4, "Delta Plays", 0.52, -42, [1, 5, 6]),
   row(5, "Echo Edge", 0.45, -33, [7, 8, 9]),
 ];
 const RED = "#E11D48";
@@ -104,8 +105,8 @@ async function main() {
   expect("legend swatches match the lines", swatches(), [RED, OWN[1], OWN[2], OWN[3], OWN[4]].map(rgb));
   expect("a row keeps the relative drop and the two win rates", buttons()[0].children[2].textContent, "−58%71% → 30%");
   expect("the hint is under the legend", container.querySelector("ol + p")?.textContent, "Tap a capper to highlight their line");
-  expect("no badge or end label on the chart: the drops are only in the legend", Array.from(container.querySelectorAll("span")).filter((s) => /^−\d+%$/.test(s.textContent ?? "") && !s.closest("button")).length, 0);
-  expect("...where each shows once", Array.from(container.querySelectorAll("button span")).map((s) => s.textContent).filter((t) => /^−\d+%$/.test(t ?? "")), ["−58%", "−50%", "−45%", "−40%", "−33%"]);
+  expect("no badge or end label on the chart: the drops are only in the legend", Array.from(container.querySelectorAll("span")).filter((s) => ROWS.some((r) => s.textContent === "−" + Math.abs(r.pct) + "%") && !s.closest("button")).length, 0);
+  expect("...where each shows once", Array.from(container.querySelectorAll("button span")).map((s) => s.textContent).filter((t) => /^−\d+%$/.test(t ?? "")), ["−58%", "−50%", "−45%", "−42%", "−33%"]);
   expect("footer names #1", [footerName(), footerText(), trendHref()], ["Alpha Picks", "Alpha Picks is down 58% from their normal 71%", "/cappers/c1"]);
 
   console.log("\n########## 2. Clicking a legend row moves the highlight ##########");
