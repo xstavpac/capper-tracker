@@ -29,6 +29,7 @@ export type LedgerRow = {
   liveScore: string | null; // "away-home" from the live feed, when matched
   resultUnitsText: string | null; // "+0.91u" / "-1u" for WIN/LOSS
   consensus: string | null;
+  consensusHref: string | null; // the game's /live page, when today's slate has it
 };
 
 // A section's own record and net units, shown in its header (Settled only).
@@ -230,6 +231,8 @@ function RowMenu({ row }: { row: LedgerRow }) {
   );
 }
 
+const CONSENSUS_PILL = "mt-1.5 inline-flex rounded-full bg-[#E6ECFF] px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300";
+
 // One grid: league + time | pick | odds + status | menu. On a phone the league badge and time become
 // a line of their own above the pick, and the odds / status column stays on the right.
 function Row({ row, showDate }: { row: LedgerRow; showDate: boolean }) {
@@ -268,11 +271,14 @@ function Row({ row, showDate }: { row: LedgerRow; showDate: boolean }) {
           <span aria-hidden="true">·</span>
           <span className="min-w-0 [overflow-wrap:anywhere]">{row.matchup}</span>
         </div>
-        {row.consensus && (
-          <span className="mt-1.5 inline-flex rounded-full bg-[#E6ECFF] px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
-            {row.consensus}
-          </span>
-        )}
+        {row.consensus &&
+          (row.consensusHref ? (
+            <Link href={row.consensusHref} className={CONSENSUS_PILL + " transition hover:bg-[#D6E0FF] dark:hover:bg-brand-500/25"}>
+              {row.consensus}
+            </Link>
+          ) : (
+            <span className={CONSENSUS_PILL}>{row.consensus}</span>
+          ))}
       </div>
 
       <div className="flex flex-col items-end gap-1">

@@ -6,6 +6,8 @@ import { easternDateRange } from "@/lib/dates";
 import { WIN_UNITS } from "@/server/data/capper-list-aggregates";
 import { uwEffSql } from "@/server/data/cappers-page-aggregates";
 import { round2HalfUpSql } from "@/server/data/page-aggregate-fragments";
+import { LIVE_SPORTS, getTickerOddsForSport } from "@/server/data/odds";
+import { liveGameHref, type PickGame } from "@/lib/pick-game-link";
 
 // gameTime is a timestamp WITHOUT time zone holding UTC. A bare Date parameter is sent as timestamptz
 // and converted in the session's zone, so each bound is written as UTC text instead (as
@@ -66,4 +68,114 @@ export async function getDayWinnersAndLosers(userId: string, startDateKey: strin
       .sort((x, y) => Number(x.rk) - Number(y.rk))
       .map((r) => ({ capperId: r.capperId, name: r.name, sports: r.sports ?? [], wins: Number(r.wins), losses: Number(r.losses), pushes: Number(r.pushes), netUnits: Number(r.netUnits) }));
   return { winners: side("w"), losers: side("l") };
+}
+
+// A Most Backed row: one side of one market of one game, with the distinct cappers on it.
+// `side`: HOME / AWAY / DRAW (moneyline, spread), OVER / UNDER (game totals), NRFI / YRFI.
+// `line`: the side's most common line among those picks (the lowest on a tie), null when none has one.
+export type MostBackedRow = {
+  sportName: string;
+  homeTeam: string;
+  awayTeam: string;
+  gameTime: Date;
+  betType: string;
+  period: string;
+  side: string;
+  line: number | null;
+  cappers: number;
+};
+
+// Most Backed: the day's PENDING picks whose game has not started, grouped by game + market + side,
+// with the DISTINCT cappers on each, cut to GLANCE_COUNT in the database. `upcoming` is every such
+// pick, whatever its market.
+//
+// The group is the "N cappers on this side" pill's own key (consensusHints, lib/pick-display.ts):
+// home team, away team, start time, bet type, period, side - so a row's count is the count its picks'
+// pills show. The side comes from fields stored at import, never from the pick's text: pickedSide for
+// a moneyline or spread, the stamped category for a game total (…OVER / …UNDER) and for NRFI / YRFI.
+// A market with no stored side is not ranked: team totals and player props.
+// Different lines on one side (-3 and -3.5) are one row; it carries the most common line.
+// Ranked by cappers desc, then earliest start, then the side's label (team or Over / Under, then the
+// line), then the rest of the key so equal rows never swap.
+export async function getMostBacked(userId: string, startDateKey: string, endDateKey: string, now: Date = new Date()): Promise<{ rows: MostBackedRow[]; upcoming: number }> {
+  const { start, end } = easternDateRange(startDateKey, endDateKey);
+  const rows = await prisma.$queryRaw<(Omit<MostBackedRow, "cappers" | "sportName"> & { upcoming: number; rk: number | null; sport: string; n: number })[]>(Prisma.sql`
+    WITH base AS (
+      SELECT p."capperId", p."homeTeam", p."awayTeam", p."gameTime", p."betType"::text AS bt, p.period::text AS period, p.line, s.name AS sport,
+        CASE
+          WHEN p."betType" IN ('MONEYLINE', 'SPREAD') THEN p."pickedSide"::text
+          WHEN p."betType" = 'TOTAL' AND p.category LIKE '%OVER' THEN 'OVER'
+          WHEN p."betType" = 'TOTAL' AND p.category LIKE '%UNDER' THEN 'UNDER'
+          WHEN p."betType" = 'NRFI' AND p.category IN ('NRFI', 'YRFI') THEN p.category
+        END AS side
+      FROM picks p
+      JOIN sports s ON s.id = p."sportId"
+      WHERE p."userId" = ${userId} AND p.status = 'PENDING'
+        AND p."gameTime" >= ${ts(start)} AND p."gameTime" < ${ts(end)} AND p."gameTime" > ${ts(now)}
+    ),
+    g AS (
+      SELECT b."homeTeam", b."awayTeam", b."gameTime", b.bt, b.period, b.side, min(b.sport) AS sport,
+        count(DISTINCT b."capperId")::int AS n,
+        mode() WITHIN GROUP (ORDER BY b.line) AS line
+      FROM base b
+      WHERE b.side IS NOT NULL
+      GROUP BY b."homeTeam", b."awayTeam", b."gameTime", b.bt, b.period, b.side
+    ),
+    top AS (
+      SELECT g.*, (row_number() OVER (
+        ORDER BY g.n DESC, g."gameTime" ASC,
+          lower(CASE g.side WHEN 'HOME' THEN g."homeTeam" WHEN 'AWAY' THEN g."awayTeam" ELSE g.side END) COLLATE "C",
+          g.line ASC NULLS FIRST, g."homeTeam" COLLATE "C", g."awayTeam" COLLATE "C", g.bt COLLATE "C", g.period COLLATE "C", g.side COLLATE "C"
+      ))::int AS rk
+      FROM g
+    )
+    SELECT t.upcoming, top.rk, top."homeTeam", top."awayTeam", top."gameTime", top.bt AS "betType", top.period, top.side, top.line, top.sport, top.n
+    FROM (SELECT count(*)::int AS upcoming FROM base) t
+    LEFT JOIN top ON top.rk <= ${GLANCE_COUNT}
+  `);
+  return {
+    upcoming: Number(rows[0]?.upcoming ?? 0),
+    rows: rows
+      .filter((r) => r.rk !== null)
+      .sort((x, y) => Number(x.rk) - Number(y.rk))
+      .map((r) => ({
+        sportName: r.sport,
+        homeTeam: r.homeTeam,
+        awayTeam: r.awayTeam,
+        // A timestamp without time zone comes back as that wall time read as UTC, which is what it holds.
+        gameTime: new Date(r.gameTime),
+        betType: r.betType,
+        period: r.period,
+        side: r.side,
+        line: r.line === null ? null : Number(r.line),
+        cappers: Number(r.n),
+      })),
+  };
+}
+
+// The /live game page for each game, where today's odds slate has it: `key` -> href. The slate is the
+// layout ticker's own cached read (getTickerOddsForSport: ids, teams and start times, no prices), so
+// this adds no database read to a page load. A game the slate does not carry (another day's, a league
+// with no Live board, a feed failure) simply has no link.
+export async function getLiveGameHrefs(games: (PickGame & { key: string; sportName: string })[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const bySport = new Map<string, typeof games>();
+  for (const g of games) {
+    const sportKey = LIVE_SPORTS.find((s) => s.label === g.sportName)?.key;
+    if (sportKey) bySport.set(sportKey, [...(bySport.get(sportKey) ?? []), g]);
+  }
+  await Promise.all(
+    Array.from(bySport.entries()).map(async ([sportKey, group]) => {
+      try {
+        const slate = await getTickerOddsForSport(sportKey);
+        for (const g of group) {
+          const href = liveGameHref(slate, g, sportKey);
+          if (href) out.set(g.key, href);
+        }
+      } catch (err) {
+        console.error("[picks-glance] no game links for", sportKey, err);
+      }
+    })
+  );
+  return out;
 }
