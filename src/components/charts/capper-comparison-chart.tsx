@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from "recharts";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
 import { Theme } from "@prisma/client";
 import { useTheme } from "@/components/layout/theme-provider";
 import type { PickNumberChartPoint } from "@/server/data/stats";
@@ -35,12 +35,10 @@ function mergeByPickNumber(series: ComparisonSeries[]): Record<string, number | 
   return rows;
 }
 
-// Same lightweight Recharts wrapper pattern as UnitsChart/
-// HistoricalVariableChart (same theme-aware grid/tick colors, same tooltip
-// styling) - genuinely new, not reused, since neither of those fits: UnitsChart
-// hardcodes a single series on a `date` x-axis, and HistoricalVariableChart's
-// date-union merge/tick-formatting is built specifically for calendar dates,
-// not the "pick 1, 2, 3..." ordinal axis this needs.
+// The /charts line chart: one line per capper on a "pick 1, 2, 3..." axis, drawn like the capper
+// page's units chart (capper-units-chart.tsx): horizontal gridlines only, the break-even line
+// dashed. The series' names and end values are in the card's header, not in a legend here.
+// Recharts draws raw SVG, so the theme's colors are picked here.
 export function CapperComparisonChart({
   series,
   height = 320,
@@ -52,18 +50,16 @@ export function CapperComparisonChart({
 }) {
   const { theme } = useTheme();
   const isDark = theme === Theme.DARK;
-  const gridColor = isDark ? "#1f2937" : "#f3f4f6";
-  const tickColor = isDark ? "#9ca3af" : "#6b7280";
+  const gridColor = isDark ? "rgba(255,255,255,0.1)" : "#EEF1F6";
+  const surface = isDark ? "#111827" : "#ffffff";
+  const tick = { fontSize: 11, fill: isDark ? "#9ca3af" : "#94A3B8" };
 
   const data = useMemo(() => mergeByPickNumber(series), [series]);
   const hasAnyPoints = series.some((s) => s.points.length > 0);
 
   if (!hasAnyPoints) {
     return (
-      <div
-        className="flex items-center justify-center rounded-card border border-dashed border-border text-sm text-muted-foreground"
-        style={{ height }}
-      >
+      <div className="flex items-center justify-center text-center text-[13px] font-medium text-muted-foreground" style={{ height }}>
         No settled picks match these filters yet.
       </div>
     );
@@ -72,23 +68,28 @@ export function CapperComparisonChart({
   return (
     <div style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+        <LineChart data={data} margin={{ top: 10, right: 12, left: -10, bottom: 8 }}>
+          <CartesianGrid vertical={false} stroke={gridColor} />
+          {/* minTickGap thins the pick numbers out on a narrow card instead of crowding them. */}
           <XAxis
             dataKey="pickNumber"
-            tick={{ fontSize: 11, fill: tickColor }}
+            tick={tick}
             axisLine={false}
             tickLine={false}
-            label={{ value: "Pick #", position: "insideBottom", offset: -5, fontSize: 11, fill: tickColor }}
+            minTickGap={28}
+            interval="preserveStartEnd"
+            label={{ value: "Pick #", position: "insideBottom", offset: -5, fontSize: 11, fill: tick.fill }}
           />
-          <YAxis tick={{ fontSize: 11, fill: tickColor }} axisLine={false} tickLine={false} />
+          <YAxis tick={tick} axisLine={false} tickLine={false} tickCount={5} />
+          <ReferenceLine y={0} stroke="#94A3B8" strokeDasharray="4 4" />
           <Tooltip
             contentStyle={{
-              borderRadius: 12,
-              border: "1px solid " + gridColor,
+              borderRadius: 10,
+              border: "1px solid " + (isDark ? "rgba(255,255,255,0.14)" : "#E2E8F0"),
+              boxShadow: "0 4px 12px rgba(15,23,42,0.08)",
               fontSize: 12,
-              backgroundColor: isDark ? "#111827" : "#ffffff",
-              color: isDark ? "#f9fafb" : "#111827",
+              backgroundColor: surface,
+              color: isDark ? "#f9fafb" : "#0F172A",
             }}
             labelFormatter={(n) => "Pick #" + n}
             formatter={(value: unknown, name: unknown) => [
@@ -96,9 +97,8 @@ export function CapperComparisonChart({
               String(name),
             ]}
           />
-          {series.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
           {series.map((s) => (
-            <Line key={s.id} type="monotone" dataKey={s.id} name={s.label} stroke={s.color} strokeWidth={2} dot={false} />
+            <Line key={s.id} type="monotone" dataKey={s.id} name={s.label} stroke={s.color} strokeWidth={2.25} dot={false} activeDot={{ r: 4 }} />
           ))}
         </LineChart>
       </ResponsiveContainer>

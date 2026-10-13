@@ -24,6 +24,14 @@ export const UsersIcon = ({ className }: P) => (
   </svg>
 );
 
+// Same glyph as the sidebar's Charts item.
+export const ChartsIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <path d="M4 4v16h16" />
+    <path d="M7 15l3.5 -4.5l3 3l4.5 -6" />
+  </svg>
+);
+
 // A medal on its ribbon.
 export const AwardIcon = ({ className }: P) => (
   <svg {...svgProps(className)}>
