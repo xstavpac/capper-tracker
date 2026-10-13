@@ -21,8 +21,8 @@ import { PicksFilterBar } from "@/components/picks/picks-filter-bar";
 import { PickLedger, type LedgerRow, type LedgerSectionSummary } from "@/components/picks/pick-ledger";
 import { PicksSummaryStrip } from "@/components/picks/picks-summary-strip";
 import { DateNavigator } from "@/components/picks/date-navigator";
-import { AtAGlance, GlanceCapperCard } from "@/components/picks/at-a-glance";
-import { getDayWinnersAndLosers } from "@/server/data/picks-glance";
+import { AtAGlance, GlanceCapperCard, MostBackedCard, type MostBackedItem } from "@/components/picks/at-a-glance";
+import { getDayWinnersAndLosers, getLiveGameHrefs, getMostBacked } from "@/server/data/picks-glance";
 import { cumulativeUnitsSeries, sportChipLayout, type HeaderPick } from "@/lib/picks-header";
 import {
   betTypeFilterCategory,
@@ -36,6 +36,7 @@ import {
   splitIntoSections,
   pickPhase,
   consensusHints,
+  sideLabel,
   capperInitials,
   formatOdds,
   winUnits,
@@ -151,7 +152,12 @@ export default async function PicksPage({
     endDateKey,
   };
 
-  const [allPicks, cappers, sports, parlays, sqlSummary, glance] = await Promise.all([
+  const now = new Date();
+  const todayKey = easternDateKey(now);
+  // Most Backed is about games still to come: today or later only. A past day has no such card.
+  const showBacked = endDateKey >= todayKey;
+
+  const [allPicks, cappers, sports, parlays, sqlSummary, glance, backed] = await Promise.all([
     // The sport chip is applied in JS below (not in this query) so the sport
     // chips' counts can reflect every sport under the other active filters.
     getFilteredPicksForUser(user.id, { ...filters, sportId: undefined }),
@@ -167,6 +173,7 @@ export default async function PicksPage({
     betTypeFilter ? Promise.resolve(null) : getPicksSummary(user.id, filters),
     // The "at a glance" row follows the day (or range) alone, never the capper / sport / result chips.
     getDayWinnersAndLosers(user.id, startDateKey, endDateKey),
+    showBacked ? getMostBacked(user.id, startDateKey, endDateKey, now) : Promise.resolve(null),
   ]);
 
   // Bet type is derived (betDetail text for NRFI/YRFI), not a stored column,
@@ -175,7 +182,6 @@ export default async function PicksPage({
   const picks = sportIdFilter ? sportScopedPicks.filter((p) => p.sportId === sportIdFilter) : sportScopedPicks;
   const summary = sqlSummary ?? summarizeLoadedPicks(picks);
 
-  const now = new Date();
   const loadedCapperIds = Array.from(new Set(picks.map((p) => p.capperId)));
   const [capperRecords, finalScores] = await Promise.all([
     getCapperAllTimeRecords(user.id, loadedCapperIds),
@@ -248,7 +254,6 @@ export default async function PicksPage({
   const dateFilterActive = Boolean(searchParams.date) || isRange;
   const hasActiveFilters = otherFiltersActive || dateFilterActive;
 
-  const todayKey = easternDateKey(now);
   const dayFmt = (key: string, opts: Intl.DateTimeFormatOptions) => formatEastern(easternDayStart(key), opts);
 
   const subtitleDate = isRange
@@ -289,6 +294,21 @@ export default async function PicksPage({
     source: p,
   }));
   const hints = consensusHints(ledgerPicks);
+  // Each consensus pill and each Most Backed row opens its game's Live page, where the slate has it.
+  const gameKey = (g: { sportName: string; homeTeam: string; awayTeam: string; gameTime: Date }) => [g.sportName, g.homeTeam, g.awayTeam, g.gameTime.getTime()].join("|");
+  const linkable = new Map(
+    [...ledgerPicks.filter((p) => hints.has(p.id)), ...(backed?.rows ?? [])].map((g) => [gameKey(g), { key: gameKey(g), sportName: g.sportName, homeTeam: g.homeTeam, awayTeam: g.awayTeam, gameTime: g.gameTime }])
+  );
+  const gameHrefs = await getLiveGameHrefs(Array.from(linkable.values()));
+  const backedItems: MostBackedItem[] = (backed?.rows ?? []).map((r) => ({
+    key: [gameKey(r), r.betType, r.period, r.side].join("|"),
+    label: sideLabel(r),
+    tag: marketTag({ betType: r.betType, period: r.period, sportName: r.sportName, betDetail: r.side }),
+    matchup: r.awayTeam + " @ " + r.homeTeam,
+    gameTimeIso: r.gameTime.toISOString(),
+    cappers: r.cappers,
+    href: gameHrefs.get(gameKey(r)) ?? null,
+  }));
   const livePicks = ledgerPicks.filter((p) => p.phase === "live").length;
   const laterPicks = ledgerPicks.filter((p) => p.phase === "pending").length;
 
@@ -341,6 +361,7 @@ export default async function PicksPage({
         liveScore: liveScore ? liveScore.away + "-" + liveScore.home : null,
         resultUnitsText: decidedUnits,
         consensus: hints.get(p.id) ?? null,
+        consensusHref: hints.has(p.id) ? (gameHrefs.get(gameKey(lp)) ?? null) : null,
       };
     }),
   }));
@@ -366,9 +387,15 @@ export default async function PicksPage({
             later={laterPicks}
           />
 
-          <AtAGlance label={dateChipLabel + " at a glance"} columns={3}>
+          <AtAGlance label={dateChipLabel + " at a glance"} columns={backed ? 3 : 2}>
             <GlanceCapperCard kind="winners" rows={glance.winners} today={dateIsDefault} />
             <GlanceCapperCard kind="losers" rows={glance.losers} today={dateIsDefault} />
+            {backed && (
+              // Two across (640-1099px) the third card takes the full row under the other two.
+              <div className="sm:max-[1099px]:col-span-2">
+                <MostBackedCard rows={backedItems} upcoming={backed.upcoming} />
+              </div>
+            )}
           </AtAGlance>
 
           <PicksFilterBar

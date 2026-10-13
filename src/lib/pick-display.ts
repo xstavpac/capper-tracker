@@ -98,6 +98,20 @@ export function buildPickLabel(p: LedgerPickInput): string {
   return formatPickLabel(cleaned || null, p.betType, p.line) ?? betTypeLabel(p.betType);
 }
 
+// The label of one SIDE of a market, from stored fields alone (Most Backed, picks-glance.ts): the
+// same wording buildPickLabel gives a pick on that side. `side` is HOME / AWAY / DRAW, OVER / UNDER,
+// NRFI / YRFI; `line` is only read for a spread or a total.
+export function sideLabel(g: { betType: string; side: string; line: number | null; homeTeam: string; awayTeam: string }): string {
+  if (g.side === "HOME" || g.side === "AWAY") {
+    const team = g.side === "HOME" ? g.homeTeam : g.awayTeam;
+    return g.betType === "SPREAD" && g.line !== null ? team + " " + signed(g.line) : team;
+  }
+  if (g.side === "OVER" || g.side === "UNDER") return (g.side === "OVER" ? "Over" : "Under") + (g.line !== null ? " " + g.line : "");
+  if (g.side === "YRFI") return "Run in the 1st inning";
+  if (g.side === "NRFI") return "No run in the 1st inning";
+  return g.side === "DRAW" ? "Draw" : g.side;
+}
+
 // The small market tag after the label (ML, Spread, Run line, F5 total, ...).
 export function marketTag(p: { betType: string; period: string; sportName: string; betDetail: string | null }): string {
   if (p.betType === "NRFI") return nrfiSide(p.betDetail) === "YES_RUN" ? "YRFI" : "NRFI";
