@@ -687,6 +687,13 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "Philadelphia 76ers (NBA)", sport: "NBA", nickname: "philadelphia 76ers" },
     { label: "Philadelphia Flyers (NHL)", sport: "NHL", nickname: "philadelphia flyers" },
   ],
+  // Same four franchises as "philadelphia" (the "nola" / "vegas" pattern).
+  philly: [
+    { label: "Philadelphia Eagles (NFL)", sport: "NFL", nickname: "philadelphia eagles" },
+    { label: "Philadelphia Phillies (MLB)", sport: "MLB", nickname: "philadelphia phillies" },
+    { label: "Philadelphia 76ers (NBA)", sport: "NBA", nickname: "philadelphia 76ers" },
+    { label: "Philadelphia Flyers (NHL)", sport: "NHL", nickname: "philadelphia flyers" },
+  ],
   phoenix: [
     { label: "Phoenix Suns (NBA)", sport: "NBA", nickname: "phoenix suns" },
     { label: "Phoenix Mercury (WNBA)", sport: "WNBA", nickname: "phoenix mercury" },
@@ -813,7 +820,7 @@ const AMBIGUOUS_CITY_KEYS = new Set<string>([
   "indiana", "indianapolis", "jacksonville", "kansas city", "las vegas",
   "vegas", "los angeles", "memphis", "miami", "milwaukee", "minnesota",
   "montreal", "nashville", "new england", "new orleans", "nola", "new york",
-  "oklahoma city", "orlando", "ottawa", "philadelphia", "phoenix",
+  "oklahoma city", "orlando", "ottawa", "philadelphia", "philly", "phoenix",
   "pittsburgh", "portland", "sacramento", "san antonio", "san diego",
   "san francisco", "san jose", "saskatchewan", "seattle", "st louis",
   "st. louis", "tampa", "tampa bay", "tennessee", "texas", "toronto", "utah",
@@ -1165,6 +1172,57 @@ const PRO_TEAM_ALIASES: [string, string, string][] = [
   ["nugs", "NBA", "nuggets"],
   ["sixers", "NBA", "76ers"],
   ["raps", "NBA", "raptors"],
+  // "wolves" is Timberwolves-only among the tracked pro leagues. The one
+  // other tracked team it is the last word of is Arkansas State's Red Wolves:
+  // NCAAF is keyed by school name, never bare mascot, so "Red Wolves -3" used
+  // to stay unresolved and would now read as the Timberwolves. "red wolves"
+  // (one FBS school, longer than "wolves", so it is matched first) keeps that
+  // line an Arkansas State pick.
+  ["wolves", "NBA", "timberwolves"],
+  ["red wolves", "NCAAF", "arkansas state red wolves"],
+  ["t-wolves", "NBA", "timberwolves"],
+  ["twolves", "NBA", "timberwolves"],
+  ["clips", "NBA", "clippers"],
+  // "okc" is the Thunder's own short name and Oklahoma City has no other
+  // tracked franchise. ("philly" is four franchises - it is an
+  // AMBIGUOUS_NICKNAMES city key, not an alias.)
+  ["okc", "NBA", "thunder"],
+  // "Philly Eagles": "philly" and "eagles" (NFL / KBO) are both
+  // AMBIGUOUS_NICKNAMES keys, and two ambiguous keys on one line read as a
+  // two-team matchup. Named whole, it is one team.
+  ["philly eagles", "NFL", "philadelphia eagles"],
+  // NBA 3-letter team codes (2026-10), vetted the way the NHL batch below was:
+  // each code was checked against ESPN's live abbreviations for every team in
+  // the NFL, MLB, NHL, WNBA, CFL and all of college football, and against
+  // every phrase in this file. Only the eight with no other owner are here.
+  // Aliases match in any letter case, so a code that is also an ordinary word
+  // is out regardless of collisions.
+  ["bkn", "NBA", "nets"],
+  ["cha", "NBA", "hornets"],
+  ["gsw", "NBA", "warriors"],
+  ["lal", "NBA", "lakers"],
+  ["nyk", "NBA", "knicks"],
+  ["nop", "NBA", "pelicans"],
+  ["orl", "NBA", "magic"],
+  ["sas", "NBA", "spurs"],
+  // Deliberately EXCLUDED - the code belongs to another tracked team too (ESPN
+  // abbreviation in brackets), or is an ordinary word:
+  // - atl (Falcons, Braves, Dream), bos (Red Sox, Bruins), chi (Bears,
+  //   Blackhawks, Sky), cle (Browns, Guardians), dal (Cowboys, Stars, Wings),
+  //   den (Broncos; also a word), det (Lions, Tigers, Red Wings), hou (Texans,
+  //   Astros, Houston Cougars), ind (Colts, Fever), mia (Dolphins, Marlins,
+  //   Miami Hurricanes; also a first name), mil (Brewers), min (Vikings,
+  //   Twins, Wild, Lynx; also a word), phi (Eagles, Phillies, Flyers), tor
+  //   (Blue Jays, Maple Leafs, Tempo), wsh (Commanders, Nationals, Capitals,
+  //   Mystics): the bare city is already an AMBIGUOUS_NICKNAMES key for each.
+  // - lac (Los Angeles Chargers), mem (Memphis Tigers), phx (Phoenix Mercury),
+  //   por (Portland Fire; also Spanish "por"), sac (Sacramento State Hornets).
+  // - uta / utah (Utah Mammoth - "UTA" is the NHL's own code; "utah" is an
+  //   AMBIGUOUS_NICKNAMES key already).
+  // - was: the NBA's code for the Wizards, and the English word "was".
+  // - the two-letter ESPN codes gs (Golden State Valkyries), no (the word, and
+  //   the Saints), ny (New York Liberty; a locality prefix here), sa.
+  // - "wiz": KBO's KT Wiz (see the note above this table).
   // NFL - "iggles" only ever means Philadelphia, so unlike bare "eagles"
   // (which collides with KBO's Hanwha Eagles and routes through the
   // ambiguous hierarchy) it can resolve NFL directly.
@@ -2138,8 +2196,35 @@ const SPORT_CONTEXT_SIGNALS: Record<string, RegExp[]> = {
     /\bfirst[\s-]half\s+spread\b/i,
   ],
   NHL: [/\bpuck\s*line\b/i, /\bpower\s*play\b/i, /\bperiod\b/i, /\bgoalie\b/i, /\bshots?\s+on\s+goal\b/i],
-  NBA: [/\brebounds?\b/i, /\bassists?\b/i, /\bquarter\b/i, /\b3-?pointers?\b/i],
+  // Basketball stat vocabulary, long and short forms. "DD" is matched in
+  // capitals only (like NFL's "TDs"). "points" / "pts" are not here: every
+  // football and basketball league scores in points - see hasNbaPointsSignal.
+  NBA: [
+    /\brebounds?\b/i,
+    /\bassists?\b/i,
+    /\bquarter\b/i,
+    /\b3-?pointers?\b/i,
+    /\bpra\b/i,
+    /\b(?:p\s*\+\s*r|p\s*\+\s*a|r\s*\+\s*a)\b/i,
+    /\b3pm\b/i,
+    /\b3s\b/i,
+    /\bthrees\b/i,
+    /\b(?:stl|steals?)\b/i,
+    /\b(?:blk|blocks?)\b/i,
+    /\bdouble[\s-]doubles?\b/i,
+    /\bDD\b/,
+  ],
 };
+
+// "points" / "pts" separate the NBA from the leagues that score in runs or
+// goals (MLB, KBO, NHL) and from nothing else: a football, WNBA or college
+// basketball candidate scores in points too, so with one of those in the
+// running the word says nothing ("New York over 44.5 points" is a football
+// total) and the line is left to the plausibility step.
+const POINTS_SCORING_SPORTS = ["NFL", "NCAAF", "CFL", "WNBA", "NCAAB"];
+function hasNbaPointsSignal(text: string, candidateSports: string[]): boolean {
+  return /\b(?:points?|pts)\b/i.test(text) && !candidateSports.some((s) => POINTS_SCORING_SPORTS.includes(s));
+}
 
 // A baseball total ("over/under 6.5-11.5") is a real signal specifically
 // against NFL (whose totals run much higher, ~38-55) - only applied when
@@ -2161,6 +2246,7 @@ export function matchingSportsForPickContext(text: string, candidateSports: stri
     const patterns = SPORT_CONTEXT_SIGNALS[sport] ?? [];
     if (patterns.some((re) => re.test(text))) return true;
     if (sport === "MLB" && candidateSports.includes("NFL") && hasMlbTotalRangeSignal(text)) return true;
+    if (sport === "NBA" && hasNbaPointsSignal(text, candidateSports)) return true;
     return false;
   });
   // KBO uses the exact same betting vocabulary as MLB (ML, run line, NRFI,

@@ -39,7 +39,8 @@ const STRONG_WORDS = [
 
 // Words that are ALSO ordinary game/team-total vocabulary - only a prop when
 // the subject before the number is a person, not a team.
-// Basketball stats (points/rebounds/assists/threes/PRA/steals/blocks) are here
+// Basketball stats (points/rebounds/assists/threes/PRA/steals/blocks, and
+// their shorthand) are here
 // too: "Lakers over 45.5 rebounds" is a team stat, so they need a person
 // subject exactly like "runs" does.
 const AMBIGUOUS_WORDS = [
@@ -64,9 +65,18 @@ const AMBIGUOUS_WORDS = [
   String.raw`shots`,
   String.raw`threes`,
   String.raw`3-?pointers?`,
+  // Capper shorthand for the same basketball stats: "o2.5 3pm", "2+ 3s",
+  // "o1.5 stl", "o0.5 blk", and the two-stat combos "o30.5 p+r" / "p+a" / "r+a".
+  String.raw`3pm`,
+  String.raw`3s`,
   String.raw`pra`,
+  String.raw`p\s*\+\s*r`,
+  String.raw`p\s*\+\s*a`,
+  String.raw`r\s*\+\s*a`,
   String.raw`steals?`,
+  String.raw`stl`,
   String.raw`blocks?`,
+  String.raw`blk`,
   String.raw`turnovers?`,
   String.raw`fouls?`,
   String.raw`corners?`,
@@ -78,6 +88,11 @@ const AMBIGUOUS_WORDS = [
 // stat word with a team subject ("Lakers over 45.5 rebounds") is a team STAT
 // total, which this app has no market or grader for.
 const SCORING_WORDS = /^(?:runs?|points?|pts)$/i;
+
+// Shorthand that is also something else entirely next to a team's number: a
+// start time ("Yankees o8.5 3pm") or St. Louis ("Cubs u7.5 STL"). A stat only
+// when the subject is a person.
+const PERSON_ONLY_WORDS = /^(?:3pm|stl)$/i;
 
 // NFL stats that only exist as N+ props this app can't grade. Deliberately
 // excludes the supported yardage/receptions markets and TDs - those are
@@ -127,6 +142,12 @@ const PHRASES: RegExp[] = [
   /\bto\s+steal\s+a\s+base\b/i,
   /\b(?:anytime|any\s*time|first|1st|last)\s+(?:home\s?run|hr)\b/i,
 ];
+
+// "Jokic double-double", "Sabonis to record a double double": a yes/no
+// basketball prop with no number. Checked with its subject (see
+// detectUnsupportedProp) - the words alone could be a capper's name.
+const DOUBLE_DOUBLE = /\bdouble[\s-]doubles?\b/i;
+const DOUBLE_DOUBLE_LEAD_IN = /\s+(?:to\s+)?(?:record|get|have|post|notch)(?:\s+an?)?$|\s+an?$/i;
 
 // A trailing "over 30.5" / "30+" left on a subject sliced off just before a stat phrase.
 const TRAILING_NUMBER = new RegExp(String.raw`\s*(?:(?:over|under|o|u)\s*)?${NUM}\+?\s*$`, "i");
@@ -244,6 +265,14 @@ export function detectUnsupportedProp(
     return reasonFor(text, m[0]);
   }
 
+  // A person before the words is what makes this a pick: "Double Double Picks"
+  // (no subject) and "Lakers double-double" (a team) are left alone.
+  const dd = DOUBLE_DOUBLE.exec(text);
+  if (dd) {
+    const subject = subjectBefore(text, dd.index).replace(DOUBLE_DOUBLE_LEAD_IN, "");
+    if (subjectKind(subject, isTeamSubject, classifyTeamSide) === "person") return reasonFor(text, dd[0]);
+  }
+
   for (const re of [OVER_UNDER_THEN_WORD, WORD_THEN_OVER_UNDER, N_PLUS_THEN_WORD, BARE_NUM_THEN_STRONG]) {
     const m = re.exec(text);
     if (!m) continue;
@@ -251,6 +280,7 @@ export function detectUnsupportedProp(
     const strong = new RegExp(`^(?:${STRONG_WORDS})$`, "i").test(word);
     const nonScoring = !SCORING_WORDS.test(word);
     const kind = subjectKind(subjectBefore(text, m.index), isTeamSubject, classifyTeamSide);
+    if (PERSON_ONLY_WORDS.test(word) && kind !== "person") continue;
 
     if (nonScoring) {
       // A stat total for a whole team / a whole game ("Lakers over 45.5

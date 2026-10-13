@@ -139,3 +139,19 @@ export function teamNameEndsWith(teamName: string, nickname: string, sportKey?: 
   const row = sportKey ? ROW_LOOKUP[sportKey]?.get(normalizeTeamName(teamName)) : undefined;
   return [teamName, ...(row ?? [])].some((spelling) => foldTeamText(spelling).endsWith(nick));
 }
+
+// Which side of a resolved game a single-team pick's nickname names - HOME,
+// AWAY, or null when it names neither or both. Same alias-aware suffix test
+// that found the game (teamNameEndsWith), so a game matched through an alias
+// row keeps its side: "los angeles clippers" (the city-key candidate's
+// nickname) against ESPN's "LA Clippers" is the Clippers' side, where a bare
+// endsWith said neither.
+export function sideForNickname(
+  game: { homeTeam: string; awayTeam: string },
+  nickname: string,
+  sportKey?: string
+): "HOME" | "AWAY" | null {
+  const home = teamNameEndsWith(game.homeTeam, nickname, sportKey);
+  const away = teamNameEndsWith(game.awayTeam, nickname, sportKey);
+  return home && !away ? "HOME" : away && !home ? "AWAY" : null;
+}
