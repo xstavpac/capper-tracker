@@ -17,6 +17,7 @@
 //     parsed off the response - including an error response - and returned
 //     for the refresh-odds cron to surface as an early-warning signal
 import { fetchMergedOddsListing } from "./odds";
+import { oddsApiRequestKeys } from "@/lib/sport-seasons";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -99,6 +100,57 @@ async function main() {
     out = await fetchMergedOddsListing("icehockey_nhl", ["icehockey_nhl", "icehockey_nhl_preseason"], "k", CTX);
     check("NHL two keys disjoint: both slates merged", out.games.map((g) => g.id).sort(), ["nhl-pre", "nhl-reg"]);
     check("NHL two keys disjoint: not primaryFailed", out.primaryFailed, false);
+
+    // 3c. NBA across the 10-19 / 10-20 boundary. The request keys are the ones
+    // oddsApiRequestKeys really returns for 2026-10-13 (not a hand-written
+    // list), and the two slates are shaped like the live ones read that day:
+    // the preseason key carries games through 10-19, the regular key already
+    // lists opening night (10-20) onward. One event id is on BOTH listings (a
+    // game the provider moved between keys) - it must come back once, as the
+    // regular key's copy.
+    const nbaKeys = oddsApiRequestKeys("basketball_nba", new Date("2026-10-13T16:00:00Z"));
+    check("NBA 2026-10-13: request keys are [regular, preseason]", nbaKeys, ["basketball_nba", "basketball_nba_preseason"]);
+    const at = (g: OddsApiGame, commence_time: string): OddsApiGame => ({ ...g, commence_time });
+    const requested: string[] = [];
+    const nbaStub = stubFetchByKey({
+      // Listed first: the "/sports/basketball_nba/odds" route must not also
+      // claim the preseason URL (it doesn't - the key is followed by "/odds").
+      basketball_nba_preseason: {
+        ok: true,
+        body: [
+          at(game("pre-1013", "Orlando Magic", "Cleveland Cavaliers", "basketball_nba_preseason"), "2026-10-13T23:00:00Z"),
+          at(game("pre-1019", "Los Angeles Lakers", "Golden State Warriors", "basketball_nba_preseason"), "2026-10-20T02:00:00Z"),
+          at(game("moved", "WRONG", "WRONG", "basketball_nba_preseason"), "2026-10-20T19:00:00Z"),
+        ],
+      },
+      basketball_nba: {
+        ok: true,
+        body: [
+          at(game("moved", "Detroit Pistons", "Boston Celtics", "basketball_nba"), "2026-10-20T19:00:00Z"),
+          at(game("reg-1020", "New York Knicks", "Philadelphia 76ers", "basketball_nba"), "2026-10-20T23:00:00Z"),
+          at(game("reg-1021", "Orlando Magic", "Atlanta Hawks", "basketball_nba"), "2026-10-21T23:10:00Z"),
+        ],
+      },
+    });
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requested.push(String(input).match(/\/sports\/([^/]+)\/odds/)?.[1] ?? "?");
+      return nbaStub(input);
+    }) as typeof fetch;
+    out = await fetchMergedOddsListing("basketball_nba", nbaKeys, "k", { fetchDate: "2026-10-13" });
+    check("NBA boundary: both keys were requested, regular key first", requested, ["basketball_nba", "basketball_nba_preseason"]);
+    check("NBA boundary: preseason (through 10-19) and regular (10-20 on) slates merged", out.games.map((g) => g.id).sort(), ["moved", "pre-1013", "pre-1019", "reg-1020", "reg-1021"]);
+    check("NBA boundary: no event id appears twice", new Set(out.games.map((g) => g.id)).size, out.games.length);
+    check("NBA boundary: the event on both listings is the regular key's copy", out.games.find((g) => g.id === "moved")?.homeTeam, "Detroit Pistons");
+    check("NBA boundary: each game keeps the key its listing came from", out.games.map((g) => g.id + ":" + g.sportKey).sort(), [
+      "moved:basketball_nba",
+      "pre-1013:basketball_nba_preseason",
+      "pre-1019:basketball_nba_preseason",
+      "reg-1020:basketball_nba",
+      "reg-1021:basketball_nba",
+    ]);
+    check("NBA boundary: not primaryFailed", out.primaryFailed, false);
+    // Opening night itself: one key, the regular one.
+    check("NBA 2026-10-20: preseason key no longer requested", oddsApiRequestKeys("basketball_nba", new Date("2026-10-20T16:00:00Z")), ["basketball_nba"]);
 
     // 4. Primary key fails -> primaryFailed true (caller aborts, no cache).
     globalThis.fetch = stubFetchByKey({
