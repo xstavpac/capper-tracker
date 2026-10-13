@@ -22,7 +22,7 @@ import { PickLedger, type LedgerRow, type LedgerSectionSummary } from "@/compone
 import { PicksSummaryStrip } from "@/components/picks/picks-summary-strip";
 import { DateNavigator } from "@/components/picks/date-navigator";
 import { AtAGlance, GlanceCapperCard, MostBackedCard, type MostBackedItem } from "@/components/picks/at-a-glance";
-import { getDayWinnersAndLosers, getLiveGameHrefs, getMostBacked } from "@/server/data/picks-glance";
+import { getDayConsensus, getDayWinnersAndLosers, getLiveGameHrefs, getMostBacked } from "@/server/data/picks-glance";
 import { cumulativeUnitsSeries, sportChipLayout, type HeaderPick } from "@/lib/picks-header";
 import {
   betTypeFilterCategory,
@@ -35,7 +35,7 @@ import {
   marketTag,
   splitIntoSections,
   pickPhase,
-  consensusHints,
+  dayConsensusHints,
   sideLabel,
   capperInitials,
   formatOdds,
@@ -157,7 +157,7 @@ export default async function PicksPage({
   // Most Backed is about games still to come: today or later only. A past day has no such card.
   const showBacked = endDateKey >= todayKey;
 
-  const [allPicks, cappers, sports, parlays, sqlSummary, glance, backed] = await Promise.all([
+  const [allPicks, cappers, sports, parlays, sqlSummary, glance, backed, dayConsensus] = await Promise.all([
     // The sport chip is applied in JS below (not in this query) so the sport
     // chips' counts can reflect every sport under the other active filters.
     getFilteredPicksForUser(user.id, { ...filters, sportId: undefined }),
@@ -174,6 +174,8 @@ export default async function PicksPage({
     // The "at a glance" row follows the day (or range) alone, never the capper / sport / result chips.
     getDayWinnersAndLosers(user.id, startDateKey, endDateKey),
     showBacked ? getMostBacked(user.id, startDateKey, endDateKey, now) : Promise.resolve(null),
+    // The pills count the whole day, never just the rows the filters leave on screen.
+    getDayConsensus(user.id, startDateKey, endDateKey),
   ]);
 
   // Bet type is derived (betDetail text for NRFI/YRFI), not a stored column,
@@ -284,6 +286,7 @@ export default async function PicksPage({
     odds: p.odds,
     status: p.status,
     gameTime: p.gameTime,
+    category: p.category,
     phase: pickPhase({
       status: p.status,
       gameTime: p.gameTime,
@@ -293,7 +296,7 @@ export default async function PicksPage({
     }),
     source: p,
   }));
-  const hints = consensusHints(ledgerPicks);
+  const hints = dayConsensusHints(ledgerPicks, dayConsensus);
   // Each consensus pill and each Most Backed row opens its game's Live page, where the slate has it.
   const gameKey = (g: { sportName: string; homeTeam: string; awayTeam: string; gameTime: Date }) => [g.sportName, g.homeTeam, g.awayTeam, g.gameTime.getTime()].join("|");
   const linkable = new Map(

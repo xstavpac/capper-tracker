@@ -8,6 +8,7 @@ import { uwEffSql } from "@/server/data/cappers-page-aggregates";
 import { round2HalfUpSql } from "@/server/data/page-aggregate-fragments";
 import { LIVE_SPORTS, getTickerOddsForSport } from "@/server/data/odds";
 import { liveGameHref, type PickGame } from "@/lib/pick-game-link";
+import { sideGroupKey } from "@/lib/pick-display";
 
 // gameTime is a timestamp WITHOUT time zone holding UTC. A bare Date parameter is sent as timestamptz
 // and converted in the session's zone, so each bound is written as UTC text instead (as
@@ -85,16 +86,49 @@ export type MostBackedRow = {
   cappers: number;
 };
 
-// Most Backed: the day's PENDING picks whose game has not started, grouped by game + market + side,
-// with the DISTINCT cappers on each, cut to GLANCE_COUNT in the database. `upcoming` is every such
-// pick, whatever its market.
+// A group needs this many distinct cappers to be a consensus: to get a pill, and to be in Most Backed.
+export const CONSENSUS_MIN_CAPPERS = 2;
+
+// The side a pick is on, from fields stored at import and never from its text: pickedSide for a
+// moneyline or spread, the stamped category for a game total (…OVER / …UNDER) and for NRFI / YRFI.
+// NULL for a market with no stored side: team totals and player props. storedSide
+// (lib/pick-display.ts) is the same rule for a loaded pick.
+const SIDE_SQL = Prisma.sql`CASE
+  WHEN p."betType" IN ('MONEYLINE', 'SPREAD') THEN p."pickedSide"::text
+  WHEN p."betType" = 'TOTAL' AND p.category LIKE '%OVER' THEN 'OVER'
+  WHEN p."betType" = 'TOTAL' AND p.category LIKE '%UNDER' THEN 'UNDER'
+  WHEN p."betType" = 'NRFI' AND p.category IN ('NRFI', 'YRFI') THEN p.category
+END`;
+
+// The consensus on every side of the day: sideGroupKey -> distinct cappers, for the groups with at
+// least CONSENSUS_MIN_CAPPERS. A group is a game + market + side (home team, away team, start time,
+// bet type, period, side) over ALL of the day's picks, whatever their status and whatever the page
+// is filtered to - so a pill reads the same number under any filter. One small row per group; no
+// pick leaves the database.
+export async function getDayConsensus(userId: string, startDateKey: string, endDateKey: string): Promise<Map<string, number>> {
+  const { start, end } = easternDateRange(startDateKey, endDateKey);
+  const rows = await prisma.$queryRaw<{ homeTeam: string; awayTeam: string; gameTime: Date; bt: string; period: string; side: string; n: number }[]>(Prisma.sql`
+    SELECT b."homeTeam", b."awayTeam", b."gameTime", b.bt, b.period, b.side, count(DISTINCT b."capperId")::int AS n
+    FROM (
+      SELECT p."capperId", p."homeTeam", p."awayTeam", p."gameTime", p."betType"::text AS bt, p.period::text AS period, ${SIDE_SQL} AS side
+      FROM picks p
+      WHERE p."userId" = ${userId} AND p."gameTime" >= ${ts(start)} AND p."gameTime" < ${ts(end)}
+    ) b
+    WHERE b.side IS NOT NULL
+    GROUP BY b."homeTeam", b."awayTeam", b."gameTime", b.bt, b.period, b.side
+    HAVING count(DISTINCT b."capperId") >= ${CONSENSUS_MIN_CAPPERS}
+  `);
+  return new Map(rows.map((r) => [sideGroupKey({ homeTeam: r.homeTeam, awayTeam: r.awayTeam, gameTime: new Date(r.gameTime), betType: r.bt, period: r.period }, r.side), Number(r.n)]));
+}
+
+// Most Backed: the consensus sides of the day's games that have NOT started and still have a pending
+// pick, cut to GLANCE_COUNT in the database. `upcoming` is every pending pick of the day whose game
+// has not started, whatever its market.
 //
-// The group is the "N cappers on this side" pill's own key (consensusHints, lib/pick-display.ts):
-// home team, away team, start time, bet type, period, side - so a row's count is the count its picks'
-// pills show. The side comes from fields stored at import, never from the pick's text: pickedSide for
-// a moneyline or spread, the stamped category for a game total (…OVER / …UNDER) and for NRFI / YRFI.
-// A market with no stored side is not ranked: team totals and player props.
-// Different lines on one side (-3 and -3.5) are one row; it carries the most common line.
+// A row's count is getDayConsensus's count for the same group (every pick of the day on that side),
+// so it is always the number on that side's "N cappers on this side" pills. Groups under
+// CONSENSUS_MIN_CAPPERS are not listed. Different lines on one side (-3 and -3.5) are one row; it
+// carries the most common line.
 // Ranked by cappers desc, then earliest start, then the side's label (team or Over / Under, then the
 // line), then the rest of the key so equal rows never swap.
 export async function getMostBacked(userId: string, startDateKey: string, endDateKey: string, now: Date = new Date()): Promise<{ rows: MostBackedRow[]; upcoming: number }> {
@@ -102,15 +136,10 @@ export async function getMostBacked(userId: string, startDateKey: string, endDat
   const rows = await prisma.$queryRaw<(Omit<MostBackedRow, "cappers" | "sportName"> & { upcoming: number; rk: number | null; sport: string; n: number })[]>(Prisma.sql`
     WITH base AS (
       SELECT p."capperId", p."homeTeam", p."awayTeam", p."gameTime", p."betType"::text AS bt, p.period::text AS period, p.line, s.name AS sport,
-        CASE
-          WHEN p."betType" IN ('MONEYLINE', 'SPREAD') THEN p."pickedSide"::text
-          WHEN p."betType" = 'TOTAL' AND p.category LIKE '%OVER' THEN 'OVER'
-          WHEN p."betType" = 'TOTAL' AND p.category LIKE '%UNDER' THEN 'UNDER'
-          WHEN p."betType" = 'NRFI' AND p.category IN ('NRFI', 'YRFI') THEN p.category
-        END AS side
+        (p.status = 'PENDING') AS pending, ${SIDE_SQL} AS side
       FROM picks p
       JOIN sports s ON s.id = p."sportId"
-      WHERE p."userId" = ${userId} AND p.status = 'PENDING'
+      WHERE p."userId" = ${userId}
         AND p."gameTime" >= ${ts(start)} AND p."gameTime" < ${ts(end)} AND p."gameTime" > ${ts(now)}
     ),
     g AS (
@@ -120,6 +149,7 @@ export async function getMostBacked(userId: string, startDateKey: string, endDat
       FROM base b
       WHERE b.side IS NOT NULL
       GROUP BY b."homeTeam", b."awayTeam", b."gameTime", b.bt, b.period, b.side
+      HAVING count(DISTINCT b."capperId") >= ${CONSENSUS_MIN_CAPPERS} AND bool_or(b.pending)
     ),
     top AS (
       SELECT g.*, (row_number() OVER (
@@ -130,7 +160,7 @@ export async function getMostBacked(userId: string, startDateKey: string, endDat
       FROM g
     )
     SELECT t.upcoming, top.rk, top."homeTeam", top."awayTeam", top."gameTime", top.bt AS "betType", top.period, top.side, top.line, top.sport, top.n
-    FROM (SELECT count(*)::int AS upcoming FROM base) t
+    FROM (SELECT (count(*) FILTER (WHERE pending))::int AS upcoming FROM base) t
     LEFT JOIN top ON top.rk <= ${GLANCE_COUNT}
   `);
   return {

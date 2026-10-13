@@ -4,9 +4,12 @@
 //   cut to five in the database; ties broken by wins (losses for Losers) then name, the same on
 //   every load; pending picks, test cappers, other days and other users in neither list.
 //
-//   Most Backed: the day's pending picks whose game has not started, grouped by game + market +
-//   side from stored fields, distinct cappers counted, the side's most common line, cut to five;
-//   and every row's count is the count the ledger's "N cappers on this side" pill shows.
+//   Most Backed: the consensus sides (2+ distinct cappers) of the day's games that have not started,
+//   grouped by game + market + side from stored fields, the side's most common line, cut to five.
+//
+//   Consensus pills: counted over the whole day (getDayConsensus), so a pill reads the same number
+//   under any filter, and every Most Backed row's count is the count on its picks' pills - with the
+//   ledger unfiltered and with it filtered down to one capper.
 //
 // DB-backed and WRITING: creates its own users/cappers/picks (ids prefixed `__PicksGlance__`) and
 // deletes them by exact id at the end. Refuses to run unless DATABASE_URL points at localhost. Run
@@ -15,8 +18,8 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { easternDayStart } from "@/lib/dates";
-import { getDayWinnersAndLosers, getMostBacked, type GlanceCapper, type MostBackedRow } from "@/server/data/picks-glance";
-import { consensusHints, sideLabel, type LedgerPickInput } from "@/lib/pick-display";
+import { getDayConsensus, getDayWinnersAndLosers, getMostBacked, type GlanceCapper, type MostBackedRow } from "@/server/data/picks-glance";
+import { dayConsensusHints, sideLabel, storedSide, type LedgerPickInput } from "@/lib/pick-display";
 
 function hostOf(url: string | undefined): string {
   try {
@@ -51,6 +54,7 @@ type Row = Prisma.PickCreateManyInput;
 const userId = PREFIX + "user";
 const otherUser = PREFIX + "other";
 const backedUser = PREFIX + "backed";
+const soloUser = PREFIX + "solo";
 const createdSports: string[] = [];
 let seq = 0;
 
@@ -86,7 +90,7 @@ function pick(owner: string, capperId: string, sport: string, status: Status, at
 const line = (rows: GlanceCapper[]) => rows.map((r) => `${r.name} ${r.netUnits} ${r.wins}-${r.losses}-${r.pushes} [${r.sports.join(",")}]`);
 
 async function cleanup() {
-  for (const u of [userId, otherUser, backedUser]) {
+  for (const u of [userId, otherUser, backedUser, soloUser]) {
     await prisma.pick.deleteMany({ where: { userId: u } });
     await prisma.capper.deleteMany({ where: { userId: u } });
     await prisma.user.deleteMany({ where: { id: u } });
@@ -202,8 +206,8 @@ async function mostBacked(mlb: string) {
   add(c4, A, over(45));
   add(c3, A, { betType: "TOTAL", betDetail: "Under 45", line: 45, category: "UNDER" }); // the other side: 1
   add(c1, A, mlAway);
-  add(c2, A, mlAway); // 2, at the later start: sixth, cut
-  add(c3, A, mlAway, "WIN"); // graded: not pending
+  add(c2, A, mlAway);
+  add(c3, A, mlAway, "WIN"); // graded by hand before the game: still a capper on that side, as on its pill
   // Game B. NRFI: five cappers, the test capper among them (the pill counts every capper too).
   for (const c of [c1, c2, c3, c4, tester]) add(c, B, nrfi);
   add(c1, B, mlHome);
@@ -221,35 +225,62 @@ async function mostBacked(mlb: string) {
 
   const got = await getMostBacked(backedUser, DAY_KEY, DAY_KEY, NOW);
   same(
-    "most backed: cappers desc, then earliest start, then label; one row per side with its most common line; five at most",
+    "most backed: cappers desc, then earliest start, then label and line; one row per side with its most common line; five at most",
     backedLine(got.rows),
     [
       "No run in the 1st inning [NRFI/FULL_GAME] Dodgers @ Giants x5",
+      "Chiefs [MONEYLINE/FULL_GAME] Chiefs @ Bills x3",
       "Chiefs -3.5 [SPREAD/FULL_GAME] Chiefs @ Bills x3",
       "Over 45 [TOTAL/FULL_GAME] Chiefs @ Bills x3",
-      "Giants [MONEYLINE/FULL_GAME] Dodgers @ Giants x2",
-      "Over 4.5 [TOTAL/FIRST_HALF] Dodgers @ Giants x2",
+      "Giants [MONEYLINE/FULL_GAME] Dodgers @ Giants x2", // "1H over" x2 at the same start is sixth: cut
     ]
   );
   const upcoming = rows.filter((r) => r.status === "PENDING" && (r.gameTime as Date).getTime() > NOW.getTime() && (r.gameTime as Date).getTime() < D1).length;
   same("most backed: the footer counts every pending pick still to start that day, ranked or not", got.upcoming, upcoming);
-  same("most backed: start times come back as the instants stored", got.rows.map((r) => r.gameTime.getTime()), [B.at, A.at, A.at, B.at, B.at]);
+  same("most backed: start times come back as the instants stored", got.rows.map((r) => r.gameTime.getTime()), [B.at, A.at, A.at, A.at, B.at]);
   const again = await Promise.all(Array.from({ length: 5 }, () => getMostBacked(backedUser, DAY_KEY, DAY_KEY, NOW)));
   check("most backed: tied rows keep their order on every load", again.every((r) => JSON.stringify(r) === JSON.stringify(got)));
 
-  // The pill: consensusHints over the same upcoming picks, as the ledger loads them.
-  const loaded = await prisma.pick.findMany({ where: { userId: backedUser, status: "PENDING", gameTime: { gt: NOW, lt: new Date(D1) } } });
-  const inputs: LedgerPickInput[] = loaded.map((p) => ({ id: p.id, capperId: p.capperId, sportName: "MLB", homeTeam: p.homeTeam, awayTeam: p.awayTeam, betType: p.betType, betDetail: p.betDetail, line: p.line, period: p.period, pickedSide: p.pickedSide, odds: p.odds, status: p.status, gameTime: p.gameTime }));
-  const hints = consensusHints(inputs);
-  const pillCount = (r: MostBackedRow) => {
-    const mine = loaded.filter(
-      (p) =>
-        p.homeTeam === r.homeTeam && p.awayTeam === r.awayTeam && p.gameTime.getTime() === r.gameTime.getTime() && p.betType === r.betType && p.period === r.period &&
-        (r.side === "HOME" || r.side === "AWAY" ? p.pickedSide === r.side : r.side === "OVER" || r.side === "UNDER" ? (p.betDetail ?? "").toLowerCase().includes(r.side.toLowerCase()) : true)
-    );
-    return Array.from(new Set(mine.map((p) => hints.get(p.id) ?? ""))).map((h) => parseInt(h, 10));
+  // The pills: the day's picks as the ledger loads them, hinted from the day's counts.
+  const day = await prisma.pick.findMany({ where: { userId: backedUser, gameTime: { gte: new Date(D0), lt: new Date(D1) } } });
+  const asInput = (p: (typeof day)[number]): LedgerPickInput => ({ id: p.id, capperId: p.capperId, sportName: "MLB", homeTeam: p.homeTeam, awayTeam: p.awayTeam, betType: p.betType, betDetail: p.betDetail, line: p.line, period: p.period, pickedSide: p.pickedSide, odds: p.odds, status: p.status, gameTime: p.gameTime, category: p.category });
+  const counts = await getDayConsensus(backedUser, DAY_KEY, DAY_KEY);
+  // The distinct pill numbers on a row's picks, among the picks a filter leaves on screen.
+  const pillsFor = (r: MostBackedRow, onScreen: typeof day) => {
+    const hints = dayConsensusHints(onScreen.map(asInput), counts);
+    const mine = onScreen.filter((p) => p.homeTeam === r.homeTeam && p.awayTeam === r.awayTeam && p.gameTime.getTime() === r.gameTime.getTime() && p.betType === r.betType && p.period === r.period && storedSide(p) === r.side);
+    return Array.from(new Set(mine.map((p) => parseInt(hints.get(p.id) ?? "0", 10))));
   };
-  same("most backed: each row's count is the one its picks' consensus pills show", got.rows.map(pillCount), got.rows.map((r) => [r.cappers]));
+  same("pills, no filter: every Most Backed row's picks all read that row's count", got.rows.map((r) => pillsFor(r, day)), got.rows.map((r) => [r.cappers]));
+  const onlyOne = day.filter((p) => p.capperId === c1);
+  check("the capper filter leaves one capper's picks on every row", got.rows.every((r) => pillsFor(r, onlyOne).length === 1));
+  same("pills, filtered to one capper: still the day's count, and still each Most Backed row's count", got.rows.map((r) => pillsFor(r, onlyOne)), got.rows.map((r) => [r.cappers]));
+  const pending = day.filter((p) => p.status === "PENDING");
+  same("pills, filtered to one result: unchanged", got.rows.map((r) => pillsFor(r, pending)), got.rows.map((r) => [r.cappers]));
+  const allHints = dayConsensusHints(day.map(asInput), counts);
+  const oneHints = dayConsensusHints(onlyOne.map(asInput), counts);
+  const sided = onlyOne.filter((p) => storedSide(p) !== null);
+  check("a pill on a stored side reads the same text with and without the capper filter", sided.length > 0 && sided.every((p) => oneHints.get(p.id) === allHints.get(p.id)));
+  const text = (betType: string, period = "FULL_GAME") => allHints.get(day.find((p) => p.capperId === c1 && p.betType === betType && p.period === period && p.homeTeam === (betType === "NRFI" || period !== "FULL_GAME" ? B : A).homeTeam)!.id);
+  same("pill wording: side / over / NRFI", [text("SPREAD"), text("TOTAL"), text("NRFI"), text("TOTAL", "FIRST_HALF")], ["3 cappers on this side", "3 cappers on this over", "5 cappers on this NRFI", "2 cappers on this over"]);
+  const lone = day.find((p) => p.capperId === c4 && p.betType === "SPREAD")!;
+  same("a side with one capper has no pill and no day count", [allHints.get(lone.id) ?? null, counts.get([lone.homeTeam, lone.awayTeam, lone.gameTime.getTime(), "SPREAD", "FULL_GAME", "HOME"].join("|")) ?? null], [null, null]);
+  // No stored side: the team total keeps the text-derived hint, counted among the picks on screen.
+  const teamTotals = day.filter((p) => p.betType === "TEAM_TOTAL");
+  same("team totals (no stored side): the hint is still the on-screen count", [teamTotals.map((p) => allHints.get(p.id)), teamTotals.filter((p) => p.capperId === c1).map((p) => oneHints.get(p.id) ?? null)], [["2 cappers on this over", "2 cappers on this over"], [null]]);
+  check("the day's counts are one entry per consensus side, never per pick", counts.size > 0 && counts.size < day.length && Array.from(counts.values()).every((n) => n >= 2));
+
+  // Nothing with two cappers: no rows, but the footer still counts what is yet to start.
+  await prisma.user.create({ data: { id: soloUser, supabaseId: `${PREFIX}sb-s`, email: `${PREFIX}s@example.invalid` } });
+  const solo: Row[] = [];
+  for (const [i, g] of [A, B].entries()) {
+    const id = `${PREFIX}solo-${i}`;
+    await prisma.capper.create({ data: { id, userId: soloUser, name: "Solo " + i, source: "OTHER" } });
+    solo.push({ ...pick(soloUser, id, mlb, "PENDING", g.at), homeTeam: g.homeTeam, awayTeam: g.awayTeam, betType: "MONEYLINE", betDetail: "ML", pickedSide: "HOME", category: "FAV_ML" });
+  }
+  await prisma.pick.createMany({ data: solo });
+  same("most backed: one capper a side is not a consensus - no rows, two picks yet to start", await getMostBacked(soloUser, DAY_KEY, DAY_KEY, NOW), { upcoming: 2, rows: [] });
+  same("no consensus: no day counts either", (await getDayConsensus(soloUser, DAY_KEY, DAY_KEY)).size, 0);
 
   same("most backed: after the last start nothing is upcoming", await getMostBacked(backedUser, DAY_KEY, DAY_KEY, new Date(A.at)), { upcoming: 0, rows: [] });
   const tomorrow = await getMostBacked(backedUser, NEXT_KEY, NEXT_KEY, NOW);

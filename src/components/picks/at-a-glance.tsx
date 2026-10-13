@@ -103,7 +103,8 @@ const BACKED_THEME = { ...TINTS.blue, title: "Most Backed", subtitle: "Upcoming 
 const BLUE = "text-brand-700 dark:text-brand-300";
 
 // Most Backed: the rows arrive ranked and cut to five. A row is a link to its game's Live page when
-// there is one. `upcoming`: every pick of the day still to start, in the footer.
+// there is one. `upcoming`: every pending pick of the day whose game has not started, in the footer
+// ("yet to start", so it is not read as the Still to play stat card, which counts live games too).
 export function MostBackedCard({ rows, upcoming }: { rows: MostBackedItem[]; upcoming: number }) {
   return (
     <PanelShell
@@ -111,12 +112,12 @@ export function MostBackedCard({ rows, upcoming }: { rows: MostBackedItem[]; upc
       footer={
         <>
           <span className={"text-[15px] font-semibold leading-none tabular-nums " + BLUE}>{upcoming.toLocaleString("en-US")}</span>
-          <p className={FOOTER_TEXT}>{"pick" + (upcoming === 1 ? "" : "s") + " still to play"}</p>
+          <p className={FOOTER_TEXT}>{"pick" + (upcoming === 1 ? "" : "s") + " yet to start"}</p>
         </>
       }
     >
       {rows.length === 0 ? (
-        <Message>No upcoming picks</Message>
+        <Message>No consensus picks yet</Message>
       ) : (
         <ol className="flex flex-col gap-0.5">
           {rows.map((e, i) => {
