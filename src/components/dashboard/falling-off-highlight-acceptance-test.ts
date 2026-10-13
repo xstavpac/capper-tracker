@@ -104,7 +104,8 @@ async function main() {
   expect("legend swatches match the lines", swatches(), [RED, OWN[1], OWN[2], OWN[3], OWN[4]].map(rgb));
   expect("a row keeps the relative drop and the two win rates", buttons()[0].children[2].textContent, "−58%71% → 30%");
   expect("the hint is under the legend", container.querySelector("ol + p")?.textContent, "Tap a capper to highlight their line");
-  expect("no floating badge: the drop is only in the legend", Array.from(container.querySelectorAll("span")).filter((s) => s.textContent === "−58%" && !s.closest("button")).length, 0);
+  expect("no badge or end label on the chart: the drops are only in the legend", Array.from(container.querySelectorAll("span")).filter((s) => /^−\d+%$/.test(s.textContent ?? "") && !s.closest("button")).length, 0);
+  expect("...where each shows once", Array.from(container.querySelectorAll("button span")).map((s) => s.textContent).filter((t) => /^−\d+%$/.test(t ?? "")), ["−58%", "−50%", "−45%", "−40%", "−33%"]);
   expect("footer names #1", [footerName(), footerText(), trendHref()], ["Alpha Picks", "Alpha Picks is down 58% from their normal 71%", "/cappers/c1"]);
 
   console.log("\n########## 2. Clicking a legend row moves the highlight ##########");

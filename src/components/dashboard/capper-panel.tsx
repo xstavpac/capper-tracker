@@ -525,9 +525,6 @@ function ptsAxis(values: number[]): { lo: number; hi: number; ticks: number[] } 
   if (ticks[ticks.length - 1] - lo >= step / 2) ticks.push(lo);
   return { lo, hi, ticks };
 }
-// The plot is at least this tall (px): what "do two endpoint labels collide" is judged against.
-const PLOT_MIN_H = 116;
-const LABEL_H = 13;
 
 // "Win% against their norm" for the top fallers: each line starts at 0 and, pick by pick over the last 10
 // decided picks, adds what the result beat the capper's own baseline win rate by, as a percentage of
@@ -545,11 +542,6 @@ function FallingChart({ rows, lead, onPick }: { rows: FallingEntry[]; lead: numb
   const y = (v: number) => ((hi - v) / (hi - lo)) * 100;
   const points = (l: number[]) => l.map((v, i) => x(i).toFixed(1) + "," + y(v).toFixed(2)).join(" ");
   const ends = lines.map((l) => l[l.length - 1] ?? 0);
-  // Every line gets its "−X%" in the right margin where the panel is wide enough and no two labels
-  // would touch; otherwise the legend alone carries the numbers.
-  const minGap = (LABEL_H / PLOT_MIN_H) * (hi - lo);
-  const sortedEnds = [...ends].sort((p, q) => p - q);
-  const allLabels = rows.length > 1 && sortedEnds.every((v, i) => i === 0 || v - sortedEnds[i - 1] >= minGap);
   // Drawn last-to-first, then the highlighted line, so it sits on top.
   const ranked = rows.map((r, i) => ({ r, i })).reverse();
   const drawn = [...ranked.filter(({ i }) => i !== lead), ...ranked.filter(({ i }) => i === lead)];
@@ -564,7 +556,7 @@ function FallingChart({ rows, lead, onPick }: { rows: FallingEntry[]; lead: numb
     <div className="flex flex-1 flex-col gap-2.5 min-[400px]:flex-row">
       {/* At least ~140px tall, and as tall as the panel's row makes it: no gap above or below. */}
       <div role="img" aria-label={label} className="relative min-h-[144px] w-full min-w-0 flex-1">
-        <div className={"absolute bottom-5 left-[42px] top-2 " + (allLabels ? "right-2 min-[1280px]:max-[1499px]:right-[54px] min-[1700px]:right-[54px]" : "right-2")}>
+        <div className="absolute bottom-5 left-[42px] right-2 top-2">
           {ticks.map((t) => (
             <span key={t} aria-hidden className={"absolute right-full mr-1.5 -translate-y-1/2 text-right " + (t === 0 ? "text-[11px] font-semibold leading-none text-[#3A4152] dark:text-foreground/80" : AXIS_TEXT)} style={{ top: y(t) + "%" }}>
               {/* 0 is the norm line. Its label sits in the axis margin: every line starts at the line's left end, so a label on the plot would be crossed. */}
@@ -602,23 +594,12 @@ function FallingChart({ rows, lead, onPick }: { rows: FallingEntry[]; lead: numb
             ))}
           </svg>
           <span aria-hidden data-end-dot={rows[lead].capperId} className="absolute h-[9px] w-[9px] -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ left: x(lines[lead].length - 1) + "%", top: y(ends[lead]) + "%", backgroundColor: look.highlight }} />
-          {allLabels &&
-            rows.map((r, i) => (
-              <span
-                key={r.capperId}
-                aria-hidden
-                className={"absolute left-full ml-2 hidden -translate-y-1/2 whitespace-nowrap text-[11px] leading-none tabular-nums min-[1280px]:max-[1499px]:block min-[1700px]:block " + (i === lead ? "font-bold" : "font-semibold")}
-                style={{ top: y(ends[i]) + "%", color: color(i) }}
-              >
-                {pctLabel(r.pct)}
-              </span>
-            ))}
         </div>
         {/* Picks back from the newest: the lines start before the first of them, at 0. */}
         <span aria-hidden className={"absolute bottom-0 left-[42px] " + AXIS_TEXT}>
           {n - 1 + " picks ago"}
         </span>
-        <span aria-hidden className={"absolute bottom-0 text-[11px] font-semibold leading-none text-foreground " + (allLabels ? "right-2 min-[1280px]:max-[1499px]:right-[54px] min-[1700px]:right-[54px]" : "right-2")}>
+        <span aria-hidden className="absolute bottom-0 right-2 text-[11px] font-semibold leading-none text-foreground">
           Latest
         </span>
       </div>
