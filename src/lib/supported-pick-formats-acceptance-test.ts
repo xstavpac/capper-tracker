@@ -12,6 +12,8 @@ import { extractLine } from "./bet-line";
 import { parsePlayerProp, parseTouchdownProp, isAnytimeTdPick } from "./bet-line";
 import { parseMlbPlayerProp } from "./mlb-prop";
 import { parseNhlPlayerProp } from "./nhl-prop";
+import { parseNbaPlayerProp, parseNbaProp } from "./nba-prop";
+import { parseSupportedNbaProp } from "./parse-catalog";
 import { detectUnsupportedNflStat } from "./unsupported-prop-vocab";
 import {
   SUPPORTED_PICK_FORMATS,
@@ -76,6 +78,17 @@ function checkExample(row: FormatRow, example: string) {
       return;
     case "nhl-prop":
       check(`${label} NHL market`, parseNhlPlayerProp(example)?.propMarket ?? null, c.market);
+      return;
+    case "nba-prop":
+      check(`${label} NBA market`, parseNbaPlayerProp(example)?.propMarket ?? null, c.market);
+      // The import itself reads it as a player prop naming a person (parked for the roster pass).
+      check(`${label} is a player prop at import`, parseSupportedNbaProp(example)?.subject ?? null, "person");
+      check(`${label} is a PLAYER_PROP, not a total`, parsePickText(example).betType, "PLAYER_PROP");
+      return;
+    case "nba-ungraded":
+      check(`${label} is an NBA prop with no graded market`, { recognized: parseNbaProp(example) !== null, market: parseNbaProp(example)?.propMarket ?? null, flagged: Boolean(parseNbaProp(example)?.unsupported) }, { recognized: true, market: null, flagged: true });
+      check(`${label} is never one of the supported markets`, parseNbaPlayerProp(example), null);
+      check(`${label} is a PLAYER_PROP, not a moneyline or total`, parsePickText(example).betType, "PLAYER_PROP");
       return;
     case "nfl-td-ungraded":
       // Recognized as a TD prop, but flagged so resolveTouchdownProp declines it.
@@ -177,9 +190,12 @@ function main() {
       const expectedStatus =
         row.check.via === "catalog-asks"
           ? "asks"
-          : row.check.via === "nfl-td-ungraded" || row.check.via === "nfl-unsupported-stat"
+          : row.check.via === "nfl-td-ungraded" || row.check.via === "nfl-unsupported-stat" || row.check.via === "nba-ungraded"
             ? "not-yet"
-            : "supported";
+            : row.check.via === "nba-prop"
+              ? // Parsed and imported, but NBA props have no grader yet - "supported" means parses AND grades.
+                "coming-soon"
+              : "supported";
       check(`${group.title} / ${row.market} status matches its check`, row.status, expectedStatus);
       for (const example of row.examples) {
         checkExample(row, example);

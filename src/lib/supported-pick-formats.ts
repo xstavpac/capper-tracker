@@ -15,6 +15,7 @@ import type { ParsedPick } from "./parse-catalog";
 import type { PlayerPropMarket } from "./bet-line";
 import type { MlbPropMarket } from "./mlb-prop";
 import type { NhlPropMarket } from "./nhl-prop";
+import type { NbaPropMarket } from "./nba-prop";
 
 export type FormatStatus = "supported" | "asks" | "coming-soon" | "not-yet";
 
@@ -44,6 +45,9 @@ export type FormatCheck =
   | { via: "nfl-prop"; market: PlayerPropMarket; anytimeTd?: boolean }
   | { via: "mlb-prop"; market: MlbPropMarket }
   | { via: "nhl-prop"; market: NhlPropMarket }
+  | { via: "nba-prop"; market: NbaPropMarket }
+  // Recognized as an NBA prop with no graded market (triple-double, first basket).
+  | { via: "nba-ungraded" }
   // Recognized as a touchdown prop that grading declines (first / multi TD).
   | { via: "nfl-td-ungraded" }
   // Flagged by detectUnsupportedNflStat - never imported as a pick.
@@ -276,8 +280,90 @@ export const SUPPORTED_PICK_FORMATS: FormatGroup[] = [
     ],
   },
   {
+    // Imported and matched to a game (the roster finds the player's team, and tells an NBA
+    // points / assists line from an NHL one). Not graded yet, so not "supported": these sit pending.
+    title: "NBA player props",
+    rows: [
+      {
+        market: "Points",
+        examples: ["Jalen Brunson over 24.5 points", "Jalen Brunson 25+ points", "Jalen Brunson o24.5 pts"],
+        status: "coming-soon",
+        note: "imports now; grading is next",
+        check: { via: "nba-prop", market: "POINTS" },
+      },
+      {
+        market: "Rebounds",
+        examples: ["Nikola Jokic over 12.5 rebounds", "Nikola Jokic o12.5 reb"],
+        status: "coming-soon",
+        check: { via: "nba-prop", market: "REBOUNDS" },
+      },
+      {
+        market: "Assists",
+        examples: ["Nikola Jokic over 9.5 assists", "Nikola Jokic o9.5 ast"],
+        status: "coming-soon",
+        check: { via: "nba-prop", market: "ASSISTS" },
+      },
+      {
+        market: "Threes made",
+        examples: ["Stephen Curry over 4.5 threes", "Stephen Curry o4.5 3pm", "Stephen Curry 5+ 3s"],
+        status: "coming-soon",
+        check: { via: "nba-prop", market: "THREES_MADE" },
+      },
+      {
+        market: "Steals",
+        examples: ["Alex Caruso over 1.5 steals", "Alex Caruso o1.5 stl"],
+        status: "coming-soon",
+        check: { via: "nba-prop", market: "STEALS" },
+      },
+      {
+        market: "Blocks",
+        examples: ["Victor Wembanyama over 3.5 blocks", "Victor Wembanyama o3.5 blk"],
+        status: "coming-soon",
+        check: { via: "nba-prop", market: "BLOCKS" },
+      },
+      {
+        market: "Points + rebounds + assists",
+        examples: ["Jayson Tatum PRA o38.5", "Jayson Tatum over 38.5 pts+reb+ast"],
+        status: "coming-soon",
+        check: { via: "nba-prop", market: "POINTS_REBOUNDS_ASSISTS" },
+      },
+      {
+        market: "Points + rebounds",
+        examples: ["Joel Embiid P+R over 40.5", "Joel Embiid over 40.5 points and rebounds"],
+        status: "coming-soon",
+        check: { via: "nba-prop", market: "POINTS_REBOUNDS" },
+      },
+      {
+        market: "Points + assists",
+        examples: ["Tyrese Haliburton P+A o30.5", "Tyrese Haliburton over 30.5 pts+ast"],
+        status: "coming-soon",
+        check: { via: "nba-prop", market: "POINTS_ASSISTS" },
+      },
+      {
+        market: "Rebounds + assists",
+        examples: ["Domantas Sabonis R+A o19.5", "Domantas Sabonis over 19.5 reb+ast"],
+        status: "coming-soon",
+        check: { via: "nba-prop", market: "REBOUNDS_ASSISTS" },
+      },
+      {
+        market: "Double-double",
+        examples: ["Nikola Jokic double-double", "Nikola Jokic DD"],
+        status: "coming-soon",
+        check: { via: "nba-prop", market: "DOUBLE_DOUBLE" },
+      },
+    ],
+  },
+  {
     title: "Not yet",
     rows: [
+      {
+        // parseNbaProp recognizes these as NBA props with no market, so they are never read as a
+        // moneyline or total and never graded as the nearest supported market.
+        market: "Triple-double / first basket / quarter props",
+        examples: ["Nikola Jokic triple-double", "Nikola Jokic first basket", "Nikola Jokic 1st quarter over 7.5 points"],
+        status: "not-yet",
+        check: { via: "nba-ungraded" },
+      },
       {
         // parseTouchdownProp recognizes these, resolveTouchdownProp declines to grade them.
         market: "First TD / 2+ TDs",

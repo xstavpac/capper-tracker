@@ -56,16 +56,20 @@
 // player this line means.
 import { parsePlayerProp } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
+import { parseNbaProp } from "@/lib/nba-prop";
 import { normalizeName, isLikelyDuplicateName } from "@/lib/fuzzy-match";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 
 export type PlayerCandidate = { playerName: string; team: string; position: string; externalPlayerId: string };
 
+// The leagues whose cached ESPN roster this resolver reads.
+export type RosterSport = "NFL" | "NHL" | "NBA";
+
 // `tier` says where the collision happened. Only "surname" (one typed word
 // shared by 2+ players) is something the user can settle by choosing; an
 // exact/fuzzy full-name collision stays unresolved, as it always has.
 export type PlayerPropResolution =
-  | { status: "resolved"; sport: "NFL" | "NHL"; team: string; playerName: string; via: "exact" | "fuzzy" | "surname" }
+  | { status: "resolved"; sport: RosterSport; team: string; playerName: string; via: "exact" | "fuzzy" | "surname" }
   | { status: "ambiguous"; tier: "exact" | "fuzzy" | "surname"; matches: PlayerCandidate[] }
   | { status: "unresolved" };
 
@@ -142,12 +146,23 @@ export function resolvePlayerPropAgainstRoster(
   // Which league's parser/roster this call is for. The parsed MARKET decides the
   // sport upstream (recover-unresolved-lines.ts passes the NHL roster only for
   // an NHL market), so an NFL and an NHL player sharing a name can never collide.
-  sport: "NFL" | "NHL" = "NFL"
+  sport: RosterSport = "NFL"
 ): PlayerPropResolution {
-  const prop = sport === "NHL" ? parseNhlPlayerProp(line) : parsePlayerProp(line);
+  const prop = sport === "NHL" ? parseNhlPlayerProp(line) : sport === "NBA" ? parseNbaProp(line) : parsePlayerProp(line);
   if (!prop) return { status: "unresolved" };
+  return resolveNameAgainstRoster(prop.playerName, roster, slate, sport);
+}
 
-  const typedName = stripNameSuffix(prop.playerName);
+// The name-matching half of resolvePlayerPropAgainstRoster, for a caller that has already parsed
+// the line (the NBA / NHL rule in nba-roster-fallback.ts matches ONE typed name against two
+// leagues' rosters). Same tiers, same policy, nothing sport-specific.
+export function resolveNameAgainstRoster(
+  rawTypedName: string,
+  roster: RosterPlayer[],
+  slate: SlateContext | undefined,
+  sport: RosterSport
+): PlayerPropResolution {
+  const typedName = stripNameSuffix(rawTypedName);
   const normalizedTyped = normalizeName(typedName);
 
   const exact = distinctPlayers(roster.filter((p) => normalizeName(stripNameSuffix(p.playerName)) === normalizedTyped));

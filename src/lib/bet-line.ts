@@ -1,6 +1,6 @@
 import { parseNhlPlayerProp, normalizeNhlNPlus, type NhlPropMarket } from "@/lib/nhl-prop";
 import { parseMlbPlayerProp, type MlbPropMarket } from "@/lib/mlb-prop";
-import type { NbaPropMarket } from "@/lib/nba-prop";
+import { parseNbaPlayerProp, type NbaPropMarket } from "@/lib/nba-prop";
 
 type BetTypeLike = "SPREAD" | "MONEYLINE" | "TOTAL" | "TEAM_TOTAL" | "PLAYER_PROP" | "NRFI";
 type SideLike = "HOME" | "AWAY";
@@ -698,8 +698,7 @@ export function parsePlayerProp(text: string): { playerName: string; propMarket:
 // parser rejected. Callers that know the sport (grading, roster recovery)
 // should prefer the sport-specific parser; this exists for the sport-blind
 // spots (import classification, categorization, dedup, filters).
-// NBA markets are in the type because a stored Pick.propMarket can be one (schema.prisma's enum has
-// them); no parser below returns one yet.
+// NBA markets are in the type too: parseAnyPlayerProp returns one when told the pick is an NBA pick.
 export type AnyPlayerPropMarket = PlayerPropMarket | NhlPropMarket | MlbPropMarket | NbaPropMarket;
 // NFL then NHL only - the two parsers that are safe on a RAW catalog line. The MLB parser is
 // sport- and team-blind ("Yankees over 2.5 runs" reads as RUNS for "Yankees"), so raw-line
@@ -709,7 +708,15 @@ export function parseNflNhlPlayerProp(text: string): { playerName: string; propM
 }
 // Every structured market, for callers that ALREADY KNOW the text is a PLAYER_PROP pick (display,
 // dedup, filters, import bookkeeping): NFL, then NHL, then MLB.
-export function parseAnyPlayerProp(text: string): { playerName: string; propMarket: AnyPlayerPropMarket } | null {
+//
+// `sportName` is the pick's own sport, when the caller has it. It matters for exactly one league:
+// "points" and "assists" are hockey AND basketball words (one PropMarket value each), and the rest
+// of basketball's vocabulary is read by no other parser - so an NBA pick is read by the NBA parser
+// alone, and never comes back as another league's market. Every other sport, and a caller with no
+// sport to give (a legacy row's text fallback), gets the same NFL -> NHL -> MLB read as before:
+// that chain has no NBA parser in it, so it can never hand an NHL pick a basketball market.
+export function parseAnyPlayerProp(text: string, sportName?: string | null): { playerName: string; propMarket: AnyPlayerPropMarket } | null {
+  if (sportName && sportName.toUpperCase() === "NBA") return parseNbaPlayerProp(text);
   return parseNflNhlPlayerProp(text) ?? parseMlbPlayerProp(text);
 }
 

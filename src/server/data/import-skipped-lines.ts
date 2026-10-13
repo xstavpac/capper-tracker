@@ -55,7 +55,9 @@ export type ParseSkippedLinesPayload = {
   // parseCatalog's droppedAsHeaders: consumed silently.
   silent: { text: string; capperName: string; reason: string }[];
   // The lines left in the manual "couldn't be identified" list.
-  unresolved: { text: string; capperName: string }[];
+  // `reason`: the recovery pass's own explanation for this line, when it has one (e.g. which
+  // roster a player wasn't found on).
+  unresolved: { text: string; capperName: string; reason?: string }[];
   // False when the recovery pass threw, so these never got a second chance.
   recoveryRan: boolean;
 };
@@ -88,7 +90,9 @@ export function parseSkippedLineEntries(payload: ParseSkippedLinesPayload): Skip
         stage: payload.recoveryRan ? ("RECOVERY_UNRESOLVED" as const) : ("PARSE_UNRESOLVED" as const),
         capperName: l.capperName,
         rawText: l.text,
-        reason: payload.recoveryRan
+        reason: l.reason
+          ? l.reason
+          : payload.recoveryRan
           ? "Still unresolved after the live-schedule / roster recovery pass"
           : "parseCatalog left it unresolved; the recovery pass failed",
       };

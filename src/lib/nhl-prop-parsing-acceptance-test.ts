@@ -172,7 +172,9 @@ function main() {
   // ---- detectUnsupportedPropLine: NHL supported, everything else unchanged --
   check("supported NHL market is not flagged", detectUnsupportedPropLine("Sidney Crosby over 3.5 shots on goal"), null);
   check("supported NHL market with an NHL tag is not flagged", detectUnsupportedPropLine("NHL Sidney Crosby anytime goal scorer"), null);
-  check("sport-less points stays GENERIC (basketball vocabulary too)", detectUnsupportedPropLine("Sidney Crosby over 0.5 points")?.reason, UNSUPPORTED_PROP_REASONS.GENERIC);
+  // Points is a basketball word too. Such a line is no longer flagged "unsupported" (NBA props import
+  // now); it is still parked sport-less for the roster pass, exactly as before.
+  check("sport-less points is parked sport-less, not flagged and not a pick", [detectUnsupportedPropLine("Sidney Crosby over 0.5 points"), parseCatalog("Krash\nSidney Crosby over 0.5 points", []).unresolved, parseCatalog("Krash\nSidney Crosby over 0.5 points", []).picks.length], [null, ["Sidney Crosby over 0.5 points"], 0]);
   check("NHL-tagged points is not flagged", detectUnsupportedPropLine("NHL Sidney Crosby over 0.5 points"), null);
   check("unsupported NHL market keeps the NHL reason", detectUnsupportedPropLine("NHL Brady Tkachuk over 3.5 hits")?.reason, UNSUPPORTED_PROP_REASONS.NHL);
   check("team shots total stays a team stat total", detectUnsupportedPropLine("Oilers over 30.5 shots on goal")?.reason, UNSUPPORTED_PROP_REASONS.TEAM_STAT);
@@ -180,7 +182,7 @@ function main() {
   check("MLB saves (tagged MLB) stays MLB-unsupported", detectUnsupportedPropLine("MLB Devin Williams over 0.5 saves")?.reason, UNSUPPORTED_PROP_REASONS.MLB);
   check("MLB strikeouts is a supported market now (not flagged)", detectUnsupportedPropLine("MLB Chris Sale over 5.5 K"), null);
   check("MLB stolen bases stays MLB-unsupported", detectUnsupportedPropLine("Aaron Judge 1+ stolen bases")?.reason, UNSUPPORTED_PROP_REASONS.MLB);
-  check("NBA points stays NBA-unsupported", detectUnsupportedPropLine("NBA LeBron James over 25.5 points")?.reason, UNSUPPORTED_PROP_REASONS.NBA);
+  check("NBA points is parked for the NBA roster pass, never an NHL pick", [detectUnsupportedPropLine("NBA LeBron James over 25.5 points"), parseCatalog("Krash\nNBA LeBron James over 25.5 points", []).unresolved, parseCatalog("Krash\nNBA LeBron James over 25.5 points", []).picks.length], [null, ["NBA LeBron James over 25.5 points"], 0]);
 
   // ---- parseCatalog: never dropped, never a total/ML/ATP -------------------
   {

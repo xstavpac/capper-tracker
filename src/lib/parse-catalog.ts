@@ -11,12 +11,14 @@ import {
   betScopeToken,
   extractLine,
   normalizeNPlusPlayerProp,
+  parsePlayerPropLine,
   type SegmentPeriod,
 } from "@/lib/bet-line";
 import { isKnownFullPlayerName } from "@/lib/player-roster-fallback";
 import { findFeedTeamHits, findSharedMascotTeams, type FeedTeam } from "@/lib/feed-teams";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { parseMlbPlayerProp, normalizeMlbNPlus } from "@/lib/mlb-prop";
+import { parseNbaProp, normalizeNbaNPlus, type ParsedNbaProp } from "@/lib/nba-prop";
 import {
   detectUnsupportedProp,
   detectUnsupportedNflStat,
@@ -1499,6 +1501,13 @@ function looksLikePick(text: string): boolean {
     // A supported MLB prop ("Juan Soto 1+ BB", "Skubal o6.5 Ks") - same reasoning: no
     // longer flagged unsupported above, so it must still count as a pick.
     parseSupportedMlbProp(text) !== null ||
+    // An NBA prop ("Tatum PRA o38.5", "Jokic double-double", "Jokic triple-double")
+    // - same reasoning. "Jokic DD" counts too, at the same cost the NHL
+    // abbreviations above carry for a brand-new capper header ending in "DD".
+    parseSupportedNbaProp(text) !== null ||
+    // "brunson 25+ points": the NBA threshold form has no signed number or over/under word either,
+    // and a lowercase name is not positively a prop above. An "N+" flush against a basketball stat is.
+    normalizeNbaNPlus(text) !== text ||
     // "Zach Ertz 3+ receptions" - a SUPPORTED NFL market in N+ form. No signed
     // number / over-under word here either, so it was read as a capper name
     // (and the next pick got credited to that fake capper). parsePickText
@@ -1530,6 +1539,65 @@ export function parseSupportedMlbProp(text: string): ReturnType<typeof parseMlbP
   return null;
 }
 
+// An NBA player prop (nba-prop.ts), with the evidence that makes it one. The NBA parser is sport- and
+// team-blind ("Lakers over 220.5 points" parses as POINTS for "Lakers"; "New York over 44.5 points"
+// for "New York"), so the words left over as the player's name decide:
+//   - "person": a name-shaped subject (capitalized words) that is not a team, city or league. The
+//     line names no team, so it is parked for the roster pass (recover-unresolved-lines.ts), which
+//     is also where a POINTS / ASSISTS line is told apart from an NHL one. Never imported as is.
+//   - "team": an NBA team plus a player's name ("Lakers LeBron over 7.5 rebounds") - imports directly.
+// A bare team, a city, a matchup, or a line carrying another league's code is not one. `prop` may be
+// an unsupported market (triple-double, first basket): still a player prop, never a moneyline/total.
+export type SupportedNbaProp = { prop: ParsedNbaProp; subject: "person" | "team" };
+// City words of the NBA's full team names ("Los Angeles Lakers LeBron" - "Los" and "Angeles" are
+// the team, not the player), and bet words that can sit between a team and its number.
+const NBA_TEAM_NAME_WORDS = new Set(
+  "atlanta boston brooklyn charlotte chicago cleveland dallas denver detroit golden state houston indiana la los angeles memphis miami milwaukee minnesota new orleans york oklahoma city orlando philadelphia phoenix portland trail sacramento san antonio toronto utah washington".split(" ")
+);
+const NBA_PROP_NON_NAME_WORDS = new Set(
+  "team total totals tt game alt alternate live full first second half quarter and or the a to ml moneyline spread line parlay sgp plus tonight today tomorrow night early late lean play pick bet max over under points pts combined".split(
+    " "
+  )
+);
+// No player's points line is anywhere near a team's or a game's: above this, a team-prefixed
+// "points" line is the team's own total whatever words sit beside the team.
+const NBA_MAX_PLAYER_POINTS_LINE = 65;
+const NBA_PROP_PERSON_SHAPE = /^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/;
+export function parseSupportedNbaProp(
+  text: string,
+  // anyCase: also accept an all-lowercase name ("jokic o10.5 reb"). Only the roster pass asks for
+  // it - there a miss falls back to the ordinary team resolvers, so a lowercase school or place
+  // that is not in the lists is never lost. Import classification stays capitalized-only.
+  opts: { anyCase?: boolean } = {}
+): SupportedNbaProp | null {
+  const prop = parseNbaProp(text);
+  if (!prop) return null;
+  if (parsePlayerProp(text) || detectUnsupportedNflStat(text) || parseSupportedMlbProp(text)) return null;
+  // An explicit league code other than NBA: that league's line ("NHL McDavid over 1.5 points").
+  const code = detectSport(text, false).sportName;
+  if (code && code !== "NBA") return null;
+  const name = prop.playerName;
+  const nameSport = detectSport(name, true).sportName;
+  if (!nameSport && !RECOGNIZED_TEAM_PHRASES.has(name.toLowerCase())) {
+    return (opts.anyCase ? BARE_NAME_SHAPE : NBA_PROP_PERSON_SHAPE).test(name) ? { prop, subject: "person" } : null;
+  }
+  // Exactly one NBA team plus something else that is not a matchup ("Lakers vs Nuggets over 220.5
+  // pts" is the game's total).
+  if (nameSport !== "NBA" || classifyTeamSide(name) !== "team+extra") return null;
+  if (/\b(?:vs?\.?|at)\b|@/i.test(name) || findTeamNicknames(name, "NBA").length !== 1) return null;
+  // ...and that something else has to read as a person's name, not as more of the bet: "Lakers Team
+  // Total over 110.5 points" and "Thunder -6.5 and over 220.5 points" are the team's own lines.
+  const extra = name
+    .split(/\s+/)
+    .filter((w) => !RECOGNIZED_TEAM_PHRASES.has(w.toLowerCase()) && !NBA_TEAM_NAME_WORDS.has(w.toLowerCase()));
+  if (extra.length === 0 || !extra.every((w) => /^[A-Z][A-Za-z'.-]*$/.test(w) && !NBA_PROP_NON_NAME_WORDS.has(w.toLowerCase()))) return null;
+  if (prop.propMarket === "POINTS") {
+    const line = parsePlayerPropLine(normalizeNbaNPlus(text));
+    if (line && line.line > NBA_MAX_PLAYER_POINTS_LINE) return null;
+  }
+  return { prop, subject: "team" };
+}
+
 // MLB/NHL (and other not-yet-supported) player-prop vocabulary - see
 // unsupported-prop-vocab.ts. An NFL prop parsePlayerProp already recognizes is
 // never reported here, so NFL prop behavior is untouched. The team-subject
@@ -1557,6 +1625,9 @@ export function detectUnsupportedPropLine(text: string): UnsupportedPropInfo | n
   if (info?.sport === "NHL" && parseNhlPlayerProp(text)) return null;
   // A supported MLB market (mlb-prop.ts) - see parseSupportedMlbProp for the evidence it needs.
   if (parseSupportedMlbProp(text)) return null;
+  // An NBA prop (nba-prop.ts) - see parseSupportedNbaProp for the evidence it needs. A line with no
+  // team on it is parked for the roster pass by parseCatalog, not imported sport-less.
+  if (parseSupportedNbaProp(text)) return null;
   // Team-prefixed NHL player prop ("Oilers McDavid over 3.5 shots on goal"): the
   // subject "Oilers McDavid" reads as a team, so the detector above calls it a
   // team stat total. It is a player prop when the NHL parser finds a name that
@@ -1883,6 +1954,9 @@ export function parsePickText(description: string): {
   // MLB N+ ("2+ hits" -> "Over 1.5 hits", "to hit a home run" -> "Over 0.5 Home Runs") only for a
   // line the importer positively identifies as an MLB prop - never a team's "8+ runs".
   if (parseSupportedMlbProp(description)) description = normalizeMlbNPlus(description);
+  // NBA N+ ("25+ points" -> "Over 24.5 points") only for a line positively identified as an NBA
+  // player prop - never a team's "110+ points".
+  if (parseSupportedNbaProp(description)) description = normalizeNbaNPlus(description);
   let odds: number | null = null;
   let units: number | null = null;
   const parens = [...description.matchAll(/\(([^)]+)\)/g)];
@@ -1996,7 +2070,12 @@ export function parsePickText(description: string): {
     /\b(no|yes)\s+run\s+(?:first|1st)(?:\s+inning)?\b/i.test(cleanDescription)
   ) {
     betType = "NRFI";
-  } else if (parseNflNhlPlayerProp(cleanDescription) || parseSupportedMlbProp(cleanDescription) || detectUnsupportedPropLine(cleanDescription)?.sport) {
+  } else if (
+    parseNflNhlPlayerProp(cleanDescription) ||
+    parseSupportedMlbProp(cleanDescription) ||
+    parseSupportedNbaProp(cleanDescription) ||
+    detectUnsupportedPropLine(cleanDescription)?.sport
+  ) {
     // (detectUnsupportedPropLine(...).sport is only set for a confidently MLB/
     // NHL prop - a generic "points"/"assists" line, which NBA uses too, keeps
     // its existing classification.)
@@ -2792,6 +2871,8 @@ function findPlayerPick(
   // below, so they need their own exclusivity here (Nick Paul, Dustin Wolf...).
   if (parseNhlPlayerProp(text)) return null;
   if (parseSupportedMlbProp(text)) return null;
+  // And NBA ("Paul o2.5 3pm" - Chris Paul / Paul George, not Tommy Paul).
+  if (parseSupportedNbaProp(text)) return null;
   // Same exclusivity for MLB/NHL prop vocabulary (Heliot Ramos, Dustin Wolf and
   // Nick Paul all share a surname with a KNOWN_TENNIS_PLAYERS entry).
   if (detectUnsupportedPropLine(text)) return null;
@@ -2992,6 +3073,11 @@ export function parseCatalog(
   parlays: ParsedParlay[];
   unresolved: string[];
   unresolvedCapperNames: string[];
+  // unresolved-line index -> the league of the bare "NBA" / "NHL" sub-header
+  // the line sat under, when its capper wrote one ("Capper / NBA / Jokic o10.5
+  // reb"). Only recorded for NBA-prop lines parked for the roster pass, where it
+  // settles a points / assists line the way a code on the line itself would.
+  unresolvedLeagues: Record<number, "NBA" | "NHL">;
   // Lines that were read as capper names (the final fallback below) but look
   // pick-like - a digit, "+", or known market vocabulary. They still become
   // the active header exactly as before; this is a side list for logging.
@@ -3023,6 +3109,8 @@ export function parseCatalog(
   // showed "Unknown" because there was no earlier resolved pick to infer
   // from). Recorded directly here instead.
   const unresolvedCapperNames: string[] = [];
+  const unresolvedLeagues: Record<number, "NBA" | "NHL"> = {};
+  let blockLeague: { league: "NBA" | "NHL"; capper: string } | null = null;
   let currentCapper = "";
   const droppedAsHeaders: DroppedLine[] = [];
   // Attribution for droppedAsHeaders: the last capper header that wasn't
@@ -3070,7 +3158,7 @@ export function parseCatalog(
     raw: string,
     gameNumber: ParsedPick["gameNumber"]
   ): ParsedPick | undefined => {
-    if (!feedTeams || (parseNflNhlPlayerProp(pickText) ?? parseSupportedMlbProp(pickText))) return undefined;
+    if (!feedTeams || (parseNflNhlPlayerProp(pickText) ?? parseSupportedMlbProp(pickText) ?? parseSupportedNbaProp(pickText))) return undefined;
     const shared = findSharedMascotTeams(pickText, feedTeams);
     if (!shared) return undefined;
     const forPlausibility = lineForPlausibility(pickText);
@@ -3120,7 +3208,7 @@ export function parseCatalog(
     const probe = parseCatalog(`Probe\n${line}`, [], rosterFullNames, feedTeams);
     const pick = probe.picks[0];
     if (!nameIsTeam) {
-      const prop = parseNflNhlPlayerProp(line) ?? parseSupportedMlbProp(line);
+      const prop = parseNflNhlPlayerProp(line) ?? parseSupportedMlbProp(line) ?? parseSupportedNbaProp(line)?.prop ?? null;
       return pick !== undefined && prop !== null && normalizeName(prop.playerName).includes(normalizeName(name));
     }
     if (pick?.ambiguousKey) {
@@ -3204,7 +3292,7 @@ export function parseCatalog(
     if (barePlayer || (BARE_NAME_SHAPE.test(player) && !bareSubject && !hasBetSignal(player))) {
       const next = rawLines[i + 1];
       const joined = next ? `${player} ${next}` : "";
-      const joinedProp = joined ? parseNflNhlPlayerProp(joined) ?? parseSupportedMlbProp(joined) : null;
+      const joinedProp = joined ? parseNflNhlPlayerProp(joined) ?? parseSupportedMlbProp(joined) ?? parseSupportedNbaProp(joined)?.prop ?? null : null;
       if (joinedProp && normalizeName(joinedProp.playerName) === normalizeName(player)) {
         rawLines[i + 1] = joined;
         continue;
@@ -3271,10 +3359,13 @@ export function parseCatalog(
       if (
         detectUnsupportedPropLine(remainder) ||
         (!parsePlayerProp(remainder) && parseNhlPlayerProp(remainder) && !detectSport(remainder).sportName) ||
-        (parseSupportedMlbProp(remainder) && !detectSport(remainder).sportName)
+        (parseSupportedMlbProp(remainder) && !detectSport(remainder).sportName) ||
+        // An NBA prop naming a player but no team: parked for the roster pass.
+        parseSupportedNbaProp(remainder)?.subject === "person"
       ) {
         unresolved.push(line);
         unresolvedCapperNames.push(inlineOwner);
+        if (blockLeague && blockLeague.capper === currentCapper) unresolvedLeagues[unresolved.length - 1] = blockLeague.league;
         continue;
       }
       const detected = withFeedSport(remainder, detectSport(remainder));
@@ -3432,6 +3523,16 @@ export function parseCatalog(
       unresolvedCapperNames.push(currentCapper || "Unknown");
       continue;
     }
+    // An NBA prop naming a player but no team ("Jokic o10.5 reb", "NBA Brunson 25+
+    // points", "Connor McDavid over 1.5 points" - points and assists are hockey
+    // words too). Parked here, before any sport / team / tennis resolution, for
+    // the roster pass, which finds the player's team and settles NBA vs NHL.
+    if (parseSupportedNbaProp(pickText)?.subject === "person") {
+      unresolved.push(strippedText);
+      unresolvedCapperNames.push(currentCapper || "Unknown");
+      if (blockLeague && blockLeague.capper === currentCapper) unresolvedLeagues[unresolved.length - 1] = blockLeague.league;
+      continue;
+    }
     const allowNicknames = !afterBlank || looksLikePick(pickText);
     const detectedByLists = detectSport(pickText, allowNicknames);
     const detected = allowNicknames ? withFeedSport(pickText, detectedByLists) : detectedByLists;
@@ -3501,6 +3602,13 @@ export function parseCatalog(
     }
 
     if (detected.sportName && !effectiveRest.trim()) {
+      // A bare "NBA" / "NHL" sub-header under a capper: remembered for that
+      // capper's following lines (see unresolvedLeagues). Any other bare code
+      // ends it.
+      blockLeague =
+        (detected.sportName === "NBA" || detected.sportName === "NHL") && !detected.leadingText?.trim()
+          ? { league: detected.sportName, capper: currentCapper }
+          : null;
       continue;
     }
 
@@ -3673,5 +3781,5 @@ export function parseCatalog(
   for (const pick of results) pick.period = withRegulationPeriod(pick);
   for (const parlay of parlays) for (const leg of parlay.legs) leg.period = withRegulationPeriod(leg);
 
-  return { picks: results, parlays, unresolved, unresolvedCapperNames, droppedAsHeaders };
+  return { picks: results, parlays, unresolved, unresolvedCapperNames, unresolvedLeagues, droppedAsHeaders };
 }

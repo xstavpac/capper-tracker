@@ -25,6 +25,7 @@ import { findAltLinePrice } from "@/server/data/alt-line-odds";
 import { resolvePickPrice, type PickOddsSource } from "@/lib/odds-source";
 import { extractLine, parsePlayerPropLine, parseAnyPlayerProp, isAnytimeTdPick } from "@/lib/bet-line";
 import { nhlAnytimeGoalSide } from "@/lib/nhl-prop";
+import { parseNbaProp } from "@/lib/nba-prop";
 import { threeWayWording } from "@/lib/nhl-three-way";
 import { isInvalidOdds } from "@/lib/pick-validation";
 import { TEAM_NICKNAME_CANONICAL, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
@@ -312,7 +313,7 @@ async function resolveGameAndOdds(
         // parseAnyPlayerProp, not the NFL-only parsePlayerProp: it reads NFL
         // text exactly as that one does (NFL is tried first) and also names
         // the NHL markets, of which anytime goal is the one the feed prices.
-        const parsedProp = parseAnyPlayerProp(item.description);
+        const parsedProp = parseAnyPlayerProp(item.description, item.sportName);
         const parsedLine = parsePlayerPropLine(item.description);
         // Anytime TD is the one market with no Over/Under line (one-sided
         // "Yes", see nfl-prop-odds.ts), so it's priced without parsedLine -
@@ -600,7 +601,7 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
       // TEAM_TOTAL-only widening - see dedupCategory's own comment. A no-op
       // for every other bet type (pickCategory's output already differs by
       // side there).
-      const dedupKey = category ? dedupCategory(category, item.betType, item.description, pickedSide) : null;
+      const dedupKey = category ? dedupCategory(category, item.betType, item.description, pickedSide, null, item.sportName) : null;
       // Can't determine a comparable side for this bet (e.g. a total with no
       // over/under in its text) - don't guess at a match either way. A
       // moneyline with a known picked team is still comparable without a
@@ -833,7 +834,14 @@ export async function bulkImportPicksAction(
       // result is needed" pattern as parseTouchdownProp/grading.ts. Only
       // set on the row being created right now; never used to update any
       // other row.
-      const playerProp = item.betType === "PLAYER_PROP" ? parseAnyPlayerProp(item.description) : null;
+      // Sport-aware: an NBA pick is read by the NBA parser alone ("over 2.5 assists" is ASSISTS for
+      // both leagues, but "over 10.5 rebounds" is nobody else's), and no other sport's pick can be
+      // stamped with a basketball market.
+      const playerProp = item.betType === "PLAYER_PROP" ? parseAnyPlayerProp(item.description, item.sportName) : null;
+      // An NBA prop this app has no market for (triple-double, first basket): no propMarket, but
+      // the row still records who it is on.
+      const ungradedNbaProp =
+        item.betType === "PLAYER_PROP" && !playerProp && item.sportName.toUpperCase() === "NBA" ? parseNbaProp(item.description) : null;
 
       toInsert.push({
         capperName: item.capperName,
@@ -850,7 +858,7 @@ export async function bulkImportPicksAction(
         gameTime,
         pickedSide,
         mlFavoredSide,
-        playerName: playerProp?.playerName,
+        playerName: playerProp?.playerName ?? ungradedNbaProp?.playerName,
         propMarket: playerProp?.propMarket,
         gameNumber: resolvedGameNumber,
         overrideDuplicate: item.overrideDuplicate === true,

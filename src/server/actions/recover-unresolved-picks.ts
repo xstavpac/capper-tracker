@@ -9,6 +9,8 @@ import { getLiveScoresForSport, getOddsForSport, LIVE_SPORTS, RESOLVABLE_SPORT_K
 import { getCachedNflRoster } from "@/server/data/nfl-roster-cache";
 import { getCachedNhlRoster } from "@/server/data/nhl-roster-cache";
 import { getCachedMlbRoster } from "@/server/data/mlb-roster-cache";
+import { getCachedNbaRoster } from "@/server/data/nba-roster-cache";
+import { parseNbaProp } from "@/lib/nba-prop";
 import { getImportFeedTeams } from "@/server/data/import-feed-teams";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 
@@ -108,7 +110,7 @@ export async function recoverUnresolvedPicksAction(
   // getImportFeedTeamsAction), so both passes agree on which lines are unresolved.
   const feedTeams = await getImportFeedTeams();
 
-  const { picks, unresolved, unresolvedCapperNames } = parseCatalog(text, knownCapperNames, rosterFullNames, feedTeams);
+  const { picks, unresolved, unresolvedCapperNames, unresolvedLeagues } = parseCatalog(text, knownCapperNames, rosterFullNames, feedTeams);
   if (unresolved.length === 0) return { recovered: [], stillUnresolved: [], reasons: {} };
 
   // Always fetched once there is anything unresolved: team lines match against
@@ -133,8 +135,20 @@ export async function recoverUnresolvedPicksAction(
       console.error("recoverUnresolvedPicksAction: MLB roster read failed", err);
     }
   }
+  // The NBA roster is read only when some unresolved line reads as an NBA prop, with the same
+  // degrade-to-unresolved failure policy. The NHL roster is read then too: points and assists are
+  // hockey words, and the NBA-vs-NHL rule needs both (lib/nba-roster-fallback.ts).
+  const hasNbaProp = unresolved.some((line) => parsePlayerProp(line) === null && parseNbaProp(line) !== null);
+  let nbaRoster: Awaited<ReturnType<typeof getCachedNbaRoster>> = [];
+  if (hasNbaProp) {
+    try {
+      nbaRoster = await getCachedNbaRoster();
+    } catch (err) {
+      console.error("recoverUnresolvedPicksAction: NBA roster read failed", err);
+    }
+  }
   let nhlRoster: Awaited<ReturnType<typeof getCachedNhlRoster>> = [];
-  if (hasMlbProp || unresolved.some((line) => parsePlayerProp(line) === null && parseNhlPlayerProp(line) !== null)) {
+  if (hasMlbProp || hasNbaProp || unresolved.some((line) => parsePlayerProp(line) === null && parseNhlPlayerProp(line) !== null)) {
     try {
       nhlRoster = await getCachedNhlRoster();
     } catch (err) {
@@ -142,5 +156,5 @@ export async function recoverUnresolvedPicksAction(
     }
   }
 
-  return recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, roster, picks, nhlRoster, mlbRoster, completeSports);
+  return recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, roster, picks, nhlRoster, mlbRoster, completeSports, nbaRoster, unresolvedLeagues);
 }

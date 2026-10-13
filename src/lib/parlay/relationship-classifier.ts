@@ -181,7 +181,7 @@ export type PropDescription =
     }
   | { status: "UNDERIVABLE"; reason: string };
 
-const YES_NO_PROP_MARKETS: ReadonlySet<AnyPlayerPropMarket> = new Set<AnyPlayerPropMarket>(["TD", "ANYTIME_GOAL", "FIRST_GOAL"]);
+const YES_NO_PROP_MARKETS: ReadonlySet<AnyPlayerPropMarket> = new Set<AnyPlayerPropMarket>(["TD", "ANYTIME_GOAL", "FIRST_GOAL", "DOUBLE_DOUBLE"]);
 const NON_OFFENSIVE_PROP_MARKETS: ReadonlySet<AnyPlayerPropMarket> = new Set<AnyPlayerPropMarket>(["STRIKEOUTS", "OUTS_RECORDED", "SAVES"]);
 
 // Never guesses: no readable player and market, or a line market with no
