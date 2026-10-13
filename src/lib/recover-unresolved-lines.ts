@@ -28,6 +28,7 @@ import {
   withGameNumberSuffix,
   detectUnsupportedPropLine,
   parseSupportedMlbProp,
+  parseSupportedNbaProp,
   playerAmbiguityKey,
   type AmbiguousOption,
   type ParsedPick,
@@ -41,6 +42,8 @@ import {
   type SlateContext,
 } from "@/lib/player-roster-fallback";
 import { resolveMlbPropAgainstRoster } from "@/lib/mlb-roster-fallback";
+import { resolveNbaPropAgainstRosters, type LeagueCandidate } from "@/lib/nba-roster-fallback";
+import type { ParsedNbaProp } from "@/lib/nba-prop";
 import { parsePlayerProp, isPassingTdsText, pickPeriodFromText } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { withRegulationPeriod } from "@/lib/nhl-three-way";
@@ -61,7 +64,7 @@ export type RecoverUnresolvedResult = {
 // "49ers" from "San Francisco 49ers" - the team's nickname, for a prompt
 // button. Every NFL nickname is the last word of the full name; the NHL and
 // MLB have a few two-word ones.
-const TWO_WORD_NICKNAME = /(Maple Leafs|Blue Jackets|Red Wings|Golden Knights|Red Sox|White Sox|Blue Jays)$/;
+const TWO_WORD_NICKNAME = /(Maple Leafs|Blue Jackets|Red Wings|Golden Knights|Red Sox|White Sox|Blue Jays|Trail Blazers)$/;
 function shortTeamName(team: string): string {
   return TWO_WORD_NICKNAME.exec(team)?.[1] ?? team.split(/\s+/).pop() ?? team;
 }
@@ -95,13 +98,44 @@ export function recoverUnresolvedLines(
   // Sport labels ("NFL", "NHL", "MLB") whose slate in `liveTeams` is known complete -
   // see SlateContext. A sport not listed here (the default) never has its
   // slate used to choose between players sharing a surname.
-  slateCompleteSports: string[] = []
+  slateCompleteSports: string[] = [],
+  // Cached NBA roster. Same default as the others: empty means no NBA line is ever resolved here,
+  // and every NHL line behaves exactly as it did before NBA props existed.
+  nbaRoster: RosterPlayer[] = [],
+  // unresolved-line index -> the league of the capper's bare "NBA" / "NHL" sub-header
+  // (parseCatalog's unresolvedLeagues).
+  leagueHints: Record<number, "NBA" | "NHL"> = {}
 ): RecoverUnresolvedResult {
   const recovered: ParsedPick[] = [];
   const stillUnresolved: string[] = [];
   const reasons: Record<string, string> = {};
 
   const isPlayerProp = new Set(unresolved.filter((line) => parsePlayerProp(line) !== null));
+
+  // NBA prop lines naming a player and no team (nba-prop.ts) the NFL parser does not claim.
+  // `strict` is a line parseCatalog itself identified as one (a capitalized name) and parked
+  // here: it is a player prop whatever the rosters say, so a miss leaves it unresolved. A
+  // lowercase one ("jokic o10.5 reb") was never positively a prop: on a roster miss it goes on
+  // to the resolvers below, exactly as before.
+  const nbaProps = new Map<string, { prop: ParsedNbaProp; strict: boolean }>();
+  for (const line of unresolved) {
+    if (isPlayerProp.has(line)) continue;
+    const strict = parseSupportedNbaProp(line);
+    if (strict) {
+      if (strict.subject === "person") nbaProps.set(line, { prop: strict.prop, strict: true });
+      continue;
+    }
+    if (detectUnsupportedPropLine(line)) continue;
+    const loose = parseSupportedNbaProp(line, { anyCase: true });
+    if (loose?.subject === "person") nbaProps.set(line, { prop: loose.prop, strict: false });
+  }
+  const strictNba = (line: string): boolean => nbaProps.get(line)?.strict === true;
+  const hasNbaCode = (line: string): boolean => /\bNBA\b/i.test(line);
+  // The verdict detectUnsupportedPropLine gave such a line before the NBA parser existed:
+  // "Player prop not supported yet" (no league named) - the lines the NHL rules below call
+  // sport-less.
+  const isSportlessStatLine = (line: string): boolean =>
+    detectUnsupportedPropLine(line)?.reason === UNSUPPORTED_PROP_REASONS.GENERIC || (strictNba(line) && !hasNbaCode(line));
 
   // NHL prop lines (nhl-prop.ts) the NFL parser does not claim. Eligible only
   // when the line is not a team/game stat total or another sport's prop: i.e.
@@ -111,6 +145,9 @@ export function recoverUnresolvedLines(
   const isNhlProp = new Set(
     unresolved.filter((line) => {
       if (isPlayerProp.has(line) || parseNhlPlayerProp(line) === null) return false;
+      // A points / assists line the NBA parser reads too is eligible exactly when it was
+      // before: no "NBA" on it.
+      if (strictNba(line)) return !hasNbaCode(line);
       const unsupported = detectUnsupportedPropLine(line);
       return !unsupported || unsupported.sport === "NHL" || unsupported.reason === UNSUPPORTED_PROP_REASONS.GENERIC;
     })
@@ -128,7 +165,7 @@ export function recoverUnresolvedLines(
   // against the liveTeams already fetched).
   const nonPlayerPropResolutions = new Map<string, LineResolution>();
   for (const line of unresolved) {
-    if (isPlayerProp.has(line) || isNhlProp.has(line) || isMlbProp.has(line) || detectUnsupportedPropLine(line)) continue;
+    if (isPlayerProp.has(line) || isNhlProp.has(line) || isMlbProp.has(line) || detectUnsupportedPropLine(line) || strictNba(line)) continue;
     nonPlayerPropResolutions.set(line, resolveLineAgainstLiveTeams(line, liveTeams));
   }
 
@@ -171,6 +208,51 @@ export function recoverUnresolvedLines(
     };
   };
 
+  // The text an NBA-roster pick is built from: the league code dropped (the pick carries its
+  // sport), and an all-lowercase name capitalized so every later read of the stored text - the
+  // N+ rewrite, the bet-type classification - sees the player prop this pass established.
+  const nbaPropText = (text: string, typedName: string): string => {
+    const noCode = text.replace(/\b(?:NBA|NHL)\b[:\s-]*/gi, " ").replace(/\s{2,}/g, " ").trim();
+    if (typedName !== typedName.toLowerCase() || !noCode.includes(typedName)) return noCode;
+    return noCode.replace(typedName, typedName.replace(/(^|[\s'-])([a-z])/g, (_m, lead: string, c: string) => lead + c.toUpperCase()));
+  };
+
+  // A player both leagues have, or a surname several players share: recovered as a pick
+  // awaiting the user's choice, each option carrying its own league.
+  const awaitingLeagueChoice = (
+    capperName: string,
+    line: string,
+    text: string,
+    gameNumber: ParsedPick["gameNumber"],
+    typedName: string,
+    candidates: LeagueCandidate[]
+  ): ParsedPick => {
+    const parsed = parsePickText(text);
+    const sports = [...new Set(candidates.map((c) => c.sport))];
+    return {
+      capperName,
+      sportName: sports.length === 1 ? sports[0] : "",
+      description: withGameNumberSuffix(text, gameNumber),
+      betType: "PLAYER_PROP",
+      odds: parsed.odds ?? -110,
+      hasExplicitOdds: parsed.odds !== null,
+      totalSide: parsed.totalSide,
+      units: parsed.units,
+      period: parsed.period,
+      raw: line,
+      ambiguous: candidates.map((c) => ({
+        label: c.playerName + " — " + shortTeamName(c.team) + " " + c.position + (sports.length > 1 ? " (" + c.sport + ")" : ""),
+        sport: c.sport,
+        nickname: c.team.toLowerCase(),
+      })),
+      ambiguousKey: playerAmbiguityKey(sports.join("/"), stripNameSuffix(typedName), candidates.map((c) => c.sport + ":" + c.externalPlayerId)),
+      ambiguousBetType: "PLAYER_PROP",
+      ambiguousLine: null,
+      teamNicknames: [],
+      gameNumber,
+    };
+  };
+
   for (let i = 0; i < unresolved.length; i++) {
     const line = unresolved[i];
     const capperName = unresolvedCapperNames[i] ?? "Unknown";
@@ -182,6 +264,53 @@ export function recoverUnresolvedLines(
     // string from the lookups built above.
     const { gameNumber, rest: lineForParsing } = extractGameNumber(line);
 
+    const nba = nbaProps.get(line);
+    if (nba && nbaRoster.length > 0) {
+      // Which player, and for points / assists which league - see nba-roster-fallback.ts.
+      const res = resolveNbaPropAgainstRosters(line, nba.prop, {
+        nbaRoster,
+        nhlRoster,
+        nbaSlate: slateFor("NBA"),
+        nhlSlate: slateFor("NHL"),
+        league: hasNbaCode(line) ? "NBA" : leagueHints[i] ?? null,
+      });
+      const text = nbaPropText(lineForParsing, nba.prop.playerName);
+      if (res.status === "ask") {
+        recovered.push(awaitingLeagueChoice(capperName, line, text, gameNumber, res.typedName, res.candidates));
+        continue;
+      }
+      if (res.status === "resolved") {
+        const parsed = parsePickText(text);
+        recovered.push({
+          capperName,
+          sportName: res.sport,
+          description: withGameNumberSuffix(parsed.cleanDescription, gameNumber),
+          betType: "PLAYER_PROP",
+          odds: parsed.odds ?? -110,
+          hasExplicitOdds: parsed.odds !== null,
+          totalSide: parsed.totalSide,
+          units: parsed.units,
+          period: parsed.period,
+          raw: line,
+          teamNicknames: [res.team.toLowerCase()],
+          gameNumber,
+        });
+        continue;
+      }
+      if (res.status === "unresolved" || nba.strict) {
+        stillUnresolved.push(line);
+        reasons[line] = res.reason;
+        continue;
+      }
+      // No roster knows a lowercase name: not a prop we can place - the resolvers below get it.
+    } else if (nba?.strict && !isNhlProp.has(line)) {
+      // No NBA roster to read (not loaded, or the read failed): an NBA prop cannot be placed.
+      // A points / assists line still gets the NHL-only handling below, as before.
+      stillUnresolved.push(line);
+      reasons[line] = "NBA player props need the NBA roster, which isn't available right now";
+      continue;
+    }
+
     if (isNhlProp.has(line)) {
       // Same conservative policy as the NFL branch below: resolves only on
       // EXACTLY ONE distinct NHL player; a shared surname asks the user.
@@ -189,7 +318,7 @@ export function recoverUnresolvedLines(
       // A sport-less points/assists line gets its sport only from a UNIQUE NHL
       // roster hit (see isNhlProp above); a shared surname is no such evidence,
       // so that line stays unresolved instead of prompting with NHL players.
-      const sportIsEvident = detectUnsupportedPropLine(line)?.reason !== UNSUPPORTED_PROP_REASONS.GENERIC;
+      const sportIsEvident = !isSportlessStatLine(line);
       if (res.status === "ambiguous" && res.tier === "surname" && sportIsEvident) {
         const typed = parseNhlPlayerProp(line)!.playerName;
         recovered.push(awaitingPlayerChoice(capperName, "NHL", line, lineForParsing, gameNumber, typed, res.matches));
@@ -251,7 +380,7 @@ export function recoverUnresolvedLines(
     // MLB/NHL player props have no roster or team path yet - never let the
     // live-team fallback match a word inside a player's name to a team.
     // (Supported NHL markets took the isNhlProp branch above.)
-    if (detectUnsupportedPropLine(line)) {
+    if (detectUnsupportedPropLine(line) || strictNba(line)) {
       stillUnresolved.push(line);
       continue;
     }

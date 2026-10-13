@@ -22,6 +22,7 @@
 
 import type { BetType } from "@prisma/client";
 import { parseAnyPlayerProp, type AnyPlayerPropMarket } from "@/lib/bet-line";
+import { parseNbaProp } from "@/lib/nba-prop";
 import { teamNamesMatch } from "@/lib/team-name-match";
 
 export type DuplicateFlag = { message: string };
@@ -53,7 +54,12 @@ export function dedupCategory(
   betType: BetType,
   betDetail: string | null,
   pickedSide: "HOME" | "AWAY" | "DRAW" | null | undefined,
-  knownPlayerProp?: KnownPlayerProp | null
+  knownPlayerProp?: KnownPlayerProp | null,
+  // The pick's sport, for the text fallback only (see parseAnyPlayerProp). The KEY itself needs no
+  // sport in it: two picks are only ever compared inside one game (isSameBet matches both team
+  // names first), and no game has an NHL team and an NBA team in it - so an NHL "POINTS" key and an
+  // NBA "POINTS" key never meet.
+  sportName?: string | null
 ): string {
   if (betType === "TEAM_TOTAL") {
     const detail = (betDetail ?? "").toLowerCase();
@@ -74,8 +80,13 @@ export function dedupCategory(
     // parsePlayerProp extractor used at import time when the caller doesn't
     // have it (a freshly-parsed batch item, or a legacy row predating those
     // columns) - never a new, separate extraction.
-    const known = knownPlayerProp ?? parseAnyPlayerProp(betDetail ?? "") ?? undefined;
-    if (!known) return category; // unparseable prop text - no worse than the old behavior
+    const known = knownPlayerProp ?? parseAnyPlayerProp(betDetail ?? "", sportName) ?? undefined;
+    if (!known) {
+      // An NBA prop with no graded market (triple-double, first basket) still names its player.
+      const ungraded = sportName && sportName.toUpperCase() === "NBA" ? parseNbaProp(betDetail ?? "") : null;
+      if (ungraded) return category + ":UNGRADED:" + ungraded.playerName.trim().toLowerCase();
+      return category; // unparseable prop text - no worse than the old behavior
+    }
     return category + ":" + known.propMarket + ":" + known.playerName.trim().toLowerCase();
   }
   return category;

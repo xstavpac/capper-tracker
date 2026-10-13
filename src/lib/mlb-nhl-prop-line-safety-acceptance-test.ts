@@ -12,7 +12,7 @@
 // Now every one of them lands in `unresolved` with a distinct reason, and the
 // controls below prove team bets, NFL props, tennis and capper headers are
 // untouched.
-import { parseCatalog, detectUnsupportedPropLine } from "@/lib/parse-catalog";
+import { parseCatalog, detectUnsupportedPropLine, parseSupportedNbaProp } from "@/lib/parse-catalog";
 import { UNSUPPORTED_PROP_REASONS } from "@/lib/unsupported-prop-vocab";
 import { recoverUnresolvedLines } from "@/lib/recover-unresolved-lines";
 import { parsePlayerProp, parsePlayerPropLine, parseTouchdownProp, normalizeNPlusPlayerProp } from "@/lib/bet-line";
@@ -36,6 +36,20 @@ function expectUnsupported(line: string, reason: string, capper = "Krash") {
   check(`  no picks/parlays: "${line}"`, [r.picks.length, r.parlays.length], [0, 0]);
   check(`  attributed to ${capper}: "${line}"`, r.unresolvedCapperNames, [capper]);
   check(`  reason: "${line}"`, detectUnsupportedPropLine(line)?.reason, reason);
+}
+
+// NBA player props are SUPPORTED at import now (nba-prop.ts). A line naming a player and no team is
+// no longer flagged "unsupported" - but the guarantee this file exists for is unchanged: it is
+// parked as exactly one unresolved entry (for the roster pass, which finds the team and tells an
+// NBA points / assists line from an NHL one), with zero picks/parlays, so it is never an ATP /
+// TOTAL / MONEYLINE pick and never a dropped capper header.
+function expectParkedForRoster(line: string, capper = "Krash") {
+  const r = parseCatalog(capper + "\n" + line);
+  check(`unresolved: "${line}"`, r.unresolved, [line]);
+  check(`  no picks/parlays: "${line}"`, [r.picks.length, r.parlays.length], [0, 0]);
+  check(`  attributed to ${capper}: "${line}"`, r.unresolvedCapperNames, [capper]);
+  check(`  not flagged unsupported: "${line}"`, detectUnsupportedPropLine(line), null);
+  check(`  read as a player prop naming a person: "${line}"`, parseSupportedNbaProp(line)?.subject, "person");
 }
 
 // NHL player props are SUPPORTED now (nhl-prop.ts), so an NHL market line is no
@@ -98,7 +112,7 @@ function main() {
   expectNhlAwaitingRoster("Cole Caufield 3+ shots on goal");
   expectMlbAwaitingRoster("Sale 3+ Ks");
   expectNhlAwaitingRoster("Leon Draisaitl first goal scorer");
-  expectUnsupported("Leon Draisaitl over 1.5 points", UNSUPPORTED_PROP_REASONS.GENERIC);
+  expectParkedForRoster("Leon Draisaitl over 1.5 points");
   expectNhlPick("NHL Leon Draisaitl over 1.5 points");
   expectNhlPick("NHL Connor McDavid o1.5 assists");
   expectMlbAwaitingRoster("Aaron Judge to hit a home run");
@@ -226,15 +240,16 @@ function main() {
   // --- A. NBA / WNBA player props ---------------------------------------------
   // Before: "NBA LeBron James over 25.5 points" imported as a game TOTAL (wrong
   // data). Now unresolved, never TOTAL. Sport is named only when a code says so.
-  expectUnsupported("NBA LeBron James over 25.5 points", UNSUPPORTED_PROP_REASONS.NBA);
+  expectParkedForRoster("NBA LeBron James over 25.5 points");
   expectUnsupported("WNBA A'ja Wilson over 9.5 rebounds", UNSUPPORTED_PROP_REASONS.WNBA);
-  expectUnsupported("A'ja Wilson over 9.5 rebounds", UNSUPPORTED_PROP_REASONS.GENERIC);
-  expectUnsupported("NBA Nikola Jokic over 10.5 assists", UNSUPPORTED_PROP_REASONS.NBA);
-  expectUnsupported("NBA Stephen Curry over 4.5 threes", UNSUPPORTED_PROP_REASONS.NBA);
-  expectUnsupported("Jalen Brunson over 40.5 PRA", UNSUPPORTED_PROP_REASONS.GENERIC);
-  expectUnsupported("Nikola Jokic over 45.5 pts+reb+ast", UNSUPPORTED_PROP_REASONS.GENERIC);
-  expectUnsupported("NBA Victor Wembanyama over 3.5 blocks", UNSUPPORTED_PROP_REASONS.NBA);
-  expectUnsupported("NBA Shai Gilgeous-Alexander over 1.5 steals", UNSUPPORTED_PROP_REASONS.NBA);
+  // No league named: parked the same way - the NBA roster pass finds no A'ja Wilson and leaves it unresolved.
+  expectParkedForRoster("A'ja Wilson over 9.5 rebounds");
+  expectParkedForRoster("NBA Nikola Jokic over 10.5 assists");
+  expectParkedForRoster("NBA Stephen Curry over 4.5 threes");
+  expectParkedForRoster("Jalen Brunson over 40.5 PRA");
+  expectParkedForRoster("Nikola Jokic over 45.5 pts+reb+ast");
+  expectParkedForRoster("NBA Victor Wembanyama over 3.5 blocks");
+  expectParkedForRoster("NBA Shai Gilgeous-Alexander over 1.5 steals");
   expectUnsupported("WNBA Caitlin Clark 25+ points", UNSUPPORTED_PROP_REASONS.WNBA);
   {
     const r = parseCatalog("Krash\nNBA LeBron James over 25.5 points");
@@ -271,11 +286,11 @@ function main() {
   ]) {
     check(`scoring total untouched: "${line}"`, detectUnsupportedPropLine(line), null);
   }
-  // A PLAYER with the same word is still the player-prop reason, not team-stat.
+  // A PLAYER with the same word is a player prop, not a team stat.
   check(
-    "person + rebounds stays the player-prop reason",
-    detectUnsupportedPropLine("NBA Nikola Jokic over 12.5 rebounds")?.reason,
-    UNSUPPORTED_PROP_REASONS.NBA
+    "person + rebounds is a player prop, not a team stat",
+    [detectUnsupportedPropLine("NBA Nikola Jokic over 12.5 rebounds"), parseSupportedNbaProp("NBA Nikola Jokic over 12.5 rebounds")?.prop.propMarket],
+    [null, "REBOUNDS"]
   );
 
   // --- Matchup ("X vs Y" / "X @ Y") + non-scoring stat --------------------------

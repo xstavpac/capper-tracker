@@ -105,7 +105,7 @@ export function existingBetIdentity(p: ExistingPickRow, sportName: string, sport
     sportKey,
     period: p.period,
     betType: p.betType,
-    category: pCategory ? dedupCategory(pCategory, p.betType, p.betDetail, p.pickedSide, knownPlayerProp) : null,
+    category: pCategory ? dedupCategory(pCategory, p.betType, p.betDetail, p.pickedSide, knownPlayerProp, sportName) : null,
     pickedSide: p.pickedSide,
   };
 }

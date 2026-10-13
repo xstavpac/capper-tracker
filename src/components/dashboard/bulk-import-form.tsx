@@ -295,6 +295,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     let unresolvedAfter = unresolved;
     let recovered: ParsedPick[] = [];
     let recoveryRan = true;
+    let recoveryReasons: Record<string, string> = {};
     setUnresolvedReasons({});
     if (unresolved.length > 0) {
       try {
@@ -302,6 +303,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         recovered = res.recovered;
         effectiveItems = [...items, ...recovered];
         unresolvedAfter = res.stillUnresolved;
+        recoveryReasons = res.reasons;
         setUnresolvedReasons(res.reasons);
       } catch {
         // Best-effort - a fallback failure just leaves every line unresolved,
@@ -321,7 +323,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     if (silent.length > 0 || unresolvedAfter.length > 0) {
       void logParseSkippedLinesAction({
         silent,
-        unresolved: unresolvedAfter.map((t) => ({ text: t, capperName: capperForUnresolved.get(t) ?? "Unknown" })),
+        unresolved: unresolvedAfter.map((t) => ({ text: t, capperName: capperForUnresolved.get(t) ?? "Unknown", reason: recoveryReasons[t] })),
         recoveryRan,
       }).catch(() => {});
     }

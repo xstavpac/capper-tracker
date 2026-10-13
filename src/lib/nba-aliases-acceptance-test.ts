@@ -27,6 +27,7 @@ import {
   resolveAmbiguousPick,
   teamGroupAliases,
   detectUnsupportedPropLine,
+  parseSupportedNbaProp,
 } from "./parse-catalog";
 import { runAmbiguousHierarchy, type ScheduleChecker, type ScheduleCheckQuery } from "./ambiguous-hierarchy";
 import { UNSUPPORTED_PROP_REASONS } from "./unsupported-prop-vocab";
@@ -213,7 +214,6 @@ async function main() {
 
   console.log("\n########## PART E: NBA prop shorthand is detected, and stays rejected ##########");
   {
-    const GENERIC = UNSUPPORTED_PROP_REASONS.GENERIC;
     for (const line of [
       "Paul o2.5 3pm",
       "Paul George over 2.5 3s",
@@ -227,11 +227,15 @@ async function main() {
       "Jokic double-double",
       "Sabonis to record a double double",
     ]) {
-      check(`'${line}' is detected as a player prop`, detectUnsupportedPropLine(line)?.reason, GENERIC);
+      // Since NBA props import (nba-prop.ts) the line is a recognized player prop, no longer flagged
+      // "unsupported"; it is parked for the roster pass exactly as it was kept unresolved before.
+      check(`'${line}' is read as a player prop naming a person`, [detectUnsupportedPropLine(line), parseSupportedNbaProp(line)?.subject], [null, "person"]);
       const res = parse(line);
       check(`'${line}' is not imported, and is kept as unresolved`, { picks: res.picks.length, unresolved: res.unresolved }, { picks: 0, unresolved: [line] });
     }
-    check("an explicit NBA code gives the NBA reason", detectUnsupportedPropLine("NBA Jokic o38.5 p+r")?.reason, UNSUPPORTED_PROP_REASONS.NBA);
+    check("an explicit NBA code is read the same way", [detectUnsupportedPropLine("NBA Jokic o38.5 p+r"), parseSupportedNbaProp("NBA Jokic o38.5 p+r")?.prop.propMarket], [null, "POINTS_REBOUNDS"]);
+    // A league this app has no props for keeps its reason.
+    check("a WNBA code keeps the WNBA reason", detectUnsupportedPropLine("WNBA A'ja Wilson o9.5 reb")?.reason, UNSUPPORTED_PROP_REASONS.WNBA);
 
     // The tennis exclusion: "Paul" is a KNOWN_TENNIS_PLAYERS surname, and
     // "Paul o2.5 3pm" used to import as an ATP total.

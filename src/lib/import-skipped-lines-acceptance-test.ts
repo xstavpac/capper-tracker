@@ -79,17 +79,31 @@ async function main() {
   // Every family of "isn't supported yet" reason maps to the same stage; a plain miss does not.
   const reasonCases: [string, string][] = [
     ["Aaron Judge 1+ stolen bases", "This MLB prop market isn't supported yet"],
-    ["NBA LeBron James over 25.5 points", "NBA player props aren't supported yet"],
     ["WNBA A'ja Wilson over 9.5 rebounds", "WNBA player props aren't supported yet"],
     ["Patrick Mahomes over 22.5 passing completions", "This NFL prop market isn't supported yet"],
     ["Lakers over 45.5 rebounds", "Team stat totals aren't supported yet"],
     ["Yankees vs Red Sox over 20.5 hits", "Game stat totals aren't supported yet"],
-    ["Jalen Brunson over 40.5 PRA", "Player prop not supported yet"],
   ];
   for (const [text, reason] of reasonCases) {
     const [entry] = parseSkippedLineEntries({ silent: [], unresolved: [{ text, capperName: "Cap" }], recoveryRan: true });
     expect(`"${text}" -> PROP_UNSUPPORTED / "${reason}"`, [entry.stage, entry.reason], ["PROP_UNSUPPORTED", reason]);
   }
+  // NBA props import now (nba-prop.ts), so an NBA prop line left over is an ordinary recovery miss -
+  // with the roster pass's own reason when the client passes one.
+  for (const text of ["NBA LeBron James over 25.5 points", "Jalen Brunson over 40.5 PRA"]) {
+    const [entry] = parseSkippedLineEntries({ silent: [], unresolved: [{ text, capperName: "Cap" }], recoveryRan: true });
+    expect(`"${text}" is no longer PROP_UNSUPPORTED`, [entry.stage, entry.reason], ["RECOVERY_UNRESOLVED", "Still unresolved after the live-schedule / roster recovery pass"]);
+  }
+  expect(
+    "the recovery pass's own reason is what gets logged",
+    parseSkippedLineEntries({ silent: [], unresolved: [{ text: "Zed Nobody over 9.5 rebounds", capperName: "Cap", reason: 'couldn\'t find "Zed Nobody" on an NBA roster' }], recoveryRan: true }).map((e) => [e.stage, e.reason]),
+    [["RECOVERY_UNRESOLVED", 'couldn\'t find "Zed Nobody" on an NBA roster']]
+  );
+  expect(
+    "an unsupported line's own reason still wins over a passed one",
+    parseSkippedLineEntries({ silent: [], unresolved: [{ text: "Lakers over 45.5 rebounds", capperName: "Cap", reason: "x" }], recoveryRan: true })[0].reason,
+    "Team stat totals aren't supported yet"
+  );
   expect(
     "a plain unresolved miss stays RECOVERY_UNRESOLVED",
     parseSkippedLineEntries({ silent: [], unresolved: [{ text: "Foo Bar over 3.5", capperName: "Cap" }], recoveryRan: true })[0].stage,

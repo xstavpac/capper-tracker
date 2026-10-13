@@ -116,7 +116,7 @@ export function rowBetIdentity(row: DedupPickRow): BetIdentity {
     sportKey: sportKeyForName(row.sportName),
     period,
     betType: row.betType,
-    category: category ? dedupCategory(category, row.betType, row.betDetail ?? null, row.pickedSide ?? null, knownPlayerProp) : null,
+    category: category ? dedupCategory(category, row.betType, row.betDetail ?? null, row.pickedSide ?? null, knownPlayerProp, row.sportName) : null,
     pickedSide: row.pickedSide ?? null,
   };
 }
