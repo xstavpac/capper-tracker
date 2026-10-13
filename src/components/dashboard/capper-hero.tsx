@@ -69,7 +69,7 @@ function MomentumCard({ breakdown, currentStreak }: { breakdown: MomentumBreakdo
 
 // `wraps` is for a value made of words (a market's name): it breaks onto a second line
 // rather than being cut off.
-function StatCell({ label, value, sub, tone, wraps, className = "" }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "up" | "down"; wraps?: boolean; className?: string }) {
+export function StatCell({ label, value, sub, tone, wraps, className = "" }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "up" | "down"; wraps?: boolean; className?: string }) {
   return (
     // The banner's navy under the same faint white wash as the momentum card (opaque, to cover the grid's own).
     <div className={"min-w-0 bg-banner bg-[linear-gradient(rgb(255_255_255/0.06),rgb(255_255_255/0.06))] px-4 py-[9px] " + className}>

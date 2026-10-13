@@ -9,15 +9,18 @@ import type { ReactNode, Ref } from "react";
 // The blue light on the card's edges, as on the /cappers and /dashboard banners (page-banner.tsx):
 // a soft glow, and a 3px bar over it. On the right only; a stacked card (under 640px) has it on
 // both sides, the glow over the title's rows only (BannerBrand).
-const GLOW =
+// Exported for a card with rows under the title (/charts): it draws the glow in its title row only.
+export const BANNER_GLOW =
   "pointer-events-none absolute inset-y-0 right-0 hidden w-[140px] bg-[linear-gradient(90deg,rgba(37,99,235,0)_0%,rgba(37,99,235,0.2)_70%,rgba(56,189,248,0.38)_100%)] [@container_(min-width:640px)]:block";
 const BAR = "pointer-events-none absolute inset-y-0 w-[3px] bg-[linear-gradient(180deg,#38BDF8,#2563EB)] shadow-[0_0_14px_2px_rgba(56,189,248,0.7)] ";
 
-export function NavyBanner({ children }: { children: ReactNode }) {
+// `glow={false}` leaves the soft glow out (the bars stay): a card taller than one row places
+// BANNER_GLOW itself, so the glow is not drawn over the rows under the title.
+export function NavyBanner({ children, glow = true }: { children: ReactNode; glow?: boolean }) {
   return (
     <div className="relative overflow-hidden rounded-2xl bg-banner shadow-[0_10px_28px_rgba(3,11,41,0.28)] [container-type:inline-size] sm:rounded-[20px]">
       {children}
-      <span aria-hidden className={GLOW} />
+      {glow && <span aria-hidden className={BANNER_GLOW} />}
       <span aria-hidden className={BAR + "left-0 [@container_(min-width:640px)]:hidden"} />
       <span aria-hidden className={BAR + "right-0"} />
     </div>
