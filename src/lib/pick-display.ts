@@ -18,6 +18,8 @@ export type LedgerPickInput = {
   odds: number;
   status: string;
   gameTime: Date;
+  // pickCategory()'s stamp (Pick.category): where a game total's and NRFI's side is stored.
+  category?: string | null;
 };
 
 // How long after first pitch/tip a game is presumed possibly still in progress
@@ -259,6 +261,40 @@ export function consensusHints(picks: LedgerPickInput[]): Map<string, string> {
     if (g.cappers.size < 2) continue;
     const text = g.cappers.size + " cappers on this " + g.word;
     for (const id of g.ids) hints.set(id, text);
+  }
+  return hints;
+}
+
+// The side a pick is on from its STORED fields (never its text), or null when the market stores none
+// (team totals, player props). The same rule as picks-glance.ts's SIDE_SQL.
+export function storedSide(p: { betType: string; pickedSide: string | null; category?: string | null }): string | null {
+  if (p.betType === "MONEYLINE" || p.betType === "SPREAD") return p.pickedSide;
+  const c = p.category ?? "";
+  if (p.betType === "TOTAL") return c.endsWith("OVER") ? "OVER" : c.endsWith("UNDER") ? "UNDER" : null;
+  if (p.betType === "NRFI") return c === "NRFI" || c === "YRFI" ? c : null;
+  return null;
+}
+
+// One side of one market of one game: the key getDayConsensus counts cappers under.
+export function sideGroupKey(g: { homeTeam: string; awayTeam: string; gameTime: Date; betType: string; period: string }, side: string): string {
+  return [g.homeTeam, g.awayTeam, g.gameTime.getTime(), g.betType, g.period, side].join("|");
+}
+
+// pickId -> hint text for the picks on screen, counted over the WHOLE day rather than over what is
+// on screen: `dayCounts` is getDayConsensus (sideGroupKey -> distinct cappers, every pick of the day),
+// so a capper / sport / bet type / result filter never changes a pill's number.
+// A pick with no stored side (a team total, or a row from before sides were stored) has no day count
+// to read and keeps consensusHints' text-derived hint, counted among the picks given.
+export function dayConsensusHints(picks: LedgerPickInput[], dayCounts: Map<string, number>): Map<string, string> {
+  const unsided = picks.filter((p) => storedSide(p) === null);
+  const hints = consensusHints(unsided);
+  for (const p of picks) {
+    const side = storedSide(p);
+    if (!side) continue;
+    const n = dayCounts.get(sideGroupKey(p, side));
+    if (n === undefined || n < 2) continue;
+    const word = side === "OVER" ? "over" : side === "UNDER" ? "under" : side === "NRFI" || side === "YRFI" ? side : "side";
+    hints.set(p.id, n + " cappers on this " + word);
   }
   return hints;
 }
