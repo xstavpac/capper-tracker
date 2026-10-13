@@ -69,6 +69,11 @@ export const TINTS = {
 export function Rank({ n }: { n: number }) {
   return <span className="w-5 shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{n + "."}</span>;
 }
+// Rank chip: gold, silver, bronze, then plain. `tone` gives every rank one color instead (a card with no podium).
+const MEDAL = ["bg-[#F5B301] text-[#3A2A00]", "bg-[#C5CBD6] text-[#1F2633]", "bg-[#D08A4E] text-white"];
+export function RankChip({ n, tone }: { n: number; tone?: string }) {
+  return <span className={"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums " + (tone ?? MEDAL[n - 1] ?? "bg-[#E6EBE8] text-foreground dark:bg-white/10")}>{n}</span>;
+}
 export function Name({ children }: { children: ReactNode }) {
   return <span className="block truncate text-sm font-semibold text-foreground">{children}</span>;
 }

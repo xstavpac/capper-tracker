@@ -21,6 +21,8 @@ import { PicksFilterBar } from "@/components/picks/picks-filter-bar";
 import { PickLedger, type LedgerRow, type LedgerSectionSummary } from "@/components/picks/pick-ledger";
 import { PicksSummaryStrip } from "@/components/picks/picks-summary-strip";
 import { DateNavigator } from "@/components/picks/date-navigator";
+import { AtAGlance, GlanceCapperCard } from "@/components/picks/at-a-glance";
+import { getDayWinnersAndLosers } from "@/server/data/picks-glance";
 import { cumulativeUnitsSeries, sportChipLayout, type HeaderPick } from "@/lib/picks-header";
 import {
   betTypeFilterCategory,
@@ -149,7 +151,7 @@ export default async function PicksPage({
     endDateKey,
   };
 
-  const [allPicks, cappers, sports, parlays, sqlSummary] = await Promise.all([
+  const [allPicks, cappers, sports, parlays, sqlSummary, glance] = await Promise.all([
     // The sport chip is applied in JS below (not in this query) so the sport
     // chips' counts can reflect every sport under the other active filters.
     getFilteredPicksForUser(user.id, { ...filters, sportId: undefined }),
@@ -163,6 +165,8 @@ export default async function PicksPage({
     // Bet type is derived in JS, so with that chip on the summary is computed
     // from the already-loaded rows instead (see summarizeLoadedPicks).
     betTypeFilter ? Promise.resolve(null) : getPicksSummary(user.id, filters),
+    // The "at a glance" row follows the day (or range) alone, never the capper / sport / result chips.
+    getDayWinnersAndLosers(user.id, startDateKey, endDateKey),
   ]);
 
   // Bet type is derived (betDetail text for NRFI/YRFI), not a stored column,
@@ -361,6 +365,11 @@ export default async function PicksPage({
             live={livePicks}
             later={laterPicks}
           />
+
+          <AtAGlance label={dateChipLabel + " at a glance"} columns={3}>
+            <GlanceCapperCard kind="winners" rows={glance.winners} today={dateIsDefault} />
+            <GlanceCapperCard kind="losers" rows={glance.losers} today={dateIsDefault} />
+          </AtAGlance>
 
           <PicksFilterBar
             cappers={cappers.map((c) => ({ value: c.id, label: c.name }))}

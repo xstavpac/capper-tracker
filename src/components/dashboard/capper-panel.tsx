@@ -43,7 +43,7 @@ import {
   TrophyFilledIcon,
   UsersIcon,
 } from "@/components/dashboard/cappers-icons";
-import { CONTROL, FOOTER_LINK, FOOTER_TEXT, FooterLine, GREEN, Message, Name, PanelShell, RED, ROW, Rank, TINTS, type PanelTheme } from "@/components/dashboard/panel-shell";
+import { CONTROL, FOOTER_LINK, FOOTER_TEXT, FooterLine, GREEN, Message, Name, PanelShell, RED, ROW, Rank, RankChip, TINTS, type PanelTheme } from "@/components/dashboard/panel-shell";
 
 type AnyPanel = PanelKey | FormPanelKey;
 
@@ -366,20 +366,14 @@ function HottestFooter({ rows, href }: { rows: StreakEntry[]; href: string }) {
   );
 }
 
-// Rank chip: gold, silver, bronze, then plain.
-const MEDAL = ["bg-[#F5B301] text-[#3A2A00]", "bg-[#C5CBD6] text-[#1F2633]", "bg-[#D08A4E] text-white"];
 // Record column: "12-3 80%" on one line where the panel is wide enough, win % under the W-L where it
 // is not (a phone, and the narrow three-column range).
-// `wide`: a card that spans the page (Today's Winners), so only a phone is narrow, and the record has
-// room for the window's pushes ("12-3-1").
-const RECORD = {
-  panel: { col: "w-[74px] max-[479px]:w-10 min-[1500px]:max-[1699px]:w-10", part: "max-[479px]:block min-[1500px]:max-[1699px]:block", pct: "max-[479px]:ml-0 min-[1500px]:max-[1699px]:ml-0" },
-  wide: { col: "w-[96px] max-[479px]:w-12", part: "max-[479px]:block", pct: "max-[479px]:ml-0" },
-};
+const RECORD_COL = "w-[74px] max-[479px]:w-10 min-[1500px]:max-[1699px]:w-10";
+const RECORD_PART = "max-[479px]:block min-[1500px]:max-[1699px]:block";
+const RECORD_PCT = "max-[479px]:ml-0 min-[1500px]:max-[1699px]:ml-0";
 const UNITS_COL = "w-[60px] min-[1500px]:max-[1699px]:w-14";
 const VIEW_COL = "w-11 min-[1500px]:max-[1699px]:w-10";
-export function WinnerRows({ rows, wide = false }: { rows: WinnerEntry[]; wide?: boolean }) {
-  const { col: RECORD_COL, part: RECORD_PART, pct: RECORD_PCT } = wide ? RECORD.wide : RECORD.panel;
+function WinnerRows({ rows }: { rows: WinnerEntry[] }) {
   return (
     <>
       <div aria-hidden className="flex items-center gap-2.5 min-[1500px]:max-[1699px]:gap-1.5 border-b border-[#0F1420]/[0.08] px-1.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-[#5B6275] dark:border-white/10 dark:text-muted-foreground">
@@ -394,12 +388,12 @@ export function WinnerRows({ rows, wide = false }: { rows: WinnerEntry[]; wide?:
           const decided = e.wins + e.losses;
           return (
             <li key={e.capperId} className={ROW + " " + (i === 0 ? "bg-[#E9F7EE] dark:bg-emerald-500/10" : "")}>
-              <span className={"flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums " + (MEDAL[i] ?? "bg-[#E6EBE8] text-foreground dark:bg-white/10")}>{i + 1}</span>
+              <RankChip n={i + 1} />
               <Link href={capperHref(e.capperId)} className="min-w-0 flex-1 hover:underline">
                 <Name>{e.name}</Name>
               </Link>
               <span className={RECORD_COL + " shrink-0 whitespace-nowrap text-xs font-medium leading-tight tabular-nums text-foreground"}>
-                <span className={RECORD_PART}>{e.wins + "–" + e.losses + (wide && e.pushes > 0 ? "–" + e.pushes : "")}</span>
+                <span className={RECORD_PART}>{e.wins + "–" + e.losses}</span>
                 {decided > 0 && <span className={RECORD_PART + " ml-1 font-semibold text-[#5B6275] dark:text-muted-foreground " + RECORD_PCT}>{Math.round((e.wins / decided) * 100) + "%"}</span>}
               </span>
               <span className={UNITS_COL + " shrink-0 text-right text-sm font-semibold tracking-[-0.01em] tabular-nums " + GREEN}>{units(e.netUnits)}</span>
@@ -418,7 +412,7 @@ export function WinnerRows({ rows, wide = false }: { rows: WinnerEntry[]; wide?:
   );
 }
 
-export function WinnersFooter({ rows, href }: { rows: WinnerEntry[]; href: string }) {
+function WinnersFooter({ rows, href }: { rows: WinnerEntry[]; href: string }) {
   const total = rows.reduce((sum, e) => sum + e.netUnits, 0);
   return (
     <>

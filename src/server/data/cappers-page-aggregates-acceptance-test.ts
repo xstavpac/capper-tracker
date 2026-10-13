@@ -738,7 +738,7 @@ async function main() {
   same("most active [today]: unchanged, today's picks only", (await panelOf<ActiveEntry>(Y1.u, "active", "today")).map((e) => e.name + " " + e.pickCount + "/" + e.totalPicks), ["Today only 2/2"]);
   check("yesterday had graded picks", (await gradedOf(Y1.u, "winners")) && (await gradedOf(Y1.u, "hottest")));
 
-  // ---- Today's Winners (/dashboard): Biggest Winners at "Today", as the card's fetch reads it -----
+  // ---- Biggest Winners at "Today", as the panel's dropdown fetch reads it -------------------------
   const todayLine = async (userId: string, now = NOWY) => ((await getPanelRows({ userId, panel: "winners", window: "today", now })) as WinnerEntry[]).map((e) => e.name + " " + e.netUnits + " " + e.wins + "-" + e.losses + "-" + e.pushes);
   const gradedToday = (userId: string) => panelWindowHasGraded({ userId, panel: "winners", window: "today", now: NOWY });
   const TW = await scenario("todaywin", [
