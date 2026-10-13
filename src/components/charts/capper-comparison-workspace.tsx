@@ -10,7 +10,7 @@ import { CapperComparisonChart, type ComparisonSeries } from "@/components/chart
 import { getRecordColor } from "@/server/data/stats";
 import { useFullscreen, FULLSCREEN_CHART_HEIGHT, FULLSCREEN_SURFACE_CLASS } from "@/components/charts/use-fullscreen";
 import { FullscreenButton } from "@/components/charts/fullscreen-button";
-import { BANNER_CONTROLS, BANNER_ICON, BANNER_ROW, BannerBrand, NavyBanner } from "@/components/ui/navy-banner";
+import { BANNER_CONTROLS, BANNER_GLOW, BANNER_ICON, BANNER_ROW, BannerBrand, NavyBanner } from "@/components/ui/navy-banner";
 import { CONTROL, GREEN, Message, PanelShell, RED, TINTS } from "@/components/dashboard/panel-shell";
 import { StatCell } from "@/components/dashboard/capper-hero";
 import { ChartsIcon, TrendingUpIcon } from "@/components/dashboard/cappers-icons";
@@ -131,17 +131,19 @@ const CARD = "rounded-[18px] border " + TINTS.neutral.card;
 // Two across when each card has 440px, one column under that.
 const TWO_UP = "grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))]";
 
-// One capper's row of the banner's stat strip. Before the first comparison arrives the cells are
-// drawn empty, so the banner does not change height when it does.
+// One capper's row of the banner's stat strip: the name and the series' color, then that capper's six
+// stats. From 900px of card it is one line; under that the name sits over a grid of three columns
+// (two on the narrowest phones). Before the first comparison arrives the cells are drawn empty, so
+// the banner does not change height when it does.
 function ProfileStrip({ name, color, profile }: { name: string; color: string; profile: CapperComparisonProfile | null }) {
   const stats = profile?.stats;
   return (
-    <div className="min-w-0">
-      <div className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold text-white">
+    <div className="min-w-0 [@container_(min-width:900px)]:flex [@container_(min-width:900px)]:items-center [@container_(min-width:900px)]:gap-4">
+      <div className="mb-1.5 flex min-w-0 items-center gap-2 text-[13px] font-semibold text-white [@container_(min-width:900px)]:mb-0 [@container_(min-width:900px)]:w-44 [@container_(min-width:900px)]:flex-none">
         <span aria-hidden className="h-2.5 w-2.5 flex-none rounded-full" style={{ backgroundColor: color }} />
         <span className="truncate">{name}</span>
       </div>
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-white/[0.14] [@container_(min-width:420px)]:grid-cols-3">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-white/[0.14] [@container_(min-width:420px)]:grid-cols-3 [@container_(min-width:900px)]:min-w-0 [@container_(min-width:900px)]:flex-1 [@container_(min-width:900px)]:grid-cols-6">
         <StatCell label="Record" value={stats ? stats.wins + "-" + stats.losses + "-" + stats.pushes : "—"} />
         <StatCell
           label="Win rate"
@@ -154,7 +156,7 @@ function ProfileStrip({ name, color, profile }: { name: string; color: string; p
           tone={stats ? (stats.netUnits >= 0 ? "up" : "down") : undefined}
         />
         <StatCell label="ROI" value={stats ? (stats.roi >= 0 ? "+" : "") + stats.roi + "%" : "—"} tone={stats ? (stats.roi >= 0 ? "up" : "down") : undefined} />
-        <StatCell label="Max drawdown" value={profile ? profile.maxDrawdown + "u" : "—"} tone={profile && profile.maxDrawdown > 0 ? "down" : undefined} />
+        <StatCell label="Drawdown" value={profile ? profile.maxDrawdown + "u" : "—"} tone={profile && profile.maxDrawdown > 0 ? "down" : undefined} />
         <StatCell label="Bets" value={profile ? String(profile.betCount) : "—"} />
       </div>
     </div>
@@ -305,10 +307,12 @@ export function CapperComparisonWorkspace({
 
   return (
     <div ref={fs.ref} className={(fs.isFullscreen ? FULLSCREEN_SURFACE_CLASS + " " : "") + "space-y-3.5"}>
-      <NavyBanner>
-        <div className={BANNER_ROW + " [@container_(min-width:640px)]:flex-wrap"}>
+      <NavyBanner glow={false}>
+        {/* The edge glow is drawn in this row only, under the time control: never over the rows below. */}
+        <div className={"relative " + BANNER_ROW + " [@container_(min-width:640px)]:flex-wrap"}>
+          <span aria-hidden className={BANNER_GLOW} />
           {brand}
-          <div className={BANNER_CONTROLS + " [@container_(min-width:640px)]:py-3"}>
+          <div className={"relative " + BANNER_CONTROLS + " [@container_(min-width:640px)]:py-3"}>
             <div role="group" aria-label="Time range" className="flex max-w-full gap-0.5 rounded-full border border-white/[0.14] bg-white/[0.08] p-0.5">
               {TIME_PRESETS.map((p) => {
                 const active = p === preset;
@@ -336,7 +340,7 @@ export function CapperComparisonWorkspace({
         <div
           role="group"
           aria-label="League"
-          className={"relative flex gap-1.5 overflow-x-auto border-t border-[rgba(59,130,246,0.18)] px-3 py-2.5 sm:flex-wrap sm:px-5 sm:py-3 " + NO_SCROLLBAR}
+          className={"flex gap-1.5 overflow-x-auto border-t border-[rgba(59,130,246,0.18)] px-3 py-2.5 sm:flex-wrap sm:px-5 sm:py-3 " + NO_SCROLLBAR}
         >
           {[{ id: null as string | null, name: "All leagues" }, ...sports].map((s) => {
             const active = s.id === filters.sportId;
@@ -362,7 +366,7 @@ export function CapperComparisonWorkspace({
           })}
         </div>
 
-        <div className={"relative grid gap-3 px-3 pb-3 transition-opacity sm:px-5 sm:pb-4 [@container_(min-width:900px)]:grid-cols-2 " + (loading && data ? "opacity-60" : "")}>
+        <div className={"grid gap-3 px-3 pb-3 transition-opacity sm:px-5 sm:pb-4 [@container_(min-width:900px)]:gap-2 " + (loading && data ? "opacity-60" : "")}>
           {selected.map((s) => (
             <ProfileStrip key={s.id} name={s.profile?.capperName ?? nameOf(s.capperId)} color={s.color} profile={s.profile} />
           ))}
