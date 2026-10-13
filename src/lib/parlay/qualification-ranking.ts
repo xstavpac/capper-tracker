@@ -41,7 +41,7 @@ export type ParlayLeg = {
   gameId?: string | null;
 };
 
-function toParlayCandidate(leg: ParlayLeg): ParlayCandidate {
+export function toParlayCandidate(leg: ParlayLeg): ParlayCandidate {
   return {
     pick: { betType: leg.betType, period: leg.period, betDetail: leg.betDetail, line: leg.line },
     game: { homeTeam: leg.homeTeam, awayTeam: leg.awayTeam, gameTime: leg.gameTime, sportName: leg.sportName, gameId: leg.gameId },
@@ -206,11 +206,19 @@ export function rankCandidates(
     });
   }
 
-  scored.sort((a, b) => {
-    if (b.wilsonLowerBound !== a.wilsonLowerBound) return b.wilsonLowerBound - a.wilsonLowerBound;
-    if (b.record.n !== a.record.n) return b.record.n - a.record.n;
-    return a.leg.pickId < b.leg.pickId ? -1 : a.leg.pickId > b.leg.pickId ? 1 : 0;
-  });
+  scored.sort((a, b) => compareByWilson({ ...a, pickId: a.leg.pickId }, { ...b, pickId: b.leg.pickId }));
 
   return scored;
+}
+
+// Section 7's one ordering for gated candidates: Wilson lower bound
+// descending, then decided-n descending, then pick id ascending. Shared with
+// Auto-Generate's same-game fill (auto-generate.ts) so both order identically.
+export function compareByWilson(
+  a: { pickId: string; wilsonLowerBound: number; record: { n: number } },
+  b: { pickId: string; wilsonLowerBound: number; record: { n: number } }
+): number {
+  if (b.wilsonLowerBound !== a.wilsonLowerBound) return b.wilsonLowerBound - a.wilsonLowerBound;
+  if (b.record.n !== a.record.n) return b.record.n - a.record.n;
+  return a.pickId < b.pickId ? -1 : a.pickId > b.pickId ? 1 : 0;
 }

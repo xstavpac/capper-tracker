@@ -20,7 +20,7 @@ export function toExpanderPick(
   game: ExpanderPickGame,
   activeSport: string,
   sportLabel: string
-): ExpanderPick & { datePosted: string } {
+): ExpanderPick & { datePosted: string; gameNumber: number | null } {
   const teamGroup = classifyPickTeamGroup(p, game, sportLabel);
   return {
     pickId: p.id,
@@ -62,5 +62,7 @@ export function toExpanderPick(
           : null,
     datePosted: p.datePosted.toISOString(),
     oddsSource: p.oddsSource,
+    // Read only by Auto-Generate's same-game fill (auto-generate.ts, sureOfGame).
+    gameNumber: p.gameNumber,
   };
 }

@@ -1,0 +1,1341 @@
+{
+  "requested3": {
+    "requested": 3,
+    "available": 5,
+    "legs": [
+      {
+        "gameId": "g1",
+        "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+        "gameTime": "2026-09-23T23:05:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g1-a",
+            "capperId": "capA",
+            "capperName": "capA",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "FAV_ML",
+            "leagueName": "MLB",
+            "gameId": "g1",
+            "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+            "betDetail": "Cubs ML",
+            "odds": -150,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Cubs ML",
+            "line": null,
+            "homeTeam": "Chicago Cubs",
+            "awayTeam": "Tampa Bay Rays",
+            "gameTime": "2026-09-23T23:05:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z"
+          },
+          "record": {
+            "wins": 21,
+            "losses": 9,
+            "winPct": 70,
+            "n": 30,
+            "source": "LEAGUE"
+          }
+        },
+        "next": [
+          {
+            "pick": {
+              "pickId": "g1-b",
+              "capperId": "capB",
+              "capperName": "capB",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "OVER",
+              "leagueName": "MLB",
+              "gameId": "g1",
+              "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+              "betDetail": "Over 8.5",
+              "odds": -110,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "TOTAL",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Over 8.5",
+              "line": 8.5,
+              "homeTeam": "Chicago Cubs",
+              "awayTeam": "Tampa Bay Rays",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 12,
+              "losses": 8,
+              "winPct": 60,
+              "n": 20,
+              "source": "LEAGUE"
+            }
+          },
+          {
+            "pick": {
+              "pickId": "g1-d",
+              "capperId": "capD",
+              "capperName": "capD",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "TD_PROP",
+              "leagueName": "MLB",
+              "gameId": "g1",
+              "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+              "betDetail": "Seiya Suzuki over 1.5 total bases",
+              "odds": -115,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "PLAYER_PROP",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Seiya Suzuki over 1.5 total bases",
+              "line": null,
+              "homeTeam": "Chicago Cubs",
+              "awayTeam": "Tampa Bay Rays",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 9,
+              "losses": 6,
+              "winPct": 60,
+              "n": 15,
+              "source": "LEAGUE"
+            }
+          },
+          {
+            "pick": {
+              "pickId": "g1-c",
+              "capperId": "capC",
+              "capperName": "capC",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "DOG_ML",
+              "leagueName": "MLB",
+              "gameId": "g1",
+              "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+              "betDetail": "Rays ML",
+              "odds": 130,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "MONEYLINE",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Rays ML",
+              "line": null,
+              "homeTeam": "Chicago Cubs",
+              "awayTeam": "Tampa Bay Rays",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 7,
+              "losses": 5,
+              "winPct": 58.333333333333336,
+              "n": 12,
+              "source": "LEAGUE"
+            }
+          }
+        ]
+      },
+      {
+        "gameId": "g2",
+        "gameLabel": "Boston Red Sox @ New York Yankees",
+        "gameTime": "2026-09-23T23:05:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g2-a",
+            "capperId": "capG",
+            "capperName": "capG",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "FAV_ML",
+            "leagueName": "MLB",
+            "gameId": "g2",
+            "gameLabel": "Boston Red Sox @ New York Yankees",
+            "betDetail": "Yankees ML",
+            "odds": -130,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Yankees ML",
+            "line": null,
+            "homeTeam": "New York Yankees",
+            "awayTeam": "Boston Red Sox",
+            "gameTime": "2026-09-23T23:05:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z"
+          },
+          "record": {
+            "wins": 26,
+            "losses": 14,
+            "winPct": 65,
+            "n": 40,
+            "source": "LEAGUE"
+          }
+        },
+        "next": [
+          {
+            "pick": {
+              "pickId": "g2-b",
+              "capperId": "capH",
+              "capperName": "capH",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "UNDER",
+              "leagueName": "MLB",
+              "gameId": "g2",
+              "gameLabel": "Boston Red Sox @ New York Yankees",
+              "betDetail": "Under 7.5",
+              "odds": -110,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "TOTAL",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Under 7.5",
+              "line": 7.5,
+              "homeTeam": "New York Yankees",
+              "awayTeam": "Boston Red Sox",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 6,
+              "losses": 4,
+              "winPct": 60,
+              "n": 10,
+              "source": "LEAGUE"
+            }
+          },
+          {
+            "pick": {
+              "pickId": "g2-c",
+              "capperId": "capI",
+              "capperName": "capI",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "TD_PROP",
+              "leagueName": "MLB",
+              "gameId": "g2",
+              "gameLabel": "Boston Red Sox @ New York Yankees",
+              "betDetail": "Aaron Judge over 1.5 total bases",
+              "odds": 105,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "PLAYER_PROP",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Aaron Judge over 1.5 total bases",
+              "line": null,
+              "homeTeam": "New York Yankees",
+              "awayTeam": "Boston Red Sox",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 5,
+              "losses": 4,
+              "winPct": 55.55555555555556,
+              "n": 9,
+              "source": "LEAGUE"
+            }
+          },
+          {
+            "pick": {
+              "pickId": "g2-d",
+              "capperId": "capJ",
+              "capperName": "capJ",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "TD_PROP",
+              "leagueName": "MLB",
+              "gameId": "g2",
+              "gameLabel": "Boston Red Sox @ New York Yankees",
+              "betDetail": "Aaron Judge under 0.5 home runs",
+              "odds": -260,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "PLAYER_PROP",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Aaron Judge under 0.5 home runs",
+              "line": null,
+              "homeTeam": "New York Yankees",
+              "awayTeam": "Boston Red Sox",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 4,
+              "losses": 4,
+              "winPct": 50,
+              "n": 8,
+              "source": "LEAGUE"
+            }
+          }
+        ]
+      },
+      {
+        "gameId": "g3",
+        "gameLabel": "San Francisco Giants @ Los Angeles Dodgers",
+        "gameTime": "2026-09-24T02:10:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g3-a",
+            "capperId": "capK",
+            "capperName": "capK",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "FAV_ML",
+            "leagueName": "MLB",
+            "gameId": "g3",
+            "gameLabel": "San Francisco Giants @ Los Angeles Dodgers",
+            "betDetail": "Dodgers ML",
+            "odds": -140,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Dodgers ML",
+            "line": null,
+            "homeTeam": "Los Angeles Dodgers",
+            "awayTeam": "San Francisco Giants",
+            "gameTime": "2026-09-24T02:10:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z"
+          },
+          "record": {
+            "wins": 31,
+            "losses": 19,
+            "winPct": 62,
+            "n": 50,
+            "source": "LEAGUE"
+          }
+        },
+        "next": []
+      }
+    ]
+  },
+  "requested5": {
+    "requested": 5,
+    "available": 5,
+    "legs": [
+      {
+        "gameId": "g1",
+        "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+        "gameTime": "2026-09-23T23:05:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g1-a",
+            "capperId": "capA",
+            "capperName": "capA",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "FAV_ML",
+            "leagueName": "MLB",
+            "gameId": "g1",
+            "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+            "betDetail": "Cubs ML",
+            "odds": -150,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Cubs ML",
+            "line": null,
+            "homeTeam": "Chicago Cubs",
+            "awayTeam": "Tampa Bay Rays",
+            "gameTime": "2026-09-23T23:05:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z"
+          },
+          "record": {
+            "wins": 21,
+            "losses": 9,
+            "winPct": 70,
+            "n": 30,
+            "source": "LEAGUE"
+          }
+        },
+        "next": [
+          {
+            "pick": {
+              "pickId": "g1-b",
+              "capperId": "capB",
+              "capperName": "capB",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "OVER",
+              "leagueName": "MLB",
+              "gameId": "g1",
+              "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+              "betDetail": "Over 8.5",
+              "odds": -110,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "TOTAL",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Over 8.5",
+              "line": 8.5,
+              "homeTeam": "Chicago Cubs",
+              "awayTeam": "Tampa Bay Rays",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 12,
+              "losses": 8,
+              "winPct": 60,
+              "n": 20,
+              "source": "LEAGUE"
+            }
+          },
+          {
+            "pick": {
+              "pickId": "g1-d",
+              "capperId": "capD",
+              "capperName": "capD",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "TD_PROP",
+              "leagueName": "MLB",
+              "gameId": "g1",
+              "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+              "betDetail": "Seiya Suzuki over 1.5 total bases",
+              "odds": -115,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "PLAYER_PROP",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Seiya Suzuki over 1.5 total bases",
+              "line": null,
+              "homeTeam": "Chicago Cubs",
+              "awayTeam": "Tampa Bay Rays",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 9,
+              "losses": 6,
+              "winPct": 60,
+              "n": 15,
+              "source": "LEAGUE"
+            }
+          },
+          {
+            "pick": {
+              "pickId": "g1-c",
+              "capperId": "capC",
+              "capperName": "capC",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "DOG_ML",
+              "leagueName": "MLB",
+              "gameId": "g1",
+              "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+              "betDetail": "Rays ML",
+              "odds": 130,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "MONEYLINE",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Rays ML",
+              "line": null,
+              "homeTeam": "Chicago Cubs",
+              "awayTeam": "Tampa Bay Rays",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 7,
+              "losses": 5,
+              "winPct": 58.333333333333336,
+              "n": 12,
+              "source": "LEAGUE"
+            }
+          }
+        ]
+      },
+      {
+        "gameId": "g2",
+        "gameLabel": "Boston Red Sox @ New York Yankees",
+        "gameTime": "2026-09-23T23:05:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g2-a",
+            "capperId": "capG",
+            "capperName": "capG",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "FAV_ML",
+            "leagueName": "MLB",
+            "gameId": "g2",
+            "gameLabel": "Boston Red Sox @ New York Yankees",
+            "betDetail": "Yankees ML",
+            "odds": -130,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Yankees ML",
+            "line": null,
+            "homeTeam": "New York Yankees",
+            "awayTeam": "Boston Red Sox",
+            "gameTime": "2026-09-23T23:05:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z"
+          },
+          "record": {
+            "wins": 26,
+            "losses": 14,
+            "winPct": 65,
+            "n": 40,
+            "source": "LEAGUE"
+          }
+        },
+        "next": [
+          {
+            "pick": {
+              "pickId": "g2-b",
+              "capperId": "capH",
+              "capperName": "capH",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "UNDER",
+              "leagueName": "MLB",
+              "gameId": "g2",
+              "gameLabel": "Boston Red Sox @ New York Yankees",
+              "betDetail": "Under 7.5",
+              "odds": -110,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "TOTAL",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Under 7.5",
+              "line": 7.5,
+              "homeTeam": "New York Yankees",
+              "awayTeam": "Boston Red Sox",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 6,
+              "losses": 4,
+              "winPct": 60,
+              "n": 10,
+              "source": "LEAGUE"
+            }
+          },
+          {
+            "pick": {
+              "pickId": "g2-c",
+              "capperId": "capI",
+              "capperName": "capI",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "TD_PROP",
+              "leagueName": "MLB",
+              "gameId": "g2",
+              "gameLabel": "Boston Red Sox @ New York Yankees",
+              "betDetail": "Aaron Judge over 1.5 total bases",
+              "odds": 105,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "PLAYER_PROP",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Aaron Judge over 1.5 total bases",
+              "line": null,
+              "homeTeam": "New York Yankees",
+              "awayTeam": "Boston Red Sox",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 5,
+              "losses": 4,
+              "winPct": 55.55555555555556,
+              "n": 9,
+              "source": "LEAGUE"
+            }
+          },
+          {
+            "pick": {
+              "pickId": "g2-d",
+              "capperId": "capJ",
+              "capperName": "capJ",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "TD_PROP",
+              "leagueName": "MLB",
+              "gameId": "g2",
+              "gameLabel": "Boston Red Sox @ New York Yankees",
+              "betDetail": "Aaron Judge under 0.5 home runs",
+              "odds": -260,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "PLAYER_PROP",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Aaron Judge under 0.5 home runs",
+              "line": null,
+              "homeTeam": "New York Yankees",
+              "awayTeam": "Boston Red Sox",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 4,
+              "losses": 4,
+              "winPct": 50,
+              "n": 8,
+              "source": "LEAGUE"
+            }
+          }
+        ]
+      },
+      {
+        "gameId": "g3",
+        "gameLabel": "San Francisco Giants @ Los Angeles Dodgers",
+        "gameTime": "2026-09-24T02:10:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g3-a",
+            "capperId": "capK",
+            "capperName": "capK",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "FAV_ML",
+            "leagueName": "MLB",
+            "gameId": "g3",
+            "gameLabel": "San Francisco Giants @ Los Angeles Dodgers",
+            "betDetail": "Dodgers ML",
+            "odds": -140,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Dodgers ML",
+            "line": null,
+            "homeTeam": "Los Angeles Dodgers",
+            "awayTeam": "San Francisco Giants",
+            "gameTime": "2026-09-24T02:10:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z"
+          },
+          "record": {
+            "wins": 31,
+            "losses": 19,
+            "winPct": 62,
+            "n": 50,
+            "source": "LEAGUE"
+          }
+        },
+        "next": []
+      },
+      {
+        "gameId": "g4",
+        "gameLabel": "Atlanta Braves @ New York Mets",
+        "gameTime": "2026-09-23T17:10:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g4-a",
+            "capperId": "capL",
+            "capperName": "capL",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "FAV_ML",
+            "leagueName": "MLB",
+            "gameId": "g4",
+            "gameLabel": "Atlanta Braves @ New York Mets",
+            "betDetail": "Mets ML",
+            "odds": -120,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Mets ML",
+            "line": null,
+            "homeTeam": "New York Mets",
+            "awayTeam": "Atlanta Braves",
+            "gameTime": "2026-09-23T17:10:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z",
+            "gameNumber": 1
+          },
+          "record": {
+            "wins": 18,
+            "losses": 12,
+            "winPct": 60,
+            "n": 30,
+            "source": "LEAGUE"
+          }
+        },
+        "next": [
+          {
+            "pick": {
+              "pickId": "g4-b",
+              "capperId": "capM",
+              "capperName": "capM",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "OVER",
+              "leagueName": "MLB",
+              "gameId": "g4",
+              "gameLabel": "Atlanta Braves @ New York Mets",
+              "betDetail": "Over 8",
+              "odds": -110,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "TOTAL",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Over 8",
+              "line": 8,
+              "homeTeam": "New York Mets",
+              "awayTeam": "Atlanta Braves",
+              "gameTime": "2026-09-23T17:10:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z",
+              "gameNumber": 1
+            },
+            "record": {
+              "wins": 5,
+              "losses": 5,
+              "winPct": 50,
+              "n": 10,
+              "source": "LEAGUE"
+            }
+          }
+        ]
+      },
+      {
+        "gameId": "g5",
+        "gameLabel": "Atlanta Braves @ New York Mets",
+        "gameTime": "2026-09-23T23:10:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g5-a",
+            "capperId": "capN",
+            "capperName": "capN",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "DOG_ML",
+            "leagueName": "MLB",
+            "gameId": "g5",
+            "gameLabel": "Atlanta Braves @ New York Mets",
+            "betDetail": "Braves ML",
+            "odds": 110,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Braves ML",
+            "line": null,
+            "homeTeam": "New York Mets",
+            "awayTeam": "Atlanta Braves",
+            "gameTime": "2026-09-23T23:10:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z",
+            "gameNumber": 2
+          },
+          "record": {
+            "wins": 14,
+            "losses": 11,
+            "winPct": 56.00000000000001,
+            "n": 25,
+            "source": "LEAGUE"
+          }
+        },
+        "next": [
+          {
+            "pick": {
+              "pickId": "g5-b",
+              "capperId": "capO",
+              "capperName": "capO",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "UNDER",
+              "leagueName": "MLB",
+              "gameId": "g5",
+              "gameLabel": "Atlanta Braves @ New York Mets",
+              "betDetail": "Under 9",
+              "odds": -110,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "TOTAL",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Under 9",
+              "line": 9,
+              "homeTeam": "New York Mets",
+              "awayTeam": "Atlanta Braves",
+              "gameTime": "2026-09-23T23:10:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z",
+              "gameNumber": null
+            },
+            "record": {
+              "wins": 5,
+              "losses": 6,
+              "winPct": 45.45454545454545,
+              "n": 11,
+              "source": "LEAGUE"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "requested20": {
+    "requested": 20,
+    "available": 5,
+    "legs": [
+      {
+        "gameId": "g1",
+        "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+        "gameTime": "2026-09-23T23:05:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g1-a",
+            "capperId": "capA",
+            "capperName": "capA",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "FAV_ML",
+            "leagueName": "MLB",
+            "gameId": "g1",
+            "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+            "betDetail": "Cubs ML",
+            "odds": -150,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Cubs ML",
+            "line": null,
+            "homeTeam": "Chicago Cubs",
+            "awayTeam": "Tampa Bay Rays",
+            "gameTime": "2026-09-23T23:05:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z"
+          },
+          "record": {
+            "wins": 21,
+            "losses": 9,
+            "winPct": 70,
+            "n": 30,
+            "source": "LEAGUE"
+          }
+        },
+        "next": [
+          {
+            "pick": {
+              "pickId": "g1-b",
+              "capperId": "capB",
+              "capperName": "capB",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "OVER",
+              "leagueName": "MLB",
+              "gameId": "g1",
+              "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+              "betDetail": "Over 8.5",
+              "odds": -110,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "TOTAL",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Over 8.5",
+              "line": 8.5,
+              "homeTeam": "Chicago Cubs",
+              "awayTeam": "Tampa Bay Rays",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 12,
+              "losses": 8,
+              "winPct": 60,
+              "n": 20,
+              "source": "LEAGUE"
+            }
+          },
+          {
+            "pick": {
+              "pickId": "g1-d",
+              "capperId": "capD",
+              "capperName": "capD",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "TD_PROP",
+              "leagueName": "MLB",
+              "gameId": "g1",
+              "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+              "betDetail": "Seiya Suzuki over 1.5 total bases",
+              "odds": -115,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "PLAYER_PROP",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Seiya Suzuki over 1.5 total bases",
+              "line": null,
+              "homeTeam": "Chicago Cubs",
+              "awayTeam": "Tampa Bay Rays",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 9,
+              "losses": 6,
+              "winPct": 60,
+              "n": 15,
+              "source": "LEAGUE"
+            }
+          },
+          {
+            "pick": {
+              "pickId": "g1-c",
+              "capperId": "capC",
+              "capperName": "capC",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "DOG_ML",
+              "leagueName": "MLB",
+              "gameId": "g1",
+              "gameLabel": "Tampa Bay Rays @ Chicago Cubs",
+              "betDetail": "Rays ML",
+              "odds": 130,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "MONEYLINE",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Rays ML",
+              "line": null,
+              "homeTeam": "Chicago Cubs",
+              "awayTeam": "Tampa Bay Rays",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 7,
+              "losses": 5,
+              "winPct": 58.333333333333336,
+              "n": 12,
+              "source": "LEAGUE"
+            }
+          }
+        ]
+      },
+      {
+        "gameId": "g2",
+        "gameLabel": "Boston Red Sox @ New York Yankees",
+        "gameTime": "2026-09-23T23:05:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g2-a",
+            "capperId": "capG",
+            "capperName": "capG",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "FAV_ML",
+            "leagueName": "MLB",
+            "gameId": "g2",
+            "gameLabel": "Boston Red Sox @ New York Yankees",
+            "betDetail": "Yankees ML",
+            "odds": -130,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Yankees ML",
+            "line": null,
+            "homeTeam": "New York Yankees",
+            "awayTeam": "Boston Red Sox",
+            "gameTime": "2026-09-23T23:05:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z"
+          },
+          "record": {
+            "wins": 26,
+            "losses": 14,
+            "winPct": 65,
+            "n": 40,
+            "source": "LEAGUE"
+          }
+        },
+        "next": [
+          {
+            "pick": {
+              "pickId": "g2-b",
+              "capperId": "capH",
+              "capperName": "capH",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "UNDER",
+              "leagueName": "MLB",
+              "gameId": "g2",
+              "gameLabel": "Boston Red Sox @ New York Yankees",
+              "betDetail": "Under 7.5",
+              "odds": -110,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "TOTAL",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Under 7.5",
+              "line": 7.5,
+              "homeTeam": "New York Yankees",
+              "awayTeam": "Boston Red Sox",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 6,
+              "losses": 4,
+              "winPct": 60,
+              "n": 10,
+              "source": "LEAGUE"
+            }
+          },
+          {
+            "pick": {
+              "pickId": "g2-c",
+              "capperId": "capI",
+              "capperName": "capI",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "TD_PROP",
+              "leagueName": "MLB",
+              "gameId": "g2",
+              "gameLabel": "Boston Red Sox @ New York Yankees",
+              "betDetail": "Aaron Judge over 1.5 total bases",
+              "odds": 105,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "PLAYER_PROP",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Aaron Judge over 1.5 total bases",
+              "line": null,
+              "homeTeam": "New York Yankees",
+              "awayTeam": "Boston Red Sox",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 5,
+              "losses": 4,
+              "winPct": 55.55555555555556,
+              "n": 9,
+              "source": "LEAGUE"
+            }
+          },
+          {
+            "pick": {
+              "pickId": "g2-d",
+              "capperId": "capJ",
+              "capperName": "capJ",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "TD_PROP",
+              "leagueName": "MLB",
+              "gameId": "g2",
+              "gameLabel": "Boston Red Sox @ New York Yankees",
+              "betDetail": "Aaron Judge under 0.5 home runs",
+              "odds": -260,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "PLAYER_PROP",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Aaron Judge under 0.5 home runs",
+              "line": null,
+              "homeTeam": "New York Yankees",
+              "awayTeam": "Boston Red Sox",
+              "gameTime": "2026-09-23T23:05:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z"
+            },
+            "record": {
+              "wins": 4,
+              "losses": 4,
+              "winPct": 50,
+              "n": 8,
+              "source": "LEAGUE"
+            }
+          }
+        ]
+      },
+      {
+        "gameId": "g3",
+        "gameLabel": "San Francisco Giants @ Los Angeles Dodgers",
+        "gameTime": "2026-09-24T02:10:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g3-a",
+            "capperId": "capK",
+            "capperName": "capK",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "FAV_ML",
+            "leagueName": "MLB",
+            "gameId": "g3",
+            "gameLabel": "San Francisco Giants @ Los Angeles Dodgers",
+            "betDetail": "Dodgers ML",
+            "odds": -140,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Dodgers ML",
+            "line": null,
+            "homeTeam": "Los Angeles Dodgers",
+            "awayTeam": "San Francisco Giants",
+            "gameTime": "2026-09-24T02:10:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z"
+          },
+          "record": {
+            "wins": 31,
+            "losses": 19,
+            "winPct": 62,
+            "n": 50,
+            "source": "LEAGUE"
+          }
+        },
+        "next": []
+      },
+      {
+        "gameId": "g4",
+        "gameLabel": "Atlanta Braves @ New York Mets",
+        "gameTime": "2026-09-23T17:10:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g4-a",
+            "capperId": "capL",
+            "capperName": "capL",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "FAV_ML",
+            "leagueName": "MLB",
+            "gameId": "g4",
+            "gameLabel": "Atlanta Braves @ New York Mets",
+            "betDetail": "Mets ML",
+            "odds": -120,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Mets ML",
+            "line": null,
+            "homeTeam": "New York Mets",
+            "awayTeam": "Atlanta Braves",
+            "gameTime": "2026-09-23T17:10:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z",
+            "gameNumber": 1
+          },
+          "record": {
+            "wins": 18,
+            "losses": 12,
+            "winPct": 60,
+            "n": 30,
+            "source": "LEAGUE"
+          }
+        },
+        "next": [
+          {
+            "pick": {
+              "pickId": "g4-b",
+              "capperId": "capM",
+              "capperName": "capM",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "OVER",
+              "leagueName": "MLB",
+              "gameId": "g4",
+              "gameLabel": "Atlanta Braves @ New York Mets",
+              "betDetail": "Over 8",
+              "odds": -110,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "TOTAL",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Over 8",
+              "line": 8,
+              "homeTeam": "New York Mets",
+              "awayTeam": "Atlanta Braves",
+              "gameTime": "2026-09-23T17:10:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z",
+              "gameNumber": 1
+            },
+            "record": {
+              "wins": 5,
+              "losses": 5,
+              "winPct": 50,
+              "n": 10,
+              "source": "LEAGUE"
+            }
+          }
+        ]
+      },
+      {
+        "gameId": "g5",
+        "gameLabel": "Atlanta Braves @ New York Mets",
+        "gameTime": "2026-09-23T23:10:00.000Z",
+        "top": {
+          "pick": {
+            "pickId": "g5-a",
+            "capperId": "capN",
+            "capperName": "capN",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "DOG_ML",
+            "leagueName": "MLB",
+            "gameId": "g5",
+            "gameLabel": "Atlanta Braves @ New York Mets",
+            "betDetail": "Braves ML",
+            "odds": 110,
+            "units": 1,
+            "status": "PENDING",
+            "betType": "MONEYLINE",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Braves ML",
+            "line": null,
+            "homeTeam": "New York Mets",
+            "awayTeam": "Atlanta Braves",
+            "gameTime": "2026-09-23T23:10:00.000Z",
+            "teamGroup": "OTHER",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-09-23T15:00:00.000Z",
+            "gameNumber": 2
+          },
+          "record": {
+            "wins": 14,
+            "losses": 11,
+            "winPct": 56.00000000000001,
+            "n": 25,
+            "source": "LEAGUE"
+          }
+        },
+        "next": [
+          {
+            "pick": {
+              "pickId": "g5-b",
+              "capperId": "capO",
+              "capperName": "capO",
+              "capperColorTag": null,
+              "capperIsFavorite": false,
+              "category": "UNDER",
+              "leagueName": "MLB",
+              "gameId": "g5",
+              "gameLabel": "Atlanta Braves @ New York Mets",
+              "betDetail": "Under 9",
+              "odds": -110,
+              "units": 1,
+              "status": "PENDING",
+              "betType": "TOTAL",
+              "period": "FULL_GAME",
+              "rawBetDetail": "Under 9",
+              "line": 9,
+              "homeTeam": "New York Mets",
+              "awayTeam": "Atlanta Braves",
+              "gameTime": "2026-09-23T23:10:00.000Z",
+              "teamGroup": "OTHER",
+              "teamLabel": "",
+              "teamColor": null,
+              "datePosted": "2026-09-23T15:00:00.000Z",
+              "gameNumber": null
+            },
+            "record": {
+              "wins": 5,
+              "losses": 6,
+              "winPct": 45.45454545454545,
+              "n": 11,
+              "source": "LEAGUE"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

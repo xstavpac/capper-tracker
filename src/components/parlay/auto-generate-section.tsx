@@ -8,15 +8,21 @@
 // autoGenerateParlayAction; this component only holds the controls and
 // renders the result. Its scope/leg-count state is local - it never touches
 // the Parlay Pool or My Picks' scope. Every league starts on.
+//
+// "Max legs per game" (1 by default) lets a parlay that is short of games take
+// a second or third leg from games it already has - see buildSameGameLegs in
+// lib/parlay/auto-generate.ts. At 1 nothing here differs from before.
 import { useEffect, useState } from "react";
 import { autoGenerateParlayAction, type AutoGenerateResult } from "@/server/actions/parlay-generator";
 import { CONTROL, FOOTER_LINK, FOOTER_TEXT, PanelShell, TINTS } from "@/components/dashboard/panel-shell";
 import { BoltIcon, ListChecksIcon } from "@/components/dashboard/cappers-icons";
-import { LABEL, LegStepper, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Tabs } from "@/components/parlay/parlay-controls";
-import { LEG_LIST, LegRow, ResultBlock, SwapBlock, formatOdds, rankedRecordText } from "@/components/parlay/swap-result";
+import { LABEL, LegStepper, NumberSegments, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Tabs } from "@/components/parlay/parlay-controls";
+import { LEG_LIST, LegRow, ResultBlock, SwapBlock, formatOdds, marketNoun, rankedRecordText } from "@/components/parlay/swap-result";
 import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { autoGenerateWindowText } from "@/lib/parlay/auto-generate-window";
-import type { AutoLeg, SwapMode } from "@/lib/parlay/auto-generate";
+import type { AutoLeg, MaxLegsPerGame, SameGameLeg, SwapMode } from "@/lib/parlay/auto-generate";
+import { swapRecordLabel } from "@/lib/parlay/pick-record";
+import { legCountText, orderDisplayLegs } from "@/lib/parlay/same-game-display";
 
 const ICON = "h-[17px] w-[17px] stroke-[2.2]";
 const AUTO = {
@@ -33,16 +39,23 @@ export type GeneratedSummary = { gamesWithPicks: number; leagues: string[] };
 
 type ResultTab = "PRIMARY" | SwapMode;
 
-function ParlayALeg({ n, leg }: { n: number; leg: AutoLeg }) {
+const SGP_TAG = "SGP";
+const MAX_PER_GAME_OPTIONS = [1, 2, 3] as const;
+const plural = (n: number) => (n === 1 ? "" : "s");
+
+// `taken` holds the picks that are legs of this parlay in their own right (the
+// same-game legs), so a game's "next picks" never repeats one.
+function ParlayALeg({ n, leg, sameGame, taken }: { n: number; leg: AutoLeg; sameGame: boolean; taken: ReadonlySet<string> }) {
+  const next = leg.next.filter((r) => !taken.has(r.pick.pickId));
   return (
-    <LegRow n={n} pick={leg.top.pick} recordText={rankedRecordText(leg.top)} winPct={leg.top.record?.winPct ?? null}>
-      {leg.next.length > 0 && (
+    <LegRow n={n} pick={leg.top.pick} recordText={rankedRecordText(leg.top)} winPct={leg.top.record?.winPct ?? null} tag={sameGame ? SGP_TAG : undefined}>
+      {next.length > 0 && (
         <details className="mt-1.5">
           <summary className="cursor-pointer text-[11.5px] font-semibold text-brand-600 dark:text-brand-400">
-            Next {leg.next.length} pick{leg.next.length === 1 ? "" : "s"} in this game
+            Next {next.length} pick{plural(next.length)} in this game
           </summary>
           <ul className="mt-1.5 space-y-1.5">
-            {leg.next.map((r) => (
+            {next.map((r) => (
               <li key={r.pick.pickId} className="rounded-[10px] border border-[#E6E8EF] bg-white px-3 py-2 dark:border-border dark:bg-card">
                 <div className="flex items-baseline justify-between gap-3 text-[13px] font-semibold text-foreground">
                   <span className="min-w-0 [overflow-wrap:anywhere]">{r.pick.betDetail}</span>
@@ -60,9 +73,20 @@ function ParlayALeg({ n, leg }: { n: number; leg: AutoLeg }) {
   );
 }
 
+// A leg added from a game Parlay A already has. Its record is the one that
+// qualified it - all leagues, its own market - not the record Parlay A ranks by.
+function SameGameLegRow({ n, leg }: { n: number; leg: SameGameLeg }) {
+  return (
+    <LegRow n={n} pick={leg.pick} recordText={swapRecordLabel(leg.record, marketNoun(leg.pick.category))} winPct={leg.record.winPct} tag={SGP_TAG}>
+      <p className="mt-1.5 text-[11.5px] font-medium text-muted-foreground">Added from a game already in this parlay</p>
+    </LegRow>
+  );
+}
+
 export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[]; onGenerated?: (summary: GeneratedSummary | null) => void }) {
   const [scope, setScope] = useState<Record<string, boolean>>({});
   const [legCount, setLegCountState] = useState(3);
+  const [maxPerGame, setMaxPerGame] = useState<MaxLegsPerGame>(1);
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AutoGenerateResult | null>(null);
@@ -81,7 +105,7 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
     setResult(null);
     setShortfallConfirmed(false);
     setTab("PRIMARY");
-  }, [scopeKey, legCount]);
+  }, [scopeKey, legCount, maxPerGame]);
 
   useEffect(() => {
     onGenerated?.(result ? { gamesWithPicks: result.parlayA.available, leagues: result.leaguesSearched } : null);
@@ -91,7 +115,7 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
     setBuilding(true);
     setError(null);
     try {
-      const next = await autoGenerateParlayAction(inScopeLeagues, legCount);
+      const next = await autoGenerateParlayAction(inScopeLeagues, legCount, maxPerGame);
       if ("error" in next) {
         setError(next.error);
         return;
@@ -114,7 +138,15 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
   }
 
   const parlayA = result?.parlayA ?? null;
-  const isShort = parlayA !== null && parlayA.available < parlayA.requested;
+  // Read leniently: a result with no same-game part is a one-leg-per-game parlay.
+  const added = result?.sameGame?.legs ?? [];
+  const builtMax = result?.sameGame?.maxLegsPerGame ?? 1;
+  const displayLegs = parlayA ? orderDisplayLegs(parlayA.legs, added) : [];
+  const legPicks = displayLegs.map((d) => (d.kind === "TOP" ? d.leg.top.pick : d.leg.pick));
+  const taken = new Set(added.map((a) => a.pick.pickId));
+  // Short of the count asked for, after any same-game legs. Never built
+  // smaller without the user saying so.
+  const isShort = parlayA !== null && displayLegs.length < parlayA.requested;
   const showParlays = parlayA !== null && parlayA.legs.length > 0 && (!isShort || shortfallConfirmed);
   const resultLeagues = parlayA ? Array.from(new Set(parlayA.legs.map((l) => l.top.pick.leagueName))) : [];
 
@@ -139,7 +171,7 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
             value={legCount}
             max={MAX_PARLAY_LEGS}
             onChange={(n) => setLegCountState(Math.max(1, Math.min(n, MAX_PARLAY_LEGS)))}
-            note={`one per game · up to ${MAX_PARLAY_LEGS}`}
+            note={`${maxPerGame === 1 ? "one per game" : "up to " + maxPerGame + " per game"} · up to ${MAX_PARLAY_LEGS}`}
           />
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={clear} disabled={!result} className={PILL_OUTLINE}>
@@ -150,6 +182,19 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
               {building ? "Generating…" : "Generate parlay"}
             </button>
           </div>
+        </div>
+        <div className="mt-3">
+          <NumberSegments
+            label="Max legs per game"
+            options={MAX_PER_GAME_OPTIONS}
+            value={maxPerGame}
+            onChange={setMaxPerGame}
+            note={
+              maxPerGame === 1
+                ? "one leg per game"
+                : "adds same-game legs only when there aren't enough games to reach your leg count"
+            }
+          />
         </div>
         {inScopeLeagues.length === 0 && (
           <p className="mt-2 text-xs font-medium text-muted-foreground">Toggle at least one league on to generate a parlay.</p>
@@ -171,10 +216,15 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
             <p className="mt-1 text-xs font-medium text-muted-foreground">
               You asked for {parlayA.requested} legs, but only {parlayA.available} unstarted game
               {parlayA.available === 1 ? "" : "s"} {autoGenerateWindowText(result!.leaguesSearched)}{" "}
-              {parlayA.available === 1 ? "has" : "have"} picks from your cappers. Each game can give one leg.
+              {parlayA.available === 1 ? "has" : "have"} picks from your cappers.{" "}
+              {builtMax === 1
+                ? "Each game can give one leg."
+                : added.length > 0
+                  ? `${added.length} same-game leg${plural(added.length)} ${added.length === 1 ? "was" : "were"} added (up to ${builtMax} per game), and no other pick on those games both clears 55% in its market and fits with the legs already there.`
+                  : `No same-game legs could be added: no other pick on those games both clears 55% in its market and fits with the leg already there.`}
             </p>
             <button type="button" onClick={() => setShortfallConfirmed(true)} className={PILL_PRIMARY + " mt-3"}>
-              Build with {parlayA.available} leg{parlayA.available === 1 ? "" : "s"}
+              Build with {displayLegs.length} leg{plural(displayLegs.length)}
             </button>
           </div>
         )}
@@ -190,7 +240,7 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
           }}
           control={
             <span className={CONTROL + " shrink-0 px-2.5 py-1 " + TINTS.neutral.control}>
-              {parlayA!.legs.length} leg{parlayA!.legs.length === 1 ? "" : "s"} · {resultLeagues.join(", ")}
+              {legCountText(legPicks, resultLeagues)}
             </span>
           }
           footer={
@@ -219,18 +269,33 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
           <div className="mt-3">
             {tab === "PRIMARY" && (
               <ResultBlock
-                title={`Parlay A — ${parlayA!.legs.length}-leg parlay`}
-                subtitle={RESULT_SUBTITLE}
+                title={`Parlay A — ${displayLegs.length}-leg parlay`}
+                subtitle={
+                  added.length > 0
+                    ? `${RESULT_SUBTITLE}. Only ${parlayA!.available} game${plural(parlayA!.available)} had picks, so ${added.length} same-game leg${plural(added.length)} ${added.length === 1 ? "was" : "were"} added.`
+                    : RESULT_SUBTITLE
+                }
                 plain
-                priceLegs={parlayA!.legs.map((leg) => leg.top.pick)}
-                sendLegs={parlayA!.legs.map((leg) => leg.top.pick)}
+                priceLegs={legPicks}
+                sameGamePrice={added.length > 0}
+                sendLegs={legPicks}
               >
                 <ol className={LEG_LIST}>
-                  {parlayA!.legs.map((leg, i) => (
-                    <ParlayALeg key={leg.gameId} n={i + 1} leg={leg} />
-                  ))}
+                  {displayLegs.map((d, i) =>
+                    d.kind === "TOP" ? (
+                      <ParlayALeg key={d.leg.top.pick.pickId} n={i + 1} leg={d.leg} sameGame={d.sameGame} taken={taken} />
+                    ) : (
+                      <SameGameLegRow key={d.leg.pick.pickId} n={i + 1} leg={d.leg} />
+                    )
+                  )}
                 </ol>
               </ResultBlock>
+            )}
+            {tab !== "PRIMARY" && added.length > 0 && (
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                Same-game legs aren&apos;t included in swap variants: this is built from Parlay A&apos;s {parlayA!.legs.length} one-per-game leg
+                {plural(parlayA!.legs.length)}.
+              </p>
             )}
             {tab === "AUTO_HEDGE" && <SwapBlock parlay={result.hedge} plain />}
             {tab === "CONTRARIAN" && <SwapBlock parlay={result.contrarian} plain />}

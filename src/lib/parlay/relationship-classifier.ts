@@ -12,7 +12,8 @@
 // relationship-classifier.mjs and scripts/t2-harness/lib/pick-matching.ts
 // (investigation-only - nothing here imports from scripts/).
 import { derivePickTeamName } from "@/lib/pick-side";
-import { extractLine, nrfiSide } from "@/lib/bet-line";
+import { extractLine, normalizeNPlusPlayerProp, nrfiSide, parseAnyPlayerProp, parsePlayerPropLine, type AnyPlayerPropMarket } from "@/lib/bet-line";
+import { normalizeName } from "@/lib/fuzzy-match";
 import { deriveTeamTotalTarget } from "@/lib/team-total-target";
 import { sameEasternDay } from "@/lib/dates";
 
@@ -153,6 +154,78 @@ export function describePick(pick: PickInput, game: GameInput): PickDescription 
   }
 
   return { status: "OK", reason: null, family, period: pick.period, level, direction, line, teamTarget };
+}
+
+// ---------------------------------------------------------------------------
+// Player props. describePick above still answers INACTIVE for PLAYER_PROP, and
+// classifyPair still gives INACTIVE for any pair with a prop in it - Hedge,
+// Contrarian and My Picks all rely on that. This is a separate description,
+// read only by the same-game rules (same-game-rules.ts): who the prop is on,
+// which stat, and which way.
+// ---------------------------------------------------------------------------
+export type PropDescription =
+  | {
+      status: "OK";
+      // normalizeName of the parsed player name, and its lowercase words (see
+      // samePropPlayer for why both).
+      player: string;
+      playerWords: string[];
+      market: AnyPlayerPropMarket;
+      // A yes/no market (anytime TD, anytime / first goal) is an OVER: the
+      // bet is that the player does it.
+      direction: "OVER" | "UNDER";
+      line: number | null;
+      // False only for the markets where more is the defense winning: a
+      // pitcher's strikeouts and outs, a goalie's saves.
+      offensive: boolean;
+    }
+  | { status: "UNDERIVABLE"; reason: string };
+
+const YES_NO_PROP_MARKETS: ReadonlySet<AnyPlayerPropMarket> = new Set<AnyPlayerPropMarket>(["TD", "ANYTIME_GOAL", "FIRST_GOAL"]);
+const NON_OFFENSIVE_PROP_MARKETS: ReadonlySet<AnyPlayerPropMarket> = new Set<AnyPlayerPropMarket>(["STRIKEOUTS", "OUTS_RECORDED", "SAVES"]);
+
+// Never guesses: no readable player and market, or a line market with no
+// readable Over/Under, is UNDERIVABLE with the reason.
+export function describeProp(pick: PickInput): PropDescription {
+  if (pick.betType !== "PLAYER_PROP") return { status: "UNDERIVABLE", reason: `not a player prop (betType "${pick.betType}")` };
+  const text = pick.betDetail ?? "";
+  const parsed = parseAnyPlayerProp(text);
+  if (!parsed) return { status: "UNDERIVABLE", reason: "player prop text names no recognized player and market" };
+
+  const playerWords = parsed.playerName
+    .toLowerCase()
+    .split(/[^a-z0-9']+/)
+    .map((w) => w.replace(/'/g, ""))
+    .filter(Boolean);
+  const player = normalizeName(parsed.playerName);
+  if (!player || playerWords.length === 0) return { status: "UNDERIVABLE", reason: "player prop text has no readable player name" };
+
+  // "3+ receptions" is "over 2.5 receptions" - the same rewrite import applies.
+  const lineInfo = parsePlayerPropLine(text) ?? parsePlayerPropLine(normalizeNPlusPlayerProp(text));
+  if (!lineInfo && !YES_NO_PROP_MARKETS.has(parsed.propMarket)) {
+    return { status: "UNDERIVABLE", reason: "player prop has no readable Over/Under line" };
+  }
+  return {
+    status: "OK",
+    player,
+    playerWords,
+    market: parsed.propMarket,
+    direction: lineInfo?.direction ?? "OVER",
+    line: lineInfo?.line ?? null,
+    offensive: !NON_OFFENSIVE_PROP_MARKETS.has(parsed.propMarket),
+  };
+}
+
+type OkProp = Extract<PropDescription, { status: "OK" }>;
+
+// Whether two props in one game are on the same player. The parsed name is
+// whatever the capper wrote around the stat - "Nacua", "Puka Nacua", "Rams
+// Puka Nacua" - so one name's words all appearing in the other's counts as
+// the same player. Symmetric.
+export function samePropPlayer(a: OkProp, b: OkProp): boolean {
+  if (a.player === b.player) return true;
+  const within = (inner: string[], outer: string[]) => inner.every((w) => outer.includes(w));
+  return within(a.playerWords, b.playerWords) || within(b.playerWords, a.playerWords);
 }
 
 export type Rule = "R1" | "R2" | "R3" | "R4" | "R5" | "R6";
