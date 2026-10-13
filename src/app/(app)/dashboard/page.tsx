@@ -7,7 +7,6 @@ import { PageBanner } from "@/components/dashboard/page-banner";
 import { DashboardStatCards } from "@/components/dashboard/dashboard-stat-cards";
 import { DashboardCategoryCards } from "@/components/dashboard/dashboard-category-cards";
 import { DashboardPanels } from "@/components/dashboard/dashboard-panels";
-import { TodaysWinnersPanel } from "@/components/dashboard/todays-winners-panel";
 import { UnitsChart } from "@/components/dashboard/units-chart";
 import { FOOTER_LINK, FOOTER_TEXT, GREEN, PanelShell, RED, TINTS } from "@/components/dashboard/panel-shell";
 import { ActivityIcon, ListIcon } from "@/components/dashboard/cappers-icons";
@@ -63,8 +62,6 @@ export default async function DashboardPage() {
         <h2 className="px-0.5 text-[15px] font-semibold tracking-[-0.01em] text-foreground">Record by category</h2>
         <DashboardCategoryCards items={summary.categoryBreakdown} />
       </section>
-
-      <TodaysWinnersPanel leaderboardHref="/cappers#leaderboard" />
 
       <DashboardPanels panels={panels} />
 

@@ -7,14 +7,8 @@ import { startOfEasternDay } from "@/lib/dates";
 // wins / losses / pushes are the same window's record.
 export type WinnerEntry = { capperId: string; name: string; colorTag: string | null; netUnits: number; wins: number; losses: number; pushes: number };
 
-// Today's Winners (/dashboard): Biggest Winners locked to "Today", re-fetched through
-// /api/cappers/panel while the tab is visible. Longer than the route's 60 s cache, so every refresh
-// reads the day as it stands; at most 60 / 3 = 20 scheduled refreshes per viewer per hour.
-export const TODAYS_WINNERS_REFRESH_MS = 3 * 60_000;
-// Why the card is empty: nothing graded yet, or graded picks but nobody ahead on the day.
+// Biggest Winners at "Today", empty because the day has no graded pick yet.
 export const TODAYS_WINNERS_NO_GRADED = "No graded picks yet today.";
-export const TODAYS_WINNERS_NONE_UP = "No cappers in the green today.";
-export const todaysWinnersEmpty = (graded: boolean | undefined) => (graded === false ? TODAYS_WINNERS_NO_GRADED : TODAYS_WINNERS_NONE_UP);
 
 // Most Active: totalPicks is the window's picks across the whole roster (the same on every row).
 export type ActiveEntry = ActivityEntry & { totalPicks: number };

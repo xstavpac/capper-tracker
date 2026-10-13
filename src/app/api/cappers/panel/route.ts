@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 // dropdown back and forth; its callback is a pure read, so it has no side effects.
 // An empty "Yesterday" also says whether the day had any graded pick (`graded`), so the panel can tell
 // "no graded picks yesterday" from "graded picks, but nobody qualifies". So does an empty Biggest
-// Winners "Today" (the dashboard's Today's Winners card).
+// Winners "Today".
 const PANEL_REVALIDATE_SECONDS = 60;
 const perUserLimiter = new RateLimiter({ name: "cappers-panel-per-user", limit: 60, windowMs: 60_000 });
 
