@@ -246,7 +246,7 @@ function main() {
       // an AMBIGUOUS key), still picked up by teamGroupAliases' suffix match.
       ["MLB", "Detroit Tigers", ["tigers", "tigs"]],
       ["NFL", "Chicago Bears", ["bears"]],
-      ["NFL", "Philadelphia Eagles", ["eagles", "iggles"]],
+      ["NFL", "Philadelphia Eagles", ["eagles", "philly eagles", "iggles"]],
       ["MLB", "San Diego Padres", ["padres", "pads"]],
       ["NBA", "Sacramento Kings", ["kings"]],
       ["NHL", "Winnipeg Jets", ["jets"]],

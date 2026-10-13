@@ -28,6 +28,7 @@ import { nhlAnytimeGoalSide } from "@/lib/nhl-prop";
 import { threeWayWording } from "@/lib/nhl-three-way";
 import { isInvalidOdds } from "@/lib/pick-validation";
 import { TEAM_NICKNAME_CANONICAL, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
+import { sideForNickname } from "@/lib/team-name-match";
 import { normalizeName } from "@/lib/fuzzy-match";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
@@ -280,9 +281,7 @@ async function resolveGameAndOdds(
         (item.betType === "MONEYLINE" || item.betType === "SPREAD" || item.betType === "TEAM_TOTAL") &&
         nicknames.length === 1
       ) {
-        const homeMatch = game.homeTeam.toLowerCase().endsWith(nicknames[0]);
-        const awayMatch = game.awayTeam.toLowerCase().endsWith(nicknames[0]);
-        pickedSide = homeMatch && !awayMatch ? "HOME" : awayMatch && !homeMatch ? "AWAY" : null;
+        pickedSide = sideForNickname(game, nicknames[0], liveSportKey);
       }
 
       // A 3-way moneyline on the draw is on neither team, however many of

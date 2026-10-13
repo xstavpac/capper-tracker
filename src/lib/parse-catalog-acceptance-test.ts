@@ -126,14 +126,14 @@ function main() {
   // Adversarial case for the tagline-extraction boundary: a name-shaped
   // lead-in before a real bet-type keyword, but NO won-loss record anywhere
   // - this must NOT be read as a capper announcing themselves. "Berlin
-  // Wolves" isn't a tracked team/nickname (not even an AMBIGUOUS_NICKNAMES
+  // Foxes" isn't a tracked team/nickname (not even an AMBIGUOUS_NICKNAMES
   // entry, unlike "Giants"), so it's a genuinely unresolvable pick that
   // happens to share the same "name-shaped words + keyword" shape as
   // "Bambino 19-0 NRFI Run" - the record requirement is what tells them
   // apart. Also confirms it doesn't corrupt the next real pick's attribution.
   {
-    const { picks, unresolved } = parseCatalog(`Real Capper\n\nBerlin Wolves NRFI\nAstros ML`, []);
-    check("Adversarial: name-shaped-but-recordless line stays unresolved, not extracted as a capper", unresolved, ["Berlin Wolves NRFI"]);
+    const { picks, unresolved } = parseCatalog(`Real Capper\n\nBerlin Foxes NRFI\nAstros ML`, []);
+    check("Adversarial: name-shaped-but-recordless line stays unresolved, not extracted as a capper", unresolved, ["Berlin Foxes NRFI"]);
     const astros = picks.find((p) => p.description.includes("Astros"));
     check("Adversarial: following real pick still attributed to 'Real Capper' (not corrupted)", astros?.capperName, "Real Capper");
   }
@@ -397,8 +397,8 @@ function main() {
   // Wiz itself is now in KBO_TEAMS as of this same round, so it no longer
   // exercises this path) - this is the general case the fix actually covers.
   {
-    const { picks, unresolved } = parseCatalog(`Capper\nAB Wolves ML`, []);
-    check("ATP fallback fix: unlisted abbreviation-shaped team stays unresolved", unresolved, ["AB Wolves ML"]);
+    const { picks, unresolved } = parseCatalog(`Capper\nAB Foxes ML`, []);
+    check("ATP fallback fix: unlisted abbreviation-shaped team stays unresolved", unresolved, ["AB Foxes ML"]);
     check("ATP fallback fix: no phantom ATP pick created", picks.length, 0);
   }
 
@@ -1529,7 +1529,10 @@ NC State +4.5`;
     const excluded = [
       "sox", "red", "mississippi", "bucs", "canes", "wings", "bolts", "cards", "boys", "caps",
       "wiz", "guards", "ms",
-      "wolves", "blazers", "clips", "okc", "cs", "c's", "g-men", "gang green", "pack", "da bears",
+      // "wolves", "clips" and "okc" were on this list as held-out Tier 2 items;
+      // they were added as NBA aliases in 2026-10 (see
+      // nba-aliases-acceptance-test.ts), so they are no longer asserted absent.
+      "blazers", "cs", "c's", "g-men", "gang green", "pack", "da bears",
       "as", "a's", "fish", "pens", "cats", "rags", "hawks", "jets", "giants", "rangers", "panthers",
     ];
     for (const token of excluded) {
