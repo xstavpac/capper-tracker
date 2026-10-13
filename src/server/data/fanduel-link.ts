@@ -1,7 +1,8 @@
 // The server half of "Send to FanDuel" (lib/parlay/fanduel-link.ts holds the
 // matching and the link itself). Reads the legs' picks scoped to the signed-in
 // user - the request names them by id only - and asks the Odds API for
-// FanDuel's ids: the free event listing per league, then one metered call per
+// FanDuel's ids: the free event listing per league (and per preseason key the
+// league has open - lib/sport-seasons.ts), then one metered call per
 // event for just the main markets its legs need, and a second for the
 // alternate-lines markets of only the legs that missed there.
 //
@@ -64,7 +65,8 @@ async function fetchEvents(sportKey: string, apiKey: string): Promise<FanDuelEve
   }
   const raw: unknown = await res.json();
   if (!Array.isArray(raw)) return null;
-  return raw.map((e) => ({ id: String(e.id), homeTeam: String(e.home_team), awayTeam: String(e.away_team), commenceTime: String(e.commence_time) }));
+  // sportKey is the key asked under, which is the one the event's odds call needs.
+  return raw.map((e) => ({ id: String(e.id), sportKey, homeTeam:String(e.home_team), awayTeam: String(e.away_team), commenceTime: String(e.commence_time) }));
 }
 
 async function fetchEventMarkets(sportKey: string, eventId: string, marketKeys: string[], apiKey: string): Promise<FanDuelMarket[] | null> {

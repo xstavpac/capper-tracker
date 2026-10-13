@@ -9,6 +9,11 @@
 // from the main line, team totals more than 5). NBA is a preseason game with
 // the three main markets only - nothing here claims NBA period or alternate
 // coverage until a regular-season response can be captured.
+//
+// Section 6 runs on the Odds API's own event listings for basketball_nba and
+// basketball_nba_preseason, and FanDuel's moneyline for Trail Blazers @ Kings,
+// all captured 2026-10-13 (the regular listing cut at 10-22). That night's
+// games were listed under the preseason key only.
 // Run with:
 //   npx tsx src/lib/parlay/fanduel-link-acceptance-test.ts
 import fs from "node:fs";
@@ -19,12 +24,15 @@ import {
   fanDuelLegTarget,
   hasStarted,
   matchFanDuelOutcome,
+  notSentDisplay,
   FANDUEL_BETSLIP_URL,
   type FanDuelDeps,
   type FanDuelEvent,
   type FanDuelLegInput,
+  type FanDuelLegResult,
   type FanDuelMarket,
 } from "@/lib/parlay/fanduel-link";
+import { SPORT_SEASON_CONFIG } from "@/lib/sport-seasons";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -347,8 +355,8 @@ check("a league the odds feed doesn't carry", target({ sportKey: null, leagueNam
 // ---------------------------------------------------------------------
 const EVENTS: Record<string, FanDuelEvent[]> = {
   americanfootball_nfl: [
-    { id: "evt-buf-lar", homeTeam: "Los Angeles Rams", awayTeam: "Buffalo Bills", commenceTime: KICKOFF },
-    { id: "evt-sea-den", homeTeam: "Denver Broncos", awayTeam: "Seattle Seahawks", commenceTime: "2026-10-16T00:15:00Z" },
+    { id: "evt-buf-lar", sportKey: "americanfootball_nfl", homeTeam: "Los Angeles Rams", awayTeam: "Buffalo Bills", commenceTime: KICKOFF },
+    { id: "evt-sea-den", sportKey: "americanfootball_nfl", homeTeam: "Denver Broncos", awayTeam: "Seattle Seahawks", commenceTime: "2026-10-16T00:15:00Z" },
   ],
 };
 const DEN_MARKETS: FanDuelMarket[] = [
@@ -361,6 +369,14 @@ const DEN_MARKETS: FanDuelMarket[] = [
     ],
   },
 ];
+// Every leg any scenario below gets back, for the "no empty reason" check.
+const ALL_RESULTS: FanDuelLegResult[] = [];
+async function build(legs: FanDuelLegInput[], deps: FanDuelDeps) {
+  const built = await buildFanDuelLink(legs, deps);
+  ALL_RESULTS.push(...built.legs);
+  return built;
+}
+
 function fakeDeps(now: Date) {
   const calls: { events: string[]; odds: { eventId: string; marketKeys: string[] }[] } = { events: [], odds: [] };
   const deps: FanDuelDeps = {
@@ -395,11 +411,11 @@ function captureDeps() {
     now: new Date("2026-10-13T20:00:00Z"),
     async getEvents(sportKey) {
       return (Object.keys(CAPTURES) as League[])
-        .filter((l) => SPORT_KEYS[l] === sportKey)
-        .map((l) => ({ id: CAPTURES[l].id, homeTeam: CAPTURES[l].home_team, awayTeam: CAPTURES[l].away_team, commenceTime: CAPTURES[l].commence_time }));
+        .filter((l) => CAPTURES[l].sport_key === sportKey)
+        .map((l) => ({ id: CAPTURES[l].id, sportKey, homeTeam: CAPTURES[l].home_team, awayTeam: CAPTURES[l].away_team, commenceTime: CAPTURES[l].commence_time }));
     },
     async getEventMarkets(sportKey, eventId, marketKeys) {
-      const league = (Object.keys(CAPTURES) as League[]).find((l) => SPORT_KEYS[l] === sportKey && CAPTURES[l].id === eventId)!;
+      const league = (Object.keys(CAPTURES) as League[]).find((l) => CAPTURES[l].sport_key === sportKey && CAPTURES[l].id === eventId)!;
       calls[league] = [...(calls[league] ?? []), marketKeys];
       return marketsOf(league).filter((m) => marketKeys.includes(m.key));
     },
@@ -427,7 +443,7 @@ function realLeg(league: League, pickId: string, over: Partial<FanDuelLegInput>)
 // [status, FanDuel's price, sentLine, reason] per leg, and the ids in the link.
 async function send(legs: FanDuelLegInput[]) {
   const { deps, calls } = captureDeps();
-  const built = await buildFanDuelLink(legs, deps);
+  const built = await build(legs, deps);
   return {
     legs: Object.fromEntries(built.legs.map((l) => [l.pickId, [l.status, l.fanDuelOdds, l.sentLine, l.reason]])),
     ids: built.url ? Array.from(new URL(built.url).searchParams.values()) : [],
@@ -482,7 +498,7 @@ async function realResponses() {
     "not_found",
     null,
     null,
-    "FanDuel's nearest line is 11.5, too far from your pick.",
+    "FanDuel's closest line is Over 11.5, more than 1.5 away from your pick.",
   ]);
   check("worse-line flag: Over 1 can only go at Over 2.5, which is harder to win", wings.legs["Over 1"], ["adjusted", -6000, { pick: 1, fanDuel: 2.5, side: "Over", worse: true }, null]);
   check("first-period total: the totals_p1 market", wings.legs["Devils Red Wings Over 1.5 First Period"], ["matched", -122, null, null]);
@@ -525,7 +541,7 @@ async function realResponses() {
       { marketKeys: ["team_totals", "alternate_team_totals"], outcomeName: "Over", description: "Detroit Red Wings", point: 6.5, maxLineMove: 1.5, easier: "lower" },
       marketsOf("NHL").filter((m) => m.key.includes("totals") && !m.key.includes("team"))
     ),
-    { status: "not_found", reason: "FanDuel isn't offering this market right now." }
+    { status: "not_found", reason: "FanDuel isn't offering a team total for this game." }
   );
   check(
     "a tie with nothing to say which way is easier is ambiguous, not a coin flip",
@@ -551,7 +567,15 @@ async function realResponses() {
     { pick: 4.5, fanDuel: 3.5, side: "Under", worse: true },
     null,
   ]);
-  check("the same team total 2.0 away is Not found", guardians.legs["Guardians Team Total Under 5.5"], ["not_found", null, null, "FanDuel's nearest line is 3.5, too far from your pick."]);
+  check("the same team total 2.0 away is Not found", guardians.legs["Guardians Team Total Under 5.5"], ["not_found", null, null, "FanDuel's closest line is Under 3.5, more than 1.5 away from your pick."]);
+  check(
+    "a game FanDuel has no team totals for says so",
+    matchFanDuelOutcome(
+      { marketKeys: ["team_totals"], outcomeName: "Under", description: "Cleveland Guardians", point: 4.5, maxLineMove: 1.5, easier: "higher" },
+      marketsOf("MLB").filter((m) => m.key !== "team_totals")
+    ),
+    { status: "not_found", reason: "FanDuel isn't offering a team total for this game." }
+  );
   check("first-five moneyline: the h2h_1st_5_innings market", guardians.legs["Guardians F5 ML"], ["matched", 104, null, null]);
   check("first-five Under 4 between 3.5 and 4.5: the higher line, from the first-five alternates", guardians.legs["F5 Under 4"]?.[2], { pick: 4, fanDuel: 4.5, side: "Under", worse: false });
   check("credits: no alternate call for the team totals (MLB has none) - only the first-five alternate totals", guardians.calls, {
@@ -584,10 +608,167 @@ async function realResponses() {
     realLeg("NBA", "Cavaliers ML", { betType: "MONEYLINE" }),
     realLeg("NBA", "Under 228.5", { line: 228.5 }),
   ]);
-  check("NBA main markets match as before, on one call", [cavs.legs, cavs.calls], [
+  check("NBA main markets match as before, on one call - found under the preseason key the capture came from", [cavs.legs, cavs.calls], [
     { "Magic +1.5": ["matched", -110, null, null], "Cavaliers ML": ["matched", -122, null, null], "Under 228.5": ["matched", -105, null, null] },
     { NBA: [["h2h", "spreads", "totals"]] },
   ]);
+}
+
+// ---------------------------------------------------------------------
+// 6. Preseason listings (2026-10-13): a league's games under two Odds API keys
+// ---------------------------------------------------------------------
+type ListedEvent = { id: string; sport_key: string; commence_time: string; home_team: string; away_team: string };
+const listing = (name: string): ListedEvent[] => JSON.parse(fs.readFileSync(path.join(__dirname, "__fixtures__", "fanduel-events-" + name + ".json"), "utf8"));
+const KINGS = capture("nba-preseason-kings");
+const NBA_LISTINGS: Record<string, ListedEvent[]> = { basketball_nba: listing("nba"), basketball_nba_preseason: listing("nba-preseason") };
+
+// The feed as it answered: each key its own listing, and an event's markets
+// only under the key it is listed on (the other key is a 404 - checked live
+// for the Kings game - which the server turns into null).
+function listingDeps(now: Date, listings: Record<string, ListedEvent[] | null>, markets: Record<string, FanDuelMarket[]>) {
+  const calls: { events: string[]; odds: string[] } = { events: [], odds: [] };
+  const deps: FanDuelDeps = {
+    now,
+    async getEvents(sportKey) {
+      calls.events.push(sportKey);
+      const listed = listings[sportKey];
+      if (listed === undefined) return [];
+      return listed && listed.map((e) => ({ id: e.id, sportKey, homeTeam: e.home_team, awayTeam: e.away_team, commenceTime: e.commence_time }));
+    },
+    async getEventMarkets(sportKey, eventId, marketKeys) {
+      calls.odds.push(sportKey + "/" + eventId);
+      const found = markets[sportKey + "/" + eventId];
+      return found ? found.filter((m) => marketKeys.includes(m.key)) : null;
+    },
+  };
+  return { deps, calls };
+}
+const h2hOf = (home: string, away: string): FanDuelMarket[] => [
+  { key: "h2h", sid: null, outcomes: [{ name: home, price: -120, sid: "1", link: link("42.1", "1") }, { name: away, price: 100, sid: "2", link: link("42.1", "2") }] },
+];
+
+async function preseasonListings() {
+  const OCT_13 = new Date("2026-10-13T21:00:00Z");
+  const nbaLeg = (pickId: string, over: Partial<FanDuelLegInput>) =>
+    leg({ pickId, sportKey: "basketball_nba", leagueName: "NBA", betDetail: pickId, homeTeam: KINGS.home_team, awayTeam: KINGS.away_team, gameTime: KINGS.commence_time, odds: 120, ...over });
+  const kingsMarkets = { ["basketball_nba_preseason/" + KINGS.id]: KINGS.bookmakers[0].markets };
+
+  // --- The bug: the Kings game is on the preseason listing only.
+  check(
+    "the capture: Trail Blazers @ Kings is on the preseason listing and not the regular one",
+    Object.fromEntries(Object.entries(NBA_LISTINGS).map(([key, events]) => [key, events.some((e) => e.id === KINGS.id)])),
+    { basketball_nba: false, basketball_nba_preseason: true }
+  );
+  const a = listingDeps(OCT_13, NBA_LISTINGS, kingsMarkets);
+  const kings = await build([nbaLeg("Sacramento Kings Moneyline", { betType: "MONEYLINE" })], a.deps);
+  check("Sacramento Kings Moneyline: found on the preseason listing and sent at FanDuel's price", kings.legs.map((l) => [l.status, l.fanDuelOdds, l.reason]), [["matched", 122, null]]);
+  check("and linked: the Kings' own selection in FanDuel's moneyline market", Array.from(new URL(kings.url!).searchParams.entries()), [
+    ["marketId[0]", "42.615692824"],
+    ["selectionId[0]", "237470"],
+  ]);
+  check("both NBA listings are read, and the markets are asked for under the key the game is listed on", a.calls, {
+    events: ["basketball_nba", "basketball_nba_preseason"],
+    odds: ["basketball_nba_preseason/" + KINGS.id],
+  });
+
+  // --- No duplicates. Warriors @ Lakers is on both listings as two different
+  // games (10-14 preseason, 10-22 regular); a regular-season game that the
+  // preseason key repeats is still one event, under the league's own key.
+  const isLakers = (e: ListedEvent) => e.home_team === "Los Angeles Lakers" && e.away_team === "Golden State Warriors";
+  const regular = NBA_LISTINGS.basketball_nba.find(isLakers)!;
+  const preseason = NBA_LISTINGS.basketball_nba_preseason.find(isLakers)!;
+  const lakers = h2hOf("Los Angeles Lakers", "Golden State Warriors");
+  const b = listingDeps(
+    OCT_13,
+    { ...NBA_LISTINGS, basketball_nba_preseason: [...NBA_LISTINGS.basketball_nba_preseason, regular] },
+    { ["basketball_nba/" + regular.id]: lakers, ["basketball_nba_preseason/" + preseason.id]: lakers }
+  );
+  const both = await build(
+    [
+      nbaLeg("Lakers ML (regular season)", { homeTeam: regular.home_team, awayTeam: regular.away_team, gameTime: regular.commence_time }),
+      nbaLeg("Lakers ML (preseason)", { homeTeam: preseason.home_team, awayTeam: preseason.away_team, gameTime: preseason.commence_time }),
+    ],
+    b.deps
+  );
+  check("a regular-season game listed under both keys is found once - matched, not 'More than one game fits'", both.legs.map((l) => [l.pickId, l.status, l.reason]), [
+    ["Lakers ML (regular season)", "matched", null],
+    ["Lakers ML (preseason)", "matched", null],
+  ]);
+  check("each game's markets are asked for once, under its own key", b.calls.odds.sort(), ["basketball_nba/" + regular.id, "basketball_nba_preseason/" + preseason.id].sort());
+
+  // --- The preseason listing failing is not "not on FanDuel".
+  const c = listingDeps(OCT_13, { ...NBA_LISTINGS, basketball_nba_preseason: null }, { ["basketball_nba/" + regular.id]: lakers });
+  const preseasonDown = await build(
+    [nbaLeg("Kings ML", {}), nbaLeg("Lakers ML", { homeTeam: regular.home_team, awayTeam: regular.away_team, gameTime: regular.commence_time })],
+    c.deps
+  );
+  check("preseason listing unreadable: a game it would hold is Unavailable, never 'Not found'; a regular-season game still goes", preseasonDown.legs.map((l) => [l.status, l.reason]), [
+    ["error", "Couldn't reach FanDuel's odds right now - try again."],
+    ["matched", null],
+  ]);
+
+  // --- Every league with a preseason key in sport-seasons.ts, not just NBA.
+  const withPreseason = Object.entries(SPORT_SEASON_CONFIG).filter(([, w]) => w.oddsApiPreseasonKey);
+  check("leagues with a preseason key", withPreseason.map(([key]) => key).sort(), ["americanfootball_nfl", "basketball_nba", "icehockey_nhl"]);
+  const TEAMS: Record<string, [league: string, home: string, away: string]> = {
+    americanfootball_nfl: ["NFL", "Los Angeles Rams", "Buffalo Bills"],
+    basketball_nba: ["NBA", "Sacramento Kings", "Portland Trail Blazers"],
+    icehockey_nhl: ["NHL", "Detroit Red Wings", "New Jersey Devils"],
+  };
+  for (const [sportKey, window] of withPreseason) {
+    const [leagueName, home, away] = TEAMS[sportKey];
+    const preseasonKey = window.oddsApiPreseasonKey!;
+    const kickoff = window.seasonStart + "T23:00:00Z";
+    const event: ListedEvent = { id: "pre-" + sportKey, sport_key: preseasonKey, commence_time: kickoff, home_team: home, away_team: away };
+    const pick = leg({ pickId: sportKey, sportKey, leagueName, betDetail: home + " ML", homeTeam: home, awayTeam: away, gameTime: kickoff });
+
+    const during = listingDeps(new Date(window.seasonStart + "T16:00:00Z"), { [preseasonKey]: [event] }, { [preseasonKey + "/" + event.id]: h2hOf(home, away) });
+    const found = await build([pick], during.deps);
+    check(sportKey + " preseason: the game is found under " + preseasonKey, [found.legs[0].status, during.calls], [
+      "matched",
+      { events: [sportKey, preseasonKey], odds: [preseasonKey + "/" + event.id] },
+    ]);
+
+    // From regularSeasonStart on, the preseason key is not asked at all.
+    const after = listingDeps(new Date(window.regularSeasonStart + "T16:00:00Z"), {}, {});
+    await build([{ ...pick, gameTime: window.regularSeasonStart + "T23:00:00Z" }], after.deps);
+    check(sportKey + " regular season: only its own listing is read", after.calls.events, [sportKey]);
+  }
+  const mlb = listingDeps(OCT_13, {}, {});
+  await build([leg({ pickId: "mlb", sportKey: "baseball_mlb", leagueName: "MLB", betDetail: "Guardians ML", homeTeam: "Tampa Bay Rays", awayTeam: "Cleveland Guardians", gameTime: "2026-10-14T00:00:00Z" })], mlb.deps);
+  check("a league with no preseason key (MLB) reads one listing", mlb.calls.events, ["baseball_mlb"]);
+}
+
+// ---------------------------------------------------------------------
+// 7. A leg that isn't sent always says why
+// ---------------------------------------------------------------------
+function noEmptyReasons() {
+  const filled = (s: unknown) => typeof s === "string" && s.trim().length > 0;
+  const notSent = ALL_RESULTS.filter((l) => l.status !== "matched" && l.status !== "adjusted");
+  check(
+    "every not-sent leg from every scenario above (" + notSent.length + ") carries its own reason, and shows a label and that sentence",
+    notSent.filter((l) => !filled(l.reason) || !filled(notSentDisplay(l).label) || notSentDisplay(l).reason !== l.reason),
+    []
+  );
+  check("every not-sent status but 'ambiguous' is among them", Array.from(new Set(notSent.map((l) => l.status))).sort(), ["error", "not_found", "started", "unsupported"]);
+
+  // What the page shows, whatever comes back: each status this build knows, and
+  // ones it doesn't ("adjusted" reaching a page loaded before #254 is a leg
+  // with no label and a null reason - the empty grey chip).
+  const statuses = ["started", "not_found", "ambiguous", "unsupported", "error", "adjusted", "matched", "some_future_status", ""];
+  const reasons = [null, undefined, "", "   ", "Game has already started."];
+  const blank = statuses
+    .flatMap((status) => reasons.map((reason) => ({ status, reason, shown: notSentDisplay({ status, reason }) })))
+    .filter((x) => !filled(x.shown.label) || !filled(x.shown.reason));
+  check("no status and no reason, known or not, shows an empty chip or an empty sentence (" + statuses.length * reasons.length + " combinations)", blank, []);
+  check("a status this build doesn't know", notSentDisplay({ status: "some_future_status", reason: null }), {
+    label: "Not sent",
+    reason: "Couldn't read FanDuel's answer for this leg - reload the page and check again.",
+  });
+  check("a known status keeps its own label and reason", notSentDisplay({ status: "not_found", reason: "Couldn't find this game on FanDuel." }), {
+    label: "Not found",
+    reason: "Couldn't find this game on FanDuel.",
+  });
 }
 
 async function main() {
@@ -599,7 +780,7 @@ async function main() {
   const started = leg({ pickId: "started", homeTeam: "Dallas Cowboys", awayTeam: "New York Giants", betDetail: "Cowboys ML", gameTime: "2026-10-12T17:00:00Z" });
 
   const a = fakeDeps(NOW);
-  const built = await buildFanDuelLink([billsMl, started, broncosMl, allenProp], a.deps);
+  const built = await build([billsMl, started, broncosMl, allenProp], a.deps);
   check(
     "each leg's status, in the order asked",
     built.legs.map((l) => [l.pickId, l.status, l.pickOdds, l.fanDuelOdds]),
@@ -627,7 +808,7 @@ async function main() {
   );
 
   const b = fakeDeps(NOW);
-  const onlyStarted = await buildFanDuelLink([started, leg({ pickId: "nrfi", betType: "NRFI", betDetail: "NRFI" })], b.deps);
+  const onlyStarted = await build([started, leg({ pickId: "nrfi", betType: "NRFI", betDetail: "NRFI" })], b.deps);
   check("nothing sendable: no link, each leg with a reason, the feed never asked", [onlyStarted.url, onlyStarted.legs.map((l) => l.status), b.calls], [
     null,
     ["started", "unsupported"],
@@ -635,11 +816,11 @@ async function main() {
   ]);
 
   const c = fakeDeps(new Date("2026-10-13T00:20:00Z"));
-  const afterKickoff = await buildFanDuelLink([leg({ pickId: "late", gameTime: "2026-10-13T00:25:00Z" })], c.deps);
+  const afterKickoff = await build([leg({ pickId: "late", gameTime: "2026-10-13T00:25:00Z" })], c.deps);
   check("a leg whose own time is still ahead but whose game has kicked off is skipped", [afterKickoff.legs[0].status, afterKickoff.url, c.calls.odds], ["started", null, []]);
 
   const d = fakeDeps(NOW);
-  const wrongLine = await buildFanDuelLink([leg({ pickId: "alt", betType: "SPREAD", betDetail: "Bills +4.5", line: 4.5 }), billsMl], d.deps);
+  const wrongLine = await build([leg({ pickId: "alt", betType: "SPREAD", betDetail: "Bills +4.5", line: 4.5 }), billsMl], d.deps);
   check(
     "a line the main market doesn't have: the alternate market is asked once, for that leg's key only; with none there, FanDuel's own line is sent and flagged worse",
     [wrongLine.legs.map((l) => [l.status, l.fanDuelOdds, l.sentLine]), d.calls.odds],
@@ -655,10 +836,10 @@ async function main() {
     ]
   );
   const d2 = fakeDeps(NOW);
-  const farLine = await buildFanDuelLink([leg({ pickId: "far-line", betType: "SPREAD", betDetail: "Bills +6.5", line: 6.5 }), billsMl], d2.deps);
+  const farLine = await build([leg({ pickId: "far-line", betType: "SPREAD", betDetail: "Bills +6.5", line: 6.5 }), billsMl], d2.deps);
   check("a line too far from anything FanDuel has is left out; the rest still go", [farLine.legs.map((l) => [l.status, l.reason]), Array.from(new URL(farLine.url!).searchParams.keys())], [
     [
-      ["not_found", "FanDuel's nearest line is +3.5, too far from your pick."],
+      ["not_found", "FanDuel's closest line is +3.5, more than 1.5 away from your pick."],
       ["matched", null],
     ],
     ["marketId[0]", "selectionId[0]"],
@@ -669,18 +850,20 @@ async function main() {
     getEvents: async () => EVENTS.americanfootball_nfl,
     getEventMarkets: async (_s, _e, keys) => (keys.includes("alternate_spreads") ? (altCalls++, null) : GAME_MARKETS.filter((m) => keys.includes(m.key))),
   };
-  const altFailed = await buildFanDuelLink([leg({ pickId: "alt", betType: "SPREAD", betDetail: "Bills +4.5", line: 4.5 }), billsMl], altDown);
+  const altFailed = await build([leg({ pickId: "alt", betType: "SPREAD", betDetail: "Bills +4.5", line: 4.5 }), billsMl], altDown);
   check("the alternate call failing is an error on that leg only - no line is guessed from half the picture", [altFailed.legs.map((l) => l.status), altCalls], [["error", "matched"], 1]);
 
   const e = fakeDeps(NOW);
-  const noGame = await buildFanDuelLink([leg({ pickId: "far", gameTime: "2026-10-13T03:00:00Z" })], e.deps);
+  const noGame = await build([leg({ pickId: "far", gameTime: "2026-10-13T03:00:00Z" })], e.deps);
   check("same teams hours from the feed's kickoff is not that game", [noGame.legs[0].status, e.calls.odds], ["not_found", []]);
 
   const down: FanDuelDeps = { now: NOW, getEvents: async () => EVENTS.americanfootball_nfl, getEventMarkets: async () => null };
-  const failed = await buildFanDuelLink([billsMl], down);
+  const failed = await build([billsMl], down);
   check("the feed failing is an error on the leg, not a match", [failed.url, failed.legs[0].status], [null, "error"]);
 
   await realResponses();
+  await preseasonListings();
+  noEmptyReasons();
 
   if (failures > 0) {
     console.log(`\n${failures} FAILED`);

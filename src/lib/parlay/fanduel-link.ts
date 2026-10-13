@@ -20,6 +20,7 @@ import { threeWayWording } from "@/lib/nhl-three-way";
 import { derivePickSide } from "@/lib/pick-side";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { normalizeName } from "@/lib/fuzzy-match";
+import { oddsApiRequestKeys } from "@/lib/sport-seasons";
 
 export type FanDuelLegStatus = "matched" | "adjusted" | "started" | "not_found" | "ambiguous" | "unsupported" | "error";
 
@@ -41,6 +42,24 @@ export type FanDuelLegResult = {
 };
 
 export type FanDuelLinkResponse = { url: string | null; legs: FanDuelLegResult[] };
+
+const NOT_SENT_LABEL: Record<Exclude<FanDuelLegStatus, "matched" | "adjusted">, string> = {
+  started: "Started",
+  not_found: "Not found",
+  ambiguous: "Ambiguous",
+  unsupported: "Not supported",
+  error: "Unavailable",
+};
+
+// The chip and the sentence shown for a leg that wasn't sent. Neither is ever
+// empty: a status this build doesn't know (a page left open across a deploy
+// that added one) or a leg that came back with no reason still says something.
+export function notSentDisplay(leg: { status: string; reason?: string | null }): { label: string; reason: string } {
+  const label = (NOT_SENT_LABEL as Record<string, string | undefined>)[leg.status];
+  const reason = typeof leg.reason === "string" ? leg.reason.trim() : "";
+  if (!label) return { label: "Not sent", reason: reason || "Couldn't read FanDuel's answer for this leg - reload the page and check again." };
+  return { label, reason: reason || "FanDuel couldn't take this leg right now - check again." };
+}
 
 // One leg as the server read it: the pick row's own bet, under the game the
 // Live board shows it on (so gameTime is the real kickoff - see
@@ -378,7 +397,10 @@ const AMBIGUOUS = "More than one FanDuel selection fits this pick.";
 // own (verified live 2026-10-13), so at any one line the selection comes from
 // the first of marketKeys that has it.
 export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMarket[]): FanDuelMatch {
-  if (!markets.some((m) => query.marketKeys.includes(m.key))) return { status: "not_found", reason: "FanDuel isn't offering this market right now." };
+  if (!markets.some((m) => query.marketKeys.includes(m.key))) {
+    const teamTotal = query.marketKeys[0].startsWith("team_totals");
+    return { status: "not_found", reason: teamTotal ? "FanDuel isn't offering a team total for this game." : "FanDuel isn't offering this market right now." };
+  }
 
   const description = query.description === undefined ? null : normalizeName(query.description);
   type Found = { selection: FanDuelSelection; price: number };
@@ -422,8 +444,10 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
   const nearest = lines[0];
   // 1e-9: 10% of a .5 line is not an exact binary fraction.
   if (move(nearest) > query.maxLineMove + 1e-9) {
-    const signed = query.marketKeys[0].startsWith("spreads") && nearest > 0 ? "+" : "";
-    return { status: "not_found", reason: "FanDuel's nearest line is " + signed + nearest + ", too far from your pick." };
+    const overUnder = query.outcomeName === "Over" || query.outcomeName === "Under";
+    const shown = overUnder ? query.outcomeName + " " + nearest : (query.marketKeys[0].startsWith("spreads") && nearest > 0 ? "+" : "") + nearest;
+    const cap = Math.round(query.maxLineMove * 100) / 100;
+    return { status: "not_found", reason: "FanDuel's closest line is " + shown + ", more than " + cap + " away from your pick." };
   }
   const atNearest = Array.from(byLine.get(nearest)!.found.values());
   const tied = lines.length > 1 && move(lines[1]) === move(nearest);
@@ -436,10 +460,14 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
 // Legs -> link
 // ---------------------------------------------------------------------
 
-export type FanDuelEvent = { id: string; homeTeam: string; awayTeam: string; commenceTime: string };
+// sportKey is the Odds API key the event is listed under - the league's own,
+// or its preseason key ("basketball_nba_preseason"). The event's markets can
+// only be asked for under that same key.
+export type FanDuelEvent = { id: string; sportKey: string; homeTeam: string; awayTeam: string; commenceTime: string };
 
-// Both return null when the feed couldn't be read. getEvents is the free
-// event listing; getEventMarkets is the metered call (one credit per market
+// Both return null when the feed couldn't be read, and both take the Odds API
+// key to ask under (an event's own sportKey for its markets). getEvents is the
+// free event listing; getEventMarkets is the metered call (one credit per market
 // returned): once per event for the main markets its legs need, and once more
 // for the alternate-lines markets of just the legs that missed there.
 export type FanDuelDeps = {
@@ -476,6 +504,19 @@ function eventForLeg(leg: FanDuelLegInput, events: FanDuelEvent[], now: Date): E
   return { event: candidates[0] };
 }
 
+// One league's events across every Odds API key it is listed under right now,
+// each event once (by id; the league's own key first). null when the league's
+// own listing couldn't be read; `incomplete` when only a preseason one couldn't.
+async function leagueEvents(sportKey: string, deps: FanDuelDeps): Promise<{ events: FanDuelEvent[]; incomplete: boolean } | null> {
+  const [own, ...preseason] = await Promise.all(oddsApiRequestKeys(sportKey, deps.now).map((key) => deps.getEvents(key)));
+  if (!own) return null;
+  const byId = new Map<string, FanDuelEvent>();
+  for (const event of [own, ...preseason].flatMap((events) => events ?? [])) {
+    if (!byId.has(event.id)) byId.set(event.id, event);
+  }
+  return { events: Array.from(byId.values()), incomplete: preseason.some((events) => events === null) };
+}
+
 export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDeps): Promise<FanDuelLinkResponse> {
   const results = new Map<string, FanDuelLegResult>();
   const settle = (
@@ -501,20 +542,25 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
     pending.push({ leg, target: target.target });
   }
 
-  // 2. Each leg's event, from one listing per league.
+  // 2. Each leg's event, from one listing per league - plus the league's
+  // preseason listing while oddsApiRequestKeys says there is one, the same
+  // keys the board's own odds are read from (fetchMergedOddsListing).
   const sportKeys = Array.from(new Set(pending.map((p) => p.leg.sportKey!)));
-  const listings = new Map(await Promise.all(sportKeys.map(async (key) => [key, await deps.getEvents(key)] as const)));
+  const listings = new Map(await Promise.all(sportKeys.map(async (key) => [key, await leagueEvents(key, deps)] as const)));
   type Wanted = { leg: FanDuelLegInput; target: FanDuelLegTarget; event: FanDuelEvent };
   const byEvent = new Map<string, Wanted[]>();
   for (const { leg, target } of pending) {
-    const events = listings.get(leg.sportKey!);
-    if (!events) {
+    const listing = listings.get(leg.sportKey!);
+    if (!listing) {
       settle(leg, "error", FEED_DOWN);
       continue;
     }
-    const match = eventForLeg(leg, events, deps.now);
+    const match = eventForLeg(leg, listing.events, deps.now);
     if (!("event" in match)) {
-      settle(leg, match.status, match.reason);
+      // Not in the listings that were read is not "not on FanDuel" while the
+      // preseason listing is unread.
+      if (match.status === "not_found" && listing.incomplete) settle(leg, "error", FEED_DOWN);
+      else settle(leg, match.status, match.reason);
       continue;
     }
     const key = leg.sportKey + "|" + match.event.id;
@@ -539,7 +585,7 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
   await Promise.all(
     Array.from(byEvent.values()).map(async (wanted) => {
       const { event } = wanted[0];
-      const sportKey = wanted[0].leg.sportKey!;
+      const sportKey = event.sportKey;
       const teamName = (side: "HOME" | "AWAY") => (side === "HOME" ? event.homeTeam : event.awayTeam);
       const query = ({ target }: Wanted, marketKeys: string[], nearest: boolean): FanDuelMatchQuery => ({
         marketKeys,
