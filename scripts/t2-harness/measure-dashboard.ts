@@ -8,6 +8,7 @@
 // the relation rows are counted once per distinct id, as Prisma sends them) and database-side row
 // bytes (pg_column_size of the user's pick rows vs octet_length of the bundle jsonb). Neither includes
 // TLS/protocol framing; both are the same yardstick for both paths.
+import "../server-only-stub.cjs"; // first: the data modules below import "server-only"
 import { spawnSync } from "node:child_process";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { assertNotProd } from "./lib/prod-guard.mjs";

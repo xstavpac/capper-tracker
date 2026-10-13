@@ -25,6 +25,7 @@
 //   - Order-dependent results (float sums, streaks) use the createdAt, id
 //     tie-break after gameTime everywhere, matching the adapter's ordered
 //     fallback dataset.
+import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { SCORECARD_WINDOWS, scorecardWindowRange, type ScorecardWindow } from "@/server/data/stats";

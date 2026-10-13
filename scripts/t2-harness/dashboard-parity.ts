@@ -9,6 +9,7 @@
 // snapshot predates today, so only the stale-PENDING cutoff depends on `now`): the latest
 // gameTime, -1d, -7d, -30d, -60d. Zero diffs required (=== with -0 == +0); exit 1 otherwise.
 //   node --import tsx scripts/t2-harness/dashboard-parity.ts [--user-id=<cuid>]
+import "../server-only-stub.cjs"; // first: the data modules below import "server-only"
 import { prisma } from "@/lib/prisma";
 import { computeDashboardSummary } from "@/server/data/dashboard-summary";
 import { computeDashboardSummaryLegacy, firstDiff, loadLegacyDashboardPicks, narrowLegacySummary } from "@/server/data/dashboard-summary-legacy";

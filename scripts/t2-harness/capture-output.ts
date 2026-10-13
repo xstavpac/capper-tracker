@@ -24,6 +24,7 @@
 // Usage:
 //   node --import tsx scripts/t2-harness/capture-output.ts --impl=old --fixture-user=A
 //   node --import tsx scripts/t2-harness/capture-output.ts --impl=old --user-id=<cuid>
+import "../server-only-stub.cjs"; // first: the data modules below import "server-only"
 import { SCORECARD_WINDOWS, type ScorecardWindow } from "@/server/data/stats";
 import { assertNotProd } from "./lib/prod-guard.mjs";
 import { FIXTURE_USER_A_SUPABASE_ID, FIXTURE_USER_B_SUPABASE_ID } from "./fixture-user-ids.mjs";

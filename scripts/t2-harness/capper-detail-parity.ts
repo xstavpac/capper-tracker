@@ -11,6 +11,7 @@
 // no picks) runs the diagonal (window == categoryWindow). Zero diffs required (=== with -0 == +0); exit 1
 // otherwise. `--quick` keeps only the latest `now`.
 //   node --import tsx scripts/t2-harness/capper-detail-parity.ts [--user-id=<cuid>] [--quick]
+import "../server-only-stub.cjs"; // first: the data modules below import "server-only"
 import { prisma } from "@/lib/prisma";
 import { SCORECARD_WINDOWS } from "@/server/data/stats";
 import { getCapperDetailData, type CapperDetailParams } from "@/server/data/capper-detail";

@@ -138,7 +138,9 @@ for (const rel of files) {
     continue;
   }
 
-  const res = spawnSync(process.execPath, ["--import", "tsx", rel], { cwd: repoRoot, stdio: "inherit", env: process.env });
+  // server-only-stub: the guarded server data modules import "server-only", which throws outside a
+  // React Server build (see that file).
+  const res = spawnSync(process.execPath, ["--require", "./scripts/server-only-stub.cjs", "--import", "tsx", rel], { cwd: repoRoot, stdio: "inherit", env: process.env });
   if (res.error) {
     console.log(`FAIL (could not launch: ${res.error.message})  ${rel}\n`);
     failed++;

@@ -12,6 +12,7 @@
 // + the narrowed roster). Neither includes TLS/protocol framing; both are the same yardstick for both paths.
 // `--synthetic=N` inserts a disposable capper with N random picks (ids prefixed __MeasureCapperDetail__,
 // deleted by exact id at the end) so the scaling case can be measured on a snapshot with small cappers.
+import "../server-only-stub.cjs"; // first: the data modules below import "server-only"
 import { spawnSync } from "node:child_process";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { assertNotProd } from "./lib/prod-guard.mjs";
