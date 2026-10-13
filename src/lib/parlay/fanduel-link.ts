@@ -4,23 +4,30 @@
 // FanDuelLegInput (server/data/fanduel-link.ts), so everything here runs in a
 // test with no network and no DB.
 //
-// Never a guess: a leg is sent only when exactly one FanDuel outcome is the
-// same market, the same team / Over / Under / player and the same line. A
-// different line, two candidates, or a market this file has no key for leaves
-// the leg out and says why.
+// Never a guess at the bet: a leg is sent only when exactly one FanDuel outcome
+// is the same market and the same team / Over / Under / player. The line is
+// the pick's own when FanDuel has it; when it doesn't, a spread, total or
+// yardage/receptions prop goes at FanDuel's current line if that is close
+// enough (see MAX_LINE_MOVE_POINTS / MAX_PROP_LINE_MOVE_RATIO), and the leg
+// says so ("adjusted"). Two candidates, a line too far off, or a market this
+// file has no key for leaves the leg out and says why.
 import { extractLine, isAnytimeTdPick, parseAnyPlayerProp, parsePlayerPropLine, totalSideFromText } from "@/lib/bet-line";
 import { derivePickSide } from "@/lib/pick-side";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { normalizeName } from "@/lib/fuzzy-match";
 
-export type FanDuelLegStatus = "matched" | "started" | "not_found" | "ambiguous" | "unsupported" | "error";
+export type FanDuelLegStatus = "matched" | "adjusted" | "started" | "not_found" | "ambiguous" | "unsupported" | "error";
 
 export type FanDuelLegResult = {
   pickId: string;
   status: FanDuelLegStatus;
-  reason: string | null; // null only for "matched"
+  reason: string | null; // null only for "matched" and "adjusted"
   pickOdds: number | null;
-  fanDuelOdds: number | null; // FanDuel's current price, "matched" only
+  fanDuelOdds: number | null; // FanDuel's current price, "matched" and "adjusted" only
+  // "adjusted" only: the pick's line and the FanDuel line sent in its place
+  // (a spread's are signed for the pick's own team).
+  pickLine: number | null;
+  fanDuelLine: number | null;
 };
 
 export type FanDuelLinkResponse = { url: string | null; legs: FanDuelLegResult[] };
@@ -80,7 +87,16 @@ export type FanDuelLegTarget = {
   outcome: { side: "HOME" | "AWAY" } | { name: "Over" | "Under" | "Yes" };
   player?: string;
   point?: number;
+  // How far FanDuel's line may sit from the point and still be sent in its
+  // place. Absent: the line has to be the pick's own.
+  maxLineMove?: number;
 };
+
+// A spread or total goes at FanDuel's line when it is within this many points
+// of the pick's; a yardage or receptions prop when within this share of the
+// pick's line.
+export const MAX_LINE_MOVE_POINTS = 1.5;
+export const MAX_PROP_LINE_MOVE_RATIO = 0.1;
 
 const FOOTBALL_SPORT_KEYS = new Set(["americanfootball_nfl", "americanfootball_ncaaf"]);
 const NHL_SPORT_KEY = "icehockey_nhl";
@@ -98,6 +114,8 @@ const FOOTBALL_LINE_PROP_KEYS: Record<string, string> = {
   PASS_RUSH_YDS: "player_pass_rush_yds",
   PASS_TDS: "player_pass_tds",
 };
+// Passing touchdowns is neither yardage nor receptions: exact line only.
+const EXACT_LINE_PROP_KEYS = new Set(["player_pass_tds"]);
 const ANYTIME_TD_KEY = "player_anytime_td";
 const ANYTIME_GOAL_KEY = "player_goal_scorer_anytime";
 
@@ -130,6 +148,7 @@ function playerPropTarget(leg: FanDuelLegInput): TargetResult {
       outcome: { name: lineInfo.direction === "OVER" ? "Over" : "Under" },
       player: prop.playerName,
       point: lineInfo.line,
+      ...(EXACT_LINE_PROP_KEYS.has(marketKey) ? {} : { maxLineMove: Math.abs(lineInfo.line) * MAX_PROP_LINE_MOVE_RATIO }),
     },
   };
 }
@@ -149,7 +168,7 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
     if (leg.betType === "MONEYLINE") return { ok: true, target: { marketKey: "h2h", outcome: { side } } };
     const point = leg.line ?? extractLine("SPREAD", leg.betDetail ?? "");
     if (point === null) return unsupported("This spread has no line to match.");
-    return { ok: true, target: { marketKey: "spreads", outcome: { side }, point } };
+    return { ok: true, target: { marketKey: "spreads", outcome: { side }, point, maxLineMove: MAX_LINE_MOVE_POINTS } };
   }
 
   if (leg.betType === "TOTAL") {
@@ -157,7 +176,7 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
     if (!side) return unsupported("Couldn't tell if this total is Over or Under.");
     const point = leg.line ?? extractLine("TOTAL", leg.betDetail ?? "");
     if (point === null) return unsupported("This total has no line to match.");
-    return { ok: true, target: { marketKey: "totals", outcome: { name: side === "OVER" ? "Over" : "Under" }, point } };
+    return { ok: true, target: { marketKey: "totals", outcome: { name: side === "OVER" ? "Over" : "Under" }, point, maxLineMove: MAX_LINE_MOVE_POINTS } };
   }
 
   return unsupported("This bet type can't be sent yet.");
@@ -210,45 +229,76 @@ function selectionOf(market: FanDuelMarket, outcome: FanDuelOutcome): FanDuelSel
   return { marketId, selectionId };
 }
 
-export type FanDuelMatchQuery = { marketKey: string; outcomeName: string; player?: string; point?: number };
+export type FanDuelMatchQuery = { marketKey: string; outcomeName: string; player?: string; point?: number; maxLineMove?: number };
 
 export type FanDuelMatch =
   | { status: "matched"; selection: FanDuelSelection; price: number }
+  | { status: "adjusted"; selection: FanDuelSelection; price: number; fanDuelLine: number }
   | { status: "not_found" | "ambiguous"; reason: string };
 
-// Exactly one outcome, or none: the market key, the outcome's name, the
-// player (case and punctuation aside - never a near-miss) and the line all
-// have to be the pick's own. A pick with a line never matches an outcome at
-// another line.
+const AMBIGUOUS = "More than one FanDuel selection fits this pick.";
+
+// A spread's line carries its sign; a total's or a prop's is a bare number.
+const lineText = (marketKey: string, line: number) => (marketKey === "spreads" && line > 0 ? "+" : "") + line;
+
+// Exactly one outcome, or none: the market key, the outcome's name and the
+// player (case and punctuation aside - never a near-miss) all have to be the
+// pick's own. So does the line, unless the query allows a move (maxLineMove)
+// and FanDuel has no outcome at the pick's line: then the closest line within
+// that move is the match, as "adjusted". The side never changes - only
+// outcomes with the pick's own name are ever looked at.
 export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMarket[]): FanDuelMatch {
   const inMarket = markets.filter((m) => m.key === query.marketKey);
   if (inMarket.length === 0) return { status: "not_found", reason: "FanDuel isn't offering this market right now." };
 
   const player = query.player === undefined ? null : normalizeName(query.player);
-  const found = new Map<string, { selection: FanDuelSelection; price: number }>();
+  type Found = { selection: FanDuelSelection; price: number };
+  const found = new Map<string, Found>();
+  // The same bet at another line, by that line.
+  const otherLines = new Map<number, Map<string, Found>>();
   let withoutIds = 0;
   for (const market of inMarket) {
     for (const outcome of market.outcomes) {
       if (outcome.name !== query.outcomeName) continue;
-      if (query.point !== undefined && outcome.point !== query.point) continue;
       if (player !== null && normalizeName(outcome.description ?? "") !== player) continue;
+      const exact = query.point === undefined || outcome.point === query.point;
+      if (!exact && typeof outcome.point !== "number") continue;
       const selection = selectionOf(market, outcome);
       if (!selection) {
-        withoutIds++;
+        if (exact) withoutIds++;
         continue;
       }
-      found.set(selection.marketId + "|" + selection.selectionId, { selection, price: outcome.price });
+      let into = found;
+      if (!exact) {
+        into = otherLines.get(outcome.point!) ?? new Map<string, Found>();
+        otherLines.set(outcome.point!, into);
+      }
+      into.set(selection.marketId + "|" + selection.selectionId, { selection, price: outcome.price });
     }
   }
 
-  if (found.size > 1) return { status: "ambiguous", reason: "More than one FanDuel selection fits this pick." };
+  if (found.size > 1) return { status: "ambiguous", reason: AMBIGUOUS };
   const only = Array.from(found.values())[0];
   if (only) return { status: "matched", ...only };
   if (withoutIds > 0) return { status: "not_found", reason: "FanDuel has this bet, but no betslip link for it." };
-  return {
-    status: "not_found",
-    reason: query.point === undefined ? "FanDuel isn't offering this selection right now." : "FanDuel isn't offering this exact line right now.",
-  };
+  if (query.point === undefined) return { status: "not_found", reason: "FanDuel isn't offering this selection right now." };
+  if (query.maxLineMove === undefined || otherLines.size === 0) {
+    return { status: "not_found", reason: "FanDuel isn't offering this exact line right now." };
+  }
+
+  const pickLine = query.point;
+  const move = (line: number) => Math.abs(line - pickLine);
+  const lines = Array.from(otherLines.keys()).sort((x, y) => move(x) - move(y));
+  const closest = lines[0];
+  // 1e-9: 10% of a .5 line is not an exact binary fraction.
+  if (move(closest) > query.maxLineMove + 1e-9) {
+    return { status: "not_found", reason: "FanDuel's line is " + lineText(query.marketKey, closest) + ", too far from your pick." };
+  }
+  // Two lines equally close (one each side of the pick), or two selections at
+  // the closest line: nothing says which one the pick means.
+  const atClosest = Array.from(otherLines.get(closest)!.values());
+  if ((lines.length > 1 && move(lines[1]) === move(closest)) || atClosest.length > 1) return { status: "ambiguous", reason: AMBIGUOUS };
+  return { status: "adjusted", ...atClosest[0], fanDuelLine: closest };
 }
 
 // ---------------------------------------------------------------------
@@ -296,8 +346,22 @@ function eventForLeg(leg: FanDuelLegInput, events: FanDuelEvent[], now: Date): E
 
 export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDeps): Promise<FanDuelLinkResponse> {
   const results = new Map<string, FanDuelLegResult>();
-  const settle = (leg: FanDuelLegInput, status: FanDuelLegStatus, reason: string | null, fanDuelOdds: number | null = null) =>
-    results.set(leg.pickId, { pickId: leg.pickId, status, reason, pickOdds: leg.odds, fanDuelOdds });
+  const settle = (
+    leg: FanDuelLegInput,
+    status: FanDuelLegStatus,
+    reason: string | null,
+    fanDuelOdds: number | null = null,
+    lines: { pickLine: number; fanDuelLine: number } | null = null
+  ) =>
+    results.set(leg.pickId, {
+      pickId: leg.pickId,
+      status,
+      reason,
+      pickOdds: leg.odds,
+      fanDuelOdds,
+      pickLine: lines?.pickLine ?? null,
+      fanDuelLine: lines?.fanDuelLine ?? null,
+    });
 
   // 1. Started games and unsupported markets never reach the feed.
   const pending: { leg: FanDuelLegInput; target: FanDuelLegTarget }[] = [];
@@ -347,10 +411,16 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
           continue;
         }
         const outcomeName = "side" in target.outcome ? (target.outcome.side === "HOME" ? event.homeTeam : event.awayTeam) : target.outcome.name;
-        const match = matchFanDuelOutcome({ marketKey: target.marketKey, outcomeName, player: target.player, point: target.point }, markets);
+        const match = matchFanDuelOutcome(
+          { marketKey: target.marketKey, outcomeName, player: target.player, point: target.point, maxLineMove: target.maxLineMove },
+          markets
+        );
         if (match.status === "matched") {
           selections.set(leg.pickId, match.selection);
           settle(leg, "matched", null, match.price);
+        } else if (match.status === "adjusted") {
+          selections.set(leg.pickId, match.selection);
+          settle(leg, "adjusted", null, match.price, { pickLine: target.point!, fanDuelLine: match.fanDuelLine });
         } else {
           settle(leg, match.status, match.reason);
         }
@@ -360,6 +430,6 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
 
   // In the order the legs were asked for.
   const ordered = legs.map((l) => results.get(l.pickId)!);
-  const matched = legs.map((l) => selections.get(l.pickId)).filter((s): s is FanDuelSelection => s !== undefined);
-  return { url: buildFanDuelBetslipUrl(matched), legs: ordered };
+  const sent = legs.map((l) => selections.get(l.pickId)).filter((s): s is FanDuelSelection => s !== undefined);
+  return { url: buildFanDuelBetslipUrl(sent), legs: ordered };
 }

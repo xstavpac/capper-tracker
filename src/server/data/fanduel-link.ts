@@ -192,6 +192,8 @@ export async function getFanDuelLink(userId: string, pickIds: string[], now: Dat
     reason: "This pick is no longer available.",
     pickOdds: null,
     fanDuelOdds: null,
+    pickLine: null,
+    fanDuelLine: null,
   });
   return { url: built.url, legs: pickIds.map((id) => byId.get(id) ?? missing(id)) };
 }

@@ -10,6 +10,8 @@ import {
   hasStarted,
   matchFanDuelOutcome,
   FANDUEL_BETSLIP_URL,
+  MAX_LINE_MOVE_POINTS,
+  MAX_PROP_LINE_MOVE_RATIO,
   type FanDuelDeps,
   type FanDuelEvent,
   type FanDuelLegInput,
@@ -101,7 +103,7 @@ check(
   { status: "matched", selection: { marketId: "42.612291280", selectionId: "7017917" }, price: -108 }
 );
 check(
-  "total at another line is never matched to the posted one",
+  "total at another line is never matched to the posted one unless the query allows a move",
   matchFanDuelOutcome({ marketKey: "totals", outcomeName: "Over", point: 53.5 }, GAME_MARKETS),
   { status: "not_found", reason: "FanDuel isn't offering this exact line right now." }
 );
@@ -144,6 +146,122 @@ check(
   "the same selection listed twice is one candidate",
   matchFanDuelOutcome({ marketKey: "totals", outcomeName: "Over", point: 54.5 }, [GAME_MARKETS[2], GAME_MARKETS[2]]).status,
   "matched"
+);
+
+// ---------------------------------------------------------------------
+// 1b. FanDuel's line in place of the pick's
+// ---------------------------------------------------------------------
+check(
+  "spread +4 when FanDuel has +3.5: sent at +3.5, flagged adjusted",
+  matchFanDuelOutcome({ marketKey: "spreads", outcomeName: "Buffalo Bills", point: 4, maxLineMove: 1.5 }, GAME_MARKETS),
+  { status: "adjusted", selection: { marketId: "42.612291278", selectionId: "50203" }, price: -115, fanDuelLine: 3.5 }
+);
+check(
+  "a move of exactly 1.5 points is still sent",
+  matchFanDuelOutcome({ marketKey: "spreads", outcomeName: "Buffalo Bills", point: 5, maxLineMove: 1.5 }, GAME_MARKETS).status,
+  "adjusted"
+);
+check(
+  "spread +5.5 when FanDuel has +3.5: too far, and says FanDuel's line",
+  matchFanDuelOutcome({ marketKey: "spreads", outcomeName: "Buffalo Bills", point: 5.5, maxLineMove: 1.5 }, GAME_MARKETS),
+  { status: "not_found", reason: "FanDuel's line is +3.5, too far from your pick." }
+);
+check(
+  "the side never flips: Bills +4 is never the Rams' outcome, whatever its line",
+  [
+    matchFanDuelOutcome({ marketKey: "spreads", outcomeName: "Buffalo Bills", point: 4, maxLineMove: 1.5 }, [
+      { key: "spreads", sid: null, outcomes: [{ name: "Los Angeles Rams", price: -110, point: 4, sid: "10782388", link: link("42.612291278", "10782388") }] },
+    ]),
+    matchFanDuelOutcome({ marketKey: "spreads", outcomeName: "Buffalo Bills", point: 4, maxLineMove: 1.5 }, [
+      {
+        key: "spreads",
+        sid: null,
+        outcomes: [
+          { name: "Buffalo Bills", price: -110, point: -4, sid: "50203", link: link("42.612291278", "50203") },
+          { name: "Los Angeles Rams", price: -110, point: 4, sid: "10782388", link: link("42.612291278", "10782388") },
+        ],
+      },
+    ]),
+  ],
+  [
+    { status: "not_found", reason: "FanDuel isn't offering this exact line right now." },
+    { status: "not_found", reason: "FanDuel's line is -4, too far from your pick." },
+  ]
+);
+
+const TOTAL_48: FanDuelMarket[] = [
+  {
+    key: "totals",
+    sid: null,
+    outcomes: [
+      { name: "Over", price: -112, point: 48, sid: "7017916", link: link("42.612291280", "7017916") },
+      { name: "Under", price: -108, point: 48, sid: "7017917", link: link("42.612291280", "7017917") },
+    ],
+  },
+];
+check(
+  "total Over 47.5 when FanDuel has 48: sent at 48, and Over stays Over",
+  matchFanDuelOutcome({ marketKey: "totals", outcomeName: "Over", point: 47.5, maxLineMove: 1.5 }, TOTAL_48),
+  { status: "adjusted", selection: { marketId: "42.612291280", selectionId: "7017916" }, price: -112, fanDuelLine: 48 }
+);
+check(
+  "total Under 47.5 when FanDuel has 48: Under stays Under",
+  matchFanDuelOutcome({ marketKey: "totals", outcomeName: "Under", point: 47.5, maxLineMove: 1.5 }, TOTAL_48),
+  { status: "adjusted", selection: { marketId: "42.612291280", selectionId: "7017917" }, price: -108, fanDuelLine: 48 }
+);
+check(
+  "total 50 when FanDuel has 48: too far",
+  matchFanDuelOutcome({ marketKey: "totals", outcomeName: "Over", point: 50, maxLineMove: 1.5 }, TOTAL_48),
+  { status: "not_found", reason: "FanDuel's line is 48, too far from your pick." }
+);
+
+const rushYds = (allenLine: number): FanDuelMarket[] => [
+  {
+    key: "player_rush_yds",
+    sid: null,
+    outcomes: [
+      { name: "Over", description: "Josh Allen", price: -114, point: allenLine, sid: "16503670", link: link("42.613952810", "16503670") },
+      { name: "Under", description: "Josh Allen", price: -112, point: allenLine, sid: "16503671", link: link("42.613952810", "16503671") },
+      { name: "Over", description: "Kyren Williams", price: -110, point: 64.5, sid: "16503680", link: link("42.613952811", "16503680") },
+    ],
+  },
+];
+const allenRush = { marketKey: "player_rush_yds", outcomeName: "Over", player: "Josh Allen", point: 64.5, maxLineMove: 64.5 * MAX_PROP_LINE_MOVE_RATIO };
+check(
+  "prop Over 64.5 when FanDuel has 66.5: sent at 66.5, the same player's Over",
+  matchFanDuelOutcome(allenRush, rushYds(66.5)),
+  { status: "adjusted", selection: { marketId: "42.613952810", selectionId: "16503670" }, price: -114, fanDuelLine: 66.5 }
+);
+check(
+  "prop Over 64.5 when FanDuel has 80.5: more than 10% away, not sent - and never another player's 64.5",
+  matchFanDuelOutcome(allenRush, rushYds(80.5)),
+  { status: "not_found", reason: "FanDuel's line is 80.5, too far from your pick." }
+);
+
+const twoLines = (first: number, second: number): FanDuelMarket[] => [
+  {
+    key: "totals",
+    sid: null,
+    outcomes: [
+      { name: "Over", price: -105, point: first, sid: "801", link: link("42.700000002", "801") },
+      { name: "Over", price: -125, point: second, sid: "802", link: link("42.700000003", "802") },
+    ],
+  },
+];
+check(
+  "the exact line always wins over a nearby one: matched, nothing substituted",
+  matchFanDuelOutcome({ marketKey: "totals", outcomeName: "Over", point: 47.5, maxLineMove: 1.5 }, twoLines(48, 47.5)),
+  { status: "matched", selection: { marketId: "42.700000003", selectionId: "802" }, price: -125 }
+);
+check(
+  "two lines in reach: the closer one",
+  matchFanDuelOutcome({ marketKey: "totals", outcomeName: "Over", point: 47.5, maxLineMove: 1.5 }, twoLines(46.5, 48)),
+  { status: "adjusted", selection: { marketId: "42.700000003", selectionId: "802" }, price: -125, fanDuelLine: 48 }
+);
+check(
+  "two lines equally close: ambiguous, neither is picked",
+  matchFanDuelOutcome({ marketKey: "totals", outcomeName: "Over", point: 47.5, maxLineMove: 1.5 }, twoLines(47, 48)).status,
+  "ambiguous"
 );
 
 const idsOf = (m: FanDuelMarket[]) => matchFanDuelOutcome({ marketKey: "h2h", outcomeName: "Buffalo Bills" }, m);
@@ -225,19 +343,39 @@ check("spread on the home team, its own signed line", target({ betType: "SPREAD"
   marketKey: "spreads",
   outcome: { side: "HOME" },
   point: -3.5,
+  maxLineMove: MAX_LINE_MOVE_POINTS,
 });
 check("spread with no stored line reads it from the text", target({ betType: "SPREAD", betDetail: "Bills +3.5" }), {
   marketKey: "spreads",
   outcome: { side: "AWAY" },
   point: 3.5,
+  maxLineMove: MAX_LINE_MOVE_POINTS,
 });
-check("total Under", target({ betType: "TOTAL", betDetail: "Under 54.5", line: 54.5 }), { marketKey: "totals", outcome: { name: "Under" }, point: 54.5 });
+check("total Under", target({ betType: "TOTAL", betDetail: "Under 54.5", line: 54.5 }), {
+  marketKey: "totals",
+  outcome: { name: "Under" },
+  point: 54.5,
+  maxLineMove: MAX_LINE_MOVE_POINTS,
+});
 check("passing-yards prop Over", target({ betType: "PLAYER_PROP", betDetail: "Josh Allen Over 244.5 Passing Yards" }), {
   marketKey: "player_pass_yds",
   outcome: { name: "Over" },
   player: "Josh Allen",
   point: 244.5,
+  maxLineMove: 244.5 * MAX_PROP_LINE_MOVE_RATIO,
 });
+check("the move a line may make: 1.5 points for a spread or total, 10% of the line for a yardage/receptions prop", [MAX_LINE_MOVE_POINTS, MAX_PROP_LINE_MOVE_RATIO], [1.5, 0.1]);
+check(
+  "a receptions prop may move; a passing-touchdowns prop is its exact line only",
+  [
+    target({ betType: "PLAYER_PROP", betDetail: "Cooper Kupp Over 5.5 Receptions" }),
+    target({ betType: "PLAYER_PROP", betDetail: "Josh Allen Over 1.5 Passing TDs" }),
+  ],
+  [
+    { marketKey: "player_receptions", outcome: { name: "Over" }, player: "Cooper Kupp", point: 5.5, maxLineMove: 5.5 * MAX_PROP_LINE_MOVE_RATIO },
+    { marketKey: "player_pass_tds", outcome: { name: "Over" }, player: "Josh Allen", point: 1.5 },
+  ]
+);
 check("a first-half bet is not sent as the full-game one", target({ period: "FIRST_HALF" }), "unsupported");
 check("team total / NRFI have no market here", [target({ betType: "TEAM_TOTAL", betDetail: "Bills Over 24.5", line: 24.5 }), target({ betType: "NRFI", betDetail: "NRFI" })], ["unsupported", "unsupported"]);
 check("a moneyline naming neither team", target({ betDetail: "ML" }), "unsupported");
@@ -329,11 +467,47 @@ async function main() {
   check("a leg whose own time is still ahead but whose game has kicked off is skipped", [afterKickoff.legs[0].status, afterKickoff.url, c.calls.odds], ["started", null, []]);
 
   const d = fakeDeps(NOW);
-  const wrongLine = await buildFanDuelLink([leg({ pickId: "alt", betType: "SPREAD", betDetail: "Bills +4.5", line: 4.5 }), billsMl], d.deps);
-  check("a leg at a line FanDuel isn't hanging is left out; the rest still go", [wrongLine.legs.map((l) => l.status), Array.from(new URL(wrongLine.url!).searchParams.keys())], [
-    ["not_found", "matched"],
-    ["marketId[0]", "selectionId[0]"],
-  ]);
+  const wrongLine = await buildFanDuelLink([leg({ pickId: "alt", betType: "SPREAD", betDetail: "Bills +5.5", line: 5.5 }), billsMl], d.deps);
+  check(
+    "a leg too far from FanDuel's line is left out with the reason; the rest still go",
+    [wrongLine.legs.map((l) => [l.status, l.reason, l.pickLine, l.fanDuelLine]), Array.from(new URL(wrongLine.url!).searchParams.keys())],
+    [
+      [
+        ["not_found", "FanDuel's line is +3.5, too far from your pick.", null, null],
+        ["matched", null, null, null],
+      ],
+      ["marketId[0]", "selectionId[0]"],
+    ]
+  );
+
+  const f = fakeDeps(NOW);
+  const moved = await buildFanDuelLink(
+    [
+      leg({ pickId: "bills+4", betType: "SPREAD", betDetail: "Bills +4", line: 4, odds: -110 }),
+      leg({ pickId: "rams-3.5", betType: "SPREAD", betDetail: "Rams -3.5", line: -3.5, odds: -110 }),
+      leg({ pickId: "under53", betType: "TOTAL", betDetail: "Under 53", line: 53, odds: -110 }),
+      leg({ pickId: "allen250", betType: "PLAYER_PROP", betDetail: "Josh Allen Over 250.5 Passing Yards", odds: -110 }),
+      billsMl,
+    ],
+    f.deps
+  );
+  check(
+    "legs FanDuel has at a nearby line are sent at its line as adjusted, with both lines; exact and moneyline legs stay matched",
+    moved.legs.map((l) => [l.pickId, l.status, l.reason, l.pickLine, l.fanDuelLine, l.fanDuelOdds]),
+    [
+      ["bills+4", "adjusted", null, 4, 3.5, -115],
+      ["rams-3.5", "matched", null, null, null, -105],
+      ["under53", "adjusted", null, 53, 54.5, -108],
+      ["allen250", "adjusted", null, 250.5, 244.5, -113],
+      ["bills-ml", "matched", null, null, null, 154],
+    ]
+  );
+  check(
+    "the link holds the adjusted legs too: Bills' own spread, the Under, Allen's Over",
+    Array.from(new URL(moved.url!).searchParams.values()),
+    ["42.612291278", "50203", "42.612291278", "10782388", "42.612291280", "7017917", "42.613952802", "16503660", "42.612291277", "50203"]
+  );
+  check("still one odds call for the event, for the main markets only", f.calls.odds, [{ eventId: "evt-buf-lar", marketKeys: ["h2h", "player_pass_yds", "spreads", "totals"] }]);
 
   const e = fakeDeps(NOW);
   const noGame = await buildFanDuelLink([leg({ pickId: "far", gameTime: "2026-10-13T03:00:00Z" })], e.deps);
