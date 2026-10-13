@@ -1,0 +1,21 @@
+{
+  "id": "860ec3ecb7ca4564408fbd4efa5cc2fd",
+  "sport_key": "basketball_nba_preseason",
+  "commence_time": "2026-10-13T23:00:00Z",
+  "home_team": "Orlando Magic",
+  "away_team": "Cleveland Cavaliers",
+  "bookmakers": [{ "key": "fanduel", "markets": [
+    { "key": "h2h", "sid": null, "outcomes": [
+      {"name":"Cleveland Cavaliers","price":-122,"sid":"60424","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615692830&selectionId=60424"},
+      {"name":"Orlando Magic","price":100,"sid":"237475","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615692830&selectionId=237475"}
+    ] },
+    { "key": "spreads", "sid": null, "outcomes": [
+      {"name":"Cleveland Cavaliers","price":-110,"point":-1.5,"sid":"60424","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615692828&selectionId=60424"},
+      {"name":"Orlando Magic","price":-110,"point":1.5,"sid":"237475","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615692828&selectionId=237475"}
+    ] },
+    { "key": "totals", "sid": null, "outcomes": [
+      {"name":"Over","price":-115,"point":228.5,"sid":"7017823","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615865446&selectionId=7017823"},
+      {"name":"Under","price":-105,"point":228.5,"sid":"7017824","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615865446&selectionId=7017824"}
+    ] }
+  ] }]
+}

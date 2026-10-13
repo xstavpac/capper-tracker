@@ -2,7 +2,8 @@
 // matching and the link itself). Reads the legs' picks scoped to the signed-in
 // user - the request names them by id only - and asks the Odds API for
 // FanDuel's ids: the free event listing per league, then one metered call per
-// event for just the markets its legs need.
+// event for just the main markets its legs need, and a second for the
+// alternate-lines markets of only the legs that missed there.
 //
 // Only ever runs from a tap on the button (POST /api/parlay/fanduel-link).
 // Nothing here is called on page load or from a cron.
@@ -192,6 +193,7 @@ export async function getFanDuelLink(userId: string, pickIds: string[], now: Dat
     reason: "This pick is no longer available.",
     pickOdds: null,
     fanDuelOdds: null,
+    sentLine: null,
   });
   return { url: built.url, legs: pickIds.map((id) => byId.get(id) ?? missing(id)) };
 }

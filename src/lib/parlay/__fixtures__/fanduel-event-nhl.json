@@ -1,0 +1,174 @@
+{
+  "id": "96c1dc95ee1b687f058a96a7153cf36a",
+  "sport_key": "icehockey_nhl",
+  "commence_time": "2026-10-13T22:10:00Z",
+  "home_team": "Detroit Red Wings",
+  "away_team": "New Jersey Devils",
+  "bookmakers": [{ "key": "fanduel", "markets": [
+    { "key": "h2h", "sid": null, "outcomes": [
+      {"name":"Detroit Red Wings","price":-110,"sid":"25593","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615070886&selectionId=25593"},
+      {"name":"New Jersey Devils","price":-110,"sid":"25586","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615070886&selectionId=25586"}
+    ] },
+    { "key": "spreads", "sid": null, "outcomes": [
+      {"name":"Detroit Red Wings","price":220,"point":-1.5,"sid":"25593","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615070885&selectionId=25593"},
+      {"name":"New Jersey Devils","price":-280,"point":1.5,"sid":"25586","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615070885&selectionId=25586"}
+    ] },
+    { "key": "totals", "sid": null, "outcomes": [
+      {"name":"Over","price":114,"point":6.5,"sid":"7017911","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615070889&selectionId=7017911"},
+      {"name":"Under","price":-140,"point":6.5,"sid":"7017912","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615070889&selectionId=7017912"}
+    ] },
+    { "key": "alternate_spreads", "sid": null, "outcomes": [
+      {"name":"Detroit Red Wings","price":-300,"point":1.5,"sid":"7000406","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=7000406"},
+      {"name":"Detroit Red Wings","price":-600,"point":2.5,"sid":"7737379","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=7737379"},
+      {"name":"Detroit Red Wings","price":-2000,"point":3.5,"sid":"7737373","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=7737373"},
+      {"name":"Detroit Red Wings","price":-8000,"point":4.5,"sid":"53102816","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=53102816"},
+      {"name":"Detroit Red Wings","price":-20000,"point":5.5,"sid":"53102817","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=53102817"},
+      {"name":"Detroit Red Wings","price":-50000,"point":6.5,"sid":"53102818","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=53102818"},
+      {"name":"Detroit Red Wings","price":215,"point":-1.5,"sid":"7000433","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=7000433"},
+      {"name":"Detroit Red Wings","price":340,"point":-2.5,"sid":"7737354","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=7737354"},
+      {"name":"Detroit Red Wings","price":920,"point":-3.5,"sid":"7737398","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=7737398"},
+      {"name":"Detroit Red Wings","price":2500,"point":-4.5,"sid":"53102815","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=53102815"},
+      {"name":"Detroit Red Wings","price":6500,"point":-5.5,"sid":"53102813","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=53102813"},
+      {"name":"New Jersey Devils","price":-290,"point":1.5,"sid":"7000413","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=7000413"},
+      {"name":"New Jersey Devils","price":-550,"point":2.5,"sid":"7739903","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=7739903"},
+      {"name":"New Jersey Devils","price":-1800,"point":3.5,"sid":"7739899","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=7739899"},
+      {"name":"New Jersey Devils","price":-6000,"point":4.5,"sid":"53462381","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=53462381"},
+      {"name":"New Jersey Devils","price":-20000,"point":5.5,"sid":"53462380","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=53462380"},
+      {"name":"New Jersey Devils","price":-50000,"point":6.5,"sid":"53462379","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=53462379"},
+      {"name":"New Jersey Devils","price":220,"point":-1.5,"sid":"7000440","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=7000440"},
+      {"name":"New Jersey Devils","price":380,"point":-2.5,"sid":"7739946","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=7739946"},
+      {"name":"New Jersey Devils","price":1000,"point":-3.5,"sid":"7739890","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=7739890"},
+      {"name":"New Jersey Devils","price":2700,"point":-4.5,"sid":"53462378","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952733&selectionId=53462378"}
+    ] },
+    { "key": "alternate_spreads_p1", "sid": null, "outcomes": [
+      {"name":"Detroit Red Wings","price":-1300,"point":1.5,"sid":"7000406","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952704&selectionId=7000406"},
+      {"name":"Detroit Red Wings","price":-6000,"point":2.5,"sid":"7737379","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952704&selectionId=7737379"},
+      {"name":"Detroit Red Wings","price":680,"point":-1.5,"sid":"7000433","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952704&selectionId=7000433"},
+      {"name":"Detroit Red Wings","price":2500,"point":-2.5,"sid":"7737354","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952704&selectionId=7737354"},
+      {"name":"New Jersey Devils","price":-1200,"point":1.5,"sid":"7000413","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952704&selectionId=7000413"},
+      {"name":"New Jersey Devils","price":-6000,"point":2.5,"sid":"7739903","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952704&selectionId=7739903"},
+      {"name":"New Jersey Devils","price":690,"point":-1.5,"sid":"7000440","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952704&selectionId=7000440"},
+      {"name":"New Jersey Devils","price":2400,"point":-2.5,"sid":"7739946","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952704&selectionId=7739946"}
+    ] },
+    { "key": "alternate_team_totals", "sid": null, "outcomes": [
+      {"name":"Over","description":"Detroit Red Wings","price":-3500,"point":0.5,"sid":"9469964","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=9469964"},
+      {"name":"Over","description":"Detroit Red Wings","price":-550,"point":1.5,"sid":"10239854","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=10239854"},
+      {"name":"Over","description":"Detroit Red Wings","price":-172,"point":2.5,"sid":"8359788","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=8359788"},
+      {"name":"Over","description":"Detroit Red Wings","price":140,"point":3.5,"sid":"8359769","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=8359769"},
+      {"name":"Over","description":"Detroit Red Wings","price":320,"point":4.5,"sid":"7669430","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=7669430"},
+      {"name":"Over","description":"Detroit Red Wings","price":820,"point":5.5,"sid":"8359772","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=8359772"},
+      {"name":"Over","description":"Detroit Red Wings","price":2000,"point":6.5,"sid":"7669354","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=7669354"},
+      {"name":"Under","description":"Detroit Red Wings","price":1460,"point":0.5,"sid":"8359786","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=8359786"},
+      {"name":"Under","description":"Detroit Red Wings","price":360,"point":1.5,"sid":"8359770","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=8359770"},
+      {"name":"Under","description":"Detroit Red Wings","price":-180,"point":3.5,"sid":"8359773","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=8359773"},
+      {"name":"Under","description":"Detroit Red Wings","price":-480,"point":4.5,"sid":"7669353","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=7669353"},
+      {"name":"Under","description":"Detroit Red Wings","price":-1600,"point":5.5,"sid":"8359775","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=8359775"},
+      {"name":"Under","description":"Detroit Red Wings","price":-5000,"point":6.5,"sid":"7669422","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=7669422"},
+      {"name":"Over","description":"New Jersey Devils","price":-3000,"point":0.5,"sid":"9469964","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=9469964"},
+      {"name":"Over","description":"New Jersey Devils","price":-550,"point":1.5,"sid":"10239854","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=10239854"},
+      {"name":"Over","description":"New Jersey Devils","price":-174,"point":2.5,"sid":"8359788","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=8359788"},
+      {"name":"Over","description":"New Jersey Devils","price":144,"point":3.5,"sid":"8359769","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=8359769"},
+      {"name":"Over","description":"New Jersey Devils","price":340,"point":4.5,"sid":"7669430","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=7669430"},
+      {"name":"Over","description":"New Jersey Devils","price":870,"point":5.5,"sid":"8359772","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=8359772"},
+      {"name":"Over","description":"New Jersey Devils","price":2300,"point":6.5,"sid":"7669354","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=7669354"},
+      {"name":"Under","description":"New Jersey Devils","price":1400,"point":0.5,"sid":"8359786","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=8359786"},
+      {"name":"Under","description":"New Jersey Devils","price":360,"point":1.5,"sid":"8359770","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=8359770"},
+      {"name":"Under","description":"New Jersey Devils","price":-182,"point":3.5,"sid":"8359773","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=8359773"},
+      {"name":"Under","description":"New Jersey Devils","price":-550,"point":4.5,"sid":"7669353","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=7669353"},
+      {"name":"Under","description":"New Jersey Devils","price":-1600,"point":5.5,"sid":"8359775","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=8359775"},
+      {"name":"Under","description":"New Jersey Devils","price":-6000,"point":6.5,"sid":"7669422","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=7669422"}
+    ] },
+    { "key": "alternate_totals", "sid": null, "outcomes": [
+      {"name":"Over","price":-6000,"point":2.5,"sid":"8359788","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=8359788"},
+      {"name":"Over","price":-950,"point":3.5,"sid":"8359769","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=8359769"},
+      {"name":"Over","price":-450,"point":4.5,"sid":"7669430","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=7669430"},
+      {"name":"Over","price":-142,"point":5.5,"sid":"8359772","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=8359772"},
+      {"name":"Over","price":110,"point":6.5,"sid":"7669354","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=7669354"},
+      {"name":"Over","price":260,"point":7.5,"sid":"8359774","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=8359774"},
+      {"name":"Over","price":420,"point":8.5,"sid":"7669420","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=7669420"},
+      {"name":"Over","price":1000,"point":9.5,"sid":"8359779","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=8359779"},
+      {"name":"Over","price":1550,"point":10.5,"sid":"602861","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=602861"},
+      {"name":"Over","price":4300,"point":11.5,"sid":"8060349","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=8060349"},
+      {"name":"Under","price":2200,"point":2.5,"sid":"7668991","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=7668991"},
+      {"name":"Under","price":540,"point":3.5,"sid":"8359773","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=8359773"},
+      {"name":"Under","price":310,"point":4.5,"sid":"7669353","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=7669353"},
+      {"name":"Under","price":112,"point":5.5,"sid":"8359775","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=8359775"},
+      {"name":"Under","price":-140,"point":6.5,"sid":"7669422","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=7669422"},
+      {"name":"Under","price":-380,"point":7.5,"sid":"8359780","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=8359780"},
+      {"name":"Under","price":-650,"point":8.5,"sid":"8359782","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=8359782"},
+      {"name":"Under","price":-2000,"point":9.5,"sid":"8104850","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=8104850"},
+      {"name":"Under","price":-3500,"point":10.5,"sid":"602860","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=602860"},
+      {"name":"Under","price":-8000,"point":11.5,"sid":"8060348","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952772&selectionId=8060348"}
+    ] },
+    { "key": "alternate_totals_p1", "sid": null, "outcomes": [
+      {"name":"Over","price":-650,"point":0.5,"sid":"9469964","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952714&selectionId=9469964"},
+      {"name":"Over","price":-122,"point":1.5,"sid":"10239854","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952714&selectionId=10239854"},
+      {"name":"Over","price":260,"point":2.5,"sid":"8359788","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952714&selectionId=8359788"},
+      {"name":"Over","price":810,"point":3.5,"sid":"8359769","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952714&selectionId=8359769"},
+      {"name":"Over","price":2400,"point":4.5,"sid":"7669430","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952714&selectionId=7669430"},
+      {"name":"Under","price":400,"point":0.5,"sid":"8359786","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952714&selectionId=8359786"},
+      {"name":"Under","price":-104,"point":1.5,"sid":"8359770","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952714&selectionId=8359770"},
+      {"name":"Under","price":-370,"point":2.5,"sid":"7668991","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952714&selectionId=7668991"},
+      {"name":"Under","price":-1600,"point":3.5,"sid":"8359773","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952714&selectionId=8359773"},
+      {"name":"Under","price":-6000,"point":4.5,"sid":"7669353","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952714&selectionId=7669353"}
+    ] },
+    { "key": "h2h_3_way", "sid": null, "outcomes": [
+      {"name":"Detroit Red Wings","price":140,"sid":"25593","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615070893&selectionId=25593"},
+      {"name":"New Jersey Devils","price":140,"sid":"25586","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615070893&selectionId=25586"},
+      {"name":"Draw","price":330,"sid":"60104","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615070893&selectionId=60104"}
+    ] },
+    { "key": "h2h_3_way_p1", "sid": null, "outcomes": [
+      {"name":"Detroit Red Wings","price":185,"sid":"25593","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952724&selectionId=25593"},
+      {"name":"New Jersey Devils","price":185,"sid":"25586","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952724&selectionId=25586"},
+      {"name":"Draw","price":175,"sid":"60104","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952724&selectionId=60104"}
+    ] },
+    { "key": "h2h_p1", "sid": null, "outcomes": [
+      {"name":"Detroit Red Wings","price":-112,"sid":"25593","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952763&selectionId=25593"},
+      {"name":"New Jersey Devils","price":-112,"sid":"25586","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952763&selectionId=25586"}
+    ] },
+    { "key": "h2h_p2", "sid": null, "outcomes": [
+      {"name":"Detroit Red Wings","price":-118,"sid":"25593","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952709&selectionId=25593"},
+      {"name":"New Jersey Devils","price":-108,"sid":"25586","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952709&selectionId=25586"}
+    ] },
+    { "key": "h2h_p3", "sid": null, "outcomes": [
+      {"name":"Detroit Red Wings","price":-110,"sid":"25593","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952711&selectionId=25593"},
+      {"name":"New Jersey Devils","price":-116,"sid":"25586","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952711&selectionId=25586"}
+    ] },
+    { "key": "spreads_p1", "sid": null, "outcomes": [
+      {"name":"Detroit Red Wings","price":180,"point":-0.5,"sid":"25593","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952735&selectionId=25593"},
+      {"name":"New Jersey Devils","price":-235,"point":0.5,"sid":"25586","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952735&selectionId=25586"}
+    ] },
+    { "key": "spreads_p2", "sid": null, "outcomes": [
+      {"name":"Detroit Red Wings","price":164,"point":-0.5,"sid":"25593","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952712&selectionId=25593"},
+      {"name":"New Jersey Devils","price":-215,"point":0.5,"sid":"25586","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952712&selectionId=25586"}
+    ] },
+    { "key": "spreads_p3", "sid": null, "outcomes": [
+      {"name":"Detroit Red Wings","price":-200,"point":0.5,"sid":"25593","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952706&selectionId=25593"},
+      {"name":"New Jersey Devils","price":154,"point":-0.5,"sid":"25586","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952706&selectionId=25586"}
+    ] },
+    { "key": "team_totals", "sid": null, "outcomes": [
+      {"name":"Over","description":"Detroit Red Wings","price":-172,"point":2.5,"sid":"8359788","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=8359788"},
+      {"name":"Under","description":"Detroit Red Wings","price":-180,"point":3.5,"sid":"8359773","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952616&selectionId=8359773"},
+      {"name":"Over","description":"New Jersey Devils","price":-174,"point":2.5,"sid":"8359788","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=8359788"},
+      {"name":"Under","description":"New Jersey Devils","price":-182,"point":3.5,"sid":"8359773","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952727&selectionId=8359773"}
+    ] },
+    { "key": "team_totals_p1", "sid": null, "outcomes": [
+      {"name":"Over","description":"Detroit Red Wings","price":-164,"point":0.5,"sid":"7017911","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952725&selectionId=7017911"},
+      {"name":"Under","description":"Detroit Red Wings","price":128,"point":0.5,"sid":"7017912","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952725&selectionId=7017912"},
+      {"name":"Over","description":"New Jersey Devils","price":-154,"point":0.5,"sid":"7017911","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952771&selectionId=7017911"},
+      {"name":"Under","description":"New Jersey Devils","price":120,"point":0.5,"sid":"7017912","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952771&selectionId=7017912"}
+    ] },
+    { "key": "totals_p1", "sid": null, "outcomes": [
+      {"name":"Over","price":-122,"point":1.5,"sid":"7017911","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952730&selectionId=7017911"},
+      {"name":"Under","price":-104,"point":1.5,"sid":"7017912","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952730&selectionId=7017912"}
+    ] },
+    { "key": "totals_p2", "sid": null, "outcomes": [
+      {"name":"Over","price":-182,"point":1.5,"sid":"7017911","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952705&selectionId=7017911"},
+      {"name":"Under","price":142,"point":1.5,"sid":"7017912","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952705&selectionId=7017912"}
+    ] },
+    { "key": "totals_p3", "sid": null, "outcomes": [
+      {"name":"Over","price":150,"point":2.5,"sid":"7017911","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952755&selectionId=7017911"},
+      {"name":"Under","price":-192,"point":2.5,"sid":"7017912","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615952755&selectionId=7017912"}
+    ] }
+  ] }]
+}
