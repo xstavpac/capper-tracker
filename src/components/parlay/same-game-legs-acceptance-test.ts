@@ -94,14 +94,19 @@ async function main() {
   Object.defineProperty(win.document, "fonts", { value: { ready: Promise.resolve() }, configurable: true });
   g.IS_REACT_ACT_ENVIRONMENT = true;
 
-  // "Send to FanDuel": p1 and p2 are found; the same-game legs are not.
+  // "Send to FanDuel": p1 is found at its own line; p2 and p3 go at FanDuel's
+  // nearest line (p3's is the harder one to win); s1 can't be sent.
   let fanDuelBody: { pickIds: string[] } | null = null;
   g.fetch = async (_url: string, init: { body: string }) => {
     fanDuelBody = JSON.parse(init.body);
     const legs = fanDuelBody!.pickIds.map((pickId) =>
       pickId === "s1"
-        ? { pickId, status: "unsupported", reason: "This bet type can't be sent yet.", pickOdds: -110, fanDuelOdds: null }
-        : { pickId, status: "matched", reason: null, pickOdds: -110, fanDuelOdds: -110 }
+        ? { pickId, status: "unsupported", reason: "This bet type can't be sent yet.", pickOdds: -110, fanDuelOdds: null, sentLine: null }
+        : pickId === "p2"
+          ? { pickId, status: "adjusted", reason: null, pickOdds: -110, fanDuelOdds: -142, sentLine: { pick: 6, fanDuel: 5.5, side: "Over", worse: false } }
+          : pickId === "p3"
+            ? { pickId, status: "adjusted", reason: null, pickOdds: -110, fanDuelOdds: -150, sentLine: { pick: 4.5, fanDuel: 3.5, side: "Under", worse: true } }
+            : { pickId, status: "matched", reason: null, pickOdds: -110, fanDuelOdds: -110, sentLine: null }
     );
     return { ok: true, json: async () => ({ url: "https://account.sportsbook.fanduel.com/sportsbook/addToBetslip?x=1", legs }) };
   };
@@ -187,6 +192,12 @@ async function main() {
   check("the half-sent pair is named", text().includes("Same-game legs not fully sent") && text().includes("Away1 @ Home1: 1 of 2 legs is in the FanDuel link."));
   check("the fully-sent pair is not", !text().includes("Away2 @ Home2: "));
   check("the unsent leg still shows why", text().includes("Not supported") && text().includes("This bet type can't be sent yet."));
+  check("a leg sent at FanDuel's line counts as sent", text().includes("On FanDuel · 4 of 5 legs"));
+  check("it shows the line sent beside the pick's, with FanDuel's price for the line sent", text().includes("Sent as Over 5.5 · pick Over 6") && text().includes("-142pick -110"));
+  const worseTags = Array.from(container.querySelectorAll("li span")).filter((el) => el.textContent === "Worse line");
+  check("only the leg whose sent line is harder to win is marked 'Worse line'", worseTags.length === 1 && (worseTags[0].closest("li")?.textContent ?? "").includes("Leg-P3"), String(worseTags.length));
+  check("the worse line reads out both lines and says why", text().includes("Sent as Under 3.5 · pick Under 4.5 · harder to win than your pick"));
+  check("and is called out again above the Open FanDuel link", text().includes("1 leg is going at a line that is harder to win than your pick."));
 
   // ---------------------------------------------------------------------
   // 4. Max 3, still short after same-game legs

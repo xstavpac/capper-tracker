@@ -1,0 +1,150 @@
+{
+  "id": "38049724abb5fcb2b69405bbe4bb3d72",
+  "sport_key": "baseball_mlb",
+  "commence_time": "2026-10-14T00:00:00Z",
+  "home_team": "Tampa Bay Rays",
+  "away_team": "Cleveland Guardians",
+  "bookmakers": [{ "key": "fanduel", "markets": [
+    { "key": "h2h", "sid": null, "outcomes": [
+      {"name":"Cleveland Guardians","price":112,"sid":"41541473","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615802440&selectionId=41541473"},
+      {"name":"Tampa Bay Rays","price":-132,"sid":"29162","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615802440&selectionId=29162"}
+    ] },
+    { "key": "spreads", "sid": null, "outcomes": [
+      {"name":"Cleveland Guardians","price":-200,"point":1.5,"sid":"41541473","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615802439&selectionId=41541473"},
+      {"name":"Tampa Bay Rays","price":164,"point":-1.5,"sid":"29162","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615802439&selectionId=29162"}
+    ] },
+    { "key": "totals", "sid": null, "outcomes": [
+      {"name":"Over","price":-132,"point":6.5,"sid":"7017905","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615802438&selectionId=7017905"},
+      {"name":"Under","price":108,"point":6.5,"sid":"7017906","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615802438&selectionId=7017906"}
+    ] },
+    { "key": "alternate_spreads", "sid": null, "outcomes": [
+      {"name":"Cleveland Guardians","price":-3500,"point":6.5,"sid":"99530524","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=99530524"},
+      {"name":"Cleveland Guardians","price":-1800,"point":5.5,"sid":"99530516","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=99530516"},
+      {"name":"Cleveland Guardians","price":-1000,"point":4.5,"sid":"99530520","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=99530520"},
+      {"name":"Cleveland Guardians","price":-650,"point":3.5,"sid":"44038144","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=44038144"},
+      {"name":"Cleveland Guardians","price":-360,"point":2.5,"sid":"44038138","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=44038138"},
+      {"name":"Cleveland Guardians","price":-210,"point":1.5,"sid":"44038142","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=44038142"},
+      {"name":"Cleveland Guardians","price":180,"point":-1.5,"sid":"43549812","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=43549812"},
+      {"name":"Cleveland Guardians","price":290,"point":-2.5,"sid":"44038134","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=44038134"},
+      {"name":"Cleveland Guardians","price":450,"point":-3.5,"sid":"44038145","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=44038145"},
+      {"name":"Cleveland Guardians","price":680,"point":-4.5,"sid":"99530517","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=99530517"},
+      {"name":"Cleveland Guardians","price":900,"point":-5.5,"sid":"99530519","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=99530519"},
+      {"name":"Cleveland Guardians","price":1200,"point":-6.5,"sid":"99530523","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=99530523"},
+      {"name":"Cleveland Guardians","price":1500,"point":-7.5,"sid":"99530521","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=99530521"},
+      {"name":"Cleveland Guardians","price":1700,"point":-8.5,"sid":"99530515","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=99530515"},
+      {"name":"Tampa Bay Rays","price":1500,"point":-8.5,"sid":"7685688","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685688"},
+      {"name":"Tampa Bay Rays","price":1200,"point":-7.5,"sid":"7685704","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685704"},
+      {"name":"Tampa Bay Rays","price":1060,"point":-6.5,"sid":"7685703","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685703"},
+      {"name":"Tampa Bay Rays","price":800,"point":-5.5,"sid":"7685685","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685685"},
+      {"name":"Tampa Bay Rays","price":560,"point":-4.5,"sid":"7685687","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685687"},
+      {"name":"Tampa Bay Rays","price":420,"point":-3.5,"sid":"7685686","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685686"},
+      {"name":"Tampa Bay Rays","price":260,"point":-2.5,"sid":"7685689","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685689"},
+      {"name":"Tampa Bay Rays","price":162,"point":-1.5,"sid":"7685693","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685693"},
+      {"name":"Tampa Bay Rays","price":-235,"point":1.5,"sid":"7685697","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685697"},
+      {"name":"Tampa Bay Rays","price":-410,"point":2.5,"sid":"7685692","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685692"},
+      {"name":"Tampa Bay Rays","price":-720,"point":3.5,"sid":"7685684","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685684"},
+      {"name":"Tampa Bay Rays","price":-1400,"point":4.5,"sid":"7685695","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685695"},
+      {"name":"Tampa Bay Rays","price":-2500,"point":5.5,"sid":"7685694","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685694"},
+      {"name":"Tampa Bay Rays","price":-4500,"point":6.5,"sid":"7685690","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804010&selectionId=7685690"}
+    ] },
+    { "key": "alternate_spreads_1st_5_innings", "sid": null, "outcomes": [
+      {"name":"Cleveland Guardians","price":-1400,"point":3.5,"sid":"44038144","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=44038144"},
+      {"name":"Cleveland Guardians","price":-600,"point":2.5,"sid":"44038138","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=44038138"},
+      {"name":"Cleveland Guardians","price":-300,"point":1.5,"sid":"44038142","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=44038142"},
+      {"name":"Cleveland Guardians","price":-148,"point":0.5,"sid":"71711761","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=71711761"},
+      {"name":"Cleveland Guardians","price":144,"point":-0.5,"sid":"71711762","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=71711762"},
+      {"name":"Cleveland Guardians","price":270,"point":-1.5,"sid":"43549812","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=43549812"},
+      {"name":"Cleveland Guardians","price":490,"point":-2.5,"sid":"44038134","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=44038134"},
+      {"name":"Cleveland Guardians","price":750,"point":-3.5,"sid":"44038145","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=44038145"},
+      {"name":"Tampa Bay Rays","price":630,"point":-3.5,"sid":"7685686","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=7685686"},
+      {"name":"Tampa Bay Rays","price":370,"point":-2.5,"sid":"7685689","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=7685689"},
+      {"name":"Tampa Bay Rays","price":210,"point":-1.5,"sid":"7685693","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=7685693"},
+      {"name":"Tampa Bay Rays","price":112,"point":-0.5,"sid":"7685696","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=7685696"},
+      {"name":"Tampa Bay Rays","price":-194,"point":0.5,"sid":"7685691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=7685691"},
+      {"name":"Tampa Bay Rays","price":-400,"point":1.5,"sid":"7685697","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=7685697"},
+      {"name":"Tampa Bay Rays","price":-900,"point":2.5,"sid":"7685692","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804098&selectionId=7685692"}
+    ] },
+    { "key": "alternate_totals", "sid": null, "outcomes": [
+      {"name":"Over","price":-3000,"point":2.5,"sid":"41518418","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=41518418"},
+      {"name":"Over","price":-650,"point":3.5,"sid":"15270250","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=15270250"},
+      {"name":"Over","price":-400,"point":4.5,"sid":"28645881","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=28645881"},
+      {"name":"Over","price":-205,"point":5.5,"sid":"6466907","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=6466907"},
+      {"name":"Over","price":-136,"point":6.5,"sid":"6466901","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=6466901"},
+      {"name":"Over","price":130,"point":7.5,"sid":"6466903","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=6466903"},
+      {"name":"Over","price":182,"point":8.5,"sid":"6466897","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=6466897"},
+      {"name":"Over","price":285,"point":9.5,"sid":"6466909","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=6466909"},
+      {"name":"Over","price":390,"point":10.5,"sid":"6466899","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=6466899"},
+      {"name":"Over","price":560,"point":11.5,"sid":"49836744","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=49836744"},
+      {"name":"Over","price":800,"point":12.5,"sid":"28645990","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=28645990"},
+      {"name":"Under","price":1500,"point":1.5,"sid":"12493514","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=12493514"},
+      {"name":"Under","price":1000,"point":2.5,"sid":"41518417","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=41518417"},
+      {"name":"Under","price":420,"point":3.5,"sid":"15270251","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=15270251"},
+      {"name":"Under","price":285,"point":4.5,"sid":"28645882","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=28645882"},
+      {"name":"Under","price":158,"point":5.5,"sid":"6466906","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=6466906"},
+      {"name":"Under","price":106,"point":6.5,"sid":"6466900","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=6466900"},
+      {"name":"Under","price":-166,"point":7.5,"sid":"6466902","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=6466902"},
+      {"name":"Under","price":-240,"point":8.5,"sid":"6466896","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=6466896"},
+      {"name":"Under","price":-400,"point":9.5,"sid":"6466908","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=6466908"},
+      {"name":"Under","price":-590,"point":10.5,"sid":"6466898","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=6466898"},
+      {"name":"Under","price":-1000,"point":11.5,"sid":"7832640","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=7832640"},
+      {"name":"Under","price":-1800,"point":12.5,"sid":"28645989","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804009&selectionId=28645989"}
+    ] },
+    { "key": "alternate_totals_1st_5_innings", "sid": null, "outcomes": [
+      {"name":"Over","price":-3500,"point":0.5,"sid":"12804825","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=12804825"},
+      {"name":"Over","price":-650,"point":1.5,"sid":"12493513","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=12493513"},
+      {"name":"Over","price":-260,"point":2.5,"sid":"41518418","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=41518418"},
+      {"name":"Over","price":-136,"point":3.5,"sid":"15270250","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=15270250"},
+      {"name":"Over","price":132,"point":4.5,"sid":"28645881","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=28645881"},
+      {"name":"Over","price":220,"point":5.5,"sid":"6466907","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=6466907"},
+      {"name":"Over","price":360,"point":6.5,"sid":"6466901","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=6466901"},
+      {"name":"Over","price":550,"point":7.5,"sid":"6466903","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=6466903"},
+      {"name":"Over","price":800,"point":8.5,"sid":"6466897","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=6466897"},
+      {"name":"Over","price":1100,"point":9.5,"sid":"6466909","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=6466909"},
+      {"name":"Under","price":920,"point":0.5,"sid":"12804826","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=12804826"},
+      {"name":"Under","price":390,"point":1.5,"sid":"12493514","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=12493514"},
+      {"name":"Under","price":188,"point":2.5,"sid":"41518417","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=41518417"},
+      {"name":"Under","price":102,"point":3.5,"sid":"15270251","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=15270251"},
+      {"name":"Under","price":-178,"point":4.5,"sid":"28645882","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=28645882"},
+      {"name":"Under","price":-310,"point":5.5,"sid":"6466906","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=6466906"},
+      {"name":"Under","price":-580,"point":6.5,"sid":"6466900","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=6466900"},
+      {"name":"Under","price":-1100,"point":7.5,"sid":"6466902","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=6466902"},
+      {"name":"Under","price":-2200,"point":8.5,"sid":"6466896","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=6466896"},
+      {"name":"Under","price":-4500,"point":9.5,"sid":"6466908","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804097&selectionId=6466908"}
+    ] },
+    { "key": "h2h_1st_5_innings", "sid": null, "outcomes": [
+      {"name":"Cleveland Guardians","price":104,"sid":"41541473","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804095&selectionId=41541473"},
+      {"name":"Tampa Bay Rays","price":-130,"sid":"29162","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804095&selectionId=29162"}
+    ] },
+    { "key": "h2h_3_way_1st_5_innings", "sid": null, "outcomes": [
+      {"name":"Cleveland Guardians","price":144,"sid":"41541473","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615803951&selectionId=41541473"},
+      {"name":"Tampa Bay Rays","price":112,"sid":"29162","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615803951&selectionId=29162"},
+      {"name":"Draw","price":415,"sid":"131604","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615803951&selectionId=131604"}
+    ] },
+    { "key": "spreads_1st_3_innings", "sid": null, "outcomes": [
+      {"name":"Cleveland Guardians","price":-186,"point":0.5,"sid":"41541473","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804064&selectionId=41541473"},
+      {"name":"Tampa Bay Rays","price":136,"point":-0.5,"sid":"29162","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804064&selectionId=29162"}
+    ] },
+    { "key": "spreads_1st_5_innings", "sid": null, "outcomes": [
+      {"name":"Cleveland Guardians","price":-146,"point":0.5,"sid":"41541473","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804093&selectionId=41541473"},
+      {"name":"Tampa Bay Rays","price":112,"point":-0.5,"sid":"29162","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804093&selectionId=29162"}
+    ] },
+    { "key": "spreads_1st_7_innings", "sid": null, "outcomes": [
+      {"name":"Cleveland Guardians","price":-128,"point":0.5,"sid":"41541473","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804065&selectionId=41541473"},
+      {"name":"Tampa Bay Rays","price":104,"point":-0.5,"sid":"29162","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804065&selectionId=29162"}
+    ] },
+    { "key": "team_totals", "sid": null, "outcomes": [
+      {"name":"Over","description":"Cleveland Guardians","price":118,"point":3.5,"sid":"97501922","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615803941&selectionId=97501922"},
+      {"name":"Under","description":"Cleveland Guardians","price":-150,"point":3.5,"sid":"97501923","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615803941&selectionId=97501923"},
+      {"name":"Over","description":"Tampa Bay Rays","price":102,"point":3.5,"sid":"12804876","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615803940&selectionId=12804876"},
+      {"name":"Under","description":"Tampa Bay Rays","price":-130,"point":3.5,"sid":"12804877","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615803940&selectionId=12804877"}
+    ] },
+    { "key": "totals_1st_1_innings", "sid": null, "outcomes": [
+      {"name":"Over","price":106,"point":0.5,"sid":"7017905","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615803967&selectionId=7017905"},
+      {"name":"Under","price":-136,"point":0.5,"sid":"7017906","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615803967&selectionId=7017906"}
+    ] },
+    { "key": "totals_1st_5_innings", "sid": null, "outcomes": [
+      {"name":"Over","price":-132,"point":3.5,"sid":"7017905","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804094&selectionId=7017905"},
+      {"name":"Under","price":102,"point":3.5,"sid":"7017906","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615804094&selectionId=7017906"}
+    ] }
+  ] }]
+}

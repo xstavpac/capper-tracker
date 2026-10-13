@@ -1,0 +1,221 @@
+{
+  "id": "66f521c79ea8a970ed062bfed392abfb",
+  "sport_key": "americanfootball_ncaaf",
+  "commence_time": "2026-10-14T00:00:00Z",
+  "home_team": "Jacksonville State Gamecocks",
+  "away_team": "Florida International Panthers",
+  "bookmakers": [{ "key": "fanduel", "markets": [
+    { "key": "h2h", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":130,"sid":"36326691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.613674610&selectionId=36326691"},
+      {"name":"Jacksonville State Gamecocks","price":-156,"sid":"4943282","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.613674610&selectionId=4943282"}
+    ] },
+    { "key": "spreads", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":102,"point":2.5,"sid":"36326691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.613674611&selectionId=36326691"},
+      {"name":"Jacksonville State Gamecocks","price":-124,"point":-2.5,"sid":"4943282","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.613674611&selectionId=4943282"}
+    ] },
+    { "key": "totals", "sid": null, "outcomes": [
+      {"name":"Over","price":-110,"point":43.5,"sid":"7017916","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.613674612&selectionId=7017916"},
+      {"name":"Under","price":-110,"point":43.5,"sid":"7017917","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.613674612&selectionId=7017917"}
+    ] },
+    { "key": "alternate_spreads", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":-320,"point":10.5,"sid":"61300754","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300754"},
+      {"name":"Florida International Panthers","price":-265,"point":9.5,"sid":"61300712","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300712"},
+      {"name":"Florida International Panthers","price":-250,"point":8.5,"sid":"61300692","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300692"},
+      {"name":"Florida International Panthers","price":-230,"point":7.5,"sid":"61300718","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300718"},
+      {"name":"Florida International Panthers","price":-174,"point":6.5,"sid":"61300713","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300713"},
+      {"name":"Florida International Panthers","price":-156,"point":5.5,"sid":"61300684","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300684"},
+      {"name":"Florida International Panthers","price":-142,"point":4.5,"sid":"61300762","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300762"},
+      {"name":"Florida International Panthers","price":-128,"point":3.5,"sid":"61300761","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300761"},
+      {"name":"Florida International Panthers","price":106,"point":2.5,"sid":"61300734","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300734"},
+      {"name":"Florida International Panthers","price":116,"point":1.5,"sid":"61300740","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300740"},
+      {"name":"Florida International Panthers","price":138,"point":-1.5,"sid":"61300756","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300756"},
+      {"name":"Florida International Panthers","price":150,"point":-2.5,"sid":"61300689","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300689"},
+      {"name":"Florida International Panthers","price":186,"point":-3.5,"sid":"61300695","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300695"},
+      {"name":"Florida International Panthers","price":200,"point":-4.5,"sid":"61300730","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300730"},
+      {"name":"Florida International Panthers","price":220,"point":-5.5,"sid":"61300717","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300717"},
+      {"name":"Florida International Panthers","price":240,"point":-6.5,"sid":"61300733","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300733"},
+      {"name":"Florida International Panthers","price":300,"point":-7.5,"sid":"61300737","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300737"},
+      {"name":"Florida International Panthers","price":330,"point":-8.5,"sid":"61300707","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300707"},
+      {"name":"Florida International Panthers","price":350,"point":-9.5,"sid":"61300683","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300683"},
+      {"name":"Florida International Panthers","price":400,"point":-10.5,"sid":"61300764","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=61300764"},
+      {"name":"Jacksonville State Gamecocks","price":235,"point":-10.5,"sid":"59621510","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621510"},
+      {"name":"Jacksonville State Gamecocks","price":200,"point":-9.5,"sid":"59621530","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621530"},
+      {"name":"Jacksonville State Gamecocks","price":190,"point":-8.5,"sid":"59621539","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621539"},
+      {"name":"Jacksonville State Gamecocks","price":176,"point":-7.5,"sid":"59621509","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621509"},
+      {"name":"Jacksonville State Gamecocks","price":136,"point":-6.5,"sid":"59621503","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621503"},
+      {"name":"Jacksonville State Gamecocks","price":122,"point":-5.5,"sid":"59621515","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621515"},
+      {"name":"Jacksonville State Gamecocks","price":112,"point":-4.5,"sid":"59621523","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621523"},
+      {"name":"Jacksonville State Gamecocks","price":100,"point":-3.5,"sid":"59621528","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621528"},
+      {"name":"Jacksonville State Gamecocks","price":-136,"point":-2.5,"sid":"59621499","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621499"},
+      {"name":"Jacksonville State Gamecocks","price":-148,"point":-1.5,"sid":"59621532","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621532"},
+      {"name":"Jacksonville State Gamecocks","price":-178,"point":1.5,"sid":"59621552","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621552"},
+      {"name":"Jacksonville State Gamecocks","price":-194,"point":2.5,"sid":"59621501","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621501"},
+      {"name":"Jacksonville State Gamecocks","price":-245,"point":3.5,"sid":"59621560","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621560"},
+      {"name":"Jacksonville State Gamecocks","price":-265,"point":4.5,"sid":"59621526","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621526"},
+      {"name":"Jacksonville State Gamecocks","price":-295,"point":5.5,"sid":"59621576","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621576"},
+      {"name":"Jacksonville State Gamecocks","price":-330,"point":6.5,"sid":"59621517","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621517"},
+      {"name":"Jacksonville State Gamecocks","price":-430,"point":7.5,"sid":"59621520","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621520"},
+      {"name":"Jacksonville State Gamecocks","price":-480,"point":8.5,"sid":"59621567","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621567"},
+      {"name":"Jacksonville State Gamecocks","price":-520,"point":9.5,"sid":"59621542","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621542"},
+      {"name":"Jacksonville State Gamecocks","price":-620,"point":10.5,"sid":"59621555","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585290&selectionId=59621555"}
+    ] },
+    { "key": "alternate_team_totals", "sid": null, "outcomes": [
+      {"name":"Over","description":"Florida International Panthers","price":-265,"point":15.5,"sid":"14159944","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=14159944"},
+      {"name":"Over","description":"Florida International Panthers","price":-220,"point":16.5,"sid":"15290705","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=15290705"},
+      {"name":"Over","description":"Florida International Panthers","price":-160,"point":17.5,"sid":"12324065","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12324065"},
+      {"name":"Over","description":"Florida International Panthers","price":-154,"point":18.5,"sid":"12272861","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12272861"},
+      {"name":"Over","description":"Florida International Panthers","price":-138,"point":19.5,"sid":"12235572","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12235572"},
+      {"name":"Over","description":"Florida International Panthers","price":-106,"point":20.5,"sid":"12213256","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12213256"},
+      {"name":"Over","description":"Florida International Panthers","price":114,"point":21.5,"sid":"12235570","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12235570"},
+      {"name":"Over","description":"Florida International Panthers","price":124,"point":22.5,"sid":"12213252","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12213252"},
+      {"name":"Over","description":"Florida International Panthers","price":144,"point":23.5,"sid":"12213375","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12213375"},
+      {"name":"Over","description":"Florida International Panthers","price":190,"point":24.5,"sid":"12213246","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12213246"},
+      {"name":"Over","description":"Florida International Panthers","price":200,"point":25.5,"sid":"12213373","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12213373"},
+      {"name":"Over","description":"Florida International Panthers","price":220,"point":26.5,"sid":"12213239","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12213239"},
+      {"name":"Over","description":"Florida International Panthers","price":280,"point":27.5,"sid":"12197205","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12197205"},
+      {"name":"Over","description":"Florida International Panthers","price":320,"point":28.5,"sid":"12194344","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12194344"},
+      {"name":"Under","description":"Florida International Panthers","price":200,"point":15.5,"sid":"14159945","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=14159945"},
+      {"name":"Under","description":"Florida International Panthers","price":168,"point":16.5,"sid":"15290706","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=15290706"},
+      {"name":"Under","description":"Florida International Panthers","price":124,"point":17.5,"sid":"12324064","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12324064"},
+      {"name":"Under","description":"Florida International Panthers","price":120,"point":18.5,"sid":"12272860","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12272860"},
+      {"name":"Under","description":"Florida International Panthers","price":108,"point":19.5,"sid":"12235571","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12235571"},
+      {"name":"Under","description":"Florida International Panthers","price":-120,"point":20.5,"sid":"12213255","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12213255"},
+      {"name":"Under","description":"Florida International Panthers","price":-146,"point":21.5,"sid":"12235569","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12235569"},
+      {"name":"Under","description":"Florida International Panthers","price":-160,"point":22.5,"sid":"12213250","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12213250"},
+      {"name":"Under","description":"Florida International Panthers","price":-186,"point":23.5,"sid":"12213374","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12213374"},
+      {"name":"Under","description":"Florida International Panthers","price":-260,"point":24.5,"sid":"12213244","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12213244"},
+      {"name":"Under","description":"Florida International Panthers","price":-265,"point":25.5,"sid":"12213372","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12213372"},
+      {"name":"Under","description":"Florida International Panthers","price":-295,"point":26.5,"sid":"12213237","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12213237"},
+      {"name":"Under","description":"Florida International Panthers","price":-390,"point":27.5,"sid":"12197204","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12197204"},
+      {"name":"Under","description":"Florida International Panthers","price":-460,"point":28.5,"sid":"12194343","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585292&selectionId=12194343"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":-430,"point":15.5,"sid":"14159944","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=14159944"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":-360,"point":16.5,"sid":"15290705","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=15290705"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":-260,"point":17.5,"sid":"12324065","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12324065"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":-245,"point":18.5,"sid":"12272861","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12272861"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":-220,"point":19.5,"sid":"12235572","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12235572"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":-170,"point":20.5,"sid":"12213256","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12213256"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":-138,"point":21.5,"sid":"12235570","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12235570"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":-128,"point":22.5,"sid":"12213252","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12213252"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":-106,"point":23.5,"sid":"12213375","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12213375"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":128,"point":24.5,"sid":"12213246","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12213246"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":132,"point":25.5,"sid":"12213373","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12213373"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":144,"point":26.5,"sid":"12213239","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12213239"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":186,"point":27.5,"sid":"12197205","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12197205"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":220,"point":28.5,"sid":"12194344","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12194344"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":300,"point":15.5,"sid":"14159945","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=14159945"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":260,"point":16.5,"sid":"15290706","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=15290706"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":196,"point":17.5,"sid":"12324064","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12324064"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":186,"point":18.5,"sid":"12272860","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12272860"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":168,"point":19.5,"sid":"12235571","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12235571"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":130,"point":20.5,"sid":"12213255","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12213255"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":108,"point":21.5,"sid":"12235569","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12235569"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":100,"point":22.5,"sid":"12213250","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12213250"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":-120,"point":23.5,"sid":"12213374","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12213374"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":-162,"point":24.5,"sid":"12213244","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12213244"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":-170,"point":25.5,"sid":"12213372","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12213372"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":-186,"point":26.5,"sid":"12213237","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12213237"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":-245,"point":27.5,"sid":"12197204","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12197204"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":-295,"point":28.5,"sid":"12194343","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585291&selectionId=12194343"}
+    ] },
+    { "key": "alternate_totals", "sid": null, "outcomes": [
+      {"name":"Over","price":-230,"point":37.5,"sid":"12197185","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12197185"},
+      {"name":"Over","price":-205,"point":38.5,"sid":"12194324","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12194324"},
+      {"name":"Over","price":-186,"point":39.5,"sid":"12197181","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12197181"},
+      {"name":"Over","price":-162,"point":40.5,"sid":"12194320","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12194320"},
+      {"name":"Over","price":-136,"point":41.5,"sid":"12197177","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12197177"},
+      {"name":"Over","price":-128,"point":42.5,"sid":"12194316","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12194316"},
+      {"name":"Over","price":-113,"point":43.5,"sid":"12197173","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12197173"},
+      {"name":"Over","price":102,"point":44.5,"sid":"12194312","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12194312"},
+      {"name":"Over","price":116,"point":45.5,"sid":"12197169","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12197169"},
+      {"name":"Over","price":126,"point":46.5,"sid":"12194308","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12194308"},
+      {"name":"Over","price":142,"point":47.5,"sid":"12213371","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12213371"},
+      {"name":"Over","price":162,"point":48.5,"sid":"12213228","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12213228"},
+      {"name":"Over","price":176,"point":49.5,"sid":"12197171","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12197171"},
+      {"name":"Under","price":176,"point":37.5,"sid":"12197184","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12197184"},
+      {"name":"Under","price":158,"point":38.5,"sid":"12194323","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12194323"},
+      {"name":"Under","price":142,"point":39.5,"sid":"12197180","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12197180"},
+      {"name":"Under","price":126,"point":40.5,"sid":"12194319","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12194319"},
+      {"name":"Under","price":106,"point":41.5,"sid":"12197176","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12197176"},
+      {"name":"Under","price":100,"point":42.5,"sid":"12194315","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12194315"},
+      {"name":"Under","price":-113,"point":43.5,"sid":"12197172","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12197172"},
+      {"name":"Under","price":-130,"point":44.5,"sid":"12194311","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12194311"},
+      {"name":"Under","price":-148,"point":45.5,"sid":"12197168","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12197168"},
+      {"name":"Under","price":-162,"point":46.5,"sid":"12194307","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12194307"},
+      {"name":"Under","price":-184,"point":47.5,"sid":"12213370","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12213370"},
+      {"name":"Under","price":-210,"point":48.5,"sid":"12213226","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12213226"},
+      {"name":"Under","price":-230,"point":49.5,"sid":"12197170","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585293&selectionId=12197170"}
+    ] },
+    { "key": "h2h_h1", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":112,"sid":"36326691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585275&selectionId=36326691"},
+      {"name":"Jacksonville State Gamecocks","price":-138,"sid":"4943282","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585275&selectionId=4943282"}
+    ] },
+    { "key": "h2h_q1", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":110,"sid":"36326691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585276&selectionId=36326691"},
+      {"name":"Jacksonville State Gamecocks","price":-128,"sid":"4943282","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585276&selectionId=4943282"}
+    ] },
+    { "key": "h2h_q2", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":110,"sid":"36326691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585277&selectionId=36326691"},
+      {"name":"Jacksonville State Gamecocks","price":-128,"sid":"4943282","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585277&selectionId=4943282"}
+    ] },
+    { "key": "h2h_q3", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":108,"sid":"36326691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585278&selectionId=36326691"},
+      {"name":"Jacksonville State Gamecocks","price":-138,"sid":"4943282","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585278&selectionId=4943282"}
+    ] },
+    { "key": "h2h_q4", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":106,"sid":"36326691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585279&selectionId=36326691"},
+      {"name":"Jacksonville State Gamecocks","price":-124,"sid":"4943282","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585279&selectionId=4943282"}
+    ] },
+    { "key": "spreads_h1", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":-115,"point":1.5,"sid":"36326691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585261&selectionId=36326691"},
+      {"name":"Jacksonville State Gamecocks","price":-105,"point":-1.5,"sid":"4943282","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585261&selectionId=4943282"}
+    ] },
+    { "key": "spreads_q1", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":-156,"point":1.5,"sid":"36326691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585262&selectionId=36326691"},
+      {"name":"Jacksonville State Gamecocks","price":128,"point":-1.5,"sid":"4943282","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585262&selectionId=4943282"}
+    ] },
+    { "key": "spreads_q2", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":-138,"point":1.5,"sid":"36326691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585263&selectionId=36326691"},
+      {"name":"Jacksonville State Gamecocks","price":114,"point":-1.5,"sid":"4943282","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585263&selectionId=4943282"}
+    ] },
+    { "key": "spreads_q3", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":-154,"point":1.5,"sid":"36326691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585264&selectionId=36326691"},
+      {"name":"Jacksonville State Gamecocks","price":126,"point":-1.5,"sid":"4943282","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585264&selectionId=4943282"}
+    ] },
+    { "key": "spreads_q4", "sid": null, "outcomes": [
+      {"name":"Florida International Panthers","price":-154,"point":1.5,"sid":"36326691","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585265&selectionId=36326691"},
+      {"name":"Jacksonville State Gamecocks","price":126,"point":-1.5,"sid":"4943282","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585265&selectionId=4943282"}
+    ] },
+    { "key": "team_totals", "sid": null, "outcomes": [
+      {"name":"Under","description":"Florida International Panthers","price":-120,"point":20.5,"sid":"7017917","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585267&selectionId=7017917"},
+      {"name":"Over","description":"Florida International Panthers","price":-106,"point":20.5,"sid":"7017916","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585267&selectionId=7017916"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":-120,"point":23.5,"sid":"7017917","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585266&selectionId=7017917"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":-106,"point":23.5,"sid":"7017916","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585266&selectionId=7017916"}
+    ] },
+    { "key": "team_totals_h1", "sid": null, "outcomes": [
+      {"name":"Over","description":"Florida International Panthers","price":-144,"point":9.5,"sid":"7017916","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585269&selectionId=7017916"},
+      {"name":"Under","description":"Florida International Panthers","price":108,"point":9.5,"sid":"7017917","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585269&selectionId=7017917"},
+      {"name":"Under","description":"Jacksonville State Gamecocks","price":-128,"point":10.5,"sid":"7017917","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585268&selectionId=7017917"},
+      {"name":"Over","description":"Jacksonville State Gamecocks","price":-104,"point":10.5,"sid":"7017916","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585268&selectionId=7017916"}
+    ] },
+    { "key": "totals_h1", "sid": null, "outcomes": [
+      {"name":"Over","price":-108,"point":21.5,"sid":"7017916","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585270&selectionId=7017916"},
+      {"name":"Under","price":-112,"point":21.5,"sid":"7017917","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585270&selectionId=7017917"}
+    ] },
+    { "key": "totals_q1", "sid": null, "outcomes": [
+      {"name":"Over","price":-110,"point":9.5,"sid":"7017916","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585271&selectionId=7017916"},
+      {"name":"Under","price":-110,"point":9.5,"sid":"7017917","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585271&selectionId=7017917"}
+    ] },
+    { "key": "totals_q2", "sid": null, "outcomes": [
+      {"name":"Over","price":-122,"point":12.5,"sid":"7017916","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585272&selectionId=7017916"},
+      {"name":"Under","price":100,"point":12.5,"sid":"7017917","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585272&selectionId=7017917"}
+    ] },
+    { "key": "totals_q3", "sid": null, "outcomes": [
+      {"name":"Over","price":-110,"point":9.5,"sid":"7017916","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585273&selectionId=7017916"},
+      {"name":"Under","price":-110,"point":9.5,"sid":"7017917","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585273&selectionId=7017917"}
+    ] },
+    { "key": "totals_q4", "sid": null, "outcomes": [
+      {"name":"Over","price":-102,"point":10.5,"sid":"7017916","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585274&selectionId=7017916"},
+      {"name":"Under","price":-120,"point":10.5,"sid":"7017917","link":"https://sportsbook.fanduel.com/addToBetslip?marketId=42.615585274&selectionId=7017917"}
+    ] }
+  ] }]
+}
