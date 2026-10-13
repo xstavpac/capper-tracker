@@ -1,5 +1,6 @@
 import { parseNhlPlayerProp, normalizeNhlNPlus, type NhlPropMarket } from "@/lib/nhl-prop";
 import { parseMlbPlayerProp, type MlbPropMarket } from "@/lib/mlb-prop";
+import type { NbaPropMarket } from "@/lib/nba-prop";
 
 type BetTypeLike = "SPREAD" | "MONEYLINE" | "TOTAL" | "TEAM_TOTAL" | "PLAYER_PROP" | "NRFI";
 type SideLike = "HOME" | "AWAY";
@@ -697,7 +698,9 @@ export function parsePlayerProp(text: string): { playerName: string; propMarket:
 // parser rejected. Callers that know the sport (grading, roster recovery)
 // should prefer the sport-specific parser; this exists for the sport-blind
 // spots (import classification, categorization, dedup, filters).
-export type AnyPlayerPropMarket = PlayerPropMarket | NhlPropMarket | MlbPropMarket;
+// NBA markets are in the type because a stored Pick.propMarket can be one (schema.prisma's enum has
+// them); no parser below returns one yet.
+export type AnyPlayerPropMarket = PlayerPropMarket | NhlPropMarket | MlbPropMarket | NbaPropMarket;
 // NFL then NHL only - the two parsers that are safe on a RAW catalog line. The MLB parser is
 // sport- and team-blind ("Yankees over 2.5 runs" reads as RUNS for "Yankees"), so raw-line
 // classification (parse-catalog.ts) uses this plus its own evidence-gated parseSupportedMlbProp.

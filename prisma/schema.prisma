@@ -144,6 +144,21 @@ enum PropMarket {
   RUNS
   RBIS
   HOME_RUNS
+  // NBA markets (2026-10). POINTS and ASSISTS above are shared with the NHL: one value means one
+  // stat, and the pick's sport says whose (an NHL POINTS pick is goals + assists from the hockey box
+  // score, an NBA one is PTS from the basketball box score). Only the stats with no existing value
+  // are added. THREES_MADE is three-pointers made; the four combined values are a single line on the
+  // sum of the named stats; DOUBLE_DOUBLE is yes/no shaped (no line). Additive. Nothing reads these
+  // yet - parsing, grading, odds and display follow in later PRs.
+  REBOUNDS
+  THREES_MADE
+  STEALS
+  BLOCKS
+  POINTS_REBOUNDS_ASSISTS
+  POINTS_REBOUNDS
+  POINTS_ASSISTS
+  REBOUNDS_ASSISTS
+  DOUBLE_DOUBLE
 }
 
 // ---------- Models ----------
@@ -1121,6 +1136,28 @@ model NhlRosterPlayer {
   @@index([team])
   @@index([lastName])
   @@map("nhl_roster_players")
+}
+
+// Cached NBA roster snapshot, the NBA twin of NhlRosterPlayer above - same columns, its own table
+// for the same reason (ESPN player ids are per-league). Every position is kept (G / F / C): any
+// rostered player can have a prop. espnPlayerId is the id ESPN's NBA summary box score reports for
+// the same player (checked 2026-10-13 against 16 completed preseason games - see
+// server/data/nba-roster.ts). Loaded by scripts/load-nba-roster.ts; no cron, rerun by hand when
+// rosters move.
+model NbaRosterPlayer {
+  id           String   @id @default(cuid())
+  espnPlayerId String   @unique
+  fullName     String
+  firstName    String
+  lastName     String
+  team         String
+  position     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([team])
+  @@index([lastName])
+  @@map("nba_roster_players")
 }
 
 // Cached MLB 40-man roster snapshot, the MLB twin of NhlRosterPlayer above. Keyed on the MLB Stats

@@ -57,6 +57,19 @@ export type BetTypeFilterKey =
   | "RUNS"
   | "RBIS"
   | "HOME_RUNS"
+  // NBA markets: in the type because a stored pick's propMarket can be one, so
+  // betTypeFilterCategory can return it. No filter option lists them yet
+  // (BET_TYPE_FILTER_OPTIONS / betTypeOptionsForChipSet), so such a pick
+  // matches no filter - the same as any market without an option.
+  | "REBOUNDS"
+  | "THREES_MADE"
+  | "STEALS"
+  | "BLOCKS"
+  | "POINTS_REBOUNDS_ASSISTS"
+  | "POINTS_REBOUNDS"
+  | "POINTS_ASSISTS"
+  | "REBOUNDS_ASSISTS"
+  | "DOUBLE_DOUBLE"
   | "NRFI"
   | "YRFI";
 
