@@ -18,7 +18,7 @@
 // NHL's own dates (no NFL-style "bug boundary" gap for NHL since its
 // regularSeasonStart was set from ESPN's actual confirmed puck-drop date,
 // not carried over from a stale guess).
-import { oddsApiRequestKeys, isSportInSeason, isPreseasonGame } from "./sport-seasons";
+import { oddsApiRequestKeys, isSportInSeason, isSportLabelInSeason, isPreseasonGame } from "./sport-seasons";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -33,6 +33,8 @@ const NFL = "americanfootball_nfl";
 const NFL_PRE = "americanfootball_nfl_preseason";
 const NHL = "icehockey_nhl";
 const NHL_PRE = "icehockey_nhl_preseason";
+const NBA = "basketball_nba";
+const NBA_PRE = "basketball_nba_preseason";
 
 // --- NFL: deep offseason, before the preseason window even opens ---
 check("2026-07-01 (offseason): NFL -> regular key only", oddsApiRequestKeys(NFL, d("2026-07-01")), [NFL]);
@@ -65,7 +67,9 @@ for (const [key, date] of [
   check(`${key} on ${date}: single key, no preseason handling`, oddsApiRequestKeys(key, d(date)), [key]);
 }
 // icehockey_nhl is NOT in this list anymore - see the dedicated NHL section
-// below, which now has a preseason-specific key just like NFL.
+// below, which now has a preseason-specific key just like NFL. basketball_nba
+// stays in it for a date past its regularSeasonStart, where it is a plain
+// single key again; its own preseason window is the NBA section below.
 check("icehockey_nhl on 2027-01-20 (well past regularSeasonStart): single key, no preseason handling", oddsApiRequestKeys(NHL, d("2027-01-20")), [NHL]);
 
 // An unknown sportKey is returned untouched as its own single element.
@@ -108,10 +112,45 @@ check("NHL 2027-01-20 (mid regular season): NOT preseason", isPreseasonGame("ice
 check("NHL 2026-07-01 (deep offseason, before the window opens): NOT preseason", isPreseasonGame("icehockey_nhl", d("2026-07-01")), false);
 check("NHL in season on 2026-09-20 (so the fetch path is actually reached)", isSportInSeason("icehockey_nhl", d("2026-09-20")), true);
 
+// --- NBA: the third sport with a preseason window - [seasonStart 2026-09-30,
+// regularSeasonStart 2026-10-20) - and its own Odds API preseason key
+// ("basketball_nba_preseason"). Both dates are ESPN's own (league
+// season.startDate, and the first event with season.slug "regular-season"),
+// read live on 2026-10-13. TODAY below is that date: the day NBA preseason
+// picks were already being posted while the old config (seasonStart
+// 2026-10-20, no preseason key) still had NBA gated out. ---
+const TODAY = d("2026-10-13");
+check("NBA 2026-10-13 (today, mid-preseason): in season", isSportInSeason(NBA, TODAY), true);
+check("NBA 2026-10-13: the 'NBA' label is in season (the ambiguity hierarchy's calendar step)", isSportLabelInSeason("NBA", TODAY), true);
+check("NBA 2026-09-30 (seasonStart): in season", isSportInSeason(NBA, d("2026-09-30")), true);
+check("NBA 2026-09-29 (day before seasonStart): NOT in season", isSportInSeason(NBA, d("2026-09-29")), false);
+check("NBA 2027-06-25 (seasonEnd, Finals): in season", isSportInSeason(NBA, d("2027-06-25")), true);
+check("NBA 2027-07-10 (offseason): NOT in season", isSportInSeason(NBA, d("2027-07-10")), false);
+
+check("2026-09-29 (before the window): NBA -> regular key only", oddsApiRequestKeys(NBA, d("2026-09-29")), [NBA]);
+check("2026-09-30 (seasonStart, first day of window): both keys", oddsApiRequestKeys(NBA, d("2026-09-30")), [NBA, NBA_PRE]);
+check("2026-10-13 (today, mid-preseason): NBA -> [regular, preseason] merged", oddsApiRequestKeys(NBA, TODAY), [NBA, NBA_PRE]);
+check("2026-10-19 (last preseason day, opening-night lines already posted): both keys", oddsApiRequestKeys(NBA, d("2026-10-19")), [NBA, NBA_PRE]);
+check("2026-10-20 (regularSeasonStart, opening night): regular key only", oddsApiRequestKeys(NBA, d("2026-10-20")), [NBA]);
+check("2027-01-20 (mid-season): regular key only", oddsApiRequestKeys(NBA, d("2027-01-20")), [NBA]);
+check("during NBA's merge window, element 0 is the real sportKey (authoritative)", oddsApiRequestKeys(NBA, TODAY)[0], NBA);
+
+check("NBA 2026-09-30 (seasonStart / first preseason day): preseason", isPreseasonGame(NBA, d("2026-09-30")), true);
+check("NBA 2026-10-13 (today): preseason", isPreseasonGame(NBA, TODAY), true);
+check("NBA 2026-10-19 (day before opening night): preseason", isPreseasonGame(NBA, d("2026-10-19")), true);
+check("NBA 2026-10-20 (regularSeasonStart / opening night): NOT preseason", isPreseasonGame(NBA, d("2026-10-20")), false);
+check("NBA 2026-10-21: NOT preseason", isPreseasonGame(NBA, d("2026-10-21")), false);
+check("NBA 2027-05-20 (playoffs): NOT preseason", isPreseasonGame(NBA, d("2027-05-20")), false);
+check("NBA 2026-09-29 (before the window opens): NOT preseason", isPreseasonGame(NBA, d("2026-09-29")), false);
+// A late West Coast preseason tip is still the previous EASTERN day: 10:30pm ET
+// on 10-19 is 2026-10-20T02:30Z, and must stay preseason.
+check("NBA 2026-10-20T02:30Z (10:30pm ET on 10-19): preseason by Eastern date", isPreseasonGame(NBA, new Date("2026-10-20T02:30:00Z")), true);
+// Opening night's first tip (BOS @ DET, 2026-10-20T19:00Z = 3pm ET) is regular season.
+check("NBA 2026-10-20T19:00Z (opening night's first tip): NOT preseason", isPreseasonGame(NBA, new Date("2026-10-20T19:00:00Z")), false);
+
 // --- Every other sport has no preseason window configured -> always false,
 //     even on a date that IS that sport's real-world preseason. ---
 check("MLB 2026-03-18 (spring training): NOT flagged - MLB has no regularSeasonStart configured", isPreseasonGame("baseball_mlb", d("2026-03-18")), false);
-check("NBA 2026-10-10 (NBA preseason): NOT flagged", isPreseasonGame("basketball_nba", d("2026-10-10")), false);
 check("WNBA 2026-05-05 (WNBA preseason): NOT flagged", isPreseasonGame("basketball_wnba", d("2026-05-05")), false);
 check("NCAAF 2026-08-26 (has no preseason concept): NOT flagged", isPreseasonGame("americanfootball_ncaaf", d("2026-08-26")), false);
 check("unknown sport: NOT flagged", isPreseasonGame("handball_bundesliga", d("2026-09-05")), false);

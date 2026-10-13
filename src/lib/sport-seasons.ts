@@ -15,9 +15,10 @@ export type SportSeasonWindow = {
   // Only set for a sport whose Odds API listing splits its preseason into a
   // wholly separate sport key from its regular-season one (confirmed live:
   // NFL preseason odds live under "americanfootball_nfl_preseason", not
-  // "americanfootball_nfl", and NHL preseason odds live under
-  // "icehockey_nhl_preseason", not "icehockey_nhl" - same split, confirmed
-  // the same way, both still treated as one continuous season everywhere
+  // "americanfootball_nfl", NHL preseason odds live under
+  // "icehockey_nhl_preseason", not "icehockey_nhl", and NBA preseason odds
+  // live under "basketball_nba_preseason", not "basketball_nba" - same split,
+  // confirmed the same way, each still treated as one continuous season everywhere
   // else in this app - one entry in LIVE_SPORTS, one seasonStart/seasonEnd
   // window, one set of grading rules). Before regularSeasonStart,
   // getOddsForSport (odds.ts) also queries oddsApiPreseasonKey and merges it
@@ -49,9 +50,23 @@ export const SPORT_SEASON_CONFIG: Record<string, SportSeasonWindow> = {
     regularSeasonStart: "2026-09-09",
     oddsApiPreseasonKey: "americanfootball_nfl_preseason",
   },
-  // 2026-27 tip-off ~mid/late Oct 2026; seasonEnd covers through the Finals
-  // (mid-to-late June 2027).
-  basketball_nba: { seasonStart: "2026-10-20", seasonEnd: "2027-06-25" },
+  // Same NFL/NHL pattern: seasonStart is ESPN's own preseason start for
+  // 2026-27 (confirmed live against their scoreboard on 2026-10-13: league
+  // season.startDate = 2026-09-30T07:00Z), not the regular-season opener, so
+  // preseason games run the same odds/scores/grading pipeline.
+  // regularSeasonStart is the first date ESPN's scoreboard carries
+  // event.season.slug === "regular-season" (2026-10-20: BOS @ DET, PHI @ NY,
+  // OKC @ SA); every event before it is slug "preseason". oddsApiPreseasonKey:
+  // confirmed live the same day that "basketball_nba_preseason" is its own
+  // active Odds API key (5 events, 8 books, h2h/spreads/totals) while
+  // "basketball_nba" already lists the regular season from 10-20 on.
+  // seasonEnd covers through the Finals (mid-to-late June 2027).
+  basketball_nba: {
+    seasonStart: "2026-09-30",
+    seasonEnd: "2027-06-25",
+    regularSeasonStart: "2026-10-20",
+    oddsApiPreseasonKey: "basketball_nba_preseason",
+  },
   // 2026 Opening Day ~late March; seasonEnd covers through the World Series
   // (early Nov 2026).
   baseball_mlb: { seasonStart: "2026-03-15", seasonEnd: "2026-11-05" },
@@ -109,7 +124,7 @@ export function isSportInSeason(sportKey: string, referenceDate: Date = new Date
 // gap between the widened `seasonStart` (which deliberately reaches back to
 // cover preseason, so preseason games run the same odds/scores/grading
 // pipeline) and the real `regularSeasonStart`. Only a sport with BOTH of
-// those configured has a preseason window; today that is NFL and NHL (every
+// those configured has a preseason window; today that is NFL, NHL and NBA (every
 // other sport's `seasonStart` already sits at/after its regular-season
 // opener - see SPORT_SEASON_CONFIG - so this returns false for them).
 //
@@ -128,9 +143,9 @@ export function isPreseasonGame(sportKey: string, gameDate: Date): boolean {
 // Which Odds API sport key(s) to actually query for `sportKey` right now, in
 // priority order - element 0 is authoritative. Only ever more than one entry,
 // or different from `sportKey` itself, for a sport with a preseason-specific
-// Odds API key configured (NFL and NHL today): their preseason odds live
-// under "americanfootball_nfl_preseason"/"icehockey_nhl_preseason",
-// separate from each sport's regular-season key.
+// Odds API key configured (NFL, NHL and NBA today): their preseason odds live
+// under "americanfootball_nfl_preseason"/"icehockey_nhl_preseason"/
+// "basketball_nba_preseason", separate from each sport's regular-season key.
 //
 // Between the last preseason game and the Week 1 opener - roughly the first
 // ~10 days of September - the preseason key is already empty while the

@@ -831,6 +831,44 @@ async function main() {
     }, { sport: "WNBA", method: "remembered" });
   }
 
+  console.log("\n########## PART I: Boston during the NBA preseason (2026-10-13) - the calendar step keeps the Celtics ##########");
+  {
+    // NBA's season window now opens at ESPN's preseason start (2026-09-30), so
+    // on 2026-10-13 MLB (through Nov 5), NHL and NBA are all in their window.
+    // Before that, NBA's window opened 2026-10-20 and the calendar step
+    // dropped the Celtics from every bare "Boston" pick posted in preseason.
+    const OCT13 = new Date("2026-10-13T16:00:00Z");
+    const res = await runAmbiguousHierarchy([ambiguousPick("Boston -4")], {}, { ...deps([]), now: OCT13 });
+    // Schedule blank, three leagues in season: the calendar can't settle it.
+    // -4 is not a run line or a puck line (both bounded at 2.5), so the line
+    // leaves the Celtics as the one plausible candidate.
+    check("Boston -4 on 2026-10-13, schedule blank: resolves NBA (Celtics), not dropped by the calendar", {
+      sport: res.picks[0].sportName,
+      nicknames: res.picks[0].teamNicknames,
+      method: res.logs[0]?.method,
+    }, { sport: "NBA", nicknames: ["celtics"], method: "plausibility" });
+  }
+  {
+    // No line to narrow on: all three Boston teams must still be on offer.
+    const OCT13 = new Date("2026-10-13T16:00:00Z");
+    const res = await runAmbiguousHierarchy([ambiguousPick("Boston ML")], {}, { ...deps([]), now: OCT13 });
+    check("Boston ML on 2026-10-13, schedule blank: stays ambiguous, not resolved by the calendar", {
+      sport: res.picks[0].sportName,
+      method: res.logs[0]?.method ?? null,
+      stillAmbiguousKey: res.stillAmbiguous[0]?.key,
+    }, { sport: "", method: null, stillAmbiguousKey: "boston" });
+    check("Boston ML on 2026-10-13: the Celtics are among the candidates offered", res.stillAmbiguous[0]?.options.map((o) => o.sport).sort(), ["MLB", "NBA", "NHL"]);
+  }
+  {
+    // The Celtics are the only Boston team with a game: schedule-first still wins.
+    const OCT13 = new Date("2026-10-13T16:00:00Z");
+    const res = await runAmbiguousHierarchy([ambiguousPick("Boston ML")], {}, { ...deps(["celtics|NBA"]), now: OCT13 });
+    check("Boston ML on 2026-10-13, only the Celtics play: NBA via schedule", {
+      sport: res.picks[0].sportName,
+      method: res.logs[0]?.method,
+    }, { sport: "NBA", method: "schedule" });
+  }
+
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
 }

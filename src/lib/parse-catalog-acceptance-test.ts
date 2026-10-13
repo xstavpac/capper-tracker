@@ -905,13 +905,23 @@ NC State +4.5`;
       ambiguousOptionsFor("boston").filter((o) => isSportLabelInSeason(o.sport, new Date("2026-09-01T12:00:00Z"))),
       [{ label: "Boston Red Sox (MLB)", sport: "MLB", nickname: "red sox" }]
     );
-    // Overlap window: MLB (through Nov 5) and NHL (from Oct 7) are both in
-    // season on Oct 15, so the calendar fallback correctly does NOT guess -
-    // only the schedule check (which runs first) could tell them apart.
+    // Overlap window: MLB (through Nov 5), NHL and NBA (whose window opens at
+    // its preseason, Sep 30) are all in season on Oct 15, so the calendar
+    // fallback correctly does NOT guess - only the schedule check (which runs
+    // first) could tell them apart. Before NBA's window covered its preseason
+    // this narrowed to MLB/NHL and dropped the Celtics from a preseason pick.
     check(
-      "calendar fallback: on 2026-10-15 two Boston options are in season (no guess)",
+      "calendar fallback: on 2026-10-15 all three Boston options are in season (no guess)",
       ambiguousOptionsFor("boston")
         .filter((o) => isSportLabelInSeason(o.sport, new Date("2026-10-15T12:00:00Z")))
+        .map((o) => o.sport),
+      ["MLB", "NBA", "NHL"]
+    );
+    // Sep 20: NBA's window has not opened; MLB and NHL (preseason) are in season.
+    check(
+      "calendar fallback: on 2026-09-20 the Celtics are not yet in season",
+      ambiguousOptionsFor("boston")
+        .filter((o) => isSportLabelInSeason(o.sport, new Date("2026-09-20T12:00:00Z")))
         .map((o) => o.sport),
       ["MLB", "NHL"]
     );
