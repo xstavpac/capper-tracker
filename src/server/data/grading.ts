@@ -413,10 +413,10 @@ export function textPickedSide(
   let homeMascot = false;
   let awayMascot = false;
   // Same-mascot matchup: homeNick and awayNick are identical, so any text
-  // match would be both sides at once. No two teams share a mascot in any
-  // other sport this app grades today, so this only ever fires for a
-  // same-mascot NCAAF matchup - and leaves the school-name match below as the
-  // only way to tell the sides apart.
+  // match would be both sides at once. That is a same-mascot NCAAF matchup
+  // (Clemson Tigers @ LSU Tigers), where the school-name match below is the
+  // only way to tell the sides apart, or Red Sox - White Sox (both end in
+  // "sox"), where nothing in the text is.
   if (homeNick !== awayNick) {
     const asWord = (nick: string) =>
       new RegExp("(?<![\\p{L}\\p{N}])" + nick.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}])", "u").test(detail);
