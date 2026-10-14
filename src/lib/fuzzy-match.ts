@@ -5,6 +5,15 @@
 // functions only, no prisma import - safe for both client components
 // (bulk-import-form.tsx) and server code.
 
+// "Jokić" -> "Jokic", "Porziņģis" -> "Porzingis", "Şengün" -> "Sengun": the
+// letters without their accent marks. normalizeName below drops every non a-z
+// character, so an accented name has to be folded first or its accented
+// letters vanish ("jokić" -> "joki") instead of matching the plain spelling
+// ESPN's rosters use.
+export function foldDiacritics(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
 export function normalizeName(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }

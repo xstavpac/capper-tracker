@@ -309,7 +309,9 @@ async function main() {
     const james = outcome("James over 24.5 points");
     check("a surname shared inside the NBA asks which player", { n: james.asks?.length ?? 0, allJames: (james.asks ?? []).every((l) => /James — /.test(l)), tagged: (james.asks ?? []).some((l) => /\((?:NBA|NHL)\)/.test(l)) }, { n: NBA.filter((p) => p.lastName === "James").length, allJames: true, tagged: false });
     check("the full name skips the question", outcome("LeBron James o24.5 pts").team, [nbaTeamOf("LeBron James")]);
-    check("an initialism is not a name: unresolved", outcome("SGA over 30.5 points"), { unresolved: 'couldn\'t find "SGA" on an NBA or NHL roster' });
+    // An initialism the alias map knows is that player (nba-player-aliases.ts); one it doesn't is still unresolved.
+    check("a known initialism is its player: SGA", outcome("SGA over 30.5 points").team, [nbaTeamOf("Shai Gilgeous-Alexander")]);
+    check("an unknown initialism is not a name: unresolved", outcome("XYZ over 30.5 points"), { unresolved: 'couldn\'t find "XYZ" on an NBA or NHL roster' });
 
     // ---- a lowercase name ----
     check("a lowercase name resolves, and is capitalized in the stored text", outcome("jokic o10.5 reb"), { sport: "NBA", betType: "PLAYER_PROP", team: [jokic], desc: "Jokic o10.5 reb" });

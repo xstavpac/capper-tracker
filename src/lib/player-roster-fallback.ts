@@ -57,7 +57,7 @@
 import { parsePlayerProp } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { parseNbaProp } from "@/lib/nba-prop";
-import { normalizeName, isLikelyDuplicateName } from "@/lib/fuzzy-match";
+import { foldDiacritics, normalizeName, isLikelyDuplicateName } from "@/lib/fuzzy-match";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 
 export type PlayerCandidate = { playerName: string; team: string; position: string; externalPlayerId: string };
@@ -162,10 +162,12 @@ export function resolveNameAgainstRoster(
   slate: SlateContext | undefined,
   sport: RosterSport
 ): PlayerPropResolution {
-  const typedName = stripNameSuffix(rawTypedName);
+  // Accents folded on both sides: "Nikola Jokić" is the roster's "Nikola Jokic".
+  const plain = (name: string) => stripNameSuffix(foldDiacritics(name));
+  const typedName = plain(rawTypedName);
   const normalizedTyped = normalizeName(typedName);
 
-  const exact = distinctPlayers(roster.filter((p) => normalizeName(stripNameSuffix(p.playerName)) === normalizedTyped));
+  const exact = distinctPlayers(roster.filter((p) => normalizeName(plain(p.playerName)) === normalizedTyped));
   if (exact.length === 1) {
     return { status: "resolved", sport, team: exact[0].team, playerName: exact[0].playerName, via: "exact" };
   }
@@ -173,7 +175,7 @@ export function resolveNameAgainstRoster(
     return { status: "ambiguous", tier: "exact", matches: toCandidates(exact) };
   }
 
-  const fuzzy = distinctPlayers(roster.filter((p) => isLikelyDuplicateName(stripNameSuffix(p.playerName), typedName)));
+  const fuzzy = distinctPlayers(roster.filter((p) => isLikelyDuplicateName(plain(p.playerName), typedName)));
   if (fuzzy.length === 1) {
     return { status: "resolved", sport, team: fuzzy[0].team, playerName: fuzzy[0].playerName, via: "fuzzy" };
   }
@@ -189,7 +191,7 @@ export function resolveNameAgainstRoster(
     // generational suffix itself (confirmed live - Kenneth Walker III's
     // lastName is literally "Walker III", not "Walker"), so a bare "Walker"
     // needs the same stripping applied on this side of the comparison too.
-    const bySurname = distinctPlayers(roster.filter((p) => normalizeName(stripNameSuffix(p.lastName)) === normalizedTyped));
+    const bySurname = distinctPlayers(roster.filter((p) => normalizeName(plain(p.lastName)) === normalizedTyped));
     if (bySurname.length === 1) {
       return { status: "resolved", sport, team: bySurname[0].team, playerName: bySurname[0].playerName, via: "surname" };
     }
