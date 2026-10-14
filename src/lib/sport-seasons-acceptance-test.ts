@@ -155,5 +155,12 @@ check("WNBA 2026-05-05 (WNBA preseason): NOT flagged", isPreseasonGame("basketba
 check("NCAAF 2026-08-26 (has no preseason concept): NOT flagged", isPreseasonGame("americanfootball_ncaaf", d("2026-08-26")), false);
 check("unknown sport: NOT flagged", isPreseasonGame("handball_bundesliga", d("2026-09-05")), false);
 
+// --- WNBA stays in season through the Finals (Game 7, if needed, is Oct 31 ET). ---
+check("WNBA 2026-10-20 (Finals Game 2 night): in season", isSportInSeason("basketball_wnba", d("2026-10-20")), true);
+check("WNBA 2026-10-25 (mid-Finals): in season", isSportInSeason("basketball_wnba", d("2026-10-25")), true);
+check("WNBA 2026-11-01T00:30Z (Game 7 tip window, Oct 31 ET): in season", isSportInSeason("basketball_wnba", new Date("2026-11-01T00:30:00Z")), true);
+check("WNBA 2026-11-01: last day in season", isSportLabelInSeason("WNBA", d("2026-11-01")), true);
+check("WNBA 2026-11-02: over", isSportLabelInSeason("WNBA", d("2026-11-02")), false);
+
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
