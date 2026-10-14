@@ -1290,6 +1290,127 @@ const PRO_TEAM_ALIASES: [string, string, string][] = [
   //   ever consulted.
 ];
 
+// Other spellings of an AMBIGUOUS_NICKNAMES city key, read ONLY directly in
+// front of a nickname ("LA Kings", "KC Royals") - never as a team on their own:
+// most are ordinary words or another league's code when they stand alone
+// ("no", "car", "min", "det"). Each maps to every pro team its city key lists,
+// in every league; the nickname after it does the narrowing. Most rows only
+// matter the day one of the city's teams shares a nickname: "KC Royals" and
+// "TB Rays" already resolve by the nickname alone.
+const CITY_ABBREVIATIONS: Record<string, string[]> = {
+  arizona: ["ari", "az", "zona"],
+  carolina: ["car"],
+  chicago: ["chi"],
+  detroit: ["det"],
+  florida: ["fla"],
+  "golden state": ["gs"],
+  "green bay": ["gb"],
+  "kansas city": ["kc"],
+  "las vegas": ["lv"],
+  "los angeles": ["la", "l.a."],
+  minnesota: ["min", "minn", "minny"],
+  "new england": ["ne"],
+  "new york": ["ny", "nyc", "n.y."],
+  "oklahoma city": ["okc"],
+  philadelphia: ["phi"],
+  pittsburgh: ["pit"],
+  sacramento: ["sac"],
+  "san antonio": ["sa"],
+  "san diego": ["sd"],
+  "san francisco": ["sf", "san fran"],
+  "san jose": ["sj"],
+  "st. louis": ["stl", "saint louis"],
+  "tampa bay": ["tb"],
+  texas: ["tex"],
+  washington: ["wsh", "was", "dc"],
+  winnipeg: ["wpg"],
+};
+
+// "<city> <nickname>" names one team. Built from the tables above rather than
+// typed out: every team a city key lists (and every NCAAF school key) is
+// paired with its own nickname and with the last word of a longer one, so
+//   - a nickname two leagues share stops being a question once the city is on
+//     the line ("LA Kings", "SAC Kings", "Chi Bears", "Tex Rangers"),
+//   - a whole word of the real nickname is enough next to its city ("Vegas
+//     Knights" -> Golden Knights, "Detroit Wings" -> Red Wings, "Minnesota
+//     Gophers", "Duke Devils") while the bare word reads as it always did,
+//   - a school in front of a mascot a pro team also uses is that school ("USF
+//     Bulls", "ECU Pirates", "WMU Broncos", "Hawaii Warriors").
+// Each row is [phrase, sport, the full team name the game match needs]. A
+// phrase is left out when its nickname alone already reads as that league's
+// team ("Tampa Bay Rays" resolves by "rays", as before), so nothing that
+// already worked changes how it is read.
+//
+// CITY_NICKNAME_COLLISIONS lists any phrase two different teams would both
+// claim. Those are not registered (the line keeps today's prompt); the
+// acceptance test asserts there are none.
+export const CITY_NICKNAME_COLLISIONS: string[] = [];
+const CITY_NICKNAME_TEAMS: [string, string, string][] = (() => {
+  const alreadyRead = new Set(
+    [
+      ...DISAMBIGUATED_TEAMS,
+      ...MLB_TEAMS.map((t): TeamEntry => [t, "MLB"]),
+      ...NBA_TEAMS.map((t): TeamEntry => [t, "NBA"]),
+      ...NFL_TEAMS.map((t): TeamEntry => [t, "NFL"]),
+      ...NHL_TEAMS.map((t): TeamEntry => [t, "NHL"]),
+      ...WNBA_TEAMS.map((t): TeamEntry => [t, "WNBA"]),
+      ...CFL_TEAMS.map((t): TeamEntry => [t, "CFL"]),
+      ...KBO_TEAMS.map((t): TeamEntry => [t, "KBO"]),
+      ...NCAAF_SCHOOLS.map(([key]): TeamEntry => [key, "NCAAF"]),
+      ...PRO_TEAM_ALIASES.map(([alias, sport]): TeamEntry => [alias, sport]),
+    ].map(([phrase, sport]) => phrase + "|" + sport)
+  );
+  // phrase -> the teams claiming it; a full nickname outranks a last word.
+  const claims = new Map<string, { sport: string; canonical: string; whole: boolean }[]>();
+  const claim = (locality: string, nickname: string, sport: string, canonical: string) => {
+    const words = nickname.split(" ");
+    const forms: [string, boolean][] = [[nickname, true]];
+    if (words.length > 1) forms.push([words[words.length - 1], false]);
+    for (const [form, whole] of forms) {
+      if (alreadyRead.has(form + "|" + sport)) continue;
+      const phrase = locality + " " + form;
+      // A school's own full name is read by detectSport's pass 0 already, and
+      // a school key that carries its mascot ("ragin cajuns") needs no second.
+      if (sport === "NCAAF" && (phrase === canonical || locality.split(" ").includes(form))) continue;
+      const list = claims.get(phrase) ?? [];
+      if (!list.some((c) => c.sport === sport && c.canonical === canonical)) list.push({ sport, canonical, whole });
+      claims.set(phrase, list);
+    }
+  };
+
+  const cityKeys = [...AMBIGUOUS_CITY_KEYS].sort((a, b) => b.length - a.length);
+  for (const city of AMBIGUOUS_CITY_KEYS) {
+    for (const option of AMBIGUOUS_NICKNAMES[city] ?? []) {
+      // The team's own nickname is its full name minus the locality in front
+      // ("vegas golden knights" under "las vegas" -> "golden knights"); the
+      // "boston" options are bare nicknames already.
+      const prefix = cityKeys.find((key) => option.nickname.startsWith(key + " "));
+      const nickname = prefix ? option.nickname.slice(prefix.length + 1) : option.nickname;
+      // Abbreviations are pro shorthand: nobody writes "DC Huskies".
+      const abbreviations = option.sport === "NCAAF" ? [] : CITY_ABBREVIATIONS[city] ?? [];
+      for (const locality of [city, ...abbreviations]) claim(locality, nickname, option.sport, option.nickname);
+    }
+  }
+  for (const [school, canonical] of NCAAF_SCHOOLS) {
+    const ownKey = NCAAF_SCHOOLS.filter(([key, c]) => c === canonical && canonical.startsWith(key + " "))
+      .map(([key]) => key)
+      .sort((a, b) => b.length - a.length)[0];
+    const nickname = ownKey ? canonical.slice(ownKey.length + 1) : canonical.split(" ").pop()!;
+    claim(school, nickname, "NCAAF", canonical);
+  }
+
+  const rows: [string, string, string][] = [];
+  for (const [phrase, list] of claims) {
+    const whole = list.filter((c) => c.whole);
+    const winners = whole.length > 0 ? whole : list;
+    if (winners.length === 1) rows.push([phrase, winners[0].sport, winners[0].canonical]);
+    else CITY_NICKNAME_COLLISIONS.push(phrase + ": " + winners.map((c) => c.canonical + " (" + c.sport + ")").join(" / "));
+  }
+  return rows;
+})();
+
+const CITY_NICKNAME_PHRASES = new Set(CITY_NICKNAME_TEAMS.map(([phrase]) => phrase));
+
 export const NCAAF_CANONICAL_SUFFIX: Record<string, string> = Object.fromEntries(NCAAF_SCHOOLS);
 
 // alias / school-key -> the canonical mascot phrase that IS a suffix of the
@@ -1299,6 +1420,7 @@ export const NCAAF_CANONICAL_SUFFIX: Record<string, string> = Object.fromEntries
 // mascot that's already its own suffix ("cubs", "yankees") isn't in here and
 // passes straight through unchanged.
 export const TEAM_NICKNAME_CANONICAL: Record<string, string> = {
+  ...Object.fromEntries(CITY_NICKNAME_TEAMS.map(([phrase, , canonical]) => [phrase, canonical])),
   ...NCAAF_CANONICAL_SUFFIX,
   ...Object.fromEntries(PRO_TEAM_ALIASES.map(([alias, , canonical]) => [alias, canonical])),
 };
@@ -1314,6 +1436,11 @@ const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...KBO_TEAMS.map((t): TeamEntry => [t, "KBO"]),
   ...NCAAF_TEAMS.map((t): TeamEntry => [t, "NCAAF"]),
   ...PRO_TEAM_ALIASES.map(([alias, sport]): TeamEntry => [alias, sport]),
+  // A phrase a hand-kept list already carries ("la kings", "ny giants",
+  // "philly eagles") keeps its row; it only gains the translation above.
+  ...CITY_NICKNAME_TEAMS.filter(
+    ([phrase]) => !DISAMBIGUATED_TEAMS.some(([p]) => p === phrase) && !PRO_TEAM_ALIASES.some(([p]) => p === phrase)
+  ).map(([phrase, sport]): TeamEntry => [phrase, sport]),
 ].sort((a, b) => b[0].length - a[0].length);
 
 // Purpose-built for classifyPickTeamGroup/shortTeamName (pick-team-group.ts)
@@ -2375,6 +2502,14 @@ function resolveAmbiguousPair(text: string): { sportName: string; teamNicknames:
   if (nicknames.length !== 2) return undefined;
 
   const [a, b] = nicknames;
+  // A city and a nickname apart on the line ("Kings - Sacramento ML") are one
+  // team, not a matchup, when exactly one team is listed under both.
+  if (AMBIGUOUS_CITY_KEYS.has(a) !== AMBIGUOUS_CITY_KEYS.has(b)) {
+    const shared = AMBIGUOUS_NICKNAMES[a].filter((x) =>
+      AMBIGUOUS_NICKNAMES[b].some((y) => y.sport === x.sport && y.nickname === x.nickname)
+    );
+    if (shared.length === 1) return { sportName: shared[0].sport, teamNicknames: [shared[0].nickname] };
+  }
   const sportsA = new Set(ambiguousSports(a));
   const common = ambiguousSports(b).filter((s) => sportsA.has(s));
   if (common.length !== 1) return undefined;
@@ -2421,10 +2556,18 @@ export function findTeamNicknames(text: string, sportName: string): string[] {
       hits.push({ phrase, start: m.index, end: m.index + m[0].length });
     }
   }
+  // A phrase's words may sit flush, so a built "<city> <nickname>" phrase
+  // ("chi sox") also matches a hand-kept alias written as one word ("chisox")
+  // on the very same span. That is one team named once: the alias stands.
   const kept = hits.filter(
     (h) =>
       !hits.some(
-        (o) => o !== h && o.start <= h.start && o.end >= h.end && o.end - o.start > h.end - h.start
+        (o) =>
+          o !== h &&
+          o.start <= h.start &&
+          o.end >= h.end &&
+          (o.end - o.start > h.end - h.start ||
+            (o.start === h.start && o.end === h.end && CITY_NICKNAME_PHRASES.has(h.phrase) && !CITY_NICKNAME_PHRASES.has(o.phrase)))
       )
   );
 
