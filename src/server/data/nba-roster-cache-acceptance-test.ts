@@ -4,11 +4,14 @@
 //
 // Needs a migrated database (SKIPped by the runner without DATABASE_URL). It
 // writes two rows with ids no real player has ("test-nba-cache-..."), reads
-// them back through getCachedNbaRoster, and removes exactly those two rows by
+// them back through getCachedNbaRoster, soft-deletes and reactivates one through
+// the refresh's table adapter, and removes exactly those two rows by
 // id - it never touches a real roster row, so it is safe against a database
 // that already has the roster loaded.
 import { prisma } from "@/lib/prisma";
-import { getCachedNbaRoster } from "@/server/data/nba-roster-cache";
+import { getCachedNbaGradingRoster, getCachedNbaRoster } from "@/server/data/nba-roster-cache";
+import { rosterTableFor } from "@/server/data/roster-tables";
+import { __clearTtlMemo } from "@/server/data/ttl-memo";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -61,6 +64,31 @@ async function main() {
       duplicateRefused = true;
     }
     check("a second row for the same ESPN id is refused", duplicateRefused, true);
+
+    // ---- soft delete (migration 20261016000000) through the real adapter ----
+    for (const t of ["nfl_roster_players", "nhl_roster_players", "nba_roster_players", "mlb_roster_players"]) {
+      const cols = await prisma.$queryRaw<{ column_name: string; is_nullable: string; column_default: string | null }[]>`
+        SELECT column_name, is_nullable, column_default FROM information_schema.columns
+        WHERE table_name = ${t} AND column_name IN ('active', 'removedAt') ORDER BY column_name`;
+      check(`${t} has active (NOT NULL, default true) and removedAt (nullable)`, cols, [
+        { column_name: "active", is_nullable: "NO", column_default: "true" },
+        { column_name: "removedAt", is_nullable: "YES", column_default: null },
+      ]);
+    }
+    const table = rosterTableFor("NBA");
+    const mineInDiff = async () => (await table.readForDiff()).filter((r) => TEST_IDS.includes(r.externalId)).sort((a, b) => a.externalId.localeCompare(b.externalId));
+    const before = await mineInDiff();
+    check("new rows default to active", before.map((r) => r.active), [true, true]);
+    const at = new Date("2026-10-15T10:45:00Z");
+    await table.deactivate([before[1].id], at);
+    const deactivated = await prisma.nbaRosterPlayer.findUnique({ where: { espnPlayerId: TEST_IDS[1] }, select: { active: true, removedAt: true } });
+    check("deactivate marks the row inactive with removedAt - the row is still there", deactivated, { active: false, removedAt: at });
+    __clearTtlMemo();
+    check("getCachedNbaRoster (import matching) leaves the inactive player out", (await getCachedNbaRoster()).filter((p) => TEST_IDS.includes(p.externalPlayerId)).map((p) => p.externalPlayerId), [TEST_IDS[0]]);
+    check("getCachedNbaGradingRoster still has him", (await getCachedNbaGradingRoster()).filter((p) => TEST_IDS.includes(p.externalPlayerId)).map((p) => p.externalPlayerId).sort(), TEST_IDS);
+    await table.updateRow(before[1].id, { fullName: "Test Center Jr.", firstName: "Test", lastName: "Center Jr.", team: "Boston Celtics", position: "C" });
+    const reactivated = await prisma.nbaRosterPlayer.findUnique({ where: { espnPlayerId: TEST_IDS[1] }, select: { active: true, removedAt: true, team: true } });
+    check("updateRow reactivates: active again, removedAt cleared, new data", reactivated, { active: true, removedAt: null, team: "Boston Celtics" });
   } finally {
     // Exactly the two rows this test wrote, by id.
     await prisma.nbaRosterPlayer.deleteMany({ where: { espnPlayerId: { in: TEST_IDS } } });

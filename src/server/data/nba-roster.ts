@@ -1,5 +1,5 @@
 // NBA roster fetch + extraction (live ESPN call) - the NBA twin of
-// nhl-roster.ts, used by ONE caller: scripts/load-nba-roster.ts, run by hand to
+// nhl-roster.ts, used only by the roster loader (roster-load.ts: the daily refresh cron and the script) to
 // (re)populate the nba_roster_players cache table. Nothing in the request path
 // fetches ESPN rosters; readers use the cache (nba-roster-cache.ts). A separate
 // table and module from NFL/NHL for the same reason those are separate: ESPN
@@ -19,7 +19,7 @@
 // the same displayName and the same team; the other 7 were on no roster at all
 // (camp players since waived) - none appeared on a roster under a different
 // id. That is what id-verified matching and a did-not-play check need.
-import type { RosterPlayer } from "@/server/data/nfl-roster";
+import { ROSTER_FETCH_TIMEOUT_MS, type RosterPlayer } from "@/server/data/nfl-roster";
 
 // All 30 franchises: ESPN numeric team id + displayName, which is
 // byte-identical to the roster response's own team.displayName, to the box
@@ -88,11 +88,12 @@ export function extractNbaRosterPlayers(team: string, espnRosterResponse: unknow
 
 // Never throws: a failed team returns [] (logged), so one outage can't take
 // down the league fetch - the loader sees fewer than 30 teams and refuses to
-// write (see nba-roster-load.ts).
+// write (see roster-load.ts).
 async function fetchNbaTeamRoster(espnTeamId: string, team: string): Promise<RosterPlayer[]> {
   try {
     const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${espnTeamId}/roster`, {
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(ROSTER_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) {
       console.error(`fetchNbaTeamRoster: ESPN roster fetch failed for ${team} (${res.status})`);
