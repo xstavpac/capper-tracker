@@ -622,6 +622,7 @@ const AMBIGUOUS_NICKNAMES: Record<string, AmbiguousOption[]> = {
     { label: "Los Angeles Clippers (NBA)", sport: "NBA", nickname: "los angeles clippers" },
     { label: "Los Angeles Kings (NHL)", sport: "NHL", nickname: "los angeles kings" },
     { label: "Los Angeles Dodgers (MLB)", sport: "MLB", nickname: "los angeles dodgers" },
+    { label: "Los Angeles Angels (MLB)", sport: "MLB", nickname: "los angeles angels" },
     { label: "Los Angeles Sparks (WNBA)", sport: "WNBA", nickname: "los angeles sparks" },
   ],
   memphis: [

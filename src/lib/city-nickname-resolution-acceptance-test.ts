@@ -185,6 +185,22 @@ async function main() {
     // Two teams, two leagues' worth of options: still a matchup, not one team.
     check("'Giants at Dallas ML' is still a two-team NFL line", { sport: first("Giants at Dallas ML")?.sportName, n: first("Giants at Dallas ML")?.teamNicknames.length }, { sport: "NFL", n: 2 });
     check("no city + nickname phrase is claimed by two teams", CITY_NICKNAME_COLLISIONS, []);
+    // The Angels are a Los Angeles team: a bare "Los Angeles" can mean them.
+    check(
+      "'Los Angeles ML' alone offers the Angels alongside the Dodgers",
+      first("Los Angeles ML")?.ambiguous?.filter((o) => o.sport === "MLB").map((o) => o.label),
+      ["Los Angeles Dodgers (MLB)", "Los Angeles Angels (MLB)"]
+    );
+    const onlyAngels = await runAmbiguousHierarchy([first("Los Angeles ML")], {}, {
+      runScheduleCheck: fakeSchedule(["los angeles angels|MLB"]),
+      runWideScheduleCheck: fakeSchedule([]),
+      now: new Date("2026-07-15T17:00:00Z"),
+    });
+    check(
+      "'Los Angeles ML' on a day only the Angels play -> the Angels",
+      { sport: onlyAngels.picks[0].sportName, team: onlyAngels.picks[0].teamNicknames },
+      { sport: "MLB", team: ["los angeles angels"] }
+    );
   }
 
   console.log("\n########## PART C: audit - every team, every league ##########");
