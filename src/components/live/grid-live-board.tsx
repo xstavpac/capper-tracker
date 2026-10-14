@@ -13,7 +13,6 @@ import { GameDetailPanel } from "@/components/live/team-picks-panel";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getLiveGameProgress } from "@/lib/live-game-progress";
 import { useRegisterLiveGameJump } from "@/components/live/live-game-jump";
-import { isFullyInPageView, scrollPageToElement } from "@/lib/page-scroll";
 
 // Grid Live's client shell: a compact game list beside a fixed
 // game-detail picks panel. Data assembly (odds, scores, picks, team-group
@@ -112,11 +111,12 @@ export function GridLiveBoard({
     const target = firstHeaderRef.current ?? emptyStateRef.current;
     if (!target) return;
 
-    // "On screen" means inside the scrolling <main> on desktop, not just the
-    // window - a header tucked under main's top edge is clipped, not visible.
-    if (isFullyInPageView(target)) return;
+    const rect = target.getBoundingClientRect();
+    const alreadyVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+    if (alreadyVisible) return;
 
-    scrollPageToElement(target, "start");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
     target.focus({ preventScroll: true });
   }, [scrollTrigger]);
 

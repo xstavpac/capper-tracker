@@ -49,7 +49,6 @@ import {
   unresolvedReasonBreakdown,
 } from "@/lib/bulk-import-summary";
 import { betTypeLabel } from "@/lib/bet-line";
-import { getPageViewport, scrollPageToElement } from "@/lib/page-scroll";
 import { capperInitials, formatOdds } from "@/lib/pick-display";
 
 // Sentinel stored in capperFuzzyChoices when the user explicitly confirms a
@@ -195,15 +194,14 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     if (scrollTrigger === 0) return;
     const area = actionAreaRef.current;
     if (!area) return;
-    // Taller than the visible page area (the scrolling <main> on desktop, not
-    // the whole window): land on its first question, not its last.
-    scrollPageToElement(area, area.getBoundingClientRect().height > getPageViewport().height ? "start" : "end");
+    // Taller than the screen: land on its first question, not its last.
+    scrollToElement(area, area.getBoundingClientRect().height > window.innerHeight ? "start" : "end");
   }, [scrollTrigger]);
 
   useEffect(() => {
     if (outcomeTrigger === 0) return;
     resultsHeadingRef.current?.focus({ preventScroll: true });
-    scrollPageToElement(resultsRef.current, "start");
+    scrollToElement(resultsRef.current, "start");
   }, [outcomeTrigger]);
 
   // "Answer below" on a row: bring that question into view and focus it.
@@ -213,7 +211,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setTimeout(() => {
       const el = document.getElementById(id) ?? actionAreaRef.current;
       el?.focus({ preventScroll: true });
-      scrollPageToElement(el, "center");
+      scrollToElement(el, "center");
     }, 0);
   }
 
@@ -1597,6 +1595,13 @@ function formatGameTime(iso: string): string {
       minute: "2-digit",
     }) + " ET"
   );
+}
+
+// Jumps instead of gliding for anyone who asked for reduced motion.
+function scrollToElement(el: HTMLElement | null, block: ScrollLogicalPosition) {
+  if (!el) return;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block });
 }
 
 // DOM ids of the questions in the "Needs your answer" panel - what a row's

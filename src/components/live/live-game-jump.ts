@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, createElement, useCallback, useContext, useEffect, useRef, type MutableRefObject, type ReactNode } from "react";
-import { scrollPageToElement } from "@/lib/page-scroll";
 
 // How a row in the /live category panel sends the viewer to its game. The
 // panel and the board are siblings (live/page.tsx), so the board mounted on the
@@ -50,7 +49,8 @@ const PULSE_ANIMATION_ID = "live-game-jump";
 export function scrollToGameCard(gameId: string) {
   const card = document.getElementById(liveGameCardId(gameId));
   if (!card) return;
-  scrollPageToElement(card, "center");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  card.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
 
   for (const running of card.getAnimations()) if (running.id === PULSE_ANIMATION_ID) running.cancel();
   const pulse = card.animate(
