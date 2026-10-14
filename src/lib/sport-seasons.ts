@@ -96,9 +96,10 @@ export const SPORT_SEASON_CONFIG: Record<string, SportSeasonWindow> = {
     regularSeasonStart: "2026-09-29",
     oddsApiPreseasonKey: "icehockey_nhl_preseason",
   },
-  // 2026 season tips off mid-May; seasonEnd covers through the WNBA Finals
-  // (mid-to-late Oct 2026).
-  basketball_wnba: { seasonStart: "2026-05-15", seasonEnd: "2026-10-20" },
+  // 2026 season tips off mid-May; seasonEnd covers through the WNBA Finals.
+  // ESPN's posted 2026 Finals run Oct 17 to a possible Game 7 on Oct 31 (ET),
+  // later than usual, so the window stays open through Nov 1.
+  basketball_wnba: { seasonStart: "2026-05-15", seasonEnd: "2026-11-01" },
   // FBS Week 0 is confirmed live for 2026-08-29 (matches the Odds API's own
   // posted slate, checked live during the NCAAF ecosystem investigation);
   // seasonStart is a few days earlier as a buffer, same reasoning as NFL's

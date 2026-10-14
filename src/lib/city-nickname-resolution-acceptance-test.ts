@@ -218,6 +218,24 @@ async function main() {
       }),
       ["Las Vegas Raiders (NFL)", "Vegas Golden Knights (NHL)", "Las Vegas Aces (WNBA)"]
     );
+    // During the WNBA Finals (Oct 17 - 31, 2026) the two finalists' cities
+    // keep their WNBA team: the season window covers the whole series.
+    const OCT25 = new Date("2026-10-25T17:00:00Z");
+    check(
+      "'Golden State ML' on Oct 25, nobody playing today -> still offers the Valkyries",
+      await prompt("Golden State ML", [], { now: OCT25 }),
+      ["Golden State Warriors (NBA)", "Golden State Valkyries (WNBA)"]
+    );
+    check(
+      "'Atlanta ML' on Oct 25, only the Dream playing -> WNBA",
+      await prompt("Atlanta ML", ["atlanta dream|WNBA"], { now: OCT25 }),
+      "resolved WNBA"
+    );
+    check(
+      "'Atlanta ML' on Oct 25, nobody playing -> the Dream are still on the list",
+      ((await prompt("Atlanta ML", [], { now: OCT25 })) as string[]).includes("Atlanta Dream (WNBA)"),
+      true
+    );
     // Every city and shared-nickname key, nobody playing: whatever is left to
     // ask about, no option is from a league outside its season.
     const offSeason: string[] = [];
