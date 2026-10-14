@@ -3,7 +3,7 @@
 //   npx tsx src/server/data/nhl-prop-dispatch-acceptance-test.ts
 //
 // Pins that the NFL gate is unchanged (NFL still graded by the NFL path; every
-// other non-NHL/non-MLB sport still declined with the NFL-only
+// other sport without its own grader (not NHL / MLB / NBA) still declined with the NFL-only
 // reason), and that an NHL pick with no recognizable NHL market is declined
 // with an NHL-specific reason instead of being mis-graded as an NFL prop.
 import { resolvePlayerProp } from "@/server/data/grading";
@@ -23,8 +23,10 @@ async function main() {
   const mlb = await resolvePlayerProp({ ...base, betDetail: "Josh Allen Over 275.5 Passing Yards" }, "1", "MLB");
   check("MLB pick with an NFL-market text is declined by the MLB grader", mlb, { outcome: null, reason: "this bet text isn't a recognized MLB prop market" });
 
-  const nba = await resolvePlayerProp({ ...base, betDetail: "Nikola Jokic over 10.5 assists" }, "1", "NBA");
-  check("NBA prop stays declined with the NFL-only reason", nba, { outcome: null, reason: "player-prop grading is NFL-only; this NBA pick needs manual grading" });
+  // NBA props have their own grader now (nba-prop-grading.ts); an NBA pick whose text is not an NBA market is
+  // declined by it - before any box-score fetch - instead of by the NFL-only gate or the NHL grader.
+  const nba = await resolvePlayerProp({ ...base, betDetail: "Josh Allen Over 275.5 Passing Yards" }, "1", "NBA");
+  check("NBA pick with an NFL-market text is declined by the NBA grader", nba, { outcome: null, reason: "this bet text isn't a recognized NBA prop market" });
 
   const nflMarketOnNhl = await resolvePlayerProp({ ...base, betDetail: "Josh Allen Over 275.5 Passing Yards" }, "1", "NHL");
   check("NHL pick with an NFL-market text is declined by the NHL grader", nflMarketOnNhl, { outcome: null, reason: "this bet text isn't a recognized NHL prop market" });
