@@ -1,7 +1,9 @@
-// Detection of MLB/NHL (and other not-yet-supported) player-prop vocabulary in
-// a pasted catalog line. This app has no MLB/NHL prop markets yet (PropMarket
-// is NFL-only - see schema.prisma), so a line like "Chris Sale over 5.5 K" or
-// "Ivan Demidov 2+ shots on goal" can't be imported. What it must NEVER do is
+// Detection of player-prop vocabulary in a pasted catalog line - MLB, NHL,
+// NBA and WNBA stat words. NFL, NHL, MLB and NBA props are supported now (their
+// parsers run first in detectUnsupportedPropLine, parse-catalog.ts, and a line
+// one of them claims is never flagged), so what is left here is a prop this
+// app still can't import: an unsupported market ("NHL Brady Tkachuk 3+ hits"),
+// a line the sport's parser couldn't read, or a WNBA prop. What it must NEVER do is
 // what it used to: get read as a capper-name header (silent drop), get
 // classified as a game TOTAL/MONEYLINE (wrong data), or be claimed by the
 // tennis-surname fallback (wrong sport). parse-catalog.ts uses this to route
@@ -160,8 +162,8 @@ const MLB_WORDS = /\b(?:strike\s?outs?|ks?|outs|total\s+bases|stolen\s+bases?|st
 
 export const UNSUPPORTED_PROP_REASONS = {
   MLB: "This MLB prop market isn't supported yet",
-  NHL: "NHL player props aren't supported yet",
-  NBA: "NBA player props aren't supported yet",
+  NHL: "This NHL prop isn't supported yet",
+  NBA: "This NBA prop isn't supported yet",
   WNBA: "WNBA player props aren't supported yet",
   NFL: "This NFL prop market isn't supported yet",
   TEAM_STAT: "Team stat totals aren't supported yet",
