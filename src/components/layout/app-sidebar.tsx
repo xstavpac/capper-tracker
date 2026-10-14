@@ -215,7 +215,7 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
       href={item.href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
-      className={"flex h-[46px] shrink-0 items-center gap-3 rounded-xl px-2 text-[15px] transition " + rowState + rowText}
+      className={"flex h-[46px] items-center gap-3 rounded-xl px-2 text-[15px] transition " + rowState + rowText}
     >
       <span
         aria-hidden="true"
@@ -241,14 +241,12 @@ function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => 
   const render = (item: NavItem) => (
     <NavLink key={item.href} item={item} active={isActiveHref(pathname, item.href)} onNavigate={onNavigate} />
   );
-  // The only part of the sidebar that scrolls (if the viewport is too short
-  // for every item), so Drop Catalog and the account row below it stay put.
   return (
-    <nav aria-label="Main" className="-mx-1 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1">
+    <>
       {items.filter((item) => item.section === "main").map(render)}
-      <div className="mx-2 my-2.5 h-px shrink-0 bg-[#EDF0F5] dark:bg-border-subtle" />
+      <div className="mx-2 my-2.5 h-px bg-[#EDF0F5] dark:bg-border-subtle" />
       {items.filter((item) => item.section === "account").map(render)}
-    </nav>
+    </>
   );
 }
 
@@ -274,12 +272,13 @@ function LogoMark() {
 // sidebar rail instead of hugging its own content.
 function SidebarDropCatalog({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <div className="mt-3 shrink-0 border-t border-[#EDF0F5] pt-3 dark:border-border-subtle">
+    <>
+      <div className="my-3 border-t border-border-subtle" />
       <a href="/picks/import" onClick={onNavigate} className={dropCatalogButtonBaseClass + " w-full"}>
         <LightningIcon />
         Drop Catalog
       </a>
-    </div>
+    </>
   );
 }
 
@@ -316,7 +315,7 @@ function AccountRow({ user }: { user: SidebarUser }) {
   }
 
   return (
-    <div className="flex shrink-0 items-center gap-2 px-2 pt-4">
+    <div className="mt-auto flex items-center gap-2 px-2 pt-4">
       {user.profilePictureUrl ? (
         // eslint-disable-next-line @next/next/no-img-element -- external (Google) avatar, no next/image remote-pattern config in this project
         <img src={user.profilePictureUrl} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
@@ -375,8 +374,8 @@ export function AppSidebar({
         </button>
       </div>
 
-      <aside className="hidden min-h-0 w-72 flex-col rounded-2xl border border-[#E3E8EF] bg-card px-4 py-5 shadow-soft dark:border-border md:flex">
-        <div className="mb-6 shrink-0 px-1">
+      <aside className="hidden w-72 flex-col gap-1 rounded-2xl border border-[#E3E8EF] bg-card px-4 py-5 shadow-soft dark:border-border md:flex">
+        <div className="mb-6 px-1">
           <LogoMark />
         </div>
         <NavLinks items={navItems} />
@@ -387,8 +386,8 @@ export function AppSidebar({
       {open && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-72 flex-col bg-card px-4 py-5 shadow-lg">
-            <div className="mb-4 flex shrink-0 items-center justify-between">
+          <aside className="absolute inset-y-0 left-0 flex w-72 flex-col gap-1 bg-card px-4 py-5 shadow-lg">
+            <div className="mb-4 flex items-center justify-between">
               <LogoMark />
               <button
                 onClick={() => setOpen(false)}
