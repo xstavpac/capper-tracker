@@ -1410,7 +1410,13 @@ const CITY_NICKNAME_TEAMS: [string, string, string][] = (() => {
   return rows;
 })();
 
-const CITY_NICKNAME_PHRASES = new Set(CITY_NICKNAME_TEAMS.map(([phrase]) => phrase));
+// The built phrases no hand-kept list already carries ("la kings", "ny giants"
+// and "philly eagles" keep their own rows and only gain the translation).
+const CITY_NICKNAME_PHRASES = new Set(
+  CITY_NICKNAME_TEAMS.map(([phrase]) => phrase).filter(
+    (phrase) => !DISAMBIGUATED_TEAMS.some(([p]) => p === phrase) && !PRO_TEAM_ALIASES.some(([p]) => p === phrase)
+  )
+);
 
 export const NCAAF_CANONICAL_SUFFIX: Record<string, string> = Object.fromEntries(NCAAF_SCHOOLS);
 
@@ -1437,11 +1443,7 @@ const TEAM_SPORT_ENTRIES: TeamEntry[] = [
   ...KBO_TEAMS.map((t): TeamEntry => [t, "KBO"]),
   ...NCAAF_TEAMS.map((t): TeamEntry => [t, "NCAAF"]),
   ...PRO_TEAM_ALIASES.map(([alias, sport]): TeamEntry => [alias, sport]),
-  // A phrase a hand-kept list already carries ("la kings", "ny giants",
-  // "philly eagles") keeps its row; it only gains the translation above.
-  ...CITY_NICKNAME_TEAMS.filter(
-    ([phrase]) => !DISAMBIGUATED_TEAMS.some(([p]) => p === phrase) && !PRO_TEAM_ALIASES.some(([p]) => p === phrase)
-  ).map(([phrase, sport]): TeamEntry => [phrase, sport]),
+  ...CITY_NICKNAME_TEAMS.filter(([phrase]) => CITY_NICKNAME_PHRASES.has(phrase)).map(([phrase, sport]): TeamEntry => [phrase, sport]),
 ].sort((a, b) => b[0].length - a[0].length);
 
 // Purpose-built for classifyPickTeamGroup/shortTeamName (pick-team-group.ts)
@@ -3090,6 +3092,10 @@ export function findTeamNickname(text: string, sportName: string): string | unde
   const lower = text.toLowerCase();
   for (const [phrase, sport] of TEAM_SPORT_ENTRIES) {
     if (sport !== sportName) continue;
+    // Callers hand this a real team's name and want the short form a pick's
+    // text would carry ("san jose state"). A built "<city> <nickname>" phrase
+    // ("san jose state spartans") is the long form - never the answer here.
+    if (CITY_NICKNAME_PHRASES.has(phrase)) continue;
     if (teamPhraseRegex(phrase).test(lower)) return phrase;
   }
   return undefined;

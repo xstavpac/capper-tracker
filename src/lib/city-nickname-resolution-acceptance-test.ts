@@ -13,7 +13,13 @@
 //   PART C - the audit: every NFL, NBA, NHL, MLB, WNBA and NCAAF team, by full
 //            official name and by city / abbreviation + nickname.
 //   PART D - a prompt never offers a league outside its season.
-import { parseCatalog, TEAM_NICKNAME_CANONICAL, NCAAF_CANONICAL_SUFFIX, CITY_NICKNAME_COLLISIONS } from "./parse-catalog";
+import {
+  parseCatalog,
+  findTeamNickname,
+  TEAM_NICKNAME_CANONICAL,
+  NCAAF_CANONICAL_SUFFIX,
+  CITY_NICKNAME_COLLISIONS,
+} from "./parse-catalog";
 import { runAmbiguousHierarchy, type ScheduleChecker, type ScheduleCheckQuery } from "./ambiguous-hierarchy";
 import { teamNameEndsWith } from "./team-name-match";
 import { SPORT_LABEL_TO_KEY, isSportLabelInSeason } from "./sport-seasons";
@@ -185,6 +191,13 @@ async function main() {
     // Two teams, two leagues' worth of options: still a matchup, not one team.
     check("'Giants at Dallas ML' is still a two-team NFL line", { sport: first("Giants at Dallas ML")?.sportName, n: first("Giants at Dallas ML")?.teamNicknames.length }, { sport: "NFL", n: 2 });
     check("no city + nickname phrase is claimed by two teams", CITY_NICKNAME_COLLISIONS, []);
+    // A game card's team still maps to the short form a pick's text carries
+    // (picks.ts matches free-text picks to a card by it).
+    check(
+      "a card team's short nickname is unchanged",
+      ["San Jose State Spartans", "Sam Houston State Bearkats", "Connecticut Huskies"].map((team) => findTeamNickname(team, "NCAAF")),
+      ["san jose state", "sam houston state", "connecticut"]
+    );
     // The Angels are a Los Angeles team: a bare "Los Angeles" can mean them.
     check(
       "'Los Angeles ML' alone offers the Angels alongside the Dodgers",
