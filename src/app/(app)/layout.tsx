@@ -1,4 +1,6 @@
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { PageScrollRestoration } from "@/components/layout/page-scroll-restoration";
+import { PAGE_SCROLLER_ID } from "@/lib/page-scroll";
 import { LiveTicker } from "@/components/marketing/live-ticker";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { ParlayPoolProvider } from "@/components/parlay/parlay-pool-context";
@@ -28,7 +30,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <ParlayPoolProvider key={user.id} userId={user.id}>
         {/* md+: the shell is locked to the viewport and <main> scrolls on its
             own, so the sidebar (and its Drop Catalog / account row at the
-            bottom) never scrolls away. Mobile keeps normal window scrolling. */}
+            bottom) never scrolls away. Mobile keeps normal window scrolling.
+            Code that scrolls or measures "on screen" goes through
+            lib/page-scroll.ts, which knows which of the two is scrolling. */}
         <div className="flex min-h-screen flex-col md:h-screen md:overflow-hidden">
           <LiveTicker initialGames={tickerGames} />
           <div className="flex flex-1 flex-col md:min-h-0 md:flex-row md:gap-3 md:p-3">
@@ -37,7 +41,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               showZoneModel={showZoneModel}
               showImportSkippedLines={showImportSkippedLines}
             />
-            <main className="flex-1 bg-background p-4 md:rounded-xl md:border md:border-border md:overflow-y-auto md:bg-card md:p-8 md:shadow-soft">
+            <main
+              id={PAGE_SCROLLER_ID}
+              className="flex-1 bg-background p-4 md:rounded-xl md:border md:border-border md:overflow-y-auto md:bg-card md:p-8 md:shadow-soft"
+            >
+              <PageScrollRestoration />
               <ParlaySlipNotice />
               {children}
             </main>
