@@ -33,13 +33,24 @@ function DashboardIcon({ className }: { className?: string }) {
   );
 }
 
+// Crown (lucide "Crown" geometry - the project doesn't depend on lucide, so
+// it's inlined like the rest of these).
 function CappersIcon({ className }: { className?: string }) {
   return (
     <svg {...iconProps(className)}>
-      <circle cx="9" cy="7" r="3" />
-      <path d="M3 20v-1a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v1" />
-      <path d="M16 4.2a3 3 0 0 1 0 5.6" />
-      <path d="M21 20v-1a4 4 0 0 0 -3 -3.85" />
+      <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
+// lucide "SkipForward" geometry - gives Skipped Lines its own glyph instead
+// of sharing Settings' gear.
+function SkippedLinesIcon({ className }: { className?: string }) {
+  return (
+    <svg {...iconProps(className)}>
+      <path d="M5 4l10 8l-10 8z" />
+      <path d="M19 5v14" />
     </svg>
   );
 }
@@ -120,6 +131,13 @@ type NavItem = {
   href: string;
   label: string;
   icon: (props: { className?: string }) => JSX.Element;
+  // Icon-tile colors (background + icon) for the inactive state. The active
+  // item swaps to the solid brand tile instead - see NavLink.
+  tile: string;
+  // "account" items render below the divider, after the main list.
+  section: "main" | "account";
+  // Admin-gated items: shown only when AppSidebar's matching flag prop is on.
+  gate?: "zoneModel" | "importSkippedLines";
   accent?: "red";
   // Live count of pooled Parlay Generator picks (Parlay's nav item only) -
   // set at render time in AppSidebar, not baked into the static list below,
@@ -127,19 +145,20 @@ type NavItem = {
   badgeCount?: number;
 };
 
-const BASE_NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
-  { href: "/cappers", label: "Cappers", icon: CappersIcon },
-  { href: "/picks", label: "Picks", icon: PicksIcon },
-  { href: "/charts", label: "Charts", icon: ChartsIcon },
-  { href: "/pricing", label: "Plans & Billing", icon: PricingIcon },
-  { href: "/settings", label: "Settings", icon: SettingsIcon },
-  { href: "/live", label: "Live", icon: LiveIcon, accent: "red" },
-  { href: "/parlay", label: "Parlay Generator", icon: ParlayIcon },
+// The one ordered list for both the desktop rail and the mobile drawer.
+// Dark-mode tile colors are the same hue at low opacity on the dark card.
+const NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Dashboard", icon: DashboardIcon, section: "main", tile: "bg-[#E7EFFF] text-[#1E5BD8] dark:bg-[#1E5BD8]/20 dark:text-[#7FA6F5]" },
+  { href: "/cappers", label: "Cappers", icon: CappersIcon, section: "main", tile: "bg-[#FFF3DC] text-[#A15C00] dark:bg-[#A15C00]/25 dark:text-[#F2B25C]" },
+  { href: "/picks", label: "Picks", icon: PicksIcon, section: "main", tile: "bg-[#E3F6EC] text-[#137A47] dark:bg-[#137A47]/25 dark:text-[#5FCB95]" },
+  { href: "/charts", label: "Charts", icon: ChartsIcon, section: "main", tile: "bg-[#F0E9FF] text-[#6A3FD0] dark:bg-[#6A3FD0]/25 dark:text-[#B49BF0]" },
+  { href: "/parlay", label: "Parlay Generator", icon: ParlayIcon, section: "main", tile: "bg-[#E7EFFF] text-[#1E5BD8] dark:bg-[#1E5BD8]/20 dark:text-[#7FA6F5]" },
+  { href: "/live", label: "Live", icon: LiveIcon, section: "main", accent: "red", tile: "bg-[#FDECEC] text-[#DC2626] dark:bg-[#DC2626]/20 dark:text-[#F87171]" },
+  { href: "/zone-model", label: "Zone Model", icon: ZoneModelIcon, section: "main", gate: "zoneModel", tile: "bg-[#DFF5F5] text-[#0E7272] dark:bg-[#0E7272]/30 dark:text-[#5CC9C9]" },
+  { href: "/admin/import-skipped-lines", label: "Skipped Lines", icon: SkippedLinesIcon, section: "main", gate: "importSkippedLines", tile: "bg-[#FFEDE3] text-[#B4470F] dark:bg-[#B4470F]/25 dark:text-[#F29A6B]" },
+  { href: "/pricing", label: "Plans & Billing", icon: PricingIcon, section: "account", tile: "bg-[#E4F4EA] text-[#18794E] dark:bg-[#18794E]/25 dark:text-[#62C998]" },
+  { href: "/settings", label: "Settings", icon: SettingsIcon, section: "account", tile: "bg-[#EEF0F4] text-[#4A5468] dark:bg-white/10 dark:text-[#A6AFC0]" },
 ];
-
-const ZONE_MODEL_NAV_ITEM: NavItem = { href: "/zone-model", label: "Zone Model", icon: ZoneModelIcon };
-const IMPORT_SKIPPED_LINES_NAV_ITEM: NavItem = { href: "/admin/import-skipped-lines", label: "Skipped Lines", icon: SettingsIcon };
 
 function isActiveHref(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + "/");
@@ -179,28 +198,34 @@ function CloseIcon() {
   );
 }
 
-// Active item gets the accent (brand, or red for Live) as both background and
-// text/icon color - everything else stays neutral gray until hovered.
+// Each item's icon sits in its own colored tile; the active item swaps that
+// tile for a solid brand one and gets a tinted row. Live's label is red only
+// while inactive; its red dot shows in both states.
 function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean; onNavigate?: () => void }) {
   const Icon = item.icon;
   const isRed = item.accent === "red";
-  const activeClass = isRed
-    ? "bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-400"
-    : "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-400";
-  const inactiveClass = isRed
-    ? "text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10"
-    : "text-muted-foreground hover:bg-muted hover:text-foreground";
+  const rowState = active
+    ? "bg-[#EEF4FF] font-bold text-[#1747C9] dark:bg-brand-500/15 dark:text-brand-400"
+    : "font-semibold text-[#4A5468] hover:bg-[#F6F8FB] hover:text-[#0B1633] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground";
+  const rowText = isRed && !active ? " !font-bold !text-[#C81E1E] dark:!text-red-400" : "";
+  const tileState = active ? "bg-[#1E6BFF] text-white shadow-[0_3px_8px_rgba(30,107,255,.35)]" : item.tile;
 
   return (
     <Link
       href={item.href}
       onClick={onNavigate}
-      className={
-        "flex items-center gap-2.5 rounded-[9px] px-3 py-[9px] text-[15px] font-medium transition " +
-        (active ? activeClass : inactiveClass)
-      }
+      aria-current={active ? "page" : undefined}
+      className={"flex h-[46px] items-center gap-3 rounded-xl px-2 text-[15px] transition " + rowState + rowText}
     >
-      <Icon className="h-5 w-5 shrink-0" />
+      <span
+        aria-hidden="true"
+        className={"relative flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] transition " + tileState}
+      >
+        <Icon className="h-[18px] w-[18px]" />
+        {isRed && (
+          <span className="absolute -right-[3px] -top-[3px] h-[9px] w-[9px] rounded-full border-2 border-white bg-[#DC2626] animate-live-dot-ring motion-reduce:animate-none dark:border-card" />
+        )}
+      </span>
       <span className="flex-1">{item.label}</span>
       {Boolean(item.badgeCount) && (
         <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-brand-500 px-1.5 text-[11px] font-semibold text-white">
@@ -213,11 +238,14 @@ function NavLink({ item, active, onNavigate }: { item: NavItem; active: boolean;
 
 function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
   const pathname = usePathname();
+  const render = (item: NavItem) => (
+    <NavLink key={item.href} item={item} active={isActiveHref(pathname, item.href)} onNavigate={onNavigate} />
+  );
   return (
     <>
-      {items.map((item) => (
-        <NavLink key={item.href} item={item} active={isActiveHref(pathname, item.href)} onNavigate={onNavigate} />
-      ))}
+      {items.filter((item) => item.section === "main").map(render)}
+      <div className="mx-2 my-2.5 h-px bg-[#EDF0F5] dark:bg-border-subtle" />
+      {items.filter((item) => item.section === "account").map(render)}
     </>
   );
 }
@@ -328,11 +356,8 @@ export function AppSidebar({
   // regardless of this) - this only decides whether the link appears, so a
   // non-admin never sees a nav entry for a route that would just 404 them.
   // Same for the import skipped-line report.
-  const navItems = [
-    ...BASE_NAV_ITEMS,
-    ...(showZoneModel ? [ZONE_MODEL_NAV_ITEM] : []),
-    ...(showImportSkippedLines ? [IMPORT_SKIPPED_LINES_NAV_ITEM] : []),
-  ].map((item) =>
+  const gates = { zoneModel: showZoneModel, importSkippedLines: showImportSkippedLines };
+  const navItems = NAV_ITEMS.filter((item) => !item.gate || gates[item.gate]).map((item) =>
     item.href === "/parlay" ? { ...item, badgeCount: pool.length } : item
   );
 
@@ -349,7 +374,7 @@ export function AppSidebar({
         </button>
       </div>
 
-      <aside className="hidden w-72 flex-col gap-1 rounded-xl border border-border bg-card px-4 py-5 shadow-soft md:flex">
+      <aside className="hidden w-72 flex-col gap-1 rounded-2xl border border-[#E3E8EF] bg-card px-4 py-5 shadow-soft dark:border-border md:flex">
         <div className="mb-6 px-1">
           <LogoMark />
         </div>

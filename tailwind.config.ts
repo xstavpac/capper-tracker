@@ -85,6 +85,13 @@ const config: Config = {
           "0%, 100%": { opacity: "1", transform: "scale(1)" },
           "50%": { opacity: "0.55", transform: "scale(1.35)" },
         },
+        // The red dot on the sidebar Live nav badge (app-sidebar.tsx): a soft
+        // ring expanding out of the dot and fading. Applied with
+        // `motion-reduce:animate-none`, so the dot stays but the ring doesn't.
+        "live-dot-ring": {
+          "0%": { boxShadow: "0 0 0 0 rgba(220,38,38,0.5)" },
+          "100%": { boxShadow: "0 0 0 6px rgba(220,38,38,0)" },
+        },
         // The light band that crosses the Hot Hand "GENERATIONAL RUN" pill
         // (capper-panel.tsx). The band is half the pill's width; it crosses in
         // the first third of the cycle and rests off the right edge for the
@@ -231,6 +238,7 @@ const config: Config = {
         "glow-pulse": "glow-pulse 2.2s ease-in-out infinite",
         "glow-pulse-compact": "glow-pulse-compact 2.2s ease-in-out infinite",
         "streak-pulse": "streak-pulse 1.3s ease-in-out infinite",
+        "live-dot-ring": "live-dot-ring 1.6s ease-out infinite",
         "pill-shimmer": "pill-shimmer 4s ease-in-out infinite",
         "fill-bar": "fill-bar 0.8s ease-out",
         "trend-surge-up": "trend-surge-up 1.6s ease-in-out infinite",
