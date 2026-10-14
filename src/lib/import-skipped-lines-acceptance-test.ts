@@ -69,12 +69,12 @@ async function main() {
   expect("KRASH/RBS paste logs 0 PARSE_SILENT rows", pasteEntries.filter((e) => e.stage === "PARSE_SILENT").length, 0);
   expect("KRASH/RBS paste logs nothing else", pasteEntries.length, 6);
   expect("PROP_UNSUPPORTED rows carry the NHL reason and their capper", pasteEntries.map((e) => [e.capperName, e.reason]), [
-    ["KRASH", "NHL player props aren't supported yet"],
-    ["KRASH", "NHL player props aren't supported yet"],
-    ["KRASH", "NHL player props aren't supported yet"],
-    ["RBS", "NHL player props aren't supported yet"],
-    ["RBS", "NHL player props aren't supported yet"],
-    ["RBS", "NHL player props aren't supported yet"],
+    ["KRASH", "This NHL prop isn't supported yet"],
+    ["KRASH", "This NHL prop isn't supported yet"],
+    ["KRASH", "This NHL prop isn't supported yet"],
+    ["RBS", "This NHL prop isn't supported yet"],
+    ["RBS", "This NHL prop isn't supported yet"],
+    ["RBS", "This NHL prop isn't supported yet"],
   ]);
   // Every family of "isn't supported yet" reason maps to the same stage; a plain miss does not.
   const reasonCases: [string, string][] = [

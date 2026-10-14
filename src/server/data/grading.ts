@@ -938,7 +938,7 @@ async function locateNflPlayer(
   if (!player) {
     let roster: RosterPlayer[] = [];
     try {
-      const loadRoster = deps.getRoster ?? (async () => (await import("@/server/data/nfl-roster-cache")).getCachedNflRoster());
+      const loadRoster = deps.getRoster ?? (async () => (await import("@/server/data/nfl-roster-cache")).getCachedNflGradingRoster());
       roster = await loadRoster();
     } catch (err) {
       console.error("resolveNflPlayerProp: NFL roster read failed", err);

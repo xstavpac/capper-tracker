@@ -1,9 +1,10 @@
-// Proof for the NBA roster fetcher and loader - run with:
+// Proof for the NBA roster fetcher and the NBA loader entry points - run with:
 //   npx tsx src/server/data/nba-roster-acceptance-test.ts
 //
 // No database and no network: the fetch is stubbed and the table is a fake.
 // (The cache reader and the migration are proved against a real database in
-// nba-roster-cache-acceptance-test.ts.)
+// nba-roster-cache-acceptance-test.ts; the shared loader's every rule in
+// roster-load-acceptance-test.ts.)
 //
 // Fixtures, both captured live from ESPN on 2026-10-13:
 //   nba-roster-atl.json                             the Hawks' roster response, verbatim
@@ -14,8 +15,10 @@
 //   PART A - the fetcher reads ESPN's FLAT roster shape, every position.
 //   PART B - roster ids are the box score's athlete ids.
 //   PART C - the league fetch survives a failed team.
-//   PART D - the loader: what a load would change, dry run writes nothing,
-//            commit writes exactly the plan, a partial league fetch is refused.
+//   PART D - the NBA loader (a thin wrapper over roster-load.ts with the NBA
+//            config): what a load would change, dry run writes nothing, commit
+//            writes only the changes and never deletes, a partial league fetch
+//            is refused.
 import fs from "node:fs";
 import path from "node:path";
 import { extractNbaRosterPlayers, fetchNbaLeagueRoster, NBA_ESPN_TEAM_IDS } from "./nba-roster";
@@ -34,40 +37,53 @@ const fixture = (name: string) => JSON.parse(fs.readFileSync(path.join(__dirname
 const atlRaw = fixture("nba-roster-atl.json");
 const box = fixture("nba-boxscore-401898402-okc-atl-players.json");
 
-// A spy table: records every call, serves `rows` to findMany.
+// A spy table: records every call, serves `rows` to readForDiff.
 function fakeTable(rows: NbaRosterRow[]) {
-  const calls = { findMany: 0, upserts: [] as { where: { espnPlayerId: string }; create: { espnPlayerId: string; team: string } }[], deletes: [] as unknown[] };
+  const calls = { reads: 0, created: [] as { externalId: string; team: string }[], updates: [] as { id: string; team: string }[], deactivations: [] as string[][] };
   const table: NbaRosterTable = {
-    findMany: async () => {
-      calls.findMany++;
+    readForDiff: async () => {
+      calls.reads++;
       return rows;
     },
-    upsert: async (args) => {
-      calls.upserts.push(args);
+    createMany: async (r) => {
+      calls.created.push(...r);
     },
-    deleteMany: async (args) => {
-      calls.deletes.push(args);
+    updateRow: async (id, data) => {
+      calls.updates.push({ id, team: data.team });
+    },
+    deactivate: async (ids) => {
+      calls.deactivations.push(ids);
     },
   };
   return { table, calls };
 }
 
-// 30 teams, two players each.
+// 30 teams, 16 players each (480 - above the NBA minimums of 450 players and 12 per team).
+const PER_TEAM = 16;
 function fullLeague(): RosterPlayer[] {
   return NBA_ESPN_TEAM_IDS.flatMap(([id, team]) =>
-    [1, 2].map((n) => ({ playerName: `Player ${id}-${n}`, firstName: "Player", lastName: `${id}-${n}`, team, position: n === 1 ? "G" : "C", externalPlayerId: `${id}0${n}` }))
+    Array.from({ length: PER_TEAM }, (_, i) => i + 1).map((n) => ({
+      playerName: `Player ${id}-${n}`,
+      firstName: "Player",
+      lastName: `${id}-${n}`,
+      team,
+      position: n % 3 === 0 ? "C" : n % 2 === 0 ? "F" : "G",
+      externalPlayerId: `${id}0${n}`,
+    }))
   );
 }
 const asRow = (p: RosterPlayer, overrides: Partial<NbaRosterRow> = {}): NbaRosterRow => ({
   id: "row-" + p.externalPlayerId,
-  espnPlayerId: p.externalPlayerId,
+  externalId: p.externalPlayerId,
   fullName: p.playerName,
   firstName: p.firstName,
   lastName: p.lastName,
   team: p.team,
   position: p.position,
+  active: true,
   ...overrides,
 });
+const counts = (p: ReturnType<typeof planNbaRosterLoad>) => ({ added: p.added, updated: p.updated, reactivated: p.reactivated, unchanged: p.unchanged, deactivated: p.deactivated, deactivationsSkipped: p.deactivationsSkipped });
 
 async function main() {
   console.log("########## PART A: the flat roster shape ##########");
@@ -146,35 +162,38 @@ async function main() {
     }
   }
 
-  console.log("\n########## PART D: the loader ##########");
+  console.log("\n########## PART D: the NBA loader ##########");
   {
     const league = fullLeague();
-    check("the test league is 30 teams / 60 players", { teams: new Set(league.map((p) => p.team)).size, players: league.length, expected: NBA_TEAM_COUNT }, { teams: 30, players: 60, expected: 30 });
+    check("the test league is 30 teams / 480 players", { teams: new Set(league.map((p) => p.team)).size, players: league.length, expected: NBA_TEAM_COUNT }, { teams: 30, players: 480, expected: 30 });
 
     // -- the plan --
-    check("empty table: everything is an add", planNbaRosterLoad(league, []), { players: 60, teams: 30, added: 60, updated: 0, unchanged: 0, stale: 0, staleIds: [] });
+    check("empty table: everything is an add", { ...counts(planNbaRosterLoad(league, [])), players: 480, teams: 30 }, { added: 480, updated: 0, reactivated: 0, unchanged: 0, deactivated: 0, deactivationsSkipped: 0, players: 480, teams: 30 });
     const traded = asRow(league[0], { team: "Utah Jazz" });
     const gone = asRow({ playerName: "Waived Player", firstName: "Waived", lastName: "Player", team: "Atlanta Hawks", position: "F", externalPlayerId: "999999" });
-    const existing = [traded, ...league.slice(1, 40).map((p) => asRow(p)), gone];
-    check("a traded player is an update, an absent one is stale, the rest split added / unchanged", planNbaRosterLoad(league, existing), {
-      players: 60,
-      teams: 30,
-      added: 20,
+    const existing = [traded, ...league.slice(1, 400).map((p) => asRow(p)), gone];
+    check("a traded player is an update, an absent one is deactivated, the rest split added / unchanged", counts(planNbaRosterLoad(league, existing)), {
+      added: 80,
       updated: 1,
-      unchanged: 39,
-      stale: 1,
-      staleIds: ["row-999999"],
+      reactivated: 0,
+      unchanged: 399,
+      deactivated: 1,
+      deactivationsSkipped: 0,
     });
-    check("a second load of the same rosters changes nothing", planNbaRosterLoad(league, league.map((p) => asRow(p))), { players: 60, teams: 30, added: 0, updated: 0, unchanged: 60, stale: 0, staleIds: [] });
+    check("a second load of the same rosters changes nothing", counts(planNbaRosterLoad(league, league.map((p) => asRow(p)))), { added: 0, updated: 0, reactivated: 0, unchanged: 480, deactivated: 0, deactivationsSkipped: 0 });
 
     // -- dry run --
     {
       const { table, calls } = fakeTable(existing);
       const lines: string[] = [];
       const res = await runNbaRosterLoad({ commit: false, fetchRoster: async () => league, table, log: (l) => lines.push(l) });
-      check("dry run: status and plan", res, { status: "dry_run", plan: { players: 60, teams: 30, added: 20, updated: 1, unchanged: 39, stale: 1, staleIds: ["row-999999"] } });
-      check("dry run: reads the table once and WRITES NOTHING", { reads: calls.findMany, upserts: calls.upserts.length, deletes: calls.deletes.length }, { reads: 1, upserts: 0, deletes: 0 });
-      check("dry run: reports the counts", lines, ["fetched 60 players across 30 teams", "would add 20, update 1, leave 39 unchanged, remove 1 stale", "dry run - nothing written. re-run with --commit to persist."]);
+      check("dry run: status", res.status, "dry_run");
+      check("dry run: reads the table once and WRITES NOTHING", { reads: calls.reads, created: calls.created.length, updates: calls.updates.length, deactivations: calls.deactivations.length }, { reads: 1, created: 0, updates: 0, deactivations: 0 });
+      check("dry run: reports the counts", lines, [
+        "fetched 480 players across 30 teams",
+        "would add 80, update 1, reactivate 0, leave 399 unchanged, deactivate 1, skip 0 deactivations (short teams: none)",
+        "dry run - nothing written. re-run with --commit to persist.",
+      ]);
     }
 
     // -- commit --
@@ -182,14 +201,14 @@ async function main() {
       const { table, calls } = fakeTable(existing);
       const res = await runNbaRosterLoad({ commit: true, fetchRoster: async () => league, table });
       check("commit: status", res.status, "committed");
-      check("commit: one upsert per fetched player, keyed by ESPN id", { n: calls.upserts.length, keys: new Set(calls.upserts.map((u) => u.where.espnPlayerId)).size }, { n: 60, keys: 60 });
-      check("commit: the traded player's row is rewritten with his new team", calls.upserts.find((u) => u.where.espnPlayerId === league[0].externalPlayerId)?.create.team, league[0].team);
-      check("commit: one delete, scoped to exactly the stale row ids", calls.deletes, [{ where: { id: { in: ["row-999999"] } } }]);
+      check("commit: only the 80 new players are inserted", calls.created.length, 80);
+      check("commit: only the traded player is updated, with his new team", calls.updates, [{ id: traded.id, team: league[0].team }]);
+      check("commit: the waived player is deactivated by row id, not deleted", calls.deactivations, [["row-999999"]]);
     }
     {
       const { table, calls } = fakeTable(league.map((p) => asRow(p)));
       await runNbaRosterLoad({ commit: true, fetchRoster: async () => league, table });
-      check("commit with nothing stale: no delete is issued at all", calls.deletes.length, 0);
+      check("commit with nothing changed: no write of any kind", { created: calls.created.length, updates: calls.updates.length, deactivations: calls.deactivations.length }, { created: 0, updates: 0, deactivations: 0 });
     }
 
     // -- partial league fetch --
@@ -198,18 +217,35 @@ async function main() {
       const partial = league.filter((p) => p.team !== "Boston Celtics" && p.team !== "Chicago Bulls");
       const lines: string[] = [];
       const res = await runNbaRosterLoad({ commit, fetchRoster: async () => partial, table, log: (l) => lines.push(l) });
-      check(`partial fetch (28 teams), commit=${commit}: refused, naming the missing teams`, res, { status: "refused_partial", players: 56, teams: 28, missingTeams: ["Boston Celtics", "Chicago Bulls"] });
-      check(`partial fetch, commit=${commit}: the table is neither read nor written`, { reads: calls.findMany, upserts: calls.upserts.length, deletes: calls.deletes.length }, { reads: 0, upserts: 0, deletes: 0 });
-      check(`partial fetch, commit=${commit}: says so`, lines[1], "ABORT: only 28/30 teams returned players - missing: Boston Celtics, Chicago Bulls");
+      check(`partial fetch (28 teams), commit=${commit}: refused, naming the missing teams`, res, {
+        status: "aborted",
+        reason: "only 28/30 teams returned players - missing: Boston Celtics, Chicago Bulls",
+        players: 448,
+        teams: 28,
+        missingTeams: ["Boston Celtics", "Chicago Bulls"],
+      });
+      check(`partial fetch, commit=${commit}: the table is neither read nor written`, { reads: calls.reads, created: calls.created.length, updates: calls.updates.length, deactivations: calls.deactivations.length }, { reads: 0, created: 0, updates: 0, deactivations: 0 });
+      check(`partial fetch, commit=${commit}: says so`, lines[1], "ABORT: only 28/30 teams returned players - missing: Boston Celtics, Chicago Bulls - nothing read or written");
     }
     {
       // 29 of 30 is still partial; an empty fetch is the same refusal.
       const { table, calls } = fakeTable(existing);
       const res29 = await runNbaRosterLoad({ commit: true, fetchRoster: async () => league.filter((p) => p.team !== "Utah Jazz"), table });
-      check("29 teams: refused", res29.status, "refused_partial");
+      check("29 teams: refused", res29.status, "aborted");
       const res0 = await runNbaRosterLoad({ commit: true, fetchRoster: async () => [], table });
-      check("0 teams: refused, all 30 named missing", { status: res0.status, missing: res0.status === "refused_partial" ? res0.missingTeams.length : -1 }, { status: "refused_partial", missing: 30 });
-      check("neither wrote anything", { upserts: calls.upserts.length, deletes: calls.deletes.length }, { upserts: 0, deletes: 0 });
+      check("0 teams: refused, all 30 named missing", { status: res0.status, missing: res0.status === "aborted" ? res0.missingTeams.length : -1 }, { status: "aborted", missing: 30 });
+      check("neither wrote anything", { created: calls.created.length, updates: calls.updates.length, deactivations: calls.deactivations.length }, { created: 0, updates: 0, deactivations: 0 });
+    }
+
+    // -- per-team guard and --force through the NBA wrapper --
+    {
+      // The Hawks come back with 5 players (< 12): their 11 missing players stay active.
+      const shortHawks = league.filter((p) => p.team !== "Atlanta Hawks" || Number(p.lastName.split("-")[1]) <= 5);
+      const all = league.map((p) => asRow(p));
+      const skipped = await runNbaRosterLoad({ commit: true, fetchRoster: async () => shortHawks, table: fakeTable(all).table });
+      check("short team: deactivations skipped", skipped.status === "committed" && { deactivated: skipped.plan.deactivated, skipped: skipped.plan.deactivationsSkipped, shortTeams: skipped.plan.shortTeams }, { deactivated: 0, skipped: 11, shortTeams: ["Atlanta Hawks"] });
+      const forced = await runNbaRosterLoad({ commit: true, force: true, fetchRoster: async () => shortHawks, table: fakeTable(all).table });
+      check("--force: the short team's missing players are deactivated", forced.status === "committed" && { deactivated: forced.plan.deactivated, skipped: forced.plan.deactivationsSkipped }, { deactivated: 11, skipped: 0 });
     }
   }
 

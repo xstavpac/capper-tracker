@@ -158,14 +158,14 @@ console.log("\n########## describeUnresolvedLines / unresolvedReasonBreakdown ##
   const entries = describeUnresolvedLines(lines);
   check("every line keeps its text, in order", entries.map((e) => e.text), lines);
   check("reasons: prop lines get one, a plain miss gets none", entries.map((e) => e.reason), [
-    "NHL player props aren't supported yet",
-    "NHL player props aren't supported yet",
+    "This NHL prop isn't supported yet",
+    "This NHL prop isn't supported yet",
     "This MLB prop market isn't supported yet",
     "Team stat totals aren't supported yet",
     null,
   ]);
   check("breakdown groups by reason, most common first", unresolvedReasonBreakdown(entries), [
-    { reason: "NHL player props aren't supported yet", count: 2 },
+    { reason: "This NHL prop isn't supported yet", count: 2 },
     { reason: "Team stat totals aren't supported yet", count: 1 },
     { reason: "This MLB prop market isn't supported yet", count: 1 },
   ]);

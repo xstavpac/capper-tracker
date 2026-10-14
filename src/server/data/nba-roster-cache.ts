@@ -1,30 +1,35 @@
-// Reads the cached NBA roster - see prisma/schema.prisma's NbaRosterPlayer and
-// scripts/load-nba-roster.ts, which is what populates it. No network call; a
-// plain indexed table read. The NBA twin of nhl-roster-cache.ts.
+// Reads the cached NBA roster - see prisma/schema.prisma's NbaRosterPlayer; the
+// daily /api/cron/refresh-rosters job (and scripts/load-nba-roster.ts by hand)
+// populates it. No network call; a plain indexed table read. The NBA twin of
+// nhl-roster-cache.ts.
 import { prisma } from "@/lib/prisma";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 import { memoizeWithTtl } from "@/server/data/ttl-memo";
+import { buildRosterViews, ROSTER_CACHE_SELECT } from "@/server/data/roster-cache-rows";
 
 const ROSTER_MEMO_TTL_MS = 60_000;
 
-// Memoized per process for ROSTER_MEMO_TTL_MS, same as getCachedNhlRoster: one
+// Memoized per process for ROSTER_MEMO_TTL_MS, same as nhl-roster-cache.ts: one
 // read serves a whole grade-picks run or import recovery on the instance. The
-// table only changes when scripts/load-nba-roster.ts is rerun by hand, so a
-// minute of staleness is invisible. The array is shared - read-only.
-export function getCachedNbaRoster(): Promise<RosterPlayer[]> {
-  return memoizeWithTtl(
+// table changes at most once a day (the refresh), so a minute of staleness is
+// invisible. Both views below come from this one read and are the same arrays
+// on every call inside the TTL - read-only.
+const readAll = () =>
+  memoizeWithTtl(
     "roster:nba",
     async () => {
-      const rows = await prisma.nbaRosterPlayer.findMany();
-      return rows.map((r) => ({
-        playerName: r.fullName,
-        firstName: r.firstName,
-        lastName: r.lastName,
-        team: r.team,
-        position: r.position,
-        externalPlayerId: r.espnPlayerId,
-      }));
+      const rows = await prisma.nbaRosterPlayer.findMany({ select: { ...ROSTER_CACHE_SELECT, espnPlayerId: true } });
+      return buildRosterViews(rows, (r) => r.espnPlayerId);
     },
     { ttlMs: ROSTER_MEMO_TTL_MS }
   );
+
+// Active players only - for import name matching (see roster-cache-rows.ts).
+export async function getCachedNbaRoster(): Promise<RosterPlayer[]> {
+  return (await readAll()).matching;
+}
+
+// Every row, including players a refresh has since marked inactive - for grading.
+export async function getCachedNbaGradingRoster(): Promise<RosterPlayer[]> {
+  return (await readAll()).grading;
 }

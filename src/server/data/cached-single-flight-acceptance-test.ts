@@ -130,7 +130,7 @@ db.oddsSnapshot.findUnique = async (args: unknown) => {
 
 const rosterRow = (n: number, fullName: string, team: string, position: string) => {
   const [firstName, ...rest] = fullName.split(" ");
-  return { id: "r" + n, fullName, firstName, lastName: rest.join(" "), team, position, espnPlayerId: "e" + n, mlbPlayerId: "m" + n };
+  return { id: "r" + n, fullName, firstName, lastName: rest.join(" "), team, position, active: true, espnPlayerId: "e" + n, mlbPlayerId: "m" + n };
 };
 const ROSTER_ROWS = [
   rosterRow(1, "Travis Kelce", "Kansas City Chiefs", "TE"),
