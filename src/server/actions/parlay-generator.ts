@@ -16,8 +16,12 @@ import { legCapRejection, type LegCapRejection } from "@/lib/parlay/leg-cap";
 import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
 import {
   buildAutoParlay,
+  buildMixNotes,
   buildSameGameLegs,
   buildSwapParlay,
+  filterEmptyNote,
+  filterGamesByInclude,
+  swapVariantNote,
   toMaxLegsPerGame,
   type AutoParlay,
   type GeneratorGame,
@@ -26,6 +30,7 @@ import {
   type SwapParlay,
 } from "@/lib/parlay/auto-generate";
 import { doubleheaderGameIds } from "@/lib/parlay/doubleheader";
+import { toGameLinesPct, toIncludePicks, type IncludePicks } from "@/lib/parlay/pick-mix";
 
 export type AutoGenerateResult = {
   parlayA: AutoParlay;
@@ -38,6 +43,17 @@ export type AutoGenerateResult = {
   // For PickCard's record block on every rendered pick.
   records: CapperLeagueRecords;
   leaguesSearched: string[];
+  // What was actually applied: the Include Picks filter, and the Pick Mix's
+  // Game Lines % (null when none - always null unless includePicks is ALL).
+  includePicks: IncludePicks;
+  gameLinesPct: number | null;
+  // Plain-text notes shown with the result: the leagues the filter left empty
+  // ("No props available for WNBA right now."), then anything the mix
+  // couldn't meet. Empty when there is nothing to say.
+  notes: string[];
+  // Shown in place of the Hedge/Contrarian result when those can't swap
+  // anything (Props, or no game-line legs). null otherwise.
+  swapNote: string | null;
 };
 
 // More than MAX_PARLAY_LEGS legs is refused outright (see leg-cap.ts) - never
@@ -45,12 +61,18 @@ export type AutoGenerateResult = {
 export async function autoGenerateParlayAction(
   leagues: string[],
   legCount: number,
-  maxLegsPerGame: number = 1
+  maxLegsPerGame: number = 1,
+  includePicks: IncludePicks = "ALL",
+  gameLinesPct: number | null = null
 ): Promise<AutoGenerateResult | LegCapRejection> {
   const user = await requireUser();
   const rejection = legCapRejection(legCount);
   if (rejection) return rejection;
   const requested = Math.max(1, Math.floor(legCount) || 1);
+  // Never trusted as sent: an unknown filter is All, and a mix applies only
+  // with All and only as a whole step from 0 to 100.
+  const include = toIncludePicks(includePicks);
+  const mixPct = include === "ALL" ? toGameLinesPct(gameLinesPct) : null;
   const sports = LIVE_SPORTS.filter((s) => leagues.includes(s.label));
 
   const now = new Date();
@@ -85,7 +107,10 @@ export async function autoGenerateParlayAction(
     });
   }
 
-  const allPicks = games.flatMap((g) => g.picks);
+  // Everything below - records, Parlay A, same-game fill, Hedge/Contrarian -
+  // sees only the picks the filter keeps.
+  const scoped = filterGamesByInclude(games, include);
+  const allPicks = scoped.flatMap((g) => g.picks);
   const [records, categoryRecords] = await Promise.all([
     getCapperLeagueRecords(
       user.id,
@@ -99,13 +124,20 @@ export async function autoGenerateParlayAction(
     ),
   ]);
 
-  const parlayA = buildAutoParlay(games, records, requested);
+  const leaguesSearched = sports.map((s) => s.label);
+  const parlayA = buildAutoParlay(scoped, records, requested, mixPct);
+  const sameGame = buildSameGameLegs(parlayA, scoped, categoryRecords, toMaxLegsPerGame(maxLegsPerGame));
+  const emptyNote = filterEmptyNote(games, include, leaguesSearched);
   return {
     parlayA,
-    sameGame: buildSameGameLegs(parlayA, games, categoryRecords, toMaxLegsPerGame(maxLegsPerGame)),
-    hedge: buildSwapParlay(parlayA, games, "AUTO_HEDGE", categoryRecords),
-    contrarian: buildSwapParlay(parlayA, games, "CONTRARIAN", categoryRecords),
+    sameGame,
+    hedge: buildSwapParlay(parlayA, scoped, "AUTO_HEDGE", categoryRecords),
+    contrarian: buildSwapParlay(parlayA, scoped, "CONTRARIAN", categoryRecords),
     records,
-    leaguesSearched: sports.map((s) => s.label),
+    leaguesSearched,
+    includePicks: include,
+    gameLinesPct: mixPct,
+    notes: [...(emptyNote ? [emptyNote] : []), ...buildMixNotes(parlayA, sameGame)],
+    swapNote: swapVariantNote(include, parlayA),
   };
 }

@@ -13,6 +13,12 @@
 //
 // Parlay A is never modified. Hedge/Contrarian are new objects that carry
 // each Parlay A pick unchanged when it has no qualifying alternate.
+//
+// "Include Picks" (All / Game Lines / Props) narrows every game's picks before
+// any of this runs (filterGamesByInclude). A Pick Mix, with All, sets how many
+// of Parlay A's legs come from each kind (buildMixedParlay); the ranking above
+// still picks which. pick-kind.ts is the only thing that says which kind a
+// pick is.
 import { categoryRecordKey, type CapperLeagueRecords } from "@/server/data/picks";
 import type { CategoryBreakdownItem } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
@@ -29,6 +35,8 @@ import {
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
 import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
+import { classifyPickKind, type PickKind } from "@/lib/parlay/pick-kind";
+import { includedKind, keepsPick, mixSplit, type IncludePicks, type MixSplit } from "@/lib/parlay/pick-mix";
 
 // gameNumber is the pick row's own doubleheader game number (Pick.gameNumber),
 // null or absent when the pick never said which game it is on.
@@ -58,6 +66,10 @@ export type AutoLeg = {
   next: RankedPick[];
 };
 
+// Set only when a Pick Mix was applied (Include Picks = All with a custom
+// mix): the Game Lines share and the leg counts it asked for.
+export type AutoMix = { gameLinesPct: number; target: MixSplit };
+
 export type AutoParlay = {
   requested: number;
   // Games with at least one pick - the most legs Parlay A can have.
@@ -65,6 +77,7 @@ export type AutoParlay = {
   // min(requested, available) legs, strongest #1 pick first. When
   // available < requested the UI must ask before showing this.
   legs: AutoLeg[];
+  mix?: AutoMix;
 };
 
 // Win% desc, then bigger sample, then pick id - see compareByRecord.
@@ -76,7 +89,24 @@ export function rankGamePicks(picks: GeneratorPick[], records: CapperLeagueRecor
   return picks.map((pick) => ({ pick, record: bestAvailableRecord(pick, records) })).sort(compareRankedPicks);
 }
 
-export function buildAutoParlay(games: GeneratorGame[], records: CapperLeagueRecords, requested: number): AutoParlay {
+// "Include Picks": every game keeps only the picks of the kind asked for (all
+// of them for ALL). Games left with no picks stay, empty - buildAutoParlay
+// already skips those. Run once, before every builder below, so Parlay A, the
+// same-game fill and Hedge/Contrarian all see the same picks.
+export function filterGamesByInclude(games: GeneratorGame[], include: IncludePicks): GeneratorGame[] {
+  if (include === "ALL") return games;
+  return games.map((g) => ({ ...g, picks: g.picks.filter((p) => keepsPick(include, p)) }));
+}
+
+// gameLinesPct (a Pick Mix, see pick-mix.ts) is only ever passed with Include
+// Picks = All. Without it, Parlay A is exactly what it always was.
+export function buildAutoParlay(
+  games: GeneratorGame[],
+  records: CapperLeagueRecords,
+  requested: number,
+  gameLinesPct: number | null = null
+): AutoParlay {
+  if (gameLinesPct !== null) return buildMixedParlay(games, records, requested, gameLinesPct);
   const candidates: AutoLeg[] = [];
   for (const game of games) {
     if (game.picks.length === 0) continue;
@@ -91,6 +121,115 @@ export function buildAutoParlay(games: GeneratorGame[], records: CapperLeagueRec
   }
   candidates.sort((a, b) => compareRankedPicks(a.top, b.top));
   return { requested, available: candidates.length, legs: candidates.slice(0, requested) };
+}
+
+// Parlay A with a Pick Mix. The mix decides HOW MANY legs come from game lines
+// and from props; the same ranking as above decides WHICH. Still one leg per
+// game.
+//   1. Each game offers its best game line and its best prop (when it has
+//      them). Walking every offer strongest first, take one while its pool
+//      still has quota and its game is unused - so a game is never spent on
+//      its weaker market while its stronger one still had room.
+//   2. Shortfall: a pool that ran out of games leaves its legs to the other
+//      pool's best remaining offers. Never fails because the mix can't be met;
+//      buildMixNotes says what happened.
+// Same-game legs come after, from buildSameGameLegs, only if games run out.
+function buildMixedParlay(games: GeneratorGame[], records: CapperLeagueRecords, requested: number, gameLinesPct: number): AutoParlay {
+  const target = mixSplit(requested, gameLinesPct);
+  type Offer = { game: GeneratorGame; kind: PickKind; top: RankedPick; ranked: RankedPick[] };
+  const offers: Offer[] = [];
+  let available = 0;
+  for (const game of games) {
+    if (game.picks.length === 0) continue;
+    available++;
+    const ranked = rankGamePicks(game.picks, records);
+    for (const kind of ["GAME_LINE", "PROP"] as const) {
+      const top = ranked.find((r) => classifyPickKind(r.pick) === kind);
+      if (top) offers.push({ game, kind, top, ranked });
+    }
+  }
+  offers.sort((a, b) => compareRankedPicks(a.top, b.top));
+
+  const left: Record<PickKind, number> = { GAME_LINE: target.gameLines, PROP: target.props };
+  const used = new Set<string>();
+  const legs: AutoLeg[] = [];
+  const take = (o: Offer) => {
+    used.add(o.game.gameId);
+    legs.push({
+      gameId: o.game.gameId,
+      gameLabel: o.game.gameLabel,
+      gameTime: o.game.gameTime,
+      top: o.top,
+      next: o.ranked.filter((r) => r !== o.top).slice(0, NEXT_PICKS_SHOWN),
+    });
+  };
+  for (const o of offers) {
+    if (left[o.kind] <= 0 || used.has(o.game.gameId)) continue;
+    take(o);
+    left[o.kind]--;
+  }
+  // Whatever pass 1 left short can only be filled by the other pool: an offer
+  // of the short pool on an unused game would have been taken above.
+  for (const o of offers) {
+    if (legs.length >= requested) break;
+    if (!used.has(o.game.gameId)) take(o);
+  }
+  legs.sort((a, b) => compareRankedPicks(a.top, b.top));
+  return { requested, available, legs, mix: { gameLinesPct, target } };
+}
+
+const KIND_NOUN: Record<PickKind, [string, string]> = { GAME_LINE: ["game line", "game lines"], PROP: ["prop", "props"] };
+const KIND_LABEL: Record<PickKind, string> = { GAME_LINE: "Game Lines", PROP: "Props" };
+const legsText = (n: number) => `${n} leg${n === 1 ? "" : "s"}`;
+
+// What a Pick Mix couldn't meet, as the plain-text notes the result shows
+// ("Only 1 eligible prop — filled 2 extra legs with Game Lines."). Counts the
+// finished parlay - Parlay A plus its same-game legs. Empty when the mix was
+// met, or no mix was set.
+export function buildMixNotes(parlayA: AutoParlay, sameGame?: SameGameFill): string[] {
+  if (!parlayA.mix) return [];
+  const count: Record<PickKind, number> = { GAME_LINE: 0, PROP: 0 };
+  for (const l of parlayA.legs) count[classifyPickKind(l.top.pick)]++;
+  for (const l of sameGame?.legs ?? []) count[classifyPickKind(l.pick)]++;
+  const target: Record<PickKind, number> = { GAME_LINE: parlayA.mix.target.gameLines, PROP: parlayA.mix.target.props };
+  const notes: string[] = [];
+  for (const kind of ["GAME_LINE", "PROP"] as const) {
+    const other: PickKind = kind === "GAME_LINE" ? "PROP" : "GAME_LINE";
+    if (count[kind] >= target[kind]) continue;
+    const [one, many] = KIND_NOUN[kind];
+    const have = count[kind] === 0 ? `No eligible ${many}` : `Only ${count[kind]} eligible ${count[kind] === 1 ? one : many}`;
+    const extra = count[other] - target[other];
+    notes.push(
+      extra > 0
+        ? `${have} — filled ${extra} extra leg${extra === 1 ? "" : "s"} with ${KIND_LABEL[other]}.`
+        : `${have} for the ${legsText(target[kind])} of ${KIND_LABEL[kind]} in your mix.`
+    );
+  }
+  return notes;
+}
+
+// The empty state for a filter that leaves a league nothing to offer ("No
+// props available for WNBA right now."). Read off the in-window picks
+// themselves - there is no list of which leagues have props. `games` is the
+// slate BEFORE filterGamesByInclude. null for All, or when every league has
+// at least one pick of the kind.
+export function filterEmptyNote(games: GeneratorGame[], include: IncludePicks, leagues: string[]): string | null {
+  const kind = includedKind(include);
+  if (kind === null) return null;
+  const empty = leagues.filter(
+    (league) => !games.some((g) => g.leagueName === league && g.picks.some((p) => classifyPickKind(p) === kind))
+  );
+  if (empty.length === 0) return null;
+  return `No ${KIND_NOUN[kind][1]} available for ${empty.join(", ")} right now.`;
+}
+
+// Hedge and Contrarian only ever swap game lines (classifyPair has no rule for
+// a player prop), so a parlay with no game-line leg has no variant to show.
+export const SWAP_GAME_LINES_ONLY_NOTE = "Hedge and Contrarian swap game lines only.";
+
+export function swapVariantNote(include: IncludePicks, parlayA: AutoParlay): string | null {
+  const anyGameLine = parlayA.legs.some((l) => classifyPickKind(l.top.pick) === "GAME_LINE");
+  return include === "PROPS" || !anyGameLine ? SWAP_GAME_LINES_ONLY_NOTE : null;
 }
 
 export function toParlayLeg(p: GeneratorPick): ParlayLeg {
@@ -259,12 +398,30 @@ export function buildSameGameLegs(
   candidates.sort((a, b) => compareByWilson({ ...a, pickId: a.pick.pickId }, { ...b, pickId: b.pick.pickId }));
 
   const asCandidate = (p: GeneratorPick) => toParlayCandidate(toParlayLeg(p));
-  for (const candidate of candidates) {
-    if (fill.legs.length >= room) break;
+  const fits = (candidate: SameGameLeg) => {
     const inGame = taken.get(candidate.gameId)!;
-    if (inGame.length >= maxLegsPerGame) continue;
-    if (inGame.some((p) => sameGameConflict(asCandidate(candidate.pick), asCandidate(p)) !== null)) continue;
-    inGame.push(candidate.pick);
+    return inGame.length < maxLegsPerGame && !inGame.some((p) => sameGameConflict(asCandidate(candidate.pick), asCandidate(p)) !== null);
+  };
+
+  // With a Pick Mix, a pool Parlay A left short is served first: the strongest
+  // candidate that fits AND is of a short pool, else the strongest that fits.
+  // Without a mix nothing is short and this is the plain strongest-first walk.
+  // A candidate that doesn't fit never fits later (games only fill up), so
+  // searching from the top each time skips nothing it shouldn't.
+  const short: Record<PickKind, number> = { GAME_LINE: 0, PROP: 0 };
+  if (parlayA.mix) {
+    short.GAME_LINE = parlayA.mix.target.gameLines;
+    short.PROP = parlayA.mix.target.props;
+    for (const leg of parlayA.legs) short[classifyPickKind(leg.top.pick)]--;
+  }
+  const pending = [...candidates];
+  while (fill.legs.length < room) {
+    let i = pending.findIndex((c) => short[classifyPickKind(c.pick)] > 0 && fits(c));
+    if (i < 0) i = pending.findIndex(fits);
+    if (i < 0) break;
+    const [candidate] = pending.splice(i, 1);
+    taken.get(candidate.gameId)!.push(candidate.pick);
+    short[classifyPickKind(candidate.pick)]--;
     fill.legs.push(candidate);
   }
   return fill;

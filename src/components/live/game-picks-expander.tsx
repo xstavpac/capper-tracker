@@ -68,6 +68,10 @@ export type ExpanderPick = {
   // Optional for the same reason as datePosted; null on a pick stored before
   // the column existed. Missing and null both mean "unknown".
   oddsSource?: PickOddsSource | null;
+  // Pick.propMarket - set only on a player prop. classifyPickKind
+  // (lib/parlay/pick-kind.ts) falls back on it for a bet type it doesn't know.
+  // Optional for the same reason as datePosted.
+  propMarket?: string | null;
 };
 
 // Fixed AWAY -> HOME -> TOTALS -> OTHER ordering (matches how the game card
