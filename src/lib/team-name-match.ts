@@ -133,11 +133,26 @@ function foldTeamText(text: string): string {
 // Still a suffix test on a whole alias row: "Louisiana Tech Bulldogs" has no
 // row and does not end with "louisiana ragin' cajuns", so it cannot answer to
 // Louisiana's nickname.
+//
+// The suffix must be whole words (endsWithWholeWords): "Charlotte Hornets"
+// ends with the letters "nets" and is not the Nets, so a Nets pick could
+// attach to a Hornets game.
 export function teamNameEndsWith(teamName: string, nickname: string, sportKey?: string): boolean {
   const nick = foldTeamText(nickname);
   if (!nick) return false;
   const row = sportKey ? ROW_LOOKUP[sportKey]?.get(normalizeTeamName(teamName)) : undefined;
-  return [teamName, ...(row ?? [])].some((spelling) => foldTeamText(spelling).endsWith(nick));
+  return [teamName, ...(row ?? [])].some((spelling) => endsWithWholeWords(foldTeamText(spelling), nick));
+}
+
+// Whether `text` ends with `phrase` starting at a word boundary: the phrase
+// is the whole text, or the character in front of it is not a letter or digit
+// ("brooklyn nets" / "nets" yes, "charlotte hornets" / "nets" no; a hyphen
+// counts as a boundary, so "hamilton tiger-cats" ends with "cats"). Both are
+// expected already lowercased / folded the same way.
+export function endsWithWholeWords(text: string, phrase: string): boolean {
+  if (!phrase || !text.endsWith(phrase)) return false;
+  const before = text[text.length - phrase.length - 1];
+  return before === undefined || !/[\p{L}\p{N}]/u.test(before);
 }
 
 // Which side of a resolved game a single-team pick's nickname names - HOME,

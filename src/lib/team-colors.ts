@@ -11,6 +11,8 @@
 // NCAAF table keys by the full canonical school name, since bare college
 // mascots collide across schools (see its own comment below).
 
+import { endsWithWholeWords } from "@/lib/team-name-match";
+
 const MLB_TEAM_COLORS: Record<string, string> = {
   diamondbacks: "#A71930",
   braves: "#CE1141",
@@ -378,7 +380,8 @@ export function getTeamColor(sportKey: string, teamName: string): string | null 
 
   const lower = teamName.toLowerCase();
   for (const [nickname, hex] of Object.entries(table)) {
-    if (lower.endsWith(nickname)) return hex;
+    // Whole words: "charlotte hornets" ends with the letters "nets" too.
+    if (endsWithWholeWords(lower, nickname)) return hex;
   }
   return null;
 }
