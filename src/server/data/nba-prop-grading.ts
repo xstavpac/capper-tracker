@@ -156,7 +156,7 @@ export async function gradeNbaPlayerProp(pick: NbaPropPick, eventId: string, dep
       try {
         // Dynamic import: the prisma-backed cache is only loaded on this rare
         // path, and pure callers/tests that inject getRoster never touch prisma.
-        const loadRoster = deps.getRoster ?? (async () => (await import("@/server/data/nba-roster-cache")).getCachedNbaRoster());
+        const loadRoster = deps.getRoster ?? (async () => (await import("@/server/data/nba-roster-cache")).getCachedNbaGradingRoster());
         rosterCache = await loadRoster();
       } catch (err) {
         console.error("gradeNbaPlayerProp: NBA roster read failed", err);

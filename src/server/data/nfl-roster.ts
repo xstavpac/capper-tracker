@@ -1,5 +1,5 @@
-// NFL roster fetch + extraction (live ESPN call), used by ONE caller today:
-// scripts/load-nfl-roster.ts, run by hand to (re)populate the
+// NFL roster fetch + extraction (live ESPN call), used only by the roster
+// loader (roster-load.ts: the daily refresh cron and scripts/load-nfl-roster.ts) to (re)populate the
 // nfl_roster_players cache table. Nothing in the request path (catalog
 // import/recovery) calls fetchNflTeamRoster/fetchNflLeagueRoster directly
 // any more - see server/data/nfl-roster-cache.ts's getCachedNflRoster, which
@@ -32,6 +32,12 @@ export type RosterPlayer = {
   position: string;
   externalPlayerId: string; // the source league API's own player id (ESPN for NFL/NHL, MLB Stats API for MLB)
 };
+
+// Per-team roster request timeout (all four leagues' fetchers). A stalled
+// request becomes a failed team - the loader then aborts that league for the
+// run - instead of holding the refresh cron past its 60s maxDuration. Normal
+// responses take well under a second.
+export const ROSTER_FETCH_TIMEOUT_MS = 15_000;
 
 // The only positions this app's player-prop markets cover today (passing/
 // rushing/receiving yards, receptions, TD - see bet-line.ts's
@@ -145,6 +151,7 @@ async function fetchNflTeamRoster(espnTeamId: string, team: string): Promise<Ros
   try {
     const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/${espnTeamId}/roster`, {
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(ROSTER_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) {
       console.error(`fetchNflTeamRoster: ESPN roster fetch failed for ${team} (${res.status})`);

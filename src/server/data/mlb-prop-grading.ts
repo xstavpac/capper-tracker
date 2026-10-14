@@ -112,7 +112,7 @@ export async function gradeMlbPlayerProp(pick: MlbPropPick, gamePk: string, deps
     try {
       // Dynamic import: the prisma-backed cache is only loaded on this rare path, and pure callers/tests
       // that inject getRoster never touch prisma.
-      const load = deps.getRoster ?? (async () => (await import("@/server/data/mlb-roster-cache")).getCachedMlbRoster());
+      const load = deps.getRoster ?? (async () => (await import("@/server/data/mlb-roster-cache")).getCachedMlbGradingRoster());
       roster = await load();
     } catch (err) {
       console.error("gradeMlbPlayerProp: MLB roster read failed", err);

@@ -1,5 +1,5 @@
 // NHL roster fetch + extraction (live ESPN call) - the NHL twin of
-// nfl-roster.ts, used by ONE caller: scripts/load-nhl-roster.ts, run by hand to
+// nfl-roster.ts, used only by the roster loader (roster-load.ts: the daily refresh cron and the script) to
 // (re)populate the nhl_roster_players cache table. Nothing in the request path
 // fetches ESPN rosters; catalog-import recovery and NHL prop grading read the
 // cache (nhl-roster-cache.ts). NFL roster code is deliberately NOT shared or
@@ -13,7 +13,7 @@
 // (boxscore.players[].statistics[].athletes[].athlete.id) - checked for Crosby,
 // Koivunen, Robertson, Silovs - which is what makes id-verified matching and the
 // did-not-play check in nhl-prop-grading.ts possible.
-import type { RosterPlayer } from "@/server/data/nfl-roster";
+import { ROSTER_FETCH_TIMEOUT_MS, type RosterPlayer } from "@/server/data/nfl-roster";
 
 const RELEVANT_POSITIONS = new Set(["C", "LW", "RW", "D", "G"]);
 
@@ -97,6 +97,7 @@ async function fetchNhlTeamRoster(espnTeamId: string, team: string): Promise<Ros
   try {
     const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams/${espnTeamId}/roster`, {
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(ROSTER_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) {
       console.error(`fetchNhlTeamRoster: ESPN roster fetch failed for ${team} (${res.status})`);

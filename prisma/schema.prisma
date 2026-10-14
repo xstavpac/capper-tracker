@@ -1097,10 +1097,9 @@ model NflReceivingRow {
 // scripts/load-nfl-roster.ts, which fetches ESPN's live roster endpoint once
 // per team and upserts every row here; catalog-import recovery
 // (server/data/nfl-roster-cache.ts's getCachedNflRoster) reads this table
-// instead of ever hitting ESPN during a bulk-import paste. Deliberately no
-// scheduled refresh: a roster only goes stale on a trade/cut/practice-squad
-// move, not on a weekly basis, so re-running the load script by hand when
-// needed is enough - see that script's header for why a cron wasn't built.
+// instead of ever hitting ESPN during a bulk-import paste. Refreshed daily in
+// season by /api/cron/refresh-rosters (server/data/roster-load.ts); the
+// script is the manual path.
 model NflRosterPlayer {
   id           String   @id @default(cuid())
   espnPlayerId String   @unique
@@ -1110,7 +1109,14 @@ model NflRosterPlayer {
   team         String
   position     String
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime  @updatedAt
+  // Soft delete (all four roster tables): a refresh that no longer finds the
+  // player on any roster sets active = false + removedAt instead of deleting the
+  // row, and reactivates it if he reappears - see server/data/roster-load.ts.
+  // Import name matching reads active rows only; grading reads every row, so a
+  // pending prop on a released or traded player still grades.
+  active       Boolean   @default(true)
+  removedAt    DateTime?
 
   @@index([team])
   @@index([lastName])
@@ -1131,7 +1137,10 @@ model NhlRosterPlayer {
   team         String
   position     String
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime  @updatedAt
+  // Soft delete - see NflRosterPlayer.
+  active       Boolean   @default(true)
+  removedAt    DateTime?
 
   @@index([team])
   @@index([lastName])
@@ -1142,8 +1151,8 @@ model NhlRosterPlayer {
 // for the same reason (ESPN player ids are per-league). Every position is kept (G / F / C): any
 // rostered player can have a prop. espnPlayerId is the id ESPN's NBA summary box score reports for
 // the same player (checked 2026-10-13 against 16 completed preseason games - see
-// server/data/nba-roster.ts). Loaded by scripts/load-nba-roster.ts; no cron, rerun by hand when
-// rosters move.
+// server/data/nba-roster.ts). Refreshed daily in season by /api/cron/refresh-rosters; the manual
+// path is scripts/load-nba-roster.ts.
 model NbaRosterPlayer {
   id           String   @id @default(cuid())
   espnPlayerId String   @unique
@@ -1153,7 +1162,10 @@ model NbaRosterPlayer {
   team         String
   position     String
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime  @updatedAt
+  // Soft delete - see NflRosterPlayer.
+  active       Boolean   @default(true)
+  removedAt    DateTime?
 
   @@index([team])
   @@index([lastName])
@@ -1165,8 +1177,8 @@ model NbaRosterPlayer {
 // players carry those ids (GameResult.externalId for MLB is the Stats API gamePk too). position is
 // the Stats API abbreviation (P, C, 1B..RF, OF, DH, TWP) - prop matching is position-aware
 // (pitcher markets need P/TWP, hitter markets need non-P). Loaded by scripts/load-mlb-roster.ts;
-// read by catalog-import recovery and by MLB prop grading. A roster changes by trade/call-up, so
-// like NFL/NHL there is no cron - rerun the loader by hand (and at opening day).
+// read by catalog-import recovery and by MLB prop grading. Refreshed daily in season by
+// /api/cron/refresh-rosters; scripts/load-mlb-roster.ts is the manual path.
 model MlbRosterPlayer {
   id           String   @id @default(cuid())
   mlbPlayerId  String   @unique
@@ -1176,7 +1188,10 @@ model MlbRosterPlayer {
   team         String
   position     String
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime  @updatedAt
+  // Soft delete - see NflRosterPlayer.
+  active       Boolean   @default(true)
+  removedAt    DateTime?
 
   @@index([team])
   @@index([lastName])

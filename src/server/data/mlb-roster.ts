@@ -1,5 +1,5 @@
 // MLB roster fetch + extraction (live MLB Stats API call) - the MLB twin of nhl-roster.ts,
-// used by ONE caller: scripts/load-mlb-roster.ts, run by hand to (re)populate the
+// used only by the roster loader (roster-load.ts: the daily refresh cron and the script) to (re)populate the
 // mlb_roster_players cache table. Nothing in the request path fetches rosters; catalog-import
 // recovery and MLB prop grading read the cache (mlb-roster-cache.ts).
 //
@@ -15,7 +15,7 @@
 //
 // team is the Stats API team.name - byte-identical to GameResult.homeTeam/awayTeam for MLB (both come
 // from the same API), so a resolved roster hit can feed teamNicknames exactly like NFL/NHL.
-import type { RosterPlayer } from "@/server/data/nfl-roster";
+import { ROSTER_FETCH_TIMEOUT_MS, type RosterPlayer } from "@/server/data/nfl-roster";
 
 // All 30 franchises: Stats API team id + name. Verified live against /teams?sportId=1 on 2026-09-30.
 export const MLB_TEAM_IDS: [mlbTeamId: string, teamName: string][] = [
@@ -87,7 +87,7 @@ async function fetchMlbTeamRoster(mlbTeamId: string, team: string, season: numbe
   try {
     const res = await fetch(
       `https://statsapi.mlb.com/api/v1/teams/${mlbTeamId}/roster?rosterType=40Man&season=${season}&hydrate=person`,
-      { next: { revalidate: 3600 } }
+      { next: { revalidate: 3600 }, signal: AbortSignal.timeout(ROSTER_FETCH_TIMEOUT_MS) }
     );
     if (!res.ok) {
       console.error(`fetchMlbTeamRoster: Stats API roster fetch failed for ${team} (${res.status})`);

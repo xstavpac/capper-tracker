@@ -148,7 +148,7 @@ export async function gradeNhlPlayerProp(pick: NhlPropPick, eventId: string, dep
     try {
       // Dynamic import: the prisma-backed cache is only loaded on this rare
       // path, and pure callers/tests that inject getRoster never touch prisma.
-      const loadRoster = deps.getRoster ?? (async () => (await import("@/server/data/nhl-roster-cache")).getCachedNhlRoster());
+      const loadRoster = deps.getRoster ?? (async () => (await import("@/server/data/nhl-roster-cache")).getCachedNhlGradingRoster());
       roster = await loadRoster();
     } catch (err) {
       console.error("gradeNhlPlayerProp: NHL roster read failed", err);
