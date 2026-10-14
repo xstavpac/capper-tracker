@@ -12,6 +12,7 @@ import {
 import { extractPasserRows, type PasserRow } from "@/server/data/nfl-passer-rows";
 import { gradeNhlPlayerProp } from "@/server/data/nhl-prop-grading";
 import { gradeMlbPlayerProp } from "@/server/data/mlb-prop-grading";
+import { gradeNbaPlayerProp } from "@/server/data/nba-prop-grading";
 import {
   extractRushingRows,
   extractReceivingRows,
@@ -1190,11 +1191,15 @@ export async function resolvePlayerProp(
   deps: NflPropDeps = {}
 ): Promise<PlayerPropResolution> {
   // NHL props are graded from ESPN's NHL summary (nhl-prop-grading.ts). Every
-  // other sport - including NFL - falls through to the untouched NFL path below,
-  // which still declines non-NFL sports with its existing "NFL-only" reason.
+  // sport without its own grader here - including NFL - falls through to the
+  // untouched NFL path below, which still declines non-NFL sports with its
+  // existing "NFL-only" reason.
   if (sportName === "NHL") return gradeNhlPlayerProp(pick, eventId);
   // MLB props are graded from the MLB Stats API box score (mlb-prop-grading.ts); eventId is the gamePk.
   if (sportName === "MLB") return gradeMlbPlayerProp(pick, eventId);
+  // NBA props are graded from ESPN's NBA summary (nba-prop-grading.ts). POINTS and ASSISTS are
+  // enum values the NHL shares, so the pick's sport - never its market - picks the grader.
+  if (sportName === "NBA") return gradeNbaPlayerProp(pick, eventId);
 
   const market = resolvedPropMarket(pick);
   if (market === null || market === "TD") {

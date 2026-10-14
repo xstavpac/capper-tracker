@@ -11,7 +11,8 @@
 //            reads PropMarket without the sport. Nothing imports such a pick
 //            yet (NBA props are still rejected at import); these are pinned so
 //            the PRs that add parsing, grading, odds and display each have to
-//            change the one they own on purpose.
+//            change the one they own on purpose. Grading is now the NBA grader's
+//            (nba-prop-grading.ts); fetch is stubbed, so still no network.
 import { PropMarket } from "@prisma/client";
 import { NBA_PROP_MARKETS, NBA_ONLY_PROP_MARKETS, isNbaPropMarket } from "@/lib/nba-prop";
 import { NHL_PROP_MARKETS, isNhlPropMarket } from "@/lib/nhl-prop";
@@ -101,14 +102,27 @@ async function main() {
 
   console.log("\n########## PART C: a pick carrying an NBA value, today (pinned for the PRs that follow) ##########");
   {
-    // Grading: never the NHL grader. An NBA pick falls to the NFL-only gate and
-    // stays PENDING - with POINTS (shared) exactly as with REBOUNDS (new).
+    // Grading: never the NHL grader, and no longer the NFL-only gate. An NBA pick
+    // goes to the NBA grader (nba-prop-grading.ts) - with POINTS (shared) exactly
+    // as with REBOUNDS (new). fetch is stubbed to fail, so each one stops at the
+    // box-score read and the URL it asked for shows which grader it reached.
     const nba = { playerName: "Nikola Jokic", homeTeam: "Denver Nuggets", awayTeam: "Los Angeles Lakers" };
-    const NFL_ONLY = { outcome: null, reason: "player-prop grading is NFL-only; this NBA pick needs manual grading" };
-    check("grading: NBA POINTS pick is not graded (and not by the NHL grader)", await resolvePlayerProp({ ...nba, propMarket: "POINTS", betDetail: "Nikola Jokic Over 27.5 Points" }, "1", "NBA"), NFL_ONLY);
-    check("grading: NBA ASSISTS pick with a hockey-sized line is still not graded as NHL", await resolvePlayerProp({ ...nba, propMarket: "ASSISTS", betDetail: "Nikola Jokic Over 2.5 Assists" }, "1", "NBA"), NFL_ONLY);
-    check("grading: NBA REBOUNDS pick is not graded", await resolvePlayerProp({ ...nba, propMarket: "REBOUNDS", betDetail: "Nikola Jokic Over 12.5 Rebounds" }, "1", "NBA"), NFL_ONLY);
-    check("grading: NBA DOUBLE_DOUBLE pick is not graded", await resolvePlayerProp({ ...nba, propMarket: "DOUBLE_DOUBLE", betDetail: "Nikola Jokic Double-Double" }, "1", "NBA"), NFL_ONLY);
+    const realFetch = globalThis.fetch;
+    const asked: string[] = [];
+    globalThis.fetch = (async (url: string) => {
+      asked.push(String(url));
+      return new Response("", { status: 404 });
+    }) as typeof fetch;
+    const NO_BOX = { outcome: null, reason: "the box score isn't available yet for this game" };
+    try {
+      check("grading: NBA POINTS pick -> the NBA grader", await resolvePlayerProp({ ...nba, propMarket: "POINTS", betDetail: "Nikola Jokic Over 27.5 Points" }, "1", "NBA"), NO_BOX);
+      check("grading: NBA ASSISTS pick with a hockey-sized line -> still the NBA grader", await resolvePlayerProp({ ...nba, propMarket: "ASSISTS", betDetail: "Nikola Jokic Over 2.5 Assists" }, "1", "NBA"), NO_BOX);
+      check("grading: NBA REBOUNDS pick -> the NBA grader", await resolvePlayerProp({ ...nba, propMarket: "REBOUNDS", betDetail: "Nikola Jokic Over 12.5 Rebounds" }, "1", "NBA"), NO_BOX);
+      check("grading: NBA DOUBLE_DOUBLE pick -> the NBA grader", await resolvePlayerProp({ ...nba, propMarket: "DOUBLE_DOUBLE", betDetail: "Nikola Jokic Double-Double" }, "1", "NBA"), NO_BOX);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    check("grading: all four read ESPN's basketball summary, never hockey's", asked.map((u) => u.includes("/basketball/nba/summary?event=1")), [true, true, true, true]);
 
     // Filter: the key is the market alone, so an NBA POINTS pick answers to the
     // same "Points" option an NHL one does; the new values have no option.
