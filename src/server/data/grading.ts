@@ -390,6 +390,72 @@ function matchesSchoolName(detail: string, schools: string[], otherSchools: stri
 
 type GradeOutcome = "WIN" | "LOSS" | "PUSH" | null;
 
+// Which side of a game a pick's own text names - the fallback for a pick with
+// no stored pickedSide. `ambiguous` is true when the text answers to BOTH
+// teams; such a pick is never graded on a side (see gradePick).
+//
+// Each team is looked for by the last word of its name (its mascot):
+//   1. as a whole word. "Hornets ML" in a Nets - Hornets game names the
+//      Hornets only: "nets" sits inside "hornets" but is not a word there.
+//   2. only when neither team's is found as a whole word, anywhere in the
+//      text - a capper writing it flush ("RedSox ML", "BlueJays -1.5").
+// A same-mascot matchup (Clemson Tigers @ LSU Tigers) has no mascot signal at
+// all. An NCAAF school name ("Duke ML") counts for its side either way.
+export function textPickedSide(
+  betDetail: string,
+  homeTeam: string,
+  awayTeam: string
+): { home: boolean; away: boolean; ambiguous: boolean } {
+  const detail = betDetail.toLowerCase();
+  const homeNick = teamNickname(homeTeam);
+  const awayNick = teamNickname(awayTeam);
+
+  let homeMascot = false;
+  let awayMascot = false;
+  // Same-mascot matchup: homeNick and awayNick are identical, so any text
+  // match would be both sides at once. That is a same-mascot NCAAF matchup
+  // (Clemson Tigers @ LSU Tigers), where the school-name match below is the
+  // only way to tell the sides apart, or Red Sox - White Sox (both end in
+  // "sox"), where nothing in the text is.
+  if (homeNick !== awayNick) {
+    const asWord = (nick: string) =>
+      new RegExp("(?<![\\p{L}\\p{N}])" + nick.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}])", "u").test(detail);
+    homeMascot = asWord(homeNick);
+    awayMascot = asWord(awayNick);
+    if (!homeMascot && !awayMascot) {
+      homeMascot = detail.includes(homeNick);
+      awayMascot = detail.includes(awayNick);
+    }
+  }
+
+  // School-name match is independent of the mascot (and must stay that way):
+  // Duke Blue Devils and Arizona State Sun Devils share a mascot ("Devils"),
+  // but their SCHOOL names ("duke"/"arizona state") don't collide at all, so
+  // "Duke ML" can - and should - still grade correctly even though "Devils
+  // ML" correctly can't. Empty for every non-NCAAF team, so this is a no-op
+  // everywhere else.
+  const homeSchools = ncaafSchoolKeys(homeTeam);
+  const awaySchools = ncaafSchoolKeys(awayTeam);
+  const home = homeMascot || (homeSchools.length > 0 && matchesSchoolName(detail, homeSchools, awaySchools));
+  const away = awayMascot || (awaySchools.length > 0 && matchesSchoolName(detail, awaySchools, homeSchools));
+  return { home, away, ambiguous: home && away };
+}
+
+// The bet types graded on one team's side of the game.
+const SIDE_BET_TYPES = ["MONEYLINE", "SPREAD", "TEAM_TOTAL"];
+
+// True when a pick has no stored side and its text answers to both teams, so
+// gradePick leaves it PENDING. For the pending-picks page's reason text.
+export function isTextSideAmbiguous(
+  betType: string,
+  betDetail: string,
+  homeTeam: string,
+  awayTeam: string,
+  pickedSide?: PickedSide | null
+): boolean {
+  return !pickedSide && SIDE_BET_TYPES.includes(betType) && textPickedSide(betDetail, homeTeam, awayTeam).ambiguous;
+}
+
 export function gradePick(
   betType: string,
   betDetail: string,
@@ -415,39 +481,20 @@ export function gradePick(
   // direct gradePick call safe too. NRFI is first-inning-scoped and exempt.
   if (betType !== "NRFI" && betScope(betDetail) === "UNSUPPORTED_SEGMENT") return null;
 
-  const homeNick = teamNickname(homeTeam);
-  const awayNick = teamNickname(awayTeam);
-
   let pickedHome: boolean;
   let pickedAway: boolean;
   if (pickedSide) {
     pickedHome = pickedSide === "HOME";
     pickedAway = pickedSide === "AWAY";
   } else {
-    // Same-mascot matchup (e.g. Clemson Tigers @ LSU Tigers) - homeNick and
-    // awayNick are identical, so detail.includes() would match BOTH sides at
-    // once and silently grade off whichever branch runs first below. No two
-    // teams share a mascot in any other sport this app grades today, so this
-    // only ever fires for a same-mascot NCAAF matchup with no pickedSide on
-    // record - forcing both flags false here makes every branch below fall
-    // through to its safe "can't tell which side was picked" null/PUSH-on-tie
-    // path instead of guessing.
-    const sameMascot = homeNick === awayNick;
-
-    // School-name match is independent of the sameMascot guard above (and
-    // must stay that way): Duke Blue Devils and Arizona State Sun Devils
-    // share a mascot ("Devils"), but their SCHOOL names ("duke"/"arizona
-    // state") don't collide at all, so "Duke ML" can - and should - still
-    // grade correctly even though "Devils ML" correctly can't. Resolves to
-    // null (not the mascot) for every non-NCAAF team, so this is a no-op
-    // everywhere else.
-    const homeSchools = ncaafSchoolKeys(homeTeam);
-    const awaySchools = ncaafSchoolKeys(awayTeam);
-    const homeSchoolMatch = homeSchools.length > 0 && matchesSchoolName(detail, homeSchools, awaySchools);
-    const awaySchoolMatch = awaySchools.length > 0 && matchesSchoolName(detail, awaySchools, homeSchools);
-
-    pickedHome = (!sameMascot && detail.includes(homeNick)) || homeSchoolMatch;
-    pickedAway = (!sameMascot && detail.includes(awayNick)) || awaySchoolMatch;
+    // No side on record: read it from the text (textPickedSide). Text that
+    // answers to both teams is not a side - the branches below would grade
+    // it as the home team's, whichever team the pick was on - so a bet graded
+    // on a side stays PENDING for a manual grade instead.
+    const fromText = textPickedSide(betDetail, homeTeam, awayTeam);
+    if (fromText.ambiguous && SIDE_BET_TYPES.includes(betType)) return null;
+    pickedHome = fromText.home;
+    pickedAway = fromText.away;
   }
 
   if (betType === "MONEYLINE") {

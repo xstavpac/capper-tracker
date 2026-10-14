@@ -18,7 +18,13 @@ import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import type { GameCardStreak } from "@/lib/game-card-record-line";
 import { easternDateRange } from "@/lib/dates";
 import { nrfiSide, betScope, periodLabel } from "@/lib/bet-line";
-import { findMatchingGameResult, resolveOutcome, resolvePlayerProp, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
+import {
+  findMatchingGameResult,
+  resolveOutcome,
+  resolvePlayerProp,
+  isTextSideAmbiguous,
+  MAX_GAME_TIME_DRIFT_MS,
+} from "@/server/data/grading";
 import { FREE_PICK_LIMIT } from "@/lib/entitlements";
 import { getEntitlementsForUser } from "@/server/data/subscriptions";
 import { insertPicksDeduped } from "@/server/data/pick-dedup";
@@ -215,6 +221,9 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
               "matched game, but this " + periodLabel(scope) + " pick predates segment grading - needs manual grading or re-import";
           } else if (scope !== "FULL_GAME") {
             unmatchedReason = "matched game, but the " + periodLabel(scope) + " score isn't posted for this game yet";
+          } else if (isTextSideAmbiguous(p.betType, p.betDetail ?? p.homeTeam, match.game.homeTeam, match.game.awayTeam, p.pickedSide)) {
+            unmatchedReason =
+              "matched game, but the bet text names both teams and no side was recorded at import, so it can't tell which team was picked - needs manual grading";
           } else {
             unmatchedReason = "matched game, but couldn't parse a gradable number from the bet text";
           }
