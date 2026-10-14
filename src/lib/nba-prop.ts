@@ -208,10 +208,16 @@ export function nbaDoubleDoubleSide(text: string): "YES" | "NO" {
   return DOUBLE_DOUBLE_NO_RE.test(text) ? "NO" : "YES";
 }
 
+// `opponent`: the team named after "@" / "vs" / "v." / "at" ("Brunson o24.5 pts @ Celtics"),
+// taken off the player's name. Only present when the line names one.
 export type ParsedNbaProp =
-  | { playerName: string; propMarket: NbaPropMarket; unsupported?: undefined }
+  | { playerName: string; propMarket: NbaPropMarket; unsupported?: undefined; opponent?: string }
   // An NBA prop this app can't grade: no market is assigned.
-  | { playerName: string; propMarket: null; unsupported: string };
+  | { playerName: string; propMarket: null; unsupported: string; opponent?: string };
+
+// "@ Celtics", "@BOS", "vs Knicks", "vs. Lakers", "v. Lakers", "versus Boston", "at Mavericks" -
+// the opponent, closing the player segment once the line and market words are gone.
+const OPPONENT_TAIL_RE = /\s+(?:@\s*|(?:vs|v|versus|at)\.?\s+)(\S.*)$/i;
 
 // Every NBA prop shape, supported or not. null when the text is not one.
 export function parseNbaProp(text: string, opts: { abbreviations?: boolean } = {}): ParsedNbaProp | null {
@@ -239,8 +245,13 @@ export function parseNbaProp(text: string, opts: { abbreviations?: boolean } = {
     .replace(/\s{2,}/g, " ")
     .trim();
 
-  if (!playerName) return null;
-  return "market" in hit ? { playerName, propMarket: hit.market } : { playerName, propMarket: null, unsupported: hit.unsupported };
+  const opp = OPPONENT_TAIL_RE.exec(playerName);
+  const name = opp ? playerName.slice(0, opp.index).trim() : playerName;
+  if (!name) return null;
+  const opponent = opp ? { opponent: opp[1].trim() } : {};
+  return "market" in hit
+    ? { playerName: name, propMarket: hit.market, ...opponent }
+    : { playerName: name, propMarket: null, unsupported: hit.unsupported, ...opponent };
 }
 
 // The supported markets only - the shape the other sports' parsers return, so

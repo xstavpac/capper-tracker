@@ -1,4 +1,4 @@
-import { normalizeName } from "@/lib/fuzzy-match";
+import { foldDiacritics, normalizeName } from "@/lib/fuzzy-match";
 import { looksPickLikeHeader } from "@/lib/market-hint";
 import { withRegulationPeriod, threeWayToken, threeWayWording } from "@/lib/nhl-three-way";
 import {
@@ -1693,6 +1693,15 @@ const NBA_PROP_NON_NAME_WORDS = new Set(
 // "points" line is the team's own total whatever words sit beside the team.
 const NBA_MAX_PLAYER_POINTS_LINE = 65;
 const NBA_PROP_PERSON_SHAPE = /^[A-Z][A-Za-z'.-]*(?:\s+[A-Z][A-Za-z'.-]*){0,3}$/;
+// The team after "@" / "vs" on a player line: a team nickname or full name ("Celtics", "Boston
+// Celtics"), a city key ("Boston"), or a 2-4 letter team code ("BOS", "LAC" - a code the NBA shares
+// with other leagues is fine here). Any league's team counts: the points / assists lines this
+// parser reads are hockey's too ("McDavid o1.5 points vs Oilers"), and the roster pass decides.
+function isOpponentTeam(text: string): boolean {
+  const t = text.trim();
+  if (/^[A-Z]{2,4}$/.test(t)) return true;
+  return findTeamNicknames(t, "NBA").length > 0 || detectSport(t, true).sportName === "NBA" || RECOGNIZED_TEAM_PHRASES.has(t.toLowerCase());
+}
 export function parseSupportedNbaProp(
   text: string,
   // anyCase: also accept an all-lowercase name ("jokic o10.5 reb"). Only the roster pass asks for
@@ -1706,10 +1715,15 @@ export function parseSupportedNbaProp(
   // An explicit league code other than NBA: that league's line ("NHL McDavid over 1.5 points").
   const code = detectSport(text, false).sportName;
   if (code && code !== "NBA") return null;
+  // A trailing opponent ("@ Celtics", "vs NYK") was taken off the name by the parser. It has to
+  // read as a team; anything else after "vs" / "at" is not an opponent this line can be about.
+  if (prop.opponent !== undefined && !isOpponentTeam(prop.opponent)) return null;
+  // Accents folded for the shape tests only ("Nikola Jokić" is a name); the name itself is kept.
   const name = prop.playerName;
-  const nameSport = detectSport(name, true).sportName;
-  if (!nameSport && !RECOGNIZED_TEAM_PHRASES.has(name.toLowerCase())) {
-    return (opts.anyCase ? BARE_NAME_SHAPE : NBA_PROP_PERSON_SHAPE).test(name) ? { prop, subject: "person" } : null;
+  const plainName = foldDiacritics(name);
+  const nameSport = detectSport(plainName, true).sportName;
+  if (!nameSport && !RECOGNIZED_TEAM_PHRASES.has(plainName.toLowerCase())) {
+    return (opts.anyCase ? BARE_NAME_SHAPE : NBA_PROP_PERSON_SHAPE).test(plainName) ? { prop, subject: "person" } : null;
   }
   // Exactly one NBA team plus something else that is not a matchup ("Lakers vs Nuggets over 220.5
   // pts" is the game's total).
@@ -1726,6 +1740,28 @@ export function parseSupportedNbaProp(
     if (line && line.line > NBA_MAX_PLAYER_POINTS_LINE) return null;
   }
   return { prop, subject: "team" };
+}
+
+// Why a line that reads as an NBA player prop could not be one - the reason the import screen shows
+// for a line no resolver placed and nothing else explained (recover-unresolved-lines.ts). null for
+// a line that is not an NBA player prop at all: another league's prop, or a team / game line the
+// NBA parser also reads ("Lakers over 220.5 points").
+export function explainDroppedNbaProp(text: string): string | null {
+  const prop = parseNbaProp(text);
+  if (!prop) return null;
+  if (parsePlayerProp(text) || detectUnsupportedNflStat(text) || parseSupportedMlbProp(text)) return null;
+  const code = detectSport(text, false).sportName;
+  if (code && code !== "NBA") return null;
+  const name = prop.playerName;
+  const plainName = foldDiacritics(name);
+  if (detectSport(plainName, true).sportName || RECOGNIZED_TEAM_PHRASES.has(plainName.toLowerCase())) return null;
+  if (prop.opponent !== undefined && !isOpponentTeam(prop.opponent)) {
+    return 'this reads as an NBA player prop on "' + name + '", but "' + prop.opponent + "\" after the @ / vs isn't a team this app knows - use the team's name or code (\"@ Celtics\", \"vs BOS\")";
+  }
+  if (!parseSupportedNbaProp(text, { anyCase: true })) {
+    return 'this reads as an NBA player prop, but "' + name + "\" doesn't look like a player's name - write the player's name, then the line (\"Jalen Brunson over 24.5 points\")";
+  }
+  return "this reads as an NBA player prop, but it couldn't be matched to a player or a game";
 }
 
 // MLB/NHL (and other not-yet-supported) player-prop vocabulary - see

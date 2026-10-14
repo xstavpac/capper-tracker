@@ -29,6 +29,7 @@ import {
   detectUnsupportedPropLine,
   parseSupportedMlbProp,
   parseSupportedNbaProp,
+  explainDroppedNbaProp,
   playerAmbiguityKey,
   type AmbiguousOption,
   type ParsedPick,
@@ -49,6 +50,9 @@ import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { withRegulationPeriod } from "@/lib/nhl-three-way";
 import { UNSUPPORTED_PROP_REASONS } from "@/lib/unsupported-prop-vocab";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
+
+// The reason an NBA player prop gets when the NBA roster could not be read (not loaded, or the read failed).
+const NBA_ROSTER_UNAVAILABLE = "NBA player props need the NBA roster, which isn't available right now";
 
 export type RecoverUnresolvedResult = {
   // Includes picks still awaiting a "which player?" answer (a bare surname 2+
@@ -109,6 +113,9 @@ export function recoverUnresolvedLines(
   const recovered: ParsedPick[] = [];
   const stillUnresolved: string[] = [];
   const reasons: Record<string, string> = {};
+  // Why a lowercase NBA-prop line the rosters did not place was handed on to the team resolvers -
+  // the reason it keeps if they cannot place it either.
+  const nbaMissReasons = new Map<string, string>();
 
   const isPlayerProp = new Set(unresolved.filter((line) => parsePlayerProp(line) !== null));
 
@@ -302,12 +309,16 @@ export function recoverUnresolvedLines(
         reasons[line] = res.reason;
         continue;
       }
-      // No roster knows a lowercase name: not a prop we can place - the resolvers below get it.
+      // No roster knows a lowercase name: not a prop we can place - the resolvers below get it,
+      // and if none of them can either, this is why.
+      nbaMissReasons.set(line, res.reason);
+    } else if (nba && nbaRoster.length === 0 && !nba.strict) {
+      nbaMissReasons.set(line, NBA_ROSTER_UNAVAILABLE);
     } else if (nba?.strict && !isNhlProp.has(line)) {
       // No NBA roster to read (not loaded, or the read failed): an NBA prop cannot be placed.
       // A points / assists line still gets the NHL-only handling below, as before.
       stillUnresolved.push(line);
-      reasons[line] = "NBA player props need the NBA roster, which isn't available right now";
+      reasons[line] = NBA_ROSTER_UNAVAILABLE;
       continue;
     }
 
@@ -468,6 +479,17 @@ export function recoverUnresolvedLines(
 
   // Same hockey 3-way read parseCatalog applies to the lines it placed itself.
   for (const pick of recovered) pick.period = withRegulationPeriod(pick);
+
+  // Every line that reads as an NBA player prop and still is not placed says why (no line is
+  // dropped with a blank reason): the roster pass's own verdict when there is one, else why it
+  // never reached the roster pass. A line some other rule already explains is left alone.
+  for (const line of stillUnresolved) {
+    // The generic "Player prop not supported yet" is not an answer for an NBA prop - they are supported.
+    const other = detectUnsupportedPropLine(line)?.reason;
+    if (reasons[line] || (other && other !== UNSUPPORTED_PROP_REASONS.GENERIC)) continue;
+    const reason = nbaMissReasons.get(line) ?? explainDroppedNbaProp(line);
+    if (reason) reasons[line] = reason;
+  }
 
   return { recovered, stillUnresolved, reasons };
 }

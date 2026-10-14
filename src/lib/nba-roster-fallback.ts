@@ -22,12 +22,14 @@
 //      player with a line no hockey market has ("over 24.5 points") is a
 //      contradiction and is left unresolved, not imported as hockey.
 //
-// Name matching is resolveNameAgainstRoster's, unchanged: exact full name, then
+// A capper alias ("SGA", "Wemby", "Giannis" - nba-player-aliases.ts) is read first.
+// Otherwise name matching is resolveNameAgainstRoster's, unchanged: exact full name, then
 // fuzzy, then a bare surname; each tier counts only when it lands on exactly one
 // player, a shared surname is settled automatically only by a complete slate on
 // which one candidate's team plays, and is otherwise the user's to answer.
 import { resolveNameAgainstRoster, type PlayerCandidate, type PlayerPropResolution, type SlateContext } from "@/lib/player-roster-fallback";
 import { isNhlSharedNbaMarket, normalizeNbaNPlus, type ParsedNbaProp } from "@/lib/nba-prop";
+import { nbaPlayerAliasName } from "@/lib/nba-player-aliases";
 import { NHL_MAX_ASSISTS_LINE, NHL_MAX_POINTS_LINE } from "@/lib/nhl-prop";
 import { parsePlayerPropLine } from "@/lib/bet-line";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
@@ -79,6 +81,16 @@ function candidatesOf(res: PlayerPropResolution, sport: "NBA" | "NHL", roster: R
 export function resolveNbaPropAgainstRosters(line: string, prop: ParsedNbaProp, ctx: NbaRosterContext): NbaRosterResolution {
   const typedName = prop.playerName;
   const shared = prop.propMarket !== null && isNhlSharedNbaMarket(prop.propMarket);
+
+  // Rule 0: a name capper shorthand gives an NBA player ("SGA", "Wemby", "Giannis" - see
+  // nba-player-aliases.ts) is that player, before any fuzzy or surname guess and whatever the
+  // market. An alias is NBA evidence on its own, so only a line that names the NHL skips it.
+  const alias = ctx.league === "NHL" ? null : nbaPlayerAliasName(typedName);
+  if (alias) {
+    const res = resolveNameAgainstRoster(alias, ctx.nbaRoster, ctx.nbaSlate, "NBA");
+    if (res.status === "resolved") return { status: "resolved", sport: "NBA", team: res.team, playerName: res.playerName };
+    // Not on the roster (any more): match what was typed, as below.
+  }
 
   // Rule 2, and rule 1 for "NBA": basketball's roster alone.
   if (!shared || ctx.league === "NBA") {
