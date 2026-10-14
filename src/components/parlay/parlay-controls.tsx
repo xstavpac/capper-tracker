@@ -155,6 +155,37 @@ export function NumberSegments<T extends number>({
   );
 }
 
+// The same pill row as NumberSegments, with words ("Include Picks": All /
+// Game Lines / Props). Just the group - the caller lays out the label beside it.
+export function TextSegments<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly { key: T; label: string }[];
+  value: T;
+  onChange: (key: T) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex items-center gap-0.5 rounded-full border border-[#DADDE5] bg-white p-0.5 dark:border-border dark:bg-card">
+      {options.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          role="radio"
+          aria-checked={o.key === value}
+          onClick={() => onChange(o.key)}
+          className={"flex h-10 items-center justify-center whitespace-nowrap rounded-full px-3.5 text-[13.5px] font-semibold transition " + (o.key === value ? SEGMENT_ON : SEGMENT_OFF)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // Which of a generated parlay's variants is shown. `note` is a small count beside the label.
 export function Tabs<T extends string>({
   label,

@@ -151,7 +151,7 @@ async function main() {
   check("control at 1: reads one leg per game", text().includes("one per game · up to 20"));
 
   await click(button("Generate parlay"));
-  check("max 1: the action is sent 1", JSON.stringify(lastCall()) === JSON.stringify([["MLB"], 3, 1]), JSON.stringify(lastCall()));
+  check("max 1: the action is sent 1", JSON.stringify(lastCall()) === JSON.stringify([["MLB"], 3, 1, "ALL", null]), JSON.stringify(lastCall()));
   check("max 1: readout is the old one", text().includes("3 legs · MLB") && !text().includes("games ·"));
   check("max 1: no SGP tag, price is not an estimate", tags() === 0 && text().includes("Combined odds") && !text().includes("Est. combined odds"));
   check("max 1: game 1's next pick is still listed", text().includes("Next 1 pick in this game"));
@@ -170,7 +170,7 @@ async function main() {
   check("changing the setting clears the built result", !text().includes("Generated parlay") && button("Build with 3 legs") === undefined);
   check("control at 2: says when it applies", text().includes("up to 2 per game · up to 20") && text().includes("adds same-game legs only when there aren't enough games to reach your leg count"));
   await click(button("Generate parlay"));
-  check("max 2: the action is sent 2", JSON.stringify(lastCall()) === JSON.stringify([["MLB"], 5, 2]), JSON.stringify(lastCall()));
+  check("max 2: the action is sent 2", JSON.stringify(lastCall()) === JSON.stringify([["MLB"], 5, 2, "ALL", null]), JSON.stringify(lastCall()));
   check("filled to the count asked: shown without a shortfall prompt", text().includes("Parlay A — 5-leg parlay") && !text().includes("Build with"));
   check("readout: 5 legs · 3 games · 2 SGPs", text().includes("5 legs · 3 games · 2 SGPs"));
   check("same-game legs sit right after their game's leg", JSON.stringify(legOrder()) === JSON.stringify(["Leg-P1", "Leg-S1", "Leg-P2", "Leg-S2", "Leg-P3"]), JSON.stringify(legOrder()));
@@ -229,7 +229,7 @@ async function main() {
   await click(maxOption(3));
   await click(byLabel("More legs"));
   await click(button("Generate parlay"));
-  check("max 3: the action is sent 3", JSON.stringify(lastCall()) === JSON.stringify([["MLB"], 6, 3]), JSON.stringify(lastCall()));
+  check("max 3: the action is sent 3", JSON.stringify(lastCall()) === JSON.stringify([["MLB"], 6, 3, "ALL", null]), JSON.stringify(lastCall()));
   check("still short: asks first, and says same-game legs were added", text().includes("You asked for 6 legs") && text().includes("2 same-game legs were added (up to 3 per game)"));
   check("still short: nothing shown until confirmed", !text().includes("Generated parlay"));
   await click(button("Build with 5 legs"));

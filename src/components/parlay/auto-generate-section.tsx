@@ -12,11 +12,18 @@
 // "Max legs per game" (1 by default) lets a parlay that is short of games take
 // a second or third leg from games it already has - see buildSameGameLegs in
 // lib/parlay/auto-generate.ts. At 1 nothing here differs from before.
+//
+// "Include Picks" (All / Game Lines / Props) narrows which picks the parlay is
+// built from; with All, an optional Pick Mix (PickMixControl) sets how many
+// legs come from game lines vs props. The mix is session state: it lives here,
+// survives switching Include Picks away and back, and is gone on reload.
 import { useEffect, useState } from "react";
 import { autoGenerateParlayAction, type AutoGenerateResult } from "@/server/actions/parlay-generator";
 import { CONTROL, FOOTER_LINK, FOOTER_TEXT, PanelShell, TINTS } from "@/components/dashboard/panel-shell";
 import { BoltIcon, ListChecksIcon } from "@/components/dashboard/cappers-icons";
-import { LABEL, LegStepper, NumberSegments, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Tabs } from "@/components/parlay/parlay-controls";
+import { LABEL, LegStepper, NumberSegments, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Tabs, TextSegments } from "@/components/parlay/parlay-controls";
+import { PickMixControl } from "@/components/parlay/pick-mix-control";
+import { INCLUDE_PICKS_OPTIONS, mixLabel, mixSplit, type IncludePicks } from "@/lib/parlay/pick-mix";
 import { LEG_LIST, LegRow, ResultBlock, SwapBlock, formatOdds, marketNoun, rankedRecordText } from "@/components/parlay/swap-result";
 import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { autoGenerateWindowText } from "@/lib/parlay/auto-generate-window";
@@ -42,6 +49,32 @@ type ResultTab = "PRIMARY" | SwapMode;
 const SGP_TAG = "SGP";
 const MAX_PER_GAME_OPTIONS = [1, 2, 3] as const;
 const plural = (n: number) => (n === 1 ? "" : "s");
+
+// What the parlay was built from, for the shortfall card's sentence.
+const PICKS_NOUN: Record<IncludePicks, string> = { ALL: "picks", GAME_LINES: "game-line picks", PROPS: "props" };
+
+// The result subtitle's tail for a filtered or mixed build. Empty for plain All.
+function builtFromText(include: IncludePicks, gameLinesPct: number | null, requested: number): string {
+  if (include === "GAME_LINES") return " · game lines only";
+  if (include === "PROPS") return " · props only";
+  if (gameLinesPct === null) return "";
+  const { gameLines, props } = mixSplit(requested, gameLinesPct);
+  return ` · mix ${mixLabel(gameLinesPct)} (${gameLines} game line${plural(gameLines)}, ${props} prop${plural(props)})`;
+}
+
+// Plain visible text, same treatment as My Picks' BuildNotes.
+function GenerateNotes({ notes }: { notes: string[] }) {
+  if (notes.length === 0) return null;
+  return (
+    <div className="mt-3 space-y-1 border-t border-[#0F1420]/[0.08] pt-2.5 dark:border-white/10">
+      {notes.map((note) => (
+        <p key={note} className="text-xs font-medium text-muted-foreground">
+          {note}
+        </p>
+      ))}
+    </div>
+  );
+}
 
 // `taken` holds the picks that are legs of this parlay in their own right (the
 // same-game legs), so a game's "next picks" never repeats one.
@@ -87,6 +120,11 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
   const [scope, setScope] = useState<Record<string, boolean>>({});
   const [legCount, setLegCountState] = useState(3);
   const [maxPerGame, setMaxPerGame] = useState<MaxLegsPerGame>(1);
+  const [includePicks, setIncludePicks] = useState<IncludePicks>("ALL");
+  // The Pick Mix's Game Lines %, or null for none. Kept while Include Picks is
+  // switched away; only sent (and only shown) while it is All.
+  const [mixPct, setMixPct] = useState<number | null>(null);
+  const appliedMix = includePicks === "ALL" ? mixPct : null;
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AutoGenerateResult | null>(null);
@@ -105,7 +143,7 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
     setResult(null);
     setShortfallConfirmed(false);
     setTab("PRIMARY");
-  }, [scopeKey, legCount, maxPerGame]);
+  }, [scopeKey, legCount, maxPerGame, includePicks, appliedMix]);
 
   useEffect(() => {
     onGenerated?.(result ? { gamesWithPicks: result.parlayA.available, leagues: result.leaguesSearched } : null);
@@ -115,7 +153,7 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
     setBuilding(true);
     setError(null);
     try {
-      const next = await autoGenerateParlayAction(inScopeLeagues, legCount, maxPerGame);
+      const next = await autoGenerateParlayAction(inScopeLeagues, legCount, maxPerGame, includePicks, appliedMix);
       if ("error" in next) {
         setError(next.error);
         return;
@@ -149,6 +187,14 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
   const isShort = parlayA !== null && displayLegs.length < parlayA.requested;
   const showParlays = parlayA !== null && parlayA.legs.length > 0 && (!isShort || shortfallConfirmed);
   const resultLeagues = parlayA ? Array.from(new Set(parlayA.legs.map((l) => l.top.pick.leagueName))) : [];
+  // Read leniently, like sameGame above: a result without these is a plain All build.
+  const builtInclude = result?.includePicks ?? "ALL";
+  const builtMix = result?.gameLinesPct ?? null;
+  const notes = result?.notes ?? [];
+  const swapNote = result?.swapNote ?? null;
+  // Nothing to build from: the filter's own empty state ("No props available
+  // for WNBA right now.") replaces the generic one when there is one.
+  const noneAvailable = parlayA !== null && parlayA.available === 0;
 
   return (
     <>
@@ -164,6 +210,13 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
               ariaLabel={(isInScope(league) ? "Remove " : "Include ") + league + " games from Auto-Generate"}
             />
           ))}
+        </div>
+
+        {/* relative: the Pick Mix popover opens under this row, at its width. */}
+        <div className="relative mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className={LABEL}>Include picks</span>
+          <TextSegments label="Include picks" options={INCLUDE_PICKS_OPTIONS} value={includePicks} onChange={setIncludePicks} />
+          {includePicks === "ALL" && <PickMixControl gameLinesPct={mixPct} legCount={legCount} onChange={setMixPct} />}
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -201,7 +254,16 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
         )}
         {error && <p className="mt-2 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
 
-        {parlayA && parlayA.available === 0 && (
+        {noneAvailable && notes.length > 0 && (
+          <div className="mt-4 space-y-1">
+            {notes.map((note) => (
+              <p key={note} className="text-sm text-muted-foreground">
+                {note}
+              </p>
+            ))}
+          </div>
+        )}
+        {noneAvailable && notes.length === 0 && (
           <p className="mt-4 text-sm text-muted-foreground">
             No games left {autoGenerateWindowText(result!.leaguesSearched)} with picks from your cappers in{" "}
             {result!.leaguesSearched.join(", ")}.
@@ -216,7 +278,7 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
             <p className="mt-1 text-xs font-medium text-muted-foreground">
               You asked for {parlayA.requested} legs, but only {parlayA.available} unstarted game
               {parlayA.available === 1 ? "" : "s"} {autoGenerateWindowText(result!.leaguesSearched)}{" "}
-              {parlayA.available === 1 ? "has" : "have"} picks from your cappers.{" "}
+              {parlayA.available === 1 ? "has" : "have"} {PICKS_NOUN[builtInclude]} from your cappers.{" "}
               {builtMax === 1
                 ? "Each game can give one leg."
                 : added.length > 0
@@ -228,6 +290,7 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
             </button>
           </div>
         )}
+        {!noneAvailable && <GenerateNotes notes={notes} />}
       </PanelShell>
 
       {showParlays && result && (
@@ -262,8 +325,8 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
             onChange={setTab}
             tabs={[
               { key: "PRIMARY", label: "Primary" },
-              { key: "AUTO_HEDGE", label: "Hedge", note: result.hedge.swapCount + "/" + result.hedge.legs.length },
-              { key: "CONTRARIAN", label: "Contrarian", note: result.contrarian.swapCount + "/" + result.contrarian.legs.length },
+              { key: "AUTO_HEDGE", label: "Hedge", note: swapNote ? undefined : result.hedge.swapCount + "/" + result.hedge.legs.length },
+              { key: "CONTRARIAN", label: "Contrarian", note: swapNote ? undefined : result.contrarian.swapCount + "/" + result.contrarian.legs.length },
             ]}
           />
           <div className="mt-3">
@@ -273,7 +336,7 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
                 subtitle={
                   added.length > 0
                     ? `${RESULT_SUBTITLE}. Only ${parlayA!.available} game${plural(parlayA!.available)} had picks, so ${added.length} same-game leg${plural(added.length)} ${added.length === 1 ? "was" : "were"} added.`
-                    : RESULT_SUBTITLE
+                    : RESULT_SUBTITLE + builtFromText(builtInclude, builtMix, parlayA!.requested)
                 }
                 plain
                 priceLegs={legPicks}
@@ -291,14 +354,15 @@ export function AutoGenerateSection({ leagues, onGenerated }: { leagues: string[
                 </ol>
               </ResultBlock>
             )}
-            {tab !== "PRIMARY" && added.length > 0 && (
+            {tab !== "PRIMARY" && swapNote && <p className="text-sm font-medium text-muted-foreground">{swapNote}</p>}
+            {tab !== "PRIMARY" && !swapNote && added.length > 0 && (
               <p className="mb-2 text-xs font-medium text-muted-foreground">
                 Same-game legs aren&apos;t included in swap variants: this is built from Parlay A&apos;s {parlayA!.legs.length} one-per-game leg
                 {plural(parlayA!.legs.length)}.
               </p>
             )}
-            {tab === "AUTO_HEDGE" && <SwapBlock parlay={result.hedge} plain />}
-            {tab === "CONTRARIAN" && <SwapBlock parlay={result.contrarian} plain />}
+            {tab === "AUTO_HEDGE" && !swapNote && <SwapBlock parlay={result.hedge} plain />}
+            {tab === "CONTRARIAN" && !swapNote && <SwapBlock parlay={result.contrarian} plain />}
           </div>
         </PanelShell>
       )}
