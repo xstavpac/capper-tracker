@@ -70,7 +70,7 @@ export const FORM_TREND_MIN_PTS = 1;
 // picks a capper needs before they can appear at all, and an empty state that only speaks for the
 // cappers who qualify.
 export const FALLING_MIN_DECIDED = TREND_RECENT + TREND_MIN_BASELINE;
-export const FALLING_SUBLABEL = "Last " + TREND_RECENT + " vs prior up to " + (FORM_LOOKBACK - TREND_RECENT);
+export const FALLING_SUBLABEL = "Recent form vs prior up to " + (FORM_LOOKBACK - TREND_RECENT);
 export const FALLING_REQUIREMENT = "Needs " + FALLING_MIN_DECIDED + "+ decided picks";
 export const FALLING_EMPTY = "No qualifying capper is below their normal form.";
 // Most Consistent: the newest CONSISTENT_PICKS decided picks (all required) in CONSISTENT_BLOCKS

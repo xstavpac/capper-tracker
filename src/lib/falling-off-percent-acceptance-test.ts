@@ -72,7 +72,7 @@ function main() {
   // What the card says about its own rules.
   check("the minimum is the recent picks plus the smallest baseline", [FALLING_MIN_DECIDED, TREND_RECENT + TREND_MIN_BASELINE], [40, 40]);
   check("the card states the minimum", FALLING_REQUIREMENT, "Needs 40+ decided picks");
-  check("the sublabel says the baseline is UP TO the rest of the lookback, not always all of it", [FALLING_SUBLABEL, FORM_LOOKBACK - TREND_RECENT], ["Last 10 vs prior up to 90", 90]);
+  check("the sublabel says the baseline is UP TO the rest of the lookback, not always all of it", [FALLING_SUBLABEL, FORM_LOOKBACK - TREND_RECENT], ["Recent form vs prior up to 90", 90]);
   check("the empty state speaks only for cappers who qualify", FALLING_EMPTY, "No qualifying capper is below their normal form.");
 
   console.log(failures === 0 ? "\nAll falling-off-percent checks passed." : `\n${failures} falling-off-percent check(s) FAILED.`);
