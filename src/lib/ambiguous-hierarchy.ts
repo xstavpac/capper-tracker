@@ -66,7 +66,9 @@ import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
 //                    posted schedule, and season / pick context don't
 //                    disagree. Otherwise it's surfaced with the implausible
 //                    option(s) already dropped.
-//   6. still ambiguous - surface for a manual choice
+//   6. still ambiguous - surface for a manual choice, with any league
+//                    outside its calendar season left off the list (unless
+//                    the feeds showed it playing)
 //
 // pick_context scoping (step 4, fixed 2026-09): pick text is specific to the
 // pick that produced it, not to every pick sharing a bare nickname across the
@@ -291,9 +293,9 @@ export async function runAmbiguousHierarchy(
   // cost a pick its options - and a key is never left with no candidate.
   // Team keys only: a shared-surname player key stops at step 1 (see step 2).
   const undecidedKeys = uniqueKeys.filter((key) => !decided.has(key) && !isPlayerAmbiguityKey(key));
+  let activity: Record<string, boolean> = {};
   if (deps.runLeagueActivityCheck && undecidedKeys.length > 0) {
     const sports = Array.from(new Set(undecidedKeys.flatMap((key) => optionsFor(key).map((o) => o.sport))));
-    let activity: Record<string, boolean> = {};
     try {
       activity = await deps.runLeagueActivityCheck(sports, now);
     } catch (err) {
@@ -571,6 +573,9 @@ export async function runAmbiguousHierarchy(
     }
   }
 
+  // Picks whose line fits none of their candidates - see the calendar trim
+  // at the end, which leaves them alone.
+  const fitsNoCandidate = new Set<number>();
   const plausibilityLog = new Map<
     string,
     { key: string; sport: string; count: number; relationship: SignalRelationship; viaSchedule: boolean }
@@ -597,6 +602,7 @@ export async function runAmbiguousHierarchy(
       // trustworthy enough to hide an option on, step 1b's narrowing
       // included, so the pick goes back to its full candidate list.
       picks[idx] = { ...p, ambiguous: baseOptionsByKey.get(key) ?? options };
+      fitsNoCandidate.add(idx);
       continue;
     }
     if (plausible.length === options.length) {
@@ -705,6 +711,22 @@ export async function runAmbiguousHierarchy(
   }
   // eslint-disable-next-line no-console -- deliberate, user-requested audit trail for auto-resolutions
   console.log("[catalog-disambiguation] auto-resolved:", logs);
+
+  // A league outside its calendar season is never offered in a prompt. Only
+  // the list shown is trimmed, after every step above has had its say, and a
+  // league the feeds positively saw a game for (step 1b) or whose team plays
+  // today (step 2) is kept whatever the calendar says - the calendar is the
+  // weaker signal. A pick is never left with nothing to choose from, and a
+  // pick whose line fits no candidate keeps the full list step 5 gave it back:
+  // nothing about it is trusted enough to hide an option on.
+  for (const { p, idx } of ambiguousEntries) {
+    const shown = picks[idx].ambiguous;
+    if (!shown || isPlayerAmbiguityKey(p.ambiguousKey!) || fitsNoCandidate.has(idx)) continue;
+    const offerable = shown.filter(
+      (o) => isSportLabelInSeason(o.sport, now) || activity[o.sport] === true || scheduleResults[o.nickname + "|" + o.sport]
+    );
+    if (offerable.length > 0 && offerable.length < shown.length) picks[idx] = { ...picks[idx], ambiguous: offerable };
+  }
 
   // Still ambiguous: a key/pick nothing above resolved, using each pick's
   // own (possibly line-plausibility-narrowed) `ambiguous` list rather than

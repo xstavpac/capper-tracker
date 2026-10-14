@@ -373,11 +373,13 @@ async function main() {
       ...deps(["chicago cubs|MLB", "chicago bears|NFL"]),
       now: SEPT,
     });
-    check("Chicago: two candidates playing, multiple sports in season -> stays ambiguous (no guess)", {
+    // The prompt lists the 4 teams whose league is in season in September; the
+    // Bulls (NBA) and Blackhawks (NHL) are out of season and not offered.
+    check("Chicago: two candidates playing, multiple sports in season -> stays ambiguous (no guess), in-season teams only", {
       sport: res.picks[0].sportName,
       stillAmbiguousKey: res.stillAmbiguous[0]?.key,
       candidateCount: res.stillAmbiguous[0]?.options.length,
-    }, { sport: "", stillAmbiguousKey: "chicago", candidateCount: 6 });
+    }, { sport: "", stillAmbiguousKey: "chicago", candidateCount: 4 });
   }
   {
     // Calendar fallback in the dead of winter (NFL/MLB/WNBA all out of
@@ -473,11 +475,13 @@ async function main() {
       ...deps([]),
       now: SEPT,
     });
-    check("Pittsburgh: nobody playing today, multiple sports in season -> stays ambiguous with all 4 real candidates", {
+    // ...of which the Penguins (NHL, not yet in season in September) are not
+    // offered: an out-of-season league never appears in a prompt.
+    check("Pittsburgh: nobody playing today, multiple sports in season -> stays ambiguous with the 3 in-season candidates", {
       sport: res.picks[0].sportName,
       stillAmbiguousKey: res.stillAmbiguous[0]?.key,
       candidateCount: res.stillAmbiguous[0]?.options.length,
-    }, { sport: "", stillAmbiguousKey: "pittsburgh", candidateCount: 4 });
+    }, { sport: "", stillAmbiguousKey: "pittsburgh", candidateCount: 3 });
   }
 
   console.log("\n########## PART F: line plausibility + cross-check (Giants: MLB SF / NFL NY / KBO Lotte) ##########");
