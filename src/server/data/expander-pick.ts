@@ -43,6 +43,7 @@ export function toExpanderPick(
     betType: p.betType,
     period: p.period,
     rawBetDetail: p.betDetail,
+    propMarket: p.propMarket,
     line: p.line,
     homeTeam: game.homeTeam,
     awayTeam: game.awayTeam,
