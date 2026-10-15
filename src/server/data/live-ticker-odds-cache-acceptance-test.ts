@@ -44,7 +44,9 @@ function ok(label: string, cond: boolean, detail?: unknown) {
 const MLB = "baseball_mlb";
 const WNBA = "basketball_wnba";
 const DAY = "2026-06-15";
-const T0 = Date.parse("2026-06-15T18:00:00Z"); // 2pm ET
+// 7:30pm ET: after e2/w1 start, so the feeds' "live" for them is believed
+// (a feed's live before commenceTime reads as preview - feed-game-status.ts).
+const T0 = Date.parse("2026-06-15T23:30:00Z");
 
 const RealDate = Date;
 class FakeDate extends RealDate {
