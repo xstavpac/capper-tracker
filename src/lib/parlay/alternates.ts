@@ -64,13 +64,16 @@ export function gameShortlist(game: GeneratorGame, records: CapperLeagueRecords,
   return list;
 }
 
-const legOf = (game: GeneratorGame, top: RankedPick, shortlist: RankedPick[], locked = false): AutoLeg => ({
+// `gameRank` is where `top` ranks among its game's picks (1 = the game's #1);
+// kept only when it isn't the #1, for the leg's "Why this leg?".
+const legOf = (game: GeneratorGame, top: RankedPick, shortlist: RankedPick[], locked = false, gameRank = 1): AutoLeg => ({
   gameId: game.gameId,
   gameLabel: game.gameLabel,
   gameTime: game.gameTime,
   top,
   next: shortlist.filter((r) => r.pick.pickId !== top.pick.pickId).slice(0, NEXT_PICKS_SHOWN),
   ...(locked ? { locked: true } : {}),
+  ...(gameRank > 1 ? { gameRank } : {}),
 });
 
 const pickLabel = (p: GeneratorPick) => `${p.capperName} — ${p.betDetail}`;
@@ -199,7 +202,12 @@ export function buildParlaySet(input: ParlaySetInput): ParlaySet {
   const lockedGames = new Set(lockedLegs.map((l) => l.gameId));
   const pool = games
     .filter((g) => g.picks.length > 0 && !lockedGames.has(g.gameId))
-    .map((game) => ({ game, shortlist: gameShortlist(game, records, slipIds) }));
+    .map((game) => ({
+      game,
+      shortlist: gameShortlist(game, records, slipIds),
+      // Display only: each pick's place in its game's full ranking.
+      rankOf: new Map(rankGamePicks(game.picks, records).map((r, i) => [r.pick.pickId, i + 1])),
+    }));
   // With a Pick Mix, keep the Primary's split of game lines and props.
   const quota: Record<PickKind, number> | null = primary.mix ? { GAME_LINE: 0, PROP: 0 } : null;
   if (quota) for (const l of primary.legs) if (!l.locked) quota[classifyPickKind(l.top.pick)]++;
@@ -212,7 +220,7 @@ export function buildParlaySet(input: ParlaySetInput): ParlaySet {
     const fits = (r: RankedPick) => !legs.some((l) => blocks(toBuildCandidate(l.top.pick), toBuildCandidate(r.pick)).blocked);
     // Pass 1 honours the mix's quota; pass 2 fills what it left short.
     for (const strict of left ? [true, false] : [false]) {
-      for (const { game, shortlist } of order) {
+      for (const { game, shortlist, rankOf } of order) {
         if (legs.length >= target) break;
         if (used.has(game.gameId)) continue;
         const options = shortlist.filter((r) => fits(r) && (!strict || left![classifyPickKind(r.pick)] > 0));
@@ -220,7 +228,7 @@ export function buildParlaySet(input: ParlaySetInput): ParlaySet {
         const top = weightedPick(options, weightOf, rng);
         used.add(game.gameId);
         if (left) left[classifyPickKind(top.pick)]--;
-        legs.push(legOf(game, top, shortlist));
+        legs.push(legOf(game, top, shortlist, false, rankOf.get(top.pick.pickId)));
       }
     }
     legs.sort((a, b) => compareRankedPicks(a.top, b.top));

@@ -225,7 +225,7 @@ async function main() {
   // 3. Build from slip: picks and games by id, locks, Source
   // ---------------------------------------------------------------------
   const { buildSlipParlayAction } = await import("./parlay-pool-generator");
-  type SlipOutcome = { error?: string; legs?: ExpanderPick[]; lockedPickIds?: string[]; shortfall?: number; threw?: string };
+  type SlipOutcome = { error?: string; legs?: ExpanderPick[]; lockedPickIds?: string[]; shortfall?: number; startedGames?: { gameId: string; gameLabel: string }[]; threw?: string };
   const build = async (items: unknown, legCount: number, source: string, leagues: unknown = ["MLB"]): Promise<SlipOutcome> => {
     try {
       return (await buildSlipParlayAction(items as never, legCount, source as never, leagues as string[])) as SlipOutcome;
@@ -251,6 +251,12 @@ async function main() {
     "SLIP_ONLY"
   );
   check("an unlocked game that has started just offers nothing", legIds(unlockedStarted) === "offboard-ahead" && unlockedStarted.shortfall === 1, sdescribe(unlockedStarted));
+  check(
+    "...and is reported as started, for the build's Excluded list",
+    unlockedStarted.startedGames?.length === 1 && unlockedStarted.startedGames[0].gameId === "evt-earlier" && /Mets/.test(unlockedStarted.startedGames[0].gameLabel),
+    JSON.stringify(unlockedStarted.startedGames)
+  );
+  check("a build with no started game reports none", gameOnly.startedGames?.length === 0, JSON.stringify(gameOnly.startedGames));
 
   const hybrid = await build([{ kind: "PICK", pickId: "offboard-ahead", locked: false }], 2, "SLIP_PLUS_POOL");
   check(

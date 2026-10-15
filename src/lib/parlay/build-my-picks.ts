@@ -93,6 +93,12 @@ export function blocks(a: BuildCandidate, b: BuildCandidate): { blocked: boolean
 
 const WON_TEXT: Record<SkippedPick["won"], string> = { HIGHER_RANKED: "higher-ranked", LOCKED: "locked" };
 
+// A skip's one-line reason, worded as its note words it: "conflicts with
+// Capper Two — Yankees ML (higher-ranked)". The note is "Skipped <label> — " + this.
+export function skipReasonText(s: Pick<SkippedPick, "reason" | "won"> & { conflictsWith: { label: string } }): string {
+  return `${s.reason === "duplicate" ? "duplicate of" : "conflicts with"} ${s.conflictsWith.label} (${WON_TEXT[s.won]})`;
+}
+
 function isUncertain(a: BuildCandidate, b: BuildCandidate): boolean {
   const outcome = classifyPair(toCandidate(a), toCandidate(b));
   return outcome.outcome === "UNDERIVABLE" || outcome.outcome === "UNCLASSIFIED";
@@ -143,7 +149,7 @@ export function selectConflictFreeLegs(ranked: BuildCandidate[], n: number, seed
         reason: blockedAsDuplicate ? "duplicate" : "conflict",
         conflictsWith: { pickId: blockedBy.pickId, label: blockedBy.label },
         won,
-        note: `Skipped ${candidate.label} — ${blockedAsDuplicate ? "duplicate of" : "conflicts with"} ${blockedBy.label} (${WON_TEXT[won]})`,
+        note: `Skipped ${candidate.label} — ${skipReasonText({ reason: blockedAsDuplicate ? "duplicate" : "conflict", conflictsWith: blockedBy, won })}`,
       });
       continue;
     }

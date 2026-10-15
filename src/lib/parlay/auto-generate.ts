@@ -67,6 +67,9 @@ export type AutoLeg = {
   // Put in by a Parlay slip lock (lockParlay, alternates.ts) - kept in every
   // alternate. Absent on every leg when the slip has no locks.
   locked?: boolean;
+  // An alternate's leg that isn't its game's #1 pick: where it ranked (2 =
+  // the game's #2). Display only - absent on Parlay A's own legs.
+  gameRank?: number;
 };
 
 // Set only when a Pick Mix was applied (Include Picks = All with a custom
