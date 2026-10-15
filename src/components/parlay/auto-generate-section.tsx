@@ -29,7 +29,7 @@ import { BoltIcon, ListChecksIcon } from "@/components/dashboard/cappers-icons";
 import { LABEL, LegStepper, NumberSegments, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Tabs, TextSegments } from "@/components/parlay/parlay-controls";
 import { PickMixControl } from "@/components/parlay/pick-mix-control";
 import { INCLUDE_PICKS_OPTIONS, mixLabel, mixSplit, type IncludePicks } from "@/lib/parlay/pick-mix";
-import { LEG_LIST, LegRow, ResultBlock, SwapBlock, formatOdds, marketNoun, rankedRecordText } from "@/components/parlay/swap-result";
+import { LEG_LIST, LegRow, ResultBlock, SwapBlock, formatOdds, marketNoun, rankedRecordText, rankedWhy } from "@/components/parlay/swap-result";
 import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { autoGenerateWindowText } from "@/lib/parlay/auto-generate-window";
 import type { AutoLeg, AutoParlay, MaxLegsPerGame, SameGameFill, SameGameLeg, SwapMode } from "@/lib/parlay/auto-generate";
@@ -98,6 +98,7 @@ function ParlayALeg({ n, leg, sameGame, taken }: { n: number; leg: AutoLeg; same
       recordText={rankedRecordText(leg.top)}
       winPct={leg.top.record?.winPct ?? null}
       tag={leg.locked ? "Locked" : sameGame ? SGP_TAG : undefined}
+      why={rankedWhy(leg.top, { locked: leg.locked, gameRank: leg.gameRank })}
     >
       {next.length > 0 && (
         <details className="mt-1.5">
@@ -126,8 +127,16 @@ function ParlayALeg({ n, leg, sameGame, taken }: { n: number; leg: AutoLeg; same
 // A leg added from a game Parlay A already has. Its record is the one that
 // qualified it - all leagues, its own market - not the record Parlay A ranks by.
 function SameGameLegRow({ n, leg }: { n: number; leg: SameGameLeg }) {
+  const recordText = swapRecordLabel(leg.record, marketNoun(leg.pick.category));
   return (
-    <LegRow n={n} pick={leg.pick} recordText={swapRecordLabel(leg.record, marketNoun(leg.pick.category))} winPct={leg.record.winPct} tag={SGP_TAG}>
+    <LegRow
+      n={n}
+      pick={leg.pick}
+      recordText={recordText}
+      winPct={leg.record.winPct}
+      tag={SGP_TAG}
+      why={{ capperName: leg.pick.capperName, recordText, sample: leg.record.n }}
+    >
       <p className="mt-1.5 text-[11.5px] font-medium text-muted-foreground">Added from a game already in this parlay</p>
     </LegRow>
   );

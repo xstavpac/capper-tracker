@@ -180,6 +180,8 @@ export type SlipRequestItem =
 export type SlipBuildResult = SlipBuild & {
   // For each leg's record line.
   records: CapperLeagueRecords;
+  // Unlocked slip games left out because they started - listed under the build.
+  startedGames: { gameId: string; gameLabel: string }[];
 };
 
 const LOCKED_GAME_GONE = "A locked game has started or is no longer on the board - remove it from your slip and try again.";
@@ -269,6 +271,7 @@ export async function buildSlipParlayAction(
   const now = new Date();
   const unstarted = (commenceTime: string) => new Date(commenceTime).getTime() > now.getTime();
   const games: { game: GeneratorGame; locked: boolean }[] = [];
+  const startedGames: SlipBuildResult["startedGames"] = [];
   for (const item of gameItems) {
     const board = boards.find((b) => b.label === item.leagueName);
     const game = board ? boardGames(board.label, board.board, unstarted).find((g) => g.gameId === item.gameId) : undefined;
@@ -276,6 +279,9 @@ export async function buildSlipParlayAction(
     // locked one can't be honoured, and says so.
     if (!game) {
       if (item.locked) return { error: LOCKED_GAME_GONE };
+      // Said under the build when it is still on the board, i.e. it started.
+      const started = board ? boardGames(board.label, board.board, () => true).find((g) => g.gameId === item.gameId) : undefined;
+      if (started) startedGames.push({ gameId: started.gameId, gameLabel: started.gameLabel });
       continue;
     }
     games.push({ game, locked: item.locked });
@@ -296,5 +302,5 @@ export async function buildSlipParlayAction(
 
   const built = buildFromSlip({ picks, games, pool, records, legCount: requested, source: src });
   if ("error" in built) return built;
-  return { ...built, records };
+  return { ...built, records, startedGames };
 }

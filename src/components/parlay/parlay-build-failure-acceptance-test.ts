@@ -147,7 +147,10 @@ async function main() {
 
   // Equal records: the legs come out by pick id, not in the slip's own order (p3, p1, p2).
   const heading = Array.from(container.querySelectorAll("h3")).find((el) => (el.textContent ?? "").includes("leg parlay"));
-  const legOrder = ((heading?.parentElement?.textContent ?? "").match(/Capper p\d/g) ?? []).join();
+  // Each leg's capper link (its "Why this leg?" names the capper again).
+  const legOrder = Array.from(heading?.parentElement?.querySelectorAll('a[href^="/cappers/"]') ?? [])
+    .map((a) => a.textContent)
+    .join();
   check("equal records: legs are ordered by pick id, not by the order they were added", legOrder === "Capper p1,Capper p2,Capper p3", legOrder);
 
   await act(() => root.unmount());

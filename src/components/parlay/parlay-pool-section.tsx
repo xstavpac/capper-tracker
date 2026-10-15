@@ -17,7 +17,18 @@ import { gameItemKey, useParlayPool, type SlipGame } from "@/components/parlay/p
 import { Message, PanelShell, TINTS } from "@/components/dashboard/panel-shell";
 import { ClipboardIcon } from "@/components/dashboard/cappers-icons";
 import { LABEL, LegStepper, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, SEGMENT_GROUP, SEGMENT_OFF, SEGMENT_ON, TextSegments } from "@/components/parlay/parlay-controls";
-import { LEG_LIST, LegRow, ResultBlock, SwapBlock, formatGameTime, formatOdds, rankedRecordText } from "@/components/parlay/swap-result";
+import {
+  ExcludedFromSlip,
+  LEG_LIST,
+  LegRow,
+  ResultBlock,
+  SwapBlock,
+  formatGameTime,
+  formatOdds,
+  rankedRecordText,
+  rankedWhy,
+  skippedAsExcluded,
+} from "@/components/parlay/swap-result";
 import { bestAvailableRecord, formatRecord } from "@/lib/parlay/pick-record";
 import type { SkippedPick, UnverifiedPair } from "@/lib/parlay/build-my-picks";
 import type { SwapMode } from "@/lib/parlay/auto-generate";
@@ -115,21 +126,23 @@ type BuiltParlay = SlipBuildResult;
 // behind a hover-only affordance - the trust story here is the same one the
 // white paper's Section 9 explanation layer describes for swaps: a skip is
 // exactly as visible as the leg it produced.
-function BuildNotes({ skipped, unverified }: { skipped: SkippedPick[]; unverified: UnverifiedPair[] }) {
-  if (skipped.length === 0 && unverified.length === 0) return null;
+// Skips are listed as "Excluded from your slip", each with its own reason.
+function BuildNotes({ skipped, unverified, started = [] }: { skipped: SkippedPick[]; unverified: UnverifiedPair[]; started?: SlipBuildResult["startedGames"] }) {
+  const excluded = [...skippedAsExcluded(skipped), ...started.map((g) => ({ key: "game:" + g.gameId, label: g.gameLabel, reason: "Game started" }))];
+  if (excluded.length === 0 && unverified.length === 0) return null;
   return (
-    <div className="space-y-1 border-t border-[#0F1420]/[0.08] py-2.5 dark:border-white/10">
-      {skipped.map((s) => (
-        <p key={s.pickId} className="text-xs font-medium text-muted-foreground">
-          {s.note}
-        </p>
-      ))}
-      {unverified.map((u) => (
-        <p key={`${u.pickId}-${u.withPickId}`} className="text-xs font-medium text-amber-700 dark:text-amber-400">
-          {u.note}
-        </p>
-      ))}
-    </div>
+    <>
+      <ExcludedFromSlip items={excluded} />
+      {unverified.length > 0 && (
+        <div className="space-y-1 border-t border-[#0F1420]/[0.08] py-2.5 dark:border-white/10">
+          {unverified.map((u) => (
+            <p key={`${u.pickId}-${u.withPickId}`} className="text-xs font-medium text-amber-700 dark:text-amber-400">
+              {u.note}
+            </p>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -145,11 +158,19 @@ function BuildMyPicksResult({ result }: { result: BuiltParlay }) {
           const record = bestAvailableRecord(leg, result.records);
           const tag = locked.has(leg.pickId) ? "Locked" : fromSlip.has(leg.pickId) && result.source === "SLIP_PLUS_POOL" ? "Slip" : undefined;
           return (
-            <LegRow key={leg.pickId} n={i + 1} pick={leg} recordText={rankedRecordText({ record, pick: leg })} winPct={record?.winPct ?? null} tag={tag} />
+            <LegRow
+              key={leg.pickId}
+              n={i + 1}
+              pick={leg}
+              recordText={rankedRecordText({ record, pick: leg })}
+              winPct={record?.winPct ?? null}
+              tag={tag}
+              why={rankedWhy({ record, pick: leg }, { locked: locked.has(leg.pickId) })}
+            />
           );
         })}
       </ol>
-      <BuildNotes skipped={result.skipped} unverified={result.unverified} />
+      <BuildNotes skipped={result.skipped} unverified={result.unverified} started={result.startedGames} />
     </ResultBlock>
   );
 }
@@ -161,7 +182,7 @@ function BuildMyPicksResult({ result }: { result: BuiltParlay }) {
 // .length is read) so both My Picks' own BuiltParlay and a pool-driven
 // Hedge/Contrarian result's primary (PoolSwapResult.parlayA.legs, a
 // different shape) can share this one notice.
-type ShortfallLike = { legs: unknown[]; skipped: SkippedPick[]; unverified: UnverifiedPair[]; requested: number };
+type ShortfallLike = { legs: unknown[]; skipped: SkippedPick[]; unverified: UnverifiedPair[]; requested: number; startedGames?: SlipBuildResult["startedGames"] };
 function ShortfallNotice({ result, onBuildAnyway, message }: { result: ShortfallLike; onBuildAnyway: () => void; message?: string }) {
   return (
     <div className="mt-4 rounded-[14px] border border-amber-300 bg-amber-50/60 p-3.5 dark:border-amber-800 dark:bg-amber-500/10">
@@ -169,7 +190,7 @@ function ShortfallNotice({ result, onBuildAnyway, message }: { result: Shortfall
         Only {result.legs.length} of {result.requested} legs available without conflicts
       </h3>
       {message && <p className="mb-2 text-xs font-medium text-muted-foreground">{message}</p>}
-      <BuildNotes skipped={result.skipped} unverified={result.unverified} />
+      <BuildNotes skipped={result.skipped} unverified={result.unverified} started={result.startedGames} />
       <div className="mt-1 flex items-center gap-2">
         <button type="button" onClick={onBuildAnyway} className={PILL_PRIMARY}>
           Build with {result.legs.length} leg{result.legs.length === 1 ? "" : "s"}
@@ -263,7 +284,7 @@ function SwapModeResult({ mode, swap }: { mode: SwapMode; swap: ReturnType<typeo
       />
     );
   }
-  return <SwapBlock parlay={result.swap} />;
+  return <SwapBlock parlay={result.swap} excluded={skippedAsExcluded(result.skipped)} />;
 }
 
 // One of the three builds, as a segment: its name over what it builds from.

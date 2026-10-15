@@ -15,9 +15,11 @@ import { WIN_PCT_TRACK, WinPctBar } from "@/components/dashboard/category-card";
 import { LABEL } from "@/components/parlay/parlay-controls";
 import { SendToFanDuel, type SendLeg } from "@/components/parlay/send-to-fanduel";
 import { AddGameButton } from "@/components/parlay/add-game-button";
-import { rankBasisLabel, swapRecordLabel } from "@/lib/parlay/pick-record";
+import { ChevronDownIcon } from "@/components/dashboard/cappers-icons";
+import { rankBasisLabel, swapRecordLabel, type RankRecordSource } from "@/lib/parlay/pick-record";
 import { combineOdds, formatAmericanOdds, formatDecimalOdds, formatPayout, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
 import type { RankedPick, SwapLeg, SwapParlay } from "@/lib/parlay/auto-generate";
+import { skipReasonText, type SkippedPick } from "@/lib/parlay/build-my-picks";
 
 export function marketNoun(category: PickCategoryKey | null): string {
   return category ? PICK_CATEGORY_MARKET_NOUN[category] : "this market";
@@ -42,6 +44,101 @@ export function rankedRecordText({ record, pick }: Pick<RankedPick, "record"> & 
 
 export const LEG_LIST = "divide-y divide-[#0F1420]/[0.06] dark:divide-white/10";
 
+// What a leg's "Why this leg?" says: who made the pick, the record it was
+// chosen on and how many graded picks that record is (shown as-is, however
+// few - the count is the disclosure), which fallback that record came from
+// when it isn't the pick's own league record, whether a slip lock put it in,
+// and, for an alternate, where it ranked in its game. `sample` null: no record.
+export type LegWhy = {
+  capperName: string;
+  recordText: string;
+  sample: number | null;
+  fallback?: "all leagues" | "last 20";
+  locked?: boolean;
+  gameRank?: number;
+};
+
+const FALLBACK_TEXT: Record<RankRecordSource, LegWhy["fallback"]> = { LEAGUE: undefined, OVERALL: "all leagues", LAST20: "last 20" };
+
+// The why of a leg chosen on bestAvailableRecord (Parlay A, its alternates,
+// My Picks' build, a swap leg left unchanged).
+export function rankedWhy(ranked: Pick<RankedPick, "record"> & { pick: ExpanderPick }, extra: Pick<LegWhy, "locked" | "gameRank"> = {}): LegWhy {
+  const { record, pick } = ranked;
+  return {
+    capperName: pick.capperName,
+    recordText: rankedRecordText(ranked),
+    sample: record ? record.n : null,
+    ...(record && FALLBACK_TEXT[record.source] ? { fallback: FALLBACK_TEXT[record.source] } : {}),
+    ...extra,
+  };
+}
+
+const WHY_PILL = "rounded-full bg-[#EEF0F4] px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none tracking-[0.05em] text-[#5B6275] dark:bg-muted dark:text-muted-foreground";
+const WHY_TERM = "text-[10px] font-semibold uppercase tracking-[0.05em] text-muted-foreground";
+
+// Collapsed by default. Plain <details>, so it opens with no script.
+export function WhyThisLeg({ why }: { why: LegWhy }) {
+  const tags = [why.locked && "Locked", why.gameRank && why.gameRank > 1 && `Game's #${why.gameRank} pick`].filter((t): t is string => Boolean(t));
+  return (
+    <details className="group mt-1.5">
+      <summary className="inline-flex min-h-6 cursor-pointer list-none items-center gap-1 text-[11.5px] font-semibold text-brand-600 dark:text-brand-400 [&::-webkit-details-marker]:hidden">
+        Why this leg?
+        <ChevronDownIcon className="h-3.5 w-3.5 stroke-[2.4] transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="mt-1.5 rounded-[10px] border border-[#E6E8EF] bg-white px-3 py-2 dark:border-border dark:bg-card">
+        {tags.length > 0 && (
+          <div className="mb-1.5 flex flex-wrap gap-1.5">
+            {tags.map((t) => (
+              <span key={t} className={WHY_PILL}>
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1 text-xs font-medium text-foreground">
+          <dt className={WHY_TERM}>Capper</dt>
+          <dd className="min-w-0 [overflow-wrap:anywhere]">{why.capperName}</dd>
+          <dt className={WHY_TERM}>Record</dt>
+          <dd className="min-w-0 tabular-nums [overflow-wrap:anywhere]">
+            {why.recordText}
+            {why.fallback && <span className={WHY_PILL + " ml-1.5 whitespace-nowrap"}>Fallback: {why.fallback}</span>}
+          </dd>
+          <dt className={WHY_TERM}>Sample</dt>
+          <dd className="tabular-nums">
+            {why.sample ?? 0} graded pick{why.sample === 1 ? "" : "s"}
+          </dd>
+        </dl>
+      </div>
+    </details>
+  );
+}
+
+// Slip items a build left out, each with its one-line reason. Nothing at all
+// when nothing was left out.
+export type ExcludedItem = { key: string; label: string; reason: string };
+
+// A build's skip notes (selectConflictFreeLegs) as Excluded items - the
+// skip's own reason, split from its label.
+export function skippedAsExcluded(skipped: SkippedPick[]): ExcludedItem[] {
+  return skipped.map((s) => ({ key: s.pickId, label: s.label, reason: skipReasonText(s) }));
+}
+export function ExcludedFromSlip({ items }: { items: ExcludedItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="border-t border-[#0F1420]/[0.08] py-2.5 dark:border-white/10">
+      <p className={LABEL}>Excluded from your slip</p>
+      <ul className="mt-1.5 space-y-1.5">
+        {items.map((item) => (
+          <li key={item.key} className="min-w-0">
+            <p className="text-[13px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{item.label}</p>
+            <p className="text-xs font-medium text-muted-foreground [overflow-wrap:anywhere]">{item.reason}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // One leg: its number, the game, the pick, who made it in which market, the
 // record it was chosen on (with a bar of its win %) and the odds. `winPct` is
 // null when there is no record to draw. `children` is anything more the leg
@@ -54,6 +151,7 @@ export function LegRow({
   recordText,
   winPct,
   tag,
+  why,
   children,
 }: {
   n: number;
@@ -61,6 +159,7 @@ export function LegRow({
   recordText: string;
   winPct: number | null;
   tag?: string;
+  why: LegWhy;
   children?: ReactNode;
 }) {
   const tone = winPct === null ? MUTED : getRecordColor(winPct) === "green" ? GREEN : RED;
@@ -93,6 +192,7 @@ export function LegRow({
             <AddGameButton pick={pick} />
           </span>
         </div>
+        <WhyThisLeg why={why} />
         {children}
       </div>
     </li>
@@ -118,7 +218,13 @@ function SwapLegRow({ n, leg, mode }: { n: number; leg: SwapLeg; mode: SwapParla
     const reason =
       leg.unchangedReason === "NOT_MAJORITY" ? "your pick's side isn't the majority of your cappers" : SWAP_COPY[mode].noAlternate;
     return (
-      <LegRow n={n} pick={leg.original.pick} recordText={rankedRecordText(leg.original)} winPct={leg.original.record?.winPct ?? null}>
+      <LegRow
+        n={n}
+        pick={leg.original.pick}
+        recordText={rankedRecordText(leg.original)}
+        winPct={leg.original.record?.winPct ?? null}
+        why={rankedWhy(leg.original)}
+      >
         <p className={NOTE}>
           <span className="rounded-full bg-muted px-1.5 py-0.5 font-semibold">Unchanged</span> {reason}
         </p>
@@ -126,8 +232,15 @@ function SwapLegRow({ n, leg, mode }: { n: number; leg: SwapLeg; mode: SwapParla
     );
   }
   const { swap, original } = leg;
+  const recordText = swapRecordLabel(swap.record, marketNoun(swap.pick.category));
   return (
-    <LegRow n={n} pick={swap.pick} recordText={swapRecordLabel(swap.record, marketNoun(swap.pick.category))} winPct={swap.record.winPct}>
+    <LegRow
+      n={n}
+      pick={swap.pick}
+      recordText={recordText}
+      winPct={swap.record.winPct}
+      why={{ capperName: swap.pick.capperName, recordText, sample: swap.record.n }}
+    >
       <p className={NOTE}>
         Replaces <span className="line-through">{original.pick.betDetail}</span> · {original.pick.capperName}
       </p>
@@ -254,10 +367,12 @@ export function ResultBlock({
   );
 }
 
-export function SwapBlock({ parlay, plain }: { parlay: SwapParlay; plain?: boolean }) {
+// `excluded`: the slip items the primary it was built from left out.
+export function SwapBlock({ parlay, plain, excluded = [] }: { parlay: SwapParlay; plain?: boolean; excluded?: ExcludedItem[] }) {
   return (
     <ResultBlock title={swapTitle(parlay)} subtitle={swapSubtitle(parlay)} plain={plain} priceLegs={swapPriceLegs(parlay)} sendLegs={swapPriceLegs(parlay)}>
       <SwapLegs parlay={parlay} />
+      <ExcludedFromSlip items={excluded} />
     </ResultBlock>
   );
 }
