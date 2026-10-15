@@ -23,6 +23,7 @@ import {
 import { FavoriteStarIcon } from "@/components/dashboard/capper-panels";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { useParlayPool } from "@/components/parlay/parlay-pool-context";
+import { selectCheckboxState } from "@/lib/parlay/select-checkbox-state";
 
 const TOP_PERFORMER_THRESHOLD = 60;
 
@@ -71,25 +72,33 @@ function StreakRow({ streak }: { streak: GameCardStreak | null | undefined }) {
 // already-pooled pick shows checked and disabled (removal happens from the
 // Parlay tab's pool list, not by re-toggling it here), so a pick appearing
 // on both Live and the Parlay tab's browse section can't be "added" twice or
-// silently dropped by an accidental re-click.
+// silently dropped by an accidental re-click. A pick whose game has started
+// shows disabled too (see select-checkbox-state.ts).
 function SelectCheckbox({ pick }: { pick: ExpanderPick }) {
   const { addMode, isInPool, checkedPicks, toggleChecked } = useParlayPool();
   if (!addMode) return null;
   const inPool = isInPool(pick.pickId);
   const checked = inPool || checkedPicks.has(pick.pickId);
+  const { disabled, title } = selectCheckboxState(pick.gameTime, inPool, new Date());
   return (
     <label
       className="flex shrink-0 items-center"
       onClick={(e) => e.stopPropagation()}
-      title={inPool ? "Already in your Parlay slip" : "Add to Parlay slip"}
+      title={title}
     >
       <input
         type="checkbox"
         checked={checked}
-        disabled={inPool}
-        onChange={() => !inPool && toggleChecked(pick)}
+        disabled={disabled}
+        onChange={() => !disabled && toggleChecked(pick)}
         className="h-4 w-4 rounded border-border-subtle accent-brand-600 disabled:cursor-not-allowed"
-        aria-label={inPool ? pick.capperName + " pick already in Parlay slip" : "Select " + pick.capperName + " pick"}
+        aria-label={
+          inPool
+            ? pick.capperName + " pick already in Parlay slip"
+            : disabled
+              ? pick.capperName + " pick - game started"
+              : "Select " + pick.capperName + " pick"
+        }
       />
     </label>
   );
