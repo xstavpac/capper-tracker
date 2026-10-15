@@ -18,6 +18,8 @@ import { JSDOM } from "jsdom";
 import type { Root } from "react-dom/client";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import type { SlipPickState } from "@/server/actions/parlay-slip";
+import type { GeneratorPick } from "@/lib/parlay/auto-generate";
+import { buildFromSlip, type SlipSource } from "@/lib/parlay/slip-build";
 
 let failures = 0;
 function check(label: string, pass: boolean, detail = "") {
@@ -77,6 +79,12 @@ stub("../../server/actions/parlay-generator", {
 });
 const swapCalls: { picks: number; legCount: number; mode: string }[] = [];
 stub("../../server/actions/parlay-pool-generator", {
+  // Runs the real buildFromSlip (lib/parlay/slip-build.ts) over the slip's own picks.
+  buildSlipParlayAction: async (items: { pickId: string; locked: boolean }[], legCount: number, source: SlipSource) => {
+    const picks = items.map((i) => ({ pick: PICKS.find((p) => p.pickId === i.pickId) as GeneratorPick, locked: i.locked }));
+    const built = buildFromSlip({ picks, games: [], pool: [], records: NO_RECORDS, legCount, source });
+    return "error" in built ? built : { ...built, records: NO_RECORDS };
+  },
   generatePoolSwapAction: async (pickIds: string[], legCount: number, mode: string) => {
     swapCalls.push({ picks: pickIds.length, legCount, mode });
     return { error: CAP_MESSAGE };
@@ -213,7 +221,7 @@ async function main() {
   check("My Picks: starts at 2 legs of 20 in-scope picks", legs() === 2 && ctx.maxLegCount === CAP, `legs=${legs()} max=${ctx.maxLegCount}`);
   await clickTimes(more, CAP - 2);
   check("My Picks: the stepper reaches 20", legs() === CAP && ctx.legCount === CAP, `legs=${legs()}`);
-  await click(button("My Picks"));
+  await click(button("Build from slip"));
   check("My Picks: the 20-leg parlay is built", says("20-leg parlay"));
   check("My Picks: no limit message at 20", !says(CAP_MESSAGE));
 

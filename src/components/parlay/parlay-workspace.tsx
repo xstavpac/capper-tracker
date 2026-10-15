@@ -20,8 +20,8 @@ const ICON = "h-[17px] w-[17px] stroke-[2.2]";
 // in a league that is switched on, and - once a parlay has been generated -
 // how many unstarted games in its window had a pick. Nothing is read for these.
 function ParlayStatCards({ generated }: { generated: GeneratedSummary | null }) {
-  const { pool, leaguesInPool, isLeagueInScope } = useParlayPool();
-  const inScope = pool.filter((p) => isLeagueInScope(p.leagueName)).length;
+  const { pool, games, slipSize, leaguesInPool, isLeagueInScope } = useParlayPool();
+  const inScope = pool.filter((p) => isLeagueInScope(p.leagueName)).length + games.filter((g) => isLeagueInScope(g.leagueName)).length;
   const leaguesOn = leaguesInPool.filter(isLeagueInScope).length;
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
@@ -30,8 +30,8 @@ function ParlayStatCards({ generated }: { generated: GeneratedSummary | null }) 
         icon={<ClipboardIcon className={ICON} />}
         iconClass={TINTS.blue.iconWrap}
         color="#2563EB"
-        value={String(pool.length)}
-        sub={"up to " + MAX_PARLAY_LEGS + " picks"}
+        value={String(slipSize)}
+        sub={"up to " + MAX_PARLAY_LEGS + " picks and games"}
       />
       <StatCard
         label="In scope"
@@ -39,7 +39,7 @@ function ParlayStatCards({ generated }: { generated: GeneratedSummary | null }) 
         iconClass={TINTS.violet.iconWrap}
         color="#7C3AED"
         value={String(inScope)}
-        sub={pool.length === 0 ? "no picks yet" : leaguesOn + " of " + leaguesInPool.length + " league" + (leaguesInPool.length === 1 ? "" : "s") + " on"}
+        sub={slipSize === 0 ? "no picks yet" : leaguesOn + " of " + leaguesInPool.length + " league" + (leaguesInPool.length === 1 ? "" : "s") + " on"}
       />
       <StatCard
         label="Games with picks"

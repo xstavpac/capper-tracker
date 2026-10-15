@@ -221,6 +221,68 @@ async function main() {
   const offLeg = offBoard.parlayA?.legs[0];
   check("a pick on no board game is still built, from its own row, with no alternate", !offBoard.error && offLeg?.top.pick.homeTeam === "Chicago Cubs" && offLeg?.top.pick.gameTime === TOMORROW && offBoard.swap?.legs[0]?.swap === null, describe(offBoard));
 
+  // ---------------------------------------------------------------------
+  // 3. Build from slip: picks and games by id, locks, Source
+  // ---------------------------------------------------------------------
+  const { buildSlipParlayAction } = await import("./parlay-pool-generator");
+  type SlipOutcome = { error?: string; legs?: ExpanderPick[]; lockedPickIds?: string[]; shortfall?: number; threw?: string };
+  const build = async (items: unknown, legCount: number, source: string, leagues: unknown = ["MLB"]): Promise<SlipOutcome> => {
+    try {
+      return (await buildSlipParlayAction(items as never, legCount, source as never, leagues as string[])) as SlipOutcome;
+    } catch (e) {
+      return { threw: String(e) };
+    }
+  };
+  const legIds = (o: SlipOutcome) => (o.legs ?? []).map((l) => l.pickId).join();
+  const sdescribe = (o: SlipOutcome) => (o.threw ? "threw " + o.threw.slice(0, 80) : o.error ? "error: " + o.error : "legs=[" + legIds(o) + "]");
+
+  // Equal (empty) records: a game's picks rank by pick id - "matched" first.
+  const gameOnly = await build([{ kind: "GAME", gameId: "evt-tonight", leagueName: "MLB", locked: false }], 1, "SLIP_ONLY");
+  check("game item: builds that game's best pick, read from the board", legIds(gameOnly) === "matched" && gameOnly.legs?.[0]?.gameTime === KICKOFF_TONIGHT, sdescribe(gameOnly));
+
+  const twoFromGame = await build([{ kind: "GAME", gameId: "evt-tonight", leagueName: "MLB", locked: false }], 2, "SLIP_ONLY");
+  check("game item: one leg from the game at most - slip only stays short", legIds(twoFromGame) === "matched" && twoFromGame.shortfall === 1, sdescribe(twoFromGame));
+
+  const lockedStarted = await build([{ kind: "GAME", gameId: "evt-earlier", leagueName: "MLB", locked: true }], 1, "SLIP_ONLY");
+  check("a locked game that has started is an error, never dropped", typeof lockedStarted.error === "string" && /locked game has started/.test(lockedStarted.error), sdescribe(lockedStarted));
+  const unlockedStarted = await build(
+    [{ kind: "PICK", pickId: "offboard-ahead", locked: false }, { kind: "GAME", gameId: "evt-earlier", leagueName: "MLB", locked: false }],
+    2,
+    "SLIP_ONLY"
+  );
+  check("an unlocked game that has started just offers nothing", legIds(unlockedStarted) === "offboard-ahead" && unlockedStarted.shortfall === 1, sdescribe(unlockedStarted));
+
+  const hybrid = await build([{ kind: "PICK", pickId: "offboard-ahead", locked: false }], 2, "SLIP_PLUS_POOL");
+  check(
+    "slip + qualified picks: the rest comes from the in-window board, one per game (not the started game)",
+    !hybrid.error && hybrid.legs?.length === 2 && hybrid.legs.some((l) => l.pickId === "offboard-ahead") && hybrid.legs.some((l) => l.pickId === "matched"),
+    sdescribe(hybrid)
+  );
+  const slipOnly = await build([{ kind: "PICK", pickId: "offboard-ahead", locked: false }], 2, "SLIP_ONLY");
+  check("slip only: never adds a pick from outside the slip", legIds(slipOnly) === "offboard-ahead" && slipOnly.shortfall === 1, sdescribe(slipOnly));
+
+  const locked = await build([{ kind: "PICK", pickId: "over", locked: true }], 1, "SLIP_PLUS_POOL");
+  check("a locked pick is the leg, ahead of the pool", legIds(locked) === "over" && locked.lockedPickIds?.join() === "over", sdescribe(locked));
+
+  before = reads();
+  const badKind = await build([{ kind: "PARLAY", pickId: "matched" }], 1, "SLIP_ONLY");
+  const badLeague = await build([{ kind: "GAME", gameId: "evt-tonight", leagueName: "XFL", locked: false }], 1, "SLIP_ONLY");
+  check(
+    "malformed items (unknown kind, unknown league) are rejected before anything is read",
+    [badKind, badLeague].every((o) => typeof o.error === "string" && !o.legs) && reads() === before,
+    [badKind, badLeague].map(sdescribe).join(" | ") + ` reads=${reads() - before}`
+  );
+  // A client-built pick object: only its id is used - everything else comes from the row.
+  const forgedPick = await build([{ kind: "PICK", ...forged }], 1, "SLIP_ONLY");
+  const forgedLeg = forgedPick.legs?.[0];
+  check(
+    "a client-built pick's own fields are ignored: built from the database row",
+    forgedLeg?.pickId === "unmatched" && forgedLeg.capperName === "Capper unmatched" && forgedLeg.odds === -120 && forgedLeg.gameTime === KICKOFF_TONIGHT,
+    sdescribe(forgedPick)
+  );
+  const theirsSlip = await build([{ kind: "PICK", pickId: "theirs", locked: false }], 1, "SLIP_ONLY");
+  check("a slip naming someone else's pick is rejected whole", typeof theirsSlip.error === "string" && !theirsSlip.legs, sdescribe(theirsSlip));
+
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
   process.exit(failures === 0 ? 0 : 1);
 }
