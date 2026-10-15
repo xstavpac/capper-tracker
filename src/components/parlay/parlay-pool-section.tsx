@@ -25,6 +25,8 @@ import {
 } from "@/lib/parlay/build-my-picks";
 import type { SwapMode } from "@/lib/parlay/auto-generate";
 import { generatePoolSwapAction, type PoolSwapResult } from "@/server/actions/parlay-pool-generator";
+import { SendToFanDuel } from "@/components/parlay/send-to-fanduel";
+import { slipSendLegs } from "@/lib/parlay/slip-send-legs";
 
 const MY_PICKS = {
   ...TINTS.neutral,
@@ -376,6 +378,7 @@ export function ParlayPoolSection({ action }: { action?: ReactNode }) {
     return (
       <PanelShell theme={MY_PICKS} control={action} footer={undefined} wrapSubtitle>
         <Message>Your Parlay slip is empty. Use the Parlay slip button in the banner above, or on Live, to add picks.</Message>
+        <SendToFanDuel legs={[]} keepWhenEmpty />
       </PanelShell>
     );
   }
@@ -451,7 +454,12 @@ export function ParlayPoolSection({ action }: { action?: ReactNode }) {
         })}
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      {/* The whole slip as it stands, every league - scope only shapes the builds below. */}
+      <div className="mt-3">
+        <SendToFanDuel legs={slipSendLegs(pool)} keepWhenEmpty />
+      </div>
+
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
         <LegCountStepper />
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <div role="group" aria-label="Build a parlay" className={"grid flex-1 grid-cols-3 gap-1 " + SEGMENT_GROUP}>

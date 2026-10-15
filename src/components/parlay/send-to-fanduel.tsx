@@ -63,7 +63,9 @@ function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string 
   );
 }
 
-export function SendToFanDuel({ legs }: { legs: SendLeg[] }) {
+// `keepWhenEmpty` shows the button, disabled, when there are no legs (the
+// Parlay slip, which can be emptied); otherwise nothing is shown for none.
+export function SendToFanDuel({ legs, keepWhenEmpty }: { legs: SendLeg[]; keepWhenEmpty?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FanDuelLinkResponse | null>(null);
@@ -94,7 +96,7 @@ export function SendToFanDuel({ legs }: { legs: SendLeg[] }) {
     }
   }
 
-  if (legs.length === 0) return null;
+  if (legs.length === 0 && !keepWhenEmpty) return null;
   const betDetailById = new Map(legs.map((l) => [l.pickId, l.betDetail]));
   const sent = result?.legs.filter(isSent) ?? [];
   const notSent = result?.legs.filter((l) => !isSent(l)) ?? [];
@@ -103,7 +105,7 @@ export function SendToFanDuel({ legs }: { legs: SendLeg[] }) {
 
   return (
     <div className="border-t border-[#0F1420]/[0.08] py-3 dark:border-white/10">
-      <button type="button" onClick={send} disabled={loading} className={PILL_OUTLINE}>
+      <button type="button" onClick={send} disabled={loading || legs.length === 0} className={PILL_OUTLINE}>
         {loading ? "Checking FanDuel…" : result ? "Check FanDuel again" : "Send to FanDuel"}
       </button>
       {error && <p className="mt-2 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
