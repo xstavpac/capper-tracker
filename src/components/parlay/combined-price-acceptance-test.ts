@@ -15,6 +15,7 @@ import { JSDOM } from "jsdom";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import type { PickOddsSource } from "@/lib/odds-source";
 import type { AutoParlay, GeneratorPick, SwapLeg, SwapMode, SwapParlay } from "@/lib/parlay/auto-generate";
+import { buildFromSlip, type SlipSource } from "@/lib/parlay/slip-build";
 
 let failures = 0;
 function check(label: string, pass: boolean, detail = "") {
@@ -82,6 +83,12 @@ stub("../../server/actions/parlay-slip", {
 });
 stub("../../server/actions/picks", { getLeagueRecordsAction: async () => EMPTY_RECORDS });
 stub("../../server/actions/parlay-pool-generator", {
+  // Runs the real buildFromSlip (lib/parlay/slip-build.ts) over the slip's own picks.
+  buildSlipParlayAction: async (items: { pickId: string; locked: boolean }[], legCount: number, source: SlipSource) => {
+    const picks = items.map((i) => ({ pick: SLIP.find((p) => p.pickId === i.pickId) as GeneratorPick, locked: i.locked }));
+    const built = buildFromSlip({ picks, games: [], pool: [], records: EMPTY_RECORDS, legCount, source });
+    return "error" in built ? built : { ...built, records: EMPTY_RECORDS };
+  },
   generatePoolSwapAction: async (_ids: string[], _legCount: number, mode: SwapMode) => ({
     parlayA,
     swap: mode === "AUTO_HEDGE" ? HEDGE : CONTRARIAN,
@@ -176,9 +183,9 @@ async function main() {
   await mine.render();
   check("my picks: no price on the slip itself, only on a built parlay", mine.text().includes("Capper p1") && !mine.text().includes("Combined odds"));
 
-  await click(mine.button("My Picks"));
+  await click(mine.button("Build from slip"));
   check("my picks: combined American, decimal and payout on $1 are shown", mine.block("My Picks").includes(PRIMARY_PRICE), mine.block("My Picks").slice(0, 200));
-  check("my picks: a slip leg's price source survives the slip's DB re-check", mine.block("My Picks").includes(PRIMARY_NOTE));
+  check("my picks: a slip leg's price source is shown on the built parlay", mine.block("My Picks").includes(PRIMARY_NOTE));
 
   await click(mine.button("Auto Hedge"));
   check("my picks auto hedge: priced from the legs it plays", mine.block("Hedge").includes(HEDGE_PRICE), mine.block("Hedge").slice(0, 200));

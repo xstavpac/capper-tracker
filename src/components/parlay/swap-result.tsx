@@ -14,6 +14,7 @@ import { TINTS } from "@/components/dashboard/panel-shell";
 import { WIN_PCT_TRACK, WinPctBar } from "@/components/dashboard/category-card";
 import { LABEL } from "@/components/parlay/parlay-controls";
 import { SendToFanDuel, type SendLeg } from "@/components/parlay/send-to-fanduel";
+import { AddGameButton } from "@/components/parlay/add-game-button";
 import { rankBasisLabel, swapRecordLabel } from "@/lib/parlay/pick-record";
 import { combineOdds, formatAmericanOdds, formatDecimalOdds, formatPayout, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
 import type { RankedPick, SwapLeg, SwapParlay } from "@/lib/parlay/auto-generate";
@@ -46,6 +47,7 @@ export const LEG_LIST = "divide-y divide-[#0F1420]/[0.06] dark:divide-white/10";
 // null when there is no record to draw. `children` is anything more the leg
 // has to say (why a swap left it unchanged, its game's next picks). `tag` is a
 // small badge beside the game ("SGP" on a leg whose game has another leg).
+// Every leg offers "+ Add game" (add-game-button.tsx) for its game.
 export function LegRow({
   n,
   pick,
@@ -87,6 +89,9 @@ export function LegRow({
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
           <p className={"text-[11.5px] font-semibold tabular-nums " + tone}>{recordText}</p>
           <WinPctBar winPct={winPct ?? 0} decided={winPct !== null} className={"w-24 " + WIN_PCT_TRACK} />
+          <span className="ml-auto">
+            <AddGameButton pick={pick} />
+          </span>
         </div>
         {children}
       </div>

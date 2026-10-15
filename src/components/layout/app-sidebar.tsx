@@ -351,14 +351,14 @@ export function AppSidebar({
   showImportSkippedLines?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const { pool } = useParlayPool();
+  const { slipSize } = useParlayPool();
   // Zone Model is admin-only and server-gated (the page itself 404s
   // regardless of this) - this only decides whether the link appears, so a
   // non-admin never sees a nav entry for a route that would just 404 them.
   // Same for the import skipped-line report.
   const gates = { zoneModel: showZoneModel, importSkippedLines: showImportSkippedLines };
   const navItems = NAV_ITEMS.filter((item) => !item.gate || gates[item.gate]).map((item) =>
-    item.href === "/parlay" ? { ...item, badgeCount: pool.length } : item
+    item.href === "/parlay" ? { ...item, badgeCount: slipSize } : item
   );
 
   return (

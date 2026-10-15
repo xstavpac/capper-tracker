@@ -35,10 +35,12 @@ function liveSportFor(row: SlipPickRow) {
 // league's board load runs its own picks query, and firing all of them at
 // once is the connection-pool pressure getPicksForGames' own comment warns
 // about.
-export async function loadSlipBoards(userId: string, rows: SlipPickRow[]): Promise<SlipBoard[]> {
+// `alsoLeagues` (Live league labels) adds boards no row needs - a slip game
+// item's league, or the leagues Build from slip fills from.
+export async function loadSlipBoards(userId: string, rows: SlipPickRow[], alsoLeagues: string[] = []): Promise<SlipBoard[]> {
   const boards: SlipBoard[] = [];
   for (const sport of LIVE_SPORTS) {
-    if (!rows.some((r) => liveSportFor(r) === sport)) continue;
+    if (!rows.some((r) => liveSportFor(r) === sport) && !alsoLeagues.includes(sport.label)) continue;
     boards.push({ key: sport.key, label: sport.label, board: await getLiveBoardData(userId, sport.key, sport.label) });
   }
   return boards;

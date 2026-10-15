@@ -16,7 +16,10 @@
 // a pick - its capper, bet, odds, teams or kickoff - is taken from the client.
 import { requireUser } from "@/server/auth";
 import { getCapperCategoryRecords, getCapperLeagueRecords, type CapperLeagueRecords } from "@/server/data/picks";
-import { getOwnedSlipPickRows, loadSlipBoards, offBoardSlipPick, picksOnBoards } from "@/server/data/parlay-slip-picks";
+import { getOwnedSlipPickRows, loadSlipBoards, offBoardSlipPick, picksOnBoards, type SlipBoard } from "@/server/data/parlay-slip-picks";
+import { LIVE_SPORTS } from "@/server/data/odds";
+import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
+import { buildFromSlip, toSlipSource, type SlipBuild, type SlipSource } from "@/lib/parlay/slip-build";
 import type { PickCategoryKey } from "@/server/data/stats";
 import { buildPoolPrimary, excludeSelectedPicks } from "@/lib/parlay/pool-swap";
 import { legCapRejection, MAX_POOL_REQUEST_PICKS, type ParlayRejection } from "@/lib/parlay/leg-cap";
@@ -162,4 +165,136 @@ export async function generatePoolSwapAction(
     records: renderRecords,
     leaguesSearched: primaryBoards.map((b) => b.label),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Build from slip (My Picks' build - see lib/parlay/slip-build.ts). The slip
+// sends what it holds by id: its picks, its games, which are locked, plus the
+// Source and the in-scope leagues the qualified pool fills from. Everything
+// about a pick or a game is read here, the same way as above.
+// ---------------------------------------------------------------------------
+export type SlipRequestItem =
+  | { kind: "PICK"; pickId: string; locked: boolean }
+  | { kind: "GAME"; gameId: string; leagueName: string; locked: boolean };
+
+export type SlipBuildResult = SlipBuild & {
+  // For each leg's record line.
+  records: CapperLeagueRecords;
+};
+
+const LOCKED_GAME_GONE = "A locked game has started or is no longer on the board - remove it from your slip and try again.";
+const LIVE_LABELS = new Set(LIVE_SPORTS.map((s) => s.label));
+
+// The request's items - or why it is refused. Checked before anything is
+// read, like requestedPickIds above.
+function requestedSlipItems(items: unknown): SlipRequestItem[] | ParlayRejection {
+  if (!Array.isArray(items)) return { error: INVALID_REQUEST };
+  if (items.length > MAX_POOL_REQUEST_PICKS) return { error: TOO_MANY_PICKS };
+  const out: SlipRequestItem[] = [];
+  const seen = new Set<string>();
+  for (const raw of items as unknown[]) {
+    if (typeof raw !== "object" || raw === null) return { error: INVALID_REQUEST };
+    const item = raw as Record<string, unknown>;
+    const locked = item.locked === true;
+    if (item.kind === "PICK") {
+      const id = item.pickId;
+      if (typeof id !== "string" || id.length === 0 || id.length > MAX_PICK_ID_LENGTH) return { error: INVALID_REQUEST };
+      if (seen.has("p:" + id)) continue;
+      seen.add("p:" + id);
+      out.push({ kind: "PICK", pickId: id, locked });
+    } else if (item.kind === "GAME") {
+      const { gameId, leagueName } = item;
+      if (typeof gameId !== "string" || gameId.length === 0 || gameId.length > MAX_PICK_ID_LENGTH) return { error: INVALID_REQUEST };
+      if (typeof leagueName !== "string" || !LIVE_LABELS.has(leagueName)) return { error: INVALID_REQUEST };
+      if (seen.has("g:" + gameId)) continue;
+      seen.add("g:" + gameId);
+      out.push({ kind: "GAME", gameId, leagueName, locked });
+    } else {
+      return { error: INVALID_REQUEST };
+    }
+  }
+  return out;
+}
+
+// A board's games that pass `keep`, each with its pending picks - the same
+// shape autoGenerateParlayAction builds (parlay-generator.ts).
+function boardGames(label: string, board: SlipBoard["board"], keep: (commenceTime: string) => boolean): GeneratorGame[] {
+  const games: GeneratorGame[] = [];
+  board.odds.forEach((game, i) => {
+    if (!keep(game.commenceTime)) return;
+    const picks = board.expanderPicksByGame[i].filter(
+      (p): p is GeneratorPick => p.status === "PENDING" && typeof p.datePosted === "string"
+    );
+    games.push({
+      gameId: game.id,
+      gameLabel: picks[0]?.gameLabel ?? game.awayTeam + " @ " + game.homeTeam,
+      gameTime: game.commenceTime,
+      leagueName: label,
+      picks,
+    });
+  });
+  return games;
+}
+
+// `leagues` are the slip's in-scope leagues: the qualified pool is their
+// games in Auto-Generate's own window (auto-generate-window.ts). Ignored for
+// SLIP_ONLY. Bounded by MAX_PARLAY_LEGS like every other build.
+export async function buildSlipParlayAction(
+  items: SlipRequestItem[],
+  legCount: number,
+  source: SlipSource,
+  leagues: string[]
+): Promise<SlipBuildResult | ParlayRejection> {
+  const user = await requireUser();
+  const rejection = legCapRejection(legCount);
+  if (rejection) return rejection;
+  const parsed = requestedSlipItems(items);
+  if (!Array.isArray(parsed)) return parsed;
+  if (!Array.isArray(leagues) || !leagues.every((l) => typeof l === "string")) return { error: INVALID_REQUEST };
+  const src = toSlipSource(source);
+  const requested = Math.max(1, Math.floor(legCount) || 1);
+
+  const pickItems = parsed.filter((i): i is Extract<SlipRequestItem, { kind: "PICK" }> => i.kind === "PICK");
+  const gameItems = parsed.filter((i): i is Extract<SlipRequestItem, { kind: "GAME" }> => i.kind === "GAME");
+  const ids = pickItems.map((i) => i.pickId);
+  const rows = await getOwnedSlipPickRows(user.id, ids);
+  if (rows.length !== ids.length || rows.some((r) => r.status !== "PENDING")) return { error: SLIP_CHANGED };
+
+  const poolLeagues = src === "SLIP_PLUS_POOL" ? leagues.filter((l) => LIVE_LABELS.has(l)) : [];
+  const boards = await loadSlipBoards(user.id, rows, [...gameItems.map((g) => g.leagueName), ...poolLeagues]);
+  const onBoard = picksOnBoards(boards, ids);
+  const rowById = new Map(rows.map((r) => [r.id, r]));
+  const picks = pickItems.map((i) => ({ pick: onBoard.get(i.pickId) ?? offBoardSlipPick(rowById.get(i.pickId)!), locked: i.locked }));
+
+  const now = new Date();
+  const unstarted = (commenceTime: string) => new Date(commenceTime).getTime() > now.getTime();
+  const games: { game: GeneratorGame; locked: boolean }[] = [];
+  for (const item of gameItems) {
+    const board = boards.find((b) => b.label === item.leagueName);
+    const game = board ? boardGames(board.label, board.board, unstarted).find((g) => g.gameId === item.gameId) : undefined;
+    // An unlocked game that has started simply has nothing to offer; a
+    // locked one can't be honoured, and says so.
+    if (!game) {
+      if (item.locked) return { error: LOCKED_GAME_GONE };
+      continue;
+    }
+    games.push({ game, locked: item.locked });
+  }
+
+  const pool: GeneratorGame[] = [];
+  for (const { label, board } of boards) {
+    if (!poolLeagues.includes(label)) continue;
+    const inWindow = autoGenerateWindow(label, board.odds.map((g) => g.commenceTime), now);
+    pool.push(...boardGames(label, board, inWindow));
+  }
+
+  const allPicks = [...picks.map((i) => i.pick), ...games.flatMap((g) => g.game.picks), ...pool.flatMap((g) => g.picks)];
+  const records = await getCapperLeagueRecords(
+    user.id,
+    allPicks.map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category }))
+  );
+
+  const built = buildFromSlip({ picks, games, pool, records, legCount: requested, source: src });
+  if ("error" in built) return built;
+  return { ...built, records };
 }

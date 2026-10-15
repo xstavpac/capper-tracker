@@ -53,6 +53,9 @@ function stub(relativePath: string, exports: Record<string, unknown>) {
   const path = require.resolve(relativePath);
   require.cache[path] = { id: path, filename: path, loaded: true, exports } as unknown as NodeJS.Module;
 }
+// Leg rows offer "+ Add game", which reads the slip context; its server
+// action is never called here.
+stub("../../server/actions/parlay-slip", { getSlipPickStatesAction: async () => ({}) });
 stub("../../server/actions/parlay-generator", {
   autoGenerateParlayAction: async (...args: unknown[]) => {
     calls.push(args);

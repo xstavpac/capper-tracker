@@ -36,6 +36,10 @@ export type BuildCandidate = {
   gameTime: Date;
   sportName: string;
   gameId?: string | null;
+  // Set on a candidate the generator chose rather than the user (a game
+  // item's or the qualified pool's picks - see slip-build.ts): it is only
+  // taken while its game has no leg yet, the one-leg-per-game default.
+  onePerGame?: boolean;
 };
 
 export type SkippedPick = {
@@ -72,7 +76,7 @@ function toCandidate(c: BuildCandidate): ParlayCandidate {
 // A pair blocks selection only for a real conflict (R2/R3 - can't both win)
 // or an exact duplicate. Every other outcome, including UNDERIVABLE/
 // UNCLASSIFIED, is non-blocking - see this file's own header for why.
-function blocks(a: BuildCandidate, b: BuildCandidate): { blocked: boolean; isDuplicate: boolean } {
+export function blocks(a: BuildCandidate, b: BuildCandidate): { blocked: boolean; isDuplicate: boolean } {
   const outcome = classifyPair(toCandidate(a), toCandidate(b));
   if (outcome.outcome === "EXACT_DUPLICATE") return { blocked: true, isDuplicate: true };
   if (outcome.outcome === "RULE" && (outcome.rule === "R2" || outcome.rule === "R3")) {
@@ -89,13 +93,18 @@ function isUncertain(a: BuildCandidate, b: BuildCandidate): boolean {
 // ranked: already ranked best-first (same win%-based ranking
 // parlay-pool-section.tsx computes today) - this function never reorders it,
 // it only decides which ranked picks make it into the final `legs`.
-export function selectConflictFreeLegs(ranked: BuildCandidate[], n: number): BuildResult {
-  const legs: BuildCandidate[] = [];
+// `seed` is legs already decided (the slip's locked items, see slip-build.ts):
+// they come first, count toward n, and every candidate is checked against them.
+export function selectConflictFreeLegs(ranked: BuildCandidate[], n: number, seed: BuildCandidate[] = []): BuildResult {
+  const legs: BuildCandidate[] = [...seed];
   const skipped: SkippedPick[] = [];
   const unverified: UnverifiedPair[] = [];
 
   for (const candidate of ranked) {
     if (legs.length >= n) break;
+    // A generator-chosen pick on a game that already has a leg is not a
+    // conflict - its game is simply spent - so it leaves no note.
+    if (candidate.onePerGame && legs.some((l) => l.gameId === candidate.gameId)) continue;
 
     let blockedBy: BuildCandidate | null = null;
     let blockedAsDuplicate = false;

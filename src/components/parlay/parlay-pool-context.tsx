@@ -23,16 +23,36 @@
 // switched it off. Confirming a new pick from a league switches that league
 // back on; nothing else does. Only the switched-off leagues are stored.
 //
-// The slip holds at most MAX_PARLAY_LEGS picks (lib/parlay/leg-cap.ts).
+// The slip holds at most MAX_PARLAY_LEGS items (lib/parlay/leg-cap.ts).
 // confirmAdd refuses a selection that would take it past that - it adds
 // nothing and says so, rather than adding only the picks that fit.
+//
+// Besides picks (`pool`), the slip holds GAMES ("the best pick from this
+// game", see lib/parlay/slip-build.ts), and any item can be LOCKED. `pool`
+// stays picks only - everything that reads it (Send to FanDuel, Hedge /
+// Contrarian) is unchanged. A game item is pruned once its game starts, by
+// the kickoff captured when it was added; the build re-checks it server-side.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getSlipPickStatesAction } from "@/server/actions/parlay-slip";
 import { reconcileSlip, type PrunedLeg } from "@/lib/parlay/slip-reconcile";
 import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
+import { toSlipSource, type SlipSource } from "@/lib/parlay/slip-build";
 
 export type PooledPick = ExpanderPick;
+
+export type SlipGame = { gameId: string; gameLabel: string; gameTime: string; leagueName: string };
+
+// Locks are kept by item key: a pick's id, or "game:" + a game item's id.
+export const gameItemKey = (gameId: string) => "game:" + gameId;
+
+function startedGames(games: SlipGame[], now: number): { kept: SlipGame[]; pruned: PrunedLeg[] } {
+  const kept = games.filter((g) => new Date(g.gameTime).getTime() > now);
+  const pruned = games
+    .filter((g) => !kept.includes(g))
+    .map((g) => ({ pickId: gameItemKey(g.gameId), label: g.gameLabel + " - best pick from this game", result: "Started" as const }));
+  return { kept, pruned };
+}
 
 const STORAGE_PREFIX = "parlay-pool:";
 const LEGACY_UNSCOPED_KEY = "parlay-pool";
@@ -49,12 +69,31 @@ type PersistedState = {
   // were persisted has neither.
   addMode?: boolean;
   checkedPicks?: PooledPick[];
+  // Optional: a slip saved before these existed has none.
+  games?: SlipGame[];
+  locked?: string[];
+  source?: SlipSource;
 };
 
 type ParlayPoolContextValue = {
   pool: PooledPick[];
   isInPool: (pickId: string) => boolean;
   removeFromPool: (pickId: string) => void;
+
+  games: SlipGame[];
+  isGameInSlip: (gameId: string) => boolean;
+  addGame: (game: SlipGame) => void;
+  removeGame: (gameId: string) => void;
+  // Picks plus games - what the slip holds, against MAX_PARLAY_LEGS.
+  slipSize: number;
+
+  // Keyed by pick id or gameItemKey(gameId).
+  isLocked: (key: string) => boolean;
+  toggleLock: (key: string) => void;
+
+  // What "Build from slip" builds from (see lib/parlay/slip-build.ts).
+  source: SlipSource;
+  setSource: (source: SlipSource) => void;
 
   addMode: boolean;
   checkedPicks: Map<string, PooledPick>;
@@ -73,7 +112,11 @@ type ParlayPoolContextValue = {
 
   legCount: number;
   setLegCount: (n: number) => void;
+  // In-scope slip items (picks and games), capped at MAX_PARLAY_LEGS.
   maxLegCount: number;
+  // The most legs a build may ask for: maxLegCount, or the cap when the
+  // Source lets the qualified pool fill in.
+  maxBuildLegs: number;
 
   // Legs just pruned from the slip (started/graded/deleted/aged out), shown
   // once by ParlaySlipNotice until dismissed.
@@ -108,6 +151,11 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   const [addMode, setAddMode] = useState(false);
   const [checkedPicks, setCheckedPicks] = useState<Map<string, PooledPick>>(new Map());
   const [overCapBy, setOverCapBy] = useState<number | null>(null);
+  const [games, setGames] = useState<SlipGame[]>([]);
+  const [locked, setLocked] = useState<string[]>([]);
+  const [source, setSource] = useState<SlipSource>("SLIP_PLUS_POOL");
+  const gamesRef = useRef<SlipGame[]>([]);
+  gamesRef.current = games;
   // Guards the persist effect below - without it, that effect's own first
   // run (on mount, before hydration below has applied) fires with the
   // empty initial state and immediately overwrites a real saved pool with
@@ -153,6 +201,13 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
         if (Array.isArray(parsed.checkedPicks) && parsed.checkedPicks.length > 0) {
           setCheckedPicks(new Map(parsed.checkedPicks.map((p) => [p.pickId, p])));
         }
+        if (Array.isArray(parsed.games)) {
+          const { kept, pruned } = startedGames(parsed.games, Date.now());
+          setGames(kept);
+          reportPruned(pruned);
+        }
+        if (Array.isArray(parsed.locked)) setLocked(parsed.locked.filter((k) => typeof k === "string"));
+        if (parsed.source) setSource(toSlipSource(parsed.source));
       }
     } catch {
       // Corrupt/unavailable storage - start from an empty pool rather than fail the page.
@@ -201,16 +256,31 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   useEffect(() => {
     if (!hydrated) return;
     try {
-      const data: PersistedState = { pool, excludedLeagues, legCount, addMode, checkedPicks: Array.from(checkedPicks.values()) };
+      const data: PersistedState = {
+        pool,
+        excludedLeagues,
+        legCount,
+        addMode,
+        checkedPicks: Array.from(checkedPicks.values()),
+        games,
+        locked,
+        source,
+      };
       window.localStorage.setItem(storageKey(userId), JSON.stringify(data));
     } catch {
       // Best-effort persistence only - a full localStorage or a private window is not fatal.
     }
-  }, [userId, pool, excludedLeagues, legCount, addMode, checkedPicks, hydrated]);
+  }, [userId, pool, excludedLeagues, legCount, addMode, checkedPicks, games, locked, source, hydrated]);
 
   // Re-check the live pool against the DB. Only legs that were in the pool
   // when the request went out are touched, so a pick added mid-flight is left alone.
   const revalidate = useCallback(async () => {
+    const gameCheck = startedGames(gamesRef.current, Date.now());
+    if (gameCheck.pruned.length > 0) {
+      const gone = new Set(gameCheck.pruned.map((g) => g.pickId));
+      setGames((prev) => prev.filter((g) => !gone.has(gameItemKey(g.gameId))));
+      reportPruned(gameCheck.pruned);
+    }
     const checked = poolRef.current;
     if (checked.length === 0 || inFlightRef.current) return;
     inFlightRef.current = true;
@@ -264,6 +334,32 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
 
   const removeFromPool = useCallback((pickId: string) => {
     setPool((prev) => prev.filter((p) => p.pickId !== pickId));
+    setLocked((prev) => prev.filter((k) => k !== pickId));
+  }, []);
+
+  const isGameInSlip = useCallback((gameId: string) => games.some((g) => g.gameId === gameId), [games]);
+
+  // Same cap as confirmAdd: refused whole, and said so on the slip button.
+  const addGame = useCallback((game: SlipGame) => {
+    if (gamesRef.current.some((g) => g.gameId === game.gameId)) return;
+    if (poolRef.current.length + uncheckedStoredRef.current.size + gamesRef.current.length >= MAX_PARLAY_LEGS) {
+      setOverCapBy(1);
+      return;
+    }
+    setGames((prev) => [...prev, { gameId: game.gameId, gameLabel: game.gameLabel, gameTime: game.gameTime, leagueName: game.leagueName }]);
+    // Like a new pick, a new game switches its league on.
+    setExcludedLeagues((prev) => (prev.includes(game.leagueName) ? prev.filter((l) => l !== game.leagueName) : prev));
+  }, []);
+
+  const removeGame = useCallback((gameId: string) => {
+    setGames((prev) => prev.filter((g) => g.gameId !== gameId));
+    setLocked((prev) => prev.filter((k) => k !== gameItemKey(gameId)));
+  }, []);
+
+  const isLocked = useCallback((key: string) => locked.includes(key), [locked]);
+
+  const toggleLock = useCallback((key: string) => {
+    setLocked((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   }, []);
 
   const dismissOverCap = useCallback(() => setOverCapBy(null), []);
@@ -288,7 +384,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     const held = new Set(poolRef.current.map((p) => p.pickId));
     uncheckedStoredRef.current.forEach((id) => held.add(id));
     const adding = Array.from(checkedPicks.values()).filter((p) => !held.has(p.pickId));
-    const over = held.size + adding.length - MAX_PARLAY_LEGS;
+    const over = held.size + gamesRef.current.length + adding.length - MAX_PARLAY_LEGS;
     if (adding.length > 0 && over > 0) {
       // Stay in add mode with the selection intact, so the user can untick
       // down to the cap instead of starting over.
@@ -317,7 +413,10 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     setAddMode(false);
   }, []);
 
-  const leaguesInPool = useMemo(() => Array.from(new Set(pool.map((p) => p.leagueName))), [pool]);
+  const leaguesInPool = useMemo(
+    () => Array.from(new Set([...pool.map((p) => p.leagueName), ...games.map((g) => g.leagueName)])),
+    [pool, games]
+  );
 
   const isLeagueInScope = useCallback((league: string) => !excludedLeagues.includes(league), [excludedLeagues]);
 
@@ -328,21 +427,37 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   // A slip saved before the cap existed can hold more than MAX_PARLAY_LEGS
   // picks; it still builds at most that many legs.
   const maxLegCount = useMemo(
-    () => Math.min(pool.filter((p) => isLeagueInScope(p.leagueName)).length, MAX_PARLAY_LEGS),
-    [pool, isLeagueInScope]
+    () =>
+      Math.min(
+        pool.filter((p) => isLeagueInScope(p.leagueName)).length + games.filter((g) => isLeagueInScope(g.leagueName)).length,
+        MAX_PARLAY_LEGS
+      ),
+    [pool, games, isLeagueInScope]
   );
+  // With the qualified pool filling in, the slip's own size no longer bounds
+  // the leg count - only the cap does.
+  const maxBuildLegs = source === "SLIP_PLUS_POOL" && maxLegCount > 0 ? MAX_PARLAY_LEGS : maxLegCount;
 
   const setLegCount = useCallback(
     (n: number) => {
-      setLegCountState(Math.max(1, Math.min(n, Math.max(maxLegCount, 1))));
+      setLegCountState(Math.max(1, Math.min(n, Math.max(maxBuildLegs, 1))));
     },
-    [maxLegCount]
+    [maxBuildLegs]
   );
 
   const value: ParlayPoolContextValue = {
     pool,
     isInPool,
     removeFromPool,
+    games,
+    isGameInSlip,
+    addGame,
+    removeGame,
+    slipSize: pool.length + games.length,
+    isLocked,
+    toggleLock,
+    source,
+    setSource,
     addMode,
     checkedPicks,
     enterAddMode,
@@ -354,14 +469,21 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     leaguesInPool,
     isLeagueInScope,
     toggleLeague,
-    legCount: Math.max(1, Math.min(legCount, Math.max(maxLegCount, 1))),
+    legCount: Math.max(1, Math.min(legCount, Math.max(maxBuildLegs, 1))),
     setLegCount,
     maxLegCount,
+    maxBuildLegs,
     notice,
     dismissNotice,
   };
 
   return <ParlayPoolContext.Provider value={value}>{children}</ParlayPoolContext.Provider>;
+}
+
+// For a control that only makes sense with a slip ("+ Add game"): null, not
+// a throw, where no provider is mounted.
+export function useOptionalParlayPool() {
+  return useContext(ParlayPoolContext);
 }
 
 export function useParlayPool() {

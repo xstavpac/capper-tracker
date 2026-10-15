@@ -21,7 +21,7 @@ import type { CapperLeagueRecords } from "@/server/data/picks";
 // Same rawBetDetail/game-fields mapping parlay-pool-section.tsx's own
 // toBuildCandidate uses for My Picks - kept identical so a pick ranks and
 // conflict-checks the same way regardless of which mode ends up using it.
-function toBuildCandidate(p: GeneratorPick): BuildCandidate {
+export function toBuildCandidate(p: GeneratorPick): BuildCandidate {
   return {
     pickId: p.pickId,
     label: `${p.capperName} — ${p.betDetail}`,

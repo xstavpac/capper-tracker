@@ -15,11 +15,11 @@ const BANNER_PILL = "flex h-[34px] items-center rounded-full border text-[12.5px
 const BANNER_BUTTON = BANNER_PILL + "flex-none px-3.5 [@container_(min-width:640px)]:px-[18px] ";
 const BANNER_IDLE = "border-[rgba(96,140,255,0.28)] bg-[rgba(30,58,138,0.35)] font-medium text-[#D3DEFA]";
 export function ParlaySlipButton({ dark = false }: { dark?: boolean }) {
-  const { pool, addMode, checkedPicks, enterAddMode, confirmAdd, discardAdd, overCapBy, dismissOverCap } = useParlayPool();
+  const { slipSize, addMode, checkedPicks, enterAddMode, confirmAdd, discardAdd, overCapBy, dismissOverCap } = useParlayPool();
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
 
   const checkedCount = checkedPicks.size;
-  const label = "Parlay slip" + (addMode ? (checkedCount > 0 ? " · " + checkedCount : "") : (pool.length > 0 ? " · " + pool.length : ""));
+  const label = "Parlay slip" + (addMode ? (checkedCount > 0 ? " · " + checkedCount : "") : (slipSize > 0 ? " · " + slipSize : ""));
 
   function handleToggle() {
     if (!addMode) {
