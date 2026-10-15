@@ -43,7 +43,7 @@ function mk(overrides: Partial<BuildCandidate>): BuildCandidate {
   check(
     "opposing MLs: skip note names both picks",
     result.skipped[0]?.note,
-    "Skipped Capper B — Red Sox ML — conflicts with Capper A — Yankees ML in your parlay"
+    "Skipped Capper B — Red Sox ML — conflicts with Capper A — Yankees ML (higher-ranked)"
   );
 }
 
@@ -74,7 +74,7 @@ function mk(overrides: Partial<BuildCandidate>): BuildCandidate {
   const result = selectConflictFreeLegs([capperA, capperB], 5);
   check("duplicate pick: only the first kept", result.legs.map((l) => l.pickId), ["a"]);
   check("duplicate pick: second skipped as duplicate", result.skipped[0]?.reason, "duplicate");
-  check("duplicate pick: skip note", result.skipped[0]?.note, "Skipped Capper B — Yankees ML — duplicate of Capper A — Yankees ML");
+  check("duplicate pick: skip note", result.skipped[0]?.note, "Skipped Capper B — Yankees ML — duplicate of Capper A — Yankees ML (higher-ranked)");
 }
 
 // ============================================================================
@@ -151,7 +151,7 @@ function mk(overrides: Partial<BuildCandidate>): BuildCandidate {
   const result = selectConflictFreeLegs([yankeesML, redSoxML], 5);
   check("one game, different stored times: only the higher-ranked side is kept", result.legs.map((l) => l.pickId), ["a"]);
   check("one game, different stored times: the other side is skipped as a conflict", result.skipped[0]?.reason, "conflict");
-  check("one game, different stored times: skip note", result.skipped[0]?.note, "Skipped Capper B — Red Sox ML — conflicts with Capper A — Yankees ML in your parlay");
+  check("one game, different stored times: skip note", result.skipped[0]?.note, "Skipped Capper B — Red Sox ML — conflicts with Capper A — Yankees ML (higher-ranked)");
 
   // The same two picks carrying their game ids: a doubleheader's two games stay two games.
   const game1 = mk({ pickId: "a", label: "Yankees ML (game 1)", betDetail: "Yankees ML", gameId: "evt1" });

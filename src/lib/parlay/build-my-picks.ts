@@ -42,11 +42,17 @@ export type BuildCandidate = {
   onePerGame?: boolean;
 };
 
+// A pick that lost a conflict (or duplicate) to a leg of this parlay. It is
+// out of THIS parlay only - it stays a candidate everywhere else (another
+// build, an alternate parlay), so nothing removes it from the pool.
+// `won` says why the other pick kept its place: it ranks higher, or it is
+// locked (a slip lock - see slip-build.ts), which beats any ranking.
 export type SkippedPick = {
   pickId: string;
   label: string;
   reason: "conflict" | "duplicate";
   conflictsWith: { pickId: string; label: string };
+  won: "HIGHER_RANKED" | "LOCKED";
   note: string;
 };
 
@@ -85,18 +91,27 @@ export function blocks(a: BuildCandidate, b: BuildCandidate): { blocked: boolean
   return { blocked: false, isDuplicate: false };
 }
 
+const WON_TEXT: Record<SkippedPick["won"], string> = { HIGHER_RANKED: "higher-ranked", LOCKED: "locked" };
+
 function isUncertain(a: BuildCandidate, b: BuildCandidate): boolean {
   const outcome = classifyPair(toCandidate(a), toCandidate(b));
   return outcome.outcome === "UNDERIVABLE" || outcome.outcome === "UNCLASSIFIED";
 }
 
-// ranked: already ranked best-first (same win%-based ranking
-// parlay-pool-section.tsx computes today) - this function never reorders it,
-// it only decides which ranked picks make it into the final `legs`.
+// ranked: already ranked best-first (compareByRecord - the same win%-based
+// ranking My Picks and Parlay A use) - this function never reorders it, it
+// only decides which ranked picks make it into the final `legs`.
 // `seed` is legs already decided (the slip's locked items, see slip-build.ts):
 // they come first, count toward n, and every candidate is checked against them.
+//
+// Conflicting picks compete: walking best-first, a candidate that conflicts
+// with a leg already taken lost to that leg - which is either locked (a seed)
+// or ranks higher (it came earlier in the ranking). So of two conflicting
+// picks the higher-ranked one is kept, unless the other is locked. The loser
+// is skipped with a note naming the winner and why it won.
 export function selectConflictFreeLegs(ranked: BuildCandidate[], n: number, seed: BuildCandidate[] = []): BuildResult {
   const legs: BuildCandidate[] = [...seed];
+  const seedIds = new Set(seed.map((s) => s.pickId));
   const skipped: SkippedPick[] = [];
   const unverified: UnverifiedPair[] = [];
 
@@ -121,14 +136,14 @@ export function selectConflictFreeLegs(ranked: BuildCandidate[], n: number, seed
     }
 
     if (blockedBy) {
+      const won = seedIds.has(blockedBy.pickId) ? "LOCKED" : "HIGHER_RANKED";
       skipped.push({
         pickId: candidate.pickId,
         label: candidate.label,
         reason: blockedAsDuplicate ? "duplicate" : "conflict",
         conflictsWith: { pickId: blockedBy.pickId, label: blockedBy.label },
-        note: blockedAsDuplicate
-          ? `Skipped ${candidate.label} — duplicate of ${blockedBy.label}`
-          : `Skipped ${candidate.label} — conflicts with ${blockedBy.label} in your parlay`,
+        won,
+        note: `Skipped ${candidate.label} — ${blockedAsDuplicate ? "duplicate of" : "conflicts with"} ${blockedBy.label} (${WON_TEXT[won]})`,
       });
       continue;
     }
