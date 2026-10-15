@@ -8,6 +8,7 @@ import { findSameDayDuplicateEvents, warnSameDayDuplicateEvents } from "@/lib/od
 import { teamNamesMatch, teamNameEndsWith } from "@/lib/team-name-match";
 import { cacheKeys } from "@/lib/cache-keys";
 import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
+import { mlbFeedStatus, resolveFeedStatus } from "@/lib/feed-game-status";
 import { cachedByTag } from "@/server/data/cached";
 import { persistOddsApiUsage } from "@/server/data/odds-api-usage";
 import { getYesterdayBoardGames } from "@/server/data/odds-projections";
@@ -927,9 +928,7 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
   const games = (data.dates ?? []).flatMap((d: any) => d.games ?? []);
 
   return games.map((g: any) => {
-    const state = g.status?.abstractGameState;
-    const status: "preview" | "live" | "final" =
-      state === "Final" ? "final" : state === "Live" ? "live" : "preview";
+    const status = mlbFeedStatus(g.status, g.gameDate, new Date());
 
     return {
       id: String(g.gamePk),
@@ -971,7 +970,7 @@ function espnEventToScoreGame(e: any, options: { teamDetail?: boolean } = {}): S
   const home = competitors.find((c: any) => c.homeAway === "home");
   const away = competitors.find((c: any) => c.homeAway === "away");
   const state = e.status?.type?.state;
-  const status: "preview" | "live" | "final" = state === "post" ? "final" : state === "in" ? "live" : "preview";
+  const status = resolveFeedStatus(state === "post" ? "final" : state === "in" ? "live" : "preview", e.date, new Date());
 
   return {
     id: String(e.id),
@@ -1338,7 +1337,7 @@ export async function getCflLiveScores(): Promise<ScoreGame[]> {
   return raw.map((g: any): ScoreGame => {
     // completed -> final; has partial scores but not completed -> live;
     // no scores yet -> preview. Mirrors ESPN's post/in/pre mapping.
-    const status: "preview" | "live" | "final" = g.completed ? "final" : g.scores ? "live" : "preview";
+    const status = resolveFeedStatus(g.completed ? "final" : g.scores ? "live" : "preview", g.commence_time, new Date());
     return {
       id: String(g.id),
       homeTeam: g.home_team,
