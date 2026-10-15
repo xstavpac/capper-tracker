@@ -122,7 +122,8 @@ async function main() {
       (el as HTMLElement | undefined)?.click();
       await settle();
     });
-  const lastCall = () => JSON.stringify(calls[calls.length - 1]);
+  // The filter arguments only - the sixth (slip, Regenerate exclude) is proven in auto-generate-alternates-acceptance-test.ts.
+  const lastCall = () => JSON.stringify((calls[calls.length - 1] as unknown[]).slice(0, 5));
   const slide = (value: number) =>
     act(async () => {
       const input = container.querySelector<HTMLInputElement>('input[type="range"]')!;

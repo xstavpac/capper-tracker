@@ -144,7 +144,8 @@ async function main() {
   });
   const legOrder = () => (text().match(/Leg-[PS]\d/g) ?? []).filter((v, i, a) => a.indexOf(v) === i);
   const tags = () => Array.from(container.querySelectorAll("ol > li span")).filter((s) => s.textContent === "SGP").length;
-  const lastCall = () => calls[calls.length - 1];
+  // The filter arguments only - the sixth (slip, Regenerate exclude) is proven in auto-generate-alternates-acceptance-test.ts.
+  const lastCall = () => calls[calls.length - 1].slice(0, 5);
 
   // ---------------------------------------------------------------------
   // 1. The control, and max 1 as before

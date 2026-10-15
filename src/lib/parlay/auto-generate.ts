@@ -64,6 +64,9 @@ export type AutoLeg = {
   gameTime: string;
   top: RankedPick;
   next: RankedPick[];
+  // Put in by a Parlay slip lock (lockParlay, alternates.ts) - kept in every
+  // alternate. Absent on every leg when the slip has no locks.
+  locked?: boolean;
 };
 
 // Set only when a Pick Mix was applied (Include Picks = All with a custom

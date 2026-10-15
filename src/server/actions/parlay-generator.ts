@@ -12,7 +12,8 @@ import { LIVE_SPORTS } from "@/server/data/odds";
 import { getLiveBoardData } from "@/server/data/live-board-picks";
 import { getCapperCategoryRecords, getCapperLeagueRecords, type CapperLeagueRecords } from "@/server/data/picks";
 import type { PickCategoryKey } from "@/server/data/stats";
-import { legCapRejection, type LegCapRejection } from "@/lib/parlay/leg-cap";
+import { legCapRejection, MAX_POOL_REQUEST_PICKS } from "@/lib/parlay/leg-cap";
+import { buildParlaySet, EMPTY_SLIP, lockParlay, type LockRejection, type SlipHint } from "@/lib/parlay/alternates";
 import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
 import {
   buildAutoParlay,
@@ -54,20 +55,42 @@ export type AutoGenerateResult = {
   // Shown in place of the Hedge/Contrarian result when those can't swap
   // anything (Props, or no game-line legs). null otherwise.
   swapNote: string | null;
+  // Every parlay of this set, first to last: on a first Generate the Primary
+  // (= parlayA) and up to two alternates; on a Regenerate up to three parlays
+  // never shown before this session - parlayA is the first of them, or the
+  // Primary when there are none (parlays is then empty).
+  parlays: { parlay: AutoParlay; sameGame: SameGameFill }[];
+  regenerated: boolean;
+  // Fewer distinct parlays than a full set could be found.
+  exhausted: boolean;
 };
+
+// How many parlays one Generate / Regenerate answers with.
+const PARLAYS_PER_SET = 3;
+
+export type AutoGenerateOptions = { slip?: SlipHint; exclude?: string[] | null };
 
 // More than MAX_PARLAY_LEGS legs is refused outright (see leg-cap.ts) - never
 // built smaller than asked.
+//
+// `options.slip` is the Parlay slip by id (lib/parlay/alternates.ts): its
+// locks go into Parlay A and every alternate, its picks join their games'
+// shortlists. `options.exclude` makes this a Regenerate: the leg sets already
+// shown this session (legSetKey), none of which comes back - and the
+// deterministic Primary isn't returned again either.
 export async function autoGenerateParlayAction(
   leagues: string[],
   legCount: number,
   maxLegsPerGame: number = 1,
   includePicks: IncludePicks = "ALL",
-  gameLinesPct: number | null = null
-): Promise<AutoGenerateResult | LegCapRejection> {
+  gameLinesPct: number | null = null,
+  options: AutoGenerateOptions = {}
+): Promise<AutoGenerateResult | LockRejection> {
   const user = await requireUser();
   const rejection = legCapRejection(legCount);
   if (rejection) return rejection;
+  const opts = toOptions(options);
+  if (!opts) return { error: INVALID_REQUEST };
   const requested = Math.max(1, Math.floor(legCount) || 1);
   // Never trusted as sent: an unknown filter is All, and a mix applies only
   // with All and only as a whole step from 0 to 100.
@@ -125,12 +148,38 @@ export async function autoGenerateParlayAction(
   ]);
 
   const leaguesSearched = sports.map((s) => s.label);
-  const parlayA = buildAutoParlay(scoped, records, requested, mixPct);
-  const sameGame = buildSameGameLegs(parlayA, scoped, categoryRecords, toMaxLegsPerGame(maxLegsPerGame));
+  // Parlay A exactly as before; with no slip locks lockParlay hands it back as is.
+  const primary = lockParlay(buildAutoParlay(scoped, records, requested, mixPct), scoped, records, opts.slip);
+  if ("error" in primary) return primary;
+  const maxPerGame = toMaxLegsPerGame(maxLegsPerGame);
+  const fills = new Map<AutoParlay, SameGameFill>();
+  const sameGameOf = (p: AutoParlay) => {
+    if (!fills.has(p)) fills.set(p, buildSameGameLegs(p, scoped, categoryRecords, maxPerGame));
+    return fills.get(p)!;
+  };
+  const set = buildParlaySet({
+    games: scoped,
+    records,
+    slip: opts.slip,
+    primary,
+    includePrimary: opts.exclude === null,
+    count: PARLAYS_PER_SET,
+    exclude: new Set(opts.exclude ?? []),
+    extraLegs: (p) => sameGameOf(p).legs.map((l) => l.pick.pickId),
+    rng: Math.random,
+  });
+  // The set's first parlay - the Primary on a first Generate - is the one
+  // Hedge and Contrarian vary and the notes describe. A Regenerate that
+  // found nothing new still answers with the Primary here, and no `parlays`.
+  const parlayA = set.parlays[0] ?? primary;
+  const sameGame = sameGameOf(parlayA);
   const emptyNote = filterEmptyNote(games, include, leaguesSearched);
   return {
     parlayA,
     sameGame,
+    parlays: set.parlays.map((parlay) => ({ parlay, sameGame: sameGameOf(parlay) })),
+    regenerated: opts.exclude !== null,
+    exhausted: set.exhausted,
     hedge: buildSwapParlay(parlayA, scoped, "AUTO_HEDGE", categoryRecords),
     contrarian: buildSwapParlay(parlayA, scoped, "CONTRARIAN", categoryRecords),
     records,
@@ -140,4 +189,42 @@ export async function autoGenerateParlayAction(
     notes: [...(emptyNote ? [emptyNote] : []), ...buildMixNotes(parlayA, sameGame)],
     swapNote: swapVariantNote(include, parlayA),
   };
+}
+
+const INVALID_REQUEST = "That request isn't valid - refresh the page and try again.";
+const MAX_ID_LENGTH = 64;
+const MAX_EXCLUDED_SETS = 1000;
+const MAX_KEY_LENGTH = (MAX_ID_LENGTH + 1) * 40;
+
+// Never trusted as sent - ids only, bounded, or the request is refused.
+function toOptions(options: unknown): { slip: SlipHint; exclude: string[] | null } | null {
+  if (options === undefined || options === null) return { slip: EMPTY_SLIP, exclude: null };
+  if (typeof options !== "object") return null;
+  const { slip, exclude } = options as Record<string, unknown>;
+  const okId = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= MAX_ID_LENGTH;
+  const items = (list: unknown, idKey: string) => {
+    if (list === undefined) return [];
+    if (!Array.isArray(list) || list.length > MAX_POOL_REQUEST_PICKS) return null;
+    const out: { id: string; locked: boolean }[] = [];
+    for (const raw of list) {
+      if (typeof raw !== "object" || raw === null || !okId((raw as Record<string, unknown>)[idKey])) return null;
+      out.push({ id: (raw as Record<string, string>)[idKey], locked: (raw as Record<string, unknown>).locked === true });
+    }
+    return out;
+  };
+  let hint: SlipHint = EMPTY_SLIP;
+  if (slip !== undefined) {
+    if (typeof slip !== "object" || slip === null) return null;
+    const picks = items((slip as Record<string, unknown>).picks, "pickId");
+    const gameItems = items((slip as Record<string, unknown>).games, "gameId");
+    if (!picks || !gameItems) return null;
+    hint = {
+      picks: picks.map((p) => ({ pickId: p.id, locked: p.locked })),
+      games: gameItems.map((g) => ({ gameId: g.id, locked: g.locked })),
+    };
+  }
+  if (exclude === undefined || exclude === null) return { slip: hint, exclude: null };
+  if (!Array.isArray(exclude) || exclude.length > MAX_EXCLUDED_SETS) return null;
+  if (!exclude.every((k) => typeof k === "string" && k.length <= MAX_KEY_LENGTH)) return null;
+  return { slip: hint, exclude: exclude as string[] };
 }

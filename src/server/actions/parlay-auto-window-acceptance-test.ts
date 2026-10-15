@@ -136,6 +136,45 @@ async function main() {
   const three = await generate(["NFL"], 3);
   check("NFL, 3 legs asked: 3 built from the 4 games available", [three.legs, three.available], [3, 4]);
 
+  // ---------------------------------------------------------------------
+  // Primary + alternates, slip locks, Regenerate (lib/parlay/alternates.ts)
+  // ---------------------------------------------------------------------
+  const keyOf = (legs: { top: { pick: { pickId: string } } }[]) => legs.map((l) => l.top.pick.pickId).sort().join(",");
+  const first = await autoGenerateParlayAction(["NFL", "NCAAF"], 3);
+  if ("error" in first) throw new Error(first.error);
+  check("first Generate: the set's first parlay is Parlay A", first.parlays[0]?.parlay === first.parlayA, true);
+  check("first Generate: not a Regenerate", first.regenerated, false);
+  check("first Generate: up to three parlays, all distinct", new Set(first.parlays.map((p) => keyOf(p.parlay.legs))).size, first.parlays.length);
+  const plain = await autoGenerateParlayAction(["NFL", "NCAAF"], 3, 1, "ALL", null, { slip: { picks: [], games: [] } });
+  if ("error" in plain) throw new Error(plain.error);
+  check("an empty slip: Parlay A is the same as with no slip at all", keyOf(plain.parlayA.legs), keyOf(first.parlayA.legs));
+
+  const shown = first.parlays.map((p) => keyOf(p.parlay.legs));
+  const again = await autoGenerateParlayAction(["NFL", "NCAAF"], 3, 1, "ALL", null, { exclude: shown });
+  if ("error" in again) throw new Error(again.error);
+  check("Regenerate: flagged as one", again.regenerated, true);
+  check("Regenerate: nothing it returns was shown before", again.parlays.some((p) => shown.includes(keyOf(p.parlay.legs))), false);
+
+  // With equal (empty) records Parlay A takes games by pick id, so nfl-thu and
+  // nfl-sun-late would not both make a 2-leg Parlay A on their own.
+  const locked = await autoGenerateParlayAction(["NFL"], 2, 1, "ALL", null, { slip: { picks: [{ pickId: "nfl-thu-p1", locked: true }], games: [{ gameId: "nfl-sun-late", locked: true }] } });
+  if ("error" in locked) throw new Error(locked.error);
+  check(
+    "locks: the locked pick and a leg from the locked game are in every parlay",
+    locked.parlays.every((p) => p.parlay.legs.some((l) => l.top.pick.pickId === "nfl-thu-p1") && p.parlay.legs.some((l) => l.gameId === "nfl-sun-late")),
+    true
+  );
+  const missing = await autoGenerateParlayAction(["MLB"], 2, 1, "ALL", null, { slip: { picks: [{ pickId: "nfl-thu-p1", locked: true }], games: [] } });
+  check("locks: a locked pick outside these games is an error that lists it", "error" in missing && "missing" in missing ? missing.missing : null, ["nfl-thu-p1"]);
+
+  const bad = await Promise.all([
+    autoGenerateParlayAction(["NFL"], 2, 1, "ALL", null, "nope" as never),
+    autoGenerateParlayAction(["NFL"], 2, 1, "ALL", null, { slip: { picks: [{ pickId: 7 }] } } as never),
+    autoGenerateParlayAction(["NFL"], 2, 1, "ALL", null, { exclude: "a,b" } as never),
+    autoGenerateParlayAction(["NFL"], 2, 1, "ALL", null, { exclude: Array.from({ length: 1001 }, () => "x") }),
+  ]);
+  check("malformed options are refused", bad.map((r) => "error" in r), [true, true, true, true]);
+
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
   process.exit(failures === 0 ? 0 : 1);
 }
