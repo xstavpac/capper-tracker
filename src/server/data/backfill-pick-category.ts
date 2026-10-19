@@ -11,13 +11,23 @@ export type BackfillOptions = {
   apply: boolean;
   batchSize: number;
   scope?: Prisma.PickWhereInput;
+  // Only rows whose recomputed category is one of these are written; every
+  // other row in scope is read, counted as `skipped`, and left exactly as it
+  // is (category AND version). Unset: every stale row in scope is stamped.
+  onlyCategories?: readonly string[];
   log?: (line: string) => void;
 };
+
+// The two version-3 categories (combined-yards props, formerly filed as
+// TD_PROP), and the scope that finds them: the CLI's --combined-yardage.
+export const COMBINED_YARDAGE_CATEGORIES = ["RUSH_REC_YDS_PROP", "PASS_RUSH_YDS_PROP"] as const;
+export const COMBINED_YARDAGE_SCOPE: Prisma.PickWhereInput = { betType: "PLAYER_PROP", category: "TD_PROP" };
 
 export type BackfillResult = {
   total: number;
   toStamp: number;
   read: number;
+  skipped: number;
   written: number;
   remaining: number;
   tally: Map<string, number>;
@@ -34,6 +44,7 @@ export async function backfillPickCategory(opts: BackfillOptions): Promise<Backf
   const tally = new Map<string, number>(); // category ("(null)" for none) -> rows
   let read = 0;
   let written = 0;
+  let skipped = 0;
   // Keyset paging: each batch is "eligible rows with id > the last id seen".
   // Do NOT page with `cursor: { id }, skip: 1` over the eligibility filter: in
   // apply mode the cursor row has just been stamped, so it no longer matches
@@ -68,6 +79,10 @@ export async function backfillPickCategory(opts: BackfillOptions): Promise<Backf
     const idsByCategory = new Map<string | null, string[]>();
     for (const row of rows) {
       const category = pickCategory({ ...row, sportName: row.sport.name });
+      if (opts.onlyCategories && (category === null || !opts.onlyCategories.includes(category))) {
+        skipped++;
+        continue;
+      }
       const ids = idsByCategory.get(category);
       if (ids) ids.push(row.id);
       else idsByCategory.set(category, [row.id]);
@@ -75,6 +90,10 @@ export async function backfillPickCategory(opts: BackfillOptions): Promise<Backf
       tally.set(label, (tally.get(label) ?? 0) + 1);
     }
 
+    // A narrowed run (onlyCategories) is a handful of rows: name each one.
+    if (opts.onlyCategories) {
+      for (const [category, ids] of idsByCategory) for (const id of ids) log(`  ${opts.apply ? "write" : "would write"} ${id} -> ${category}`);
+    }
     if (opts.apply) {
       for (const [category, ids] of idsByCategory) {
         const { count } = await prisma.pick.updateMany({
@@ -92,9 +111,10 @@ export async function backfillPickCategory(opts: BackfillOptions): Promise<Backf
     log(`  ${category.padEnd(22)} ${n}`);
   }
   const remaining = await prisma.pick.count({ where: stale });
-  log(`\nRead ${read} pick(s); ${opts.apply ? `wrote ${written}` : "would write " + read}.`);
+  const toWrite = read - skipped;
+  log(`\nRead ${read} pick(s); ${opts.apply ? `wrote ${written}` : "would write " + toWrite}${skipped > 0 ? `; left ${skipped} untouched (category not in --only list)` : ""}.`);
   log(`Picks still below version ${PICK_CATEGORY_VERSION}: ${remaining}${opts.apply ? "" : " (dry run - unchanged)"}`);
-  return { total, toStamp, read, written, remaining, tally };
+  return { total, toStamp, read, skipped, written, remaining, tally };
 }
 
 // ---------------------------------------------------------------------------
@@ -146,6 +166,11 @@ export type VerifyResult = {
   samples: VerifyMismatch[];
   // "stored -> computed" for every mismatch, so a systematic drift shows up as one big line.
   mismatchPairs: Map<string, number>;
+  // Unstamped rows whose stored category would CHANGE if restamped - what a
+  // backfill after a version bump would actually rewrite. Unstamped rows whose
+  // category stays the same aren't counted here.
+  staleChanges: number;
+  staleChangePairs: Map<string, number>;
 };
 
 export async function verifyPickCategory(opts: VerifyOptions): Promise<VerifyResult> {
@@ -157,7 +182,17 @@ export async function verifyPickCategory(opts: VerifyOptions): Promise<VerifyRes
     const total = await tx.pick.count({ where: scope });
     log(`Picks total:       ${total}`);
 
-    const result: VerifyResult = { total, read: 0, unstamped: 0, aheadOfCurrent: 0, mismatches: 0, samples: [], mismatchPairs: new Map() };
+    const result: VerifyResult = {
+      total,
+      read: 0,
+      unstamped: 0,
+      aheadOfCurrent: 0,
+      mismatches: 0,
+      samples: [],
+      mismatchPairs: new Map(),
+      staleChanges: 0,
+      staleChangePairs: new Map(),
+    };
 
     // Keyset paging over ALL picks (not just below-current-version ones), exactly
     // as the backfill does since #124: `id > lastId`, ordered by id, so it never
@@ -188,12 +223,17 @@ export async function verifyPickCategory(opts: VerifyOptions): Promise<VerifyRes
       result.read += rows.length;
 
       for (const row of rows) {
+        const computed = pickCategory({ ...row, sportName: row.sport.name });
         if (row.categoryVersion < PICK_CATEGORY_VERSION) {
           result.unstamped++;
+          if (computed !== row.category) {
+            result.staleChanges++;
+            const pair = `${row.category ?? "(null)"} -> ${computed ?? "(null)"}`;
+            result.staleChangePairs.set(pair, (result.staleChangePairs.get(pair) ?? 0) + 1);
+          }
           continue;
         }
         if (row.categoryVersion > PICK_CATEGORY_VERSION) result.aheadOfCurrent++;
-        const computed = pickCategory({ ...row, sportName: row.sport.name });
         if (computed !== row.category) {
           result.mismatches++;
           const pair = `${row.category ?? "(null)"} -> ${computed ?? "(null)"}`;
