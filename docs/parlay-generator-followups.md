@@ -8,3 +8,7 @@ Logged here so it isn't lost; none of it is built yet.
   pick; `/api/parlay/fanduel-link` refuses more than `MAX_PARLAY_LEGS` with a 400,
   and `send-to-fanduel.tsx` shows the generic failure. Only reachable with a slip
   saved before the cap existed. (Logged 2026-10-19.)
+- **Zero-reads acceptance test is DB-only and SKIPs in CI**; revisit when CI gets a
+  database (`parlay-generate-zero-reads-acceptance-test.ts`; the pure
+  `generator-session-acceptance-test.ts` covers the reuse/reload rules in CI).
+  (Logged 2026-10-19.)
