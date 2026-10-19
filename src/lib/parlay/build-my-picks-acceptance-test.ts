@@ -48,7 +48,8 @@ function mk(overrides: Partial<BuildCandidate>): BuildCandidate {
 }
 
 // ============================================================================
-// Over vs Under on the same total -> skip. Over 8.5 vs Over 7.5 (R1) -> both allowed.
+// Over vs Under on the same total -> skip. Over 8.5 vs Over 7.5 (R1) is the
+// same bet at another line -> one leg (duplicate-line-acceptance-test.ts).
 // ============================================================================
 {
   const over85 = mk({ pickId: "a", label: "Over 8.5", betType: "TOTAL", betDetail: "Over 8.5", line: 8.5 });
@@ -61,8 +62,8 @@ function mk(overrides: Partial<BuildCandidate>): BuildCandidate {
   const over85 = mk({ pickId: "a", label: "Over 8.5", betType: "TOTAL", betDetail: "Over 8.5", line: 8.5 });
   const over75 = mk({ pickId: "b", label: "Over 7.5", betType: "TOTAL", betDetail: "Over 7.5", line: 7.5 });
   const result = selectConflictFreeLegs([over85, over75], 5);
-  check("Over 8.5 vs Over 7.5 (R1, correlated but chosen by user): both allowed", result.legs.map((l) => l.pickId), ["a", "b"]);
-  check("Over 8.5 vs Over 7.5: nothing skipped", result.skipped, []);
+  check("Over 8.5 vs Over 7.5 (R1, the same bet at another line): one leg, the better line (no records)", result.legs.map((l) => l.pickId), ["b"]);
+  check("Over 8.5 vs Over 7.5: Over 8.5 skipped as a duplicate", result.skipped.map((s) => [s.pickId, s.reason, s.won]), [["a", "duplicate", "BETTER_LINE"]]);
 }
 
 // ============================================================================

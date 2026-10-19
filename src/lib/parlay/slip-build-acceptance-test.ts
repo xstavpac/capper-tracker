@@ -53,7 +53,7 @@ function run(over: Partial<SlipBuildInput>): SlipBuild | ParlayRejection {
   const slip = [P.g5Under, P.g1Away, P.g2Over, P.g1Home];
   for (const n of [1, 2, 3, 4]) {
     const r = built(run({ picks: slip.map((pick) => ({ pick, locked: false })), legCount: n }));
-    const today = selectConflictFreeLegs(rankPoolPicks(slip, records).map(toBuildCandidate), n);
+    const today = selectConflictFreeLegs(rankPoolPicks(slip, records).map((p) => toBuildCandidate(p, records)), n);
     check(`slip only, ${n} legs: same legs as today's My Picks`, ids(r), today.legs.map((l) => l.pickId));
     check(`slip only, ${n} legs: same skip notes as today's My Picks`, r.skipped, today.skipped);
   }

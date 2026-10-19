@@ -263,7 +263,7 @@ export type ParlayCandidate = { pick: PickInput; game: GameInput };
 // time), so two picks on one game routinely disagree by hours. The id, when
 // both have one, is what tells two legs of a doubleheader apart; the date
 // fallback can't, and treats them as one game.
-function sameGame(a: GameInput, b: GameInput): boolean {
+export function sameGame(a: GameInput, b: GameInput): boolean {
   if (a.gameId && b.gameId) return a.gameId === b.gameId;
   return (
     a.sportName === b.sportName &&

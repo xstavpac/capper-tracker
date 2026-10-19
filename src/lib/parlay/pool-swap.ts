@@ -21,8 +21,11 @@ import type { CapperLeagueRecords } from "@/server/data/picks";
 // Same rawBetDetail/game-fields mapping parlay-pool-section.tsx's own
 // toBuildCandidate uses for My Picks - kept identical so a pick ranks and
 // conflict-checks the same way regardless of which mode ends up using it.
-export function toBuildCandidate(p: GeneratorPick): BuildCandidate {
+// `records`, when given, sets the standing a duplicate line is settled on.
+export function toBuildCandidate(p: GeneratorPick, records?: CapperLeagueRecords): BuildCandidate {
+  const record = records ? bestAvailableRecord(p, records) : undefined;
   return {
+    ...(records ? { standing: record ? { winPct: record.winPct, n: record.n } : null } : {}),
     pickId: p.pickId,
     label: `${p.capperName} — ${p.betDetail}`,
     betType: p.betType,
@@ -55,7 +58,10 @@ export type PoolPrimary = {
 export function buildPoolPrimary(pool: GeneratorPick[], records: CapperLeagueRecords, legCount: number): PoolPrimary {
   const ranked = rankPoolPicks(pool, records);
   const byId = new Map(ranked.map((p) => [p.pickId, p]));
-  const selection = selectConflictFreeLegs(ranked.map(toBuildCandidate), legCount);
+  const selection = selectConflictFreeLegs(
+    ranked.map((p) => toBuildCandidate(p, records)),
+    legCount
+  );
   const legs: AutoLeg[] = selection.legs.map((c) => {
     const pick = byId.get(c.pickId)!;
     return {
