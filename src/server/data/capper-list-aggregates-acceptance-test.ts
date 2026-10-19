@@ -32,13 +32,13 @@ import {
   SCORECARD_WINDOWS,
   type ScorecardWindow,
 } from "@/server/data/stats";
-import * as legacy from "@/server/data/cappers";
+import * as legacy from "@/server/data/cappers-legacy";
 // getSportCategoryPanelData moved out of cappers.ts (unused by any page since
 // #128) into its own test-only reference file - see that file's header.
 import * as legacyPanel from "@/server/data/sport-category-panel-legacy";
-import * as adapter from "@/server/data/pick-aggregates-cappers-adapter";
+import * as adapter from "@/server/data/pick-aggregates-cappers-adapter-legacy";
 import { queryWindowTotals, queryCurrentStreaks } from "@/server/data/capper-list-aggregates";
-import { getCapperPickDataset } from "@/server/data/pick-aggregates";
+import { getCapperPickDataset } from "@/server/data/pick-aggregates-legacy";
 import { createPicksWithEntitlementCheck } from "@/server/data/subscriptions";
 
 function hostOf(url: string | undefined): string {

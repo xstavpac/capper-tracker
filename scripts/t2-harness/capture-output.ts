@@ -46,7 +46,7 @@ type CappersImpl = {
 // treats a plain `@/server/data/cappers` import as a full CappersImpl needs
 // this composition instead of that bare import.
 async function loadRealCappersImpl(): Promise<CappersImpl> {
-  const cappers = await import("@/server/data/cappers");
+  const cappers = await import("@/server/data/cappers-legacy");
   const { getSportCategoryPanelData } = await import("@/server/data/sport-category-panel-legacy");
   return { ...cappers, getSportCategoryPanelData } as unknown as CappersImpl;
 }
@@ -57,7 +57,7 @@ async function loadRealCappersImpl(): Promise<CappersImpl> {
 const IMPLEMENTATIONS: Record<string, () => Promise<CappersImpl>> = {
   old: loadRealCappersImpl,
   t3: async () => {
-    const mod = await import("@/server/data/pick-aggregates-cappers-adapter");
+    const mod = await import("@/server/data/pick-aggregates-cappers-adapter-legacy");
     return mod as unknown as CappersImpl;
   },
 

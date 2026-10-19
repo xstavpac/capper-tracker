@@ -5,7 +5,7 @@ import { getCapperComparison, type ComparisonFilters, type CapperComparisonProfi
 
 // Thin auth-gated wrapper, same pattern as getVariableSeriesAction
 // (server/actions/charts.ts) - ownership scoping happens inside
-// getCapperComparison itself (getCapperById/getPicksForCapper are both
+// getCapperComparison itself (getCapperById and its pick read are both
 // userId-scoped), this only adds the session check.
 export async function getCapperComparisonAction(
   capperAId: string,

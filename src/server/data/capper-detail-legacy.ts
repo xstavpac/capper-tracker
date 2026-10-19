@@ -1,7 +1,7 @@
 // FROZEN pre-migration reference for /cappers/[capperId] (docs/design/dashboard-capper-detail-
 // egress.md §8 "legacy"). It is the derivation the page ran inline until the capper-detail egress
-// PR: fetch every pick of the capper with three relation includes (getPicksForCapper, which stays
-// in picks.ts for capper-comparison.ts), then compute every section from that one array in JS.
+// PR: fetch every pick of the capper with three relation includes (getPicksForCapper - since removed; its
+// verbatim copy is loadLegacyCapperPicks below), then compute every section from that one array in JS.
 // Kept ONLY so capper-detail-acceptance-test.ts and scripts/t2-harness/capper-detail-parity.ts have
 // something to diff the one-statement path against, and deleted after the observation period.
 // Nothing under src/ outside a *-acceptance-test.ts file may import this module

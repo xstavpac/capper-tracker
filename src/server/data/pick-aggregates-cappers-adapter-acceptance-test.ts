@@ -21,7 +21,7 @@
 //   npx tsx src/server/data/pick-aggregates-cappers-adapter-acceptance-test.ts
 // Exits non-zero on any failed assertion.
 import { prisma } from "@/lib/prisma";
-import { legacyCapperLeaderboardTable as getCapperLeaderboardTable } from "@/server/data/pick-aggregates-cappers-adapter";
+import { legacyCapperLeaderboardTable as getCapperLeaderboardTable } from "@/server/data/pick-aggregates-cappers-adapter-legacy";
 
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {

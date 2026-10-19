@@ -248,17 +248,6 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
   );
 }
 
-export async function getPicksForCapper(userId: string, capperId: string) {
-  return prisma.pick.findMany({
-    where: { userId, capperId },
-    include: { capper: true, sport: true, league: true },
-    // (gameTime, createdAt, id): the canonical chronological tie-break, so this
-    // order matches comparePicksChronological and the SQL aggregates -
-    // selectCapperRecentPicks takes its "most recent" straight from it.
-    orderBy: [{ gameTime: "asc" }, { createdAt: "asc" }, { id: "asc" }],
-  });
-}
-
 export type PickFilters = {
   capperId?: string;
   sportId?: string;
@@ -298,14 +287,6 @@ export async function getFilteredPicksForUser(userId: string, filters: PickFilte
       ...(filters.status ? { status: filters.status } : {}),
       ...(dateRange ? { gameTime: { gte: dateRange.start, lt: dateRange.end } } : {}),
     },
-    include: { capper: true, sport: true, league: true },
-    orderBy: { gameTime: "desc" },
-  });
-}
-
-export async function getPicksForUser(userId: string) {
-  return prisma.pick.findMany({
-    where: { userId },
     include: { capper: true, sport: true, league: true },
     orderBy: { gameTime: "desc" },
   });

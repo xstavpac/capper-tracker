@@ -609,7 +609,7 @@ export function scorecardWindowRange(window: ScorecardWindow, now: Date): { star
 // (no category section renders) - then this falls back to all-sport, since
 // there is no sport to be consistent with.
 //
-// `picks` must be gameTime-ascending (as getPicksForCapper returns them); the
+// `picks` must be gameTime-ascending ((gameTime, createdAt, id) order); the
 // result is the `limit` most recent, newest first, and the limit applies to
 // the SCOPED set (10 recent NCAAF picks, not "NCAAF picks that survive the
 // top 10 overall"). `scopedSport` is echoed back for the section heading.
