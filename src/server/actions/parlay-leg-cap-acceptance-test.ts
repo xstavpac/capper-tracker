@@ -93,6 +93,10 @@ stub("../data/picks", {
     recordLoads++;
     return {};
   },
+  getCapperRecordBundle: async () => {
+    recordLoads++;
+    return { leagueRecords: { records: {}, streaks: {}, last20: {} }, categoryRecords: {} };
+  },
 });
 
 async function main() {

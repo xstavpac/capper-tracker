@@ -47,6 +47,7 @@ stub("../data/live-board-picks", {
 stub("../data/picks", {
   getCapperLeagueRecords: async () => FROZEN_LEAGUE_RECORDS,
   getCapperCategoryRecords: async () => FROZEN_CATEGORY_RECORDS,
+  getCapperRecordBundle: async () => ({ leagueRecords: FROZEN_LEAGUE_RECORDS, categoryRecords: FROZEN_CATEGORY_RECORDS }),
   categoryRecordKey: (capperId: string, category: string) => capperId + "|" + category,
 });
 

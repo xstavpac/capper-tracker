@@ -3,14 +3,14 @@
 // Auto-Generate (Parlay A + its same-game fill + Hedge + Contrarian) for /parlay, over each
 // league's unstarted games in its window (auto-generate-window.ts: today, or
 // the football week for NFL/NCAAF). Loads data only
-// through what Live already uses (getLiveBoardData, getCapperLeagueRecords,
-// getCapperCategoryRecords - all scoped to the signed-in user's own picks
+// through what Live already uses (getLiveBoardData, and getCapperRecordBundle - the
+// query behind getCapperLeagueRecords/getCapperCategoryRecords - all scoped to the signed-in user's own picks
 // and cappers) and hands it to the pure builders in auto-generate.ts. Runs
 // server-side because rankCandidates' module imports server/data/picks.
 import { requireUser } from "@/server/auth";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { getLiveBoardData } from "@/server/data/live-board-picks";
-import { getCapperCategoryRecords, getCapperLeagueRecords, type CapperLeagueRecords } from "@/server/data/picks";
+import { getCapperRecordBundle, type CapperLeagueRecords } from "@/server/data/picks";
 import type { PickCategoryKey } from "@/server/data/stats";
 import { legCapRejection, MAX_POOL_REQUEST_PICKS } from "@/lib/parlay/leg-cap";
 import { buildParlaySet, EMPTY_SLIP, lockParlay, type LockRejection, type SlipHint } from "@/lib/parlay/alternates";
@@ -134,18 +134,15 @@ export async function autoGenerateParlayAction(
   // sees only the picks the filter keeps.
   const scoped = filterGamesByInclude(games, include);
   const allPicks = scoped.flatMap((g) => g.picks);
-  const [records, categoryRecords] = await Promise.all([
-    getCapperLeagueRecords(
-      user.id,
-      allPicks.map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category }))
-    ),
-    getCapperCategoryRecords(
-      user.id,
-      allPicks
-        .filter((p): p is GeneratorPick & { category: PickCategoryKey } => p.category !== null)
-        .map((p) => ({ capperId: p.capperId, category: p.category }))
-    ),
-  ]);
+  // One bundle query for both shapes (was two in parallel, each scanning the
+  // same cappers' history): every record is computed per capper/category
+  // independently, so asking for both at once returns the same values.
+  const { leagueRecords: records, categoryRecords } = await getCapperRecordBundle(user.id, {
+    leagueEntries: allPicks.map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category })),
+    categoryPairs: allPicks
+      .filter((p): p is GeneratorPick & { category: PickCategoryKey } => p.category !== null)
+      .map((p) => ({ capperId: p.capperId, category: p.category })),
+  });
 
   const leaguesSearched = sports.map((s) => s.label);
   // Parlay A exactly as before; with no slip locks lockParlay hands it back as is.

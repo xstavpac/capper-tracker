@@ -94,6 +94,7 @@ stub("../data/live-board-picks", {
 stub("../data/picks", {
   getCapperLeagueRecords: async () => ({ records: {}, streaks: {}, last20: {} }),
   getCapperCategoryRecords: async () => ({}),
+  getCapperRecordBundle: async () => ({ leagueRecords: { records: {}, streaks: {}, last20: {} }, categoryRecords: {} }),
 });
 
 async function main() {

@@ -3,8 +3,8 @@
 // Auto Hedge / Contrarian for the Select-Your-Own-Picks flow (/parlay's "My
 // Picks" section - see docs/parlay-white-paper.md Section 2.1, three modes
 // over one primary pool). Mirrors autoGenerateParlayAction's shape
-// (parlay-generator.ts) closely on purpose: same getLiveBoardData/
-// getCapperCategoryRecords calls, same buildSwapParlay call - the only new
+// (parlay-generator.ts) closely on purpose: same getLiveBoardData and
+// record-bundle reads (getCapperRecordBundle), same buildSwapParlay call - the only new
 // piece is buildPoolPrimary (lib/parlay/pool-swap.ts), which builds the
 // primary parlay from the user's pool instead of the full slate's top pick
 // per game. Runs server-side because buildPoolPrimary/buildSwapParlay's
@@ -15,7 +15,7 @@
 // scoped to the signed-in user, its game from the Live board. Nothing about
 // a pick - its capper, bet, odds, teams or kickoff - is taken from the client.
 import { requireUser } from "@/server/auth";
-import { getCapperCategoryRecords, getCapperLeagueRecords, type CapperLeagueRecords } from "@/server/data/picks";
+import { getCapperLeagueRecords, getCapperRecordBundle, type CapperLeagueRecords } from "@/server/data/picks";
 import { getOwnedSlipPickRows, loadSlipBoards, offBoardSlipPick, picksOnBoards, type SlipBoard } from "@/server/data/parlay-slip-picks";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
@@ -137,23 +137,21 @@ export async function generatePoolSwapAction(
   const gamesForSwap = excludeSelectedPicks(games, primary.parlayA);
 
   const allPicks = gamesForSwap.flatMap((g) => g.picks);
-  const categoryRecords = await getCapperCategoryRecords(
-    user.id,
-    allPicks
-      .filter((p): p is GeneratorPick & { category: PickCategoryKey } => p.category !== null)
-      .map((p) => ({ capperId: p.capperId, category: p.category }))
-  );
 
   // The `records` fetched above only covers the pool's own picks (what
   // buildPoolPrimary needed to rank them) - a swap's alternate pick belongs
   // to a different capper entirely, so PickCard would render it with no
   // record at all without also covering the catalog. Re-fetch over the
   // union, same shape autoGenerateParlayAction fetches for its own full
-  // slate (parlay-generator.ts).
-  const renderRecords = await getCapperLeagueRecords(
-    user.id,
-    [...poolPicks, ...allPicks].map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category }))
-  );
+  // slate (parlay-generator.ts). One bundle query carries both that and the
+  // swap's category records (was two sequential calls); the first call above
+  // can't join them - buildPoolPrimary needs its result before allPicks exists.
+  const { leagueRecords: renderRecords, categoryRecords } = await getCapperRecordBundle(user.id, {
+    leagueEntries: [...poolPicks, ...allPicks].map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category })),
+    categoryPairs: allPicks
+      .filter((p): p is GeneratorPick & { category: PickCategoryKey } => p.category !== null)
+      .map((p) => ({ capperId: p.capperId, category: p.category })),
+  });
 
   return {
     parlayA: primary.parlayA,
