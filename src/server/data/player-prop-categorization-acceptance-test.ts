@@ -96,7 +96,10 @@ function main() {
   }
 
   // --- Markets with no category of their own yet: unchanged ---------------
-  for (const m of ["RUSH_REC_YDS", "PASS_RUSH_YDS", "PASS_TDS"] as const) {
+  // Version 3: combined-yards lines have their own key.
+  check("propMarket=RUSH_REC_YDS -> RUSH_REC_YDS_PROP", propPick({ betDetail: null, propMarket: "RUSH_REC_YDS" }), "RUSH_REC_YDS_PROP");
+  check("propMarket=PASS_RUSH_YDS -> PASS_RUSH_YDS_PROP", propPick({ betDetail: null, propMarket: "PASS_RUSH_YDS" }), "PASS_RUSH_YDS_PROP");
+  for (const m of ["PASS_TDS"] as const) {
     check(`propMarket=${m} -> TD_PROP (unchanged)`, propPick({ betDetail: null, propMarket: m }), "TD_PROP");
   }
   check("NHL propMarket=SHOTS_ON_GOAL -> TD_PROP (unchanged)", propPick({ betDetail: null, propMarket: "SHOTS_ON_GOAL", sportName: "NHL" }), "TD_PROP");
@@ -111,7 +114,7 @@ function main() {
   check("fallback (propMarket null): empty betDetail -> null", propPick({ betDetail: "" }), null);
 
   // --- The new categories are shown ---------------------------------------
-  check("the four stat-prop categories", STAT_PROP_CATEGORY_KEYS, ["PASS_YDS_PROP", "RUSH_YDS_PROP", "REC_YDS_PROP", "RECEPTIONS_PROP"]);
+  check("the six stat-prop categories", STAT_PROP_CATEGORY_KEYS, ["PASS_YDS_PROP", "RUSH_YDS_PROP", "REC_YDS_PROP", "RECEPTIONS_PROP", "RUSH_REC_YDS_PROP", "PASS_RUSH_YDS_PROP"]);
   check("TD_PROP is still in ALL_CATEGORY_KEYS", ALL_CATEGORY_KEYS.includes("TD_PROP"), true);
   check("every stat-prop category is in ALL_CATEGORY_KEYS", STAT_PROP_CATEGORY_KEYS.every((k) => ALL_CATEGORY_KEYS.includes(k)), true);
   check("NFL chip set has TD_PROP and every stat-prop tile", (["TD_PROP", ...STAT_PROP_CATEGORY_KEYS] as const).every((k) => NFL_CHIP_SET.includes(k)), true);
@@ -120,8 +123,8 @@ function main() {
     ["NCAAF", "NBA", "WNBA", "NCAAB", "NHL", "MLB", "KBO", "CFL"].filter((s) => chipSetForLeague(s).some((k) => k.endsWith("_PROP"))),
     []
   );
-  check("tile labels", STAT_PROP_CATEGORY_KEYS.map((k) => PICK_CATEGORY_LABELS[k]), ["Passing Yards", "Rushing Yards", "Receiving Yards", "Receptions"]);
-  check("record-line nouns", STAT_PROP_CATEGORY_KEYS.map((k) => PICK_CATEGORY_MARKET_NOUN[k]), ["passing yards", "rushing yards", "receiving yards", "receptions"]);
+  check("tile labels", STAT_PROP_CATEGORY_KEYS.map((k) => PICK_CATEGORY_LABELS[k]), ["Passing Yards", "Rushing Yards", "Receiving Yards", "Receptions", "Rush + Rec Yards", "Pass + Rush Yards"]);
+  check("record-line nouns", STAT_PROP_CATEGORY_KEYS.map((k) => PICK_CATEGORY_MARKET_NOUN[k]), ["passing yards", "rushing yards", "receiving yards", "receptions", "rushing + receiving yards", "passing + rushing yards"]);
 
   console.log(failures === 0 ? `\nAll checks passed.` : `\n${failures} check(s) FAILED.`);
   process.exit(failures === 0 ? 0 : 1);

@@ -4,6 +4,11 @@
 //   npx tsx scripts/backfill-pick-category.ts --apply    # actually writes
 //   npx tsx scripts/backfill-pick-category.ts --verify   # READ-ONLY audit of every stored stamp (see below)
 //   options: --batch=500   rows read per batch (default 500)
+//            --combined-yardage   only PLAYER_PROP picks stored as TD_PROP whose
+//                                 category is now RUSH_REC_YDS_PROP / PASS_RUSH_YDS_PROP
+//                                 (PICK_CATEGORY_VERSION 3). Works with all three modes;
+//                                 with --apply it writes those rows only, by id, and
+//                                 leaves every other pick (category and version) alone.
 //
 // BACKFILL (default / --apply): stamps picks that predate the stored-category
 // columns (categoryVersion = 0), or that were stamped by an older
@@ -28,10 +33,18 @@
 // the target. A dry run first is the intended workflow for the backfill.
 import { prisma } from "@/lib/prisma";
 import { PICK_CATEGORY_VERSION } from "@/server/data/stats";
-import { backfillPickCategory, verifyPickCategory } from "@/server/data/backfill-pick-category";
+import {
+  backfillPickCategory,
+  COMBINED_YARDAGE_CATEGORIES,
+  COMBINED_YARDAGE_SCOPE,
+  verifyPickCategory,
+} from "@/server/data/backfill-pick-category";
 
 const apply = process.argv.includes("--apply");
 const verify = process.argv.includes("--verify");
+const combinedYardage = process.argv.includes("--combined-yardage");
+const known = new Set(["--apply", "--verify", "--combined-yardage"]);
+const unknownArg = process.argv.slice(2).find((a) => !known.has(a) && !a.startsWith("--batch="));
 const batchArg = process.argv.find((a) => a.startsWith("--batch="));
 const batchSize = batchArg ? Math.max(1, parseInt(batchArg.slice("--batch=".length), 10) || 500) : 500;
 
@@ -47,13 +60,24 @@ function targetHost(): string {
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set.");
   if (verify && apply) throw new Error("--verify is read-only and cannot be combined with --apply.");
+  if (unknownArg) throw new Error(`Unknown argument ${unknownArg} - nothing was run.`);
+  const scope = combinedYardage ? COMBINED_YARDAGE_SCOPE : undefined;
 
   console.log(`Target:            ${targetHost()}`);
   console.log(`Mode:              ${verify ? "VERIFY (read-only, enforced by the database)" : apply ? "APPLY (writes)" : "DRY RUN (no writes)"}`);
+  console.log(`Scope:             ${combinedYardage ? "combined-yardage props stored as TD_PROP -> " + COMBINED_YARDAGE_CATEGORIES.join(" / ") : "every pick"}`);
   console.log(`PICK_CATEGORY_VERSION: ${PICK_CATEGORY_VERSION}`);
 
   if (verify) {
-    const r = await verifyPickCategory({ batchSize, maxSamples: 20, log: (line) => console.log(line) });
+    const r = await verifyPickCategory({ batchSize, scope, maxSamples: 20, log: (line) => console.log(line) });
+    if (combinedYardage) {
+      const hits = COMBINED_YARDAGE_CATEGORIES.map((c) => [c, r.staleChangePairs.get("TD_PROP -> " + c) ?? 0] as const);
+      console.log("");
+      console.log(`PLAYER_PROP rows stored as TD_PROP: ${r.total}`);
+      for (const [c, n] of hits) console.log(`  would move to ${c.padEnd(20)} ${n}`);
+      console.log(`Would change (total):              ${hits.reduce((s, [, n]) => s + n, 0)}`);
+      return;
+    }
     console.log("");
     console.log(`Total rows:        ${r.total}`);
     console.log(`Rows visited:      ${r.read}${r.read === r.total ? "" : "   <-- DOES NOT MATCH TOTAL (rows changed during the run, or a paging bug)"}`);
@@ -72,7 +96,13 @@ async function main() {
     return;
   }
 
-  await backfillPickCategory({ apply, batchSize, log: (line) => console.log(line) });
+  await backfillPickCategory({
+    apply,
+    batchSize,
+    scope,
+    onlyCategories: combinedYardage ? COMBINED_YARDAGE_CATEGORIES : undefined,
+    log: (line) => console.log(line),
+  });
 }
 
 main()

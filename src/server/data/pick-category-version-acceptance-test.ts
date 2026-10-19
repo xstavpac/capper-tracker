@@ -66,14 +66,19 @@ const GOLDEN: [string, Partial<Input> & { betType: Input["betType"] }, string | 
   ["PLAYER_PROP propMarket RUSH_YDS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "RUSH_YDS", betDetail: "anything" }, "RUSH_YDS_PROP"],
   ["PLAYER_PROP propMarket REC_YDS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "REC_YDS", betDetail: "anything" }, "REC_YDS_PROP"],
   ["PLAYER_PROP propMarket RECEPTIONS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "RECEPTIONS", betDetail: "anything" }, "RECEPTIONS_PROP"],
-  ["PLAYER_PROP propMarket with no key of its own", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "RUSH_REC_YDS", betDetail: "anything" }, "TD_PROP"],
+  // Version 3: combined-yards lines left TD_PROP for keys of their own.
+  ["PLAYER_PROP propMarket RUSH_REC_YDS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "RUSH_REC_YDS", betDetail: "anything" }, "RUSH_REC_YDS_PROP"],
+  ["PLAYER_PROP propMarket PASS_RUSH_YDS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "PASS_RUSH_YDS", betDetail: "anything" }, "PASS_RUSH_YDS_PROP"],
+  ["PLAYER_PROP legacy pass + rush text", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "Josh Allen Over 249.5 Passing + Rushing Yards" }, "PASS_RUSH_YDS_PROP"],
+  ["PLAYER_PROP legacy rush and rec text", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "Kenneth Walker over 110 rushing and receiving yards" }, "RUSH_REC_YDS_PROP"],
+  ["PLAYER_PROP propMarket with no key of its own", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "PASS_TDS", betDetail: "anything" }, "TD_PROP"],
   ["PLAYER_PROP legacy passing-yards text", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "Joe Burrow Over 250 Passing Yards" }, "PASS_YDS_PROP"],
   ["PLAYER_PROP legacy TD text", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "Puka Nacua Anytime TD" }, "TD_PROP"],
   ["PLAYER_PROP unparseable (null)", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "??" }, null],
 ];
 
 // The expected values above were captured at this version.
-expect("PICK_CATEGORY_VERSION matches the version the golden table was captured at", PICK_CATEGORY_VERSION, 2);
+expect("PICK_CATEGORY_VERSION matches the version the golden table was captured at", PICK_CATEGORY_VERSION, 3);
 for (const [label, overrides, expected] of GOLDEN) {
   expect(`pickCategory: ${label}`, pickCategory({ ...base, ...overrides } as Input), expected);
 }
