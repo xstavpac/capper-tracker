@@ -42,3 +42,20 @@ export const CRON_GRACE_MINUTES = {
 
 // A run still RUNNING this long past its route's maxDuration was killed.
 export const CRON_TIMEOUT_GRACE_SECONDS = 60;
+
+// ---------------------------------------------------------------------------
+// Odds API
+// ---------------------------------------------------------------------------
+
+// Red when the latest call's account-wide credits are at least this used...
+// Same number as CREDIT_ALERT_THRESHOLD in server/data/odds-api-usage.ts (the
+// "[odds-api-usage] credits ALERT" log line); odds-api-status-acceptance-test
+// pins the two together.
+export const ODDS_CREDITS_ALERT_PCT = 0.85;
+// ...or fewer than this many are left. Same env var and default as the
+// "[odds-api] credits LOW" watermark in odds.ts.
+export const ODDS_CREDITS_LOW_REMAINING = Number(process.env.ODDS_API_CREDITS_LOW_WATERMARK) || 1000;
+
+// An in-season sport with no odds snapshot for today's ET date this long
+// after today's refresh-odds run (05:05 UTC) is stale.
+export const ODDS_SNAPSHOT_SEED_GRACE_HOURS = 2;

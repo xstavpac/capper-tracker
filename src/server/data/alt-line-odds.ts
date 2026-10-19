@@ -153,7 +153,7 @@ async function loadAltLineMarket(
   // One odds_api_usage_log row per call that got a response, failed or not. A
   // failed write there never loses the odds just bought.
   const logUsage = () =>
-    persistOddsApiUsage({ sportKey, marketsRequested: [marketKey], eventsRequested: 1, credits }).catch((err) => {
+    persistOddsApiUsage({ sportKey, marketsRequested: [marketKey], eventsRequested: 1, credits, httpStatus: res.status, caller: "alt-lines" }).catch((err) => {
       console.error(
         "[alt-line-odds] failed to persist usage log",
         JSON.stringify({ eventId, marketKey, error: err instanceof Error ? err.message : String(err) })

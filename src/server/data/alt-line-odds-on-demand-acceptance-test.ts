@@ -235,7 +235,18 @@ async function main() {
     `https://api.the-odds-api.com/v4/sports/${NFL}/events/${RAMS}/odds?apiKey=REDACTED&regions=us&markets=alternate_totals&oddsFormat=american`
   );
   expect("the call is logged to odds_api_usage_log", usageRows, [
-    { sportKey: NFL, pollTimestamp: new Date(base).toISOString(), creditsUsed: 2615, creditsRemaining: 17385, requestsToday: 1, requestsMonth: 1, marketsRequested: "alternate_totals", eventsRequested: 1 },
+    {
+      sportKey: NFL,
+      pollTimestamp: new Date(base).toISOString(),
+      creditsUsed: 2615,
+      creditsRemaining: 17385,
+      requestsToday: 1,
+      requestsMonth: 1,
+      marketsRequested: "alternate_totals",
+      eventsRequested: 1,
+      httpStatus: 200,
+      caller: "alt-lines",
+    },
   ]);
 
   // ---- 2. a second pick on the same game does not fetch again ----

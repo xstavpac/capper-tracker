@@ -32,7 +32,7 @@ Every threshold is in `src/lib/admin-thresholds.ts`.
 |---|---|---|
 | DB Monitor | any top-30 statement has a red flag at the default threshold (500 avg rows/call). The three expected-heavy refresh-scores reads only count above 5,000 | the page's own pg_stat_statements statement (30 rows) |
 | Crons | a cron's latest run is ERROR (HTTP 5xx, a body with status "error", or a throw), or still RUNNING 60 s past its route's maxDuration (timed out / crashed), or it's overdue: its latest fire time is past its grace (`CRON_GRACE_MINUTES`: 20 min for grade-picks, 30 for backfill-odds, 60 for the daily ones) with no run started at or after it. A WARNING (200 with ok:false) shows on the page but isn't a dot; a cron with no runs logged yet isn't overdue | latest run per cron (`DISTINCT ON (name)` over the `(name, startedAt)` index): 6 rows, inside the combined status statement |
-| Odds API | latest credits used >= 85%, or fewer than 1,000 left; or an in-season sport has no snapshot for today's ET date 2h after the refresh-odds run | Odds API PR |
+| Odds API | the newest usage row's credits (the Odds API's own x-requests-used / x-requests-remaining) are >= 85% used (`ODDS_CREDITS_ALERT_PCT`, the same number as the `credits ALERT` log line) or under 1,000 left (`ODDS_CREDITS_LOW_REMAINING`, the same env var and default as the `credits LOW` line); or an in-season sport has no snapshot for today's ET date 2h after today's refresh-odds fire (05:05 UTC; nothing is due just after ET midnight, before it fires) | the newest `odds_api_usage_log` row (pollTimestamp index, 1 row) and the newest snapshot per sport (`DISTINCT ON ("sportKey")` over the (sportKey, fetchDate) unique index, ~6 rows, never the `data` blob), inside the combined status statement |
 | Grading | at least 1 stuck-pending pick: its game went final 3+ hours ago, or no final was found 8+ hours after start | Grading PR |
 | Imports | in the last 24h: a GAME_UNMATCHED, PARSE_UNRESOLVED or RECOVERY_UNRESOLVED line, or a pick inserted with no matched game. PARSE_SILENT and PROP_UNSUPPORTED are listed on the page but never turn the dot on | Imports PR |
 
@@ -51,6 +51,20 @@ seeded + prop events for refresh-odds, games added for backfill, events
 fetched for the NHL pass, roster rows written). Logging is best-effort: a
 failed write never fails the cron. About 100 runs a day, ~3k rows a month;
 no prune (deletes here are by id only).
+
+## Odds API
+
+`odds_api_usage_log` already had a row per Odds API call with usage headers
+(credits used / remaining as of that call, account-wide). Each row now also
+records the response's HTTP status and its `caller`: `odds-seed` /
+`odds-backfill` (the bulk listing in odds.ts), `nfl-prop-odds` /
+`nhl-goal-scorer-odds` (event-level props), `alt-lines`, `fanduel-link`.
+Which calls get a row is unchanged (the NFL-prop 95% credit gate reads the
+newest row), so a call that throws before any response, or an event-prop call
+that fails, still leaves none. Rows from before this change show "not
+recorded". Page: latest credits, today's calls by sport x caller x status
+(ET day), this month's count, and each sport's newest snapshot - one
+statement, a few dozen small rows.
 
 `CRON_JOBS` mirrors `vercel.json` (pinned by `cron-runs-acceptance-test.ts`).
 Page: each cron's newest run plus its last 10 in 7 days - two small

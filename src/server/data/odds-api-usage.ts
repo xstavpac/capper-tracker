@@ -24,6 +24,12 @@ import { prisma } from "@/lib/prisma";
 import { easternDateKey, easternDayStart } from "@/lib/dates";
 import type { OddsApiCredits } from "@/server/data/odds";
 
+// Which code path made an Odds API call, stored on its usage row.
+//   odds-seed / odds-backfill - the bulk h2h/spreads/totals listing (odds.ts)
+//   nfl-prop-odds / nhl-goal-scorer-odds - event-level prop markets
+//   alt-lines - the import's alternate totals/spreads; fanduel-link - the slip's betslip link
+export type OddsApiCaller = "odds-seed" | "odds-backfill" | "nfl-prop-odds" | "nhl-goal-scorer-odds" | "alt-lines" | "fanduel-link";
+
 export const CREDIT_WARN_THRESHOLD = 0.7;
 export const CREDIT_ALERT_THRESHOLD = 0.85;
 export const CREDIT_STOP_LOWER_PRIORITY_THRESHOLD = 0.95;
@@ -64,6 +70,10 @@ export async function persistOddsApiUsage(input: {
   eventsRequested: number;
   credits: OddsApiCredits;
   pollTimestamp?: Date;
+  // For the admin Odds API tab: the response's HTTP status and which code
+  // path made the call (see OddsApiCaller).
+  httpStatus?: number | null;
+  caller?: OddsApiCaller;
 }): Promise<{ pctUsed: number | null; level: CreditUsageLevel }> {
   const now = input.pollTimestamp ?? new Date();
   const todayKey = easternDateKey(now);
@@ -89,6 +99,8 @@ export async function persistOddsApiUsage(input: {
       requestsMonth: monthCountBefore + 1,
       marketsRequested: input.marketsRequested.join(","),
       eventsRequested: input.eventsRequested,
+      httpStatus: input.httpStatus ?? null,
+      caller: input.caller ?? null,
     },
   });
 

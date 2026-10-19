@@ -8,6 +8,8 @@ import { buildMonitorView } from "@/lib/db-monitor";
 import { CRON_JOBS, cronHealth, cronsAlert, type CronRunRow } from "@/lib/cron-runs";
 import { loadDbMonitorSnapshot } from "@/server/data/db-monitor";
 import { LATEST_CRON_RUNS_SQL } from "@/server/data/cron-runs";
+import { oddsApiAlert, snapshotHealth, type LatestSnapshot, type LatestUsage } from "@/lib/odds-api-status";
+import { LATEST_SNAPSHOTS_SQL, LATEST_USAGE_SQL, ODDS_SPORT_KEYS, parseLatestSnapshots, parseLatestUsage } from "@/server/data/odds-api-status";
 import type { AdminTabAlerts, AdminTabKey } from "@/lib/admin-tabs";
 
 // The ops console's red dots, for the admin layout, cached for
@@ -22,12 +24,16 @@ import type { AdminTabAlerts, AdminTabKey } from "@/lib/admin-tabs";
 
 type StatusRow = {
   crons: (Omit<CronRunRow, "startedAt" | "endedAt"> & { startedAt: string; endedAt: string | null })[];
+  oddsLatest: (Omit<LatestUsage, "pollTimestamp"> & { pollTimestamp: string }) | null;
+  oddsSnapshots: (Omit<LatestSnapshot, "createdAt"> & { createdAt: string })[] | null;
 };
 
 async function loadStatusRow(): Promise<StatusRow> {
   const [row] = await prisma.$queryRaw<StatusRow[]>(Prisma.sql`
     SELECT
-      (SELECT coalesce(json_agg(c), '[]'::json) FROM (${LATEST_CRON_RUNS_SQL}) c) AS crons
+      (SELECT coalesce(json_agg(c), '[]'::json) FROM (${LATEST_CRON_RUNS_SQL}) c) AS crons,
+      (SELECT row_to_json(u) FROM (${LATEST_USAGE_SQL}) u) AS "oddsLatest",
+      (SELECT json_agg(s) FROM (${LATEST_SNAPSHOTS_SQL}) s) AS "oddsSnapshots"
   `);
   return row;
 }
@@ -57,6 +63,15 @@ const CHECKS: StatusCheck[] = [
           return cronHealth(job, latest, now);
         })
       );
+    },
+  },
+  {
+    // Credits on the newest usage row; today's snapshot per in-season sport.
+    tab: "odds-api",
+    run: async (status) => {
+      const { oddsLatest, oddsSnapshots } = await status();
+      const now = new Date();
+      return oddsApiAlert(parseLatestUsage(oddsLatest), snapshotHealth(ODDS_SPORT_KEYS, parseLatestSnapshots(oddsSnapshots), now), now);
     },
   },
 ];
