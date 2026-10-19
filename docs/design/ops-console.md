@@ -113,6 +113,9 @@ date-range report moved to `/admin/imports/skipped-lines` (linked from the
 page); `/admin/import-skipped-lines` is gated and redirects there, keeping
 `from` / `to`.
 
+Follow-up: the parlay (MLP) import doesn't write an `import_runs` row, so
+the Imports tab and its red dot don't cover parlay imports.
+
 ## Copy for Claude
 
 Every tab has one, built by `formatAdminReport` (`src/lib/admin-report.ts`):
