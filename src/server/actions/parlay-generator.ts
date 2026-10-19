@@ -36,7 +36,7 @@ import { toGameLinesPct, toIncludePicks, type IncludePicks } from "@/lib/parlay/
 export type AutoGenerateResult = {
   parlayA: AutoParlay;
   // Extra legs from games already in Parlay A - empty unless the request's
-  // "max legs per game" is 2 or 3 AND there were fewer games than legs asked
+  // "max legs per game" is 2 or more AND there were fewer games than legs asked
   // for. Hedge and Contrarian are built from Parlay A alone and never see these.
   sameGame: SameGameFill;
   hedge: SwapParlay;

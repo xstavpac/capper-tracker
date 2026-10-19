@@ -150,9 +150,9 @@ async function main() {
   // ---------------------------------------------------------------------
   // 1. The control, and max 1 as before
   // ---------------------------------------------------------------------
-  check("control: 'Max legs per game' with 1 / 2 / 3", [1, 2, 3].every((n) => maxOption(n) !== undefined) && text().includes("Max legs per game"));
+  check("control: 'Max legs per game' with 1 to 5", [1, 2, 3, 4, 5].every((n) => maxOption(n) !== undefined) && text().includes("Max legs per game"));
   check("control: 1 is on by default", maxOption(1)?.getAttribute("aria-checked") === "true" && maxOption(2)?.getAttribute("aria-checked") === "false");
-  check("control at 1: reads one leg per game", text().includes("one per game · up to 20"));
+  check("control at 1: reads one leg per game", text().includes("one per game · up to 25"));
 
   await click(button("Generate parlay"));
   check("max 1: the action is sent 1", JSON.stringify(lastCall()) === JSON.stringify([["MLB"], 3, 1, "ALL", null]), JSON.stringify(lastCall()));
@@ -172,7 +172,7 @@ async function main() {
   // ---------------------------------------------------------------------
   await click(maxOption(2));
   check("changing the setting clears the built result", !text().includes("Generated parlay") && button("Build with 3 legs") === undefined);
-  check("control at 2: says when it applies", text().includes("up to 2 per game · up to 20") && text().includes("adds same-game legs only when there aren't enough games to reach your leg count"));
+  check("control at 2: says when it applies", text().includes("up to 2 per game · up to 25") && text().includes("adds same-game legs only when there aren't enough games to reach your leg count"));
   await click(button("Generate parlay"));
   check("max 2: the action is sent 2", JSON.stringify(lastCall()) === JSON.stringify([["MLB"], 5, 2, "ALL", null]), JSON.stringify(lastCall()));
   check("filled to the count asked: shown without a shortfall prompt", text().includes("Parlay A — 5-leg parlay") && !text().includes("Build with"));

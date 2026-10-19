@@ -75,9 +75,9 @@ async function main() {
   check("Parlay A, Hedge and Contrarian are identical at max 1, 2 and 3", [core(two) === core(one), core(three) === core(one), core(byDefault) === core(one)], [true, true, true]);
   check("Hedge and Contrarian have Parlay A's 5 legs at max 3, not 10", [three.hedge.legs.length, three.contrarian.legs.length], [5, 5]);
 
-  check("a setting that isn't 1, 2 or 3 is treated as 1", [(await generate(20, 7)).sameGame, (await generate(20, 0)).sameGame], [{ maxLegsPerGame: 1, legs: [] }, { maxLegsPerGame: 1, legs: [] }]);
+  check("a setting outside 1 to 5 is treated as 1", [(await generate(20, 7)).sameGame, (await generate(20, 0)).sameGame], [{ maxLegsPerGame: 1, legs: [] }, { maxLegsPerGame: 1, legs: [] }]);
   check("enough games for the count asked: nothing added even at max 3", added(await generate(5, 3)), []);
-  const capped = await autoGenerateParlayAction(["MLB"], 21, 3);
+  const capped = await autoGenerateParlayAction(["MLB"], 26, 3);
   check("past the leg cap is still refused", "error" in capped, true);
 
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
