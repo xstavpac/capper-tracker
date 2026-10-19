@@ -88,6 +88,21 @@ user-workflow versions, or opportunistically. Local dev is on Node 24
 already; the runner script uses `node --import tsx`, which needs Node >= 20.6,
 so 22 is fine.
 
+### `odds-projections-parity-acceptance-test.ts` fails against real local snapshots (noted 2026-10-19)
+
+Fails on `main` (52a3260) too, only in its "real `<sportKey>`: per-game lookups"
+checks, i.e. only when the local DB holds real `odds_snapshots` rows. The
+fixture sections pass. Likely cause, from reading the test rather than a
+confirmed repro: it compares the matched game's **index** in two
+concatenated lists. The old read (`oddsSnapshot.findMany`, no `orderBy`)
+returns snapshots in physical order, while `getOddsGamesForTendencies`
+orders by `fetchDate`, then position. When the rows aren't stored in
+`fetchDate` order, the indexes differ even though the matched prices and
+totals are identical (the failure output shows exactly that, e.g. idx 232
+vs 278 with the same moneylines). Fix in the test, not the product:
+compare the matched game's id or content, or give the reference read
+`orderBy: { fetchDate: "asc" }`. Not fixed yet.
+
 ### Seeded Postgres in CI so the model-engine suites run there - DONE (2026-09)
 
 The gap was **7** skipped suites, not 6 (the old comment undercounted). `ci.yml`

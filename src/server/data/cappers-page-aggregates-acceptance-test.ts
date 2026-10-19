@@ -16,7 +16,7 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { PICK_CATEGORY_VERSION, SCORECARD_WINDOWS, pickCategory, currentStreak, type ScorecardWindow } from "@/server/data/stats";
-import * as adapter from "@/server/data/pick-aggregates-cappers-adapter";
+import * as adapter from "@/server/data/pick-aggregates-cappers-adapter-legacy";
 import type { LeaderboardEntry } from "@/server/data/cappers";
 import { getCappersPageData, sparklineTone, SPARKLINE_MIN_PICKS, STANDOUT_MIN_GRADED, STAT_WEEKS, getPanelRows, panelWindowHasGraded, consistencyScore, consistencyTier, type ActiveEntry, type CapperSparkline, type PanelWindow, type StreakEntry, type WinnerEntry } from "@/server/data/cappers-page-aggregates";
 import { trendSeries, yesterdayRange } from "@/lib/cappers-panels";

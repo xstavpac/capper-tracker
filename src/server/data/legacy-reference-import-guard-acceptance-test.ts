@@ -1,4 +1,6 @@
-// Static guard: picks-by-capper-legacy.ts, sport-category-panel-legacy.ts, dashboard-summary-legacy.ts and capper-detail-legacy.ts
+// Static guard: the GUARDED_MODULES below (picks-by-capper-legacy.ts, sport-category-panel-legacy.ts,
+// dashboard-summary-legacy.ts, capper-detail-legacy.ts, cappers-legacy.ts, pick-aggregates-legacy.ts,
+// pick-aggregates-cappers-adapter-legacy.ts, units-series-parity.ts, board-picks-legacy.ts)
 // are frozen, pre-migration reference implementations - kept ONLY so
 // picks-by-capper-aggregates-acceptance-test.ts / capper-list-aggregates-acceptance-test.ts /
 // live-category-panel-parity-acceptance-test.ts and the T2 harness
@@ -26,7 +28,20 @@ function check(label: string, pass: boolean, detail = "") {
   if (!pass) failures++;
 }
 
-const GUARDED_MODULES = ["picks-by-capper-legacy", "sport-category-panel-legacy", "dashboard-summary-legacy", "capper-detail-legacy"];
+const GUARDED_MODULES = [
+  "picks-by-capper-legacy",
+  "sport-category-panel-legacy",
+  "dashboard-summary-legacy",
+  "capper-detail-legacy",
+  // The raw-pick Cappers-page functions (full pick history per capper list) and
+  // the full-history units-series verification helper.
+  "cappers-legacy",
+  "pick-aggregates-legacy",
+  "pick-aggregates-cappers-adapter-legacy",
+  "units-series-parity",
+  // The pre-#277 board / game-detail pick reads (+-2 days, full rows).
+  "board-picks-legacy",
+];
 
 function stripComments(input: string): string {
   const src = input.replace(/\r\n/g, "\n");

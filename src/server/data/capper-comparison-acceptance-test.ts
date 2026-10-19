@@ -5,7 +5,8 @@
 // dimension, because the filtering and stats code is unchanged - this proves no
 // needed column was dropped.
 //
-// Reference = the ORIGINAL read (getPicksForCapper: full rows + relations) fed
+// Reference = the ORIGINAL read (getPicksForCapper, now loadLegacyCapperPicks in
+// capper-detail-legacy.ts: full rows + relations) fed
 // through the same applyComparisonFilters / computeStats / units-series functions.
 //
 // Two modes:
@@ -20,7 +21,7 @@
 //   npx tsx src/server/data/capper-comparison-acceptance-test.ts [--real-db]
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { getPicksForCapper } from "@/server/data/picks";
+import { loadLegacyCapperPicks as getPicksForCapper } from "@/server/data/capper-detail-legacy";
 import {
   getCapperComparison,
   applyComparisonFilters,

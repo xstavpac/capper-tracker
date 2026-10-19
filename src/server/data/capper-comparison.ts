@@ -43,7 +43,7 @@ const COMPARISON_PICK_SELECT = {
 
 export type ComparisonPick = Prisma.PickGetPayload<{ select: typeof COMPARISON_PICK_SELECT }>;
 
-// Same scope and order as getPicksForCapper (userId + capperId, gameTime asc), minus the relations.
+// userId + capperId, gameTime asc (the scope and order of the old getPicksForCapper), no relations.
 function getComparisonPicks(userId: string, capperId: string): Promise<ComparisonPick[]> {
   return prisma.pick.findMany({
     where: { userId, capperId },
@@ -57,7 +57,7 @@ function getComparisonPicks(userId: string, capperId: string): Promise<Compariso
 // architectural pattern the Picks page already uses for its own bet-type
 // filter (fetch broadly, filter derived/computed fields in JS) - not a
 // second DB-query-building abstraction, and not worth one: a capper's full
-// pick history is a bounded, small dataset (getPicksForCapper has no
+// pick history is a bounded, small dataset (this read has no
 // pagination), so there's no performance reason to push any of this down
 // into SQL.
 export type ComparisonFilters = {

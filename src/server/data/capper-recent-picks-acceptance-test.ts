@@ -23,7 +23,7 @@ function check(label: string, actual: unknown, expected: unknown) {
 type FakePick = { id: string; sport: { name: string } };
 const pick = (id: string, sport: string): FakePick => ({ id, sport: { name: sport } });
 
-// getPicksForCapper returns picks gameTime-ascending, so index 0 is the
+// The capper reads return picks gameTime-ascending, so index 0 is the
 // OLDEST. The exact reported scenario for "Dorm Room Degenerates": a couple
 // of older MLB picks, then a run of recent NCAAF picks. His primary sport
 // (most category-eligible picks) is NCAAF, so selectedCategorySport defaults
