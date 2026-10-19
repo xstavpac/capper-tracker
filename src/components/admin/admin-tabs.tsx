@@ -15,7 +15,7 @@ export function AdminTabs({ alerts = {} }: { alerts?: AdminTabAlerts }) {
       <ul className="flex min-w-max gap-1 px-1">
         {ADMIN_TABS.map((tab) => {
           const active = pathname === tab.href || pathname.startsWith(tab.href + "/");
-          const alert = alerts[tab.key] === true;
+          const alert = alerts[tab.key];
           return (
             <li key={tab.key}>
               <Link
@@ -30,8 +30,11 @@ export function AdminTabs({ alerts = {} }: { alerts?: AdminTabAlerts }) {
                 {tab.label}
                 {alert && (
                   <>
-                    <span aria-hidden className="h-2 w-2 rounded-full bg-[#DC2626] dark:bg-[#F87171]" />
-                    <span className="sr-only">(needs attention)</span>
+                    {/* The one-line reason shows on hover; the 16px box is the hover target around the 8px dot. */}
+                    <span aria-hidden title={alert} className="inline-flex h-4 w-4 items-center justify-center">
+                      <span className="h-2 w-2 rounded-full bg-[#DC2626] dark:bg-[#F87171]" />
+                    </span>
+                    <span className="sr-only">(needs attention: {alert})</span>
                   </>
                 )}
               </Link>

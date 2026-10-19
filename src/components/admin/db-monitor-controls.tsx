@@ -3,30 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { resetDbStatsAction } from "@/server/actions/db-monitor";
-
-const BUTTON = "rounded-md border border-border bg-muted px-3 py-1.5 text-sm text-foreground hover:bg-muted/70 disabled:opacity-50";
-
-// Copies the server-built plain-text report. The same text is on the page in
-// a <details> block, so a browser that blocks clipboard access still has it.
-export function CopyReportButton({ report }: { report: string }) {
-  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(report);
-      setState("copied");
-    } catch {
-      setState("failed");
-    }
-    setTimeout(() => setState("idle"), 2500);
-  }
-
-  return (
-    <button type="button" onClick={copy} className={BUTTON}>
-      {state === "copied" ? "Copied" : state === "failed" ? "Copy failed - use the text below" : "Copy for Claude"}
-    </button>
-  );
-}
+import { ADMIN_BUTTON as BUTTON } from "@/components/admin/report-controls";
 
 // "Reset stats" behind an in-page confirm (not window.confirm), then a
 // refresh so the page re-reads the now-empty stats.

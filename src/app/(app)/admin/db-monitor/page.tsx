@@ -9,7 +9,8 @@ import {
   formatNumber,
   parseRowThreshold,
 } from "@/lib/db-monitor";
-import { CopyReportButton, ResetStatsButton } from "@/components/admin/db-monitor-controls";
+import { ResetStatsButton } from "@/components/admin/db-monitor-controls";
+import { CopyReportButton, ReportDetails } from "@/components/admin/report-controls";
 
 // pg_stat_statements for runaway queries, admin-only (requireAdminOpsPage).
 // One monitor statement per load (loadDbMonitorSnapshot), read fresh for each
@@ -114,10 +115,7 @@ export default async function DbMonitorPage({
         </div>
       )}
 
-      <details className="text-sm">
-        <summary className="cursor-pointer text-muted-foreground">Report text (what &quot;Copy for Claude&quot; copies)</summary>
-        <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border-subtle bg-muted p-3 font-mono text-xs text-foreground">{report}</pre>
-      </details>
+      <ReportDetails report={report} />
     </div>
   );
 }

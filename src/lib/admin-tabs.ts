@@ -7,8 +7,9 @@ export const ADMIN_TABS = [
 
 export type AdminTabKey = (typeof ADMIN_TABS)[number]["key"];
 
-// Which tabs show the red alert dot. The admin layout fills this in; a tab
-// with no entry (or false) shows none.
-export type AdminTabAlerts = Partial<Record<AdminTabKey, boolean>>;
+// Which tabs show the red alert dot, each with the one-line reason shown on
+// hover. The admin layout fills this in (getAdminStatus); a tab with no entry
+// shows none.
+export type AdminTabAlerts = Partial<Record<AdminTabKey, string>>;
 
 export const ADMIN_HOME_HREF: string = ADMIN_TABS[0].href;
