@@ -101,6 +101,7 @@ export async function loadImportsView(now = new Date()): Promise<ImportsView> {
          FROM import_runs r CROSS JOIN LATERAL jsonb_array_elements(r.ambiguity) e
          WHERE r."createdAt" >= ${ts(since)} AND jsonb_typeof(r.ambiguity) = 'array'
          GROUP BY 1, 2, 3
+         ORDER BY 4 DESC, 1, 2, 3
          LIMIT ${IMPORT_LIST_LIMIT}
        ) a) AS ambiguity
   `);

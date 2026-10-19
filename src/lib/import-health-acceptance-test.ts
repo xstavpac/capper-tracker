@@ -125,10 +125,11 @@ const now = T("2026-10-19T20:00:00Z");
   expect("action: a fallback flag per queued row (no score source)", [/toInsert\.push\(\{[\s\S]*?\}\);\s*\n\s*fallback\.push\(!resolvable\);/.test(fn), (fn.match(/toInsert\.push\(/g) ?? []).length], [true, 1]);
   expect("action: fallback picks mapped through insertedIndexes -> created ids", /result\.insertedIndexes\.flatMap\(\(rowIndex, k\) =>\s*\n?\s*fallback\[rowIndex\] \? \[\{ pickId: result\.created\[k\]\.id/.test(fn), true);
   const record = fn.indexOf("await recordImportRun(");
-  expect("action: one run recorded after the insert, before both success returns", [record > fn.indexOf("insertPicksDeduped(user.id, toInsert)"), record < fn.indexOf("if (!result.allowed) {\n    return"), (fn.match(/recordImportRun\(/g) ?? []).length], [true, true, 1]);
+  expect("action: one run recorded after the insert, before both success returns", [record > fn.indexOf("insertPicksDeduped(user.id, toInsert)"), record < fn.search(/if \(!result\.allowed\) \{\r?\n\s*return/), (fn.match(/recordImportRun\(/g) ?? []).length], [true, true, 1]);
   expect("action: a refused import records 0 inserted", /const picksInserted = result\.allowed \? result\.created\.length : 0;/.test(fn), true);
 
   const runs = src("src/server/data/import-runs.ts");
+  expect("page read: the ambiguity list is the top names by count, not an arbitrary 30", /GROUP BY 1, 2, 3\s*\n?\s*ORDER BY 4 DESC, 1, 2, 3\s*\n?\s*LIMIT \$\{IMPORT_LIST_LIMIT\}/.test(runs), true);
   expect("record: validates the ambiguity log, best-effort", [/sanitizeAmbiguityLog\(input\.ambiguity\)/.test(runs), /catch \(err\)/.test(runs)], [true, true]);
   expect("page read: one statement", (runs.slice(runs.indexOf("export async function loadImportsView")).match(/\$queryRaw/g) ?? []).length, 1);
 

@@ -6,7 +6,10 @@
 // Seeded under its own user: two import runs (one with a fallback pick and an
 // ambiguity log with a junk entry), an alerting skipped line, a listed-only
 // one, and one older than the window. The local DB is shared, so window
-// totals are checked as "at least ours". Everything is deleted by id.
+// totals are checked as "at least ours", and the two in-window lines are
+// written as the newest rows (the page lists only the newest
+// IMPORT_LIST_LIMIT, and other suites' imports log GAME_UNMATCHED lines).
+// Everything is deleted by id.
 //
 // DB-backed (runs when DATABASE_URL is set). Run with:
 //   npx tsx src/server/data/import-runs-acceptance-test.ts
@@ -74,8 +77,8 @@ async function main() {
     });
     await prisma.importSkippedLine.createMany({
       data: [
-        line(lineIds.alert, "GAME_UNMATCHED", new Date(now.getTime() - 1 * H)),
-        line(lineIds.listed, "PARSE_SILENT", new Date(now.getTime() - 2 * H)),
+        line(lineIds.alert, "GAME_UNMATCHED", new Date(Date.now() - 1000)),
+        line(lineIds.listed, "PARSE_SILENT", new Date(Date.now() - 2000)),
         line(lineIds.old, "GAME_UNMATCHED", new Date(now.getTime() - (IMPORT_WINDOW_HOURS + 2) * H)),
       ],
     });
