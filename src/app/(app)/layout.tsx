@@ -5,7 +5,7 @@ import { ParlayPoolProvider } from "@/components/parlay/parlay-pool-context";
 import { ParlaySlipNotice } from "@/components/parlay/parlay-slip-notice";
 import { getLiveTickerGames } from "@/server/data/live-ticker";
 import { requireUser } from "@/server/auth";
-import { getNavFeatureFlags, ZONE_MODEL_FLAG_KEY, IMPORT_SKIPPED_LINES_FLAG_KEY } from "@/server/data/feature-flags";
+import { getNavFeatureFlags, ZONE_MODEL_FLAG_KEY, ADMIN_OPS_CONSOLE_FLAG_KEY } from "@/server/data/feature-flags";
 
 // Every route under here needs a live, per-request session - never
 // statically prerender them. Without this, Next's build-time trial-render
@@ -18,8 +18,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [user, tickerGames] = await Promise.all([requireUser(), getLiveTickerGames()]);
   // Sidebar visibility only, from the shared flag snapshot (no per-request
   // query). The gated pages do their own uncached check - see feature-flags.ts.
-  const [showZoneModel, showImportSkippedLines] = await getNavFeatureFlags(
-    [ZONE_MODEL_FLAG_KEY, IMPORT_SKIPPED_LINES_FLAG_KEY],
+  const [showZoneModel, showAdminOps] = await getNavFeatureFlags(
+    [ZONE_MODEL_FLAG_KEY, ADMIN_OPS_CONSOLE_FLAG_KEY],
     user.id
   );
 
@@ -32,7 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <AppSidebar
               user={{ name: user.name, email: user.email, profilePictureUrl: user.profilePictureUrl }}
               showZoneModel={showZoneModel}
-              showImportSkippedLines={showImportSkippedLines}
+              showAdminOps={showAdminOps}
             />
             <main className="flex-1 bg-background p-4 md:rounded-xl md:border md:border-border md:bg-card md:p-8 md:shadow-soft">
               <ParlaySlipNotice />

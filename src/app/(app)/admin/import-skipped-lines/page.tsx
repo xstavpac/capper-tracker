@@ -1,10 +1,8 @@
-import { notFound } from "next/navigation";
-import { requireUser } from "@/server/auth";
-import { isFeatureEnabledForUser, IMPORT_SKIPPED_LINES_FLAG_KEY } from "@/server/data/feature-flags";
+import { requireAdminOpsPage } from "@/server/admin-gate";
 import { getSkippedLineReport, resolveReportRange } from "@/server/data/import-skipped-lines-report";
 
-// Gated server-side on the import_skipped_lines feature flag, same pattern as
-// /zone-model: the sidebar link is only a convenience, a direct request
+// An ops console tab, gated server-side by requireAdminOpsPage like every page
+// under /admin: the sidebar link is only a convenience, a direct request
 // without the flag 404s here. Server-rendered and on-demand - the date
 // filter is a plain GET form, no client state or polling.
 export default async function ImportSkippedLinesPage({
@@ -12,8 +10,7 @@ export default async function ImportSkippedLinesPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  const user = await requireUser();
-  if (!(await isFeatureEnabledForUser(IMPORT_SKIPPED_LINES_FLAG_KEY, user.id))) notFound();
+  await requireAdminOpsPage();
 
   const { from, to, fromInput, toInput } = resolveReportRange(searchParams.from, searchParams.to);
   const report = await getSkippedLineReport(from, to);
