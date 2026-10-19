@@ -44,6 +44,21 @@ Fingerprints in `src/lib/db-monitor.ts` (`STATEMENT_LABELS`), each taken from th
 statement its code path really sends: query-log captures against the local DB,
 stored in `src/lib/db-monitor-fixtures.ts`. Re-capture rather than hand-edit.
 
+Every statement in the 2026-10-19 prod top 30 has a label, named for the code
+path that sends it (each label's `source` says which). Three of them -
+grade-picks' and refresh-scores' upserts into `game_results`,
+`nfl_team_stat_snapshots` and `team_tendency_snapshots` - need live feeds to
+run, so their fixture text is production's own pg_stat_statements entry; the
+rest were captured locally with writes rolled back.
+
+Expected-heavy reads: refresh-scores reads three things in full once a day on
+purpose - `Odds for tendencies`, `Game observations (model)` and
+`Decay-delta persisted ids`. Up to `EXPECTED_HEAVY_MAX_AVG_ROWS` (5,000) avg
+rows/call they show "expected (daily cron, full history)" instead of a row
+threshold flag; above it they flag. Drop the allowance if those reads get
+bounded. Both numbers live in `src/lib/admin-thresholds.ts`, with every other
+ops-console threshold.
+
 Red flags:
 
 | Code | Rule |
@@ -52,7 +67,7 @@ Red flags:
 | RETIRED_B | `picks LEFT JOIN sports` filtered on the joined sport's `name`, no gameTime bound (raw panel, #128) |
 | RETIRED_C | picks whose WHERE is `userId =` **alone**, ORDER BY gameTime, no bound, no LIMIT (getPickRowsForStats, #142) |
 | UNLABELED_FULL_ROW | no label, and the SELECT list names at least `PICK_COLUMN_COUNT - 3` picks columns |
-| ROW_THRESHOLD | avg rows/call above `?threshold=` (default 500) |
+| ROW_THRESHOLD | avg rows/call above `?threshold=` (default 500); an expected-heavy label instead above its 5,000 ceiling |
 
 C is narrower than "userId + ORDER BY gameTime, no bound or LIMIT" on purpose:
 capper comparison also fits that, but it is scoped to one capper by design. Its

@@ -95,6 +95,7 @@ export default async function DbMonitorPage({
                 <tr key={r.queryid} className={`border-b border-border-subtle align-top ${r.flags.length ? "bg-[#FDECEC] dark:bg-[#DC2626]/15" : ""}`}>
                   <td className="py-2 pr-3">
                     <div className="font-medium text-foreground">{r.label ?? <span className="text-muted-foreground">Unlabeled</span>}</div>
+                    {r.expected && <div className="mt-0.5 text-xs text-muted-foreground">{r.expected}</div>}
                     {r.flags.map((f) => (
                       <div key={f.code} className="mt-0.5 text-xs font-medium text-[#B91C1C] dark:text-[#F87171]">
                         {f.reason}
