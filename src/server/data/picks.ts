@@ -1,5 +1,5 @@
 ﻿import { prisma } from "@/lib/prisma";
-import type { BetType, PickStatus, Period } from "@prisma/client";
+import type { BetType, PickStatus, Period, Prisma } from "@prisma/client";
 import { findTeamNickname, teamPhraseRegex, normalizeForGrouping } from "@/lib/parse-catalog";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { SPORT_LABEL_TO_KEY } from "@/lib/sport-seasons";
@@ -381,6 +381,60 @@ export function matchPicksToGame<
   );
 }
 
+// The columns a board / game-detail pick is read with - only what
+// matchPicksToGame, assignPicksToNearestGame, toExpanderPick (pickCategory,
+// classifyPickTeamGroup included) and the game page read. pickedSide,
+// mlFavoredSide and propMarket are OPTIONAL inputs of pickCategory, so the type
+// would not catch them missing - drop one and a pick's category silently
+// changes (board-picks-window-parity-acceptance-test.ts pins this).
+export const BOARD_PICK_SELECT = {
+  id: true,
+  capperId: true,
+  homeTeam: true,
+  awayTeam: true,
+  betType: true,
+  betDetail: true,
+  odds: true,
+  oddsSource: true,
+  line: true,
+  period: true,
+  units: true,
+  datePosted: true,
+  gameTime: true,
+  status: true,
+  pickedSide: true,
+  mlFavoredSide: true,
+  propMarket: true,
+  gameNumber: true,
+  capper: { select: { name: true, colorTag: true, isFavorite: true } },
+} satisfies Prisma.PickSelect;
+
+export type BoardPickRow = Prisma.PickGetPayload<{ select: typeof BOARD_PICK_SELECT }>;
+
+// The canonical chronological tie-break (comparePicksChronological, the SQL
+// aggregates). Without it a card's picks came back in whatever order the plan
+// produced; nothing ranks on that order, but the cards render in it.
+const BOARD_PICK_ORDER: Prisma.PickOrderByWithRelationInput[] = [{ gameTime: "asc" }, { createdAt: "asc" }, { id: "asc" }];
+
+// The rows that can match any of `commenceTimes`: matchPicksToGame keeps a pick
+// only within MAX_GAME_TIME_DRIFT_MS (inclusive) of its game, so anything
+// outside [earliest - drift, latest + drift] can never reach a card. This used
+// to read +-2 days, which fetched picks no card could use.
+function boardPicksInWindow(userId: string, sportId: string, commenceTimes: number[]) {
+  return prisma.pick.findMany({
+    where: {
+      userId,
+      sportId,
+      gameTime: {
+        gte: new Date(Math.min(...commenceTimes) - MAX_GAME_TIME_DRIFT_MS),
+        lte: new Date(Math.max(...commenceTimes) + MAX_GAME_TIME_DRIFT_MS),
+      },
+    },
+    select: BOARD_PICK_SELECT,
+    orderBy: BOARD_PICK_ORDER,
+  });
+}
+
 // Finds this user's logged picks for one specific game.
 export async function getPicksForGame(
   userId: string,
@@ -391,13 +445,7 @@ export async function getPicksForGame(
   });
   if (!sport) return [];
 
-  const windowStart = new Date(params.commenceTime.getTime() - 2 * 86400000);
-  const windowEnd = new Date(params.commenceTime.getTime() + 2 * 86400000);
-
-  const candidates = await prisma.pick.findMany({
-    where: { userId, sportId: sport.id, gameTime: { gte: windowStart, lt: windowEnd } },
-    include: { capper: true },
-  });
+  const candidates = await boardPicksInWindow(userId, sport.id, [params.commenceTime.getTime()]);
   if (candidates.length === 0) return [];
 
   return matchPicksToGame(candidates, params, params.sportName);
@@ -421,22 +469,16 @@ export async function getPicksForGames(
   });
   if (!sport) return games.map(() => []);
 
-  const times = games.map((g) => g.commenceTime.getTime());
-  const windowStart = new Date(Math.min(...times) - 2 * 86400000);
-  const windowEnd = new Date(Math.max(...times) + 2 * 86400000);
-
-  const allPicks = await prisma.pick.findMany({
-    where: { userId, sportId: sport.id, gameTime: { gte: windowStart, lt: windowEnd } },
-    include: { capper: true },
-  });
+  const allPicks = await boardPicksInWindow(
+    userId,
+    sport.id,
+    games.map((g) => g.commenceTime.getTime())
+  );
   if (allPicks.length === 0) return games.map(() => []);
 
-  const matchedPerGame = games.map((game) => {
-    const gameWindowStart = new Date(game.commenceTime.getTime() - 2 * 86400000);
-    const gameWindowEnd = new Date(game.commenceTime.getTime() + 2 * 86400000);
-    const candidates = allPicks.filter((p) => p.gameTime >= gameWindowStart && p.gameTime < gameWindowEnd);
-    return matchPicksToGame(candidates, game, sportName);
-  });
+  // No per-game pre-filter: matchPicksToGame applies each game's own drift
+  // window itself (the +-2-day slice that used to sit here was always wider).
+  const matchedPerGame = games.map((game) => matchPicksToGame(allPicks, game, sportName));
   return assignPicksToNearestGame(matchedPerGame, games);
 }
 

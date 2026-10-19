@@ -6,8 +6,8 @@
 // homeTeam/awayTeam/gameTime/gameId are the GAME's, not the pick row's: a
 // pick's own stored teams and time are whatever the import resolved (for an
 // import that matched no game, the time is the import time).
-import type { Capper, Pick } from "@prisma/client";
 import { pickCategory, betTypeLabel } from "@/server/data/stats";
+import type { BoardPickRow } from "@/server/data/picks";
 import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
 import { getTeamColor } from "@/lib/team-colors";
 import { formatPickLabel } from "@/lib/bet-line";
@@ -15,8 +15,10 @@ import { type ExpanderPick } from "@/components/live/game-picks-expander";
 
 export type ExpanderPickGame = { id: string; homeTeam: string; awayTeam: string; commenceTime: string };
 
+// `p` is the board's projected row (BOARD_PICK_SELECT); a full Pick row with
+// its capper - the slip's off-board path - fits it too.
 export function toExpanderPick(
-  p: Pick & { capper: Capper },
+  p: BoardPickRow,
   game: ExpanderPickGame,
   activeSport: string,
   sportLabel: string
