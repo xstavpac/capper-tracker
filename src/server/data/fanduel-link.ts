@@ -91,7 +91,7 @@ async function fetchEventMarkets(sportKey: string, eventId: string, marketKeys: 
   // Logs x-requests-remaining / -used / -last for this call.
   const credits = readOddsApiCredits(res, { sportKey, requestSportKey: sportKey });
   try {
-    await persistOddsApiUsage({ sportKey, marketsRequested: marketKeys, eventsRequested: 1, credits });
+    await persistOddsApiUsage({ sportKey, marketsRequested: marketKeys, eventsRequested: 1, credits, httpStatus: res.status, caller: "fanduel-link" });
   } catch (err) {
     console.error(LOG_TAG + " failed to persist usage log", JSON.stringify({ ...ctx, error: err instanceof Error ? err.message : String(err) }));
   }

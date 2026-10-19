@@ -29,7 +29,7 @@
 import { revalidateTag } from "next/cache";
 import type { OddsGame, OddsApiCredits } from "@/server/data/odds";
 import { ODDS_API_BASE_URL, readOddsApiCredits, resolveOddsGame, type OddsLoader } from "@/server/data/odds";
-import { getLatestCreditUsageLevel, persistOddsApiUsage } from "@/server/data/odds-api-usage";
+import { getLatestCreditUsageLevel, persistOddsApiUsage, type OddsApiCaller } from "@/server/data/odds-api-usage";
 import { prisma } from "@/lib/prisma";
 import { easternDateKey } from "@/lib/dates";
 import { cacheKeys } from "@/lib/cache-keys";
@@ -229,6 +229,8 @@ export type EventPropFetchTarget = {
   // for what the game doesn't carry yet.
   marketKeys: (game: OddsGame) => readonly string[];
   logTag: string;
+  // odds_api_usage_log.caller for this target's calls.
+  caller: OddsApiCaller;
 };
 
 const NFL_EVENT_PROP_TARGET: EventPropFetchTarget = {
@@ -236,6 +238,7 @@ const NFL_EVENT_PROP_TARGET: EventPropFetchTarget = {
   requestSportKey: () => NFL_SPORT_KEY,
   marketKeys: () => NFL_PROP_MARKET_KEYS,
   logTag: "[nfl-prop-odds]",
+  caller: "nfl-prop-odds",
 };
 
 async function fetchOneEventPropOdds(
@@ -243,7 +246,7 @@ async function fetchOneEventPropOdds(
   apiKey: string,
   target: EventPropFetchTarget,
   marketKeys: readonly string[]
-): Promise<{ bookmakers: OddsGame["bookmakers"] | null; credits: OddsApiCredits | null; ok: boolean }> {
+): Promise<{ bookmakers: OddsGame["bookmakers"] | null; credits: OddsApiCredits | null; ok: boolean; httpStatus: number | null }> {
   const eventId = game.id;
   const requestSportKey = target.requestSportKey(game);
   const url =
@@ -266,7 +269,7 @@ async function fetchOneEventPropOdds(
       target.logTag + " upstream fetch threw",
       JSON.stringify({ eventId, error: err instanceof Error ? err.message : String(err) })
     );
-    return { bookmakers: null, credits: null, ok: false };
+    return { bookmakers: null, credits: null, ok: false, httpStatus: null };
   }
 
   const credits = readOddsApiCredits(res, { sportKey: target.sportKey, requestSportKey });
@@ -277,11 +280,11 @@ async function fetchOneEventPropOdds(
       target.logTag + " upstream fetch failed",
       JSON.stringify({ eventId, status: res.status, statusText: res.statusText, body: bodyText.slice(0, 500) })
     );
-    return { bookmakers: null, credits, ok: false };
+    return { bookmakers: null, credits, ok: false, httpStatus: res.status };
   }
 
   const raw = await res.json();
-  return { bookmakers: Array.isArray(raw.bookmakers) ? raw.bookmakers : [], credits, ok: true };
+  return { bookmakers: Array.isArray(raw.bookmakers) ? raw.bookmakers : [], credits, ok: true, httpStatus: res.status };
 }
 
 // PlayerPropMarket (bet-line.ts, mirrors schema.prisma's PropMarket enum) ->
@@ -472,7 +475,7 @@ export async function fetchAndMergeEventPropOdds(
     }
 
     const marketKeys = target.marketKeys(game);
-    const { bookmakers, credits, ok } = await fetchOneEventPropOdds(game, apiKey, target, marketKeys);
+    const { bookmakers, credits, ok, httpStatus } = await fetchOneEventPropOdds(game, apiKey, target, marketKeys);
     if (!ok || !bookmakers) {
       eventsFailed++;
       continue;
@@ -487,6 +490,8 @@ export async function fetchAndMergeEventPropOdds(
         marketsRequested: [...marketKeys],
         eventsRequested: 1,
         credits,
+        httpStatus,
+        caller: target.caller,
       });
       level = newLevel;
     }

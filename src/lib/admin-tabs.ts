@@ -3,6 +3,7 @@
 export const ADMIN_TABS = [
   { key: "db-monitor", href: "/admin/db-monitor", label: "DB Monitor" },
   { key: "crons", href: "/admin/crons", label: "Crons" },
+  { key: "odds-api", href: "/admin/odds-api", label: "Odds API" },
   { key: "skipped-lines", href: "/admin/import-skipped-lines", label: "Skipped Lines" },
 ] as const;
 

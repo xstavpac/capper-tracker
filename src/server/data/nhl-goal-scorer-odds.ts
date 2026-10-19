@@ -72,6 +72,7 @@ const NHL_GOAL_SCORER_TARGET: EventPropFetchTarget = {
   requestSportKey: (game) => (game.sportKey.startsWith(NHL_SPORT_KEY) ? game.sportKey : NHL_SPORT_KEY),
   marketKeys: missingNhlEventMarkets,
   logTag: "[nhl-goal-scorer-odds]",
+  caller: "nhl-goal-scorer-odds",
 };
 
 // Anytime-goal price: player + "Yes", first bookmaker that has it wins, same

@@ -468,9 +468,15 @@ const ODDS_MARKET_PARAMS = "&regions=us&markets=" + BULK_MARKET_KEYS.join(",") +
 // unguarded throw here for one sport would reject that whole Promise.all and
 // 500 the entire cron run, even though every other sport's fetch already
 // succeeded moments earlier. Best-effort: log loudly, swallow, move on.
-async function recordBulkUsage(sportKey: string, eventsRequested: number, credits: OddsApiCredits): Promise<void> {
+async function recordBulkUsage(
+  sportKey: string,
+  eventsRequested: number,
+  credits: OddsApiCredits,
+  httpStatus: number | null,
+  caller: "odds-seed" | "odds-backfill"
+): Promise<void> {
   try {
-    await persistOddsApiUsage({ sportKey, marketsRequested: BULK_MARKET_KEYS, eventsRequested, credits });
+    await persistOddsApiUsage({ sportKey, marketsRequested: BULK_MARKET_KEYS, eventsRequested, credits, httpStatus, caller });
   } catch (err) {
     console.error(
       "[odds-api-usage] failed to persist usage log - odds fetch continues unaffected",
@@ -525,13 +531,15 @@ export async function fetchMergedOddsListing(
   requestKeys: string[],
   apiKey: string,
   context: { fetchDate: string }
-): Promise<{ games: OddsGame[]; primaryFailed: boolean; credits: OddsApiCredits | null }> {
+): Promise<{ games: OddsGame[]; primaryFailed: boolean; credits: OddsApiCredits | null; httpStatus: number | null }> {
   const byId = new Map<string, OddsGame>();
   let primaryFailed = false;
   // Freshest usage headers seen this call - the keys are fetched sequentially
   // against the one account, so the last response's `remaining` is the most
   // current.
   let credits: OddsApiCredits | null = null;
+  // The HTTP status of the response those credits came from.
+  let httpStatus: number | null = null;
   const multiKey = requestKeys.length > 1;
 
   for (let i = 0; i < requestKeys.length; i++) {
@@ -562,6 +570,7 @@ export async function fetchMergedOddsListing(
     // exhausted plan reports `x-requests-remaining: 0`, which is exactly what
     // we want surfaced when fetches start failing.
     credits = readOddsApiCredits(res, { sportKey, requestSportKey });
+    httpStatus = res.status;
 
     if (!res.ok) {
       // Body is truncated (the-odds-api.com error responses are small JSON,
@@ -608,7 +617,7 @@ export async function fetchMergedOddsListing(
     }
   }
 
-  return { games: [...byId.values()], primaryFailed, credits };
+  return { games: [...byId.values()], primaryFailed, credits, httpStatus };
 }
 
 // OddsFetchStatus / BackfillStatus live in @/lib/odds-cron-status (pure, so
@@ -680,11 +689,11 @@ async function getOddsForSportUncached(
   // are both captured across the handoff (see oddsApiRequestKeys). The cache
   // above and everything below stays keyed on the app's own sportKey.
   const requestKeys = oddsApiRequestKeys(sportKey);
-  const { games: mergedRaw, primaryFailed, credits } = await fetchMergedOddsListing(sportKey, requestKeys, apiKey, {
+  const { games: mergedRaw, primaryFailed, credits, httpStatus } = await fetchMergedOddsListing(sportKey, requestKeys, apiKey, {
     fetchDate,
   });
   if (credits) {
-    await recordBulkUsage(sportKey, mergedRaw.length, credits);
+    await recordBulkUsage(sportKey, mergedRaw.length, credits, httpStatus, "odds-seed");
   }
   // Primary (regular-season) key failed -> a real outage, not an empty slate.
   // Return [] WITHOUT writing a row, exactly as the single-key failure path
@@ -890,11 +899,11 @@ export async function backfillOddsForSport(sportKey: string): Promise<{ added: n
   // A primary-key failure aborts this additive pass the same way `!res.ok`
   // did before; a preseason-key-only failure is logged and ignored.
   const requestKeys = oddsApiRequestKeys(sportKey);
-  const { games: mergedRaw, primaryFailed, credits } = await fetchMergedOddsListing(sportKey, requestKeys, apiKey, {
+  const { games: mergedRaw, primaryFailed, credits, httpStatus } = await fetchMergedOddsListing(sportKey, requestKeys, apiKey, {
     fetchDate,
   });
   if (credits) {
-    await recordBulkUsage(sportKey, mergedRaw.length, credits);
+    await recordBulkUsage(sportKey, mergedRaw.length, credits, httpStatus, "odds-backfill");
   }
   if (primaryFailed) return { added: 0, status: "fetch_failed" };
 
