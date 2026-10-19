@@ -690,6 +690,8 @@ const STAT_PROP_CATEGORY = {
   RUSH_YDS: "RUSH_YDS_PROP",
   REC_YDS: "REC_YDS_PROP",
   RECEPTIONS: "RECEPTIONS_PROP",
+  RUSH_REC_YDS: "RUSH_REC_YDS_PROP",
+  PASS_RUSH_YDS: "PASS_RUSH_YDS_PROP",
 } as const;
 export type StatPropCategoryKey = (typeof STAT_PROP_CATEGORY)[keyof typeof STAT_PROP_CATEGORY];
 export const STAT_PROP_CATEGORY_KEYS: StatPropCategoryKey[] = Object.values(STAT_PROP_CATEGORY);
@@ -801,6 +803,8 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   RUSH_YDS_PROP: "Rushing Yards",
   REC_YDS_PROP: "Receiving Yards",
   RECEPTIONS_PROP: "Receptions",
+  RUSH_REC_YDS_PROP: "Rush + Rec Yards",
+  PASS_RUSH_YDS_PROP: "Pass + Rush Yards",
   NRFI: "NRFI",
   YRFI: "YRFI",
   F5_SPREAD_MINUS: "F5 Spread -",
@@ -857,6 +861,8 @@ export const PICK_CATEGORY_MARKET_NOUN: Record<PickCategoryKey, string> = {
   RUSH_YDS_PROP: "rushing yards",
   REC_YDS_PROP: "receiving yards",
   RECEPTIONS_PROP: "receptions",
+  RUSH_REC_YDS_PROP: "rushing + receiving yards",
+  PASS_RUSH_YDS_PROP: "passing + rushing yards",
   NRFI: "NRFI",
   YRFI: "YRFI",
   F5_SPREAD_MINUS: "first-5 favorite spread",
@@ -1082,7 +1088,7 @@ type PickCategoryInput = {
 // value - so until that backfill runs they reflect the old classification.
 // pick-category-version-acceptance-test.ts pins pickCategory's outputs so changing
 // them without bumping this fails a test.
-export const PICK_CATEGORY_VERSION = 2;
+export const PICK_CATEGORY_VERSION = 3;
 
 export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
   if (pick.betType === "NRFI") {
@@ -1173,9 +1179,11 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
   if (pick.betType === "PLAYER_PROP") {
     // Passing / rushing / receiving yards and receptions each have their own
     // key (STAT_PROP_CATEGORY): "Joe Burrow Over 250 Passing Yards" is not a
-    // touchdown prop and must not be counted in the TD_PROP record. Every
-    // other market (TD, and the combined-yards, passing-TD, NHL and MLB ones,
-    // which have no key of their own yet) still lands in TD_PROP.
+    // touchdown prop and must not be counted in the TD_PROP record. Neither
+    // is a combined-yards line ("Josh Allen Over 249.5 Passing + Rushing
+    // Yards"), which has its own key too (version 3). Every other market (TD,
+    // and the passing-TD, NHL and MLB ones, which have no key of their own
+    // yet) still lands in TD_PROP.
     // propMarket, when set, is trusted directly. When it's null (rows
     // predating the column, and any manually-entered PLAYER_PROP pick, which
     // never runs through parsePlayerProp at all), betDetail is re-parsed with
@@ -1212,6 +1220,8 @@ const SPECIALIST_LABELS: Record<PickCategoryKey, string> = {
   RUSH_YDS_PROP: "Rushing-yards specialist",
   REC_YDS_PROP: "Receiving-yards specialist",
   RECEPTIONS_PROP: "Receptions specialist",
+  RUSH_REC_YDS_PROP: "Rush + rec yards specialist",
+  PASS_RUSH_YDS_PROP: "Pass + rush yards specialist",
   NRFI: "NRFI specialist",
   YRFI: "YRFI specialist",
   F5_SPREAD_MINUS: "F5 favorite spread specialist",

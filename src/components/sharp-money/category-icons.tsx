@@ -248,6 +248,8 @@ const CATEGORY_ICONS: Record<PickCategoryKey, () => ReactElement> = {
   RUSH_YDS_PROP: () => <TdPropIcon />,
   REC_YDS_PROP: () => <TdPropIcon />,
   RECEPTIONS_PROP: () => <TdPropIcon />,
+  RUSH_REC_YDS_PROP: () => <TdPropIcon />,
+  PASS_RUSH_YDS_PROP: () => <TdPropIcon />,
   NRFI: () => <BadgeIcon glyph="no" colorClass={RED} />,
   YRFI: () => <BadgeIcon glyph="yes" colorClass={EMERALD} />,
   F5_SPREAD_MINUS: () => <DiagonalArrowIcon direction="down" colorClass={VIOLET} />,
