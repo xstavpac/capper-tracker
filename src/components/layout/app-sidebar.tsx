@@ -44,13 +44,14 @@ function CappersIcon({ className }: { className?: string }) {
   );
 }
 
-// lucide "SkipForward" geometry - gives Skipped Lines its own glyph instead
-// of sharing Settings' gear.
-function SkippedLinesIcon({ className }: { className?: string }) {
+// A gauge for the /admin ops console (DB Monitor, Skipped Lines, ...) - its
+// own glyph instead of sharing Settings' gear.
+function AdminIcon({ className }: { className?: string }) {
   return (
     <svg {...iconProps(className)}>
-      <path d="M5 4l10 8l-10 8z" />
-      <path d="M19 5v14" />
+      <path d="M4.5 17a8 8 0 1 1 15 0" />
+      <path d="M12 13l3.5 -4" />
+      <circle cx="12" cy="13" r="1.2" />
     </svg>
   );
 }
@@ -137,7 +138,7 @@ type NavItem = {
   // "account" items render below the divider, after the main list.
   section: "main" | "account";
   // Admin-gated items: shown only when AppSidebar's matching flag prop is on.
-  gate?: "zoneModel" | "importSkippedLines";
+  gate?: "zoneModel" | "adminOps";
   accent?: "red";
   // Live count of pooled Parlay Generator picks (Parlay's nav item only) -
   // set at render time in AppSidebar, not baked into the static list below,
@@ -155,7 +156,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/parlay", label: "Parlay Generator", icon: ParlayIcon, section: "main", tile: "bg-[#E7EFFF] text-[#1E5BD8] dark:bg-[#1E5BD8]/20 dark:text-[#7FA6F5]" },
   { href: "/live", label: "Live", icon: LiveIcon, section: "main", accent: "red", tile: "bg-[#FDECEC] text-[#DC2626] dark:bg-[#DC2626]/20 dark:text-[#F87171]" },
   { href: "/zone-model", label: "Zone Model", icon: ZoneModelIcon, section: "main", gate: "zoneModel", tile: "bg-[#DFF5F5] text-[#0E7272] dark:bg-[#0E7272]/30 dark:text-[#5CC9C9]" },
-  { href: "/admin/import-skipped-lines", label: "Skipped Lines", icon: SkippedLinesIcon, section: "main", gate: "importSkippedLines", tile: "bg-[#FFEDE3] text-[#B4470F] dark:bg-[#B4470F]/25 dark:text-[#F29A6B]" },
+  { href: "/admin", label: "Admin", icon: AdminIcon, section: "main", gate: "adminOps", tile: "bg-[#FFEDE3] text-[#B4470F] dark:bg-[#B4470F]/25 dark:text-[#F29A6B]" },
   { href: "/pricing", label: "Plans & Billing", icon: PricingIcon, section: "account", tile: "bg-[#E4F4EA] text-[#18794E] dark:bg-[#18794E]/25 dark:text-[#62C998]" },
   { href: "/settings", label: "Settings", icon: SettingsIcon, section: "account", tile: "bg-[#EEF0F4] text-[#4A5468] dark:bg-white/10 dark:text-[#A6AFC0]" },
 ];
@@ -344,19 +345,19 @@ function AccountRow({ user }: { user: SidebarUser }) {
 export function AppSidebar({
   user,
   showZoneModel = false,
-  showImportSkippedLines = false,
+  showAdminOps = false,
 }: {
   user: SidebarUser;
   showZoneModel?: boolean;
-  showImportSkippedLines?: boolean;
+  showAdminOps?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const { slipSize } = useParlayPool();
   // Zone Model is admin-only and server-gated (the page itself 404s
   // regardless of this) - this only decides whether the link appears, so a
   // non-admin never sees a nav entry for a route that would just 404 them.
-  // Same for the import skipped-line report.
-  const gates = { zoneModel: showZoneModel, importSkippedLines: showImportSkippedLines };
+  // Same for the /admin ops console.
+  const gates = { zoneModel: showZoneModel, adminOps: showAdminOps };
   const navItems = NAV_ITEMS.filter((item) => !item.gate || gates[item.gate]).map((item) =>
     item.href === "/parlay" ? { ...item, badgeCount: slipSize } : item
   );

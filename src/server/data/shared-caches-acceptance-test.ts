@@ -167,7 +167,8 @@ async function main() {
 
     const layout = src("src/app/(app)/layout.tsx");
     expect("layout reads flags from the shared snapshot only", [/getNavFeatureFlags\(/.test(layout), /isFeatureEnabledForUser/.test(layout)], [true, false]);
-    for (const page of ["src/app/(app)/zone-model/page.tsx", "src/app/(app)/admin/import-skipped-lines/page.tsx"]) {
+    // /admin's pages gate through admin-gate.ts (pinned in db-monitor-acceptance-test.ts).
+    for (const page of ["src/app/(app)/zone-model/page.tsx", "src/server/admin-gate.ts"]) {
       const s = src(page);
       expect(`${page}: the gate itself stays the direct, uncached check`, [/isFeatureEnabledForUser\(/.test(s), /getNavFeatureFlags/.test(s)], [true, false]);
     }

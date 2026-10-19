@@ -10,10 +10,13 @@ import { cachedByTag } from "@/server/data/cached";
 // with zero new code.
 export const ZONE_MODEL_FLAG_KEY = "zone_model";
 
-// Admin report over the import skipped-line log (see /admin/import-skipped-lines).
-// Seeded OFF with overrides for the admins in migration
-// 20260930120000_add_import_skipped_lines.
-export const IMPORT_SKIPPED_LINES_FLAG_KEY = "import_skipped_lines";
+// The /admin ops console: its layout, every page under it and every admin
+// server action (see src/server/admin-gate.ts). Seeded OFF with overrides for
+// the admins in migration 20261019120000_add_admin_ops_console_flag.
+//
+// It replaced `import_skipped_lines` as the gate for /admin/import-skipped-lines;
+// that flag's row is still in the table but nothing reads it any more.
+export const ADMIN_OPS_CONSOLE_FLAG_KEY = "admin_ops_console";
 
 // A user has access to `key` when EITHER the flag's global `enabled` is
 // true (the eventual "everyone" rollout - a single DB value flip, no code
@@ -46,7 +49,7 @@ export async function isFeatureEnabledForUser(key: string, userId: string): Prom
 // in memory. A flag flip therefore reaches the sidebar within that TTL.
 //
 // This is for deciding what to DRAW only. The gated routes themselves
-// (/zone-model, /admin/import-skipped-lines) keep calling
+// (/zone-model, everything under /admin via admin-gate.ts) keep calling
 // isFeatureEnabledForUser, uncached, so granting or revoking access takes
 // effect on the route immediately - a stale snapshot can show or hide a link
 // for up to a minute, never open or close the page behind it.
