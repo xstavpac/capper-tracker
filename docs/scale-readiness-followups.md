@@ -52,6 +52,17 @@ Tracked items from the scale-readiness work (audit target: 50,000 users).
 
 ## Not yet started
 
+### Capper roster read is the full row (`getCappersForUser`)
+
+Seen in the DB Monitor on 2026-10-19 (5h after a stats reset): the
+"Capper roster (full row)" statement ran 26 times for ~185 rows each (4,810
+rows, #3 of the prod top 30). `getCappersForUser` (`server/data/cappers.ts`)
+has no `select`, so every call ships each capper's whole row - notes, photo
+url, source - for the full roster, from /picks, /charts, /picks/import and the
+dashboard adapter. Most callers need id / name / colorTag / isFavorite. Fix:
+project the roster read (or split a slim variant) after checking each
+caller's fields.
+
 ### Units chart on the per-capper page (client-side cost)
 
 `cappers/[capperId]/page.tsx` calls `computeUnitsChartData` directly, uncached,

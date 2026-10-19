@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { DB_ROW_THRESHOLD_DEFAULT, EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE } from "@/lib/admin-thresholds";
 
 // Pure half of the admin DB Monitor (/admin/db-monitor): reads pg_stat_statements
 // rows (fetched by src/server/data/db-monitor.ts in one statement) and turns them
@@ -9,7 +10,7 @@ import { Prisma } from "@prisma/client";
 // keeps. That text is what Prisma / $queryRaw sent, with literal constants
 // replaced by $n, so nothing below keys on a literal value.
 
-export const DEFAULT_ROW_THRESHOLD = 500;
+export const DEFAULT_ROW_THRESHOLD = DB_ROW_THRESHOLD_DEFAULT;
 export const TOP_STATEMENT_LIMIT = 30;
 
 // ---------------------------------------------------------------------------
@@ -145,12 +146,37 @@ const ORDER_GAME_TIME_DESC = /ORDER BY "picks"\."gameTime" DESC/;
 
 const touchesPicks = (s: StatementShape) => s.tables.includes("picks");
 const has = (s: StatementShape, re: RegExp) => re.test(s.text);
+const reads = (s: StatementShape, table: string) => s.primaryTable === table;
+const inserts = (s: StatementShape, table: string) => s.text.startsWith(`INSERT INTO "${table}" `);
+// The outermost WHERE with its grouping parentheses dropped, and the trailing
+// always-true conjunct Prisma adds to a findUnique (`AND 1=1`, which
+// pg_stat_statements stores as `AND $4=$5`) cut off.
+const whereOf = (s: StatementShape) =>
+  s.where
+    .replace(/[()]/g, "")
+    .replace(/ AND (?:1=1|\$\d+=\$\d+)$/, "")
+    .trim();
+const whereIs = (s: StatementShape, re: RegExp) => re.test(whereOf(s));
+const GR_SPORT_ONLY = /^"game_results"\."sportKey" = \$\d+$/;
+
+// A label whose statement reads a sport's whole history by design. Under
+// maxAvgRows it is shown with `note` instead of a row-threshold flag.
+export type ExpectedHeavy = { maxAvgRows: number; note: string };
+const DAILY_FULL_HISTORY: ExpectedHeavy = { maxAvgRows: EXPECTED_HEAVY_MAX_AVG_ROWS, note: EXPECTED_HEAVY_NOTE };
+
+export type StatementLabel = {
+  label: string;
+  source: string;
+  matches: (s: StatementShape) => boolean;
+  expected?: ExpectedHeavy;
+};
 
 // First match wins. Each fingerprint was taken from the statement its code
-// path actually sends (captured with a query log against the local DB - see
-// db-monitor-fixtures.ts); db-monitor-acceptance-test.ts pins that every
-// fixture gets its own label and no other.
-export const STATEMENT_LABELS: { label: string; source: string; matches: (s: StatementShape) => boolean }[] = [
+// path actually sends (captured with a query log against the local DB, or for
+// three cron upserts that need live feeds, from production's
+// pg_stat_statements - see db-monitor-fixtures.ts); db-monitor-acceptance-
+// test.ts pins that every fixture gets its own label and no other.
+export const STATEMENT_LABELS: StatementLabel[] = [
   {
     label: "Fuzzy grading",
     source: "regradeAllFuzzyMatchedPicks (grade-picks cron)",
@@ -206,10 +232,167 @@ export const STATEMENT_LABELS: { label: string; source: string; matches: (s: Sta
       /\bp\.category IS NOT NULL\b/.test(s.text) &&
       /\bPARTITION BY cat\b/.test(s.text),
   },
+
+  // ---- Page loads ----
+  {
+    label: "Session user",
+    source: "getCurrentUser / requireUser (server/auth.ts), every signed-in request",
+    matches: (s) => reads(s, "users") && whereIs(s, /^"users"\."supabaseId" = \$\d+$/),
+  },
+  {
+    // No `select`, so the whole capper row (notes, photo url) for the roster.
+    label: "Capper roster (full row)",
+    source: "getCappersForUser (/picks, /charts, /picks/import, dashboard adapter)",
+    matches: (s) =>
+      reads(s, "cappers") && has(s, /"cappers"\."userId" = \$\d+/) && has(s, /ORDER BY "cappers"\."isFavorite" DESC/) && has(s, /"cappers"\."notes"/),
+  },
+  {
+    // Prisma's follow-up read for `include: { capper: ... }` on a picks
+    // findMany. Each IN-list length is its own pg_stat_statements entry.
+    label: "Capper include",
+    source: "picks findMany include capper (getPicksForGames, getPendingPicksForUser, /picks lists)",
+    matches: (s) => reads(s, "cappers") && whereIs(s, /^"cappers"\."id" IN [$\d,]+$/),
+  },
+  {
+    label: "Cappers with pick counts",
+    source: "loadCappersWithPickCounts (/cappers, capper detail; 60s cache)",
+    matches: (s) => reads(s, "cappers") && has(s, /"_aggr_count_picks"/),
+  },
+  {
+    label: "Capper all-time W-L",
+    source: "getCapperAllTimeRecords (picks-summary.ts, /picks)",
+    matches: (s) => touchesPicks(s) && has(s, USER_EQ) && has(s, CAPPER_IN) && has(s, /GROUP BY "picks"\."capperId", "picks"\."status"/),
+  },
+  {
+    label: "/picks final scores",
+    source: "getFinalScoresForPicks (picks-summary.ts, /picks)",
+    matches: (s) => reads(s, "game_results") && has(s, /"game_results"\."sportKey" IN \(/) && has(s, /"game_results"\."gameDate" >= /),
+  },
+  {
+    // getMostBacked has the same HAVING but also bool_or(b.pending).
+    label: "Day consensus",
+    source: "getDayConsensus (picks-glance.ts, /picks at a glance)",
+    matches: (s) => has(s, /HAVING count\(DISTINCT b\."capperId"\) >= /) && !has(s, /\bbool_or\(/),
+  },
+  {
+    label: "Zone model",
+    source: "computeZoneModel / computePendingZoneGames (zone-model.ts, /zone-model)",
+    matches: (s) =>
+      (reads(s, "game_results") && whereIs(s, GR_SPORT_ONLY) && has(s, /"game_results"\."favTeam"/) && !has(s, /ORDER BY/)) ||
+      ((reads(s, "team_tendency_snapshots") || reads(s, "team_stat_snapshots")) && whereIs(s, /^"team_(?:tendency|stat)_snapshots"\."sportKey" = \$\d+$/)),
+  },
+
+  // ---- grade-picks cron (every 15 min; the page-load grading paths share these) ----
+  {
+    // findUnique by name: 4 per sport per run (picks, fuzzy regrade, legs, leg regrade).
+    label: "Grading sport lookup",
+    source: "gradeAllPendingPicks / regradeAllFuzzyMatchedPicks / gradeAllPendingLegs / regradeAllFuzzyMatchedLegs",
+    matches: (s) => reads(s, "sports") && whereIs(s, /^"sports"\."name" = \$\d+$/) && s.hasLimit,
+  },
+  {
+    label: "Game results window",
+    source: "fetchCandidatePool / findMatchingGameResult (grading.ts), parlay-grading.ts candidate pools",
+    matches: (s) =>
+      reads(s, "game_results") &&
+      whereIs(s, /^"game_results"\."sportKey" = \$\d+ AND "game_results"\."gameDate" >= \$\d+ AND "game_results"\."gameDate" < \$\d+$/),
+  },
+  {
+    label: "Grading pending legs",
+    source: "gradeAllPendingLegs (parlay-grading.ts)",
+    matches: (s) => s.tables.includes("legs") && has(s, /"legs"\."sportId" = \$\d+/) && has(s, /"legs"\."status" = /) && has(s, /"legs"\."gameTime" >= /),
+  },
+  {
+    label: "Final-score state",
+    source: "fetchExistingResultState (persistFinalScores, grade-picks + refresh-scores)",
+    matches: (s) => s.tail.startsWith('FROM game_results WHERE "sportKey" = ') && has(s, /"externalId" = ANY\(/),
+  },
+  {
+    label: "Final-score upsert",
+    source: "persistFinalScores (grading.ts); each update-field combination is its own entry",
+    matches: (s) => inserts(s, "game_results") && has(s, /ON CONFLICT \("sportKey","externalId"\)/),
+  },
+
+  // ---- refresh-scores cron (daily) ----
+  {
+    label: "Odds for tendencies",
+    source: "getOddsGamesForTendencies (recomputeTeamTendencies)",
+    matches: (s) =>
+      /^FROM odds_snapshots s CROSS JOIN LATERAL jsonb_array_elements\(/.test(s.tail) && /WHERE s\."sportKey" = \$\d+ ORDER BY s\."fetchDate", g\.ord$/.test(s.tail),
+    expected: DAILY_FULL_HISTORY,
+  },
+  {
+    label: "Tendency game results",
+    source: "recomputeTeamTendencies (team-tendencies.ts)",
+    matches: (s) => reads(s, "game_results") && whereIs(s, /^"game_results"\."sportKey" = \$\d+ AND "game_results"\."isPreseason" = \$\d+$/),
+  },
+  {
+    label: "Tendency upsert",
+    source: "recomputeTeamTendencies (team-tendencies.ts)",
+    matches: (s) => inserts(s, "team_tendencies"),
+  },
+  {
+    label: "Tendencies by sport",
+    source: "snapshotTeamTendencies (team-tendencies.ts); zone-model.ts sends the same read",
+    matches: (s) => reads(s, "team_tendencies") && whereIs(s, /^"team_tendencies"\."sportKey" = \$\d+$/),
+  },
+  {
+    label: "Tendency snapshot upsert",
+    source: "snapshotTeamTendencies (team-tendencies.ts)",
+    matches: (s) => inserts(s, "team_tendency_snapshots"),
+  },
+  {
+    // No snapshotDate bound on purpose (see resolver.ts).
+    label: "Tendency history (model)",
+    source: "resolveTeamTendency (model-engine/resolver.ts, decay-delta sync)",
+    matches: (s) =>
+      reads(s, "team_tendency_snapshots") &&
+      whereIs(s, /^"team_tendency_snapshots"\."sportKey" = \$\d+ AND "team_tendency_snapshots"\."teamName" = \$\d+$/) &&
+      has(s, /ORDER BY "team_tendency_snapshots"\."snapshotDate" ASC/),
+  },
+  {
+    label: "Game observations (model)",
+    source: "resolveAllGameObservations (model-engine/observations.ts, decay-delta sync)",
+    matches: (s) => reads(s, "game_results") && whereIs(s, GR_SPORT_ONLY) && has(s, /ORDER BY "game_results"\."gameDate" ASC OFFSET/),
+    expected: DAILY_FULL_HISTORY,
+  },
+  {
+    label: "Decay-delta persisted ids",
+    source: "persistGradedDecayDeltaGames (model-engine/decay-delta-predictions.ts)",
+    matches: (s) =>
+      reads(s, "decay_delta_predictions") &&
+      whereIs(s, /^"decay_delta_predictions"\."modelId" = \$\d+ AND "decay_delta_predictions"\."gameResultId" IS NOT NULL$/),
+    expected: DAILY_FULL_HISTORY,
+  },
+  {
+    label: "Team record snapshot",
+    source: "captureTeamRecordSnapshots (team-record.ts, NFL)",
+    matches: (s) =>
+      inserts(s, "team_record_snapshots") ||
+      (reads(s, "game_results") && whereIs(s, GR_SPORT_ONLY) && has(s, /"game_results"\."isPreseason" FROM/) && !has(s, /ORDER BY/)),
+  },
+  {
+    label: "Situational snapshot upsert",
+    source: "captureSituationalRateSnapshots (situational-snapshots.ts, NFL)",
+    matches: (s) => inserts(s, "situational_rate_snapshots"),
+  },
+  {
+    label: "NFL team stat upsert",
+    source: "captureNflTeamStatSnapshots (stat-snapshots.ts)",
+    matches: (s) => inserts(s, "nfl_team_stat_snapshots"),
+  },
 ];
 
+export function labelEntryFor(s: StatementShape): StatementLabel | null {
+  return STATEMENT_LABELS.find((l) => l.matches(s)) ?? null;
+}
+
 export function labelFor(s: StatementShape): string | null {
-  return STATEMENT_LABELS.find((l) => l.matches(s))?.label ?? null;
+  return labelEntryFor(s)?.label ?? null;
+}
+
+// The expected-heavy allowance for a label, if it has one.
+export function expectedFor(label: string | null): ExpectedHeavy | null {
+  return (label && STATEMENT_LABELS.find((l) => l.label === label)?.expected) || null;
 }
 
 // ---------------------------------------------------------------------------
@@ -244,7 +427,16 @@ export function redFlagsFor(s: StatementShape, label: string | null, avgRows: nu
   if (!label && picks && isFullRowPicks(s)) {
     flags.push({ code: "UNLABELED_FULL_ROW", reason: `Unlabeled full-row picks read (${s.picksColumnsSelected} columns)` });
   }
-  if (avgRows > threshold) {
+  // An expected-heavy read is held to its own ceiling instead of the threshold.
+  const expected = expectedFor(label);
+  if (expected) {
+    if (avgRows > expected.maxAvgRows) {
+      flags.push({
+        code: "ROW_THRESHOLD",
+        reason: `Averages ${formatNumber(Math.round(avgRows))} rows/call, above its expected-read ceiling of ${formatNumber(expected.maxAvgRows)}`,
+      });
+    }
+  } else if (avgRows > threshold) {
     flags.push({ code: "ROW_THRESHOLD", reason: `Averages ${formatNumber(Math.round(avgRows))} rows/call (threshold ${formatNumber(threshold)})` });
   }
   return flags;
@@ -306,6 +498,9 @@ export type RawSnapshot = {
 export type MonitorRow = {
   queryid: string;
   label: string | null;
+  // The expected-heavy note ("expected (daily cron, full history)") when the
+  // label has one and the row stayed under its ceiling.
+  expected: string | null;
   calls: number;
   rows: number;
   avgRows: number;
@@ -332,9 +527,11 @@ export function buildMonitorView(raw: RawSnapshot, threshold: number, now: Date)
     const shape = describeStatement(st.query);
     const label = labelFor(shape);
     const avgRows = st.calls > 0 ? st.rows / st.calls : 0;
+    const expected = expectedFor(label);
     return {
       queryid: st.queryid,
       label,
+      expected: expected && avgRows <= expected.maxAvgRows ? expected.note : null,
       calls: st.calls,
       rows: st.rows,
       avgRows,
@@ -413,7 +610,7 @@ export function formatClaudeReport(view: MonitorView): string {
   view.rows.forEach((r, i) => {
     lines.push("");
     lines.push(
-      `${i + 1}. ${r.flags.length ? "[FLAG] " : ""}${r.label ?? "Unlabeled"} - calls ${formatNumber(r.calls)}, rows ${formatNumber(r.rows)}, avg ${formatAvg(r.avgRows)} rows/call, exec ${formatNumber(r.totalExecMs)} ms`
+      `${i + 1}. ${r.flags.length ? "[FLAG] " : ""}${r.label ?? "Unlabeled"}${r.expected ? ` [${r.expected}]` : ""} - calls ${formatNumber(r.calls)}, rows ${formatNumber(r.rows)}, avg ${formatAvg(r.avgRows)} rows/call, exec ${formatNumber(r.totalExecMs)} ms`
     );
     for (const f of r.flags) lines.push(`   [FLAG] ${f.reason}`);
     lines.push(`   ${r.text}`);

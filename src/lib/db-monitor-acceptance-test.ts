@@ -28,6 +28,7 @@ import {
   type RawSnapshot,
 } from "@/lib/db-monitor";
 import { STATEMENT_FIXTURES } from "@/lib/db-monitor-fixtures";
+import { DB_ROW_THRESHOLD_DEFAULT, EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE } from "@/lib/admin-thresholds";
 
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {
@@ -79,10 +80,45 @@ expect(
   []
 );
 expect(
-  "the eight requested labels exist",
+  "the labels: the eight from #279 plus one per statement in the 2026-10-19 prod top 30",
   STATEMENT_LABELS.map((l) => l.label).sort(),
-  ["/picks", "Board window", "Capper comparison", "Category panel", "Fuzzy grading", "Grading pending", "Record bundle", "Slip id IN"]
+  [
+    "/picks",
+    "/picks final scores",
+    "Board window",
+    "Capper all-time W-L",
+    "Capper comparison",
+    "Capper include",
+    "Capper roster (full row)",
+    "Cappers with pick counts",
+    "Category panel",
+    "Day consensus",
+    "Decay-delta persisted ids",
+    "Final-score state",
+    "Final-score upsert",
+    "Fuzzy grading",
+    "Game observations (model)",
+    "Game results window",
+    "Grading pending",
+    "Grading pending legs",
+    "Grading sport lookup",
+    "NFL team stat upsert",
+    "Odds for tendencies",
+    "Record bundle",
+    "Session user",
+    "Situational snapshot upsert",
+    "Slip id IN",
+    "Team record snapshot",
+    "Tendencies by sport",
+    "Tendency game results",
+    "Tendency history (model)",
+    "Tendency snapshot upsert",
+    "Tendency upsert",
+    "Zone model",
+  ]
 );
+expect("label names are unique", new Set(STATEMENT_LABELS.map((l) => l.label)).size, STATEMENT_LABELS.length);
+expect("every label names its code path", STATEMENT_LABELS.filter((l) => !l.source.trim()).map((l) => l.label), []);
 
 const fixture = (name: string) => {
   const f = STATEMENT_FIXTURES.find((x) => x.name.startsWith(name));
@@ -139,7 +175,56 @@ const fixture = (name: string) => {
   expect("avg exactly at the threshold is not flagged", flagCodes(sql, 500, 500), []);
   expect("avg over the threshold is flagged", flagCodes(sql, 500.5, 500), ["ROW_THRESHOLD"]);
   expect("threshold is configurable", flagCodes(sql, 120, 100), ["ROW_THRESHOLD"]);
-  expect("parseRowThreshold", [parseRowThreshold(undefined), parseRowThreshold("250"), parseRowThreshold(["40", "9"]), parseRowThreshold("0"), parseRowThreshold("-5"), parseRowThreshold("1.5"), parseRowThreshold("abc")], [500, 250, 40, 500, 500, 500, 500]);
+  expect("the default threshold comes from admin-thresholds.ts", DEFAULT_ROW_THRESHOLD, DB_ROW_THRESHOLD_DEFAULT);
+  expect("parseRowThreshold",[parseRowThreshold(undefined), parseRowThreshold("250"), parseRowThreshold(["40", "9"]), parseRowThreshold("0"), parseRowThreshold("-5"), parseRowThreshold("1.5"), parseRowThreshold("abc")], [500, 250, 40, 500, 500, 500, 500]);
+}
+
+// ---- 4b. Expected-heavy cron reads (rows 1, 5, 8 of the 2026-10-19 prod top 30) ----
+{
+  expect(
+    "exactly the three daily full-history reads are expected-heavy, at the configured ceiling",
+    STATEMENT_LABELS.filter((l) => l.expected).map((l) => [l.label, l.expected!.maxAvgRows, l.expected!.note]),
+    [
+      ["Odds for tendencies", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
+      ["Game observations (model)", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
+      ["Decay-delta persisted ids", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
+    ]
+  );
+  expect("ceiling 5,000, note as agreed", [EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE], [5000, "expected (daily cron, full history)"]);
+  // Prod's averages that day: 1,647 / 1,514 / 1,250 rows per call.
+  for (const [name, avg] of [["odds for tendencies", 1647], ["game observations", 1514], ["decay-delta persisted ids", 1250]] as const) {
+    const sql = fixture(name);
+    expect(`${name}: ${avg} avg rows is not flagged`, flagCodes(sql, avg), []);
+    expect(`${name}: at the ceiling is not flagged`, flagCodes(sql, 5000), []);
+    expect(`${name}: over the ceiling is flagged`, flagCodes(sql, 5000.5), ["ROW_THRESHOLD"]);
+    expect(`${name}: ... and a lower ?threshold= doesn't apply to it`, flagCodes(asPgStatStatements(sql), 1000, 100), []);
+  }
+  expect("an ordinary label still uses the threshold", flagCodes(fixture("tendency game results"), 501), ["ROW_THRESHOLD"]);
+
+  const view = buildMonitorView(
+    {
+      statsReset: null,
+      dealloc: 0,
+      totalRows: 0,
+      statementCount: 3,
+      top: [
+        { queryid: "1", query: asPgStatStatements(fixture("odds for tendencies")), calls: 6, rows: 9881, totalExecMs: 1950 },
+        { queryid: "2", query: fixture("game observations"), calls: 1, rows: 6000, totalExecMs: 9 },
+        { queryid: "3", query: fixture("tendency game results"), calls: 6, rows: 2529, totalExecMs: 160 },
+      ],
+    },
+    500,
+    new Date()
+  );
+  expect("view: under the ceiling -> note, no flag; over -> flag, no note", view.rows.map((r) => [r.expected, r.flags.map((f) => f.code)]), [
+    [EXPECTED_HEAVY_NOTE, []],
+    [null, ["ROW_THRESHOLD"]],
+    [null, []],
+  ]);
+  expect("view: only the over-ceiling row counts as flagged", view.flaggedCount, 1);
+  const lines = formatClaudeReport(view).split("\n");
+  expect("report: the expected note follows the label", lines.includes("1. Odds for tendencies [expected (daily cron, full history)] - calls 6, rows 9,881, avg 1,647 rows/call, exec 1,950 ms"), true);
+  expect("report: over-ceiling reason", lines.includes("   [FLAG] Averages 6,000 rows/call, above its expected-read ceiling of 5,000"), true);
 }
 
 // ---- 5. Byte estimate ----

@@ -3,7 +3,10 @@
 // path was run with a logging PrismaClient installed as the app's client, on
 // seeded rows that were deleted afterwards. `run` is the commit the text came
 // from - 52a3260 is main, 1a96517 is #277's projected board read, b1b7874 is
-// the commit before #128, where retired shapes A/B/C still ran.
+// the commit before #128, where retired shapes A/B/C still ran. 52f483d is the
+// ops-console capture (writes issued inside a rolled-back transaction). Three
+// cron upserts need live score/stat feeds, so their text is production's own
+// pg_stat_statements entry, copied from the DB Monitor page (run e769b64).
 //
 // pg_stat_statements stores the same text with literal constants swapped for
 // $n; the test runs every fixture through that swap too.
@@ -117,17 +120,17 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "expectFlags": []
   },
   {
-    "name": "control: capper include follow-up (cappers id IN)",
+    "name": "capper include, full row (pre-#277 board)",
     "run": "52a3260",
     "sql": "SELECT \"public\".\"cappers\".\"id\", \"public\".\"cappers\".\"userId\", \"public\".\"cappers\".\"name\", \"public\".\"cappers\".\"photoUrl\", \"public\".\"cappers\".\"source\"::text, \"public\".\"cappers\".\"customSource\", \"public\".\"cappers\".\"notes\", \"public\".\"cappers\".\"isFavorite\", \"public\".\"cappers\".\"isTest\", \"public\".\"cappers\".\"sportSpecialization\", \"public\".\"cappers\".\"colorTag\", \"public\".\"cappers\".\"createdAt\", \"public\".\"cappers\".\"updatedAt\" FROM \"public\".\"cappers\" WHERE \"public\".\"cappers\".\"id\" IN ($1,$2) OFFSET $3",
-    "expectLabel": null,
+    "expectLabel": "Capper include",
     "expectFlags": []
   },
   {
-    "name": "control: sport lookup by name",
+    "name": "grading sport lookup (findUnique by name)",
     "run": "52a3260",
     "sql": "SELECT \"public\".\"sports\".\"id\", \"public\".\"sports\".\"name\" FROM \"public\".\"sports\" WHERE (\"public\".\"sports\".\"name\" = $1 AND 1=1) LIMIT $2 OFFSET $3",
-    "expectLabel": null,
+    "expectLabel": "Grading sport lookup",
     "expectFlags": []
   },
   {
@@ -159,5 +162,236 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
       "RETIRED_C",
       "UNLABELED_FULL_ROW"
     ]
+  },
+  {
+    "name": "session user",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"supabaseId\", \"public\".\"users\".\"email\", \"public\".\"users\".\"name\", \"public\".\"users\".\"profilePictureUrl\", \"public\".\"users\".\"themePreference\"::text, \"public\".\"users\".\"createdAt\", \"public\".\"users\".\"updatedAt\" FROM \"public\".\"users\" WHERE (\"public\".\"users\".\"supabaseId\" = $1 AND 1=1) LIMIT $2 OFFSET $3",
+    "expectLabel": "Session user",
+    "expectFlags": []
+  },
+  {
+    "name": "capper roster (getCappersForUser)",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"cappers\".\"id\", \"public\".\"cappers\".\"userId\", \"public\".\"cappers\".\"name\", \"public\".\"cappers\".\"photoUrl\", \"public\".\"cappers\".\"source\"::text, \"public\".\"cappers\".\"customSource\", \"public\".\"cappers\".\"notes\", \"public\".\"cappers\".\"isFavorite\", \"public\".\"cappers\".\"isTest\", \"public\".\"cappers\".\"sportSpecialization\", \"public\".\"cappers\".\"colorTag\", \"public\".\"cappers\".\"createdAt\", \"public\".\"cappers\".\"updatedAt\" FROM \"public\".\"cappers\" WHERE \"public\".\"cappers\".\"userId\" = $1 ORDER BY \"public\".\"cappers\".\"isFavorite\" DESC, \"public\".\"cappers\".\"name\" ASC OFFSET $2",
+    "expectLabel": "Capper roster (full row)",
+    "expectFlags": []
+  },
+  {
+    "name": "capper include, full row (getPendingPicksForUser)",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"cappers\".\"id\", \"public\".\"cappers\".\"userId\", \"public\".\"cappers\".\"name\", \"public\".\"cappers\".\"photoUrl\", \"public\".\"cappers\".\"source\"::text, \"public\".\"cappers\".\"customSource\", \"public\".\"cappers\".\"notes\", \"public\".\"cappers\".\"isFavorite\", \"public\".\"cappers\".\"isTest\", \"public\".\"cappers\".\"sportSpecialization\", \"public\".\"cappers\".\"colorTag\", \"public\".\"cappers\".\"createdAt\", \"public\".\"cappers\".\"updatedAt\" FROM \"public\".\"cappers\" WHERE \"public\".\"cappers\".\"id\" IN ($1,$2,$3,$4,$5) OFFSET $6",
+    "expectLabel": "Capper include",
+    "expectFlags": []
+  },
+  {
+    "name": "capper include, projected (getPicksForGames)",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"cappers\".\"id\", \"public\".\"cappers\".\"name\", \"public\".\"cappers\".\"colorTag\", \"public\".\"cappers\".\"isFavorite\" FROM \"public\".\"cappers\" WHERE \"public\".\"cappers\".\"id\" IN ($1,$2,$3) OFFSET $4",
+    "expectLabel": "Capper include",
+    "expectFlags": []
+  },
+  {
+    "name": "cappers with pick counts",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"cappers\".\"id\", \"public\".\"cappers\".\"name\", COALESCE(\"aggr_selection_0_Pick\".\"_aggr_count_picks\", 0) AS \"_aggr_count_picks\" FROM \"public\".\"cappers\" LEFT JOIN (SELECT \"public\".\"picks\".\"capperId\", COUNT(*) AS \"_aggr_count_picks\" FROM \"public\".\"picks\" WHERE 1=1 GROUP BY \"public\".\"picks\".\"capperId\") AS \"aggr_selection_0_Pick\" ON (\"public\".\"cappers\".\"id\" = \"aggr_selection_0_Pick\".\"capperId\") WHERE \"public\".\"cappers\".\"userId\" = $1 ORDER BY \"public\".\"cappers\".\"name\" ASC OFFSET $2",
+    "expectLabel": "Cappers with pick counts",
+    "expectFlags": []
+  },
+  {
+    "name": "capper all-time W-L",
+    "run": "52f483d",
+    "sql": "SELECT COUNT(*), \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"status\"::text FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"userId\" = $1 AND \"public\".\"picks\".\"capperId\" IN ($2,$3,$4) AND \"public\".\"picks\".\"status\" IN (CAST($5::text AS \"public\".\"PickStatus\"),CAST($6::text AS \"public\".\"PickStatus\"))) GROUP BY \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"status\" OFFSET $7",
+    "expectLabel": "Capper all-time W-L",
+    "expectFlags": []
+  },
+  {
+    "name": "/picks final scores",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"game_results\".\"id\", \"public\".\"game_results\".\"sportKey\", \"public\".\"game_results\".\"gameDate\", \"public\".\"game_results\".\"homeTeam\", \"public\".\"game_results\".\"awayTeam\", \"public\".\"game_results\".\"homeScore\", \"public\".\"game_results\".\"awayScore\", \"public\".\"game_results\".\"gameNumber\" FROM \"public\".\"game_results\" WHERE (\"public\".\"game_results\".\"sportKey\" IN ($1,$2) AND \"public\".\"game_results\".\"gameDate\" >= $3 AND \"public\".\"game_results\".\"gameDate\" < $4) OFFSET $5",
+    "expectLabel": "/picks final scores",
+    "expectFlags": []
+  },
+  {
+    "name": "day consensus (SQL)",
+    "run": "52f483d",
+    "sql": "\n    SELECT b.\"homeTeam\", b.\"awayTeam\", b.\"gameTime\", b.bt, b.period, b.side, count(DISTINCT b.\"capperId\")::int AS n\n    FROM (\n      SELECT p.\"capperId\", p.\"homeTeam\", p.\"awayTeam\", p.\"gameTime\", p.\"betType\"::text AS bt, p.period::text AS period, CASE\n  WHEN p.\"betType\" IN ('MONEYLINE', 'SPREAD') THEN p.\"pickedSide\"::text\n  WHEN p.\"betType\" = 'TOTAL' AND p.category LIKE '%OVER' THEN 'OVER'\n  WHEN p.\"betType\" = 'TOTAL' AND p.category LIKE '%UNDER' THEN 'UNDER'\n  WHEN p.\"betType\" = 'NRFI' AND p.category IN ('NRFI', 'YRFI') THEN p.category\nEND AS side\n      FROM picks p\n      WHERE p.\"userId\" = $1 AND p.\"gameTime\" >= $2::timestamp AND p.\"gameTime\" < $3::timestamp\n    ) b\n    WHERE b.side IS NOT NULL\n    GROUP BY b.\"homeTeam\", b.\"awayTeam\", b.\"gameTime\", b.bt, b.period, b.side\n    HAVING count(DISTINCT b.\"capperId\") >= $4\n  ",
+    "expectLabel": "Day consensus",
+    "expectFlags": []
+  },
+  {
+    "name": "zone model: game results",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"game_results\".\"id\", \"public\".\"game_results\".\"homeTeam\", \"public\".\"game_results\".\"awayTeam\", \"public\".\"game_results\".\"homeScore\", \"public\".\"game_results\".\"awayScore\", \"public\".\"game_results\".\"favTeam\", \"public\".\"game_results\".\"totalLine\", \"public\".\"game_results\".\"gameDate\" FROM \"public\".\"game_results\" WHERE \"public\".\"game_results\".\"sportKey\" = $1 OFFSET $2",
+    "expectLabel": "Zone model",
+    "expectFlags": []
+  },
+  {
+    "name": "zone model: tendency snapshots",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"team_tendency_snapshots\".\"id\", \"public\".\"team_tendency_snapshots\".\"sportKey\", \"public\".\"team_tendency_snapshots\".\"teamName\", \"public\".\"team_tendency_snapshots\".\"snapshotDate\", \"public\".\"team_tendency_snapshots\".\"favWins\", \"public\".\"team_tendency_snapshots\".\"favLosses\", \"public\".\"team_tendency_snapshots\".\"favPushes\", \"public\".\"team_tendency_snapshots\".\"dogWins\", \"public\".\"team_tendency_snapshots\".\"dogLosses\", \"public\".\"team_tendency_snapshots\".\"dogPushes\", \"public\".\"team_tendency_snapshots\".\"overCount\", \"public\".\"team_tendency_snapshots\".\"underCount\", \"public\".\"team_tendency_snapshots\".\"totalPushCount\", \"public\".\"team_tendency_snapshots\".\"sourceId\", \"public\".\"team_tendency_snapshots\".\"scope\"::text, \"public\".\"team_tendency_snapshots\".\"createdAt\" FROM \"public\".\"team_tendency_snapshots\" WHERE \"public\".\"team_tendency_snapshots\".\"sportKey\" = $1 ORDER BY \"public\".\"team_tendency_snapshots\".\"snapshotDate\" ASC OFFSET $2",
+    "expectLabel": "Zone model",
+    "expectFlags": []
+  },
+  {
+    "name": "zone model: team stat snapshots",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"team_stat_snapshots\".\"id\", \"public\".\"team_stat_snapshots\".\"sportKey\", \"public\".\"team_stat_snapshots\".\"teamName\", \"public\".\"team_stat_snapshots\".\"snapshotDate\", \"public\".\"team_stat_snapshots\".\"wins\", \"public\".\"team_stat_snapshots\".\"losses\", \"public\".\"team_stat_snapshots\".\"winPct\", \"public\".\"team_stat_snapshots\".\"runDifferential\", \"public\".\"team_stat_snapshots\".\"battingAvg\", \"public\".\"team_stat_snapshots\".\"obp\", \"public\".\"team_stat_snapshots\".\"slg\", \"public\".\"team_stat_snapshots\".\"ops\", \"public\".\"team_stat_snapshots\".\"era\", \"public\".\"team_stat_snapshots\".\"whip\", \"public\".\"team_stat_snapshots\".\"homeWins\", \"public\".\"team_stat_snapshots\".\"homeLosses\", \"public\".\"team_stat_snapshots\".\"awayWins\", \"public\".\"team_stat_snapshots\".\"awayLosses\", \"public\".\"team_stat_snapshots\".\"last10Wins\", \"public\".\"team_stat_snapshots\".\"last10Losses\", \"public\".\"team_stat_snapshots\".\"streakType\", \"public\".\"team_stat_snapshots\".\"streakCount\", \"public\".\"team_stat_snapshots\".\"sourceId\", \"public\".\"team_stat_snapshots\".\"scope\"::text, \"public\".\"team_stat_snapshots\".\"createdAt\" FROM \"public\".\"team_stat_snapshots\" WHERE \"public\".\"team_stat_snapshots\".\"sportKey\" = $1 ORDER BY \"public\".\"team_stat_snapshots\".\"snapshotDate\" ASC OFFSET $2",
+    "expectLabel": "Zone model",
+    "expectFlags": []
+  },
+  {
+    "name": "game results window (grading candidates)",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"game_results\".\"id\", \"public\".\"game_results\".\"gameDate\", \"public\".\"game_results\".\"homeTeam\", \"public\".\"game_results\".\"awayTeam\", \"public\".\"game_results\".\"externalId\", \"public\".\"game_results\".\"homeScore\", \"public\".\"game_results\".\"awayScore\", \"public\".\"game_results\".\"firstFiveHomeScore\", \"public\".\"game_results\".\"firstFiveAwayScore\", \"public\".\"game_results\".\"firstInningHomeScore\", \"public\".\"game_results\".\"firstInningAwayScore\", \"public\".\"game_results\".\"linescoreJson\", \"public\".\"game_results\".\"gameNumber\" FROM \"public\".\"game_results\" WHERE (\"public\".\"game_results\".\"sportKey\" = $1 AND \"public\".\"game_results\".\"gameDate\" >= $2 AND \"public\".\"game_results\".\"gameDate\" < $3) OFFSET $4",
+    "expectLabel": "Game results window",
+    "expectFlags": []
+  },
+  {
+    "name": "grading pending legs count()",
+    "run": "52f483d",
+    "sql": "SELECT COUNT(*) FROM (SELECT \"public\".\"legs\".\"id\" FROM \"public\".\"legs\" WHERE (\"public\".\"legs\".\"sportId\" = $1 AND \"public\".\"legs\".\"status\" = CAST($2::text AS \"public\".\"PickStatus\") AND \"public\".\"legs\".\"gameTime\" >= $3) OFFSET $4) AS \"sub\"",
+    "expectLabel": "Grading pending legs",
+    "expectFlags": []
+  },
+  {
+    "name": "final-score state (SQL)",
+    "run": "52f483d",
+    "sql": "\n    SELECT \"externalId\",\n           \"firstFiveHomeScore\",\n           \"firstInningHomeScore\",\n           \"homeTurnovers\",\n           \"favTeam\",\n           (\"linescoreJson\" IS NULL OR \"linescoreJson\" = 'null'::jsonb) AS \"linescoreMissing\",\n           (\"quartersJson\" IS NULL OR \"quartersJson\" = 'null'::jsonb) AS \"quartersMissing\",\n           (\"scoringPlaysJson\" IS NULL OR \"scoringPlaysJson\" = 'null'::jsonb) AS \"scoringPlaysMissing\"\n    FROM game_results\n    WHERE \"sportKey\" = $1 AND \"externalId\" = ANY($2::text[])\n  ",
+    "expectLabel": "Final-score state",
+    "expectFlags": []
+  },
+  {
+    "name": "odds for tendencies (SQL)",
+    "run": "52f483d",
+    "sql": "\n      SELECT \n         g.ord::int AS ord,\n         g.game->'homeTeam' AS \"homeTeam\",\n         g.game->'awayTeam' AS \"awayTeam\",\n         g.game->'commenceTime' AS \"commenceTime\",\n         (SELECT COALESCE(jsonb_agg(d.pair ORDER BY d.bord, d.oord), '[]'::jsonb)\n            FROM (\n              SELECT DISTINCT ON (o.oc->'name') b.bord, o.oord, CASE WHEN jsonb_exists(o.oc, 'price') THEN jsonb_build_array(o.oc->'name', o.oc->'price') ELSE jsonb_build_array(o.oc->'name') END AS pair\n                FROM jsonb_array_elements((CASE WHEN jsonb_typeof(g.game->'bookmakers') = 'array' THEN g.game->'bookmakers' ELSE '[]'::jsonb END)) WITH ORDINALITY AS b(bk, bord)\n                CROSS JOIN LATERAL (\n                  SELECT m.mk FROM jsonb_array_elements((CASE WHEN jsonb_typeof(b.bk->'markets') = 'array' THEN b.bk->'markets' ELSE '[]'::jsonb END)) WITH ORDINALITY AS m(mk, mord)\n                   WHERE m.mk->>'key' = 'h2h' ORDER BY m.mord LIMIT 1\n                ) fm\n                CROSS JOIN LATERAL jsonb_array_elements((CASE WHEN jsonb_typeof(fm.mk->'outcomes') = 'array' THEN fm.mk->'outcomes' ELSE '[]'::jsonb END)) WITH ORDINALITY AS o(oc, oord)\n               ORDER BY o.oc->'name', b.bord, o.oord\n            ) d\n         ) AS ml,\n         (SELECT jsonb_build_array(o.oc->'point')\n            FROM jsonb_array_elements((CASE WHEN jsonb_typeof(g.game->'bookmakers') = 'array' THEN g.game->'bookmakers' ELSE '[]'::jsonb END)) WITH ORDINALITY AS b(bk, bord)\n            CROSS JOIN LATERAL (\n              SELECT m.mk FROM jsonb_array_elements((CASE WHEN jsonb_typeof(b.bk->'markets') = 'array' THEN b.bk->'markets' ELSE '[]'::jsonb END)) WITH ORDINALITY AS m(mk, mord)\n               WHERE m.mk->>'key' = 'totals' ORDER BY m.mord LIMIT 1\n            ) fm\n            CROSS JOIN LATERAL jsonb_array_elements((CASE WHEN jsonb_typeof(fm.mk->'outcomes') = 'array' THEN fm.mk->'outcomes' ELSE '[]'::jsonb END)) WITH ORDINALITY AS o(oc, oord)\n           WHERE jsonb_exists(o.oc, 'point')\n           ORDER BY b.bord, o.oord LIMIT 1\n         ) AS pt\n      FROM odds_snapshots s\n      CROSS JOIN LATERAL jsonb_array_elements((CASE WHEN jsonb_typeof(s.data) = 'array' THEN s.data ELSE '[]'::jsonb END)) WITH ORDINALITY AS g(game, ord)\n      WHERE s.\"sportKey\" = $1\n      ORDER BY s.\"fetchDate\", g.ord",
+    "expectLabel": "Odds for tendencies",
+    "expectFlags": []
+  },
+  {
+    "name": "tendency game results",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"game_results\".\"id\", \"public\".\"game_results\".\"homeTeam\", \"public\".\"game_results\".\"awayTeam\", \"public\".\"game_results\".\"homeScore\", \"public\".\"game_results\".\"awayScore\", \"public\".\"game_results\".\"gameDate\" FROM \"public\".\"game_results\" WHERE (\"public\".\"game_results\".\"sportKey\" = $1 AND \"public\".\"game_results\".\"isPreseason\" = $2) OFFSET $3",
+    "expectLabel": "Tendency game results",
+    "expectFlags": []
+  },
+  {
+    "name": "tendency upsert",
+    "run": "52f483d",
+    "sql": "INSERT INTO \"public\".\"team_tendencies\" (\"id\",\"sportKey\",\"teamName\",\"favWins\",\"favLosses\",\"favPushes\",\"dogWins\",\"dogLosses\",\"dogPushes\",\"overCount\",\"underCount\",\"totalPushCount\",\"sourceId\",\"scope\",\"updatedAt\") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,CAST($14::text AS \"public\".\"DataScope\"),$15) ON CONFLICT (\"sportKey\",\"teamName\") DO UPDATE SET \"favWins\" = $16, \"favLosses\" = $17, \"favPushes\" = $18, \"dogWins\" = $19, \"dogLosses\" = $20, \"dogPushes\" = $21, \"overCount\" = $22, \"underCount\" = $23, \"totalPushCount\" = $24, \"updatedAt\" = $25 WHERE ((\"public\".\"team_tendencies\".\"sportKey\" = $26 AND \"public\".\"team_tendencies\".\"teamName\" = $27) AND 1=1) RETURNING \"public\".\"team_tendencies\".\"id\", \"public\".\"team_tendencies\".\"sportKey\", \"public\".\"team_tendencies\".\"teamName\", \"public\".\"team_tendencies\".\"favWins\", \"public\".\"team_tendencies\".\"favLosses\", \"public\".\"team_tendencies\".\"favPushes\", \"public\".\"team_tendencies\".\"dogWins\", \"public\".\"team_tendencies\".\"dogLosses\", \"public\".\"team_tendencies\".\"dogPushes\", \"public\".\"team_tendencies\".\"overCount\", \"public\".\"team_tendencies\".\"underCount\", \"public\".\"team_tendencies\".\"totalPushCount\", \"public\".\"team_tendencies\".\"sourceId\", \"public\".\"team_tendencies\".\"scope\"::text, \"public\".\"team_tendencies\".\"updatedAt\"",
+    "expectLabel": "Tendency upsert",
+    "expectFlags": []
+  },
+  {
+    "name": "tendencies by sport",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"team_tendencies\".\"id\", \"public\".\"team_tendencies\".\"sportKey\", \"public\".\"team_tendencies\".\"teamName\", \"public\".\"team_tendencies\".\"favWins\", \"public\".\"team_tendencies\".\"favLosses\", \"public\".\"team_tendencies\".\"favPushes\", \"public\".\"team_tendencies\".\"dogWins\", \"public\".\"team_tendencies\".\"dogLosses\", \"public\".\"team_tendencies\".\"dogPushes\", \"public\".\"team_tendencies\".\"overCount\", \"public\".\"team_tendencies\".\"underCount\", \"public\".\"team_tendencies\".\"totalPushCount\", \"public\".\"team_tendencies\".\"sourceId\", \"public\".\"team_tendencies\".\"scope\"::text, \"public\".\"team_tendencies\".\"updatedAt\" FROM \"public\".\"team_tendencies\" WHERE \"public\".\"team_tendencies\".\"sportKey\" = $1 OFFSET $2",
+    "expectLabel": "Tendencies by sport",
+    "expectFlags": []
+  },
+  {
+    "name": "tendency history (resolveTeamTendency)",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"team_tendency_snapshots\".\"id\", \"public\".\"team_tendency_snapshots\".\"sportKey\", \"public\".\"team_tendency_snapshots\".\"teamName\", \"public\".\"team_tendency_snapshots\".\"snapshotDate\", \"public\".\"team_tendency_snapshots\".\"favWins\", \"public\".\"team_tendency_snapshots\".\"favLosses\", \"public\".\"team_tendency_snapshots\".\"favPushes\", \"public\".\"team_tendency_snapshots\".\"dogWins\", \"public\".\"team_tendency_snapshots\".\"dogLosses\", \"public\".\"team_tendency_snapshots\".\"dogPushes\", \"public\".\"team_tendency_snapshots\".\"overCount\", \"public\".\"team_tendency_snapshots\".\"underCount\", \"public\".\"team_tendency_snapshots\".\"totalPushCount\", \"public\".\"team_tendency_snapshots\".\"sourceId\", \"public\".\"team_tendency_snapshots\".\"scope\"::text, \"public\".\"team_tendency_snapshots\".\"createdAt\" FROM \"public\".\"team_tendency_snapshots\" WHERE (\"public\".\"team_tendency_snapshots\".\"sportKey\" = $1 AND \"public\".\"team_tendency_snapshots\".\"teamName\" = $2) ORDER BY \"public\".\"team_tendency_snapshots\".\"snapshotDate\" ASC OFFSET $3",
+    "expectLabel": "Tendency history (model)",
+    "expectFlags": []
+  },
+  {
+    "name": "game observations",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"game_results\".\"id\", \"public\".\"game_results\".\"gameDate\", \"public\".\"game_results\".\"favTeam\", \"public\".\"game_results\".\"homeTeam\", \"public\".\"game_results\".\"awayTeam\", \"public\".\"game_results\".\"homeScore\", \"public\".\"game_results\".\"awayScore\", \"public\".\"game_results\".\"totalLine\" FROM \"public\".\"game_results\" WHERE \"public\".\"game_results\".\"sportKey\" = $1 ORDER BY \"public\".\"game_results\".\"gameDate\" ASC OFFSET $2",
+    "expectLabel": "Game observations (model)",
+    "expectFlags": []
+  },
+  {
+    "name": "decay-delta persisted ids",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"decay_delta_predictions\".\"id\", \"public\".\"decay_delta_predictions\".\"gameResultId\" FROM \"public\".\"decay_delta_predictions\" WHERE (\"public\".\"decay_delta_predictions\".\"modelId\" = $1 AND \"public\".\"decay_delta_predictions\".\"gameResultId\" IS NOT NULL) OFFSET $2",
+    "expectLabel": "Decay-delta persisted ids",
+    "expectFlags": []
+  },
+  {
+    "name": "team record snapshot read",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"game_results\".\"id\", \"public\".\"game_results\".\"homeTeam\", \"public\".\"game_results\".\"awayTeam\", \"public\".\"game_results\".\"homeScore\", \"public\".\"game_results\".\"awayScore\", \"public\".\"game_results\".\"gameDate\", \"public\".\"game_results\".\"isPreseason\" FROM \"public\".\"game_results\" WHERE \"public\".\"game_results\".\"sportKey\" = $1 OFFSET $2",
+    "expectLabel": "Team record snapshot",
+    "expectFlags": []
+  },
+  {
+    "name": "team record snapshot upsert",
+    "run": "52f483d",
+    "sql": "INSERT INTO \"public\".\"team_record_snapshots\" (\"id\",\"sportKey\",\"teamName\",\"snapshotDate\",\"wins\",\"losses\",\"ties\",\"winPct\",\"homeWins\",\"homeLosses\",\"awayWins\",\"awayLosses\",\"last10Wins\",\"last10Losses\",\"streakType\",\"streakCount\",\"gamesInRecord\",\"sourceId\",\"scope\",\"createdAt\") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,CAST($19::text AS \"public\".\"DataScope\"),$20) ON CONFLICT (\"sportKey\",\"teamName\",\"snapshotDate\") DO UPDATE SET \"sportKey\" = $21, \"teamName\" = $22, \"snapshotDate\" = $23, \"wins\" = $24, \"losses\" = $25, \"ties\" = $26, \"winPct\" = $27, \"homeWins\" = $28, \"homeLosses\" = $29, \"awayWins\" = $30, \"awayLosses\" = $31, \"last10Wins\" = $32, \"last10Losses\" = $33, \"streakType\" = $34, \"streakCount\" = $35, \"gamesInRecord\" = $36 WHERE ((\"public\".\"team_record_snapshots\".\"sportKey\" = $37 AND \"public\".\"team_record_snapshots\".\"teamName\" = $38 AND \"public\".\"team_record_snapshots\".\"snapshotDate\" = $39) AND 1=1) RETURNING \"public\".\"team_record_snapshots\".\"id\", \"public\".\"team_record_snapshots\".\"sportKey\", \"public\".\"team_record_snapshots\".\"teamName\", \"public\".\"team_record_snapshots\".\"snapshotDate\", \"public\".\"team_record_snapshots\".\"wins\", \"public\".\"team_record_snapshots\".\"losses\", \"public\".\"team_record_snapshots\".\"ties\", \"public\".\"team_record_snapshots\".\"winPct\", \"public\".\"team_record_snapshots\".\"homeWins\", \"public\".\"team_record_snapshots\".\"homeLosses\", \"public\".\"team_record_snapshots\".\"awayWins\", \"public\".\"team_record_snapshots\".\"awayLosses\", \"public\".\"team_record_snapshots\".\"last10Wins\", \"public\".\"team_record_snapshots\".\"last10Losses\", \"public\".\"team_record_snapshots\".\"streakType\", \"public\".\"team_record_snapshots\".\"streakCount\", \"public\".\"team_record_snapshots\".\"gamesInRecord\", \"public\".\"team_record_snapshots\".\"sourceId\", \"public\".\"team_record_snapshots\".\"scope\"::text, \"public\".\"team_record_snapshots\".\"createdAt\"",
+    "expectLabel": "Team record snapshot",
+    "expectFlags": []
+  },
+  {
+    "name": "situational snapshot upsert",
+    "run": "52f483d",
+    "sql": "INSERT INTO \"public\".\"situational_rate_snapshots\" (\"id\",\"sportKey\",\"teamName\",\"questionKey\",\"snapshotDate\",\"wins\",\"total\",\"sourceId\",\"scope\",\"createdAt\") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CAST($9::text AS \"public\".\"DataScope\"),$10) ON CONFLICT (\"sportKey\",\"teamName\",\"questionKey\",\"snapshotDate\") DO UPDATE SET \"wins\" = $11, \"total\" = $12 WHERE ((\"public\".\"situational_rate_snapshots\".\"sportKey\" = $13 AND \"public\".\"situational_rate_snapshots\".\"teamName\" = $14 AND \"public\".\"situational_rate_snapshots\".\"questionKey\" = $15 AND \"public\".\"situational_rate_snapshots\".\"snapshotDate\" = $16) AND 1=1) RETURNING \"public\".\"situational_rate_snapshots\".\"id\", \"public\".\"situational_rate_snapshots\".\"sportKey\", \"public\".\"situational_rate_snapshots\".\"teamName\", \"public\".\"situational_rate_snapshots\".\"questionKey\", \"public\".\"situational_rate_snapshots\".\"snapshotDate\", \"public\".\"situational_rate_snapshots\".\"wins\", \"public\".\"situational_rate_snapshots\".\"total\", \"public\".\"situational_rate_snapshots\".\"sourceId\", \"public\".\"situational_rate_snapshots\".\"scope\"::text, \"public\".\"situational_rate_snapshots\".\"createdAt\"",
+    "expectLabel": "Situational snapshot upsert",
+    "expectFlags": []
+  },
+  {
+    "name": "control: sport include follow-up (sports id IN)",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"sports\".\"id\", \"public\".\"sports\".\"name\" FROM \"public\".\"sports\" WHERE \"public\".\"sports\".\"id\" IN ($1,$2,$3) OFFSET $4",
+    "expectLabel": null,
+    "expectFlags": []
+  },
+  {
+    "name": "control: sport lookup ILIKE (getPicksForGames)",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"sports\".\"id\", \"public\".\"sports\".\"name\" FROM \"public\".\"sports\" WHERE \"public\".\"sports\".\"name\" ILIKE $1 LIMIT $2 OFFSET $3",
+    "expectLabel": null,
+    "expectFlags": []
+  },
+  {
+    "name": "control: odds snapshot count (SQL)",
+    "run": "52f483d",
+    "sql": "SELECT count(*)::int AS n FROM odds_snapshots WHERE \"sportKey\" = $1",
+    "expectLabel": null,
+    "expectFlags": []
+  },
+  {
+    "name": "control: decay-delta pending games",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"game_results\".\"id\", \"public\".\"game_results\".\"favTeam\", \"public\".\"game_results\".\"homeTeam\", \"public\".\"game_results\".\"awayTeam\", \"public\".\"game_results\".\"homeScore\", \"public\".\"game_results\".\"awayScore\", \"public\".\"game_results\".\"gameDate\", \"public\".\"game_results\".\"totalLine\" FROM \"public\".\"game_results\" WHERE (\"public\".\"game_results\".\"sportKey\" = $1 AND \"public\".\"game_results\".\"favTeam\" IS NOT NULL AND \"public\".\"game_results\".\"totalLine\" IS NOT NULL AND 1=1) ORDER BY \"public\".\"game_results\".\"gameDate\" ASC, \"public\".\"game_results\".\"id\" ASC OFFSET $2",
+    "expectLabel": null,
+    "expectFlags": []
+  },
+  {
+    "name": "control: pregame odds projection (SQL)",
+    "run": "52f483d",
+    "sql": "\n    SELECT \n         g.ord::int AS ord,\n         g.game->'homeTeam' AS \"homeTeam\",\n         g.game->'awayTeam' AS \"awayTeam\",\n         g.game->'commenceTime' AS \"commenceTime\",\n         (SELECT COALESCE(jsonb_agg(CASE WHEN jsonb_exists(o.oc, 'price') THEN jsonb_build_array(o.oc->'name', o.oc->'price') ELSE jsonb_build_array(o.oc->'name') END ORDER BY o.oord), '[]'::jsonb)\n            FROM (\n              SELECT m.mk FROM jsonb_array_elements((CASE WHEN jsonb_typeof(g.game->'bookmakers') = 'array' THEN g.game->'bookmakers' ELSE '[]'::jsonb END)) WITH ORDINALITY AS b(bk, bord)\n               CROSS JOIN LATERAL jsonb_array_elements((CASE WHEN jsonb_typeof(b.bk->'markets') = 'array' THEN b.bk->'markets' ELSE '[]'::jsonb END)) WITH ORDINALITY AS m(mk, mord)\n               WHERE m.mk->>'key' = 'h2h' ORDER BY b.bord, m.mord LIMIT 1\n            ) fm\n            CROSS JOIN LATERAL jsonb_array_elements((CASE WHEN jsonb_typeof(fm.mk->'outcomes') = 'array' THEN fm.mk->'outcomes' ELSE '[]'::jsonb END)) WITH ORDINALITY AS o(oc, oord)\n         ) AS ml,\n         (SELECT jsonb_build_array(o.oc->'point')\n            FROM (\n              SELECT m.mk FROM jsonb_array_elements((CASE WHEN jsonb_typeof(g.game->'bookmakers') = 'array' THEN g.game->'bookmakers' ELSE '[]'::jsonb END)) WITH ORDINALITY AS b(bk, bord)\n               CROSS JOIN LATERAL jsonb_array_elements((CASE WHEN jsonb_typeof(b.bk->'markets') = 'array' THEN b.bk->'markets' ELSE '[]'::jsonb END)) WITH ORDINALITY AS m(mk, mord)\n               WHERE m.mk->>'key' = 'totals' ORDER BY b.bord, m.mord LIMIT 1\n            ) fm\n            CROSS JOIN LATERAL jsonb_array_elements((CASE WHEN jsonb_typeof(fm.mk->'outcomes') = 'array' THEN fm.mk->'outcomes' ELSE '[]'::jsonb END)) WITH ORDINALITY AS o(oc, oord)\n           WHERE jsonb_exists(o.oc, 'point')\n           ORDER BY o.oord LIMIT 1\n         ) AS pt\n    FROM odds_snapshots s\n    CROSS JOIN LATERAL jsonb_array_elements((CASE WHEN jsonb_typeof(s.data) = 'array' THEN s.data ELSE '[]'::jsonb END)) WITH ORDINALITY AS g(game, ord)\n    WHERE s.\"sportKey\" = $1 AND s.\"fetchDate\" = $2\n    ORDER BY g.ord",
+    "expectLabel": null,
+    "expectFlags": []
+  },
+  {
+    "name": "control: NFL situational read",
+    "run": "52f483d",
+    "sql": "SELECT \"public\".\"game_results\".\"id\", \"public\".\"game_results\".\"homeTeam\", \"public\".\"game_results\".\"awayTeam\", \"public\".\"game_results\".\"homeScore\", \"public\".\"game_results\".\"awayScore\", \"public\".\"game_results\".\"gameDate\", \"public\".\"game_results\".\"isPreseason\", \"public\".\"game_results\".\"quartersJson\", \"public\".\"game_results\".\"scoringPlaysJson\", \"public\".\"game_results\".\"homeTurnovers\", \"public\".\"game_results\".\"awayTurnovers\" FROM \"public\".\"game_results\" WHERE (\"public\".\"game_results\".\"sportKey\" = $1 AND \"public\".\"game_results\".\"isPreseason\" = $2 AND (\"public\".\"game_results\".\"quartersJson\" IS NOT NULL OR \"public\".\"game_results\".\"scoringPlaysJson\" IS NOT NULL OR \"public\".\"game_results\".\"homeTurnovers\" IS NOT NULL)) OFFSET $3",
+    "expectLabel": null,
+    "expectFlags": []
+  },
+  {
+    "name": "tendency snapshot upsert",
+    "run": "e769b64 (prod pg_stat_statements, 2026-10-19)",
+    "sql": "INSERT INTO \"team_tendency_snapshots\" (\"id\",\"sportKey\",\"teamName\",\"snapshotDate\",\"favWins\",\"favLosses\",\"favPushes\",\"dogWins\",\"dogLosses\",\"dogPushes\",\"overCount\",\"underCount\",\"totalPushCount\",\"sourceId\",\"scope\",\"createdAt\") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,CAST($15::text AS \"DataScope\"),$16) ON CONFLICT (\"sportKey\",\"teamName\",\"snapshotDate\") DO UPDATE SET \"favWins\" = $17, \"favLosses\" = $18, \"favPushes\" = $19, \"dogWins\" = $20, \"dogLosses\" = $21, \"dogPushes\" = $22, \"overCount\" = $23, \"underCount\" = $24, \"totalPushCount\" = $25 WHERE ((\"team_tendency_snapshots\".\"sportKey\" = $26 AND \"team_tendency_snapshots\".\"teamName\" = $27 AND \"team_tendency_snapshots\".\"snapshotDate\" = $28) AND $29=$30) RETURNING \"team_tendency_snapshots\".\"id\", \"team_tendency_snapshots\".\"sportKey\", \"team_tendency_snapshots\".\"teamName\", \"team_tendency_snapshots\".\"snapshotDate\", \"team_tendency_snapshots\".\"favWins\", \"team_tendency_snapshots\".\"favLosses\", \"team_tendency_snapshots\".\"favPushes\", \"team_tendency_snapshots\".\"dogWins\", \"team_tendency_snapshots\".\"dogLosses\", \"team_tendency_snapshots\".\"dogPushes\", \"team_tendency_snapshots\".\"overCount\", \"team_tendency_snapshots\".\"underCount\", \"team_tendency_snapshots\".\"totalPushCount\", \"team_tendency_snapshots\".\"sourceId\", \"team_tendency_snapshots\".\"scope\"::text, \"team_tendency_snapshots\".\"createdAt\"",
+    "expectLabel": "Tendency snapshot upsert",
+    "expectFlags": []
+  },
+  {
+    "name": "final-score upsert",
+    "run": "e769b64 (prod pg_stat_statements, 2026-10-19)",
+    "sql": "INSERT INTO \"game_results\" (\"id\",\"sportKey\",\"externalId\",\"homeTeam\",\"awayTeam\",\"homeScore\",\"awayScore\",\"firstFiveHomeScore\",\"firstFiveAwayScore\",\"firstInningHomeScore\",\"firstInningAwayScore\",\"homeTurnovers\",\"awayTurnovers\",\"gameNumber\",\"gameDate\",\"createdAt\",\"isPreseason\",\"favTeam\",\"totalLine\",\"lineSource\") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) ON CONFLICT (\"sportKey\",\"externalId\") DO UPDATE SET \"homeScore\" = $21, \"awayScore\" = $22 WHERE ((\"game_results\".\"sportKey\" = $23 AND \"game_results\".\"externalId\" = $24) AND $25=$26) RETURNING \"game_results\".\"id\", \"game_results\".\"sportKey\", \"game_results\".\"externalId\", \"game_results\".\"homeTeam\", \"game_results\".\"awayTeam\", \"game_results\".\"homeScore\", \"game_results\".\"awayScore\", \"game_results\".\"firstFiveHomeScore\", \"game_results\".\"firstFiveAwayScore\", \"game_results\".\"firstInningHomeScore\", \"game_results\".\"firstInningAwayScore\", \"game_results\".\"inningsJson\", \"game_results\".\"quartersJson\", \"game_results\".\"linescoreJson\", \"game_results\".\"scoringPlaysJson\", \"game_results\".\"homeTurnovers\", \"game_results\".\"awayTurnovers\", \"game_results\".\"gameNumber\", \"game_results\".\"gameDate\", \"game_results\".\"createdAt\", \"game_results\".\"isPreseason\", \"game_results\".\"favTeam\", \"game_results\".\"totalLine\", \"game_results\".\"lineSource\"",
+    "expectLabel": "Final-score upsert",
+    "expectFlags": []
+  },
+  {
+    "name": "NFL team stat upsert",
+    "run": "e769b64 (prod pg_stat_statements, 2026-10-19)",
+    "sql": "INSERT INTO \"nfl_team_stat_snapshots\" (\"id\",\"gameId\",\"season\",\"week\",\"gameType\",\"gameDate\",\"team\",\"opponent\",\"homeAway\",\"completed\",\"points\",\"pointsAllowed\",\"totalYards\",\"totalYardsAllowed\",\"passingYards\",\"passingYardsAllowed\",\"rushingYards\",\"rushingYardsAllowed\",\"offensivePlays\",\"yardsPerPlay\",\"firstDowns\",\"thirdDownPct\",\"thirdDownPctAllowed\",\"timeOfPossessionSeconds\",\"turnovers\",\"takeaways\",\"turnoverMargin\",\"sacks\",\"sacksAllowed\",\"sackYardsLost\",\"penalties\",\"penaltyYards\",\"passingEpa\",\"rushingEpa\",\"receivingEpa\",\"offensiveEpa\",\"sourceId\",\"scope\",\"createdAt\",\"updatedAt\") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,CAST($38::text AS \"DataScope\"),$39,$40) ON CONFLICT (\"team\",\"gameId\") DO UPDATE SET \"gameId\" = $41, \"season\" = $42, \"week\" = $43, \"gameType\" = $44, \"gameDate\" = $45, \"team\" = $46, \"opponent\" = $47, \"homeAway\" = $48, \"completed\" = $49, \"points\" = $50, \"pointsAllowed\" = $51, \"totalYards\" = $52, \"totalYardsAllowed\" = $53, \"passingYards\" = $54, \"passingYardsAllowed\" = $55, \"rushingYards\" = $56, \"rushingYardsAllowed\" = $57, \"offensivePlays\" = $58, \"yardsPerPlay\" = $59, \"firstDowns\" = $60, \"thirdDownPct\" = $61, \"thirdDownPctAllowed\" = $62, \"timeOfPossessionSeconds\" = $63, \"turnovers\" = $64, \"takeaways\" = $65, \"turnoverMargin\" = $66, \"sacks\" = $67, \"sacksAllowed\" = $68, \"sackYardsLost\" = $69, \"penalties\" = $70, \"penaltyYards\" = $71, \"passingEpa\" = $72, \"rushingEpa\" = $73, \"receivingEpa\" = $74, \"offensiveEpa\" = $75, \"updatedAt\" = $76 WHERE ((\"nfl_team_stat_snapshots\".\"team\" = $77 AND \"nfl_team_stat_snapshots\".\"gameId\" = $78) AND $79=$80) RETURNING \"nfl_team_stat_snapshots\".\"id\", \"nfl_team_stat_snapshots\".\"gameId\", \"nfl_team_stat_snapshots\".\"season\", \"nfl_team_stat_snapshots\".\"week\", \"nfl_team_stat_snapshots\".\"gameType\", \"nfl_team_stat_snapshots\".\"gameDate\", \"nfl_team_stat_snapshots\".\"team\", \"nfl_team_stat_snapshots\".\"opponent\", \"nfl_team_stat_snapshots\".\"homeAway\", \"nfl_team_stat_snapshots\".\"completed\", \"nfl_team_stat_snapshots\".\"points\", \"nfl_team_stat_snapshots\".\"pointsAllowed\", \"nfl_team_stat_snapshots\".\"totalYards\", \"nfl_team_stat_snapshots\".\"totalYardsAllowed\", \"nfl_team_stat_snapshots\".\"passingYards\", \"nfl_team_stat_snapshots\".\"passingYardsAllowed\", \"nfl_team_stat_snapshots\".\"rushingYards\", \"nfl_team_stat_snapshots\".\"rushingYardsAllowed\", \"nfl_team_stat_snapshots\".\"offensivePlays\", \"nfl_team_stat_snapshots\".\"yardsPerPlay\", \"nfl_team_stat_snapshots\".\"firstDowns\", \"nfl_team_stat_snapshots\".\"thirdDownPct\", \"nfl_team_stat_snapshots\".\"thirdDownPctAllowed\", \"nfl_team_stat_snapshots\".\"timeOfPossessionSeconds\", \"nfl_team_stat_snapshots\".\"turnovers\", \"nfl_team_stat_snapshots\".\"takeaways\", \"nfl_team_stat_snapshots\".\"turnoverMargin\", \"nfl_team_stat_snapshots\".\"sacks\", \"nfl_team_stat_snapshots\".\"sacksAllowed\", \"nfl_team_stat_snapshots\".\"sackYardsLost\", \"nfl_team_stat_snapshots\".\"penalties\", \"nfl_team_stat_snapshots\".\"penaltyYards\", \"nfl_team_stat_snapshots\".\"passingEpa\", \"nfl_team_stat_snapshots\".\"rushingEpa\", \"nfl_team_stat_snapshots\".\"receivingEpa\", \"nfl_team_stat_snapshots\".\"offensiveEpa\", \"nfl_team_stat_snapshots\".\"sourceId\", \"nfl_team_stat_snapshots\".\"scope\"::text, \"nfl_team_stat_snapshots\".\"createdAt\", \"nfl_team_stat_snapshots\".\"updatedAt\"",
+    "expectLabel": "NFL team stat upsert",
+    "expectFlags": []
   }
 ];
