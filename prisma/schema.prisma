@@ -181,6 +181,7 @@ model User {
   customMetrics           CustomMetric[]
   featureFlagOverrides    FeatureFlagUserOverride[]
   importSkippedLines      ImportSkippedLine[]
+  importRuns              ImportRun[]
 
   @@map("users")
 }
@@ -393,6 +394,8 @@ model Pick {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  gradeFailure PickGradeFailure? // why the grading pass last couldn't grade this pick (admin Grading tab) - its own table, no column here
+
   @@index([userId, capperId])
   @@index([userId, status])
   @@index([userId, sportId])
@@ -550,6 +553,8 @@ model OddsApiUsageLog {
   requestsMonth    Int
   marketsRequested String // comma-joined market keys requested in this call
   eventsRequested  Int // events covered by this call/batch (1 for a single event-odds call, game count for a bulk sport-odds call)
+  httpStatus       Int? // the response's HTTP status; null on rows written before it was recorded
+  caller           String? // which code path made the call (e.g. "refresh-odds", "alt-lines", "fanduel-link"); null on older rows
   createdAt        DateTime @default(now())
 
   @@index([pollTimestamp])
@@ -1474,4 +1479,77 @@ model FeatureFlagUserOverride {
 
   @@unique([flagKey, userId])
   @@map("feature_flag_user_overrides")
+}
+
+// ---------- Ops console logs (admin-only; nothing user-facing reads these) ----------
+
+enum CronRunStatus {
+  RUNNING // inserted at start; a row still RUNNING past the route's maxDuration timed out
+  OK
+  WARNING // the route answered 200 with ok:false (e.g. refresh-odds with every sport empty)
+  ERROR // HTTP 5xx or a throw
+}
+
+// One row per cron invocation that passed the CRON_SECRET check, written by
+// runCronLogged (server/data/cron-runs.ts): inserted when the run starts,
+// updated when it ends. No retention prune: ~100 runs a day, ~3k rows a
+// month, and this project only deletes by id.
+model CronRun {
+  id          String        @id @default(cuid())
+  name        String // the route's name under /api/cron, e.g. "grade-picks"
+  startedAt   DateTime      @default(now())
+  endedAt     DateTime?
+  durationMs  Int?
+  status      CronRunStatus @default(RUNNING)
+  httpStatus  Int?
+  rowsTouched Int? // the route's own count of rows written/graded (see cron-run-summary.ts)
+  summary     Json? // small per-route counts, never a response body
+  error       String? // the thrown message, clipped
+
+  @@index([name, startedAt])
+  @@map("cron_runs")
+}
+
+// The latest reason the grading pass couldn't grade a still-PENDING pick
+// (no final game matched, or a matched game the pick can't be graded from -
+// e.g. a player not in the box score). Upserted by the grading passes on
+// every miss, so lastSeenAt/attempts track the retries; read by the admin
+// Grading tab. A separate table, not picks columns, so every full-row picks
+// read stays the same width. Deleted with its pick (cascade); a row whose
+// pick has since graded is ignored by the reader (status filter).
+model PickGradeFailure {
+  pickId       String    @id
+  pick         Pick      @relation(fields: [pickId], references: [id], onDelete: Cascade)
+  reason       String
+  gameResultId String? // the matched GameResult, when there was one
+  finalSeenAt  DateTime? // that GameResult's createdAt: when the score feed first showed it final
+  firstSeenAt  DateTime  @default(now())
+  lastSeenAt   DateTime  @default(now())
+  attempts     Int       @default(1)
+
+  @@index([finalSeenAt])
+  @@map("pick_grade_failures")
+}
+
+// One row per bulk import submission (bulkImportPicksAction), for the admin
+// Imports tab: how many lines went in, how many picks were inserted with no
+// matched game (a sport with no score source: gameTime falls back to the
+// import time), and how the ambiguous team names in the paste were settled
+// (the browser resolves those; it sends this summary with the import).
+model ImportRun {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  itemsSubmitted    Int
+  picksInserted     Int
+  skipped           Int
+  fallbackUnmatched Int // inserted with gameTime = import time (no matched game)
+  fallbackPicks     Json? // [{ pickId, sport, betDetail }] for those, capped
+  ambiguousAuto     Int      @default(0) // settled by the hierarchy (memory / league activity / schedule / season)
+  ambiguousAsked    Int      @default(0) // the user picked the team
+  ambiguity         Json? // [{ key, chosen, step, count }], capped
+
+  @@index([createdAt])
+  @@map("import_runs")
 }
