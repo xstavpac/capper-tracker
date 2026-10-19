@@ -53,6 +53,8 @@ const MANUAL_ONLY = new Map([
 // explicitly. When DATABASE_URL is unavailable they report SKIP.
 const NEEDS_DB = new Set([
   "src/lib/model-engine/weighted-accumulation-acceptance-test.ts",
+  // Installs its own query-logging PrismaClient (no `@/lib/prisma` import to detect).
+  "src/server/actions/parlay-generate-zero-reads-acceptance-test.ts",
 ]);
 
 // Suites that import `@/lib/prisma` but never actually query - they swap a
