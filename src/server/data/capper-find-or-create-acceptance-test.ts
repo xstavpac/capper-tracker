@@ -16,10 +16,12 @@
 //  9. The raw INSERT covers every Capper column that has no database default
 //     (checked against Prisma's DMMF).
 //  10. The unique index really exists and rejects a direct duplicate insert.
+//  11. The narrowed reads (name-only scan, id+name roster) return what the
+//      full-row reads did: the matched row in full, the roster ids/names in order.
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { findOrCreateCapper, CAPPER_INSERT_COLUMNS } from "@/server/data/capper-find-or-create";
-import { createCapper, renameCapper } from "@/server/data/cappers";
+import { createCapper, getCappersForUser, renameCapper } from "@/server/data/cappers";
 
 let failures = 0;
 function check(label: string, pass: boolean, detail = "") {
@@ -201,6 +203,31 @@ async function main() {
     check("unique index exists on (userId, lower(btrim(name)))", idx.length === 1 && /UNIQUE/.test(idx[0].indexdef) && /lower\(btrim\(/.test(idx[0].indexdef), idx[0]?.indexdef);
     const raw = await rejects(() => prisma.capper.create({ data: { userId: u3.id, name: " BRAVO", source: "OTHER" } }));
     check("a direct duplicate insert is rejected by the DB", !!raw);
+
+    // 11. The narrowed reads return what the full-row reads did.
+    const u4 = await mkUser("u4");
+    const detailed = await createCapper(u4.id, {
+      name: "Detail Capper",
+      source: "OTHER",
+      customSource: "cs",
+      photoUrl: "https://example.test/p.png",
+      notes: "some notes",
+      sportSpecialization: "MLB",
+      colorTag: "blue",
+    });
+    for (const name of ["zeta", "Alpha", "beta", "Gamma"]) await createCapper(u4.id, { name, source: "OTHER" });
+    await prisma.capper.updateMany({ where: { userId: u4.id, name: { in: ["zeta", "beta"] } }, data: { isFavorite: true } });
+    const matched = await findOrCreateCapper(u4.id, "detail-capper");
+    const stored = await prisma.capper.findUnique({ where: { id: detailed.id } });
+    check("a name match returns the full stored row, every column", !matched.created && JSON.stringify(matched.capper) === JSON.stringify(stored));
+    const fullRoster = await prisma.capper.findMany({ where: { userId: u4.id }, orderBy: [{ isFavorite: "desc" }, { name: "asc" }] });
+    const narrowRoster = await getCappersForUser(u4.id);
+    check(
+      "getCappersForUser: same ids and names, same order, as the full-row read",
+      JSON.stringify(narrowRoster) === JSON.stringify(fullRoster.map((c) => ({ id: c.id, name: c.name }))),
+      JSON.stringify(narrowRoster)
+    );
+    check("getCappersForUser: only id and name are read", narrowRoster.every((c) => Object.keys(c).join(",") === "id,name"));
   } finally {
     savedEnv.NODE_ENV = saved.NODE_ENV;
     savedEnv.DEV_AUTH_BYPASS = saved.DEV_AUTH_BYPASS;
