@@ -115,6 +115,14 @@ stub("../data/picks", {
     recordReads++;
     return { "capper-over|OVER": { key: "OVER", label: "", wins: 6, losses: 4, pushes: 0, winPct: 60, count: 10 } };
   },
+  // The actions now read both shapes in one call; same values as the two above.
+  getCapperRecordBundle: async () => {
+    recordReads++;
+    return {
+      leagueRecords: { records: {}, streaks: {}, last20: {} },
+      categoryRecords: { "capper-over|OVER": { key: "OVER", label: "", wins: 6, losses: 4, pushes: 0, winPct: 60, count: 10 } },
+    };
+  },
 });
 
 async function main() {
