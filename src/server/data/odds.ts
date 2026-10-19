@@ -11,7 +11,7 @@ import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
 import { mlbFeedStatus, resolveFeedStatus } from "@/lib/feed-game-status";
 import { cachedByTag } from "@/server/data/cached";
 import { persistOddsApiUsage } from "@/server/data/odds-api-usage";
-import { getYesterdayBoardGames } from "@/server/data/odds-projections";
+import { getBoardGamesProjection, getYesterdayBoardGames } from "@/server/data/odds-projections";
 import { OddsSnapshotMissingError, readSnapshotOrSeed, type OddsSeedDeps } from "@/server/data/odds-seed-claim";
 
 // Live scores are current-ish data polled every 25s per open /live tab -
@@ -205,6 +205,46 @@ export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
           getOddsForSportUncached(sportKey, { fetchIfMissing: false })
         )
       ).games,
+    fromSeeded: (games) => games,
+    empty: [],
+    deps: oddsSeedDeps,
+  });
+}
+
+// Today's board for the readers that only render it - the /live board (and so
+// Auto-Generate and the slip, through getLiveBoardData) and the game page: the
+// same games as getOddsForSport, each keeping every top-level field, with its
+// bookmakers cut to what those readers reach - bookmakers[0] (its title) and the
+// first book carrying each of h2h / spreads / totals (findMarketAcrossBooks), with
+// only those three markets (getBoardGamesProjection, odds-projections.ts). The
+// full blob is ~400KB for a Saturday NCAAF board; this is ~130KB. Anything that
+// prices a pick against a specific book, line or prop (the catalog import,
+// grading, recovery) keeps reading getOddsForSport.
+//
+// Its own cache entry, tagged with cacheKeys.odds(sportKey, fetchDate) so every
+// snapshot write path's revalidateTag invalidates it too, on the same 1h
+// backstop TTL. Off-season reads [] like getOddsForSportUncached. A missing row
+// goes through the same fleet-wide seed claim as getOddsForSport (the cached read
+// throws OddsSnapshotMissingError, never stored); the request that seeds gets the
+// freshly fetched full games for that one render, which carry the same
+// reader-visible fields.
+export async function getBoardOddsForSport(sportKey: string): Promise<OddsGame[]> {
+  const fetchDate = easternDateKey(new Date());
+  if (!isSportInSeason(sportKey)) return [];
+  return readSnapshotOrSeed<OddsGame, OddsGame[]>({
+    sportKey,
+    fetchDate,
+    read: () =>
+      cachedByTag(
+        cacheKeys.boardOdds(sportKey, fetchDate),
+        ODDS_CACHE_TTL_SECONDS,
+        async () => {
+          const games = await getBoardGamesProjection(sportKey, fetchDate);
+          if (games === null) throw new OddsSnapshotMissingError(sportKey, fetchDate);
+          return games;
+        },
+        [cacheKeys.odds(sportKey, fetchDate)]
+      ),
     fromSeeded: (games) => games,
     empty: [],
     deps: oddsSeedDeps,

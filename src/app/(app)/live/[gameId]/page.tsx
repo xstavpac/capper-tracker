@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/server/auth";
 import {
-  getOddsForSport,
+  getBoardOddsForSport,
   getYesterdayOddsForSport,
   getLiveScoresForSport,
   matchScoreToGame,
@@ -87,7 +87,7 @@ export default async function GameDetailPage({
     );
   }
 
-  const odds = await getOddsForSport(sportMeta.key);
+  const odds = await getBoardOddsForSport(sportMeta.key);
   // Today's snapshot first; then last night's, which is where a game the board
   // carried over past midnight ET lives (see getLiveBoardData). Without the
   // fallback every carried-over card on /live linked to the "isn't in today's

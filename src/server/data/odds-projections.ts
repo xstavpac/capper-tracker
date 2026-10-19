@@ -174,6 +174,15 @@ export async function getLatestPregameSnapshot(sportKey: string): Promise<{ fetc
 const LIVE_MARKET_KEYS = ["h2h", "spreads", "totals"] as const;
 
 export async function getYesterdayBoardGames(sportKey: string, fetchDate: string): Promise<OddsGame[]> {
+  return (await getBoardGamesProjection(sportKey, fetchDate)) ?? [];
+}
+
+// The same projection for any day's snapshot - also today's board
+// (getBoardOddsForSport, odds.ts), whose readers are the same LiveScoreboard plus
+// the game page (bookmakers[0].title, first h2h / spreads / totals). null when
+// the (sportKey, fetchDate) row doesn't exist, so a caller can tell "no snapshot
+// yet" (seed it) from "a snapshot with no games".
+export async function getBoardGamesProjection(sportKey: string, fetchDate: string): Promise<OddsGame[] | null> {
   const rows = await prisma.$queryRaw<{ games: OddsGame[] }[]>(Prisma.sql`
     SELECT COALESCE(
              (SELECT jsonb_agg(
@@ -214,5 +223,5 @@ export async function getYesterdayBoardGames(sportKey: string, fetchDate: string
     FROM odds_snapshots s
     WHERE s."sportKey" = ${sportKey} AND s."fetchDate" = ${fetchDate}
   `);
-  return rows.length > 0 ? rows[0].games : [];
+  return rows.length > 0 ? rows[0].games : null;
 }

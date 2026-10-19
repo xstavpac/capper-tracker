@@ -15,7 +15,7 @@
 // selection resolution all stay in live/page.tsx, since the other callers
 // have no equivalent for any of them.
 import {
-  getOddsForSport,
+  getBoardOddsForSport,
   getYesterdayOddsForSport,
   getClientScoresForSport,
   type OddsGame,
@@ -40,7 +40,7 @@ export async function getLiveBoardData(
   sportLabel: string
 ): Promise<LiveBoardData> {
   const [allOdds, yesterdayOdds, scores] = await Promise.all([
-    getOddsForSport(activeSport),
+    getBoardOddsForSport(activeSport),
     getYesterdayOddsForSport(activeSport),
     // The browser-bound view: `scores` is returned to live/page.tsx, which
     // hands it to client components as props.
