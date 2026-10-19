@@ -5,7 +5,7 @@ export const ADMIN_TABS = [
   { key: "crons", href: "/admin/crons", label: "Crons" },
   { key: "odds-api", href: "/admin/odds-api", label: "Odds API" },
   { key: "grading", href: "/admin/grading", label: "Grading" },
-  { key: "skipped-lines", href: "/admin/import-skipped-lines", label: "Skipped Lines" },
+  { key: "imports", href: "/admin/imports", label: "Imports" },
 ] as const;
 
 export type AdminTabKey = (typeof ADMIN_TABS)[number]["key"];

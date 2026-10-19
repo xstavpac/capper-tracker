@@ -11,6 +11,7 @@ import {
 } from "@/lib/parse-catalog";
 import { autoResolveAmbiguousPicks } from "@/lib/resolve-ambiguous-catalog";
 import { importRowCapError } from "@/lib/import-limits";
+import type { ImportAmbiguityEntry } from "@/lib/import-health";
 import {
   bulkImportPicksAction,
   bulkImportParlaysAction,
@@ -146,6 +147,10 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // handleParse) so editing the text and re-pasting still honors an answer
   // already established earlier in the same import.
   const [ambiguousChoices, setAmbiguousChoices] = useState<Record<string, AmbiguousOption>>({});
+  // How each ambiguous name in the current paste was settled (the hierarchy's
+  // method, or "user"), sent with the import for the ops console's Imports
+  // tab only. Reset on every parse.
+  const [ambiguityLog, setAmbiguityLog] = useState<ImportAmbiguityEntry[]>([]);
   const [resolving, setResolving] = useState(false);
   // Keyed by index in `parsed`, same indirection as enrichedOdds. Presence
   // means this pick matches an existing logged pick (same capper + game +
@@ -333,6 +338,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     const outcome = await autoResolveAmbiguousPicks(effectiveItems, ambiguousChoices);
     setResolving(false);
     setParsed(outcome.picks);
+    setAmbiguityLog(outcome.logs.map((l) => ({ key: l.ambiguousName, sport: l.resolvedSport, method: l.method, count: l.pickCount })));
     setScrollTrigger((v) => v + 1);
     // Merges both automatic decisions from this pass AND anything carried in
     // from priorChoices - so a decision made just now also survives a later
@@ -518,6 +524,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       return resolved;
     });
     setParsed(next);
+    if (newlyResolved.length > 0) {
+      setAmbiguityLog((prev) => [...prev, { key, sport: choice.sport, method: "user", count: newlyResolved.length }]);
+    }
     const needsOdds = newlyResolved.filter((e) => !e.p.hasExplicitOdds);
     if (needsOdds.length > 0) fetchOddsFor(needsOdds);
     if (newlyResolved.length > 0) checkDuplicatesFor(newlyResolved);
@@ -663,7 +672,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         capperName: resolvedCapperName(e.p.capperName),
         sportName: e.p.sportName,
         raw: e.p.raw,
-      }))
+      })),
+      ambiguityLog
     );
     // A refused picks import must not let the parlay import run on its own.
     if (!res.success) {

@@ -34,7 +34,7 @@ Every threshold is in `src/lib/admin-thresholds.ts`.
 | Crons | a cron's latest run is ERROR (HTTP 5xx, a body with status "error", or a throw), or still RUNNING 60 s past its route's maxDuration (timed out / crashed), or it's overdue: its latest fire time is past its grace (`CRON_GRACE_MINUTES`: 20 min for grade-picks, 30 for backfill-odds, 60 for the daily ones) with no run started at or after it. A WARNING (200 with ok:false) shows on the page but isn't a dot; a cron with no runs logged yet isn't overdue | latest run per cron (`DISTINCT ON (name)` over the `(name, startedAt)` index): 6 rows, inside the combined status statement |
 | Odds API | the newest usage row's credits (the Odds API's own x-requests-used / x-requests-remaining) are >= 85% used (`ODDS_CREDITS_ALERT_PCT`, the same number as the `credits ALERT` log line) or under 1,000 left (`ODDS_CREDITS_LOW_REMAINING`, the same env var and default as the `credits LOW` line); or an in-season sport has no snapshot for today's ET date 2h after today's refresh-odds fire (05:05 UTC; nothing is due just after ET midnight, before it fires) | the newest `odds_api_usage_log` row (pollTimestamp index, 1 row) and the newest snapshot per sport (`DISTINCT ON ("sportKey")` over the (sportKey, fetchDate) unique index, ~6 rows, never the `data` blob), inside the combined status statement |
 | Grading | at least 1 stuck-pending pick: PENDING, in a sport the grade-picks cron grades (`RESOLVABLE_SPORT_KEYS`), inside the 14-day regrade lookback, and either its matched final was first seen 3+ hours ago (`GRADING_STUCK_AFTER_FINAL_HOURS`) or no final was found 8+ hours after its start (`GRADING_STUCK_NO_RESULT_HOURS`). Sports with no score source, and picks past the lookback, are counted on the page but never turn the dot on | the stuck count plus the oldest stuck pick (1 row), inside the combined status statement |
-| Imports | in the last 24h: a GAME_UNMATCHED, PARSE_UNRESOLVED or RECOVERY_UNRESOLVED line, or a pick inserted with no matched game. PARSE_SILENT and PROP_UNSUPPORTED are listed on the page but never turn the dot on | Imports PR |
+| Imports | in the last 24h: a GAME_UNMATCHED, PARSE_UNRESOLVED or RECOVERY_UNRESOLVED line, or a pick inserted with no matched game. PARSE_SILENT and PROP_UNSUPPORTED are listed on the page but never turn the dot on | two counts over the window, inside the combined status statement: alerting skipped lines (the (stage, createdAt) index) and the sum of `fallbackUnmatched` over `import_runs` (createdAt index). 1 small json value |
 
 (Each tab's PR fills in its row's exact read and cost.)
 
@@ -89,6 +89,29 @@ PENDING picks across users; only counts and the 50 rows leave the database.
 `CRON_JOBS` mirrors `vercel.json` (pinned by `cron-runs-acceptance-test.ts`).
 Page: each cron's newest run plus its last 10 in 7 days - two small
 statements, read fresh.
+
+## Imports
+
+`bulkImportPicksAction` writes one `import_runs` row per import
+(`recordImportRun`, `server/data/import-runs.ts`), after the picks since it
+needs their ids: lines submitted, picks inserted, skipped, and the picks
+inserted with no matched game - a sport with no score source, so the bet
+text became the home team, "-" the opponent and the import time the game
+time (pick id, sport, bet text; up to 200). A refused (pick-limit) import
+records 0 inserted. The import form also sends how each ambiguous team name
+in the paste was settled - the auto-resolution hierarchy's method, or "user"
+when it asked - which the server validates (`sanitizeAmbiguityLog`: known
+methods only, clipped, at most 100 entries) and stores as auto / asked
+counts plus the list. Best-effort: a failed write never fails the import.
+The MLP (parlay) import isn't recorded.
+
+Page (`/admin/imports`, last `IMPORT_WINDOW_HOURS` = 24h, all users): one
+statement - skipped lines by stage, the newest 30 alerting / listed lines
+with their raw text, run totals, the no-matched-game picks, and the
+ambiguity decisions aggregated by name, sport and method. The full
+date-range report moved to `/admin/imports/skipped-lines` (linked from the
+page); `/admin/import-skipped-lines` is gated and redirects there, keeping
+`from` / `to`.
 
 ## Copy for Claude
 

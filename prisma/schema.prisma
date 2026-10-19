@@ -1548,7 +1548,7 @@ model ImportRun {
   fallbackPicks     Json? // [{ pickId, sport, betDetail }] for those, capped
   ambiguousAuto     Int      @default(0) // settled by the hierarchy (memory / league activity / schedule / season)
   ambiguousAsked    Int      @default(0) // the user picked the team
-  ambiguity         Json? // [{ key, chosen, step, count }], capped
+  ambiguity         Json? // [{ key, sport, method, count }], capped
 
   @@index([createdAt])
   @@map("import_runs")

@@ -9,9 +9,9 @@ import { sanitizeAmbiguityLog, type ImportAmbiguityEntry, type ImportsView, type
 const MAX_FALLBACK_PICKS = 200;
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
 
-// One row per bulk import (bulkImportPicksAction). Best-effort like the
-// skipped-line log: it never fails or slows the import (one insert, errors
-// swallowed).
+// One row per bulk import (bulkImportPicksAction), written after the picks
+// (it needs their ids). Best-effort like the skipped-line log: it never fails
+// the import (one small insert, errors swallowed).
 export async function recordImportRun(input: {
   userId: string;
   itemsSubmitted: number;
