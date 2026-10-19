@@ -1,21 +1,38 @@
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { cachedByTag } from "@/server/data/cached";
 import { cacheKeys } from "@/lib/cache-keys";
 import { ADMIN_STATUS_CACHE_SECONDS, DB_ROW_THRESHOLD_DEFAULT } from "@/lib/admin-thresholds";
 import { checkFailedAlert, dbMonitorAlert } from "@/lib/admin-status";
 import { buildMonitorView } from "@/lib/db-monitor";
+import { CRON_JOBS, cronHealth, cronsAlert, type CronRunRow } from "@/lib/cron-runs";
 import { loadDbMonitorSnapshot } from "@/server/data/db-monitor";
+import { LATEST_CRON_RUNS_SQL } from "@/server/data/cron-runs";
 import type { AdminTabAlerts, AdminTabKey } from "@/lib/admin-tabs";
 
-// The ops console's red dots, for the admin layout. One small read per tab
-// (each tab's PR adds its check here), run together and cached for
+// The ops console's red dots, for the admin layout, cached for
 // ADMIN_STATUS_CACHE_SECONDS in one entry shared by the admins - so a page
-// load costs nothing on a hit, and on a miss only the reads below. The tab
-// pages read their own data fresh, so a dot can trail its page by up to the
-// cache TTL.
-//
-// A check that throws gets a dot saying so, and doesn't take the others down.
+// load costs nothing on a hit. On a miss it costs TWO statements:
+//   1. the combined status statement below: one scalar subquery per tab
+//      (each tab's PR adds its own), a few small rows in all;
+//   2. the DB Monitor's own pg_stat_statements statement.
+// The tab pages read their own data fresh, so a dot can trail its page by up
+// to the cache TTL. A check that throws gets a dot saying so, and doesn't
+// take the others down.
 
-type StatusCheck = { tab: AdminTabKey; run: () => Promise<string | null> };
+type StatusRow = {
+  crons: (Omit<CronRunRow, "startedAt" | "endedAt"> & { startedAt: string; endedAt: string | null })[];
+};
+
+async function loadStatusRow(): Promise<StatusRow> {
+  const [row] = await prisma.$queryRaw<StatusRow[]>(Prisma.sql`
+    SELECT
+      (SELECT coalesce(json_agg(c), '[]'::json) FROM (${LATEST_CRON_RUNS_SQL}) c) AS crons
+  `);
+  return row;
+}
+
+type StatusCheck = { tab: AdminTabKey; run: (status: () => Promise<StatusRow>) => Promise<string | null> };
 
 const CHECKS: StatusCheck[] = [
   {
@@ -28,13 +45,29 @@ const CHECKS: StatusCheck[] = [
       return dbMonitorAlert(buildMonitorView(result.snapshot, DB_ROW_THRESHOLD_DEFAULT, new Date()));
     },
   },
+  {
+    tab: "crons",
+    run: async (status) => {
+      const { crons } = await status();
+      const now = new Date();
+      return cronsAlert(
+        CRON_JOBS.map((job) => {
+          const r = crons.find((c) => c.name === job.name);
+          const latest = r ? { ...r, startedAt: new Date(r.startedAt), endedAt: r.endedAt ? new Date(r.endedAt) : null } : null;
+          return cronHealth(job, latest, now);
+        })
+      );
+    },
+  },
 ];
 
 export async function loadAdminStatus(): Promise<AdminTabAlerts> {
+  let statusRow: Promise<StatusRow> | null = null;
+  const status = () => (statusRow ??= loadStatusRow());
   const results = await Promise.all(
     CHECKS.map(async (c) => {
       try {
-        return [c.tab, await c.run()] as const;
+        return [c.tab, await c.run(status)] as const;
       } catch (err) {
         return [c.tab, checkFailedAlert(err)] as const;
       }

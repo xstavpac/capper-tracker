@@ -3,6 +3,7 @@ import { persistFinalScores, gradeAllPendingPicks, regradeAllFuzzyMatchedPicks }
 import { gradeAllPendingLegs, regradeAllFuzzyMatchedLegs } from "@/server/data/parlay-grading";
 import { RESOLVABLE_SPORT_KEYS, LIVE_SPORTS } from "@/server/data/odds";
 import { cacheKeys } from "@/lib/cache-keys";
+import { runCronLogged } from "@/server/data/cron-runs";
 
 export const dynamic = "force-dynamic";
 // Pro plan default (15s) isn't enough headroom for a sport with a large
@@ -48,7 +49,12 @@ export async function GET(req: Request) {
       return new Response("Unauthorized", { status: 401 });
     }
   }
+  return runCronLogged("grade-picks", run);
+}
 
+// The run itself, logged to cron_runs (start, end, status, rows touched) by
+// runCronLogged - only after the auth check above passes.
+async function run(): Promise<Response> {
   const runStart = Date.now();
 
   const results = await Promise.all(

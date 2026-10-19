@@ -1,4 +1,5 @@
 import { seedNhlGoalScorerOddsForToday } from "@/server/data/nhl-goal-scorer-odds";
+import { runCronLogged } from "@/server/data/cron-runs";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,12 @@ export async function GET(req: Request) {
       return new Response("Unauthorized", { status: 401 });
     }
   }
+  return runCronLogged("nhl-goal-scorer-odds", run);
+}
 
+// The run itself, logged to cron_runs (start, end, status, rows touched) by
+// runCronLogged - only after the auth check above passes.
+async function run(): Promise<Response> {
   try {
     const seeded = await seedNhlGoalScorerOddsForToday();
     const result = {

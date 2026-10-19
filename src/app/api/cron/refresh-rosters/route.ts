@@ -3,6 +3,7 @@ import { cacheKeys } from "@/lib/cache-keys";
 import { ROSTER_LEAGUE_ORDER, ROSTER_LEAGUES } from "@/server/data/roster-leagues";
 import { rosterTableFor } from "@/server/data/roster-tables";
 import { isAuthorizedCronRequest, refreshRosters, rosterRefreshSummary } from "@/server/data/refresh-rosters";
+import { runCronLogged } from "@/server/data/cron-runs";
 
 export const dynamic = "force-dynamic";
 // A normal run is four parallel league fetches (1-2s each, measured 2026-10-14)
@@ -24,7 +25,12 @@ export async function GET(req: Request) {
   if (!isAuthorizedCronRequest(req.headers.get("authorization"), process.env.CRON_SECRET)) {
     return new Response("Unauthorized", { status: 401 });
   }
+  return runCronLogged("refresh-rosters", run);
+}
 
+// The run itself, logged to cron_runs (start, end, status, rows touched) by
+// runCronLogged - only after the auth check above passes.
+async function run(): Promise<Response> {
   const start = Date.now();
   const outcomes = await refreshRosters({
     leagues: ROSTER_LEAGUE_ORDER.map((league) => ROSTER_LEAGUES[league]),

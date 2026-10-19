@@ -1,5 +1,6 @@
 import { backfillOddsForSport, LIVE_SPORTS } from "@/server/data/odds";
 import { classifyBackfillOddsRun } from "@/lib/odds-cron-status";
+import { runCronLogged } from "@/server/data/cron-runs";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,12 @@ export async function GET(req: Request) {
       return new Response("Unauthorized", { status: 401 });
     }
   }
+  return runCronLogged("backfill-odds", run);
+}
 
+// The run itself, logged to cron_runs (start, end, status, rows touched) by
+// runCronLogged - only after the auth check above passes.
+async function run(): Promise<Response> {
   const results = await Promise.all(
     LIVE_SPORTS.map(async (sport) => {
       const { added, status } = await backfillOddsForSport(sport.key);
