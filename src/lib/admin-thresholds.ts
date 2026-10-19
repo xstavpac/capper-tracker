@@ -59,3 +59,18 @@ export const ODDS_CREDITS_LOW_REMAINING = Number(process.env.ODDS_API_CREDITS_LO
 // An in-season sport with no odds snapshot for today's ET date this long
 // after today's refresh-odds run (05:05 UTC) is stale.
 export const ODDS_SNAPSHOT_SEED_GRACE_HOURS = 2;
+
+// ---------------------------------------------------------------------------
+// Grading
+// ---------------------------------------------------------------------------
+
+// "Stuck pending": a PENDING pick in a sport the cron grades, inside the
+// regrade lookback, whose matched game went final this long ago...
+export const GRADING_STUCK_AFTER_FINAL_HOURS = 3;
+// ...or, with no final found for it at all, whose game started this long ago
+// (long enough for any game to have finished and its score to have landed).
+export const GRADING_STUCK_NO_RESULT_HOURS = 8;
+// The fuzzy-graded count's window.
+export const GRADING_FUZZY_WINDOW_DAYS = 14;
+// How many stuck picks the page (and its report) lists.
+export const GRADING_STUCK_LIST_LIMIT = 50;
