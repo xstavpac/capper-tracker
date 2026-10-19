@@ -10,6 +10,7 @@ import {
 import { captureTeamRecordSnapshots } from "@/server/data/team-record";
 import { captureSituationalRateSnapshots } from "@/server/data/situational-snapshots";
 import { syncDecayDeltaPredictions } from "@/server/data/model-engine/decay-delta-predictions";
+import { runCronLogged } from "@/server/data/cron-runs";
 
 const MLB_SPORT_KEY = "baseball_mlb";
 const NFL_SPORT_KEY = "americanfootball_nfl";
@@ -51,7 +52,12 @@ export async function GET(req: Request) {
       return new Response("Unauthorized", { status: 401 });
     }
   }
+  return runCronLogged("refresh-scores", run);
+}
 
+// The run itself, logged to cron_runs (start, end, status, rows touched) by
+// runCronLogged - only after the auth check above passes.
+async function run(): Promise<Response> {
   const runStart = Date.now();
 
   const results = await Promise.all(

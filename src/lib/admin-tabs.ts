@@ -2,6 +2,7 @@
 // here plus its page under src/app/(app)/admin/ (calling requireAdminOpsPage).
 export const ADMIN_TABS = [
   { key: "db-monitor", href: "/admin/db-monitor", label: "DB Monitor" },
+  { key: "crons", href: "/admin/crons", label: "Crons" },
   { key: "skipped-lines", href: "/admin/import-skipped-lines", label: "Skipped Lines" },
 ] as const;
 

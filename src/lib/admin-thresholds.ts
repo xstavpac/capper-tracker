@@ -24,3 +24,21 @@ export const DB_ROW_THRESHOLD_DEFAULT = 500;
 // they flag like anything else. Remove once those reads are bounded.
 export const EXPECTED_HEAVY_MAX_AVG_ROWS = 5000;
 export const EXPECTED_HEAVY_NOTE = "expected (daily cron, full history)";
+
+// ---------------------------------------------------------------------------
+// Crons
+// ---------------------------------------------------------------------------
+
+// How late a cron may start before it counts as overdue: its schedule's
+// latest fire time must be this many minutes past with no run started.
+export const CRON_GRACE_MINUTES = {
+  "grade-picks": 20, // every 15 min
+  "backfill-odds": 30, // every 4h
+  "refresh-scores": 60, // daily
+  "refresh-odds": 60,
+  "nhl-goal-scorer-odds": 60,
+  "refresh-rosters": 60,
+} as const;
+
+// A run still RUNNING this long past its route's maxDuration was killed.
+export const CRON_TIMEOUT_GRACE_SECONDS = 60;
