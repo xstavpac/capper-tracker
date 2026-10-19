@@ -18,6 +18,7 @@
 //        their team and the teams differ, which makes them two players.
 //   R-E  One story per game: a game-total Under with no offensive prop Over,
 //        a game-total Over with no offensive prop Under.
+//   DUPLICATE  The same bet twice, or at two lines (duplicateLine below).
 //   UNVERIFIED  A pick the classifier can't describe (a side with no readable
 //        team, a prop with no readable player or line, a team total whose team
 //        didn't resolve) is never paired with anything. Not guessed as safe.
@@ -29,6 +30,7 @@ import {
   classifyPair,
   describePick,
   describeProp,
+  sameGame,
   samePropPlayer,
   type ParlayCandidate,
   type PickDescription,
@@ -88,6 +90,53 @@ function storyClash(prop: OkProp, total: PickDescription): boolean {
   return prop.offensive && prop.direction !== total.direction;
 }
 
+// ---------------------------------------------------------------------------
+// One bet at two lines: same game, same market, same side, different line
+// (Tulane Over 53.5 + Tulane Over 52.5, Lakers -4.5 + Lakers -3.5, Bowers Over
+// 79.5 + Over 49.5 receiving yards). Only one of them can be a leg. For game
+// lines "same market" is the same bet type in the same scope, which is the
+// classifier's R1 with matching bet types (a moneyline and a spread on one team
+// are two markets). For props it is the same player and stat in the same
+// direction - a second copy of the same prop at the same line counts too,
+// since the classifier never calls two props an exact duplicate.
+//
+// `better` says which line is easier to win: the lower Over, the higher
+// Under, the higher spread (more points, or fewer laid). EQUAL only for two
+// props at the same line.
+// ---------------------------------------------------------------------------
+export type DuplicateLine = { better: "A" | "B" | "EQUAL" };
+
+function lineWinner(direction: "UP" | "DOWN", lineA: number, lineB: number): DuplicateLine["better"] {
+  if (lineA === lineB) return "EQUAL";
+  // UP: the higher number is easier (an Under, a spread); DOWN: the lower (an Over).
+  return (direction === "UP") === lineA > lineB ? "A" : "B";
+}
+
+export function duplicateLine(a: ParlayCandidate, b: ParlayCandidate): DuplicateLine | null {
+  const aIsProp = a.pick.betType === "PLAYER_PROP";
+  const bIsProp = b.pick.betType === "PLAYER_PROP";
+  if (aIsProp !== bIsProp) return null;
+
+  if (aIsProp) {
+    if (!sameGame(a.game, b.game)) return null;
+    const descA = describeProp(a.pick);
+    const descB = describeProp(b.pick);
+    if (descA.status !== "OK" || descB.status !== "OK") return null;
+    if (descA.market !== descB.market || descA.direction !== descB.direction || !sameGamePlayer(a, descA, b, descB)) return null;
+    if (descA.line === null || descB.line === null) return descA.line === descB.line ? { better: "EQUAL" } : null;
+    return { better: lineWinner(descA.direction === "UNDER" ? "UP" : "DOWN", descA.line, descB.line) };
+  }
+
+  if (a.pick.betType !== b.pick.betType) return null;
+  const outcome = classifyPair(a, b);
+  if (outcome.outcome !== "RULE" || outcome.rule !== "R1") return null;
+  const descA = describePick(a.pick, a.game);
+  const descB = describePick(b.pick, b.game);
+  if (descA.line === null || descB.line === null || descA.line === descB.line) return null;
+  const direction = descA.family === "SIDE" || descA.direction === "UNDER" ? "UP" : "DOWN";
+  return { better: lineWinner(direction, descA.line, descB.line) };
+}
+
 // null when the two picks may both be legs of one parlay. Both picks must be
 // on the same game - the caller groups by the board's game id.
 export function sameGameConflict(a: ParlayCandidate, b: ParlayCandidate): SameGameConflict | null {
@@ -110,6 +159,9 @@ export function sameGameConflict(a: ParlayCandidate, b: ParlayCandidate): SameGa
 
   const outcome = classifyPair(a, b);
   if (outcome.outcome === "EXACT_DUPLICATE") return conflict("DUPLICATE", "the same bet twice");
+  // Sides and game totals are already one per game (R-A, R-B); this catches a
+  // team total at two lines (Cubs Over 4.5 + Cubs Over 3.5).
+  if (duplicateLine(a, b)) return conflict("DUPLICATE", "the same bet at another line");
   if (outcome.outcome === "RULE" && (outcome.rule === "R3" || outcome.rule === "R6")) {
     return conflict("OPPOSING", `opposite directions (${outcome.rule})`);
   }

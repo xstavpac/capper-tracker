@@ -117,7 +117,7 @@ export function buildFromSlip(input: SlipBuildInput): SlipBuild | ParlayRejectio
   const offer = (p: GeneratorPick, onePerGame: boolean) => {
     if (seedIds.has(p.pickId) || candidates.has(p.pickId)) return;
     byId.set(p.pickId, p);
-    candidates.set(p.pickId, { ...toBuildCandidate(p), onePerGame });
+    candidates.set(p.pickId, { ...toBuildCandidate(p, records), onePerGame });
   };
   // The user's own picks first, so a pick that is also on a game item keeps
   // its standing as the user's pick (not limited to one per game).
@@ -132,7 +132,11 @@ export function buildFromSlip(input: SlipBuildInput): SlipBuild | ParlayRejectio
   }
 
   const ranked = rank(Array.from(candidates.keys()).map((id) => byId.get(id)!)).map((p) => candidates.get(p.pickId)!);
-  const selection = selectConflictFreeLegs(ranked, n, seed.map(toBuildCandidate));
+  const selection = selectConflictFreeLegs(
+    ranked,
+    n,
+    seed.map((p) => toBuildCandidate(p, records))
+  );
   const slipGameIds = new Set(input.games.map((g) => g.game.gameId));
   const legs = selection.legs.map((c) => byId.get(c.pickId)!);
 

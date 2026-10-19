@@ -13,7 +13,10 @@
 //   - classifyPair rule R2 (same scope, opposing sides) or R3 (same total,
 //     opposite direction) -> the two legs can't both win -> conflict, skip.
 //   - EXACT_DUPLICATE -> a second capper on the identical pick adds nothing
-//     -> skip as a duplicate.
+//     -> skip as a duplicate. So does the same bet at another line
+//     (duplicateLine, same-game-rules.ts: Tulane Over 53.5 + Over 52.5) -
+//     of the two, the better-ranked pick stays, and on equal records the
+//     better line.
 //   - R1/R4/R5/R6/NOT_SAME_GAME -> never block (includes legs correlated by
 //     the user's own choice - that's allowed, only literal conflicts and
 //     duplicates are skipped).
@@ -23,6 +26,7 @@
 //     OR as a conflict. Both legs are included, and a note is attached
 //     recording that this pair couldn't be verified.
 import { classifyPair, type ParlayCandidate } from "@/lib/parlay/relationship-classifier";
+import { duplicateLine, type DuplicateLine } from "@/lib/parlay/same-game-rules";
 
 export type BuildCandidate = {
   pickId: string;
@@ -40,6 +44,9 @@ export type BuildCandidate = {
   // item's or the qualified pool's picks - see slip-build.ts): it is only
   // taken while its game has no leg yet, the one-leg-per-game default.
   onePerGame?: boolean;
+  // The record the caller ranked it by (win %, decided picks), when it has
+  // one. Only read to settle a duplicate line between two equal records.
+  standing?: { winPct: number; n: number } | null;
 };
 
 // A pick that lost a conflict (or duplicate) to a leg of this parlay. It is
@@ -52,7 +59,7 @@ export type SkippedPick = {
   label: string;
   reason: "conflict" | "duplicate";
   conflictsWith: { pickId: string; label: string };
-  won: "HIGHER_RANKED" | "LOCKED";
+  won: "HIGHER_RANKED" | "LOCKED" | "BETTER_LINE";
   note: string;
 };
 
@@ -79,19 +86,23 @@ function toCandidate(c: BuildCandidate): ParlayCandidate {
   };
 }
 
-// A pair blocks selection only for a real conflict (R2/R3 - can't both win)
-// or an exact duplicate. Every other outcome, including UNDERIVABLE/
-// UNCLASSIFIED, is non-blocking - see this file's own header for why.
-export function blocks(a: BuildCandidate, b: BuildCandidate): { blocked: boolean; isDuplicate: boolean } {
+// A pair blocks selection only for a real conflict (R2/R3 - can't both win),
+// an exact duplicate, or the same bet at another line. Every other outcome,
+// including UNDERIVABLE/UNCLASSIFIED, is non-blocking - see this file's own
+// header for why. `betterLine` is set for a duplicate line: which of the two
+// has the easier line ("EQUAL" for two props at the same line).
+export function blocks(a: BuildCandidate, b: BuildCandidate): { blocked: boolean; isDuplicate: boolean; betterLine?: DuplicateLine["better"] } {
   const outcome = classifyPair(toCandidate(a), toCandidate(b));
   if (outcome.outcome === "EXACT_DUPLICATE") return { blocked: true, isDuplicate: true };
+  const dup = duplicateLine(toCandidate(a), toCandidate(b));
+  if (dup) return { blocked: true, isDuplicate: true, betterLine: dup.better };
   if (outcome.outcome === "RULE" && (outcome.rule === "R2" || outcome.rule === "R3")) {
     return { blocked: true, isDuplicate: false };
   }
   return { blocked: false, isDuplicate: false };
 }
 
-const WON_TEXT: Record<SkippedPick["won"], string> = { HIGHER_RANKED: "higher-ranked", LOCKED: "locked" };
+const WON_TEXT: Record<SkippedPick["won"], string> = { HIGHER_RANKED: "higher-ranked", LOCKED: "locked", BETTER_LINE: "better line" };
 
 // A skip's one-line reason, worded as its note words it: "conflicts with
 // Capper Two — Yankees ML (higher-ranked)". The note is "Skipped <label> — " + this.
@@ -102,6 +113,15 @@ export function skipReasonText(s: Pick<SkippedPick, "reason" | "won"> & { confli
 function isUncertain(a: BuildCandidate, b: BuildCandidate): boolean {
   const outcome = classifyPair(toCandidate(a), toCandidate(b));
   return outcome.outcome === "UNDERIVABLE" || outcome.outcome === "UNCLASSIFIED";
+}
+
+// Equal records: the same win % and sample, or no record on either. A
+// candidate without `standing` at all is unranked, so equal to another.
+function sameStanding(a: BuildCandidate, b: BuildCandidate): boolean {
+  const sa = a.standing ?? null;
+  const sb = b.standing ?? null;
+  if (sa === null || sb === null) return sa === sb;
+  return sa.winPct === sb.winPct && sa.n === sb.n;
 }
 
 // ranked: already ranked best-first (compareByRecord - the same win%-based
@@ -115,11 +135,25 @@ function isUncertain(a: BuildCandidate, b: BuildCandidate): boolean {
 // or ranks higher (it came earlier in the ranking). So of two conflicting
 // picks the higher-ranked one is kept, unless the other is locked. The loser
 // is skipped with a note naming the winner and why it won.
+//
+// One exception to "earlier wins": the same bet at another line between two
+// equal records (same win % and sample - only a pick id told them apart). The
+// better line takes the leg over, provided it fits with every other leg; a
+// locked leg is never taken over.
 export function selectConflictFreeLegs(ranked: BuildCandidate[], n: number, seed: BuildCandidate[] = []): BuildResult {
   const legs: BuildCandidate[] = [...seed];
   const seedIds = new Set(seed.map((s) => s.pickId));
   const skipped: SkippedPick[] = [];
-  const unverified: UnverifiedPair[] = [];
+  let unverified: UnverifiedPair[] = [];
+  const skip = (loser: BuildCandidate, winner: BuildCandidate, reason: SkippedPick["reason"], won: SkippedPick["won"]) =>
+    skipped.push({
+      pickId: loser.pickId,
+      label: loser.label,
+      reason,
+      conflictsWith: { pickId: winner.pickId, label: winner.label },
+      won,
+      note: `Skipped ${loser.label} — ${skipReasonText({ reason, conflictsWith: winner, won })}`,
+    });
 
   for (const candidate of ranked) {
     if (legs.length >= n) break;
@@ -129,32 +163,39 @@ export function selectConflictFreeLegs(ranked: BuildCandidate[], n: number, seed
 
     let blockedBy: BuildCandidate | null = null;
     let blockedAsDuplicate = false;
+    let betterLine: DuplicateLine["better"] | undefined;
     const uncertainAgainst: BuildCandidate[] = [];
 
     for (const leg of legs) {
-      const { blocked, isDuplicate } = blocks(candidate, leg);
-      if (blocked) {
+      const verdict = blocks(candidate, leg);
+      if (verdict.blocked) {
         blockedBy = leg;
-        blockedAsDuplicate = isDuplicate;
+        blockedAsDuplicate = verdict.isDuplicate;
+        betterLine = verdict.betterLine;
         break;
       }
       if (isUncertain(candidate, leg)) uncertainAgainst.push(leg);
     }
 
     if (blockedBy) {
-      const won = seedIds.has(blockedBy.pickId) ? "LOCKED" : "HIGHER_RANKED";
-      skipped.push({
-        pickId: candidate.pickId,
-        label: candidate.label,
-        reason: blockedAsDuplicate ? "duplicate" : "conflict",
-        conflictsWith: { pickId: blockedBy.pickId, label: blockedBy.label },
-        won,
-        note: `Skipped ${candidate.label} — ${skipReasonText({ reason: blockedAsDuplicate ? "duplicate" : "conflict", conflictsWith: blockedBy, won })}`,
-      });
-      continue;
+      const loser = blockedBy;
+      const takesOver =
+        betterLine === "A" &&
+        !seedIds.has(loser.pickId) &&
+        sameStanding(candidate, loser) &&
+        legs.every((l) => l === loser || !blocks(candidate, l).blocked);
+      if (!takesOver) {
+        skip(candidate, loser, blockedAsDuplicate ? "duplicate" : "conflict", seedIds.has(loser.pickId) ? "LOCKED" : "HIGHER_RANKED");
+        continue;
+      }
+      legs[legs.indexOf(loser)] = candidate;
+      skip(loser, candidate, "duplicate", "BETTER_LINE");
+      unverified = unverified.filter((u) => u.pickId !== loser.pickId && u.withPickId !== loser.pickId);
+      uncertainAgainst.length = 0;
+      for (const leg of legs) if (leg !== candidate && isUncertain(candidate, leg)) uncertainAgainst.push(leg);
+    } else {
+      legs.push(candidate);
     }
-
-    legs.push(candidate);
     for (const leg of uncertainAgainst) {
       unverified.push({
         pickId: candidate.pickId,
