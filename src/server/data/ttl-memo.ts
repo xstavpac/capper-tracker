@@ -60,14 +60,14 @@ export function memoizeWithTtl<T>(
 }
 
 /**
- * Clamp an env-supplied TTL (seconds) to a sane range, falling back to
- * `fallback` for anything missing or malformed. Shared by the live-scores
- * and odds cache windows.
+ * Clamp an env-supplied TTL (seconds) to 1..`max` (300 unless a caller
+ * passes its own ceiling), falling back to `fallback` for anything missing or
+ * malformed. Shared by the live-scores, odds and page-grading windows.
  */
-export function resolveTtlSeconds(raw: string | undefined, fallback: number): number {
+export function resolveTtlSeconds(raw: string | undefined, fallback: number, max = 300): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) return fallback;
-  return Math.min(300, Math.max(1, Math.floor(n)));
+  return Math.min(max, Math.max(1, Math.floor(n)));
 }
 
 /** Test-only: drop everything so suites don't leak state into each other. */

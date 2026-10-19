@@ -114,6 +114,9 @@ async function main() {
   expect("resolveTtlSeconds: zero/negative -> fallback", resolveTtlSeconds("0", 15), 15);
   expect("resolveTtlSeconds: valid -> floored int", resolveTtlSeconds("42.9", 15), 42);
   expect("resolveTtlSeconds: clamped to 300", resolveTtlSeconds("99999", 15), 300);
+  expect("resolveTtlSeconds: a caller's own ceiling", resolveTtlSeconds("99999", 3600, 21600), 21600);
+  expect("resolveTtlSeconds: under a caller's ceiling, kept", resolveTtlSeconds("7200", 3600, 21600), 7200);
+  expect("resolveTtlSeconds: missing -> fallback even above 300", resolveTtlSeconds(undefined, 3600, 21600), 3600);
 
   console.log(`\n${failures === 0 ? "ALL PASS" : failures + " FAILURE(S)"}`);
   if (failures > 0) process.exit(1);

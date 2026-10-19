@@ -15,11 +15,22 @@ import { getYesterdayBoardGames } from "@/server/data/odds-projections";
 import { OddsSnapshotMissingError, readSnapshotOrSeed, type OddsSeedDeps } from "@/server/data/odds-seed-claim";
 
 // Live scores are current-ish data polled every 25s per open /live tab -
-// keep the window tight. Odds change at most every 4h (the backfill cron)
-// and usually once a day, so a longer window is invisible and still
-// collapses the /live polling burst. Both env-overridable, clamped 1-300s.
+// keep the window tight (env-overridable, clamped 1-300s).
+//
+// The odds snapshot only changes when a write path runs (the daily seed, the
+// every-4h backfill, the NFL / NHL prop enrichments, an on-demand seed of a
+// missing row), and every write that can replace a cached value calls
+// revalidateTag right after it (odds-snapshot-write-guard-acceptance-test.ts
+// pins that). So this TTL is a backstop for a FAILED invalidation, not a
+// freshness window - and every expiry re-reads the whole snapshot (~400KB for
+// a Saturday NCAAF board), so it is 1 hour, not the old 60s. Worst case, when
+// a write's revalidateTag call itself fails (logged, the write still lands):
+// readers keep the pre-write snapshot for up to this TTL, plus the one stale
+// read that triggers the background refresh after it - e.g. a late game the
+// backfill added, or newly enriched prop prices, show up to ~1h late.
+// Env-overridable up to 6h (ODDS_CACHE_TTL_SECONDS).
 const LIVE_SCORES_TTL_SECONDS = resolveTtlSeconds(process.env.LIVE_SCORES_TTL_SECONDS, 15);
-const ODDS_CACHE_TTL_SECONDS = resolveTtlSeconds(process.env.ODDS_CACHE_TTL_SECONDS, 60);
+const ODDS_CACHE_TTL_SECONDS = resolveTtlSeconds(process.env.ODDS_CACHE_TTL_SECONDS, 3600, 6 * 3600);
 
 // The Odds API returns x-requests-remaining / -used / -last on every response.
 // Once `remaining` drops below this, the per-call credits log escalates from
@@ -152,7 +163,8 @@ const BASE_URL = ODDS_API_BASE_URL;
 // not per-instance memory, so it actually survives that churn.
 //
 // Freshness contract: every OddsSnapshot write path (seedOddsSnapshot,
-// backfillOddsForSport, seedNflPropOddsForToday) calls revalidateTag for its
+// backfillOddsForSport, seedNflPropOddsForToday, seedNhlGoalScorerOddsForToday;
+// the on-demand seed is the documented exception - see oddsSeedDeps) calls revalidateTag for its
 // (sportKey, fetchDate) key immediately after a successful write. The next
 // read for that exact key after a successful invalidation gets a fresh
 // fetch, not a stale value. ODDS_CACHE_TTL_SECONDS (below) is a best-effort
@@ -250,6 +262,13 @@ async function claimOddsSeedViaDataCache(
   return claimed;
 }
 
+// The on-demand seed is the one snapshot write with no revalidateTag after it,
+// on purpose: it only runs after the cached read REJECTED with
+// OddsSnapshotMissingError, which unstable_cache never stores - so there is no
+// cached entry for this (sportKey, fetchDate) to invalidate, and the next read
+// goes to the DB and finds the new row. (It also runs inside page renders,
+// where revalidateTag throws.) odds-snapshot-write-guard-acceptance-test.ts
+// holds it to exactly that: the cached read must pass fetchIfMissing: false.
 const oddsSeedDeps: OddsSeedDeps<OddsGame> = {
   now: Date.now,
   claimWindow: claimOddsSeedViaDataCache,
@@ -275,10 +294,10 @@ export type TickerOddsGame = Pick<OddsGame, "id" | "homeTeam" | "awayTeam" | "co
 // a failed invalidation (each write path logs and continues), not a freshness
 // mechanism. 10 minutes bounds that failure to a short, unnoticeable window
 // (the backfill itself only runs every 4h) while cutting misses from one per
-// minute per sport to one per ten. Deliberately NOT ODDS_CACHE_TTL_SECONDS:
-// that one is clamped to <= 300s and sized for the full blob's write-path
-// enrichment; live SCORES (the part of the ticker that does change by the
-// second) are not cached here at all - see getLiveTickerGames.
+// minute per sport to one per ten. Deliberately NOT ODDS_CACHE_TTL_SECONDS
+// (the full blob's backstop, sized separately - see its own comment); live
+// SCORES (the part of the ticker that does change by the second) are not
+// cached here at all - see getLiveTickerGames.
 const TICKER_ODDS_CACHE_TTL_SECONDS = 600;
 
 // Pure so the key/tag/TTL contract is provable without a Next request context.
