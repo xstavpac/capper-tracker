@@ -1,5 +1,14 @@
 // Every threshold the /admin ops console judges by, in one place: what a tab's
 // page flags and what turns its red dot on. Each tab's PR adds its section.
+// The exact red-dot rule per tab is in docs/design/ops-console.md.
+
+// ---------------------------------------------------------------------------
+// Red dots
+// ---------------------------------------------------------------------------
+
+// How long the layout's red-dot summary (getAdminStatus) is cached. The tab
+// pages themselves always read fresh.
+export const ADMIN_STATUS_CACHE_SECONDS = 180;
 
 // ---------------------------------------------------------------------------
 // DB Monitor

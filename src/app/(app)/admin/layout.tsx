@@ -1,15 +1,15 @@
 import { AdminTabs } from "@/components/admin/admin-tabs";
 import { requireAdminOpsPage } from "@/server/admin-gate";
-import type { AdminTabAlerts } from "@/lib/admin-tabs";
+import { getAdminStatus } from "@/server/data/admin-status";
 
 // The ops console shell: gate, title, tab row. Each page under here ALSO calls
 // requireAdminOpsPage (see admin-gate.ts for why the layout alone isn't enough).
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await requireAdminOpsPage();
 
-  // Red dots per tab. Each tab's PR adds its own cheap "anything wrong?" read
-  // here; none is wired yet, so DB Monitor's flags show on its own page only.
-  const alerts: AdminTabAlerts = {};
+  // Red dots per tab, with a one-line reason each: a small cached summary
+  // (see server/data/admin-status.ts), read only after the gate passes.
+  const alerts = await getAdminStatus();
 
   return (
     <div className="space-y-6">

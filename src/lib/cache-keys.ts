@@ -58,4 +58,8 @@ export const cacheKeys = {
   // manual/one-time rerun, never triggered by parsing), so there's no
   // revalidateTag call for this key; it relies on the TTL alone.
   nflRosterFullNames: () => "nfl-roster-full-names",
+  // The /admin ops console's red-dot summary (server/data/admin-status.ts): one
+  // entry shared by the admins, no user data in it. TTL only - the tab pages
+  // read fresh, so a dot can trail its page by up to the TTL.
+  adminStatus: () => "admin-status",
 } as const;
