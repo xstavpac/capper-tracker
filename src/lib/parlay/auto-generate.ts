@@ -29,8 +29,8 @@ import {
   qualifies,
   rankCandidates,
   toParlayCandidate,
+  toParlayLeg,
   wilsonLowerBound,
-  type ParlayLeg,
 } from "@/lib/parlay/qualification-ranking";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
@@ -238,23 +238,8 @@ export function swapVariantNote(include: IncludePicks, parlayA: AutoParlay): str
   return include === "PROPS" || !anyGameLine ? SWAP_GAME_LINES_ONLY_NOTE : null;
 }
 
-export function toParlayLeg(p: GeneratorPick): ParlayLeg {
-  return {
-    pickId: p.pickId,
-    capperId: p.capperId,
-    betType: p.betType,
-    period: p.period,
-    betDetail: p.rawBetDetail,
-    line: p.line,
-    odds: p.odds,
-    datePosted: new Date(p.datePosted),
-    homeTeam: p.homeTeam,
-    awayTeam: p.awayTeam,
-    gameTime: new Date(p.gameTime),
-    sportName: p.leagueName,
-    gameId: p.gameId,
-  };
-}
+// Lives in qualification-core.ts (client-safe); re-exported for existing imports.
+export { toParlayLeg };
 
 export type SwapMode = "AUTO_HEDGE" | "CONTRARIAN";
 

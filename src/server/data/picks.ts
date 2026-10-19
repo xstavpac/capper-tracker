@@ -17,6 +17,7 @@ import { queryCapperRecordBundle, type CardRequest, type CategoryRequest } from 
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import type { GameCardStreak } from "@/lib/game-card-record-line";
 import { easternDateRange } from "@/lib/dates";
+import { categoryRecordKey, leagueRecordKey } from "@/lib/record-keys";
 import { nrfiSide, betScope, periodLabel } from "@/lib/bet-line";
 import {
   findMatchingGameResult,
@@ -519,13 +520,8 @@ export async function getCapperCategoryRecord(
   return records[categoryRecordKey(capperId, category)] ?? null;
 }
 
-export function categoryRecordKey(capperId: string, category: PickCategoryKey): string {
-  return capperId + "|" + category;
-}
-
-export function leagueRecordKey(capperId: string, leagueSport: string, category: PickCategoryKey): string {
-  return capperId + "|" + leagueSport + "|" + category;
-}
+// Defined in lib/record-keys.ts (client-safe); re-exported here for every existing import.
+export { categoryRecordKey, leagueRecordKey };
 
 export type CapperLeagueRecords = {
   // keyed by leagueRecordKey(capperId, leagueSport, category)
