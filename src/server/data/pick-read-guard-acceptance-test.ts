@@ -41,6 +41,7 @@ const LEGACY_MODULES = [
   "pick-aggregates-legacy",
   "pick-aggregates-cappers-adapter-legacy",
   "units-series-parity",
+  "board-picks-legacy",
 ];
 
 // One entry per findMany call, in source order.
@@ -60,8 +61,7 @@ const ALLOWLIST: Record<string, string[]> = {
   "src/server/data/picks.ts": [
     "status PENDING (the pending-triage list)",
     "the Picks page's Eastern date range",
-    "getPicksForGame: one sport, the game's +-window",
-    "getPicksForGames: one sport, the board's games' +-window",
+    "boardPicksInWindow (getPicksForGame / getPicksForGames): one sport, [earliest game - 6h, latest game + 6h]",
   ],
   "src/server/data/sharp-money.ts": ["one Eastern day (no importer - dead)"],
 };
