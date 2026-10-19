@@ -38,6 +38,9 @@ export const cacheKeys = {
   // today. Its own key (it must not collide with the full-blob or ticker entries) but
   // TAGGED with odds(sportKey, fetchDate) - see yesterdayOddsCacheParams (odds.ts).
   yesterdayOdds: (sportKey: string, fetchDate: string) => `yesterday-odds:${sportKey}:${fetchDate}`,
+  // Today's projected board (getBoardOddsForSport, odds.ts) - same projection as
+  // yesterdayOdds, its own key, TAGGED with odds(sportKey, fetchDate).
+  boardOdds: (sportKey: string, fetchDate: string) => `board-odds:${sportKey}:${fetchDate}`,
   // The "who fetches from the Odds API when today's row is missing" claim (see
   // odds-seed-claim.ts) - with a time bucket appended, the claim entry itself.
   oddsSeedClaim: (sportKey: string, fetchDate: string) => `odds-seed-claim:${sportKey}:${fetchDate}`,

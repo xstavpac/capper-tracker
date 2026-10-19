@@ -1,6 +1,6 @@
 // Static guard: the GUARDED_MODULES below (picks-by-capper-legacy.ts, sport-category-panel-legacy.ts,
 // dashboard-summary-legacy.ts, capper-detail-legacy.ts, cappers-legacy.ts, pick-aggregates-legacy.ts,
-// pick-aggregates-cappers-adapter-legacy.ts, units-series-parity.ts, board-picks-legacy.ts)
+// pick-aggregates-cappers-adapter-legacy.ts, units-series-parity.ts, board-picks-legacy.ts, board-odds-legacy.ts)
 // are frozen, pre-migration reference implementations - kept ONLY so
 // picks-by-capper-aggregates-acceptance-test.ts / capper-list-aggregates-acceptance-test.ts /
 // live-category-panel-parity-acceptance-test.ts and the T2 harness
@@ -41,6 +41,7 @@ const GUARDED_MODULES = [
   "units-series-parity",
   // The pre-#277 board / game-detail pick reads (+-2 days, full rows).
   "board-picks-legacy",
+  "board-odds-legacy",
 ];
 
 function stripComments(input: string): string {

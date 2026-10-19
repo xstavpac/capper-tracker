@@ -42,6 +42,7 @@ const LEGACY_MODULES = [
   "pick-aggregates-cappers-adapter-legacy",
   "units-series-parity",
   "board-picks-legacy",
+  "board-odds-legacy",
 ];
 
 // One entry per findMany call, in source order.
