@@ -1,8 +1,8 @@
-// Proof that the Parlay Generator's UI holds the 20-leg cap, and says so:
-// Auto-Generate's stepper reaches 20 and answers a 21st with "20 legs max";
-// the Parlay slip takes 20 picks and refuses a Confirm that would make 21
-// (adding none of them, keeping the ticks); My Picks builds a 20-leg parlay
-// and its stepper answers a 21st the same way; and a "20 legs max" refusal
+// Proof that the Parlay Generator's UI holds the 25-leg cap, and says so:
+// Auto-Generate's stepper reaches 25 and answers a 26th with "25 legs max";
+// the Parlay slip takes 25 picks and refuses a Confirm that would make 26
+// (adding none of them, keeping the ticks); My Picks builds a 25-leg parlay
+// and its stepper answers a 26th the same way; and a "25 legs max" refusal
 // from either server action is shown as that, not as a generic failure.
 //
 // The real AutoGenerateSection, ParlayPoolProvider, ParlaySlipButton,
@@ -27,8 +27,8 @@ function check(label: string, pass: boolean, detail = "") {
   if (!pass) failures++;
 }
 
-const CAP = 20;
-const CAP_MESSAGE = "20 legs max";
+const CAP = 25;
+const CAP_MESSAGE = "25 legs max";
 
 type States = Record<string, SlipPickState>;
 const FUTURE = "2099-01-01T00:00:00.000Z";
@@ -46,8 +46,8 @@ function pick(i: number): ExpanderPick {
     datePosted: "2098-12-31T00:00:00.000Z",
   };
 }
-// One pick in each of 25 games, so no two can conflict.
-const PICKS = Array.from({ length: 25 }, (_, i) => pick(i + 1));
+// One pick in each of 30 games, so no two can conflict.
+const PICKS = Array.from({ length: 30 }, (_, i) => pick(i + 1));
 const NO_RECORDS = { records: {}, streaks: {}, last20: {} };
 
 // --- stand-ins for the server actions ---
@@ -152,31 +152,31 @@ async function main() {
   }
 
   // ---------------------------------------------------------------------
-  // 1. Auto-Generate: the stepper reaches 20, and a 21st is answered
+  // 1. Auto-Generate: the stepper reaches 25, and a 26th is answered
   // ---------------------------------------------------------------------
   await mount(h(AutoGenerateSection, { leagues: ["MLB"] }));
   check("Auto-Generate: starts at 3 legs", legs() === 3, `legs=${legs()}`);
   await clickTimes(more, CAP - 3);
-  check("Auto-Generate: the stepper reaches 20", legs() === CAP, `legs=${legs()}`);
-  check("Auto-Generate: no limit message at 20", !says(CAP_MESSAGE));
+  check("Auto-Generate: the stepper reaches 25", legs() === CAP, `legs=${legs()}`);
+  check("Auto-Generate: no limit message at 25", !says(CAP_MESSAGE));
 
   await click(button("Generate parlay"));
-  check("Auto-Generate: asks the server for 20 legs", autoCalls.join() === String(CAP), `calls=[${autoCalls.join()}]`);
-  check("Auto-Generate: the 20-leg parlay is shown", says("Parlay A — 20-leg parlay"));
+  check("Auto-Generate: asks the server for 25 legs", autoCalls.join() === String(CAP), `calls=[${autoCalls.join()}]`);
+  check("Auto-Generate: the 25-leg parlay is shown", says("Parlay A — 25-leg parlay"));
 
   await click(more());
-  check("Auto-Generate: a 21st leg is not added", legs() === CAP, `legs=${legs()}`);
-  check('Auto-Generate: a 21st leg shows "20 legs max"', alerts().includes(CAP_MESSAGE), `alerts=[${alerts().join()}]`);
-  check("Auto-Generate: the server was never asked for 21", !autoCalls.some((n) => n > CAP), `calls=[${autoCalls.join()}]`);
+  check("Auto-Generate: a 26th leg is not added", legs() === CAP, `legs=${legs()}`);
+  check('Auto-Generate: a 26th leg shows "25 legs max"', alerts().includes(CAP_MESSAGE), `alerts=[${alerts().join()}]`);
+  check("Auto-Generate: the server was never asked for 26", !autoCalls.some((n) => n > CAP), `calls=[${autoCalls.join()}]`);
   await click(fewer());
-  check("Auto-Generate: stepping back to 19 clears the message", legs() === CAP - 1 && !says(CAP_MESSAGE), `legs=${legs()}`);
+  check("Auto-Generate: stepping back to 24 clears the message", legs() === CAP - 1 && !says(CAP_MESSAGE), `legs=${legs()}`);
 
   autoRejects = true;
   await click(button("Generate parlay"));
-  check('Auto-Generate: a "20 legs max" refusal from the server is shown as that', says(CAP_MESSAGE) && !says("leg parlay"), `text has message=${says(CAP_MESSAGE)}`);
+  check('Auto-Generate: a "25 legs max" refusal from the server is shown as that', says(CAP_MESSAGE) && !says("leg parlay"), `text has message=${says(CAP_MESSAGE)}`);
 
   // ---------------------------------------------------------------------
-  // 2. The Parlay slip: 20 picks go in, a Confirm that would make 21 does not
+  // 2. The Parlay slip: 25 picks go in, a Confirm that would make 26 does not
   // ---------------------------------------------------------------------
   let ctx!: ReturnType<typeof useParlayPool>;
   function Probe() {
@@ -200,99 +200,99 @@ async function main() {
   await click(button("Parlay slip"));
   await tickPicks(1, CAP);
   await click(button("Confirm"));
-  check("slip: 20 picks confirmed", ctx.pool.length === CAP && !ctx.addMode, `pool=${ctx.pool.length}`);
-  check("slip: no limit message at 20", !says(CAP_MESSAGE));
+  check("slip: 25 picks confirmed", ctx.pool.length === CAP && !ctx.addMode, `pool=${ctx.pool.length}`);
+  check("slip: no limit message at 25", !says(CAP_MESSAGE));
 
   await click(button("Parlay slip"));
-  await click(box(21));
+  await click(box(26));
   await click(button("Confirm"));
-  check("slip: a 21st pick is not added", ctx.pool.length === CAP, `pool=${ctx.pool.length}`);
-  check('slip: a 21st pick shows "20 legs max"', alerts().some((a) => a.includes(CAP_MESSAGE)), `alerts=[${alerts().join()}]`);
-  check("slip: the refused pick is still ticked, still in add mode", ctx.addMode && ctx.checkedPicks.has("p21") && box(21)?.checked === true);
+  check("slip: a 26th pick is not added", ctx.pool.length === CAP, `pool=${ctx.pool.length}`);
+  check('slip: a 26th pick shows "25 legs max"', alerts().some((a) => a.includes(CAP_MESSAGE)), `alerts=[${alerts().join()}]`);
+  check("slip: the refused pick is still ticked, still in add mode", ctx.addMode && ctx.checkedPicks.has("p26") && box(26)?.checked === true);
   await click(button("OK"));
-  check("slip: dismissing the message keeps the selection", !says(CAP_MESSAGE) && ctx.addMode && ctx.checkedPicks.has("p21"));
-  await click(box(21));
+  check("slip: dismissing the message keeps the selection", !says(CAP_MESSAGE) && ctx.addMode && ctx.checkedPicks.has("p26"));
+  await click(box(26));
   await click(button("Parlay slip"));
   check("setup: add mode left with nothing ticked", !ctx.addMode && ctx.pool.length === CAP);
 
   // ---------------------------------------------------------------------
-  // 3. My Picks: a 20-leg parlay builds, and its stepper answers a 21st
+  // 3. My Picks: a 25-leg parlay builds, and its stepper answers a 26th
   // ---------------------------------------------------------------------
-  check("My Picks: starts at 2 legs of 20 in-scope picks", legs() === 2 && ctx.maxLegCount === CAP, `legs=${legs()} max=${ctx.maxLegCount}`);
+  check("My Picks: starts at 2 legs of 25 in-scope picks", legs() === 2 && ctx.maxLegCount === CAP, `legs=${legs()} max=${ctx.maxLegCount}`);
   await clickTimes(more, CAP - 2);
-  check("My Picks: the stepper reaches 20", legs() === CAP && ctx.legCount === CAP, `legs=${legs()}`);
+  check("My Picks: the stepper reaches 25", legs() === CAP && ctx.legCount === CAP, `legs=${legs()}`);
   await click(button("Build from slip"));
-  check("My Picks: the 20-leg parlay is built", says("20-leg parlay"));
-  check("My Picks: no limit message at 20", !says(CAP_MESSAGE));
+  check("My Picks: the 25-leg parlay is built", says("25-leg parlay"));
+  check("My Picks: no limit message at 25", !says(CAP_MESSAGE));
 
   await click(more());
-  check("My Picks: a 21st leg is not added", legs() === CAP && ctx.legCount === CAP, `legs=${legs()}`);
-  check('My Picks: a 21st leg shows "20 legs max"', alerts().includes(CAP_MESSAGE), `alerts=[${alerts().join()}]`);
+  check("My Picks: a 26th leg is not added", legs() === CAP && ctx.legCount === CAP, `legs=${legs()}`);
+  check('My Picks: a 26th leg shows "25 legs max"', alerts().includes(CAP_MESSAGE), `alerts=[${alerts().join()}]`);
 
   // ---------------------------------------------------------------------
-  // 4. One Confirm of 21 ticks adds none of them (no trimming to 20)
+  // 4. One Confirm of 26 ticks adds none of them (no trimming to 25)
   // ---------------------------------------------------------------------
   await mount(page("user-2"));
   await click(button("Parlay slip"));
   await tickPicks(1, CAP + 1);
   await click(button("Confirm"));
-  check("21 ticked at once: none are added", ctx.pool.length === 0 && ctx.addMode && ctx.checkedPicks.size === CAP + 1, `pool=${ctx.pool.length} ticked=${ctx.checkedPicks.size}`);
-  check('21 ticked at once: shows "20 legs max" and how many to untick', alerts().some((a) => a.includes(CAP_MESSAGE) && a.includes("untick 1")), `alerts=[${alerts().join()}]`);
-  await click(box(21));
-  check("21 ticked at once: unticking one clears the message", !says(CAP_MESSAGE));
+  check("26 ticked at once: none are added", ctx.pool.length === 0 && ctx.addMode && ctx.checkedPicks.size === CAP + 1, `pool=${ctx.pool.length} ticked=${ctx.checkedPicks.size}`);
+  check('26 ticked at once: shows "25 legs max" and how many to untick', alerts().some((a) => a.includes(CAP_MESSAGE) && a.includes("untick 1")), `alerts=[${alerts().join()}]`);
+  await click(box(26));
+  check("26 ticked at once: unticking one clears the message", !says(CAP_MESSAGE));
   await click(button("Confirm"));
-  check("...and the 20 that remain confirm", ctx.pool.length === CAP && !ctx.addMode, `pool=${ctx.pool.length}`);
+  check("...and the 25 that remain confirm", ctx.pool.length === CAP && !ctx.addMode, `pool=${ctx.pool.length}`);
 
   // ---------------------------------------------------------------------
   // 5. Stored legs still being checked count toward the cap
   // ---------------------------------------------------------------------
-  win.localStorage.setItem("parlay-pool:user-3", JSON.stringify({ pool: PICKS.slice(0, 19), leagueScope: { MLB: true }, legCount: 2 }));
+  win.localStorage.setItem("parlay-pool:user-3", JSON.stringify({ pool: PICKS.slice(0, 24), leagueScope: { MLB: true }, legCount: 2 }));
   let settle!: (s: States) => void;
   respondSlip = () => new Promise<States>((resolve) => (settle = resolve));
   await mount(page("user-3"));
-  check("setup: 19 stored legs, not shown until checked", ctx.pool.length === 0);
+  check("setup: 24 stored legs, not shown until checked", ctx.pool.length === 0);
   await click(button("Parlay slip"));
-  await tickPicks(20, 21);
+  await tickPicks(25, 26);
   await click(button("Confirm"));
-  check('confirm during hydrate: 19 stored + 2 new is refused with "20 legs max"', ctx.pool.length === 0 && ctx.addMode && alerts().some((a) => a.includes(CAP_MESSAGE)), `pool=${ctx.pool.length} alerts=[${alerts().join()}]`);
+  check('confirm during hydrate: 24 stored + 2 new is refused with "25 legs max"', ctx.pool.length === 0 && ctx.addMode && alerts().some((a) => a.includes(CAP_MESSAGE)), `pool=${ctx.pool.length} alerts=[${alerts().join()}]`);
   await act(async () => {
-    settle(pending(PICKS.slice(0, 19).map((p) => p.pickId)));
+    settle(pending(PICKS.slice(0, 24).map((p) => p.pickId)));
     await tick();
   });
-  check("...and the slip is the 19 stored legs", ctx.pool.length === 19, `pool=${ctx.pool.length}`);
-  await click(box(21));
+  check("...and the slip is the 24 stored legs", ctx.pool.length === 24, `pool=${ctx.pool.length}`);
+  await click(box(26));
   await click(button("Confirm"));
-  check("...and one more makes 20", ctx.pool.length === CAP && !ctx.addMode, `pool=${ctx.pool.length}`);
+  check("...and one more makes 25", ctx.pool.length === CAP && !ctx.addMode, `pool=${ctx.pool.length}`);
   respondSlip = async (ids) => pending(ids);
 
   // ---------------------------------------------------------------------
-  // 6. A slip saved before the cap existed is kept whole, but builds at most 20
+  // 6. A slip saved before the cap existed is kept whole, but builds at most 25
   // ---------------------------------------------------------------------
-  win.localStorage.setItem("parlay-pool:user-4", JSON.stringify({ pool: PICKS.slice(0, 24), leagueScope: { MLB: true }, legCount: 24 }));
+  win.localStorage.setItem("parlay-pool:user-4", JSON.stringify({ pool: PICKS.slice(0, 29), leagueScope: { MLB: true }, legCount: 29 }));
   await mount(page("user-4"));
-  check("oversized stored slip: no pick is dropped", ctx.pool.length === 24, `pool=${ctx.pool.length}`);
-  check("oversized stored slip: the leg count stops at 20", ctx.maxLegCount === CAP && ctx.legCount === CAP && legs() === CAP, `max=${ctx.maxLegCount} legCount=${ctx.legCount}`);
+  check("oversized stored slip: no pick is dropped", ctx.pool.length === 29, `pool=${ctx.pool.length}`);
+  check("oversized stored slip: the leg count stops at 25", ctx.maxLegCount === CAP && ctx.legCount === CAP && legs() === CAP, `max=${ctx.maxLegCount} legCount=${ctx.legCount}`);
   await click(button("Parlay slip"));
-  await click(box(25));
+  await click(box(30));
   await click(button("Confirm"));
-  check('oversized stored slip: adding to it is refused with "20 legs max"', ctx.pool.length === 24 && alerts().some((a) => a.includes(CAP_MESSAGE)), `pool=${ctx.pool.length}`);
-  await click(box(25));
+  check('oversized stored slip: adding to it is refused with "25 legs max"', ctx.pool.length === 29 && alerts().some((a) => a.includes(CAP_MESSAGE)), `pool=${ctx.pool.length}`);
+  await click(box(30));
   await click(button("Parlay slip"));
 
   // ---------------------------------------------------------------------
-  // 7. Auto Hedge / Contrarian: 20 legs are sent, and a refusal is shown
+  // 7. Auto Hedge / Contrarian: 25 legs are sent, and a refusal is shown
   // ---------------------------------------------------------------------
-  await mount(page("user-1")); // the 20-pick slip from 2, read back from storage
+  await mount(page("user-1")); // the 25-pick slip from 2, read back from storage
   await clickTimes(more, CAP);
   await click(button("Auto Hedge"));
   await click(button("Contrarian"));
   check(
-    "Auto Hedge and Contrarian each ask the server for 20 legs from the 20-pick slip",
+    "Auto Hedge and Contrarian each ask the server for 25 legs from the 25-pick slip",
     JSON.stringify(swapCalls) === JSON.stringify([{ picks: CAP, legCount: CAP, mode: "AUTO_HEDGE" }, { picks: CAP, legCount: CAP, mode: "CONTRARIAN" }]),
     JSON.stringify(swapCalls)
   );
   const shown = $$("p").filter((p) => p.textContent === CAP_MESSAGE).length;
-  check('a "20 legs max" refusal from the server is shown for each, as that', shown === 2, `shown=${shown}`);
+  check('a "25 legs max" refusal from the server is shown for each, as that', shown === 2, `shown=${shown}`);
 
   await act(() => root!.unmount());
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);

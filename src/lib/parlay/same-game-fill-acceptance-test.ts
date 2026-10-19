@@ -47,8 +47,8 @@ const ids = (legs: { pick: GeneratorPick }[]) => legs.map((l) => l.pick.pickId);
     buildSameGameLegs(a, games, cr, 3);
     check(`${n} legs asked: building same-game legs leaves Parlay A untouched`, JSON.stringify(a) === before, true);
   }
-  check("an unknown setting is read as 1", [0, 4, "2", null, undefined, 2.5].map(toMaxLegsPerGame), [1, 1, 1, 1, 1, 1]);
-  check("2 and 3 are read as themselves", [1, 2, 3].map(toMaxLegsPerGame), [1, 2, 3]);
+  check("an unknown setting is read as 1", [0, 6, "2", null, undefined, 2.5].map(toMaxLegsPerGame), [1, 1, 1, 1, 1, 1]);
+  check("1 to 5 are read as themselves", [1, 2, 3, 4, 5].map(toMaxLegsPerGame), [1, 2, 3, 4, 5]);
 }
 
 // ============================================================================
@@ -115,11 +115,12 @@ const max3 = buildSameGameLegs(parlayA, games, cr, 3);
 }
 
 // ============================================================================
-// Never past 20 legs
+// Never past MAX_PARLAY_LEGS (25) legs
 // ============================================================================
 {
-  // 18 games, each with a side (Parlay A's leg), a game total and a prop that
-  // all qualify and all fit together: 36 candidates for 2 open slots.
+  // Two games short of the cap, each with a side (Parlay A's leg), a game total
+  // and a prop that all qualify and all fit together: twice that many candidates
+  // for 2 open slots.
   const TEAMS: [string, string][] = [
     ["Chicago Cubs", "Tampa Bay Rays"],
     ["New York Yankees", "Boston Red Sox"],
@@ -129,7 +130,8 @@ const max3 = buildSameGameLegs(parlayA, games, cr, 3);
   const league: CapperLeagueRecords = { records: {}, streaks: {}, last20: {} };
   const market: Record<string, CategoryBreakdownItem | null> = {};
   const col = (wins: number, losses: number) => ({ wins, losses, pushes: 0, winPct: (wins / (wins + losses)) * 100, count: wins + losses });
-  for (let i = 0; i < 18; i++) {
+  const GAMES = MAX_PARLAY_LEGS - 2;
+  for (let i = 0; i < GAMES; i++) {
     const [homeTeam, awayTeam] = TEAMS[i % TEAMS.length];
     const gameId = "m" + String(i).padStart(2, "0");
     const base = games[0].picks[0];
@@ -152,10 +154,10 @@ const max3 = buildSameGameLegs(parlayA, games, cr, 3);
   }
   const a20 = buildAutoParlay(many, league, MAX_PARLAY_LEGS);
   const fill20 = buildSameGameLegs(a20, many, market, 3);
-  check("20 asked, 18 games, 36 candidates: 18 + 2 = 20, no more", [a20.legs.length, fill20.legs.length], [18, 2]);
-  // Even handed a request past the cap (the action refuses those), it stops at 20.
+  check(`${MAX_PARLAY_LEGS} asked, ${GAMES} games, ${GAMES * 2} candidates: ${GAMES} + 2, no more`, [a20.legs.length, fill20.legs.length], [GAMES, 2]);
+  // Even handed a request past the cap (the action refuses those), it stops at the cap.
   const over = buildSameGameLegs({ ...a20, requested: 50 }, many, market, 3);
-  check("a request past the cap still stops at 20 legs", a20.legs.length + over.legs.length, MAX_PARLAY_LEGS);
+  check("a request past the cap still stops at the cap", a20.legs.length + over.legs.length, MAX_PARLAY_LEGS);
 }
 
 // ============================================================================

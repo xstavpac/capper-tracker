@@ -58,7 +58,7 @@ const FIRST_TAB: ResultTab = "P0";
 type SetParlay = { parlay: AutoParlay; sameGame: SameGameFill };
 
 const SGP_TAG = "SGP";
-const MAX_PER_GAME_OPTIONS = [1, 2, 3] as const;
+const MAX_PER_GAME_OPTIONS = [1, 2, 3, 4, 5] as const;
 const plural = (n: number) => (n === 1 ? "" : "s");
 
 // What the parlay was built from, for the shortfall card's sentence.

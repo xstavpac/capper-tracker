@@ -7,7 +7,11 @@
 // (parlay-controls.tsx), the slip's confirmAdd (parlay-pool-context.tsx), and
 // the server actions (parlay-generator.ts, parlay-pool-generator.ts). A
 // request past the cap is refused with MAX_PARLAY_LEGS_MESSAGE.
-export const MAX_PARLAY_LEGS = 20;
+export const MAX_PARLAY_LEGS = 25;
+
+// The most legs a parlay takes from one game ("Max legs per game"). Bounds the
+// generated legs only - a slip pick is never dropped to meet it.
+export const MAX_LEGS_PER_GAME = 5;
 
 export const MAX_PARLAY_LEGS_MESSAGE = `${MAX_PARLAY_LEGS} legs max`;
 

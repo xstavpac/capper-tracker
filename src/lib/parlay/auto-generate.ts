@@ -33,7 +33,7 @@ import {
   type ParlayLeg,
 } from "@/lib/parlay/qualification-ranking";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
-import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
+import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
 import { classifyPickKind, type PickKind } from "@/lib/parlay/pick-kind";
 import { includedKind, keepsPick, mixSplit, type IncludePicks, type MixSplit } from "@/lib/parlay/pick-mix";
@@ -319,7 +319,7 @@ export function buildSwapParlay(
 }
 
 // ---------------------------------------------------------------------------
-// Same-game fill ("Max legs per game" 2 or 3). Runs after Parlay A and never
+// Same-game fill ("Max legs per game" 2 to 5). Runs after Parlay A and never
 // changes it: Parlay A is still exactly one leg per game, and these are extra
 // legs from games Parlay A already has.
 //
@@ -337,10 +337,11 @@ export function buildSwapParlay(
 // never blocks the rest of its game or any other game. Nothing is padded:
 // when no candidate is left the parlay stays short.
 // ---------------------------------------------------------------------------
-export type MaxLegsPerGame = 1 | 2 | 3;
+export type MaxLegsPerGame = 1 | 2 | 3 | 4 | 5;
 
+// Never trusted as sent: a whole number from 1 to MAX_LEGS_PER_GAME, else 1.
 export function toMaxLegsPerGame(value: unknown): MaxLegsPerGame {
-  return value === 2 || value === 3 ? value : 1;
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_LEGS_PER_GAME ? (value as MaxLegsPerGame) : 1;
 }
 
 export type SameGameLeg = {

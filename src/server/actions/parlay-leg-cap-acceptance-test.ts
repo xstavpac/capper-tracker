@@ -1,7 +1,7 @@
-// Proof that both Parlay Generator server actions hold the 20-leg cap:
+// Proof that both Parlay Generator server actions hold the 25-leg cap:
 // autoGenerateParlayAction (Auto-Generate) and generatePoolSwapAction (Auto
-// Hedge / Contrarian over the slip). 20 legs is built in full; 21 is refused
-// with "20 legs max" before any data is read - not built as 20, not built as 21.
+// Hedge / Contrarian over the slip). 25 legs is built in full; 26 is refused
+// with "25 legs max" before any data is read - not built as 25, not built as 26.
 //
 // The real actions run. Only what they load from is replaced: the signed-in
 // user, the pick rows, the live board, and the record lookups. The clock is fixed at noon
@@ -19,8 +19,8 @@ function check(label: string, pass: boolean, detail = "") {
   if (!pass) failures++;
 }
 
-const CAP = 20;
-const CAP_MESSAGE = "20 legs max";
+const CAP = 25;
+const CAP_MESSAGE = "25 legs max";
 
 const RealDate = Date;
 const NOW = new RealDate("2026-10-12T16:00:00.000Z").getTime(); // noon Eastern
@@ -37,7 +37,7 @@ globalThis.Date = FixedDate as DateConstructor;
 
 const GAME_TIME = "2026-10-12T23:05:00.000Z"; // 7:05pm Eastern, same day
 const POSTED = "2026-10-12T13:00:00.000Z";
-const SLATE_SIZE = 25;
+const SLATE_SIZE = 30;
 
 function pick(i: number): ExpanderPick {
   const home = "Home" + i;
@@ -50,7 +50,7 @@ function pick(i: number): ExpanderPick {
     datePosted: POSTED,
   };
 }
-// One pick in each of 25 games: more than the cap, so a 20-leg request is
+// One pick in each of 30 games: more than the cap, so a 25-leg request is
 // never short for lack of games.
 const SLATE = Array.from({ length: SLATE_SIZE }, (_, i) => pick(i + 1));
 
@@ -111,12 +111,12 @@ async function main() {
   // ---------------------------------------------------------------------
   const auto20 = await autoGenerateParlayAction(["MLB"], CAP);
   check(
-    "Auto-Generate: 20 legs requested, 20 legs built",
+    "Auto-Generate: 25 legs requested, 25 legs built",
     !("error" in auto20) && auto20.parlayA.requested === CAP && auto20.parlayA.legs.length === CAP,
     "error" in auto20 ? describe(auto20) : `requested=${auto20.parlayA.requested} legs=${auto20.parlayA.legs.length}`
   );
   check(
-    "Auto-Generate: the Hedge and Contrarian built with it are 20 legs too",
+    "Auto-Generate: the Hedge and Contrarian built with it are 25 legs too",
     !("error" in auto20) && auto20.hedge.legs.length === CAP && auto20.contrarian.legs.length === CAP,
     "error" in auto20 ? "" : `hedge=${auto20.hedge.legs.length} contrarian=${auto20.contrarian.legs.length}`
   );
@@ -124,7 +124,7 @@ async function main() {
   let before = loads();
   const auto21 = await autoGenerateParlayAction(["MLB"], CAP + 1);
   check(
-    'Auto-Generate: 21 legs is rejected with "20 legs max"',
+    'Auto-Generate: 26 legs is rejected with "25 legs max"',
     "error" in auto21 && auto21.error === CAP_MESSAGE,
     "error" in auto21 ? auto21.error : `built a parlay: requested=${auto21.parlayA.requested} legs=${auto21.parlayA.legs.length}`
   );
@@ -137,7 +137,7 @@ async function main() {
   for (const mode of ["AUTO_HEDGE", "CONTRARIAN"] as const) {
     const swap20 = await generatePoolSwapAction(ids(CAP), CAP, mode);
     check(
-      `${labels[mode]}: 20 legs requested, 20 legs built`,
+      `${labels[mode]}: 25 legs requested, 25 legs built`,
       !("error" in swap20) && swap20.requested === CAP && swap20.parlayA.legs.length === CAP && swap20.swap.legs.length === CAP && swap20.shortfall === 0,
       "error" in swap20 ? describe(swap20) : `requested=${swap20.requested} primary=${swap20.parlayA.legs.length} swap=${swap20.swap.legs.length}`
     );
@@ -145,7 +145,7 @@ async function main() {
     before = loads();
     const swap21 = await generatePoolSwapAction(ids(CAP + 1), CAP + 1, mode);
     check(
-      `${labels[mode]}: 21 legs is rejected with "20 legs max"`,
+      `${labels[mode]}: 26 legs is rejected with "25 legs max"`,
       "error" in swap21 && swap21.error === CAP_MESSAGE,
       "error" in swap21 ? swap21.error : `built a parlay: requested=${swap21.requested} primary=${swap21.parlayA.legs.length}`
     );
