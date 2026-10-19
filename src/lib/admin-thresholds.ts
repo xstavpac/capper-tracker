@@ -74,3 +74,18 @@ export const GRADING_STUCK_NO_RESULT_HOURS = 8;
 export const GRADING_FUZZY_WINDOW_DAYS = 14;
 // How many stuck picks the page (and its report) lists.
 export const GRADING_STUCK_LIST_LIMIT = 50;
+
+// ---------------------------------------------------------------------------
+// Imports
+// ---------------------------------------------------------------------------
+
+// The window the Imports tab and its dot look at.
+export const IMPORT_WINDOW_HOURS = 24;
+// Skipped-line stages that turn the dot on (no matched game, or a line the
+// parser / recovery pass couldn't read). Any one in the window is enough,
+// as is any pick inserted with no matched game (import_runs.fallbackUnmatched).
+export const IMPORT_ALERT_STAGES = ["GAME_UNMATCHED", "PARSE_UNRESOLVED", "RECOVERY_UNRESOLVED"] as const;
+// Listed on the page, never a dot.
+export const IMPORT_LISTED_STAGES = ["PARSE_SILENT", "PROP_UNSUPPORTED"] as const;
+// How many lines / fallback picks / ambiguity rows the page lists.
+export const IMPORT_LIST_LIMIT = 30;
