@@ -8,6 +8,7 @@ import { LocalGameTime } from "@/components/local-game-time";
 import { orderBoardGames, matchScoreToGame, teamScore } from "@/components/live/live-scoreboard-ordering";
 import { getTeamColor } from "@/lib/team-colors";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
+import { TargetGameCheckbox } from "@/components/parlay/target-game-checkbox";
 import { TeamColorBar } from "@/components/live/team-color-bar";
 import { BoardPulsePanel } from "@/components/live/board-pulse-panel";
 import { useSharedLiveScores } from "@/components/live/use-live-scores";
@@ -30,6 +31,7 @@ function favoriteSide(homePrice: number | null, awayPrice: number | null): "home
 
 export function LiveScoreboard({
   activeSport,
+  sportLabel,
   odds,
   boardPulseOdds,
   initialScores,
@@ -37,6 +39,8 @@ export function LiveScoreboard({
   showBoardPulse,
 }: {
   activeSport: string;
+  // The league's name ("NFL"), for the slip's "Target game".
+  sportLabel: string;
   odds: OddsGame[];
   // The fixed full slate Board Pulse runs off (see live/page.tsx) - today's
   // scheduled games regardless of status, NOT the board's shrinking rendered
@@ -116,6 +120,11 @@ export function LiveScoreboard({
 
           return (
             <div key={game.id} id={liveGameCardId(game.id)} className="rounded-card bg-card p-4 shadow-soft transition-shadow hover:shadow-md">
+              {/* Slip mode only: target this game for the generator (outside the card's link). */}
+              <TargetGameCheckbox
+                className="mb-1.5"
+                game={{ gameId: game.id, gameLabel: matchedPicks[0]?.gameLabel ?? game.awayTeam + " @ " + game.homeTeam, gameTime: game.commenceTime, leagueName: sportLabel }}
+              />
               {/* LiveScoreboard only ever renders in Feed mode (live/page.tsx
                   gates it on !isGrid), so this link always carries an
                   explicit view=feed - the detail page's own "Back to Live"

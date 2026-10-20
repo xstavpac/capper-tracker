@@ -9,17 +9,17 @@
 //     with none, from the full slate. A pick's game is always in play - it
 //     shows as "targeted via your picks" - but is NOT a target: picks alone
 //     never switch the generator off the full slate.
-//   - slip mode (Live's checkboxes): turned off by Send to generator. Until
-//     Live's slip mode lands (PR 7) it is still the old add mode, which keeps
-//     unconfirmed ticks across a refresh, so it is carried in `legacy`.
+//   - slip mode (Live's checkboxes) is NOT stored: it lives in memory, survives
+//     a client-side nav, turns off on Send to generator, and a reload never
+//     brings it back (it used to, and checkboxes reappeared on Live after sending).
 //
 // Stored under the same localStorage key as before ("parlay-pool:<userId>"),
 // now with `version: 2`. A slip saved by the old code (no version) is read
 // through migrateStoredSlip: its `pool` becomes `picks`, its game items
-// ("best pick from this game") become targets, its add mode, ticks and leg
-// count are carried in `legacy` (the generator's leg count, and Live's add
-// mode until its slip mode lands), and its locks and Source - which only the
-// old /parlay sections had - are dropped.
+// ("best pick from this game") become targets, its leg count is carried in
+// `legacy` (the generator's leg count), and its add mode, unconfirmed ticks,
+// locks and Source - which only the old Confirm flow and /parlay sections had -
+// are dropped.
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { MAX_PARLAY_LEGS, MAX_POOL_REQUEST_PICKS } from "@/lib/parlay/leg-cap";
 
@@ -28,9 +28,7 @@ export type SlipTarget = { gameId: string; gameLabel: string; gameTime: string; 
 
 // What only the old /parlay sections read. Dropped with them.
 export type LegacySlipFields = {
-  addMode: boolean;
   legCount: number;
-  checkedPicks: SlipPick[];
 };
 
 export type SlipStateV2 = {
@@ -46,7 +44,7 @@ export const SLIP_STATE_VERSION = 2;
 // on a request.
 export const MAX_SLIP_TARGETS = MAX_POOL_REQUEST_PICKS;
 
-export const EMPTY_LEGACY: LegacySlipFields = { addMode: false, legCount: 2, checkedPicks: [] };
+export const EMPTY_LEGACY: LegacySlipFields = { legCount: 2 };
 export const EMPTY_SLIP_STATE: SlipStateV2 = { version: 2, picks: [], targets: [], excludedLeagues: [], legacy: EMPTY_LEGACY };
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -71,7 +69,6 @@ export function migrateStoredSlip(raw: unknown): SlipStateV2 {
     .slice(0, MAX_SLIP_TARGETS)
     .map(toTarget);
   const legCount = typeof legacyIn.legCount === "number" && legacyIn.legCount >= 1 ? Math.floor(legacyIn.legCount) : EMPTY_LEGACY.legCount;
-  const checkedPicks = Array.isArray(legacyIn.checkedPicks) ? uniqueBy((legacyIn.checkedPicks as unknown[]).filter(isPick), (p) => p.pickId) : [];
   const state: SlipStateV2 = {
     version: 2,
     picks,
@@ -79,11 +76,7 @@ export function migrateStoredSlip(raw: unknown): SlipStateV2 {
     // An old slip with a `leagueScope` map instead is not read: its "off"
     // entries were the old MLB-only default, not the user's choice.
     excludedLeagues: strings(raw.excludedLeagues),
-    legacy: {
-      addMode: legacyIn.addMode === true,
-      legCount,
-      checkedPicks,
-    },
+    legacy: { legCount },
   };
   return state;
 }
@@ -157,7 +150,7 @@ export function removePick(state: SlipStateV2, pickId: string): SlipStateV2 {
 
 // After Send to FanDuel: the slip starts over. The league scope stays.
 export function clearedSlip(state: SlipStateV2): SlipStateV2 {
-  return { ...state, picks: [], targets: [], legacy: { ...state.legacy, addMode: false, checkedPicks: [] } };
+  return { ...state, picks: [], targets: [] };
 }
 
 // ---------------------------------------------------------------------------

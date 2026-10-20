@@ -52,7 +52,7 @@ const game = (gameId: string, leagueName = "NFL"): SlipTarget => ({ gameId, game
   check("v1: pool -> picks (duplicates dropped)", s.picks.map((p) => p.pickId), ["a", "b"]);
   check("v1: game items -> targets (duplicates and malformed dropped)", s.targets.map((t) => t.gameId), ["g9"]);
   check("v1: league scope kept", s.excludedLeagues, ["NHL"]);
-  check("v1: add mode, ticks and leg count carried in legacy; locks and Source dropped", s.legacy, { addMode: true, legCount: 4, checkedPicks: [pick("c", "g3")] });
+  check("v1: the leg count carried in legacy; add mode, ticks, locks and Source dropped", s.legacy, { legCount: 4 });
   check("v1 -> v2 -> read again: identical", migrateStoredSlip(JSON.parse(serializeSlip(s))), s);
   check("stored v2 says its version", JSON.parse(serializeSlip(s)).version, 2);
 
@@ -113,10 +113,10 @@ const game = (gameId: string, leagueName = "NFL"): SlipTarget => ({ gameId, game
     picks: [pick("a", "g1")],
     targets: [game("g2")],
     excludedLeagues: ["NHL"],
-    legacy: { addMode: true, legCount: 5, checkedPicks: [pick("b", "g3")] },
+    legacy: { legCount: 5 },
   };
   const c = clearedSlip(s);
-  check("cleared: no picks, no targets, nothing ticked, slip mode off", [c.picks, c.targets, c.legacy.checkedPicks, c.legacy.addMode], [[], [], [], false]);
+  check("cleared: no picks, no targets", [c.picks, c.targets], [[], []]);
   check("cleared: league scope and leg count stay", [c.excludedLeagues, c.legacy.legCount], [["NHL"], 5]);
 }
 

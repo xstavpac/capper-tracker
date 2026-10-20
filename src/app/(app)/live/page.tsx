@@ -177,6 +177,7 @@ export default async function LivePage({
               <LiveScoreboard
                 key={activeSport}
                 activeSport={activeSport}
+                sportLabel={sportLabel}
                 odds={odds}
                 boardPulseOdds={boardPulseOdds}
                 initialScores={scores}

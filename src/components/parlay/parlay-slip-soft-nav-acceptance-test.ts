@@ -90,6 +90,7 @@ async function main() {
   const { AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime");
   const { ParlayPoolProvider, useParlayPool, clearParlaySlips } = await import("./parlay-pool-context");
   const { ParlaySlipButton } = await import("./parlay-slip-button");
+  const { TargetGameCheckbox } = await import("./target-game-checkbox");
   const { LiveBannerRow } = await import("../live/live-banner-row");
   const { PickCard } = await import("../live/pick-card");
   const h = React.createElement;
@@ -112,7 +113,19 @@ async function main() {
     return null;
   }
   function Board({ league }: { league: string }) {
-    return h("div", { "data-board": league }, BOARDS[league].map((p) => h(PickCard, { key: p.pickId, pick: p, records: null, loading: false, selectable: true })));
+    // Each pick is on its own game; each game card carries "Target game" (slip mode only).
+    return h(
+      "div",
+      { "data-board": league },
+      BOARDS[league].map((p) =>
+        h(
+          "div",
+          { key: p.pickId },
+          h(TargetGameCheckbox, { game: { gameId: p.gameId, gameLabel: "Away @ Home " + p.gameId, gameTime: p.gameTime, leagueName: p.leagueName } }),
+          h(PickCard, { pick: p, records: null, loading: false, selectable: true })
+        )
+      )
+    );
   }
   function Page() {
     const leagues = LEAGUES.map((l) => ({ ...l, href: "/live?sport=" + l.key + "&view=" + at.view }));
@@ -124,7 +137,7 @@ async function main() {
       ParlayPoolProvider,
       { key: userId, userId, children: null },
       h(Probe),
-      h(LiveBannerRow, { leagues, league: at.league, views, view: at.view, children: h(ParlaySlipButton, { dark: true }) }),
+      h(LiveBannerRow, { leagues, league: at.league, views, view: at.view, children: h(ParlaySlipButton) }),
       h(Board, { key: at.league, league: at.league })
     );
   }
@@ -177,6 +190,7 @@ async function main() {
   const link = (label: string) => $$<HTMLAnchorElement>("a").find((a) => a.textContent === label)!;
   const button = (startsWith: string) => $$<HTMLButtonElement>("button").find((b) => (b.textContent ?? "").startsWith(startsWith));
   const slipLabel = () => button("Parlay slip")?.textContent ?? "(no slip button)";
+  const barText = () => container!.querySelector('[role="toolbar"] span span')?.textContent ?? "(not in slip mode)";
   const box = (pickId: string) => $$<HTMLInputElement>("input[type=checkbox]").find((i) => (i.getAttribute("aria-label") ?? "").includes("Capper " + pickId + " "));
   const boardLeague = () => container!.querySelector("[data-board]")?.getAttribute("data-board");
   const poolIds = () => ctx.pool.map((p) => p.pickId).join(",");
@@ -200,39 +214,43 @@ async function main() {
   }
 
   // ---------------------------------------------------------------------
-  // 1. Ticked picks survive a league switch
+  // 1. Checked picks go straight into the slip; slip mode and the slip
+  //    survive a league switch (client-side navigation)
   // ---------------------------------------------------------------------
   respond = async (ids) => pending(ids);
   await start("user-1");
   await click(button("Parlay slip"));
+  check("slip mode on: the bar shows, no picks yet", ctx.slipMode && barText() === "0 picks · 0 games targeted", barText());
   await click(box("nfl1"));
   await click(box("nfl2"));
-  check("setup: two NFL picks ticked", slipLabel() === "Parlay slip · 2" && box("nfl1")!.checked && box("nfl2")!.checked, slipLabel());
+  check("checked picks go straight into the slip (no Confirm)", poolIds() === "nfl1,nfl2" && box("nfl1")!.checked && box("nfl2")!.checked && !button("Confirm"), poolIds());
+  check("...and their games are targeted via the picks", barText() === "2 picks · 2 games targeted", barText());
 
   await follow(link("NCAAF"));
   check("NFL -> NCAAF: the board is NCAAF's", boardLeague() === "americanfootball_ncaaf", String(boardLeague()));
   check("NFL -> NCAAF: the router took the click (client-side navigation)", routerNavs.join() === "/live?sport=americanfootball_ncaaf&view=advanced", `routerNavs=[${routerNavs.join()}]`);
   check("NFL -> NCAAF: ParlayPoolProvider stayed mounted", providerMounts === 1, `mounts=${providerMounts}`);
-  check("NFL -> NCAAF: still in add mode with both picks ticked", ctx.addMode && ctx.checkedPicks.has("nfl1") && ctx.checkedPicks.has("nfl2") && slipLabel() === "Parlay slip · 2", slipLabel());
+  check("NFL -> NCAAF: still in slip mode, both picks in the slip", ctx.slipMode && poolIds() === "nfl1,nfl2", poolIds());
 
   await follow(link("NFL"));
   check("back on NFL: both checkboxes are still checked", box("nfl1")?.checked === true && box("nfl2")?.checked === true);
 
   await follow(link("Feed"));
   check("Grid -> Feed: the router took the click", routerNavs[routerNavs.length - 1] === "/live?sport=americanfootball_nfl&view=feed", `last=${routerNavs[routerNavs.length - 1]}`);
-  check("Grid -> Feed: ParlayPoolProvider stayed mounted, picks still ticked", providerMounts === 1 && box("nfl1")?.checked === true && box("nfl2")?.checked === true, `mounts=${providerMounts}`);
+  check("Grid -> Feed: ParlayPoolProvider stayed mounted, picks still checked", providerMounts === 1 && box("nfl1")?.checked === true && box("nfl2")?.checked === true, `mounts=${providerMounts}`);
 
   // ---------------------------------------------------------------------
-  // 2. Confirmed legs, from more than one league, survive a league switch
+  // 2. Unchecking removes; picks from more than one league survive a switch
   // ---------------------------------------------------------------------
+  await click(box("nfl2"));
+  check("unchecking a pick takes it out of the slip", poolIds() === "nfl1" && box("nfl2")?.checked === false, poolIds());
   await follow(link("NCAAF"));
   await click(box("ncaaf1"));
-  await click(button("Confirm"));
-  check("setup: three legs confirmed across NFL and NCAAF", poolIds() === "nfl1,nfl2,ncaaf1" && !ctx.addMode, poolIds());
+  check("setup: picks from NFL and NCAAF", poolIds() === "nfl1,ncaaf1", poolIds());
 
   const callsBefore = fetchCalls;
   await follow(link("MLB"));
-  check("NCAAF -> MLB: all three legs remain", poolIds() === "nfl1,nfl2,ncaaf1" && slipLabel() === "Parlay slip · 3", `${poolIds()} / ${slipLabel()}`);
+  check("NCAAF -> MLB: both picks remain", poolIds() === "nfl1,ncaaf1" && barText().startsWith("2 picks"), `${poolIds()} / ${barText()}`);
   check("NCAAF -> MLB: ParlayPoolProvider stayed mounted, slip not re-read from storage", providerMounts === 1 && fetchCalls === callsBefore, `mounts=${providerMounts} fetchCalls=${fetchCalls - callsBefore}`);
 
   // The clicked chip lights before the server answers.
@@ -246,86 +264,87 @@ async function main() {
   check("...and is the current page once it does", boardLeague() === "americanfootball_nfl" && link("NFL").getAttribute("aria-current") === "page" && lit("NFL"));
 
   // ---------------------------------------------------------------------
-  // 3. Ticked picks survive a real refresh
+  // 3. Target game: a game with no pick can be targeted; a picked game is
+  //    targeted via the pick and can't be unchecked
   // ---------------------------------------------------------------------
-  await start("user-3");
+  const targetBox = (gameId: string) => $$<HTMLInputElement>("input[type=checkbox]").find((i) => (i.getAttribute("aria-label") ?? "").endsWith("Away @ Home " + gameId));
+  check("the picked game: 'Targeted via your picks', checked and locked", targetBox("game-nfl1")?.checked === true && targetBox("game-nfl1")?.disabled === true && (targetBox("game-nfl1")?.getAttribute("aria-label") ?? "").startsWith("Targeted via your picks"));
+  await click(targetBox("game-nfl2"));
+  check("a game with no pick in the slip can be targeted on its own", ctx.targets.map((t) => t.gameId).join() === "game-nfl2" && barText() === "2 picks · 3 games targeted", barText());
+  await click(targetBox("game-nfl2"));
+  check("...and untargeted", ctx.targets.length === 0);
+
+  // ---------------------------------------------------------------------
+  // 4. Exit, refresh, and Send to generator turn slip mode off - and it
+  //    stays off (it used to come back on Live after sending)
+  // ---------------------------------------------------------------------
+  await click(button("Exit"));
+  check("Exit: slip mode off, the slip kept", !ctx.slipMode && poolIds() === "nfl1,ncaaf1" && slipLabel() === "Parlay slip · 2" && box("nfl1") === undefined, slipLabel());
   await click(button("Parlay slip"));
-  await click(box("nfl1"));
-  await click(box("nfl2"));
   await loadPage();
   check("refresh: the page really reloaded", providerMounts === 2, `mounts=${providerMounts}`);
-  check("refresh: still in add mode", ctx.addMode);
-  check("refresh: both picks are still ticked", box("nfl1")?.checked === true && box("nfl2")?.checked === true && slipLabel() === "Parlay slip · 2", slipLabel());
-
-  await click(button("Confirm"));
-  await loadPage();
-  check("refresh after Confirm: the legs are in the slip, nothing left ticked", poolIds() === "nfl1,nfl2" && !ctx.addMode && ctx.checkedPicks.size === 0, poolIds());
+  check("refresh: the slip is back, slip mode is not", poolIds() === "nfl1,ncaaf1" && !ctx.slipMode && box("nfl1") === undefined, poolIds());
 
   await click(button("Parlay slip"));
-  await follow(link("NCAAF"));
-  await click(box("ncaaf1"));
-  await click(button("Parlay slip")); // leaving add mode with a tick asks first
-  await click(button("Discard"));
-  await loadPage();
-  check("refresh after Discard: nothing comes back ticked", !ctx.addMode && ctx.checkedPicks.size === 0);
+  const send = link("Send to generator →");
+  check("slip mode: 'Send to generator →' links to /parlay", send?.getAttribute("href") === "/parlay");
+  await follow(send);
+  check("Send to generator: slip mode off, the router went to /parlay", !ctx.slipMode && routerNavs[routerNavs.length - 1] === "/parlay", `last=${routerNavs[routerNavs.length - 1]}`);
+  await follow(link("NFL"));
+  check("back on Live after sending: no checkboxes, the slip kept", box("nfl1") === undefined && slipLabel() === "Parlay slip · 2" && poolIds() === "nfl1,ncaaf1", slipLabel());
 
-  await click(button("Parlay slip"));
-  await click(box("ncaaf1"));
   await act(() => clearParlaySlips());
-  check("sign-out clears the stored ticks with the slip", win.localStorage.getItem("parlay-pool:user-3") === null);
+  check("sign-out clears the stored slip", win.localStorage.getItem("parlay-pool:user-1") === null);
 
   // ---------------------------------------------------------------------
-  // 4. A confirm made while the stored slip is still being checked
+  // 5. A pick checked while the stored slip is still being checked
   // ---------------------------------------------------------------------
   const A = pick("stored1", "NFL");
   const seed = (user: string) => win.localStorage.setItem("parlay-pool:" + user, JSON.stringify({ pool: [A], leagueScope: { NFL: true }, legCount: 2 }));
   let settle: { resolve: (s: States) => void; reject: (e: Error) => void };
   const held = () => new Promise<States>((resolve, reject) => (settle = { resolve, reject }));
 
-  // 4a. the check comes back: the stored leg and the new one are both there
+  // 5a. the check comes back: the stored pick and the new one are both there
   seed("user-4a");
   respond = held;
   await start("user-4a");
   check("setup: the stored slip is not shown until it has been checked", poolIds() === "" && fetchCalls === 1, `pool=${poolIds()} fetchCalls=${fetchCalls}`);
   await click(button("Parlay slip"));
   await click(box("nfl1"));
-  await click(button("Confirm"));
-  check("setup: a leg confirmed while the check is in flight", poolIds() === "nfl1", poolIds());
+  check("setup: a pick added while the check is in flight", poolIds() === "nfl1", poolIds());
   await act(async () => {
     settle.resolve(pending(["stored1"]));
     await tick();
   });
-  check("confirm during hydrate: the new leg is kept alongside the stored one", poolIds() === "stored1,nfl1", poolIds());
+  check("added during hydrate: the new pick is kept alongside the stored one", poolIds() === "stored1,nfl1", poolIds());
   respond = async (ids) => pending(ids);
   await loadPage();
   check("...and both are saved", poolIds() === "stored1,nfl1", poolIds());
 
-  // 4b. the check fails (offline): same
+  // 5b. the check fails (offline): same
   seed("user-4b");
   respond = held;
   await start("user-4b");
   await click(button("Parlay slip"));
   await click(box("nfl1"));
-  await click(button("Confirm"));
   await act(async () => {
     settle.reject(new Error("offline"));
     await tick();
   });
-  check("confirm during hydrate, check failed: the new leg is kept alongside the stored one", poolIds() === "stored1,nfl1", poolIds());
+  check("added during hydrate, check failed: the new pick is kept alongside the stored one", poolIds() === "stored1,nfl1", poolIds());
 
-  // 4c. a stored leg the check prunes is not brought back by a confirm made meanwhile
+  // 5c. a stored pick the check prunes is not brought back by a re-check meanwhile
   win.localStorage.setItem("parlay-pool:user-4c", JSON.stringify({ pool: [BOARDS.americanfootball_nfl[0]], leagueScope: { NFL: true }, legCount: 2 }));
   respond = held;
   await start("user-4c");
   await click(button("Parlay slip"));
   await click(box("nfl1"));
   await click(box("nfl2"));
-  await click(button("Confirm"));
   await act(async () => {
     settle.resolve({ nfl1: { status: "WIN", odds: -110, kickoff: FUTURE, started: true } });
     await tick();
   });
-  check("confirm during hydrate: a stored leg that has since been graded is still pruned, and said quietly", poolIds() === "nfl2" && ctx.removedLine === "1 pick removed — games started", `pool=${poolIds()} line=${ctx.removedLine}`);
+  check("added during hydrate: a stored pick that has since been graded is still pruned, and said quietly", poolIds() === "nfl2" && ctx.removedLine === "1 pick removed — games started", `pool=${poolIds()} line=${ctx.removedLine}`);
 
   await act(() => root!.unmount());
 

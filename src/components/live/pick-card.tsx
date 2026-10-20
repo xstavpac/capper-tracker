@@ -68,17 +68,15 @@ function StreakRow({ streak }: { streak: GameCardStreak | null | undefined }) {
   );
 }
 
-// Parlay Pool's checkbox - rendered only while add mode is on. An
-// already-pooled pick shows checked and disabled (removal happens from the
-// Parlay tab's pool list, not by re-toggling it here), so a pick appearing
-// on both Live and the Parlay tab's browse section can't be "added" twice or
-// silently dropped by an accidental re-click. A pick whose game has started
-// shows disabled too (see select-checkbox-state.ts).
+// The Parlay slip's checkbox - rendered only in Live's slip mode. It writes
+// straight into the slip: checked is in, unchecked is out (no Confirm). A new
+// pick can't be added once its game started (select-checkbox-state.ts); one
+// already in the slip can always be taken out. Checking a pick also puts its
+// game in play ("targeted via your picks").
 function SelectCheckbox({ pick }: { pick: ExpanderPick }) {
-  const { addMode, isInPool, checkedPicks, toggleChecked } = useParlayPool();
-  if (!addMode) return null;
+  const { slipMode, isInPool, togglePick } = useParlayPool();
+  if (!slipMode) return null;
   const inPool = isInPool(pick.pickId);
-  const checked = inPool || checkedPicks.has(pick.pickId);
   const { disabled, title } = selectCheckboxState(pick.gameTime, inPool, new Date());
   return (
     <label
@@ -88,16 +86,16 @@ function SelectCheckbox({ pick }: { pick: ExpanderPick }) {
     >
       <input
         type="checkbox"
-        checked={checked}
+        checked={inPool}
         disabled={disabled}
-        onChange={() => !disabled && toggleChecked(pick)}
+        onChange={() => !disabled && togglePick(pick)}
         className="h-4 w-4 rounded border-border-subtle accent-brand-600 disabled:cursor-not-allowed"
         aria-label={
           inPool
-            ? pick.capperName + " pick already in Parlay slip"
+            ? "Remove " + pick.capperName + " pick from Parlay slip"
             : disabled
               ? pick.capperName + " pick - game started"
-              : "Select " + pick.capperName + " pick"
+              : "Add " + pick.capperName + " pick to Parlay slip"
         }
       />
     </label>

@@ -1,7 +1,7 @@
 // The slip state model inside the real ParlayPoolProvider (jsdom): an old
 // stored slip hydrates into the new fields and is re-saved as v2; Live's
-// direct-write picks and targets; a pick's game can't be untargeted; Send to
-// generator turns slip mode off (confirming old-style ticks first); Send to
+// direct-write picks and targets; a pick's game can't be untargeted; slip mode
+// lives in memory only (never stored), Send to generator and Exit turn it off; Send to
 // FanDuel's clear; the quiet "games started" line Your Picks shows. Only the
 // slip's revalidation action is replaced. Pure - no DB. Run with:
 //   npx tsx src/components/parlay/parlay-slip-state-context-acceptance-test.ts
@@ -114,18 +114,20 @@ async function main() {
   });
   check("picks stop at the leg cap and say so", ctx.pool.length === 25 && ctx.overCapBy === 1, `pool=${ctx.pool.length} over=${ctx.overCapBy}`);
 
-  // ---- 3. Send to generator: slip mode off, old-style ticks confirmed ----
+  // ---- 3. Slip mode: in memory only; Send to generator and Exit turn it off ----
   await mount("u2");
-  await act(() => ctx.enterAddMode());
-  await act(() => ctx.toggleChecked(pick("t1", "g7")));
-  check("setup: slip mode on with one tick", ctx.slipMode && ctx.checkedPicks.size === 1);
-  await act(() => ctx.sendToGenerator());
-  check("Send to generator: the tick is confirmed into the slip and slip mode is off", !ctx.slipMode && ctx.pool.some((p) => p.pickId === "t1") && ctx.checkedPicks.size === 0);
+  await act(() => ctx.enterSlipMode());
+  await act(() => ctx.togglePick(pick("t1", "g7")));
+  check("setup: slip mode on, the checked pick already in the slip", ctx.slipMode && ctx.pool.some((p) => p.pickId === "t1"));
+  check("slip mode is never stored", stored("u2").legacy?.addMode === undefined && stored("u2").slipMode === undefined, JSON.stringify(stored("u2").legacy));
   await mount("u2");
-  check("...and slip mode is still off after a reload", !ctx.slipMode && stored("u2").legacy?.addMode === false);
-  await act(() => ctx.enterAddMode());
+  check("a reload: the slip is back, slip mode is not", !ctx.slipMode && ctx.pool.some((p) => p.pickId === "t1"));
+  await act(() => ctx.enterSlipMode());
   await act(() => ctx.sendToGenerator());
-  check("Send to generator with nothing ticked just turns slip mode off", !ctx.slipMode);
+  check("Send to generator turns slip mode off, the slip kept", !ctx.slipMode && ctx.pool.length === 1);
+  await act(() => ctx.enterSlipMode());
+  await act(() => ctx.exitSlipMode());
+  check("Exit turns slip mode off too", !ctx.slipMode);
 
   // ---- 4. Send to FanDuel's clear ----
   await act(() => {

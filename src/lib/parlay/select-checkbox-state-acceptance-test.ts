@@ -1,8 +1,9 @@
-// Proof for select-checkbox-state.ts (the Add to Parlay checkbox's
-// started-game gate). Pure: no DB, no network.
+// Proof for select-checkbox-state.ts: Live's slip-mode checkboxes - a pick's
+// (straight into the slip, started-game gate) and a game's "Target game".
+// Pure: no DB, no network.
 // Run with:
 //   npx tsx src/lib/parlay/select-checkbox-state-acceptance-test.ts
-import { selectCheckboxState } from "@/lib/parlay/select-checkbox-state";
+import { selectCheckboxState, targetCheckboxState } from "@/lib/parlay/select-checkbox-state";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown) {
@@ -12,21 +13,27 @@ function check(name: string, actual: unknown, expected: unknown) {
 }
 
 const NOW = new Date("2026-10-14T23:00:00Z");
+const LATER = "2026-10-15T00:00:00Z";
+const EARLIER = "2026-10-14T19:05:00Z";
 const ENABLED = { disabled: false, title: "Add to Parlay slip" };
 const STARTED = { disabled: true, title: "Game started" };
+const IN_SLIP = { disabled: false, title: "In your Parlay slip - uncheck to remove" };
 
-check("before start: enabled", selectCheckboxState("2026-10-14T23:00:01Z", false, NOW), ENABLED);
-check("at start: disabled", selectCheckboxState(NOW.toISOString(), false, NOW), STARTED);
-check("after start: disabled", selectCheckboxState("2026-10-14T19:05:00Z", false, NOW), STARTED);
-check("missing start time: disabled", selectCheckboxState("", false, NOW), STARTED);
-check("unparseable start time: disabled", selectCheckboxState("TBD", false, NOW), STARTED);
-check("already on slip, before start: unchanged", selectCheckboxState("2026-10-15T00:00:00Z", true, NOW), {
+check("pick, before start: enabled", selectCheckboxState("2026-10-14T23:00:01Z", false, NOW), ENABLED);
+check("pick, at start: disabled", selectCheckboxState(NOW.toISOString(), false, NOW), STARTED);
+check("pick, after start: disabled", selectCheckboxState(EARLIER, false, NOW), STARTED);
+check("pick, missing start time: disabled", selectCheckboxState("", false, NOW), STARTED);
+check("pick, unparseable start time: disabled", selectCheckboxState("TBD", false, NOW), STARTED);
+check("pick in the slip, before start: can be unchecked", selectCheckboxState(LATER, true, NOW), IN_SLIP);
+check("pick in the slip, after start: can still be unchecked", selectCheckboxState(EARLIER, true, NOW), IN_SLIP);
+
+check("game, before start: can be targeted", targetCheckboxState(LATER, false, false, NOW), { disabled: false, title: "Build from this game", label: "Target game" });
+check("game, started: can't be targeted", targetCheckboxState(EARLIER, false, false, NOW), { disabled: true, title: "Game started", label: "Target game" });
+check("game targeted: can be untargeted, even after start", targetCheckboxState(EARLIER, true, false, NOW), { disabled: false, title: "Stop targeting this game", label: "Target game" });
+check("game with one of your picks: targeted via picks, locked", targetCheckboxState(LATER, false, true, NOW), {
   disabled: true,
-  title: "Already in your Parlay slip",
-});
-check("already on slip, after start: unchanged (slip prune handles it)", selectCheckboxState("2026-10-14T19:05:00Z", true, NOW), {
-  disabled: true,
-  title: "Already in your Parlay slip",
+  title: "Remove your picks on this game to stop targeting it",
+  label: "Targeted via your picks",
 });
 
 if (failures) {

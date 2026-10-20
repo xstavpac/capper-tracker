@@ -223,6 +223,12 @@ export function GridLiveBoard({
             pickCount={(matchedPicksByGame[selectedEntry.gameIndex] ?? []).length}
             progress={selectedProgress}
             firstHeaderRef={firstHeaderRef}
+            slipGame={{
+              gameId: selectedEntry.game.id,
+              gameLabel: panelData.away.teamLabel + " @ " + panelData.home.teamLabel,
+              gameTime: selectedEntry.game.commenceTime,
+              leagueName: sportLabel,
+            }}
           />
         ) : (
           <div
