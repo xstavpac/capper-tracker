@@ -1330,7 +1330,7 @@ NC State +4.5`;
     }, { sport: "NCAAF", teams: ["liberty flames", "james madison dukes"], bet: "TOTAL", side: "under" });
 
     // --- Item 3: "Miami, Ohio" comma form ---
-    for (const text of ["Miami, Ohio", "Miami, OH"]) {
+    for (const text of ["Miami, Ohio ML", "Miami, OH ML"]) {
       const pick = parseCatalog(`SHARP\n${text}`, []).picks[0];
       check(`'${text}' -> NCAAF Miami (OH) RedHawks`, {
         sport: pick?.sportName,
@@ -1832,7 +1832,8 @@ NC State +4.5`;
     );
 
     const noHeader = parseCatalog("Bare Player Prop Over 3.5 Rushing Yards", []);
-    check("no header at all -> unresolvedCapperNames is 'Unknown'", noHeader.unresolvedCapperNames, ["Unknown"]);
+    // No placeholder capper: "" tells the import to block the line and ask for one.
+    check("no header at all -> unresolvedCapperNames is '' (blocked, never 'Unknown')", noHeader.unresolvedCapperNames, [""]);
   }
 
   // ==========================================================================
@@ -2419,13 +2420,13 @@ NC State +4.5`;
     // --- Guard: a real pick whose leading text (before the separator) is
     // itself pick-shaped ("Kent +52.5") must NOT be misread as a brand-new
     // capper's name - verified via a follow-up unresolved line in the same
-    // (still-"Unknown") block, since currentCapper would otherwise have been
+    // (still headerless) block, since currentCapper would otherwise have been
     // corrupted to "Kent +52.5" for it. ---
     const guarded = parseCatalog("Kent +52.5 - anytime TD NFL\n\nBare Player Prop Over 3.5 Rushing Yards", []);
     check(
       "a pick-shaped leading phrase ('Kent +52.5') is never registered as a capper name",
       guarded.unresolvedCapperNames,
-      ["Unknown"]
+      [""]
     );
 
     // --- Negative control: the KNOWN-capper inline shorthand (`inlineMatch`)

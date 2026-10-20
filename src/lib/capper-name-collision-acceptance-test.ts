@@ -6,8 +6,12 @@
 // leaving "Moneyline", which was then discarded without a trace - and "Tampa
 // Bay Rays vs Yankees ML" imported as that capper's Yankees pick. The same
 // prefix read swallowed new capper headers ("Sharp University" under a saved
-// SHARP) and abbreviations ("UNC +21.5" under a saved UNC), and a bare player
-// name ("James Cook") became a capper header.
+// SHARP) and abbreviations ("UNC +21.5" under a saved UNC).
+//
+// Since 2026-10-20 a line with no bet content is always a capper header
+// (parse-catalog.ts hasBetContent): a bare team ("Tampa Bay Rays") or player
+// ("James Cook") heads a block. The one exception is a bare name directly
+// above a market-only line ("James Cook" / "Touchdown"), read as one prop.
 //
 // Pure: no network, no database.
 import { parseCatalog, isTeamPhrase } from "@/lib/parse-catalog";
@@ -113,33 +117,27 @@ expect(
 );
 expect("parseCatalog no longer returns droppedInline", "droppedInline" in parseCatalog("SHARP Foo 2+ wins", SAVED), false);
 
-// ---- 3. A bare team-name line is never a capper header ----
+// ---- 3. A bare team-name line is a capper header (a moneyline is written with ML) ----
 expect(
-  'bare "Tampa Bay Rays" inside a block is the Rays moneyline, as it is for an unsaved name on main',
-  run("Porter Picks\nTampa Bay Rays"),
-  only([["Porter Picks", "MLB", "MONEYLINE", "Tampa Bay Rays", ["rays"]]])
+  'bare "Tampa Bay Rays" inside a block is a header, not a moneyline',
+  run("Porter Picks\nTampa Bay Rays\nDodgers ML"),
+  only([["Tampa Bay Rays", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]]])
 );
 expect(
-  'bare "Tampa Bay Rays" opening a block is unresolved; the next pick stays with the active capper',
+  'bare "Tampa Bay Rays" opening a block heads it',
   run("Porter Picks\nYankees ML\n\nTampa Bay Rays\nDodgers ML"),
-  only(
-    [
-      ["Porter Picks", "MLB", "MONEYLINE", "Yankees ML", ["yankees"]],
-      ["Porter Picks", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]],
-    ],
-    [["Porter Picks", "Tampa Bay Rays"]]
-  )
+  only([
+    ["Porter Picks", "MLB", "MONEYLINE", "Yankees ML", ["yankees"]],
+    ["Tampa Bay Rays", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]],
+  ])
 );
 expect(
   "same for a team name nobody has saved",
   run("Porter Picks\nYankees ML\n\nSeattle Mariners\nDodgers ML", []),
-  only(
-    [
-      ["Porter Picks", "MLB", "MONEYLINE", "Yankees ML", ["yankees"]],
-      ["Porter Picks", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]],
-    ],
-    [["Porter Picks", "Seattle Mariners"]]
-  )
+  only([
+    ["Porter Picks", "MLB", "MONEYLINE", "Yankees ML", ["yankees"]],
+    ["Seattle Mariners", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]],
+  ])
 );
 expect(
   'the "*Name" escape still heads a block with a team-named capper',
@@ -175,7 +173,7 @@ expect(
   ])
 );
 
-// ---- C. A bare player name is never a capper header ----
+// ---- C. A bare player name is a header, except directly above a market-only line ----
 {
   const paste = "Porter Picks\nYankees ML\nJames Cook\nTouchdown";
   expect(
@@ -192,20 +190,22 @@ expect(
   );
 }
 expect(
-  "a yardage market on the next line joins the same way",
-  run("Porter Picks\nJosh Allen\nOver 225.5 Passing Yards", []).unresolved,
-  [["Porter Picks", "Josh Allen Over 225.5 Passing Yards"]]
+  '"Anytime TD" on the next line joins the same way',
+  run("Porter Picks\nJames Cook\nAnytime TD", []).unresolved,
+  [["Porter Picks", "James Cook Anytime TD"]]
 );
 expect(
-  '"James Cook" with no market line after it is unresolved; the next pick stays with the active capper',
+  "a next line with a number is a complete pick: the name above it is its header",
+  run("Porter Picks\nJosh Allen\nOver 225.5 Passing Yards", []).unresolved,
+  [["Josh Allen", "Over 225.5 Passing Yards"]]
+);
+expect(
+  '"James Cook" above a complete pick heads it, even with James Cook on the roster',
   run("Porter Picks\nYankees ML\nJames Cook\nDodgers ML"),
-  only(
-    [
-      ["Porter Picks", "MLB", "MONEYLINE", "Yankees ML", ["yankees"]],
-      ["Porter Picks", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]],
-    ],
-    [["Porter Picks", "James Cook"]]
-  )
+  only([
+    ["Porter Picks", "MLB", "MONEYLINE", "Yankees ML", ["yankees"]],
+    ["James Cook", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]],
+  ])
 );
 expect(
   'one-line "James Cook Touchdown" under a saved "James Cook" capper is parked under the active capper',
@@ -226,9 +226,9 @@ expect(
   )
 );
 expect(
-  "with no roster: a bare surname above a yardage market joins too, even opening a block",
-  run("Porter Picks\nYankees ML\n\nGibbs\nOver 65.5 Rushing Yards", [], null).unresolved,
-  [["Porter Picks", "Gibbs Over 65.5 Rushing Yards"]]
+  "with no roster: a bare surname above a market-only line joins too, even opening a block",
+  run("Porter Picks\nYankees ML\n\nGibbs\nTouchdown", [], null).unresolved,
+  [["Porter Picks", "Gibbs Touchdown"]]
 );
 expect(
   "with no roster: a header above a pick that names its own player is still a header",
@@ -269,9 +269,14 @@ expect(
   ])
 );
 expect(
-  'a saved capper followed by a bare team ("SHARP Tampa Bay Rays") is that capper\'s moneyline',
-  run("Porter Picks\nSHARP Tampa Bay Rays", ["SHARP", "Porter Picks"]),
-  only([["SHARP", "MLB", "MONEYLINE", "Tampa Bay Rays", ["rays"]]])
+  'a saved capper followed by a bare team ("SHARP Tampa Bay Rays") has no bet content: a header',
+  run("Porter Picks\nSHARP Tampa Bay Rays\nDodgers ML", ["SHARP", "Porter Picks"]),
+  only([["SHARP Tampa Bay Rays", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]]])
+);
+expect(
+  'with ML it is that capper\'s moneyline ("SHARP Tampa Bay Rays ML")',
+  run("Porter Picks\nSHARP Tampa Bay Rays ML", ["SHARP", "Porter Picks"]),
+  only([["SHARP", "MLB", "MONEYLINE", "Tampa Bay Rays ML", ["rays"]]])
 );
 expect(
   'a new header that merely contains a nickname ("Tigers Kitchen") is still a header after a blank line',

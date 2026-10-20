@@ -16,6 +16,7 @@ import {
   importActionLabel,
   describeUnresolvedLines,
   unresolvedReasonBreakdown,
+  splitByCapper,
   type ReviewPickState,
 } from "./bulk-import-summary";
 
@@ -96,6 +97,7 @@ check(
     ambiguousUnanswered: [],
     totalLinePending: [],
     duplicates: ["Cody - NFL - Chiefs ML"],
+    noCapper: [],
     serverSkipped: 0,
   }),
   1
@@ -110,6 +112,7 @@ check(
     ambiguousUnanswered: ['Vegas John - "Cardinals -3"', 'Vegas John - "Cardinals ML"'],
     totalLinePending: [],
     duplicates: ["Cody - NFL - Chiefs ML"],
+    noCapper: [],
     serverSkipped: 0,
   }),
   3
@@ -125,6 +128,7 @@ check(
     ambiguousUnanswered: [], // e.g. the user answered "San Francisco Giants (MLB)" before submitting
     totalLinePending: [],
     duplicates: [],
+    noCapper: [],
     serverSkipped: 0,
   }),
   0
@@ -139,6 +143,7 @@ check(
     ambiguousUnanswered: ['Vegas John - "Cardinals -3"'],
     totalLinePending: ["Cody - NFL - Bears Under"],
     duplicates: ["Cody - NFL - Chiefs ML"],
+    noCapper: [],
     serverSkipped: 1, // one submitted pick the server itself couldn't match to today's schedule
   }),
   5
@@ -174,7 +179,7 @@ console.log("\n########## describeUnresolvedLines / unresolvedReasonBreakdown ##
   // lines are counted in totalSkipped exactly like any other unresolved line.
   check(
     "prop lines count in the shared skip total",
-    totalSkipped({ unresolvedLines: lines, ambiguousUnanswered: [], totalLinePending: [], duplicates: [], serverSkipped: 0 }),
+    totalSkipped({ unresolvedLines: lines, ambiguousUnanswered: [], totalLinePending: [], duplicates: [], noCapper: [], serverSkipped: 0 }),
     5
   );
 }
@@ -207,6 +212,7 @@ console.log("\n########## pendingSkipCounts / importActionLabel: the Import butt
       ambiguousUnanswered: ["a", "b"],
       totalLinePending: totalLinePendingIdx.map(String),
       duplicates: duplicateSkipIdx.map(String),
+      noCapper: [],
       serverSkipped: 0,
     })
   );
@@ -224,6 +230,24 @@ console.log("\n########## pendingSkipCounts / importActionLabel: the Import butt
     "Import 135 picks · 3 unanswered will be skipped · 4 skipped"
   );
   check("label: decided only", importActionLabel("Import 0 picks", { unanswered: 0, decided: 12 }), "Import 0 picks · 12 skipped");
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n########## splitByCapper: a pick with no capper header is held back ##########");
+{
+  const items = [
+    { capperName: "Brad Thomas", raw: "Memphis -6.5" },
+    { capperName: "", raw: "Chiefs ML" },
+    { capperName: "  ", raw: "Bills -3" },
+  ];
+  const { withCapper, noCapper } = splitByCapper(items);
+  check("picks under a header go on to the import", withCapper.map((i) => i.raw), ["Memphis -6.5"]);
+  check("headerless picks are held back by raw line, never given a placeholder capper", noCapper, ["Chiefs ML", "Bills -3"]);
+  check(
+    "held-back picks count as skipped",
+    totalSkipped({ unresolvedLines: [], ambiguousUnanswered: [], totalLinePending: [], duplicates: [], noCapper, serverSkipped: 0 }),
+    2
+  );
 }
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

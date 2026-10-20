@@ -3182,6 +3182,28 @@ const ROSTER_NAME_SHAPE = /^[A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*){1,3}
 // A name of any length, surname alone included ("Gibbs").
 const BARE_NAME_SHAPE = /^[A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*){0,3}$/;
 
+// A number standing as its own word: a line, odds or stake ("-6.5", "+120",
+// "0.5", "o10.5", "25+", "2u", "(-110)"). A digit inside a word ("P4D",
+// "49ers") is not one.
+const BET_NUMBER_TOKEN = /^[ou]?[+-]?\d+(?:\.\d+)?(?:\+|u|units?|%|\*)?$/i;
+// Market words, over/under and units - the words a capper writes a bet
+// with. A capper's name that contains one is read as a pick; "*Name" is the
+// way to head a block with it. Prop shapes beyond these ("Jokic
+// double-double", "Draisaitl ATGS") are caught by looksLikePick's prop
+// parsers, which already tell them from headers like "Double Double Picks".
+const BET_WORD =
+  /\b(?:ml|money\s*line|spread|over|under|o\/u|units?|tds?|atd|touchdowns?|hrs?|home\s*runs?|homeruns?|yards?|yds|rec|pts|reb|ast|sog|strikeouts?|outs|(?:no|yes)\s+runs?\s+(?:in\s+(?:the\s+)?)?(?:1st|first)(?:\s+inn(?:ing)?)?)\b/i;
+
+// The capper-header rule: a line with no bet content - no line or number, no
+// over/under, no market word, no units - is a capper's header, whatever else
+// it names (an active player, a team, a saved capper). Only a line that has
+// bet content is read as a pick, and only then are the roster and team lists
+// consulted.
+function hasBetContent(text: string): boolean {
+  if (BET_WORD.test(text) || looksLikePick(text)) return true;
+  return text.split(/\s+/).some((token) => BET_NUMBER_TOKEN.test(token.replace(/^[([{:,]+|[)\]}:,]+$/g, "")));
+}
+
 // Text that is only a market, line, odds or stake - no team or player in it
 // ("+21.5", "Moneyline", "Over 8.5 -110 (2u)").
 function hasNoSubject(text: string): boolean {
@@ -3294,6 +3316,8 @@ export function parseCatalog(
   // capper name matched correctly right here, but the resulting pick still
   // showed "Unknown" because there was no earlier resolved pick to infer
   // from). Recorded directly here instead.
+  // "" when no header came before the line: the import blocks those lines
+  // and asks for a capper, never attributes them to a placeholder.
   const unresolvedCapperNames: string[] = [];
   const unresolvedLeagues: Record<number, "NBA" | "NHL"> = {};
   let blockLeague: { league: "NBA" | "NHL"; capper: string } | null = null;
@@ -3305,11 +3329,9 @@ export function parseCatalog(
   // lines would each be attributed to the previous dropped line.
   let trustedCapper = "";
   let droppedHeaderValue: string | null = null;
-  // Treated like "start of catalog" - a blank line before a name is the
-  // strongest signal that what follows is a new capper's header, not a pick.
-  // Gates the fuzzy nickname-only branches below (see detectSport's
-  // allowNicknameFallback) so a header like "Tigers Kitchen" can't be
-  // misread as a Tigers pick just because it contains a team nickname.
+  // A line right after a blank one (or the paste's first line) opens a
+  // block: only then is a "Name - pick" line with a league code read as a
+  // brand-new capper's first pick (see effectiveRest below).
   let precededByBlank = true;
 
   // A team read from the feed (see feedTeamNicknames) settles the sport for a line the
@@ -3372,8 +3394,9 @@ export function parseCatalog(
     };
   };
 
-  // A whole line (or a saved capper's name) that is an NFL roster player's
-  // full name. Needs the roster; without it nothing is ever read as a player.
+  // Text after a saved capper's name, or the name itself, that is an NFL
+  // roster player's full name. Only asked of a line with bet content (see
+  // hasBetContent). Needs the roster; without it nothing is read as a player.
   const isRosterPlayer = (name: string): boolean =>
     rosterFullNames !== undefined && ROSTER_NAME_SHAPE.test(name.trim()) && isKnownFullPlayerName(name.trim(), rosterFullNames);
 
@@ -3413,7 +3436,7 @@ export function parseCatalog(
     const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
     currentCapper = existingMatch ?? name;
     if (!existingMatch && looksPickLikeHeader(line)) {
-      droppedAsHeaders.push({ text: line, capperName: trustedCapper || "Unknown" });
+      droppedAsHeaders.push({ text: line, capperName: trustedCapper });
       droppedHeaderValue = currentCapper;
     }
   };
@@ -3441,65 +3464,51 @@ export function parseCatalog(
       continue;
     }
 
-    // A standalone line that matches a SAVED capper's name (case/punctuation-
-    // insensitive, same normalizeName leniency used everywhere else a known
-    // name is matched) is always read as that capper's header, checked before
-    // any team/sport detection - once a capper is saved, the app already
-    // knows their name and doesn't need to guess from words in the text. The
-    // "*" prefix above is only needed for a brand-new, not-yet-saved capper
-    // whose name happens to collide with a team nickname the first time.
-    //
-    // The exception is a line that is, whole, a team or a roster player
-    // ("Tampa Bay Rays", "James Cook"): that names a bet's subject, so it is
-    // never a capper header - not even when a saved capper has that name
-    // (most do only because such a line was once misread as a header).
-    // "*Name" above stays the way to head a block with a capper who really
-    // is named like a team.
-    const barePlayer = isRosterPlayer(line.replace(/^[^\w]+/, ""));
-    const bareSubject = barePlayer || isTeamPhrase(line, feedTeams);
+    // A line with no bet content is a capper's header (see hasBetContent),
+    // checked before any roster, team or sport lookup: "Brad Thomas", "Josh
+    // Allen", "Memphis" and "Chiefs" alone each head a block. A moneyline is
+    // written with ML. Two kinds of line without bet content are not names and
+    // keep their own handling below: a boilerplate label ("Full Card") and a
+    // league code ("NBA" as a sub-header, "BAMBINO - NFL").
+    if (!hasBetContent(line) && !isBoilerplateLabel(line.replace(/^-\s*/, "").trim()) && !detectSport(line, false).sportName) {
+      // The one exception: a bare name directly above a line that is only a
+      // market ("James Cook" / "Touchdown", "Anytime TD") is that prop's
+      // subject, and the two are read as one line. A next line with a number
+      // or a subject of its own is a complete pick, so the name is its header.
+      const player = line.replace(/^[^\w]+/, "").trim();
+      const next = rawLines[i + 1];
+      if (next && BARE_NAME_SHAPE.test(player) && !/\d/.test(next)) {
+        const joined = `${player} ${next}`;
+        const joinedProp = parseNflNhlPlayerProp(joined) ?? parseSupportedMlbProp(joined) ?? parseSupportedNbaProp(joined)?.prop ?? null;
+        if (joinedProp && normalizeName(joinedProp.playerName) === normalizeName(player)) {
+          rawLines[i + 1] = joined;
+          continue;
+        }
+      }
+      // A saved capper's name plus a section label ("SHARP Best Bets") is
+      // that capper's header.
+      const labelled = sortedNames.find(
+        (name) => line.toLowerCase().startsWith(name.toLowerCase()) && isBoilerplateLabel(line.slice(name.length).replace(/^[\s:.-]+/, ""))
+      );
+      if (labelled) currentCapper = labelled;
+      else readAsCapperHeader(line);
+      continue;
+    }
+
+    // A line that is exactly a SAVED capper's name is that capper's header
+    // even when the name carries bet content ("Over Achievers").
     const normalizedLine = normalizeName(line);
-    const savedNameMatch = bareSubject ? undefined : knownCapperNames.find((n) => normalizeName(n) === normalizedLine);
+    const savedNameMatch = knownCapperNames.find((n) => normalizeName(n) === normalizedLine);
     if (savedNameMatch) {
       currentCapper = savedNameMatch;
       continue;
     }
 
-    // A bare player name is the subject of a prop whose market sits on the
-    // next line ("James Cook" / "Touchdown"): the two are read as one line.
-    // With no such next line there is no bet to read - surfaced, never a header.
-    //
-    // The join does not depend on the roster (it can be missing: a failed
-    // fetch, an unloaded table, a player outside it): any bare name directly
-    // above a market that names no subject of its own is that market's
-    // subject, since a capper's header is followed by picks that do name one.
-    // A bare name with a complete pick under it is only known to be a player
-    // from the roster; without it that line is a header, as it always was.
-    const player = line.replace(/^[^\w]+/, "").trim();
-    if (barePlayer || (BARE_NAME_SHAPE.test(player) && !bareSubject && !hasBetSignal(player))) {
-      const next = rawLines[i + 1];
-      const joined = next ? `${player} ${next}` : "";
-      const joinedProp = joined ? parseNflNhlPlayerProp(joined) ?? parseSupportedMlbProp(joined) ?? parseSupportedNbaProp(joined)?.prop ?? null : null;
-      if (joinedProp && normalizeName(joinedProp.playerName) === normalizeName(player)) {
-        rawLines[i + 1] = joined;
-        continue;
-      }
-    }
-    if (barePlayer) {
-      unresolved.push(player);
-      unresolvedCapperNames.push(currentCapper || "Unknown");
-      continue;
-    }
-
     const lower = line.toLowerCase();
-    const savedPrefix = bareSubject
-      ? undefined
-      : sortedNames.find((name) => {
-          const nameLower = name.toLowerCase();
-          return (
-            lower === nameLower ||
-            (lower.startsWith(nameLower) && /[\s:.-]/.test(line[name.length] ?? " "))
-          );
-        });
+    const savedPrefix = sortedNames.find((name) => {
+      const nameLower = name.toLowerCase();
+      return lower === nameLower || (lower.startsWith(nameLower) && /[\s:.-]/.test(line[name.length] ?? " "));
+    });
 
     // What a saved capper's name at the start of a line means depends on the
     // name and on what follows it:
@@ -3530,7 +3539,7 @@ export function parseCatalog(
     if (inlineMatch) {
       // An unresolved line under a capper named like a team or player stays
       // with the capper already active - the name was more likely the bet's subject.
-      const inlineOwner = subjectNamed ? currentCapper || "Unknown" : inlineMatch;
+      const inlineOwner = subjectNamed ? currentCapper : inlineMatch;
       const rawRemainder = line.slice(inlineMatch.length).replace(/^[\s:.-]+/, "").trim();
       const { gameNumber: inlineGameNumber, rest: remainder } = extractGameNumber(rawRemainder);
       if (!remainder) {
@@ -3649,7 +3658,7 @@ export function parseCatalog(
           // the active capper and the live-schedule recovery pass can place it.
           const teamShaped = !/\s/.test(inlineMatch) && looksLikeTeamAbbreviation(inlineMatch) && hasNoSubject(remainder);
           unresolved.push(line);
-          unresolvedCapperNames.push(teamShaped ? currentCapper || "Unknown" : inlineOwner);
+          unresolvedCapperNames.push(teamShaped ? currentCapper : inlineOwner);
         }
         continue;
       }
@@ -3706,7 +3715,7 @@ export function parseCatalog(
     // ATP pick, or a capper-name header. See unsupported-prop-vocab.ts.
     if (detectUnsupportedPropLine(pickText)) {
       unresolved.push(strippedText);
-      unresolvedCapperNames.push(currentCapper || "Unknown");
+      unresolvedCapperNames.push(currentCapper);
       continue;
     }
     // An NBA prop naming a player but no team ("Jokic o10.5 reb", "NBA Brunson 25+
@@ -3715,13 +3724,13 @@ export function parseCatalog(
     // the roster pass, which finds the player's team and settles NBA vs NHL.
     if (parseSupportedNbaProp(pickText)?.subject === "person") {
       unresolved.push(strippedText);
-      unresolvedCapperNames.push(currentCapper || "Unknown");
+      unresolvedCapperNames.push(currentCapper);
       if (blockLeague && blockLeague.capper === currentCapper) unresolvedLeagues[unresolved.length - 1] = blockLeague.league;
       continue;
     }
-    const allowNicknames = !afterBlank || looksLikePick(pickText);
-    const detectedByLists = detectSport(pickText, allowNicknames);
-    const detected = allowNicknames ? withFeedSport(pickText, detectedByLists) : detectedByLists;
+    // Every line here has bet content or a league code - a header never gets
+    // this far - so team nicknames are read whatever line precedes it.
+    const detected = withFeedSport(pickText, detectSport(pickText));
 
     // A brand-new capper's first-ever line, written as "Name - pick" with an
     // explicit trailing/inline league code ("BAMBINO - Juwan Johnson
@@ -3805,7 +3814,7 @@ export function parseCatalog(
         const a = parseMlpLeg(fragA, detected.sportName);
         const b = parseMlpLeg(fragB, detected.sportName);
         parlays.push({
-          capperName: currentCapper || "Unknown",
+          capperName: currentCapper,
           sportName: detected.sportName,
           legs: [a.leg, b.leg],
           units: mlp.explicitUnits ?? mlpUnits(a.units, b.units),
@@ -3816,7 +3825,7 @@ export function parseCatalog(
 
       const parsed = parsePickText(effectiveRest);
       results.push({
-        capperName: currentCapper || "Unknown",
+        capperName: currentCapper,
         sportName: detected.sportName,
         description: withGameNumberSuffix(parsed.cleanDescription, headerGameNumber),
         betType: parsed.betType,
@@ -3832,133 +3841,113 @@ export function parseCatalog(
       continue;
     }
 
-    // Same reasoning as detectSport's gate above - these are both
-    // nickname-driven too, so a header right after a blank line skips them
-    // entirely rather than risk misreading it as a pick, unless the line
-    // unmistakably looks like a pick anyway (looksLikePick).
-    if (!afterBlank || looksLikePick(pickText)) {
-      const pairResolved = resolveAmbiguousPair(pickText);
-      if (pairResolved) {
-        const parsed = parsePickText(pickText);
-        results.push({
-          capperName: currentCapper || "Unknown",
-          sportName: pairResolved.sportName,
-          description: withGameNumberSuffix(parsed.cleanDescription, headerGameNumber),
-          betType: parsed.betType,
-          odds: parsed.odds ?? -110,
-          hasExplicitOdds: parsed.odds !== null,
-          totalSide: parsed.totalSide,
-          units: parsed.units,
-          period: parsed.period,
-          raw: strippedText,
-          teamNicknames: pairResolved.teamNicknames,
-          gameNumber: headerGameNumber,
-        });
-        continue;
-      }
-
-      const found = findAmbiguousNickname(pickText, rosterFullNames);
-      if (found) {
-        const forPlausibility = lineForPlausibility(pickText);
-        results.push({
-          capperName: currentCapper || "Unknown",
-          sportName: "",
-          description: withGameNumberSuffix(pickText, headerGameNumber),
-          betType: "SPREAD",
-          odds: -110,
-          hasExplicitOdds: false,
-          units: 1,
-          period: "FULL_GAME",
-          raw: strippedText,
-          ambiguous: found.options,
-          ambiguousKey: found.key,
-          ambiguousBetType: forPlausibility.betType,
-          ambiguousLine: forPlausibility.line,
-          ambiguousPartialGame: forPlausibility.partialGame,
-          teamNicknames: [],
-          gameNumber: headerGameNumber,
-        });
-        continue;
-      }
-
-      const matchupPick = findMatchupPlayerPick(pickText);
-      if (matchupPick) {
-        const parsed = parsePickText(pickText);
-        results.push({
-          capperName: currentCapper || "Unknown",
-          sportName: "MMA",
-          description: withGameNumberSuffix(parsed.cleanDescription, headerGameNumber),
-          betType: parsed.betType,
-          odds: parsed.odds ?? -110,
-          hasExplicitOdds: parsed.odds !== null,
-          totalSide: parsed.totalSide,
-          units: parsed.units,
-          period: parsed.period,
-          raw: strippedText,
-          teamNicknames: matchupPick.playerKeys,
-          gameNumber: headerGameNumber,
-        });
-        continue;
-      }
-
-      const playerPick = findPlayerPick(pickText, rosterFullNames);
-      if (playerPick) {
-        const parsed = parsePickText(pickText);
-        results.push({
-          capperName: currentCapper || "Unknown",
-          sportName: "ATP",
-          description: withGameNumberSuffix(parsed.cleanDescription, headerGameNumber),
-          betType: parsed.betType,
-          odds: parsed.odds ?? -110,
-          hasExplicitOdds: parsed.odds !== null,
-          totalSide: parsed.totalSide,
-          units: parsed.units,
-          period: parsed.period,
-          raw: strippedText,
-          teamNicknames: [playerPick.playerKey],
-          gameNumber: headerGameNumber,
-        });
-        continue;
-      }
-
-      // Looks unmistakably like a pick (bet keyword, matchup shape, etc.) but
-      // nothing above could resolve its sport/team/player - do NOT fall
-      // through to being read as a capper name (see the comment on
-      // `unresolved` above for why that's actively harmful, not just a missed
-      // pick), UNLESS this is actually a capper announcing their own
-      // category-specific record (e.g. "Bambino 19-0 NRFI Run") - see
-      // extractCapperNameFromTagline. Anything else that merely looks
-      // pick-shaped is surfaced for manual review instead.
-      if (looksLikePick(strippedText)) {
-        const taglineName = extractCapperNameFromTagline(strippedText);
-        if (taglineName) {
-          const normalized = normalizeName(taglineName);
-          const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
-          currentCapper = existingMatch ?? taglineName;
-          continue;
-        }
-
-        const sharedMascot = sharedMascotPick(pickText, currentCapper || "Unknown", strippedText, headerGameNumber);
-        if (sharedMascot) {
-          results.push(sharedMascot);
-          continue;
-        }
-
-        unresolved.push(strippedText);
-        unresolvedCapperNames.push(currentCapper || "Unknown");
-        continue;
-      }
-    }
-
-    // A bare team name that did not read as a bet (it opens a block, where a
-    // nickname alone is not trusted as a pick) is surfaced, never a header.
-    if (bareSubject) {
-      unresolved.push(strippedText);
-      unresolvedCapperNames.push(currentCapper || "Unknown");
+    // A line with bet content that names a team pair, an ambiguous nickname, a
+    // matchup or a tennis player.
+    const pairResolved = resolveAmbiguousPair(pickText);
+    if (pairResolved) {
+      const parsed = parsePickText(pickText);
+      results.push({
+        capperName: currentCapper,
+        sportName: pairResolved.sportName,
+        description: withGameNumberSuffix(parsed.cleanDescription, headerGameNumber),
+        betType: parsed.betType,
+        odds: parsed.odds ?? -110,
+        hasExplicitOdds: parsed.odds !== null,
+        totalSide: parsed.totalSide,
+        units: parsed.units,
+        period: parsed.period,
+        raw: strippedText,
+        teamNicknames: pairResolved.teamNicknames,
+        gameNumber: headerGameNumber,
+      });
       continue;
     }
 
-    readAsCapperHeader(line);
+    const found = findAmbiguousNickname(pickText, rosterFullNames);
+    if (found) {
+      const forPlausibility = lineForPlausibility(pickText);
+      results.push({
+        capperName: currentCapper,
+        sportName: "",
+        description: withGameNumberSuffix(pickText, headerGameNumber),
+        betType: "SPREAD",
+        odds: -110,
+        hasExplicitOdds: false,
+        units: 1,
+        period: "FULL_GAME",
+        raw: strippedText,
+        ambiguous: found.options,
+        ambiguousKey: found.key,
+        ambiguousBetType: forPlausibility.betType,
+        ambiguousLine: forPlausibility.line,
+        ambiguousPartialGame: forPlausibility.partialGame,
+        teamNicknames: [],
+        gameNumber: headerGameNumber,
+      });
+      continue;
+    }
+
+    const matchupPick = findMatchupPlayerPick(pickText);
+    if (matchupPick) {
+      const parsed = parsePickText(pickText);
+      results.push({
+        capperName: currentCapper,
+        sportName: "MMA",
+        description: withGameNumberSuffix(parsed.cleanDescription, headerGameNumber),
+        betType: parsed.betType,
+        odds: parsed.odds ?? -110,
+        hasExplicitOdds: parsed.odds !== null,
+        totalSide: parsed.totalSide,
+        units: parsed.units,
+        period: parsed.period,
+        raw: strippedText,
+        teamNicknames: matchupPick.playerKeys,
+        gameNumber: headerGameNumber,
+      });
+      continue;
+    }
+
+    const playerPick = findPlayerPick(pickText, rosterFullNames);
+    if (playerPick) {
+      const parsed = parsePickText(pickText);
+      results.push({
+        capperName: currentCapper,
+        sportName: "ATP",
+        description: withGameNumberSuffix(parsed.cleanDescription, headerGameNumber),
+        betType: parsed.betType,
+        odds: parsed.odds ?? -110,
+        hasExplicitOdds: parsed.odds !== null,
+        totalSide: parsed.totalSide,
+        units: parsed.units,
+        period: parsed.period,
+        raw: strippedText,
+        teamNicknames: [playerPick.playerKey],
+        gameNumber: headerGameNumber,
+      });
+      continue;
+    }
+
+    // A line with bet content that nothing above could place is never a
+    // capper name (see the comment on `unresolved` above for why that is
+    // actively harmful), UNLESS it is a capper announcing their own record
+    // ("Bambino 19-0 NRFI Run" - see extractCapperNameFromTagline). Anything
+    // else is surfaced for manual review.
+    const taglineName = extractCapperNameFromTagline(strippedText);
+    if (taglineName) {
+      const normalized = normalizeName(taglineName);
+      const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
+      currentCapper = existingMatch ?? taglineName;
+      continue;
+    }
+
+    const sharedMascot = sharedMascotPick(pickText, currentCapper, strippedText, headerGameNumber);
+    if (sharedMascot) {
+      results.push(sharedMascot);
+      continue;
+    }
+
+    unresolved.push(strippedText);
+    unresolvedCapperNames.push(currentCapper);
   }
 
   // Hockey 3-way moneyline: an NHL moneyline worded as a regulation-time bet

@@ -135,7 +135,9 @@ check("nrfiSide: NRFI / YRFI / 'no run' / 'yes run'", [nrfiSide("Yankees NRFI"),
   "YES_RUN",
 ]);
 check("a plain moneyline is still a moneyline", imported("Marlins ML"), ["MLB", "MONEYLINE", "FULL_GAME", "Marlins ML", ["marlins"], null]);
-check("a two-team line with no market is still the MONEYLINE default", imported("Marlins Royals")[1], "MONEYLINE");
+check("a two-team line with ML is a MONEYLINE", imported("Marlins Royals ML")[1], "MONEYLINE");
+// A line with no bet content is a capper header (parse-catalog.ts hasBetContent).
+check("a two-team line with no market is a capper header, not a pick", imported("Marlins Royals")[1], 0);
 
 // ============================================================
 // PART 2 - team totals

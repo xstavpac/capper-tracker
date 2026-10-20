@@ -27,7 +27,7 @@ export function toSkippedLineRows(userId: string, entries: SkippedLineEntry[]) {
     .slice(0, MAX_ENTRIES_PER_WRITE)
     .map((e) => ({
       userId,
-      capperName: clip(e.capperName || "Unknown", MAX_TEXT_LENGTH),
+      capperName: clip(e.capperName, MAX_TEXT_LENGTH),
       rawText: clip(e.rawText, MAX_TEXT_LENGTH),
       guessedSport: e.guessedSport ? clip(e.guessedSport, MAX_TEXT_LENGTH) : null,
       stage: e.stage,
