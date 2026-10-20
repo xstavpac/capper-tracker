@@ -213,6 +213,20 @@ export const STATEMENT_LABELS: StatementLabel[] = [
         (has(s, STATUS_EQ) && has(s, ORDER_GAME_TIME_ASC) && !s.hasGameTimeBound)),
   },
   {
+    // "Load older picks": one keyset page (LIMIT 51) strictly before the
+    // window, ordered gameTime DESC, id DESC - the id tiebreak is the
+    // fingerprint. Also its one-row reload after a row's result changes,
+    // which reads the 18 ledger columns (the full-row findFirst by id +
+    // userId in updatePickStatus is a different statement).
+    label: "/picks older",
+    source: "getOlderPicks / reloadOlderLedgerRow (picks-older.ts, loadOlderPicksAction)",
+    matches: (s) =>
+      touchesPicks(s) &&
+      s.hasLimit &&
+      ((has(s, USER_EQ) && has(s, /ORDER BY "picks"\."gameTime" DESC, "picks"\."id" DESC/)) ||
+        (whereIs(s, /^"picks"\."id" = \$\d+ AND "picks"\."userId" = \$\d+$/) && !isFullRowPicks(s))),
+  },
+  {
     label: "Slip id IN",
     source: "getSlipPickStatesAction (parlay slip)",
     matches: (s) => touchesPicks(s) && has(s, USER_EQ) && has(s, ID_IN),

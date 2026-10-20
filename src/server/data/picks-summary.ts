@@ -9,6 +9,7 @@ import { WIN_UNITS } from "@/server/data/capper-list-aggregates";
 import { LIVE_SPORTS, getLiveScoresForSport } from "@/server/data/odds";
 import { matchFeedGame, type GameFeedStatus } from "@/lib/pick-display";
 import { matchGameResult, MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
+import { mergedTimeWindows } from "@/lib/older-picks";
 import { recordStatsFromTotals, unitsWonOnBet, type RecordTotals } from "@/server/data/stats";
 
 export type PicksSummaryFilters = {
@@ -128,6 +129,11 @@ export async function getCapperAllTimeRecords(
 // against. One query for the whole page: game_results rows in the picks'
 // date span for the sports involved, narrow columns only. Picks with no match
 // (ungraded-by-score, manual overrides, unsupported sport) are simply absent.
+//
+// `span: "pickDays"` (older picks, loadOlderPicksAction) reads only +-2 days
+// around each pick's own game instead of the whole span: a page of older picks
+// can straddle weeks with nothing logged, and the span would read every game
+// in between. The first page keeps the single span read.
 export async function getFinalScoresForPicks(
   picks: {
     id: string;
@@ -139,7 +145,8 @@ export async function getFinalScoresForPicks(
     betDetail: string | null;
     gameNumber: number | null;
   }[],
-  now: Date
+  now: Date,
+  opts: { span?: "whole" | "pickDays" } = {}
 ): Promise<Map<string, { home: number; away: number }>> {
   const out = new Map<string, { home: number; away: number }>();
   const settled = picks.filter(
@@ -150,11 +157,14 @@ export async function getFinalScoresForPicks(
   if (settled.length === 0 || sportKeys.length === 0) return out;
 
   const times = settled.map((p) => p.gameTime.getTime());
+  const windows = opts.span === "pickDays" ? mergedTimeWindows(times, 2 * 86400000) : null;
   const rows = await prisma.gameResult.findMany({
-    where: {
-      sportKey: { in: sportKeys },
-      gameDate: { gte: new Date(Math.min(...times) - 2 * 86400000), lt: new Date(Math.max(...times) + 2 * 86400000) },
-    },
+    where: windows
+      ? { sportKey: { in: sportKeys }, OR: windows.map((w) => ({ gameDate: { gte: new Date(w.start), lt: new Date(w.end) } })) }
+      : {
+          sportKey: { in: sportKeys },
+          gameDate: { gte: new Date(Math.min(...times) - 2 * 86400000), lt: new Date(Math.max(...times) + 2 * 86400000) },
+        },
     select: { sportKey: true, gameDate: true, homeTeam: true, awayTeam: true, homeScore: true, awayScore: true, gameNumber: true },
   });
   for (const p of settled) {

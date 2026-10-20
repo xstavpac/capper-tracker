@@ -7,6 +7,9 @@ import type { PickCategoryKey } from "@/server/data/stats";
 import { cacheKeys } from "@/lib/cache-keys";
 import type { BetType, PickStatus, Period } from "@prisma/client";
 import { isInvalidOdds } from "@/lib/pick-validation";
+import { parseOlderPicksCursor, parseOlderPicksQuery, type OlderPicksCursor } from "@/lib/older-picks";
+import { buildOlderLedgerRows, getOlderPicks, reloadOlderLedgerRow } from "@/server/data/picks-older";
+import type { LedgerRow } from "@/components/picks/pick-ledger";
 
 // The Dashboard page caches its pick aggregations per user (see
 // getDashboardSummary). Any action that changes this user's picks must bust
@@ -153,4 +156,52 @@ export async function getLeagueRecordsAction(
 ): Promise<CapperLeagueRecords> {
   const user = await requireUser();
   return getCapperLeagueRecords(user.id, entries);
+}
+
+export type OlderPicksResult =
+  | {
+      success: true;
+      rows: LedgerRow[];
+      // capperId -> "W-L" for cappers the request didn't list as known.
+      capperRecords: Record<string, string>;
+      cursor: OlderPicksCursor | null;
+      hasMore: boolean;
+    }
+  | { success: false; error: string };
+
+// "Load older picks" on /picks: one click's worth of picks strictly older than
+// the page's window, under the page's filters (server/data/picks-older.ts).
+// userId comes from the session only. Every filter is validated here
+// (parseOlderPicksQuery: ids by shape, status and bet type by value, the
+// window start as a date key); a capper or sport id is only ever a condition
+// inside this user's own WHERE, so another user's id matches nothing.
+export async function loadOlderPicksAction(query: unknown, cursor: unknown, knownCapperIds: unknown): Promise<OlderPicksResult> {
+  const user = await requireUser();
+  const q = parseOlderPicksQuery(query);
+  const at = parseOlderPicksCursor(cursor);
+  const known = Array.isArray(knownCapperIds) ? knownCapperIds.filter((id): id is string => typeof id === "string").slice(0, 500) : [];
+  if (!q || at === "invalid") return { success: false, error: "Couldn't load older picks." };
+  try {
+    const now = new Date();
+    const page = await getOlderPicks(user.id, q, at, now);
+    const { rows, capperRecords } = await buildOlderLedgerRows(user.id, page.picks, known, now);
+    return { success: true, rows, capperRecords, cursor: page.cursor, hasMore: page.hasMore };
+  } catch {
+    return { success: false, error: "Couldn't load older picks." };
+  }
+}
+
+// An older row again after its menu changed the result (the page refresh only
+// re-renders the first page). null row: the pick is gone.
+export async function reloadOlderPickRowAction(
+  pickId: string
+): Promise<{ success: true; row: LedgerRow | null; capperRecord: string | null } | { success: false; error: string }> {
+  const user = await requireUser();
+  if (typeof pickId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(pickId)) return { success: false, error: "Couldn't reload the pick." };
+  try {
+    const got = await reloadOlderLedgerRow(user.id, pickId, new Date());
+    return { success: true, row: got?.row ?? null, capperRecord: got?.capperRecord ?? null };
+  } catch {
+    return { success: false, error: "Couldn't reload the pick." };
+  }
 }

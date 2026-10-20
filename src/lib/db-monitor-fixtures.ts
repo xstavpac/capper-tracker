@@ -6,7 +6,8 @@
 // the commit before #128, where retired shapes A/B/C still ran. 52f483d is the
 // ops-console capture (writes issued inside a rolled-back transaction); aacbcd6
 // is the egress-plan capture (2026-10-20: roster, capper, tendency batch, the
-// narrowed /picks and sport reads). Three
+// narrowed /picks and sport reads); 3c6cb08 is "Load older picks" (2026-10-20: the
+// keyset page in each filter shape, its one-row reload, the per-day final scores). Three
 // cron upserts need live score/stat feeds, so their text is production's own
 // pg_stat_statements entry, copied from the DB Monitor page (run e769b64).
 //
@@ -492,6 +493,55 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "run": "aacbcd6",
     "sql": "SELECT \"public\".\"sports\".\"id\" FROM \"public\".\"sports\" WHERE (\"public\".\"sports\".\"name\" = $1 AND 1=1) LIMIT $2 OFFSET $3",
     "expectLabel": "Grading sport lookup",
+    "expectFlags": []
+  },
+  {
+    "name": "/picks older, first click (no cursor)",
+    "run": "3c6cb08",
+    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"sportId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"odds\", \"public\".\"picks\".\"line\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"units\", \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"gradedAt\", \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"propMarket\"::text, \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"category\" FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"userId\" = $1 AND \"public\".\"picks\".\"gameTime\" < $2) ORDER BY \"public\".\"picks\".\"gameTime\" DESC, \"public\".\"picks\".\"id\" DESC LIMIT $3 OFFSET $4",
+    "expectLabel": "/picks older",
+    "expectFlags": []
+  },
+  {
+    "name": "/picks older, later click (cursor)",
+    "run": "3c6cb08",
+    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"sportId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"odds\", \"public\".\"picks\".\"line\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"units\", \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"gradedAt\", \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"propMarket\"::text, \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"category\" FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"userId\" = $1 AND \"public\".\"picks\".\"gameTime\" < $2 AND \"public\".\"picks\".\"gameTime\" <= $3 AND (\"public\".\"picks\".\"gameTime\" < $4 OR (\"public\".\"picks\".\"gameTime\" = $5 AND \"public\".\"picks\".\"id\" < $6))) ORDER BY \"public\".\"picks\".\"gameTime\" DESC, \"public\".\"picks\".\"id\" DESC LIMIT $7 OFFSET $8",
+    "expectLabel": "/picks older",
+    "expectFlags": []
+  },
+  {
+    "name": "/picks older, capper + sport + status + Total (cursor)",
+    "run": "3c6cb08",
+    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"sportId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"odds\", \"public\".\"picks\".\"line\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"units\", \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"gradedAt\", \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"propMarket\"::text, \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"category\" FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"userId\" = $1 AND \"public\".\"picks\".\"capperId\" = $2 AND \"public\".\"picks\".\"sportId\" = $3 AND \"public\".\"picks\".\"status\" = CAST($4::text AS \"public\".\"PickStatus\") AND \"public\".\"picks\".\"gameTime\" < $5 AND \"public\".\"picks\".\"gameTime\" <= $6 AND (\"public\".\"picks\".\"gameTime\" < $7 OR (\"public\".\"picks\".\"gameTime\" = $8 AND \"public\".\"picks\".\"id\" < $9)) AND \"public\".\"picks\".\"betType\" = CAST($10::text AS \"public\".\"BetType\") AND \"public\".\"picks\".\"period\" <> CAST($11::text AS \"public\".\"Period\")) ORDER BY \"public\".\"picks\".\"gameTime\" DESC, \"public\".\"picks\".\"id\" DESC LIMIT $12 OFFSET $13",
+    "expectLabel": "/picks older",
+    "expectFlags": []
+  },
+  {
+    "name": "/picks older, player prop market",
+    "run": "3c6cb08",
+    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"sportId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"odds\", \"public\".\"picks\".\"line\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"units\", \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"gradedAt\", \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"propMarket\"::text, \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"category\" FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"userId\" = $1 AND \"public\".\"picks\".\"gameTime\" < $2 AND \"public\".\"picks\".\"betType\" = CAST($3::text AS \"public\".\"BetType\") AND (\"public\".\"picks\".\"propMarket\" = CAST($4::text AS \"public\".\"PropMarket\") OR \"public\".\"picks\".\"propMarket\" IS NULL)) ORDER BY \"public\".\"picks\".\"gameTime\" DESC, \"public\".\"picks\".\"id\" DESC LIMIT $5 OFFSET $6",
+    "expectLabel": "/picks older",
+    "expectFlags": []
+  },
+  {
+    "name": "/picks older, F5 moneyline",
+    "run": "3c6cb08",
+    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"sportId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"odds\", \"public\".\"picks\".\"line\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"units\", \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"gradedAt\", \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"propMarket\"::text, \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"category\" FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"userId\" = $1 AND \"public\".\"picks\".\"gameTime\" < $2 AND \"public\".\"picks\".\"betType\" = CAST($3::text AS \"public\".\"BetType\") AND \"public\".\"picks\".\"period\" = CAST($4::text AS \"public\".\"Period\")) ORDER BY \"public\".\"picks\".\"gameTime\" DESC, \"public\".\"picks\".\"id\" DESC LIMIT $5 OFFSET $6",
+    "expectLabel": "/picks older",
+    "expectFlags": []
+  },
+  {
+    "name": "/picks older, one row reloaded",
+    "run": "3c6cb08",
+    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"sportId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"odds\", \"public\".\"picks\".\"line\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"units\", \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"gradedAt\", \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"propMarket\"::text, \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"category\" FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"id\" = $1 AND \"public\".\"picks\".\"userId\" = $2) LIMIT $3 OFFSET $4",
+    "expectLabel": "/picks older",
+    "expectFlags": []
+  },
+  {
+    "name": "/picks older final scores, a window per pick day",
+    "run": "3c6cb08",
+    "sql": "SELECT \"public\".\"game_results\".\"id\", \"public\".\"game_results\".\"sportKey\", \"public\".\"game_results\".\"gameDate\", \"public\".\"game_results\".\"homeTeam\", \"public\".\"game_results\".\"awayTeam\", \"public\".\"game_results\".\"homeScore\", \"public\".\"game_results\".\"awayScore\", \"public\".\"game_results\".\"gameNumber\" FROM \"public\".\"game_results\" WHERE (\"public\".\"game_results\".\"sportKey\" IN ($1) AND ((\"public\".\"game_results\".\"gameDate\" >= $2 AND \"public\".\"game_results\".\"gameDate\" < $3) OR (\"public\".\"game_results\".\"gameDate\" >= $4 AND \"public\".\"game_results\".\"gameDate\" < $5))) OFFSET $6",
+    "expectLabel": "/picks final scores",
     "expectFlags": []
   }
 ];
