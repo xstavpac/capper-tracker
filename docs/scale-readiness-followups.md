@@ -61,7 +61,8 @@ has no `select`, so every call ships each capper's whole row - notes, photo
 url, source - for the full roster, from /picks, /charts, /picks/import and the
 dashboard adapter. Most callers need id / name / colorTag / isFavorite. Fix:
 project the roster read (or split a slim variant) after checking each
-caller's fields.
+caller's fields. **Done in #297** (2026-10-20): every caller used only id and
+name, so the read selects those two; the DB Monitor label is now "Capper roster".
 
 ### Units chart on the per-capper page (client-side cost)
 

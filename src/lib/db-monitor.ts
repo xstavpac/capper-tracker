@@ -158,6 +158,13 @@ const whereOf = (s: StatementShape) =>
     .trim();
 const whereIs = (s: StatementShape, re: RegExp) => re.test(whereOf(s));
 const GR_SPORT_ONLY = /^"game_results"\."sportKey" = \$\d+$/;
+// A findMany with no `where` sends `WHERE 1=1` (pg_stat_statements: `$2=$3`).
+const ALWAYS_TRUE = /^(?:1=1|\$\d+=\$\d+)$/;
+const isRosterTable = (t: string | null) => t !== null && /^(?:nfl|mlb|nhl|nba)_roster_players$/.test(t);
+// Both whole-table roster reads select the row id (Prisma adds the key); they
+// differ in column order. The refresh's diff read names the league's player
+// id right after it (roster-table-adapter.ts); the cache read names it last.
+const ROSTER_DIFF_COLUMNS = /^SELECT "(?:nfl|mlb|nhl|nba)_roster_players"\."id", "(?:nfl|mlb|nhl|nba)_roster_players"\."(?:espn|mlb)PlayerId",/;
 
 // A label whose statement reads a sport's whole history by design. Under
 // maxAvgRows it is shown with `note` instead of a row-threshold flag.
@@ -240,11 +247,19 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     matches: (s) => reads(s, "users") && whereIs(s, /^"users"\."supabaseId" = \$\d+$/),
   },
   {
-    // No `select`, so the whole capper row (notes, photo url) for the roster.
-    label: "Capper roster (full row)",
-    source: "getCappersForUser (/picks, /charts, /picks/import, dashboard adapter)",
-    matches: (s) =>
-      reads(s, "cappers") && has(s, /"cappers"\."userId" = \$\d+/) && has(s, /ORDER BY "cappers"\."isFavorite" DESC/) && has(s, /"cappers"\."notes"/),
+    // id + name since #297; entries recorded before it read the whole row
+    // (notes, photo url) and match too - the ORDER BY is the fingerprint.
+    label: "Capper roster",
+    source: "getCappersForUser (/picks, /charts, /picks/import, /live category panel)",
+    matches: (s) => reads(s, "cappers") && has(s, /"cappers"\."userId" = \$\d+/) && has(s, /ORDER BY "cappers"\."isFavorite" DESC/),
+  },
+  {
+    // The user's cappers by name, in no order: id + name since #297 / #312;
+    // entries recorded before them (find-or-create, the parlay import) read the
+    // whole row.
+    label: "Capper names (import / find-or-create)",
+    source: "findOrCreateCapper scan, resolveImportRefs, bulkImportPicksAction, bulkImportParlaysAction",
+    matches: (s) => reads(s, "cappers") && whereIs(s, /^"cappers"\."userId" = \$\d+$/) && !has(s, /\bORDER BY\b/) && !has(s, /"_aggr_count_picks"/),
   },
   {
     // Prisma's follow-up read for `include: { capper: ... }` on a picks
@@ -341,13 +356,23 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     matches: (s) => inserts(s, "team_tendency_snapshots"),
   },
   {
-    // No snapshotDate bound on purpose (see resolver.ts).
+    // One team's whole history: since #310 only the per-team fallback (a team
+    // or asOf outside a sync pass's batch); before it, every decay-delta input.
     label: "Tendency history (model)",
     source: "resolveTeamTendency (model-engine/resolver.ts, decay-delta sync)",
     matches: (s) =>
       reads(s, "team_tendency_snapshots") &&
       whereIs(s, /^"team_tendency_snapshots"\."sportKey" = \$\d+ AND "team_tendency_snapshots"\."teamName" = \$\d+$/) &&
       has(s, /ORDER BY "team_tendency_snapshots"\."snapshotDate" ASC/),
+  },
+  {
+    // #310: one read per decay-delta sync pass for every team it can resolve,
+    // bounded to the pass's asOf span (raw SQL with a per-team floor subquery).
+    label: "Tendency history (batch)",
+    source: "createTendencyHistorySource (model-engine/tendency-history.ts, decay-delta sync)",
+    matches: (s) =>
+      /^FROM team_tendency_snapshots t WHERE t\."sportKey" = \$\d+ AND t\."teamName" = ANY\(/.test(s.tail) &&
+      has(s, /SELECT max\(s\."snapshotDate"\)/),
   },
   {
     label: "Game observations (model)",
@@ -379,6 +404,28 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     label: "NFL team stat upsert",
     source: "captureNflTeamStatSnapshots (stat-snapshots.ts)",
     matches: (s) => inserts(s, "nfl_team_stat_snapshots"),
+  },
+
+  // ---- roster tables (nfl / mlb / nhl / nba _roster_players) ----
+  {
+    // The whole table, no filter (WHERE 1=1): one league's grading + import
+    // views. Behind the Data Cache since #302, so about once a day per league.
+    label: "Roster cache (grading / import recovery)",
+    source: "nfl/mlb/nhl/nba-roster-cache.ts readAll (prop grading fallback, recover-unresolved-picks)",
+    matches: (s) => isRosterTable(s.primaryTable) && whereIs(s, ALWAYS_TRUE) && !has(s, ROSTER_DIFF_COLUMNS),
+  },
+  {
+    // The same whole-table read in the refresh's column order: it diffs the
+    // feed against it before writing. Daily, all rows by design.
+    label: "Roster refresh diff",
+    source: "roster-table-adapter.ts readForDiff (refresh-rosters cron, scripts/load-*-roster.ts)",
+    matches: (s) => isRosterTable(s.primaryTable) && whereIs(s, ALWAYS_TRUE) && has(s, ROSTER_DIFF_COLUMNS),
+    expected: DAILY_FULL_HISTORY,
+  },
+  {
+    label: "NFL roster names (bulk import)",
+    source: "getCachedNflRosterFullNames (nfl-roster-cache.ts, 1h Data Cache)",
+    matches: (s) => reads(s, "nfl_roster_players") && whereIs(s, /^"nfl_roster_players"\."active" = \$\d+$/),
   },
 ];
 

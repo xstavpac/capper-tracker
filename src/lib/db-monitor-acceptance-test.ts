@@ -80,7 +80,7 @@ expect(
   []
 );
 expect(
-  "the labels: the eight from #279 plus one per statement in the 2026-10-19 prod top 30",
+  "the labels: the eight from #279, one per statement in the 2026-10-19 prod top 30, and the egress-plan reads (2026-10-20)",
   STATEMENT_LABELS.map((l) => l.label).sort(),
   [
     "/picks",
@@ -89,7 +89,8 @@ expect(
     "Capper all-time W-L",
     "Capper comparison",
     "Capper include",
-    "Capper roster (full row)",
+    "Capper names (import / find-or-create)",
+    "Capper roster",
     "Cappers with pick counts",
     "Category panel",
     "Day consensus",
@@ -102,15 +103,19 @@ expect(
     "Grading pending",
     "Grading pending legs",
     "Grading sport lookup",
+    "NFL roster names (bulk import)",
     "NFL team stat upsert",
     "Odds for tendencies",
     "Record bundle",
+    "Roster cache (grading / import recovery)",
+    "Roster refresh diff",
     "Session user",
     "Situational snapshot upsert",
     "Slip id IN",
     "Team record snapshot",
     "Tendencies by sport",
     "Tendency game results",
+    "Tendency history (batch)",
     "Tendency history (model)",
     "Tendency snapshot upsert",
     "Tendency upsert",
@@ -179,15 +184,16 @@ const fixture = (name: string) => {
   expect("parseRowThreshold",[parseRowThreshold(undefined), parseRowThreshold("250"), parseRowThreshold(["40", "9"]), parseRowThreshold("0"), parseRowThreshold("-5"), parseRowThreshold("1.5"), parseRowThreshold("abc")], [500, 250, 40, 500, 500, 500, 500]);
 }
 
-// ---- 4b. Expected-heavy cron reads (rows 1, 5, 8 of the 2026-10-19 prod top 30) ----
+// ---- 4b. Expected-heavy cron reads (rows 1, 5, 8 of the 2026-10-19 prod top 30, and the roster refresh) ----
 {
   expect(
-    "exactly the three daily full-history reads are expected-heavy, at the configured ceiling",
+    "exactly the four daily full-history reads are expected-heavy, at the configured ceiling",
     STATEMENT_LABELS.filter((l) => l.expected).map((l) => [l.label, l.expected!.maxAvgRows, l.expected!.note]),
     [
       ["Odds for tendencies", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
       ["Game observations (model)", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
       ["Decay-delta persisted ids", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
+      ["Roster refresh diff", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
     ]
   );
   expect("ceiling 5,000, note as agreed", [EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE], [5000, "expected (daily cron, full history)"]);

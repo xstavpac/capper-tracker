@@ -4,7 +4,9 @@
 // seeded rows that were deleted afterwards. `run` is the commit the text came
 // from - 52a3260 is main, 1a96517 is #277's projected board read, b1b7874 is
 // the commit before #128, where retired shapes A/B/C still ran. 52f483d is the
-// ops-console capture (writes issued inside a rolled-back transaction). Three
+// ops-console capture (writes issued inside a rolled-back transaction); aacbcd6
+// is the egress-plan capture (2026-10-20: roster, capper, tendency batch, the
+// narrowed /picks and sport reads). Three
 // cron upserts need live score/stat feeds, so their text is production's own
 // pg_stat_statements entry, copied from the DB Monitor page (run e769b64).
 //
@@ -174,7 +176,7 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "name": "capper roster (getCappersForUser)",
     "run": "52f483d",
     "sql": "SELECT \"public\".\"cappers\".\"id\", \"public\".\"cappers\".\"userId\", \"public\".\"cappers\".\"name\", \"public\".\"cappers\".\"photoUrl\", \"public\".\"cappers\".\"source\"::text, \"public\".\"cappers\".\"customSource\", \"public\".\"cappers\".\"notes\", \"public\".\"cappers\".\"isFavorite\", \"public\".\"cappers\".\"isTest\", \"public\".\"cappers\".\"sportSpecialization\", \"public\".\"cappers\".\"colorTag\", \"public\".\"cappers\".\"createdAt\", \"public\".\"cappers\".\"updatedAt\" FROM \"public\".\"cappers\" WHERE \"public\".\"cappers\".\"userId\" = $1 ORDER BY \"public\".\"cappers\".\"isFavorite\" DESC, \"public\".\"cappers\".\"name\" ASC OFFSET $2",
-    "expectLabel": "Capper roster (full row)",
+    "expectLabel": "Capper roster",
     "expectFlags": []
   },
   {
@@ -392,6 +394,104 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "run": "e769b64 (prod pg_stat_statements, 2026-10-19)",
     "sql": "INSERT INTO \"nfl_team_stat_snapshots\" (\"id\",\"gameId\",\"season\",\"week\",\"gameType\",\"gameDate\",\"team\",\"opponent\",\"homeAway\",\"completed\",\"points\",\"pointsAllowed\",\"totalYards\",\"totalYardsAllowed\",\"passingYards\",\"passingYardsAllowed\",\"rushingYards\",\"rushingYardsAllowed\",\"offensivePlays\",\"yardsPerPlay\",\"firstDowns\",\"thirdDownPct\",\"thirdDownPctAllowed\",\"timeOfPossessionSeconds\",\"turnovers\",\"takeaways\",\"turnoverMargin\",\"sacks\",\"sacksAllowed\",\"sackYardsLost\",\"penalties\",\"penaltyYards\",\"passingEpa\",\"rushingEpa\",\"receivingEpa\",\"offensiveEpa\",\"sourceId\",\"scope\",\"createdAt\",\"updatedAt\") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,CAST($38::text AS \"DataScope\"),$39,$40) ON CONFLICT (\"team\",\"gameId\") DO UPDATE SET \"gameId\" = $41, \"season\" = $42, \"week\" = $43, \"gameType\" = $44, \"gameDate\" = $45, \"team\" = $46, \"opponent\" = $47, \"homeAway\" = $48, \"completed\" = $49, \"points\" = $50, \"pointsAllowed\" = $51, \"totalYards\" = $52, \"totalYardsAllowed\" = $53, \"passingYards\" = $54, \"passingYardsAllowed\" = $55, \"rushingYards\" = $56, \"rushingYardsAllowed\" = $57, \"offensivePlays\" = $58, \"yardsPerPlay\" = $59, \"firstDowns\" = $60, \"thirdDownPct\" = $61, \"thirdDownPctAllowed\" = $62, \"timeOfPossessionSeconds\" = $63, \"turnovers\" = $64, \"takeaways\" = $65, \"turnoverMargin\" = $66, \"sacks\" = $67, \"sacksAllowed\" = $68, \"sackYardsLost\" = $69, \"penalties\" = $70, \"penaltyYards\" = $71, \"passingEpa\" = $72, \"rushingEpa\" = $73, \"receivingEpa\" = $74, \"offensiveEpa\" = $75, \"updatedAt\" = $76 WHERE ((\"nfl_team_stat_snapshots\".\"team\" = $77 AND \"nfl_team_stat_snapshots\".\"gameId\" = $78) AND $79=$80) RETURNING \"nfl_team_stat_snapshots\".\"id\", \"nfl_team_stat_snapshots\".\"gameId\", \"nfl_team_stat_snapshots\".\"season\", \"nfl_team_stat_snapshots\".\"week\", \"nfl_team_stat_snapshots\".\"gameType\", \"nfl_team_stat_snapshots\".\"gameDate\", \"nfl_team_stat_snapshots\".\"team\", \"nfl_team_stat_snapshots\".\"opponent\", \"nfl_team_stat_snapshots\".\"homeAway\", \"nfl_team_stat_snapshots\".\"completed\", \"nfl_team_stat_snapshots\".\"points\", \"nfl_team_stat_snapshots\".\"pointsAllowed\", \"nfl_team_stat_snapshots\".\"totalYards\", \"nfl_team_stat_snapshots\".\"totalYardsAllowed\", \"nfl_team_stat_snapshots\".\"passingYards\", \"nfl_team_stat_snapshots\".\"passingYardsAllowed\", \"nfl_team_stat_snapshots\".\"rushingYards\", \"nfl_team_stat_snapshots\".\"rushingYardsAllowed\", \"nfl_team_stat_snapshots\".\"offensivePlays\", \"nfl_team_stat_snapshots\".\"yardsPerPlay\", \"nfl_team_stat_snapshots\".\"firstDowns\", \"nfl_team_stat_snapshots\".\"thirdDownPct\", \"nfl_team_stat_snapshots\".\"thirdDownPctAllowed\", \"nfl_team_stat_snapshots\".\"timeOfPossessionSeconds\", \"nfl_team_stat_snapshots\".\"turnovers\", \"nfl_team_stat_snapshots\".\"takeaways\", \"nfl_team_stat_snapshots\".\"turnoverMargin\", \"nfl_team_stat_snapshots\".\"sacks\", \"nfl_team_stat_snapshots\".\"sacksAllowed\", \"nfl_team_stat_snapshots\".\"sackYardsLost\", \"nfl_team_stat_snapshots\".\"penalties\", \"nfl_team_stat_snapshots\".\"penaltyYards\", \"nfl_team_stat_snapshots\".\"passingEpa\", \"nfl_team_stat_snapshots\".\"rushingEpa\", \"nfl_team_stat_snapshots\".\"receivingEpa\", \"nfl_team_stat_snapshots\".\"offensiveEpa\", \"nfl_team_stat_snapshots\".\"sourceId\", \"nfl_team_stat_snapshots\".\"scope\"::text, \"nfl_team_stat_snapshots\".\"createdAt\", \"nfl_team_stat_snapshots\".\"updatedAt\"",
     "expectLabel": "NFL team stat upsert",
+    "expectFlags": []
+  },
+  {
+    "name": "capper roster, id + name (getCappersForUser, #297)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"cappers\".\"id\", \"public\".\"cappers\".\"name\" FROM \"public\".\"cappers\" WHERE \"public\".\"cappers\".\"userId\" = $1 ORDER BY \"public\".\"cappers\".\"isFavorite\" DESC, \"public\".\"cappers\".\"name\" ASC OFFSET $2",
+    "expectLabel": "Capper roster",
+    "expectFlags": []
+  },
+  {
+    "name": "capper names scan (findOrCreateCapper, #297)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"cappers\".\"id\", \"public\".\"cappers\".\"name\" FROM \"public\".\"cappers\" WHERE \"public\".\"cappers\".\"userId\" = $1 OFFSET $2",
+    "expectLabel": "Capper names (import / find-or-create)",
+    "expectFlags": []
+  },
+  {
+    "name": "roster cache read, NFL (readAll, #302)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"nfl_roster_players\".\"id\", \"public\".\"nfl_roster_players\".\"fullName\", \"public\".\"nfl_roster_players\".\"firstName\", \"public\".\"nfl_roster_players\".\"lastName\", \"public\".\"nfl_roster_players\".\"team\", \"public\".\"nfl_roster_players\".\"position\", \"public\".\"nfl_roster_players\".\"active\", \"public\".\"nfl_roster_players\".\"espnPlayerId\" FROM \"public\".\"nfl_roster_players\" WHERE 1=1 OFFSET $1",
+    "expectLabel": "Roster cache (grading / import recovery)",
+    "expectFlags": []
+  },
+  {
+    "name": "roster cache read, MLB (readAll, #302)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"mlb_roster_players\".\"id\", \"public\".\"mlb_roster_players\".\"fullName\", \"public\".\"mlb_roster_players\".\"firstName\", \"public\".\"mlb_roster_players\".\"lastName\", \"public\".\"mlb_roster_players\".\"team\", \"public\".\"mlb_roster_players\".\"position\", \"public\".\"mlb_roster_players\".\"active\", \"public\".\"mlb_roster_players\".\"mlbPlayerId\" FROM \"public\".\"mlb_roster_players\" WHERE 1=1 OFFSET $1",
+    "expectLabel": "Roster cache (grading / import recovery)",
+    "expectFlags": []
+  },
+  {
+    "name": "roster cache read, NHL (readAll, #302)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"nhl_roster_players\".\"id\", \"public\".\"nhl_roster_players\".\"fullName\", \"public\".\"nhl_roster_players\".\"firstName\", \"public\".\"nhl_roster_players\".\"lastName\", \"public\".\"nhl_roster_players\".\"team\", \"public\".\"nhl_roster_players\".\"position\", \"public\".\"nhl_roster_players\".\"active\", \"public\".\"nhl_roster_players\".\"espnPlayerId\" FROM \"public\".\"nhl_roster_players\" WHERE 1=1 OFFSET $1",
+    "expectLabel": "Roster cache (grading / import recovery)",
+    "expectFlags": []
+  },
+  {
+    "name": "roster cache read, NBA (readAll, #302)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"nba_roster_players\".\"id\", \"public\".\"nba_roster_players\".\"fullName\", \"public\".\"nba_roster_players\".\"firstName\", \"public\".\"nba_roster_players\".\"lastName\", \"public\".\"nba_roster_players\".\"team\", \"public\".\"nba_roster_players\".\"position\", \"public\".\"nba_roster_players\".\"active\", \"public\".\"nba_roster_players\".\"espnPlayerId\" FROM \"public\".\"nba_roster_players\" WHERE 1=1 OFFSET $1",
+    "expectLabel": "Roster cache (grading / import recovery)",
+    "expectFlags": []
+  },
+  {
+    "name": "roster refresh diff read, NFL (readForDiff)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"nfl_roster_players\".\"id\", \"public\".\"nfl_roster_players\".\"espnPlayerId\", \"public\".\"nfl_roster_players\".\"fullName\", \"public\".\"nfl_roster_players\".\"firstName\", \"public\".\"nfl_roster_players\".\"lastName\", \"public\".\"nfl_roster_players\".\"team\", \"public\".\"nfl_roster_players\".\"position\", \"public\".\"nfl_roster_players\".\"active\" FROM \"public\".\"nfl_roster_players\" WHERE 1=1 OFFSET $1",
+    "expectLabel": "Roster refresh diff",
+    "expectFlags": []
+  },
+  {
+    "name": "roster refresh diff read, MLB (readForDiff)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"mlb_roster_players\".\"id\", \"public\".\"mlb_roster_players\".\"mlbPlayerId\", \"public\".\"mlb_roster_players\".\"fullName\", \"public\".\"mlb_roster_players\".\"firstName\", \"public\".\"mlb_roster_players\".\"lastName\", \"public\".\"mlb_roster_players\".\"team\", \"public\".\"mlb_roster_players\".\"position\", \"public\".\"mlb_roster_players\".\"active\" FROM \"public\".\"mlb_roster_players\" WHERE 1=1 OFFSET $1",
+    "expectLabel": "Roster refresh diff",
+    "expectFlags": []
+  },
+  {
+    "name": "roster refresh diff read, NHL (readForDiff)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"nhl_roster_players\".\"id\", \"public\".\"nhl_roster_players\".\"espnPlayerId\", \"public\".\"nhl_roster_players\".\"fullName\", \"public\".\"nhl_roster_players\".\"firstName\", \"public\".\"nhl_roster_players\".\"lastName\", \"public\".\"nhl_roster_players\".\"team\", \"public\".\"nhl_roster_players\".\"position\", \"public\".\"nhl_roster_players\".\"active\" FROM \"public\".\"nhl_roster_players\" WHERE 1=1 OFFSET $1",
+    "expectLabel": "Roster refresh diff",
+    "expectFlags": []
+  },
+  {
+    "name": "roster refresh diff read, NBA (readForDiff)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"nba_roster_players\".\"id\", \"public\".\"nba_roster_players\".\"espnPlayerId\", \"public\".\"nba_roster_players\".\"fullName\", \"public\".\"nba_roster_players\".\"firstName\", \"public\".\"nba_roster_players\".\"lastName\", \"public\".\"nba_roster_players\".\"team\", \"public\".\"nba_roster_players\".\"position\", \"public\".\"nba_roster_players\".\"active\" FROM \"public\".\"nba_roster_players\" WHERE 1=1 OFFSET $1",
+    "expectLabel": "Roster refresh diff",
+    "expectFlags": []
+  },
+  {
+    "name": "NFL roster names (getCachedNflRosterFullNames)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"nfl_roster_players\".\"id\", \"public\".\"nfl_roster_players\".\"fullName\" FROM \"public\".\"nfl_roster_players\" WHERE \"public\".\"nfl_roster_players\".\"active\" = $1 OFFSET $2",
+    "expectLabel": "NFL roster names (bulk import)",
+    "expectFlags": []
+  },
+  {
+    "name": "tendency history batch, bounded (createTendencyHistorySource, #310)",
+    "run": "aacbcd6",
+    "sql": "\n    SELECT t.* FROM team_tendency_snapshots t\n    WHERE t.\"sportKey\" = $1\n      AND t.\"teamName\" = ANY($2::text[])\n      AND t.\"snapshotDate\" <= $3\n      AND t.\"snapshotDate\" >= COALESCE((\n        SELECT max(s.\"snapshotDate\") FROM team_tendency_snapshots s\n        WHERE s.\"sportKey\" = t.\"sportKey\" AND s.\"teamName\" = t.\"teamName\" AND s.\"snapshotDate\" <= $4\n      ), '')\n    ORDER BY t.\"snapshotDate\" ASC",
+    "expectLabel": "Tendency history (batch)",
+    "expectFlags": []
+  },
+  {
+    "name": "/picks date range, 18 columns (getFilteredPicksForUser, #301)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"sportId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"odds\", \"public\".\"picks\".\"line\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"units\", \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"gradedAt\", \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"propMarket\"::text, \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"category\" FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"userId\" = $1 AND \"public\".\"picks\".\"gameTime\" >= $2 AND \"public\".\"picks\".\"gameTime\" < $3) ORDER BY \"public\".\"picks\".\"gameTime\" DESC OFFSET $4",
+    "expectLabel": "/picks",
+    "expectFlags": []
+  },
+  {
+    "name": "grading sport lookup, id only (getSportIdByName, #311)",
+    "run": "aacbcd6",
+    "sql": "SELECT \"public\".\"sports\".\"id\" FROM \"public\".\"sports\" WHERE (\"public\".\"sports\".\"name\" = $1 AND 1=1) LIMIT $2 OFFSET $3",
+    "expectLabel": "Grading sport lookup",
     "expectFlags": []
   }
 ];
