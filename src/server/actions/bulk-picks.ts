@@ -1049,7 +1049,8 @@ export async function bulkImportParlaysAction(items: BulkImportParlayItem[]): Pr
   const user = await requireUser();
   const getOdds = createRequestOddsLoader();
 
-  const existingCappers = await prisma.capper.findMany({ where: { userId: user.id } });
+  // Only id and name: resolveOrCreateCapperId matches on the name (CapperRef).
+  const existingCappers = await prisma.capper.findMany({ where: { userId: user.id }, select: { id: true, name: true } });
   const capperCache = new Map<string, string>();
   const sportCache = new Map<string, string>();
   const errors: string[] = [];
