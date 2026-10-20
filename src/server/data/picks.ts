@@ -178,7 +178,8 @@ const UNMATCHED_CHECK_DELAY_HOURS = 6;
 export async function getPendingPicksForUser(userId: string): Promise<PendingPickRow[]> {
   const picks = await prisma.pick.findMany({
     where: { userId, status: "PENDING" },
-    include: { capper: true, sport: true },
+    // Only the names are read (capperName on the row, the sport label for prop resolution).
+    include: { capper: { select: { name: true } }, sport: { select: { name: true } } },
     orderBy: { gameTime: "asc" },
   });
 
@@ -274,6 +275,31 @@ export type PickFilters = {
 // entire pick history (2,000+ rows and growing with every sport added) on
 // every page load. Every other caller of PickFilters that doesn't pass a
 // date range is unaffected (no date clause is added at all), same as before.
+// The columns /picks renders, filters and totals on - nothing else. No
+// includes: the page already loads the user's capper roster and the sports
+// list in the same Promise.all, and joins the names on with
+// withCapperAndSportNames below (the league was never read).
+export const FILTERED_PICK_SELECT = {
+  id: true,
+  capperId: true,
+  sportId: true,
+  homeTeam: true,
+  awayTeam: true,
+  betType: true,
+  betDetail: true,
+  odds: true,
+  line: true,
+  period: true,
+  units: true,
+  gameTime: true,
+  status: true,
+  gradedAt: true,
+  pickedSide: true,
+  propMarket: true,
+  gameNumber: true,
+  category: true,
+} as const satisfies Prisma.PickSelect;
+
 export async function getFilteredPicksForUser(userId: string, filters: PickFilters) {
   const dateRange =
     filters.startDateKey && filters.endDateKey
@@ -288,8 +314,40 @@ export async function getFilteredPicksForUser(userId: string, filters: PickFilte
       ...(filters.status ? { status: filters.status } : {}),
       ...(dateRange ? { gameTime: { gte: dateRange.start, lt: dateRange.end } } : {}),
     },
-    include: { capper: true, sport: true, league: true },
+    select: FILTERED_PICK_SELECT,
     orderBy: { gameTime: "desc" },
+  });
+}
+
+// Puts capper.name and sport.name on each row from lists the caller already
+// has. A capper or sport missing from those lists (a pick whose capper is not
+// in the user's own roster, which the schema does not rule out) is read by id,
+// as the old include did, so every row still gets its real name.
+export async function withCapperAndSportNames<T extends { capperId: string; sportId: string }>(
+  rows: T[],
+  cappers: { id: string; name: string }[],
+  sports: { id: string; name: string }[]
+): Promise<(T & { capper: { name: string }; sport: { name: string } })[]> {
+  const capperName = new Map(cappers.map((c) => [c.id, c.name]));
+  const sportName = new Map(sports.map((s) => [s.id, s.name]));
+  const missingCappers = Array.from(new Set(rows.map((r) => r.capperId).filter((id) => !capperName.has(id))));
+  const missingSports = Array.from(new Set(rows.map((r) => r.sportId).filter((id) => !sportName.has(id))));
+  const [extraCappers, extraSports] = await Promise.all([
+    missingCappers.length > 0
+      ? prisma.capper.findMany({ where: { id: { in: missingCappers } }, select: { id: true, name: true } })
+      : Promise.resolve([]),
+    missingSports.length > 0
+      ? prisma.sport.findMany({ where: { id: { in: missingSports } }, select: { id: true, name: true } })
+      : Promise.resolve([]),
+  ]);
+  for (const c of extraCappers) capperName.set(c.id, c.name);
+  for (const s of extraSports) sportName.set(s.id, s.name);
+  return rows.map((r) => {
+    const cn = capperName.get(r.capperId);
+    const sn = sportName.get(r.sportId);
+    // Both are required relations; a miss here means the row vanished mid-request.
+    if (cn === undefined || sn === undefined) throw new Error("No capper " + r.capperId + " or sport " + r.sportId + " row for a loaded pick.");
+    return { ...r, capper: { name: cn }, sport: { name: sn } };
   });
 }
 

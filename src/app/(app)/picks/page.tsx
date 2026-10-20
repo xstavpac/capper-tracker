@@ -1,5 +1,5 @@
 import { requireUser } from "@/server/auth";
-import { getFilteredPicksForUser, getSportsWithLeagues } from "@/server/data/picks";
+import { getFilteredPicksForUser, getSportsWithLeagues, withCapperAndSportNames } from "@/server/data/picks";
 import {
   getPicksSummary,
   summarizeLoadedPicks,
@@ -157,7 +157,7 @@ export default async function PicksPage({
   // Most Backed is about games still to come: today or later only. A past day has no such card.
   const showBacked = endDateKey >= todayKey;
 
-  const [allPicks, cappers, sports, parlays, sqlSummary, glance, backed, dayConsensus] = await Promise.all([
+  const [loadedPicks, cappers, sports, parlays, sqlSummary, glance, backed, dayConsensus] = await Promise.all([
     // The sport chip is applied in JS below (not in this query) so the sport
     // chips' counts can reflect every sport under the other active filters.
     getFilteredPicksForUser(user.id, { ...filters, sportId: undefined }),
@@ -177,6 +177,8 @@ export default async function PicksPage({
     // The pills count the whole day, never just the rows the filters leave on screen.
     getDayConsensus(user.id, startDateKey, endDateKey),
   ]);
+  // Capper and sport names come from the roster and sports list loaded above, not a per-pick include.
+  const allPicks = await withCapperAndSportNames(loadedPicks, cappers, sports);
 
   // Bet type is derived (betDetail text for NRFI/YRFI), not a stored column,
   // so it's filtered here rather than in the DB query.
