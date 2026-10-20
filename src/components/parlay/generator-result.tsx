@@ -199,6 +199,7 @@ export function GeneratorResult({
   const shownPicks = swap ? swap.legs.map((l) => (l.swap ?? l.original).pick) : legs.map((l) => l.pick);
   const notes = [
     ...parlay.shortfall,
+    ...parlay.mixNotes,
     ...(unavailableTargetLabels.length > 0
       ? [`${unavailableTargetLabels.join(", ")}: started or no longer on the board — not used.`]
       : []),

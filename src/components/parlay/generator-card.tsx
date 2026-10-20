@@ -5,8 +5,8 @@
 //   1 · Your picks - the slip's picks by game, each always in the parlay.
 //   2 · Target games - full slate, or only the games targeted on Live (plus
 //       your picks' games).
-//   3 · Filters - league scope, Include Picks + Pick Mix, max legs per game,
-//       Fill from.
+//   3 · Filters - league scope, Include Picks (All Picks / Moneyline / Spread /
+//       Totals / Props) + Pick Mix, max legs per game, Fill from.
 //   Legs, Clear, Generate parlay - and the result under it.
 //
 // Generate asks the server once (generateParlayAction) for the pool and the
@@ -22,9 +22,10 @@ import { PanelShell, TINTS } from "@/components/dashboard/panel-shell";
 import { BoltIcon } from "@/components/dashboard/cappers-icons";
 import { useParlayPool, type PooledPick } from "@/components/parlay/parlay-pool-context";
 import { CountStepper, LABEL, LegStepper, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, TextSegments } from "@/components/parlay/parlay-controls";
-import { PickMixControl } from "@/components/parlay/pick-mix-control";
+import { IncludePicksChips, PickMixControl } from "@/components/parlay/pick-mix-control";
 import { formatGameTime, formatOdds, GeneratorResult } from "@/components/parlay/generator-result";
-import { INCLUDE_PICKS_OPTIONS, type IncludePicks } from "@/lib/parlay/pick-mix";
+import { reconcileMix, selectedCategories, toggleInclude, type IncludeSelection, type PickMix } from "@/lib/parlay/include-picks";
+import type { BetCategory } from "@/lib/parlay/bet-category";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import { createGeneratorSession, poolKey, type PoolInputs } from "@/lib/parlay/generator-session";
@@ -64,9 +65,15 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
   const slip = useParlayPool();
   const { pool, targets, targetedGames, removedLine, isLeagueInScope, isLeagueLocked, toggleLeague, legCount, setLegCount } = slip;
 
-  const [include, setInclude] = useState<IncludePicks>("ALL");
-  // Kept while Include Picks is switched away; only applied with All.
-  const [mixPct, setMixPct] = useState<number | null>(null);
+  const [include, setInclude] = useState<IncludeSelection>("ALL");
+  // Rows for the selected categories only; follows the selection (reconcileMix).
+  const [mix, setMix] = useState<PickMix | null>(null);
+  const categories = selectedCategories(include);
+  function onToggleInclude(key: "ALL" | BetCategory) {
+    const next = toggleInclude(include, key);
+    setInclude(next);
+    setMix((m) => m && reconcileMix(m, selectedCategories(next)));
+  }
   const [maxPerGame, setMaxPerGame] = useState(1);
   const [fillFromChoice, setFillFrom] = useState<FillFrom>("BEST_AVAILABLE");
   const fillFrom: FillFrom = pool.length === 0 ? "BEST_AVAILABLE" : fillFromChoice;
@@ -83,8 +90,8 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
     [leagues, isLeagueInScope, pool, targets]
   );
   const settings: GeneratorSettings = useMemo(
-    () => ({ legCount, maxLegsPerGame: maxPerGame, include, gameLinesPct: include === "ALL" ? mixPct : null, fillFrom }),
-    [legCount, maxPerGame, include, mixPct, fillFrom]
+    () => ({ legCount, maxLegsPerGame: maxPerGame, include, mix, fillFrom }),
+    [legCount, maxPerGame, include, mix, fillFrom]
   );
   const key = poolKey(inputs);
 
@@ -298,8 +305,8 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           {/* relative: the Pick Mix popover opens under this row, at its width. */}
           <div className="relative mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <span className={LABEL}>Include picks</span>
-            <TextSegments label="Include picks" options={INCLUDE_PICKS_OPTIONS} value={include} onChange={setInclude} />
-            {include === "ALL" && <PickMixControl gameLinesPct={mixPct} legCount={legCount} onChange={setMixPct} />}
+            <IncludePicksChips value={include} onToggle={onToggleInclude} />
+            {categories.length > 1 && <PickMixControl categories={categories} mix={mix} legCount={legCount} onChange={setMix} />}
           </div>
           <div className="mt-3.5">
             <CountStepper

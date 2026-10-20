@@ -125,7 +125,7 @@ const snap = (slate: ReturnType<typeof makeSlate>, slip: string[] = [], targets:
   leagueRecords: slate.leagueRecords,
   categoryRecords: slate.categoryRecords,
 });
-const SETTINGS: GeneratorSettings = { legCount: 4, maxLegsPerGame: 1, include: "ALL", gameLinesPct: null, fillFrom: "BEST_AVAILABLE" };
+const SETTINGS: GeneratorSettings = { legCount: 4, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
 const run = (s: GeneratorSnapshot, over: Partial<GeneratorSettings> = {}, variation: { seed: number; history: string[][] } | null = null) =>
   buildGeneratedParlay(s, { ...SETTINGS, ...over }, variation, NOW);
 const ids = (p: GeneratedParlay) => p.legs.map((l) => l.pick.pickId);
@@ -235,12 +235,12 @@ const slate = makeSlate(BASE);
 // ============================================================================
 {
   const s = makeSlate([...BASE, ...TEAMS.map((_, g) => ({ id: `g${g}p`, game: g, bet: "PROP" as const, wl: [58, 42] as [number, number], player: "Hitter " + "ABCDEFGH"[g] }))]);
-  const r = run(snap(s, ["g0h"]), { include: "PROPS", legCount: 3 });
+  const r = run(snap(s, ["g0h"]), { include: ["PROPS"], legCount: 3 });
   check("Props: every generated leg is a prop", r.legs.filter((l) => l.source === "GENERATED").every((l) => l.pick.betType === "PLAYER_PROP"), true);
   check("Props: the slip's moneyline is still in", ids(r).includes("g0h"), true);
-  const m = run(snap(s, ["g0h"]), { legCount: 4, gameLinesPct: 50 });
+  const m = run(snap(s, ["g0h"]), { legCount: 4, mix: { MONEYLINE: 25, SPREAD: 0, TOTALS: 25, PROPS: 50 } });
   const kinds = m.legs.map((l) => (l.pick.betType === "PLAYER_PROP" ? "P" : "G")).sort().join("");
-  check("mix 50/50 of 4, slip holds a game line: 2 game lines + 2 props overall", kinds, "GGPP");
+  check("mix ML 25 · Totals 25 · Props 50 of 4, slip holds a moneyline: 2 game lines + 2 props overall", kinds, "GGPP");
   const only = run(snap(s, ["g0h", "g1h"]), { legCount: 4, fillFrom: "YOUR_PICKS_ONLY" });
   check("Your picks only: just the slip, and it says so", [ids(only).sort(), only.shortfall], [["g0h", "g1h"], ["Your picks only: 2 picks in your slip. Switch Fill from to Best available to add legs."]]);
   check("Your picks only with an empty slip: Best available", run(snap(s), { legCount: 3, fillFrom: "YOUR_PICKS_ONLY" }).legs.length, 3);

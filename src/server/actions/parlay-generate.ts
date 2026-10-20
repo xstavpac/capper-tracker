@@ -25,7 +25,7 @@ import type { PickCategoryKey } from "@/server/data/stats";
 import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
 import { doubleheaderGameIds } from "@/lib/parlay/doubleheader";
 import { legCapRejection, MAX_POOL_REQUEST_PICKS, type ParlayRejection } from "@/lib/parlay/leg-cap";
-import { toIncludePicks } from "@/lib/parlay/pick-mix";
+import { selectedCategories, toIncludeSelection, toPickMix } from "@/lib/parlay/include-picks";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import {
   buildGeneratedParlay,
@@ -77,6 +77,7 @@ function parseRequest(raw: unknown): GenerateRequest | ParlayRejection {
   const rejection = legCapRejection(legCount);
   if (rejection) return rejection;
   const fillFrom: FillFrom = s.fillFrom === "YOUR_PICKS_ONLY" ? "YOUR_PICKS_ONLY" : "BEST_AVAILABLE";
+  const include = toIncludeSelection(s.include);
   return {
     leagues: Array.from(new Set(leagues as string[])),
     slipPickIds: Array.from(new Set(slipPickIds as string[])),
@@ -84,8 +85,8 @@ function parseRequest(raw: unknown): GenerateRequest | ParlayRejection {
     settings: {
       legCount,
       maxLegsPerGame: typeof s.maxLegsPerGame === "number" ? s.maxLegsPerGame : 1,
-      include: toIncludePicks(s.include),
-      gameLinesPct: typeof s.gameLinesPct === "number" ? s.gameLinesPct : null,
+      include,
+      mix: toPickMix(s.mix, selectedCategories(include)),
       fillFrom,
     },
   };

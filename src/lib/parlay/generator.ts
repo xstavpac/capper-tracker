@@ -19,19 +19,28 @@
 //      plus the games of your picks. Without, from every game in the snapshot.
 //   3. A generated leg must clear the 55% gate on its capper's all-leagues
 //      record in its market (qualifies, qualification-ranking.ts) - the same
-//      gate Hedge and Contrarian use - and pass the Include Picks filter. Slip
-//      picks are never gated or filtered. No minimum sample: candidates are
+//      gate Hedge and Contrarian use - and pass the Include Picks filter
+//      (include-picks.ts: All Picks, or any of Moneyline / Spread / Totals /
+//      Props - betCategory, period ignored). Slip picks are never gated or
+//      filtered. No minimum sample: candidates are
 //      ranked by Wilson lower bound (compareByWilson), which puts a small
 //      sample below a large one at the same win %, and every leg carries its
 //      record so the sample size shows.
 //   4. One generated leg per game first, best games first. Only when games run
 //      out are same-game legs added, up to "max legs per game" counted with any
-//      slip picks on that game. A generated leg never breaks a same-game rule
+//      slip picks on that game - across every category and every period (a
+//      1H / F5 / quarter pick is on its game's board card, so it counts toward
+//      that game). A generated leg never breaks a same-game rule
 //      (same-game-rules.ts) against any leg on its game - not opposing, not a
 //      duplicate at any line, not a second side or game total.
-//   5. A Pick Mix (Include Picks = All) splits the whole parlay between game
-//      lines and props; the slip's own legs count toward it, the generated
-//      legs fill what is left of each share, then any shortfall from the other.
+//   5. A Pick Mix (two or more categories selected) splits the whole parlay
+//      between them by share, scaled to the leg count by largest remainder.
+//      The slip's own legs count toward their category's share, the generated
+//      legs fill what is left of each, then any shortfall from the other
+//      selected categories by normal ranking - a mix never shortens a parlay
+//      and never beats max legs per game or a same-game rule. A category that
+//      came up short is said (mixNotes). An unclassified pick (All Picks only)
+//      counts toward no share.
 //
 // Generate (no `variation`) is deterministic: the same snapshot and settings
 // always give the same parlay. Regenerate (`variation`) gives another parlay of
@@ -57,8 +66,17 @@ import {
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
 import { selectConflictFreeLegs } from "@/lib/parlay/build-my-picks";
 import { toBuildCandidate } from "@/lib/parlay/pool-swap";
-import { classifyPickKind, type PickKind } from "@/lib/parlay/pick-kind";
-import { keepsPick, mixSplit, toGameLinesPct, toIncludePicks, type IncludePicks } from "@/lib/parlay/pick-mix";
+import { betCategory, type BetCategoryResult } from "@/lib/parlay/bet-category";
+import {
+  keepsPick,
+  mixCounts,
+  mixShortNote,
+  selectedCategories,
+  toIncludeSelection,
+  toPickMix,
+  type IncludeSelection,
+  type PickMix,
+} from "@/lib/parlay/include-picks";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { legSetKey } from "@/lib/parlay/parlay-set";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
@@ -89,9 +107,10 @@ export type GeneratorSnapshot = {
 export type GeneratorSettings = {
   legCount: number;
   maxLegsPerGame: number;
-  include: IncludePicks;
-  // A Pick Mix's Game Lines %, or null. Read only with include = ALL.
-  gameLinesPct: number | null;
+  include: IncludeSelection;
+  // A Pick Mix's share per selected category, or null. Read only with two or
+  // more categories selected.
+  mix: PickMix | null;
   fillFrom: FillFrom;
 };
 
@@ -161,6 +180,9 @@ export type GeneratedParlay = {
   // Why the parlay is short of `requested` - empty when it isn't - and, with
   // targets, every targeted game that had nothing to give.
   shortfall: string[];
+  // Each Pick Mix category that couldn't fill its share (the other selected
+  // categories made up the rest).
+  mixNotes: string[];
   // Targeted game ids that are not in the snapshot (started or off the board).
   unavailableTargets: string[];
   dropped: DroppedSlipPick[];
@@ -227,7 +249,7 @@ type Candidate = {
   game: GeneratorGame;
   record: LegRecord;
   wilsonLowerBound: number;
-  kind: PickKind;
+  category: BetCategoryResult;
 };
 
 const byWilson = (a: Candidate, b: Candidate) =>
@@ -254,8 +276,9 @@ const toLegRecord = (r: { wins: number; losses: number; winPct: number }): LegRe
 export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: GeneratorSettings, variation: Variation | null, now: Date): GeneratedParlay {
   const nowMs = now.getTime();
   const started = (iso: string) => new Date(iso).getTime() <= nowMs;
-  const include = toIncludePicks(settings.include);
-  const mixPct = include === "ALL" ? toGameLinesPct(settings.gameLinesPct) : null;
+  const include = toIncludeSelection(settings.include);
+  const categories = selectedCategories(include);
+  const mix = toPickMix(settings.mix, categories);
   const maxPerGame = Math.min(MAX_LEGS_PER_GAME, Math.max(1, Math.floor(settings.maxLegsPerGame) || 1));
   const legCount = Math.min(MAX_PARLAY_LEGS, Math.max(1, Math.floor(settings.legCount) || 1));
 
@@ -310,7 +333,7 @@ export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: Gene
       if (!record || !qualifies(record)) continue;
       // Never against a slip pick on its game.
       if (onGame.some((s) => !(sureOfGame(game, s) && sureOfGame(game, pick)) || sameGameConflict(asCandidate(pick), asCandidate(s)) !== null)) continue;
-      list.push({ pick, game, record: toLegRecord(record), wilsonLowerBound: wilsonLowerBound(record.wins, record.losses), kind: classifyPickKind(pick) });
+      list.push({ pick, game, record: toLegRecord(record), wilsonLowerBound: wilsonLowerBound(record.wins, record.losses), category: betCategory(pick) });
     }
     list.sort(byWilson);
     candidatesOf.set(game.gameId, list);
@@ -330,15 +353,12 @@ export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: Gene
 
   // ---- 5. Selection -----------------------------------------------------------
   const need = fillFrom === "YOUR_PICKS_ONLY" ? 0 : target - slipLegs.length;
-  const slipKinds: Record<PickKind, number> = { GAME_LINE: 0, PROP: 0 };
-  for (const p of slipLegs) slipKinds[classifyPickKind(p)]++;
-  const quota: Record<PickKind, number> | null =
-    mixPct === null
-      ? null
-      : (() => {
-          const split = mixSplit(target, mixPct);
-          return { GAME_LINE: Math.max(0, split.gameLines - slipKinds.GAME_LINE), PROP: Math.max(0, split.props - slipKinds.PROP) };
-        })();
+  const slipCounts = new Map<BetCategoryResult, number>();
+  for (const p of slipLegs) slipCounts.set(betCategory(p), (slipCounts.get(betCategory(p)) ?? 0) + 1);
+  const mixTarget = mix && mixCounts(target, mix, categories);
+  const quota: Partial<Record<BetCategoryResult, number>> | null = mixTarget
+    ? Object.fromEntries(categories.map((c) => [c, Math.max(0, mixTarget[c] - (slipCounts.get(c) ?? 0))]))
+    : null;
 
   const select = (rng: Rng | null, recent: ReadonlySet<string>): Candidate[] => {
     const chosen: Candidate[] = [];
@@ -354,10 +374,12 @@ export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: Gene
     const take = (c: Candidate) => {
       chosen.push(c);
       onGame.set(c.game.gameId, [...(onGame.get(c.game.gameId) ?? []), c.pick]);
-      if (left) left[c.kind]--;
+      if (left && left[c.category] !== undefined) left[c.category]!--;
     };
     const passes: boolean[] = left ? [true, false] : [false];
-    const allows = (c: Candidate, strict: boolean) => !strict || left![c.kind] > 0;
+    // A strict pass takes only what a share still wants. An unclassified pick
+    // has no share, so it waits for the open pass.
+    const allows = (c: Candidate, strict: boolean) => !strict || (left![c.category] ?? 0) > 0;
 
     // Pass 1: one leg per game that has none yet, best games first.
     const open = eligible
@@ -485,6 +507,13 @@ export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: Gene
       );
     }
   }
+  const mixNotes: string[] = [];
+  if (mixTarget && fillFrom === "BEST_AVAILABLE") {
+    for (const c of categories) {
+      const got = legs.filter((l) => betCategory(l.pick) === c).length;
+      if (got < mixTarget[c]) mixNotes.push(mixShortNote(c, got, mixTarget[c]));
+    }
+  }
   if (targeted && fillFrom === "BEST_AVAILABLE") {
     for (const id of snapshot.targets) {
       const game = gameById.get(id);
@@ -503,6 +532,7 @@ export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: Gene
     capacity,
     capacityText,
     shortfall,
+    mixNotes,
     unavailableTargets,
     dropped,
     hedge: buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE"),
@@ -523,7 +553,7 @@ export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: Gene
 function buildSwap(
   legs: EngineLeg[],
   gameById: Map<string, GeneratorGame>,
-  include: IncludePicks,
+  include: IncludeSelection,
   snapshot: GeneratorSnapshot,
   mode: SwapMode
 ): EngineSwap {
