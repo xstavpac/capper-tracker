@@ -341,13 +341,13 @@ async function main() {
       const prop = parseNbaProp("Fox over 1.5 assists")!;
       const base = { nbaRoster: NBA, nhlRoster: NHL, league: null } as const;
       check("rule: both rosters hit -> ask", resolveNbaPropAgainstRosters("Fox over 1.5 assists", prop, base).status, "ask");
-      check("rule: league NBA -> NBA only", resolveNbaPropAgainstRosters("Fox over 1.5 assists", prop, { ...base, league: "NBA" }), { status: "resolved", sport: "NBA", team: "San Antonio Spurs", playerName: "De'Aaron Fox" });
-      check("rule: league NHL -> NHL only", resolveNbaPropAgainstRosters("Fox over 1.5 assists", prop, { ...base, league: "NHL" }), { status: "resolved", sport: "NHL", team: "New York Rangers", playerName: "Adam Fox" });
+      check("rule: league NBA -> NBA only", resolveNbaPropAgainstRosters("Fox over 1.5 assists", prop, { ...base, league: "NBA" }), { status: "resolved", sport: "NBA", team: "San Antonio Spurs", playerName: "De'Aaron Fox", nearMiss: false });
+      check("rule: league NHL -> NHL only", resolveNbaPropAgainstRosters("Fox over 1.5 assists", prop, { ...base, league: "NHL" }), { status: "resolved", sport: "NHL", team: "New York Rangers", playerName: "Adam Fox", nearMiss: false });
       check("rule: an empty NHL roster means NBA alone can answer", resolveNbaPropAgainstRosters("Fox over 1.5 assists", prop, { ...base, nhlRoster: [] }).status, "resolved");
       // A complete slate on which only one same-surname NBA player's team plays settles it (same tiebreak as NFL).
       const james = parseNbaProp("James over 24.5 points")!;
       const lebron = NBA.find((p) => p.playerName === "LeBron James")!;
-      check("rule: a complete slate with one James playing resolves him", resolveNbaPropAgainstRosters("James over 24.5 points", james, { ...base, nbaSlate: { teams: [lebron.team], complete: true } }), { status: "resolved", sport: "NBA", team: lebron.team, playerName: "LeBron James" });
+      check("rule: a complete slate with one James playing resolves him", resolveNbaPropAgainstRosters("James over 24.5 points", james, { ...base, nbaSlate: { teams: [lebron.team], complete: true } }), { status: "resolved", sport: "NBA", team: lebron.team, playerName: "LeBron James", nearMiss: false });
       check("rule: an incomplete slate does not", resolveNbaPropAgainstRosters("James over 24.5 points", james, { ...base, nbaSlate: { teams: [lebron.team], complete: false } }).status, "ask");
     }
 

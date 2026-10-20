@@ -22,15 +22,21 @@
 //     line is ambiguous between sports and stays unresolved (same caution as the team-alias work).
 //     Checked BEFORE any shared-name handling, so such a line never reaches the prompt either:
 //     reason "cross-sport" is a dead end, not a question the user can answer by choosing a player.
+//   - NEAR-MISSES: a name found only by the short-form tier (Alex -> Alexander, Mike -> Michael, a
+//     3-letter first-name prefix) or the typo tier is not the player's own spelling. It resolves on its
+//     own only when exactly one such player's team is in the pick's game (SlateContext.nearMissTeams);
+//     otherwise it is "ambiguous" with reason "near-miss" and goes to the "which player?" prompt (one
+//     suggestion or several), never imported as a guess.
 import { mlbPositionFitsMarket, parseMlbPlayerProp } from "@/lib/mlb-prop";
 import { matchMlbName } from "@/lib/mlb-name-match";
 import type { PlayerCandidate, SlateContext } from "@/lib/player-roster-fallback";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 
 export type MlbRosterResolution =
-  | { status: "resolved"; sport: "MLB"; team: string; playerName: string }
+  // `nearMiss`: the name was matched by a near-miss tier (the pick text should take the roster's spelling).
+  | { status: "resolved"; sport: "MLB"; team: string; playerName: string; nearMiss: boolean; typedName: string }
   // `typedName` is the name as the capper wrote it (the prompt's question is keyed on it).
-  | { status: "ambiguous"; reason: "shared-name" | "cross-sport"; typedName: string; matches: PlayerCandidate[] }
+  | { status: "ambiguous"; reason: "shared-name" | "near-miss" | "cross-sport"; typedName: string; matches: PlayerCandidate[] }
   | { status: "unresolved" };
 
 function toCandidates(players: RosterPlayer[]): PlayerCandidate[] {
@@ -65,6 +71,12 @@ export function resolveMlbPropAgainstRoster(
     }
   }
 
+  if (hit.tier === "short-form" || hit.tier === "fuzzy") {
+    const inGame = slate?.nearMissTeams ? matched.filter((p) => slate.nearMissTeams!.includes(p.team)) : [];
+    if (inGame.length === 1) return { status: "resolved", sport: "MLB", team: inGame[0].team, playerName: inGame[0].playerName, nearMiss: true, typedName: prop.playerName };
+    return { status: "ambiguous", reason: "near-miss", typedName: prop.playerName, matches: toCandidates(matched) };
+  }
+
   let chosen: RosterPlayer | null = matched.length === 1 ? matched[0] : null;
   if (!chosen && slate?.complete) {
     // The one automatic tiebreak: a complete slate on which exactly one candidate's team plays.
@@ -73,5 +85,5 @@ export function resolveMlbPropAgainstRoster(
   }
   if (!chosen) return { status: "ambiguous", reason: "shared-name", typedName: prop.playerName, matches: toCandidates(matched) };
 
-  return { status: "resolved", sport: "MLB", team: chosen.team, playerName: chosen.playerName };
+  return { status: "resolved", sport: "MLB", team: chosen.team, playerName: chosen.playerName, nearMiss: false, typedName: prop.playerName };
 }
