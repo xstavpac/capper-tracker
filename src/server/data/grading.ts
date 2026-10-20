@@ -37,6 +37,7 @@ import {
 } from "@/lib/bet-line";
 import { NCAAF_CANONICAL_SUFFIX, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
 import { recordGradeFailures, noMatchReason, ungradeableReason, type GradeFailure } from "@/server/data/grading-failures";
+import { getSportIdByName } from "@/server/data/sport-ids";
 
 function findMarket(game: OddsGame, key: string) {
   for (const b of game.bookmakers) {
@@ -1576,15 +1577,15 @@ export async function gradeAllPendingPicks(
   sportName: string,
   maxPicks = 500
 ): Promise<{ graded: number; notMatched: number; remaining: number; changedUserIds: Set<string> }> {
-  const sport = await prisma.sport.findUnique({ where: { name: sportName } });
-  if (!sport) return { graded: 0, notMatched: 0, remaining: 0, changedUserIds: new Set() };
+  const sportId = await getSportIdByName(sportName);
+  if (!sportId) return { graded: 0, notMatched: 0, remaining: 0, changedUserIds: new Set() };
 
   // Picks older than the lookback are excluded from auto-grading: they stay
   // PENDING (visible, and manually gradeable via updatePickStatus), but an
   // unmatchable one (bad import: no game, gameTime = import time) can no
   // longer take a queue slot or stretch fetchCandidatePool's window back to
   // its own date on every run.
-  const gradeable = { sportId: sport.id, status: "PENDING" as const, gameTime: { gte: regradeLookbackCutoff() } };
+  const gradeable = { sportId, status: "PENDING" as const, gameTime: { gte: regradeLookbackCutoff() } };
   const totalPending = await prisma.pick.count({ where: gradeable });
   if (totalPending === 0) return { graded: 0, notMatched: 0, remaining: 0, changedUserIds: new Set() };
 
@@ -1608,12 +1609,12 @@ export async function regradeAllFuzzyMatchedPicks(
   sportKey: string,
   sportName: string
 ): Promise<{ checked: number; upgraded: number; changedUserIds: Set<string> }> {
-  const sport = await prisma.sport.findUnique({ where: { name: sportName } });
-  if (!sport) return { checked: 0, upgraded: 0, changedUserIds: new Set() };
+  const sportId = await getSportIdByName(sportName);
+  if (!sportId) return { checked: 0, upgraded: 0, changedUserIds: new Set() };
 
   const fuzzyGraded = await prisma.pick.findMany({
     where: {
-      sportId: sport.id,
+      sportId,
       status: { in: ["WIN", "LOSS", "PUSH"] },
       gradedViaFuzzyMatch: true,
       gameTime: { gte: regradeLookbackCutoff() },

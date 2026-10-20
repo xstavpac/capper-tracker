@@ -67,6 +67,9 @@ export const cacheKeys = {
   // invalidation as nflRosterFullNames: the cron revalidates a league's tag
   // after every committed load of that league.
   rosterRows: (league: string) => `roster-rows:${league.toLowerCase()}`,
+  // Process-local memo key for a sport's id by name (sport-ids.ts). No tag:
+  // sports rows are never renamed or deleted, and a miss is never cached.
+  sportIdByName: (name: string) => `sport-id:${name}`,
   // The /admin ops console's red-dot summary (server/data/admin-status.ts): one
   // entry shared by the admins, no user data in it. TTL only - the tab pages
   // read fresh, so a dot can trail its page by up to the TTL.
