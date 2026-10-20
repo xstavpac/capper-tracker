@@ -299,11 +299,19 @@ async function main() {
   type CreatedLeg = { betDetail: string; odds: number; line: number | null };
   const created: CreatedLeg[][] = [];
   const db = prisma as unknown as Record<string, Record<string, unknown>>;
-  db.capper.findMany = async () => [{ id: "capper-leg-test", name: "Leg Tester" }];
+  // The roster read: what it asked for, answered with the only columns it may use.
+  const capperReads: unknown[] = [];
+  db.capper.findMany = async (args: unknown) => {
+    capperReads.push(args);
+    return [{ id: "capper-leg-test", name: "Leg Tester" }];
+  };
   db.capper.findFirst = async () => ({ id: "capper-leg-test" });
   db.sport.findFirst = async () => ({ id: "sport-nfl" });
+  const parlayCappers: unknown[] = [];
   db.parlayBet.create = async (args: unknown) => {
-    created.push((args as { data: { legs: { create: CreatedLeg[] } } }).data.legs.create);
+    const data = (args as { data: { capperId?: unknown; capper?: unknown; legs: { create: CreatedLeg[] } } }).data;
+    parlayCappers.push(data.capperId ?? data.capper);
+    created.push(data.legs.create);
     return { id: "parlay-" + created.length };
   };
 
@@ -357,6 +365,8 @@ async function main() {
   check("leg with the capper's own price keeps it", legOf("Buccaneers +3.5 +105"), { line: 3.5, odds: 105 });
   check("leg with no line on the feed: the whole parlay is rejected, nothing priced", legOf("Bears -3"), null);
 
+  check("the parlay import reads the roster's id and name only", capperReads.map((a) => (a as { select?: unknown }).select ?? "every column"), [{ id: true, name: true }]);
+  check("both parlays attach to the existing capper (matched by name)", JSON.stringify(parlayCappers).split("capper-leg-test").length - 1, 2);
   check("the Odds API was never called", oddsApiCalls, 0);
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);
