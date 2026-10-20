@@ -135,7 +135,7 @@ console.log("\n########## 2: period in parentheses + first-half shorthands #####
 
 console.log("\n########## 3: Miami (OH) ##########");
 {
-  for (const line of ["Miami (Ohio) -3", "Miami of Ohio -3", "Miami Ohio -5", "Miami RedHawks", "Miami (OH) -3", "Miami (OH) RedHawks -3"]) {
+  for (const line of ["Miami (Ohio) -3", "Miami of Ohio -3", "Miami Ohio -5", "Miami RedHawks ML", "Miami (OH) -3", "Miami (OH) RedHawks -3"]) {
     const pick = firstPick(line);
     check(`'${line}' -> NCAAF Miami (OH) RedHawks only`, { sport: pick?.sportName, teams: canonicalTeams(line), ambiguous: pick?.ambiguousKey }, { sport: "NCAAF", teams: ["miami (oh) redhawks"], ambiguous: undefined });
   }

@@ -192,9 +192,11 @@ function main() {
 
   // --- Controls: nothing else changes ---------------------------------------
   // Capper headers that share vocabulary with a prop keep parsing as headers.
-  for (const header of ["KRASH", "RBS", "HOOP DEALER", "HR Kings", "Hits Only", "Points Guru", "Saves Sam", "Total Bases Tom"]) {
+  // "HR" is a market word (parse-catalog.ts hasBetContent), so "HR Kings"
+  // needs the "*" capper marker.
+  for (const header of ["KRASH", "RBS", "HOOP DEALER", "*HR Kings", "Hits Only", "Points Guru", "Saves Sam", "Total Bases Tom"]) {
     const r = parseCatalog(header + "\nMLB Yankees ML");
-    check(`header stays a capper name: "${header}"`, [r.picks.map((p) => p.capperName), r.unresolved.length], [[header], 0]);
+    check(`header stays a capper name: "${header}"`, [r.picks.map((p) => p.capperName), r.unresolved.length], [[header.replace(/^\*/, "")], 0]);
   }
   // A capper's own record tagline is not a prop.
   {

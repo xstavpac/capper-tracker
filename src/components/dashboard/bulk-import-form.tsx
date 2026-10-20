@@ -48,6 +48,7 @@ import {
   type ReviewPickState,
   describeUnresolvedLines,
   unresolvedReasonBreakdown,
+  splitByCapper,
 } from "@/lib/bulk-import-summary";
 import { betTypeLabel } from "@/lib/bet-line";
 import { capperInitials, formatOdds } from "@/lib/pick-display";
@@ -76,6 +77,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // silently misread as a capper name that then swallows every real pick
   // after it.
   const [unresolvedLines, setUnresolvedLines] = useState<string[]>([]);
+  // Raw lines of picks / parlays with no capper header above them - held
+  // back from the import until the user adds a capper (see splitByCapper).
+  const [noCapperLines, setNoCapperLines] = useState<string[]>([]);
   // Specific per-line failure reasons from the server recovery pass (line text -> reason).
   const [unresolvedReasons, setUnresolvedReasons] = useState<Record<string, string>>({});
   // Indices in `parsed` for picks the static parser couldn't place and the
@@ -124,6 +128,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     // client-side the same way skippedDuplicates is, since the pre-submit
     // "couldn't be identified" section disappears once `parsed` is cleared.
     skippedUnresolvedLines: string[];
+    // Picks / parlays held back for having no capper header above them.
+    skippedNoCapper: string[];
     // Ambiguous-team picks still awaiting a manual choice ("Cardinals?")
     // at the moment Import was clicked.
     skippedAmbiguous: string[];
@@ -290,7 +296,8 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
       unresolvedCapperNames,
       droppedAsHeaders,
     } = parseCatalog(text, existingCapperNames, rosterFullNames, feedTeams);
-    setParlays(parlayItems);
+    const parlaySplit = splitByCapper(parlayItems);
+    setParlays(parlaySplit.withCapper);
     // Last-resort pass: hand the lines parseCatalog couldn't place to the
     // server, which checks them against the real team names on today's live
     // schedule + odds board (see recoverUnresolvedPicksAction). Only an
@@ -322,20 +329,25 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     // takes the user from the session, so this can't affect the import.
     const capperForUnresolved = new Map<string, string>();
     unresolved.forEach((line, i) => {
-      if (!capperForUnresolved.has(line)) capperForUnresolved.set(line, unresolvedCapperNames[i] ?? "Unknown");
+      if (!capperForUnresolved.has(line)) capperForUnresolved.set(line, unresolvedCapperNames[i] ?? "");
     });
     const silent = droppedAsHeaders.map((l) => ({ ...l, reason: "Read as a capper header but looks like a pick" }));
     if (silent.length > 0 || unresolvedAfter.length > 0) {
       void logParseSkippedLinesAction({
         silent,
-        unresolved: unresolvedAfter.map((t) => ({ text: t, capperName: capperForUnresolved.get(t) ?? "Unknown", reason: recoveryReasons[t] })),
+        unresolved: unresolvedAfter.map((t) => ({ text: t, capperName: capperForUnresolved.get(t) ?? "", reason: recoveryReasons[t] })),
         recoveryRan,
       }).catch(() => {});
     }
-    // autoResolveAmbiguousPicks preserves array order and length, so the
-    // recovered picks keep the tail slots they were appended into.
-    setRecoveredIndices(new Set(recovered.map((_, i) => items.length + i)));
-    const outcome = await autoResolveAmbiguousPicks(effectiveItems, ambiguousChoices);
+    // A pick with no capper header above it is held back, never imported
+    // under a placeholder: the user is asked to add the capper's name.
+    const pickSplit = splitByCapper(effectiveItems);
+    setNoCapperLines([...pickSplit.noCapper, ...parlaySplit.noCapper]);
+    // autoResolveAmbiguousPicks preserves array order and length, so each
+    // recovered pick keeps its slot in pickSplit.withCapper.
+    const recoveredSet = new Set(recovered);
+    setRecoveredIndices(new Set(pickSplit.withCapper.flatMap((p, i) => (recoveredSet.has(p) ? [i] : []))));
+    const outcome = await autoResolveAmbiguousPicks(pickSplit.withCapper, ambiguousChoices);
     setResolving(false);
     setParsed(outcome.picks);
     setAmbiguityLog(outcome.logs.map((l) => ({ key: l.ambiguousName, sport: l.resolvedSport, method: l.method, count: l.pickCount })));
@@ -623,6 +635,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     const skippedDuplicates = skippedDuplicateEntries.map((e) => dedupeLabel(e.p));
     const skippedAmbiguous = ambiguousEntries.map((e) => e.p.capperName + ' - "' + e.p.raw + '"');
     const skippedUnresolvedLines = unresolvedLines;
+    const skippedNoCapper = noCapperLines;
     // totalLinePendingIdx deliberately excludes anything already counted in
     // skippedDuplicateEntries (see partitionReviewEntries) - a pick flagged
     // for both reasons at once must land in exactly one category, or the
@@ -717,6 +730,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
           ambiguousUnanswered: skippedAmbiguous,
           totalLinePending: skippedTotalLinePending,
           duplicates: skippedDuplicates,
+          noCapper: skippedNoCapper,
           serverSkipped: res.skipped,
         }),
         errors: res.errors,
@@ -725,6 +739,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         skippedDuplicates,
         serverDuplicates: res.duplicatesSkipped,
         skippedUnresolvedLines,
+        skippedNoCapper,
         skippedAmbiguous,
         skippedTotalLinePending,
         pickLimitBlocked: res.pickLimitBlocked,
@@ -739,6 +754,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
         setParsed(null);
         setParlays([]);
         setUnresolvedLines([]);
+        setNoCapperLines([]);
         setUnresolvedReasons({});
         setText("");
       }
@@ -792,7 +808,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     return dupPending || totalPending;
   }
   const readyCount = includedPicks.length + parlays.length;
-  const reviewCount = allEntries.filter(needsReview).length;
+  const reviewCount = allEntries.filter(needsReview).length + noCapperLines.length;
   const dupCheckStatus = duplicateCheckStatus(dupChecksPending, dupCheckFailed);
   const canImport =
     !(includedPicks.length === 0 && skippedDuplicateEntries.length === 0 && parlays.length === 0) &&
@@ -821,6 +837,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setParsed(null);
     setParlays([]);
     setUnresolvedLines([]);
+    setNoCapperLines([]);
     setUnresolvedReasons({});
     setResult(null);
     setImportError(null);
@@ -1120,10 +1137,31 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
 
             {parsed && (
               <div className="mt-3 space-y-4">
-                {capperGroups.length === 0 && parlays.length === 0 && (
+                {capperGroups.length === 0 && parlays.length === 0 && noCapperLines.length === 0 && (
                   <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
                     No picks found in this paste.
                   </p>
+                )}
+
+                {noCapperLines.length > 0 && (
+                  <div className="rounded-lg border border-amber-400 bg-amber-50/60 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-500/5 dark:text-amber-200">
+                    <h3 className="text-sm font-semibold">
+                      {noCapperLines.length === 1 ? "1 pick has no capper" : noCapperLines.length + " picks have no capper"}
+                    </h3>
+                    <p className="mt-1">
+                      Nothing above {noCapperLines.length === 1 ? "it" : "them"} names who posted{" "}
+                      {noCapperLines.length === 1 ? "it" : "them"}, so {noCapperLines.length === 1 ? "it" : "they"} won&apos;t be
+                      imported. Add the capper&apos;s name on its own line above {noCapperLines.length === 1 ? "it" : "them"}, then
+                      check again.
+                    </p>
+                    <ul className="mt-1.5 space-y-1">
+                      {noCapperLines.map((line, i) => (
+                        <li key={i} className="break-words font-mono">
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
 
                 {capperGroups.map((group) => {
@@ -1566,6 +1604,12 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                   items={result.skippedUnresolvedLines}
                   title={(n) => n + " couldn't read"}
                   note="Couldn't be matched to a sport or team - not imported and not attributed to any capper."
+                  mono
+                />
+                <ResultGroup
+                  items={result.skippedNoCapper}
+                  title={(n) => n + " skipped with no capper"}
+                  note="Nothing above them named a capper. Add the capper's name on its own line above them and import them again."
                   mono
                 />
                 <ResultGroup

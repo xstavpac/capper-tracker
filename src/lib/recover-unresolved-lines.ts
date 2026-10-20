@@ -262,7 +262,7 @@ export function recoverUnresolvedLines(
 
   for (let i = 0; i < unresolved.length; i++) {
     const line = unresolved[i];
-    const capperName = unresolvedCapperNames[i] ?? "Unknown";
+    const capperName = unresolvedCapperNames[i] ?? "";
     // Same "Game 2"/"G2"/... extraction parseCatalog's own picks already get
     // (see parse-catalog.ts's extractGameNumber) - a recovered line never
     // went through that extraction the first time, since it only failed to

@@ -77,14 +77,14 @@ function main() {
     check("case3: nothing pushed to unresolved for a directly-resolved pick", unresolved, []);
   }
 
-  // Case 4: genuinely unattributed input (no header line at all) still
-  // behaves as "Unknown" - not silently guessed at from an unrelated
-  // nearby capper.
+  // Case 4: genuinely unattributed input (no header line at all) carries no
+  // capper ("") - never guessed from an unrelated nearby capper, never a
+  // placeholder. The import blocks it and asks for a capper.
   {
     const { unresolved, unresolvedCapperNames } = parseCatalog("mike evans over 56.5 rec yards", []);
-    check("case4: no header at all -> unresolvedCapperNames is 'Unknown'", unresolvedCapperNames, ["Unknown"]);
+    check("case4: no header at all -> unresolvedCapperNames is ''", unresolvedCapperNames, [""]);
     const { recovered } = recoverUnresolvedLines(unresolved, unresolvedCapperNames, liveTeams, roster);
-    check("case4: recovered pick (roster still resolves the player) is attributed 'Unknown'", recovered[0]?.capperName, "Unknown");
+    check("case4: recovered pick (roster still resolves the player) has no capper", recovered[0]?.capperName, "");
   }
 
   // Case 5: a genuinely unmatched player (not on the fixture roster) stays

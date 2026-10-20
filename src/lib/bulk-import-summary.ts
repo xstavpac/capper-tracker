@@ -119,6 +119,8 @@ export type SkippedPickCategories = {
   // Picks flagged as a possible duplicate that were excluded (explicit
   // "Skip", or never answered - see isSkippedAsDuplicate).
   duplicates: string[];
+  // Picks and parlays with no capper header above them (see splitByCapper).
+  noCapper: string[];
   // Picks that WERE sent to bulkImportPicksAction but the server itself
   // couldn't persist (BulkImportResult.skipped - no live-schedule match, or
   // a per-item error).
@@ -131,8 +133,22 @@ export function totalSkipped(categories: SkippedPickCategories): number {
     categories.ambiguousUnanswered.length +
     categories.totalLinePending.length +
     categories.duplicates.length +
+    categories.noCapper.length +
     categories.serverSkipped
   );
+}
+
+// parseCatalog leaves capperName "" on a pick with no capper header above it.
+// Such a pick is never imported under a placeholder: it is held back, its raw
+// line shown, and the user asked to add the capper's name above it.
+export function splitByCapper<T extends { capperName: string; raw: string }>(items: T[]): { withCapper: T[]; noCapper: string[] } {
+  const withCapper: T[] = [];
+  const noCapper: string[] = [];
+  for (const item of items) {
+    if (item.capperName.trim()) withCapper.push(item);
+    else noCapper.push(item.raw);
+  }
+  return { withCapper, noCapper };
 }
 
 // ---------------------------------------------------------------------------

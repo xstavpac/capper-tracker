@@ -101,9 +101,9 @@ expect(
 );
 expect(
   "parse: plain NHL moneylines are unchanged",
-  shape(["Oilers ML", "Oilers", "Oilers moneyline -130", "Oilers ML 1st period"]).map((r) => [r[1], r[2], r[3]]),
+  // A bare "Oilers" is a capper header (parse-catalog.ts hasBetContent), not a moneyline.
+  shape(["Oilers ML", "Oilers moneyline -130", "Oilers ML 1st period"]).map((r) => [r[1], r[2], r[3]]),
   [
-    ["NHL", "MONEYLINE", "FULL_GAME"],
     ["NHL", "MONEYLINE", "FULL_GAME"],
     ["NHL", "MONEYLINE", "FULL_GAME"],
     ["NHL", "MONEYLINE", "FIRST_PERIOD"],
