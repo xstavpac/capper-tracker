@@ -450,11 +450,12 @@ function OlderPicks({
   ) : null;
 
   if (link) return <div className="flex justify-center py-1">{control}</div>;
+  // One hairline between blocks: the card (or the Settled rows above) already draws the top one.
   const body = (
-    <>
+    <div className="divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
       {days.map((day) => (
         <div key={day.dayKey}>
-          <div className={"border-y border-[#0F1420]/[0.06] bg-[#F7F8FB] px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] dark:border-white/10 dark:bg-white/[0.03] sm:px-5 " + MUTED}>
+          <div className={"border-b border-[#0F1420]/[0.06] bg-[#F7F8FB] px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] dark:border-white/10 dark:bg-white/[0.03] sm:px-5 " + MUTED}>
             {dayHeading(day.rows[0].gameTimeIso)}
           </div>
           <div className="divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
@@ -465,7 +466,7 @@ function OlderPicks({
         </div>
       ))}
       {control}
-    </>
+    </div>
   );
   if (!bare) return <div className="overflow-hidden rounded-b-[17px]">{body}</div>;
   return (
