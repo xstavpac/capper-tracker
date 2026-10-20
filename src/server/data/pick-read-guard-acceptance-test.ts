@@ -59,6 +59,7 @@ const ALLOWLIST: Record<string, string[]> = {
   ],
   "src/server/data/parlay-slip-picks.ts": ["id IN the slip's pick ids (<= MAX_POOL_REQUEST_PICKS)"],
   "src/server/data/pick-dedup.ts": ["existingPicksWhere, inside the insert transaction"],
+  "src/server/data/picks-older.ts": ["Load older picks: keyset page, take: 51, at most 3 per click (18 columns)"],
   "src/server/data/picks.ts": [
     "status PENDING (the pending-triage list)",
     "the Picks page's Eastern date range",
