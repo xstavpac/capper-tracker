@@ -22,8 +22,9 @@
 //   - league scope: every league is on unless switched off; a league with a
 //     pick or a target in the slip can't be switched off, and adding one
 //     switches its league back on. Only the switched-off leagues are stored.
-//   - Live's slip mode is still the old add mode (ticks, then Confirm) until
-//     Live's own slip mode lands; Send to generator confirms and turns it off.
+//   - Live's slip mode: its checkboxes write straight into the slip (no
+//     Confirm). It lives in memory only - it survives a client-side nav, turns
+//     off on Send to generator or Exit, and a reload never brings it back.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getSlipPickStatesAction } from "@/server/actions/parlay-slip";
@@ -88,18 +89,14 @@ type ParlayPoolContextValue = {
   legCount: number;
   setLegCount: (n: number) => void;
 
-  // ---- Live's slip mode (still the old add mode until Live's slip mode lands) ----
-  addMode: boolean;
+  // ---- Live's slip mode (in memory only) ----
   slipMode: boolean;
-  checkedPicks: Map<string, PooledPick>;
-  enterAddMode: () => void;
-  toggleChecked: (pick: PooledPick) => void;
-  confirmAdd: () => void;
-  discardAdd: () => void;
-  // Confirms anything still ticked, then turns slip mode off.
+  enterSlipMode: () => void;
+  exitSlipMode: () => void;
+  // Turns slip mode off; the caller then goes to /parlay.
   sendToGenerator: () => void;
-  // How many picks the last add was over MAX_PARLAY_LEGS by - set when it was
-  // refused, null otherwise. Cleared as soon as the selection changes.
+  // Set (to 1) when a pick was refused at the leg cap, null otherwise.
+  // Cleared by the next change.
   overCapBy: number | null;
   dismissOverCap: () => void;
 
@@ -137,8 +134,8 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   const [targets, setTargets] = useState<SlipGame[]>([]);
   const [excludedLeagues, setExcludedLeagues] = useState<string[]>([]);
   const [legCount, setLegCountState] = useState(EMPTY_LEGACY.legCount);
-  const [addMode, setAddMode] = useState(false);
-  const [checkedPicks, setCheckedPicks] = useState<Map<string, PooledPick>>(new Map());
+  // Live's slip mode. In memory only: never stored, so a reload never brings it back.
+  const [slipMode, setSlipMode] = useState(false);
   const [overCapBy, setOverCapBy] = useState<number | null>(null);
   const [removed, setRemoved] = useState<RemovedLine | null>(null);
   // Guards the persist effect below - without it, that effect's own first
@@ -184,8 +181,6 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
         stored = parsed.picks;
         setExcludedLeagues(parsed.excludedLeagues);
         setLegCountState(Math.min(MAX_PARLAY_LEGS, parsed.legacy.legCount));
-        if (parsed.legacy.addMode) setAddMode(true);
-        if (parsed.legacy.checkedPicks.length > 0) setCheckedPicks(new Map(parsed.legacy.checkedPicks.map((p) => [p.pickId, p])));
         // A target whose game started has nothing left to give: dropped quietly.
         setTargets(unstarted(parsed.targets, Date.now()));
       }
@@ -237,13 +232,13 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
         picks: pool,
         targets,
         excludedLeagues,
-        legacy: { addMode, legCount, checkedPicks: Array.from(checkedPicks.values()) },
+        legacy: { legCount },
       };
       window.localStorage.setItem(storageKey(userId), serializeSlip(data));
     } catch {
       // Best-effort persistence only - a full localStorage or a private window is not fatal.
     }
-  }, [userId, pool, targets, excludedLeagues, legCount, addMode, checkedPicks, hydrated]);
+  }, [userId, pool, targets, excludedLeagues, legCount, hydrated]);
 
   // Re-check the slip against the DB. Only picks that were in it when the
   // request went out are touched, so one added mid-flight is left alone.
@@ -361,57 +356,19 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
 
   const dismissOverCap = useCallback(() => setOverCapBy(null), []);
 
-  const enterAddMode = useCallback(() => {
-    setCheckedPicks(new Map());
+  const enterSlipMode = useCallback(() => {
     setOverCapBy(null);
-    setAddMode(true);
+    setSlipMode(true);
   }, []);
 
-  const toggleChecked = useCallback((pick: PooledPick) => {
+  const exitSlipMode = useCallback(() => {
     setOverCapBy(null);
-    setCheckedPicks((prev) => {
-      const next = new Map(prev);
-      if (next.has(pick.pickId)) next.delete(pick.pickId);
-      else next.set(pick.pickId, pick);
-      return next;
-    });
+    setSlipMode(false);
   }, []);
 
-  // Refuses a selection that would take the slip past MAX_PARLAY_LEGS picks -
-  // adds nothing and says so, rather than adding only the picks that fit.
-  const confirmAdd = useCallback(() => {
-    const held = new Set(poolRef.current.map((p) => p.pickId));
-    uncheckedStoredRef.current.forEach((id) => held.add(id));
-    const adding = Array.from(checkedPicks.values()).filter((p) => !held.has(p.pickId));
-    const over = held.size + adding.length - MAX_PARLAY_LEGS;
-    if (adding.length > 0 && over > 0) {
-      // Stay in add mode with the selection intact, so the user can untick
-      // down to the cap instead of starting over.
-      setOverCapBy(over);
-      return;
-    }
-    setOverCapBy(null);
-    const existingIds = new Set(poolRef.current.map((p) => p.pickId));
-    const additions = Array.from(checkedPicks.values()).filter((p) => !existingIds.has(p.pickId));
-    poolRef.current = [...poolRef.current, ...additions];
-    setPool(poolRef.current);
-    // A new pick switches its league on, even one the user had switched off.
-    switchOn(Array.from(new Set(additions.map((p) => p.leagueName))));
-    setCheckedPicks(new Map());
-    setAddMode(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- switchOn only calls a state setter
-  }, [checkedPicks]);
-
-  const discardAdd = useCallback(() => {
-    setOverCapBy(null);
-    setCheckedPicks(new Map());
-    setAddMode(false);
-  }, []);
-
-  const sendToGenerator = useCallback(() => {
-    if (checkedPicks.size > 0) confirmAdd();
-    else discardAdd();
-  }, [checkedPicks, confirmAdd, discardAdd]);
+  // The picks are already in the slip (checkboxes write straight in); sending
+  // is just leaving slip mode.
+  const sendToGenerator = exitSlipMode;
 
   const clearSlip = useCallback(() => {
     const empty = clearedSlip(modelState());
@@ -419,8 +376,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     targetsRef.current = empty.targets;
     setPool(empty.picks);
     setTargets(empty.targets);
-    setCheckedPicks(new Map());
-    setAddMode(false);
+    setSlipMode(false);
     setOverCapBy(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the refs, not render state
   }, []);
@@ -445,13 +401,9 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     toggleLeague,
     legCount,
     setLegCount,
-    addMode,
-    slipMode: addMode,
-    checkedPicks,
-    enterAddMode,
-    toggleChecked,
-    confirmAdd,
-    discardAdd,
+    slipMode,
+    enterSlipMode,
+    exitSlipMode,
     sendToGenerator,
     overCapBy,
     dismissOverCap,

@@ -20,7 +20,7 @@ export function LiveBanner({ activeSport, isGrid }: { activeSport: string; isGri
   return (
     <NavyBanner>
       <LiveBannerRow leagues={leagues} league={activeSport} views={views} view={view}>
-        <ParlaySlipButton dark />
+        <ParlaySlipButton />
       </LiveBannerRow>
     </NavyBanner>
   );
