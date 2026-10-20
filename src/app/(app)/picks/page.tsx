@@ -18,7 +18,7 @@ import { deleteParlayAction } from "@/server/actions/parlays";
 import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
 import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
 import { PicksFilterBar } from "@/components/picks/picks-filter-bar";
-import { PickLedger, type LedgerRow, type LedgerSectionSummary } from "@/components/picks/pick-ledger";
+import { PickLedger, type LedgerSectionSummary } from "@/components/picks/pick-ledger";
 import { PicksSummaryStrip } from "@/components/picks/picks-summary-strip";
 import { DateNavigator } from "@/components/picks/date-navigator";
 import { AtAGlance, GlanceCapperCard, MostBackedCard, type MostBackedItem } from "@/components/picks/at-a-glance";
@@ -30,19 +30,9 @@ import {
   visibleBetTypeOptionsForChipSet,
   type BetTypeFilterKey,
 } from "@/lib/bet-type-filter";
-import {
-  buildPickLabel,
-  marketTag,
-  splitIntoSections,
-  pickPhase,
-  dayConsensusHints,
-  sideLabel,
-  capperInitials,
-  formatOdds,
-  winUnits,
-  type LedgerPickInput,
-  type PickPhase,
-} from "@/lib/pick-display";
+import { marketTag, splitIntoSections, dayConsensusHints, sideLabel, winUnits } from "@/lib/pick-display";
+import { toLedgerPick, toLedgerRow } from "@/server/data/picks-ledger-rows";
+import { olderPicksQueryKey, type OlderPicksQuery } from "@/lib/older-picks";
 import { formatPickLabel } from "@/lib/bet-line";
 import type { PickStatus } from "@prisma/client";
 import { ImageBanner } from "@/components/ui/ImageBanner";
@@ -91,10 +81,6 @@ function periodBadgeLabel(period: string, sportName: string | undefined): string
 // just whichever one happens to be selected server-side at render time.
 function computeVisibleBetTypeOptions(sportName: string | undefined): { value: BetTypeFilterKey; label: string }[] {
   return visibleBetTypeOptionsForChipSet(chipSetForSport(sportName));
-}
-
-function fmtUnits(n: number): string {
-  return String(Math.round(n * 100) / 100);
 }
 
 export default async function PicksPage({
@@ -247,30 +233,7 @@ export default async function PicksPage({
   // "Default" means the chip reads Today with nothing to clear.
   const dateIsDefault = !isRange && startDateKey === todayKey;
 
-  const ledgerPicks: (LedgerPickInput & { source: (typeof picks)[number]; phase: PickPhase })[] = picks.map((p) => ({
-    id: p.id,
-    capperId: p.capperId,
-    sportName: p.sport.name,
-    homeTeam: p.homeTeam,
-    awayTeam: p.awayTeam,
-    betType: p.betType,
-    betDetail: p.betDetail,
-    line: p.line,
-    period: p.period,
-    pickedSide: p.pickedSide,
-    odds: p.odds,
-    status: p.status,
-    gameTime: p.gameTime,
-    category: p.category,
-    phase: pickPhase({
-      status: p.status,
-      gameTime: p.gameTime,
-      now,
-      hasFinalResult: finalScores.has(p.id),
-      feedStatus: feedStatuses.get(p.id)?.status ?? null,
-    }),
-    source: p,
-  }));
+  const ledgerPicks = picks.map((p) => toLedgerPick(p, { now, finalScores, feedStatuses }));
   const hints = dayConsensusHints(ledgerPicks, dayConsensus);
   // Each consensus pill and each Most Backed row opens its game's Live page, where the slate has it.
   const gameKey = (g: { sportName: string; homeTeam: string; awayTeam: string; gameTime: Date }) => [g.sportName, g.homeTeam, g.awayTeam, g.gameTime.getTime()].join("|");
@@ -287,6 +250,16 @@ export default async function PicksPage({
     cappers: r.cappers,
     href: gameHrefs.get(gameKey(r)) ?? null,
   }));
+  // What "Load older picks" follows: the page's own filters, and the first day of the window it
+  // shows (older rows are strictly before it - the resolved key, so a click after midnight can't
+  // move the window under the rows already on screen).
+  const olderQuery: OlderPicksQuery = {
+    capperId: filters.capperId,
+    sportId: sportIdFilter,
+    status: filters.status,
+    betType: betTypeFilter,
+    before: startDateKey,
+  };
   const livePicks = ledgerPicks.filter((p) => p.phase === "live").length;
   const laterPicks = ledgerPicks.filter((p) => p.phase === "pending").length;
 
@@ -308,40 +281,15 @@ export default async function PicksPage({
   const sections = splitIntoSections(ledgerPicks).map((section) => ({
     key: section.key,
     summary: section.key === "settled" ? sectionSummary(section.picks) : undefined,
-    rows: section.picks.map((lp): LedgerRow => {
-      const p = lp.source;
-      const rec = capperRecords.get(p.capperId);
-      const score = finalScores.get(p.id);
-      const liveScore = feedStatuses.get(p.id)?.score ?? null;
-      const decidedUnits =
-        p.status === "WIN"
-          ? "+" + fmtUnits(winUnits(p.units, p.odds)) + "u"
-          : p.status === "LOSS"
-            ? "-" + fmtUnits(p.units) + "u"
-            : null;
-      return {
-        id: p.id,
-        sportName: p.sport.name,
-        gameTimeIso: p.gameTime.toISOString(),
-        label: buildPickLabel(lp),
-        tag: marketTag({ betType: p.betType, period: p.period, sportName: p.sport.name, betDetail: p.betDetail }),
-        capperId: p.capperId,
-        capperName: p.capper.name,
-        capperInitials: capperInitials(p.capper.name),
-        capperRecord: rec ? rec.wins + "-" + rec.losses : null,
-        matchup: score
-          ? p.awayTeam + " " + score.away + " @ " + p.homeTeam + " " + score.home + " (Final)"
-          : p.awayTeam + " @ " + p.homeTeam,
-        oddsText: formatOdds(p.odds),
-        unitsText: fmtUnits(p.units) + "u",
-        phase: lp.phase,
-        currentStatus: p.status,
-        liveScore: liveScore ? liveScore.away + "-" + liveScore.home : null,
-        resultUnitsText: decidedUnits,
-        consensus: hints.get(p.id) ?? null,
-        consensusHref: hints.has(p.id) ? (gameHrefs.get(gameKey(lp)) ?? null) : null,
-      };
-    }),
+    rows: section.picks.map((lp) =>
+      toLedgerRow(lp, {
+        capperRecords,
+        finalScores,
+        feedStatuses,
+        consensus: hints.get(lp.id) ?? null,
+        consensusHref: hints.has(lp.id) ? (gameHrefs.get(gameKey(lp)) ?? null) : null,
+      })
+    ),
   }));
 
   return (
@@ -389,21 +337,23 @@ export default async function PicksPage({
             rangeClamped={clamped}
           />
 
-          {picks.length === 0 ? (
+          {picks.length === 0 && (
             <div className={"rounded-[18px] border p-10 text-center " + TINTS.neutral.card}>
               <p className="text-[13px] font-medium text-muted-foreground">
                 {hasActiveFilters ? "No picks match these filters." : "No picks for this day yet."}
               </p>
             </div>
-          ) : (
-            // Keyed by the day, so a new day starts from its own defaults (Settled open or closed, 25 rows).
-            <PickLedger
-              key={startDateKey + ":" + endDateKey}
-              sections={sections}
-              showDate={isRange}
-              collapseSettled={dateIsDefault && sections.some((s) => s.key !== "settled")}
-            />
           )}
+          {/* Keyed by the day, so a new day starts from its own defaults (Settled open or closed, 25 rows,
+              no older picks loaded). */}
+          <PickLedger
+            key={startDateKey + ":" + endDateKey}
+            sections={sections}
+            showDate={isRange}
+            collapseSettled={dateIsDefault && sections.some((s) => s.key !== "settled")}
+            olderQuery={olderQuery}
+            olderQueryKey={olderPicksQueryKey(olderQuery)}
+          />
         </div>
 
         {parlays.length > 0 && (
