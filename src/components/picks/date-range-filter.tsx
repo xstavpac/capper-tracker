@@ -12,7 +12,7 @@ const DATE_INPUT_CLASS =
 // second date input; toggling back drops it, so submitting the surrounding
 // form always sends exactly one of `date` or `startDate`+`endDate`, never
 // both - the server only needs to handle one shape at a time (see
-// PicksPage's resolveDateFilter).
+// resolveDateFilter in lib/picks-header.ts).
 export function DateRangeFilter({
   initialDate,
   initialStartDate,

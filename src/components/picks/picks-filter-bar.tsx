@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DateRangeFilter } from "@/components/picks/date-range-filter";
 import type { BetTypeFilterKey } from "@/lib/bet-type-filter";
 import { SportIcon } from "@/components/picks/sport-icon";
-import type { SportChip } from "@/lib/picks-header";
+import { MAX_PICKS_RANGE_DAYS, type SportChip } from "@/lib/picks-header";
 
 type Option = { value: string; label: string };
 
@@ -137,6 +137,7 @@ export function PicksFilterBar({
   dateStart,
   dateEnd,
   isRange,
+  rangeClamped,
 }: {
   cappers: Option[];
   // Already ordered by count; `more` overflows into the More dropdown.
@@ -148,6 +149,8 @@ export function PicksFilterBar({
   dateStart: string;
   dateEnd: string;
   isRange: boolean;
+  // The requested range was longer than MAX_PICKS_RANGE_DAYS and the page shows its last days only.
+  rangeClamped: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -182,7 +185,8 @@ export function PicksFilterBar({
   const anyActive = Boolean(capperId || sportId || betType || status || !dateIsDefault);
 
   return (
-    <div className={"flex flex-wrap items-center gap-2 " + (pending ? "opacity-70" : "")}>
+    // With the clamp note under the date chip, the rows get the room it takes, so it never covers a wrapped chip.
+    <div className={"flex flex-wrap items-center gap-x-2 " + (rangeClamped ? "gap-y-7 pb-5 " : "gap-y-2 ") + (pending ? "opacity-70" : "")}>
       <button
         type="button"
         aria-pressed={!sportId}
@@ -235,40 +239,47 @@ export function PicksFilterBar({
 
       <span className="mx-1 hidden h-5 w-px bg-[#DADDE5] dark:bg-border sm:block" aria-hidden="true" />
 
-      <ChipMenu label={dateLabel} active={!dateIsDefault}>
-        {(close) => (
-          <form
-            className="flex flex-col gap-2 p-2"
-            onChange={(e) => {
-              const fd = new FormData(e.currentTarget);
-              const changes: Record<string, string | null> = { date: null, startDate: null, endDate: null };
-              for (const k of ["date", "startDate", "endDate"]) {
-                const v = fd.get(k);
-                if (typeof v === "string" && v) changes[k] = v;
-              }
-              navigate(changes);
-            }}
-            onSubmit={(e) => e.preventDefault()}
-          >
-            <DateRangeFilter
-              initialDate={dateStart}
-              initialStartDate={dateStart}
-              initialEndDate={dateEnd}
-              initialIsRange={isRange}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                navigate({ date: null, startDate: null, endDate: null });
-                close();
+      <div className="relative">
+        <ChipMenu label={dateLabel} active={!dateIsDefault}>
+          {(close) => (
+            <form
+              className="flex flex-col gap-2 p-2"
+              onChange={(e) => {
+                const fd = new FormData(e.currentTarget);
+                const changes: Record<string, string | null> = { date: null, startDate: null, endDate: null };
+                for (const k of ["date", "startDate", "endDate"]) {
+                  const v = fd.get(k);
+                  if (typeof v === "string" && v) changes[k] = v;
+                }
+                navigate(changes);
               }}
-              className="self-start text-sm text-brand-600 hover:text-brand-700"
+              onSubmit={(e) => e.preventDefault()}
             >
-              Jump to today ({todayKey})
-            </button>
-          </form>
+              <DateRangeFilter
+                initialDate={dateStart}
+                initialStartDate={dateStart}
+                initialEndDate={dateEnd}
+                initialIsRange={isRange}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  navigate({ date: null, startDate: null, endDate: null });
+                  close();
+                }}
+                className="self-start text-sm text-brand-600 hover:text-brand-700"
+              >
+                Jump to today ({todayKey})
+              </button>
+            </form>
+          )}
+        </ChipMenu>
+        {rangeClamped && (
+          <p className="absolute left-0 top-full mt-1 whitespace-nowrap text-[11px] text-muted-foreground">
+            Showing the last {MAX_PICKS_RANGE_DAYS} days of your range.
+          </p>
         )}
-      </ChipMenu>
+      </div>
 
       <ChipMenu label={capperName ?? "All cappers"} active={Boolean(capperId)}>
         {(close) => (
