@@ -116,6 +116,50 @@ page); `/admin/import-skipped-lines` is gated and redirects there, keeping
 Follow-up: the parlay (MLP) import doesn't write an `import_runs` row, so
 the Imports tab and its red dot don't cover parlay imports.
 
+## Follow-ups observed on prod (2026-10-19, after the tabs shipped)
+
+Findings from the first look at the live tabs. None are bugs in the tabs
+themselves; each needs its own investigation.
+
+- **Grading: Rays @ Guardians picks stuck with no final.** 6 MLB picks on
+  Rays @ Guardians, start 2026-10-18 21:08 UTC (5 moneylines: 3 Guardians,
+  2 Rays; plus 1 Guardians Under 6.5). Each has been PENDING for 34h. The
+  logged reason, 22 attempts each: "no final game matched (3 finals for this
+  sport within +-2 days of the pick's game time)". A 7th pick, "Guardians vs.
+  Rays +0.5" (SPREAD), matched a final, but on the reversed matchup (Cleveland
+  Guardians @ Tampa Bay Rays, 2026-10-20 00:08 UTC). Its reason: "matched a
+  final game but couldn't grade this SPREAD from it". Check whether the
+  10-18 game was postponed or rescheduled (live schedule first), and how the
+  spread pick's side is read when home/away flip.
+- **backfill-odds WARNING:** gamesAdded=0 with
+  `missingSeed=basketball_nba,baseball_mlb,basketball_wnba,americanfootball_ncaaf`.
+  The 4-hourly backfill found no seeded snapshot for those sports that day.
+- **refresh-odds ran outside its slot:** a run about 23:00 UTC (OK, 129 games,
+  4 sports seeded, 14,959 credits left), not at the daily 05:05 UTC fire.
+  Probably triggered by hand. Confirm who or what triggered it.
+- **DB Monitor `/picks` baseline:** "Averages 1,009 rows/call (threshold 500)"
+  (9 flagged statements). This was read before #301 (`/picks: read only the
+  rendered columns`) reached main; a later read the same evening showed 885
+  rows/call (8 flagged). Use 1,009 as the before figure for the /picks egress
+  work. Column-only narrowing cuts bytes per row, not rows per call.
+- **Import lines to look at** (RECOVERY_UNRESOLVED unless noted):
+  - "Freddy Peralta over 13.5 (original wording: "ounce")": "ounce" is
+    probably "outs", a pitcher-outs prop the parser didn't recognize.
+  - "Over 51.5" and "2H Over 24.5" (capper "Invisible Insider"): totals with
+    no team, so nothing to match.
+  - "Stefon Diggs under 17.5 longest reception": appeared twice; a
+    longest-reception prop market isn't handled.
+  - "Brock Purdy under 0.5 interceptions" (PROP_UNSUPPORTED, listed only):
+    this NFL prop market isn't supported yet.
+
+## Worktree cleanup order (local)
+
+The ops worktrees `wt-ops-e`, `wt-ops-f` and `wt-ops-g` each have a
+`node_modules` junction to `wt-ops-console\node_modules`. Remove each
+junction (`cmd /c rmdir <worktree>\node_modules`) before its
+`git worktree remove`, and remove `wt-ops-console` last, after those
+worktrees and their junctions are gone.
+
 ## Copy for Claude
 
 Every tab has one, built by `formatAdminReport` (`src/lib/admin-report.ts`):
