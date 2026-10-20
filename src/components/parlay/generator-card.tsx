@@ -194,7 +194,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           </Link>
         </SectionTitle>
         {pool.length === 0 ? (
-          <p className="mt-2 text-sm text-muted-foreground">No picks yet. Every pick you add goes in the parlay.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Picks you&apos;ve locked in for this parlay.</p>
         ) : (
           <>
             <div className="mt-2 grid gap-2.5 md:grid-cols-2">
@@ -241,7 +241,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
                   + Add games from Live
                 </Link>
               </SectionTitle>
-              <p className="mt-2 text-sm text-muted-foreground">Full slate — all unstarted games in your selected leagues</p>
+              <p className="mt-2 text-sm text-muted-foreground">Choose which games to build around, or use the full slate.</p>
             </>
           ) : (
             <>

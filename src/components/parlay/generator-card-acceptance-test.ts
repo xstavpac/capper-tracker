@@ -173,7 +173,7 @@ async function main() {
 
   // ---- A pool change clears the result ----
   await click(button("Use full slate"));
-  check("Use full slate: back to the full slate text, result cleared", text().includes("Full slate — all unstarted games in your selected leagues") && !text().includes("Your parlay ·"));
+  check("Use full slate: back to the full slate text, result cleared", text().includes("Choose which games to build around, or use the full slate.") && !text().includes("Your parlay ·"));
 
   // ---- Same-game legs: no combined odds; shortfall said ----
   await click(button("Generate parlay"));
