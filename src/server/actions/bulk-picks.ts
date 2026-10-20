@@ -48,6 +48,7 @@ import {
   type DbDupCandidate,
 } from "@/server/data/duplicate-db-match";
 import { recordImportSkippedLines, type SkippedLineEntry } from "@/server/data/import-skipped-lines";
+import { recordImportRun } from "@/server/data/import-runs";
 import { createParlayBet, type LegCreateInput } from "@/server/data/parlays";
 import type { BetType, Period } from "@prisma/client";
 
@@ -697,7 +698,10 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
 
 export async function bulkImportPicksAction(
   items: BulkImportItem[],
-  skippedDuplicates: SkippedDuplicateItem[] = []
+  skippedDuplicates: SkippedDuplicateItem[] = [],
+  // How the browser settled ambiguous team names in this paste, for the ops
+  // console's Imports tab only (validated in recordImportRun).
+  ambiguity: unknown = []
 ): Promise<BulkImportResult> {
   const user = await requireUser();
   const getOdds = createRequestOddsLoader();
@@ -749,6 +753,10 @@ export async function bulkImportPicksAction(
   // per-item failure than the billing gate below, which is all-or-nothing
   // across whatever DID resolve.
   const toInsert: DedupPickRow[] = [];
+  // Parallel to toInsert: inserted with resolveGameAndOdds' placeholders
+  // (no score source for its sport, so no game was looked up) - logged on
+  // the import run.
+  const fallback: boolean[] = [];
   // Every item dropped below, for the skipped-line log - written once, in one
   // batch, after the loop. Pure bookkeeping: nothing here affects the result.
   const skippedLog: SkippedLineEntry[] = skippedDuplicates.map((d) => ({
@@ -864,6 +872,7 @@ export async function bulkImportPicksAction(
         overrideDuplicate: item.overrideDuplicate === true,
         raw: item.raw,
       });
+      fallback.push(!resolvable);
     } catch (err) {
       const message = err instanceof Error ? err.message : "failed";
       errors.push(item.capperName + " - " + item.description + ": " + message);
@@ -911,6 +920,22 @@ export async function bulkImportPicksAction(
   revalidatePath("/picks");
   revalidatePath("/dashboard");
   revalidatePath("/cappers");
+
+  // One import_runs row for the ops console (best-effort, never throws).
+  const fallbackPicks = result.allowed
+    ? result.insertedIndexes.flatMap((rowIndex, k) =>
+        fallback[rowIndex] ? [{ pickId: result.created[k].id, sport: toInsert[rowIndex].sportName, betDetail: toInsert[rowIndex].betDetail ?? "" }] : []
+      )
+    : [];
+  const picksInserted = result.allowed ? result.created.length : 0;
+  await recordImportRun({
+    userId: user.id,
+    itemsSubmitted: items.length,
+    picksInserted,
+    skipped: items.length - picksInserted,
+    fallbackPicks,
+    ambiguity,
+  });
 
   if (!result.allowed) {
     return {

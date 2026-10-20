@@ -14,7 +14,7 @@ export const ZONE_MODEL_FLAG_KEY = "zone_model";
 // server action (see src/server/admin-gate.ts). Seeded OFF with overrides for
 // the admins in migration 20261019120000_add_admin_ops_console_flag.
 //
-// It replaced `import_skipped_lines` as the gate for /admin/import-skipped-lines;
+// It replaced `import_skipped_lines` as the gate for the Skipped Lines report;
 // that flag's row is still in the table but nothing reads it any more.
 export const ADMIN_OPS_CONSOLE_FLAG_KEY = "admin_ops_console";
 

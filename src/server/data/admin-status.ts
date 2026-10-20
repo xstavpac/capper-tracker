@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { cachedByTag } from "@/server/data/cached";
 import { cacheKeys } from "@/lib/cache-keys";
-import { ADMIN_STATUS_CACHE_SECONDS, DB_ROW_THRESHOLD_DEFAULT } from "@/lib/admin-thresholds";
+import { ADMIN_STATUS_CACHE_SECONDS, DB_ROW_THRESHOLD_DEFAULT, IMPORT_WINDOW_HOURS } from "@/lib/admin-thresholds";
 import { checkFailedAlert, dbMonitorAlert } from "@/lib/admin-status";
 import { buildMonitorView } from "@/lib/db-monitor";
 import { CRON_JOBS, cronHealth, cronsAlert, type CronRunRow } from "@/lib/cron-runs";
@@ -12,6 +12,8 @@ import { oddsApiAlert, snapshotHealth, type LatestSnapshot, type LatestUsage } f
 import { LATEST_SNAPSHOTS_SQL, LATEST_USAGE_SQL, ODDS_SPORT_KEYS, parseLatestSnapshots, parseLatestUsage } from "@/server/data/odds-api-status";
 import { gradingAlert } from "@/lib/grading-health";
 import { gradingStatusSql, parseStuck } from "@/server/data/grading-health";
+import { importsAlert } from "@/lib/import-health";
+import { importsStatusSql } from "@/server/data/import-runs";
 import type { AdminTabAlerts, AdminTabKey } from "@/lib/admin-tabs";
 
 // The ops console's red dots, for the admin layout, cached for
@@ -30,17 +32,20 @@ type StatusRow = {
   oddsSnapshots: (Omit<LatestSnapshot, "createdAt"> & { createdAt: string })[] | null;
   stuckCount: number;
   oldestStuck: Parameters<typeof parseStuck>[0] | null;
+  imports: { failed: number; fallback: number };
 };
 
 async function loadStatusRow(): Promise<StatusRow> {
-  const grading = gradingStatusSql(new Date());
+  const now = new Date();
+  const grading = gradingStatusSql(now);
   const [row] = await prisma.$queryRaw<StatusRow[]>(Prisma.sql`
     SELECT
       (SELECT coalesce(json_agg(c), '[]'::json) FROM (${LATEST_CRON_RUNS_SQL}) c) AS crons,
       (SELECT row_to_json(u) FROM (${LATEST_USAGE_SQL}) u) AS "oddsLatest",
       (SELECT json_agg(s) FROM (${LATEST_SNAPSHOTS_SQL}) s) AS "oddsSnapshots",
       ${grading.count} AS "stuckCount",
-      ${grading.oldest} AS "oldestStuck"
+      ${grading.oldest} AS "oldestStuck",
+      ${importsStatusSql(now)} AS imports
   `);
   return row;
 }
@@ -88,6 +93,11 @@ const CHECKS: StatusCheck[] = [
       const { stuckCount, oldestStuck } = await status();
       return gradingAlert(stuckCount, oldestStuck ? parseStuck(oldestStuck) : null, new Date());
     },
+  },
+  {
+    // Alerting skipped lines and no-matched-game picks in the window.
+    tab: "imports",
+    run: async (status) => importsAlert((await status()).imports, IMPORT_WINDOW_HOURS),
   },
 ];
 
