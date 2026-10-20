@@ -21,7 +21,7 @@ export type TickerGame = {
   homeShort: string;
   awayShort: string;
   commenceTime: string;
-  status: "preview" | "live" | "final";
+  status: "preview" | "live" | "final" | "postponed" | "cancelled";
   homeScore: number | null;
   awayScore: number | null;
   inningHalf: string | null;

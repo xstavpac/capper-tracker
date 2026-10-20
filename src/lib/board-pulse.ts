@@ -2,6 +2,7 @@
 // (initial render) and the client (recomputing on each live-score poll tick,
 // using the same static odds/favorite/total data plus whatever scores just
 // came back).
+import { isUnplayed } from "@/lib/feed-game-status";
 
 // Cited historical MLB moneyline underdog win rate (~42.7% since 2021,
 // ~44% over the longer run) - see
@@ -37,7 +38,7 @@ export type BoardPulseVerdict = "hot" | "cold" | "on pace" | "insufficient";
 
 export type BoardPulseGame = {
   id: string;
-  status: "preview" | "live" | "final";
+  status: "preview" | "live" | "final" | "postponed" | "cancelled";
   homeScore: number | null;
   awayScore: number | null;
   inningHalf: string | null;
@@ -138,7 +139,7 @@ export function computeBoardPulse(games: BoardPulseGame[]): BoardPulseStats {
   let trendingUnder = 0;
 
   for (const g of games) {
-    if (g.status === "preview") continue;
+    if (g.status === "preview" || isUnplayed(g.status)) continue;
     if (g.homeScore === null || g.awayScore === null) continue;
 
     if (g.favorite) {

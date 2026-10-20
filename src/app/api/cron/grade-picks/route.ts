@@ -1,5 +1,5 @@
 import { revalidateTag } from "next/cache";
-import { persistFinalScores, gradeAllPendingPicks, regradeAllFuzzyMatchedPicks } from "@/server/data/grading";
+import { persistFinalScores, gradeAllPendingPicks, regradeAllFuzzyMatchedPicks, type GameResultChange } from "@/server/data/grading";
 import { gradeAllPendingLegs, regradeAllFuzzyMatchedLegs } from "@/server/data/parlay-grading";
 import { RESOLVABLE_SPORT_KEYS, LIVE_SPORTS } from "@/server/data/odds";
 import { cacheKeys } from "@/lib/cache-keys";
@@ -62,7 +62,10 @@ async function run(): Promise<Response> {
       const sportName = LIVE_SPORTS.find((s) => s.key === sportKey)?.label;
       if (!sportName) return { sport: sportKey, skipped: true, changedUserIds: new Set<string>(), timing: null };
 
-      const [persisted, persistMs] = await timed(() => persistFinalScores(sportKey));
+      // Every start-time / team change persistFinalScores makes to an existing
+      // row, old -> new, so it lands in this run's cron_runs summary.
+      const gameResultChanges: GameResultChange[] = [];
+      const [persisted, persistMs] = await timed(() => persistFinalScores(sportKey, gameResultChanges));
       const [grading, gradeMs] = await timed(() => gradeAllPendingPicks(sportKey, sportName));
       const [regrading, regradeMs] = await timed(() => regradeAllFuzzyMatchedPicks(sportKey, sportName));
       const [legGrading, legGradeMs] = await timed(() => gradeAllPendingLegs(sportKey, sportName));
@@ -71,6 +74,7 @@ async function run(): Promise<Response> {
       return {
         sport: sportKey,
         persisted,
+        gameResultChanges,
         grading,
         regrading,
         legGrading,

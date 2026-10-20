@@ -87,7 +87,7 @@ expect("stuck after 3h final / 8h no result, fuzzy 14 days, list 50", [GRADING_S
 {
   const grading = src("src/server/data/grading.ts");
   const pool = grading.slice(grading.indexOf("export async function gradePickPool"), grading.indexOf("export async function regradeFuzzyPool"));
-  expect("gradePickPool: a no-match is recorded", /failures\.push\(\{ pickId: pick\.id, reason: noMatchReason\(candidates\.length\)/.test(pool), true);
+  expect("gradePickPool: a no-match is recorded", /failures\.push\(\{ pickId: pick\.id, reason: noMatchReason\(candidatesInPickWindow\(candidates, pick\)\)/.test(pool), true);
   expect("gradePickPool: props go through resolvePlayerProp for their reason", /await resolvePlayerProp\(pick, result\.game\.externalId, sportName\)/.test(pool), true);
   expect("gradePickPool: a matched-but-ungradeable miss keeps the game and its final time", [/gameResultId: result\.game\.id/.test(pool), /finalSeenAt: result\.game\.createdAt/.test(pool)], [true, true]);
   expect("gradePickPool: recorded once, after the chunks", /\}\);\s*\n\s*await recordGradeFailures\(failures\);\s*\n\s*return \{ graded, notMatched, changedUserIds \};/.test(pool), true);

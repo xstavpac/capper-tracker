@@ -23,6 +23,7 @@ import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { GameHeadToHeadHeader, type HeadToHeadSide } from "@/components/live/game-head-to-head-header";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 import { teamScore } from "@/components/live/live-scoreboard-ordering";
+import { unplayedLabel } from "@/lib/feed-game-status";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -117,6 +118,7 @@ export default async function GameDetailPage({
   const score = matchScoreToGame(scores, game, sportMeta.key);
   const isLive = score?.status === "live";
   const isFinal = score?.status === "final";
+  const unplayed = unplayedLabel(score?.status);
 
   // MLB and NFL get the head-to-head header and the richer picks list below;
   // every other sport keeps the plain two-row header and picks table.
@@ -299,6 +301,9 @@ export default async function GameDetailPage({
           )}
           {isFinal && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">FINAL</span>
+          )}
+          {unplayed && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{unplayed.toUpperCase()}</span>
           )}
         </div>
 

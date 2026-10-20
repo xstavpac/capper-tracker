@@ -33,7 +33,7 @@ const FIXTURE = {
     {
       id: "401803301",
       date: "2026-03-15T23:00:00Z",
-      status: { type: { state: "post", detail: "Final", shortDetail: "Final" }, period: 3 },
+      status: { type: { state: "post", completed: true, detail: "Final", shortDetail: "Final" }, period: 3 },
       competitions: [
         {
           competitors: [
@@ -46,7 +46,7 @@ const FIXTURE = {
     {
       id: "401803575",
       date: "2026-04-05T23:00:00Z",
-      status: { type: { state: "post", detail: "Final/OT", shortDetail: "Final/OT", altDetail: "OT" }, period: 4 },
+      status: { type: { state: "post", completed: true, detail: "Final/OT", shortDetail: "Final/OT", altDetail: "OT" }, period: 4 },
       competitions: [
         {
           competitors: [
@@ -59,7 +59,7 @@ const FIXTURE = {
     {
       id: "401803410",
       date: "2026-04-15T23:00:00Z",
-      status: { type: { state: "post", detail: "Final/SO", shortDetail: "Final/SO", altDetail: "SO" }, period: 5 },
+      status: { type: { state: "post", completed: true, detail: "Final/SO", shortDetail: "Final/SO", altDetail: "SO" }, period: 5 },
       competitions: [
         {
           competitors: [

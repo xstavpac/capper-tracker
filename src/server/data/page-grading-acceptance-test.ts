@@ -257,7 +257,7 @@ async function main() {
     for (const route of ["src/app/api/cron/grade-picks/route.ts", "src/app/api/cron/refresh-scores/route.ts"]) {
       const s = src(route);
       expect(`${route}: imports persistFinalScores from grading`, /import \{[^}]*\bpersistFinalScores\b[^}]*\} from "@\/server\/data\/grading"/.test(s), true);
-      expect(`${route}: calls persistFinalScores(sportKey) directly`, /persistFinalScores\(sportKey\)/.test(s), true);
+      expect(`${route}: calls persistFinalScores(sportKey) directly`, /persistFinalScores\(sportKey[,)]/.test(s), true);
       expect(`${route}: never touches the page-load throttle`, /page-grading|throttledPersistFinalScores|gradeUserPagePicks/.test(s), false);
     }
     expect(

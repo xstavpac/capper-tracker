@@ -52,6 +52,8 @@ export function ungradeableReason(pick: { betType: string; period: string }): st
   return `matched a final game but couldn't grade this ${what} from it (e.g. which side it's on is ambiguous, or that period's score is missing)`;
 }
 
+// finalsInWindow is counted per pick: finals inside THIS pick's own +-2-day
+// window, not the run's whole candidate pool.
 export function noMatchReason(finalsInWindow: number): string {
   return `no final game matched (${finalsInWindow} finals for this sport within +-2 days of the pick's game time)`;
 }

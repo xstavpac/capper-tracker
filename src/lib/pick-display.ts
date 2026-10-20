@@ -154,7 +154,7 @@ export type PickPhase =
 
 // The game's own status from a live-score feed (ScoreGame.status), or null
 // when no feed game could be matched.
-export type GameFeedStatus = "preview" | "live" | "final" | null;
+export type GameFeedStatus = "preview" | "live" | "final" | "postponed" | "cancelled" | null;
 
 export function pickPhase(p: {
   status: string;
