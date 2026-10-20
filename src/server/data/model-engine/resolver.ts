@@ -50,11 +50,25 @@ function requirePitcher(entity: EntityRef, category: VariableCategory): number {
 // it would make findLatestAtOrBefore redundant on this path instead of
 // load-bearing - exactly the kind of second implementation this step was
 // told not to introduce.
-async function resolveTeamTendency(variableId: string, teamName: string, asOf: Date, sportKey: string): Promise<ResolvedValue> {
-  const rows = await prisma.teamTendencySnapshot.findMany({
-    where: { sportKey, teamName },
-    orderBy: { snapshotDate: "asc" },
-  });
+//
+// resolveTeamTendency can take the team's rows from a sync pass's batch read
+// (context.tendencyHistory, tendency-history.ts) instead of its own query. That
+// read IS date-bounded - to [the team's latest snapshot at or before the pass's
+// earliest asOf day, the pass's latest asOf day] - but the bound can't change
+// which row is chosen: findLatestAtOrBefore picks the last row dated at or
+// before the asOf's day, which is never after the latest asOf day, and every row
+// older than the earliest day's pick is superseded by it. findLatestAtOrBefore
+// still makes the decision alone (the bound only drops rows it could never
+// pick), and an asOf outside the pass's span gets the full per-team query below.
+async function resolveTeamTendency(variableId: string, teamName: string, asOf: Date, context: EvaluationContext): Promise<ResolvedValue> {
+  const { sportKey, tendencyHistory } = context;
+  const preloaded = tendencyHistory?.sportKey === sportKey ? tendencyHistory.rowsFor(teamName, asOf) : null;
+  const rows =
+    (await preloaded) ??
+    (await prisma.teamTendencySnapshot.findMany({
+      where: { sportKey, teamName },
+      orderBy: { snapshotDate: "asc" },
+    }));
   const row = findLatestAtOrBefore(rows, asOf);
   if (!row) return NOT_FOUND;
   // computeTendencyRates has no minimum-sample floor: this is a real rate at
@@ -98,7 +112,7 @@ export async function resolveVariable(
 
   switch (variable.category) {
     case "team_tendencies":
-      return resolveTeamTendency(variableId, requireTeam(entity, variable.category), asOf, context.sportKey);
+      return resolveTeamTendency(variableId, requireTeam(entity, variable.category), asOf, context);
     case "team_stats":
       return resolveTeamStat(variableId, requireTeam(entity, variable.category), asOf, context.sportKey);
     case "pitcher_stats":

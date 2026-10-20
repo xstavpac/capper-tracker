@@ -7,6 +7,7 @@ import { resolveVariable } from "./resolver";
 import { getEvaluationEventFacts } from "./facts";
 import { getPregameEventFacts, type PregameSnapshotSource } from "./pregame-facts";
 import { resolveGameObservations, filterObservationsBeforeAsOf, type GameObservation } from "./observations";
+import type { TendencyHistorySource } from "./tendency-history";
 import { evaluateExpression, evaluateComparison, type ValueContext } from "@/lib/model-engine/evaluate";
 import { computeWeightedRate } from "@/lib/model-engine/weighted-accumulation";
 import { evaluateObservationExpression, ObservationFieldUnavailable } from "@/lib/model-engine/observation-expression";
@@ -135,10 +136,15 @@ function resolveRoleTeamName(role: string, facts: { favTeam: string | null; home
 // evaluates many unstarted games in one run passes one createPregameSnapshotSource()
 // so each day's odds board is read once, not once per game. Omitted, every
 // pregame event reads its own (slim) projection, as before.
+//
+// options.tendencyHistory: a pass that evaluates many events passes one
+// createTendencyHistorySource() (tendency-history.ts) naming its teams, so the
+// team_tendencies inputs read the snapshot table once for the pass instead of
+// once per event and input. Omitted, each input queries its own team, as before.
 export async function runModelDefinition(
   model: ModelDefinition,
   event: EvaluationEvent,
-  options?: { allObservations?: GameObservation[]; pregameSnapshots?: PregameSnapshotSource }
+  options?: { allObservations?: GameObservation[]; pregameSnapshots?: PregameSnapshotSource; tendencyHistory?: TendencyHistorySource }
 ): Promise<OrchestrationResult> {
   const context: ValueContext = {};
   const unavailableIds = new Set<string>();
@@ -209,7 +215,7 @@ export async function runModelDefinition(
       unavailableIds.add(input.id);
       continue;
     }
-    const result = await resolveVariable(input.variableId, { type: "team", teamName }, event.asOf, { sportKey });
+    const result = await resolveVariable(input.variableId, { type: "team", teamName }, event.asOf, { sportKey, tendencyHistory: options?.tendencyHistory });
     if (result.found) {
       context[input.id] = result.value as number;
     } else {
