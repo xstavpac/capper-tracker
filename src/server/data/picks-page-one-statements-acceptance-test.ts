@@ -81,9 +81,11 @@ async function main() {
   const { easternDayStart } = await import("@/lib/dates");
   const user = await prisma.user.create({ data: { supabaseId: `${TAG}-u`, email: `${TAG}@example.test` } });
   userId = user.id;
+  let createdSportId: string | null = null;
   try {
-    const sport = await prisma.sport.findFirst({ where: { name: "MLB" }, select: { id: true } });
-    if (!sport) throw new Error("No MLB sport row in the local DB (run prisma:seed).");
+    // CI's seed has no sports: create MLB when missing, and delete only what was created.
+    const existing = await prisma.sport.findUnique({ where: { name: "MLB" }, select: { id: true } });
+    const sport = existing ?? { id: (createdSportId = (await prisma.sport.create({ data: { name: "MLB" } })).id) };
     const capA = await prisma.capper.create({ data: { userId, name: "Alpha", source: "OTHER" } });
     const capB = await prisma.capper.create({ data: { userId, name: "Beta", source: "OTHER" } });
     const at = (dayKey: string, h: number) => new Date(easternDayStart(dayKey).getTime() + h * 3_600_000);
@@ -130,6 +132,7 @@ async function main() {
     check("no first-page statement uses the older-picks cursor ordering", captured.flat().every((s) => !/ORDER BY "picks"\."gameTime" DESC, "picks"\."id" DESC/.test(s)));
   } finally {
     await prisma.user.deleteMany({ where: { id: userId } });
+    if (createdSportId) await prisma.sport.deleteMany({ where: { id: createdSportId } });
   }
 }
 

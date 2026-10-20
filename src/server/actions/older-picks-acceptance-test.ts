@@ -67,11 +67,18 @@ async function main() {
   const other = await prisma.user.create({ data: { supabaseId: `${TAG}-o`, email: `${TAG}-o@example.test` } });
   userId = user.id;
   const gameResultIds: string[] = [];
+  const createdSportIds: string[] = [];
+  // CI's seed has no sports: create one when missing, and delete only what was created.
+  const sportNamed = async (name: string) => {
+    const existing = await prisma.sport.findUnique({ where: { name }, select: { id: true } });
+    if (existing) return existing;
+    const created = await prisma.sport.create({ data: { name }, select: { id: true } });
+    createdSportIds.push(created.id);
+    return created;
+  };
   try {
-    const sports = await prisma.sport.findMany({ where: { name: { in: ["MLB", "NHL"] } }, select: { id: true, name: true } });
-    const mlb = sports.find((s) => s.name === "MLB");
-    const nhl = sports.find((s) => s.name === "NHL");
-    if (!mlb || !nhl) throw new Error("No MLB/NHL sport rows in the local DB (run prisma:seed).");
+    const mlb = await sportNamed("MLB");
+    const nhl = await sportNamed("NHL");
     const capA = await prisma.capper.create({ data: { userId, name: "Alpha", source: "OTHER" } });
     const capB = await prisma.capper.create({ data: { userId, name: "Beta", source: "OTHER" } });
     const foreignCap = await prisma.capper.create({ data: { userId: other.id, name: "Foreign", source: "OTHER" } });
@@ -259,6 +266,7 @@ async function main() {
   } finally {
     await prisma.gameResult.deleteMany({ where: { id: { in: gameResultIds } } });
     await prisma.user.deleteMany({ where: { id: { in: [user.id, other.id] } } });
+    await prisma.sport.deleteMany({ where: { id: { in: createdSportIds } } });
   }
 }
 

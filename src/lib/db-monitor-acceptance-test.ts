@@ -80,11 +80,12 @@ expect(
   []
 );
 expect(
-  "the labels: the eight from #279, one per statement in the 2026-10-19 prod top 30, and the egress-plan reads (2026-10-20)",
+  "the labels: the eight from #279, one per statement in the 2026-10-19 prod top 30, the egress-plan reads (2026-10-20) and Load older picks",
   STATEMENT_LABELS.map((l) => l.label).sort(),
   [
     "/picks",
     "/picks final scores",
+    "/picks older",
     "Board window",
     "Capper all-time W-L",
     "Capper comparison",
@@ -130,6 +131,15 @@ const fixture = (name: string) => {
   if (!f) throw new Error("no fixture " + name);
   return f.sql;
 };
+
+// "/picks older" takes the 18-column reload by id + userId, not updatePickStatus's full-row
+// findFirst on the same WHERE (its column list, from the full-row "/picks date range" capture).
+{
+  const fullRowById =
+    fixture("/picks date range").split(" FROM ")[0] +
+    ' FROM "public"."picks" WHERE ("public"."picks"."id" = $1 AND "public"."picks"."userId" = $2) LIMIT $3 OFFSET $4';
+  expect("a full-row pick by id + userId is not /picks older", labelFor(describeStatement(fullRowById)), null);
+}
 
 // ---- 2. Shape details the flags rest on ----
 {
