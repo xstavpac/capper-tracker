@@ -114,7 +114,9 @@ async function main() {
   const mixed = parseCatalog(`KRASH\nIvan Demidov 2+ shots on goal\nYankees ML`, []);
   expect("pick after a prop line is attributed to KRASH, not to the prop line", mixed.picks.map((p) => [p.capperName, p.description]), [["KRASH", "Yankees ML"]]);
   expect("plain capper header is not dropped", parseCatalog("Bambino Bets\nYankees ML", []).droppedAsHeaders, []);
-  expect("header with a digit (\"Sharp Guru 2\") is a (tolerated) false positive", parseCatalog("Sharp Guru 2\nYankees ML", []).droppedAsHeaders.length, 1);
+  expect("header with a digit in a word (\"P4D Picks\") is a (tolerated) false positive", parseCatalog("P4D Picks\nYankees ML", []).droppedAsHeaders.length, 1);
+  // A standalone number is bet content (parse-catalog.ts hasBetContent): never a header.
+  expect("a line with a standalone number (\"Sharp Guru 2\") is read as a pick, not a header", parseCatalog("Sharp Guru 2\nYankees ML", []).unresolved, ["Sharp Guru 2"]);
   const inline = parseCatalog(`Sharp Sam Some Guy 2+ wins`, ["Sharp Sam"]);
   expect("line after a saved capper's name that resolves to nothing is unresolved, not discarded", [inline.unresolved, inline.unresolvedCapperNames], [["Sharp Sam Some Guy 2+ wins"], ["Sharp Sam"]]);
 

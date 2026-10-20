@@ -3187,12 +3187,13 @@ const BARE_NAME_SHAPE = /^[A-Za-z][A-Za-z'.-]*(?:\s+[A-Za-z][A-Za-z'.-]*){0,3}$/
 // "49ers") is not one.
 const BET_NUMBER_TOKEN = /^[ou]?[+-]?\d+(?:\.\d+)?(?:\+|u|units?|%|\*)?$/i;
 // Market words, over/under and units - the words a capper writes a bet
-// with. A capper's name that contains one is read as a pick; "*Name" is the
+// with (the hockey 3-way wordings are nhl-three-way.ts's). A capper's name
+// that contains one is read as a pick; "*Name" is the
 // way to head a block with it. Prop shapes beyond these ("Jokic
 // double-double", "Draisaitl ATGS") are caught by looksLikePick's prop
 // parsers, which already tell them from headers like "Double Double Picks".
 const BET_WORD =
-  /\b(?:ml|money\s*line|spread|over|under|o\/u|units?|tds?|atd|touchdowns?|hrs?|home\s*runs?|homeruns?|yards?|yds|rec|pts|reb|ast|sog|strikeouts?|outs|(?:no|yes)\s+runs?\s+(?:in\s+(?:the\s+)?)?(?:1st|first)(?:\s+inn(?:ing)?)?)\b/i;
+  /\b(?:ml|money\s*line|spread|over|under|o\/u|units?|tds?|atd|touchdowns?|hrs?|home\s*runs?|homeruns?|yards?|yds|rec|pts|reb|ast|sog|strikeouts?|outs|(?:3|three)[\s-]*way|regulation|reg|draw|tie|dnb|double\s+chance|(?:no|yes)\s+runs?\s+(?:in\s+(?:the\s+)?)?(?:1st|first)(?:\s+inn(?:ing)?)?)\b/i;
 
 // The capper-header rule: a line with no bet content - no line or number, no
 // over/under, no market word, no units - is a capper's header, whatever else
