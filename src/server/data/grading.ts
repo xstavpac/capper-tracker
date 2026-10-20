@@ -36,6 +36,7 @@ import {
   type PlayerPropMarket,
 } from "@/lib/bet-line";
 import { NCAAF_CANONICAL_SUFFIX, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
+import { recordGradeFailures, noMatchReason, ungradeableReason, type GradeFailure } from "@/server/data/grading-failures";
 
 function findMarket(game: OddsGame, key: string) {
   for (const b of game.bookmakers) {
@@ -1322,6 +1323,10 @@ export function regradeLookbackCutoff(now: Date = new Date()): Date {
 // grading logic ever reads them; they're written by persistFinalScores and
 // read only by the separate Game Pulse / team-tendencies queries.
 export const CANDIDATE_GAME_RESULT_SELECT = {
+  // id + createdAt: which final a pick that still can't be graded matched, and
+  // when the feed first showed it final (pick_grade_failures, admin Grading tab).
+  id: true,
+  createdAt: true,
   gameDate: true,
   homeTeam: true,
   awayTeam: true,
@@ -1370,19 +1375,31 @@ export async function gradePickPool(
   const candidates = await fetchCandidatePool(picks, sportKey);
   let graded = 0;
   let notMatched = 0;
+  // Every miss with its reason, recorded once at the end (recordGradeFailures).
+  const failures: GradeFailure[] = [];
 
   await inChunks(picks, async (pick) => {
     const result = matchGameResult(candidates, pick);
     if (!result) {
       notMatched++;
+      failures.push({ pickId: pick.id, reason: noMatchReason(candidates.length), gameResultId: null, finalSeenAt: null });
       return;
     }
-    const outcome =
+    // resolvePlayerProp, not gradePlayerProp: same outcome, plus the reason
+    // when there isn't one (e.g. the player isn't in the box score).
+    const resolved =
       pick.betType === "PLAYER_PROP"
-        ? await gradePlayerProp(pick, result.game.externalId, sportName)
-        : resolveOutcome(pick, result.game);
+        ? await resolvePlayerProp(pick, result.game.externalId, sportName)
+        : { outcome: resolveOutcome(pick, result.game) };
+    const outcome = resolved.outcome;
     if (!outcome) {
       notMatched++;
+      failures.push({
+        pickId: pick.id,
+        reason: "reason" in resolved ? resolved.reason : ungradeableReason(pick),
+        gameResultId: result.game.id,
+        finalSeenAt: result.game.createdAt,
+      });
       return;
     }
     // updateMany with a status:PENDING guard, not update({ where: { id } }):
@@ -1404,6 +1421,7 @@ export async function gradePickPool(
     }
   });
 
+  await recordGradeFailures(failures);
   return { graded, notMatched, changedUserIds };
 }
 

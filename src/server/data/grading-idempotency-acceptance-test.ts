@@ -220,6 +220,10 @@ async function main() {
   // the same way the rest of this file proves grading.ts's internals. ----
 
   const CANDIDATE_SELECT_SHAPE = {
+    // id + createdAt: recorded for a pick the matched final still can't grade
+    // (pick_grade_failures - the admin Grading tab's "final N hours ago").
+    id: true,
+    createdAt: true,
     gameDate: true,
     homeTeam: true,
     awayTeam: true,
