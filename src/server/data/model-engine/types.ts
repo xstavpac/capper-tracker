@@ -4,6 +4,8 @@
 // resolvePitcherStatFromSnapshot) already requires it, not because the
 // contract might someday need it.
 
+import type { TendencyHistorySource } from "./tendency-history";
+
 // The two entity shapes every existing resolver actually keys its query by
 // - a team by name (team_tendencies, team_stats) or a pitcher by MLB Stats
 // API numeric id (pitcher_stats). Not a generic `{ type: string; id: string
@@ -14,8 +16,10 @@ export type EntityRef = { type: "team"; teamName: string } | { type: "pitcher"; 
 
 // Every one of the three snapshot tables' queries is scoped by sportKey -
 // the one piece of context every existing resolver signature actually
-// needs. Nothing speculative added beyond that.
-export type EvaluationContext = { sportKey: string };
+// needs. tendencyHistory is optional: a sync pass that resolves many events
+// passes one batch-loaded source (tendency-history.ts) so team_tendencies
+// lookups don't each query the table; without it, each lookup queries.
+export type EvaluationContext = { sportKey: string; tendencyHistory?: TendencyHistorySource };
 
 export type ResolvedValue = {
   value: number | null;

@@ -50,11 +50,19 @@ function requirePitcher(entity: EntityRef, category: VariableCategory): number {
 // it would make findLatestAtOrBefore redundant on this path instead of
 // load-bearing - exactly the kind of second implementation this step was
 // told not to introduce.
-async function resolveTeamTendency(variableId: string, teamName: string, asOf: Date, sportKey: string): Promise<ResolvedValue> {
-  const rows = await prisma.teamTendencySnapshot.findMany({
-    where: { sportKey, teamName },
-    orderBy: { snapshotDate: "asc" },
-  });
+//
+// resolveTeamTendency can take the team's rows from a sync pass's batch read
+// (context.tendencyHistory, tendency-history.ts) instead of its own query: the
+// same rows in the same order, so findLatestAtOrBefore still decides alone.
+async function resolveTeamTendency(variableId: string, teamName: string, asOf: Date, context: EvaluationContext): Promise<ResolvedValue> {
+  const { sportKey, tendencyHistory } = context;
+  const preloaded = tendencyHistory?.sportKey === sportKey ? tendencyHistory.rowsFor(teamName) : null;
+  const rows =
+    (await preloaded) ??
+    (await prisma.teamTendencySnapshot.findMany({
+      where: { sportKey, teamName },
+      orderBy: { snapshotDate: "asc" },
+    }));
   const row = findLatestAtOrBefore(rows, asOf);
   if (!row) return NOT_FOUND;
   // computeTendencyRates has no minimum-sample floor: this is a real rate at
@@ -98,7 +106,7 @@ export async function resolveVariable(
 
   switch (variable.category) {
     case "team_tendencies":
-      return resolveTeamTendency(variableId, requireTeam(entity, variable.category), asOf, context.sportKey);
+      return resolveTeamTendency(variableId, requireTeam(entity, variable.category), asOf, context);
     case "team_stats":
       return resolveTeamStat(variableId, requireTeam(entity, variable.category), asOf, context.sportKey);
     case "pitcher_stats":
