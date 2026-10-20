@@ -45,7 +45,11 @@ export function mlbNameKey(name: string): string {
   return mlbNameTokens(name).join(" ");
 }
 
-export type MlbNameMatch<T> = { status: "one"; item: T } | { status: "many"; items: T[] } | { status: "none" };
+// `tier` is the tier that matched (numbered as in the header): "short-form" and "fuzzy" are the
+// near-misses - the typed name is not the player's own spelling - which the roster recovery pass
+// resolves silently only when the player's team is in the pick's game.
+export type MlbNameTier = "exact" | "short-form" | "fuzzy" | "surname";
+export type MlbNameMatch<T> = { status: "one"; item: T; tier: MlbNameTier } | { status: "many"; items: T[]; tier: MlbNameTier } | { status: "none" };
 
 export type MlbMatchOptions = { allowFuzzy?: boolean; allowSurname?: boolean };
 
@@ -103,28 +107,30 @@ export function matchMlbName<T>(
   const tLast = t[t.length - 1];
   const distinct = (xs: T[]) => [...new Map(xs.map((x) => [id(x), x])).values()];
 
-  const tiers: T[][] = [items.filter((i) => mlbNameKey(fullName(i)) === tKey)];
+  const tiers: { tier: MlbNameTier; hits: T[] }[] = [{ tier: "exact", hits: items.filter((i) => mlbNameKey(fullName(i)) === tKey) }];
   if (t.length >= 2) {
-    tiers.push(
-      items.filter((i) => {
+    tiers.push({
+      tier: "short-form",
+      hits: items.filter((i) => {
         const n = mlbNameTokens(fullName(i));
         return n.length >= 2 && n[n.length - 1] === tLast && firstNamesCompatible(n[0], tFirst);
-      })
-    );
-    if (allowFuzzy) tiers.push(items.filter((i) => isLikelyDuplicateName(mlbNameKey(fullName(i)), tKey)));
+      }),
+    });
+    if (allowFuzzy) tiers.push({ tier: "fuzzy", hits: items.filter((i) => isLikelyDuplicateName(mlbNameKey(fullName(i)), tKey)) });
   }
   if (t.length === 1 && allowSurname) {
-    tiers.push(
-      items.filter((i) => {
+    tiers.push({
+      tier: "surname",
+      hits: items.filter((i) => {
         const n = mlbNameTokens(fullName(i));
         return n.length >= 1 && n[n.length - 1] === tFirst;
-      })
-    );
+      }),
+    });
   }
-  for (const tier of tiers) {
-    const d = distinct(tier);
-    if (d.length === 1) return { status: "one", item: d[0] };
-    if (d.length > 1) return { status: "many", items: d };
+  for (const { tier, hits } of tiers) {
+    const d = distinct(hits);
+    if (d.length === 1) return { status: "one", item: d[0], tier };
+    if (d.length > 1) return { status: "many", items: d, tier };
   }
   return { status: "none" };
 }

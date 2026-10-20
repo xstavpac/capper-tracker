@@ -77,11 +77,14 @@ check("a different first name with the same surname is NOT matched (Zack Muncy)"
 
 // ---- position-aware resolution -------------------------------------------------------------------------------------------
 // `slateTeams` is a COMPLETE MLB slate unless `complete` says otherwise; omitted means no slate at all.
-const res = (line: string, slateTeams?: string[], other: RosterPlayer[][] = [], complete = true) => {
-  const r = resolveMlbPropAgainstRoster(line, roster, slateTeams ? { teams: slateTeams, complete } : undefined, other);
+// `nearMissTeams`: the teams in the pick's game, for a near-miss name (SlateContext.nearMissTeams).
+const res = (line: string, slateTeams?: string[], other: RosterPlayer[][] = [], complete = true, nearMissTeams?: string[]) => {
+  const r = resolveMlbPropAgainstRoster(line, roster, slateTeams ? { teams: slateTeams, complete, nearMissTeams } : undefined, other);
   return r.status === "resolved" ? ["resolved", r.playerName, r.team] : r.status === "ambiguous" ? ["ambiguous", r.matches.map((x) => x.team).sort()] : ["unresolved"];
 };
-check("alias + recovery: 'Michael Trout 2+ hits' resolves the Angels' Mike Trout", res("Michael Trout 2+ hits"), ["resolved", "Mike Trout", "Los Angeles Angels"]);
+// A short form is a near-miss: it resolves only with the Angels in the pick's game, and otherwise is offered.
+check("alias + recovery: 'Michael Trout 2+ hits' with the Angels in the game -> Mike Trout", res("Michael Trout 2+ hits", ["Los Angeles Angels"], [], true, ["Los Angeles Angels"]), ["resolved", "Mike Trout", "Los Angeles Angels"]);
+check("alias + recovery: 'Michael Trout 2+ hits' with no game known -> offered, not guessed", res("Michael Trout 2+ hits"), ["ambiguous", ["Los Angeles Angels"]]);
 check("pitcher K line resolves a pitcher (Chris Sale)", res("Chris Sale over 5.5 Ks"), ["resolved", "Chris Sale", "Atlanta Braves"]);
 check("pitcher K line: bare surname resolves the pitcher (Luzardo)", res("Luzardo o5.5 K"), ["resolved", "Jesús Luzardo", "Philadelphia Phillies"]);
 check("a HITTER on a K line never resolves (batter strikeouts are not a market)", res("Trea Turner over 1.5 Ks"), ["unresolved"]);

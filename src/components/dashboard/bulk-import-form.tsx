@@ -825,11 +825,22 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
 
   function ambiguousReason(group: (typeof ambiguousGroups)[number]): string {
     if (group.options.length === 1) {
-      return "Line plausibility narrowed this to " + group.options[0].label + ", but another signal disagreed - confirm it.";
+      // A player prompt with one option is a near-miss name's suggestion: "Brian Thomas Jr. — Jaguars WR".
+      const [only] = group.options;
+      if (isPlayerAmbiguityKey(group.key) && only.playerName) {
+        const detail = only.label.split(" — ")[1];
+        return "Did you mean " + only.playerName + (detail ? " (" + detail + ")" : "") + "?";
+      }
+      return "Line plausibility narrowed this to " + only.label + ", but another signal disagreed - confirm it.";
     }
     return isPlayerAmbiguityKey(group.key)
-      ? "More than one player has this name - which one?"
+      ? playerQuestionShort(group) + " - which one?"
       : "Ambiguous team - could mean " + group.options.map((o) => o.label).join(" or ") + ".";
+  }
+
+  // A near-miss name (options carry the typed name) is close to several players rather than shared by them.
+  function playerQuestionShort(group: (typeof ambiguousGroups)[number]): string {
+    return group.options.some((o) => o.typedName) ? "More than one player is close to this name" : "More than one player has this name";
   }
 
   function handleClear() {
@@ -1322,7 +1333,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                                   (g.options.length === 1
                                     ? ambiguousReason(g)
                                     : isPlayerAmbiguityKey(g.key)
-                                      ? "More than one player has this name"
+                                      ? playerQuestionShort(g)
                                       : "Ambiguous team")
                                 }
                               >
@@ -1344,7 +1355,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                                       ? "Answering once resolves all " + g.count + " picks with this name in this paste."
                                       : "Answering once resolves all " + g.count + " " + g.key + " picks in this paste."
                                     : isPlayerAmbiguityKey(g.key)
-                                      ? "Or edit the text to add the first name, then drop again."
+                                      ? g.options.some((o) => o.typedName)
+                                        ? "Or fix the spelling in the text, then drop again."
+                                        : "Or edit the text to add the first name, then drop again."
                                       : "Or edit the text to specify the city, then drop again."}{" "}
                                   Left unanswered, it won&apos;t be imported.
                                 </div>

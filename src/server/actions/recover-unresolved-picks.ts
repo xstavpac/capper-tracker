@@ -27,8 +27,9 @@ import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 // bulk-import paste never triggers a live ESPN roster request. Neither
 // fallback ever invents a team or player: a line resolves only on an
 // EXACT-ONE match, everything else - including a collision between two or
-// more candidates - stays unresolved. The one collision that is not a dead
-// end is a bare surname shared by 2+ rostered players: it comes back as a pick
+// more candidates - stays unresolved. Two cases are not dead ends: a bare
+// surname shared by 2+ rostered players, and a near-miss name (a typo of one or
+// more players, whose team isn't in the pick's game). Each comes back as a pick
 // awaiting the user's "which player?" answer, never as a guess.
 //
 // A player-prop-shaped line is routed to the roster fallback ONLY, never
@@ -73,13 +74,9 @@ async function gatherLiveTeamNames(): Promise<{ teams: LiveTeam[]; completeSport
         getOddsForSport(key).catch(() => ((failed = true), [])),
       ]);
       if (!failed && scores.length > 0 && odds.length > 0) completeSports.push(label);
-      for (const g of scores) {
-        if (g.homeTeam) out.push({ sport: label, name: g.homeTeam });
-        if (g.awayTeam) out.push({ sport: label, name: g.awayTeam });
-      }
-      for (const g of odds) {
-        if (g.homeTeam) out.push({ sport: label, name: g.homeTeam });
-        if (g.awayTeam) out.push({ sport: label, name: g.awayTeam });
+      for (const g of [...scores, ...odds]) {
+        if (g.homeTeam) out.push({ sport: label, name: g.homeTeam, opponent: g.awayTeam, commenceTime: g.commenceTime });
+        if (g.awayTeam) out.push({ sport: label, name: g.awayTeam, opponent: g.homeTeam, commenceTime: g.commenceTime });
       }
     })
   );

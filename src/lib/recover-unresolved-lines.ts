@@ -31,6 +31,8 @@ import {
   parseSupportedNbaProp,
   explainDroppedNbaProp,
   playerAmbiguityKey,
+  findTeamNicknames,
+  TEAM_NICKNAME_CANONICAL,
   type AmbiguousOption,
   type ParsedPick,
 } from "@/lib/parse-catalog";
@@ -39,6 +41,7 @@ import {
   resolvePlayerPropAgainstRoster,
   resolvePassingTdQuarterback,
   stripNameSuffix,
+  withRosterName,
   type PlayerCandidate,
   type SlateContext,
 } from "@/lib/player-roster-fallback";
@@ -49,6 +52,7 @@ import { parsePlayerProp, isPassingTdsText, pickPeriodFromText } from "@/lib/bet
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { withRegulationPeriod } from "@/lib/nhl-three-way";
 import { UNSUPPORTED_PROP_REASONS } from "@/lib/unsupported-prop-vocab";
+import { teamNameEndsWith } from "@/lib/team-name-match";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 
 // The reason an NBA player prop gets when the NBA roster could not be read (not loaded, or the read failed).
@@ -65,6 +69,14 @@ export type RecoverUnresolvedResult = {
   reasons: Record<string, string>;
 };
 
+// A near-miss player name (see player-roster-fallback.ts) is placed silently only when the player's team
+// is in the pick's game. With no opponent on the line, "the pick's game" is any game on a complete slate
+// starting within the next ~36 hours (or under way - started up to 6 hours ago). The whole slate is too
+// wide for this: the odds board lists an NFL team's game all week, which would let a typo resolve to any
+// player whose team isn't on a bye.
+const NEAR_MISS_AHEAD_MS = 36 * 60 * 60 * 1000;
+const NEAR_MISS_UNDER_WAY_MS = 6 * 60 * 60 * 1000;
+
 // "49ers" from "San Francisco 49ers" - the team's nickname, for a prompt
 // button. Every NFL nickname is the last word of the full name; the NHL and
 // MLB have a few two-word ones.
@@ -76,11 +88,15 @@ function shortTeamName(team: string): string {
 // One prompt option per candidate player: "Christian McCaffrey — 49ers RB".
 // `nickname` is the full team name lowercased, the same value a resolved
 // roster hit puts in teamNicknames.
-export function playerAmbiguityOptions(sport: string, matches: PlayerCandidate[]): AmbiguousOption[] {
+// `nearMissOf`: the typed name, when it was only a near-miss of these players - choosing one then
+// renames it in the pick (resolveAmbiguousPick).
+export function playerAmbiguityOptions(sport: string, matches: PlayerCandidate[], nearMissOf?: string): AmbiguousOption[] {
   return matches.map((m) => ({
     label: m.playerName + " — " + shortTeamName(m.team) + " " + m.position,
     sport,
     nickname: m.team.toLowerCase(),
+    playerName: m.playerName,
+    ...(nearMissOf ? { typedName: nearMissOf } : {}),
   }));
 }
 
@@ -108,7 +124,9 @@ export function recoverUnresolvedLines(
   nbaRoster: RosterPlayer[] = [],
   // unresolved-line index -> the league of the capper's bare "NBA" / "NHL" sub-header
   // (parseCatalog's unresolvedLeagues).
-  leagueHints: Record<number, "NBA" | "NHL"> = {}
+  leagueHints: Record<number, "NBA" | "NHL"> = {},
+  // The clock the near-miss game window is measured from (tests pin it).
+  now: number = Date.now()
 ): RecoverUnresolvedResult {
   const recovered: ParsedPick[] = [];
   const stillUnresolved: string[] = [];
@@ -176,13 +194,30 @@ export function recoverUnresolvedLines(
     nonPlayerPropResolutions.set(line, resolveLineAgainstLiveTeams(line, liveTeams));
   }
 
-  const slateFor = (sport: string): SlateContext => ({
-    teams: liveTeams.filter((t) => t.sport === sport).map((t) => t.name),
-    complete: slateCompleteSports.includes(sport),
-  });
+  // `opponent`: the team an NBA line names after "@" / "vs" - when it reads as a team, the pick's game is
+  // that opponent's, and a near-miss is placed only on the team playing it. Otherwise the ~36-hour window.
+  const slateFor = (sport: string, opponent?: string): SlateContext => {
+    const entries = liveTeams.filter((t) => t.sport === sport);
+    const complete = slateCompleteSports.includes(sport);
+    let nearMissTeams: string[] | undefined;
+    const nicknames = opponent ? findTeamNicknames(opponent, sport).map((n) => TEAM_NICKNAME_CANONICAL[n] ?? n) : [];
+    if (nicknames.length > 0) {
+      nearMissTeams = entries.filter((t) => t.opponent && nicknames.some((n) => teamNameEndsWith(t.opponent!, n))).map((t) => t.name);
+    } else if (complete) {
+      nearMissTeams = entries
+        .filter((t) => {
+          const start = t.commenceTime ? Date.parse(t.commenceTime) : NaN;
+          return start >= now - NEAR_MISS_UNDER_WAY_MS && start <= now + NEAR_MISS_AHEAD_MS;
+        })
+        .map((t) => t.name);
+    }
+    return { teams: entries.map((t) => t.name), complete, nearMissTeams };
+  };
 
   // A bare surname shared by 2+ rostered players that the slate could not
-  // settle: recovered as a pick awaiting the user's choice. The description
+  // settle, or a near-miss name the pick's game could not (`nearMiss` - the
+  // options then carry the typed name, so choosing one renames it): recovered
+  // as a pick awaiting the user's choice. The description
   // stays unparsed - resolveAmbiguousPick re-parses it once a player is chosen,
   // same as an ambiguous-team pick.
   const awaitingPlayerChoice = (
@@ -192,7 +227,8 @@ export function recoverUnresolvedLines(
     lineForParsing: string,
     gameNumber: ParsedPick["gameNumber"],
     typedName: string,
-    matches: PlayerCandidate[]
+    matches: PlayerCandidate[],
+    nearMiss = false
   ): ParsedPick => {
     const parsed = parsePickText(lineForParsing);
     return {
@@ -206,7 +242,7 @@ export function recoverUnresolvedLines(
       units: parsed.units,
       period: parsed.period,
       raw: line,
-      ambiguous: playerAmbiguityOptions(sport, matches),
+      ambiguous: playerAmbiguityOptions(sport, matches, nearMiss ? typedName : undefined),
       ambiguousKey: playerAmbiguityKey(sport, stripNameSuffix(typedName), matches.map((m) => m.externalPlayerId)),
       ambiguousBetType: parsed.betType,
       ambiguousLine: null,
@@ -232,7 +268,8 @@ export function recoverUnresolvedLines(
     text: string,
     gameNumber: ParsedPick["gameNumber"],
     typedName: string,
-    candidates: LeagueCandidate[]
+    candidates: LeagueCandidate[],
+    nearMiss = false
   ): ParsedPick => {
     const parsed = parsePickText(text);
     const sports = [...new Set(candidates.map((c) => c.sport))];
@@ -251,6 +288,8 @@ export function recoverUnresolvedLines(
         label: c.playerName + " — " + shortTeamName(c.team) + " " + c.position + (sports.length > 1 ? " (" + c.sport + ")" : ""),
         sport: c.sport,
         nickname: c.team.toLowerCase(),
+        playerName: c.playerName,
+        ...(nearMiss ? { typedName } : {}),
       })),
       ambiguousKey: playerAmbiguityKey(sports.join("/"), stripNameSuffix(typedName), candidates.map((c) => c.sport + ":" + c.externalPlayerId)),
       ambiguousBetType: "PLAYER_PROP",
@@ -277,13 +316,13 @@ export function recoverUnresolvedLines(
       const res = resolveNbaPropAgainstRosters(line, nba.prop, {
         nbaRoster,
         nhlRoster,
-        nbaSlate: slateFor("NBA"),
+        nbaSlate: slateFor("NBA", nba.prop.opponent),
         nhlSlate: slateFor("NHL"),
         league: hasNbaCode(line) ? "NBA" : leagueHints[i] ?? null,
       });
       const text = nbaPropText(lineForParsing, nba.prop.playerName);
       if (res.status === "ask") {
-        recovered.push(awaitingLeagueChoice(capperName, line, text, gameNumber, res.typedName, res.candidates));
+        recovered.push(awaitingLeagueChoice(capperName, line, text, gameNumber, res.typedName, res.candidates, res.nearMiss));
         continue;
       }
       if (res.status === "resolved") {
@@ -291,7 +330,10 @@ export function recoverUnresolvedLines(
         recovered.push({
           capperName,
           sportName: res.sport,
-          description: withGameNumberSuffix(parsed.cleanDescription, gameNumber),
+          description: withGameNumberSuffix(
+            res.nearMiss ? withRosterName(parsed.cleanDescription, nba.prop.playerName, res.playerName) : parsed.cleanDescription,
+            gameNumber
+          ),
           betType: "PLAYER_PROP",
           odds: parsed.odds ?? -110,
           hasExplicitOdds: parsed.odds !== null,
@@ -330,9 +372,9 @@ export function recoverUnresolvedLines(
       // roster hit (see isNhlProp above); a shared surname is no such evidence,
       // so that line stays unresolved instead of prompting with NHL players.
       const sportIsEvident = !isSportlessStatLine(line);
-      if (res.status === "ambiguous" && res.tier === "surname" && sportIsEvident) {
-        const typed = parseNhlPlayerProp(line)!.playerName;
-        recovered.push(awaitingPlayerChoice(capperName, "NHL", line, lineForParsing, gameNumber, typed, res.matches));
+      const nhlTyped = parseNhlPlayerProp(line)!.playerName;
+      if (res.status === "ambiguous" && (res.tier === "surname" || res.tier === "near-miss") && sportIsEvident) {
+        recovered.push(awaitingPlayerChoice(capperName, "NHL", line, lineForParsing, gameNumber, nhlTyped, res.matches, res.tier === "near-miss"));
         continue;
       }
       if (res.status !== "resolved") {
@@ -343,7 +385,10 @@ export function recoverUnresolvedLines(
       recovered.push({
         capperName,
         sportName: res.sport,
-        description: withGameNumberSuffix(parsed.cleanDescription, gameNumber),
+        description: withGameNumberSuffix(
+          res.via === "fuzzy" ? withRosterName(parsed.cleanDescription, nhlTyped, res.playerName) : parsed.cleanDescription,
+          gameNumber
+        ),
         betType: parsed.betType,
         odds: parsed.odds ?? -110,
         hasExplicitOdds: parsed.odds !== null,
@@ -362,8 +407,8 @@ export function recoverUnresolvedLines(
       // 2+ of them share asks the user unless a complete slate has exactly one of their teams on it;
       // a name that is ambiguous between SPORTS stays unresolved.
       const res = resolveMlbPropAgainstRoster(line, mlbRoster, slateFor("MLB"), [nhlRoster]);
-      if (res.status === "ambiguous" && res.reason === "shared-name") {
-        recovered.push(awaitingPlayerChoice(capperName, "MLB", line, lineForParsing, gameNumber, res.typedName, res.matches));
+      if (res.status === "ambiguous" && (res.reason === "shared-name" || res.reason === "near-miss")) {
+        recovered.push(awaitingPlayerChoice(capperName, "MLB", line, lineForParsing, gameNumber, res.typedName, res.matches, res.reason === "near-miss"));
         continue;
       }
       if (res.status !== "resolved") {
@@ -374,7 +419,10 @@ export function recoverUnresolvedLines(
       recovered.push({
         capperName,
         sportName: res.sport,
-        description: withGameNumberSuffix(parsed.cleanDescription, gameNumber),
+        description: withGameNumberSuffix(
+          res.nearMiss ? withRosterName(parsed.cleanDescription, res.typedName, res.playerName) : parsed.cleanDescription,
+          gameNumber
+        ),
         betType: parsed.betType,
         odds: parsed.odds ?? -110,
         hasExplicitOdds: parsed.odds !== null,
@@ -397,17 +445,19 @@ export function recoverUnresolvedLines(
     }
 
     if (isPlayerProp.has(line)) {
-      // The slate only ever breaks a bare-surname collision, and only when
-      // complete - it never affects the exact/fuzzy full-name tiers. A
-      // collision it can't settle goes to the user, never to a guess.
+      // The slate only ever breaks a bare-surname collision (when complete)
+      // or places a near-miss name (its ~36-hour window) - an exact full name
+      // never reads it. What it can't settle goes to the user, never to a guess.
       const typed = parsePlayerProp(line)!.playerName;
       let team: string;
+      // The roster's name when the typed one was only a near-miss of it.
+      let rosterName: string | null = null;
       if (isPassingTdsText(line)) {
         // QB-only market: resolves against quarterbacks and reports WHY it failed (a non-QB, an unknown
         // name, no game in the window) instead of the generic unresolved message.
         const qb = resolvePassingTdQuarterback(line, roster, slateFor("NFL"));
         if (qb?.status === "ambiguous") {
-          recovered.push(awaitingPlayerChoice(capperName, "NFL", line, lineForParsing, gameNumber, typed, qb.matches));
+          recovered.push(awaitingPlayerChoice(capperName, "NFL", line, lineForParsing, gameNumber, typed, qb.matches, qb.tier === "near-miss"));
           continue;
         }
         if (qb?.status !== "resolved") {
@@ -416,26 +466,28 @@ export function recoverUnresolvedLines(
           continue;
         }
         team = qb.team;
+        if (qb.via === "fuzzy") rosterName = qb.playerName;
       } else {
         const res = resolvePlayerPropAgainstRoster(line, roster, slateFor("NFL"));
-        if (res.status === "ambiguous" && res.tier === "surname") {
-          recovered.push(awaitingPlayerChoice(capperName, "NFL", line, lineForParsing, gameNumber, typed, res.matches));
+        if (res.status === "ambiguous" && (res.tier === "surname" || res.tier === "near-miss")) {
+          recovered.push(awaitingPlayerChoice(capperName, "NFL", line, lineForParsing, gameNumber, typed, res.matches, res.tier === "near-miss"));
           continue;
         }
         if (res.status !== "resolved") {
-          // A full-name collision (2+ distinct players with the same exact or
-          // fuzzy name) is deliberately treated the same as "unresolved".
+          // A full-name collision (2+ distinct players with the same exact
+          // name) is deliberately treated the same as "unresolved".
           stillUnresolved.push(line);
           continue;
         }
         team = res.team;
+        if (res.via === "fuzzy") rosterName = res.playerName;
       }
 
       const parsed = parsePickText(lineForParsing);
       recovered.push({
         capperName,
         sportName: "NFL",
-        description: withGameNumberSuffix(parsed.cleanDescription, gameNumber),
+        description: withGameNumberSuffix(rosterName ? withRosterName(parsed.cleanDescription, typed, rosterName) : parsed.cleanDescription, gameNumber),
         betType: parsed.betType,
         odds: parsed.odds ?? -110,
         hasExplicitOdds: parsed.odds !== null,

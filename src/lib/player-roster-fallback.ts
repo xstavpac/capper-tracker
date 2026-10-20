@@ -49,6 +49,17 @@
 // The slate only ever breaks a tie - it is never used to pre-filter the
 // roster - so a team on a bye never loses an otherwise-unambiguous match.
 //
+// Near-misses (2026-10, the "Brad Thomas anytime TD" case - fuzzy-matched to
+// Brian Thomas Jr. with nothing to say that was the player meant): only an
+// exact (case/punctuation/suffix-insensitive) full name resolves on its own
+// merit. A full name that only comes within the typo tolerance resolves
+// silently ONLY when exactly one near-miss player's team is in the pick's
+// game - SlateContext.nearMissTeams, see there. A single near-miss whose team
+// isn't, or one that can't be checked, is "ambiguous" with tier "near-miss"
+// and goes to the "which player?" prompt with the suggestion as its one
+// option; two real players both within tolerance (Bijan Robinson / Brian
+// Robinson Jr.) are settled the same way, and otherwise both are offered.
+//
 // There is deliberately NO paste-context tiebreak. An earlier version also
 // narrowed by team names found elsewhere in the same paste ("Commanders -3"
 // two lines up); that is exactly what imported the McCaffrey pick above as
@@ -65,12 +76,13 @@ export type PlayerCandidate = { playerName: string; team: string; position: stri
 // The leagues whose cached ESPN roster this resolver reads.
 export type RosterSport = "NFL" | "NHL" | "NBA";
 
-// `tier` says where the collision happened. Only "surname" (one typed word
-// shared by 2+ players) is something the user can settle by choosing; an
-// exact/fuzzy full-name collision stays unresolved, as it always has.
+// `tier` says where the collision happened. "surname" (one typed word shared
+// by 2+ players) and "near-miss" (a full name only within the typo tolerance of
+// the player(s) in `matches` - possibly just one) are the user's to settle by
+// choosing; an exact full-name collision stays unresolved, as it always has.
 export type PlayerPropResolution =
   | { status: "resolved"; sport: RosterSport; team: string; playerName: string; via: "exact" | "fuzzy" | "surname" }
-  | { status: "ambiguous"; tier: "exact" | "fuzzy" | "surname"; matches: PlayerCandidate[] }
+  | { status: "ambiguous"; tier: "exact" | "near-miss" | "surname"; matches: PlayerCandidate[] }
   | { status: "unresolved" };
 
 // Every team with a game in the import's matching window (the live scoreboard
@@ -78,7 +90,14 @@ export type PlayerPropResolution =
 // from). `complete` is false whenever either feed failed or came back empty:
 // a partial slate can make a team look like it has no game, so it must not be
 // used to choose between players.
-export type SlateContext = { teams: string[]; complete: boolean };
+//
+// `nearMissTeams` is the narrower question a near-miss name asks (see the
+// header): the teams in the pick's game. An NBA line naming its opponent
+// ("@ Celtics") gives that game; otherwise it is every team with a game
+// starting within about 36 hours on a complete slate. Undefined when neither
+// is known - a near-miss then always goes to the user. Exact matches and the
+// bare-surname tiebreak never read it.
+export type SlateContext = { teams: string[]; complete: boolean; nearMissTeams?: string[] };
 
 function toCandidates(players: RosterPlayer[]): PlayerCandidate[] {
   return players.map((p) => ({ playerName: p.playerName, team: p.team, position: p.position, externalPlayerId: p.externalPlayerId }));
@@ -176,11 +195,13 @@ export function resolveNameAgainstRoster(
   }
 
   const fuzzy = distinctPlayers(roster.filter((p) => isLikelyDuplicateName(plain(p.playerName), typedName)));
-  if (fuzzy.length === 1) {
-    return { status: "resolved", sport, team: fuzzy[0].team, playerName: fuzzy[0].playerName, via: "fuzzy" };
-  }
-  if (fuzzy.length > 1) {
-    return { status: "ambiguous", tier: "fuzzy", matches: toCandidates(fuzzy) };
+  if (fuzzy.length > 0) {
+    // A near-miss: resolved only when exactly one of them is in the pick's game.
+    const inGame = slate?.nearMissTeams ? fuzzy.filter((p) => slate.nearMissTeams!.includes(p.team)) : [];
+    if (inGame.length === 1) {
+      return { status: "resolved", sport, team: inGame[0].team, playerName: inGame[0].playerName, via: "fuzzy" };
+    }
+    return { status: "ambiguous", tier: "near-miss", matches: toCandidates(fuzzy) };
   }
 
   // Bare-surname tier - only for a single typed token, and only after both
@@ -222,7 +243,7 @@ export function resolveNameAgainstRoster(
 // slate is known: a QB whose team isn't on the NFL schedule/odds board can't be matched to a game anyway.
 export type PassTdResolution =
   | { status: "resolved"; team: string; playerName: string; via: "exact" | "fuzzy" | "surname" }
-  | { status: "ambiguous"; matches: PlayerCandidate[] }
+  | { status: "ambiguous"; tier: "surname" | "near-miss"; matches: PlayerCandidate[] }
   | { status: "failed"; reason: string };
 
 function describeQuarterbacks(matches: { playerName: string; team: string }[]): string {
@@ -252,8 +273,18 @@ export function resolvePassingTdQuarterback(
     return { status: "resolved", team: res.team, playerName: res.playerName, via: res.via };
   }
   if (res.status === "ambiguous") {
-    // A shared QB surname is the user's to settle; a full-name collision still just fails with its reason.
-    if (res.tier === "surname") return { status: "ambiguous", matches: res.matches };
+    // A near-miss QB whose team has no game on a complete slate fails like an exact one would: confirming
+    // the name couldn't give the pick a game.
+    if (res.tier === "near-miss" && slate?.complete && !res.matches.some((m) => slate.teams.includes(m.team))) {
+      const m = res.matches[0];
+      return {
+        status: "failed",
+        reason: m.playerName + " (" + m.team + ") has no game in the current NFL window (bye week or not scheduled), so this pick can't be matched to a game",
+      };
+    }
+    // A shared QB surname or a near-miss name is the user's to settle; a full-name collision still just
+    // fails with its reason.
+    if (res.tier === "surname" || res.tier === "near-miss") return { status: "ambiguous", tier: res.tier, matches: res.matches };
     return {
       status: "failed",
       reason:
@@ -264,12 +295,30 @@ export function resolvePassingTdQuarterback(
   // No QB matches. Say so precisely: a real player at another position is a different failure than an
   // unknown name.
   const other = resolvePlayerPropAgainstRoster(line, roster.filter((p) => p.position !== "QB"));
-  if (other.status === "resolved") {
-    const pos = roster.find((p) => p.playerName === other.playerName && p.team === other.team)?.position ?? "non-QB";
+  // A lone near-miss names the player as well as a resolved one does, for this message.
+  const nonQb =
+    other.status === "resolved"
+      ? { playerName: other.playerName, team: other.team }
+      : other.status === "ambiguous" && other.tier === "near-miss" && other.matches.length === 1
+        ? other.matches[0]
+        : null;
+  if (nonQb) {
+    const pos = roster.find((p) => p.playerName === nonQb.playerName && p.team === nonQb.team)?.position ?? "non-QB";
     return {
       status: "failed",
-      reason: other.playerName + " (" + other.team + ") is a " + pos + ", not a quarterback - passing TDs is a QB-only market",
+      reason: nonQb.playerName + " (" + nonQb.team + ") is a " + pos + ", not a quarterback - passing TDs is a QB-only market",
     };
   }
   return { status: "failed", reason: "couldn't find a quarterback named \"" + typed + "\" on an active NFL roster" };
+}
+
+// The pick text with a near-miss name replaced by the roster's ("Josh Allan Over 1.5 Passing TDs" ->
+// "Josh Allen Over 1.5 Passing TDs"), so grading reads the player the pick was matched to instead of
+// fuzzy-matching the typo again. The capper's own line stays in the pick's `raw`. First occurrence,
+// case-insensitive; text without the typed name comes back unchanged.
+export function withRosterName(text: string, typedName: string, rosterName: string): string {
+  const typed = typedName.trim();
+  if (!typed) return text;
+  const re = new RegExp(typed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  return text.replace(re, () => rosterName);
 }

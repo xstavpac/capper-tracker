@@ -42,6 +42,10 @@ export type LiveTeam = {
   // The team's full display name exactly as the live feed returned it
   // ("VMI Keydets", "Florida International Panthers").
   name: string;
+  // The game this entry came from: the other side's name, and its start (ISO). Read only by the
+  // roster pass's near-miss check (recover-unresolved-lines.ts) - which game a player's team is in.
+  opponent?: string;
+  commenceTime?: string;
 };
 
 export type LineResolution =

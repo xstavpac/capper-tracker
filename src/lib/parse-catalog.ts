@@ -14,7 +14,7 @@ import {
   parsePlayerPropLine,
   type SegmentPeriod,
 } from "@/lib/bet-line";
-import { isKnownFullPlayerName } from "@/lib/player-roster-fallback";
+import { isKnownFullPlayerName, withRosterName } from "@/lib/player-roster-fallback";
 import { findFeedTeamHits, findSharedMascotTeams, type FeedTeam } from "@/lib/feed-teams";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { parseMlbPlayerProp, normalizeMlbNPlus } from "@/lib/mlb-prop";
@@ -174,7 +174,12 @@ type TeamEntry = [string, string];
 // canonical disambiguated phrase (matches a DISAMBIGUATED_TEAMS entry) so
 // resolving a pick can plug it straight into teamNicknames without having to
 // re-derive it from `label` by parsing text back out of a display string.
-export type AmbiguousOption = { label: string; sport: string; nickname: string };
+//
+// A "which player?" option also carries `playerName` (the roster's name, for
+// the prompt's wording) and, when the typed name was only a near-miss of it,
+// `typedName`: choosing that option then puts the roster's name in the
+// pick's text in place of the typed one (see resolveAmbiguousPick).
+export type AmbiguousOption = { label: string; sport: string; nickname: string; playerName?: string; typedName?: string };
 
 const KNOWN_SPORTS = [
   "WNBA", "NCAAF", "NCAAB", "MLB", "NBA", "NHL", "NFL", "CFL", "MLS", "UFC", "MMA",
@@ -2305,10 +2310,13 @@ export function resolveAmbiguousPick(pick: ParsedPick, choice: AmbiguousOption):
   // with any other parens, then re-appended below from pick.gameNumber
   // (untouched by the ...pick spread) rather than trusted to survive in text.
   const parsed = parsePickText(pick.description);
+  // A near-miss player confirmed: grading reads the roster's name, not the typo (`raw` keeps the capper's line).
+  const description =
+    choice.playerName && choice.typedName ? withRosterName(parsed.cleanDescription, choice.typedName, choice.playerName) : parsed.cleanDescription;
   return {
     ...pick,
     sportName: choice.sport,
-    description: withGameNumberSuffix(parsed.cleanDescription, pick.gameNumber),
+    description: withGameNumberSuffix(description, pick.gameNumber),
     betType: parsed.betType,
     odds: parsed.odds ?? -110,
     hasExplicitOdds: parsed.odds !== null,

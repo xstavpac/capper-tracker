@@ -14,7 +14,9 @@
 //      reads the NBA roster alone.
 //   3. Otherwise the typed name is matched against BOTH rosters:
 //        one league hits   -> that league
-//        both hit          -> the user is asked (candidates from both)
+//        both hit          -> the user is asked (candidates from both) - unless one
+//                             league's hit is the exact name and the other's only a
+//                             near-miss (a typo away): the exact one wins
 //        neither hits      -> unresolved, never a guess
 //   4. The NHL line caps (a hockey points line is never above 3.5, assists
 //      2.5) are a second opinion, not the separator. A roster hit beats the
@@ -26,7 +28,10 @@
 // Otherwise name matching is resolveNameAgainstRoster's, unchanged: exact full name, then
 // fuzzy, then a bare surname; each tier counts only when it lands on exactly one
 // player, a shared surname is settled automatically only by a complete slate on
-// which one candidate's team plays, and is otherwise the user's to answer.
+// which one candidate's team plays, and is otherwise the user's to answer. A
+// near-miss name (within the typo tolerance, not exact) is placed only when its
+// player's team is in the pick's game - the "@ Opponent" game when the line names
+// one - and otherwise asked about with the suggestion offered.
 import { resolveNameAgainstRoster, type PlayerCandidate, type PlayerPropResolution, type SlateContext } from "@/lib/player-roster-fallback";
 import { isNhlSharedNbaMarket, normalizeNbaNPlus, type ParsedNbaProp } from "@/lib/nba-prop";
 import { nbaPlayerAliasName } from "@/lib/nba-player-aliases";
@@ -37,10 +42,12 @@ import type { RosterPlayer } from "@/server/data/nfl-roster";
 export type LeagueCandidate = PlayerCandidate & { sport: "NBA" | "NHL" };
 
 export type NbaRosterResolution =
-  | { status: "resolved"; sport: "NBA" | "NHL"; team: string; playerName: string }
-  // The user has to choose: a surname shared within one league, or a name both
-  // leagues have. `candidates` carry their own league.
-  | { status: "ask"; typedName: string; candidates: LeagueCandidate[] }
+  // `nearMiss`: matched by the typo tier, not the exact name (the pick text should take the roster's spelling).
+  | { status: "resolved"; sport: "NBA" | "NHL"; team: string; playerName: string; nearMiss: boolean }
+  // The user has to choose: a surname shared within one league, a near-miss name
+  // (possibly one suggestion), or a name both leagues have. `candidates` carry their own league.
+  // `nearMiss`: every candidate is only a near-miss for the typed name (confirming one renames it).
+  | { status: "ask"; typedName: string; candidates: LeagueCandidate[]; nearMiss: boolean }
   | { status: "unresolved"; reason: string }
   // No roster knows the name at all. The caller decides: an unresolved player
   // prop, or (for a line that was never positively a prop) its other resolvers.
@@ -59,9 +66,10 @@ const describe = (matches: PlayerCandidate[]) => matches.map((m) => m.playerName
 
 // One league's answer, in this module's terms.
 function fromLeague(res: PlayerPropResolution, sport: "NBA" | "NHL", typedName: string): NbaRosterResolution {
-  if (res.status === "resolved") return { status: "resolved", sport, team: res.team, playerName: res.playerName };
+  if (res.status === "resolved") return { status: "resolved", sport, team: res.team, playerName: res.playerName, nearMiss: res.via === "fuzzy" };
   if (res.status === "ambiguous") {
-    if (res.tier === "surname") return { status: "ask", typedName, candidates: res.matches.map((m) => ({ ...m, sport })) };
+    if (res.tier === "surname" || res.tier === "near-miss")
+      return { status: "ask", typedName, candidates: res.matches.map((m) => ({ ...m, sport })), nearMiss: res.tier === "near-miss" };
     // A full-name collision is not something a prompt settles - same as NFL / NHL.
     return { status: "unresolved", reason: '"' + typedName + '" matches more than one ' + sport + " player (" + describe(res.matches) + ") - this line can't say which" };
   }
@@ -88,7 +96,7 @@ export function resolveNbaPropAgainstRosters(line: string, prop: ParsedNbaProp, 
   const alias = ctx.league === "NHL" ? null : nbaPlayerAliasName(typedName);
   if (alias) {
     const res = resolveNameAgainstRoster(alias, ctx.nbaRoster, ctx.nbaSlate, "NBA");
-    if (res.status === "resolved") return { status: "resolved", sport: "NBA", team: res.team, playerName: res.playerName };
+    if (res.status === "resolved") return { status: "resolved", sport: "NBA", team: res.team, playerName: res.playerName, nearMiss: res.via === "fuzzy" };
     // Not on the roster (any more): match what was typed, as below.
   }
 
@@ -120,8 +128,21 @@ export function resolveNbaPropAgainstRosters(line: string, prop: ParsedNbaProp, 
   const nbaHit = nba.status !== "unresolved";
   const nhlHit = nhl.status !== "unresolved";
 
+  // An exact name in one league beats a near-miss in the other.
+  const exactHit = (res: PlayerPropResolution) => (res.status === "resolved" && res.via === "exact") || (res.status === "ambiguous" && res.tier === "exact");
+  const nearMissHit = (res: PlayerPropResolution) => (res.status === "resolved" && res.via === "fuzzy") || (res.status === "ambiguous" && res.tier === "near-miss");
+  if (nbaHit && nhlHit && exactHit(nba) && nearMissHit(nhl)) return fromLeague(nba, "NBA", typedName);
+  if (nbaHit && nhlHit && exactHit(nhl) && nearMissHit(nba)) {
+    if (!fitsHockey) return notHockey(nhl.status === "resolved" ? nhl.playerName : typedName);
+    return fromLeague(nhl, "NHL", typedName);
+  }
   if (nbaHit && nhlHit) {
-    return { status: "ask", typedName, candidates: [...candidatesOf(nba, "NBA", ctx.nbaRoster), ...candidatesOf(nhl, "NHL", ctx.nhlRoster)] };
+    return {
+      status: "ask",
+      typedName,
+      candidates: [...candidatesOf(nba, "NBA", ctx.nbaRoster), ...candidatesOf(nhl, "NHL", ctx.nhlRoster)],
+      nearMiss: nearMissHit(nba) && nearMissHit(nhl),
+    };
   }
   if (nbaHit) return fromLeague(nba, "NBA", typedName);
   if (nhlHit) {
