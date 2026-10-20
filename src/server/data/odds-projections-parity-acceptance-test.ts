@@ -266,7 +266,14 @@ async function cleanup() {
 // ---- comparisons -----------------------------------------------------------------
 
 async function oldTendencyBoards(sportKey: string): Promise<OddsGame[]> {
-  const snaps = await prisma.oddsSnapshot.findMany({ where: { sportKey }, select: { data: true } }); // the original read
+  // The original read, ordered: it had no orderBy, so it returned snapshots in
+  // physical order, which is fetchDate order only on a freshly inserted table.
+  // After a full test run has deleted and inserted rows, Postgres reuses the
+  // freed space and the order shifts, which changed which duplicate game
+  // findOddsGameForResult kept. fetchDate is unique per sport, so this is
+  // exactly the order getOddsGamesForTendencies pins (fetchDate, then board
+  // position).
+  const snaps = await prisma.oddsSnapshot.findMany({ where: { sportKey }, orderBy: { fetchDate: "asc" }, select: { data: true } });
   return snaps.flatMap((s) => s.data as unknown as OddsGame[]);
 }
 
@@ -334,8 +341,8 @@ async function main() {
   const tendencyReport: Awaited<ReturnType<typeof compareTendencies>>[] = [];
   const pregameReport: NonNullable<Awaited<ReturnType<typeof comparePregame>>>[] = [];
   try {
-    // Insert in ascending fetchDate order so the heap order the old unordered
-    // findMany saw is the same chronological order the new query pins.
+    // Inserted in ascending fetchDate order (the old read is now ordered by
+    // fetchDate explicitly, so this no longer has to hold for parity).
     const fixtures = SPORTS.map((s, i) => ({ sportKey: s, fx: buildFixture(s, 1000 + i * 77) }));
     for (const { sportKey, fx } of fixtures) {
       for (let d = 0; d < DAYS; d++) {
@@ -443,6 +450,11 @@ async function main() {
     for (const row of fullGraded) expected[row.id] = await computeGradedDecayDelta(row, { allObservations });
     const gradedRun = await persistGradedDecayDeltaGames(sportKey);
     const persisted = await prisma.decayDeltaPrediction.findMany({ where: { sportKey, gameResultId: { not: null } } });
+    // In `expected`'s (gameDate) order, not the table's physical order: `same`
+    // compares JSON text, so key order alone could fail it. A row `expected`
+    // doesn't have sorts last and still fails the comparison.
+    const position = new Map(Object.keys(expected).map((id, i) => [id, i]));
+    persisted.sort((x, y) => (position.get(x.gameResultId!) ?? Infinity) - (position.get(y.gameResultId!) ?? Infinity));
     const actual: Record<string, unknown> = {};
     for (const p of persisted) {
       actual[p.gameResultId!] = {

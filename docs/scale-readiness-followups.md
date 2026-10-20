@@ -88,7 +88,7 @@ user-workflow versions, or opportunistically. Local dev is on Node 24
 already; the runner script uses `node --import tsx`, which needs Node >= 20.6,
 so 22 is fine.
 
-### `odds-projections-parity-acceptance-test.ts` fails against real local snapshots (noted 2026-10-19)
+### `odds-projections-parity-acceptance-test.ts` fails against real local snapshots (noted 2026-10-19) - FIXED (2026-10-19)
 
 Fails on `main` (52a3260) too, only in its "real `<sportKey>`: per-game lookups"
 checks, i.e. only when the local DB holds real `odds_snapshots` rows. The
@@ -101,7 +101,17 @@ orders by `fetchDate`, then position. When the rows aren't stored in
 totals are identical (the failure output shows exactly that, e.g. idx 232
 vs 278 with the same moneylines). Fix in the test, not the product:
 compare the matched game's id or content, or give the reference read
-`orderBy: { fetchDate: "asc" }`. Not fixed yet.
+`orderBy: { fetchDate: "asc" }`.
+
+Confirmed and fixed in the test: the reference read is now ordered by
+`fetchDate` (unique per sport, so the same sequence production reads). The
+same physical-order shift also made the `parity_ncaaf` *fixture* checks fail
+inside a full run (44 vs 43 games processed, other leagues' teams in the
+tendency rows) while passing alone, because the fixture's duplicate games are
+deduped by first appearance. The decay-delta comparison had the same hidden
+order dependence (JSON text compared, rows read unordered) and now sorts the
+persisted rows into the expected order. With the fix, the real-snapshot and
+fixture checks pass both alone and in the full suite.
 
 ### Seeded Postgres in CI so the model-engine suites run there - DONE (2026-09)
 
