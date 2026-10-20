@@ -162,10 +162,12 @@ export async function persistGradedDecayDeltaGames(sportKey: string): Promise<Gr
     // regresses back into per-row O(N^2) table scans either.
     const allObservations = await resolveAllGameObservations(sportKey);
     // Every team these games can resolve as favorite or underdog, read once for
-    // the pass (on the first game that needs it) - not once per game and input.
+    // the pass (on the first game that needs it) - not once per game and input -
+    // and bounded to the games' own dates (each game resolves as of its gameDate).
     const tendencyHistory = createTendencyHistorySource(
       sportKey,
-      pending.flatMap((r) => [r.homeTeam, r.awayTeam, ...(r.favTeam ? [r.favTeam] : [])])
+      pending.flatMap((r) => [r.homeTeam, r.awayTeam, ...(r.favTeam ? [r.favTeam] : [])]),
+      pending.map((r) => r.gameDate)
     );
 
     for (const row of pending) {
@@ -247,10 +249,12 @@ export async function persistPregameDecayDeltaGames(sportKey: string): Promise<P
   const snapshot = await getLatestPregameSnapshot(sportKey);
   if (!snapshot) return { candidateGames: 0, alreadyCovered: 0, newlyPersisted: 0, skipped: 0 };
   const pregameSnapshots = createPregameSnapshotSource();
-  // One snapshot read for every team on today's unstarted board (on first use).
+  // One snapshot read for every team on today's unstarted board (on first use),
+  // bounded to `now` - every game here resolves as of now.
   const tendencyHistory = createTendencyHistorySource(
     sportKey,
-    snapshot.games.flatMap((g) => [g.homeTeam, g.awayTeam])
+    snapshot.games.flatMap((g) => [g.homeTeam, g.awayTeam]),
+    [now]
   );
 
   const games = snapshot.games;

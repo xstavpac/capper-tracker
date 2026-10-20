@@ -13,7 +13,12 @@
 //  2. Query count: one findMany for every listed-team lookup; an unlisted team
 //     or another sport falls back to its own query; no lookup, no query.
 //  3. End to end: runModelDefinition(decayDeltaModel) on a seeded graded game,
-//     with and without the source: identical context, buckets, unavailable ids.
+//     with and without the source (unbounded and bounded): identical context,
+//     buckets, unavailable ids.
+//  4. The bound: for several asOf spans, every case still matches (an asOf
+//     outside the span falls back to the per-team query); the bounded read
+//     keeps exactly [latest snapshot at or before the earliest day, latest day];
+//     one raw read serves every in-span lookup.
 import { prisma } from "@/lib/prisma";
 import { easternDayStart } from "@/lib/dates";
 import { decayDeltaModel } from "@/lib/model-engine/fixtures/decay-delta";
@@ -44,6 +49,14 @@ const realFindMany = delegate.findMany.bind(delegate);
 delegate.findMany = (...a: unknown[]) => {
   findManyCalls++;
   return realFindMany(...a);
+};
+// ...and raw reads (the bounded source's one query).
+let rawCalls = 0;
+const client = prisma as unknown as { $queryRaw: (...a: unknown[]) => Promise<unknown> };
+const realQueryRaw = client.$queryRaw.bind(prisma);
+client.$queryRaw = (...a: unknown[]) => {
+  rawCalls++;
+  return realQueryRaw(...a);
 };
 
 async function main() {
@@ -130,8 +143,44 @@ async function main() {
     check("runModelDefinition: same unavailable ids", [...batched.unavailableIds].sort(), [...plain.unavailableIds].sort());
     // A's 04-03 snapshot (fav 5/10) and B's 04-04 one (dog 4/10): both inputs resolved, so the match isn't vacuous.
     check("runModelDefinition: both tendency inputs resolved from the seeded rows", [plain.context["di_fav_rate"], plain.context["di_dog_rate"]], [0.5, 0.4]);
+    const boundedRun = await runModelDefinition(decayDeltaModel, event, { tendencyHistory: createTendencyHistorySource(SPORT, [A, B], [game.gameDate]) });
+    check("runModelDefinition: same context with the bounded source", boundedRun.context, plain.context);
+    check("runModelDefinition: same buckets with the bounded source", boundedRun.buckets, plain.buckets);
+
+    // 4. The bound: the read keeps only [latest snapshot at or before the earliest asOf day, latest asOf day].
+    const spans: [string, Date[]][] = [
+      ["every case date", asOfs],
+      ["a narrow span (04-03..04-05)", [at("2031-04-03"), at("2031-04-05")]],
+      ["one day in a gap (04-05)", [at("2031-04-05")]],
+      ["before any snapshot (03-31)", [at("2031-03-31")]],
+    ];
+    for (const [label, span] of spans) {
+      const bounded = createTendencyHistorySource(SPORT, [A, B, EMPTY], span);
+      let diff = 0;
+      for (const teamName of teams)
+        for (const asOf of asOfs)
+          for (const v of VARIABLES) {
+            const want = await resolveVariable(v, { type: "team", teamName }, asOf, { sportKey: SPORT });
+            const got = await resolveVariable(v, { type: "team", teamName }, asOf, { sportKey: SPORT, tendencyHistory: bounded });
+            if (JSON.stringify(got) !== JSON.stringify(want)) diff++;
+          }
+      check(`bounded to ${label}: all ${cases} cases identical (out-of-span asOfs fall back)`, diff, 0);
+    }
+    const dates = async (span: Date[], asOf: Date) =>
+      (await createTendencyHistorySource(SPORT, [A], span).rowsFor(A, asOf))?.map((r) => r.snapshotDate) ?? null;
+    check("A bounded to 04-05: just its 04-03 row", await dates([at("2031-04-05")], at("2031-04-05")), ["2031-04-03"]);
+    check("A bounded to 04-02..04-06: 04-01 (the floor) through 04-06", await dates([at("2031-04-06"), at("2031-04-02")], at("2031-04-02")), ["2031-04-01", "2031-04-03", "2031-04-06"]);
+    check("A bounded to 04-20: only its last row", await dates([at("2031-04-20")], at("2031-04-20")), ["2031-04-06"]);
+    check("A bounded to 03-31 (before any snapshot): no rows, not found", await dates([at("2031-03-31")], at("2031-03-31")), []);
+    check("an asOf outside the bounded span: no rows from the source (falls back)", createTendencyHistorySource(SPORT, [A], [at("2031-04-05")]).rowsFor(A, at("2031-04-06")), null);
+    findManyCalls = 0;
+    rawCalls = 0;
+    const one = createTendencyHistorySource(SPORT, [A, B, EMPTY], [at("2031-04-03"), at("2031-04-05")]);
+    for (const teamName of [A, B, EMPTY]) for (const asOf of [at("2031-04-03"), at("2031-04-04"), at("2031-04-05")]) await resolveVariable("tendency_over_rate", { type: "team", teamName }, asOf, { sportKey: SPORT, tendencyHistory: one });
+    check("bounded: 9 in-span lookups, one read in total", { raw: rawCalls, findMany: findManyCalls }, { raw: 1, findMany: 0 });
   } finally {
     delegate.findMany = realFindMany;
+    client.$queryRaw = realQueryRaw;
     await prisma.gameResult.deleteMany({ where: { id: { in: gameIds } } });
     await prisma.teamTendencySnapshot.deleteMany({ where: { id: { in: snapshotIds } } });
   }
