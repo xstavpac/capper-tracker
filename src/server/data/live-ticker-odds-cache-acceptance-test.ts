@@ -100,7 +100,7 @@ globalThis.fetch = (async (input: unknown) => {
       gameDate: at,
       gameNumber: 1,
       doubleHeader: "N",
-      status: { abstractGameState: state },
+      status: { abstractGameState: state, codedGameState: state === "Final" ? "F" : state === "Live" ? "I" : "S" },
       teams: { home: { team: { name: home }, score: hs }, away: { team: { name: away }, score: as } },
       linescore: { innings: [], ...extra },
     });

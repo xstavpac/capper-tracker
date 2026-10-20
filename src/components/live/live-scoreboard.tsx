@@ -13,6 +13,7 @@ import { TeamColorBar } from "@/components/live/team-color-bar";
 import { BoardPulsePanel } from "@/components/live/board-pulse-panel";
 import { useSharedLiveScores } from "@/components/live/use-live-scores";
 import { liveGameCardId, scrollToGameCard, useRegisterLiveGameJump } from "@/components/live/live-game-jump";
+import { unplayedLabel } from "@/lib/feed-game-status";
 
 function formatOdds(price: number) {
   return price > 0 ? "+" + price : String(price);
@@ -115,8 +116,9 @@ export function LiveScoreboard({
           const over = totals?.outcomes.find((o) => o.name === "Over");
 
           // Final games are filtered out upstream by orderBoardGames, so the
-          // board only ever renders live or not-yet-started games here.
+          // board only ever renders live, not-yet-started or postponed/cancelled games here.
           const isLive = score?.status === "live";
+          const unplayed = unplayedLabel(score?.status);
 
           return (
             <div key={game.id} id={liveGameCardId(game.id)} className="rounded-card bg-card p-4 shadow-soft transition-shadow hover:shadow-md">
@@ -148,6 +150,9 @@ export function LiveScoreboard({
                       )}
                       <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600 dark:bg-red-500/15 dark:text-red-400">LIVE</span>
                     </span>
+                  )}
+                  {unplayed && (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{unplayed.toUpperCase()}</span>
                   )}
                 </div>
 

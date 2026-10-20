@@ -82,6 +82,33 @@ export type CronRunOutcome = { status: Exclude<CronRunStatus, "RUNNING">; rowsTo
 const num = (v: any) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 const sum = (xs: any[] | undefined, f: (x: any) => number) => (Array.isArray(xs) ? xs.reduce((a, x) => a + f(x), 0) : 0);
 
+// persistFinalScores' start-time / team changes to existing GameResult rows
+// (results[].gameResultChanges), old -> new, one "; "-separated entry each,
+// capped at the first GAME_RESULT_CHANGE_LOG_MAX (gameResultsChanged is always
+// the full count). Added only when a run made any, so an ordinary run's
+// summary is unchanged.
+// Not counted in rowsTouched: the changed rows are already in finalsPersisted.
+export const GAME_RESULT_CHANGE_LOG_MAX = 20;
+
+function gameResultChangeSummary(r: any[]): Record<string, number | string> {
+  const changes = (Array.isArray(r) ? r : []).flatMap((x) => (Array.isArray(x?.gameResultChanges) ? x.gameResultChanges : []));
+  if (changes.length === 0) return {};
+  const log = changes
+    .slice(0, GAME_RESULT_CHANGE_LOG_MAX)
+    .map((c: any) =>
+      [
+        c.sportKey + " " + c.externalId,
+        c.gameDate ? "gameDate " + c.gameDate.from + " -> " + c.gameDate.to : null,
+        c.teams ? "teams " + c.teams.from + " -> " + c.teams.to : null,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    )
+    .join("; ");
+  const more = changes.length - GAME_RESULT_CHANGE_LOG_MAX;
+  return { gameResultsChanged: changes.length, gameResultChangeLog: more > 0 ? log + "; ... +" + more + " more" : log };
+}
+
 // Per route: rows written / graded, plus the few counts worth seeing at a
 // glance. Read off the route's own JSON response, so the routes compute
 // nothing extra for this.
@@ -97,7 +124,10 @@ const SUMMARIZE: Record<CronName, (b: any) => { rowsTouched: number; summary: Re
       legsGraded: sum(r, (x) => num(x.legGrading?.graded)),
       legsUpgraded: sum(r, (x) => num(x.legRegrading?.upgraded)),
     };
-    return { rowsTouched: summary.finalsPersisted + summary.graded + summary.fuzzyUpgraded + summary.legsGraded + summary.legsUpgraded, summary };
+    return {
+      rowsTouched: summary.finalsPersisted + summary.graded + summary.fuzzyUpgraded + summary.legsGraded + summary.legsUpgraded,
+      summary: { ...summary, ...gameResultChangeSummary(r) },
+    };
   },
   "refresh-scores": (b) => {
     const r = b.results ?? [];
@@ -114,7 +144,7 @@ const SUMMARIZE: Record<CronName, (b: any) => { rowsTouched: number; summary: Re
       decayDeltaPersisted: num(b.decayDeltaPredictions?.graded?.newlyPersisted) + num(b.decayDeltaPredictions?.pregame?.newlyPersisted),
     };
     const { nflTeamSnapshotErrors: _e, ...written } = summary;
-    return { rowsTouched: Object.values(written).reduce((a, v) => a + v, 0), summary };
+    return { rowsTouched: Object.values(written).reduce((a, v) => a + v, 0), summary: { ...summary, ...gameResultChangeSummary(r) } };
   },
   "refresh-odds": (b) => {
     const r = b.results ?? [];

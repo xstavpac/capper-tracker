@@ -162,7 +162,8 @@ export async function getFinalScoresForPicks(
     if (!key) continue;
     const match = matchGameResult(
       rows.filter((r) => r.sportKey === key),
-      p
+      p,
+      key
     );
     if (match) out.set(p.id, { home: match.game.homeScore, away: match.game.awayScore });
   }

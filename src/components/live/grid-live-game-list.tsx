@@ -8,6 +8,7 @@ import { teamScore } from "@/components/live/live-scoreboard-ordering";
 import { LiveProgressBar, LiveProgressLabel } from "@/components/live/live-progress-bar";
 import { TINTS } from "@/components/dashboard/panel-shell";
 import { CalendarIcon } from "@/components/dashboard/cappers-icons";
+import { unplayedLabel } from "@/lib/feed-game-status";
 
 // The compact, one-row-per-game list Grid Live shows instead of Feed
 // Live's full accordion cards. Deliberately minimal - just enough to
@@ -65,6 +66,7 @@ export function GridLiveGameList({
       {sortedGames.map(({ game, gameIndex, score }) => {
         const isSelected = game.id === selectedGameId;
         const isLive = score?.status === "live";
+        const unplayed = unplayedLabel(score?.status);
         const pickCount = matchedPicksByGame[gameIndex]?.length ?? 0;
         // Desktop-only (see the `lg:` gates below) - mobile's collapsed list
         // rows stay pixel-identical whether or not a game is live or
@@ -105,13 +107,20 @@ export function GridLiveGameList({
                     LIVE
                   </span>
                 </span>
-              ) : (
-                pickCount > 0 && (
-                  <span className="rounded-full bg-[#E6ECFF] px-2 py-0.5 text-[10.5px] font-semibold leading-none text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
-                    {pickCount} pick{pickCount === 1 ? "" : "s"}
-                  </span>
-                )
-              )}
+              ) : unplayed || pickCount > 0 ? (
+                <span className="flex items-center gap-1.5">
+                  {unplayed && (
+                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold leading-none text-muted-foreground">
+                      {unplayed.toUpperCase()}
+                    </span>
+                  )}
+                  {pickCount > 0 && (
+                    <span className="rounded-full bg-[#E6ECFF] px-2 py-0.5 text-[10.5px] font-semibold leading-none text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+                      {pickCount} pick{pickCount === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </span>
+              ) : null}
             </div>
             <div className="flex items-center justify-between gap-2">
               <span className="flex min-w-0 items-center gap-1.5">

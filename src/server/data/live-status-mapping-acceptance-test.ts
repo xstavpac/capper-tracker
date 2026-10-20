@@ -178,7 +178,7 @@ async function main() {
         gameDate: "2026-10-10T01:00:00Z",
         gameNumber: 1,
         doubleHeader: "N",
-        status: { abstractGameState: c.abstract, detailedState: c.detailed },
+        status: { abstractGameState: c.abstract, codedGameState: c.abstract === "Final" ? "F" : c.abstract === "Live" ? "I" : "S", detailedState: c.detailed },
         teams: { home: { score: 4, team: { name: home(c) } }, away: { score: 4, team: { name: away(c) } } },
         linescore: { inningState: c.half, currentInningOrdinal: c.ordinal, innings: [] },
       }));

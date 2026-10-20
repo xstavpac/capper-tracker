@@ -8,7 +8,7 @@ import { findSameDayDuplicateEvents, warnSameDayDuplicateEvents } from "@/lib/od
 import { teamNamesMatch, teamNameEndsWith } from "@/lib/team-name-match";
 import { cacheKeys } from "@/lib/cache-keys";
 import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
-import { mlbFeedStatus, resolveFeedStatus } from "@/lib/feed-game-status";
+import { espnFeedStatus, isUnplayed, mlbFeedStatus, resolveFeedStatus } from "@/lib/feed-game-status";
 import { cachedByTag } from "@/server/data/cached";
 import { persistOddsApiUsage } from "@/server/data/odds-api-usage";
 import { getBoardGamesProjection, getYesterdayBoardGames } from "@/server/data/odds-projections";
@@ -87,7 +87,8 @@ export type ScoreGame = {
   id: string;
   homeTeam: string;
   awayTeam: string;
-  status: "preview" | "live" | "final";
+  // "postponed" / "cancelled": see FeedGameStatus (lib/feed-game-status.ts). Never scored.
+  status: "preview" | "live" | "final" | "postponed" | "cancelled";
   scores: { name: string; score: string }[] | null;
   commenceTime: string;
   // MLB-only (from the schedule endpoint's `hydrate=linescore`) - "Top"/
@@ -134,6 +135,10 @@ export type ScoreGame = {
   // put its score on - toClientScores drops it before anything is sent to a
   // browser.
   fcsOnly?: true;
+  // The feed sent no score for at least one side, and `scores` shows "0" in its
+  // place for display. persistFinalScores never writes a result from such a
+  // game. Server-only: toClientScores drops it.
+  scoreMissing?: true;
 };
 
 export const LIVE_SPORTS = [
@@ -1004,7 +1009,7 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
       awayTeam: g.teams.away.team.name,
       status,
       scores:
-        status === "preview"
+        status === "preview" || isUnplayed(status)
           ? null
           : [
               { name: g.teams.home.team.name, score: String(g.teams.home.score ?? 0) },
@@ -1019,6 +1024,7 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
       // meaningful together with doubleHeaderStatus.
       gameNumber: typeof g.gameNumber === "number" ? g.gameNumber : null,
       doubleHeaderStatus: g.doubleHeader ?? null,
+      ...(g.teams.home.score == null || g.teams.away.score == null ? { scoreMissing: true as const } : {}),
       innings:
         status === "live" || status === "final"
           ? (g.linescore?.innings ?? []).map((i: any) => ({
@@ -1037,8 +1043,7 @@ function espnEventToScoreGame(e: any, options: { teamDetail?: boolean } = {}): S
   const competitors = e.competitions?.[0]?.competitors ?? [];
   const home = competitors.find((c: any) => c.homeAway === "home");
   const away = competitors.find((c: any) => c.homeAway === "away");
-  const state = e.status?.type?.state;
-  const status = resolveFeedStatus(state === "post" ? "final" : state === "in" ? "live" : "preview", e.date, new Date());
+  const status = espnFeedStatus(e.status?.type, e.date, new Date());
 
   return {
     id: String(e.id),
@@ -1046,7 +1051,7 @@ function espnEventToScoreGame(e: any, options: { teamDetail?: boolean } = {}): S
     awayTeam: away?.team?.displayName ?? "",
     status,
     scores:
-      status === "preview"
+      status === "preview" || isUnplayed(status)
         ? null
         : [
             { name: home?.team?.displayName ?? "", score: String(home?.score ?? 0) },
@@ -1058,6 +1063,7 @@ function espnEventToScoreGame(e: any, options: { teamDetail?: boolean } = {}): S
     innings: null,
     period: status === "live" ? (e.status?.period ?? null) : null,
     clock: status === "live" ? (e.status?.displayClock ?? null) : null,
+    ...(home?.score == null || away?.score == null || home.score === "" || away.score === "" ? { scoreMissing: true as const } : {}),
     ...(options.teamDetail
       ? {
           homeLocation: home?.team?.location,
@@ -1242,7 +1248,7 @@ export async function getNcaafLiveScores(): Promise<ScoreGame[]> {
 export function toClientScores(games: ScoreGame[]): ScoreGame[] {
   return games
     .filter((g) => !g.fcsOnly)
-    .map(({ homeLocation, awayLocation, homeShortName, awayShortName, fcsOnly, ...rest }) => rest);
+    .map(({ homeLocation, awayLocation, homeShortName, awayShortName, fcsOnly, scoreMissing, ...rest }) => rest);
 }
 
 // getLiveScoresForSport for anything that ends up in a response or in client
@@ -2057,7 +2063,9 @@ export function resolveScheduleGameFromFeeds(
 ): ScheduleCandidateResult {
   const inWindow = (g: { commenceTime: string }) => withinResolveWindow(g.commenceTime, referenceTime);
 
-  const fromScores = scoreGames.filter((g) => teamMatches(g) && inWindow(g));
+  // A postponed or cancelled slot is never a game to attach a pick to: the
+  // makeup (a new entry, same gamePk for MLB) is, once the feed lists it.
+  const fromScores = scoreGames.filter((g) => !isUnplayed(g.status) && teamMatches(g) && inWindow(g));
 
   const sameDayScores = fromScores.filter((g) => sameSlateDay(new Date(g.commenceTime), referenceTime));
   if (sameDayScores.length > 0) return pickBestScheduleCandidate(sameDayScores, referenceTime, gameNumber);
@@ -2135,7 +2143,7 @@ async function resolveScheduleGame(
   if (nearTermOnly) return resolveScheduleGameFromFeeds(scoreGames, [], teamMatches, referenceTime, gameNumber);
 
   const scoreHasUpcoming = scoreGames.some(
-    (g) => teamMatches(g) && g.status !== "final" && withinResolveWindow(g.commenceTime, referenceTime)
+    (g) => teamMatches(g) && g.status !== "final" && !isUnplayed(g.status) && withinResolveWindow(g.commenceTime, referenceTime)
   );
   const oddsGames = scoreHasUpcoming ? [] : await fetchFeedOrEmpty("odds", () => getOdds(sportKey));
   const scheduleGames =

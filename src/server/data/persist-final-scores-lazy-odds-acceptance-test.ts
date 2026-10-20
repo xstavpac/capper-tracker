@@ -74,7 +74,7 @@ globalThis.fetch = (async (input: unknown) => {
             gameDate: g.at,
             gameNumber: 1,
             doubleHeader: "N",
-            status: { abstractGameState: g.state },
+            status: { abstractGameState: g.state, codedGameState: g.state === "Final" ? "F" : "S" },
             teams: { home: { team: { name: g.home }, score: g.hs }, away: { team: { name: g.away }, score: g.as } },
             linescore: {
               innings: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ num: n, home: { runs: n === 1 ? 1 : 0 }, away: { runs: n === 2 ? 2 : 0 } })),

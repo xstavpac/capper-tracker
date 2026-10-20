@@ -1,4 +1,4 @@
-import { persistFinalScores } from "@/server/data/grading";
+import { persistFinalScores, type GameResultChange } from "@/server/data/grading";
 import { RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { recomputeTeamTendencies, snapshotTeamTendencies } from "@/server/data/team-tendencies";
 import {
@@ -62,7 +62,10 @@ async function run(): Promise<Response> {
 
   const results = await Promise.all(
     RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
-      const [persisted, persistMs] = await timed(() => persistFinalScores(sportKey));
+      // Every start-time / team change persistFinalScores makes to an existing
+      // row, old -> new, so it lands in this run's cron_runs summary.
+      const gameResultChanges: GameResultChange[] = [];
+      const [persisted, persistMs] = await timed(() => persistFinalScores(sportKey, gameResultChanges));
       // Recompute right after this sport's scores are persisted, so a
       // freshly-final game is reflected in tendencies the same run it
       // lands in GameResult, not a day later on the next cron pass.
@@ -75,6 +78,7 @@ async function run(): Promise<Response> {
       return {
         sport: sportKey,
         persisted,
+        gameResultChanges,
         tendencies,
         tendencySnapshots,
         timing: {

@@ -101,6 +101,9 @@ function deriveLedgerFields(
 // (see fetchExistingResultState) instead of being transferred whole.
 type ExistingResultState = {
   externalId: string;
+  gameDate: Date;
+  homeTeam: string;
+  awayTeam: string;
   firstFiveHomeScore: number | null;
   firstInningHomeScore: number | null;
   homeTurnovers: number | null;
@@ -124,6 +127,9 @@ export async function fetchExistingResultState(
   if (externalIds.length === 0) return new Map();
   const rows = await prisma.$queryRaw<ExistingResultState[]>(Prisma.sql`
     SELECT "externalId",
+           "gameDate",
+           "homeTeam",
+           "awayTeam",
            "firstFiveHomeScore",
            "firstInningHomeScore",
            "homeTurnovers",
@@ -150,7 +156,42 @@ export async function fetchExistingResultState(
 // sport without its source wired up just stays PENDING (resolveOutcome
 // returns null) rather than grading wrong. The firstFive* columns are
 // MLB-flavored by name only - resolveOutcome reads them generically.
-export async function persistFinalScores(sportKey: string): Promise<number> {
+// A change persistFinalScores made to an existing row's game identity: the
+// feed moved the game's start time (an MLB makeup replayed under the
+// postponed game's gamePk) or, rarer, renamed a side. Collected into the
+// caller's `changes` array for the cron run log, and always console-logged.
+export type GameResultChange = {
+  sportKey: string;
+  externalId: string;
+  gameDate?: { from: string; to: string };
+  teams?: { from: string; to: string };
+};
+
+// The identity fields of an existing row the feed now disagrees with, or null
+// when the start time and both team names still match. Teams are compared as
+// the pair the feed sends for this externalId, so home/away only ever flips
+// when the feed itself changed them. Exported for
+// game-result-reschedule-acceptance-test.ts.
+export function gameResultIdentityChange(
+  sportKey: string,
+  existing: { externalId: string; gameDate: Date; homeTeam: string; awayTeam: string },
+  feed: { homeTeam: string; awayTeam: string; commenceTime: string }
+): GameResultChange | null {
+  const feedStart = new Date(feed.commenceTime);
+  const dateMoved = Number.isFinite(feedStart.getTime()) && feedStart.getTime() !== existing.gameDate.getTime();
+  const teamsChanged = feed.homeTeam !== existing.homeTeam || feed.awayTeam !== existing.awayTeam;
+  if (!dateMoved && !teamsChanged) return null;
+  return {
+    sportKey,
+    externalId: existing.externalId,
+    ...(dateMoved ? { gameDate: { from: existing.gameDate.toISOString(), to: feedStart.toISOString() } } : {}),
+    ...(teamsChanged
+      ? { teams: { from: existing.awayTeam + " @ " + existing.homeTeam, to: feed.awayTeam + " @ " + feed.homeTeam } }
+      : {}),
+  };
+}
+
+export async function persistFinalScores(sportKey: string, changes?: GameResultChange[]): Promise<number> {
   const games = await getLiveScoresForSport(sportKey);
   const finals = games.filter((g) => g.status === "final" && g.scores);
   const supportsFirstFive = sportKey === "baseball_mlb";
@@ -164,7 +205,10 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
   // getEspnGameSegments / getNflGameFacts).
   const supportsLinescore = supportsFirstHalf || sportKey === "icehockey_nhl";
 
+  // A final the feed sent without a score (its display mapping shows "0" in
+  // its place) is never written: that game wasn't played, it isn't a 0-0.
   const finalScores = (g: (typeof finals)[number]) => {
+    if (g.scoreMissing) return null;
     const homeScore = g.scores!.find((s) => s.name === g.homeTeam)?.score;
     const awayScore = g.scores!.find((s) => s.name === g.awayTeam)?.score;
     return homeScore === undefined || awayScore === undefined ? null : { homeScore, awayScore };
@@ -199,6 +243,11 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
       const { homeScore, awayScore } = scores;
 
       const existing = existingById.get(g.id);
+      const identityChange = existing ? gameResultIdentityChange(sportKey, existing, g) : null;
+      if (identityChange) {
+        console.log(JSON.stringify({ tag: "game-result-identity-change", ...identityChange }));
+        changes?.push(identityChange);
+      }
 
       // Early-inning scores are immutable once captured, and fetching them hits the
       // heavier live-feed endpoint - only fetch what's still missing. Checking both
@@ -287,6 +336,8 @@ export async function persistFinalScores(sportKey: string): Promise<number> {
         update: {
           homeScore: parseInt(homeScore, 10),
           awayScore: parseInt(awayScore, 10),
+          ...(identityChange?.gameDate ? { gameDate: new Date(identityChange.gameDate.to) } : {}),
+          ...(identityChange?.teams ? { homeTeam: g.homeTeam, awayTeam: g.awayTeam } : {}),
           ...(firstHalfHome !== null ? { firstFiveHomeScore: firstHalfHome, firstFiveAwayScore: firstHalfAway } : {}),
           ...(firstInning
             ? { firstInningHomeScore: firstInning.home, firstInningAwayScore: firstInning.away }
@@ -627,8 +678,35 @@ function withinDrift<T extends { gameDate: Date }>(candidates: T[], reference: D
 // either way, just filtered from a wider in-memory array instead of a per-pick
 // query, so a bulk grading run can't silently match differently than a single
 // page-load grade would have.
+// Sports where a 0-0 final can't happen: a 0-0 row there is a game that was
+// never played (postponed/cancelled, written as "final" before the feed
+// status fix), never something to grade from.
+const NO_SCORELESS_FINALS = new Set(["baseball_mlb", "icehockey_nhl"]);
+
+function inPickWindow<T extends { gameDate: Date }>(candidates: T[], gameTime: Date): T[] {
+  const windowStart = gameTime.getTime() - 2 * 86400000;
+  const windowEnd = gameTime.getTime() + 2 * 86400000;
+  return candidates.filter((c) => {
+    const t = c.gameDate.getTime();
+    return t >= windowStart && t < windowEnd;
+  });
+}
+
+// How many candidates sit inside this pick's own +-2-day window - the number
+// a no-match reason reports (the shared pool spans every pick in the run).
+export function candidatesInPickWindow(candidates: { gameDate: Date }[], pick: { gameTime: Date }): number {
+  return inPickWindow(candidates, pick.gameTime).length;
+}
+
 export function matchGameResult<
-  T extends { gameDate: Date; homeTeam: string; awayTeam: string; gameNumber?: number | null }
+  T extends {
+    gameDate: Date;
+    homeTeam: string;
+    awayTeam: string;
+    gameNumber?: number | null;
+    homeScore?: number;
+    awayScore?: number;
+  }
 >(
   candidates: T[],
   pick: {
@@ -647,14 +725,15 @@ export function matchGameResult<
     // genuinely the wrong pool) returns null - stays PENDING rather than
     // falling back to the closest-time guess this field exists to prevent.
     gameNumber?: number | null;
-  }
+  },
+  // The candidates' sport. For MLB/NHL a 0-0 row is dropped before matching
+  // (see NO_SCORELESS_FINALS); omitted, every candidate is kept.
+  sportKey?: string
 ): GameMatch<T> | null {
-  const windowStart = pick.gameTime.getTime() - 2 * 86400000;
-  const windowEnd = pick.gameTime.getTime() + 2 * 86400000;
-  const inWindow = candidates.filter((c) => {
-    const t = c.gameDate.getTime();
-    return t >= windowStart && t < windowEnd;
-  });
+  const refuseScoreless = sportKey !== undefined && NO_SCORELESS_FINALS.has(sportKey);
+  const inWindow = inPickWindow(candidates, pick.gameTime).filter(
+    (c) => !(refuseScoreless && c.homeScore === 0 && c.awayScore === 0)
+  );
   if (inWindow.length === 0) return null;
 
   const byGameNumber = (pool: T[]) =>
@@ -688,7 +767,16 @@ export function matchGameResult<
     pick.gameTime
   );
   if (fuzzy.length === 0) return null;
-  return { game: closestByDate(fuzzy, pick.gameTime), matchType: "fuzzy" };
+  // The text search above can't tell home from away, so a series game with
+  // the sides flipped can land in the same 6h window. Prefer a candidate
+  // whose home/away nicknames sit on the pick's own home/away fields; a
+  // reversed one is only a fallback, and only inside that same window.
+  const pickHome = pick.homeTeam.toLowerCase();
+  const pickAway = pick.awayTeam.toLowerCase();
+  const sameOrientation = fuzzy.filter(
+    (c) => pickHome.includes(teamNickname(c.homeTeam)) && pickAway.includes(teamNickname(c.awayTeam))
+  );
+  return { game: closestByDate(sameOrientation.length > 0 ? sameOrientation : fuzzy, pick.gameTime), matchType: "fuzzy" };
 }
 
 export async function findMatchingGameResult(
@@ -709,7 +797,7 @@ export async function findMatchingGameResult(
   });
   if (candidates.length === 0) return null;
 
-  return matchGameResult(candidates, pick);
+  return matchGameResult(candidates, pick, sportKey);
 }
 
 type SegmentScore = { home: number; away: number };
@@ -1379,10 +1467,10 @@ export async function gradePickPool(
   const failures: GradeFailure[] = [];
 
   await inChunks(picks, async (pick) => {
-    const result = matchGameResult(candidates, pick);
+    const result = matchGameResult(candidates, pick, sportKey);
     if (!result) {
       notMatched++;
-      failures.push({ pickId: pick.id, reason: noMatchReason(candidates.length), gameResultId: null, finalSeenAt: null });
+      failures.push({ pickId: pick.id, reason: noMatchReason(candidatesInPickWindow(candidates, pick)), gameResultId: null, finalSeenAt: null });
       return;
     }
     // resolvePlayerProp, not gradePlayerProp: same outcome, plus the reason
@@ -1438,7 +1526,7 @@ export async function regradeFuzzyPool(
   let upgraded = 0;
 
   await inChunks(picks, async (pick) => {
-    const result = matchGameResult(candidates, pick);
+    const result = matchGameResult(candidates, pick, sportKey);
     if (!result || result.matchType !== "exact") return;
     const outcome =
       pick.betType === "PLAYER_PROP"

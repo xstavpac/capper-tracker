@@ -27,7 +27,7 @@ check("MLB Warmup (PW) after start -> scheduled", mlbFeedStatus({ abstractGameSt
 check("MLB Warmup (PW) before start -> scheduled", mlbFeedStatus({ abstractGameState: "Live", statusCode: "PW" }, START, at(-20)), "preview");
 check("MLB In Progress (I) before start -> scheduled", mlbFeedStatus({ abstractGameState: "Live", statusCode: "I" }, START, at(-20)), "preview");
 check("MLB In Progress (I) after start -> live", mlbFeedStatus({ abstractGameState: "Live", statusCode: "I" }, START, at(1)), "live");
-check("MLB Final -> final", mlbFeedStatus({ abstractGameState: "Final", statusCode: "F" }, START, at(200)), "final");
+check("MLB Final -> final", mlbFeedStatus({ abstractGameState: "Final", codedGameState: "F", statusCode: "F" }, START, at(200)), "final");
 check("MLB Preview -> preview", mlbFeedStatus({ abstractGameState: "Preview", statusCode: "S" }, START, at(-60)), "preview");
 check("MLB missing status -> preview", mlbFeedStatus(undefined, START, at(10)), "preview");
 

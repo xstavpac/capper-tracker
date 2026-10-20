@@ -6,6 +6,7 @@ import { closestByTime } from "@/lib/dates";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { LocalGameTime } from "@/components/local-game-time";
 import { useSafePoll } from "@/lib/use-safe-poll";
+import { isUnplayed, unplayedLabel } from "@/lib/feed-game-status";
 
 // Deliberately lighter than the authenticated live page's 25s poll
 // (LIVE_POLL_INTERVAL_MS in live-scoreboard.tsx) - a game's score
@@ -19,7 +20,7 @@ type ScoreUpdate = {
   homeTeam: string;
   awayTeam: string;
   commenceTime: string;
-  status: "preview" | "live" | "final";
+  status: "preview" | "live" | "final" | "postponed" | "cancelled";
   scores: { name: string; score: string }[] | null;
   inningHalf: string | null;
   inningOrdinal: string | null;
@@ -89,6 +90,8 @@ function GameState({ game }: { game: TickerGame }) {
     return <LocalGameTime date={game.commenceTime} options={{ hour: "numeric", minute: "2-digit" }} />;
   }
   if (game.status === "final") return <>Final</>;
+  const unplayed = unplayedLabel(game.status);
+  if (unplayed) return <>{unplayed}</>;
   if (game.sportLabel === "MLB" && game.inningHalf && game.inningOrdinal) {
     return (
       <>
@@ -111,7 +114,7 @@ function Segment({ game }: { game: TickerGame }) {
         <span>{game.awayShort}</span>
         <span className="text-blue-300">
           {game.awayScore ?? ""}
-          {game.status !== "preview" && " - "}
+          {game.status !== "preview" && !isUnplayed(game.status) && " - "}
           {game.homeScore ?? ""}
         </span>
         <span>{game.homeShort}</span>

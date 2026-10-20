@@ -22,7 +22,7 @@ export type GradeablePickInput = {
   sportKey: string | null;
   status: string;
   hasFinalResult: boolean;
-  feedStatus: "preview" | "live" | "final" | null;
+  feedStatus: "preview" | "live" | "final" | "postponed" | "cancelled" | null;
 };
 
 export type GradeablePicks = {

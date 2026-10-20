@@ -89,7 +89,7 @@ const FIXTURE = {
       // under groups=80 because it's the FBS team's game.
       id: "401752702",
       date: "2026-09-05T19:00:00Z",
-      status: { type: { state: "post", detail: "Final", shortDetail: "Final" } },
+      status: { type: { state: "post", completed: true, detail: "Final", shortDetail: "Final" } },
       competitions: [
         {
           competitors: [
@@ -109,7 +109,7 @@ const FCS_FIXTURE = {
     {
       id: "401868120",
       date: "2026-09-05T20:00:00Z",
-      status: { type: { state: "post", detail: "Final", shortDetail: "Final" } },
+      status: { type: { state: "post", completed: true, detail: "Final", shortDetail: "Final" } },
       competitions: [
         {
           competitors: [

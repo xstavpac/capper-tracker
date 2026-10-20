@@ -158,7 +158,7 @@ export async function gradeAllPendingLegs(
     const chunk = toProcess.slice(i, i + BULK_GRADE_CONCURRENCY);
     const outcomes = await Promise.all(
       chunk.map(async (leg) => {
-        const result = matchGameResult(candidates, leg);
+        const result = matchGameResult(candidates, leg, sportKey);
         if (!result) return { matched: false, parlayBetId: leg.parlayBetId };
 
         const outcome =
@@ -227,7 +227,7 @@ export async function regradeAllFuzzyMatchedLegs(
     const touchedParlayIds: string[] = [];
     await Promise.all(
       chunk.map(async (leg) => {
-        const result = matchGameResult(candidates, leg);
+        const result = matchGameResult(candidates, leg, sportKey);
         if (!result || result.matchType !== "exact") return;
 
         const outcome =
