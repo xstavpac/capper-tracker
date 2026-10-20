@@ -154,6 +154,31 @@ async function main() {
       resolver.resolveVariable("tendency_fav_win_pct", { type: "team", teamName: "New York Yankees" }, new Date(), { sportKey: "baseball_mlb" })
     );
     await run("control: zone model", () => zone.computeZoneModel("baseball_mlb"));
+
+    // Egress plan reads (2026-10-20): the roster tables, the narrowed capper and
+    // /picks reads, and the batched tendency history.
+    const rosterCaches = {
+      NFL: await import(WT + "/server/data/nfl-roster-cache.ts"),
+      MLB: await import(WT + "/server/data/mlb-roster-cache.ts"),
+      NHL: await import(WT + "/server/data/nhl-roster-cache.ts"),
+      NBA: await import(WT + "/server/data/nba-roster-cache.ts"),
+    };
+    const rosterTables = await import(WT + "/server/data/roster-tables.ts");
+    const findOrCreate = await import(WT + "/server/data/capper-find-or-create.ts");
+    const tendencyHistory = await import(WT + "/server/data/model-engine/tendency-history.ts");
+    await run("roster cache: NFL grading roster", () => rosterCaches.NFL.getCachedNflGradingRoster());
+    await run("roster cache: MLB grading roster", () => rosterCaches.MLB.getCachedMlbGradingRoster());
+    await run("roster cache: NHL grading roster", () => rosterCaches.NHL.getCachedNhlGradingRoster());
+    await run("roster cache: NBA grading roster", () => rosterCaches.NBA.getCachedNbaGradingRoster());
+    await run("nfl roster names: getCachedNflRosterFullNames", () => rosterCaches.NFL.getCachedNflRosterFullNames());
+    for (const league of ["NFL", "MLB", "NHL", "NBA"] as const) {
+      await run("roster refresh diff: " + league, () => rosterTables.rosterTableFor(league).readForDiff());
+    }
+    await run("capper names: findOrCreateCapper (existing name)", () => findOrCreate.findOrCreateCapper(user.id, cappers[0].name));
+    await run("tendency history batch: bounded read", () =>
+      tendencyHistory.createTendencyHistorySource("baseball_mlb", ["New York Yankees", "Boston Red Sox"], [new Date(now - 48 * H), new Date()]).rowsFor("New York Yankees", new Date())
+    );
+    await run("/picks: getFilteredPicksForUser (narrow select)", () => picks.getFilteredPicksForUser(user.id, { startDateKey: today, endDateKey: today }));
   } finally {
     label = "cleanup";
     const del = await db.pick.deleteMany({ where: { id: { in: pickIds }, userId: user.id } });
