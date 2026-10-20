@@ -59,7 +59,7 @@ const generate: GenerateCall = async (req) => {
   };
   return { snapshot, parlay: buildGeneratedParlay(snapshot, req.settings, null, new Date(clock)) };
 };
-const S: GeneratorSettings = { legCount: 2, maxLegsPerGame: 1, include: "ALL", gameLinesPct: null, fillFrom: "BEST_AVAILABLE" };
+const S: GeneratorSettings = { legCount: 2, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
 const pool = { leagues: ["MLB"], slipPickIds: ["g4ml"], targets: [] as { gameId: string; leagueName: string }[] };
 
 (async () => {
@@ -73,7 +73,7 @@ const pool = { leagues: ["MLB"], slipPickIds: ["g4ml"], targets: [] as { gameId:
   }
   check("5 Regenerates: no request", calls.length, 1);
   check("...none fetched, and they varied", [keys.some((k) => k.endsWith("!")), new Set(keys).size > 1], [false, true]);
-  await session.generate(pool, { ...S, legCount: 3, maxLegsPerGame: 2, include: "GAME_LINES", gameLinesPct: 50, fillFrom: "YOUR_PICKS_ONLY" });
+  await session.generate(pool, { ...S, legCount: 3, maxLegsPerGame: 2, include: ["MONEYLINE", "SPREAD", "TOTALS"], mix: { MONEYLINE: 50, SPREAD: 0, TOTALS: 50 }, fillFrom: "YOUR_PICKS_ONLY" });
   check("settings that don't change the pool: no request", calls.length, 1);
   await session.generate({ leagues: ["MLB"], slipPickIds: ["g4ml"], targets: [] }, S);
   check("the same pool rebuilt from new arrays: no request", calls.length, 1);

@@ -160,7 +160,7 @@ async function main() {
   let clock = NOW;
   const session = createGeneratorSession({ generate: (r) => generateParlayAction(r), now: () => new Date(clock) });
   const inputs = { leagues: ["NFL"], slipPickIds: [slipId], targets: [] as { gameId: string; leagueName: string }[] };
-  const settings: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: "ALL", gameLinesPct: null, fillFrom: "BEST_AVAILABLE" };
+  const settings: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
   const bundleCalls = () => queries.filter((q) => q.includes('"cardReq"')).length;
 
   const q0 = queries.length;
@@ -192,7 +192,7 @@ async function main() {
 
   // ---- Settings that don't change the pool: zero reads.
   const beforeSettings = queries.length;
-  for (const s of [{ legCount: 4 }, { maxLegsPerGame: 2, legCount: 6 }, { include: "GAME_LINES" as const }, { gameLinesPct: 50 }]) {
+  for (const s of [{ legCount: 4 }, { maxLegsPerGame: 2, legCount: 6 }, { include: ["MONEYLINE", "SPREAD", "TOTALS"] as GeneratorSettings["include"] }, { mix: { MONEYLINE: 50, PROPS: 50 } }]) {
     const r = await session.generate(inputs, { ...settings, ...s });
     if ("error" in r) throw new Error(r.error);
     check(`settings ${JSON.stringify(s)}: rebuilt without a request`, !r.fetched);

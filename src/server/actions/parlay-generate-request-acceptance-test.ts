@@ -23,7 +23,7 @@ stub("../data/picks", { getCapperRecordBundle: async () => (reads++, { leagueRec
 
 (async () => {
   const { generateParlayAction } = await import("./parlay-generate");
-  const settings = { legCount: 3, maxLegsPerGame: 1, include: "ALL", gameLinesPct: null, fillFrom: "BEST_AVAILABLE" };
+  const settings = { legCount: 3, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
   const ok = { leagues: ["NFL"], slipPickIds: [], targets: [], settings };
   const bad: [string, unknown, string][] = [
     ["not an object", null, "isn't valid"],
