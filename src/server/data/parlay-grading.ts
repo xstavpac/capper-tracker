@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { PickStatus } from "@prisma/client";
+import { getSportIdByName } from "@/server/data/sport-ids";
 import {
   matchGameResult,
   resolveOutcome,
@@ -128,12 +129,12 @@ export async function gradeAllPendingLegs(
   sportName: string,
   maxLegs = 500
 ): Promise<{ graded: number; notMatched: number; remaining: number }> {
-  const sport = await prisma.sport.findUnique({ where: { name: sportName } });
-  if (!sport) return { graded: 0, notMatched: 0, remaining: 0 };
+  const sportId = await getSportIdByName(sportName);
+  if (!sportId) return { graded: 0, notMatched: 0, remaining: 0 };
 
   // Same stale-pending exclusion as gradeAllPendingPicks: legs older than the
   // lookback stay PENDING but no longer take slots or widen the candidate window.
-  const gradeable = { sportId: sport.id, status: "PENDING" as const, gameTime: { gte: regradeLookbackCutoff() } };
+  const gradeable = { sportId, status: "PENDING" as const, gameTime: { gte: regradeLookbackCutoff() } };
   const totalPending = await prisma.leg.count({ where: gradeable });
   if (totalPending === 0) return { graded: 0, notMatched: 0, remaining: 0 };
 
@@ -198,12 +199,12 @@ export async function regradeAllFuzzyMatchedLegs(
   sportKey: string,
   sportName: string
 ): Promise<{ checked: number; upgraded: number }> {
-  const sport = await prisma.sport.findUnique({ where: { name: sportName } });
-  if (!sport) return { checked: 0, upgraded: 0 };
+  const sportId = await getSportIdByName(sportName);
+  if (!sportId) return { checked: 0, upgraded: 0 };
 
   const fuzzyGraded = await prisma.leg.findMany({
     where: {
-      sport: { id: sport.id },
+      sport: { id: sportId },
       status: { in: ["WIN", "LOSS", "PUSH"] },
       gradedViaFuzzyMatch: true,
       gameTime: { gte: regradeLookbackCutoff() },
