@@ -141,8 +141,9 @@ async function main() {
     check("runModelDefinition: same context with and without the source", batched.context, plain.context);
     check("runModelDefinition: same buckets", batched.buckets, plain.buckets);
     check("runModelDefinition: same unavailable ids", [...batched.unavailableIds].sort(), [...plain.unavailableIds].sort());
-    // A's 04-03 snapshot (fav 5/10) and B's 04-04 one (dog 4/10): both inputs resolved, so the match isn't vacuous.
-    check("runModelDefinition: both tendency inputs resolved from the seeded rows", [plain.context["di_fav_rate"], plain.context["di_dog_rate"]], [0.5, 0.4]);
+    // A's 04-03 snapshot (fav 5 of 5+5+0) and B's 04-04 one (dog 4 of 4+6+1 - the rate's denominator counts
+    // pushes, per computeTendencyRates): both inputs resolved, so the match isn't vacuous.
+    check("runModelDefinition: both tendency inputs resolved from the seeded rows", [plain.context["di_fav_rate"], plain.context["di_dog_rate"]], [0.5, 4 / 11]);
     const boundedRun = await runModelDefinition(decayDeltaModel, event, { tendencyHistory: createTendencyHistorySource(SPORT, [A, B], [game.gameDate]) });
     check("runModelDefinition: same context with the bounded source", boundedRun.context, plain.context);
     check("runModelDefinition: same buckets with the bounded source", boundedRun.buckets, plain.buckets);
