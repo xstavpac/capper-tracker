@@ -3,6 +3,8 @@
 import {
   cumulativeUnitsSeries,
   dateStepHref,
+  MAX_PICKS_RANGE_DAYS,
+  resolveDateFilter,
   shiftDateKey,
   sportChipLayout,
   winRatePct,
@@ -78,6 +80,25 @@ check("shift across DST end", shiftDateKey("2026-11-01", 1), "2026-11-02");
 check("href sets date, keeps other params", dateStepHref("/picks", "capperId=x&date=2026-09-29", "2026-09-29", -1), "/picks?capperId=x&date=2026-09-28");
 check("href from default (no param)", dateStepHref("/picks", "", "2026-09-29", 1), "/picks?date=2026-09-30");
 check("href drops range params", dateStepHref("/picks", "startDate=a&endDate=b", "2026-09-29", 1), "/picks?date=2026-09-30");
+// resolveDateFilter: the page's date params -> one Eastern-day range, a range over 31 days clamped.
+const T = "2026-10-20";
+check("max range is 31 days", MAX_PICKS_RANGE_DAYS, 31);
+check("no params: today", resolveDateFilter({}, T), { startDateKey: T, endDateKey: T, isRange: false, clamped: false });
+check("single date", resolveDateFilter({ date: "2026-10-01" }, T), { startDateKey: "2026-10-01", endDateKey: "2026-10-01", isRange: false, clamped: false });
+check("one-sided range: start only", resolveDateFilter({ startDate: "2026-10-01" }, T), { startDateKey: "2026-10-01", endDateKey: "2026-10-01", isRange: true, clamped: false });
+check("one-sided range: end only", resolveDateFilter({ endDate: "2026-10-05" }, T), { startDateKey: "2026-10-05", endDateKey: "2026-10-05", isRange: true, clamped: false });
+check("reversed range is swapped", resolveDateFilter({ startDate: "2026-10-10", endDate: "2026-10-01" }, T), { startDateKey: "2026-10-01", endDateKey: "2026-10-10", isRange: true, clamped: false });
+check("exactly 31 days: unchanged", resolveDateFilter({ startDate: "2026-09-20", endDate: "2026-10-20" }, T), { startDateKey: "2026-09-20", endDateKey: "2026-10-20", isRange: true, clamped: false });
+check("32 days: clamped to the last 31 (end kept)", resolveDateFilter({ startDate: "2026-09-19", endDate: "2026-10-20" }, T), { startDateKey: "2026-09-20", endDateKey: "2026-10-20", isRange: true, clamped: true });
+check("a season: clamped, end kept", resolveDateFilter({ startDate: "2026-03-01", endDate: "2026-10-20" }, T), { startDateKey: "2026-09-20", endDateKey: "2026-10-20", isRange: true, clamped: true });
+check("reversed and too long: swapped, then clamped", resolveDateFilter({ startDate: "2026-10-20", endDate: "2025-01-01" }, T), { startDateKey: "2026-09-20", endDateKey: "2026-10-20", isRange: true, clamped: true });
+check("clamp across a year boundary", resolveDateFilter({ startDate: "2025-06-01", endDate: "2026-01-15" }, T), { startDateKey: "2025-12-16", endDateKey: "2026-01-15", isRange: true, clamped: true });
+check("clamp across DST end (Nov 1)", resolveDateFilter({ startDate: "2026-09-01", endDate: "2026-11-15" }, T), { startDateKey: "2026-10-16", endDateKey: "2026-11-15", isRange: true, clamped: true });
+{
+  const r = resolveDateFilter({ startDate: "2026-01-01", endDate: "2026-12-31" }, T);
+  const days = (Date.parse(r.endDateKey) - Date.parse(r.startDateKey)) / 86400000 + 1;
+  check("a clamped range spans exactly 31 days, both ends included", days, 31);
+}
 
 if (failures > 0) {
   console.log(`\n${failures} FAILED`);

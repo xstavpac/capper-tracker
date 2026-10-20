@@ -23,7 +23,7 @@ import { PicksSummaryStrip } from "@/components/picks/picks-summary-strip";
 import { DateNavigator } from "@/components/picks/date-navigator";
 import { AtAGlance, GlanceCapperCard, MostBackedCard, type MostBackedItem } from "@/components/picks/at-a-glance";
 import { getDayConsensus, getDayWinnersAndLosers, getLiveGameHrefs, getMostBacked } from "@/server/data/picks-glance";
-import { cumulativeUnitsSeries, sportChipLayout, type HeaderPick } from "@/lib/picks-header";
+import { cumulativeUnitsSeries, resolveDateFilter, sportChipLayout, type HeaderPick } from "@/lib/picks-header";
 import {
   betTypeFilterCategory,
   firstHalfLabelPrefixForChipSet,
@@ -93,34 +93,6 @@ function computeVisibleBetTypeOptions(sportName: string | undefined): { value: B
   return visibleBetTypeOptionsForChipSet(chipSetForSport(sportName));
 }
 
-// Resolves the page's three date searchParams (`date` for single-day mode,
-// `startDate`/`endDate` for range mode) down to one definite Eastern-
-// calendar-day range - defaulting to TODAY when none of the three are
-// present, so a plain /picks load (including "Clear") always queries just
-// today's picks rather than the entire history. Range mode wins whenever
-// either range param is present (even alone - the missing side falls back to
-// the one that IS given, so a single-sided link/bookmark still resolves to a
-// real one-day range rather than an unbounded query), and a reversed
-// start/end pair is swapped rather than silently returning zero rows.
-function resolveDateFilter(searchParams: { date?: string; startDate?: string; endDate?: string }): {
-  startDateKey: string;
-  endDateKey: string;
-  isRange: boolean;
-} {
-  const isRange = Boolean(searchParams.startDate || searchParams.endDate);
-  if (!isRange) {
-    const dateKey = searchParams.date || easternDateKey(new Date());
-    return { startDateKey: dateKey, endDateKey: dateKey, isRange: false };
-  }
-
-  let startDateKey = searchParams.startDate || searchParams.endDate!;
-  let endDateKey = searchParams.endDate || searchParams.startDate!;
-  if (startDateKey > endDateKey) {
-    [startDateKey, endDateKey] = [endDateKey, startDateKey];
-  }
-  return { startDateKey, endDateKey, isRange: true };
-}
-
 function fmtUnits(n: number): string {
   return String(Math.round(n * 100) / 100);
 }
@@ -140,8 +112,11 @@ export default async function PicksPage({
 }) {
   const user = await requireUser();
 
+  const now = new Date();
+  const todayKey = easternDateKey(now);
   const betTypeFilter = (searchParams.betType as BetTypeFilterKey) || undefined;
-  const { startDateKey, endDateKey, isRange } = resolveDateFilter(searchParams);
+  // A range longer than MAX_PICKS_RANGE_DAYS comes back clamped; everything below uses these keys.
+  const { startDateKey, endDateKey, isRange, clamped } = resolveDateFilter(searchParams, todayKey);
 
   const sportIdFilter = searchParams.sportId || undefined;
   const filters = {
@@ -152,8 +127,6 @@ export default async function PicksPage({
     endDateKey,
   };
 
-  const now = new Date();
-  const todayKey = easternDateKey(now);
   // Most Backed is about games still to come: today or later only. A past day has no such card.
   const showBacked = endDateKey >= todayKey;
 
@@ -413,6 +386,7 @@ export default async function PicksPage({
             dateStart={startDateKey}
             dateEnd={endDateKey}
             isRange={isRange}
+            rangeClamped={clamped}
           />
 
           {picks.length === 0 ? (

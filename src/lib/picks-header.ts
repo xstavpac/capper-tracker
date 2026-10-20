@@ -83,6 +83,45 @@ export function shiftDateKey(key: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
+// The longest date range /picks loads at once, in days (both ends included).
+// A wider range keeps its end day and starts MAX_PICKS_RANGE_DAYS - 1 days
+// before it: the page reads every pick in its range in one go, so an unbounded
+// range read grew with the user's whole pick history.
+export const MAX_PICKS_RANGE_DAYS = 31;
+
+// Resolves /picks' three date searchParams (`date` for single-day mode,
+// `startDate`/`endDate` for range mode) down to one definite Eastern-calendar-
+// day range - defaulting to `todayKey` when none of the three are present, so a
+// plain /picks load (including "Clear") always queries just today's picks
+// rather than the entire history. Range mode wins whenever either range param
+// is present (even alone - the missing side falls back to the one that IS
+// given, so a single-sided link/bookmark still resolves to a real one-day range
+// rather than an unbounded query), a reversed start/end pair is swapped rather
+// than silently returning zero rows, and a range longer than
+// MAX_PICKS_RANGE_DAYS is cut to its last MAX_PICKS_RANGE_DAYS days
+// (`clamped`). Every query and label on the page uses the returned keys.
+export function resolveDateFilter(
+  searchParams: { date?: string; startDate?: string; endDate?: string },
+  todayKey: string
+): { startDateKey: string; endDateKey: string; isRange: boolean; clamped: boolean } {
+  const isRange = Boolean(searchParams.startDate || searchParams.endDate);
+  if (!isRange) {
+    const dateKey = searchParams.date || todayKey;
+    return { startDateKey: dateKey, endDateKey: dateKey, isRange: false, clamped: false };
+  }
+
+  let startDateKey = searchParams.startDate || searchParams.endDate!;
+  let endDateKey = searchParams.endDate || searchParams.startDate!;
+  if (startDateKey > endDateKey) {
+    [startDateKey, endDateKey] = [endDateKey, startDateKey];
+  }
+  const earliestStart = shiftDateKey(endDateKey, -(MAX_PICKS_RANGE_DAYS - 1));
+  if (startDateKey < earliestStart) {
+    return { startDateKey: earliestStart, endDateKey, isRange: true, clamped: true };
+  }
+  return { startDateKey, endDateKey, isRange: true, clamped: false };
+}
+
 // The href a date arrow navigates to: same path and other params, `date` set
 // to the shifted day, and range params dropped (arrows only exist in
 // single-day mode).
