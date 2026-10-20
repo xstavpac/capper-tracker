@@ -1,14 +1,14 @@
-// One-off repair for the 2026 ALCS rainout (gamePk 849817) and the same
-// stale-gameDate bug on 824785. Background: docs/design/postponed-games-followups.md
-// ("Repair needed") and PR #306.
+// One-off repair for the 2026 ALCS rainout (gamePk 849817) only. Background:
+// docs/design/postponed-games-followups.md ("Repair needed") and PR #306.
+// 824785 (same stale-gameDate bug, no picks affected) is deliberately left alone.
 //
 //   DATABASE_URL="<target db>" npx tsx scripts/repair-849817-postponed-slot.ts           # DRY RUN (default)
 //   DATABASE_URL="<target db>" npx tsx scripts/repair-849817-postponed-slot.ts --apply   # actually writes
 //
 // What it does:
-//   1. GameResult gameDate -> the makeup's real start, for 849817 and 824785.
-//      Both targets are re-read from MLB StatsAPI at run time, and the run
-//      aborts if StatsAPI disagrees with the constants below.
+//   1. GameResult 849817 gameDate -> the makeup's real start, 2026-10-18 21:08
+//      UTC. Re-read from MLB StatsAPI at run time; the run aborts if StatsAPI
+//      disagrees with the constant below.
 //   2. Voids (status CANCELLED, the app's void: excluded from record and
 //      units like PENDING) every graded MLB pick in 849817's original slot
 //      (TB/CLE, gameTime within 6h of 2026-10-17 00:00 UTC). That is the 22
@@ -55,10 +55,9 @@ const HOUR = 3600000;
 const DRIFT = 6 * HOUR;
 const VOID_STATUS: PickStatus = "CANCELLED";
 
-// gameDate targets: each makeup's start per StatsAPI (checked live 2026-10-20).
+// gameDate target: the makeup's start per StatsAPI (checked live 2026-10-20).
 const GAME_DATE_FIXES = [
   { externalId: "849817", label: "TB @ CLE (ALCS, postponed 10/17 00:00)", to: "2026-10-18T21:08:00.000Z" },
-  { externalId: "824785", label: "TOR @ BAL (postponed 9/22 22:35)", to: "2026-09-23T17:35:00.000Z" },
 ];
 const ORIGINAL_SLOT = new Date("2026-10-17T00:00:00Z");
 const MAKEUP_START = new Date("2026-10-18T21:08:00Z");
