@@ -3,7 +3,7 @@
 // Build My Picks takes the top N ranked picks with no conflict check").
 //
 // Pure selection logic: given a list of picks already ranked (best first,
-// same ranking parlay-pool-section.tsx already computes) and a target leg
+// same ranking slip picks are ranked by) and a target leg
 // count, walk the ranking in order and add each pick unless it conflicts
 // with or duplicates a leg already selected. The ranking itself is never
 // touched - only which ranked picks get selected changes. No UI, no DB.

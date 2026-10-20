@@ -52,7 +52,7 @@ const game = (gameId: string, leagueName = "NFL"): SlipTarget => ({ gameId, game
   check("v1: pool -> picks (duplicates dropped)", s.picks.map((p) => p.pickId), ["a", "b"]);
   check("v1: game items -> targets (duplicates and malformed dropped)", s.targets.map((t) => t.gameId), ["g9"]);
   check("v1: league scope kept", s.excludedLeagues, ["NHL"]);
-  check("v1: the old sections' fields carried in legacy", s.legacy, { addMode: true, legCount: 4, checkedPicks: [pick("c", "g3")], locked: ["a"], source: "SLIP_ONLY" });
+  check("v1: add mode, ticks and leg count carried in legacy; locks and Source dropped", s.legacy, { addMode: true, legCount: 4, checkedPicks: [pick("c", "g3")] });
   check("v1 -> v2 -> read again: identical", migrateStoredSlip(JSON.parse(serializeSlip(s))), s);
   check("stored v2 says its version", JSON.parse(serializeSlip(s)).version, 2);
 
@@ -93,11 +93,11 @@ const game = (gameId: string, leagueName = "NFL"): SlipTarget => ({ gameId, game
 // Picks: straight into the slip
 // ============================================================================
 {
-  let s: SlipStateV2 = { ...EMPTY_SLIP_STATE, excludedLeagues: ["MLB"], legacy: { ...EMPTY_SLIP_STATE.legacy, locked: ["a"] } };
+  let s: SlipStateV2 = { ...EMPTY_SLIP_STATE, excludedLeagues: ["MLB"] };
   s = togglePick(s, pick("a", "g1", "MLB")).state;
   check("a pick goes straight in and switches its league on", [s.picks.map((p) => p.pickId), s.excludedLeagues], [["a"], []]);
   s = togglePick(s, pick("a", "g1", "MLB")).state;
-  check("toggling it again removes it (and its old lock)", [s.picks.length, s.legacy.locked], [0, []]);
+  check("toggling it again removes it", s.picks.length, 0);
   const atCap: SlipStateV2 = { ...EMPTY_SLIP_STATE, picks: Array.from({ length: MAX_PARLAY_LEGS }, (_, i) => pick("p" + i, "g" + i)) };
   const over = togglePick(atCap, pick("extra", "gx"));
   check(`a ${MAX_PARLAY_LEGS + 1}th pick is refused, nothing added`, [over.refused, over.state.picks.length], ["PICK_CAP", MAX_PARLAY_LEGS]);
@@ -113,10 +113,10 @@ const game = (gameId: string, leagueName = "NFL"): SlipTarget => ({ gameId, game
     picks: [pick("a", "g1")],
     targets: [game("g2")],
     excludedLeagues: ["NHL"],
-    legacy: { addMode: true, legCount: 5, checkedPicks: [pick("b", "g3")], locked: ["a"], source: "SLIP_ONLY" },
+    legacy: { addMode: true, legCount: 5, checkedPicks: [pick("b", "g3")] },
   };
   const c = clearedSlip(s);
-  check("cleared: no picks, no targets, nothing ticked or locked, slip mode off", [c.picks, c.targets, c.legacy.checkedPicks, c.legacy.locked, c.legacy.addMode], [[], [], [], [], false]);
+  check("cleared: no picks, no targets, nothing ticked, slip mode off", [c.picks, c.targets, c.legacy.checkedPicks, c.legacy.addMode], [[], [], [], false]);
   check("cleared: league scope and leg count stay", [c.excludedLeagues, c.legacy.legCount], [["NHL"], 5]);
 }
 

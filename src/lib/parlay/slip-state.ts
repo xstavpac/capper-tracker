@@ -16,12 +16,12 @@
 // Stored under the same localStorage key as before ("parlay-pool:<userId>"),
 // now with `version: 2`. A slip saved by the old code (no version) is read
 // through migrateStoredSlip: its `pool` becomes `picks`, its game items
-// ("best pick from this game") become targets, and its add mode and ticks,
-// locks, Source and leg count are carried in `legacy` for the old /parlay
-// sections until the generator redesign replaces them.
+// ("best pick from this game") become targets, its add mode, ticks and leg
+// count are carried in `legacy` (the generator's leg count, and Live's add
+// mode until its slip mode lands), and its locks and Source - which only the
+// old /parlay sections had - are dropped.
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { MAX_PARLAY_LEGS, MAX_POOL_REQUEST_PICKS } from "@/lib/parlay/leg-cap";
-import { toSlipSource, type SlipSource } from "@/lib/parlay/slip-build";
 
 export type SlipPick = ExpanderPick;
 export type SlipTarget = { gameId: string; gameLabel: string; gameTime: string; leagueName: string };
@@ -31,8 +31,6 @@ export type LegacySlipFields = {
   addMode: boolean;
   legCount: number;
   checkedPicks: SlipPick[];
-  locked: string[];
-  source: SlipSource;
 };
 
 export type SlipStateV2 = {
@@ -48,7 +46,7 @@ export const SLIP_STATE_VERSION = 2;
 // on a request.
 export const MAX_SLIP_TARGETS = MAX_POOL_REQUEST_PICKS;
 
-export const EMPTY_LEGACY: LegacySlipFields = { addMode: false, legCount: 2, checkedPicks: [], locked: [], source: "SLIP_PLUS_POOL" };
+export const EMPTY_LEGACY: LegacySlipFields = { addMode: false, legCount: 2, checkedPicks: [] };
 export const EMPTY_SLIP_STATE: SlipStateV2 = { version: 2, picks: [], targets: [], excludedLeagues: [], legacy: EMPTY_LEGACY };
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -85,8 +83,6 @@ export function migrateStoredSlip(raw: unknown): SlipStateV2 {
       addMode: legacyIn.addMode === true,
       legCount,
       checkedPicks,
-      locked: strings(legacyIn.locked),
-      source: legacyIn.source === undefined ? EMPTY_LEGACY.source : toSlipSource(legacyIn.source),
     },
   };
   return state;
@@ -156,16 +152,12 @@ export function togglePick(state: SlipStateV2, pick: SlipPick): SlipChange {
 }
 
 export function removePick(state: SlipStateV2, pickId: string): SlipStateV2 {
-  return {
-    ...state,
-    picks: state.picks.filter((p) => p.pickId !== pickId),
-    legacy: { ...state.legacy, locked: state.legacy.locked.filter((k) => k !== pickId) },
-  };
+  return { ...state, picks: state.picks.filter((p) => p.pickId !== pickId) };
 }
 
 // After Send to FanDuel: the slip starts over. The league scope stays.
 export function clearedSlip(state: SlipStateV2): SlipStateV2 {
-  return { ...state, picks: [], targets: [], legacy: { ...state.legacy, addMode: false, checkedPicks: [], locked: [] } };
+  return { ...state, picks: [], targets: [], legacy: { ...state.legacy, addMode: false, checkedPicks: [] } };
 }
 
 // ---------------------------------------------------------------------------

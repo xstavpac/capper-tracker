@@ -325,15 +325,18 @@ async function main() {
     settle.resolve({ nfl1: { status: "WIN", odds: -110, kickoff: FUTURE, started: true } });
     await tick();
   });
-  check("confirm during hydrate: a stored leg that has since been graded is still pruned", poolIds() === "nfl2" && ctx.notice?.[0]?.result === "Won", `pool=${poolIds()} notice=${ctx.notice?.[0]?.result}`);
+  check("confirm during hydrate: a stored leg that has since been graded is still pruned, and said quietly", poolIds() === "nfl2" && ctx.removedLine === "1 pick removed — games started", `pool=${poolIds()} line=${ctx.removedLine}`);
 
   await act(() => root!.unmount());
 
   // ---------------------------------------------------------------------
-  // 5. /parlay's link to Live (a server page: read, not rendered)
+  // 5. /parlay's links to Live (the generator card: read, not rendered)
   // ---------------------------------------------------------------------
-  const parlayPage = readFileSync(join(__dirname, "..", "..", "app", "(app)", "parlay", "page.tsx"), "utf8");
-  check('/parlay: "+ Add picks from Live" is a next/link, not a plain <a>', /<Link href="\/live"[^>]*>\s*\+ Add picks from Live/.test(parlayPage) && !/<a href="\/live"/.test(parlayPage));
+  const card = readFileSync(join(__dirname, "generator-card.tsx"), "utf8");
+  check(
+    '/parlay: "+ Add picks from Live" and "+ Add games from Live" are next/links, not plain <a>',
+    /<Link href="\/live"[^>]*>\s*\+ Add picks from Live/.test(card) && /<Link href="\/live"[^>]*>\s*\+ Add games from Live/.test(card) && !/<a href="\/live"/.test(card)
+  );
 
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
   process.exit(failures === 0 ? 0 : 1);

@@ -2,7 +2,7 @@
 
 // Auto-Generate's "Customize Mix" link, its Pick Mix popover, and the chip
 // that shows an active mix ("60/40 ✕"). Presentational: the mix itself lives
-// in AutoGenerateSection (session-only React state) and comes in as props.
+// in the generator card (generator-card.tsx, session-only React state) and comes in as props.
 //
 // The popover edits a draft. Done saves it, Cancel / outside click / Escape
 // throw it away. The chip reopens the popover; its ✕ clears the mix back to

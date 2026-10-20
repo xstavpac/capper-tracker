@@ -1,65 +1,59 @@
 "use client";
 
-// The /parlay page under its banner: the stat tiles, Auto-Generate (with its
-// result) and My Picks. Auto-Generate and My Picks stay separate flows with
-// their own scope, leg count and builders; all this holds is what the last
-// Auto-Generate found, for the third tile.
-import { useState, type ReactNode } from "react";
+// The /parlay page under its banner: three stat tiles over the one Parlay
+// Generator card (generator-card.tsx). The tiles read the slip and, for legs,
+// the last build - nothing is fetched for them.
+import { useState } from "react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { TINTS } from "@/components/dashboard/panel-shell";
-import { CalendarIcon, ClipboardIcon, TargetIcon } from "@/components/dashboard/cappers-icons";
+import { ClipboardIcon, ListChecksIcon, TargetIcon } from "@/components/dashboard/cappers-icons";
 import { useParlayPool } from "@/components/parlay/parlay-pool-context";
-import { AutoGenerateSection, type GeneratedSummary } from "@/components/parlay/auto-generate-section";
-import { ParlayPoolSection } from "@/components/parlay/parlay-pool-section";
+import { GeneratorCard, type GeneratorSummary } from "@/components/parlay/generator-card";
 import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
-import { autoGenerateWindowText } from "@/lib/parlay/auto-generate-window";
 
 const ICON = "h-[17px] w-[17px] stroke-[2.2]";
 
-// Three numbers the page already has: the slip's picks, how many of them are
-// in a league that is switched on, and - once a parlay has been generated -
-// how many unstarted games in its window had a pick. Nothing is read for these.
-function ParlayStatCards({ generated }: { generated: GeneratedSummary | null }) {
-  const { pool, games, slipSize, leaguesInPool, isLeagueInScope } = useParlayPool();
-  const inScope = pool.filter((p) => isLeagueInScope(p.leagueName)).length + games.filter((g) => isLeagueInScope(g.leagueName)).length;
-  const leaguesOn = leaguesInPool.filter(isLeagueInScope).length;
+function ParlayStatCards({ summary }: { summary: GeneratorSummary }) {
+  const { pool, targets, targetedGames, legCount } = useParlayPool();
+  const legs = summary?.legs ?? legCount;
+  const fromSlip = summary?.fromSlip ?? Math.min(pool.length, legCount);
+  const generated = summary?.generated ?? Math.max(0, legCount - pool.length);
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
       <StatCard
-        label="In your slip"
+        label="Your picks"
         icon={<ClipboardIcon className={ICON} />}
         iconClass={TINTS.blue.iconWrap}
         color="#2563EB"
-        value={String(slipSize)}
-        sub={"up to " + MAX_PARLAY_LEGS + " picks and games"}
+        value={String(pool.length)}
+        sub="always in the parlay"
       />
       <StatCard
-        label="In scope"
+        label="Targeting"
         icon={<TargetIcon className={ICON} />}
         iconClass={TINTS.violet.iconWrap}
         color="#7C3AED"
-        value={String(inScope)}
-        sub={slipSize === 0 ? "no picks yet" : leaguesOn + " of " + leaguesInPool.length + " league" + (leaguesInPool.length === 1 ? "" : "s") + " on"}
+        value={targets.length === 0 ? "Full slate" : `${targetedGames.length} game${targetedGames.length === 1 ? "" : "s"}`}
+        sub={targets.length === 0 ? "every unstarted game in your leagues" : "targeted games and your picks' games"}
       />
       <StatCard
-        label="Games with picks"
-        icon={<CalendarIcon className={ICON} />}
+        label="Legs"
+        icon={<ListChecksIcon className={ICON} />}
         iconClass={TINTS.green.iconWrap}
         color="#16A34A"
-        value={generated ? String(generated.gamesWithPicks) : "—"}
-        sub={generated ? autoGenerateWindowText(generated.leagues) + " in " + generated.leagues.join(", ") : "shown after you generate"}
+        value={`${legs} of ${MAX_PARLAY_LEGS} max`}
+        sub={`${fromSlip} from your picks · ${generated} generated`}
       />
     </div>
   );
 }
 
-export function ParlayWorkspace({ leagues, addPicksLink }: { leagues: string[]; addPicksLink: ReactNode }) {
-  const [generated, setGenerated] = useState<GeneratedSummary | null>(null);
+export function ParlayWorkspace({ leagues }: { leagues: string[] }) {
+  const [summary, setSummary] = useState<GeneratorSummary>(null);
   return (
     <>
-      <ParlayStatCards generated={generated} />
-      <AutoGenerateSection leagues={leagues} onGenerated={setGenerated} />
-      <ParlayPoolSection action={addPicksLink} />
+      <ParlayStatCards summary={summary} />
+      <GeneratorCard leagues={leagues} onSummary={setSummary} />
     </>
   );
 }
