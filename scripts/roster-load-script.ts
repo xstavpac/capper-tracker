@@ -37,8 +37,12 @@ export async function runRosterLoadScript(league: RosterLeague, opts: { fetchRos
       log: (line) => console.log(`${tag} ${line}`),
     });
     if (result.status === "aborted") process.exitCode = 1;
-    if (league === "NFL" && result.status === "committed") {
-      console.log(`${tag} the bulk-import name list (nfl-roster-full-names cache tag) picks this up within its 1-hour TTL`);
+    // A bare script has no Next cache to revalidate: the app's cached copies
+    // catch up at the next refresh-rosters run (it revalidates every committed
+    // league) or on their own TTLs, whichever comes first.
+    if (result.status === "committed") {
+      console.log(`${tag} the app's cached roster (roster-rows:${league.toLowerCase()} cache tag) picks this up at the next daily refresh-rosters run, at most 24 hours (its TTL)`);
+      if (league === "NFL") console.log(`${tag} the bulk-import name list (nfl-roster-full-names cache tag) picks this up within its 1-hour TTL`);
     }
   } catch (e) {
     console.error(e);

@@ -9,9 +9,13 @@
 //   PART C - one league failing (throws) or aborting (partial fetch) never stops the others.
 //   PART D - the summary lines.
 //   PART E - auth fails closed.
+//   PART F - which Data Cache tags the cron revalidates (rosterCacheTagsToRevalidate),
+//            and that the route revalidates exactly those.
 import type { RosterPlayer } from "./nfl-roster";
 import type { ExistingRosterRow, RosterLeague, RosterLeagueConfig, RosterTable } from "./roster-load";
-import { isAuthorizedCronRequest, refreshRosters, rosterRefreshSummary, type RosterRefreshOutcome } from "./refresh-rosters";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { isAuthorizedCronRequest, refreshRosters, rosterCacheTagsToRevalidate, rosterRefreshSummary, type RosterRefreshOutcome } from "./refresh-rosters";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -142,6 +146,55 @@ async function main() {
     check("missing header: rejected", isAuthorizedCronRequest(null, "s3cret"), false);
     check("bare secret without Bearer: rejected", isAuthorizedCronRequest("s3cret", "s3cret"), false);
     check("correct Bearer secret: accepted", isAuthorizedCronRequest("Bearer s3cret", "s3cret"), true);
+  }
+
+  console.log("\n########## PART F: cache tags the cron revalidates ##########");
+  {
+    // A first load: every league writes, so every league's cached roster drops (and NFL's name list).
+    const { tableFor } = spyTables();
+    const out = await refreshRosters({ leagues: ALL.map((l) => leagueConfig(l, async () => roster(l))), tableFor, now: IN_SEASON_ALL });
+    check("every league wrote: each league's roster tag, plus NFL's name list", rosterCacheTagsToRevalidate(out), [
+      "roster-rows:nfl",
+      "nfl-roster-full-names",
+      "roster-rows:nhl",
+      "roster-rows:nba",
+      "roster-rows:mlb",
+    ]);
+
+    // Nothing changed upstream: a committed run that writes 0 rows still drops the cache, so a
+    // manual scripts/load-*-roster.ts write (which can't reach the Data Cache) shows up after the next run.
+    const existingRows = (l: RosterLeague) => roster(l).map((p, i) => ({ id: "r" + i, externalId: p.externalPlayerId, fullName: p.playerName, firstName: p.firstName, lastName: p.lastName, team: p.team, position: p.position, active: true }));
+    const same = existingRows("NHL");
+    const unchanged = await refreshRosters({
+      leagues: [leagueConfig("NFL", async () => roster("NFL")), leagueConfig("NHL", async () => roster("NHL"))],
+      tableFor: spyTables({ NFL: existingRows("NFL"), NHL: same }).tableFor,
+      now: IN_SEASON_ALL,
+    });
+    check(
+      "committed with 0 rows written: still each league's tag (and NFL's name list)",
+      { results: unchanged.map((o) => [o.status, "rowsWritten" in o ? o.rowsWritten : null]), tags: rosterCacheTagsToRevalidate(unchanged) },
+      { results: [["committed", 0], ["committed", 0]], tags: ["roster-rows:nfl", "nfl-roster-full-names", "roster-rows:nhl"] }
+    );
+
+    // Aborted, failed and offseason-skipped leagues wrote nothing and get no tag; the committed league does.
+    const mixed = await refreshRosters({
+      leagues: [
+        leagueConfig("NFL", async () => roster("NFL").filter((p) => p.team !== "T3")),
+        leagueConfig("NHL", async () => roster("NHL").filter((p) => p.externalPlayerId !== "NHL-T1-0")),
+        leagueConfig("NBA", async () => {
+          throw new Error("boom");
+        }),
+        leagueConfig("MLB", async () => roster("MLB")),
+      ],
+      tableFor: spyTables({ NHL: same }).tableFor,
+      now: MLB_OFFSEASON,
+    });
+    check("aborted / failed / skipped leagues: no tag; the committed one: its tag", rosterCacheTagsToRevalidate(mixed), ["roster-rows:nhl"]);
+
+    // The route itself: it revalidates exactly these tags, and nothing else.
+    const route = readFileSync(join(process.cwd(), "src/app/api/cron/refresh-rosters/route.ts"), "utf8");
+    check("route revalidates every tag rosterCacheTagsToRevalidate returns", /for \(const tag of rosterCacheTagsToRevalidate\(outcomes\)\) revalidateTag\(tag\);/.test(route), true);
+    check("route has no other revalidateTag call", (route.match(/revalidateTag\(/g) ?? []).length, 1);
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
