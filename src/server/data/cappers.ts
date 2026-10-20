@@ -25,10 +25,14 @@ export type CapperLeagueFilter = { sportName?: string; category?: PickCategoryKe
 
 // Every capper the user has, favorites first. (The old league/category filter
 // branch read the user's whole pick history to narrow the list; no page used it -
-// it lives on in cappers-legacy.ts as a parity reference.)
+// it lives on in cappers-legacy.ts as a parity reference.) Only id and name:
+// every caller (/picks, /charts, /picks/import, the /live category panel) uses
+// just those two, and the full row (notes, photo url, ...) was read for the
+// whole roster on every one of those page loads.
 export async function getCappersForUser(userId: string) {
   return prisma.capper.findMany({
     where: { userId },
+    select: { id: true, name: true },
     orderBy: [{ isFavorite: "desc" }, { name: "asc" }],
   });
 }

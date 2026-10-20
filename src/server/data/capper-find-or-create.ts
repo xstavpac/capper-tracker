@@ -73,9 +73,12 @@ export async function findOrCreateCapper(
 
   const normalized = normalizeName(trimmed);
   if (normalized !== "") {
-    const existing = await db.capper.findMany({ where: { userId } });
+    // The scan needs only names; the full row is read for the one match. A
+    // match deleted in between falls through to the insert below.
+    const existing = await db.capper.findMany({ where: { userId }, select: { id: true, name: true } });
     const match = existing.find((c) => normalizeName(c.name) === normalized);
-    if (match) return { capper: match, created: false };
+    const capper = match ? await db.capper.findUnique({ where: { id: match.id } }) : null;
+    if (capper) return { capper, created: false };
   }
 
   const values: Record<InsertColumn, unknown> = {
