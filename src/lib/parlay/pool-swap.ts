@@ -1,26 +1,14 @@
-// Adapts the Parlay Pool's selected picks into the AutoParlay shape
-// buildSwapParlay (auto-generate.ts) already knows how to swap legs within -
-// so Hedge/Contrarian on Select-Your-Own-Picks reuse the exact same engine
-// Auto-Generate uses. No second Hedge/Contrarian implementation.
-//
-// Per docs/parlay-white-paper.md Section 2.1, My Picks / Auto Hedge /
-// Contrarian are three modes over the SAME primary pool. The primary here is
-// exactly what My Picks already builds (parlay-pool-section.tsx): the
-// ranked, conflict-free top N of the in-scope pool via selectConflictFreeLegs
-// (Section 9). Auto Hedge/Contrarian then search each of those N legs' own
-// game for a qualifying alternate - that search itself is unchanged
-// buildSwapParlay, called by the server action that wires this up
-// (server/actions/parlay-pool-generator.ts).
-//
-// Pure - no DB access.
+// The slip-pick building blocks the Parlay Generator's engine (generator.ts)
+// shares: toBuildCandidate (a board pick as the conflict walk reads it) and the
+// conflict-free primary of a pick pool (buildPoolPrimary, selectConflictFreeLegs
+// - Section 9). Pure - no DB access.
 import { selectConflictFreeLegs, type BuildCandidate, type SkippedPick, type UnverifiedPair } from "@/lib/parlay/build-my-picks";
 import { bestAvailableRecord, rankPoolPicks } from "@/lib/parlay/pick-record";
 import type { AutoLeg, AutoParlay, GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 
-// Same rawBetDetail/game-fields mapping parlay-pool-section.tsx's own
-// toBuildCandidate uses for My Picks - kept identical so a pick ranks and
-// conflict-checks the same way regardless of which mode ends up using it.
+// The one mapping from a board pick to the conflict walk's candidate, so a
+// pick ranks and conflict-checks the same way wherever it is used.
 // `records`, when given, sets the standing a duplicate line is settled on.
 export function toBuildCandidate(p: GeneratorPick, records?: CapperLeagueRecords): BuildCandidate {
   const record = records ? bestAvailableRecord(p, records) : undefined;

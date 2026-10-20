@@ -2,8 +2,7 @@
 // stored slip hydrates into the new fields and is re-saved as v2; Live's
 // direct-write picks and targets; a pick's game can't be untargeted; Send to
 // generator turns slip mode off (confirming old-style ticks first); Send to
-// FanDuel's clear; the quiet "games started" line replaces nothing yet (the
-// old banner's `notice` still fills) but is there for Your Picks. Only the
+// FanDuel's clear; the quiet "games started" line Your Picks shows. Only the
 // slip's revalidation action is replaced. Pure - no DB. Run with:
 //   npx tsx src/components/parlay/parlay-slip-state-context-acceptance-test.ts
 import { JSDOM } from "jsdom";
@@ -85,10 +84,10 @@ async function main() {
   );
   await mount("u1");
   check("v1 slip: its pick is in the slip", ctx.pool.map((p) => p.pickId).join() === "a", ctx.pool.map((p) => p.pickId).join());
-  check("v1 slip: its game item is a target", ctx.targets.map((t) => t.gameId).join() === "g2" && ctx.games.length === 1);
-  check("v1 slip: the old sections' locks and Source still apply", ctx.isLocked("a") && ctx.source === "SLIP_ONLY");
+  check("v1 slip: its game item is a target", ctx.targets.map((t) => t.gameId).join() === "g2");
+  check("v1 slip: its MLB exclusion is kept, its leg count read", !ctx.isLeagueInScope("MLB") && ctx.legCount === 3);
   const s1 = stored("u1");
-  check("re-saved as v2 with picks/targets and the legacy block", s1.version === 2 && s1.picks?.[0]?.pickId === "a" && s1.targets?.[0]?.gameId === "g2" && s1.legacy?.locked?.[0] === "a", JSON.stringify(s1).slice(0, 200));
+  check("re-saved as v2 with picks/targets and the legacy block (no locks)", s1.version === 2 && s1.picks?.[0]?.pickId === "a" && s1.targets?.[0]?.gameId === "g2" && s1.legacy?.legCount === 3 && s1.legacy?.locked === undefined, JSON.stringify(s1).slice(0, 200));
   check("targeted games: the target, then the pick's game", ctx.targetedGames.map((t) => `${t.gameId}:${t.explicit ? "E" : ""}${t.viaPicks ? "P" : ""}`).join() === "g2:E,g1:P", JSON.stringify(ctx.targetedGames.map((t) => t.gameId)));
   check("the generator is told the explicit target only", JSON.stringify(ctx.generatorTargets()) === JSON.stringify([{ gameId: "g2", leagueName: "NFL" }]));
 
@@ -142,8 +141,7 @@ async function main() {
     Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, kickoff: id === "k" ? FUTURE : "2000-01-01T00:00:00.000Z", started: id !== "k" }]));
   await mount("u3");
   check("two picks pruned because their games started: the line says so", ctx.removedLine === "2 picks removed — games started", String(ctx.removedLine));
-  check("the old banner's notice still fills until the redesign removes it", (ctx.notice ?? []).length === 2);
-
+  
   await act(() => root!.unmount());
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
   process.exit(failures === 0 ? 0 : 1);

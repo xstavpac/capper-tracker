@@ -1,46 +1,38 @@
 "use client";
 
-// The Parlay Pool: client-side state for the Parlay Generator's simplest
-// construction mode (My Picks - see /parlay). Deliberately client-only, not
-// a DB table - unlike ParlayBet/Leg (server/data/parlays.ts), which record a
-// CAPPER's own already-placed parlay for grading/record-keeping, this pool
-// is the user's own in-progress selection of picks to combine into a slip.
-// Nothing here is graded or tied to a capper's record.
+// The Parlay slip: client-side state for the Parlay Generator - the picks the
+// user put in it and the games they targeted. Deliberately client-only, not a
+// DB table - unlike ParlayBet/Leg (server/data/parlays.ts), which record a
+// CAPPER's own already-placed parlay for grading/record-keeping, the slip is
+// the user's own in-progress selection. Nothing here is graded.
 //
 // One provider (mounted in (app)/layout.tsx, alongside ThemeProvider) covers
-// every page, so the pool and any in-progress "add mode" selection survive a
-// client-side nav between /live and /parlay (or between leagues on /live)
-// without a remount. It's also persisted to localStorage (scoped by userId)
-// purely so an accidental refresh doesn't silently wipe a slip the user was
-// still building - the confirmed legs and the add-mode selection both. The
-// stored legs are only a list of pick ids to look up, though: on hydrate and
-// on every tab focus they are revalidated against the DB
-// (getSlipPickStatesAction), so status, odds and whether the game has started
-// always come from current data and any leg that has started, been graded, or
-// been deleted is pruned (with a one-time notice).
+// every page, so the slip and Live's slip mode survive a client-side nav. It's
+// also persisted to localStorage (scoped by userId) so a refresh doesn't wipe
+// it. The stored picks are only ids to look up, though: on hydrate and on
+// every tab focus they are revalidated against the DB (getSlipPickStatesAction),
+// so status, odds and whether the game has started always come from current
+// data, and any pick that has started, been graded or been deleted is pruned -
+// said once, quietly, by `removedLine` on the generator's Your Picks.
 //
-// League scope: every league with a pick in the slip is ON unless the user
-// switched it off. Confirming a new pick from a league switches that league
-// back on; nothing else does. Only the switched-off leagues are stored.
-//
-// The slip holds at most MAX_PARLAY_LEGS items (lib/parlay/leg-cap.ts).
-// confirmAdd refuses a selection that would take it past that - it adds
-// nothing and says so, rather than adding only the picks that fit.
-//
-// Besides picks (`pool`), the slip holds GAMES ("the best pick from this
-// game", see lib/parlay/slip-build.ts), and any item can be LOCKED. `pool`
-// stays picks only - everything that reads it (Send to FanDuel, Hedge /
-// Contrarian) is unchanged. A game item is pruned once its game starts, by
-// the kickoff captured when it was added; the build re-checks it server-side.
+// The model and its stored format live in lib/parlay/slip-state.ts:
+//   - picks: every one goes into every generated parlay; at most MAX_PARLAY_LEGS.
+//   - targets: games targeted on purpose. A pick's game is in play too
+//     ("targeted via your picks") but isn't a target.
+//   - league scope: every league is on unless switched off; a league with a
+//     pick or a target in the slip can't be switched off, and adding one
+//     switches its league back on. Only the switched-off leagues are stored.
+//   - Live's slip mode is still the old add mode (ticks, then Confirm) until
+//     Live's own slip mode lands; Send to generator confirms and turns it off.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getSlipPickStatesAction } from "@/server/actions/parlay-slip";
 import { reconcileSlip, type PrunedLeg } from "@/lib/parlay/slip-reconcile";
 import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
-import type { SlipSource } from "@/lib/parlay/slip-build";
 import {
   addRemoved,
   clearedSlip,
+  EMPTY_LEGACY,
   generatorTargets as toGeneratorTargets,
   migrateStoredSlip,
   removedLineText,
@@ -50,36 +42,29 @@ import {
   togglePick as togglePickIn,
   type RemovedLine,
   type SlipStateV2,
+  type SlipTarget,
   type TargetedGame,
 } from "@/lib/parlay/slip-state";
 
-// The slip's state model and stored format live in lib/parlay/slip-state.ts.
-// The new parts (targets, Live's direct-write picks, Send to generator, the
-// quiet "games started" line) sit beside the old ones until the generator
-// redesign and Live's slip mode replace the old /parlay sections and Confirm.
-
 export type PooledPick = ExpanderPick;
-
-export type SlipGame = { gameId: string; gameLabel: string; gameTime: string; leagueName: string };
-
-// Locks are kept by item key: a pick's id, or "game:" + a game item's id.
-export const gameItemKey = (gameId: string) => "game:" + gameId;
-
-function startedGames(games: SlipGame[], now: number): { kept: SlipGame[]; pruned: PrunedLeg[] } {
-  const kept = games.filter((g) => new Date(g.gameTime).getTime() > now);
-  const pruned = games
-    .filter((g) => !kept.includes(g))
-    .map((g) => ({ pickId: gameItemKey(g.gameId), label: g.gameLabel + " - best pick from this game", result: "Started" as const }));
-  return { kept, pruned };
-}
+export type SlipGame = SlipTarget;
 
 const STORAGE_PREFIX = "parlay-pool:";
 const LEGACY_UNSCOPED_KEY = "parlay-pool";
 const REVALIDATE_MIN_INTERVAL_MS = 60_000;
 
 type ParlayPoolContextValue = {
-  // ---- The state model (lib/parlay/slip-state.ts) ----
-  // Games targeted on purpose - the same items as `games` below.
+  // ---- Picks ----
+  pool: PooledPick[];
+  isInPool: (pickId: string) => boolean;
+  removeFromPool: (pickId: string) => void;
+  // Live's checkbox in slip mode: adds or removes the pick at once. Refused
+  // past the leg cap (overCapBy says so).
+  togglePick: (pick: PooledPick) => void;
+  // How many picks the slip holds (the sidebar badge).
+  slipSize: number;
+
+  // ---- Targets ----
   targets: SlipGame[];
   // Every game in play: the targets plus the games of the slip's picks.
   targetedGames: TargetedGame[];
@@ -88,68 +73,41 @@ type ParlayPoolContextValue = {
   isTargetedViaPicks: (gameId: string) => boolean;
   // Refused (returns false) for a game a pick is on, or past the target cap.
   toggleTarget: (game: SlipGame) => boolean;
-  // Live's checkbox in slip mode: adds or removes the pick at once, no
-  // Confirm. Refused past the leg cap (overCapBy says so).
-  togglePick: (pick: PooledPick) => void;
+  // "Use full slate".
+  clearTargets: () => void;
   // What the generator is told: the explicit targets only.
   generatorTargets: () => { gameId: string; leagueName: string }[];
-  // Live's checkboxes (the old add mode, until Live's slip mode lands).
-  slipMode: boolean;
-  // Confirms anything still ticked the old way, then turns slip mode off.
-  sendToGenerator: () => void;
-  // After Send to FanDuel: picks and targets cleared, slip mode off.
-  clearSlip: () => void;
-  // "3 picks removed — games started" for a while after a prune, else null.
-  removedLine: string | null;
 
-  // ---- The old /parlay sections' API ----
+  // ---- League scope ----
+  isLeagueInScope: (league: string) => boolean;
+  // A league a pick or a target is in can't be switched off.
+  isLeagueLocked: (league: string) => boolean;
+  toggleLeague: (league: string) => void;
 
-  pool: PooledPick[];
-  isInPool: (pickId: string) => boolean;
-  removeFromPool: (pickId: string) => void;
+  // ---- The generator's leg count (1 to MAX_PARLAY_LEGS) ----
+  legCount: number;
+  setLegCount: (n: number) => void;
 
-  games: SlipGame[];
-  isGameInSlip: (gameId: string) => boolean;
-  addGame: (game: SlipGame) => void;
-  removeGame: (gameId: string) => void;
-  // Picks plus games - what the slip holds, against MAX_PARLAY_LEGS.
-  slipSize: number;
-
-  // Keyed by pick id or gameItemKey(gameId).
-  isLocked: (key: string) => boolean;
-  toggleLock: (key: string) => void;
-
-  // What "Build from slip" builds from (see lib/parlay/slip-build.ts).
-  source: SlipSource;
-  setSource: (source: SlipSource) => void;
-
+  // ---- Live's slip mode (still the old add mode until Live's slip mode lands) ----
   addMode: boolean;
+  slipMode: boolean;
   checkedPicks: Map<string, PooledPick>;
   enterAddMode: () => void;
   toggleChecked: (pick: PooledPick) => void;
   confirmAdd: () => void;
   discardAdd: () => void;
-  // How many picks the last confirmAdd was over MAX_PARLAY_LEGS by - set when
-  // it was refused, null otherwise. Cleared as soon as the selection changes.
+  // Confirms anything still ticked, then turns slip mode off.
+  sendToGenerator: () => void;
+  // How many picks the last add was over MAX_PARLAY_LEGS by - set when it was
+  // refused, null otherwise. Cleared as soon as the selection changes.
   overCapBy: number | null;
   dismissOverCap: () => void;
 
-  leaguesInPool: string[];
-  isLeagueInScope: (league: string) => boolean;
-  toggleLeague: (league: string) => void;
+  // ---- After Send to FanDuel: picks and targets cleared, slip mode off ----
+  clearSlip: () => void;
 
-  legCount: number;
-  setLegCount: (n: number) => void;
-  // In-scope slip items (picks and games), capped at MAX_PARLAY_LEGS.
-  maxLegCount: number;
-  // The most legs a build may ask for: maxLegCount, or the cap when the
-  // Source lets the qualified pool fill in.
-  maxBuildLegs: number;
-
-  // Legs just pruned from the slip (started/graded/deleted/aged out), shown
-  // once by ParlaySlipNotice until dismissed.
-  notice: PrunedLeg[] | null;
-  dismissNotice: () => void;
+  // "3 picks removed — games started" for a while after a prune, else null.
+  removedLine: string | null;
 };
 
 const ParlayPoolContext = createContext<ParlayPoolContextValue | null>(null);
@@ -172,53 +130,48 @@ export function clearParlaySlips() {
   }
 }
 
+const unstarted = (games: SlipGame[], now: number) => games.filter((g) => new Date(g.gameTime).getTime() > now);
+
 export function ParlayPoolProvider({ userId, children }: { userId: string; children: React.ReactNode }) {
   const [pool, setPool] = useState<PooledPick[]>([]);
+  const [targets, setTargets] = useState<SlipGame[]>([]);
   const [excludedLeagues, setExcludedLeagues] = useState<string[]>([]);
-  const [legCount, setLegCountState] = useState(2);
+  const [legCount, setLegCountState] = useState(EMPTY_LEGACY.legCount);
   const [addMode, setAddMode] = useState(false);
   const [checkedPicks, setCheckedPicks] = useState<Map<string, PooledPick>>(new Map());
   const [overCapBy, setOverCapBy] = useState<number | null>(null);
-  const [games, setGames] = useState<SlipGame[]>([]);
-  const [locked, setLocked] = useState<string[]>([]);
-  const [source, setSource] = useState<SlipSource>("SLIP_PLUS_POOL");
-  const gamesRef = useRef<SlipGame[]>([]);
-  gamesRef.current = games;
+  const [removed, setRemoved] = useState<RemovedLine | null>(null);
   // Guards the persist effect below - without it, that effect's own first
   // run (on mount, before hydration below has applied) fires with the
-  // empty initial state and immediately overwrites a real saved pool with
-  // {pool: []}, wiping it out before it's ever read back.
+  // empty initial state and immediately overwrites a real saved slip.
   const [hydrated, setHydrated] = useState(false);
-  const [notice, setNotice] = useState<PrunedLeg[] | null>(null);
+  // The refs move with every change (not on the next render), so two changes
+  // in one event each see the other.
   const poolRef = useRef<PooledPick[]>([]);
   poolRef.current = pool;
-  // Stored legs still being checked against the DB on hydrate: not in `pool`
-  // yet, but about to be, so confirmAdd counts them toward the cap.
+  const targetsRef = useRef<SlipGame[]>([]);
+  targetsRef.current = targets;
+  // Stored picks still being checked against the DB on hydrate: not in `pool`
+  // yet, but about to be, so the cap counts them.
   const uncheckedStoredRef = useRef<Set<string>>(new Set());
   const lastCheckRef = useRef(0);
   const inFlightRef = useRef(false);
-  // Pick ids already reported in a notice this session, so the same leg is
-  // never announced twice (e.g. two overlapping revalidations).
+  // Pick ids already reported this session, so the same pick is never
+  // counted twice (e.g. two overlapping revalidations).
   const noticedRef = useRef<Set<string>>(new Set());
 
-  const [removed, setRemoved] = useState<RemovedLine | null>(null);
   const reportPruned = useCallback((pruned: PrunedLeg[]) => {
     const fresh = pruned.filter((l) => !noticedRef.current.has(l.pickId));
     if (fresh.length === 0) return;
     fresh.forEach((l) => noticedRef.current.add(l.pickId));
-    setNotice((prev) => [...(prev ?? []), ...fresh]);
-    // The quiet line counts what left because its game started (or finished);
-    // a deleted pick ("Removed") isn't a game starting.
+    // What left because its game started (or finished); a deleted pick isn't a game starting.
     const started = fresh.filter((l) => l.result !== "Removed").length;
     if (started > 0) setRemoved((prev) => addRemoved(prev, started, Date.now()));
   }, []);
 
   // Hydrate once per userId (a different account signing in on the same
-  // browser gets its own, empty pool rather than inheriting the previous
-  // user's). The stored pool is NOT put on screen until it has been checked
-  // against the DB, so a stale leg never flashes as Pending or counts in the
-  // nav badge. addMode/checkedPicks come back as they were saved: they are an
-  // unconfirmed selection, checked like any other leg once confirmed.
+  // browser gets its own, empty slip). The stored picks are NOT put on screen
+  // until checked against the DB, so a stale pick never flashes as Pending.
   useEffect(() => {
     let cancelled = false;
     let stored: PooledPick[] = [];
@@ -230,29 +183,24 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
         const parsed = migrateStoredSlip(JSON.parse(raw));
         stored = parsed.picks;
         setExcludedLeagues(parsed.excludedLeagues);
-        setLegCountState(parsed.legacy.legCount);
+        setLegCountState(Math.min(MAX_PARLAY_LEGS, parsed.legacy.legCount));
         if (parsed.legacy.addMode) setAddMode(true);
         if (parsed.legacy.checkedPicks.length > 0) setCheckedPicks(new Map(parsed.legacy.checkedPicks.map((p) => [p.pickId, p])));
-        const { kept, pruned } = startedGames(parsed.targets, Date.now());
-        setGames(kept);
-        reportPruned(pruned);
-        setLocked(parsed.legacy.locked);
-        setSource(parsed.legacy.source);
+        // A target whose game started has nothing left to give: dropped quietly.
+        setTargets(unstarted(parsed.targets, Date.now()));
       }
     } catch {
-      // Corrupt/unavailable storage - start from an empty pool rather than fail the page.
+      // Corrupt/unavailable storage - start from an empty slip rather than fail the page.
     }
     if (stored.length === 0) {
       setHydrated(true);
       return;
     }
-    // The check below takes a round-trip, and the user can confirm picks
-    // before it lands. Its answer replaces only the stored legs it was asked
-    // about - anything confirmed in the meantime stays.
+    // The check takes a round-trip, and the user can add picks before it
+    // lands. Its answer replaces only the stored picks it was asked about.
     const storedIds = new Set(stored.map((p) => p.pickId));
     uncheckedStoredRef.current = storedIds;
-    const withConfirmedSince = (checked: PooledPick[]) => (prev: PooledPick[]) =>
-      [...checked, ...prev.filter((p) => !storedIds.has(p.pickId))];
+    const withAddedSince = (checked: PooledPick[]) => (prev: PooledPick[]) => [...checked, ...prev.filter((p) => !storedIds.has(p.pickId))];
     (async () => {
       let states: Awaited<ReturnType<typeof getSlipPickStatesAction>> | null = null;
       try {
@@ -264,14 +212,12 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
       uncheckedStoredRef.current = new Set();
       if (states) {
         const { kept, pruned } = reconcileSlip(stored, states);
-        setPool(withConfirmedSince(kept));
+        setPool(withAddedSince(kept));
         reportPruned(pruned);
       } else {
-        // Couldn't reach the DB: show only what can't already be known stale
-        // (still pending, not started per the client clock). The next focus
-        // revalidation replaces these with real values.
+        // Couldn't reach the DB: show only what can't already be known stale.
         const now = Date.now();
-        setPool(withConfirmedSince(stored.filter((p) => p.status === "PENDING" && new Date(p.gameTime).getTime() > now)));
+        setPool(withAddedSince(stored.filter((p) => p.status === "PENDING" && new Date(p.gameTime).getTime() > now)));
       }
       lastCheckRef.current = Date.now();
       setHydrated(true);
@@ -289,25 +235,21 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
       const data: SlipStateV2 = {
         version: 2,
         picks: pool,
-        targets: games,
+        targets,
         excludedLeagues,
-        legacy: { addMode, legCount, checkedPicks: Array.from(checkedPicks.values()), locked, source },
+        legacy: { addMode, legCount, checkedPicks: Array.from(checkedPicks.values()) },
       };
       window.localStorage.setItem(storageKey(userId), serializeSlip(data));
     } catch {
       // Best-effort persistence only - a full localStorage or a private window is not fatal.
     }
-  }, [userId, pool, excludedLeagues, legCount, addMode, checkedPicks, games, locked, source, hydrated]);
+  }, [userId, pool, targets, excludedLeagues, legCount, addMode, checkedPicks, hydrated]);
 
-  // Re-check the live pool against the DB. Only legs that were in the pool
-  // when the request went out are touched, so a pick added mid-flight is left alone.
+  // Re-check the slip against the DB. Only picks that were in it when the
+  // request went out are touched, so one added mid-flight is left alone.
   const revalidate = useCallback(async () => {
-    const gameCheck = startedGames(gamesRef.current, Date.now());
-    if (gameCheck.pruned.length > 0) {
-      const gone = new Set(gameCheck.pruned.map((g) => g.pickId));
-      setGames((prev) => prev.filter((g) => !gone.has(gameItemKey(g.gameId))));
-      reportPruned(gameCheck.pruned);
-    }
+    const live = unstarted(targetsRef.current, Date.now());
+    if (live.length !== targetsRef.current.length) setTargets(live);
     const checked = poolRef.current;
     if (checked.length === 0 || inFlightRef.current) return;
     inFlightRef.current = true;
@@ -324,9 +266,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
           return k !== undefined && (k.status !== c.status || k.odds !== c.odds || k.gameTime !== c.gameTime);
         });
       if (changed) {
-        setPool((prev) =>
-          prev.flatMap((p) => (!ids.has(p.pickId) ? [p] : keptById.has(p.pickId) ? [keptById.get(p.pickId)!] : []))
-        );
+        setPool((prev) => prev.flatMap((p) => (!ids.has(p.pickId) ? [p] : keptById.has(p.pickId) ? [keptById.get(p.pickId)!] : [])));
         reportPruned(pruned);
       }
     } catch {
@@ -355,39 +295,69 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     };
   }, [hydrated, revalidate]);
 
-  const dismissNotice = useCallback(() => setNotice(null), []);
+  // The quiet line clears itself: re-render when it runs out.
+  useEffect(() => {
+    if (!removed) return;
+    const t = window.setTimeout(() => setRemoved((r) => (r && r.until <= Date.now() ? null : r)), Math.max(0, removed.until - Date.now()) + 50);
+    return () => window.clearTimeout(t);
+  }, [removed]);
+
+  const switchOn = (leagues: string[]) => setExcludedLeagues((prev) => (prev.some((l) => leagues.includes(l)) ? prev.filter((l) => !leagues.includes(l)) : prev));
+  const modelState = (): SlipStateV2 => ({ version: 2, picks: poolRef.current, targets: targetsRef.current, excludedLeagues: [], legacy: EMPTY_LEGACY });
 
   const isInPool = useCallback((pickId: string) => pool.some((p) => p.pickId === pickId), [pool]);
 
   const removeFromPool = useCallback((pickId: string) => {
-    setPool((prev) => prev.filter((p) => p.pickId !== pickId));
-    setLocked((prev) => prev.filter((k) => k !== pickId));
+    poolRef.current = poolRef.current.filter((p) => p.pickId !== pickId);
+    setPool(poolRef.current);
   }, []);
 
-  const isGameInSlip = useCallback((gameId: string) => games.some((g) => g.gameId === gameId), [games]);
-
-  // Same cap as confirmAdd: refused whole, and said so on the slip button.
-  const addGame = useCallback((game: SlipGame) => {
-    if (gamesRef.current.some((g) => g.gameId === game.gameId)) return;
-    if (poolRef.current.length + uncheckedStoredRef.current.size + gamesRef.current.length >= MAX_PARLAY_LEGS) {
+  const togglePick = useCallback((pick: PooledPick) => {
+    const inSlip = poolRef.current.some((p) => p.pickId === pick.pickId);
+    if (!inSlip && poolRef.current.length + uncheckedStoredRef.current.size >= MAX_PARLAY_LEGS) {
       setOverCapBy(1);
       return;
     }
-    setGames((prev) => [...prev, { gameId: game.gameId, gameLabel: game.gameLabel, gameTime: game.gameTime, leagueName: game.leagueName }]);
-    // Like a new pick, a new game switches its league on.
-    setExcludedLeagues((prev) => (prev.includes(game.leagueName) ? prev.filter((l) => l !== game.leagueName) : prev));
+    const change = togglePickIn(modelState(), pick);
+    if (change.refused) {
+      setOverCapBy(1);
+      return;
+    }
+    setOverCapBy(null);
+    poolRef.current = change.state.picks;
+    setPool(change.state.picks);
+    if (!inSlip) switchOn([pick.leagueName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the refs, not render state
   }, []);
 
-  const removeGame = useCallback((gameId: string) => {
-    setGames((prev) => prev.filter((g) => g.gameId !== gameId));
-    setLocked((prev) => prev.filter((k) => k !== gameItemKey(gameId)));
+  const toggleTarget = useCallback((game: SlipGame) => {
+    const change = toggleTargetIn(modelState(), game);
+    if (change.refused) return false;
+    const added = !targetsRef.current.some((g) => g.gameId === game.gameId);
+    targetsRef.current = change.state.targets;
+    setTargets(change.state.targets);
+    if (added) switchOn([game.leagueName]);
+    return true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the refs, not render state
   }, []);
 
-  const isLocked = useCallback((key: string) => locked.includes(key), [locked]);
-
-  const toggleLock = useCallback((key: string) => {
-    setLocked((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  const clearTargets = useCallback(() => {
+    targetsRef.current = [];
+    setTargets([]);
   }, []);
+
+  const leaguesInSlip = useMemo(() => new Set([...pool.map((p) => p.leagueName), ...targets.map((t) => t.leagueName)]), [pool, targets]);
+  const isLeagueInScope = useCallback((league: string) => leaguesInSlip.has(league) || !excludedLeagues.includes(league), [excludedLeagues, leaguesInSlip]);
+  const isLeagueLocked = useCallback((league: string) => leaguesInSlip.has(league), [leaguesInSlip]);
+  const toggleLeague = useCallback(
+    (league: string) => {
+      if (leaguesInSlip.has(league)) return;
+      setExcludedLeagues((prev) => (prev.includes(league) ? prev.filter((l) => l !== league) : [...prev, league]));
+    },
+    [leaguesInSlip]
+  );
+
+  const setLegCount = useCallback((n: number) => setLegCountState(Math.max(1, Math.min(Math.floor(n) || 1, MAX_PARLAY_LEGS))), []);
 
   const dismissOverCap = useCallback(() => setOverCapBy(null), []);
 
@@ -407,11 +377,13 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     });
   }, []);
 
+  // Refuses a selection that would take the slip past MAX_PARLAY_LEGS picks -
+  // adds nothing and says so, rather than adding only the picks that fit.
   const confirmAdd = useCallback(() => {
     const held = new Set(poolRef.current.map((p) => p.pickId));
     uncheckedStoredRef.current.forEach((id) => held.add(id));
     const adding = Array.from(checkedPicks.values()).filter((p) => !held.has(p.pickId));
-    const over = held.size + gamesRef.current.length + adding.length - MAX_PARLAY_LEGS;
+    const over = held.size + adding.length - MAX_PARLAY_LEGS;
     if (adding.length > 0 && over > 0) {
       // Stay in add mode with the selection intact, so the user can untick
       // down to the cap instead of starting over.
@@ -419,110 +391,21 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
       return;
     }
     setOverCapBy(null);
-    setPool((prev) => {
-      const existingIds = new Set(prev.map((p) => p.pickId));
-      const additions = Array.from(checkedPicks.values()).filter((p) => !existingIds.has(p.pickId));
-      // A new pick switches its league on, even one the user had switched
-      // off. A pick already in the slip is not new and changes nothing.
-      const added = new Set(additions.map((p) => p.leagueName));
-      setExcludedLeagues((prevExcluded) =>
-        prevExcluded.some((l) => added.has(l)) ? prevExcluded.filter((l) => !added.has(l)) : prevExcluded
-      );
-      return [...prev, ...additions];
-    });
+    const existingIds = new Set(poolRef.current.map((p) => p.pickId));
+    const additions = Array.from(checkedPicks.values()).filter((p) => !existingIds.has(p.pickId));
+    poolRef.current = [...poolRef.current, ...additions];
+    setPool(poolRef.current);
+    // A new pick switches its league on, even one the user had switched off.
+    switchOn(Array.from(new Set(additions.map((p) => p.leagueName))));
     setCheckedPicks(new Map());
     setAddMode(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- switchOn only calls a state setter
   }, [checkedPicks]);
 
   const discardAdd = useCallback(() => {
     setOverCapBy(null);
     setCheckedPicks(new Map());
     setAddMode(false);
-  }, []);
-
-  const leaguesInPool = useMemo(
-    () => Array.from(new Set([...pool.map((p) => p.leagueName), ...games.map((g) => g.leagueName)])),
-    [pool, games]
-  );
-
-  const isLeagueInScope = useCallback((league: string) => !excludedLeagues.includes(league), [excludedLeagues]);
-
-  const toggleLeague = useCallback((league: string) => {
-    setExcludedLeagues((prev) => (prev.includes(league) ? prev.filter((l) => l !== league) : [...prev, league]));
-  }, []);
-
-  // A slip saved before the cap existed can hold more than MAX_PARLAY_LEGS
-  // picks; it still builds at most that many legs.
-  const maxLegCount = useMemo(
-    () =>
-      Math.min(
-        pool.filter((p) => isLeagueInScope(p.leagueName)).length + games.filter((g) => isLeagueInScope(g.leagueName)).length,
-        MAX_PARLAY_LEGS
-      ),
-    [pool, games, isLeagueInScope]
-  );
-  // With the qualified pool filling in, the slip's own size no longer bounds
-  // the leg count - only the cap does.
-  const maxBuildLegs = source === "SLIP_PLUS_POOL" && maxLegCount > 0 ? MAX_PARLAY_LEGS : maxLegCount;
-
-  const setLegCount = useCallback(
-    (n: number) => {
-      setLegCountState(Math.max(1, Math.min(n, Math.max(maxBuildLegs, 1))));
-    },
-    [maxBuildLegs]
-  );
-
-  // ---- The state model's actions ----
-  // The quiet line clears itself: re-render when it runs out.
-  useEffect(() => {
-    if (!removed) return;
-    const t = window.setTimeout(() => setRemoved((r) => (r && r.until <= Date.now() ? null : r)), Math.max(0, removed.until - Date.now()) + 50);
-    return () => window.clearTimeout(t);
-  }, [removed]);
-
-  const modelState = (): SlipStateV2 => ({
-    version: 2,
-    picks: poolRef.current,
-    targets: gamesRef.current,
-    excludedLeagues: [],
-    legacy: { addMode: false, legCount: 1, checkedPicks: [], locked: [], source: "SLIP_PLUS_POOL" },
-  });
-
-  const toggleTarget = useCallback((game: SlipGame) => {
-    const change = toggleTargetIn(modelState(), game);
-    if (change.refused) return false;
-    const added = !gamesRef.current.some((g) => g.gameId === game.gameId);
-    gamesRef.current = change.state.targets;
-    setGames(change.state.targets);
-    if (added) {
-      setExcludedLeagues((prev) => (prev.includes(game.leagueName) ? prev.filter((l) => l !== game.leagueName) : prev));
-    } else {
-      setLocked((prev) => prev.filter((k) => k !== gameItemKey(game.gameId)));
-    }
-    return true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the refs, not render state
-  }, []);
-
-  const togglePick = useCallback((pick: PooledPick) => {
-    const inSlip = poolRef.current.some((p) => p.pickId === pick.pickId);
-    // Stored legs still being checked on hydrate count toward the cap too.
-    if (!inSlip && poolRef.current.length + uncheckedStoredRef.current.size >= MAX_PARLAY_LEGS) {
-      setOverCapBy(1);
-      return;
-    }
-    const change = togglePickIn(modelState(), pick);
-    if (change.refused) {
-      setOverCapBy(1);
-      return;
-    }
-    setOverCapBy(null);
-    // The ref moves now, not on the next render: two toggles in one event must
-    // each see the other.
-    poolRef.current = change.state.picks;
-    setPool(change.state.picks);
-    if (inSlip) setLocked((prev) => prev.filter((k) => k !== pick.pickId));
-    else setExcludedLeagues((prev) => (prev.includes(pick.leagueName) ? prev.filter((l) => l !== pick.leagueName) : prev));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the refs, not render state
   }, []);
 
   const sendToGenerator = useCallback(() => {
@@ -532,65 +415,55 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
 
   const clearSlip = useCallback(() => {
     const empty = clearedSlip(modelState());
+    poolRef.current = empty.picks;
+    targetsRef.current = empty.targets;
     setPool(empty.picks);
-    setGames(empty.targets);
-    setLocked([]);
+    setTargets(empty.targets);
     setCheckedPicks(new Map());
     setAddMode(false);
     setOverCapBy(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the refs, not render state
   }, []);
 
-  const targetedGames = useMemo(() => toTargetedGames({ picks: pool, targets: games }), [pool, games]);
+  const targetedGames = useMemo(() => toTargetedGames({ picks: pool, targets }), [pool, targets]);
 
   const value: ParlayPoolContextValue = {
-    targets: games,
+    pool,
+    isInPool,
+    removeFromPool,
+    togglePick,
+    slipSize: pool.length,
+    targets,
     targetedGames,
     isTargeted: (gameId) => targetedGames.some((g) => g.gameId === gameId),
     isTargetedViaPicks: (gameId) => pool.some((p) => p.gameId === gameId),
     toggleTarget,
-    togglePick,
-    generatorTargets: () => toGeneratorTargets({ targets: games }),
-    slipMode: addMode,
-    sendToGenerator,
-    clearSlip,
-    removedLine: removedLineText(removed, Date.now()),
-    pool,
-    isInPool,
-    removeFromPool,
-    games,
-    isGameInSlip,
-    addGame,
-    removeGame,
-    slipSize: pool.length + games.length,
-    isLocked,
-    toggleLock,
-    source,
-    setSource,
+    clearTargets,
+    generatorTargets: () => toGeneratorTargets({ targets }),
+    isLeagueInScope,
+    isLeagueLocked,
+    toggleLeague,
+    legCount,
+    setLegCount,
     addMode,
+    slipMode: addMode,
     checkedPicks,
     enterAddMode,
     toggleChecked,
     confirmAdd,
     discardAdd,
+    sendToGenerator,
     overCapBy,
     dismissOverCap,
-    leaguesInPool,
-    isLeagueInScope,
-    toggleLeague,
-    legCount: Math.max(1, Math.min(legCount, Math.max(maxBuildLegs, 1))),
-    setLegCount,
-    maxLegCount,
-    maxBuildLegs,
-    notice,
-    dismissNotice,
+    clearSlip,
+    removedLine: removedLineText(removed, Date.now()),
   };
 
   return <ParlayPoolContext.Provider value={value}>{children}</ParlayPoolContext.Provider>;
 }
 
-// For a control that only makes sense with a slip ("+ Add game"): null, not
-// a throw, where no provider is mounted.
+// For a control that only makes sense with a slip: null, not a throw, where no
+// provider is mounted.
 export function useOptionalParlayPool() {
   return useContext(ParlayPoolContext);
 }

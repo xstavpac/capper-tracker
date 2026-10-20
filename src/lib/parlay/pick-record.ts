@@ -1,5 +1,5 @@
 // The one "how good is this capper at this pick" number the Parlay Generator
-// ranks by - shared by My Picks (parlay-pool-section.tsx) and Auto-Generate
+// ranks by - shared by the slip-pick ranking (generator.ts) and Auto-Generate
 // (auto-generate.ts) so both rank a pick identically. It's the same record
 // PickCard already shows for the pick (getCapperLeagueRecords): the capper's
 // record in this bet category in this league, falling back to their

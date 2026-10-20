@@ -1,11 +1,11 @@
-// The one leg ceiling for every Parlay Generator mode - Auto-Generate, My
-// Picks, Auto Hedge and Contrarian. Client-safe: nothing here imports
+// The one leg ceiling for the Parlay Generator (its Primary, Hedge and
+// Contrarian). Client-safe: nothing here imports
 // server/data or prisma, so the /parlay client components, the Parlay Pool
 // context and the server actions can all share it.
 //
-// Enforced in three places, none of which trims: the leg stepper
-// (parlay-controls.tsx), the slip's confirmAdd (parlay-pool-context.tsx), and
-// the server actions (parlay-generator.ts, parlay-pool-generator.ts). A
+// Enforced without trimming by the leg stepper (parlay-controls.tsx), the
+// slip's add (parlay-pool-context.tsx), the server action (parlay-generate.ts)
+// and the FanDuel link route. A
 // request past the cap is refused with MAX_PARLAY_LEGS_MESSAGE.
 export const MAX_PARLAY_LEGS = 25;
 

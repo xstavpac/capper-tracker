@@ -63,9 +63,10 @@ function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string 
   );
 }
 
-// `keepWhenEmpty` shows the button, disabled, when there are no legs (the
-// Parlay slip, which can be emptied); otherwise nothing is shown for none.
-export function SendToFanDuel({ legs, keepWhenEmpty }: { legs: SendLeg[]; keepWhenEmpty?: boolean }) {
+// `keepWhenEmpty` shows the button, disabled, when there are no legs;
+// otherwise nothing is shown for none. `onOpened` runs when the user opens
+// FanDuel's betslip - the generator clears the slip then.
+export function SendToFanDuel({ legs, keepWhenEmpty, onOpened }: { legs: SendLeg[]; keepWhenEmpty?: boolean; onOpened?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FanDuelLinkResponse | null>(null);
@@ -152,7 +153,7 @@ export function SendToFanDuel({ legs, keepWhenEmpty }: { legs: SendLeg[]; keepWh
             </p>
           )}
           {result.url && (
-            <a href={result.url} target="_blank" rel="noopener noreferrer" className={PILL_PRIMARY + " mt-2.5"}>
+            <a href={result.url} target="_blank" rel="noopener noreferrer" onClick={onOpened} className={PILL_PRIMARY + " mt-2.5"}>
               Open FanDuel
             </a>
           )}

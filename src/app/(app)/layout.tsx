@@ -2,7 +2,6 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { LiveTicker } from "@/components/marketing/live-ticker";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { ParlayPoolProvider } from "@/components/parlay/parlay-pool-context";
-import { ParlaySlipNotice } from "@/components/parlay/parlay-slip-notice";
 import { getLiveTickerGames } from "@/server/data/live-ticker";
 import { requireUser } from "@/server/auth";
 import { getNavFeatureFlags, ZONE_MODEL_FLAG_KEY, ADMIN_OPS_CONSOLE_FLAG_KEY } from "@/server/data/feature-flags";
@@ -35,7 +34,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               showAdminOps={showAdminOps}
             />
             <main className="flex-1 bg-background p-4 md:rounded-xl md:border md:border-border md:bg-card md:p-8 md:shadow-soft">
-              <ParlaySlipNotice />
               {children}
             </main>
           </div>
