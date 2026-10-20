@@ -56,11 +56,17 @@ export const cacheKeys = {
   // The NflRosterPlayer table's full names only (no team/position/espnId) -
   // what the client-side bulk-import parser fetches to give parseCatalog's
   // findAmbiguousNickname player-prop guard roster data without shipping the
-  // whole roster's other columns over the wire. No mutation path writes this
-  // table at request time (see scripts/load-nfl-roster.ts's own comment - a
-  // manual/one-time rerun, never triggered by parsing), so there's no
-  // revalidateTag call for this key; it relies on the TTL alone.
+  // whole roster's other columns over the wire. Only the roster loader writes
+  // the table: the daily refresh-rosters cron revalidates this tag after every
+  // committed NFL load, 0 rows written included (rosterCacheTagsToRevalidate,
+  // refresh-rosters.ts), which also picks up a manual scripts/load-nfl-roster.ts
+  // --commit; until that run, the TTL.
   nflRosterFullNames: () => "nfl-roster-full-names",
+  // One league's roster rows (nfl/nhl/nba/mlb-roster-cache.ts readAll), behind
+  // both the import name matching and the prop-grading views. Same writers and
+  // invalidation as nflRosterFullNames: the cron revalidates a league's tag
+  // after every committed load of that league.
+  rosterRows: (league: string) => `roster-rows:${league.toLowerCase()}`,
   // The /admin ops console's red-dot summary (server/data/admin-status.ts): one
   // entry shared by the admins, no user data in it. TTL only - the tab pages
   // read fresh, so a dot can trail its page by up to the TTL.

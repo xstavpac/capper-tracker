@@ -1,8 +1,7 @@
 import { revalidateTag } from "next/cache";
-import { cacheKeys } from "@/lib/cache-keys";
 import { ROSTER_LEAGUE_ORDER, ROSTER_LEAGUES } from "@/server/data/roster-leagues";
 import { rosterTableFor } from "@/server/data/roster-tables";
-import { isAuthorizedCronRequest, refreshRosters, rosterRefreshSummary } from "@/server/data/refresh-rosters";
+import { isAuthorizedCronRequest, refreshRosters, rosterCacheTagsToRevalidate, rosterRefreshSummary } from "@/server/data/refresh-rosters";
 import { runCronLogged } from "@/server/data/cron-runs";
 
 export const dynamic = "force-dynamic";
@@ -38,10 +37,9 @@ async function run(): Promise<Response> {
   });
   for (const o of outcomes) console.log(rosterRefreshSummary(o));
 
-  // The bulk-import NFL name list is the one roster read behind a Data Cache
-  // tag; the per-process roster memos expire on their own within a minute.
-  const nfl = outcomes.find((o) => o.league === "NFL");
-  if (nfl && "rowsWritten" in nfl && nfl.rowsWritten > 0) revalidateTag(cacheKeys.nflRosterFullNames());
+  // Every league whose load committed drops its cached roster (and NFL its
+  // bulk-import name list), so the next grade or import reads the fresh table.
+  for (const tag of rosterCacheTagsToRevalidate(outcomes)) revalidateTag(tag);
 
   return Response.json({
     ms: Date.now() - start,

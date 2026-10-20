@@ -12,6 +12,7 @@ import { cacheKeys } from "@/lib/cache-keys";
 import { buildRosterViews, ROSTER_CACHE_SELECT } from "@/server/data/roster-cache-rows";
 
 const ROSTER_MEMO_TTL_MS = 60_000;
+const ROSTER_ROWS_REVALIDATE_SECONDS = 24 * 60 * 60;
 
 // Memoized per process for ROSTER_MEMO_TTL_MS: prop grading calls this once per
 // pick it cannot find in a box score, so a grade-picks run with N such picks
@@ -20,11 +21,18 @@ const ROSTER_MEMO_TTL_MS = 60_000;
 // The table changes at most once a day (the refresh), so a minute of
 // staleness is invisible. Both views below come from this one read and are
 // the same arrays on every call inside the TTL - read-only.
+//
+// Under the memo, the rows themselves sit in the shared Data Cache for a day:
+// most grade runs land on a cold or different instance, where the memo alone
+// meant one whole-table read per run. The refresh-rosters cron revalidates the
+// tag after every committed NFL load (rosterCacheTagsToRevalidate, refresh-rosters.ts).
 const readAll = () =>
   memoizeWithTtl(
     "roster:nfl",
     async () => {
-      const rows = await prisma.nflRosterPlayer.findMany({ select: { ...ROSTER_CACHE_SELECT, espnPlayerId: true } });
+      const rows = await cachedByTag(cacheKeys.rosterRows("NFL"), ROSTER_ROWS_REVALIDATE_SECONDS, () =>
+        prisma.nflRosterPlayer.findMany({ select: { ...ROSTER_CACHE_SELECT, espnPlayerId: true } })
+      );
       return buildRosterViews(rows, (r) => r.espnPlayerId);
     },
     { ttlMs: ROSTER_MEMO_TTL_MS }
@@ -47,8 +55,9 @@ export async function getCachedNflGradingRoster(): Promise<RosterPlayer[]> {
 // get-nfl-roster-names.ts's server action), a much higher-traffic path than
 // the recovery and grading callers, so an uncached read here would be a real
 // repeated-Postgres-egress cost for no benefit. Active players only - it feeds
-// import name matching. The refresh cron revalidates this tag after any NFL
-// write; a manual scripts/load-nfl-roster.ts run relies on the one-hour TTL.
+// import name matching. The refresh cron revalidates this tag after every
+// committed NFL load; a manual scripts/load-nfl-roster.ts run is picked up by
+// the next of that run or the one-hour TTL.
 export async function getCachedNflRosterFullNames(): Promise<string[]> {
   return cachedByTag(cacheKeys.nflRosterFullNames(), 60 * 60, async () => {
     const rows = await prisma.nflRosterPlayer.findMany({ where: { active: true }, select: { fullName: true } });

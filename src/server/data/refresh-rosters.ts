@@ -7,6 +7,7 @@
 // Leagues run in parallel and independently: one league throwing or aborting
 // is caught and reported in its own outcome, and never stops the others.
 import { isSportInSeason } from "@/lib/sport-seasons";
+import { cacheKeys } from "@/lib/cache-keys";
 import { describePlan, rowsWritten, runRosterLoad, type RosterLeague, type RosterLeagueConfig, type RosterLoadResult, type RosterTable } from "@/server/data/roster-load";
 
 export type RosterRefreshOutcome =
@@ -49,6 +50,22 @@ export function rosterRefreshSummary(o: RosterRefreshOutcome): string {
     case "committed":
       return `${tag} committed in ${o.ms}ms: ${o.result.status === "committed" ? describePlan(o.result.plan) : ""}; ${o.rowsWritten} rows written`;
   }
+}
+
+// The Data Cache tags the cron must revalidate after a run: each league whose
+// load committed gets its roster-rows tag, and NFL also the bulk-import name
+// list's tag - even when it wrote 0 rows, so a manual scripts/load-*-roster.ts
+// write (which can't reach the Data Cache) is picked up by the next daily run.
+// A skipped, failed or aborted league wrote nothing; its cache stays. Pure, so
+// the decision is testable without Next; the route calls revalidateTag on each.
+export function rosterCacheTagsToRevalidate(outcomes: RosterRefreshOutcome[]): string[] {
+  const tags: string[] = [];
+  for (const o of outcomes) {
+    if (o.status !== "committed") continue;
+    tags.push(cacheKeys.rosterRows(o.league));
+    if (o.league === "NFL") tags.push(cacheKeys.nflRosterFullNames());
+  }
+  return tags;
 }
 
 // Fails closed: no CRON_SECRET configured means no request is authorized.

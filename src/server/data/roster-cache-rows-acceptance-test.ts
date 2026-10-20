@@ -6,7 +6,9 @@
 // No database and no network. The grading half reuses the real NHL fixtures of
 // nhl-prop-grading-acceptance-test.ts: PIT @ BUF (2026-09-29), where Andrei
 // Kuzmenko is on Pittsburgh's roster but absent from the box score, so an
-// id-verified roster hit PUSHES his prop.
+// id-verified roster hit PUSHES his prop. PART D: the views built from the rows
+// as the shared Data Cache stores them (JSON) are the same, and every reader's
+// table read goes through cachedByTag under the tag the refresh cron revalidates.
 import fs from "node:fs";
 import path from "node:path";
 import { buildRosterViews } from "./roster-cache-rows";
@@ -14,6 +16,7 @@ import { extractNhlBoxScore } from "./nhl-boxscore";
 import { extractNhlRosterPlayers } from "./nhl-roster";
 import { gradeNhlPlayerProp } from "./nhl-prop-grading";
 import { resolveNameAgainstRoster } from "@/lib/player-roster-fallback";
+import { cacheKeys } from "@/lib/cache-keys";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -52,6 +55,23 @@ async function main() {
   const viaMatching = await gradeNhlPlayerProp(pick, "test", { fetchBox: async () => pitBox, getRoster: async () => views.matching });
   check("with the grading view: id-verified did-not-play -> PUSH", viaGrading, { outcome: "PUSH" });
   check("with the matching view it could NOT grade (why grading must not use it)", viaMatching.outcome, null);
+
+  console.log("\n########## PART D: the rows through the shared Data Cache ##########");
+  // unstable_cache stores the rows as JSON; the views built from the stored copy must be the ones built from the read.
+  const stored = JSON.parse(JSON.stringify(rows)) as typeof rows;
+  const fromStore = buildRosterViews(stored, (r) => r.espnPlayerId);
+  check("grading view from the stored rows = from the read", fromStore.grading, views.grading);
+  check("matching view from the stored rows = from the read", fromStore.matching, views.matching);
+  const viaStored = await gradeNhlPlayerProp(pick, "test", { fetchBox: async () => pitBox, getRoster: async () => fromStore.grading });
+  check("the inactive player's prop grades the same from the stored rows", viaStored, viaGrading);
+  // Every reader's table read sits behind cachedByTag, under the tag the cron revalidates for that league.
+  for (const league of ["NFL", "NHL", "NBA", "MLB"] as const) {
+    const src = fs.readFileSync(path.join(process.cwd(), "src/server/data", league.toLowerCase() + "-roster-cache.ts"), "utf8");
+    const reads = (src.match(/RosterPlayer\.findMany\(/g) ?? []).length;
+    const cached = (src.match(/cachedByTag\(cacheKeys\.\w+\(/g) ?? []).length;
+    check(`${league}: every roster table read is behind cachedByTag (${reads} read(s))`, reads > 0 && reads === cached, true);
+    check(`${league}: keyed by the tag the cron revalidates (${cacheKeys.rosterRows(league)})`, src.includes(`cachedByTag(cacheKeys.rosterRows("${league}")`), true);
+  }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);
