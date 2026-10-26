@@ -17,6 +17,7 @@
 // fe5af69 to write the fixture).
 import { PrismaClient } from "@prisma/client";
 import { normalizeSql } from "@/lib/db-monitor";
+import { drainQueryLog } from "@/server/data/query-log-drain";
 import { STATEMENT_FIXTURES } from "@/lib/db-monitor-fixtures";
 import { PAGE_ONE_STATEMENTS } from "@/server/data/picks-page-one-statements-fixture";
 
@@ -105,8 +106,10 @@ async function main() {
       const searchParams = Object.fromEntries(
         Object.entries(raw).map(([k, v]) => [k, v === "CAPPER_A" ? capA.id : v === "SPORT" ? sport.id : v])
       );
+      await drainQueryLog(logged, queries);
       queries.length = 0;
       await PicksPage({ searchParams });
+      await drainQueryLog(logged, queries);
       const statements = sorted(queries.map(shape));
       captured.push(statements);
 
