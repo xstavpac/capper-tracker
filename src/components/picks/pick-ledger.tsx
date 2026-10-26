@@ -8,7 +8,7 @@ import { ChevronDownIcon } from "@/components/dashboard/cappers-icons";
 import { GREEN, RED, TINTS } from "@/components/dashboard/panel-shell";
 import { updatePickStatusAction, deletePickAction, loadOlderPicksAction, reloadOlderPickRowAction } from "@/server/actions/picks";
 import type { LedgerSection, PickPhase } from "@/lib/pick-display";
-import { groupByDay, type OlderPicksCursor, type OlderPicksQuery } from "@/lib/older-picks";
+import { groupByDay, olderDayHeading, olderDayKey, type OlderPicksCursor, type OlderPicksQuery } from "@/lib/older-picks";
 
 // Serializable row model built on the server (page.tsx) - all display strings
 // are precomputed there via lib/pick-display so this file is layout only.
@@ -393,22 +393,6 @@ type OlderState = {
 
 const freshOlder = (key: string): OlderState => ({ key, rows: [], cursor: null, hasMore: true, lastCount: null, loading: false, error: null, records: {} });
 
-// The viewer's own calendar day, like the times on every row.
-function localDayKey(iso: string): string {
-  const d = new Date(iso);
-  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-}
-
-function dayHeading(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    ...(d.getFullYear() !== new Date().getFullYear() ? { year: "numeric" } : {}),
-  });
-}
-
 const OLDER_BUTTON = "block w-full px-5 py-3 text-center text-[13px] font-semibold text-brand-600 hover:bg-[#F5F6FA] disabled:opacity-60 dark:text-brand-400 dark:hover:bg-muted";
 const OLDER_LINK = "text-[13px] font-semibold text-brand-600 hover:underline dark:text-brand-400";
 
@@ -427,7 +411,7 @@ function OlderPicks({
   bare: boolean;
 }) {
   // Grouped over the whole merged list on every render: a day split across two clicks has one header.
-  const days = groupByDay(state.rows, (r) => localDayKey(r.gameTimeIso));
+  const days = groupByDay(state.rows, (r) => olderDayKey(r.gameTimeIso));
   const link = bare && state.rows.length === 0;
   const emptyStretch = state.lastCount === 0 && state.hasMore;
   const control = state.loading ? (
@@ -456,7 +440,7 @@ function OlderPicks({
       {days.map((day) => (
         <div key={day.dayKey}>
           <div className={"border-b border-[#0F1420]/[0.06] bg-[#F7F8FB] px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] dark:border-white/10 dark:bg-white/[0.03] sm:px-5 " + MUTED}>
-            {dayHeading(day.rows[0].gameTimeIso)}
+            {olderDayHeading(day.rows[0].gameTimeIso, new Date())}
           </div>
           <div className="divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
             {day.rows.map((row) => (

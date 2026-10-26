@@ -4,6 +4,8 @@
 // The server half is server/data/picks-older.ts; the action is
 // loadOlderPicksAction (server/actions/picks.ts).
 
+import { easternDateKey, formatEastern } from "@/lib/dates";
+
 // Rows one DB page reads (one more is read to know whether anything is older).
 export const OLDER_PICKS_PAGE_SIZE = 50;
 // A bet-type filter is cut in memory after the read, so a page can come back
@@ -87,6 +89,21 @@ export function mergedTimeWindows(times: number[], padMs: number): { start: numb
     else out.push({ start: t - padMs, end: t + padMs });
   }
   return out;
+}
+
+// The Eastern calendar day a row's game time falls on: the same day the page's
+// window and navigator use, whatever zone the browser is in. Row TIMES stay in
+// the viewer's zone; the day grouping must not follow it.
+export function olderDayKey(iso: string): string {
+  return easternDateKey(new Date(iso));
+}
+
+// "Sun, Oct 25" for a day group, in Eastern; the year only when it isn't the
+// current Eastern year.
+export function olderDayHeading(iso: string, now: Date): string {
+  const d = new Date(iso);
+  const sameYear = easternDateKey(d).slice(0, 4) === easternDateKey(now).slice(0, 4);
+  return formatEastern(d, { weekday: "short", month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
 }
 
 // Consecutive runs of rows on the same day, in list order. Computed over the
