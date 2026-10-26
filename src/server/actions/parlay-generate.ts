@@ -20,6 +20,8 @@
 import { requireUser } from "@/server/auth";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { getCapperRecordBundle } from "@/server/data/picks";
+import { gameStatusFor } from "@/server/data/expander-pick";
+import { isGameOver } from "@/lib/parlay/game-over";
 import { getOwnedSlipPickRows, loadSlipBoards, offBoardSlipPick, picksOnBoards } from "@/server/data/parlay-slip-picks";
 import type { PickCategoryKey } from "@/server/data/stats";
 import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
@@ -114,12 +116,16 @@ export async function generateParlayAction(request: GenerateRequest): Promise<Ge
   const fullSlate = req.targets.length === 0;
 
   const games: GeneratorGame[] = [];
-  for (const { label, board } of boards) {
+  for (const { key, label, board } of boards) {
     const inWindow = autoGenerateWindow(label, board.odds.map((g) => g.commenceTime), now);
     // From the whole board: the other game of a doubleheader may already be under way.
     const doubleheaders = doubleheaderGameIds(board.odds, board.scores);
     board.odds.forEach((game, i) => {
-      if (new Date(game.commenceTime).getTime() <= now.getTime()) return;
+      // A live game is fine for a target or a slip pick (it is priced as posted);
+      // only a game that is over is skipped, and the full slate never reaches
+      // for a game already under way (inWindow).
+      const gameStatus = gameStatusFor(board.scores, game, key);
+      if (isGameOver({ gameTime: game.commenceTime, gameStatus }, now)) return;
       const wanted =
         targetIds.has(game.id) || slipGameIds.has(game.id) || (fullSlate && req.leagues.includes(label) && inWindow(game.commenceTime));
       if (!wanted) return;
@@ -130,6 +136,7 @@ export async function generateParlayAction(request: GenerateRequest): Promise<Ge
         gameId: game.id,
         gameLabel: picks[0]?.gameLabel ?? game.awayTeam + " @ " + game.homeTeam,
         gameTime: game.commenceTime,
+        gameStatus,
         leagueName: label,
         picks,
         doubleheader: doubleheaders.has(game.id),

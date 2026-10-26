@@ -8,8 +8,8 @@
 //     new snapshot and its Primary. Either way the Regenerate history restarts.
 //   - Regenerate: the engine here with the next seed and the history of
 //     parlays shown - never a request, unless the pool changed or the snapshot
-//     went stale (snapshotIsStale: older than ~2 minutes, or a game in it has
-//     started), in which case it reloads first and draws from the new pool.
+//     went stale (snapshotIsStale: older than ~2 minutes, or a game in it is over
+//     or, off the targets and the slip, has kicked off), in which case it reloads first and draws from the new pool.
 //   - Refresh: always one request - a fresh snapshot (picks, odds, records) and
 //     its Primary, whatever the pool and the snapshot's age. Restarts the
 //     Regenerate history like Generate.

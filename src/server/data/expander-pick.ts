@@ -12,8 +12,16 @@ import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
 import { getTeamColor } from "@/lib/team-colors";
 import { formatPickLabel } from "@/lib/bet-line";
 import { type ExpanderPick } from "@/components/live/game-picks-expander";
+import { matchScoreToGame } from "@/components/live/live-scoreboard-ordering";
+import type { GameFeedStatus } from "@/lib/parlay/game-over";
+import type { ScoreGame } from "@/server/data/odds";
 
 export type ExpanderPickGame = { id: string; homeTeam: string; awayTeam: string; commenceTime: string };
+
+// The score feed's status for a board game, null when the feed has no row for it.
+export function gameStatusFor(scores: ScoreGame[], game: ExpanderPickGame, sportKey: string): GameFeedStatus | null {
+  return matchScoreToGame(scores, game, sportKey)?.status ?? null;
+}
 
 // `p` is the board's projected row (BOARD_PICK_SELECT); a full Pick row with
 // its capper - the slip's off-board path - fits it too.
@@ -21,7 +29,8 @@ export function toExpanderPick(
   p: BoardPickRow,
   game: ExpanderPickGame,
   activeSport: string,
-  sportLabel: string
+  sportLabel: string,
+  gameStatus: GameFeedStatus | null = null
 ): ExpanderPick & { datePosted: string; gameNumber: number | null } {
   const teamGroup = classifyPickTeamGroup(p, game, sportLabel);
   return {
@@ -67,5 +76,6 @@ export function toExpanderPick(
     oddsSource: p.oddsSource,
     // Read only by Auto-Generate's same-game fill (auto-generate.ts, sureOfGame).
     gameNumber: p.gameNumber,
+    gameStatus,
   };
 }

@@ -281,21 +281,47 @@ const slate = makeSlate(BASE);
 }
 
 // ============================================================================
-// Started games, staleness.
+// Games that are over (dropped), live games (kept), staleness.
 // ============================================================================
 {
   const early = makeSlate([{ id: "e", game: 0, bet: "HOME", wl: [30, 10] }], "2099-06-01T11:00:00.000Z");
+  // The same game, with the feed saying it is final.
+  const over = { ...early, picks: new Map([["e", { ...early.picks.get("e")!, gameStatus: "final" as const }]]), games: early.games.map((g) => ({ ...g, gameStatus: "final" as const })) };
   const r = buildGeneratedParlay(
-    { ...snap(slate, ["g1h"]), slipPicks: [early.picks.get("e")!, slate.picks.get("g1h")!], games: [...slate.games, ...early.games] },
+    { ...snap(slate, ["g1h"]), slipPicks: [over.picks.get("e")!, slate.picks.get("g1h")!], games: [...slate.games, ...over.games] },
     { ...SETTINGS, legCount: 3 },
     null,
     NOW
   );
-  check("a slip pick whose game started is dropped, and says so", r.dropped.map((d) => [d.pickId, d.reason]), [["e", "started"]]);
-  check("...a started game is never used", r.legs.some((l) => l.pick.pickId === "e"), false);
-  check("stale: older than 2 minutes", snapshotIsStale({ builtAt: new Date(NOW.getTime() - SNAPSHOT_MAX_AGE_MS - 1).toISOString(), games: slate.games, slipPicks: [] }, NOW), true);
-  check("fresh: built just now, nothing started", snapshotIsStale({ builtAt: NOW.toISOString(), games: slate.games, slipPicks: [] }, NOW), false);
-  check("stale: a game in it has started", snapshotIsStale({ builtAt: NOW.toISOString(), games: early.games, slipPicks: [] }, NOW), true);
+  check("a slip pick whose game is over is dropped, and says so", r.dropped.map((d) => [d.pickId, d.reason]), [["e", "over"]]);
+  check("...a game that is over is never used", r.legs.some((l) => l.pick.pickId === "e"), false);
+  for (const gameStatus of ["postponed", "cancelled"] as const) {
+    const o = { ...over.picks.get("e")!, gameStatus };
+    const rr = buildGeneratedParlay({ ...snap(slate, ["g1h"]), slipPicks: [o, slate.picks.get("g1h")!], games: slate.games }, { ...SETTINGS, legCount: 3 }, null, NOW);
+    check(gameStatus + " slip pick: dropped as over", rr.dropped.map((d) => [d.pickId, d.reason]), [["e", "over"]]);
+  }
+
+  // LIVE: the same game with no status (kicked off an hour ago) or "live" stays in.
+  for (const gameStatus of [undefined, "live" as const]) {
+    const live = { ...early.picks.get("e")!, gameStatus };
+    const lr = buildGeneratedParlay(
+      { ...snap(slate, ["g1h"]), slipPicks: [live, slate.picks.get("g1h")!], games: [...slate.games, ...early.games.map((g) => ({ ...g, gameStatus }))] },
+      { ...SETTINGS, legCount: 3 },
+      null,
+      NOW
+    );
+    check("live slip pick (" + (gameStatus ?? "no status") + "): used as a leg, not dropped", [lr.dropped.length, lr.legs.some((l) => l.pick.pickId === "e")], [0, true]);
+  }
+  const liveTarget = buildGeneratedParlay({ ...snap(slate, [], ["e-game"]), games: [...slate.games, { ...early.games[0], gameId: "e-game", gameStatus: "live" as const }] }, { ...SETTINGS, legCount: 1 }, null, NOW);
+  check("a targeted live game is not reported unavailable", liveTarget.unavailableTargets, []);
+  const overTarget = buildGeneratedParlay({ ...snap(slate, [], ["e-game"]), games: [...slate.games, { ...early.games[0], gameId: "e-game", gameStatus: "final" as const }] }, { ...SETTINGS, legCount: 1 }, null, NOW);
+  check("a targeted game that is over is reported unavailable", overTarget.unavailableTargets, ["e-game"]);
+  check("stale: older than 2 minutes", snapshotIsStale({ builtAt: new Date(NOW.getTime() - SNAPSHOT_MAX_AGE_MS - 1).toISOString(), games: slate.games, slipPicks: [], targets: [] }, NOW), true);
+  check("fresh: built just now, nothing over", snapshotIsStale({ builtAt: NOW.toISOString(), games: slate.games, slipPicks: [], targets: [] }, NOW), false);
+  check("stale: a full-slate game in it has kicked off", snapshotIsStale({ builtAt: NOW.toISOString(), games: early.games, slipPicks: [], targets: [] }, NOW), true);
+  check("fresh: a live game that is targeted stays", snapshotIsStale({ builtAt: NOW.toISOString(), games: early.games, slipPicks: [], targets: [early.games[0].gameId] }, NOW), false);
+  check("fresh: a live game a slip pick is on stays", snapshotIsStale({ builtAt: NOW.toISOString(), games: early.games, slipPicks: [early.picks.get("e")!], targets: [] }, NOW), false);
+  check("stale: a targeted game that is now over", snapshotIsStale({ builtAt: NOW.toISOString(), games: over.games, slipPicks: [], targets: [over.games[0].gameId] }, NOW), true);
 }
 
 // ============================================================================

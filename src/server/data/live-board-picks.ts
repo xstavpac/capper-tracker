@@ -22,7 +22,7 @@ import {
   type ScoreGame,
 } from "@/server/data/odds";
 import { getPicksForGames } from "@/server/data/picks";
-import { toExpanderPick } from "@/server/data/expander-pick";
+import { toExpanderPick, gameStatusFor } from "@/server/data/expander-pick";
 import { type ExpanderPick } from "@/components/live/game-picks-expander";
 import { slateCutoffKey } from "@/components/live/live-scoreboard-ordering";
 import { easternDateKey } from "@/lib/dates";
@@ -80,7 +80,7 @@ export async function getLiveBoardData(
   );
 
   const expanderPicksByGame: ExpanderPick[][] = matchedPicksByGame.map((matchedPicks, gameIndex) =>
-    matchedPicks.map((p) => toExpanderPick(p, odds[gameIndex], activeSport, sportLabel))
+    matchedPicks.map((p) => toExpanderPick(p, odds[gameIndex], activeSport, sportLabel, gameStatusFor(scores, odds[gameIndex], activeSport)))
   );
 
   return { odds, scores, expanderPicksByGame };

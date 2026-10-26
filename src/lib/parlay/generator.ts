@@ -14,7 +14,7 @@
 //      count. Two slip picks that can't both be legs (opposing, or the same bet,
 //      at any line - blocks(), build-my-picks.ts) compete: the better record
 //      stays, then the better line. The other is listed in `dropped`. A slip
-//      pick whose game has started is dropped too. When "max legs per game" is
+//      pick whose game is over is dropped too (a live game's picks stay). When "max legs per game" is
 //      lower than the picks you chose on one game, the best of them (the same
 //      ranking) stay and the rest are listed in `dropped` as left out, with
 //      why - they stay in your slip, they are only not used in this parlay.
@@ -92,6 +92,7 @@ import {
 } from "@/lib/parlay/include-picks";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { legSetKey } from "@/lib/parlay/parlay-set";
+import { hasKickedOff, isGameOver, type GameClock } from "@/lib/parlay/game-over";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
 
 // ---------------------------------------------------------------------------
@@ -103,12 +104,12 @@ export type GeneratorSnapshot = {
   // When the pool was read, for snapshotIsStale.
   builtAt: string;
   // Every game generated legs may come from: the in-scope leagues' unstarted
-  // games, the targeted games, and the games of the slip's picks. Pending
-  // picks only.
+  // games, the targeted games, and the games of the slip's picks (a targeted
+  // or slip game may be live). Pending picks only.
   games: GeneratorGame[];
   // The slip's picks, read server-side.
   slipPicks: GeneratorPick[];
-  // Targeted game ids. A target missing from `games` (started, or off the
+  // Targeted game ids. A target missing from `games` (over, or off the
   // board) is reported in `unavailableTargets`.
   targets: string[];
   // Every slip pick's and candidate's card (in-league and all-time market
@@ -200,7 +201,7 @@ export type EngineLeg = {
 export type DroppedSlipPick = {
   pickId: string;
   label: string;
-  reason: "duplicate" | "opposes" | "started" | "left_out";
+  reason: "duplicate" | "opposes" | "over" | "left_out";
   // The slip pick that stayed (duplicate / opposes / left out).
   against: { pickId: string; label: string } | null;
   // "duplicates Capper — Over 53.5 — not used"
@@ -244,7 +245,7 @@ export type GeneratedParlay = {
   // Each Pick Mix category that couldn't fill its share (the other selected
   // categories made up the rest).
   mixNotes: string[];
-  // Targeted game ids that are not in the snapshot (started or off the board).
+  // Targeted game ids that are not in the snapshot (over or off the board).
   unavailableTargets: string[];
   dropped: DroppedSlipPick[];
   hedge: EngineSwap;
@@ -266,11 +267,16 @@ const VARIATION_TRIES = 12;
 // A snapshot older than this is reloaded before the next build.
 export const SNAPSHOT_MAX_AGE_MS = 2 * 60 * 1000;
 
-// Reload when the pool is old, or a game in it has started.
-export function snapshotIsStale(snapshot: Pick<GeneratorSnapshot, "builtAt" | "games" | "slipPicks">, now: Date): boolean {
-  const t = now.getTime();
-  if (t - new Date(snapshot.builtAt).getTime() > SNAPSHOT_MAX_AGE_MS) return true;
-  return snapshot.games.some((g) => new Date(g.gameTime).getTime() <= t) || snapshot.slipPicks.some((p) => new Date(p.gameTime).getTime() <= t);
+// Reload when the pool is old, a game in it is over, or a game the full slate
+// drew from has kicked off (a live game stays in only as a target or a slip
+// pick's game).
+export function snapshotIsStale(snapshot: Pick<GeneratorSnapshot, "builtAt" | "games" | "slipPicks" | "targets">, now: Date): boolean {
+  if (now.getTime() - new Date(snapshot.builtAt).getTime() > SNAPSHOT_MAX_AGE_MS) return true;
+  const kept = new Set([...snapshot.targets, ...snapshot.slipPicks.map((p) => p.gameId)]);
+  return (
+    snapshot.games.some((g) => isGameOver(g, now) || (hasKickedOff(g.gameTime, now) && !kept.has(g.gameId))) ||
+    snapshot.slipPicks.some((p) => isGameOver(p, now))
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -355,9 +361,8 @@ export function buildGeneratedParlay(
   now: Date,
   rules: GeneratorRules = GENERATOR_RULES
 ): GeneratedParlay {
-  const nowMs = now.getTime();
   const gate = effectiveGate(settings, rules);
-  const started = (iso: string) => new Date(iso).getTime() <= nowMs;
+  const over = (g: GameClock) => isGameOver(g, now);
   const include = toIncludeSelection(settings.include);
   const categories = selectedCategories(include);
   const mix = toPickMix(settings.mix, categories);
@@ -368,7 +373,7 @@ export function buildGeneratedParlay(
   const dropped: DroppedSlipPick[] = [];
   const liveSlip: GeneratorPick[] = [];
   for (const p of snapshot.slipPicks) {
-    if (started(p.gameTime)) dropped.push({ pickId: p.pickId, label: pickLabel(p), reason: "started", against: null, note: "game started — not used" });
+    if (over(p)) dropped.push({ pickId: p.pickId, label: pickLabel(p), reason: "over", against: null, note: "game over — not used" });
     else liveSlip.push(p);
   }
   const slipById = new Map(liveSlip.map((p) => [p.pickId, p]));
@@ -412,7 +417,7 @@ export function buildGeneratedParlay(
 
   // ---- 2. Games -----------------------------------------------------------
   const allSlipIds = new Set(snapshot.slipPicks.map((p) => p.pickId));
-  const gameById = new Map(snapshot.games.filter((g) => !started(g.gameTime)).map((g) => [g.gameId, g]));
+  const gameById = new Map(snapshot.games.filter((g) => !over(g)).map((g) => [g.gameId, g]));
   const slipGameIds = new Set(slipLegs.map((p) => p.gameId));
   const targeted = snapshot.targets.length > 0;
   const unavailableTargets = targeted ? snapshot.targets.filter((id) => !gameById.has(id)) : [];

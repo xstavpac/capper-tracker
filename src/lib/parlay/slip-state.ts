@@ -22,6 +22,7 @@
 // are dropped.
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { MAX_PARLAY_LEGS, MAX_POOL_REQUEST_PICKS } from "@/lib/parlay/leg-cap";
+import { isGameOver } from "@/lib/parlay/game-over";
 
 export type SlipPick = ExpanderPick;
 export type SlipTarget = { gameId: string; gameLabel: string; gameTime: string; leagueName: string };
@@ -158,7 +159,7 @@ export function clearedSlip(state: SlipStateV2): SlipStateV2 {
 // stays until dismissed - a pick that disappears without a trace is the one
 // thing the slip must never do.
 // ---------------------------------------------------------------------------
-export type RemovedPick = { pickId: string; label: string; result: "Won" | "Lost" | "Push" | "Void" | "Started" | "Removed" };
+export type RemovedPick = { pickId: string; label: string; result: "Won" | "Lost" | "Push" | "Void" | "Over" | "Removed" };
 
 export type RemovedLine = { picks: RemovedPick[] };
 
@@ -175,7 +176,7 @@ const REMOVED_WHY: Record<RemovedPick["result"], string> = {
   Lost: "graded Lost",
   Push: "graded Push",
   Void: "graded Void",
-  Started: "game started",
+  Over: "game over",
   Removed: "no longer in your picks",
 };
 
@@ -191,8 +192,8 @@ export function removedHeading(line: RemovedLine): string {
 // ---------------------------------------------------------------------------
 // Another tab changed the slip (a `storage` event on its key). Read what it
 // stored the way a hydrate does, minus the DB check the other tab already made:
-// only a pending pick whose game has not started, only a target not yet
-// started. A removed key (sign-out in the other tab) is the empty slip.
+// only a pending pick whose game is not over, only a target whose game is not
+// over. A removed key (sign-out in the other tab) is the empty slip.
 // ---------------------------------------------------------------------------
 export function slipFromStorageEvent(raw: string | null, now: number): SlipStateV2 {
   if (raw === null) return EMPTY_SLIP_STATE;
@@ -205,7 +206,7 @@ export function slipFromStorageEvent(raw: string | null, now: number): SlipState
   const s = migrateStoredSlip(parsed);
   return {
     ...s,
-    picks: s.picks.filter((p) => p.status === "PENDING" && new Date(p.gameTime).getTime() > now),
-    targets: s.targets.filter((t) => new Date(t.gameTime).getTime() > now),
+    picks: s.picks.filter((p) => p.status === "PENDING" && !isGameOver(p, new Date(now))),
+    targets: s.targets.filter((t) => !isGameOver(t, new Date(now))),
   };
 }

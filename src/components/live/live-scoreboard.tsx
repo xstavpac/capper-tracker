@@ -125,7 +125,7 @@ export function LiveScoreboard({
               {/* Slip mode only: target this game for the generator (outside the card's link). */}
               <TargetGameCheckbox
                 className="mb-1.5"
-                game={{ gameId: game.id, gameLabel: matchedPicks[0]?.gameLabel ?? game.awayTeam + " @ " + game.homeTeam, gameTime: game.commenceTime, leagueName: sportLabel }}
+                game={{ gameId: game.id, gameLabel: matchedPicks[0]?.gameLabel ?? game.awayTeam + " @ " + game.homeTeam, gameTime: game.commenceTime, gameStatus: score?.status ?? null, leagueName: sportLabel }}
               />
               {/* LiveScoreboard only ever renders in Feed mode (live/page.tsx
                   gates it on !isGrid), so this link always carries an

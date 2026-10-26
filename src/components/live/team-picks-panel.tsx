@@ -12,6 +12,7 @@ import { LocalGameTime } from "@/components/local-game-time";
 import { TINTS } from "@/components/dashboard/panel-shell";
 import { TargetGameCheckbox } from "@/components/parlay/target-game-checkbox";
 import type { SlipGame } from "@/components/parlay/parlay-pool-context";
+import type { GameClock } from "@/lib/parlay/game-over";
 
 // Grid Live's fixed detail panel - shows BOTH teams' picks at once,
 // stacked in one card, unlike GamePicksExpander (which lists AWAY/HOME/OTHER
@@ -145,7 +146,7 @@ export function GameDetailPanel({
 }: {
   data: GridLiveGamePanelData;
   // The game as the Parlay slip names it, for "Target game" in slip mode.
-  slipGame?: SlipGame;
+  slipGame?: SlipGame & GameClock;
   // The selected game's start and its total matched picks (every group), for the panel's header -
   // both read from what GridLiveBoard already holds for the game list.
   commenceTime: string;

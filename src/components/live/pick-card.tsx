@@ -70,14 +70,14 @@ function StreakRow({ streak }: { streak: GameCardStreak | null | undefined }) {
 
 // The Parlay slip's checkbox - rendered only in Live's slip mode. It writes
 // straight into the slip: checked is in, unchecked is out (no Confirm). A new
-// pick can't be added once its game started (select-checkbox-state.ts); one
+// pick can't be added once its game is over (select-checkbox-state.ts); one
 // already in the slip can always be taken out. Checking a pick also puts its
 // game in play ("targeted via your picks").
 function SelectCheckbox({ pick }: { pick: ExpanderPick }) {
   const { slipMode, isInPool, togglePick } = useParlayPool();
   if (!slipMode) return null;
   const inPool = isInPool(pick.pickId);
-  const { disabled, title } = selectCheckboxState(pick.gameTime, inPool, new Date());
+  const { disabled, title } = selectCheckboxState(pick, inPool, new Date());
   return (
     <label
       className="flex shrink-0 items-center"
@@ -94,7 +94,7 @@ function SelectCheckbox({ pick }: { pick: ExpanderPick }) {
           inPool
             ? "Remove " + pick.capperName + " pick from Parlay slip"
             : disabled
-              ? pick.capperName + " pick - game started"
+              ? pick.capperName + " pick - game over"
               : "Add " + pick.capperName + " pick to Parlay slip"
         }
       />

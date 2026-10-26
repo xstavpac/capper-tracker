@@ -17,12 +17,13 @@
 // Run with:
 //   npx tsx src/lib/parlay/fanduel-link-acceptance-test.ts
 import fs from "node:fs";
+import { hasKickedOff } from "@/lib/parlay/game-over";
 import path from "node:path";
 import {
   buildFanDuelBetslipUrl,
   buildFanDuelLink,
   fanDuelLegTarget,
-  hasStarted,
+  LIVE_LEG_REASON,
   matchFanDuelOutcome,
   notSentDisplay,
   FANDUEL_BETSLIP_URL,
@@ -750,13 +751,13 @@ function noEmptyReasons() {
     notSent.filter((l) => !filled(l.reason) || !filled(notSentDisplay(l).label) || notSentDisplay(l).reason !== l.reason),
     []
   );
-  check("every not-sent status but 'ambiguous' is among them", Array.from(new Set(notSent.map((l) => l.status))).sort(), ["error", "not_found", "started", "unsupported"]);
+  check("every not-sent status but 'ambiguous' is among them", Array.from(new Set(notSent.map((l) => l.status))).sort(), ["error", "live", "not_found", "over", "unsupported"]);
 
   // What the page shows, whatever comes back: each status this build knows, and
   // ones it doesn't ("adjusted" reaching a page loaded before #254 is a leg
   // with no label and a null reason - the empty grey chip).
-  const statuses = ["started", "not_found", "ambiguous", "unsupported", "error", "adjusted", "matched", "some_future_status", ""];
-  const reasons = [null, undefined, "", "   ", "Game has already started."];
+  const statuses = ["live", "over", "not_found", "ambiguous", "unsupported", "error", "adjusted", "matched", "some_future_status", ""];
+  const reasons = [null, undefined, "", "   ", LIVE_LEG_REASON];
   const blank = statuses
     .flatMap((status) => reasons.map((reason) => ({ status, reason, shown: notSentDisplay({ status, reason }) })))
     .filter((x) => !filled(x.shown.label) || !filled(x.shown.reason));
@@ -772,26 +773,29 @@ function noEmptyReasons() {
 }
 
 async function main() {
-  check("kickoff in the future has not started; at or before now it has", [hasStarted(KICKOFF, NOW), hasStarted(NOW.toISOString(), NOW), hasStarted("2026-10-12T19:00:00Z", NOW)], [false, true, true]);
+  check("kickoff in the future has not kicked off; at or before now it has", [hasKickedOff(KICKOFF, NOW), hasKickedOff(NOW.toISOString(), NOW), hasKickedOff("2026-10-12T19:00:00Z", NOW)], [false, true, true]);
 
   const billsMl = leg({ pickId: "bills-ml" });
   const allenProp = leg({ pickId: "allen", betType: "PLAYER_PROP", betDetail: "Josh Allen Over 244.5 Passing Yards", odds: -110 });
   const broncosMl = leg({ pickId: "broncos-ml", betDetail: "Broncos ML", homeTeam: "Denver Broncos", awayTeam: "Seattle Seahawks", gameTime: "2026-10-16T00:15:00Z", odds: 132 });
+  const over = leg({ pickId: "over", gameStatus: "final", homeTeam: "Dallas Cowboys", awayTeam: "New York Giants", betDetail: "Cowboys ML", gameTime: "2026-10-12T14:00:00Z" });
   const started = leg({ pickId: "started", homeTeam: "Dallas Cowboys", awayTeam: "New York Giants", betDetail: "Cowboys ML", gameTime: "2026-10-12T17:00:00Z" });
 
   const a = fakeDeps(NOW);
-  const built = await build([billsMl, started, broncosMl, allenProp], a.deps);
+  const built = await build([billsMl, started, broncosMl, allenProp, over], a.deps);
   check(
     "each leg's status, in the order asked",
     built.legs.map((l) => [l.pickId, l.status, l.pickOdds, l.fanDuelOdds]),
     [
       ["bills-ml", "matched", 150, 154],
-      ["started", "started", 150, null],
+      ["started", "live", 150, null],
       ["broncos-ml", "matched", 132, 132],
       ["allen", "matched", -110, -113],
+      ["over", "over", 150, null],
     ]
   );
-  check("the started leg says why", built.legs[1].reason, "Game has already started.");
+  check("the live leg is named, not an error: Live — add on FanDuel", built.legs[1].reason, "Live — add on FanDuel");
+  check("the game-over leg says why", built.legs[4].reason, "Game is over.");
   check(
     "the link holds the matched legs only, in leg order",
     Array.from(new URL(built.url!).searchParams.values()),
@@ -799,7 +803,7 @@ async function main() {
   );
   check("one listing per league", a.calls.events, ["americanfootball_nfl"]);
   check(
-    "one odds call per event, for only the markets its legs need - none for the started game",
+    "one odds call per event, for only the markets its legs need - none for the live and game-over legs",
     a.calls.odds.sort((x, y) => x.eventId.localeCompare(y.eventId)),
     [
       { eventId: "evt-buf-lar", marketKeys: ["h2h", "player_pass_yds"] },
@@ -811,13 +815,13 @@ async function main() {
   const onlyStarted = await build([started, leg({ pickId: "nrfi", betType: "NRFI", betDetail: "NRFI" })], b.deps);
   check("nothing sendable: no link, each leg with a reason, the feed never asked", [onlyStarted.url, onlyStarted.legs.map((l) => l.status), b.calls], [
     null,
-    ["started", "unsupported"],
+    ["live", "unsupported"],
     { events: [], odds: [] },
   ]);
 
   const c = fakeDeps(new Date("2026-10-13T00:20:00Z"));
   const afterKickoff = await build([leg({ pickId: "late", gameTime: "2026-10-13T00:25:00Z" })], c.deps);
-  check("a leg whose own time is still ahead but whose game has kicked off is skipped", [afterKickoff.legs[0].status, afterKickoff.url, c.calls.odds], ["started", null, []]);
+  check("a leg whose own time is still ahead but whose game has kicked off is skipped", [afterKickoff.legs[0].status, afterKickoff.url, c.calls.odds], ["live", null, []]);
 
   const d = fakeDeps(NOW);
   const wrongLine = await build([leg({ pickId: "alt", betType: "SPREAD", betDetail: "Bills +4.5", line: 4.5 }), billsMl], d.deps);

@@ -125,12 +125,12 @@ const game = (gameId: string, leagueName = "NFL"): SlipTarget => ({ gameId, game
 // The prune notice names every removed pick and why, and stays
 // ============================================================================
 {
-  const a = { pickId: "a", label: "Cap A - Away @ Home - Home ML", result: "Started" as const };
+  const a = { pickId: "a", label: "Cap A - Away @ Home - Home ML", result: "Over" as const };
   const b = { pickId: "b", label: "Cap B - X @ Y - Over 5", result: "Removed" as const };
   const c = { pickId: "c", label: "Cap C - P @ Q - Q ML", result: "Won" as const };
   let line = addRemoved(null, [a, b]);
   check("two picks removed: heading", line && removedHeading(line), "2 picks removed from your slip");
-  check("each pick is named with its reason", line?.picks.map(removedPickText), ["Cap A - Away @ Home - Home ML — game started", "Cap B - X @ Y - Over 5 — no longer in your picks"]);
+  check("each pick is named with its reason", line?.picks.map(removedPickText), ["Cap A - Away @ Home - Home ML — game over", "Cap B - X @ Y - Over 5 — no longer in your picks"]);
   line = addRemoved(line, [b, c]);
   check("another prune adds up; a pick already listed is not listed twice", line?.picks.map((p) => p.pickId), ["a", "b", "c"]);
   check("graded picks say so", removedPickText(c), "Cap C - P @ Q - Q ML — graded Won");
@@ -144,7 +144,7 @@ const game = (gameId: string, leagueName = "NFL"): SlipTarget => ({ gameId, game
 {
   const stored = { ...EMPTY_SLIP_STATE, picks: [{ ...pick("f", "gf"), status: "PENDING" as const }, { ...pick("graded", "gg"), status: "WIN" as const }, { ...pick("started", "gs"), status: "PENDING" as const, gameTime: "2000-01-01T00:00:00.000Z" }] };
   const got = slipFromStorageEvent(serializeSlip(stored), Date.parse("2020-01-01T00:00:00.000Z"));
-  check("keeps pending, unstarted picks only", got.picks.map((p) => p.pickId), ["f"]);
+  check("keeps pending picks whose game is not over only", got.picks.map((p) => p.pickId), ["f"]);
   check("a removed key is the empty slip", slipFromStorageEvent(null, 0), EMPTY_SLIP_STATE);
   check("corrupt storage is the empty slip", slipFromStorageEvent("{nope", 0), EMPTY_SLIP_STATE);
 }
