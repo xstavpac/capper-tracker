@@ -3,6 +3,7 @@ import { matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
 import { chipSetForLeague, DEFAULT_CHIP_SET, PICK_CATEGORY_LABELS } from "@/server/data/stats";
 import { getSportCategoryPanelData } from "@/server/data/pick-aggregates-cappers-adapter";
 import { getLiveBoardData } from "@/server/data/live-board-picks";
+import { getDefaultLiveSport } from "@/server/data/live-default-sport";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
 import { GridLiveBoard } from "@/components/live/grid-live-board";
 import { orderBoardGames } from "@/components/live/live-scoreboard-ordering";
@@ -22,14 +23,13 @@ export default async function LivePage({
 }: {
   searchParams: { sport?: string; view?: string; gameId?: string };
 }) {
-  // MLB is currently the only league fully wired up with real data - default
-  // there instead of LIVE_SPORTS[0] (NFL), which is otherwise empty most of
-  // the year. Tab order/visibility is untouched, this only changes which one
-  // is selected when no ?sport= is in the URL.
-  const activeSport = searchParams.sport || "baseball_mlb";
-  const sportLabel = LIVE_SPORTS.find((s) => s.key === activeSport)?.label ?? activeSport;
-
   const user = await requireUser();
+
+  // No ?sport= means a fresh visit to /live: open on the league whose game is live or starts
+  // first (getDefaultLiveSport), MLB when nothing is scheduled. A ?sport= in the URL - a tab
+  // the viewer picked, a shared link - is never overridden. Tab order/visibility is untouched.
+  const activeSport = searchParams.sport || (await getDefaultLiveSport());
+  const sportLabel = LIVE_SPORTS.find((s) => s.key === activeSport)?.label ?? activeSport;
 
   // Only sports with categories beyond the universal set (every league tab
   // here has its own chip set today) get the category record query - for
