@@ -15,7 +15,7 @@ import { getParlaysForUser } from "@/server/data/parlays";
 import { LegStatusButtons } from "@/components/dashboard/leg-status-buttons";
 import { RowDeleteButton } from "@/components/dashboard/row-delete-button";
 import { deleteParlayAction } from "@/server/actions/parlays";
-import { formatEastern, easternDateKey, easternDayStart } from "@/lib/dates";
+import { formatEastern, easternDefaultDayKey, easternDayStart } from "@/lib/dates";
 import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
 import { PicksFilterBar } from "@/components/picks/picks-filter-bar";
 import { PickLedger, type LedgerSectionSummary } from "@/components/picks/pick-ledger";
@@ -99,7 +99,8 @@ export default async function PicksPage({
   const user = await requireUser();
 
   const now = new Date();
-  const todayKey = easternDateKey(now);
+  // The default day stays on the previous Eastern day until 4:00 AM Eastern; an explicit date param is never shifted.
+  const todayKey = easternDefaultDayKey(now);
   const betTypeFilter = (searchParams.betType as BetTypeFilterKey) || undefined;
   // A range longer than MAX_PICKS_RANGE_DAYS comes back clamped; everything below uses these keys.
   const { startDateKey, endDateKey, isRange, clamped } = resolveDateFilter(searchParams, todayKey);

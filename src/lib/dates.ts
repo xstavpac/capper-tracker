@@ -47,6 +47,20 @@ export function easternDateKey(date: Date): string {
   return year + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
 }
 
+// The Eastern day a plain /picks load (no date param) shows: the previous
+// Eastern day until `rolloverHour`:00 Eastern wall-clock time, then the current
+// one. Reads the Eastern hour itself rather than shifting the instant by a
+// fixed number of hours, which would land an hour off on both DST switch days.
+export function easternDefaultDayKey(now: Date, rolloverHour = 4): string {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: APP_TIME_ZONE, hour: "numeric", hourCycle: "h23" })
+      .formatToParts(now)
+      .find((p) => p.type === "hour")?.value
+  );
+  const key = easternDateKey(now);
+  return hour < rolloverHour ? addDaysToDateKey(key, -1) : key;
+}
+
 // Do `a` and `b` fall on the same Eastern calendar day? Timezone-fixed
 // replacement for the old sameLocalDay, which compared using the server
 // process's own local zone instead of a consistent one.
