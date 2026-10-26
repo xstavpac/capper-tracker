@@ -26,7 +26,8 @@ function admin(): SupabaseClient {
 
 export async function uploadScreenshot(path: string, bytes: Uint8Array, contentType: string): Promise<void> {
   const { error } = await admin().storage.from(BUG_REPORT_BUCKET).upload(path, bytes, { contentType, upsert: false });
-  if (error) throw new Error(error.message);
+  // Carry the HTTP status so submit.ts can log it; the message alone says what, the status says who rejected it.
+  if (error) throw Object.assign(new Error(error.message), { status: (error as { status?: number }).status });
 }
 
 // Short-lived: the URL is minted on click, so the list page never loads an image.
