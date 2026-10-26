@@ -32,7 +32,6 @@ import {
   type GeneratorSettings,
   type GeneratorSnapshot,
 } from "@/lib/parlay/generator";
-// @ts-expect-error - plain .mjs helper, no types
 import { assertNotProd } from "./lib/prod-guard.mjs";
 
 const url = process.env.DATABASE_URL ?? "";
