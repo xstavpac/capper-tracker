@@ -2,6 +2,7 @@ import { requireUser } from "@/server/auth";
 import { getEntitlementsForUser, getSubscriptionForUser } from "@/server/data/subscriptions";
 import { BillingSummary } from "@/components/billing/billing-summary";
 import { ThemeToggle } from "@/components/settings/theme-toggle";
+import { BugReportCard } from "@/components/settings/bug-report-card";
 import { formatEastern } from "@/lib/dates";
 
 export default async function SettingsPage() {
@@ -31,6 +32,10 @@ export default async function SettingsPage() {
 
       <div className="mb-6">
         <ThemeToggle />
+      </div>
+
+      <div className="mb-6">
+        <BugReportCard />
       </div>
 
       {/* Data-source attribution. The nflverse credit is a CC-BY-4.0 license

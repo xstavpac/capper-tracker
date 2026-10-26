@@ -182,6 +182,7 @@ model User {
   featureFlagOverrides    FeatureFlagUserOverride[]
   importSkippedLines      ImportSkippedLine[]
   importRuns              ImportRun[]
+  bugReports              BugReport[]
 
   @@map("users")
 }
@@ -1557,4 +1558,30 @@ model ImportRun {
 
   @@index([createdAt])
   @@map("import_runs")
+}
+
+// A user's bug report from Settings. The screenshot is NOT in the database:
+// it is one private Supabase Storage object at screenshotPath (bucket
+// bug-reports), read only by the admin tab through a short-lived signed URL.
+// screenshotPath is null for a text-only report, or after the admin resolves it
+// (resolving deletes the object).
+enum BugReportStatus {
+  OPEN
+  RESOLVED
+}
+
+model BugReport {
+  id             String          @id @default(cuid())
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  description    String
+  pagePath       String?
+  userAgent      String?
+  screenshotPath String?
+  status         BugReportStatus @default(OPEN)
+  createdAt      DateTime        @default(now())
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@map("bug_reports")
 }
