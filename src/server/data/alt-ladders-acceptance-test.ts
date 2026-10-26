@@ -442,6 +442,22 @@ async function main() {
     await getAltLadders(req([SP]));
     expect("other callers, yesterday's rows and failed calls do not count against the budget", oddsApiCalls.length, 1);
 
+    // The budget's day is the EASTERN day (creditsSpentToday: easternDayStart(easternDateKey(now))), never UTC.
+    const etBudget = (nowAt: string, rowAt: string, label: string, expectedCalls: number) => {
+      reset();
+      nowMs = Date.parse(nowAt);
+      seed(SP, { fetchedAgoMs: 2 * HOUR, commence: startsIn(5) });
+      spent(150, { pollTimestamp: new RealDate(rowAt) });
+      return getAltLadders(req([SP])).then(() => expect(label, oddsApiCalls.length, expectedCalls));
+    };
+    // EDT: ET midnight 2026-10-15 is 04:00Z.
+    await etBudget("2026-10-15T04:01:00Z", "2026-10-15T03:59:00Z", "ET midnight: 150 spent at 23:59 ET the day before do not count at 00:01 ET (a UTC day would count them)", 1);
+    await etBudget("2026-10-15T04:01:00Z", "2026-10-15T04:00:00Z", "ET midnight: a row stamped exactly at 00:00 ET counts toward the new day", 0);
+    await etBudget("2026-10-15T03:30:00Z", "2026-10-14T23:30:00Z", "23:30 ET: a row from 19:30 ET the same ET day counts even though UTC has already rolled over", 0);
+    // EST after the fall-back: ET midnight 2026-11-02 is 05:00Z.
+    await etBudget("2026-11-02T05:30:00Z", "2026-11-02T04:30:00Z", "after the DST change: 04:30Z is 23:30 EST the day before, not counted at 00:30 EST", 1);
+    await etBudget("2026-11-02T05:30:00Z", "2026-11-02T05:10:00Z", "after the DST change: 05:10Z is 00:10 EST, counted", 0);
+
     // Budget is shared across events: with 1 credit left, only the first event is bought.
     reset();
     spent(149);
