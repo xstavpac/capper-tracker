@@ -109,6 +109,12 @@ type ExistingResultState = {
   firstInningHomeScore: number | null;
   homeTurnovers: number | null;
   favTeam: string | null;
+  homeScore: number;
+  awayScore: number;
+  // Whether the stored inningsJson equals the feed's innings for this game
+  // (see fetchExistingResultState's inningsById). Meaningless when the feed
+  // sent no innings for the game.
+  inningsCurrent: boolean;
   linescoreMissing: boolean;
   quartersMissing: boolean;
   scoringPlaysMissing: boolean;
@@ -119,11 +125,16 @@ type ExistingResultState = {
 // scoringPlaysJson across the wire only to test them against null).
 // "Missing" is `IS NULL OR = 'null'::jsonb` so it matches Prisma's own
 // reading of a Json? column (SQL NULL and a stored JSON null both surface as
-// null), keeping the gates below exactly as they were. Exported for
+// null), keeping the gates below exactly as they were. The scores ride along
+// so a final whose stored row is already identical can skip its write
+// (finalScoreWriteNeeded), and so does a boolean for inningsJson: the feed's
+// innings go in as one jsonb object keyed by externalId and are compared in
+// SQL, so the stored blob never crosses the wire. Exported for
 // persist-final-scores-lazy-odds-acceptance-test.ts.
 export async function fetchExistingResultState(
   sportKey: string,
-  externalIds: string[]
+  externalIds: string[],
+  inningsById: Record<string, unknown> = {}
 ): Promise<Map<string, ExistingResultState>> {
   if (externalIds.length === 0) return new Map();
   const rows = await prisma.$queryRaw<ExistingResultState[]>(Prisma.sql`
@@ -135,6 +146,9 @@ export async function fetchExistingResultState(
            "firstInningHomeScore",
            "homeTurnovers",
            "favTeam",
+           "homeScore",
+           "awayScore",
+           ("inningsJson" IS NOT DISTINCT FROM (${JSON.stringify(inningsById)}::jsonb -> "externalId")) AS "inningsCurrent",
            ("linescoreJson" IS NULL OR "linescoreJson" = 'null'::jsonb) AS "linescoreMissing",
            ("quartersJson" IS NULL OR "quartersJson" = 'null'::jsonb) AS "quartersMissing",
            ("scoringPlaysJson" IS NULL OR "scoringPlaysJson" = 'null'::jsonb) AS "scoringPlaysMissing"
@@ -192,6 +206,34 @@ export function gameResultIdentityChange(
   };
 }
 
+// Whether persisting a final needs a write at all. A row already in the table
+// with these scores, no identity change, and nothing for the update to add
+// (every optional field is unset when it wasn't fetched this run or the fetch
+// had nothing) would be rewritten with the values it already holds - and the
+// grade-picks cron meets the same finals on every run for as long as they sit
+// in the yesterday..tomorrow feed window. Exported for
+// final-score-write-needed-acceptance-test.ts.
+export function finalScoreWriteNeeded(args: {
+  existing: { homeScore: number; awayScore: number; inningsCurrent: boolean } | undefined;
+  homeScore: number;
+  awayScore: number;
+  identityChange: GameResultChange | null;
+  // True when the update would carry any of: first-half / first-inning
+  // scores, quartersJson, linescoreJson, scoringPlaysJson, turnovers, or
+  // ledger fields.
+  hasBackfill: boolean;
+  // The feed's innings for this game (MLB only); written when they differ
+  // from the stored blob.
+  feedInnings: unknown;
+}): boolean {
+  const { existing } = args;
+  if (!existing) return true;
+  if (existing.homeScore !== args.homeScore || existing.awayScore !== args.awayScore) return true;
+  if (args.identityChange || args.hasBackfill) return true;
+  if (args.feedInnings && !existing.inningsCurrent) return true;
+  return false;
+}
+
 export async function persistFinalScores(sportKey: string, changes?: GameResultChange[]): Promise<number> {
   const games = await getLiveScoresForSport(sportKey);
   const finals = games.filter((g) => g.status === "final" && g.scores);
@@ -217,7 +259,8 @@ export async function persistFinalScores(sportKey: string, changes?: GameResultC
   const scoredFinals = finals.filter((g) => finalScores(g) !== null);
   const existingById = await fetchExistingResultState(
     sportKey,
-    scoredFinals.map((g) => g.id)
+    scoredFinals.map((g) => g.id),
+    Object.fromEntries(scoredFinals.filter((g) => g.innings).map((g) => [g.id, g.innings]))
   );
 
   // Same daily cache getOddsForSport always serves elsewhere - fetched at
@@ -332,7 +375,32 @@ export async function persistFinalScores(sportKey: string, changes?: GameResultC
         : null;
       const ledgerHasData = ledger && (ledger.favTeam !== null || ledger.totalLine !== null);
 
+      // Nothing to write: the stored row already has these scores and the
+      // fetches above had nothing new for it. Still counted as persisted - the
+      // game's result is in the table, as it was before this run.
+      const hasBackfill =
+        firstHalfHome !== null ||
+        !!firstInning ||
+        !!quartersJson ||
+        !!linescoreJson ||
+        !!scoringPlaysJson ||
+        homeTurnovers !== null ||
+        !!ledgerHasData;
+      const writeNeeded = finalScoreWriteNeeded({
+        existing,
+        homeScore: parseInt(homeScore, 10),
+        awayScore: parseInt(awayScore, 10),
+        identityChange,
+        hasBackfill,
+        feedInnings: inningsJson,
+      });
+      if (!writeNeeded) return true;
+
+      // select: { id } - the result is never read, and the default RETURNING
+      // ships every column (inningsJson / linescoreJson / quartersJson /
+      // scoringPlaysJson included) back for every write.
       await prisma.gameResult.upsert({
+        select: { id: true },
         where: { sportKey_externalId: { sportKey, externalId: g.id } },
         update: {
           homeScore: parseInt(homeScore, 10),

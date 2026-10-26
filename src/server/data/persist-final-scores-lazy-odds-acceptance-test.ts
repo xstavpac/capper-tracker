@@ -98,7 +98,7 @@ globalThis.fetch = (async (input: unknown) => {
 }) as typeof fetch;
 
 // --- prisma spies (count, then delegate to the real method)
-const counts = { oddsSnapshot: 0, gameResultFindUnique: 0, gameResultBatch: 0 };
+const counts = { oddsSnapshot: 0, gameResultFindUnique: 0, gameResultBatch: 0, upserts: 0 };
 type AnyFn = (...a: unknown[]) => unknown;
 const restores: (() => void)[] = [];
 function spy(model: string, method: string, onCall: () => void) {
@@ -116,6 +116,7 @@ for (const m of ["findUnique", "findFirst", "findMany", "findUniqueOrThrow", "fi
   spy("oddsSnapshot", m, () => counts.oddsSnapshot++);
 }
 spy("gameResult", "findUnique", () => counts.gameResultFindUnique++);
+spy("gameResult", "upsert", () => counts.upserts++);
 spy("gameResult", "findMany", () => counts.gameResultBatch++);
 // The batched existence read may be a raw query (it projects null-flags for
 // the JSON columns instead of transferring them) - count those too. Raw
@@ -135,6 +136,7 @@ function resetCounts() {
   counts.oddsSnapshot = 0;
   counts.gameResultFindUnique = 0;
   counts.gameResultBatch = 0;
+  counts.upserts = 0;
   feedFetches = 0;
 }
 
@@ -218,7 +220,7 @@ async function run(label: string, games: Fx[]) {
     unfreezeClock();
   }
   console.log(`  [${label}] written=${written} oddsSnapshotReads=${counts.oddsSnapshot} gameResultFindUnique=${counts.gameResultFindUnique} gameResultBatchReads=${counts.gameResultBatch} feedFetches=${feedFetches}`);
-  return { written, odds: counts.oddsSnapshot, unique: counts.gameResultFindUnique, batch: counts.gameResultBatch };
+  return { written, odds: counts.oddsSnapshot, unique: counts.gameResultFindUnique, batch: counts.gameResultBatch, upserts: counts.upserts };
 }
 
 // Filled from a run against the pre-change code (see header).
@@ -296,6 +298,21 @@ async function main() {
   expect("rerun: exactly one OddsSnapshot read (G_NOODDS still unresolved)", again.odds, 1);
   const rows2 = await snapshotRows();
   expect("rerun: rows unchanged", rows2, rows);
+  // The first run wrote every final; the rerun's rows are identical to the
+  // feed and complete, so it must not write at all - yet still counts them.
+  expect("mixed: G_NEEDS and G_NOODDS are new; G_HAS was written by the previous run and is unchanged, so skipped", mixed.upserts, 2);
+  expect("rerun: zero upserts, finals still counted as persisted", [again.upserts, again.written], [0, 3]);
+
+  // 4b. A changed score is written; a stored inningsJson that no longer
+  //    equals the feed's is written; nothing else is.
+  const rescored = await run("score corrected", [{ ...G_NEEDS, hs: 6 }, G_HAS, G_NOODDS]);
+  expect("score corrected: exactly one upsert", rescored.upserts, 1);
+  expect("score corrected: new score stored", (await snapshotRows())[0].homeScore, 6);
+  await prisma.gameResult.update({ where: { sportKey_externalId: { sportKey: SPORT, externalId: String(G_HAS.pk) } }, data: { inningsJson: Prisma.JsonNull } });
+  const inningsGone = await run("stored innings missing", [{ ...G_NEEDS, hs: 6 }, G_HAS, G_NOODDS]);
+  expect("stored inningsJson missing: exactly one upsert, innings restored", [inningsGone.upserts, (await snapshotRows())[1].innings], [1, 9]);
+  const settled = await run("settled", [{ ...G_NEEDS, hs: 6 }, G_HAS, G_NOODDS]);
+  expect("settled: zero upserts", settled.upserts, 0);
 
   // 5. The batched read's "missing" flags must agree with how Prisma reads
   //    each JSON column (SQL NULL and a stored JSON null both read as null in

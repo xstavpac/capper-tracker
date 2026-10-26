@@ -336,8 +336,8 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     matches: (s) => s.tail.startsWith('FROM game_results WHERE "sportKey" = ') && has(s, /"externalId" = ANY\(/),
   },
   {
-    label: "Final-score upsert",
-    source: "persistFinalScores (grading.ts); each update-field combination is its own entry",
+    label: "Final-score write (new/changed)",
+    source: "persistFinalScores (grading.ts); only new or changed finals are written; each update-field combination is its own entry",
     matches: (s) => inserts(s, "game_results") && has(s, /ON CONFLICT \("sportKey","externalId"\)/),
   },
 

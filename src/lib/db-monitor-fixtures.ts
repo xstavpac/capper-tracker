@@ -387,7 +387,7 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "name": "final-score upsert",
     "run": "e769b64 (prod pg_stat_statements, 2026-10-19)",
     "sql": "INSERT INTO \"game_results\" (\"id\",\"sportKey\",\"externalId\",\"homeTeam\",\"awayTeam\",\"homeScore\",\"awayScore\",\"firstFiveHomeScore\",\"firstFiveAwayScore\",\"firstInningHomeScore\",\"firstInningAwayScore\",\"homeTurnovers\",\"awayTurnovers\",\"gameNumber\",\"gameDate\",\"createdAt\",\"isPreseason\",\"favTeam\",\"totalLine\",\"lineSource\") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) ON CONFLICT (\"sportKey\",\"externalId\") DO UPDATE SET \"homeScore\" = $21, \"awayScore\" = $22 WHERE ((\"game_results\".\"sportKey\" = $23 AND \"game_results\".\"externalId\" = $24) AND $25=$26) RETURNING \"game_results\".\"id\", \"game_results\".\"sportKey\", \"game_results\".\"externalId\", \"game_results\".\"homeTeam\", \"game_results\".\"awayTeam\", \"game_results\".\"homeScore\", \"game_results\".\"awayScore\", \"game_results\".\"firstFiveHomeScore\", \"game_results\".\"firstFiveAwayScore\", \"game_results\".\"firstInningHomeScore\", \"game_results\".\"firstInningAwayScore\", \"game_results\".\"inningsJson\", \"game_results\".\"quartersJson\", \"game_results\".\"linescoreJson\", \"game_results\".\"scoringPlaysJson\", \"game_results\".\"homeTurnovers\", \"game_results\".\"awayTurnovers\", \"game_results\".\"gameNumber\", \"game_results\".\"gameDate\", \"game_results\".\"createdAt\", \"game_results\".\"isPreseason\", \"game_results\".\"favTeam\", \"game_results\".\"totalLine\", \"game_results\".\"lineSource\"",
-    "expectLabel": "Final-score upsert",
+    "expectLabel": "Final-score write (new/changed)",
     "expectFlags": []
   },
   {
