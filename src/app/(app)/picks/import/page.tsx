@@ -23,7 +23,7 @@ export default async function BulkImportPage() {
   return (
     <div className="mx-auto max-w-[1200px]">
       {/* Header + manual single-pick entry: the same PickForm, opened from the header button. */}
-      <ImportPageHeader cappers={cappers} sports={sports} atLimit={planStatus.atLimit} />
+      <ImportPageHeader cappers={cappers.map((c) => ({ id: c.id, name: c.name }))} sports={sports} atLimit={planStatus.atLimit} />
       <BulkImportForm existingCapperNames={cappers.map((c) => c.name)} />
       <WherePicksLandCard />
       <SupportedFormatsSection />

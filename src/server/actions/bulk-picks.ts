@@ -7,6 +7,7 @@ import { cacheKeys } from "@/lib/cache-keys";
 import { importRowCapError } from "@/lib/import-limits";
 import { insertPicksDeduped, sportKeyForName, type DedupInsertResult, type DedupPickRow } from "@/server/data/pick-dedup";
 import { resolveOrCreateCapperId, resolveOrCreateSportId } from "@/server/data/import-refs";
+import { getCapperRoster, revalidateCapperRoster } from "@/server/data/capper-roster";
 import {
   resolveGameForNickname,
   resolveGameForTeams,
@@ -558,7 +559,8 @@ export async function checkDuplicatePicksAction(items: DuplicateCheckItem[]): Pr
   const user = await requireUser();
   const getOdds = createRequestOddsLoader();
 
-  const existingCappers = await prisma.capper.findMany({ where: { userId: user.id }, select: { id: true, name: true } });
+  // The review screen's read-only preview: the cached roster is enough (any capper write busts it).
+  const existingCappers = await getCapperRoster(user.id);
   const capperByNormalizedName = new Map(existingCappers.map((c) => [normalizeName(c.name), c]));
 
   // Phase 1 - resolve every item (no database): which game, which side, which
@@ -917,6 +919,8 @@ export async function bulkImportPicksAction(
   // getDashboardSummary) - revalidatePath does not reliably evict
   // unstable_cache entries.
   revalidateTag(cacheKeys.dashboard(user.id));
+  // The transaction above can have created cappers.
+  revalidateCapperRoster(user.id);
   revalidatePath("/picks");
   revalidatePath("/dashboard");
   revalidatePath("/cappers");
@@ -1114,6 +1118,7 @@ export async function bulkImportParlaysAction(items: BulkImportParlayItem[]): Pr
   // Parlays themselves are in no cached read, but this import can create
   // cappers, and the cached roster / cappers bundle carry the capper list.
   revalidateTag(cacheKeys.dashboard(user.id));
+  revalidateCapperRoster(user.id);
   revalidatePath("/picks");
   revalidatePath("/dashboard");
 

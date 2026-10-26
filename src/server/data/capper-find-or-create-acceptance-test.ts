@@ -223,11 +223,11 @@ async function main() {
     const fullRoster = await prisma.capper.findMany({ where: { userId: u4.id }, orderBy: [{ isFavorite: "desc" }, { name: "asc" }] });
     const narrowRoster = await getCappersForUser(u4.id);
     check(
-      "getCappersForUser: same ids and names, same order, as the full-row read",
-      JSON.stringify(narrowRoster) === JSON.stringify(fullRoster.map((c) => ({ id: c.id, name: c.name }))),
+      "getCappersForUser: same ids, names, colours and favorites, same order, as the full-row read",
+      JSON.stringify(narrowRoster) === JSON.stringify(fullRoster.map((c) => ({ id: c.id, name: c.name, colorTag: c.colorTag, isFavorite: c.isFavorite }))),
       JSON.stringify(narrowRoster)
     );
-    check("getCappersForUser: only id and name are read", narrowRoster.every((c) => Object.keys(c).join(",") === "id,name"));
+    check("getCappersForUser: only id, name, colorTag and isFavorite are read", narrowRoster.every((c) => Object.keys(c).join(",") === "id,name,colorTag,isFavorite"));
   } finally {
     savedEnv.NODE_ENV = saved.NODE_ENV;
     savedEnv.DEV_AUTH_BYPASS = saved.DEV_AUTH_BYPASS;

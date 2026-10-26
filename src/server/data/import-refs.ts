@@ -49,7 +49,9 @@ export async function resolveOrCreateCapperId(
     } else {
       // Race-safe find-or-create: a concurrent create of the same name returns
       // the existing row instead of throwing.
-      const { capper } = await findOrCreateCapper(userId, capperName, { source: "OTHER", customSource: "Catalog import" }, db);
+      // existingCappers is the roster this import already read; passing it spares findOrCreateCapper
+      // a roster read of its own for every new capper.
+      const { capper } = await findOrCreateCapper(userId, capperName, { source: "OTHER", customSource: "Catalog import" }, db, existingCappers);
       capperId = capper.id;
       if (!existingCappers.some((c) => c.id === capper.id)) existingCappers.push(capper);
     }
@@ -102,10 +104,20 @@ export type PendingPickInsert = Omit<PickInsertData, "capperId" | "sportId"> & {
 // capper and sport (in first-appearance order) on `db`, which the pick import
 // passes as its open transaction. One capper read, then per NEW capper the
 // same three statements findOrCreateCapper always issued, and one lookup per
-// distinct sport.
-export async function resolveImportRefs(db: Db, userId: string, rows: PendingPickInsert[]): Promise<PickInsertData[]> {
+// distinct sport. `knownCappers` is the caller's read of the roster in this same
+// transaction (insertPicksDeduped reads it for its own duplicate check, under the
+// same per-user lock), so it is not read twice; a copy is used because capper
+// creation below appends to it.
+export async function resolveImportRefs(
+  db: Db,
+  userId: string,
+  rows: PendingPickInsert[],
+  knownCappers?: readonly CapperRef[]
+): Promise<PickInsertData[]> {
   if (rows.length === 0) return [];
-  const existingCappers: CapperRef[] = await db.capper.findMany({ where: { userId }, select: { id: true, name: true } });
+  const existingCappers: CapperRef[] = knownCappers
+    ? knownCappers.map((c) => ({ id: c.id, name: c.name }))
+    : await db.capper.findMany({ where: { userId }, select: { id: true, name: true } });
   const capperCache = new Map<string, string>();
   const sportCache = new Map<string, string>();
 

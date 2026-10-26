@@ -7,6 +7,7 @@ import { ENTITLEMENT_TX_OPTIONS } from "@/server/data/subscriptions";
 import { normalizeName, duplicateNameDistance } from "@/lib/fuzzy-match";
 import { cacheKeys } from "@/lib/cache-keys";
 import { cachedByTag } from "@/server/data/cached";
+import { getCapperRoster } from "@/server/data/capper-roster";
 import {
   computeStats,
   computeSpecialistTag,
@@ -25,16 +26,11 @@ export type CapperLeagueFilter = { sportName?: string; category?: PickCategoryKe
 
 // Every capper the user has, favorites first. (The old league/category filter
 // branch read the user's whole pick history to narrow the list; no page used it -
-// it lives on in cappers-legacy.ts as a parity reference.) Only id and name:
-// every caller (/picks, /charts, /picks/import, the /live category panel) uses
-// just those two, and the full row (notes, photo url, ...) was read for the
-// whole roster on every one of those page loads.
+// it lives on in cappers-legacy.ts as a parity reference.) Served from the
+// per-user cached roster (capper-roster.ts): id, name, colorTag and isFavorite,
+// not the full row (notes, photo url, ...).
 export async function getCappersForUser(userId: string) {
-  return prisma.capper.findMany({
-    where: { userId },
-    select: { id: true, name: true },
-    orderBy: [{ isFavorite: "desc" }, { name: "asc" }],
-  });
+  return getCapperRoster(userId);
 }
 
 export async function getCapperById(userId: string, capperId: string) {
@@ -151,15 +147,21 @@ export async function getCappersWithPickCounts(userId: string): Promise<CapperSu
   ]);
 }
 
-async function loadCappersWithPickCounts(userId: string): Promise<CapperSummary[]> {
-  const cappers = await prisma.capper.findMany({
-    where: { userId },
-    // Only what CapperSummary carries: the full capper row (photo, notes, source, ...) was
-    // fetched for the whole roster on every capper-detail load and discarded.
-    select: { id: true, name: true, _count: { select: { picks: true } } },
-    orderBy: { name: "asc" },
-  });
-  return cappers.map((c) => ({ id: c.id, name: c.name, pickCount: c._count.picks }));
+// Raw SQL, not `_count: { select: { picks: true } }`: Prisma's relation count is a
+// LEFT JOIN onto `SELECT "capperId", COUNT(*) FROM picks WHERE 1=1 GROUP BY "capperId"`,
+// which groups EVERY user's picks before joining to this user's cappers - its cost
+// grew with the whole picks table. Here the grouped subquery is this user's picks
+// only. Same counts as long as a pick carries its capper's owner as userId (every write path
+// guarantees it: createPick and the imports only use the user's own cappers), same order
+// (name ascending, the database's own collation either way).
+export async function loadCappersWithPickCounts(userId: string): Promise<CapperSummary[]> {
+  return prisma.$queryRaw<CapperSummary[]>(Prisma.sql`
+    SELECT c.id, c.name, COALESCE(p.n, 0)::int AS "pickCount"
+    FROM cappers c
+    LEFT JOIN (SELECT "capperId", count(*)::int AS n FROM picks WHERE "userId" = ${userId} GROUP BY "capperId") p
+      ON p."capperId" = c.id
+    WHERE c."userId" = ${userId}
+    ORDER BY c.name ASC`);
 }
 
 export type SuspectedDuplicatePair = { capperA: CapperSummary; capperB: CapperSummary; distance: number };

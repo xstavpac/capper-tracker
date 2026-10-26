@@ -85,3 +85,32 @@ a name or other text match (standing project rule after a text-`where`
 a row that isn't the caller's simply matches nothing; `count === 0` throws an
 opaque "not found" either way. Covered by
 `src/server/data/delete-scoping-acceptance-test.ts`.
+
+## The capper roster (its own tag)
+
+`getCapperRoster(userId)` (`server/data/capper-roster.ts`; `getCappersForUser` is the same thing) holds the
+user's cappers - `id`, `name`, `colorTag`, `isFavorite`, favorites first then by name - in the Data Cache
+under `cacheKeys.cappersRoster(userId)`, TTL 1 h as a backstop only. It has **its own tag, not the dashboard
+one**: the dashboard tag is also busted by every pick write and grading pass, none of which touch the roster.
+
+Every runtime path that changes a capper must call `revalidateCapperRoster(userId)` after the write commits:
+
+| Path | Write | Roster invalidation |
+|---|---|---|
+| `createCapperAction` → `createCapper` → `findOrCreateCapper` (raw INSERT) | 1 capper | ✅ `revalidatePickStats` |
+| `mergeCappersAction` → `mergeCappers` (`capper.delete`) | 1 capper deleted | ✅ `revalidatePickStats` |
+| `renameCapperAction` → `renameCapper` (`capper.updateMany`) | name | ✅ `revalidatePickStats` |
+| `deleteCapperAction` → `deleteCapper` (`capper.deleteMany`) | 1 capper deleted | ✅ `revalidatePickStats` |
+| `toggleFavoriteCapperAction` → `toggleFavoriteCapper` (`capper.update`) | `isFavorite` | ✅ `revalidatePickStats` |
+| `bulkImportPicksAction` → `insertPicksDeduped` → `resolveImportRefs` → `findOrCreateCapper` | N cappers | ✅ inline, after the transaction |
+| `bulkImportParlaysAction` → `resolveOrCreateCapperId` → `findOrCreateCapper` | N cappers | ✅ inline, after the loop |
+| `createPickAction` → `createPick` → `insertPicksDeduped` | none (the manual form names an existing capper) | N/A |
+| `prisma/seed-dev.ts`, `scripts/` | — | N/A — local dev / one-off operator scripts |
+
+`capper-roster-guard-acceptance-test.ts` enforces this table: a source file that calls a capper writer
+without being registered there, or a registered action that writes without busting the roster, fails.
+
+The import and find-or-create **write paths do not read the cached roster**: they read it inside their own
+transaction, once per action (the pick import's one scan is `insertPicksDeduped`'s, handed on to
+`resolveImportRefs` and `findOrCreateCapper`; the parlay import reads once itself). A stale roster there
+would create a duplicate capper.

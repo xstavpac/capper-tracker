@@ -66,7 +66,12 @@ export async function findOrCreateCapper(
   userId: string,
   name: string,
   data: NewCapperData = { source: "OTHER", customSource: "Catalog import" },
-  db: Db = prisma
+  db: Db = prisma,
+  // The caller's own read of this user's cappers, taken in the same action (the bulk
+  // imports read the roster once and keep it current as they create). Given one, the
+  // scan below uses it instead of reading the roster again for every new capper. The
+  // insert's ON CONFLICT still stops an exact duplicate raised since that read.
+  knownCappers?: readonly { id: string; name: string }[]
 ): Promise<FindOrCreateCapperResult> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Capper name is required.");
@@ -75,7 +80,7 @@ export async function findOrCreateCapper(
   if (normalized !== "") {
     // The scan needs only names; the full row is read for the one match. A
     // match deleted in between falls through to the insert below.
-    const existing = await db.capper.findMany({ where: { userId }, select: { id: true, name: true } });
+    const existing = knownCappers ?? (await db.capper.findMany({ where: { userId }, select: { id: true, name: true } }));
     const match = existing.find((c) => normalizeName(c.name) === normalized);
     const capper = match ? await db.capper.findUnique({ where: { id: match.id } }) : null;
     if (capper) return { capper, created: false };
