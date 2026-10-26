@@ -186,6 +186,7 @@ function wiring() {
   expect("schema: no image column in the database", /model BugReport \{[^}]*(Bytes|bytea)/.test(schema), false);
   const sql = src("prisma/migrations/20261026140000_add_bug_reports/migration.sql");
   expect("migration is additive only (no DROP / ALTER COLUMN / UPDATE / DELETE FROM)", /\bDROP\b|ALTER COLUMN|(?<!ON )\bUPDATE\b|DELETE FROM|ALTER TABLE "(?!bug_reports)/i.test(sql), false);
+  expect("migration enables RLS on bug_reports and creates no policy", [/ALTER TABLE "bug_reports" ENABLE ROW LEVEL SECURITY;/.test(sql), /CREATE POLICY/i.test(sql)], [true, false]);
   expect("migration creates only bug_reports + its enum", [(sql.match(/CREATE TABLE "([a-z_]+)"/g) ?? []).length, /CREATE TABLE "bug_reports"/.test(sql), /CREATE TYPE "BugReportStatus"/.test(sql)], [1, true, true]);
 }
 
