@@ -10,6 +10,8 @@ import {
   betScope,
   betScopeToken,
   extractLine,
+  isOverShorthand,
+  isUnderShorthand,
   normalizeNPlusPlayerProp,
   parsePlayerPropLine,
   type SegmentPeriod,
@@ -2263,10 +2265,10 @@ export function parsePickText(description: string): {
     betType = "PLAYER_PROP";
   } else if (/\bML\b/i.test(cleanDescription) || /money\s*line/i.test(cleanDescription)) {
     betType = "MONEYLINE";
-  } else if (/\bover\b/i.test(cleanDescription) || /\bo\s*\d+(\.\d+)?\b/i.test(cleanDescription)) {
+  } else if (/\bover\b/i.test(cleanDescription) || isOverShorthand(cleanDescription)) {
     betType = isTeamTotalText(cleanDescription) ? "TEAM_TOTAL" : "TOTAL";
     totalSide = "over";
-  } else if (/\bunder\b/i.test(cleanDescription) || /\bu\s*\d+(\.\d+)?\b/i.test(cleanDescription)) {
+  } else if (/\bunder\b/i.test(cleanDescription) || isUnderShorthand(cleanDescription)) {
     betType = isTeamTotalText(cleanDescription) ? "TEAM_TOTAL" : "TOTAL";
     totalSide = "under";
   } else if (/\btotal\b/i.test(cleanDescription)) {

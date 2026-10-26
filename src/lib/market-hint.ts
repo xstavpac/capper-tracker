@@ -30,7 +30,7 @@ const BUCKETS: { hint: string; pattern: RegExp }[] = [
   { hint: "points", pattern: /\bpoints?\b|\bpts\b/i },
   { hint: "first half", pattern: /\b1h\b|\bfirst\s*half\b|\b1st\s*half\b/i },
   { hint: "parlay", pattern: /\bparlay\b|\bteaser\b/i },
-  { hint: "over/under", pattern: /\bover\b|\bunder\b|\b[ou]\s*\d/i },
+  { hint: "over/under", pattern: /\bover\b|\bunder\b|\b(?:o|ov|u|un)\.?\s*\d/i },
 ];
 
 export function computeMarketHint(text: string): string | null {

@@ -66,7 +66,7 @@ export function extractLine(betType: BetTypeLike, rawText: string): number | nul
     // "1st"). Confirmed against real logged picks during the Team Total
     // investigation - this corrupted the stored line on 17 real rows.
     const afterOverUnder =
-      text.match(/\b(?:over|under)\s+(\d+(?:\.\d+)?)\b/i) ?? text.match(/\b[ou](\d+(?:\.\d+)?)\b/i);
+      text.match(/\b(?:over|under)\s+(\d+(?:\.\d+)?)\b/i) ?? text.match(/\b(?:ov|un|o|u)\.?\s*(\d+(?:\.\d+)?)\b/i);
     if (afterOverUnder) return parseFloat(afterOverUnder[1]);
     const match = text.match(/(\d+(\.\d+)?)/);
     if (match) return parseFloat(match[1]);
@@ -226,8 +226,27 @@ export function totalSideFromText(betDetail: string | null): TotalSide | null {
   const detail = (betDetail ?? "").toLowerCase();
   if (detail.includes("over")) return "OVER";
   if (detail.includes("under")) return "UNDER";
+  // The shorthand cappers type instead of the word: "o6.5", "O 6.5", "ov 5"
+  // for over; "u6.5", "un 5" for under. A pick written this way imports as a
+  // TOTAL / TEAM_TOTAL (its side is read at import), but its text is stored as
+  // typed, so without this the grader could never tell which side it was on.
+  // "O/U 6.5" names the market, not a side: drop it first, or its "U 6.5" would
+  // read as an under.
+  const sideText = detail.replace(/\b(?:o|ov)\s*\/\s*(?:u|un)\b/g, " ");
+  if (isOverShorthand(sideText)) return "OVER";
+  if (isUnderShorthand(sideText)) return "UNDER";
   return null;
 }
+
+// "o6.5" / "O 6.5" / "ov 5" and "u6.5" / "un 5": one letter (or "ov" / "un"),
+// an optional dot and space, then a digit. A digit or letter before it rules it
+// out, so "2u 5" (units), "Outlook 5" and "Utah 5" are not sides. Shared by the
+// grader (totalSideFromText), the importer's over/under detection
+// (parse-catalog.ts, live-team-fallback.ts) and extractLine's line scan.
+const OVER_SHORTHAND = /\b(?:o|ov)\.?\s*\d/i;
+const UNDER_SHORTHAND = /\b(?:u|un)\.?\s*\d/i;
+export const isOverShorthand = (text: string): boolean => OVER_SHORTHAND.test(text);
+export const isUnderShorthand = (text: string): boolean => UNDER_SHORTHAND.test(text);
 
 // Which slice of a game a pick's free text scopes it to, re-derived from
 // betDetail every time - the same "never stored, always re-read from
