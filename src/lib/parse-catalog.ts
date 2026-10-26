@@ -12,6 +12,8 @@ import {
   extractLine,
   isOverShorthand,
   isUnderShorthand,
+  isSidelessOverUnder,
+  stripOverUnderMarket,
   normalizeNPlusPlayerProp,
   parsePlayerPropLine,
   type SegmentPeriod,
@@ -2233,6 +2235,8 @@ export function parsePickText(description: string): {
   // coherent (see the "-220 doesn't match the market" investigation).
   let betType: ParsedPick["betType"] = "MONEYLINE";
   let totalSide: "over" | "under" | undefined;
+  // "o/u 6.5" / "over/under 6.5" is the market, not a side (see bet-line.ts).
+  const sideText = stripOverUnderMarket(cleanDescription);
   const hasExplicitSpreadNumber = /[+-]\d+(\.\d+)?/.test(cleanDescription);
   const hasSpreadKeyword = /\b(spread|run\s*line|puck\s*line|point\s*spread)\b/i.test(cleanDescription);
   // "inning" is optional - "no run 1st" / "yes run first" are common
@@ -2265,10 +2269,10 @@ export function parsePickText(description: string): {
     betType = "PLAYER_PROP";
   } else if (/\bML\b/i.test(cleanDescription) || /money\s*line/i.test(cleanDescription)) {
     betType = "MONEYLINE";
-  } else if (/\bover\b/i.test(cleanDescription) || isOverShorthand(cleanDescription)) {
+  } else if (/\bover\b/i.test(sideText) || isOverShorthand(sideText)) {
     betType = isTeamTotalText(cleanDescription) ? "TEAM_TOTAL" : "TOTAL";
     totalSide = "over";
-  } else if (/\bunder\b/i.test(cleanDescription) || isUnderShorthand(cleanDescription)) {
+  } else if (/\bunder\b/i.test(sideText) || isUnderShorthand(sideText)) {
     betType = isTeamTotalText(cleanDescription) ? "TEAM_TOTAL" : "TOTAL";
     totalSide = "under";
   } else if (/\btotal\b/i.test(cleanDescription)) {
@@ -3563,6 +3567,7 @@ export function parseCatalog(
       // here - not silently dropped - for the NHL-roster recovery pass. NFL props
       // are unchanged: they never took this branch.)
       if (
+        isSidelessOverUnder(remainder) ||
         detectUnsupportedPropLine(remainder) ||
         (!parsePlayerProp(remainder) && parseNhlPlayerProp(remainder) && !detectSport(remainder).sportName) ||
         (parseSupportedMlbProp(remainder) && !detectSport(remainder).sportName) ||
@@ -3724,7 +3729,9 @@ export function parseCatalog(
     // not importable yet. Routed straight to `unresolved` BEFORE any sport/
     // team/tennis resolution so they can't become a game TOTAL/MONEYLINE, an
     // ATP pick, or a capper-name header. See unsupported-prop-vocab.ts.
-    if (detectUnsupportedPropLine(pickText)) {
+    // An "o/u 6.5" with no side chosen can't be graded either way: left for
+    // manual entry, never given a side (see isSidelessOverUnder).
+    if (isSidelessOverUnder(pickText) || detectUnsupportedPropLine(pickText)) {
       unresolved.push(strippedText);
       unresolvedCapperNames.push(currentCapper);
       continue;
