@@ -78,7 +78,9 @@ async function main() {
     const run1 = await gradePickPool(seeded, "baseball_mlb", "MLB");
     expect("pass 1: nothing graded, all three missed", [run1.graded, run1.notMatched], [0, 3]);
     const rows = await prisma.pickGradeFailure.findMany({ where: { pickId: { in: Object.values(pickIds) } }, orderBy: { pickId: "asc" } });
-    expect("a failure row per miss", rows.map((r) => r.pickId), [pickIds.A, pickIds.B, pickIds.C]);
+    // C (game 2h ago, nothing matched) is still just waiting: "no final matched"
+    // is not recorded as a failure until 8h after the game starts.
+    expect("a failure row per miss, except a no-match pick whose game started under 8h ago", rows.map((r) => r.pickId), [pickIds.A, pickIds.B]);
     const a = rows.find((r) => r.pickId === pickIds.A)!;
     expect("A: matched final recorded with when it went final, and why it can't be graded", [a.gameResultId, a.finalSeenAt?.toISOString(), a.reason.startsWith("matched a final game but couldn't grade this NRFI")], [gameResultId, new Date(now.getTime() - 4 * H).toISOString(), true]);
     const b = rows.find((r) => r.pickId === pickIds.B)!;

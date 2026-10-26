@@ -15,6 +15,7 @@ import {
 } from "@/server/data/stats";
 import { queryCapperRecordBundle, type CardRequest, type CategoryRequest } from "@/server/data/picks-by-capper-aggregates";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
+import { clearGradeFailures } from "@/server/data/grading-failures";
 import type { GameCardStreak } from "@/lib/game-card-record-line";
 import { easternDateRange } from "@/lib/dates";
 import { categoryRecordKey, leagueRecordKey } from "@/lib/record-keys";
@@ -126,7 +127,7 @@ export async function updatePickStatus(userId: string, pickId: string, status: P
 
   const wasPending = pick.status === "PENDING";
 
-  return prisma.pick.update({
+  const updated = await prisma.pick.update({
     where: { id: pickId },
     data: {
       status,
@@ -137,6 +138,11 @@ export async function updatePickStatus(userId: string, pickId: string, status: P
       ...(wasPending && status !== "PENDING" ? { gradedAt: new Date() } : {}),
     },
   });
+  // Any status change ends the grading pass's retry backoff for this pick: a
+  // manual grade has nothing left to explain, and a pick put back to PENDING
+  // gets a fresh start.
+  await clearGradeFailures([pickId]);
+  return updated;
 }
 
 // Permanently removes one standalone Pick. Scoped by id + userId ONLY (never
