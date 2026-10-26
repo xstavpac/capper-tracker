@@ -50,6 +50,10 @@ const PICKS = TEAMS.flatMap((_, g) => [mk(`g${g}ml`, g, "ML", 28 - g), mk(`g${g}
 const games: GeneratorGame[] = TEAMS.map(([home, away], g) => ({ gameId: "G" + g, gameLabel: away + " @ " + home, gameTime: FUTURE, leagueName: "MLB", picks: PICKS.filter((p) => p.gameId === "G" + g) }));
 
 const requests: GenerateRequest[] = [];
+// The real engine, loaded once in main() before anything renders. The stubbed action calls it
+// synchronously: a dynamic import inside the action was a real module load on every Generate,
+// slower than the fixed settle() below on a loaded CI runner (Generating… still on screen).
+let buildGenerated: typeof import("@/lib/parlay/generator").buildGeneratedParlay | null = null;
 function stub(relativePath: string, exports: Record<string, unknown>) {
   const path = require.resolve(relativePath);
   require.cache[path] = { id: path, filename: path, loaded: true, exports } as unknown as NodeJS.Module;
@@ -57,7 +61,7 @@ function stub(relativePath: string, exports: Record<string, unknown>) {
 stub("../../server/actions/parlay-generate", {
   generateParlayAction: async (req: GenerateRequest) => {
     requests.push(req);
-    const { buildGeneratedParlay } = await import("@/lib/parlay/generator");
+    if (!buildGenerated) throw new Error("generator not preloaded");
     const snapshot: GeneratorSnapshot = {
       builtAt: new Date().toISOString(),
       games: req.targets.length > 0 ? games.filter((g) => req.targets.some((t) => t.gameId === g.gameId) || req.slipPickIds.some((id) => id.startsWith(g.gameId.toLowerCase()))) : games,
@@ -66,7 +70,7 @@ stub("../../server/actions/parlay-generate", {
       leagueRecords: { records: {}, streaks: {}, last20: {} },
       categoryRecords,
     };
-    return { snapshot, parlay: buildGeneratedParlay(snapshot, req.settings, null, new Date()) };
+    return { snapshot, parlay: buildGenerated(snapshot, req.settings, null, new Date()) };
   },
 });
 stub("../../server/actions/picks", { getLeagueRecordsAction: async () => ({ records: {}, streaks: {}, last20: {} }) });
@@ -90,6 +94,7 @@ async function main() {
     const { pickIds } = JSON.parse(init.body) as { pickIds: string[] };
     return { ok: true, json: async () => ({ legs: pickIds.map((pickId) => ({ pickId, status: "matched", fanDuelOdds: -110, pickOdds: -110, sentLine: null })), url: "https://fanduel.example/betslip" }) };
   };
+  buildGenerated = (await import("@/lib/parlay/generator")).buildGeneratedParlay;
   const React = await import("react");
   g.React = React;
   const { createRoot } = await import("react-dom/client");
@@ -102,6 +107,14 @@ async function main() {
   const settle = async () => {
     for (let i = 0; i < 4; i++) await act(async () => void (await tick()));
   };
+  // Bounded wait on the DOM itself: throws on timeout, never retries silently.
+  const waitUntil = async (cond: () => boolean, what: string, timeoutMs = 10_000) => {
+    const start = Date.now();
+    while (!cond()) {
+      if (Date.now() - start > timeoutMs) throw new Error("timed out after " + timeoutMs + "ms waiting for " + what);
+      await act(async () => void (await tick()));
+    }
+  };
   const router = { push: () => {}, replace: () => {}, prefetch: () => {}, refresh: () => {}, back: () => {}, forward: () => {} };
 
   let ctx!: ReturnType<typeof useParlayPool>;
@@ -112,6 +125,10 @@ async function main() {
   const el = win.document.createElement("div");
   win.document.body.appendChild(el);
   const text = () => el.textContent ?? "";
+  const generate = async () => {
+    await click(button("Generate parlay"));
+    await waitUntil(() => !text().includes("Generating…"), "Generating… to clear");
+  };
   const buttons = () => Array.from(el.querySelectorAll("button"));
   const button = (label: string) => buttons().find((b) => (b.textContent ?? "").trim() === label || b.getAttribute("aria-label") === label);
   const click = async (b: Element | undefined) => {
@@ -168,7 +185,7 @@ async function main() {
   for (let i = 0; i < 4; i++) await click(button("Fewer: Max legs per game"));
 
   // ---- Generate: one request ----
-  await click(button("Generate parlay"));
+  await generate();
   check("Generate: one request, with the slip's ids, the explicit target only, the in-scope leagues", requests.length === 1 && requests[0].slipPickIds.join() === "g0ml,g1ml" && requests[0].targets.map((t) => t.gameId).join() === "G3" && requests[0].leagues.join() === "NFL,MLB", JSON.stringify(requests[0]));
   check("result: 'Your parlay · 3 legs'", text().includes("Your parlay · 3 legs"), text().slice(-400));
   check("result: the two slip picks marked 'Your pick'", (text().match(/Your pick(?!s)/g) ?? []).length >= 2);
@@ -201,7 +218,7 @@ async function main() {
   await act(() => ctx.exitSlipMode());
 
   // ---- Same-game legs: no combined odds; shortfall said ----
-  await click(button("Generate parlay"));
+  await generate();
   check("full slate Generate: a second request", requests.length === 2 && requests[1].targets.length === 0);
   await click(button("More: Max legs per game"));
   for (let i = 0; i < 5; i++) await click(button("More legs"));
