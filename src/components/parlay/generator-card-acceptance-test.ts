@@ -11,6 +11,8 @@
 // no "Why this leg?", and Send to FanDuel on every tab clearing the slip.
 // Pure - no DB. Run with:
 //   npx tsx src/components/parlay/generator-card-acceptance-test.ts
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { JSDOM } from "jsdom";
 import type { Root } from "react-dom/client";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
@@ -138,6 +140,23 @@ async function main() {
   check("no 'Why this leg?' anywhere", !text().includes("Why this leg"));
   check("no old 'N legs were removed' banner", !/legs? (was|were) removed from your Parlay slip/.test(text()));
 
+  // ---- "+ Add ... from Live": the link opens Live with slip mode already on ----
+  const liveLink = (label: string) => Array.from(el.querySelectorAll("a")).find((a) => (a.textContent ?? "").trim() === label);
+  const slipNow = () => JSON.stringify({ pool: ctx.pool.map((p) => p.pickId), targets: ctx.targets.map((t) => t.gameId), legCount: ctx.legCount });
+  const slipBefore = slipNow();
+  for (const label of ["+ Add picks from Live", "+ Add games from Live"]) {
+    check(`${label}: slip mode is off before the click`, !ctx.slipMode);
+    check(`${label}: still a link to /live`, liveLink(label)?.getAttribute("href") === "/live");
+    await act(() => void (liveLink(label) as HTMLElement).click());
+    await settle();
+    check(`${label}: lands in slip mode`, ctx.slipMode);
+    check(`${label}: the slip, its targets and the leg count are unchanged`, slipNow() === slipBefore, slipNow());
+    await act(() => ctx.exitSlipMode());
+  }
+  const cardSource = readFileSync(join(__dirname, "generator-card.tsx"), "utf8");
+  const liveLinks = cardSource.match(/<Link href="\/live"[^>]*>/g) ?? [];
+  check("source: all three Live links carry onClick={slip.enterSlipMode}", liveLinks.length === 3 && liveLinks.every((l) => l.includes("onClick={slip.enterSlipMode}")), JSON.stringify(liveLinks));
+
   // ---- Filters ----
   check("MLB has picks: its pill can't be switched off", el.querySelector('[aria-label="MLB is on: your slip has picks or games from it"]') !== null);
   await click(el.querySelector('[aria-label="MLB is on: your slip has picks or games from it"]') ?? undefined);
@@ -174,6 +193,12 @@ async function main() {
   // ---- A pool change clears the result ----
   await click(button("Use full slate"));
   check("Use full slate: back to the full slate text, result cleared", text().includes("Choose which games to build around, or use the full slate.") && !text().includes("Your parlay ·"));
+
+  // The no-targets branch has its own "+ Add games from Live" link.
+  await act(() => void (liveLink("+ Add games from Live") as HTMLElement).click());
+  await settle();
+  check("+ Add games from Live (no targets yet): lands in slip mode too", ctx.slipMode && ctx.targets.length === 0);
+  await act(() => ctx.exitSlipMode());
 
   // ---- Same-game legs: no combined odds; shortfall said ----
   await click(button("Generate parlay"));

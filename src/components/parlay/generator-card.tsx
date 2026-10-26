@@ -227,7 +227,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
                 Clear all picks
               </button>
             )}
-            <Link href="/live" className={LINK}>
+            <Link href="/live" onClick={slip.enterSlipMode} className={LINK}>
               + Add picks from Live
             </Link>
           </span>
@@ -298,7 +298,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           {targets.length === 0 ? (
             <>
               <SectionTitle n={2} title="Target games">
-                <Link href="/live" className={LINK}>
+                <Link href="/live" onClick={slip.enterSlipMode} className={LINK}>
                   + Add games from Live
                 </Link>
               </SectionTitle>
@@ -307,7 +307,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           ) : (
             <>
               <SectionTitle n={2} title={`Target games · ${targetedGames.length}`}>
-                <Link href="/live" className={LINK}>
+                <Link href="/live" onClick={slip.enterSlipMode} className={LINK}>
                   + Add games from Live
                 </Link>
               </SectionTitle>
