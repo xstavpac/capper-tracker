@@ -48,7 +48,7 @@ import {
 import { resolveMlbPropAgainstRoster } from "@/lib/mlb-roster-fallback";
 import { resolveNbaPropAgainstRosters, type LeagueCandidate } from "@/lib/nba-roster-fallback";
 import type { ParsedNbaProp } from "@/lib/nba-prop";
-import { parsePlayerProp, isPassingTdsText, pickPeriodFromText } from "@/lib/bet-line";
+import { parsePlayerProp, isPassingTdsText, pickPeriodFromText, isSidelessOverUnder } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { withRegulationPeriod } from "@/lib/nhl-three-way";
 import { UNSUPPORTED_PROP_REASONS } from "@/lib/unsupported-prop-vocab";
@@ -56,6 +56,7 @@ import { teamNameEndsWith } from "@/lib/team-name-match";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 
 // The reason an NBA player prop gets when the NBA roster could not be read (not loaded, or the read failed).
+const SIDELESS_OVER_UNDER_REASON = "Over/under with no side chosen - add it manually with Over or Under";
 const NBA_ROSTER_UNAVAILABLE = "NBA player props need the NBA roster, which isn't available right now";
 
 export type RecoverUnresolvedResult = {
@@ -509,6 +510,13 @@ export function recoverUnresolvedLines(
       continue;
     }
 
+    // No side chosen ("o/u 6.5"): parseFallbackBetText would default it to a
+    // spread. Stays unresolved instead, with the reason shown.
+    if (isSidelessOverUnder(lineForParsing)) {
+      stillUnresolved.push(line);
+      reasons[line] = SIDELESS_OVER_UNDER_REASON;
+      continue;
+    }
     const bet = parseFallbackBetText(lineForParsing);
     recovered.push({
       capperName,

@@ -197,19 +197,34 @@ export type TotalSide = "OVER" | "UNDER";
 // names both (matches the original inline behavior, where the TOTAL/
 // TEAM_TOTAL branches checked isOver before isUnder and returned early).
 export function totalSideFromText(betDetail: string | null): TotalSide | null {
-  const detail = (betDetail ?? "").toLowerCase();
+  // "O/U 6.5" / "over/under 6.5" name the market, not a side: drop the token
+  // first, or its "U 6.5" reads as an under and its "over" as an over.
+  const detail = stripOverUnderMarket(betDetail ?? "").toLowerCase();
   if (detail.includes("over")) return "OVER";
   if (detail.includes("under")) return "UNDER";
   // The shorthand cappers type instead of the word: "o6.5", "O 6.5", "ov 5"
   // for over; "u6.5", "un 5" for under. A pick written this way imports as a
   // TOTAL / TEAM_TOTAL (its side is read at import), but its text is stored as
   // typed, so without this the grader could never tell which side it was on.
-  // "O/U 6.5" names the market, not a side: drop it first, or its "U 6.5" would
-  // read as an under.
-  const sideText = detail.replace(/\b(?:o|ov)\s*\/\s*(?:u|un)\b/g, " ");
-  if (isOverShorthand(sideText)) return "OVER";
-  if (isUnderShorthand(sideText)) return "UNDER";
+  if (isOverShorthand(detail)) return "OVER";
+  if (isUnderShorthand(detail)) return "UNDER";
   return null;
+}
+
+// The over/under MARKET token: "o/u", "O/U", "o-u", "ov/un", "over/under",
+// with or without spaces around the separator and before the line ("o/u6.5").
+// It states no side. (?![a-z]) rather than \b after the last word so the digit
+// of "o/u6.5" doesn't hide it.
+const OVER_UNDER_MARKET = /\b(?:o|ov|over)\s*[/-]\s*(?:u|un|under)(?![a-z])/gi;
+export const stripOverUnderMarket = (text: string): string => text.replace(OVER_UNDER_MARKET, " ");
+
+// True when the text names the over/under market but no side: no over/under
+// word and no o6.5 / u6.5 shorthand outside the token. A trailing bare "o" /
+// "u" ("o/u 6.5 u") is not a side - it can mean units - so it stays sideless.
+// The importer declines these rather than guess a side.
+export function isSidelessOverUnder(text: string): boolean {
+  if (!new RegExp(OVER_UNDER_MARKET.source, "i").test(text)) return false;
+  return totalSideFromText(text) === null;
 }
 
 // "o6.5" / "O 6.5" / "ov 5" and "u6.5" / "un 5": one letter (or "ov" / "un"),
@@ -219,8 +234,8 @@ export function totalSideFromText(betDetail: string | null): TotalSide | null {
 // (parse-catalog.ts, live-team-fallback.ts) and extractLine's line scan.
 const OVER_SHORTHAND = /\b(?:o|ov)\.?\s*\d/i;
 const UNDER_SHORTHAND = /\b(?:u|un)\.?\s*\d/i;
-export const isOverShorthand = (text: string): boolean => OVER_SHORTHAND.test(text);
-export const isUnderShorthand = (text: string): boolean => UNDER_SHORTHAND.test(text);
+export const isOverShorthand = (text: string): boolean => OVER_SHORTHAND.test(stripOverUnderMarket(text));
+export const isUnderShorthand = (text: string): boolean => UNDER_SHORTHAND.test(stripOverUnderMarket(text));
 
 // Which slice of a game a pick's free text scopes it to, re-derived from
 // betDetail every time - the same "never stored, always re-read from
