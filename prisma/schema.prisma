@@ -583,6 +583,29 @@ model OddsAltLineFetch {
   @@map("odds_alt_line_fetches")
 }
 
+// FanDuel's alternate-line ladder for one (event, market), shared by every user
+// - see server/data/alt-ladders.ts. `outcomes` is FanDuel's outcomes trimmed to
+// {name, description?, point?, price, sid, link}; null until the first fetch
+// lands. `fetchedAt` is when we bought it, `marketLastUpdate` the book's own
+// last_update, `claimedAt` the single-flight claim (a conditional UPDATE sets
+// it; a claim older than 30 s is up for grabs). Rows for games that started
+// more than 24 h ago are deleted by the write path.
+model OddsAltLadder {
+  id               String    @id @default(cuid())
+  eventId          String // the Odds API event id
+  marketKey        String // "alternate_spreads" | "alternate_totals" | "h2h"
+  commenceTime     DateTime // the game's start, for the freshness tier and the cleanup
+  outcomes         Json?
+  fetchedAt        DateTime?
+  marketLastUpdate DateTime?
+  claimedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@unique([eventId, marketKey])
+  @@index([commenceTime])
+  @@map("odds_alt_ladders")
+}
+
 // Where in the catalog-import pipeline a line was lost (see ImportSkippedLine).
 enum ImportSkipStage {
   PARSE_SILENT // parseCatalog read it as a capper header though it looks like a pick (older rows: also lines discarded after a known-capper prefix)
