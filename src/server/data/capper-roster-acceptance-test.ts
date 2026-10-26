@@ -22,11 +22,18 @@
 //   node --require ./scripts/server-only-stub.cjs --import tsx src/server/data/capper-roster-acceptance-test.ts
 import { PrismaClient } from "@prisma/client";
 import { normalizeSql } from "@/lib/db-monitor";
+import { drainQueryLog } from "@/server/data/query-log-drain";
 
 const queries: string[] = [];
 const logged = new PrismaClient({ log: [{ emit: "event", level: "query" }] });
 logged.$on("query", (e) => queries.push(normalizeSql(e.query)));
 (globalThis as unknown as { prisma: PrismaClient }).prisma = logged;
+// Wait for every event of the calls so far, then (resetLog) start a new window.
+const drain = () => drainQueryLog(logged, queries);
+const resetLog = async () => {
+  await drain();
+  queries.length = 0;
+};
 
 let failures = 0;
 function check(label: string, pass: boolean, detail = "") {
@@ -81,8 +88,9 @@ async function main() {
     const other = await prisma.capper.create({ data: { userId: b.id, name: "Other", source: "OTHER" } });
 
     // ---- 1. The roster ----
-    queries.length = 0;
+    await resetLog();
     const roster = await getCapperRoster(a.id);
+    await drain();
     const rosterStatements = queries.filter((q) => /FROM "cappers"/.test(q));
     check("1 one statement for the roster", rosterStatements.length === 1, String(rosterStatements.length));
     check(
@@ -116,8 +124,9 @@ async function main() {
       (
         await prisma.capper.findMany({ where: { userId }, select: { id: true, name: true, _count: { select: { picks: true } } }, orderBy: { name: "asc" } })
       ).map((c) => ({ id: c.id, name: c.name, pickCount: c._count.picks }));
-    queries.length = 0;
+    await resetLog();
     const newA = await loadCappersWithPickCounts(a.id);
+    await drain();
     const countStatements = queries.filter((q) => /FROM cappers/.test(q));
     check("2 one statement", countStatements.length === 1, String(countStatements.length));
     check("2 the grouped subquery is this user's picks only", /FROM picks WHERE "userId" = \$\d+ GROUP BY "capperId"/.test(countStatements[0] ?? "") && !/\$\d+ ?= ?\$\d+/.test(countStatements[0] ?? ""), countStatements[0]);
@@ -144,8 +153,9 @@ async function main() {
       pickedSide: "HOME" as const,
       mlFavoredSide: "HOME" as const,
     });
-    queries.length = 0;
+    await resetLog();
     const imported = await insertPicksDeduped(c.id, [row("sharp-sam", 0), row("New One", 1), row("New Two", 2), row("New Three", 3), row("New One", 4)]);
+    await drain();
     const scans = queries.filter(isNamesScan);
     check("3 the import is allowed", imported.allowed === true);
     check("3 one roster scan for the whole import (was five)", scans.length === 1, String(scans.length));
@@ -161,16 +171,19 @@ async function main() {
       JSON.stringify([...byDetail])
     );
 
-    queries.length = 0;
+    await resetLog();
     const own = await findOrCreateCapper(c.id, "Standalone", { source: "OTHER" });
+    await drain();
     check("3 findOrCreateCapper on its own: one scan, creates", queries.filter(isNamesScan).length === 1 && own.created === true);
-    queries.length = 0;
+    await resetLog();
     const known = await prisma.capper.findMany({ where: { userId: c.id }, select: { id: true, name: true } });
-    queries.length = 0;
+    await resetLog();
     const again = await findOrCreateCapper(c.id, "standalone", { source: "OTHER" }, prisma, known);
+    await drain();
     check("3 given the caller's roster: no scan, finds the existing capper", queries.filter(isNamesScan).length === 0 && again.created === false && again.capper.id === own.capper.id);
-    queries.length = 0;
+    await resetLog();
     const fresh = await findOrCreateCapper(c.id, "Brand New", { source: "OTHER" }, prisma, known);
+    await drain();
     check("3 given the caller's roster: no scan, creates a name it lacks", queries.filter(isNamesScan).length === 0 && fresh.created === true);
 
     // ---- 4. The /live board's picks ----
@@ -183,8 +196,9 @@ async function main() {
         { userId: a.id, capperId: other.id, sportId: sport.id, homeTeam: game.homeTeam, awayTeam: game.awayTeam, betType: "TOTAL", betDetail: "Under 9", line: 9, odds: -110, units: 1, gameTime: game.commenceTime },
       ],
     });
-    queries.length = 0;
+    await resetLog();
     const [matched] = await getPicksForGames(a.id, "MLB", [game]);
+    await drain();
     const capperOf = (id: string) => matched?.find((p) => p.capperId === id)?.capper;
     check("4 the three picks come back", matched?.length === 3, String(matched?.length));
     check("4 favorite capper: name, colour and favorite flag", JSON.stringify(capperOf(zed.id)) === JSON.stringify({ name: "Zed", colorTag: "red", isFavorite: true }), JSON.stringify(capperOf(zed.id)));
@@ -194,10 +208,11 @@ async function main() {
     const idLists = queries.filter(isIdInList);
     check("4 one roster read, and one by-id read only for the capper outside it", rosterReads.length === 1 && idLists.length === 1, JSON.stringify({ rosterReads: rosterReads.length, idLists: idLists.length }));
 
-    queries.length = 0;
+    await resetLog();
     await prisma.pick.deleteMany({ where: { userId: a.id, capperId: other.id } });
-    queries.length = 0;
+    await resetLog();
     const [onlyOwn] = await getPicksForGames(a.id, "MLB", [game]);
+    await drain();
     check("4 own cappers only: no by-id capper statement at all", onlyOwn?.length === 2 && queries.filter(isIdInList).length === 0, JSON.stringify({ n: onlyOwn?.length, idLists: queries.filter(isIdInList).length }));
   } finally {
     if (userIds.length > 0) await prisma.user.deleteMany({ where: { id: { in: userIds } } });
