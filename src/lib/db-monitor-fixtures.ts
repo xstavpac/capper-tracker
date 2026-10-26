@@ -578,5 +578,19 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "sql": "\n      DELETE FROM pick_grade_failures WHERE \"pickId\" IN (\n        SELECT f.\"pickId\" FROM pick_grade_failures f\n        LEFT JOIN picks p ON p.id = f.\"pickId\"\n        WHERE f.\"gameResultId\" = ANY($1::text[])\n           OR ($2::boolean AND f.\"gameResultId\" IS NULL AND p.\"sportId\" = $3\n               AND p.\"gameTime\" >= $4::timestamp AND p.\"gameTime\" < $5::timestamp)\n      )\n    ",
     "expectLabel": "Grade-failure reset (new/changed game data)",
     "expectFlags": []
+  },
+  {
+    "name": "capper roster, 4 columns (getCapperRoster, egress batch 2 D)",
+    "run": "15525ac+D",
+    "sql": "SELECT \"public\".\"cappers\".\"id\", \"public\".\"cappers\".\"name\", \"public\".\"cappers\".\"colorTag\", \"public\".\"cappers\".\"isFavorite\" FROM \"public\".\"cappers\" WHERE \"public\".\"cappers\".\"userId\" = $1 ORDER BY \"public\".\"cappers\".\"isFavorite\" DESC, \"public\".\"cappers\".\"name\" ASC OFFSET $2",
+    "expectLabel": "Capper roster",
+    "expectFlags": []
+  },
+  {
+    "name": "cappers with pick counts, user-scoped raw SQL (loadCappersWithPickCounts, egress batch 2 D)",
+    "run": "15525ac+D",
+    "sql": "\n    SELECT c.id, c.name, COALESCE(p.n, 0)::int AS \"pickCount\"\n    FROM cappers c\n    LEFT JOIN (SELECT \"capperId\", count(*)::int AS n FROM picks WHERE \"userId\" = $1 GROUP BY \"capperId\") p\n      ON p.\"capperId\" = c.id\n    WHERE c.\"userId\" = $2\n    ORDER BY c.name ASC",
+    "expectLabel": "Cappers with pick counts",
+    "expectFlags": []
   }
 ];

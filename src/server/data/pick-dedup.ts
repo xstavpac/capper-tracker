@@ -249,7 +249,8 @@ export async function insertPicksDeduped(
       // transaction, exactly as before.
       const strip = ({ overrideDuplicate: _o, raw: _r, capperId: _c, sportId: _s, ...rest }: DedupPickRow) => rest;
       const needRefs = survivors.filter((p) => !(p.row.capperId && p.row.sportId));
-      const resolved = await resolveImportRefs(db, userId, needRefs.map((p) => strip(p.row)));
+      // The roster read at the top of this transaction (same lock) is passed on, not read again.
+      const resolved = await resolveImportRefs(db, userId, needRefs.map((p) => strip(p.row)), existingCappers);
       const resolvedByIndex = new Map(needRefs.map((p, k) => [p.index, resolved[k]]));
       return survivors.map((p): PickInsertData => {
         const fromRefs = resolvedByIndex.get(p.index);

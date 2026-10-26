@@ -12,6 +12,12 @@ export const cacheKeys = {
   cappersPage: (userId: string, params: string) => `cappers-page:${userId}:${params}`,
   capperPage: (userId: string, capperId: string, params: string) => `capper-page:${userId}:${capperId}:${params}`,
   cappersWithPickCounts: (userId: string) => `cappers-with-pick-counts:${userId}`,
+  // The user's capper roster (id, name, colorTag, isFavorite; favorites first). Its OWN tag, not
+  // the dashboard one: the dashboard tag is also busted by every grading pass and pick write, none
+  // of which touch the roster, and each bust would send the next page load back to the database.
+  // Busted by exactly the capper writes: create (manual and import), rename, favorite, merge,
+  // delete (revalidateCapperRoster, capper-roster.ts).
+  cappersRoster: (userId: string) => `cappers-roster:${userId}`,
   // Every feature flag with the users it is switched on for - one entry shared
   // by all users (see feature-flags.ts). Nothing writes flags at request time
   // (they are flipped in SQL), so there is no revalidateTag for it: TTL only.

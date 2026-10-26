@@ -277,18 +277,22 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     matches: (s) => reads(s, "users") && whereIs(s, /^"users"\."supabaseId" = \$\d+$/),
   },
   {
-    // id + name since #297; entries recorded before it read the whole row
-    // (notes, photo url) and match too - the ORDER BY is the fingerprint.
+    // The cached roster's fill (capper-roster.ts): id, name, colorTag, isFavorite. Entries
+    // recorded before it read id + name (#297), and before that the whole row (notes, photo
+    // url) - all match; the ORDER BY is the fingerprint. With the cache this is about one read
+    // per user per capper change (or hour), not one per page load.
     label: "Capper roster",
-    source: "getCappersForUser (/picks, /charts, /picks/import, /live category panel)",
+    source: "getCapperRoster / getCappersForUser (capper-roster.ts; /picks, /charts, /picks/import, /live category panel, /live board capper names)",
     matches: (s) => reads(s, "cappers") && has(s, /"cappers"\."userId" = \$\d+/) && has(s, /ORDER BY "cappers"\."isFavorite" DESC/),
   },
   {
     // The user's cappers by name, in no order: id + name since #297 / #312;
     // entries recorded before them (find-or-create, the parlay import) read the
-    // whole row.
+    // whole row. Once per import action (the roster read inside the pick import's
+    // transaction, the parlay import's own read); findOrCreateCapper scans only for a
+    // manual create, since the imports pass it the roster they already read.
     label: "Capper names (import / find-or-create)",
-    source: "findOrCreateCapper scan, resolveImportRefs, bulkImportPicksAction, bulkImportParlaysAction",
+    source: "findOrCreateCapper scan (manual create), resolveImportRefs and insertPicksDeduped for the pick import, bulkImportParlaysAction",
     matches: (s) => reads(s, "cappers") && whereIs(s, /^"cappers"\."userId" = \$\d+$/) && !has(s, /\bORDER BY\b/) && !has(s, /"_aggr_count_picks"/),
   },
   {
@@ -299,9 +303,11 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     matches: (s) => reads(s, "cappers") && whereIs(s, /^"cappers"\."id" IN [$\d,]+$/),
   },
   {
+    // Raw SQL scoped to the user's picks since this PR (alias "pickCount"); entries recorded
+    // before it are Prisma's _count join, whose subquery grouped every user's picks.
     label: "Cappers with pick counts",
     source: "loadCappersWithPickCounts (/cappers, capper detail; 60s cache)",
-    matches: (s) => reads(s, "cappers") && has(s, /"_aggr_count_picks"/),
+    matches: (s) => reads(s, "cappers") && (has(s, /"_aggr_count_picks"/) || has(s, /AS "pickCount"/)),
   },
   {
     label: "Capper all-time W-L",

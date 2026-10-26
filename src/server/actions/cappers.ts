@@ -12,13 +12,18 @@ import {
   type MergeCappersResult,
 } from "@/server/data/cappers";
 import { cacheKeys } from "@/lib/cache-keys";
+import { revalidateCapperRoster } from "@/server/data/capper-roster";
 import type { Source } from "@prisma/client";
 
 // The Dashboard's pick aggregations cache per user and group by capper
 // name/id, so any capper change that reassigns, removes, or renames picks'
 // capper must bust it by tag (revalidatePath does not evict unstable_cache).
+//
+// The capper roster (id, name, colorTag, isFavorite) is cached per user under its own tag;
+// every one of these changes (create, merge, rename, delete, favorite) changes it.
 function revalidatePickStats(userId: string) {
   revalidateTag(cacheKeys.dashboard(userId));
+  revalidateCapperRoster(userId);
 }
 
 export type CreateCapperResult =

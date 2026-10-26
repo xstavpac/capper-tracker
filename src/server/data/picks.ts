@@ -16,6 +16,7 @@ import {
 import { queryCapperRecordBundle, type CardRequest, type CategoryRequest } from "@/server/data/picks-by-capper-aggregates";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { clearGradeFailures } from "@/server/data/grading-failures";
+import { getCapperRoster } from "@/server/data/capper-roster";
 import type { GameCardStreak } from "@/lib/game-card-record-line";
 import { easternDateRange } from "@/lib/dates";
 import { categoryRecordKey, leagueRecordKey } from "@/lib/record-keys";
@@ -452,10 +453,14 @@ export const BOARD_PICK_SELECT = {
   mlFavoredSide: true,
   propMarket: true,
   gameNumber: true,
-  capper: { select: { name: true, colorTag: true, isFavorite: true } },
 } satisfies Prisma.PickSelect;
 
-export type BoardPickRow = Prisma.PickGetPayload<{ select: typeof BOARD_PICK_SELECT }>;
+// The capper is joined on from the cached roster (boardPicksInWindow), not read as a relation:
+// Prisma's relation select is a second statement, `FROM cappers WHERE id IN (...)`, with an IN list of
+// every capper on the board - a new statement shape per list length, on every board load.
+export type BoardPickRow = Prisma.PickGetPayload<{ select: typeof BOARD_PICK_SELECT }> & {
+  capper: { name: string; colorTag: string | null; isFavorite: boolean };
+};
 
 // The canonical chronological tie-break (comparePicksChronological, the SQL
 // aggregates). Without it a card's picks came back in whatever order the plan
@@ -466,8 +471,8 @@ const BOARD_PICK_ORDER: Prisma.PickOrderByWithRelationInput[] = [{ gameTime: "as
 // only within MAX_GAME_TIME_DRIFT_MS (inclusive) of its game, so anything
 // outside [earliest - drift, latest + drift] can never reach a card. This used
 // to read +-2 days, which fetched picks no card could use.
-function boardPicksInWindow(userId: string, sportId: string, commenceTimes: number[]) {
-  return prisma.pick.findMany({
+async function boardPicksInWindow(userId: string, sportId: string, commenceTimes: number[]): Promise<BoardPickRow[]> {
+  const rows = await prisma.pick.findMany({
     where: {
       userId,
       sportId,
@@ -478,6 +483,22 @@ function boardPicksInWindow(userId: string, sportId: string, commenceTimes: numb
     },
     select: BOARD_PICK_SELECT,
     orderBy: BOARD_PICK_ORDER,
+  });
+  if (rows.length === 0) return [];
+  const roster = new Map((await getCapperRoster(userId)).map((c) => [c.id, c]));
+  // A pick whose capper is not in the user's roster (the schema does not rule it out) is read by id,
+  // as the relation select did, so every row still gets its capper.
+  const missing = Array.from(new Set(rows.map((r) => r.capperId).filter((id) => !roster.has(id))));
+  if (missing.length > 0) {
+    for (const c of await prisma.capper.findMany({ where: { id: { in: missing } }, select: { id: true, name: true, colorTag: true, isFavorite: true } })) {
+      roster.set(c.id, c);
+    }
+  }
+  return rows.map((r) => {
+    const c = roster.get(r.capperId);
+    // capperId is a required relation; a miss here means the capper vanished mid-request.
+    if (!c) throw new Error("No capper " + r.capperId + " row for a loaded pick.");
+    return { ...r, capper: { name: c.name, colorTag: c.colorTag, isFavorite: c.isFavorite } };
   });
 }
 
