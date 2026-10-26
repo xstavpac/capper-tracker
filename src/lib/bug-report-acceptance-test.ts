@@ -21,7 +21,7 @@ import {
   validateDescription,
   validateScreenshot,
 } from "@/lib/bug-report";
-import { submitBugReport, type BugReportDeps } from "@/server/bug-reports/submit";
+import { describeUploadError, submitBugReport, type BugReportDeps } from "@/server/bug-reports/submit";
 import { ADMIN_TABS } from "@/lib/admin-tabs";
 
 let failures = 0;
@@ -90,19 +90,20 @@ const big = (head: Uint8Array, size: number) => {
 }
 
 // ---- 5. Submit flow on fakes ----
-type World = { inserted: Parameters<BugReportDeps["insert"]>[0][]; uploaded: string[]; removed: string[]; count: number; latestAt: Date | null; configured: boolean; uploadFails: boolean; insertFails: boolean };
+type World = { inserted: Parameters<BugReportDeps["insert"]>[0][]; uploaded: string[]; removed: string[]; count: number; latestAt: Date | null; configured: boolean; uploadFails: boolean; insertFails: boolean; uploadError: unknown; logs: string[] };
 function world(over: Partial<World> = {}) {
-  const w: World = { inserted: [], uploaded: [], removed: [], count: 0, latestAt: null, configured: true, uploadFails: false, insertFails: false, ...over };
+  const w: World = { inserted: [], uploaded: [], removed: [], count: 0, latestAt: null, configured: true, uploadFails: false, insertFails: false, uploadError: new Error("boom"), logs: [], ...over };
   const deps: BugReportDeps = {
     now: () => new Date("2026-10-26T20:00:00Z"),
     newId: () => "rep1",
     recentActivity: async () => ({ count: w.count, latestAt: w.latestAt }),
     storageConfigured: () => w.configured,
     upload: async (path) => {
-      if (w.uploadFails) throw new Error("boom");
+      if (w.uploadFails) throw w.uploadError;
       w.uploaded.push(path);
     },
     remove: async (path) => void w.removed.push(path),
+    log: { warn: (m) => void w.logs.push(`warn ${m}`), error: (m) => void w.logs.push(`error ${m}`) },
     insert: async (row) => {
       if (w.insertFails) throw new Error("db down");
       w.inserted.push(row);
@@ -132,6 +133,37 @@ async function main() {
     const { w, deps } = world({ uploadFails: true });
     const r = await submitBugReport(deps, input({ screenshot: PNG }));
     expect("upload failure -> text report still saved", [r, w.inserted.length, w.inserted[0]?.screenshotPath], [{ ok: true, screenshot: "unavailable" }, 1, null]);
+  }
+  {
+    // Logging: the upload error's message + HTTP status, never the key / file / path / user.
+    const SECRET = "sb_secret_FAKEKEYVALUE123";
+    const { w, deps } = world({ uploadFails: true, uploadError: Object.assign(new Error("Bucket not found"), { status: 404 }) });
+    await submitBugReport(deps, input({ screenshot: PNG }));
+    expect("upload failure logs exactly the message and status", w.logs, ["error [bug-report] screenshot upload failed: Bucket not found (status 404)"]);
+    const text = w.logs.join(" ");
+    expect("log has no path, user id or file bytes", [text.includes("u1/"), text.includes("rep1"), text.includes("u1"), /137|0x89|PNG/.test(text)], [false, false, false, false]);
+    expect("describeUploadError keeps message + status only (a status-less error -> null; long message capped)", [
+      describeUploadError(new Error("x")),
+      describeUploadError(Object.assign(new Error("y".repeat(500)), { status: 401 })).message.length,
+      describeUploadError("not an error"),
+      describeUploadError(null),
+    ], [{ message: "x", status: null }, 200, { message: "unknown error", status: null }, { message: "unknown error", status: null }]);
+    expect("an error object's other fields (e.g. a header holding a key) are never read", JSON.stringify(describeUploadError(Object.assign(new Error("m"), { status: 500, headers: { apikey: SECRET } }))).includes(SECRET), false);
+  }
+  {
+    const { w, deps } = world({ configured: false });
+    await submitBugReport(deps, input({ screenshot: WEBP }));
+    expect("not configured -> one warning, no error log", w.logs, ["warn [bug-report] screenshot storage is not configured; saved the report without its screenshot"]);
+  }
+  {
+    const { w, deps } = world({ configured: false });
+    await submitBugReport(deps, input());
+    expect("no screenshot attached -> nothing logged even when storage is unconfigured", w.logs, []);
+  }
+  {
+    const { w, deps } = world();
+    await submitBugReport(deps, input({ screenshot: WEBP }));
+    expect("successful upload logs nothing", w.logs, []);
   }
   {
     const { w, deps } = world({ insertFails: true });
@@ -169,6 +201,10 @@ async function main() {
 function wiring() {
   const submit = src("src/server/actions/bug-reports.ts");
   expect("submit action: 'use server', requireUser first, userId from the session not the form", [/^"use server";/.test(submit), submit.indexOf("requireUser()") > 0 && submit.indexOf("requireUser()") < submit.indexOf("formData.get"), /userId: user\.id/.test(submit), /formData\.get\("userId"\)/.test(submit)], [true, true, true, false]);
+
+  const submitSrc = src("src/server/bug-reports/submit.ts");
+  const logCalls = submitSrc.match(/log.(?:warn|error)([^;]*);/g) ?? [];
+  expect("submit.ts: exactly two log calls, interpolating only message and status", [logCalls.length, logCalls.every((c) => !/screenshot[^"]*${|bytes|userId|path}|SERVICE_ROLE/.test(c))], [2, true]);
 
   const admin = src("src/server/actions/bug-reports-admin.ts");
   const actionBodies = admin.split(/export async function /).slice(1);

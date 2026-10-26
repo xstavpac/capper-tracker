@@ -21,6 +21,7 @@ export type BugReportDeps = {
   storageConfigured: () => boolean;
   upload: (path: string, bytes: Uint8Array, contentType: string) => Promise<void>;
   remove: (path: string) => Promise<void>;
+  log?: BugReportLog;
   insert: (row: {
     id: string;
     userId: string;
@@ -30,6 +31,10 @@ export type BugReportDeps = {
     screenshotPath: string | null;
   }) => Promise<void>;
 };
+
+// Where a failure is reported. Optional so callers that don't care (tests) get
+// the console; the acceptance test passes a recorder.
+export type BugReportLog = { warn: (msg: string) => void; error: (msg: string) => void };
 
 export type BugReportInput = {
   userId: string;
@@ -45,6 +50,15 @@ export type BugReportInput = {
 export type BugReportResult =
   | { ok: true; screenshot: "saved" | "none" | "unavailable" }
   | { ok: false; error: string };
+
+// What may be logged about a failed upload: the error's message (capped) and
+// its HTTP status, nothing else. Never the key, the file or its bytes, the path
+// or the user.
+export function describeUploadError(err: unknown): { message: string; status: number | null } {
+  const message = err instanceof Error ? err.message : "unknown error";
+  const status = (err as { status?: unknown } | null)?.status;
+  return { message: message.slice(0, 200), status: typeof status === "number" ? status : null };
+}
 
 export async function submitBugReport(deps: BugReportDeps, input: BugReportInput): Promise<BugReportResult> {
   const description = validateDescription(input.description);
@@ -62,6 +76,7 @@ export async function submitBugReport(deps: BugReportDeps, input: BugReportInput
   const rate = decideBugReportRate({ countInWindow: recent.count, latestAt: recent.latestAt, now });
   if (!rate.ok) return rate;
 
+  const log = deps.log ?? console;
   const id = deps.newId();
   let screenshotPath: string | null = null;
   let screenshot: "saved" | "none" | "unavailable" = "none";
@@ -74,9 +89,13 @@ export async function submitBugReport(deps: BugReportDeps, input: BugReportInput
         await deps.upload(path, input.screenshot, type.mime);
         screenshotPath = path;
         screenshot = "saved";
-      } catch {
-        // Fall through: the text report is still worth keeping.
+      } catch (err) {
+        // Fall through: the text report is still worth keeping - but say why.
+        const { message, status } = describeUploadError(err);
+        log.error(`[bug-report] screenshot upload failed: ${message} (status ${status ?? "n/a"})`);
       }
+    } else {
+      log.warn("[bug-report] screenshot storage is not configured; saved the report without its screenshot");
     }
   }
 
