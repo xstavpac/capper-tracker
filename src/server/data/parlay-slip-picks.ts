@@ -12,6 +12,9 @@ import { LIVE_SPORTS } from "@/server/data/odds";
 import { getLiveBoardData, type LiveBoardData } from "@/server/data/live-board-picks";
 import { toExpanderPick } from "@/server/data/expander-pick";
 import type { GeneratorPick } from "@/lib/parlay/auto-generate";
+import { findBoardGameForPick } from "@/lib/parlay/off-board-game";
+import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
+import { SPORT_LABEL_TO_KEY } from "@/lib/sport-seasons";
 
 export type SlipPickRow = Pick & { capper: Capper; sport: { name: string } };
 
@@ -62,15 +65,21 @@ export function picksOnBoards(boards: SlipBoard[], pickIds: Iterable<string>): M
   return found;
 }
 
-// A pick the board has no game for, built from its own row: its stored teams
-// and time stand in for the game's. The id is unique to the pick, so it is
-// never taken for the same game as another leg's by id, and no board game
-// offers it an alternate.
-export function offBoardSlipPick(row: SlipPickRow): GeneratorPick {
+// A pick the board has no pick-to-game match for, built from its own row: its
+// stored teams and time stand in for the game's. Given the boards, it is first
+// keyed to the real game by teams and time (findBoardGameForPick), so the
+// generator's max legs per game and same-game rules count it against that game.
+// Only with no such game does it get an id of its own ("pick:<id>"), never taken
+// for the same game as another leg's, and no board game offers it an alternate.
+export function offBoardSlipPick(row: SlipPickRow, boards: SlipBoard[] = []): GeneratorPick {
   const sport = liveSportFor(row);
+  const board = boards.find((b) => b.label === sport?.label);
+  const real = board ? findBoardGameForPick(row, board.board.odds, SPORT_LABEL_TO_KEY[board.label], MAX_GAME_TIME_DRIFT_MS) : null;
   return toExpanderPick(
     row,
-    { id: "pick:" + row.id, homeTeam: row.homeTeam, awayTeam: row.awayTeam, commenceTime: row.gameTime.toISOString() },
+    real
+      ? { id: real.id, homeTeam: real.homeTeam, awayTeam: real.awayTeam, commenceTime: real.commenceTime }
+      : { id: "pick:" + row.id, homeTeam: row.homeTeam, awayTeam: row.awayTeam, commenceTime: row.gameTime.toISOString() },
     sport?.key ?? "",
     sport?.label ?? row.sport.name
   );

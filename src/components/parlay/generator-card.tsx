@@ -28,6 +28,7 @@ import { reconcileMix, selectedCategories, toggleInclude, type IncludeSelection,
 import type { BetCategory } from "@/lib/parlay/bet-category";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
+import { slipLegFloor } from "@/lib/parlay/leg-cap";
 import { createGeneratorSession, poolKey, type PoolInputs } from "@/lib/parlay/generator-session";
 import { removedHeading, removedPickText } from "@/lib/parlay/slip-state";
 import type { FillFrom, GeneratedParlay, GeneratorSettings } from "@/lib/parlay/generator";
@@ -176,13 +177,13 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
 
   // The leg count: never fewer than the picks (every one goes in), and - once
   // a build has said what the pool holds - never more than it can supply.
-  const minLegs = Math.min(MAX_PARLAY_LEGS, Math.max(1, pool.length));
+  const minLegs = Math.min(MAX_PARLAY_LEGS, Math.max(1, slipLegFloor(pool, maxPerGame)));
   const capacity = parlay && builtFor === key ? parlay.capacity : MAX_PARLAY_LEGS;
   const maxLegs = Math.max(minLegs, Math.min(MAX_PARLAY_LEGS, capacity));
   useEffect(() => {
     if (legCount < minLegs) setLegCount(minLegs);
   }, [legCount, minLegs, setLegCount]);
-  const generatedLegs = Math.max(0, legCount - pool.length);
+  const generatedLegs = Math.max(0, legCount - slipLegFloor(pool, maxPerGame));
 
   // Your picks, by game, in the order they were added.
   const byGame = useMemo(() => {
@@ -355,7 +356,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
               min={1}
               max={MAX_LEGS_PER_GAME}
               onChange={(n) => setMaxPerGame(Math.max(1, Math.min(MAX_LEGS_PER_GAME, n)))}
-              note={maxPerGame === 1 ? "one generated leg per game" : "same-game legs only when games run out · never opposing or duplicate"}
+              note={maxPerGame === 1 ? "one leg per game, your picks included" : "same-game legs only when games run out · never opposing or duplicate"}
             />
           </div>
           <div className="mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -371,7 +372,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
             value={legCount}
             max={maxLegs}
             onChange={(n) => setLegCount(Math.max(minLegs, Math.min(n, maxLegs)))}
-            note={`up to ${MAX_PARLAY_LEGS} · ${pool.length} from your picks, ${generatedLegs} from your cappers`}
+            note={`up to ${MAX_PARLAY_LEGS} · ${slipLegFloor(pool, maxPerGame)} from your picks, ${generatedLegs} from your cappers`}
           />
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={clear} disabled={!parlay && !error} className={PILL_OUTLINE}>

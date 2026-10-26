@@ -105,7 +105,7 @@ export async function generateParlayAction(request: GenerateRequest): Promise<Ge
   const now = new Date();
   const onBoard = picksOnBoards(boards, req.slipPickIds);
   const rowById = new Map(rows.map((r) => [r.id, r]));
-  const slipPicks: GeneratorPick[] = req.slipPickIds.map((id) => onBoard.get(id) ?? offBoardSlipPick(rowById.get(id)!));
+  const slipPicks: GeneratorPick[] = req.slipPickIds.map((id) => onBoard.get(id) ?? offBoardSlipPick(rowById.get(id)!, boards));
   const slipGameIds = new Set(slipPicks.map((p) => p.gameId));
   const targetIds = new Set(req.targets.map((t) => t.gameId));
   const fullSlate = req.targets.length === 0;

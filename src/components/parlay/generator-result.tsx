@@ -198,6 +198,7 @@ export function GeneratorResult({
   const swap = tab === "AUTO_HEDGE" ? parlay.hedge : tab === "CONTRARIAN" ? parlay.contrarian : null;
   const shownPicks = swap ? swap.legs.map((l) => (l.swap ?? l.original).pick) : legs.map((l) => l.pick);
   const notes = [
+    ...parlay.dropped.filter((d) => d.reason === "left_out").map((d) => `${d.label}: ${d.note}`),
     ...parlay.shortfall,
     ...parlay.mixNotes,
     ...(unavailableTargetLabels.length > 0

@@ -10,8 +10,21 @@
 export const MAX_PARLAY_LEGS = 25;
 
 // The most legs a parlay takes from one game ("Max legs per game"). Bounds the
-// generated legs only - a slip pick is never dropped to meet it.
+// generated legs and the slip's own picks: of the picks chosen on one game the
+// best stay and the rest are named as left out (generator.ts). Nothing is
+// removed from the slip itself.
 export const MAX_LEGS_PER_GAME = 5;
+
+// The fewest slip picks a parlay keeps at "Max legs per game": per game, as many
+// of the chosen picks as the max allows (an upper bound - a conflicting pick
+// can still be dropped).
+export function slipLegFloor(picks: { gameId: string }[], maxPerGame: number): number {
+  const perGame = new Map<string, number>();
+  for (const p of picks) perGame.set(p.gameId, (perGame.get(p.gameId) ?? 0) + 1);
+  let n = 0;
+  for (const c of perGame.values()) n += Math.min(c, Math.max(1, maxPerGame));
+  return n;
+}
 
 export const MAX_PARLAY_LEGS_MESSAGE = `${MAX_PARLAY_LEGS} legs max`;
 

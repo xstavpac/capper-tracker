@@ -14,7 +14,10 @@
 //      count. Two slip picks that can't both be legs (opposing, or the same bet,
 //      at any line - blocks(), build-my-picks.ts) compete: the better record
 //      stays, then the better line. The other is listed in `dropped`. A slip
-//      pick whose game has started is dropped too.
+//      pick whose game has started is dropped too. When "max legs per game" is
+//      lower than the picks you chose on one game, the best of them (the same
+//      ranking) stay and the rest are listed in `dropped` as left out, with
+//      why - they stay in your slip, they are only not used in this parlay.
 //   2. Targets: with any, generated legs come only from the targeted games
 //      plus the games of your picks. Without, from every game in the snapshot.
 //   3. A generated leg must clear the 55% gate on its capper's all-leagues
@@ -142,8 +145,8 @@ export type EngineLeg = {
 export type DroppedSlipPick = {
   pickId: string;
   label: string;
-  reason: "duplicate" | "opposes" | "started";
-  // The slip pick that stayed (duplicate / opposes).
+  reason: "duplicate" | "opposes" | "started" | "left_out";
+  // The slip pick that stayed (duplicate / opposes / left out).
   against: { pickId: string; label: string } | null;
   // "duplicates Capper — Over 53.5 — not used"
   note: string;
@@ -304,7 +307,27 @@ export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: Gene
       note: `${reason === "duplicate" ? "duplicates" : "opposes"} ${s.conflictsWith.label} — not used`,
     });
   }
-  const slipLegs: GeneratorPick[] = settled.legs.map((c) => slipById.get(c.pickId)!);
+  // Max legs per game applies to the slip's own picks too: of the picks chosen
+  // on one game, the best (settled.legs is already best first) stay and the
+  // rest are named as left out. Nothing leaves the slip itself.
+  const slipLegs: GeneratorPick[] = [];
+  const keptOnGame = new Map<string, GeneratorPick[]>();
+  for (const c of settled.legs) {
+    const p = slipById.get(c.pickId)!;
+    const kept = keptOnGame.get(p.gameId) ?? [];
+    if (kept.length >= maxPerGame) {
+      dropped.push({
+        pickId: p.pickId,
+        label: pickLabel(p),
+        reason: "left_out",
+        against: { pickId: kept[0].pickId, label: pickLabel(kept[0]) },
+        note: `left out — max legs per game is ${maxPerGame}; ${kept.map(pickLabel).join(", ")} rank${kept.length === 1 ? "s" : ""} higher on this game — not used`,
+      });
+      continue;
+    }
+    keptOnGame.set(p.gameId, [...kept, p]);
+    slipLegs.push(p);
+  }
   const target = Math.max(legCount, slipLegs.length);
   const fillFrom: FillFrom = slipLegs.length === 0 ? "BEST_AVAILABLE" : settings.fillFrom;
 
