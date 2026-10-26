@@ -342,10 +342,10 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "expectFlags": []
   },
   {
-    "name": "control: sport lookup ILIKE (getPicksForGames)",
+    "name": "sport lookup ILIKE (getSportIdByNameInsensitive)",
     "run": "52f483d",
     "sql": "SELECT \"public\".\"sports\".\"id\", \"public\".\"sports\".\"name\" FROM \"public\".\"sports\" WHERE \"public\".\"sports\".\"name\" ILIKE $1 LIMIT $2 OFFSET $3",
-    "expectLabel": null,
+    "expectLabel": "Sport lookup (board)",
     "expectFlags": []
   },
   {

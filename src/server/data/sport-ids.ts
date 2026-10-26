@@ -33,3 +33,27 @@ export async function getSportIdByName(name: string): Promise<string | null> {
     throw err;
   }
 }
+
+// The same id by a case-insensitive name match - what getPicksForGame(s) read
+// with `findFirst({ where: { name: { equals, mode: "insensitive" } } })` before
+// every board and game-detail pick read, one row per call. Callers pass the
+// league's display label ("MLB"), whose casing need not match the stored name.
+// Same rules as above: a hit lives an hour per process and cannot go stale
+// (sports are never renamed or deleted; the sports table has no names that
+// differ only by case, so the match is unambiguous), and a miss is never cached.
+export async function getSportIdByNameInsensitive(name: string): Promise<string | null> {
+  try {
+    return await memoizeWithTtl(
+      cacheKeys.sportIdByNameInsensitive(name),
+      async () => {
+        const sport = await prisma.sport.findFirst({ where: { name: { equals: name, mode: "insensitive" } } });
+        if (!sport) throw new SportNotFound(name);
+        return sport.id;
+      },
+      { ttlMs: SPORT_ID_TTL_MS }
+    );
+  } catch (err) {
+    if (err instanceof SportNotFound) return null;
+    throw err;
+  }
+}
