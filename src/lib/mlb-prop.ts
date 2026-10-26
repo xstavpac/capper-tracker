@@ -1,3 +1,4 @@
+import { normalizeSpelledOutPropNumber } from "@/lib/number-words";
 // MLB player-prop text parsing - the MLB twin of nhl-prop.ts / bet-line.ts's NFL
 // parsePlayerProp, in its own pure module so the NFL and NHL parsers (and every
 // test that pins them) are untouched. bet-line.ts re-exports the combined
@@ -162,7 +163,7 @@ export type ParsedMlbProp = { playerName: string; propMarket: MlbPropMarket; lin
 
 export function parseMlbPlayerProp(text: string): ParsedMlbProp | null {
   if (SCOPED_VARIANT.test(text)) return null;
-  const normalized = normalizeMlbNPlus(text);
+  const normalized = normalizeMlbNPlus(normalizeSpelledOutPropNumber(text));
   if (SCOPED_VARIANT.test(normalized)) return null;
 
   const a = LINE_THEN_WORD.exec(normalized);

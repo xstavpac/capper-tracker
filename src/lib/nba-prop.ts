@@ -1,3 +1,4 @@
+import { normalizeSpelledOutPropNumber } from "@/lib/number-words";
 // NBA player-prop text parsing - the NBA twin of nhl-prop.ts, kept in its own
 // pure module (no imports) so the NFL / NHL / MLB parsers are untouched.
 //
@@ -222,7 +223,7 @@ const OPPONENT_TAIL_RE = /\s+(?:@\s*|(?:vs|v|versus|at)\.?\s+)(\S.*)$/i;
 // Every NBA prop shape, supported or not. null when the text is not one.
 export function parseNbaProp(text: string, opts: { abbreviations?: boolean } = {}): ParsedNbaProp | null {
   const abbreviations = opts.abbreviations !== false;
-  const normalized = normalizeNbaNPlus(text.replace(/\([^)]*\)/g, " "));
+  const normalized = normalizeNbaNPlus(normalizeSpelledOutPropNumber(text.replace(/\([^)]*\)/g, " ")));
   const hit = classify(normalized, abbreviations);
   if (!hit) return null;
   // A yes/no market has no number to anchor it, so the player has to come
