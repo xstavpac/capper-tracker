@@ -1,3 +1,4 @@
+import { normalizeSpelledOutPropNumber } from "@/lib/number-words";
 // Detection of player-prop vocabulary in a pasted catalog line - MLB, NHL,
 // NBA and WNBA stat words. NFL, NHL, MLB and NBA props are supported now (their
 // parsers run first in detectUnsupportedPropLine, parse-catalog.ts, and a line
@@ -246,10 +247,13 @@ function subjectKind(
 // the normal resolvers); `classifyTeamSide` does the same for each side of an
 // "X vs Y" matchup.
 export function detectUnsupportedProp(
-  text: string,
+  rawText: string,
   isTeamSubject: (subject: string) => boolean = () => false,
   classifyTeamSide: (side: string) => TeamSideClass = () => "none"
 ): UnsupportedPropInfo | null {
+  // "over two total bases" is read as "over 2 total bases" (number-words.ts), so the sport evidence
+  // here agrees with the prop parsers on the same line.
+  const text = normalizeSpelledOutPropNumber(rawText);
   const teamStat = { sport: null, reason: UNSUPPORTED_PROP_REASONS.TEAM_STAT } as const;
   const gameStat = { sport: null, reason: UNSUPPORTED_PROP_REASONS.GAME_STAT } as const;
 

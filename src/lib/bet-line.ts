@@ -1,37 +1,11 @@
 import { parseNhlPlayerProp, normalizeNhlNPlus, type NhlPropMarket } from "@/lib/nhl-prop";
 import { parseMlbPlayerProp, type MlbPropMarket } from "@/lib/mlb-prop";
 import { parseNbaPlayerProp, type NbaPropMarket } from "@/lib/nba-prop";
+import { NUMBER_WORDS, normalizeSpelledOutPropNumber } from "@/lib/number-words";
 
 type BetTypeLike = "SPREAD" | "MONEYLINE" | "TOTAL" | "TEAM_TOTAL" | "PLAYER_PROP" | "NRFI";
 type SideLike = "HOME" | "AWAY";
 
-// Cappers occasionally spell a total out ("under nine" instead of "under 9") -
-// one through twenty covers realistic bet totals (MLB/NBA/NFL totals don't
-// realistically run higher, and nothing in this app's free-text bet details
-// spells out a total as a compound word like "twenty-five" or a half like
-// "eight and a half", so those intentionally aren't handled here).
-const NUMBER_WORDS: Record<string, number> = {
-  one: 1,
-  two: 2,
-  three: 3,
-  four: 4,
-  five: 5,
-  six: 6,
-  seven: 7,
-  eight: 8,
-  nine: 9,
-  ten: 10,
-  eleven: 11,
-  twelve: 12,
-  thirteen: 13,
-  fourteen: 14,
-  fifteen: 15,
-  sixteen: 16,
-  seventeen: 17,
-  eighteen: 18,
-  nineteen: 19,
-  twenty: 20,
-};
 const NUMBER_WORD_PATTERN = new RegExp("\\b(" + Object.keys(NUMBER_WORDS).join("|") + ")\\b", "i");
 
 function extractSpelledOutNumber(text: string): number | null {
@@ -678,7 +652,9 @@ export function isAnytimeTdPick(text: string): boolean {
 // malformed or genuinely non-prop betDetail on a manually-entered
 // PLAYER_PROP pick) - callers treat that the same as "not a recognized
 // player prop", not as a TD prop by default.
-export function parsePlayerProp(text: string): { playerName: string; propMarket: PlayerPropMarket } | null {
+export function parsePlayerProp(rawText: string): { playerName: string; propMarket: PlayerPropMarket } | null {
+  // "over six receptions" reads as "over 6 receptions" (see normalizeSpelledOutPropNumber).
+  const text = normalizeSpelledOutPropNumber(rawText);
   const td = parseTouchdownProp(text);
   if (td) return { playerName: td.playerName, propMarket: "TD" };
 
@@ -788,7 +764,8 @@ export type PlayerPropLineInfo = { line: number; direction: "OVER" | "UNDER" };
 // e.g. leftover/duplicated text in a manually-entered pick - returns null
 // (can't tell which side this pick actually is) rather than silently
 // grading against whichever side happened to appear first.
-export function parsePlayerPropLine(text: string): PlayerPropLineInfo | null {
+export function parsePlayerPropLine(rawText: string): PlayerPropLineInfo | null {
+  const text = normalizeSpelledOutPropNumber(rawText);
   const overMatch = text.match(/\bover\s+(\d+(?:\.\d+)?)\b/i) ?? text.match(/\bo\s*(\d+(?:\.\d+)?)\b/i);
   const underMatch = text.match(/\bunder\s+(\d+(?:\.\d+)?)\b/i) ?? text.match(/\bu\s*(\d+(?:\.\d+)?)\b/i);
   if (overMatch && !underMatch) return { direction: "OVER", line: parseFloat(overMatch[1]) };
