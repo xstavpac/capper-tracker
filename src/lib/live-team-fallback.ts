@@ -34,7 +34,7 @@
 // never touched this file (2026-09 follow-up).
 
 import { normalizeForGrouping, teamPhraseRegex, isPlayerPropSurnameCollision } from "@/lib/parse-catalog";
-import { isTeamTotalText } from "@/lib/bet-line";
+import { isTeamTotalText, isOverShorthand, isUnderShorthand } from "@/lib/bet-line";
 
 export type LiveTeam = {
   // The sport LABEL as parse-catalog / LIVE_SPORTS use it ("NCAAF", "NFL", ...).
@@ -204,8 +204,8 @@ export function parseFallbackBetText(line: string): BetTextParts {
   const lower = line.toLowerCase();
 
   let totalSide: "over" | "under" | undefined;
-  if (/\bover\b|\bo\s*\d/.test(lower)) totalSide = "over";
-  else if (/\bunder\b|\bu\s*\d/.test(lower)) totalSide = "under";
+  if (/\bover\b/.test(lower) || isOverShorthand(lower)) totalSide = "over";
+  else if (/\bunder\b/.test(lower) || isUnderShorthand(lower)) totalSide = "under";
 
   let betType: BetTextParts["betType"];
   // Same team-total test the main parser uses, so "VMI team total over 20.5"
