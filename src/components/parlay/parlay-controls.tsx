@@ -228,6 +228,8 @@ export function CountStepper({
   max,
   onChange,
   note,
+  step: stepBy = 1,
+  unit = "",
 }: {
   label: string;
   value: number;
@@ -235,19 +237,23 @@ export function CountStepper({
   max: number;
   onChange: (n: number) => void;
   note?: string;
+  // How far − and + move the value, and what follows it ("%").
+  step?: number;
+  unit?: string;
 }) {
   const step = "flex h-11 w-11 items-center justify-center rounded-full text-lg text-foreground transition hover:bg-foreground/[0.035] disabled:opacity-30 disabled:hover:bg-transparent";
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <span className={LABEL}>{label}</span>
       <div className="flex items-center rounded-full border border-[#DADDE5] bg-white dark:border-border dark:bg-card">
-        <button type="button" onClick={() => onChange(value - 1)} disabled={value <= min} aria-label={"Fewer: " + label} className={step}>
+        <button type="button" onClick={() => onChange(value - stepBy)} disabled={value <= min} aria-label={"Fewer: " + label} className={step}>
           &minus;
         </button>
-        <span className="w-8 text-center text-[15px] font-semibold tabular-nums text-foreground" aria-live="polite">
+        <span className={(unit ? "w-12" : "w-8") + " text-center text-[15px] font-semibold tabular-nums text-foreground"} aria-live="polite">
           {value}
+          {unit}
         </span>
-        <button type="button" onClick={() => onChange(value + 1)} disabled={value >= max} aria-label={"More: " + label} className={step}>
+        <button type="button" onClick={() => onChange(value + stepBy)} disabled={value >= max} aria-label={"More: " + label} className={step}>
           +
         </button>
       </div>

@@ -59,6 +59,8 @@ const UNDO_CLEAR_MS = 30_000;
 type ClearedSlip = { picks: PooledPick[]; targets: SlipGame[] };
 
 type ParlayPoolContextValue = {
+  // The signed-in user, for per-user preferences kept beside the slip.
+  userId: string;
   // ---- Picks ----
   pool: PooledPick[];
   isInPool: (pickId: string) => boolean;
@@ -443,6 +445,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   const targetedGames = useMemo(() => toTargetedGames({ picks: pool, targets }), [pool, targets]);
 
   const value: ParlayPoolContextValue = {
+    userId,
     pool,
     isInPool,
     removeFromPool,

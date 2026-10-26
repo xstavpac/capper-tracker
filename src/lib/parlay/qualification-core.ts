@@ -90,8 +90,10 @@ export { wilsonLowerBound };
 // `record.winPct < QUALIFYING_WIN_PCT` skips), so winPct === 55.0 passes.
 // A gate, not a score - never blended with wilsonLowerBound above.
 // ---------------------------------------------------------------------------
-export function qualifies(record: { winPct: number } | null): boolean {
-  return record !== null && record.winPct >= 55;
+// `minWinPct` is the Generator's adjustable gate (lib/parlay/gate.ts); every
+// other caller leaves it at 55.
+export function qualifies(record: { winPct: number } | null, minWinPct = 55): boolean {
+  return record !== null && record.winPct >= minWinPct;
 }
 
 // ---------------------------------------------------------------------------
@@ -220,7 +222,7 @@ export function rankCandidatesByRecord<R extends { wins: number; losses: number;
   candidates: ParlayLeg[],
   mode: "AUTO_HEDGE" | "CONTRARIAN",
   recordOf: (leg: ParlayLeg) => R | null,
-  opts: { contrarianHeadcount: boolean; sameGamePicks?: ParlayLeg[]; z?: number }
+  opts: { contrarianHeadcount: boolean; sameGamePicks?: ParlayLeg[]; z?: number; minWinPct?: number }
 ): (RankedCandidate & { gateRecord: R })[] {
   if (mode === "CONTRARIAN" && opts.contrarianHeadcount && !contrarianHeadcountPasses(primary, opts.sameGamePicks ?? candidates)) return [];
 
@@ -232,7 +234,7 @@ export function rankCandidatesByRecord<R extends { wins: number; losses: number;
     if (outcome.outcome !== "RULE" || outcome.mode !== mode) continue;
 
     const record = recordOf(candidate);
-    if (!record || !qualifies(record)) continue;
+    if (!record || !qualifies(record, opts.minWinPct)) continue;
 
     const { wins, losses, winPct } = record;
     scored.push({
