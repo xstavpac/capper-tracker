@@ -28,11 +28,15 @@
 //      pass the Include Picks filter (include-picks.ts: All Picks, or any of
 //      Moneyline / Spread / Totals / Props - betCategory, period ignored).
 //      Slip picks are never gated or filtered. No minimum sample: candidates
-//      are ranked by Wilson lower bound (compareByWilson), which puts a small
-//      sample below a large one at the same win %, and every leg carries its
+//      are ranked by Wilson lower bound (compareByWilson) at the generator's
+//      own, softer z (GENERATOR_Z - the shared default, 1.96, is what the
+//      Live category panel uses and stays there): a small sample still ranks
+//      below a large one at the same win %, but a mid-volume record (18-4) is
+//      no longer buried under a huge one (100-30). Every leg carries its
 //      record and which one it is (basis) so the sample size shows. Last 20
 //      is never a gate or a rank. LEGACY_RULES is the engine as it was before
-//      (all-leagues market record, Contrarian headcount), for comparison.
+//      (all-leagues market record, z=1.96, Contrarian headcount), for
+//      comparison.
 //   4. One generated leg per game first, best games first. Only when games run
 //      out are same-game legs added, up to "max legs per game" counted with any
 //      slip picks on that game - across every category and every period (a
@@ -116,17 +120,42 @@ export type GeneratorSnapshot = {
 };
 
 // Which record gates and ranks a generated leg and a Hedge / Contrarian
-// alternate, and whether Contrarian needs your pick's side to be the majority.
+// alternate, how hard a small sample is marked down, how close counts as a
+// tie for Regenerate, and whether Contrarian needs your pick's side to be the
+// majority.
 export type GeneratorRules = {
   // LEAGUE_FIRST: recordForGate. ALL_TIME: the all-leagues market record.
   recordScope: "LEAGUE_FIRST" | "ALL_TIME";
   contrarianHeadcount: boolean;
+  // Wilson lower bound's z for the ranking (never the gate).
+  z: number;
+  // Regenerate's bands, in Wilson points at this z (PICK_TIE_BAND, GAME_BAND).
+  pickTieBand: number;
+  gameBand: number;
 };
 
-export const GENERATOR_RULES: GeneratorRules = { recordScope: "LEAGUE_FIRST", contrarianHeadcount: false };
+// ---------------------------------------------------------------------------
+// Tunables
+// ---------------------------------------------------------------------------
+// The generator's Wilson z: softer than the shared 1.96, so a mid-volume record
+// sits close to a huge one (18-4 is 4.2 points under 100-30, 7.5 at 1.96) while
+// a tiny perfect one stays well below it (3-0 is 9.6 points under 18-4). Much
+// softer and 3-0 / 5-0 records float to the top (the replay at z=1.0: median
+// leg sample 5, average leg 92%).
+export const GENERATOR_Z = 1.5;
+// Picks within this many Wilson points (at GENERATOR_Z) of their game's best
+// are interchangeable.
+export const PICK_TIE_BAND = 0.035;
+// Games whose best leg is within this of the last game that makes the cut can
+// rotate in. Both bands were 0.03 / 0.05 at z=1.96; at GENERATOR_Z they cover
+// the same share of near-ties in the snapshot replay (13.9% of same-game
+// pairs, 29.8% of games past the cut - parlay-generator-replay.ts).
+export const GAME_BAND = 0.055;
+
+export const GENERATOR_RULES: GeneratorRules = { recordScope: "LEAGUE_FIRST", contrarianHeadcount: false, z: GENERATOR_Z, pickTieBand: PICK_TIE_BAND, gameBand: GAME_BAND };
 // The engine before record scope changed: all-leagues market record, Wilson at
-// z=1.96, the 55% gate, Contrarian only from the majority side.
-export const LEGACY_RULES: GeneratorRules = { recordScope: "ALL_TIME", contrarianHeadcount: true };
+// z=1.96 with its bands, the 55% gate, Contrarian only from the majority side.
+export const LEGACY_RULES: GeneratorRules = { recordScope: "ALL_TIME", contrarianHeadcount: true, z: 1.96, pickTieBand: 0.03, gameBand: 0.05 };
 
 export type GeneratorSettings = {
   legCount: number;
@@ -225,13 +254,6 @@ export type GeneratedParlay = {
   generatedKey: string;
 };
 
-// ---------------------------------------------------------------------------
-// Tunables
-// ---------------------------------------------------------------------------
-// Picks within this many Wilson points of their game's best are interchangeable.
-export const PICK_TIE_BAND = 0.03;
-// Games whose best leg is within this of the last game that makes the cut can rotate in.
-export const GAME_BAND = 0.05;
 // How many recent parlays' legs weigh less, and by how much.
 export const RECENT_PARLAYS = 3;
 export const RECENT_WEIGHT = 0.35;
@@ -403,7 +425,7 @@ export function buildGeneratedParlay(
       const { record, basis } = gated;
       // Never against a slip pick on its game.
       if (onGame.some((s) => !(sureOfGame(game, s) && sureOfGame(game, pick)) || sameGameConflict(asCandidate(pick), asCandidate(s)) !== null)) continue;
-      list.push({ pick, game, record: toLegRecord(record), basis, wilsonLowerBound: wilsonLowerBound(record.wins, record.losses), category: betCategory(pick) });
+      list.push({ pick, game, record: toLegRecord(record), basis, wilsonLowerBound: wilsonLowerBound(record.wins, record.losses, rules.z), category: betCategory(pick) });
     }
     list.sort(byWilson);
     candidatesOf.set(game.gameId, list);
@@ -459,7 +481,7 @@ export function buildGeneratedParlay(
     let order = open;
     if (rng && open.length > need) {
       // Games close to the cut rotate; the rest stay in rank order behind them.
-      const cut = open[Math.min(need, open.length) - 1].top.wilsonLowerBound - GAME_BAND;
+      const cut = open[Math.min(need, open.length) - 1].top.wilsonLowerBound - rules.gameBand;
       const rotating = open.filter((o) => o.top.wilsonLowerBound >= cut);
       const behind = open.filter((o) => o.top.wilsonLowerBound < cut);
       const gamePenalty = (o: (typeof open)[number]) => (candidatesOf.get(o.game.gameId)!.some((c) => recent.has(c.pick.pickId)) ? RECENT_WEIGHT : 1);
@@ -473,7 +495,7 @@ export function buildGeneratedParlay(
         if (options.length === 0) continue;
         if (!rng) take(options[0]);
         else {
-          const band = options.filter((c) => c.wilsonLowerBound >= options[0].wilsonLowerBound - PICK_TIE_BAND);
+          const band = options.filter((c) => c.wilsonLowerBound >= options[0].wilsonLowerBound - rules.pickTieBand);
           take(weightedOrder(band, (c) => c.wilsonLowerBound * penalty(c), rng)[0]);
         }
       }
@@ -484,8 +506,8 @@ export function buildGeneratedParlay(
       const taken = new Set(chosen.map((c) => c.pick.pickId));
       let rest = eligible.flatMap((g) => candidatesOf.get(g.gameId)!).filter((c) => !taken.has(c.pick.pickId)).sort(byWilson);
       if (rng && rest.length > 0) {
-        const band = rest.filter((c) => c.wilsonLowerBound >= rest[0].wilsonLowerBound - PICK_TIE_BAND);
-        const outside = rest.filter((c) => c.wilsonLowerBound < rest[0].wilsonLowerBound - PICK_TIE_BAND);
+        const band = rest.filter((c) => c.wilsonLowerBound >= rest[0].wilsonLowerBound - rules.pickTieBand);
+        const outside = rest.filter((c) => c.wilsonLowerBound < rest[0].wilsonLowerBound - rules.pickTieBand);
         rest = [...weightedOrder(band, (c) => c.wilsonLowerBound * penalty(c), rng), ...outside];
       }
       for (const strict of passes) {
@@ -648,7 +670,7 @@ function buildSwap(
         others.map(toParlayLeg),
         mode,
         (l) => recordForGate(pickById.get(l.pickId)!, snapshot.leagueRecords, snapshot.categoryRecords),
-        { contrarianHeadcount: rules.contrarianHeadcount, sameGamePicks: sameGame }
+        { contrarianHeadcount: rules.contrarianHeadcount, sameGamePicks: sameGame, z: rules.z }
       )[0];
       best = top && { leg: top.leg, rule: top.rule, record: top.record, wilsonLowerBound: top.wilsonLowerBound, basis: top.gateRecord.source };
     }

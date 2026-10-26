@@ -213,13 +213,14 @@ export function rankCandidatesBy(
 // time) so Hedge and Contrarian gate and rank on the same record as its own
 // legs. The same classifier, 55% gate and Wilson order. `contrarianHeadcount`
 // off drops Section 5(b): any opposite-side capper who clears the gate is a
-// candidate, whatever the headcount.
+// candidate, whatever the headcount. `z` is the Wilson z (default 1.96, the
+// shared one; the generator passes its own).
 export function rankCandidatesByRecord<R extends { wins: number; losses: number; winPct: number }>(
   primary: ParlayLeg,
   candidates: ParlayLeg[],
   mode: "AUTO_HEDGE" | "CONTRARIAN",
   recordOf: (leg: ParlayLeg) => R | null,
-  opts: { contrarianHeadcount: boolean; sameGamePicks?: ParlayLeg[] }
+  opts: { contrarianHeadcount: boolean; sameGamePicks?: ParlayLeg[]; z?: number }
 ): (RankedCandidate & { gateRecord: R })[] {
   if (mode === "CONTRARIAN" && opts.contrarianHeadcount && !contrarianHeadcountPasses(primary, opts.sameGamePicks ?? candidates)) return [];
 
@@ -238,7 +239,7 @@ export function rankCandidatesByRecord<R extends { wins: number; losses: number;
       leg: candidate,
       rule: outcome.rule,
       record: { wins, losses, n: wins + losses, winPct },
-      wilsonLowerBound: wilsonLowerBound(wins, losses),
+      wilsonLowerBound: wilsonLowerBound(wins, losses, opts.z),
       gateRecord: record,
     });
   }
