@@ -97,7 +97,7 @@ expect(
     "Day consensus",
     "Decay-delta persisted ids",
     "Final-score state",
-    "Final-score upsert",
+    "Final-score write (new/changed)",
     "Fuzzy grading",
     "Game observations (model)",
     "Game results window",
