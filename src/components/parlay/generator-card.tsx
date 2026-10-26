@@ -29,6 +29,7 @@ import type { BetCategory } from "@/lib/parlay/bet-category";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import { createGeneratorSession, poolKey, type PoolInputs } from "@/lib/parlay/generator-session";
+import { removedHeading, removedPickText } from "@/lib/parlay/slip-state";
 import type { FillFrom, GeneratedParlay, GeneratorSettings } from "@/lib/parlay/generator";
 
 const FILL_FROM_OPTIONS: { key: FillFrom; label: string }[] = [
@@ -63,7 +64,7 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
 
 export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSummary?: (s: GeneratorSummary) => void }) {
   const slip = useParlayPool();
-  const { pool, targets, targetedGames, removedLine, isLeagueInScope, isLeagueLocked, toggleLeague, legCount, setLegCount } = slip;
+  const { pool, targets, targetedGames, removed, isLeagueInScope, isLeagueLocked, toggleLeague, legCount, setLegCount } = slip;
 
   const [include, setInclude] = useState<IncludeSelection>("ALL");
   // Rows for the selected categories only; follows the selection (reconcileMix).
@@ -115,11 +116,21 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
     // eslint-disable-next-line react-hooks/exhaustive-deps -- picksKey stands in for pool
   }, [picksKey]);
 
-  async function run(kind: "generate" | "regenerate") {
+  async function run(kind: "generate" | "regenerate" | "refresh") {
     setBusy(true);
     setError(null);
     try {
-      const res = kind === "generate" ? await session.current.generate(inputs, settings) : await session.current.regenerate(inputs, settings);
+      if (kind === "refresh" && (await slip.refreshSlip())) {
+        // The slip itself changed (a pick graded, started or gone): the notice
+        // names it, and the old result no longer describes the slip.
+        return;
+      }
+      const res =
+        kind === "refresh"
+          ? await session.current.refresh(inputs, settings)
+          : kind === "generate"
+            ? await session.current.generate(inputs, settings)
+            : await session.current.regenerate(inputs, settings);
       if ("error" in res) {
         setError(res.error);
         return;
@@ -196,10 +207,25 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
       >
         {/* 1 · Your picks */}
         <SectionTitle n={1} title={`Your picks${pool.length > 0 ? " · " + pool.length : ""}`}>
-          <Link href="/live" className={LINK}>
-            + Add picks from Live
-          </Link>
+          <span className="flex items-center gap-3">
+            {pool.length > 0 && (
+              <button type="button" onClick={slip.clearSlip} className={LINK}>
+                Clear all picks
+              </button>
+            )}
+            <Link href="/live" className={LINK}>
+              + Add picks from Live
+            </Link>
+          </span>
         </SectionTitle>
+        {slip.clearedCount > 0 && (
+          <p className="mt-1.5 text-xs font-medium text-muted-foreground">
+            Cleared {slip.clearedCount} pick{slip.clearedCount === 1 ? "" : "s"}.{" "}
+            <button type="button" onClick={slip.undoClear} className={LINK}>
+              Undo
+            </button>
+          </p>
+        )}
         {pool.length === 0 ? (
           <p className="mt-2 text-sm text-muted-foreground">Picks you&apos;ve locked in for this parlay.</p>
         ) : (
@@ -237,7 +263,21 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
             <p className="mt-2 text-xs font-medium text-muted-foreground">Every pick here goes in the parlay. Remove one with ×.</p>
           </>
         )}
-        {removedLine && <p className="mt-1.5 text-xs font-medium text-muted-foreground">{removedLine}</p>}
+        {removed && (
+          <div className="mt-1.5 text-xs font-medium text-muted-foreground">
+            <p className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-foreground">{removedHeading(removed)}</span>
+              <button type="button" onClick={slip.dismissRemoved} className={LINK}>
+                Dismiss
+              </button>
+            </p>
+            <ul className="mt-0.5 list-disc pl-4">
+              {removed.picks.map((p) => (
+                <li key={p.pickId}>{removedPickText(p)}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* 2 · Target games */}
         <div className={"mt-4 " + SECTION}>
@@ -335,8 +375,13 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           />
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={clear} disabled={!parlay && !error} className={PILL_OUTLINE}>
-              Clear
+              Clear result
             </button>
+            {parlay && builtFor === key && (
+              <button type="button" onClick={() => void run("refresh")} disabled={busy || inputs.leagues.length === 0} className={PILL_OUTLINE} title="Reload the picks, odds and records, then rebuild">
+                Refresh
+              </button>
+            )}
             <button type="button" onClick={() => void run("generate")} disabled={busy || inputs.leagues.length === 0} className={PILL_PRIMARY}>
               <BoltIcon className="h-4 w-4" />
               {busy ? "Generating…" : "Generate parlay"}
@@ -359,8 +404,8 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           unavailableTargetLabels={parlay.unavailableTargets.map((id) => targetLabel.get(id) ?? "A targeted game")}
           onRegenerate={() => void run("regenerate")}
           onSent={() => {
-            slip.clearSlip();
-            clear();
+            // Your picks stay; only Live's slip mode ends.
+            slip.exitSlipMode();
           }}
         />
       )}

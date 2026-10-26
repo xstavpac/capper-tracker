@@ -36,8 +36,8 @@ import {
   EMPTY_LEGACY,
   generatorTargets as toGeneratorTargets,
   migrateStoredSlip,
-  removedLineText,
   serializeSlip,
+  slipFromStorageEvent,
   targetedGames as toTargetedGames,
   toggleTarget as toggleTargetIn,
   togglePick as togglePickIn,
@@ -53,6 +53,10 @@ export type SlipGame = SlipTarget;
 const STORAGE_PREFIX = "parlay-pool:";
 const LEGACY_UNSCOPED_KEY = "parlay-pool";
 const REVALIDATE_MIN_INTERVAL_MS = 60_000;
+// How long "Clear all picks" can be undone.
+const UNDO_CLEAR_MS = 30_000;
+
+type ClearedSlip = { picks: PooledPick[]; targets: SlipGame[] };
 
 type ParlayPoolContextValue = {
   // ---- Picks ----
@@ -100,11 +104,19 @@ type ParlayPoolContextValue = {
   overCapBy: number | null;
   dismissOverCap: () => void;
 
-  // ---- After Send to FanDuel: picks and targets cleared, slip mode off ----
+  // ---- "Clear all picks": picks and targets cleared, slip mode off. Undoable
+  // for a while (clearedCount says how many it would bring back, else 0). ----
   clearSlip: () => void;
+  undoClear: () => void;
+  clearedCount: number;
 
-  // "3 picks removed — games started" for a while after a prune, else null.
-  removedLine: string | null;
+  // The picks pruned from the slip (graded, started, or gone) and why, until
+  // dismissed - null when none.
+  removed: RemovedLine | null;
+  dismissRemoved: () => void;
+
+  // Re-checks the slip against the DB now (no throttle). True when it changed.
+  refreshSlip: () => Promise<boolean>;
 };
 
 const ParlayPoolContext = createContext<ParlayPoolContextValue | null>(null);
@@ -138,6 +150,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   const [slipMode, setSlipMode] = useState(false);
   const [overCapBy, setOverCapBy] = useState<number | null>(null);
   const [removed, setRemoved] = useState<RemovedLine | null>(null);
+  const [cleared, setCleared] = useState<ClearedSlip | null>(null);
   // Guards the persist effect below - without it, that effect's own first
   // run (on mount, before hydration below has applied) fires with the
   // empty initial state and immediately overwrites a real saved slip.
@@ -161,9 +174,8 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     const fresh = pruned.filter((l) => !noticedRef.current.has(l.pickId));
     if (fresh.length === 0) return;
     fresh.forEach((l) => noticedRef.current.add(l.pickId));
-    // What left because its game started (or finished); a deleted pick isn't a game starting.
-    const started = fresh.filter((l) => l.result !== "Removed").length;
-    if (started > 0) setRemoved((prev) => addRemoved(prev, started, Date.now()));
+    // Every pick that leaves is named, whatever the reason (graded, started, deleted).
+    setRemoved((prev) => addRemoved(prev, fresh));
   }, []);
 
   // Hydrate once per userId (a different account signing in on the same
@@ -234,7 +246,9 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
         excludedLeagues,
         legacy: { legCount },
       };
-      window.localStorage.setItem(storageKey(userId), serializeSlip(data));
+      const json = serializeSlip(data);
+      // An unchanged slip isn't rewritten (it would only echo to the other tabs).
+      if (window.localStorage.getItem(storageKey(userId)) !== json) window.localStorage.setItem(storageKey(userId), json);
     } catch {
       // Best-effort persistence only - a full localStorage or a private window is not fatal.
     }
@@ -242,11 +256,12 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
 
   // Re-check the slip against the DB. Only picks that were in it when the
   // request went out are touched, so one added mid-flight is left alone.
-  const revalidate = useCallback(async () => {
+  const revalidate = useCallback(async (): Promise<boolean> => {
     const live = unstarted(targetsRef.current, Date.now());
-    if (live.length !== targetsRef.current.length) setTargets(live);
+    const targetsChanged = live.length !== targetsRef.current.length;
+    if (targetsChanged) setTargets(live);
     const checked = poolRef.current;
-    if (checked.length === 0 || inFlightRef.current) return;
+    if (checked.length === 0 || inFlightRef.current) return targetsChanged;
     inFlightRef.current = true;
     try {
       const states = await getSlipPickStatesAction(checked.map((p) => p.pickId));
@@ -264,12 +279,32 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
         setPool((prev) => prev.flatMap((p) => (!ids.has(p.pickId) ? [p] : keptById.has(p.pickId) ? [keptById.get(p.pickId)!] : [])));
         reportPruned(pruned);
       }
+      return changed || targetsChanged;
     } catch {
       // Transient failure - keep the slip as-is; the next focus retries.
+      return targetsChanged;
     } finally {
       inFlightRef.current = false;
     }
   }, [reportPruned]);
+
+  // Another tab changed the slip: take its version, so this tab never writes an
+  // older one back over it.
+  useEffect(() => {
+    if (!hydrated) return;
+    function onStorage(e: StorageEvent) {
+      if (e.key !== storageKey(userId)) return;
+      const next = slipFromStorageEvent(e.newValue, Date.now());
+      poolRef.current = next.picks;
+      targetsRef.current = next.targets;
+      setPool(next.picks);
+      setTargets(next.targets);
+      setExcludedLeagues(next.excludedLeagues);
+      setLegCountState(Math.min(MAX_PARLAY_LEGS, next.legacy.legCount));
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [hydrated, userId]);
 
   // Revalidate whenever the tab regains focus/visibility (throttled - focus
   // and visibilitychange usually fire together).
@@ -290,12 +325,12 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     };
   }, [hydrated, revalidate]);
 
-  // The quiet line clears itself: re-render when it runs out.
+  // "Clear all picks" can be undone for a while; then it is final.
   useEffect(() => {
-    if (!removed) return;
-    const t = window.setTimeout(() => setRemoved((r) => (r && r.until <= Date.now() ? null : r)), Math.max(0, removed.until - Date.now()) + 50);
+    if (!cleared) return;
+    const t = window.setTimeout(() => setCleared(null), UNDO_CLEAR_MS);
     return () => window.clearTimeout(t);
-  }, [removed]);
+  }, [cleared]);
 
   const switchOn = (leagues: string[]) => setExcludedLeagues((prev) => (prev.some((l) => leagues.includes(l)) ? prev.filter((l) => !leagues.includes(l)) : prev));
   const modelState = (): SlipStateV2 => ({ version: 2, picks: poolRef.current, targets: targetsRef.current, excludedLeagues: [], legacy: EMPTY_LEGACY });
@@ -371,6 +406,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   const sendToGenerator = exitSlipMode;
 
   const clearSlip = useCallback(() => {
+    if (poolRef.current.length > 0 || targetsRef.current.length > 0) setCleared({ picks: poolRef.current, targets: targetsRef.current });
     const empty = clearedSlip(modelState());
     poolRef.current = empty.picks;
     targetsRef.current = empty.targets;
@@ -380,6 +416,29 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     setOverCapBy(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the refs, not render state
   }, []);
+
+  // Brings back what "Clear all picks" removed, under the leg cap and without
+  // doubling anything added since.
+  const undoClear = useCallback(() => {
+    if (!cleared) return;
+    const havePicks = new Set(poolRef.current.map((p) => p.pickId));
+    const picks = [...poolRef.current, ...cleared.picks.filter((p) => !havePicks.has(p.pickId))].slice(0, MAX_PARLAY_LEGS);
+    const haveTargets = new Set(targetsRef.current.map((t) => t.gameId));
+    const targets = [...targetsRef.current, ...cleared.targets.filter((t) => !haveTargets.has(t.gameId))];
+    poolRef.current = picks;
+    targetsRef.current = targets;
+    setPool(picks);
+    setTargets(targets);
+    switchOn(picks.map((p) => p.leagueName));
+    setCleared(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the refs, not render state
+  }, [cleared]);
+
+  const dismissRemoved = useCallback(() => setRemoved(null), []);
+  const refreshSlip = useCallback(() => {
+    lastCheckRef.current = Date.now();
+    return revalidate();
+  }, [revalidate]);
 
   const targetedGames = useMemo(() => toTargetedGames({ picks: pool, targets }), [pool, targets]);
 
@@ -408,7 +467,11 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     overCapBy,
     dismissOverCap,
     clearSlip,
-    removedLine: removedLineText(removed, Date.now()),
+    undoClear,
+    clearedCount: cleared ? cleared.picks.length : 0,
+    removed,
+    dismissRemoved,
+    refreshSlip,
   };
 
   return <ParlayPoolContext.Provider value={value}>{children}</ParlayPoolContext.Provider>;

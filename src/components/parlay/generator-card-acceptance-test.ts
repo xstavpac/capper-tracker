@@ -193,7 +193,13 @@ async function main() {
     open!.click();
   });
   await settle();
-  check("opening FanDuel clears the slip and the result", ctx.pool.length === 0 && ctx.targets.length === 0 && !text().includes("Your parlay ·"));
+  check("opening FanDuel keeps the slip, its targets and the result; slip mode ends", ctx.pool.length > 0 && !ctx.slipMode && text().includes("Your parlay ·"), `pool=${ctx.pool.length}`);
+  await click(button("Clear all picks"));
+  check("Clear all picks empties the slip and offers Undo", ctx.pool.length === 0 && Boolean(button("Undo")));
+  await click(button("Undo"));
+  check("Undo brings the picks back", ctx.pool.length > 0);
+  await click(button("Clear all picks"));
+  await act(() => ctx.clearTargets());
   check("Fill from: with no picks, Best available is the only choice", text().includes("Add picks to build from your picks only"));
 
   // ---- The 25-leg cap ----

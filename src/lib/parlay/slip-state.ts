@@ -148,26 +148,64 @@ export function removePick(state: SlipStateV2, pickId: string): SlipStateV2 {
   return { ...state, picks: state.picks.filter((p) => p.pickId !== pickId) };
 }
 
-// After Send to FanDuel: the slip starts over. The league scope stays.
+// "Clear all picks": the slip starts over. The league scope stays.
 export function clearedSlip(state: SlipStateV2): SlipStateV2 {
   return { ...state, picks: [], targets: [] };
 }
 
 // ---------------------------------------------------------------------------
-// "3 picks removed — games started": the one quiet line Your Picks shows, in
-// place of the old banner on every tab. It clears itself.
+// The prune notice Your Picks shows: which picks left the slip and why. It
+// stays until dismissed - a pick that disappears without a trace is the one
+// thing the slip must never do.
 // ---------------------------------------------------------------------------
-export const REMOVED_LINE_MS = 30_000;
+export type RemovedPick = { pickId: string; label: string; result: "Won" | "Lost" | "Push" | "Void" | "Started" | "Removed" };
 
-export type RemovedLine = { count: number; until: number };
+export type RemovedLine = { picks: RemovedPick[] };
 
-export function addRemoved(line: RemovedLine | null, count: number, now: number): RemovedLine | null {
-  if (count <= 0) return line;
-  const live = line && line.until > now ? line.count : 0;
-  return { count: live + count, until: now + REMOVED_LINE_MS };
+// Adds newly pruned picks to the notice (one entry per pick id).
+export function addRemoved(line: RemovedLine | null, pruned: RemovedPick[]): RemovedLine | null {
+  const seen = new Set((line?.picks ?? []).map((p) => p.pickId));
+  const fresh = pruned.filter((p) => !seen.has(p.pickId));
+  if (fresh.length === 0) return line;
+  return { picks: [...(line?.picks ?? []), ...fresh] };
 }
 
-export function removedLineText(line: RemovedLine | null, now: number): string | null {
-  if (!line || line.until <= now) return null;
-  return `${line.count} pick${line.count === 1 ? "" : "s"} removed — games started`;
+const REMOVED_WHY: Record<RemovedPick["result"], string> = {
+  Won: "graded Won",
+  Lost: "graded Lost",
+  Push: "graded Push",
+  Void: "graded Void",
+  Started: "game started",
+  Removed: "no longer in your picks",
+};
+
+export function removedPickText(p: RemovedPick): string {
+  return `${p.label} — ${REMOVED_WHY[p.result]}`;
+}
+
+export function removedHeading(line: RemovedLine): string {
+  const n = line.picks.length;
+  return `${n} pick${n === 1 ? "" : "s"} removed from your slip`;
+}
+
+// ---------------------------------------------------------------------------
+// Another tab changed the slip (a `storage` event on its key). Read what it
+// stored the way a hydrate does, minus the DB check the other tab already made:
+// only a pending pick whose game has not started, only a target not yet
+// started. A removed key (sign-out in the other tab) is the empty slip.
+// ---------------------------------------------------------------------------
+export function slipFromStorageEvent(raw: string | null, now: number): SlipStateV2 {
+  if (raw === null) return EMPTY_SLIP_STATE;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return EMPTY_SLIP_STATE;
+  }
+  const s = migrateStoredSlip(parsed);
+  return {
+    ...s,
+    picks: s.picks.filter((p) => p.status === "PENDING" && new Date(p.gameTime).getTime() > now),
+    targets: s.targets.filter((t) => new Date(t.gameTime).getTime() > now),
+  };
 }

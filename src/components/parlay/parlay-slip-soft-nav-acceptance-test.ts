@@ -344,7 +344,7 @@ async function main() {
     settle.resolve({ nfl1: { status: "WIN", odds: -110, kickoff: FUTURE, started: true } });
     await tick();
   });
-  check("added during hydrate: a stored pick that has since been graded is still pruned, and said quietly", poolIds() === "nfl2" && ctx.removedLine === "1 pick removed — games started", `pool=${poolIds()} line=${ctx.removedLine}`);
+  check("added during hydrate: a stored pick that has since been graded is still pruned, and said quietly", poolIds() === "nfl2" && ctx.removed?.picks.map((p) => p.pickId + ":" + p.result).join() === "nfl1:Won", `pool=${poolIds()} removed=${JSON.stringify(ctx.removed)}`);
 
   await act(() => root!.unmount());
 

@@ -1,7 +1,7 @@
 // The Parlay slip's state model (slip-state.ts): reading every stored shape
 // (the old one, v2, corrupt), round-tripping, targets vs games of picks, what
-// the generator is told, the caps, Send to FanDuel's clear, and the quiet
-// "games started" line. Pure - no DB. Run with:
+// the generator is told, the caps, Clear all picks, the named prune notice and
+// reading another tab's change. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/slip-state-acceptance-test.ts
 import {
   addRemoved,
@@ -11,9 +11,10 @@ import {
   isTargetedViaPicks,
   MAX_SLIP_TARGETS,
   migrateStoredSlip,
-  REMOVED_LINE_MS,
-  removedLineText,
+  removedHeading,
+  removedPickText,
   serializeSlip,
+  slipFromStorageEvent,
   targetedGames,
   togglePick,
   toggleTarget,
@@ -105,7 +106,7 @@ const game = (gameId: string, leagueName = "NFL"): SlipTarget => ({ gameId, game
 }
 
 // ============================================================================
-// Send to FanDuel clears the slip; the league scope stays
+// Clear all picks; the league scope stays
 // ============================================================================
 {
   const s: SlipStateV2 = {
@@ -121,18 +122,31 @@ const game = (gameId: string, leagueName = "NFL"): SlipTarget => ({ gameId, game
 }
 
 // ============================================================================
-// "3 picks removed — games started"
+// The prune notice names every removed pick and why, and stays
 // ============================================================================
 {
-  const t = 1_000_000;
-  let line = addRemoved(null, 2, t);
-  check("two picks removed", removedLineText(line, t), "2 picks removed — games started");
-  line = addRemoved(line, 1, t + 1000);
-  check("another one while it shows: they add up", removedLineText(line, t + 1000), "3 picks removed — games started");
-  check("one", removedLineText(addRemoved(null, 1, t), t), "1 pick removed — games started");
-  check("it clears itself", removedLineText(line, t + 1000 + REMOVED_LINE_MS), null);
-  check("after it cleared, a new prune starts from zero", removedLineText(addRemoved(line, 1, t + 1000 + REMOVED_LINE_MS + 1), t + 1000 + REMOVED_LINE_MS + 1), "1 pick removed — games started");
-  check("nothing removed: no line", addRemoved(null, 0, t), null);
+  const a = { pickId: "a", label: "Cap A - Away @ Home - Home ML", result: "Started" as const };
+  const b = { pickId: "b", label: "Cap B - X @ Y - Over 5", result: "Removed" as const };
+  const c = { pickId: "c", label: "Cap C - P @ Q - Q ML", result: "Won" as const };
+  let line = addRemoved(null, [a, b]);
+  check("two picks removed: heading", line && removedHeading(line), "2 picks removed from your slip");
+  check("each pick is named with its reason", line?.picks.map(removedPickText), ["Cap A - Away @ Home - Home ML — game started", "Cap B - X @ Y - Over 5 — no longer in your picks"]);
+  line = addRemoved(line, [b, c]);
+  check("another prune adds up; a pick already listed is not listed twice", line?.picks.map((p) => p.pickId), ["a", "b", "c"]);
+  check("graded picks say so", removedPickText(c), "Cap C - P @ Q - Q ML — graded Won");
+  check("one pick: singular heading", removedHeading({ picks: [a] }), "1 pick removed from your slip");
+  check("nothing removed: no notice", addRemoved(null, []), null);
+}
+
+// ============================================================================
+// Another tab's change (a storage event)
+// ============================================================================
+{
+  const stored = { ...EMPTY_SLIP_STATE, picks: [{ ...pick("f", "gf"), status: "PENDING" as const }, { ...pick("graded", "gg"), status: "WIN" as const }, { ...pick("started", "gs"), status: "PENDING" as const, gameTime: "2000-01-01T00:00:00.000Z" }] };
+  const got = slipFromStorageEvent(serializeSlip(stored), Date.parse("2020-01-01T00:00:00.000Z"));
+  check("keeps pending, unstarted picks only", got.picks.map((p) => p.pickId), ["f"]);
+  check("a removed key is the empty slip", slipFromStorageEvent(null, 0), EMPTY_SLIP_STATE);
+  check("corrupt storage is the empty slip", slipFromStorageEvent("{nope", 0), EMPTY_SLIP_STATE);
 }
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
