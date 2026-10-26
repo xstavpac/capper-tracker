@@ -31,14 +31,17 @@ const plural = (n: number) => (n === 1 ? "" : "s");
 const LEG_LIST = "divide-y divide-[#0F1420]/[0.06] dark:divide-white/10";
 const TAG = "ml-1.5 rounded-full px-1.5 py-px text-[10px] font-bold";
 
-// "62% (106–65)" plus what the record is: a generated leg's market record
-// across every league, or the record a slip pick's card shows.
-const BASIS: Record<RankRecordSource, string> = { LEAGUE: "in this league", OVERALL: "all leagues", LAST20: "last 20 picks" };
-export function recordText(record: LegRecord | null, basis: EngineLeg["basis"], pick: Pick<ExpanderPick, "category">): string {
+// "62% (106–65)" plus what the record is: "· NFL favorite spread" (this
+// league, this market), "· all leagues favorite spread" (this market, every
+// league) or "· last 20 picks" (a slip pick's card, nothing better).
+export function recordText(record: LegRecord | null, basis: EngineLeg["basis"], pick: Pick<ExpanderPick, "category" | "leagueName">): string {
   if (!record) return "No record yet";
   const base = `${Math.round(record.winPct)}% (${record.wins}–${record.losses})`;
-  if (basis === "MARKET") return `${base} · all leagues ${pick.category ? PICK_CATEGORY_MARKET_NOUN[pick.category] : "this market"}`;
-  return basis ? `${base} · ${BASIS[basis]}` : base;
+  const market = pick.category ? PICK_CATEGORY_MARKET_NOUN[pick.category] : "this market";
+  if (basis === "LEAGUE") return `${base} · ${pick.leagueName} ${market}`;
+  if (basis === "OVERALL" || basis === "MARKET") return `${base} · all leagues ${market}`;
+  if (basis === "LAST20") return `${base} · last 20 picks`;
+  return base;
 }
 
 function LegRow({ n, pick, record, mine, sgp, children }: { n: number; pick: ExpanderPick; record: { text: string; winPct: number | null }; mine: boolean; sgp: boolean; children?: ReactNode }) {
@@ -102,7 +105,7 @@ function SwapLegRow({ n, leg, mode }: { n: number; leg: EngineSwapLeg; mode: Eng
   }
   const { swap } = leg;
   return (
-    <LegRow n={n} pick={swap.pick} record={{ text: recordText(swap.record, "MARKET", swap.pick), winPct: swap.record.winPct }} mine={false} sgp={original.sameGame}>
+    <LegRow n={n} pick={swap.pick} record={{ text: recordText(swap.record, swap.basis ?? "MARKET", swap.pick), winPct: swap.record.winPct }} mine={false} sgp={original.sameGame}>
       <p className={NOTE}>
         Replaces <span className="line-through">{original.pick.betDetail}</span> · {original.pick.capperName}
       </p>

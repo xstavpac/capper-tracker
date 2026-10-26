@@ -90,7 +90,7 @@ export { wilsonLowerBound };
 // `record.winPct < QUALIFYING_WIN_PCT` skips), so winPct === 55.0 passes.
 // A gate, not a score - never blended with wilsonLowerBound above.
 // ---------------------------------------------------------------------------
-export function qualifies(record: CategoryBreakdownItem | null): boolean {
+export function qualifies(record: { winPct: number } | null): boolean {
   return record !== null && record.winPct >= 55;
 }
 
@@ -196,27 +196,50 @@ export function rankCandidatesBy(
   categoryOf: (leg: ParlayLeg) => PickCategoryKey | null,
   sameGamePicks: ParlayLeg[] = candidates
 ): RankedCandidate[] {
-  if (mode === "CONTRARIAN" && !contrarianHeadcountPasses(primary, sameGamePicks)) return [];
+  return rankCandidatesByRecord(
+    primary,
+    candidates,
+    mode,
+    (leg) => {
+      const category = categoryOf(leg);
+      return category ? (records[categoryRecordKey(leg.capperId, category)] ?? null) : null;
+    },
+    { contrarianHeadcount: true, sameGamePicks }
+  ).map(({ gateRecord: _, ...ranked }) => ranked);
+}
+
+// rankCandidatesBy with the record supplied per candidate - the Parlay
+// Generator passes recordForGate (pick-record.ts: in-league first, then all
+// time) so Hedge and Contrarian gate and rank on the same record as its own
+// legs. The same classifier, 55% gate and Wilson order. `contrarianHeadcount`
+// off drops Section 5(b): any opposite-side capper who clears the gate is a
+// candidate, whatever the headcount.
+export function rankCandidatesByRecord<R extends { wins: number; losses: number; winPct: number }>(
+  primary: ParlayLeg,
+  candidates: ParlayLeg[],
+  mode: "AUTO_HEDGE" | "CONTRARIAN",
+  recordOf: (leg: ParlayLeg) => R | null,
+  opts: { contrarianHeadcount: boolean; sameGamePicks?: ParlayLeg[] }
+): (RankedCandidate & { gateRecord: R })[] {
+  if (mode === "CONTRARIAN" && opts.contrarianHeadcount && !contrarianHeadcountPasses(primary, opts.sameGamePicks ?? candidates)) return [];
 
   const primaryCandidate = toParlayCandidate(primary);
-  const scored: RankedCandidate[] = [];
+  const scored: (RankedCandidate & { gateRecord: R })[] = [];
 
   for (const candidate of candidates) {
     const outcome = classifyPair(primaryCandidate, toParlayCandidate(candidate));
     if (outcome.outcome !== "RULE" || outcome.mode !== mode) continue;
 
-    const category = categoryOf(candidate);
-    if (!category) continue;
+    const record = recordOf(candidate);
+    if (!record || !qualifies(record)) continue;
 
-    const record = records[categoryRecordKey(candidate.capperId, category)] ?? null;
-    if (!qualifies(record)) continue;
-
-    const { wins, losses, winPct } = record as CategoryBreakdownItem;
+    const { wins, losses, winPct } = record;
     scored.push({
       leg: candidate,
       rule: outcome.rule,
       record: { wins, losses, n: wins + losses, winPct },
       wilsonLowerBound: wilsonLowerBound(wins, losses),
+      gateRecord: record,
     });
   }
 

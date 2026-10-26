@@ -20,15 +20,19 @@
 //      why - they stay in your slip, they are only not used in this parlay.
 //   2. Targets: with any, generated legs come only from the targeted games
 //      plus the games of your picks. Without, from every game in the snapshot.
-//   3. A generated leg must clear the 55% gate on its capper's all-leagues
-//      record in its market (qualifies, qualification-ranking.ts) - the same
-//      gate Hedge and Contrarian use - and pass the Include Picks filter
-//      (include-picks.ts: All Picks, or any of Moneyline / Spread / Totals /
-//      Props - betCategory, period ignored). Slip picks are never gated or
-//      filtered. No minimum sample: candidates are
-//      ranked by Wilson lower bound (compareByWilson), which puts a small
+//   3. A generated leg must clear the 55% gate (qualifies, qualification-
+//      core.ts) on its capper's record for this bet: their record in its
+//      market in its league, or their all-time record in the market when they
+//      have no win or loss in the league yet (recordForGate, pick-record.ts) -
+//      the same record Hedge and Contrarian gate and rank on. It must also
+//      pass the Include Picks filter (include-picks.ts: All Picks, or any of
+//      Moneyline / Spread / Totals / Props - betCategory, period ignored).
+//      Slip picks are never gated or filtered. No minimum sample: candidates
+//      are ranked by Wilson lower bound (compareByWilson), which puts a small
 //      sample below a large one at the same win %, and every leg carries its
-//      record so the sample size shows.
+//      record and which one it is (basis) so the sample size shows. Last 20
+//      is never a gate or a rank. LEGACY_RULES is the engine as it was before
+//      (all-leagues market record, Contrarian headcount), for comparison.
 //   4. One generated leg per game first, best games first. Only when games run
 //      out are same-game legs added, up to "max legs per game" counted with any
 //      slip picks on that game - across every category and every period (a
@@ -56,12 +60,13 @@ import type { CapperLeagueRecords } from "@/server/data/picks";
 import { categoryRecordKey } from "@/lib/record-keys";
 import type { CategoryBreakdownItem } from "@/server/data/stats";
 import type { GeneratorGame, GeneratorPick, SwapMode } from "@/lib/parlay/auto-generate";
-import { bestAvailableRecord, rankPoolPicks, type RankRecordSource } from "@/lib/parlay/pick-record";
+import { bestAvailableRecord, rankPoolPicks, recordForGate, type RankRecordSource } from "@/lib/parlay/pick-record";
 import {
   compareByWilson,
   contrarianHeadcountPasses,
   qualifies,
   rankCandidatesBy,
+  rankCandidatesByRecord,
   toParlayCandidate,
   toParlayLeg,
   wilsonLowerBound,
@@ -101,11 +106,27 @@ export type GeneratorSnapshot = {
   // Targeted game ids. A target missing from `games` (started, or off the
   // board) is reported in `unavailableTargets`.
   targets: string[];
-  // Slip picks' records (bestAvailableRecord - what their cards show).
+  // Every slip pick's and candidate's card (in-league and all-time market
+  // records): what slip picks show (bestAvailableRecord) and what candidates
+  // are gated and ranked on (recordForGate).
   leagueRecords: CapperLeagueRecords;
-  // Every candidate's all-leagues market record (the gate and the ranking).
+  // Every candidate's all-leagues market record: recordForGate's all-time
+  // record when a pick has no card, and LEGACY_RULES' gate.
   categoryRecords: Record<string, CategoryBreakdownItem | null>;
 };
+
+// Which record gates and ranks a generated leg and a Hedge / Contrarian
+// alternate, and whether Contrarian needs your pick's side to be the majority.
+export type GeneratorRules = {
+  // LEAGUE_FIRST: recordForGate. ALL_TIME: the all-leagues market record.
+  recordScope: "LEAGUE_FIRST" | "ALL_TIME";
+  contrarianHeadcount: boolean;
+};
+
+export const GENERATOR_RULES: GeneratorRules = { recordScope: "LEAGUE_FIRST", contrarianHeadcount: false };
+// The engine before record scope changed: all-leagues market record, Wilson at
+// z=1.96, the 55% gate, Contrarian only from the majority side.
+export const LEGACY_RULES: GeneratorRules = { recordScope: "ALL_TIME", contrarianHeadcount: true };
 
 export type GeneratorSettings = {
   legCount: number;
@@ -133,7 +154,8 @@ export type EngineLeg = {
   gameTime: string;
   source: "SLIP" | "GENERATED";
   // A slip pick: the record its card shows (bestAvailableRecord, `basis` says
-  // which). A generated leg: the market record it was gated and ranked on.
+  // which). A generated leg: the record it was gated and ranked on - LEAGUE or
+  // OVERALL (recordForGate), MARKET under LEGACY_RULES.
   record: LegRecord | null;
   basis: RankRecordSource | "MARKET" | null;
   // Generated legs only.
@@ -159,8 +181,11 @@ export type EngineSwapLeg = {
     rule: Rule;
     record: LegRecord;
     wilsonLowerBound: number;
+    // Which record it was gated on (recordForGate). Absent under LEGACY_RULES:
+    // the all-leagues market record.
+    basis?: "LEAGUE" | "OVERALL";
   } | null;
-  // A slip pick is never swapped.
+  // A slip pick is never swapped. NOT_MAJORITY: LEGACY_RULES only.
   unchangedReason: "SLIP_PICK" | "NO_ALTERNATE" | "NOT_MAJORITY" | null;
 };
 
@@ -251,6 +276,7 @@ type Candidate = {
   pick: GeneratorPick;
   game: GeneratorGame;
   record: LegRecord;
+  basis: "LEAGUE" | "OVERALL" | "MARKET";
   wilsonLowerBound: number;
   category: BetCategoryResult;
 };
@@ -271,12 +297,32 @@ function marketRecord(pick: GeneratorPick, records: Record<string, CategoryBreak
   return pick.category ? (records[categoryRecordKey(pick.capperId, pick.category)] ?? null) : null;
 }
 
+// The record a candidate is gated and ranked on, and which one it is.
+function gateRecord(
+  pick: GeneratorPick,
+  snapshot: GeneratorSnapshot,
+  rules: GeneratorRules
+): { record: { wins: number; losses: number; winPct: number }; basis: Candidate["basis"] } | null {
+  if (rules.recordScope === "ALL_TIME") {
+    const record = marketRecord(pick, snapshot.categoryRecords);
+    return record ? { record, basis: "MARKET" } : null;
+  }
+  const record = recordForGate(pick, snapshot.leagueRecords, snapshot.categoryRecords);
+  return record ? { record, basis: record.source } : null;
+}
+
 const toLegRecord = (r: { wins: number; losses: number; winPct: number }): LegRecord => ({ wins: r.wins, losses: r.losses, n: r.wins + r.losses, winPct: r.winPct });
 
 // ---------------------------------------------------------------------------
 // The engine
 // ---------------------------------------------------------------------------
-export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: GeneratorSettings, variation: Variation | null, now: Date): GeneratedParlay {
+export function buildGeneratedParlay(
+  snapshot: GeneratorSnapshot,
+  settings: GeneratorSettings,
+  variation: Variation | null,
+  now: Date,
+  rules: GeneratorRules = GENERATOR_RULES
+): GeneratedParlay {
   const nowMs = now.getTime();
   const started = (iso: string) => new Date(iso).getTime() <= nowMs;
   const include = toIncludeSelection(settings.include);
@@ -352,11 +398,12 @@ export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: Gene
     const list: Candidate[] = [];
     for (const pick of game.picks) {
       if (allSlipIds.has(pick.pickId) || !keepsPick(include, pick)) continue;
-      const record = marketRecord(pick, snapshot.categoryRecords);
-      if (!record || !qualifies(record)) continue;
+      const gated = gateRecord(pick, snapshot, rules);
+      if (!gated || !qualifies(gated.record)) continue;
+      const { record, basis } = gated;
       // Never against a slip pick on its game.
       if (onGame.some((s) => !(sureOfGame(game, s) && sureOfGame(game, pick)) || sameGameConflict(asCandidate(pick), asCandidate(s)) !== null)) continue;
-      list.push({ pick, game, record: toLegRecord(record), wilsonLowerBound: wilsonLowerBound(record.wins, record.losses), category: betCategory(pick) });
+      list.push({ pick, game, record: toLegRecord(record), basis, wilsonLowerBound: wilsonLowerBound(record.wins, record.losses), category: betCategory(pick) });
     }
     list.sort(byWilson);
     candidatesOf.set(game.gameId, list);
@@ -496,7 +543,7 @@ export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: Gene
         gameTime: c.game.gameTime,
         source: "GENERATED",
         record: c.record,
-        basis: "MARKET",
+        basis: c.basis,
         wilsonLowerBound: c.wilsonLowerBound,
         sameGame: false,
       })
@@ -558,8 +605,8 @@ export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: Gene
     mixNotes,
     unavailableTargets,
     dropped,
-    hedge: buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE"),
-    contrarian: buildSwap(legs, gameById, include, snapshot, "CONTRARIAN"),
+    hedge: buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE", rules),
+    contrarian: buildSwap(legs, gameById, include, snapshot, "CONTRARIAN", rules),
     variety,
     generatedKey: keyOf(chosen),
   };
@@ -567,9 +614,10 @@ export function buildGeneratedParlay(snapshot: GeneratorSnapshot, settings: Gene
 
 // ---------------------------------------------------------------------------
 // Hedge / Contrarian: each generated leg searched for an alternate on its own
-// game with rankCandidates (qualification-ranking.ts - classifier, 55% gate,
-// Contrarian headcount, Wilson order), exactly as before. Slip picks are never
-// swapped. An alternate is never one of the parlay's own picks or a slip pick,
+// game with rankCandidatesByRecord (qualification-core.ts - classifier, 55%
+// gate, Wilson order) on the same record as the generated legs (gateRecord).
+// Contrarian takes any capper on the other side who clears the gate - no
+// headcount, except under LEGACY_RULES. Slip picks are never swapped. An alternate is never one of the parlay's own picks or a slip pick,
 // and never breaks a same-game rule against the other legs on its game (as
 // they stand after any swap already made there).
 // ---------------------------------------------------------------------------
@@ -578,7 +626,8 @@ function buildSwap(
   gameById: Map<string, GeneratorGame>,
   include: IncludeSelection,
   snapshot: GeneratorSnapshot,
-  mode: SwapMode
+  mode: SwapMode,
+  rules: GeneratorRules
 ): EngineSwap {
   const inParlay = new Set([...legs.map((l) => l.pick.pickId), ...snapshot.slipPicks.map((p) => p.pickId)]);
   const current = new Map<string, GeneratorPick>(legs.map((l) => [l.pick.pickId, l.pick]));
@@ -588,17 +637,30 @@ function buildSwap(
     const siblings = legs.filter((l) => l !== leg && l.gameId === leg.gameId).map((l) => current.get(l.pick.pickId)!);
     const others = gamePicks.filter((p) => !inParlay.has(p.pickId) && siblings.every((s) => sameGameConflict(asCandidate(p), asCandidate(s)) === null));
     const primary = toParlayLeg(leg.pick);
-    const categoryOf = new Map(gamePicks.map((p) => [p.pickId, p.category]));
-    const ranked = rankCandidatesBy(primary, others.map(toParlayLeg), mode, snapshot.categoryRecords, (l) => categoryOf.get(l.pickId) ?? null, gamePicks.map(toParlayLeg));
-    const best = ranked[0];
-    const bestPick = best ? others.find((p) => p.pickId === best.leg.pickId) : undefined;
+    const pickById = new Map(gamePicks.map((p) => [p.pickId, p]));
+    const sameGame = gamePicks.map(toParlayLeg);
+    let best: { leg: { pickId: string }; rule: Rule; record: LegRecord; wilsonLowerBound: number; basis?: "LEAGUE" | "OVERALL" } | undefined;
+    if (rules.recordScope === "ALL_TIME") {
+      best = rankCandidatesBy(primary, others.map(toParlayLeg), mode, snapshot.categoryRecords, (l) => pickById.get(l.pickId)?.category ?? null, sameGame)[0];
+    } else {
+      const top = rankCandidatesByRecord(
+        primary,
+        others.map(toParlayLeg),
+        mode,
+        (l) => recordForGate(pickById.get(l.pickId)!, snapshot.leagueRecords, snapshot.categoryRecords),
+        { contrarianHeadcount: rules.contrarianHeadcount, sameGamePicks: sameGame }
+      )[0];
+      best = top && { leg: top.leg, rule: top.rule, record: top.record, wilsonLowerBound: top.wilsonLowerBound, basis: top.gateRecord.source };
+    }
+    const bestPick = best ? others.find((p) => p.pickId === best!.leg.pickId) : undefined;
     if (!best || !bestPick) {
-      const notMajority = mode === "CONTRARIAN" && !contrarianHeadcountPasses(primary, gamePicks.map(toParlayLeg));
+      const notMajority = mode === "CONTRARIAN" && rules.contrarianHeadcount && !contrarianHeadcountPasses(primary, sameGame);
       return { original: leg, swap: null, unchangedReason: notMajority ? "NOT_MAJORITY" : "NO_ALTERNATE" };
     }
     inParlay.add(bestPick.pickId);
     current.set(leg.pick.pickId, bestPick);
-    return { original: leg, swap: { pick: bestPick, rule: best.rule, record: best.record, wilsonLowerBound: best.wilsonLowerBound }, unchangedReason: null };
+    const { basis, rule, record } = best;
+    return { original: leg, swap: { pick: bestPick, rule, record, wilsonLowerBound: best.wilsonLowerBound, ...(basis ? { basis } : {}) }, unchangedReason: null };
   });
   return { mode, legs: out, swapCount: out.filter((l) => l.swap !== null).length };
 }

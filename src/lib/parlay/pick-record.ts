@@ -6,9 +6,11 @@
 // all-time record in the category, then their last-20-picks record, in the
 // same "best available" order the card itself falls back through.
 //
-// Pure and client-safe: type-only imports.
+// Pure and client-safe: type-only imports, and record-keys.ts (import-free).
 import type { CapperLeagueRecords } from "@/server/data/picks";
+import type { CategoryBreakdownItem } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
+import { categoryRecordKey, leagueRecordKey } from "@/lib/record-keys";
 
 export type RankRecordSource = "LEAGUE" | "OVERALL" | "LAST20";
 
@@ -36,6 +38,44 @@ export function bestAvailableRecord(pick: RecordInput, records: CapperLeagueReco
   if (card && card.overall.count > 0) return toRecord(card.overall, "OVERALL");
   const last20 = records.last20[pick.capperId];
   if (last20 && last20.count > 0) return toRecord(last20, "LAST20");
+  return null;
+}
+
+// The record a generated leg (and a Hedge / Contrarian alternate) is gated and
+// ranked on: the capper's record in this bet category in THIS league when they
+// have any win or loss there, else their all-time record in the category
+// (every league), else none. No minimum volume - a 1-0 record counts. Never
+// last 20: that record is every market at once, so it can't say whether a
+// capper is good at this bet. Unlike bestAvailableRecord, a league record of
+// pushes only doesn't count as a record.
+//
+// The all-time record is the card's overall column; `allTime` (the bundle's
+// categoryRecords - the same numbers) covers a pick that has no card.
+export type GateRecord = {
+  wins: number;
+  losses: number;
+  winPct: number;
+  n: number;
+  source: "LEAGUE" | "OVERALL";
+};
+
+export function recordForGate(
+  pick: RecordInput,
+  records: CapperLeagueRecords,
+  allTime: Record<string, CategoryBreakdownItem | null> = {}
+): GateRecord | null {
+  if (!pick.category) return null;
+  const card = records.records[leagueRecordKey(pick.capperId, pick.leagueName, pick.category)] ?? null;
+  const toRecord = (c: { wins: number; losses: number; winPct: number }, source: GateRecord["source"]): GateRecord => ({
+    wins: c.wins,
+    losses: c.losses,
+    winPct: c.winPct,
+    n: c.wins + c.losses,
+    source,
+  });
+  if (card && card.league.wins + card.league.losses > 0) return toRecord(card.league, "LEAGUE");
+  const overall = card?.overall ?? allTime[categoryRecordKey(pick.capperId, pick.category)] ?? null;
+  if (overall && overall.wins + overall.losses > 0) return toRecord(overall, "OVERALL");
   return null;
 }
 
