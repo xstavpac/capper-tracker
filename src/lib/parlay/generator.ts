@@ -75,6 +75,7 @@ import {
   toParlayLeg,
   wilsonLowerBound,
 } from "@/lib/parlay/qualification-core";
+import { GATE_DEFAULT, normalizeMinWinPct } from "@/lib/parlay/gate";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
 import { selectConflictFreeLegs } from "@/lib/parlay/build-my-picks";
 import { toBuildCandidate } from "@/lib/parlay/pool-swap";
@@ -165,6 +166,9 @@ export type GeneratorSettings = {
   // more categories selected.
   mix: PickMix | null;
   fillFrom: FillFrom;
+  // The win-rate gate (lib/parlay/gate.ts), 55 by default. Absent or invalid
+  // is 55; LEGACY_RULES ignores it.
+  minWinPct?: number;
 };
 
 // A Regenerate: the seed to draw with, and the generated legs (pick ids) of
@@ -333,6 +337,12 @@ function gateRecord(
   return record ? { record, basis: record.source } : null;
 }
 
+// The gate a build applies: the setting, or 55 under LEGACY_RULES (which is the
+// engine as it was, whatever the setting says).
+function effectiveGate(settings: GeneratorSettings, rules: GeneratorRules): number {
+  return rules.recordScope === "ALL_TIME" ? GATE_DEFAULT : normalizeMinWinPct(settings.minWinPct ?? GATE_DEFAULT);
+}
+
 const toLegRecord = (r: { wins: number; losses: number; winPct: number }): LegRecord => ({ wins: r.wins, losses: r.losses, n: r.wins + r.losses, winPct: r.winPct });
 
 // ---------------------------------------------------------------------------
@@ -346,6 +356,7 @@ export function buildGeneratedParlay(
   rules: GeneratorRules = GENERATOR_RULES
 ): GeneratedParlay {
   const nowMs = now.getTime();
+  const gate = effectiveGate(settings, rules);
   const started = (iso: string) => new Date(iso).getTime() <= nowMs;
   const include = toIncludeSelection(settings.include);
   const categories = selectedCategories(include);
@@ -421,7 +432,7 @@ export function buildGeneratedParlay(
     for (const pick of game.picks) {
       if (allSlipIds.has(pick.pickId) || !keepsPick(include, pick)) continue;
       const gated = gateRecord(pick, snapshot, rules);
-      if (!gated || !qualifies(gated.record)) continue;
+      if (!gated || !qualifies(gated.record, gate)) continue;
       const { record, basis } = gated;
       // Never against a slip pick on its game.
       if (onGame.some((s) => !(sureOfGame(game, s) && sureOfGame(game, pick)) || sameGameConflict(asCandidate(pick), asCandidate(s)) !== null)) continue;
@@ -627,8 +638,8 @@ export function buildGeneratedParlay(
     mixNotes,
     unavailableTargets,
     dropped,
-    hedge: buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE", rules),
-    contrarian: buildSwap(legs, gameById, include, snapshot, "CONTRARIAN", rules),
+    hedge: buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE", rules, gate),
+    contrarian: buildSwap(legs, gameById, include, snapshot, "CONTRARIAN", rules, gate),
     variety,
     generatedKey: keyOf(chosen),
   };
@@ -649,7 +660,8 @@ function buildSwap(
   include: IncludeSelection,
   snapshot: GeneratorSnapshot,
   mode: SwapMode,
-  rules: GeneratorRules
+  rules: GeneratorRules,
+  gate: number
 ): EngineSwap {
   const inParlay = new Set([...legs.map((l) => l.pick.pickId), ...snapshot.slipPicks.map((p) => p.pickId)]);
   const current = new Map<string, GeneratorPick>(legs.map((l) => [l.pick.pickId, l.pick]));
@@ -670,7 +682,7 @@ function buildSwap(
         others.map(toParlayLeg),
         mode,
         (l) => recordForGate(pickById.get(l.pickId)!, snapshot.leagueRecords, snapshot.categoryRecords),
-        { contrarianHeadcount: rules.contrarianHeadcount, sameGamePicks: sameGame, z: rules.z }
+        { contrarianHeadcount: rules.contrarianHeadcount, sameGamePicks: sameGame, z: rules.z, minWinPct: gate }
       )[0];
       best = top && { leg: top.leg, rule: top.rule, record: top.record, wilsonLowerBound: top.wilsonLowerBound, basis: top.gateRecord.source };
     }

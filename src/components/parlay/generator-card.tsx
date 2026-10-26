@@ -27,6 +27,7 @@ import { formatGameTime, formatOdds, GeneratorResult } from "@/components/parlay
 import { reconcileMix, selectedCategories, toggleInclude, type IncludeSelection, type PickMix } from "@/lib/parlay/include-picks";
 import type { BetCategory } from "@/lib/parlay/bet-category";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
+import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, normalizeMinWinPct, readStoredGate, writeStoredGate } from "@/lib/parlay/gate";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import { slipLegFloor } from "@/lib/parlay/leg-cap";
 import { createGeneratorSession, poolKey, type PoolInputs } from "@/lib/parlay/generator-session";
@@ -65,7 +66,7 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
 
 export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSummary?: (s: GeneratorSummary) => void }) {
   const slip = useParlayPool();
-  const { pool, targets, targetedGames, removed, isLeagueInScope, isLeagueLocked, toggleLeague, legCount, setLegCount } = slip;
+  const { pool, targets, targetedGames, removed, isLeagueInScope, isLeagueLocked, toggleLeague, legCount, setLegCount, userId } = slip;
 
   const [include, setInclude] = useState<IncludeSelection>("ALL");
   // Rows for the selected categories only; follows the selection (reconcileMix).
@@ -80,6 +81,18 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
   const [fillFromChoice, setFillFrom] = useState<FillFrom>("BEST_AVAILABLE");
   const fillFrom: FillFrom = pool.length === 0 ? "BEST_AVAILABLE" : fillFromChoice;
 
+  // Remembered per user, apart from the slip. Read after mount so the server and
+  // first client render agree.
+  const [minWinPct, setMinWinPctState] = useState(GATE_DEFAULT);
+  useEffect(() => {
+    setMinWinPctState(readStoredGate(userId));
+  }, [userId]);
+  function setMinWinPct(n: number) {
+    const next = normalizeMinWinPct(Math.max(GATE_MIN, Math.min(GATE_MAX, n)));
+    setMinWinPctState(next);
+    writeStoredGate(userId, next);
+  }
+
   const [parlay, setParlay] = useState<GeneratedParlay | null>(null);
   const [builtFor, setBuiltFor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -92,8 +105,8 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
     [leagues, isLeagueInScope, pool, targets]
   );
   const settings: GeneratorSettings = useMemo(
-    () => ({ legCount, maxLegsPerGame: maxPerGame, include, mix, fillFrom }),
-    [legCount, maxPerGame, include, mix, fillFrom]
+    () => ({ legCount, maxLegsPerGame: maxPerGame, include, mix, fillFrom, minWinPct }),
+    [legCount, maxPerGame, include, mix, fillFrom, minWinPct]
   );
   const key = poolKey(inputs);
 
@@ -357,6 +370,21 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
               max={MAX_LEGS_PER_GAME}
               onChange={(n) => setMaxPerGame(Math.max(1, Math.min(MAX_LEGS_PER_GAME, n)))}
               note={maxPerGame === 1 ? "one leg per game, your picks included" : "same-game legs only when games run out · never opposing or duplicate"}
+            />
+          </div>
+          <div className="mt-3.5">
+            <CountStepper
+              label="Minimum win rate"
+              value={minWinPct}
+              min={GATE_MIN}
+              max={GATE_MAX}
+              step={GATE_STEP}
+              unit="%"
+              onChange={setMinWinPct}
+              note={
+                "Only cappers at or above this win rate on that bet type are used. Lower lets more in; higher is stricter." +
+                (minWinPct < GATE_DEFAULT ? " Under " + GATE_DEFAULT + "% means more risk." : "")
+              }
             />
           </div>
           <div className="mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">

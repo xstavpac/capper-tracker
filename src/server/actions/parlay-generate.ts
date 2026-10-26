@@ -24,6 +24,7 @@ import { getOwnedSlipPickRows, loadSlipBoards, offBoardSlipPick, picksOnBoards }
 import type { PickCategoryKey } from "@/server/data/stats";
 import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
 import { doubleheaderGameIds } from "@/lib/parlay/doubleheader";
+import { normalizeMinWinPct } from "@/lib/parlay/gate";
 import { legCapRejection, MAX_POOL_REQUEST_PICKS, type ParlayRejection } from "@/lib/parlay/leg-cap";
 import { selectedCategories, toIncludeSelection, toPickMix } from "@/lib/parlay/include-picks";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
@@ -88,6 +89,8 @@ function parseRequest(raw: unknown): GenerateRequest | ParlayRejection {
       include,
       mix: toPickMix(s.mix, selectedCategories(include)),
       fillFrom,
+      // Anything but a whole step in range is the 55% default.
+      minWinPct: normalizeMinWinPct(s.minWinPct),
     },
   };
 }
