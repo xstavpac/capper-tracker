@@ -2,22 +2,32 @@
 
 import { createContext, createElement, useContext, useEffect, useState, type ReactNode } from "react";
 import type { ScoreGame } from "@/server/data/odds";
+import { useSafePoll } from "@/lib/use-safe-poll";
 
-// Extracted from live-scoreboard.tsx as a pure refactor (behavior unchanged)
-// so Grid Live can poll the exact same scores feed instead of running a
-// second interval. This is the same hand-rolled setInterval loop that
-// existed inline before the extraction - NOT migrated to useSafePoll
-// (src/lib/use-safe-poll.ts), the app's sanctioned polling hook, since that
-// would add backoff/visibility-pause behavior Standard Live doesn't have
-// today and this extraction is scoped to be a pure lift, not a behavior
-// change. Migrating both Standard and Grid Live's live-scores poll onto
-// useSafePoll is a reasonable follow-up, just a separate, deliberate change.
+// Extracted from live-scoreboard.tsx as a pure refactor so Grid Live can poll
+// the exact same scores feed instead of running a second interval. Polls
+// through useSafePoll (src/lib/use-safe-poll.ts), the app's sanctioned polling
+// hook: no fetches while the tab is hidden, an immediate refresh when it
+// becomes visible again, backed-off retries on failure, and a stop after
+// repeated failures (the hand-rolled setInterval it replaced did none of
+// these, so a background tab polled all day).
 //
 // The interval itself balances "genuinely live" against Vercel function
 // invocations - a game state (score, inning) realistically changes at most
 // every few minutes, so polling faster than this would just be extra cost
 // for no visible benefit.
-const LIVE_POLL_INTERVAL_MS = 25000;
+export const LIVE_POLL_INTERVAL_MS = 25000;
+
+// The fetch useSafePoll runs each tick: throws on a non-2xx or a malformed body
+// so the hook counts it as a failure (and backs off) rather than treating it as
+// a successful empty poll.
+export async function fetchLiveScores(activeSport: string, signal: AbortSignal): Promise<ScoreGame[]> {
+  const res = await fetch(`/api/live/scores?sport=${encodeURIComponent(activeSport)}`, { cache: "no-store", signal });
+  if (!res.ok) throw new Error("live scores " + res.status);
+  const data = await res.json();
+  if (!Array.isArray(data.scores)) throw new Error("live scores: no scores array");
+  return data.scores;
+}
 
 export function useLiveScores(activeSport: string, initialScores: ScoreGame[]): ScoreGame[] {
   const [scores, setScores] = useState(initialScores);
@@ -31,24 +41,14 @@ export function useLiveScores(activeSport: string, initialScores: ScoreGame[]): 
     setScores(initialScores);
   }, [initialScores]);
 
+  const { data: polled } = useSafePoll<ScoreGame[]>({
+    fetcher: (signal) => fetchLiveScores(activeSport, signal),
+    enabled: true,
+    intervalMs: LIVE_POLL_INTERVAL_MS,
+  });
   useEffect(() => {
-    let cancelled = false;
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/live/scores?sport=${encodeURIComponent(activeSport)}`, { cache: "no-store" });
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
-        if (!cancelled && Array.isArray(data.scores)) setScores(data.scores);
-      } catch {
-        // Transient network hiccup - next tick tries again, no need to
-        // surface this as an error for a background refresh.
-      }
-    }, LIVE_POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [activeSport]);
+    if (polled) setScores(polled);
+  }, [polled]);
 
   return scores;
 }
