@@ -10,8 +10,9 @@ import type { Capper, Pick } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { getLiveBoardData, type LiveBoardData } from "@/server/data/live-board-picks";
-import { toExpanderPick } from "@/server/data/expander-pick";
+import { toExpanderPick, gameStatusFor } from "@/server/data/expander-pick";
 import type { GeneratorPick } from "@/lib/parlay/auto-generate";
+import { OFF_BOARD_GAME_PREFIX } from "@/lib/parlay/game-over";
 import { findBoardGameForPick } from "@/lib/parlay/off-board-game";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { SPORT_LABEL_TO_KEY } from "@/lib/sport-seasons";
@@ -79,8 +80,9 @@ export function offBoardSlipPick(row: SlipPickRow, boards: SlipBoard[] = []): Ge
     row,
     real
       ? { id: real.id, homeTeam: real.homeTeam, awayTeam: real.awayTeam, commenceTime: real.commenceTime }
-      : { id: "pick:" + row.id, homeTeam: row.homeTeam, awayTeam: row.awayTeam, commenceTime: row.gameTime.toISOString() },
+      : { id: OFF_BOARD_GAME_PREFIX + row.id, homeTeam: row.homeTeam, awayTeam: row.awayTeam, commenceTime: row.gameTime.toISOString() },
     sport?.key ?? "",
-    sport?.label ?? row.sport.name
+    sport?.label ?? row.sport.name,
+    real && board ? gameStatusFor(board.board.scores, real, SPORT_LABEL_TO_KEY[board.label]) : null
   );
 }

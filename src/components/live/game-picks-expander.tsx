@@ -6,6 +6,7 @@ import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import type { PickOddsSource } from "@/lib/odds-source";
+import type { GameFeedStatus } from "@/lib/parlay/game-over";
 import { OTHER_GROUP_LABEL, TOTALS_GROUP_LABEL, sortTotalsPicks } from "@/lib/pick-team-group";
 import { PickCard } from "@/components/live/pick-card";
 import { TotalsSideList } from "@/components/live/totals-side-list";
@@ -72,6 +73,12 @@ export type ExpanderPick = {
   // (lib/parlay/pick-kind.ts) falls back on it for a bet type it doesn't know.
   // Optional for the same reason as datePosted.
   propMarket?: string | null;
+  // The score feed's status for this pick's game when the board was read (null
+  // when the feed has no row for it). Read only by the Parlay code
+  // (lib/parlay/game-over.ts), which lets a live game stay on the slip until it
+  // is final, postponed or cancelled. Optional like datePosted: picks stored
+  // before it existed don't carry it.
+  gameStatus?: GameFeedStatus | null;
 };
 
 // Fixed AWAY -> HOME -> TOTALS -> OTHER ordering (matches how the game card

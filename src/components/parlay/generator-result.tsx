@@ -21,7 +21,8 @@ import { WIN_PCT_TRACK, WinPctBar } from "@/components/dashboard/category-card";
 import { ClipboardIcon, ListChecksIcon } from "@/components/dashboard/cappers-icons";
 import { LABEL, Tabs } from "@/components/parlay/parlay-controls";
 import { SendToFanDuel } from "@/components/parlay/send-to-fanduel";
-import { combineOdds, formatAmericanOdds, formatDecimalOdds, formatPayout, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
+import { combineOdds, formatAmericanOdds, formatDecimalOdds, formatPayout, hasUsablePrice, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
+import { isGameLive, LIVE_NOTE, type GameClock } from "@/lib/parlay/game-over";
 import type { EngineLeg, EngineSwap, EngineSwapLeg, GeneratedParlay, LegRecord } from "@/lib/parlay/generator";
 import type { RankRecordSource } from "@/lib/parlay/pick-record";
 
@@ -46,12 +47,14 @@ export function recordText(record: LegRecord | null, basis: EngineLeg["basis"], 
 
 function LegRow({ n, pick, record, mine, sgp, children }: { n: number; pick: ExpanderPick; record: { text: string; winPct: number | null }; mine: boolean; sgp: boolean; children?: ReactNode }) {
   const tone = record.winPct === null ? MUTED : getRecordColor(record.winPct) === "green" ? GREEN : RED;
+  const live = isGameLive(pick, new Date());
   return (
     <li className="flex gap-3 py-3">
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-banner text-xs font-bold tabular-nums text-white">{n}</span>
       <div className="min-w-0 flex-1">
         <p className={LABEL}>
           {pick.leagueName} · {pick.gameLabel} · {formatGameTime(pick.gameTime)}
+          {live && <span className={TAG + " bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300"}>Live</span>}
           {sgp && <span className={TAG + " bg-[#E6ECFF] text-brand-600 dark:bg-brand-500/15 dark:text-brand-400"}>SGP</span>}
           {mine && (
             <span className={TAG + " inline-flex items-center gap-1 bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"} title="One of your picks - in every parlay">
@@ -74,6 +77,7 @@ function LegRow({ n, pick, record, mine, sgp, children }: { n: number; pick: Exp
           <p className={"text-[11.5px] font-semibold tabular-nums " + tone}>{record.text}</p>
           <WinPctBar winPct={record.winPct ?? 0} decided={record.winPct !== null} className={"w-24 " + WIN_PCT_TRACK} />
         </div>
+        {live && <p className="mt-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">{LIVE_NOTE}</p>}
         {children}
       </div>
     </li>
@@ -131,13 +135,18 @@ const PRICE_BOX = "mt-2.5 rounded-[12px] border border-[#E6E8EF] bg-white px-3.5
 // honest exceptions said in words: a leg with no price (no number at all) and
 // legs at the importer's -110 placeholder (shown, marked "≈"). A parlay with
 // same-game legs gets no number: FanDuel prices those together.
-export function CombinedPrice({ legs, sameGame }: { legs: CombineLeg[]; sameGame: boolean }) {
+export function CombinedPrice({ legs, sameGame }: { legs: (CombineLeg & Partial<GameClock>)[]; sameGame: boolean }) {
+  // A leg on a game under way is priced as posted; its odds may have moved.
+  const now = new Date();
+  const isLive = (l: CombineLeg & Partial<GameClock>) => l.gameTime !== undefined && isGameLive({ gameTime: l.gameTime, gameStatus: l.gameStatus, gameId: l.gameId }, now);
+  const liveNote = legs.some(isLive) ? <p className="mt-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">{LIVE_NOTE}</p> : null;
   if (sameGame) {
     return (
       <div className={PRICE_BOX}>
         <p className={LABEL}>Combined odds</p>
         <p className="mt-0.5 text-sm font-semibold text-foreground">Priced at FanDuel</p>
         <p className="text-xs font-medium text-muted-foreground">Same-game legs aren&apos;t independent, so FanDuel prices this parlay itself.</p>
+        {liveNote}
       </div>
     );
   }
@@ -149,18 +158,22 @@ export function CombinedPrice({ legs, sameGame }: { legs: CombineLeg[]; sameGame
         <p className={LABEL}>Combined odds</p>
         <p className="mt-0.5 text-sm font-semibold text-foreground">Unavailable</p>
         <p className="text-xs font-medium text-muted-foreground">
-          {combined.unavailableLegs > 0
+          {combined.unavailableLegs > 0 && legs.some((l) => isLive(l) && !hasUsablePrice(l.odds))
+            ? "A live leg has no price, so this parlay can't be priced - check FanDuel."
+            : combined.unavailableLegs > 0
             ? `${combined.unavailableLegs} leg${plural(combined.unavailableLegs)} ${combined.unavailableLegs === 1 ? "has" : "have"} no price, so this parlay can't be priced.`
             : "This parlay's price is too large to show."}
         </p>
+        {liveNote}
       </div>
     );
   }
   const approx = combined.estimated ? "≈ " : "";
+  const asPosted = legs.some(isLive) ? " (as posted)" : "";
   return (
     <div className={PRICE_BOX}>
       <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-3">
-        <PriceCell label={combined.estimated ? "Combined odds (estimate)" : "Combined odds"} value={approx + formatAmericanOdds(combined.american)} />
+        <PriceCell label={(combined.estimated ? "Combined odds (estimate)" : "Combined odds") + asPosted} value={approx + formatAmericanOdds(combined.american)} />
         <PriceCell label="Decimal" value={approx + formatDecimalOdds(combined.decimal)} />
         <PriceCell label="Payout" value={approx + formatPayout(payoutOn(combined))} sub="on $1" />
       </dl>
@@ -170,6 +183,7 @@ export function CombinedPrice({ legs, sameGame }: { legs: CombineLeg[]; sameGame
           {combined.defaultedLegs === 1 ? "is" : "are"} counted at a placeholder -110.
         </p>
       )}
+      {liveNote}
     </div>
   );
 }
@@ -189,7 +203,7 @@ export function GeneratorResult({
   busy: boolean;
   // The last Regenerate found nothing else of comparable strength.
   noAlternative: boolean;
-  // Targeted games that have started or left the board, by name.
+  // Targeted games that are over or have left the board, by name.
   unavailableTargetLabels: string[];
   onRegenerate: () => void;
   // The user opened FanDuel's betslip with this parlay.
@@ -205,7 +219,7 @@ export function GeneratorResult({
     ...parlay.shortfall,
     ...parlay.mixNotes,
     ...(unavailableTargetLabels.length > 0
-      ? [`${unavailableTargetLabels.join(", ")}: started or no longer on the board — not used.`]
+      ? [`${unavailableTargetLabels.join(", ")}: over or no longer on the board — not used.`]
       : []),
   ];
 

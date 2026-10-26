@@ -227,6 +227,7 @@ export function GridLiveBoard({
               gameId: selectedEntry.game.id,
               gameLabel: panelData.away.teamLabel + " @ " + panelData.home.teamLabel,
               gameTime: selectedEntry.game.commenceTime,
+              gameStatus: selectedEntry.score?.status ?? null,
               leagueName: sportLabel,
             }}
           />

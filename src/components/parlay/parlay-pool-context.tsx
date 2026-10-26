@@ -11,8 +11,8 @@
 // also persisted to localStorage (scoped by userId) so a refresh doesn't wipe
 // it. The stored picks are only ids to look up, though: on hydrate and on
 // every tab focus they are revalidated against the DB (getSlipPickStatesAction),
-// so status, odds and whether the game has started always come from current
-// data, and any pick that has started, been graded or been deleted is pruned -
+// so status, odds and whether the game is over always come from current
+// data, and any pick whose game is over, that has been graded or been deleted is pruned -
 // said once, quietly, by `removedLine` on the generator's Your Picks.
 //
 // The model and its stored format live in lib/parlay/slip-state.ts:
@@ -30,6 +30,7 @@ import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getSlipPickStatesAction } from "@/server/actions/parlay-slip";
 import { reconcileSlip, type PrunedLeg } from "@/lib/parlay/slip-reconcile";
 import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
+import { isGameOver } from "@/lib/parlay/game-over";
 import {
   addRemoved,
   clearedSlip,
@@ -112,7 +113,7 @@ type ParlayPoolContextValue = {
   undoClear: () => void;
   clearedCount: number;
 
-  // The picks pruned from the slip (graded, started, or gone) and why, until
+  // The picks pruned from the slip (graded, game over, or gone) and why, until
   // dismissed - null when none.
   removed: RemovedLine | null;
   dismissRemoved: () => void;
@@ -141,7 +142,8 @@ export function clearParlaySlips() {
   }
 }
 
-const unstarted = (games: SlipGame[], now: number) => games.filter((g) => new Date(g.gameTime).getTime() > now);
+// A target whose game is over has nothing left to give (a live one still does).
+const notOver = (games: SlipGame[], now: number) => games.filter((g) => !isGameOver(g, new Date(now)));
 
 export function ParlayPoolProvider({ userId, children }: { userId: string; children: React.ReactNode }) {
   const [pool, setPool] = useState<PooledPick[]>([]);
@@ -176,7 +178,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     const fresh = pruned.filter((l) => !noticedRef.current.has(l.pickId));
     if (fresh.length === 0) return;
     fresh.forEach((l) => noticedRef.current.add(l.pickId));
-    // Every pick that leaves is named, whatever the reason (graded, started, deleted).
+    // Every pick that leaves is named, whatever the reason (graded, game over, deleted).
     setRemoved((prev) => addRemoved(prev, fresh));
   }, []);
 
@@ -195,8 +197,8 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
         stored = parsed.picks;
         setExcludedLeagues(parsed.excludedLeagues);
         setLegCountState(Math.min(MAX_PARLAY_LEGS, parsed.legacy.legCount));
-        // A target whose game started has nothing left to give: dropped quietly.
-        setTargets(unstarted(parsed.targets, Date.now()));
+        // A target whose game is over has nothing left to give: dropped quietly.
+        setTargets(notOver(parsed.targets, Date.now()));
       }
     } catch {
       // Corrupt/unavailable storage - start from an empty slip rather than fail the page.
@@ -226,7 +228,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
       } else {
         // Couldn't reach the DB: show only what can't already be known stale.
         const now = Date.now();
-        setPool(withAddedSince(stored.filter((p) => p.status === "PENDING" && new Date(p.gameTime).getTime() > now)));
+        setPool(withAddedSince(stored.filter((p) => p.status === "PENDING" && !isGameOver(p, new Date(now)))));
       }
       lastCheckRef.current = Date.now();
       setHydrated(true);
@@ -259,7 +261,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   // Re-check the slip against the DB. Only picks that were in it when the
   // request went out are touched, so one added mid-flight is left alone.
   const revalidate = useCallback(async (): Promise<boolean> => {
-    const live = unstarted(targetsRef.current, Date.now());
+    const live = notOver(targetsRef.current, Date.now());
     const targetsChanged = live.length !== targetsRef.current.length;
     if (targetsChanged) setTargets(live);
     const checked = poolRef.current;
@@ -275,7 +277,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
         pruned.length > 0 ||
         current.some((c) => {
           const k = keptById.get(c.pickId);
-          return k !== undefined && (k.status !== c.status || k.odds !== c.odds || k.gameTime !== c.gameTime);
+          return k !== undefined && (k.status !== c.status || k.odds !== c.odds || k.gameTime !== c.gameTime || k.gameStatus !== c.gameStatus);
         });
       if (changed) {
         setPool((prev) => prev.flatMap((p) => (!ids.has(p.pickId) ? [p] : keptById.has(p.pickId) ? [keptById.get(p.pickId)!] : [])));

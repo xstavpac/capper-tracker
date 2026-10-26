@@ -10,6 +10,7 @@
 import { easternDateKey } from "@/lib/dates";
 import { slateCutoffKey } from "@/components/live/live-scoreboard-ordering";
 import { isWeeklySlateLeague } from "@/lib/live-category-picks";
+import { hasKickedOff } from "@/lib/parlay/game-over";
 
 // `commenceTimes` is every game the league's board holds - the slate is
 // anchored on the earliest one still to come. Returns the test for one game.
@@ -19,7 +20,7 @@ export function autoGenerateWindow(leagueName: string, commenceTimes: string[], 
   return (commenceTime) => {
     const start = new Date(commenceTime);
     const key = easternDateKey(start);
-    return start.getTime() > now.getTime() && key >= todayKey && key <= lastKey;
+    return !hasKickedOff(commenceTime, now) && key >= todayKey && key <= lastKey;
   };
 }
 

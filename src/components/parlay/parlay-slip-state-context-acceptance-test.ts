@@ -19,7 +19,7 @@ function check(label: string, pass: boolean, detail = "") {
 type States = Record<string, SlipPickState>;
 const FUTURE = "2099-01-01T00:00:00.000Z";
 let respond: (ids: string[]) => Promise<States> = async (ids) =>
-  Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, kickoff: FUTURE, started: false }]));
+  Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, kickoff: FUTURE, over: false, gameStatus: null }]));
 const actionPath = require.resolve("../../server/actions/parlay-slip");
 require.cache[actionPath] = {
   id: actionPath,
@@ -140,20 +140,20 @@ async function main() {
   // ---- 5. The quiet "games started" line ----
   win.localStorage.setItem("parlay-pool:u3", JSON.stringify({ version: 2, picks: [pick("s1", "gs1"), pick("s2", "gs2"), pick("k", "gk")], targets: [] }));
   respond = async (ids) =>
-    Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, kickoff: id === "k" ? FUTURE : "2000-01-01T00:00:00.000Z", started: id !== "k" }]));
+    Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, kickoff: id === "k" ? FUTURE : "2000-01-01T00:00:00.000Z", over: id !== "k", gameStatus: null }]));
   await mount("u3");
-  check("two picks pruned because their games started: the notice names them", ctx.removed?.picks.map((p) => p.pickId + ":" + p.result).join() === "s1:Started,s2:Started", JSON.stringify(ctx.removed));
+  check("two picks pruned because their games started: the notice names them", ctx.removed?.picks.map((p) => p.pickId + ":" + p.result).join() === "s1:Over,s2:Over", JSON.stringify(ctx.removed));
   await act(() => ctx.dismissRemoved());
   check("Dismiss clears the notice", ctx.removed === null);
 
   // ---- 6. A deleted pick is named too, not dropped silently ----
   win.localStorage.setItem("parlay-pool:u4", JSON.stringify({ version: 2, picks: [pick("gone", "gg1"), pick("here", "gg2")], targets: [] }));
-  respond = async (ids) => Object.fromEntries(ids.filter((id) => id !== "gone").map((id) => [id, { status: "PENDING", odds: -110, kickoff: FUTURE, started: false }]));
+  respond = async (ids) => Object.fromEntries(ids.filter((id) => id !== "gone").map((id) => [id, { status: "PENDING", odds: -110, kickoff: FUTURE, over: false, gameStatus: null }]));
   await mount("u4");
   check("a pick the DB no longer has is pruned and named", ctx.pool.map((p) => p.pickId).join() === "here" && ctx.removed?.picks[0]?.result === "Removed" && ctx.removed.picks[0].pickId === "gone", JSON.stringify(ctx.removed));
 
   // ---- 7. Clear all picks, and Undo ----
-  respond = async (ids) => Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, kickoff: FUTURE, started: false }]));
+  respond = async (ids) => Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, kickoff: FUTURE, over: false, gameStatus: null }]));
   await mount("u5");
   await act(() => ctx.togglePick(pick("c1", "gc1")));
   await act(() => ctx.togglePick(pick("c2", "gc2")));
@@ -183,7 +183,7 @@ async function main() {
   // ---- 9. refreshSlip re-checks now ----
   win.localStorage.setItem("parlay-pool:u6", JSON.stringify({ version: 2, picks: [pick("r1", "gr1")], targets: [] }));
   await mount("u6");
-  respond = async (ids) => Object.fromEntries(ids.map((id) => [id, { status: "LOSS", odds: -110, kickoff: FUTURE, started: false }]));
+  respond = async (ids) => Object.fromEntries(ids.map((id) => [id, { status: "LOSS", odds: -110, kickoff: FUTURE, over: false, gameStatus: null }]));
   let changed = false;
   await act(async () => {
     changed = await ctx.refreshSlip();

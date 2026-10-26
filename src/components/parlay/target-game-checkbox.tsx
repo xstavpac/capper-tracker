@@ -7,14 +7,15 @@
 // "Targeted via your picks" and can't be unchecked while the pick is there.
 // Writes straight into the slip, like the pick checkboxes.
 import { useOptionalParlayPool, type SlipGame } from "@/components/parlay/parlay-pool-context";
+import type { GameClock } from "@/lib/parlay/game-over";
 import { targetCheckboxState } from "@/lib/parlay/select-checkbox-state";
 
-export function TargetGameCheckbox({ game, dark = false, className = "" }: { game: SlipGame; dark?: boolean; className?: string }) {
+export function TargetGameCheckbox({ game, dark = false, className = "" }: { game: SlipGame & GameClock; dark?: boolean; className?: string }) {
   const slip = useOptionalParlayPool();
   if (!slip || !slip.slipMode) return null;
   const viaPicks = slip.isTargetedViaPicks(game.gameId);
   const targeted = slip.targets.some((t) => t.gameId === game.gameId);
-  const { disabled, title, label } = targetCheckboxState(game.gameTime, targeted, viaPicks, new Date());
+  const { disabled, title, label } = targetCheckboxState(game, targeted, viaPicks, new Date());
   return (
     <label
       title={title}

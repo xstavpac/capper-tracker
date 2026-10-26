@@ -138,7 +138,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
     setError(null);
     try {
       if (kind === "refresh" && (await slip.refreshSlip())) {
-        // The slip itself changed (a pick graded, started or gone): the notice
+        // The slip itself changed (a pick graded, its game over or gone): the notice
         // names it, and the old result no longer describes the slip.
         return;
       }
