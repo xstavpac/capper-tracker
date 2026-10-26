@@ -43,7 +43,7 @@ const LINK = "text-xs font-semibold text-brand-600 hover:underline dark:text-bra
 const CHIP = "inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold";
 // The "+ Add ... from Live" links: a filled brand pill, so the way into Live stands out from the quiet text links.
 const ADD_FROM_LIVE =
-  "inline-flex h-8 items-center rounded-full border border-brand-600 bg-brand-600 px-3.5 text-[13px] font-semibold text-white transition hover:bg-brand-700 dark:border-brand-500 dark:bg-brand-500 dark:hover:bg-brand-600";
+  "inline-flex h-8 items-center rounded-full border border-brand-600 bg-brand-600 px-3.5 text-[13px] font-semibold text-white transition hover:bg-brand-700";
 
 // What the page's stat tiles read from the last build.
 export type GeneratorSummary = { legs: number; fromSlip: number; generated: number } | null;
