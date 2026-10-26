@@ -77,6 +77,15 @@ const pool = { leagues: ["MLB"], slipPickIds: ["g4ml"], targets: [] as { gameId:
   check("settings that don't change the pool: no request", calls.length, 1);
   await session.generate({ leagues: ["MLB"], slipPickIds: ["g4ml"], targets: [] }, S);
   check("the same pool rebuilt from new arrays: no request", calls.length, 1);
+  const before = calls.length;
+  const rf = await createGeneratorSession({ generate, now: () => new Date(clock) }).refresh(pool, S);
+  check("Refresh: one request, even on a fresh session", [calls.length - before, "error" in rf ? null : rf.fetched], [1, true]);
+  const held = createGeneratorSession({ generate, now: () => new Date(clock) });
+  await held.generate(pool, S);
+  const afterGenerate = calls.length;
+  await held.refresh(pool, S);
+  check("Refresh: a request even when the held snapshot is still usable", calls.length - afterGenerate, 1);
+  calls.length = before; // the later checks count from the main session's requests
   check("poolKey ignores order", poolKey({ leagues: ["NFL", "MLB"], slipPickIds: ["b", "a"], targets: [] }) === poolKey({ leagues: ["MLB", "NFL"], slipPickIds: ["a", "b"], targets: [] }), true);
   const again = await session.generate(pool, S);
   check("Generate on a held snapshot: the same Primary as the first", "error" in g1 || "error" in again ? null : again.parlay.generatedKey === g1.parlay.generatedKey, true);

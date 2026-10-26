@@ -10,6 +10,9 @@
 //     parlays shown - never a request, unless the pool changed or the snapshot
 //     went stale (snapshotIsStale: older than ~2 minutes, or a game in it has
 //     started), in which case it reloads first and draws from the new pool.
+//   - Refresh: always one request - a fresh snapshot (picks, odds, records) and
+//     its Primary, whatever the pool and the snapshot's age. Restarts the
+//     Regenerate history like Generate.
 //   - Leg count, max per game, Include Picks, Pick Mix and Fill from don't
 //     change the pool, so they never cause a request - only a rebuild.
 //
@@ -74,6 +77,15 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
         remember(parlay);
         return { parlay, fetched: false };
       }
+      const res = await load(inputs, settings);
+      if ("error" in res) return res;
+      remember(res.parlay);
+      return { parlay: res.parlay, fetched: true };
+    },
+
+    // A fresh snapshot, whether or not the held one is still usable.
+    async refresh(inputs: PoolInputs, settings: GeneratorSettings): Promise<SessionResult> {
+      history = [];
       const res = await load(inputs, settings);
       if ("error" in res) return res;
       remember(res.parlay);
