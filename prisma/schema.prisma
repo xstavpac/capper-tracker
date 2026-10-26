@@ -1526,8 +1526,13 @@ model PickGradeFailure {
   firstSeenAt  DateTime  @default(now())
   lastSeenAt   DateTime  @default(now())
   attempts     Int       @default(1)
+  // When the grading pass may try this pick again (see gradeRetryDelaySeconds).
+  // NULL = due now (every row written before the backoff existed); the far-future
+  // GRADE_RETRY_STOPPED_AT = retries stopped, left for manual review.
+  nextAttemptAt DateTime?
 
   @@index([finalSeenAt])
+  @@index([nextAttemptAt])
   @@map("pick_grade_failures")
 }
 

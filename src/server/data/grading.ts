@@ -7,6 +7,7 @@ import {
   getMlbEarlyInningScores,
   getNflGameFacts,
   getEspnGameSegments,
+  LIVE_SPORTS,
   type OddsGame,
 } from "@/server/data/odds";
 import { extractPasserRows, type PasserRow } from "@/server/data/nfl-passer-rows";
@@ -36,7 +37,15 @@ import {
   type PlayerPropMarket,
 } from "@/lib/bet-line";
 import { NCAAF_CANONICAL_SUFFIX, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
-import { recordGradeFailures, noMatchReason, ungradeableReason, type GradeFailure } from "@/server/data/grading-failures";
+import {
+  recordGradeFailures,
+  clearGradeFailures,
+  resetGradeFailuresForGames,
+  noMatchReason,
+  ungradeableReason,
+  GRADE_NO_MATCH_AFTER_MS,
+  type GradeFailure,
+} from "@/server/data/grading-failures";
 import { getSportIdByName } from "@/server/data/sport-ids";
 
 function findMarket(game: OddsGame, key: string) {
@@ -276,6 +285,12 @@ export async function persistFinalScores(sportKey: string, changes?: GameResultC
   });
   const oddsGames = anyNeedsLedger ? await getOddsForSport(sportKey) : [];
 
+  // What this run changed, for resetGradeFailuresForGames below: existing rows
+  // that were corrected or backfilled (their id), and newly created ones (their
+  // start time).
+  const changedResultIds: string[] = [];
+  const newGameDates: Date[] = [];
+
   // Each game's persist is independent - was previously a sequential for-loop,
   // which meant a day with many newly-final games (each potentially needing a
   // first-five fetch against MLB's heavier live-feed endpoint) made every
@@ -399,7 +414,7 @@ export async function persistFinalScores(sportKey: string, changes?: GameResultC
       // select: { id } - the result is never read, and the default RETURNING
       // ships every column (inningsJson / linescoreJson / quartersJson /
       // scoringPlaysJson included) back for every write.
-      await prisma.gameResult.upsert({
+      const written = await prisma.gameResult.upsert({
         select: { id: true },
         where: { sportKey_externalId: { sportKey, externalId: g.id } },
         update: {
@@ -451,9 +466,22 @@ export async function persistFinalScores(sportKey: string, changes?: GameResultC
           lineSource: ledgerHasData ? "odds_snapshot" : null,
         },
       });
+      if (existing) {
+        if (written?.id) changedResultIds.push(written.id);
+      } else {
+        newGameDates.push(new Date(g.commenceTime));
+      }
       return true;
     })
   );
+
+  // New or changed game data is a reason for picks that already missed to try
+  // again, so it ends their retry backoff (see resetGradeFailuresForGames).
+  if (changedResultIds.length > 0 || newGameDates.length > 0) {
+    const sportName = LIVE_SPORTS.find((s) => s.key === sportKey)?.label;
+    const sportId = newGameDates.length > 0 && sportName ? await getSportIdByName(sportName) : null;
+    await resetGradeFailuresForGames({ sportId, gameResultIds: changedResultIds, newGameDates });
+  }
 
   return results.filter(Boolean).length;
 }
@@ -1370,6 +1398,44 @@ export async function gradePlayerProp(pick: PlayerPropPick, eventId: string, spo
   return (await resolvePlayerProp(pick, eventId, sportName)).outcome;
 }
 
+// The columns the grading pass reads from a pick - exactly the ones
+// gradePickPool and everything it calls (matchGameResult, resolveOutcome,
+// resolvePlayerProp, the failure reasons) take, traced through their parameter
+// types. The candidate reads select these instead of every column.
+export const GRADING_PICK_SELECT = {
+  id: true,
+  userId: true,
+  gameTime: true,
+  homeTeam: true,
+  awayTeam: true,
+  betDetail: true,
+  betType: true,
+  period: true,
+  line: true,
+  pickedSide: true,
+  gameNumber: true,
+  propMarket: true,
+  playerName: true,
+} satisfies Prisma.PickSelect;
+
+export type GradingPick = Prisma.PickGetPayload<{ select: typeof GRADING_PICK_SELECT }>;
+
+// Which PENDING picks the grading pass looks at this run, on top of the sport
+// / user each caller adds:
+//   - a game inside the regrade lookback that has started, or starts within
+//     MAX_GAME_TIME_DRIFT_MS (the same gate page grading applies) - a pick for a game days away can't have
+//     a final yet, and used to be read, matched and written up as a miss on
+//     every 15-minute run until it did;
+//   - not inside a retry backoff (see gradeRetryDelaySeconds): no failure row,
+//     or one whose nextAttemptAt has passed (NULL = due, for rows written
+//     before the column existed).
+export function gradeCandidateWhere(now: Date = new Date()): { gameTime: { gte: Date; lte: Date }; OR: Prisma.PickWhereInput[] } {
+  return {
+    gameTime: { gte: regradeLookbackCutoff(now), lte: new Date(now.getTime() + MAX_GAME_TIME_DRIFT_MS) },
+    OR: [{ gradeFailure: { is: null } }, { gradeFailure: { is: { OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] } } }],
+  };
+}
+
 // Per-user counterpart of gradeAllPendingPicks, run opportunistically when a
 // user loads /picks or /live/[gameId]. Same one-pool-plus-chunked-writes path
 // (gradePickPool) - not a per-pick query loop.
@@ -1378,8 +1444,15 @@ export async function gradePendingPicks(
   sportName: string,
   sportKey: string
 ): Promise<{ graded: number; notMatched: number }> {
+  const now = new Date();
   const pendingPicks = await prisma.pick.findMany({
-    where: { userId, status: "PENDING", sport: { name: sportName }, gameTime: { gte: regradeLookbackCutoff() } },
+    where: {
+      userId,
+      status: "PENDING",
+      sport: { name: sportName },
+      ...gradeCandidateWhere(now),
+    },
+    select: GRADING_PICK_SELECT,
   });
   const { graded, notMatched } = await gradePickPool(pendingPicks, sportKey, sportName);
   return { graded, notMatched };
@@ -1522,7 +1595,7 @@ async function inChunks<T>(items: T[], fn: (item: T) => Promise<void>): Promise<
 // Exported for grading-idempotency-acceptance-test.ts (the conditional-write
 // behavior). Not a public API - gradeAllPendingPicks / gradePendingPicks are.
 export async function gradePickPool(
-  picks: Pick[],
+  picks: GradingPick[],
   sportKey: string,
   sportName: string
 ): Promise<{ graded: number; notMatched: number; changedUserIds: Set<string> }> {
@@ -1534,12 +1607,20 @@ export async function gradePickPool(
   let notMatched = 0;
   // Every miss with its reason, recorded once at the end (recordGradeFailures).
   const failures: GradeFailure[] = [];
+  // Picks this pass graded, whose failure rows (if any) are dropped at the end.
+  const gradedIds: string[] = [];
+  const nowMs = Date.now();
 
   await inChunks(picks, async (pick) => {
     const result = matchGameResult(candidates, pick, sportKey);
     if (!result) {
       notMatched++;
-      failures.push({ pickId: pick.id, reason: noMatchReason(candidatesInPickWindow(candidates, pick)), gameResultId: null, finalSeenAt: null });
+      // Not a failure until the game has had time to finish and its score to
+      // land (GRADE_NO_MATCH_AFTER_MS): before that the pick is just waiting,
+      // and counting it would spend the retry backoff before a final exists.
+      if (nowMs >= pick.gameTime.getTime() + GRADE_NO_MATCH_AFTER_MS) {
+        failures.push({ pickId: pick.id, reason: noMatchReason(candidatesInPickWindow(candidates, pick)), gameResultId: null, finalSeenAt: null });
+      }
       return;
     }
     // resolvePlayerProp, not gradePlayerProp: same outcome, plus the reason
@@ -1575,10 +1656,12 @@ export async function gradePickPool(
     if (count === 1) {
       graded++;
       changedUserIds.add(pick.userId);
+      gradedIds.push(pick.id);
     }
   });
 
   await recordGradeFailures(failures);
+  await clearGradeFailures(gradedIds);
   return { graded, notMatched, changedUserIds };
 }
 
@@ -1653,12 +1736,16 @@ export async function gradeAllPendingPicks(
   // unmatchable one (bad import: no game, gameTime = import time) can no
   // longer take a queue slot or stretch fetchCandidatePool's window back to
   // its own date on every run.
-  const gradeable = { sportId, status: "PENDING" as const, gameTime: { gte: regradeLookbackCutoff() } };
+  // Only picks due a grading attempt this run (gradeCandidateWhere): a game
+  // that has started, outside any retry backoff - so `remaining` counts the
+  // due backlog, not picks waiting on a later game or a backoff.
+  const gradeable = { sportId, status: "PENDING" as const, ...gradeCandidateWhere() };
   const totalPending = await prisma.pick.count({ where: gradeable });
   if (totalPending === 0) return { graded: 0, notMatched: 0, remaining: 0, changedUserIds: new Set() };
 
   const toProcess = await prisma.pick.findMany({
     where: gradeable,
+    select: GRADING_PICK_SELECT,
     orderBy: { gameTime: "asc" },
     take: maxPicks,
   });

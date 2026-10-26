@@ -543,5 +543,40 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "sql": "SELECT \"public\".\"game_results\".\"id\", \"public\".\"game_results\".\"sportKey\", \"public\".\"game_results\".\"gameDate\", \"public\".\"game_results\".\"homeTeam\", \"public\".\"game_results\".\"awayTeam\", \"public\".\"game_results\".\"homeScore\", \"public\".\"game_results\".\"awayScore\", \"public\".\"game_results\".\"gameNumber\" FROM \"public\".\"game_results\" WHERE (\"public\".\"game_results\".\"sportKey\" IN ($1) AND ((\"public\".\"game_results\".\"gameDate\" >= $2 AND \"public\".\"game_results\".\"gameDate\" < $3) OR (\"public\".\"game_results\".\"gameDate\" >= $4 AND \"public\".\"game_results\".\"gameDate\" < $5))) OFFSET $6",
     "expectLabel": "/picks final scores",
     "expectFlags": []
+  },
+  {
+    "name": "grading pending count() (due candidates, #B)",
+    "run": "egress/grade-failure-backoff (local capture 2026-10-26)",
+    "sql": "SELECT COUNT(*) FROM (SELECT \"public\".\"picks\".\"id\" FROM \"public\".\"picks\" LEFT JOIN \"public\".\"pick_grade_failures\" AS \"j1\" ON (\"j1\".\"pickId\") = (\"public\".\"picks\".\"id\") LEFT JOIN \"public\".\"pick_grade_failures\" AS \"j2\" ON (\"j2\".\"pickId\") = (\"public\".\"picks\".\"id\") WHERE (\"public\".\"picks\".\"sportId\" = $1 AND \"public\".\"picks\".\"status\" = CAST($2::text AS \"public\".\"PickStatus\") AND \"public\".\"picks\".\"gameTime\" >= $3 AND \"public\".\"picks\".\"gameTime\" <= $4 AND ((\"j1\".\"pickId\" IS NULL) OR ((\"j2\".\"nextAttemptAt\" IS NULL OR \"j2\".\"nextAttemptAt\" <= $5) AND (\"j2\".\"pickId\" IS NOT NULL)))) OFFSET $6) AS \"sub\"",
+    "expectLabel": "Grading pending",
+    "expectFlags": []
+  },
+  {
+    "name": "grading pending findMany (due candidates, projected, #B)",
+    "run": "egress/grade-failure-backoff (local capture 2026-10-26)",
+    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"userId\", \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"line\", \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"propMarket\"::text, \"public\".\"picks\".\"playerName\" FROM \"public\".\"picks\" LEFT JOIN \"public\".\"pick_grade_failures\" AS \"j1\" ON (\"j1\".\"pickId\") = (\"public\".\"picks\".\"id\") LEFT JOIN \"public\".\"pick_grade_failures\" AS \"j2\" ON (\"j2\".\"pickId\") = (\"public\".\"picks\".\"id\") WHERE (\"public\".\"picks\".\"sportId\" = $1 AND \"public\".\"picks\".\"status\" = CAST($2::text AS \"public\".\"PickStatus\") AND \"public\".\"picks\".\"gameTime\" >= $3 AND \"public\".\"picks\".\"gameTime\" <= $4 AND ((\"j1\".\"pickId\" IS NULL) OR ((\"j2\".\"nextAttemptAt\" IS NULL OR \"j2\".\"nextAttemptAt\" <= $5) AND (\"j2\".\"pickId\" IS NOT NULL)))) ORDER BY \"public\".\"picks\".\"gameTime\" ASC LIMIT $6 OFFSET $7",
+    "expectLabel": "Grading pending",
+    "expectFlags": []
+  },
+  {
+    "name": "grade-failure write (SQL, backoff)",
+    "run": "egress/grade-failure-backoff (local capture 2026-10-26)",
+    "sql": "\n      INSERT INTO pick_grade_failures (\"pickId\", reason, \"gameResultId\", \"finalSeenAt\", \"firstSeenAt\", \"lastSeenAt\", attempts, \"nextAttemptAt\")\n      SELECT t.pick_id, t.reason, t.game_result_id, t.final_seen_at::timestamp(3), now() AT TIME ZONE 'UTC', now() AT TIME ZONE 'UTC', 1, now() AT TIME ZONE 'UTC'\n      FROM unnest(\n        $1::text[],\n        $2::text[],\n        $3::text[],\n        $4::text[]\n      ) AS t(pick_id, reason, game_result_id, final_seen_at)\n      JOIN picks p ON p.id = t.pick_id\n      ON CONFLICT (\"pickId\") DO UPDATE SET\n        reason = EXCLUDED.reason,\n        \"gameResultId\" = EXCLUDED.\"gameResultId\",\n        \"finalSeenAt\" = EXCLUDED.\"finalSeenAt\",\n        \"lastSeenAt\" = EXCLUDED.\"lastSeenAt\",\n        attempts = pick_grade_failures.attempts + 1,\n        \"nextAttemptAt\" = CASE\n          WHEN pick_grade_failures.attempts + 1 >= $5::int THEN $6::timestamp\n          ELSE (now() AT TIME ZONE 'UTC') + make_interval(secs => (CASE\n            WHEN pick_grade_failures.attempts + 1 < $7::int THEN 0\n            WHEN pick_grade_failures.attempts + 1 < $8::int THEN $9::int\n            ELSE $10::int\n          END)::float8)\n        END\n    ",
+    "expectLabel": "Grade-failure write",
+    "expectFlags": []
+  },
+  {
+    "name": "grade-failure clear (SQL)",
+    "run": "egress/grade-failure-backoff (local capture 2026-10-26)",
+    "sql": "DELETE FROM pick_grade_failures WHERE \"pickId\" = ANY($1::text[])",
+    "expectLabel": "Grade-failure clear (graded pick)",
+    "expectFlags": []
+  },
+  {
+    "name": "grade-failure reset (SQL)",
+    "run": "egress/grade-failure-backoff (local capture 2026-10-26)",
+    "sql": "\n      DELETE FROM pick_grade_failures WHERE \"pickId\" IN (\n        SELECT f.\"pickId\" FROM pick_grade_failures f\n        LEFT JOIN picks p ON p.id = f.\"pickId\"\n        WHERE f.\"gameResultId\" = ANY($1::text[])\n           OR ($2::boolean AND f.\"gameResultId\" IS NULL AND p.\"sportId\" = $3\n               AND p.\"gameTime\" >= $4::timestamp AND p.\"gameTime\" < $5::timestamp)\n      )\n    ",
+    "expectLabel": "Grade-failure reset (new/changed game data)",
+    "expectFlags": []
   }
 ];

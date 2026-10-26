@@ -192,8 +192,24 @@ export const STATEMENT_LABELS: StatementLabel[] = [
   {
     // The findMany and its count() - both cross-user, sport + PENDING + lookback.
     label: "Grading pending",
-    source: "gradeAllPendingPicks (grade-picks cron)",
+    source: "gradeAllPendingPicks (grade-picks cron): picks due a grading attempt - game started, outside any retry backoff",
     matches: (s) => touchesPicks(s) && has(s, SPORT_EQ) && has(s, STATUS_EQ) && has(s, GAME_TIME_GTE) && !has(s, USER_EQ),
+  },
+  {
+    // One upsert per pool of misses; the backoff column is set in the same statement.
+    label: "Grade-failure write",
+    source: "recordGradeFailures (grading-failures.ts, gradePickPool)",
+    matches: (s) => s.text.startsWith("INSERT INTO pick_grade_failures "),
+  },
+  {
+    label: "Grade-failure clear (graded pick)",
+    source: "clearGradeFailures (gradePickPool when a pick grades; updatePickStatus)",
+    matches: (s) => s.text.startsWith('DELETE FROM pick_grade_failures WHERE "pickId" = ANY('),
+  },
+  {
+    label: "Grade-failure reset (new/changed game data)",
+    source: "resetGradeFailuresForGames (persistFinalScores, only when a final was created or changed)",
+    matches: (s) => s.text.startsWith('DELETE FROM pick_grade_failures WHERE "pickId" IN ('),
   },
   {
     // getPicksForGame(s): one user's sport, a gameTime window. Matches both the
