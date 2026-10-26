@@ -14,8 +14,8 @@
 //
 // Reads, per call: the slip's own rows (getOwnedSlipPickRows), one board per
 // league needed (getLiveBoardData - sequential, as everywhere), and ONE record
-// bundle (getCapperRecordBundle: the slip picks' card records + every
-// candidate's market record in a single query). Nothing about a pick or a game
+// bundle (getCapperRecordBundle: every slip pick's and candidate's card - its
+// in-league and all-time market record - in a single query). Nothing about a pick or a game
 // is taken from the client: the request names picks and games by id.
 import { requireUser } from "@/server/auth";
 import { LIVE_SPORTS } from "@/server/data/odds";
@@ -134,12 +134,14 @@ export async function generateParlayAction(request: GenerateRequest): Promise<Ge
     });
   }
 
-  // ONE record bundle: the slip picks' card records (what their rows show and
-  // how two conflicting slip picks are ranked) and every candidate's market
-  // record (the 55% gate, the Wilson ranking, Hedge and Contrarian).
+  // ONE record bundle: every slip pick's and candidate's card. A slip pick's
+  // is what its row shows and how two conflicting slip picks are ranked; a
+  // candidate's in-league record (all-time when it has none) is the 55% gate,
+  // the Wilson ranking, Hedge and Contrarian (recordForGate). The all-leagues
+  // market records cover a pick with no card, and LEGACY_RULES.
   const candidates = games.flatMap((g) => g.picks);
   const { leagueRecords, categoryRecords } = await getCapperRecordBundle(user.id, {
-    leagueEntries: slipPicks.map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category })),
+    leagueEntries: [...slipPicks, ...candidates].map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category })),
     categoryPairs: candidates
       .filter((p): p is GeneratorPick & { category: PickCategoryKey } => p.category !== null)
       .map((p) => ({ capperId: p.capperId, category: p.category })),
