@@ -341,6 +341,13 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     matches: (s) => reads(s, "sports") && whereIs(s, /^"sports"\."name" = \$\d+$/) && s.hasLimit,
   },
   {
+    // A cold instance reads once per sport an hour (sport-ids.ts memo); it used to be one read
+    // before every board and game-detail pick read.
+    label: "Sport lookup (board)",
+    source: "getSportIdByNameInsensitive (sport-ids.ts; getPicksForGame / getPicksForGames, /live board, game detail)",
+    matches: (s) => reads(s, "sports") && whereIs(s, /^"sports"\."name" ILIKE \$\d+$/) && s.hasLimit,
+  },
+  {
     label: "Game results window",
     source: "fetchCandidatePool / findMatchingGameResult (grading.ts), parlay-grading.ts candidate pools",
     matches: (s) =>

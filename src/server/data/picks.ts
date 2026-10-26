@@ -17,6 +17,7 @@ import { queryCapperRecordBundle, type CardRequest, type CategoryRequest } from 
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { clearGradeFailures } from "@/server/data/grading-failures";
 import { getCapperRoster } from "@/server/data/capper-roster";
+import { getSportIdByNameInsensitive } from "@/server/data/sport-ids";
 import type { GameCardStreak } from "@/lib/game-card-record-line";
 import { easternDateRange } from "@/lib/dates";
 import { categoryRecordKey, leagueRecordKey } from "@/lib/record-keys";
@@ -507,12 +508,10 @@ export async function getPicksForGame(
   userId: string,
   params: { sportName: string; homeTeam: string; awayTeam: string; commenceTime: Date }
 ) {
-  const sport = await prisma.sport.findFirst({
-    where: { name: { equals: params.sportName, mode: "insensitive" } },
-  });
-  if (!sport) return [];
+  const sportId = await getSportIdByNameInsensitive(params.sportName);
+  if (!sportId) return [];
 
-  const candidates = await boardPicksInWindow(userId, sport.id, [params.commenceTime.getTime()]);
+  const candidates = await boardPicksInWindow(userId, sportId, [params.commenceTime.getTime()]);
   if (candidates.length === 0) return [];
 
   return matchPicksToGame(candidates, params, params.sportName);
@@ -531,14 +530,12 @@ export async function getPicksForGames(
 ) {
   if (games.length === 0) return [];
 
-  const sport = await prisma.sport.findFirst({
-    where: { name: { equals: sportName, mode: "insensitive" } },
-  });
-  if (!sport) return games.map(() => []);
+  const sportId = await getSportIdByNameInsensitive(sportName);
+  if (!sportId) return games.map(() => []);
 
   const allPicks = await boardPicksInWindow(
     userId,
-    sport.id,
+    sportId,
     games.map((g) => g.commenceTime.getTime())
   );
   if (allPicks.length === 0) return games.map(() => []);

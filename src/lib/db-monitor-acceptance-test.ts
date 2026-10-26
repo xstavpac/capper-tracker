@@ -116,6 +116,7 @@ expect(
     "Session user",
     "Situational snapshot upsert",
     "Slip id IN",
+    "Sport lookup (board)",
     "Team record snapshot",
     "Tendencies by sport",
     "Tendency game results",
