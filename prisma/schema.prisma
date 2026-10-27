@@ -183,6 +183,7 @@ model User {
   importSkippedLines      ImportSkippedLine[]
   importRuns              ImportRun[]
   bugReports              BugReport[]
+  heavyConsensusMarkets   HeavyConsensusMarket[]
 
   @@map("users")
 }
@@ -1607,4 +1608,32 @@ model BugReport {
   @@index([status, createdAt])
   @@index([userId, createdAt])
   @@map("bug_reports")
+}
+
+// One historical Heavy Consensus market for one viewer: a full-game ML / spread /
+// total where at least HEAVY_CONSENSUS_STORE_MIN_CAPPERS of the viewer's cappers
+// posted before the start and 80%+ of them were on one side (lib/heavy-consensus.ts).
+// Written only by the nightly recompute in refresh-scores and the one-off backfill
+// (server/data/heavy-consensus.ts); read only by the pooled hit rate, which keeps
+// one row per worldKey. Per viewer, so the same game can appear once per user.
+model HeavyConsensusMarket {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  worldKey     String // sport|away|home|Eastern date|game number|market|heavy side - the cross-viewer identity
+  sport        String // Sport.name, e.g. "NFL"
+  gameDate     String // the game's Eastern date, YYYY-MM-DD - the nightly window's grain
+  gameTime     DateTime
+  market       String // MONEYLINE | SPREAD | TOTAL
+  heavySide    String // AWAY | HOME | OVER | UNDER
+  cappers      Int // non-hedged cappers on the market
+  heavyCappers Int
+  sharePct     Int // rounded
+  band         String // "80-89" | "90+" - not read yet; kept so the rate can be banded later
+  outcome      String? // WIN | LOSS by one vote per heavy-side capper; null = tied / nothing graded
+  computedAt   DateTime @default(now())
+
+  @@unique([userId, worldKey])
+  @@index([gameDate])
+  @@map("heavy_consensus_markets")
 }
