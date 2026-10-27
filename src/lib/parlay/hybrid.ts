@@ -42,13 +42,21 @@
 // middle. With nothing in band, the combination closest to the band.
 //
 // Games: a box needs a qualifying team side AND a qualifying total on the same
-// game (one of each - never both teams); a game scores the sum of the two. The
-// top HYBRID_CANDIDATE_GAMES are built; the result is a
-// primary plus up to HYBRID_ALTERNATES alternates, each on a different game.
-// Only when no box lands in the band, each box may take up to two more single
-// edge-placed legs from other games (next-best position first, kept only when
-// it gets strictly closer; HYBRID_MAX_LEGS in all). With no box-eligible game,
-// the top two positions on different games make a cross-game hybrid.
+// game (one of each - never both teams); a game scores the sum of the two. Up
+// to HYBRID_MAX_LADDER_GAMES boxes are built, each tuned on its own to the target
+// band (so the cost is linear in the number of boxes).
+//   Total legs below 4 (no room for a second box): the best box is the primary,
+//   with up to HYBRID_ALTERNATES alternates on other games.
+//   Total legs 4 and up (`maxLegs` is a CAP): whole boxes only, never padded with
+//   single legs. Boxes that land in the band come first, then the rest, each group
+//   best-scored first; a box is added while its legs fit under the cap (an Auto or
+//   3-leg box that does not fit falls back to its 2-leg form). The result is one
+//   parlay of those boxes: structure "multi-box", the boxes listed in `boxes`, the
+//   combined price the product of the box prices (an estimate whenever a box has
+//   two legs on one game), and `delivery` saying how many legs came out of how
+//   many were asked for.
+// With no box-eligible game, the top two positions on different games make a
+// cross-game hybrid (never expanded).
 //
 // 3-leg box (`boxLegs`): the third leg is the other side of the box's own total
 // (Over 204.5 -> + Under 254.5), so the total is boxed from both sides. Hybrid
@@ -83,7 +91,11 @@ import { normalizeTeamName, teamNamesMatch } from "@/lib/team-name-match";
 
 // No leg is priced shorter than this.
 export const HYBRID_MIN_LEG_PRICE = -600;
-export const HYBRID_MAX_LEGS = 4;
+// Total legs is a cap on the whole parlay (several boxes), not on one box.
+export const HYBRID_MAX_LEGS = 25;
+export const HYBRID_DEFAULT_MAX_LEGS = 3;
+// The most games' ladders one generation may buy (alt-ladders.ts: 2-3 credits a game).
+export const HYBRID_MAX_LADDER_GAMES = 12;
 export const HYBRID_DEFAULT_TARGET_MIN = -140;
 export const HYBRID_DEFAULT_TARGET_MAX = -110;
 // Box-eligible games evaluated, and alternates returned beside the primary.
@@ -119,7 +131,7 @@ export type HybridSettings = {
   width?: HybridWidth;
   // Optional per-leg price range in American odds, either order.
   legRange?: { min: number; max: number } | null;
-  // Default and hard cap HYBRID_MAX_LEGS; at least 2.
+  // The parlay's cap: default HYBRID_DEFAULT_MAX_LEGS, at most HYBRID_MAX_LEGS, at least 2.
   maxLegs?: number;
   // Absent: "2". A third box leg needs maxLegs >= 3.
   boxLegs?: HybridBoxLegs;
@@ -186,7 +198,7 @@ export type HybridLeg = {
   };
 };
 
-export type HybridStructure = "same-game-box" | "cross-game";
+export type HybridStructure = "same-game-box" | "cross-game" | "multi-box";
 
 export type Hybrid = {
   structure: HybridStructure;
@@ -204,6 +216,21 @@ export type Hybrid = {
   consensusScore: number;
   // Rungs moved from the edges, summed.
   rungsMoved: number;
+  // "multi-box" only: each box as its own hybrid (price, in-band flag, legs); `legs`
+  // is these concatenated.
+  boxes?: Hybrid[];
+};
+
+// What came out of what was asked for.
+export type HybridDelivery = {
+  // The total-legs cap the request carried.
+  requestedLegs: number;
+  deliveredLegs: number;
+  boxes: number;
+  // Games that could be built into a box (a ladder, a side and a total).
+  qualifyingGames: number;
+  // True when the games ran out: room under the cap for another box, and none left.
+  shortOfGames: boolean;
 };
 
 export type HybridResult = {
@@ -211,6 +238,7 @@ export type HybridResult = {
   alternates: Hybrid[];
   // Why there is no primary, when there is none.
   note: string | null;
+  delivery: HybridDelivery;
 };
 
 // ---- Odds math (combine-odds.ts underneath) ----
@@ -862,40 +890,17 @@ function buildHybrid(structure: HybridStructure, legs: Placed[], tuned: Tuned): 
 
 // ---- Assembly ----
 
-type Candidate = { structure: HybridStructure; core: Placed[]; extras: Placed[]; tuned: Tuned; coreScore: number };
+type Candidate = {
+  structure: HybridStructure;
+  core: Placed[];
+  tuned: Tuned;
+  coreScore: number;
+  // A 3-leg box's 2-leg form, for when only two legs fit under the cap.
+  fallback: { core: Placed[]; tuned: Tuned } | null;
+};
 
-// Up to two more single edge-placed legs from games not yet in the hybrid, best
-// position first; each is kept only when it gets strictly closer to the band.
-// The core legs re-tune around the added legs.
-function expand(c: Candidate, ranked: ConsensusPosition[], placedOf: (p: ConsensusPosition) => Placed | null, band: TargetBand, maxLegs: number): Candidate {
-  let current = c;
-  const used = new Set(c.core.map((l) => l.position.eventId));
-  while (current.tuned.distance > 0 && current.core.length + current.extras.length < maxLegs) {
-    let next: Placed | null = null;
-    for (const p of ranked) {
-      if (used.has(p.eventId)) continue;
-      next = placedOf(p);
-      if (next) break;
-    }
-    if (!next) break;
-    const extras = [...current.extras, next];
-    // Fixed (extra) legs first, the core after them.
-    const order = [...extras, ...current.core];
-    const t = tune(order, extras.length, band);
-    if (!t || t.distance >= current.tuned.distance - EPS) break;
-    used.add(next.position.eventId);
-    const coreIdx = t.indexes.slice(extras.length);
-    current = {
-      ...current,
-      extras,
-      tuned: { ...t, indexes: [...coreIdx, ...t.indexes.slice(0, extras.length)] },
-    };
-  }
-  return current;
-}
-
-function toHybrid(c: Candidate): Hybrid {
-  return buildHybrid(c.structure, [...c.core, ...c.extras], c.tuned);
+function toHybrid(c: Pick<Candidate, "structure" | "core" | "tuned">): Hybrid {
+  return buildHybrid(c.structure, c.core, c.tuned);
 }
 
 // In band first; fewer legs (a 3-leg box's third leg not counted); then the
@@ -905,7 +910,7 @@ function rankCandidates(a: Candidate, b: Candidate): number {
   const ai = a.tuned.distance === 0;
   const bi = b.tuned.distance === 0;
   if (ai !== bi) return ai ? -1 : 1;
-  const legCount = (c: Candidate) => [...c.core, ...c.extras].filter((l) => !l.opposite).length;
+  const legCount = (c: Candidate) => c.core.filter((l) => !l.opposite).length;
   const al = legCount(a);
   const bl = legCount(b);
   if (al !== bl) return al - bl;
@@ -917,9 +922,26 @@ function rankCandidates(a: Candidate, b: Candidate): number {
 }
 
 export function normalizeSettings(s?: HybridSettings): Required<Pick<HybridSettings, "width" | "maxLegs" | "boxLegs">> & HybridSettings {
-  const maxLegs = Math.min(HYBRID_MAX_LEGS, Math.max(2, Math.floor(s?.maxLegs ?? HYBRID_MAX_LEGS) || HYBRID_MAX_LEGS));
+  const maxLegs = Math.min(HYBRID_MAX_LEGS, Math.max(2, Math.floor(s?.maxLegs ?? HYBRID_DEFAULT_MAX_LEGS) || HYBRID_DEFAULT_MAX_LEGS));
   const boxLegs: HybridBoxLegs = s?.boxLegs === "3" || s?.boxLegs === "auto" ? s.boxLegs : "2";
   return { ...s, width: s?.width === "wider" ? "wider" : "balanced", maxLegs, boxLegs };
+}
+
+// The fewest legs a box takes: 3 in "3 Legs", else 2.
+export function minBoxLegs(boxLegs: HybridBoxLegs): number {
+  return boxLegs === "3" ? 3 : 2;
+}
+
+// True when the cap leaves room for a second box (the multi-box path).
+export function isMultiBox(maxLegs: number, boxLegs: HybridBoxLegs): boolean {
+  return maxLegs >= 2 * minBoxLegs(boxLegs);
+}
+
+// How many games' ladders a generation buys: the boxes the cap can hold plus two
+// spare for a game FanDuel has not posted, never fewer than the single-box path's
+// HYBRID_CANDIDATE_GAMES and never more than HYBRID_MAX_LADDER_GAMES.
+export function ladderGameCount(maxLegs: number, boxLegs: HybridBoxLegs): number {
+  return Math.min(HYBRID_MAX_LADDER_GAMES, Math.max(HYBRID_CANDIDATE_GAMES, Math.floor(maxLegs / minBoxLegs(boxLegs)) + 2));
 }
 
 // A 3-leg box's tuning: the third leg alone first (the side and the total stay
@@ -933,19 +955,19 @@ function tuneThree(legs: Placed[], band: TargetBand): Tuned | null {
 }
 
 // The box for one game: [side, total], or [side, total, the total's other side]
-// per `boxLegs` (see the header).
-function chooseBox(side: Placed, total: Placed, opposite: Placed | null, settings: ReturnType<typeof normalizeSettings>, band: TargetBand): { core: Placed[]; tuned: Tuned } {
+// per `boxLegs` (see the header). `fallback` is the 2-leg form of a 3-leg box.
+function chooseBox(side: Placed, total: Placed, opposite: Placed | null, settings: ReturnType<typeof normalizeSettings>, band: TargetBand): { core: Placed[]; tuned: Tuned; fallback: { core: Placed[]; tuned: Tuned } | null } {
   const two = { core: [side, total], tuned: tune([side, total], 0, band)! };
-  if (!opposite || settings.boxLegs === "2" || settings.maxLegs < 3) return two;
+  if (!opposite || settings.boxLegs === "2" || settings.maxLegs < 3) return { ...two, fallback: null };
   const core = [side, total, opposite];
   const tuned = tuneThree(core, band);
-  if (!tuned) return two;
-  if (settings.boxLegs === "3") return { core, tuned };
+  if (!tuned) return { ...two, fallback: null };
+  if (settings.boxLegs === "3") return { core, tuned, fallback: two };
   // auto: only when the 2-leg box at its edges is too short.
   const atEdges = impliedOn(two.core, two.core.map((l) => l.edgeIndex))!;
-  if (atEdges <= band.high + EPS) return two;
+  if (atEdges <= band.high + EPS) return { ...two, fallback: null };
   const edgesKept = tuned.indexes[0] === side.edgeIndex && tuned.indexes[1] === total.edgeIndex;
-  return (tuned.distance === 0 && edgesKept) || tuned.distance < two.tuned.distance - EPS ? { core, tuned } : two;
+  return (tuned.distance === 0 && edgesKept) || tuned.distance < two.tuned.distance - EPS ? { core, tuned, fallback: two } : { ...two, fallback: null };
 }
 
 export type BoxGame = { eventId: string; side: ConsensusPosition; total: ConsensusPosition; score: number };
@@ -967,10 +989,39 @@ export function boxEligibleGames(ranked: ConsensusPosition[]): BoxGame[] {
     .sort((a, b) => (Math.abs(a.score - b.score) > EPS ? b.score - a.score : a.eventId < b.eventId ? -1 : a.eventId > b.eventId ? 1 : 0));
 }
 
+// The boxes as one parlay: the legs in box order, the price the product of the
+// boxes' prices (each already priced as a box), in target only when every box is.
+function combineBoxes(boxes: Hybrid[]): Hybrid {
+  const decimal = boxes.reduce((d, b) => d * b.combinedDecimal, 1);
+  const updates = boxes.map((b) => b.oddsAsOf).filter((u): u is string => u !== null).sort();
+  return {
+    structure: "multi-box",
+    legs: boxes.flatMap((b) => b.legs),
+    combinedAmerican: decimalToAmerican(decimal)!,
+    combinedDecimal: decimal,
+    impliedProbability: 1 / decimal,
+    isEstimate: boxes.some((b) => b.isEstimate),
+    inTarget: boxes.every((b) => b.inTarget),
+    boxDescription: boxes.map((b) => b.boxDescription).join(" · "),
+    oddsAsOf: updates[0] ?? null,
+    anyStale: boxes.some((b) => b.anyStale),
+    consensusScore: boxes.reduce((s, b) => s + b.consensusScore, 0),
+    rungsMoved: boxes.reduce((s, b) => s + b.rungsMoved, 0),
+    boxes,
+  };
+}
+
+function deliveryOf(cap: number, deliveredLegs: number, boxes: number, qualifyingGames: number, minBox: number): HybridDelivery {
+  return { requestedLegs: cap, deliveredLegs, boxes, qualifyingGames, shortOfGames: boxes === qualifyingGames && cap - deliveredLegs >= minBox };
+}
+
 export function optimizeHybrid(input: HybridInput): HybridResult {
   const settings = normalizeSettings(input.settings);
   const band = targetBand(settings);
   const ranked = input.positions;
+  const cap = settings.maxLegs;
+  const multi = isMultiBox(cap, settings.boxLegs);
+  const minBox = minBoxLegs(settings.boxLegs);
 
   const placedCache = new Map<string, Placed | null>();
   const placedOf = (p: ConsensusPosition, opposite = false): Placed | null => {
@@ -978,22 +1029,40 @@ export function optimizeHybrid(input: HybridInput): HybridResult {
     return placedCache.get(p.key)!;
   };
 
+  // One box per game, each tuned on its own (cost linear in the boxes), best-scored game first.
   const boxes: Candidate[] = [];
+  const limit = multi ? HYBRID_MAX_LADDER_GAMES : HYBRID_CANDIDATE_GAMES;
   for (const g of boxEligibleGames(ranked)) {
-    if (boxes.length >= HYBRID_CANDIDATE_GAMES) break;
+    if (boxes.length >= limit) break;
     const side = placedOf(g.side);
     const total = placedOf(g.total);
     if (!side || !total) continue;
     const opposite = settings.boxLegs === "2" ? null : placedOf(oppositeTotal(g.total, input.ladders), true);
-    const { core, tuned } = chooseBox(side, total, opposite, settings, band);
-    boxes.push({ structure: "same-game-box", core, extras: [], tuned, coreScore: g.score });
+    const { core, tuned, fallback } = chooseBox(side, total, opposite, settings, band);
+    boxes.push({ structure: "same-game-box", core, tuned, coreScore: g.score, fallback });
+  }
+
+  if (boxes.length > 0 && !multi) {
+    const sorted = [...boxes].sort(rankCandidates).map(toHybrid);
+    const primary = sorted[0];
+    return { primary, alternates: sorted.slice(1, 1 + HYBRID_ALTERNATES), note: null, delivery: deliveryOf(cap, primary.legs.length, 1, boxes.length, minBox) };
   }
 
   if (boxes.length > 0) {
-    const anyIn = boxes.some((b) => b.tuned.distance === 0);
-    const final = anyIn || settings.maxLegs <= 2 ? boxes : boxes.map((b) => expand(b, ranked, placedOf, band, settings.maxLegs));
-    const sorted = [...final].sort(rankCandidates).map(toHybrid);
-    return { primary: sorted[0], alternates: sorted.slice(1, 1 + HYBRID_ALTERNATES), note: null };
+    // In-band boxes first, then the rest, each group best-scored first (the order built).
+    const ordered = [...boxes.filter((b) => b.tuned.distance === 0), ...boxes.filter((b) => b.tuned.distance !== 0)];
+    const picked: Pick<Candidate, "structure" | "core" | "tuned">[] = [];
+    let used = 0;
+    for (const b of ordered) {
+      if (used + b.core.length <= cap) picked.push(b);
+      else if (b.fallback && used + b.fallback.core.length <= cap) picked.push({ structure: b.structure, ...b.fallback });
+      else continue;
+      used += picked[picked.length - 1].core.length;
+    }
+    const hybrids = picked.map(toHybrid);
+    // A slate that holds one box is that box, in the plain shape.
+    const primary = hybrids.length === 1 ? hybrids[0] : combineBoxes(hybrids);
+    return { primary, alternates: [], note: null, delivery: deliveryOf(cap, used, picked.length, boxes.length, minBox) };
   }
 
   // No box: the top two placeable positions on different games.
@@ -1009,10 +1078,14 @@ export function optimizeHybrid(input: HybridInput): HybridResult {
     }
   }
   if (!first || !second) {
-    return { primary: null, alternates: [], note: first ? "Only one game has a placeable consensus position." : "No consensus position has a usable FanDuel ladder." };
+    return {
+      primary: null,
+      alternates: [],
+      note: first ? "Only one game has a placeable consensus position." : "No consensus position has a usable FanDuel ladder.",
+      delivery: deliveryOf(cap, 0, 0, 0, minBox),
+    };
   }
   const core = [first, second];
-  let cross: Candidate = { structure: "cross-game", core, extras: [], tuned: tune(core, 0, band)!, coreScore: first.position.score + second.position.score };
-  if (cross.tuned.distance > 0 && settings.maxLegs > 2) cross = expand(cross, ranked, placedOf, band, settings.maxLegs);
-  return { primary: toHybrid(cross), alternates: [], note: null };
+  const cross: Candidate = { structure: "cross-game", core, tuned: tune(core, 0, band)!, coreScore: first.position.score + second.position.score, fallback: null };
+  return { primary: toHybrid(cross), alternates: [], note: null, delivery: deliveryOf(cap, 2, 0, 0, minBox) };
 }

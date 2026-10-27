@@ -12,7 +12,8 @@
 //   npx tsx src/server/data/hybrid-generate-acceptance-test.ts
 import nflEvent from "@/lib/parlay/__fixtures__/fanduel-event-nfl.json";
 import { buildConsensusPositions } from "@/lib/parlay/consensus";
-import { optimizeHybrid, HYBRID_CANDIDATE_GAMES } from "@/lib/parlay/hybrid";
+import { optimizeHybrid, HYBRID_CANDIDATE_GAMES, HYBRID_MAX_LADDER_GAMES, ladderGameCount } from "@/lib/parlay/hybrid";
+import { HYBRID_LINK_MAX_LEGS } from "@/lib/parlay/hybrid-link";
 import type { HybridGenerateRequest } from "@/lib/parlay/hybrid-request";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { GeneratorSnapshot } from "@/lib/parlay/generator";
@@ -24,6 +25,7 @@ import {
   ALT_LINES_NOT_POSTED_NOTE,
   LADDERS_UNAVAILABLE_NOTE,
   chooseCandidateEvents,
+  ladderRequests,
   PRICING_IN_PROGRESS_NOTE,
   runHybridGenerate,
   type HybridDeps,
@@ -63,6 +65,7 @@ const TEAMS: Record<string, [string, string, string]> = {
   NFL: [HOME, AWAY, "Broncos"],
   NHL: ["Detroit Red Wings", "New Jersey Devils", "Red Wings"],
   MLB: ["Chicago Cubs", "Boston Red Sox", "Cubs"],
+  NBA: ["Boston Celtics", "Los Angeles Lakers", "Celtics"],
 };
 type SideKind = "SPREAD" | "ML" | null;
 type GameSpec = { side: SideKind; total: boolean; league?: string };
@@ -98,7 +101,7 @@ function snapshotOf(games: GameSpec[], record?: (n: number) => [number, number])
 }
 
 const BOX: GameSpec = { side: "SPREAD", total: true };
-const SETTINGS = { targetMin: -140, targetMax: -110, width: "balanced" as const, perLegRange: null, maxLegs: 4, minWinPct: 55, boxLegs: "2" as const };
+const SETTINGS = { targetMin: -140, targetMax: -110, width: "balanced" as const, perLegRange: null, maxLegs: 2, minWinPct: 55, boxLegs: "2" as const };
 const request = (over: Partial<HybridGenerateRequest> = {}): HybridGenerateRequest => ({ leagues: ["NFL"], targets: [], include: "ALL", settings: SETTINGS, ...over });
 
 // ---- The fakes, with a call log ----
@@ -160,7 +163,7 @@ async function main() {
       positions: positions.filter((p) => candidate.has(p.eventId)),
       ladders: Object.fromEntries(r.ladderRequests.flat().map((q) => [q.eventId, ladderFor(q.markets)])),
       swings: Object.fromEntries([HOME, AWAY].map((t) => [t, []])),
-      settings: { targetMin: -140, targetMax: -110, width: "balanced", legRange: null, maxLegs: 4, boxLegs: "2" },
+      settings: { targetMin: -140, targetMax: -110, width: "balanced", legRange: null, maxLegs: 2, boxLegs: "2" },
     });
     check("the result is the optimizer's, untouched", res.result, direct);
     check("sport keys for the link are returned for the asked events", Object.keys(res.eventSportKeys).sort(), asked(r));
@@ -170,21 +173,32 @@ async function main() {
   {
     const r = rig(eight);
     await run(r, request());
-    // 8 box games: the top 6, then the next positions' events for the extra legs (maxLegs 4 -> 2 more).
-    check("maxLegs 4: the top 6 box games + 2 more events", asked(r), ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"]);
-    const r2 = rig(eight);
-    await run(r2, request({ settings: { ...SETTINGS, maxLegs: 2 } }));
-    check(`maxLegs 2: exactly the top ${HYBRID_CANDIDATE_GAMES} box games`, asked(r2), ["G1", "G2", "G3", "G4", "G5", "G6"]);
-    const r3 = rig(eight);
-    await run(r3, request({ settings: { ...SETTINGS, maxLegs: 3 } }));
-    check("maxLegs 3: the top 6 + 1 more", asked(r3), ["G1", "G2", "G3", "G4", "G5", "G6", "G7"]);
+    // The box games asked about: the legs cap can hold plus two spare, 6 at least, 12 at most. No padding events.
+    check(`maxLegs 2: exactly the top ${HYBRID_CANDIDATE_GAMES} box games`, asked(r), ["G1", "G2", "G3", "G4", "G5", "G6"]);
+    for (const [maxLegs, boxLegs] of [[3, "2"], [4, "2"], [3, "auto"], [4, "3"], [5, "3"]] as const) {
+      const rx = rig(eight);
+      await run(rx, request({ settings: { ...SETTINGS, maxLegs, boxLegs } }));
+      check(`maxLegs ${maxLegs} / ${boxLegs}: still the top 6 box games, no extra events`, asked(rx), ["G1", "G2", "G3", "G4", "G5", "G6"]);
+    }
+    const twelve = snapshotOf(Array.from({ length: 14 }, () => BOX));
+    const ids = (n: number) => Array.from({ length: n }, (_, k) => "G" + (k + 1)).sort();
+    for (const [maxLegs, boxLegs, games] of [[7, "2", 6], [15, "2", 9], [15, "auto", 9], [15, "3", 7], [25, "2", 12], [25, "auto", 12]] as const) {
+      const rx = rig(twelve);
+      await run(rx, request({ settings: { ...SETTINGS, maxLegs, boxLegs } }));
+      check(`maxLegs ${maxLegs} / ${boxLegs}: ladders for ${games} games`, [asked(rx).length, ladderGameCount(maxLegs, boxLegs)], [games, games]);
+      check(`...the top ${games} box games`, asked(rx), ids(games));
+    }
+    const sixteen = snapshotOf(Array.from({ length: 16 }, () => BOX));
+    const cap = rig(sixteen);
+    await run(cap, request({ settings: { ...SETTINGS, maxLegs: 25 } }));
+    check("16 qualifying games, 25 legs: never more than the 12-game limit", [asked(cap).length, HYBRID_MAX_LADDER_GAMES], [12, 12]);
+    // Credits: 2 markets a game on a cold cache (alternate_spreads + alternate_totals), 3 where h2h is needed.
+    const fifteen = rig(twelve);
+    await run(fifteen, request({ settings: { ...SETTINGS, maxLegs: 15 } }));
+    check("15 legs: 9 games x 2 markets = 18 credits cold", fifteen.ladderRequests.flat().reduce((n, q) => n + q.markets.length, 0), 18);
     // A 3-leg box's third leg is on the box's own game and ladder: no extra event for it.
-    const r4 = rig(eight);
-    await run(r4, request({ settings: { ...SETTINGS, maxLegs: 3, boxLegs: "auto" } }));
-    check("auto, maxLegs 3 (the default): exactly the top 6, as 2-leg maxLegs 2 asks", asked(r4), ["G1", "G2", "G3", "G4", "G5", "G6"]);
     const r5 = rig(eight);
     await run(r5, request({ settings: { ...SETTINGS, maxLegs: 4, boxLegs: "3" } }));
-    check("3-leg, maxLegs 4: the top 6 + 1 more", asked(r5), ["G1", "G2", "G3", "G4", "G5", "G6", "G7"]);
     check("3-leg: the box games ask for the same markets as 2-leg", r5.ladderRequests.flat().find((q) => q.eventId === "G1")!.markets, r.ladderRequests.flat().find((q) => q.eventId === "G1")!.markets);
     check("the events above never include a game with no position", chooseCandidateEvents(buildConsensusPositions(snapshotOf([BOX, { side: null, total: false }]), { now: NOW }), 4), ["G1"]);
   }
@@ -197,8 +211,12 @@ async function main() {
     const marketsOf = (id: string) => r.ladderRequests.flat().find((q) => q.eventId === id)?.markets;
     check("spread + total supporters: alternate_spreads + alternate_totals, NO h2h", marketsOf("G1"), ["alternate_spreads", "alternate_totals"]);
     check("moneyline supporters: h2h is added", marketsOf("G2"), ["alternate_spreads", "alternate_totals", "h2h"]);
-    check("a side with no total asks for no totals", marketsOf("G3"), ["alternate_spreads"]);
-    check("a total with no side asks for no spreads", marketsOf("G4"), ["alternate_totals"]);
+    check("a side with no total is no box: no ladder is bought for it", marketsOf("G3"), undefined);
+    check("a total with no side is no box: no ladder is bought for it", marketsOf("G4"), undefined);
+    // What each kind of position would need, straight from the request builder.
+    const pos3 = buildConsensusPositions(mixed, { now: NOW });
+    const sportKey = () => "americanfootball_nfl";
+    check("a side alone asks for spreads only; a total alone for totals only", ladderRequests(pos3, ["G3", "G4"], sportKey).map((q) => [q.eventId, q.markets]), [["G3", ["alternate_spreads"]], ["G4", ["alternate_totals"]]]);
     check("h2h is requested for one event only", r.ladderRequests.flat().filter((q) => q.markets.includes("h2h")).map((q) => q.eventId), ["G2"]);
     check("every request carries the event's own sport key and start", r.ladderRequests.flat().every((q) => q.sport === "americanfootball_nfl" && q.commenceTime === START), true);
   }
@@ -237,7 +255,7 @@ async function main() {
     const sides = snapshotOf(Array.from({ length: 8 }, () => ({ side: "SPREAD" as SideKind, total: false })));
     const r = rig(sides);
     await run(r, request());
-    check("no box game: maxLegs + 1 events (5)", asked(r), ["G1", "G2", "G3", "G4", "G5"]);
+    check("no box game: three events (two plus a spare), whatever the legs cap", asked(r), ["G1", "G2", "G3"]);
     const r2 = rig(sides);
     await run(r2, request({ settings: { ...SETTINGS, maxLegs: 2 } }));
     check("no box game, 2 legs: 3 events (two plus a spare)", asked(r2), ["G1", "G2", "G3"]);
@@ -382,10 +400,20 @@ async function main() {
     await run(r4, request({ settings: two }));
     check("nothing unposted: one pass", r4.ladderRequests.length, 1);
 
-    // maxLegs 4: the two extra events are fetched in pass one; the replacements come after them.
+    // maxLegs 4: 6 games in pass one (4 legs hold two boxes, plus two spare); pass two replaces the 3 unposted.
     const r5 = rig(ten, { lookup: lookupWith(unpostedSet) });
-    await run(r5, request());
-    check("maxLegs 4: pass one is 6 box + 2 extra; pass two the 2 box games left", r5.ladderRequests.map((q) => q.length), [8, 2]);
+    await run(r5, request({ settings: { ...SETTINGS, maxLegs: 4 } }));
+    check("maxLegs 4: pass one is 6 games; pass two the 3 replacements", r5.ladderRequests.map((q) => q.length), [6, 3]);
+
+    // The 12-game limit holds through the backfill: 14 eligible, 3 of the top 12 unposted, cap 25 -> no room to replace.
+    const fourteen = snapshotOf(Array.from({ length: 14 }, () => BOX));
+    const r6 = rig(fourteen, { lookup: lookupWith(unpostedSet) });
+    const res6 = await run(r6, request({ settings: { ...SETTINGS, maxLegs: 25 } }));
+    check("cap 25: 12 asked, the limit leaves no room to backfill", [r6.ladderRequests.length, asked(r6).length, res6.candidateEvents.length], [1, 12, 12]);
+    // 15 legs asks 9; the backfill may go up to 12, never past it.
+    const r7 = rig(fourteen, { lookup: lookupWith(new Set(["G1", "G2", "G3", "G4", "G5"])) });
+    const res7 = await run(r7, request({ settings: { ...SETTINGS, maxLegs: 15 } }));
+    check("cap 15: 9 asked, then 3 replacements (12 in all), not the 5 that were lost", [r7.ladderRequests.map((q) => q.length), res7.candidateEvents.length], [[9, 3], 12]);
   }
 
   // ---- 12. h2h for hockey and baseball (the moneyline is their main line) ----
@@ -441,6 +469,48 @@ async function main() {
 
     const fresh = await buildHybridFanDuelLink(legs, mk([ladders([])]));
     check("nothing stale: one read, no re-price", [fresh.url !== null, calls.length], [true, 1]);
+  }
+
+  // ---- 15. Multi-box through the action: the cap, fewer games than the cap, the link flag, a spent credit budget ----
+  {
+    const fourteen = snapshotOf(Array.from({ length: 14 }, () => BOX));
+    const r = rig(fourteen);
+    const res = await run(r, request({ settings: { ...SETTINGS, maxLegs: 15 } }));
+    const p = res.result.primary!;
+    check("cap 15: seven boxes, 14 legs, 9 games asked", [p.structure, p.boxes!.length, p.legs.length, asked(r).length, res.result.delivery.deliveredLegs], ["multi-box", 7, 14, 9, 14]);
+    check("14 legs is more than the FanDuel handoff takes: not linkable", res.linkable, false);
+    const four = await run(rig(fourteen), request({ settings: { ...SETTINGS, maxLegs: 4 } }));
+    check(`cap 4: two boxes, ${HYBRID_LINK_MAX_LEGS} legs, linkable`, [four.result.primary!.legs.length, four.linkable], [4, true]);
+    const single = await run(rig(fourteen), request());
+    check("cap 2: one box, linkable", [single.result.primary!.legs.length, single.linkable], [2, true]);
+    const none = await run(rig(snapshotOf([{ side: null, total: false }])), request());
+    check("no hybrid at all is linkable-trivially false-safe: no legs", [none.result.primary, none.linkable], [null, true]);
+
+    // Fewer games than the cap: only those games are asked, and the shortfall is reported.
+    const three = rig(snapshotOf(Array.from({ length: 3 }, () => BOX)));
+    const rs = await run(three, request({ settings: { ...SETTINGS, maxLegs: 15 } }));
+    check("3 qualifying games, cap 15: ladders for those 3 only", asked(three), ["G1", "G2", "G3"]);
+    check("...6 of 15 delivered, short of games", rs.result.delivery, { requestedLegs: 15, deliveredLegs: 6, boxes: 3, qualifyingGames: 3, shortOfGames: true });
+
+    // The credit budget runs low part-way (alt-ladders admit(): the first games are funded, the rest are skipped):
+    // generation degrades to the funded games, with a note per skipped game, instead of failing.
+    const funded = new Set(["G1", "G2", "G3", "G4"]);
+    const lowBudget = rig(fourteen, {
+      lookup: (reqs) => ({
+        ladders: Object.fromEntries(reqs.filter((q) => funded.has(q.eventId)).map((q) => [q.eventId, ladderFor(q.markets)])),
+        pricingInProgress: [],
+        unavailable: reqs.filter((q) => !funded.has(q.eventId)).flatMap((q) => q.markets.map((market) => ({ eventId: q.eventId, market, cause: "budget" as const }))),
+      }),
+    });
+    const rb = await run(lowBudget, request({ settings: { ...SETTINGS, maxLegs: 15 } }));
+    check("budget low: a parlay from the 4 funded games", [rb.result.primary!.boxes!.map((b) => b.legs[0].eventId), rb.result.delivery.deliveredLegs, rb.result.delivery.shortOfGames], [["G1", "G2", "G3", "G4"], 8, true]);
+    check("...one ladders-unavailable note per skipped game, cause budget", [rb.notes.length, new Set(rb.notes.map((n) => n.kind)).size, rb.notes.every((n) => n.cause === "budget")], [5, 1, true]);
+    check("...no third ladder pass was bought", lowBudget.ladderRequests.length <= 2, true);
+
+    // Budget spent entirely and nothing cached: no hybrid, one note per game, no error.
+    const spent = rig(fourteen, { lookup: (reqs) => ({ ladders: {}, pricingInProgress: [], unavailable: reqs.flatMap((q) => q.markets.map((market) => ({ eventId: q.eventId, market, cause: "budget" as const }))) }) });
+    const rz = await run(spent, request({ settings: { ...SETTINGS, maxLegs: 15 } }));
+    check("budget spent, nothing cached: no primary, a note per game, delivered 0", [rz.result.primary, rz.notes.length > 0, rz.result.delivery.deliveredLegs, rz.linkable], [null, true, 0, true]);
   }
 
   console.log(failures > 0 ? `\n${failures} check(s) FAILED.` : "\nAll checks passed.");
