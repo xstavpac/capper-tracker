@@ -22,6 +22,7 @@ import type { CapperLeagueRecords } from "@/server/data/picks";
 import type { AltLadder, AltLadderLookup, AltLadderRequest } from "@/server/data/alt-ladders";
 import {
   ALT_LINES_NOT_POSTED_NOTE,
+  LADDERS_UNAVAILABLE_NOTE,
   chooseCandidateEvents,
   PRICING_IN_PROGRESS_NOTE,
   runHybridGenerate,
@@ -275,6 +276,22 @@ async function main() {
     const wait = rig(snapshotOf([BOX]), { lookup: () => ({ ladders: {}, pricingInProgress: [{ eventId: "G1", market: "alternate_spreads" }] }) });
     const r3 = await run(wait, request());
     check("pricing in progress is reported as a note on the event", [r3.result.primary, r3.notes.map((n) => n.kind)], [null, ["pricing-in-progress"]]);
+
+    // Pricing prevented (credit budget, usage gate, API failure, no key, failed lookup): one
+    // ladders-unavailable note per event, carrying the cause. Not "not posted", not "in progress".
+    for (const cause of ["budget", "usage-gate", "api-failure", "no-api-key", "lookup-failed"] as const) {
+      const down = rig(snapshotOf([BOX]), {
+        lookup: (reqs) => ({ ladders: {}, pricingInProgress: [], unavailable: reqs.flatMap((q) => q.markets.map((market) => ({ eventId: q.eventId, market, cause }))) }),
+      });
+      const rd = await run(down, request());
+      check("unavailable (" + cause + "): no primary, one ladders-unavailable note with the cause", [rd.result.primary, rd.notes.map((n) => [n.eventId, n.kind, n.cause, n.message])], [null, [["G1", "ladders-unavailable", cause, LADDERS_UNAVAILABLE_NOTE]]]);
+    }
+    // A cached (stale) ladder can still be in hand while pricing was prevented: the note stays.
+    const staleDown = rig(snapshotOf([BOX]), {
+      lookup: (reqs) => ({ ladders: Object.fromEntries(reqs.map((q) => [q.eventId, Object.fromEntries(Object.entries(ladderFor(q.markets)).map(([k, v]) => [k, { ...v, isStale: true }]))])), pricingInProgress: [], unavailable: reqs.flatMap((q) => q.markets.map((market) => ({ eventId: q.eventId, market, cause: "budget" as const }))) }),
+    });
+    const rs = await run(staleDown, request());
+    check("unavailable with stale cache: still a primary, flagged stale, and the note", [rs.result.primary?.anyStale, rs.notes.map((n) => n.kind)], [true, ["ladders-unavailable"]]);
   }
 
   // ---- 9. A rejection from the loader passes straight through ----

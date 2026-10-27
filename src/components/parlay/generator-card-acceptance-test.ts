@@ -73,6 +73,15 @@ stub("../../server/actions/parlay-generate", {
     return { snapshot, parlay: buildGenerated(snapshot, req.settings, null, new Date()) };
   },
 });
+// Consensus Hybrid's actions: counted, never reached by Standard.
+const hybridRequests: unknown[] = [];
+stub("../../server/actions/parlay-hybrid", {
+  hybridGenerateAction: async (req: unknown) => {
+    hybridRequests.push(req);
+    return { result: { primary: null, alternates: [], note: null }, notes: [], candidateEvents: [], eventSportKeys: {}, generatedAt: new Date().toISOString() };
+  },
+  hybridFanDuelLinkAction: async () => ({ error: "not used here" }),
+});
 stub("../../server/actions/picks", { getLeagueRecordsAction: async () => ({ records: {}, streaks: {}, last20: {} }) });
 stub("../../server/actions/parlay-slip", {
   getSlipPickStatesAction: async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, kickoff: FUTURE, over: false, gameStatus: null }])),
@@ -251,6 +260,23 @@ async function main() {
     await click(b);
   }
   check("the leg stepper reaches 25 and answers a 26th with '25 legs max'", ctx.legCount === 25 && text().includes("25 legs max"), `legs=${ctx.legCount}`);
+
+  // ---- Standard | Hybrid ----
+  await click(button("Standard"));
+  check("Standard is the default view: its own controls, no Hybrid line", text().includes("Max legs per game") && !text().includes("Hybrid builds from capper consensus"));
+  const standardRequests = requests.length;
+  await click(button("Hybrid"));
+  check("Hybrid: the muted slip line, its controls", text().includes("Hybrid builds from capper consensus. Your slip isn't used in this mode.") && text().includes("Target odds") && text().includes("Box width") && text().includes("Max legs"));
+  check("Hybrid: leg count, max legs per game, Pick Mix, fill toggle and Props are gone", !text().includes("Max legs per game") && !text().includes("Fill from") && !text().includes("Customize Mix") && !text().includes("Props") && !text().includes("Your picks ·"));
+  check("Hybrid: switching modes sends no request", requests.length === standardRequests && hybridRequests.length === 0);
+  await click(button("Generate hybrid"));
+  check("Hybrid: the Generate button sends exactly one hybrid request, none to Standard", hybridRequests.length === 1 && requests.length === standardRequests);
+  const sent = hybridRequests[0] as { settings: { targetMin: number; targetMax: number; maxLegs: number; width: string; minWinPct: number } };
+  check("Hybrid: defaults are -140 / -110, 2 legs, balanced, 55%", sent.settings.targetMin === -140 && sent.settings.targetMax === -110 && sent.settings.maxLegs === 2 && sent.settings.width === "balanced" && sent.settings.minWinPct === 55);
+  check("Hybrid: no-box result is explained in plain words", text().includes("No game has qualifying consensus on both a side and a total."));
+  await click(button("Standard"));
+  check("back on Standard: its controls and its leg count (25) are still there", text().includes("Max legs per game") && ctx.legCount === 25 && !text().includes("Hybrid builds from capper consensus"));
+  check("flipping modes never regenerated anything", requests.length === standardRequests && hybridRequests.length === 1);
 
   await act(() => root.unmount());
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);

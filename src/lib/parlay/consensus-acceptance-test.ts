@@ -283,6 +283,19 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
     { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [6, 4], all: [90, 10] },
   ]), HOME)!;
   check("the league-specific record is used first", leagueFirst.supporters.map((s) => [s.record.source, s.record.wins, s.record.losses]), [["LEAGUE", 6, 4], ["LEAGUE", 6, 4]]);
+  // The record's own market travels with it: A's best record is the moneyline (9-1), though the
+  // hardest post (the endorsed line) is the spread, so recordMarket and postedMarket differ.
+  const mixed = find(build([
+    { id: "a1", capper: "A", bet: { kind: "ML", team: "HOME" }, lg: [9, 1] },
+    { id: "a2", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [7, 3] },
+    { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [7, 3] },
+  ]), HOME)!;
+  check("recordMarket is the market of the record used, apart from the posted market", mixed.supporters.map((s) => [s.capperId, s.recordMarket, s.postedMarket, s.record.wins]), [["A", "MONEYLINE", "SPREAD", 9], ["B", "SPREAD", "SPREAD", 7]]);
+  const totalPos = buildConsensusPositions(snapshotOf([
+    { id: "t1", capper: "A", bet: { kind: "TOTAL", side: "Over", line: 44.5 }, lg: [8, 2] },
+    { id: "t2", capper: "B", bet: { kind: "TOTAL", side: "Over", line: 44.5 }, lg: [8, 2] },
+  ]), { now: NOW }).find((p) => p.family === "TOTAL")!;
+  check("a total's record market is TOTAL", totalPos.supporters.map((s) => s.recordMarket), ["TOTAL", "TOTAL"]);
   // No league wins or losses: the all-time category record.
   const specs: Spec[] = [
     { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, all: [9, 3] },

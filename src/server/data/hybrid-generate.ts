@@ -25,17 +25,20 @@ import type { HybridGenerateRequest } from "@/lib/parlay/hybrid-request";
 import { keepsPick } from "@/lib/parlay/include-picks";
 import type { ParlayRejection } from "@/lib/parlay/leg-cap";
 import type { SwingGame } from "@/lib/parlay/recent-swings";
-import type { AltLadderLookup, AltLadderMarket, AltLadderRequest } from "@/server/data/alt-ladders";
+import type { AltLadderLookup, AltLadderMarket, AltLadderRequest, AltLadderUnavailableCause } from "@/server/data/alt-ladders";
 import type { LoadedSnapshot, SnapshotScope } from "@/server/data/generator-snapshot";
 
 export const ALT_LINES_NOT_POSTED_NOTE = "Alternate lines post on game day (FanDuel).";
+export const LADDERS_UNAVAILABLE_NOTE = "Live alternate prices are unavailable right now.";
 export const PRICING_IN_PROGRESS_NOTE = "Pricing in progress - another request is fetching this game's FanDuel lines. Try again in a few seconds.";
 
 export type HybridEventNote = {
   eventId: string;
   gameLabel: string;
-  kind: "alt-lines-not-posted" | "pricing-in-progress";
+  kind: "alt-lines-not-posted" | "pricing-in-progress" | "ladders-unavailable";
   message: string;
+  // ladders-unavailable only: the credit budget, the usage gate or an API failure stopped the pricing.
+  cause?: AltLadderUnavailableCause;
 };
 
 export type HybridGenerateResponse = {
@@ -146,7 +149,11 @@ export async function runHybridGenerate(req: HybridGenerateRequest, deps: Hybrid
       const second = ladderRequests(ranked.filter((p) => more.includes(p.eventId)), more, sportKeyOf);
       const again = await deps.getLadders(second);
       requests = [...requests, ...second];
-      lookup = { ladders: { ...lookup.ladders, ...again.ladders }, pricingInProgress: [...lookup.pricingInProgress, ...again.pricingInProgress] };
+      lookup = {
+        ladders: { ...lookup.ladders, ...again.ladders },
+        pricingInProgress: [...lookup.pricingInProgress, ...again.pricingInProgress],
+        unavailable: [...(lookup.unavailable ?? []), ...(again.unavailable ?? [])],
+      };
     }
   }
   const positions = ranked.filter((p) => candidates.has(p.eventId));
@@ -187,8 +194,14 @@ function eventNotes(requests: AltLadderRequest[], positions: ConsensusPosition[]
     return p ? `${p.awayTeam} @ ${p.homeTeam}` : eventId;
   };
   const inProgress = new Set(lookup.pricingInProgress.map((x) => x.eventId));
+  const causeOf = new Map((lookup.unavailable ?? []).map((u) => [u.eventId, u.cause]));
   const notes: HybridEventNote[] = [];
   for (const r of requests) {
+    const cause = causeOf.get(r.eventId);
+    if (cause && !inProgress.has(r.eventId)) {
+      notes.push({ eventId: r.eventId, gameLabel: labelOf(r.eventId), kind: "ladders-unavailable", message: LADDERS_UNAVAILABLE_NOTE, cause });
+      continue;
+    }
     if (inProgress.has(r.eventId)) {
       notes.push({ eventId: r.eventId, gameLabel: labelOf(r.eventId), kind: "pricing-in-progress", message: PRICING_IN_PROGRESS_NOTE });
       continue;

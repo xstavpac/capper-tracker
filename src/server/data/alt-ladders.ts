@@ -302,7 +302,12 @@ type Owned = Event & { promise: Promise<Map<string, FetchedMarket> | null>; sett
 // A pair another request was buying when this call asked: held by another
 // instance's claim, or by a fetch on this instance that did not deliver in time.
 type LostPair = { eventId: string; market: AltLadderMarket; commenceTime: Date };
-type Loaded = { out: AltLadderResult; lost: LostPair[] };
+// Why a pair could not be priced by this call: the daily hybrid credit budget,
+// the usage gate (>=95% of the plan), the Odds API failing, no API key, or the
+// cache lookup itself failing.
+export type AltLadderUnavailableCause = "budget" | "usage-gate" | "api-failure" | "no-api-key" | "lookup-failed";
+export type AltLadderUnavailable = { eventId: string; market: AltLadderMarket; cause: AltLadderUnavailableCause };
+type Loaded = { out: AltLadderResult; lost: LostPair[]; unavailable: AltLadderUnavailable[] };
 
 async function load(requests: AltLadderRequest[]): Promise<Loaded> {
   const now = new Date();
@@ -316,7 +321,7 @@ async function load(requests: AltLadderRequest[]): Promise<Loaded> {
     for (const m of r.markets) if (!e.markets.includes(m)) e.markets.push(m);
     events.set(r.eventId, e);
   }
-  if (events.size === 0) return { out: {}, lost: [] };
+  if (events.size === 0) return { out: {}, lost: [], unavailable: [] };
 
   const rows: Row[] = await prisma.oddsAltLadder.findMany({
     where: { eventId: { in: [...events.keys()] }, marketKey: { in: [...new Set([...events.values()].flatMap((e) => e.markets))] } },
@@ -364,8 +369,17 @@ async function load(requests: AltLadderRequest[]): Promise<Loaded> {
   let bought = false;
   const started = new Set<string>();
   const lost: LostPair[] = [];
+  const unavailable: AltLadderUnavailable[] = [];
+  const skip = (e: Event, cause: AltLadderUnavailableCause) => e.markets.forEach((market) => unavailable.push({ eventId: e.eventId, market, cause }));
+  const failed = new Map<string, AltLadderMarket[]>();
   try {
-    const admitted = apiKey && toFetch.length > 0 ? await admit(toFetch, now) : [];
+    let admitted: Owned[] = [];
+    if (!apiKey) toFetch.forEach((e) => skip(e, "no-api-key"));
+    else if (toFetch.length > 0) {
+      const gate = await admit(toFetch, now);
+      admitted = gate.admitted;
+      gate.skipped.forEach(({ event, cause }) => skip(event, cause));
+    }
     for (const e of admitted) {
       const claimed: AltLadderMarket[] = [];
       for (const m of e.markets) {
@@ -381,9 +395,12 @@ async function load(requests: AltLadderRequest[]): Promise<Loaded> {
       fetchEventLadders({ eventId: e.eventId, sport: e.sport, markets: claimed, claimedAt: now, apiKey: apiKey! })
         .catch((err): null => {
           console.error("[alt-ladders] fetch failed", logTag({ eventId: e.eventId, markets: claimed, error: err instanceof Error ? err.message : String(err) }));
+          failed.set(e.eventId, claimed);
           return null;
         })
         .then((got) => {
+          // The fetch answered nothing usable (HTTP error, bad body, a throw): the Odds API failed us.
+          if (got === null) failed.set(e.eventId, claimed);
           e.markets.forEach((m) => inFlight.delete(pairKey(e.eventId, m)));
           e.settle(got);
         });
@@ -410,6 +427,7 @@ async function load(requests: AltLadderRequest[]): Promise<Loaded> {
     const [eventId, market] = key.split("|");
     lost.push({ eventId, market: market as AltLadderMarket, commenceTime: events.get(eventId)!.commenceTime });
   });
+  failed.forEach((markets, eventId) => markets.forEach((market) => unavailable.push({ eventId, market, cause: "api-failure" })));
   if (bought) await deleteOldLadders(now);
 
   const out: AltLadderResult = {};
@@ -432,7 +450,7 @@ async function load(requests: AltLadderRequest[]): Promise<Loaded> {
       if (ladder) (out[e.eventId] ??= {})[market] = ladder;
     }
   });
-  return { out, lost };
+  return { out, lost, unavailable };
 }
 
 // ---- Waiting on another request's claim ----
@@ -445,6 +463,10 @@ export type AltLadderLookup = {
   // Pairs still held by another request's claim, with nothing cached, once the
   // wait ran out. Not "no ladder": the price is on its way.
   pricingInProgress: { eventId: string; market: AltLadderMarket }[];
+  // Pairs this call could not price, and why (credit budget, usage gate, API
+  // failure, no key, failed lookup). A stale cached ladder may still be in `ladders`.
+  // Always set by the real lookup; optional so a test's literal can omit it.
+  unavailable?: AltLadderUnavailable[];
 };
 
 type ClaimRow = Row & { claimedAt: Date | null };
@@ -465,10 +487,11 @@ export async function getAltLaddersAwaitingClaims(
     loaded = await load(requests);
   } catch (err) {
     console.error("[alt-ladders] lookup failed", logTag({ error: err instanceof Error ? err.message : String(err) }));
-    return { ladders: {}, pricingInProgress: [] };
+    return { ladders: {}, pricingInProgress: [], unavailable: requests.flatMap((r) => r.markets.map((market) => ({ eventId: r.eventId, market, cause: "lookup-failed" as const }))) };
   }
   const ladders = loaded.out;
-  if (loaded.lost.length === 0) return { ladders, pricingInProgress: [] };
+  const unavailable = loaded.unavailable;
+  if (loaded.lost.length === 0) return { ladders, pricingInProgress: [], unavailable };
 
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const backoff = opts.backoffMs ?? HYBRID_CLAIM_REREAD_BACKOFF_MS;
@@ -513,27 +536,29 @@ export async function getAltLaddersAwaitingClaims(
     console.error("[alt-ladders] claim re-read failed", logTag({ error: err instanceof Error ? err.message : String(err) }));
     for (const pair of waiting) if (!ladders[pair.eventId]?.[pair.market]) inProgress.push(pair);
   }
-  return { ladders, pricingInProgress: inProgress.map(({ eventId, market }) => ({ eventId, market })) };
+  return { ladders, pricingInProgress: inProgress.map(({ eventId, market }) => ({ eventId, market })), unavailable };
 }
 
 // The events this call may buy, after the two credit controls. Both checks are
 // reads of odds_api_usage_log, made only when something is actually stale.
-async function admit(toFetch: Owned[], now: Date): Promise<Owned[]> {
+async function admit(toFetch: Owned[], now: Date): Promise<{ admitted: Owned[]; skipped: { event: Owned; cause: "budget" | "usage-gate" }[] }> {
   if ((await getLatestCreditUsageLevel()) === "stop_lower_priority") {
     console.error("[alt-ladders] skipped - credit usage >=95%, lower-priority markets paused", logTag({ events: toFetch.length }));
-    return [];
+    return { admitted: [], skipped: toFetch.map((event) => ({ event, cause: "usage-gate" as const })) };
   }
   let remaining = HYBRID_DAILY_CREDIT_BUDGET - (await creditsSpentToday(now));
   const admitted: Owned[] = [];
+  const skipped: { event: Owned; cause: "budget" | "usage-gate" }[] = [];
   for (const e of toFetch) {
     if (e.markets.length > remaining) {
+      skipped.push({ event: e, cause: "budget" });
       console.error("[alt-ladders] skipped - daily hybrid credit budget spent", logTag({ eventId: e.eventId, budget: HYBRID_DAILY_CREDIT_BUDGET, remaining }));
       continue;
     }
     remaining -= e.markets.length;
     admitted.push(e);
   }
-  return admitted;
+  return { admitted, skipped };
 }
 
 /** Test-only: forget every fetch this instance has in flight. */

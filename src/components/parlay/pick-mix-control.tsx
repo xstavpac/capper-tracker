@@ -34,10 +34,11 @@ const INCLUDE_OPTIONS: { key: "ALL" | BetCategory; label: string }[] = [
   ...BET_CATEGORIES.map((c) => ({ key: c, label: BET_CATEGORY_LABELS[c] })),
 ];
 
-export function IncludePicksChips({ value, onToggle }: { value: IncludeSelection; onToggle: (key: "ALL" | BetCategory) => void }) {
+// `hide`: categories left off the row (Consensus Hybrid has no Props).
+export function IncludePicksChips({ value, onToggle, hide = [] }: { value: IncludeSelection; onToggle: (key: "ALL" | BetCategory) => void; hide?: BetCategory[] }) {
   return (
     <div role="group" aria-label="Include picks" className="flex flex-wrap gap-1.5">
-      {INCLUDE_OPTIONS.map((o) => {
+      {INCLUDE_OPTIONS.filter((o) => o.key === "ALL" || !hide.includes(o.key)).map((o) => {
         const on = o.key === "ALL" ? value === "ALL" : value !== "ALL" && value.includes(o.key);
         return (
           <button

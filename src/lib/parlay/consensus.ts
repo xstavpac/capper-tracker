@@ -72,6 +72,8 @@ export type PositionCapper = {
   capperId: string;
   capperName: string;
   record: HybridRecord;
+  // The market of the post whose record this is (the capper's best-scoring post on the position).
+  recordMarket: HybridMarket;
   // Wilson lower bound of `record` at the generator's z - what the score sums.
   score: number;
   // The hardest gated post on the position, as posted: its market and number
@@ -208,6 +210,7 @@ function toCapper(posts: Post[]): PositionCapper {
     capperId: best.pick.capperId,
     capperName: best.pick.capperName,
     record: best.record,
+    recordMarket: best.market,
     score: best.score,
     postedMarket: hardest.market,
     postedLine: hardest.postedLine,

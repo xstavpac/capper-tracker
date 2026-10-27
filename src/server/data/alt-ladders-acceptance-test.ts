@@ -614,6 +614,45 @@ async function main() {
     expect("the re-read fails mid-wait: no throw, the cached ladder stands", [broke.ladders[EVENT]?.[SP]?.isStale, broke.ladders[EVENT]?.[SP]?.outcomes.length], [true, 1]);
   }
 
+  // ---- 14b. why a pair could not be priced: the lookup says so (unavailable), one cause each ----
+  {
+    const stalePair = () => {
+      reset();
+      seed(SP, { fetchedAgoMs: 2 * HOUR, commence: startsIn(5) });
+    };
+    const causes = (r: { unavailable?: { eventId: string; market: string; cause: string }[] }) => (r.unavailable ?? []).map((u) => [u.eventId, u.market, u.cause]);
+
+    stalePair();
+    const ok = await getAltLaddersAwaitingClaims(req([SP]), { sleep: async () => {} });
+    expect("priced normally: nothing unavailable", ok.unavailable, []);
+
+    stalePair();
+    gateRow = { creditsUsed: 19_000, creditsRemaining: 1_000 };
+    const gate = await getAltLaddersAwaitingClaims(req([SP]), { sleep: async () => {} });
+    expect("usage gate (>=95%): unavailable, cause usage-gate; the cached ladder still comes back stale", [causes(gate), gate.ladders[EVENT]?.[SP]?.isStale], [[[EVENT, SP, "usage-gate"]], true]);
+
+    stalePair();
+    for (let i = 0; i < 150; i++) usageRows.push({ sportKey: SPORT, pollTimestamp: new RealDate(nowMs - HOUR), creditsUsed: 100, creditsRemaining: 19_900, marketsRequested: "alternate_spreads", eventsRequested: 1, httpStatus: 200, caller: "hybrid-ladders" });
+    const budget = await getAltLaddersAwaitingClaims(req([SP]), { sleep: async () => {} });
+    expect("daily budget spent: unavailable, cause budget", [causes(budget), oddsApiCalls.length], [[[EVENT, SP, "budget"]], 0]);
+
+    stalePair();
+    answer = () => new Response("upstream down", { status: 500, headers: OK_HEADERS });
+    const api = await getAltLaddersAwaitingClaims(req([SP]), { sleep: async () => {} });
+    expect("Odds API failing (HTTP 500): unavailable, cause api-failure", causes(api), [[EVENT, SP, "api-failure"]]);
+
+    stalePair();
+    env.ODDS_API_KEY = "";
+    const noKey = await getAltLaddersAwaitingClaims(req([SP]), { sleep: async () => {} });
+    env.ODDS_API_KEY = "test-key-never-sent-anywhere";
+    expect("no API key: unavailable, cause no-api-key, nothing sent", [causes(noKey), oddsApiCalls.length], [[[EVENT, SP, "no-api-key"]], 0]);
+
+    reset();
+    ladderFailsRead = true;
+    const down = await getAltLaddersAwaitingClaims(req([SP]), { sleep: async () => {} });
+    expect("cache lookup failing: no throw, every asked pair unavailable, cause lookup-failed", [down.ladders, causes(down)], [{}, [[EVENT, SP, "lookup-failed"]]]);
+  }
+
   // ---- 15. alternate lines not posted yet (FanDuel posts NBA alternates only on game day) ----
   {
     const NBA = "basketball_nba";

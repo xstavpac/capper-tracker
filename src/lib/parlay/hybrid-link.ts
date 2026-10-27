@@ -46,6 +46,8 @@ export type HybridLinkLegResult =
       // FanDuel's closest line for the same market and outcome right now; null
       // when the market has none (or the lines could not be read).
       nearest: HybridLinkNearest | null;
+      // Set when the leg is gone because its ladder could not be refreshed.
+      stale?: { asOf: string | null };
     };
 
 export type HybridLinkResponse = {
@@ -53,6 +55,9 @@ export type HybridLinkResponse = {
   url: string | null;
   legs: HybridLinkLegResult[];
   anyStale: boolean;
+  // When a leg's ladder could not be refreshed: the time of the market update behind
+  // the stale prices (ISO); null when nothing is stale or the feed gave none.
+  staleAsOf?: string | null;
   // The oldest FanDuel market update behind the prices (ISO), null when unknown.
   oddsAsOf: string | null;
 };
@@ -60,6 +65,8 @@ export type HybridLinkResponse = {
 const MARKETS: readonly string[] = ["alternate_spreads", "alternate_totals", "h2h"];
 const MAX_TEXT = 100;
 const reject = (error: string): ParlayRejection => ({ error });
+// The stale leg's reason; its time travels in `stale.asOf`, not in the text.
+export const STALE_REASON = "FanDuel's odds couldn't be refreshed";
 export const HYBRID_LINK_INVALID = "That request isn't valid - generate again and retry.";
 
 export function parseHybridLinkLegs(raw: unknown, allowedSportKeys: ReadonlySet<string>): HybridLinkLegInput[] | ParlayRejection {
@@ -118,7 +125,7 @@ export function buildHybridLink(legs: HybridLinkLegInput[], ladders: AltLadderRe
     // A ladder that could not be refreshed is not a price to bet on: no link.
     if (ladder.isStale) {
       const asOf = ladder.marketLastUpdate ? new Date(ladder.marketLastUpdate).toISOString() : null;
-      results.push({ status: "gone", leg, reason: `FanDuel's odds couldn't be refreshed${asOf ? " (as of " + asOf + ")" : ""} - try again.`, nearest: null });
+      results.push({ status: "gone", leg, reason: STALE_REASON + " - try again.", nearest: null, stale: { asOf } });
       continue;
     }
     // No maxLineMove: the exact point or nothing.
@@ -142,7 +149,8 @@ export function buildHybridLink(legs: HybridLinkLegInput[], ladders: AltLadderRe
   return {
     url: all ? buildFanDuelBetslipUrl(selections) : null,
     legs: results,
-    anyStale: results.some((r) => r.status === "gone" && r.reason.startsWith("FanDuel's odds couldn't be refreshed")),
+    anyStale: results.some((r) => r.status === "gone" && r.stale !== undefined),
+    staleAsOf: results.map((r) => (r.status === "gone" ? r.stale?.asOf ?? null : null)).filter((t): t is string => t !== null).sort()[0] ?? null,
     oddsAsOf: updates.sort()[0] ?? null,
   };
 }
