@@ -111,7 +111,7 @@ function hybrid(over: Partial<Hybrid> = {}): Hybrid {
 }
 const note = (kind: HybridEventNote["kind"], eventId = "E1", gameLabel = "Chicago Bears @ Detroit Lions"): HybridEventNote => ({ eventId, gameLabel, kind, message: "x" });
 function response(result: Partial<HybridResult> = {}, notes: HybridEventNote[] = [], candidateEvents = ["E1"]): HybridGenerateResponse {
-  return { result: { primary: hybrid(), alternates: [], note: null, ...result }, notes, candidateEvents, eventSportKeys: { E1: "americanfootball_nfl" }, generatedAt: "2026-10-27T19:15:00.000Z" };
+  return { result: { primary: hybrid(), alternates: [], note: null, delivery: { requestedLegs: 3, deliveredLegs: 2, boxes: 1, qualifyingGames: 1, shortOfGames: false }, ...result }, notes, candidateEvents, eventSportKeys: { E1: "americanfootball_nfl" }, linkable: true, generatedAt: "2026-10-27T19:15:00.000Z" };
 }
 const SETTINGS = { targetMin: -140, targetMax: -110 };
 const page = (over: Partial<PageInput> = {}): PageInput => ({ phase: "done", response: response(), errorMessage: null, settings: SETTINGS, ...over });

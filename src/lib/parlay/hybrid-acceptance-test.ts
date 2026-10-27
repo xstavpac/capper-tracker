@@ -2,7 +2,8 @@
 // placement for Over / Under / favorite / dog, home and away, balanced vs wider,
 // the opponent flip and the raw-score fallback; football key numbers; snapping
 // against the anchor and the -600 floor; fine-tuning toward the target band;
-// box eligibility, the 3-leg box (2 / 3 / auto, corridor pricing), expansion,
+// box eligibility, the 3-leg box (2 / 3 / auto, corridor pricing), the multi-box
+// parlay (total legs as a cap, in-band first, delivery), no padding,
 // the cross-game fallback, no-fit, stale flags and the odds math. Ladders are the real FanDuel captures in __fixtures__. Pure -
 // no DB, no fetch. Run with:
 //   npx tsx src/lib/parlay/hybrid-acceptance-test.ts
@@ -14,6 +15,7 @@ import { americanToDecimal, combineOdds, decimalToAmerican } from "@/lib/parlay/
 import type { ConsensusPosition, PositionCapper } from "@/lib/parlay/consensus";
 import {
   distanceToBand,
+  HYBRID_DEFAULT_MAX_LEGS,
   HYBRID_MIN_LEG_PRICE,
   impliedProbability,
   jointImplied,
@@ -563,45 +565,123 @@ function nflBox(overMisses: number[], sideCover: number[] | null, settings: Hybr
 }
 
 // ============================================================================
-// Expansion (NHL: coarse ladders) and the 4-leg cap
+// No padding: a box that misses the band stays two legs (the old expansion is gone)
 // ============================================================================
 {
-  // Core NHL box stuck at its anchors: Red Wings +2.5 (-600) x Over 4.5 (-450) = -235.
-  // Extras: NHL team sides anchored at +2.5 on other games (-600 / -550 rungs).
-  const ladders: HybridLadders = { h1: laddersOf(NHL), x1: laddersOf(NHL), x2: laddersOf(NHL), x3: laddersOf(NHL), x4: laddersOf(NHL, { noH2h: true }) };
+  // Core NHL box stuck at its anchors, with single-leg positions to spare on other games.
+  const ladders: HybridLadders = { h1: laddersOf(NHL), x1: laddersOf(NHL), x2: laddersOf(NHL), x3: laddersOf(NHL) };
   const core = [pos("h1", NHL, "SIDE", DET, 2.5, { score: 5 }), pos("h1", NHL, "TOTAL", "OVER", 4.5, { score: 5 })];
   const extras = [pos("x1", NHL, "SIDE", DET, 2.5, { score: 3 }), pos("x2", NHL, "SIDE", DET, 2.5, { score: 2 }), pos("x3", NHL, "SIDE", DET, 2.5, { score: 1 })];
-  const r = optimizeHybrid({ positions: [...core, ...extras], ladders, swings: {} });
-  const h = r.primary!;
-  // -235 -> x -600 = 0.601 (closer) -> x -600 = 0.515 (closer still); a 5th leg is never tried.
-  check("expansion: two extra legs, 4-leg cap", h.legs.map((l) => l.eventId), ["h1", "h1", "x1", "x2"]);
-  check("expansion: each extra is edge-placed", h.legs.slice(2).map((l) => [l.point, l.move.rungs]), [[2.5, 0], [2.5, 0]]);
-  check("expansion: still a same-game box, still an estimate", [h.structure, h.isEstimate], ["same-game-box", true]);
-  check("expansion: closest result, not in target", [h.inTarget, r2(h.impliedProbability)], [false, 0.52]);
-  check("expansion: description names the other games", h.boxDescription, "Wins if Detroit Red Wings lose by 2 or fewer, 5+ total goals, Detroit Red Wings lose by 2 or fewer and Detroit Red Wings lose by 2 or fewer");
+  for (const maxLegs of [3, 4, 9, 25]) {
+    const r = optimizeHybrid({ positions: [...core, ...extras], ladders, swings: {}, settings: { maxLegs } });
+    const h = r.primary!;
+    check(`no padding at maxLegs ${maxLegs}: the lone box stays two legs on its own game`, [h.structure, h.legs.map((l) => l.eventId), h.inTarget], ["same-game-box", ["h1", "h1"], false]);
+    check(`maxLegs ${maxLegs}: delivered 2, one qualifying game`, [r.delivery.deliveredLegs, r.delivery.boxes, r.delivery.qualifyingGames], [2, 1, 1]);
+  }
+  check("maxLegs above 25 is held to 25", optimizeHybrid({ positions: [...core, ...extras], ladders, swings: {}, settings: { maxLegs: 99 } }).delivery.requestedLegs, 25);
+  check("maxLegs absent is the default 3", optimizeHybrid({ positions: [...core, ...extras], ladders, swings: {} }).delivery.requestedLegs, HYBRID_DEFAULT_MAX_LEGS);
+}
 
-  // With maxLegs 2 there is no expansion.
-  const two = optimizeHybrid({ positions: [...core, ...extras], ladders, swings: {}, settings: { maxLegs: 2 } }).primary!;
-  check("maxLegs 2: no expansion", two.legs.length, 2);
-  check("maxLegs is capped at 4", optimizeHybrid({ positions: [...core, ...extras], ladders, swings: {}, settings: { maxLegs: 9 } }).primary!.legs.length, 4);
-}
+// ============================================================================
+// Multi-box: total legs is a cap, whole boxes only, each box tuned on its own
+// ============================================================================
 {
-  // An extra that would move the price AWAY from the band is not kept: the box is
-  // too short (-235), and an NHL Over 6.5 (+110) extra overshoots to +222.
-  const ladders: HybridLadders = { h1: laddersOf(NHL), x1: laddersOf(NHL) };
-  const core = [pos("h1", NHL, "SIDE", DET, 2.5, { score: 5 }), pos("h1", NHL, "TOTAL", "OVER", 4.5, { score: 5 })];
-  const r = optimizeHybrid({ positions: [...core, pos("x1", NHL, "TOTAL", "OVER", 6.5, { score: 3 })], ladders, swings: {} }).primary!;
-  check("expansion only when strictly closer", r.legs.length, 2);
-}
-{
-  // A box already in target never expands, even with positions to spare.
-  const swings = { [DEN]: games(DEN, "X", [-12, -8, 3, 1, -2], [-9, -5, 0, 0, 0]), [SEA]: games(SEA, "Y", [0, 4, -2, -5, 1], [0, 0, 0, 0, 0]) };
-  const r = optimizeHybrid({
-    positions: [pos("e1", NFL, "SIDE", DEN, 2.5), pos("e1", NFL, "TOTAL", "OVER", 45.5), pos("h1", NHL, "SIDE", DET, 2.5)],
-    ladders: { e1: laddersOf(NFL), h1: laddersOf(NHL) },
+  const swings = { [DEN]: games(DEN, "X", [-12, -8, 3, 1, -2], [-9, -5, 0, 0, 0]) };
+  // IN games land in the band (+2.5 / Over 45.5); OUT games are stuck out of it (+10.5 / Over 35.5).
+  const game = (id: string, score: number, inBand: boolean) => [
+    pos(id, NFL, "SIDE", DEN, inBand ? 2.5 : 10.5, { score }),
+    pos(id, NFL, "TOTAL", "OVER", inBand ? 45.5 : 35.5, { score }),
+  ];
+  const build = (specs: [string, number, boolean][]) => ({
+    positions: specs.flatMap(([id, score, inBand]) => game(id, score, inBand)),
+    ladders: Object.fromEntries(specs.map(([id]) => [id, laddersOf(NFL)])) as HybridLadders,
     swings,
-  }).primary!;
-  check("in-target box: no expansion", [r.legs.length, r.inTarget], [2, true]);
+  });
+  const run = (specs: [string, number, boolean][], settings: HybridSettings) => optimizeHybrid({ ...build(specs), settings });
+  const five: [string, number, boolean][] = [["g1", 5, true], ["g2", 4, true], ["g3", 3, true], ["g4", 2, true], ["g5", 1, true]];
+
+  // ---- The cap, whole boxes, best-scored first ----
+  const seven = run(five, { maxLegs: 7 });
+  const h = seven.primary!;
+  check("cap 7: three whole boxes, six legs, no single-leg padding", [h.structure, h.boxes!.length, h.legs.length], ["multi-box", 3, 6]);
+  check("cap 7: the best-scored games, in order", h.boxes!.map((b) => b.legs[0].eventId), ["g1", "g2", "g3"]);
+  check("cap 7: delivery says 6 of 7, five games qualified", seven.delivery, { requestedLegs: 7, deliveredLegs: 6, boxes: 3, qualifyingGames: 5, shortOfGames: false });
+  check("multi-box: no alternates", seven.alternates, []);
+  check("multi-box: legs are the boxes' legs in box order", h.legs.map((l) => l.positionKey), h.boxes!.flatMap((b) => b.legs.map((l) => l.positionKey)));
+  check("each box is its own game's side + total", h.boxes!.map((b) => [b.structure, b.legs.map((l) => l.family), new Set(b.legs.map((l) => l.eventId)).size]), [["same-game-box", ["SIDE", "TOTAL"], 1], ["same-game-box", ["SIDE", "TOTAL"], 1], ["same-game-box", ["SIDE", "TOTAL"], 1]]);
+
+  // ---- The combined price: the product of the box prices ----
+  const product = h.boxes!.reduce((d, b) => d * b.combinedDecimal, 1);
+  check("combined decimal is the product of the box prices", r2(h.combinedDecimal * 1000), r2(product * 1000));
+  check("combined American / implied follow from it", [h.combinedAmerican, r2(h.impliedProbability * 10000)], [decimalToAmerican(product), r2((1 / product) * 10000)]);
+  check("each box has two legs on one game, so the parlay is an estimate", [h.boxes!.every((b) => b.isEstimate), h.isEstimate], [true, true]);
+  check("in target only when every box is", [h.boxes!.map((b) => b.inTarget), h.inTarget], [[true, true, true], true]);
+  check("every leg respects the -600 floor", h.legs.every((l) => l.price >= HYBRID_MIN_LEG_PRICE), true);
+
+  // ---- Per-box independence: a box's price does not depend on the others ----
+  const alone = run([["g2", 4, true]], { maxLegs: 2 }).primary!;
+  check("a box in the parlay is priced exactly as it is alone", [h.boxes![1].combinedAmerican, h.boxes![1].legs.map((l) => [l.point, l.price])], [alone.combinedAmerican, alone.legs.map((l) => [l.point, l.price])]);
+
+  // ---- In-band boxes first: an out-of-band higher score never displaces an in-band lower one ----
+  const mixed: [string, number, boolean][] = [["a", 5, false], ["b", 1, true], ["c", 2, true]];
+  const four = run(mixed, { maxLegs: 4 }).primary!;
+  check("cap 4: the two in-band boxes, not the higher-scored out-of-band one", [four.boxes!.map((b) => b.legs[0].eventId), four.inTarget], [["c", "b"], true]);
+  const both = run([["a", 5, false], ["b", 1, true]], { maxLegs: 4 }).primary!;
+  check("both fit: in-band first (b), then the out-of-band box (a), each flagged", [both.boxes!.map((b) => [b.legs[0].eventId, b.inTarget]), both.inTarget], [[["b", true], ["a", false]], false]);
+  const all3 = run(mixed, { maxLegs: 6 }).primary!;
+  check("cap 6: in-band by score (c, b), then the out-of-band fill (a)", all3.boxes!.map((b) => [b.legs[0].eventId, b.inTarget]), [["c", true], ["b", true], ["a", false]]);
+  check("the out-of-band box is flagged on its own; the others stay in target", [all3.boxes!.map((b) => b.inTarget), all3.inTarget], [[true, true, false], false]);
+  const outs = run([["o1", 3, false], ["o2", 9, false], ["o3", 6, false]], { maxLegs: 4 }).primary!;
+  check("all out of band: the best-scored first", outs.boxes!.map((b) => b.legs[0].eventId), ["o2", "o3"]);
+
+  // ---- Fewer games than the cap: deliver what exists, say so ----
+  const few = run(five.slice(0, 3), { maxLegs: 15 });
+  check("3 qualifying games, cap 15: 3 boxes, 6 legs", [few.primary!.boxes!.length, few.primary!.legs.length], [3, 6]);
+  check("...reported as 6 of 15 delivered, short of games", few.delivery, { requestedLegs: 15, deliveredLegs: 6, boxes: 3, qualifyingGames: 3, shortOfGames: true });
+  const lone = run(five.slice(0, 1), { maxLegs: 15 });
+  check("a slate of one game is that box in the plain shape", [lone.primary!.structure, lone.primary!.boxes, lone.primary!.legs.length], ["same-game-box", undefined, 2]);
+  check("...delivery: 2 of 15, short of games", lone.delivery, { requestedLegs: 15, deliveredLegs: 2, boxes: 1, qualifyingGames: 1, shortOfGames: true });
+
+  // ---- 2 / 3 / 4 / 7 / 15 / 25 ----
+  const many: [string, number, boolean][] = Array.from({ length: 14 }, (_, i) => [`m${i + 1}`, 20 - i, true] as [string, number, boolean]);
+  const legsAt = (maxLegs: number, boxLegs?: "2" | "3" | "auto") => run(many, { maxLegs, boxLegs }).delivery;
+  check("cap 2: one box", legsAt(2).deliveredLegs, 2);
+  check("cap 3 (2-leg boxes): one box, 2 legs", legsAt(3).deliveredLegs, 2);
+  check("cap 4: two boxes", [legsAt(4).boxes, legsAt(4).deliveredLegs], [2, 4]);
+  check("cap 7: three boxes, 6 legs", [legsAt(7).boxes, legsAt(7).deliveredLegs], [3, 6]);
+  check("cap 15: seven boxes, 14 legs", [legsAt(15).boxes, legsAt(15).deliveredLegs], [7, 14]);
+  check("cap 25: twelve boxes (the ladder-game limit), 24 legs", legsAt(25), { requestedLegs: 25, deliveredLegs: 24, boxes: 12, qualifyingGames: 12, shortOfGames: false });
+  check("cap 25 with 14 games: only 12 boxes are ever built", run(many, { maxLegs: 25 }).primary!.boxes!.length, 12);
+  check("no game appears in two boxes", new Set(run(many, { maxLegs: 25 }).primary!.boxes!.map((b) => b.legs[0].eventId)).size, 12);
+  check("cap 2 and 3 keep the single-box shape with alternates", [run(many, { maxLegs: 3 }).primary!.structure, run(many, { maxLegs: 3 }).alternates.length], ["same-game-box", 2]);
+}
+
+// ---- 3-leg boxes inside the cap: Auto and "3 Legs" ----
+{
+  const GSW = NBA.away_team;
+  const DEN_NBA = NBA.home_team;
+  const swings = {
+    [GSW]: games(GSW, "X", [-12, -20, 0, 0, 0], [-18, -25, 9, 12, 0]),
+    [DEN_NBA]: games(DEN_NBA, "Y", [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]),
+  };
+  const ladders = { b1: laddersOf(NBA), b2: laddersOf(NBA) };
+  const positions = [
+    pos("b1", NBA, "SIDE", GSW, 7.5, { score: 2 }),
+    pos("b1", NBA, "TOTAL", "OVER", 236.5, { score: 2 }),
+    pos("b2", NBA, "SIDE", GSW, 7.5, { score: 1 }),
+    pos("b2", NBA, "TOTAL", "OVER", 236.5, { score: 1 }),
+  ];
+  const at = (maxLegs: number, boxLegs: "2" | "3" | "auto") => optimizeHybrid({ positions, ladders, swings, settings: { maxLegs, boxLegs } });
+  const auto6 = at(6, "auto");
+  check("auto, cap 6: two 3-leg boxes", [auto6.primary!.boxes!.map((b) => b.legs.length), auto6.delivery.deliveredLegs], [[3, 3], 6]);
+  const auto5 = at(5, "auto");
+  check("auto, cap 5: the second 3-leg box falls back to its 2-leg form", [auto5.primary!.boxes!.map((b) => b.legs.length), auto5.delivery.deliveredLegs], [[3, 2], 5]);
+  const auto4 = at(4, "auto");
+  check("auto, cap 4: one 3-leg box, nothing else fits (3 of 4)", [auto4.primary!.legs.length, auto4.delivery.deliveredLegs, auto4.delivery.shortOfGames], [3, 3, false]);
+  const three7 = at(7, "3");
+  check("3 Legs, cap 7: two boxes, 6 legs", [three7.primary!.boxes!.map((b) => b.legs.length), three7.delivery.deliveredLegs], [[3, 3], 6]);
+  check("the opposite leg counts against the cap", at(6, "auto").primary!.legs.filter((l) => l.opposite).length, 2);
+  check("the corridor is priced as a corridor inside each box", at(6, "auto").primary!.boxes!.every((b) => b.isEstimate && b.legs.some((l) => l.opposite)), true);
 }
 
 // ============================================================================
@@ -622,6 +702,16 @@ function nflBox(overMisses: number[], sideCover: number[] | null, settings: Hybr
   check("cross-game: price is the exact product", h.combinedAmerican, exact.status === "AVAILABLE" ? exact.american : null);
   check("cross-game: decimal", r2(h.combinedDecimal), r2(h.legs.reduce((d, l) => d * americanToDecimal(l.price)!, 1)));
   check("cross-game: the total names its game", h.boxDescription.includes(`total goals in ${NJ} @ ${DET}`), true);
+  check("cross-game: delivery says 2", r.delivery, { requestedLegs: 2, deliveredLegs: 2, boxes: 0, qualifyingGames: 0, shortOfGames: false });
+  // A bigger cap never pads the pair: still two legs, reported 2 of N.
+  const big = optimizeHybrid({
+    positions: [pos("e1", NFL, "SIDE", DEN, 2.5, { score: 3 }), pos("h1", NHL, "TOTAL", "OVER", 6.5, { score: 1 }), pos("x1", NHL, "SIDE", DET, 2.5, { score: 1 })],
+    ladders: { e1: laddersOf(NFL), h1: laddersOf(NHL), x1: laddersOf(NHL) },
+    swings: {},
+    settings: { maxLegs: 15 },
+  });
+  check("cross-game at cap 15: still two legs, no expansion", [big.primary!.structure, big.primary!.legs.length], ["cross-game", 2]);
+  check("cross-game at cap 15: 2 of 15 delivered", big.delivery, { requestedLegs: 15, deliveredLegs: 2, boxes: 0, qualifyingGames: 0, shortOfGames: true });
 }
 {
   // Stale ladders pass through, and oddsAsOf is the oldest market update.

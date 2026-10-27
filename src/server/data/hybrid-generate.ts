@@ -7,10 +7,12 @@
 //      on unstarted in-window games, plus both record maps. No new pick reads.
 //   2. positions (consensus.ts) from that snapshot, restricted to the targeted
 //      games and to the Include Picks markets.
-//   3. the candidate events: the top HYBRID_CANDIDATE_GAMES box-eligible games,
-//      plus the few next events the optimizer may reach for to expand past two
-//      legs or to fall back to a cross-game pair. Ladders are asked for ONLY
-//      these, and the optimizer is handed only the positions on them.
+//   3. the candidate events: the top box-eligible games, as many as the legs cap
+//      can hold plus two spare (ladderGameCount, 6 to HYBRID_MAX_LADDER_GAMES),
+//      or the first three games when none is box-eligible (the cross-game
+//      fallback). Ladders are asked for ONLY these - never more than
+//      HYBRID_MAX_LADDER_GAMES, backfill included - and the optimizer is handed
+//      only the positions on them.
 //   4. getAltLadders-with-claim-wait for those events: alternate_spreads for a
 //      team-side position, alternate_totals for a total, h2h only for a team side
 //      with moneyline supporters.
@@ -20,7 +22,8 @@
 // note for each event whose alternate lines are not posted yet or are still being
 // priced by another request.
 import { buildConsensusPositions, type ConsensusPosition } from "@/lib/parlay/consensus";
-import { boxEligibleGames, HYBRID_CANDIDATE_GAMES, optimizeHybrid, type HybridBoxLegs, type HybridResult } from "@/lib/parlay/hybrid";
+import { boxEligibleGames, HYBRID_MAX_LADDER_GAMES, ladderGameCount, optimizeHybrid, type HybridBoxLegs, type HybridResult } from "@/lib/parlay/hybrid";
+import { HYBRID_LINK_MAX_LEGS } from "@/lib/parlay/hybrid-link";
 import type { HybridGenerateRequest } from "@/lib/parlay/hybrid-request";
 import { keepsPick } from "@/lib/parlay/include-picks";
 import type { ParlayRejection } from "@/lib/parlay/leg-cap";
@@ -48,6 +51,8 @@ export type HybridGenerateResponse = {
   candidateEvents: string[];
   // Each candidate event's Odds API sport key: what hybridFanDuelLinkAction's legs carry.
   eventSportKeys: Record<string, string>;
+  // False when the parlay has more legs than the FanDuel handoff takes (HYBRID_LINK_MAX_LEGS).
+  linkable: boolean;
   generatedAt: string;
 };
 
@@ -60,32 +65,17 @@ export type HybridDeps = {
   leagueKey: (label: string) => string | undefined;
 };
 
-// Events beyond the box-eligible games that a hybrid with more than two legs can
-// take its extra legs from (one per leg past the box: past two, or past three
-// when the box may take the other side of its total, which is on the box's own
-// game and ladder).
-export function extraEventCount(maxLegs: number, boxLegs: HybridBoxLegs = "2"): number {
-  return Math.max(0, maxLegs - (boxLegs === "2" ? 2 : 3));
-}
-
-// The events to buy ladders for, in order. With a box: the top K box-eligible
-// games, then the next positions' events (one per leg the settings allow beyond
-// two). With none: the cross-game fallback needs two games, plus one per extra
-// leg and one spare for a game with no ladder.
+// The events to buy ladders for, in order. With a box: the top ladderGameCount
+// box-eligible games - no more, so the credit spend is bounded by
+// HYBRID_MAX_LADDER_GAMES whatever the slate holds, and no padding events. With
+// none: the cross-game fallback needs two games plus one spare for a game with no
+// ladder.
 export function chooseCandidateEvents(ranked: ConsensusPosition[], maxLegs: number, boxLegs: HybridBoxLegs = "2"): string[] {
   const box = boxEligibleGames(ranked)
-    .slice(0, HYBRID_CANDIDATE_GAMES)
+    .slice(0, ladderGameCount(maxLegs, boxLegs))
     .map((g) => g.eventId);
-  const chosen = new Set(box);
-  const extra = box.length > 0 ? extraEventCount(maxLegs, boxLegs) : maxLegs + 1;
-  let added = 0;
-  for (const p of ranked) {
-    if (added >= extra) break;
-    if (chosen.has(p.eventId)) continue;
-    chosen.add(p.eventId);
-    added++;
-  }
-  return Array.from(chosen);
+  if (box.length > 0) return box;
+  return Array.from(new Set(ranked.map((p) => p.eventId))).slice(0, 3);
 }
 
 // What each candidate event needs from the ladder cache: its team-side position
@@ -136,15 +126,17 @@ export async function runHybridGenerate(req: HybridGenerateRequest, deps: Hybrid
   let requests = ladderRequests(ranked.filter((p) => candidates.has(p.eventId)), candidateEvents, sportKeyOf);
   let lookup: AltLadderLookup = requests.length > 0 ? await deps.getLadders(requests) : { ladders: {}, pricingInProgress: [] };
 
-  // 4b. Backfill: a top-6 box game FanDuel hasn't posted alternate lines for is replaced by the next
-  // box-eligible game, once (a second pass, so the spend stays bounded). A game already known to be
+  // 4b. Backfill: a top box game FanDuel hasn't posted alternate lines for is replaced by the next
+  // box-eligible game, once (a second pass, and the games asked about never pass
+  // HYBRID_MAX_LADDER_GAMES, so the spend stays bounded). A game already known to be
   // unposted is a held cache row - asking for it again buys nothing - and is never re-asked here.
-  const topBox = new Set(boxEligibleGames(ranked).slice(0, HYBRID_CANDIDATE_GAMES).map((g) => g.eventId));
+  const boxIds = boxEligibleGames(ranked).map((g) => g.eventId);
+  const topBox = new Set(boxIds.slice(0, ladderGameCount(req.settings.maxLegs, req.settings.boxLegs)));
   const unposted = unpostedEvents(requests, lookup);
   const lost = candidateEvents.filter((id) => topBox.has(id) && unposted.has(id)).length;
   if (lost > 0) {
     const have = new Set(candidateEvents);
-    const more = boxEligibleGames(ranked).map((g) => g.eventId).filter((id) => !have.has(id)).slice(0, lost);
+    const more = boxIds.filter((id) => !have.has(id)).slice(0, Math.min(lost, Math.max(0, HYBRID_MAX_LADDER_GAMES - candidateEvents.length)));
     if (more.length > 0) {
       more.forEach((id) => candidates.add(id));
       candidateEvents.push(...more);
@@ -176,7 +168,7 @@ export async function runHybridGenerate(req: HybridGenerateRequest, deps: Hybrid
   const { targetMin, targetMax, width, perLegRange, maxLegs, boxLegs } = req.settings;
   const result = optimizeHybrid({ positions, ladders: lookup.ladders, swings, settings: { targetMin, targetMax, width, legRange: perLegRange, maxLegs, boxLegs } });
 
-  return { result, notes: eventNotes(requests, positions, lookup), candidateEvents, eventSportKeys: Object.fromEntries(requests.map((r) => [r.eventId, r.sport])), generatedAt: deps.now.toISOString() };
+  return { result, notes: eventNotes(requests, positions, lookup), candidateEvents, eventSportKeys: Object.fromEntries(requests.map((r) => [r.eventId, r.sport])), linkable: (result.primary?.legs.length ?? 0) <= HYBRID_LINK_MAX_LEGS, generatedAt: deps.now.toISOString() };
 }
 
 function isUnposted(r: AltLadderRequest, lookup: AltLadderLookup): boolean {

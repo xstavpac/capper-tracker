@@ -20,7 +20,6 @@
 // the ladders.
 import { buildFanDuelBetslipUrl, matchFanDuelOutcome, type FanDuelSelection } from "@/lib/parlay/fanduel-link";
 import type { HybridMarketKey } from "@/lib/parlay/hybrid";
-import { HYBRID_MAX_LEGS } from "@/lib/parlay/hybrid";
 import type { ParlayRejection } from "@/lib/parlay/leg-cap";
 import type { AltLadder, AltLadderResult } from "@/server/data/alt-ladders";
 
@@ -68,9 +67,14 @@ const reject = (error: string): ParlayRejection => ({ error });
 // The stale leg's reason; its time travels in `stale.asOf`, not in the text.
 export const STALE_REASON = "FanDuel's odds couldn't be refreshed";
 export const HYBRID_LINK_INVALID = "That request isn't valid - generate again and retry.";
+// The exact-line handoff covers a single box (up to 3 legs) or a small hybrid; a bigger
+// parlay is built but not yet linkable.
+export const HYBRID_LINK_MAX_LEGS = 4;
+export const HYBRID_LINK_TOO_MANY = `Send to FanDuel handles up to ${HYBRID_LINK_MAX_LEGS} legs for now - place this parlay's legs by hand.`;
 
 export function parseHybridLinkLegs(raw: unknown, allowedSportKeys: ReadonlySet<string>): HybridLinkLegInput[] | ParlayRejection {
-  if (!Array.isArray(raw) || raw.length === 0 || raw.length > HYBRID_MAX_LEGS) return reject(HYBRID_LINK_INVALID);
+  if (Array.isArray(raw) && raw.length > HYBRID_LINK_MAX_LEGS) return reject(HYBRID_LINK_TOO_MANY);
+  if (!Array.isArray(raw) || raw.length === 0) return reject(HYBRID_LINK_INVALID);
   const legs: HybridLinkLegInput[] = [];
   for (const r of raw) {
     if (typeof r !== "object" || r === null) return reject(HYBRID_LINK_INVALID);

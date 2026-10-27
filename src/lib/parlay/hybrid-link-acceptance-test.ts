@@ -7,7 +7,7 @@
 //   npx tsx src/lib/parlay/hybrid-link-acceptance-test.ts
 import nbaEvent from "@/lib/parlay/__fixtures__/fanduel-event-nba.json";
 import nflEvent from "@/lib/parlay/__fixtures__/fanduel-event-nfl.json";
-import { buildHybridLink, nearestLine, parseHybridLinkLegs, type HybridLinkLegInput } from "@/lib/parlay/hybrid-link";
+import { buildHybridLink, HYBRID_LINK_INVALID, HYBRID_LINK_MAX_LEGS, HYBRID_LINK_TOO_MANY, nearestLine, parseHybridLinkLegs, type HybridLinkLegInput } from "@/lib/parlay/hybrid-link";
 import { FANDUEL_BETSLIP_URL } from "@/lib/parlay/fanduel-link";
 import type { AltLadder, AltLadderOutcome, AltLadderResult } from "@/server/data/alt-ladders";
 
@@ -187,6 +187,10 @@ const none = () => null;
   check("a preseason sport key is allowed when the app carries it", Array.isArray(parseHybridLinkLegs([{ ...good, sportKey: "basketball_nba_preseason" }], ok)), true);
   check("not an array / empty", [rejected(null), rejected([]), rejected({})], [true, true, true]);
   check("more than 4 legs", rejected([good, { ...good, point: -6.5 }, { ...good, point: -5.5 }, { ...good, point: -4.5 }, { ...good, point: -3.5 }]), true);
+  const five = parseHybridLinkLegs([good, { ...good, point: -6.5 }, { ...good, point: -5.5 }, { ...good, point: -4.5 }, { ...good, point: -3.5 }], ok);
+  check("the link cap stays 4, even though a parlay can have 25 legs", HYBRID_LINK_MAX_LEGS, 4);
+  check("more than 4 legs gets its own explanation, not the generic one", [!Array.isArray(five) && five.error === HYBRID_LINK_TOO_MANY, HYBRID_LINK_TOO_MANY.includes("up to 4 legs"), (HYBRID_LINK_TOO_MANY as string) === HYBRID_LINK_INVALID], [true, true, false]);
+  check("exactly 4 legs parses", Array.isArray(parseHybridLinkLegs([good, { ...good, point: -6.5 }, { ...good, point: -5.5 }, { ...good, point: -4.5 }], ok)), true);
   check("a sport key the app doesn't carry (it ends up in a URL path)", rejected([{ ...good, sportKey: "../../admin" }]), true);
   check("an unknown market", rejected([{ ...good, marketKey: "player_points" }]), true);
   check("an alternate market with no point", rejected([{ ...good, point: null }]), true);

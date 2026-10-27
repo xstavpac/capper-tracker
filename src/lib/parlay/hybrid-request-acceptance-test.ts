@@ -47,8 +47,8 @@ check("a string, NaN, a missing target", [errorOf(parse({}, { targetMax: "-110" 
 check("width must be balanced or wider", [errorOf(parse({}, { width: "wider" })), errorOf(parse({}, { width: "narrow" })), errorOf(parse({}, { width: undefined }))], [null, "Width must be \"balanced\" or \"wider\".", "Width must be \"balanced\" or \"wider\"."]);
 
 // ---- max legs ----
-check("maxLegs 2, 3, 4 are fine", [2, 3, 4].map((n) => errorOf(parse({}, { maxLegs: n }))), [null, null, null]);
-check("maxLegs 1 / 5 / 3.5 / '3' / missing are rejected", [1, 5, 3.5, "3", undefined].map((n) => errorOf(parse({}, { maxLegs: n })) === "Legs must be a whole number from 2 to 4."), [true, true, true, true, true]);
+check("maxLegs 2, 3, 4, 7, 15, 25 are fine", [2, 3, 4, 7, 15, 25].map((n) => errorOf(parse({}, { maxLegs: n }))), [null, null, null, null, null, null]);
+check("maxLegs 1 / 26 / 3.5 / '3' / missing are rejected", [1, 26, 3.5, "3", undefined].map((n) => errorOf(parse({}, { maxLegs: n })) === "Legs must be a whole number from 2 to 25."), [true, true, true, true, true]);
 
 // ---- per-leg range ----
 check("no range, or null, is fine", [errorOf(parse({}, { perLegRange: undefined })), errorOf(parse({}, { perLegRange: null }))], [null, null]);
