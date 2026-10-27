@@ -123,6 +123,16 @@ enum PropMarket {
   // The Odds API key it maps to is player_pass_tds; that mapping is not wired up
   // yet (see PLAYER_PROP_ODDS_MARKET_KEYS), so these picks get default odds.
   PASS_TDS
+  // NFL attempts / interceptions / completions (2026-10). All four are already in
+  // the box score this app reads: PASS_ATTEMPTS / PASS_COMPLETIONS from the
+  // passing "C/ATT" column and PASS_INTERCEPTIONS from "INT" (PasserRow - QB-only,
+  // graded like PASS_TDS), RUSH_ATTEMPTS from the rushing "CAR" column
+  // (RushingRow.carries). No Odds API key is mapped (same as PASS_TDS), so these
+  // picks get default odds.
+  PASS_ATTEMPTS
+  RUSH_ATTEMPTS
+  PASS_INTERCEPTIONS
+  PASS_COMPLETIONS
   // NHL markets (2026-10). Graded from ESPN's NHL summary box score / scoring
   // plays - see server/data/nhl-boxscore.ts and nhl-prop-grading.ts. Additive:
   // no NFL value or grading path changes. POINTS = goals + assists; SAVES is

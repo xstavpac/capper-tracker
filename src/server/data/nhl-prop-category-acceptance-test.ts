@@ -19,7 +19,7 @@ function check(label: string, actual: unknown, expected: unknown) {
   if (!pass) failures++;
 }
 
-const NFL_MARKETS = ["PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "TD", "RUSH_REC_YDS", "PASS_RUSH_YDS", "PASS_TDS"];
+const NFL_MARKETS = ["PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "TD", "RUSH_REC_YDS", "PASS_RUSH_YDS", "PASS_TDS", "PASS_ATTEMPTS", "RUSH_ATTEMPTS", "PASS_INTERCEPTIONS", "PASS_COMPLETIONS"];
 const NHL_MARKETS = ["ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "ASSISTS", "SAVES"];
 // MLB markets (2026-10) - same treatment: propMarket set -> TD_PROP, no new pickCategory branch.
 const MLB_MARKETS = ["STRIKEOUTS", "OUTS_RECORDED", "TOTAL_BASES", "HITS", "WALKS", "RUNS", "RBIS", "HOME_RUNS"];
@@ -72,8 +72,12 @@ check("legacy null-propMarket MLB text stays uncategorized (unchanged)", pickCat
 // NHL props existed (no stored category changes, hence no version bump).
 check("legacy null-propMarket NHL text stays uncategorized (unchanged)", pickCategory(input(null, "Sidney Crosby over 3.5 shots on goal")), null);
 // The NFL yardage / receptions markets have their own category (version 2), and so do the
-// combined-yards ones (version 3); the rest are TD_PROP.
-const NFL_STAT_PROP: Record<string, string> = { PASS_YDS: "PASS_YDS_PROP", RUSH_YDS: "RUSH_YDS_PROP", REC_YDS: "REC_YDS_PROP", RECEPTIONS: "RECEPTIONS_PROP", RUSH_REC_YDS: "RUSH_REC_YDS_PROP", PASS_RUSH_YDS: "PASS_RUSH_YDS_PROP" };
+// combined-yards ones (version 3), and so do the attempts / completions / interceptions
+// counts (new markets, so no stored row changes); the rest are TD_PROP.
+const NFL_STAT_PROP: Record<string, string> = {
+  PASS_YDS: "PASS_YDS_PROP", RUSH_YDS: "RUSH_YDS_PROP", REC_YDS: "REC_YDS_PROP", RECEPTIONS: "RECEPTIONS_PROP", RUSH_REC_YDS: "RUSH_REC_YDS_PROP", PASS_RUSH_YDS: "PASS_RUSH_YDS_PROP",
+  PASS_ATTEMPTS: "PASS_ATTEMPTS_PROP", PASS_COMPLETIONS: "PASS_COMPLETIONS_PROP", PASS_INTERCEPTIONS: "PASS_INTERCEPTIONS_PROP", RUSH_ATTEMPTS: "RUSH_ATTEMPTS_PROP",
+};
 check("legacy null-propMarket NFL text takes the market's own category", pickCategory(input(null, "Josh Allen Over 275.5 Passing Yards", "NFL")), "PASS_YDS_PROP");
 check("NFL markets: yardage / receptions their own category, the rest TD_PROP", NFL_MARKETS.map((m) => pickCategory(input(m as PropMarket, null, "NFL"))), NFL_MARKETS.map((m) => NFL_STAT_PROP[m] ?? "TD_PROP"));
 check("PICK_CATEGORY_VERSION", PICK_CATEGORY_VERSION, 3);

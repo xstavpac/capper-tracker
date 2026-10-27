@@ -65,7 +65,7 @@
 // two lines up); that is exactly what imported the McCaffrey pick above as
 // Luke/Commanders. A team named in another pick says nothing about which
 // player this line means.
-import { parsePlayerProp } from "@/lib/bet-line";
+import { parsePlayerProp, isQbOnlyPropMarket } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { parseNbaProp } from "@/lib/nba-prop";
 import { foldDiacritics, normalizeName, isLikelyDuplicateName } from "@/lib/fuzzy-match";
@@ -243,7 +243,8 @@ export function resolveNameAgainstRoster(
   return { status: "unresolved" };
 }
 
-// Passing touchdowns (PASS_TDS) are a QB-only market, so a typed name resolves against the roster's
+// Passing touchdowns (PASS_TDS) - and pass attempts, completions and interceptions thrown, graded from
+// the same passing row - are QB-only markets, so a typed name resolves against the roster's
 // quarterbacks only: "Watson" is Deshaun Watson (QB), never WR Christian Watson. Same exact -> fuzzy ->
 // bare-surname tiers (and the same complete-slate tie-break) as resolvePlayerPropAgainstRoster, run on the
 // QB subset - so when two QBs share a surname, the only one whose team has a game on a complete slate wins,
@@ -257,6 +258,14 @@ export type PassTdResolution =
   | { status: "ambiguous"; tier: "surname" | "near-miss"; matches: PlayerCandidate[] }
   | { status: "failed"; reason: string };
 
+// How the "not a quarterback" reason names the market.
+const QB_MARKET_PHRASES: Record<string, string> = {
+  PASS_TDS: "passing TDs",
+  PASS_ATTEMPTS: "pass attempts",
+  PASS_COMPLETIONS: "completions",
+  PASS_INTERCEPTIONS: "interceptions thrown",
+};
+
 function describeQuarterbacks(matches: { playerName: string; team: string }[]): string {
   return matches.map((m) => m.playerName + " (" + m.team + ")").join(", ");
 }
@@ -267,7 +276,7 @@ export function resolvePassingTdQuarterback(
   slate?: SlateContext
 ): PassTdResolution | null {
   const prop = parsePlayerProp(line);
-  if (!prop || prop.propMarket !== "PASS_TDS") return null;
+  if (!prop || !isQbOnlyPropMarket(prop.propMarket)) return null;
   const typed = prop.playerName;
   const quarterbacks = roster.filter((p) => p.position === "QB");
 
@@ -317,7 +326,7 @@ export function resolvePassingTdQuarterback(
     const pos = roster.find((p) => p.playerName === nonQb.playerName && p.team === nonQb.team)?.position ?? "non-QB";
     return {
       status: "failed",
-      reason: nonQb.playerName + " (" + nonQb.team + ") is a " + pos + ", not a quarterback - passing TDs is a QB-only market",
+      reason: nonQb.playerName + " (" + nonQb.team + ") is a " + pos + ", not a quarterback - " + QB_MARKET_PHRASES[prop.propMarket] + " is a QB-only market",
     };
   }
   return { status: "failed", reason: "couldn't find a quarterback named \"" + typed + "\" on an active NFL roster" };

@@ -49,7 +49,7 @@ import { nflPlayerAliasName } from "@/lib/nfl-player-aliases";
 import { resolveMlbPropAgainstRoster } from "@/lib/mlb-roster-fallback";
 import { resolveNbaPropAgainstRosters, type LeagueCandidate } from "@/lib/nba-roster-fallback";
 import type { ParsedNbaProp } from "@/lib/nba-prop";
-import { parsePlayerProp, isPassingTdsText, pickPeriodFromText, isSidelessOverUnder } from "@/lib/bet-line";
+import { parsePlayerProp, isQbOnlyPropMarket, pickPeriodFromText, isSidelessOverUnder } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { withRegulationPeriod } from "@/lib/nhl-three-way";
 import { UNSUPPORTED_PROP_REASONS } from "@/lib/unsupported-prop-vocab";
@@ -454,7 +454,7 @@ export function recoverUnresolvedLines(
       let team: string;
       // The roster's name when the typed one was only a near-miss of it.
       let rosterName: string | null = null;
-      if (isPassingTdsText(line)) {
+      if (isQbOnlyPropMarket(parsePlayerProp(line)?.propMarket)) {
         // QB-only market: resolves against quarterbacks and reports WHY it failed (a non-QB, an unknown
         // name, no game in the window) instead of the generic unresolved message.
         const qb = resolvePassingTdQuarterback(line, roster, slateFor("NFL"));

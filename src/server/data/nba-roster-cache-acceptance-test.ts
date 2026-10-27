@@ -28,7 +28,10 @@ async function main() {
   const enumRows = await prisma.$queryRaw<{ value: string }[]>`SELECT unnest(enum_range(NULL::"PropMarket"))::text AS value`;
   const values = enumRows.map((r) => r.value);
   check("the database's PropMarket enum has the nine new values", NEW_VALUES.filter((v) => !values.includes(v)), []);
-  check("they are the last nine, in order (appended, nothing reordered)", values.slice(-9), NEW_VALUES);
+  // Appended together and never reordered: still one contiguous run, in order. (Not "the last nine" -
+  // later migrations append their own values after them, e.g. the NFL attempts markets.)
+  const start = values.indexOf(NEW_VALUES[0]);
+  check("they are one contiguous run, in order (appended, nothing reordered)", values.slice(start, start + NEW_VALUES.length), NEW_VALUES);
   check("the NHL values they sit beside are still there", ["POINTS", "ASSISTS", "SAVES"].filter((v) => !values.includes(v)), []);
 
   const table = await prisma.$queryRaw<{ rls: boolean }[]>`SELECT relrowsecurity AS rls FROM pg_class WHERE relname = 'nba_roster_players' AND relkind = 'r'`;

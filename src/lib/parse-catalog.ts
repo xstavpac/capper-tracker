@@ -1784,9 +1784,9 @@ export function explainDroppedNbaProp(text: string): string | null {
 // number), so game/team totals ("Yankees over 4.5 runs", "NBA LeBron James
 // over 25.5 points") keep flowing to their normal resolvers.
 export function detectUnsupportedPropLine(text: string): UnsupportedPropInfo | null {
-  // NFL stats with no grader ("3+ sacks", "2+ passing completions") are checked
-  // first: parsePlayerProp would otherwise claim "passing completions" as
-  // PASS_YDS and let it import as a yardage pick.
+  // NFL stats with no grader ("3+ sacks", "5+ receiving targets") are checked
+  // first: parsePlayerProp would otherwise claim "receiving targets" as
+  // REC_YDS and let it import as a yardage pick.
   const nflUnsupported = detectUnsupportedNflStat(text);
   if (nflUnsupported) return nflUnsupported;
   if (parsePlayerProp(text)) return null;

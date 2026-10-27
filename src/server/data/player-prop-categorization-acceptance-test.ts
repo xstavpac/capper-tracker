@@ -114,7 +114,7 @@ function main() {
   check("fallback (propMarket null): empty betDetail -> null", propPick({ betDetail: "" }), null);
 
   // --- The new categories are shown ---------------------------------------
-  check("the six stat-prop categories", STAT_PROP_CATEGORY_KEYS, ["PASS_YDS_PROP", "RUSH_YDS_PROP", "REC_YDS_PROP", "RECEPTIONS_PROP", "RUSH_REC_YDS_PROP", "PASS_RUSH_YDS_PROP"]);
+  check("the ten stat-prop categories", STAT_PROP_CATEGORY_KEYS, ["PASS_YDS_PROP", "RUSH_YDS_PROP", "REC_YDS_PROP", "RECEPTIONS_PROP", "RUSH_REC_YDS_PROP", "PASS_RUSH_YDS_PROP", "PASS_ATTEMPTS_PROP", "PASS_COMPLETIONS_PROP", "PASS_INTERCEPTIONS_PROP", "RUSH_ATTEMPTS_PROP"]);
   check("TD_PROP is still in ALL_CATEGORY_KEYS", ALL_CATEGORY_KEYS.includes("TD_PROP"), true);
   check("every stat-prop category is in ALL_CATEGORY_KEYS", STAT_PROP_CATEGORY_KEYS.every((k) => ALL_CATEGORY_KEYS.includes(k)), true);
   check("NFL chip set has TD_PROP and every stat-prop tile", (["TD_PROP", ...STAT_PROP_CATEGORY_KEYS] as const).every((k) => NFL_CHIP_SET.includes(k)), true);
@@ -123,8 +123,8 @@ function main() {
     ["NCAAF", "NBA", "WNBA", "NCAAB", "NHL", "MLB", "KBO", "CFL"].filter((s) => chipSetForLeague(s).some((k) => k.endsWith("_PROP"))),
     []
   );
-  check("tile labels", STAT_PROP_CATEGORY_KEYS.map((k) => PICK_CATEGORY_LABELS[k]), ["Passing Yards", "Rushing Yards", "Receiving Yards", "Receptions", "Rush + Rec Yards", "Pass + Rush Yards"]);
-  check("record-line nouns", STAT_PROP_CATEGORY_KEYS.map((k) => PICK_CATEGORY_MARKET_NOUN[k]), ["passing yards", "rushing yards", "receiving yards", "receptions", "rushing + receiving yards", "passing + rushing yards"]);
+  check("tile labels", STAT_PROP_CATEGORY_KEYS.map((k) => PICK_CATEGORY_LABELS[k]), ["Passing Yards", "Rushing Yards", "Receiving Yards", "Receptions", "Rush + Rec Yards", "Pass + Rush Yards", "Pass Attempts", "Completions", "Interceptions", "Rushing Attempts"]);
+  check("record-line nouns", STAT_PROP_CATEGORY_KEYS.map((k) => PICK_CATEGORY_MARKET_NOUN[k]), ["passing yards", "rushing yards", "receiving yards", "receptions", "rushing + receiving yards", "passing + rushing yards", "pass attempts", "completions", "interceptions thrown", "rushing attempts"]);
 
   console.log(failures === 0 ? `\nAll checks passed.` : `\n${failures} check(s) FAILED.`);
   process.exit(failures === 0 ? 0 : 1);
