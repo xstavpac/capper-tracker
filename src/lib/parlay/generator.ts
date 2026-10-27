@@ -21,10 +21,11 @@
 //   2. Targets: with any, generated legs come only from the targeted games
 //      plus the games of your picks. Without, from every game in the snapshot.
 //   3. A generated leg must clear the 55% gate (qualifies, qualification-
-//      core.ts) on its capper's record for this bet: their record in its
-//      market in its league, or their all-time record in the market when they
-//      have no win or loss in the league yet (recordForGate, pick-record.ts) -
-//      the same record Hedge and Contrarian gate and rank on. It must also
+//      core.ts) on its capper's record for this bet: the better of their
+//      record in its market in its league and their all-time record in the
+//      market, by Wilson lower bound at the rules' z (a tie goes to the
+//      league; recordForGate, pick-record.ts) - the same record Hedge and
+//      Contrarian gate and rank on. It must also
 //      pass the Include Picks filter (include-picks.ts: All Picks, or any of
 //      Moneyline / Spread / Totals / Props - betCategory, period ignored).
 //      Slip picks are never gated or filtered. No minimum sample: candidates
@@ -76,6 +77,7 @@ import {
   wilsonLowerBound,
 } from "@/lib/parlay/qualification-core";
 import { GATE_DEFAULT, normalizeMinWinPct } from "@/lib/parlay/gate";
+import { GENERATOR_Z } from "@/lib/parlay/generator-z";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
 import { selectConflictFreeLegs } from "@/lib/parlay/build-my-picks";
 import { toBuildCandidate } from "@/lib/parlay/pool-swap";
@@ -139,12 +141,8 @@ export type GeneratorRules = {
 // ---------------------------------------------------------------------------
 // Tunables
 // ---------------------------------------------------------------------------
-// The generator's Wilson z: softer than the shared 1.96, so a mid-volume record
-// sits close to a huge one (18-4 is 4.2 points under 100-30, 7.5 at 1.96) while
-// a tiny perfect one stays well below it (3-0 is 9.6 points under 18-4). Much
-// softer and 3-0 / 5-0 records float to the top (the replay at z=1.0: median
-// leg sample 5, average leg 92%).
-export const GENERATOR_Z = 1.5;
+// The generator's Wilson z (generator-z.ts): 1.5, softer than the shared 1.96.
+export { GENERATOR_Z };
 // Picks within this many Wilson points (at GENERATOR_Z) of their game's best
 // are interchangeable.
 export const PICK_TIE_BAND = 0.035;
@@ -339,7 +337,7 @@ function gateRecord(
     const record = marketRecord(pick, snapshot.categoryRecords);
     return record ? { record, basis: "MARKET" } : null;
   }
-  const record = recordForGate(pick, snapshot.leagueRecords, snapshot.categoryRecords);
+  const record = recordForGate(pick, snapshot.leagueRecords, snapshot.categoryRecords, rules.z);
   return record ? { record, basis: record.source } : null;
 }
 
@@ -686,7 +684,7 @@ function buildSwap(
         primary,
         others.map(toParlayLeg),
         mode,
-        (l) => recordForGate(pickById.get(l.pickId)!, snapshot.leagueRecords, snapshot.categoryRecords),
+        (l) => recordForGate(pickById.get(l.pickId)!, snapshot.leagueRecords, snapshot.categoryRecords, rules.z),
         { contrarianHeadcount: rules.contrarianHeadcount, sameGamePicks: sameGame, z: rules.z, minWinPct: gate }
       )[0];
       best = top && { leg: top.leg, rule: top.rule, record: top.record, wilsonLowerBound: top.wilsonLowerBound, basis: top.gateRecord.source };

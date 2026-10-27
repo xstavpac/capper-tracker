@@ -6,11 +6,14 @@
 // all-time record in the category, then their last-20-picks record, in the
 // same "best available" order the card itself falls back through.
 //
-// Pure and client-safe: type-only imports, and record-keys.ts (import-free).
+// Pure and client-safe: type-only imports, and import-free modules
+// (record-keys.ts, wilson-lower-bound.ts, generator-z.ts).
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import type { CategoryBreakdownItem } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { categoryRecordKey, leagueRecordKey } from "@/lib/record-keys";
+import { wilsonLowerBound } from "@/lib/wilson-lower-bound";
+import { GENERATOR_Z } from "@/lib/parlay/generator-z";
 
 export type RankRecordSource = "LEAGUE" | "OVERALL" | "LAST20";
 
@@ -42,12 +45,17 @@ export function bestAvailableRecord(pick: RecordInput, records: CapperLeagueReco
 }
 
 // The record a generated leg (and a Hedge / Contrarian alternate) is gated and
-// ranked on: the capper's record in this bet category in THIS league when they
-// have any win or loss there, else their all-time record in the category
-// (every league), else none. No minimum volume - a 1-0 record counts. Never
-// last 20: that record is every market at once, so it can't say whether a
-// capper is good at this bet. Unlike bestAvailableRecord, a league record of
-// pushes only doesn't count as a record.
+// ranked on - the better of two: the capper's record in this bet category in
+// THIS league, and their all-time record in the category (every league, every
+// season). Each is scored with the generator's ordering score (Wilson lower
+// bound at GENERATOR_Z) and the higher one is the record; a tie goes to the
+// in-league one. So a tiny in-league record (1-2) no longer hides a strong
+// all-time one (60-40), while a strong in-league one (8-0) still wins. The
+// gate is then checked on the chosen record's plain win % only - never the
+// other one. No minimum volume - a 1-0 record counts, it just scores low.
+// Never last 20: that record is every market at once, so it can't say whether
+// a capper is good at this bet. Unlike bestAvailableRecord, a record of pushes
+// only doesn't count as a record.
 //
 // The all-time record is the card's overall column; `allTime` (the bundle's
 // categoryRecords - the same numbers) covers a pick that has no card.
@@ -59,24 +67,46 @@ export type GateRecord = {
   source: "LEAGUE" | "OVERALL";
 };
 
+type Column = { wins: number; losses: number; winPct: number };
+
+function gateCandidates(
+  pick: RecordInput,
+  records: CapperLeagueRecords,
+  allTime: Record<string, CategoryBreakdownItem | null>
+): { league: GateRecord | null; overall: GateRecord | null } | null {
+  if (!pick.category) return null;
+  const card = records.records[leagueRecordKey(pick.capperId, pick.leagueName, pick.category)] ?? null;
+  const toRecord = (c: Column | null | undefined, source: GateRecord["source"]): GateRecord | null =>
+    c && c.wins + c.losses > 0 ? { wins: c.wins, losses: c.losses, winPct: c.winPct, n: c.wins + c.losses, source } : null;
+  return {
+    league: toRecord(card?.league, "LEAGUE"),
+    overall: toRecord(card?.overall ?? allTime[categoryRecordKey(pick.capperId, pick.category)], "OVERALL"),
+  };
+}
+
 export function recordForGate(
+  pick: RecordInput,
+  records: CapperLeagueRecords,
+  allTime: Record<string, CategoryBreakdownItem | null> = {},
+  z: number = GENERATOR_Z
+): GateRecord | null {
+  const c = gateCandidates(pick, records, allTime);
+  if (!c) return null;
+  if (!c.league || !c.overall) return c.league ?? c.overall;
+  return wilsonLowerBound(c.overall.wins, c.overall.losses, z) > wilsonLowerBound(c.league.wins, c.league.losses, z) ? c.overall : c.league;
+}
+
+// recordForGate as it was before best-of-two: the in-league record whenever
+// the capper has any win or loss there, else all time. Consensus Hybrid
+// (consensus.ts) still gates and scores on this.
+// TODO: move Consensus Hybrid to recordForGate (best-of-two) in a later Hybrid pass.
+export function leagueFirstRecord(
   pick: RecordInput,
   records: CapperLeagueRecords,
   allTime: Record<string, CategoryBreakdownItem | null> = {}
 ): GateRecord | null {
-  if (!pick.category) return null;
-  const card = records.records[leagueRecordKey(pick.capperId, pick.leagueName, pick.category)] ?? null;
-  const toRecord = (c: { wins: number; losses: number; winPct: number }, source: GateRecord["source"]): GateRecord => ({
-    wins: c.wins,
-    losses: c.losses,
-    winPct: c.winPct,
-    n: c.wins + c.losses,
-    source,
-  });
-  if (card && card.league.wins + card.league.losses > 0) return toRecord(card.league, "LEAGUE");
-  const overall = card?.overall ?? allTime[categoryRecordKey(pick.capperId, pick.category)] ?? null;
-  if (overall && overall.wins + overall.losses > 0) return toRecord(overall, "OVERALL");
-  return null;
+  const c = gateCandidates(pick, records, allTime);
+  return c && (c.league ?? c.overall);
 }
 
 // The Parlay Generator's one ordering: win% desc, then more graded picks,
