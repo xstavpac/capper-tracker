@@ -400,25 +400,25 @@ function main() {
     check("TD N+ still flagged multi-TD unsupported by parseTouchdownProp", !!parseTouchdownProp("Puka Nacua 2+ TDs")?.unsupported, true);
   }
   // Unsupported NFL stats in N+ form route to unresolved (never yardage picks -
-  // parsePlayerProp alone would read "passing completions" as PASS_YDS).
-  for (const line of ["Patrick Mahomes 25+ passing completions", "NFL T.J. Watt 1+ sacks", "Micah Parsons 5+ tackles", "Derrick Henry 20+ rushing attempts"]) {
+  // parsePlayerProp alone would read "receiving targets" as REC_YDS).
+  for (const line of ["NFL T.J. Watt 1+ sacks", "Micah Parsons 5+ tackles", "Amon-Ra St. Brown 5+ receiving targets"]) {
     const r = parseCatalog("Krash\n" + line);
     check(`unsupported NFL N+ -> unresolved: "${line}"`, [r.picks.length, r.unresolved.length], [0, 1]);
     check(`  reason: "${line}"`, detectUnsupportedPropLine(line)?.reason, UNSUPPORTED_PROP_REASONS.NFL);
   }
   // Same unsupported NFL stats in OVER/UNDER form: unresolved with the NFL
-  // reason, checked before parsePlayerProp (which reads "passing completions"
-  // and "pass attempts" as PASS_YDS, and "rushing attempts" as RUSH_YDS).
+  // reason, checked before parsePlayerProp (which reads "receiving targets" as
+  // REC_YDS). A bare "attempts" names no one market (pass or rush), and a
+  // "longest" play is its own market - both stay unsupported.
   for (const line of [
-    "Patrick Mahomes over 22.5 passing completions",
-    "Josh Allen under 34.5 pass attempts",
+    "Josh Allen over 34.5 attempts",
+    "CeeDee Lamb over 24.5 longest reception",
+    "Saquon Barkley over 19.5 longest rush",
     "T.J. Watt over 0.5 sacks",
     "Micah Parsons over 6.5 tackles",
     "Derrick Henry over 15.5 carries",
     "Amon-Ra St. Brown over 5.5 targets",
     "Brandon Aubrey over 1.5 field goals",
-    "Sauce Gardner over 0.5 interceptions",
-    "NFL Derrick Henry over 20.5 rushing attempts",
     "Derrick Henry o15.5 carries",
   ]) {
     const r = parseCatalog("Krash\n" + line);
@@ -435,6 +435,11 @@ function main() {
     "Jahmyr Gibbs over 99.5 rush and rec yards",
     "Josh Allen over 299.5 pass and rush yards",
     "Rome Odunze Anytime Touchdown",
+    // Supported since the attempts / completions / interceptions markets (2026-10).
+    "Derrick Henry over 20.5 rushing attempts",
+    "Josh Allen under 34.5 pass attempts",
+    "Patrick Mahomes over 22.5 passing completions",
+    "Sam Darnold over 0.5 interceptions",
   ]) {
     const r = parseCatalog("Krash\nNFL " + line);
     check(`supported NFL prop unaffected: "${line}"`, r.picks.map((p) => [p.sportName, p.betType, p.description]), [["NFL", "PLAYER_PROP", line]]);

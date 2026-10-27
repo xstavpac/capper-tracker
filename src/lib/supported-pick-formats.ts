@@ -164,6 +164,30 @@ export const SUPPORTED_PICK_FORMATS: FormatGroup[] = [
         check: { via: "nfl-prop", market: "PASS_TDS" },
       },
       {
+        market: "Pass attempts",
+        examples: ["Jared Goff over 33.5 pass attempts"],
+        status: "supported",
+        check: { via: "nfl-prop", market: "PASS_ATTEMPTS" },
+      },
+      {
+        market: "Completions",
+        examples: ["Jared Goff over 22.5 completions"],
+        status: "supported",
+        check: { via: "nfl-prop", market: "PASS_COMPLETIONS" },
+      },
+      {
+        market: "Interceptions thrown",
+        examples: ["Jared Goff over 0.5 interceptions"],
+        status: "supported",
+        check: { via: "nfl-prop", market: "PASS_INTERCEPTIONS" },
+      },
+      {
+        market: "Rushing attempts",
+        examples: ["Jahmyr Gibbs over 15.5 rushing attempts"],
+        status: "supported",
+        check: { via: "nfl-prop", market: "RUSH_ATTEMPTS" },
+      },
+      {
         market: "Rush + rec yards",
         examples: ["Jahmyr Gibbs over 95.5 rush + rec yards"],
         status: "supported",
@@ -375,8 +399,7 @@ export const SUPPORTED_PICK_FORMATS: FormatGroup[] = [
         market: "Other NFL stats",
         examples: [
           "Jahmyr Gibbs over 15.5 carries",
-          "Jared Goff over 22.5 completions",
-          "Jared Goff over 0.5 interceptions",
+          "Amon-Ra St. Brown over 24.5 longest reception",
           "Aidan Hutchinson over 0.5 sacks",
           "Jack Campbell over 7.5 tackles",
         ],

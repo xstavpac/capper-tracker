@@ -17,7 +17,7 @@
 import { shortTeamName } from "@/lib/pick-team-group";
 import { stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
 import { nhlAnytimeGoalSide } from "@/lib/nhl-prop";
-import { totalSideFromText, parsePlayerPropLine, nrfiSide, parseTouchdownProp } from "@/lib/bet-line";
+import { totalSideFromText, parsePlayerPropLine, nrfiSide, parseTouchdownProp, isQbOnlyPropMarket } from "@/lib/bet-line";
 
 export type PickDisplayLabelInput = {
   betType: string; // Prisma BetType enum value, typed loosely like betTypeLabel/formatPickLabel already are
@@ -53,6 +53,10 @@ const PROP_MARKET_PHRASES: Record<string, string> = {
   RUSH_REC_YDS: "Rush+Rec Yds",
   PASS_RUSH_YDS: "Pass+Rush Yds",
   PASS_TDS: "Passing TDs",
+  PASS_ATTEMPTS: "Pass Attempts",
+  PASS_COMPLETIONS: "Completions",
+  PASS_INTERCEPTIONS: "Interceptions",
+  RUSH_ATTEMPTS: "Rush Attempts",
   // NHL markets (ANYTIME_GOAL / FIRST_GOAL are yes-no shaped, handled below)
   SHOTS_ON_GOAL: "Shots on Goal",
   POINTS: "Points",
@@ -153,9 +157,9 @@ export function buildPickDisplayLabel(input: PickDisplayLabelInput): string | nu
       if (!lineInfo) return null;
 
       const sideWord = lineInfo.direction === "OVER" ? "Over" : "Under";
-      // Passing-TDs picks are often recovered from a bare typed name ("Deshaun watson over 0.5 ...");
+      // QB-only picks (passing TDs / attempts / completions / interceptions) are often recovered from a bare typed name ("Deshaun watson over 0.5 ...");
       // capitalize a word only when the capper left it lowercase, so "DeAndre"/"McCaffrey" are untouched.
-      const shownName = input.propMarket === "PASS_TDS" ? cleanedName.replace(/(^|\s)([a-z])/g, (_m, sp: string, c: string) => sp + c.toUpperCase()) : cleanedName;
+      const shownName = isQbOnlyPropMarket(input.propMarket) ? cleanedName.replace(/(^|\s)([a-z])/g, (_m, sp: string, c: string) => sp + c.toUpperCase()) : cleanedName;
       return `${shownName} ${sideWord} ${lineInfo.line} ${phrase}`;
     }
 

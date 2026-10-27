@@ -510,7 +510,19 @@ export type PlayerPropMarket =
   | "TD"
   | "RUSH_REC_YDS"
   | "PASS_RUSH_YDS"
-  | "PASS_TDS";
+  | "PASS_TDS"
+  | "PASS_ATTEMPTS"
+  | "RUSH_ATTEMPTS"
+  | "PASS_INTERCEPTIONS"
+  | "PASS_COMPLETIONS";
+
+// The markets graded from the QB's passing row only (grading.ts's "passers" pool) and resolved against
+// the roster's quarterbacks at import (resolveQuarterbackProp, player-roster-fallback.ts).
+const QB_ONLY_PROP_MARKETS: ReadonlySet<string> = new Set(["PASS_TDS", "PASS_ATTEMPTS", "PASS_INTERCEPTIONS", "PASS_COMPLETIONS"]);
+
+export function isQbOnlyPropMarket(market: string | null | undefined): boolean {
+  return !!market && QB_ONLY_PROP_MARKETS.has(market);
+}
 
 // The stat-category word ALONE is enough to identify PASS_YDS/RUSH_YDS - "65.5
 // rushing", "245.5 passing" - a real capper catalog import gap found testing
@@ -577,20 +589,36 @@ export function isPassingTdsText(text: string): boolean {
 }
 
 const PROP_MARKET_CONNECTOR = /\s*(?:and|&|\+|\/)\s*/.source;
+// "rec", "receiving", and the verb "receive" ("rush + receive yards" is real capper text).
+const REC_WORD = /rec(?:eiv(?:ing|e))?/.source;
+// "Longest reception" / "longest rush" / "longest completion" are their own markets (the single longest
+// play), which this app doesn't grade. Without this check the stat word alone claimed them as
+// RECEPTIONS / RUSH_YDS / PASS_YDS. parsePlayerProp declines them; detectUnsupportedNflStat
+// (unsupported-prop-vocab.ts) routes the line to unresolved with the NFL reason.
+const LONGEST_PLAY_PATTERN = /\blongest\b/i;
 const PLAYER_PROP_STAT_PATTERNS: [Exclude<PlayerPropMarket, "TD">, RegExp][] = [
   // First: "passing touchdowns" would otherwise be claimed by PASS_YDS's bare "passing" below.
   ["PASS_TDS", PASSING_TDS_PATTERN],
+  // Attempts / completions / interceptions, ahead of the bare "pass"/"rush" patterns for the same
+  // reason: "rushing attempts" would otherwise be RUSH_YDS with "attempts" left in the player name.
+  // A bare "attempts" (no pass/rush word) is not claimed - it could be either market. Completions and
+  // interceptions are passing-only stats, so the bare word is enough; "INT"/"INTs" is the box score's
+  // own column name.
+  ["PASS_ATTEMPTS", /\bpass(?:ing)?\s+att(?:empt)?s?\b/i],
+  ["RUSH_ATTEMPTS", /\brush(?:ing)?\s+att(?:empt)?s?\b/i],
+  ["PASS_COMPLETIONS", /\b(?:pass(?:ing)?\s+)?completions?\b/i],
+  ["PASS_INTERCEPTIONS", /\b(?:pass(?:ing)?\s+)?(?:interceptions?|ints?)(?:\s+thrown)?\b/i],
   [
     "RUSH_REC_YDS",
     new RegExp(
-      `${LEADING_YARDS}\\b(?:rush(?:ing)?${PROP_MARKET_CONNECTOR}rec(?:eiving)?|rec(?:eiving)?${PROP_MARKET_CONNECTOR}rush(?:ing)?)\\b(?:\\s*${YARDS_UNIT}\\b)?`,
+      `${LEADING_YARDS}\\b(?:rush(?:ing)?${PROP_MARKET_CONNECTOR}${REC_WORD}|${REC_WORD}${PROP_MARKET_CONNECTOR}rush(?:ing)?)\\b(?:\\s*${YARDS_UNIT}\\b)?`,
       "i"
     ),
   ],
   [
     "PASS_RUSH_YDS",
     new RegExp(
-      `${LEADING_YARDS}\\b(?:pass(?:ing)?${PROP_MARKET_CONNECTOR}(?:rush(?:ing)?|rec(?:eiving)?)|(?:rush(?:ing)?|rec(?:eiving)?)${PROP_MARKET_CONNECTOR}pass(?:ing)?)\\b(?:\\s*${YARDS_UNIT}\\b)?`,
+      `${LEADING_YARDS}\\b(?:pass(?:ing)?${PROP_MARKET_CONNECTOR}(?:rush(?:ing)?|${REC_WORD})|(?:rush(?:ing)?|${REC_WORD})${PROP_MARKET_CONNECTOR}pass(?:ing)?)\\b(?:\\s*${YARDS_UNIT}\\b)?`,
       "i"
     ),
   ],
@@ -609,7 +637,8 @@ const PLAYER_PROP_STAT_PATTERNS: [Exclude<PlayerPropMarket, "TD">, RegExp][] = [
 //   - "2+ TDs" is untouched (parseTouchdownProp keeps its own multi-TD
 //     "unsupported" handling - TD isn't in PLAYER_PROP_STAT_PATTERNS), but
 //     "2+ passing TDs" IS rewritten: PASS_TDS is a count market with a line;
-//   - "1+ sacks", "3+ passing completions" etc. aren't rewritten (see
+//   - "2+ interceptions" / "20+ completions" ARE rewritten (count markets);
+//   - "1+ sacks", "5+ targets" etc. aren't rewritten (see
 //     unsupported-prop-vocab.ts, which routes them to unresolved);
 //   - text that already states its own over/under number is left alone.
 // Integer thresholds only; anything else ("2.5+") is not a real phrasing.
@@ -672,8 +701,9 @@ export function parsePlayerProp(rawText: string): { playerName: string; propMark
   const text = normalizeSpelledOutPropNumber(rawText);
   const td = parseTouchdownProp(text);
   if (td) return { playerName: td.playerName, propMarket: "TD" };
+  if (LONGEST_PLAY_PATTERN.test(text)) return null;
 
-  const match = PLAYER_PROP_STAT_PATTERNS.find(([, pattern]) => pattern.test(text));
+  const match =PLAYER_PROP_STAT_PATTERNS.find(([, pattern]) => pattern.test(text));
   if (!match) return null;
   const [propMarket, statPattern] = match;
 

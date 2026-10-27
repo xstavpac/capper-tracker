@@ -31,7 +31,7 @@ function check(label: string, actual: unknown, expected: unknown) {
   if (!pass) failures++;
 }
 
-const NFL_MARKETS = ["PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "TD", "RUSH_REC_YDS", "PASS_RUSH_YDS", "PASS_TDS"];
+const NFL_MARKETS = ["PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "TD", "RUSH_REC_YDS", "PASS_RUSH_YDS", "PASS_TDS", "PASS_ATTEMPTS", "RUSH_ATTEMPTS", "PASS_INTERCEPTIONS", "PASS_COMPLETIONS"];
 const NEW_VALUES = ["REBOUNDS", "THREES_MADE", "STEALS", "BLOCKS", "POINTS_REBOUNDS_ASSISTS", "POINTS_REBOUNDS", "POINTS_ASSISTS", "REBOUNDS_ASSISTS", "DOUBLE_DOUBLE"];
 
 const filterPick = (propMarket: PropMarket | null, betDetail: string) => ({ betType: "PLAYER_PROP" as const, period: "FULL_GAME" as const, betDetail, propMarket });
@@ -97,7 +97,7 @@ async function main() {
     check("text parser: no line returns an NBA-only market", ["LeBron James over 7.5 rebounds", "Stephen Curry over 4.5 threes", "Nikola Jokic over 48.5 PRA", "Nikola Jokic double-double"].map((t) => parseAnyPlayerProp(t)?.propMarket ?? null), [null, null, null, null]);
     // Other sports' filter options are untouched.
     check("no filter option lists a new value", BET_TYPE_FILTER_OPTIONS.filter((o) => NEW_VALUES.includes(o.value)).map((o) => o.value), []);
-    check("the option list is the same 31 as before", BET_TYPE_FILTER_OPTIONS.length, 31);
+    check("the option list is the 31 from before plus the 4 NFL attempts / completions / interceptions markets", BET_TYPE_FILTER_OPTIONS.length, 35);
   }
 
   console.log("\n########## PART C: a pick carrying an NBA value, today (pinned for the PRs that follow) ##########");

@@ -98,20 +98,22 @@ const SCORING_WORDS = /^(?:runs?|points?|pts)$/i;
 const PERSON_ONLY_WORDS = /^(?:3pm|stl)$/i;
 
 // NFL stats that only exist as N+ props this app can't grade. Deliberately
-// excludes the supported yardage/receptions markets and TDs - those are
-// handled by normalizeNPlusPlayerProp / parseTouchdownProp (bet-line.ts).
+// excludes the supported yardage/receptions/attempts/completions/interceptions
+// markets and TDs - those are handled by normalizeNPlusPlayerProp /
+// parseTouchdownProp (bet-line.ts). A bare "attempts" (no pass/rush word) and
+// "receiving attempts/completions" stay here: neither names one market.
 const NFL_UNSUPPORTED_WORDS = [
-  String.raw`(?:(?:pass(?:ing)?|rush(?:ing)?|rec(?:eiving)?)\s+)?(?:completions?|attempts?|carries|targets?)`,
+  String.raw`(?:(?:pass(?:ing)?|rush(?:ing)?|rec(?:eiving)?)\s+)?(?:carries|targets?)`,
+  String.raw`rec(?:eiving)?\s+(?:completions?|attempts?)`,
+  String.raw`attempts?`,
   String.raw`sacks?`,
   String.raw`(?:solo\s+)?tackles?`,
-  String.raw`interceptions?`,
-  String.raw`ints?`,
   String.raw`field\s+goals?`,
   String.raw`fgs?`,
   String.raw`extra\s+points?`,
 ].join("|");
-// Both threshold spellings: "3+ sacks" and "over 22.5 passing completions" /
-// "u34.5 pass attempts".
+// Both threshold spellings: "3+ sacks" and "over 5.5 receiving targets" /
+// "u34.5 attempts".
 const NFL_UNSUPPORTED_STAT = new RegExp(
   `(?:(?<![\\w.-])\\d+\\+|(?<![\\w.])(?:over|under|o|u)\\s*\\d+(?:\\.\\d+)?)\\s*(?:${NFL_UNSUPPORTED_WORDS})\\b`,
   "i"
@@ -201,14 +203,18 @@ function reasonFor(text: string, matchedWord: string): UnsupportedPropInfo {
   return { sport, reason: sport ? UNSUPPORTED_PROP_REASONS[sport] : UNSUPPORTED_PROP_REASONS.GENERIC };
 }
 
-// "3+ sacks" / "over 22.5 passing completions": an NFL prop, in either
+// "3+ sacks" / "over 5.5 receiving targets": an NFL prop, in either
 // threshold spelling, for a stat this app doesn't grade. Separate from
 // detectUnsupportedProp because the caller must check it BEFORE its "an NFL
 // prop parsePlayerProp recognizes is never flagged" early return -
-// parsePlayerProp reads "passing completions" as PASS_YDS (bare "passing"
+// parsePlayerProp reads "receiving targets" as REC_YDS (bare "receiving"
 // matches), which would otherwise import it as a yardage pick.
+// "Longest reception" / "longest rush" / "longest completion" (the single longest
+// play) is checked with or without a number next to it - parsePlayerProp declines
+// any "longest" text, so nothing else would claim the line as a player prop.
+const NFL_LONGEST_PLAY = /\blongest\s+(?:pass(?:ing)?|completions?|rush(?:ing|es)?|runs?|receptions?|rec(?:eiving)?|catch(?:es)?)\b/i;
 export function detectUnsupportedNflStat(text: string): UnsupportedPropInfo | null {
-  return NFL_UNSUPPORTED_STAT.test(text) ? { sport: "NFL", reason: UNSUPPORTED_PROP_REASONS.NFL } : null;
+  return NFL_UNSUPPORTED_STAT.test(text) || NFL_LONGEST_PLAY.test(text) ? { sport: "NFL", reason: UNSUPPORTED_PROP_REASONS.NFL } : null;
 }
 
 // How a "who is this bet on" subject reads. "matchup-game": both sides of an

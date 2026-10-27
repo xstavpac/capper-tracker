@@ -692,6 +692,10 @@ const STAT_PROP_CATEGORY = {
   RECEPTIONS: "RECEPTIONS_PROP",
   RUSH_REC_YDS: "RUSH_REC_YDS_PROP",
   PASS_RUSH_YDS: "PASS_RUSH_YDS_PROP",
+  PASS_ATTEMPTS: "PASS_ATTEMPTS_PROP",
+  PASS_COMPLETIONS: "PASS_COMPLETIONS_PROP",
+  PASS_INTERCEPTIONS: "PASS_INTERCEPTIONS_PROP",
+  RUSH_ATTEMPTS: "RUSH_ATTEMPTS_PROP",
 } as const;
 export type StatPropCategoryKey = (typeof STAT_PROP_CATEGORY)[keyof typeof STAT_PROP_CATEGORY];
 export const STAT_PROP_CATEGORY_KEYS: StatPropCategoryKey[] = Object.values(STAT_PROP_CATEGORY);
@@ -805,6 +809,10 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   RECEPTIONS_PROP: "Receptions",
   RUSH_REC_YDS_PROP: "Rush + Rec Yards",
   PASS_RUSH_YDS_PROP: "Pass + Rush Yards",
+  PASS_ATTEMPTS_PROP: "Pass Attempts",
+  PASS_COMPLETIONS_PROP: "Completions",
+  PASS_INTERCEPTIONS_PROP: "Interceptions",
+  RUSH_ATTEMPTS_PROP: "Rushing Attempts",
   NRFI: "NRFI",
   YRFI: "YRFI",
   F5_SPREAD_MINUS: "F5 Spread -",
@@ -863,6 +871,10 @@ export const PICK_CATEGORY_MARKET_NOUN: Record<PickCategoryKey, string> = {
   RECEPTIONS_PROP: "receptions",
   RUSH_REC_YDS_PROP: "rushing + receiving yards",
   PASS_RUSH_YDS_PROP: "passing + rushing yards",
+  PASS_ATTEMPTS_PROP: "pass attempts",
+  PASS_COMPLETIONS_PROP: "completions",
+  PASS_INTERCEPTIONS_PROP: "interceptions thrown",
+  RUSH_ATTEMPTS_PROP: "rushing attempts",
   NRFI: "NRFI",
   YRFI: "YRFI",
   F5_SPREAD_MINUS: "first-5 favorite spread",
@@ -1181,7 +1193,9 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
     // key (STAT_PROP_CATEGORY): "Joe Burrow Over 250 Passing Yards" is not a
     // touchdown prop and must not be counted in the TD_PROP record. Neither
     // is a combined-yards line ("Josh Allen Over 249.5 Passing + Rushing
-    // Yards"), which has its own key too (version 3). Every other market (TD,
+    // Yards"), which has its own key too (version 3), and neither are the NFL
+    // attempts / completions / interceptions counts (new markets in 2026-10:
+    // no stored row had them, so no version bump). Every other market (TD,
     // and the passing-TD, NHL and MLB ones, which have no key of their own
     // yet) still lands in TD_PROP.
     // propMarket, when set, is trusted directly. When it's null (rows
@@ -1222,6 +1236,10 @@ const SPECIALIST_LABELS: Record<PickCategoryKey, string> = {
   RECEPTIONS_PROP: "Receptions specialist",
   RUSH_REC_YDS_PROP: "Rush + rec yards specialist",
   PASS_RUSH_YDS_PROP: "Pass + rush yards specialist",
+  PASS_ATTEMPTS_PROP: "Pass-attempts specialist",
+  PASS_COMPLETIONS_PROP: "Completions specialist",
+  PASS_INTERCEPTIONS_PROP: "Interceptions specialist",
+  RUSH_ATTEMPTS_PROP: "Rushing-attempts specialist",
   NRFI: "NRFI specialist",
   YRFI: "YRFI specialist",
   F5_SPREAD_MINUS: "F5 favorite spread specialist",

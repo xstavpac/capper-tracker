@@ -34,6 +34,7 @@ import {
   nrfiSide,
   totalSideFromText,
   betScope,
+  isQbOnlyPropMarket,
   type PlayerPropMarket,
 } from "@/lib/bet-line";
 import { NCAAF_CANONICAL_SUFFIX, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
@@ -1105,7 +1106,7 @@ async function locateNflPlayer(
   if (!index.isFinal) return fail("the box score isn't final yet for this game");
 
   const offense = index.players.filter(isOffensePlayer);
-  // "passers" (passing-TDs market, QB-only): names match against the players with a passing row, so a
+  // "passers" (passing TDs / attempts / completions / interceptions, QB-only): names match against the players with a passing row, so a
   // WR sharing the surname ("Watson" in a game with Deshaun and Christian) can never collide. A QB who
   // is in the box score without a passing row is still found through the roster path below (real 0).
   const passers = index.players.filter((p) => p.groups.includes("passing"));
@@ -1288,7 +1289,7 @@ function resolvedPlayerName(pick: PlayerPropPick): string | null {
 // values are a sum of two of these integers, still always a whole number, so
 // the same reasoning holds without a separate check. PASS_TDS (a TD count) is
 // an integer too: o0.5/o1.5 can never push, a whole-number line ("over 2")
-// pushes on equal.
+// pushes on equal. Same for the attempts / completions / interceptions counts.
 function gradeAgainstLine(actual: number, line: number, direction: "OVER" | "UNDER"): "WIN" | "LOSS" | "PUSH" {
   if (actual === line) return "PUSH";
   return actual > line === (direction === "OVER") ? "WIN" : "LOSS";
@@ -1330,7 +1331,9 @@ async function resolveYardageOrReceptionsProp(
     return { outcome: null, reason: "couldn't identify a player name in the bet text" };
   }
 
-  const located = await locateNflPlayer(playerName, eventId, market === "PASS_TDS" ? "passers" : "offense", deps);
+  // Passing TDs / attempts / completions / interceptions are QB-only markets: names match the players
+  // with a passing row, so a WR sharing the QB's surname can never collide.
+  const located = await locateNflPlayer(playerName, eventId, isQbOnlyPropMarket(market) ? "passers" : "offense", deps);
   if (!located.ok) return located.resolution;
 
   // A player present in the box score but with no row in this market's stat
@@ -1354,7 +1357,15 @@ async function resolveYardageOrReceptionsProp(
               ? (receiving?.receptions ?? 0)
               : market === "PASS_TDS"
                 ? (passing?.touchdowns ?? 0)
-                : rushYds + recYds; // RUSH_REC_YDS
+                : market === "PASS_ATTEMPTS"
+                  ? (passing?.attempts ?? 0)
+                  : market === "PASS_COMPLETIONS"
+                    ? (passing?.completions ?? 0)
+                    : market === "PASS_INTERCEPTIONS"
+                      ? (passing?.interceptions ?? 0)
+                      : market === "RUSH_ATTEMPTS"
+                        ? (rushing?.carries ?? 0)
+                        : rushYds + recYds; // RUSH_REC_YDS
 
   return { outcome: gradeAgainstLine(actual, lineInfo.line, lineInfo.direction) };
 }

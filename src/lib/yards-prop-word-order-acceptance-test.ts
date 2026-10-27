@@ -88,9 +88,9 @@ function main() {
   check("name intact when no reversed qualifier", parsePlayerProp("Yards Smith over 65.5 rushing yards")?.playerName, "Yards Smith");
 
   // Attempts/carries: reversed order must not create a yards reading that
-  // wasn't there (they already misread as yards today - see the separate
-  // attempts/carries fix - so this only pins that THIS change adds nothing).
-  check("'yards rushing attempts' never consumes 'attempts'", parsePlayerProp("Gibbs over 9.5 yards rushing attempts")?.playerName, "Gibbs attempts");
+  // wasn't there. "rushing attempts" is its own market (RUSH_ATTEMPTS, 2026-10),
+  // checked before RUSH_YDS, so a stray "yards" never turns it into yardage.
+  check("'yards rushing attempts' is never a yardage market", parsePlayerProp("Gibbs over 9.5 yards rushing attempts")?.propMarket, "RUSH_ATTEMPTS");
   check("carries line unaffected (still no market)", parsePlayerProp("Gibbs over 9.5 carries"), null);
 
   console.log(failures === 0 ? `\nAll checks passed.` : `\n${failures} check(s) FAILED.`);
