@@ -44,8 +44,9 @@ export function bestAvailableRecord(pick: RecordInput, records: CapperLeagueReco
   return null;
 }
 
-// The record a generated leg (and a Hedge / Contrarian alternate) is gated and
-// ranked on - the better of two: the capper's record in this bet category in
+// The record a generated leg (and a Hedge / Contrarian alternate, and a
+// Consensus Hybrid supporter - consensus.ts) is gated and ranked on - the
+// better of two: the capper's record in this bet category in
 // THIS league, and their all-time record in the category (every league, every
 // season). Each is scored with the generator's ordering score (Wilson lower
 // bound at GENERATOR_Z) and the higher one is the record; a tie goes to the
@@ -94,19 +95,6 @@ export function recordForGate(
   if (!c) return null;
   if (!c.league || !c.overall) return c.league ?? c.overall;
   return wilsonLowerBound(c.overall.wins, c.overall.losses, z) > wilsonLowerBound(c.league.wins, c.league.losses, z) ? c.overall : c.league;
-}
-
-// recordForGate as it was before best-of-two: the in-league record whenever
-// the capper has any win or loss there, else all time. Consensus Hybrid
-// (consensus.ts) still gates and scores on this.
-// TODO: move Consensus Hybrid to recordForGate (best-of-two) in a later Hybrid pass.
-export function leagueFirstRecord(
-  pick: RecordInput,
-  records: CapperLeagueRecords,
-  allTime: Record<string, CategoryBreakdownItem | null> = {}
-): GateRecord | null {
-  const c = gateCandidates(pick, records, allTime);
-  return c && (c.league ?? c.overall);
 }
 
 // The Parlay Generator's one ordering: win% desc, then more graded picks,
