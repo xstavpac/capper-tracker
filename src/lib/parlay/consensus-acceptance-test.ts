@@ -277,12 +277,34 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
 // The record hierarchy, the win-% lever and the soft sample-size adjustment
 // ============================================================================
 {
-  // League record first, even when the all-time one is better.
-  const leagueFirst = find(build([
+  // Best-of-two (pick-record.ts recordForGate): the higher Wilson lower bound at GENERATOR_Z wins.
+  const allTimeWins = find(build([
     { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [6, 4], all: [90, 10] },
     { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [6, 4], all: [90, 10] },
   ]), HOME)!;
-  check("the league-specific record is used first", leagueFirst.supporters.map((s) => [s.record.source, s.record.wins, s.record.losses]), [["LEAGUE", 6, 4], ["LEAGUE", 6, 4]]);
+  check("a stronger all-time record beats the league one", allTimeWins.supporters.map((s) => [s.record.source, s.record.wins, s.record.losses]), [["OVERALL", 90, 10], ["OVERALL", 90, 10]]);
+  check("the score is the chosen record's", allTimeWins.score, 2 * lb(90, 10));
+  const leagueWins = find(build([
+    { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [8, 0], all: [60, 40] },
+    { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [1, 2], all: [60, 40] },
+  ]), HOME)!;
+  check(
+    "in-league 8-0 beats all-time 60-40; a tiny in-league 1-2 loses to all-time 60-40",
+    leagueWins.supporters.map((s) => [s.capperId, s.record.source, s.record.wins, s.record.losses]),
+    [["A", "LEAGUE", 8, 0], ["B", "OVERALL", 60, 40]]
+  );
+  const tie = find(build([
+    { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [6, 4], all: [6, 4] },
+    { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [6, 4], all: [6, 4] },
+  ]), HOME)!;
+  check("a tie goes to the league record", tie.supporters.map((s) => s.record.source), ["LEAGUE", "LEAGUE"]);
+  // 50-40 in-league (55.6%) scores above 2-0 all time, so it is the record; at gate 60 it fails, and 2-0 is never tried.
+  const gateSpecs: Spec[] = [
+    { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [50, 40], all: [2, 0] },
+    { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [7, 3] },
+  ];
+  check("gated on the chosen record: 50-40 passes 55", find(build(gateSpecs), HOME)?.supporters.map((s) => [s.capperId, s.record.source, s.record.wins]), [["A", "LEAGUE", 50], ["B", "LEAGUE", 7]]);
+  check("gated on the chosen record only: 50-40 fails 60, no fallback to 2-0", build(gateSpecs, { minWinPct: 60 }).length, 0);
   // The record's own market travels with it: A's best record is the moneyline (9-1), though the
   // hardest post (the endorsed line) is the spread, so recordMarket and postedMarket differ.
   const mixed = find(build([

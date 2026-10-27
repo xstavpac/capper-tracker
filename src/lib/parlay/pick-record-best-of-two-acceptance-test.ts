@@ -3,11 +3,11 @@
 // in-league and all-time category records scores higher on the generator's
 // ordering score (Wilson lower bound at GENERATOR_Z = 1.5), a tie to the
 // league. The win-% gate is checked on the chosen record only - no fallback to
-// the other one - and there is no minimum sample. Consensus Hybrid stays on
-// leagueFirstRecord. Pure - no DB. Run with:
+// the other one - and there is no minimum sample. Consensus Hybrid's own cases
+// are in consensus-acceptance-test.ts. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/pick-record-best-of-two-acceptance-test.ts
 import { buildGeneratedParlay, GENERATOR_Z, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
-import { leagueFirstRecord, recordForGate } from "@/lib/parlay/pick-record";
+import { recordForGate } from "@/lib/parlay/pick-record";
 import { wilsonLowerBound } from "@/lib/wilson-lower-bound";
 import { recordText } from "@/components/parlay/generator-result";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
@@ -124,7 +124,7 @@ check("ordering score is z = 1.5", GENERATOR_Z, 1.5);
 }
 
 // ============================================================================
-// Ties, the gate, the suffix, Hedge / Contrarian, Hybrid
+// Ties, the gate, the suffix, Hedge / Contrarian
 // ============================================================================
 {
   const snap = makeSnapshot([
@@ -157,13 +157,6 @@ check("ordering score is z = 1.5", GENERATOR_Z, 1.5);
   check("swap suffix names the chosen record: all leagues", hedge.swap && recordText(hedge.swap.record, hedge.swap.basis ?? "MARKET", hedge.swap.pick), "60% (60–40) · all leagues over");
   const flip = built.contrarian.SUGGESTED.legs.find((l) => l.original.pick.pickId === "flipped")!;
   check("Contrarian alternate on its better record (all time 60-40 over 1-0 in MLB)", flip.swap && { to: flip.swap.pick.pickId, basis: flip.swap.basis }, { to: "flipAlt", basis: "OVERALL" });
-
-  // Consensus Hybrid is unchanged: in-league whenever there is any.
-  const lf = (id: string) => {
-    const r = leagueFirstRecord(pickOf(snap, id), snap.leagueRecords, snap.categoryRecords);
-    return r && `${r.source} ${r.wins}-${r.losses}`;
-  };
-  check("Hybrid (leagueFirstRecord) keeps in-league first", [lf("hedgeAlt"), lf("flipAlt"), lf("noFallback")], ["LEAGUE 1-2", "LEAGUE 1-0", "LEAGUE 50-40"]);
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
