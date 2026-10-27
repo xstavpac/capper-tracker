@@ -8,15 +8,14 @@ import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { hybridFanDuelLinkAction } from "@/server/actions/parlay-hybrid";
 import { PanelShell, TINTS } from "@/components/dashboard/panel-shell";
-import { BoltIcon } from "@/components/dashboard/cappers-icons";
+import { BoltIcon, LayersIcon, SlidersIcon, TrophyIcon, WidthIcon } from "@/components/dashboard/cappers-icons";
 import { GREEN } from "@/components/dashboard/stat-card";
-import { CountStepper, LABEL, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Tabs, TextSegments } from "@/components/parlay/parlay-controls";
+import { FilterRow, LABEL, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Section, SettingRow, SettingsBlock, StepperControl, Tabs, TextSegments } from "@/components/parlay/parlay-controls";
 import { IncludePicksChips } from "@/components/parlay/pick-mix-control";
 import { formatGameTime } from "@/components/parlay/generator-result";
 import type { HybridGenerator } from "@/components/parlay/use-hybrid-generator";
 import type { TargetedGame } from "@/lib/parlay/slip-state";
 import { GATE_MAX, GATE_MIN, GATE_STEP } from "@/lib/parlay/gate";
-import { HYBRID_MAX_LEGS } from "@/lib/parlay/hybrid";
 import type { Hybrid, HybridBoxLegs, HybridWidth } from "@/lib/parlay/hybrid";
 import type { HybridLinkResponse } from "@/lib/parlay/hybrid-link";
 import type { HybridGenerateSettings } from "@/lib/parlay/hybrid-request";
@@ -25,9 +24,7 @@ import {
   ALT_LINES_NOTE,
   BOX_LEGS_HINT,
   BOX_LEGS_OPTIONS,
-  boxLegsPatch,
   boxText,
-  bumpMaxLegs,
   cardTabs,
   combinedPrice,
   crossGameText,
@@ -37,7 +34,6 @@ import {
   legViews,
   linkLegs,
   linkView,
-  minMaxLegs,
   MODE_NOTE,
   normalizePriceText,
   oddsAsOfText,
@@ -51,14 +47,15 @@ import {
   type PageState,
 } from "@/lib/parlay/hybrid-view";
 
-const SECTION = "border-t border-[#0F1420]/[0.08] pt-3.5 dark:border-white/10";
 const NOTICE = "mt-3 rounded-[12px] border border-amber-300 bg-amber-50/60 px-3.5 py-2.5 dark:border-amber-800 dark:bg-amber-500/10";
 const INFO = "mt-3 rounded-[12px] border border-[#E6E8EF] bg-muted/40 px-3.5 py-2.5 dark:border-border";
 const INPUT =
-  "h-11 w-24 rounded-full border border-[#DADDE5] bg-white px-4 text-center text-[15px] font-semibold tabular-nums text-foreground outline-none transition focus:border-brand-600 dark:border-border dark:bg-card";
+  "h-11 w-28 rounded-full border border-[#DADDE5] bg-white px-4 text-center text-[15px] font-semibold tabular-nums text-foreground outline-none transition focus:border-brand-600 dark:border-border dark:bg-card";
+const ADD_FROM_LIVE =
+  "inline-flex h-8 items-center rounded-full border border-brand-600 bg-brand-600 px-3.5 text-[13px] font-semibold text-white transition hover:bg-brand-700";
 const WIDTH_OPTIONS: { key: HybridWidth; label: string }[] = [
   { key: "balanced", label: "Balanced" },
-  { key: "wider", label: "Wider" },
+  { key: "wider", label: "Wide" },
 ];
 const CATEGORIES_HIDDEN = ["PROPS"] as const;
 
@@ -71,7 +68,7 @@ const MODE_OPTIONS: { key: Mode; label: string }[] = [
 // Standard | Hybrid, at the top of the Generator card.
 export function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => void }) {
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <span className={LABEL}>Mode</span>
       <TextSegments<Mode> label="Generator mode" options={MODE_OPTIONS} value={mode} onChange={onChange} />
     </div>
@@ -144,23 +141,22 @@ export function HybridControls({
       wrapSubtitle
     >
       {modeToggle}
-      <p className="text-xs font-medium text-muted-foreground">{MODE_NOTE}</p>
+      <p className="mt-2 text-xs font-medium text-muted-foreground">{MODE_NOTE}</p>
 
-      {/* 1 · Target games */}
-      <div className={"mt-4 " + SECTION}>
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className={LABEL}>1 · Target games{explicit.length > 0 ? " · " + explicit.length : ""}</p>
-          <Link
-            href="/live"
-            className="inline-flex h-8 items-center rounded-full border border-brand-600 bg-brand-600 px-3.5 text-[13px] font-semibold text-white transition hover:bg-brand-700"
-          >
+      {/* 1 · Target games (Hybrid doesn't use the slip's picks) */}
+      <Section
+        n={1}
+        tone="green"
+        title={`Target Games${explicit.length > 0 ? " · " + explicit.length : ""}`}
+        description="Games you've targeted on Live, or the full slate."
+        actions={
+          <Link href="/live" className={ADD_FROM_LIVE}>
             + Add games from Live
           </Link>
-        </div>
-        {explicit.length === 0 ? (
-          <p className="mt-2 text-sm text-muted-foreground">Choose which games to build around, or use the full slate.</p>
-        ) : (
-          <div className="mt-2 flex flex-wrap gap-2">
+        }
+      >
+        {explicit.length > 0 && (
+          <div className="flex flex-wrap gap-2">
             {explicit.map((g) => (
               <span key={g.gameId} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-brand-600 bg-brand-600 pl-3 pr-1 text-[13px] font-semibold text-white">
                 {g.gameLabel}
@@ -178,109 +174,99 @@ export function HybridControls({
             </button>
           </div>
         )}
-      </div>
+      </Section>
 
-      {/* 2 · Filters */}
-      <div className={"mt-4 " + SECTION}>
-        <p className={LABEL}>2 · Filters</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {leagues.map((league) => (
-            <ScopeChip
-              key={league}
-              label={league}
-              inScope={isLeagueInScope(league)}
-              onToggle={() => toggleLeague(league)}
-              ariaLabel={
-                isLeagueLocked(league) ? league + " is on: your slip has picks or games from it" : (isLeagueInScope(league) ? "Leave out " : "Include ") + league + " games"
-              }
-            />
-          ))}
+      {/* 2 · Pick filters */}
+      <Section n={2} title="Pick Filters" description="Choose which games to build around, or use the full slate.">
+        <div className="space-y-3">
+          <FilterRow label="Leagues">
+            {leagues.map((league) => (
+              <ScopeChip
+                key={league}
+                label={league}
+                inScope={isLeagueInScope(league)}
+                onToggle={() => toggleLeague(league)}
+                ariaLabel={
+                  isLeagueLocked(league) ? league + " is on: your slip has picks or games from it" : (isLeagueInScope(league) ? "Leave out " : "Include ") + league + " games"
+                }
+              />
+            ))}
+          </FilterRow>
+          <FilterRow label="Bet types">
+            <IncludePicksChips value={gen.include} onToggle={gen.toggleInclude} hide={[...CATEGORIES_HIDDEN]} />
+          </FilterRow>
+          <SettingsBlock>
+            <SettingRow icon={<TrophyIcon className="h-5 w-5" />} label="Minimum capper win rate" note="Only cappers at or above this win rate count toward consensus.">
+              <StepperControl
+                label="Minimum capper win rate"
+                value={form.minWinPct}
+                min={GATE_MIN}
+                max={GATE_MAX}
+                step={GATE_STEP}
+                unit="%"
+                onChange={(n) => patchForm({ minWinPct: Math.max(GATE_MIN, Math.min(GATE_MAX, n)) })}
+              />
+            </SettingRow>
+          </SettingsBlock>
         </div>
-        <div className="mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span className={LABEL}>Include picks</span>
-          <IncludePicksChips value={gen.include} onToggle={gen.toggleInclude} hide={[...CATEGORIES_HIDDEN]} />
-        </div>
-        <div className="mt-3.5">
-          <CountStepper
-            label="Minimum win rate"
-            value={form.minWinPct}
-            min={GATE_MIN}
-            max={GATE_MAX}
-            step={GATE_STEP}
-            unit="%"
-            onChange={(n) => patchForm({ minWinPct: Math.max(GATE_MIN, Math.min(GATE_MAX, n)) })}
-            note="Only cappers at or above this win rate on that bet type count toward consensus."
-          />
-        </div>
-      </div>
+      </Section>
 
-      {/* 3 · Hybrid settings */}
-      <div className={"mt-4 " + SECTION}>
-        <p className={LABEL}>3 · Hybrid</p>
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span className={LABEL}>Target odds</span>
-          <PriceField label="Minimum target odds" value={form.targetMin} onChange={(v) => patchForm({ targetMin: v })} invalid={!!errors.target} />
-          <span className="text-sm text-muted-foreground" aria-hidden>
-            to
-          </span>
-          <PriceField label="Maximum target odds" value={form.targetMax} onChange={(v) => patchForm({ targetMax: v })} invalid={!!errors.target} />
+      {/* 3 · Line flexibility */}
+      <Section n={3} title="Line Flexibility" description="Adjust how far from consensus we can go when building your parlay.">
+        <div className="space-y-1">
+          <SettingRow soft icon={<SlidersIcon className="h-5 w-5" />} label="Target odds">
+            <PriceField label="Minimum target odds" value={form.targetMin} onChange={(v) => patchForm({ targetMin: v })} invalid={!!errors.target} />
+            <span className="px-1 text-sm text-muted-foreground" aria-hidden>
+              to
+            </span>
+            <PriceField label="Maximum target odds" value={form.targetMax} onChange={(v) => patchForm({ targetMax: v })} invalid={!!errors.target} />
+          </SettingRow>
+          {errors.target && (
+            <p role="alert" className="text-xs font-medium text-red-600 dark:text-red-400">
+              {errors.target}
+            </p>
+          )}
+          <SettingRow soft icon={<WidthIcon className="h-5 w-5" />} label="Line range" note={WIDTH_HINT}>
+            <TextSegments<HybridWidth> label="Line range" options={WIDTH_OPTIONS} value={form.width} onChange={(width) => patchForm({ width })} />
+          </SettingRow>
+          <SettingRow soft icon={<LayersIcon className="h-5 w-5" />} label="Total legs" note={BOX_LEGS_HINT}>
+            <TextSegments<HybridBoxLegs> label="Total legs" options={BOX_LEGS_OPTIONS} value={form.boxLegs} onChange={(boxLegs) => patchForm({ boxLegs })} />
+          </SettingRow>
         </div>
-        {errors.target && (
-          <p role="alert" className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
-            {errors.target}
-          </p>
-        )}
-        <div className="mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span className={LABEL}>Box width</span>
-          <TextSegments<HybridWidth> label="Box width" options={WIDTH_OPTIONS} value={form.width} onChange={(width) => patchForm({ width })} />
-          <span className="text-xs font-medium text-muted-foreground">{WIDTH_HINT}</span>
-        </div>
-        <div className="mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span className={LABEL}>Legs</span>
-          <TextSegments<HybridBoxLegs> label="Legs" options={BOX_LEGS_OPTIONS} value={form.boxLegs} onChange={(boxLegs) => patchForm(boxLegsPatch(form, boxLegs))} />
-          <span className="text-xs font-medium text-muted-foreground">{BOX_LEGS_HINT}</span>
-        </div>
-        <div className="mt-3.5">
-          <CountStepper
-            label="Max legs"
-            value={form.maxLegs}
-            min={minMaxLegs(form.boxLegs)}
-            max={HYBRID_MAX_LEGS}
-            onChange={(n) => patchForm({ maxLegs: Math.max(minMaxLegs(form.boxLegs), Math.min(HYBRID_MAX_LEGS, n)) })}
-            note="two is a side and a total from one game"
-          />
-        </div>
-        <div className="mt-3.5">
+        <div className="mt-2 flex flex-col items-end">
           <button type="button" onClick={() => patchForm({ advanced: !form.advanced })} aria-expanded={form.advanced} className="text-[13px] font-semibold text-brand-600 hover:underline dark:text-brand-400">
             {form.advanced ? "Hide advanced" : "Advanced"}
           </button>
-          {form.advanced && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <span className={LABEL}>Per-leg odds</span>
-              <PriceField label="Minimum per-leg odds" value={form.legMin} onChange={(v) => patchForm({ legMin: v })} invalid={!!errors.perLeg} />
-              <span className="text-sm text-muted-foreground" aria-hidden>
-                to
-              </span>
-              <PriceField label="Maximum per-leg odds" value={form.legMax} onChange={(v) => patchForm({ legMax: v })} invalid={!!errors.perLeg} />
-              <span className="text-xs font-medium text-muted-foreground">leave both empty for no limit</span>
-            </div>
-          )}
-          {errors.perLeg && (
-            <p role="alert" className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
-              {errors.perLeg}
-            </p>
-          )}
         </div>
-      </div>
+        {form.advanced && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className={LABEL}>Per-leg odds</span>
+            <PriceField label="Minimum per-leg odds" value={form.legMin} onChange={(v) => patchForm({ legMin: v })} invalid={!!errors.perLeg} />
+            <span className="text-sm text-muted-foreground" aria-hidden>
+              to
+            </span>
+            <PriceField label="Maximum per-leg odds" value={form.legMax} onChange={(v) => patchForm({ legMax: v })} invalid={!!errors.perLeg} />
+            <span className="text-xs font-medium text-muted-foreground">leave both empty for no limit</span>
+          </div>
+        )}
+        {errors.perLeg && (
+          <p role="alert" className="mt-1.5 text-xs font-medium text-red-600 dark:text-red-400">
+            {errors.perLeg}
+          </p>
+        )}
+      </Section>
 
-      {/* Generate */}
-      <div className={"mt-4 flex flex-wrap items-center justify-end gap-3 " + SECTION}>
+      {/* Clear · Generate */}
+      <div className="mt-3.5 flex flex-wrap items-center justify-end gap-2 border-t border-[#0F1420]/[0.08] pt-3.5 dark:border-white/10">
+        <button type="button" onClick={gen.clear} disabled={gen.phase === "idle"} className={PILL_OUTLINE}>
+          Clear result
+        </button>
         <button type="button" onClick={() => void gen.generate()} disabled={busy || !parsed.ok || !canGenerate} className={PILL_PRIMARY} aria-busy={busy}>
           {busy ? <Spinner /> : <BoltIcon className="h-4 w-4" />}
-          {busy ? "Generating…" : "Generate hybrid"}
+          {busy ? "Generating…" : "Generate parlay"}
         </button>
       </div>
-      {!canGenerate && <p className="mt-2 text-xs font-medium text-muted-foreground">Switch at least one league on to generate a hybrid.</p>}
+      {!canGenerate && <p className="mt-2 text-xs font-medium text-muted-foreground">Switch at least one league on to generate a parlay.</p>}
     </PanelShell>
   );
 }
@@ -335,7 +321,6 @@ function HybridCard({
   state,
   busy,
   onGenerate,
-  onAllowMore,
   cardKey,
 }: {
   hybrid: Hybrid;
@@ -345,7 +330,6 @@ function HybridCard({
   state: Extract<PageState, { kind: "result" | "no-fit" }>;
   busy: boolean;
   onGenerate: () => void;
-  onAllowMore: () => void;
   cardKey: HybridCardKey;
 }) {
   const status = targetStatus(hybrid.combinedAmerican, settings);
@@ -353,7 +337,6 @@ function HybridCard({
   const asOf = oddsAsOfText(hybrid.oddsAsOf, formatGameTime);
   const games = hybridGames(hybrid, formatGameTime);
   const legs = legViews(hybrid);
-  const flags = state.flags;
   return (
     <div className="mt-1">
       {hybrid.anyStale && (
@@ -379,13 +362,6 @@ function HybridCard({
         <StatusText kind={status.kind} text={status.text} />
       </div>
       {asOf && <p className="mt-0.5 text-xs font-medium text-muted-foreground">{asOf}</p>}
-      {cardKey === "primary" && flags.outsideTarget && flags.canAllowMoreLegs && (
-        <div className="mt-2.5">
-          <button type="button" onClick={onAllowMore} disabled={busy} className={PILL_OUTLINE}>
-            {busy ? "Generating…" : `Allow more legs (up to ${bumpMaxLegs(settings.maxLegs)})`}
-          </button>
-        </div>
-      )}
 
       <ol className="mt-3 divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
         {legs.map((l, i) => (
@@ -508,8 +484,6 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
   const { state, response, builtSettings } = gen;
   const busy = gen.phase === "loading";
   const retry = () => void gen.generate();
-  // Re-runs with one more leg allowed, from the settings the shown result was built with.
-  const onAllowMoreLegs = () => void gen.generate({ maxLegs: bumpMaxLegs(gen.builtSettings?.maxLegs ?? gen.form.maxLegs) });
 
   if (state.kind === "idle") return null;
   if (state.kind === "loading") return <Skeleton />;
@@ -594,7 +568,7 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
       wrapSubtitle
     >
       {tabs.length > 1 && <Tabs<HybridCardKey> label="Hybrid choices" tabs={tabs} value={key} onChange={gen.setCard} />}
-      {gen.settingsChanged && <p className="mt-2 text-xs font-medium text-muted-foreground">Settings changed since this was built. Press Generate hybrid to update it.</p>}
+      {gen.settingsChanged && <p className="mt-2 text-xs font-medium text-muted-foreground">Settings changed since this was built. Press Generate parlay to update it.</p>}
       {flags.skippedGames.length > 0 && (
         <div role="status" className={INFO}>
           <p className="text-xs font-medium text-foreground">{ALT_LINES_NOTE} Skipped: {flags.skippedGames.join(", ")}.</p>
@@ -621,7 +595,6 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
         state={state}
         busy={busy}
         onGenerate={retry}
-        onAllowMore={onAllowMoreLegs}
         cardKey={key}
       />
     </PanelShell>

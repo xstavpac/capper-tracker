@@ -1,15 +1,12 @@
 // The Consensus Hybrid view-model (hybrid-view.ts): odds display, the settings
 // form, target status, the box in words, per-leg lines, which state the page
-// shows, the maxLegs bump, and the Send to FanDuel outcome (including the
+// shows, Total Legs (the one source of the leg cap), and the Send to FanDuel outcome (including the
 // price-moved diff). Pure - no DB, no network, no clock.
 //   npx tsx src/lib/parlay/hybrid-view-acceptance-test.ts
 import {
   BOX_LEGS_OPTIONS,
-  boxLegsPatch,
   boxText,
   buildSettings,
-  bumpMaxLegs,
-  canAllowMoreLegs,
   cardTabs,
   combinedPrice,
   consensusLine,
@@ -23,7 +20,7 @@ import {
   legViews,
   linkLegs,
   linkView,
-  minMaxLegs,
+  maxLegsFor,
   normalizePriceText,
   oddsAsOfText,
   pageState,
@@ -116,7 +113,7 @@ const note = (kind: HybridEventNote["kind"], eventId = "E1", gameLabel = "Chicag
 function response(result: Partial<HybridResult> = {}, notes: HybridEventNote[] = [], candidateEvents = ["E1"]): HybridGenerateResponse {
   return { result: { primary: hybrid(), alternates: [], note: null, ...result }, notes, candidateEvents, eventSportKeys: { E1: "americanfootball_nfl" }, generatedAt: "2026-10-27T19:15:00.000Z" };
 }
-const SETTINGS = { targetMin: -140, targetMax: -110, maxLegs: 2 };
+const SETTINGS = { targetMin: -140, targetMax: -110 };
 const page = (over: Partial<PageInput> = {}): PageInput => ({ phase: "done", response: response(), errorMessage: null, settings: SETTINGS, ...over });
 
 // ---- Odds display: negative, positive, even ----
@@ -144,16 +141,16 @@ check("combined exact (cross-game)", combinedPrice(hybrid({ isEstimate: false, c
 // ---- The form -> settings ----
 
 const form = (over: Partial<HybridForm> = {}): HybridForm => ({ ...DEFAULT_FORM, ...over });
-check("defaults are -140 / -110, balanced, Legs Auto with 3 max legs, 55%", buildSettings(form()), { ok: true, settings: { targetMin: -140, targetMax: -110, width: "balanced", perLegRange: null, maxLegs: 3, minWinPct: 55, boxLegs: "auto" } });
+check("defaults are -140 / -110, balanced, Total Legs Auto (cap 3), 55%", buildSettings(form()), { ok: true, settings: { targetMin: -140, targetMax: -110, width: "balanced", perLegRange: null, maxLegs: 3, minWinPct: 55, boxLegs: "auto" } });
 
-// ---- Legs: 2 · 3 · Auto ----
-check("Legs options read 2 · 3 · Auto", BOX_LEGS_OPTIONS.map((o) => o.label), ["2", "3", "Auto"]);
-check("picking 3 or Auto at Max legs 2 raises it to 3", [boxLegsPatch({ maxLegs: 2 }, "3"), boxLegsPatch({ maxLegs: 2 }, "auto")], [{ boxLegs: "3", maxLegs: 3 }, { boxLegs: "auto", maxLegs: 3 }]);
-check("picking 3 at Max legs 4 keeps 4; picking 2 never lowers it", [boxLegsPatch({ maxLegs: 4 }, "3"), boxLegsPatch({ maxLegs: 3 }, "2")], [{ boxLegs: "3", maxLegs: 4 }, { boxLegs: "2", maxLegs: 3 }]);
-check("the Max legs floor: 3 for a forced 3-leg box, else 2", [minMaxLegs("3"), minMaxLegs("auto"), minMaxLegs("2")], [3, 2, 2]);
-check("a 3-leg box never sends Max legs 2", (buildSettings(form({ boxLegs: "3", maxLegs: 2 })) as { settings: { maxLegs: number } }).settings.maxLegs, 3);
-const sent2 = (buildSettings(form({ boxLegs: "2", maxLegs: 2 })) as { settings: { maxLegs: number; boxLegs: string } }).settings;
-check("Legs 2 with Max legs 2 sends both as chosen", [sent2.boxLegs, sent2.maxLegs], ["2", 2]);
+// ---- Total Legs: 2 · 3 · Auto ----
+check("Total Legs options read 2 Legs · 3 Legs · Auto", BOX_LEGS_OPTIONS.map((o) => o.label), ["2 Legs", "3 Legs", "Auto"]);
+check("the leg cap comes from Total Legs alone: 2 -> 2, 3 -> 3, Auto -> 3", [maxLegsFor("2"), maxLegsFor("3"), maxLegsFor("auto")], [2, 3, 3]);
+const capOf = (over: Partial<HybridForm>) => (buildSettings(form(over)) as { settings: { maxLegs: number; boxLegs: string } }).settings;
+check("Total Legs 2 sends 2 legs", [capOf({ boxLegs: "2" }).boxLegs, capOf({ boxLegs: "2" }).maxLegs], ["2", 2]);
+check("Total Legs 3 sends 3 legs", [capOf({ boxLegs: "3" }).boxLegs, capOf({ boxLegs: "3" }).maxLegs], ["3", 3]);
+check("Total Legs Auto sends 3 legs of room", [capOf({ boxLegs: "auto" }).boxLegs, capOf({ boxLegs: "auto" }).maxLegs], ["auto", 3]);
+check("the form no longer carries a Max legs value, so a stale one is ignored", capOf({ boxLegs: "2", ...({ maxLegs: 4 } as object) }).maxLegs, 2);
 check("positive targets accepted", buildSettings(form({ targetMin: "+100", targetMax: "+150" })).ok, true);
 check("a range across the sign accepted", buildSettings(form({ targetMin: "-110", targetMax: "+120" })).ok, true);
 check("min above max is an error on the target field", Object.keys((buildSettings(form({ targetMin: "-110", targetMax: "-140" })) as { errors: object }).errors), ["target"]);
@@ -165,20 +162,6 @@ check("advanced open and both empty is no range", (buildSettings(form({ advanced
 check("half a per-leg range is an error", Object.keys((buildSettings(form({ advanced: true, legMin: "-300" })) as { errors: object }).errors), ["perLeg"]);
 check("backwards per-leg range is an error", Object.keys((buildSettings(form({ advanced: true, legMin: "+150", legMax: "-300" })) as { errors: object }).errors), ["perLeg"]);
 check("per-leg range wholly under the -600 floor is an error", Object.keys((buildSettings(form({ advanced: true, legMin: "-900", legMax: "-700" })) as { errors: object }).errors), ["perLeg"]);
-check("maxLegs is clamped to 2..4", [2, 3, 4].map((n) => (buildSettings(form({ maxLegs: n })) as { settings: { maxLegs: number } }).settings.maxLegs), [2, 3, 4]);
-check("a bad maxLegs falls back into range", [(buildSettings(form({ maxLegs: 9 })) as { settings: { maxLegs: number } }).settings.maxLegs, (buildSettings(form({ maxLegs: 0 })) as { settings: { maxLegs: number } }).settings.maxLegs], [4, 2]);
-
-// ---- The maxLegs bump ----
-
-check("bump 2 -> 3", bumpMaxLegs(2), 3);
-check("bump 3 -> 4", bumpMaxLegs(3), 4);
-check("bump is capped at 4", bumpMaxLegs(4), 4);
-check("bump of junk starts from 2", bumpMaxLegs(Number.NaN), 3);
-check("more legs offered: outside target, used all its legs", canAllowMoreLegs(2, hybrid({ inTarget: false })), true);
-check("more legs not offered at 4", canAllowMoreLegs(4, hybrid({ inTarget: false, legs: [leg(), OVER, leg({ eventId: "E2" }), leg({ eventId: "E3" })] })), false);
-check("more legs not offered in target", canAllowMoreLegs(2, hybrid()), false);
-check("more legs not offered when it stopped short of its allowance", canAllowMoreLegs(3, hybrid({ inTarget: false })), false);
-check("more legs not offered with no hybrid", canAllowMoreLegs(2, null), false);
 
 // ---- Target status: in, just outside, far outside ----
 
@@ -235,14 +218,13 @@ check("state: done without a response is an error, not a crash", pageState(page(
 check(
   "state: in-target result",
   pageState(page()),
-  { kind: "result", flags: { outsideTarget: false, canAllowMoreLegs: false, crossGame: false, skippedGames: [], pricingGames: [], unavailableGames: [], stale: false } }
+  { kind: "result", flags: { outsideTarget: false, crossGame: false, skippedGames: [], pricingGames: [], unavailableGames: [], stale: false } }
 );
 check(
-  "state: no fit offers more legs at maxLegs 2",
+  "state: no fit",
   pageState(page({ response: response({ primary: hybrid({ inTarget: false, combinedAmerican: -250 }) }) })),
-  { kind: "no-fit", flags: { outsideTarget: true, canAllowMoreLegs: true, crossGame: false, skippedGames: [], pricingGames: [], unavailableGames: [], stale: false } }
+  { kind: "no-fit", flags: { outsideTarget: true, crossGame: false, skippedGames: [], pricingGames: [], unavailableGames: [], stale: false } }
 );
-check("state: no fit at maxLegs 4 offers nothing more", (pageState(page({ settings: { ...SETTINGS, maxLegs: 4 }, response: response({ primary: hybrid({ inTarget: false, legs: [leg(), OVER, leg({ eventId: "E2" }), leg({ eventId: "E3" })] }) }) })) as { flags: { canAllowMoreLegs: boolean } }).flags.canAllowMoreLegs, false);
 check("state: cross-game fallback", (pageState(page({ response: response({ primary: hybrid({ structure: "cross-game", isEstimate: false }) }) })) as { flags: { crossGame: boolean } }).flags.crossGame, true);
 check("cross-game wording, two legs", crossGameText(hybrid({ structure: "cross-game" })), "No game has qualifying consensus on both a side and a total. Built from two different games, so the price is exact.");
 check("state: skipped games ride along with a result", (pageState(page({ response: response({}, [note("alt-lines-not-posted", "E9", "A @ B")]) })) as { flags: { skippedGames: string[] } }).flags.skippedGames, ["A @ B"]);

@@ -181,7 +181,7 @@ async function main() {
   }
   const cardSource = readFileSync(join(__dirname, "generator-card.tsx"), "utf8");
   const liveLinks = cardSource.match(/<Link href="\/live"[^>]*>/g) ?? [];
-  check("source: all three Live links carry onClick={slip.enterSlipMode}", liveLinks.length === 3 && liveLinks.every((l) => l.includes("onClick={slip.enterSlipMode}")), JSON.stringify(liveLinks));
+  check("source: both Live links (picks, games) carry onClick={slip.enterSlipMode}", liveLinks.length === 2 && liveLinks.every((l) => l.includes("onClick={slip.enterSlipMode}")), JSON.stringify(liveLinks));
 
   // ---- Filters ----
   check("MLB has picks: its pill can't be switched off", el.querySelector('[aria-label="MLB is on: your slip has picks or games from it"]') !== null);
@@ -287,10 +287,10 @@ async function main() {
   check("Standard is the default view: its own controls, no Hybrid line", text().includes("Max legs per game") && !text().includes("Hybrid builds from capper consensus"));
   const standardRequests = requests.length;
   await click(button("Hybrid"));
-  check("Hybrid: the muted slip line, its controls", text().includes("Hybrid builds from capper consensus. Your slip isn't used in this mode.") && text().includes("Target odds") && text().includes("Box width") && text().includes("Max legs"));
+  check("Hybrid: the muted slip line, its controls", text().includes("Hybrid builds from capper consensus. Your slip isn't used in this mode.") && text().includes("Target odds") && text().includes("Line range") && text().includes("Total legs") && !text().includes("Max legs"));
   check("Hybrid: leg count, max legs per game, Pick Mix, fill toggle and Props are gone", !text().includes("Max legs per game") && !text().includes("Fill from") && !text().includes("Customize Mix") && !text().includes("Props") && !text().includes("Your picks ·"));
   check("Hybrid: switching modes sends no request", requests.length === standardRequests && hybridRequests.length === 0);
-  await click(button("Generate hybrid"));
+  await click(button("Generate parlay"));
   check("Hybrid: the Generate button sends exactly one hybrid request, none to Standard", hybridRequests.length === 1 && requests.length === standardRequests);
   const sent = hybridRequests[0] as { settings: { targetMin: number; targetMax: number; maxLegs: number; width: string; minWinPct: number; boxLegs: string } };
   check(

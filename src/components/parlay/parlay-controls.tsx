@@ -5,7 +5,7 @@
 // only (state comes in as props) so My Picks (backed by the Parlay Pool
 // context) and Auto-Generate (its own local state, so it never changes the
 // user's pool scope) render the identical control.
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { MUTED } from "@/components/dashboard/stat-card";
 import { MAX_PARLAY_LEGS, MAX_PARLAY_LEGS_MESSAGE } from "@/lib/parlay/leg-cap";
 
@@ -220,44 +220,132 @@ export function Tabs<T extends string>({
   );
 }
 
-// A small −/+ stepper for a bounded count ("Max legs per game": 1 to 5).
-export function CountStepper({
+// The −/+ group of a bounded count, without a label: the settings rows lay the label out themselves.
+export function StepperControl({
   label,
   value,
   min,
   max,
   onChange,
-  note,
   step: stepBy = 1,
   unit = "",
 }: {
+  // Names the buttons for assistive tech ("Fewer: Max legs per game").
   label: string;
   value: number;
   min: number;
   max: number;
   onChange: (n: number) => void;
-  note?: string;
   // How far − and + move the value, and what follows it ("%").
   step?: number;
   unit?: string;
 }) {
   const step = "flex h-11 w-11 items-center justify-center rounded-full text-lg text-foreground transition hover:bg-foreground/[0.035] disabled:opacity-30 disabled:hover:bg-transparent";
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-      <span className={LABEL}>{label}</span>
-      <div className="flex items-center rounded-full border border-[#DADDE5] bg-white dark:border-border dark:bg-card">
-        <button type="button" onClick={() => onChange(value - stepBy)} disabled={value <= min} aria-label={"Fewer: " + label} className={step}>
-          &minus;
-        </button>
-        <span className={(unit ? "w-12" : "w-8") + " text-center text-[15px] font-semibold tabular-nums text-foreground"} aria-live="polite">
-          {value}
-          {unit}
-        </span>
-        <button type="button" onClick={() => onChange(value + stepBy)} disabled={value >= max} aria-label={"More: " + label} className={step}>
-          +
-        </button>
+    <div className="flex items-center rounded-full border border-[#DADDE5] bg-white dark:border-border dark:bg-card">
+      <button type="button" onClick={() => onChange(value - stepBy)} disabled={value <= min} aria-label={"Fewer: " + label} className={step}>
+        &minus;
+      </button>
+      <span className={(unit ? "w-12" : "w-8") + " text-center text-[15px] font-semibold tabular-nums text-foreground"} aria-live="polite">
+        {value}
+        {unit}
+      </span>
+      <button type="button" onClick={() => onChange(value + stepBy)} disabled={value >= max} aria-label={"More: " + label} className={step}>
+        +
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The generator card's layout pieces: numbered sections, filter rows, and the
+// tinted settings block.
+// ---------------------------------------------------------------------------
+
+const SECTION_RULE = "border-t border-[#0F1420]/[0.08] dark:border-white/10";
+
+// The round number beside a section's title: green for the picks, blue for the rest.
+function StepBadge({ n, tone }: { n: number; tone: "green" | "blue" }) {
+  return (
+    <span
+      aria-hidden
+      className={"flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-white " + (tone === "green" ? "bg-[#16A34A] dark:bg-emerald-600" : "bg-brand-600")}
+    >
+      {n}
+    </span>
+  );
+}
+
+// One numbered section: badge, title, a one-line description, and its actions
+// right-aligned on the title's row (they wrap under it on a phone).
+export function Section({
+  n,
+  tone = "blue",
+  title,
+  description,
+  actions,
+  children,
+}: {
+  n: number;
+  tone?: "green" | "blue";
+  title: string;
+  description: string;
+  actions?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <section aria-label={title} className={"mt-3.5 pt-3.5 " + SECTION_RULE}>
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 items-start gap-3">
+          <StepBadge n={n} tone={tone} />
+          <div className="min-w-0">
+            <h3 className="text-[15px] font-semibold leading-7 text-foreground">{title}</h3>
+            <p className="-mt-1 text-xs font-medium text-muted-foreground">{description}</p>
+          </div>
+        </div>
+        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {note && <span className="text-xs font-medium text-muted-foreground">{note}</span>}
+      {children && <div className="mt-3">{children}</div>}
+    </section>
+  );
+}
+
+// LEAGUES / BET TYPES: an uppercase label, then the chips on its row (under it on a phone).
+export function FilterRow({ label, className = "", children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <div className={"flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3 " + className}>
+      <span className={LABEL + " shrink-0 sm:w-[84px]"}>{label}</span>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">{children}</div>
+    </div>
+  );
+}
+
+// The tinted, rounded block the settings rows sit in, thin dividers between them.
+export function SettingsBlock({ children }: { children: ReactNode }) {
+  return (
+    <div className="divide-y divide-[#0F1420]/[0.06] rounded-[14px] border border-[#E1E7FA] bg-[#F6F8FF] px-3.5 dark:divide-white/10 dark:border-brand-500/30 dark:bg-brand-500/[0.06]">
+      {children}
+    </div>
+  );
+}
+
+// One setting: icon + uppercase label, the control, then its helper text. Three
+// columns from `sm` up (so every row's control lines up); stacked on a phone.
+// `soft` puts the icon in a soft round tile (Line Flexibility) rather than bare.
+export function SettingRow({ icon, label, note, soft, children }: { icon: ReactNode; label: string; note?: ReactNode; soft?: boolean; children: ReactNode }) {
+  return (
+    <div className={"grid items-center gap-x-4 gap-y-2 sm:grid-cols-[200px_auto_minmax(0,1fr)] " + (soft ? "py-2" : "py-3")}>
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          aria-hidden
+          className={"flex shrink-0 items-center justify-center " + (soft ? "h-10 w-10 rounded-full bg-[#E6ECFF] text-brand-600 dark:bg-brand-500/15 dark:text-brand-400" : "h-6 w-6 text-[#5B6275] dark:text-muted-foreground")}
+        >
+          {icon}
+        </span>
+        <span className={LABEL}>{label}</span>
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">{children}</div>
+      {note && <p className="text-xs font-medium text-muted-foreground">{note}</p>}
     </div>
   );
 }

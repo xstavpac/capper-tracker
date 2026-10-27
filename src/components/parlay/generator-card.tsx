@@ -2,11 +2,12 @@
 
 // The Parlay Generator: one card, one set of controls, one result (PR 6 of the
 // consolidation). Top to bottom:
-//   1 · Your picks - the slip's picks by game, each always in the parlay.
-//   2 · Target games - full slate, or only the games targeted on Live (plus
-//       your picks' games).
-//   3 · Filters - league scope, Include Picks (All Picks / Moneyline / Spread /
-//       Totals / Props) + Pick Mix, max legs per game, Fill from.
+//   1 · Your Picks and Target Games - the slip's picks by game, each always in
+//       the parlay; full slate, or only the games targeted on Live (plus your
+//       picks' games).
+//   2 · Pick Filters - league scope, Bet Types (All Picks / Moneyline / Spread /
+//       Totals / Props) + Customize Mix, max legs per game, minimum capper win
+//       rate, Fill from.
 //   Legs, Clear, Generate parlay - and the result under it.
 //
 // Generate asks the server once (generateParlayAction) for the pool and the
@@ -19,9 +20,9 @@ import { generateParlayAction } from "@/server/actions/parlay-generate";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PanelShell, TINTS } from "@/components/dashboard/panel-shell";
-import { BoltIcon } from "@/components/dashboard/cappers-icons";
+import { BoltIcon, DatabaseIcon, GamepadIcon, TrophyIcon } from "@/components/dashboard/cappers-icons";
 import { useParlayPool, type PooledPick } from "@/components/parlay/parlay-pool-context";
-import { CountStepper, LABEL, LegStepper, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, TextSegments } from "@/components/parlay/parlay-controls";
+import { FilterRow, LABEL, LegStepper, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Section, SettingRow, SettingsBlock, StepperControl, TextSegments } from "@/components/parlay/parlay-controls";
 import { IncludePicksChips, PickMixControl } from "@/components/parlay/pick-mix-control";
 import { HybridControls, HybridResults, ModeToggle, type Mode } from "@/components/parlay/hybrid-mode";
 import { useHybridGenerator } from "@/components/parlay/use-hybrid-generator";
@@ -41,7 +42,6 @@ const FILL_FROM_OPTIONS: { key: FillFrom; label: string }[] = [
   { key: "BEST_AVAILABLE", label: "Best available" },
   { key: "YOUR_PICKS_ONLY", label: "Your picks only" },
 ];
-const SECTION = "border-t border-[#0F1420]/[0.08] pt-3.5 dark:border-white/10";
 const LINK = "text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400";
 const CHIP = "inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold";
 // The "+ Add ... from Live" links: a filled brand pill, so the way into Live stands out from the quiet text links.
@@ -50,17 +50,6 @@ const ADD_FROM_LIVE =
 
 // What the page's stat tiles read from the last build.
 export type GeneratorSummary = { legs: number; fromSlip: number; generated: number } | null;
-
-function SectionTitle({ n, title, children }: { n: number; title: string; children?: React.ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-baseline justify-between gap-2">
-      <p className={LABEL}>
-        {n} · {title}
-      </p>
-      {children}
-    </div>
-  );
-}
 
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -252,203 +241,198 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
     );
   }
 
+  const hasPicksBody = slip.clearedCount > 0 || pool.length > 0 || Boolean(removed) || targets.length > 0;
+
   return (
     <>
       <PanelShell
         theme={{
           ...TINTS.neutral,
           title: "Parlay Generator",
-          subtitle: "Your picks are in every parlay. The rest are the best qualified picks from your cappers.",
+          subtitle: "Build parlays using your picks or target games. The rest are the best qualified picks from your cappers.",
           icon: <BoltIcon className="h-[17px] w-[17px] stroke-[2.2]" />,
         }}
         footer={undefined}
         wrapSubtitle
       >
         {modeToggle}
-        {/* 1 · Your picks */}
-        <SectionTitle n={1} title={`Your picks${pool.length > 0 ? " · " + pool.length : ""}`}>
-          <span className="flex items-center gap-3">
-            {pool.length > 0 && (
-              <button type="button" onClick={slip.clearSlip} className={LINK}>
-                Clear all picks
-              </button>
-            )}
-            <Link href="/live" onClick={slip.enterSlipMode} className={ADD_FROM_LIVE}>
-              + Add picks from Live
-            </Link>
-          </span>
-        </SectionTitle>
-        {slip.clearedCount > 0 && (
-          <p className="mt-1.5 text-xs font-medium text-muted-foreground">
-            Cleared {slip.clearedCount} pick{slip.clearedCount === 1 ? "" : "s"}.{" "}
-            <button type="button" onClick={slip.undoClear} className={LINK}>
-              Undo
-            </button>
-          </p>
-        )}
-        {pool.length === 0 ? (
-          <p className="mt-2 text-sm text-muted-foreground">Picks you&apos;ve locked in for this parlay.</p>
-        ) : (
-          <>
-            <div className="mt-2 grid gap-2.5 md:grid-cols-2">
-              {byGame.map((picks) => (
-                <div key={picks[0].gameId} className="rounded-[14px] border border-[#E6E8EF] bg-white dark:border-border dark:bg-card">
-                  <p className={LABEL + " border-b border-[#0F1420]/[0.06] px-3.5 py-2 dark:border-white/10"}>
-                    {picks[0].leagueName} · {picks[0].gameLabel} · {formatGameTime(picks[0].gameTime)}
+
+        {/* 1 · Your picks and target games */}
+        <Section
+          n={1}
+          tone="green"
+          title="Your Picks and Target Games"
+          description="Picks you've locked in for this parlay."
+          actions={
+            <>
+              <Link href="/live" onClick={slip.enterSlipMode} className={ADD_FROM_LIVE}>
+                + Add picks from Live
+              </Link>
+              <Link href="/live" onClick={slip.enterSlipMode} className={ADD_FROM_LIVE}>
+                + Add games from Live
+              </Link>
+            </>
+          }
+        >
+          {hasPicksBody && (
+            <div className="space-y-3">
+              {slip.clearedCount > 0 && (
+                <p className="text-xs font-medium text-muted-foreground">
+                  Cleared {slip.clearedCount} pick{slip.clearedCount === 1 ? "" : "s"}.{" "}
+                  <button type="button" onClick={slip.undoClear} className={LINK}>
+                    Undo
+                  </button>
+                </p>
+              )}
+              {pool.length > 0 && (
+                <div>
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <p className={LABEL}>Your picks · {pool.length}</p>
+                    <button type="button" onClick={slip.clearSlip} className={LINK}>
+                      Clear all picks
+                    </button>
+                  </div>
+                  <div className="mt-2 grid gap-2.5 md:grid-cols-2">
+                    {byGame.map((picks) => (
+                      <div key={picks[0].gameId} className="rounded-[14px] border border-[#E6E8EF] bg-white dark:border-border dark:bg-card">
+                        <p className={LABEL + " border-b border-[#0F1420]/[0.06] px-3.5 py-2 dark:border-white/10"}>
+                          {picks[0].leagueName} · {picks[0].gameLabel} · {formatGameTime(picks[0].gameTime)}
+                        </p>
+                        <ul className="divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
+                          {picks.map((p) => {
+                            const r = records ? bestAvailableRecord(p, records) : null;
+                            return (
+                              <li key={p.pickId} className="flex items-center gap-2.5 py-1 pl-3.5 pr-1">
+                                <div className="min-w-0 flex-1 py-1">
+                                  <p className="text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{p.betDetail}</p>
+                                  <p className="text-xs font-medium text-muted-foreground">
+                                    <Link href={"/cappers/" + p.capperId} className="text-foreground hover:underline">
+                                      {p.capperName}
+                                    </Link>
+                                    {records && " · " + (r ? `${r.wins}–${r.losses}` : "no record yet")}
+                                  </p>
+                                  {droppedNote.has(p.pickId) && <p className="text-xs font-medium text-amber-700 dark:text-amber-400">{droppedNote.get(p.pickId)}</p>}
+                                </div>
+                                <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{formatOdds(p.odds)}</span>
+                                <RemoveButton label={`Remove ${p.capperName} pick from your slip`} onClick={() => slip.removeFromPool(p.pickId)} />
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs font-medium text-muted-foreground">Every pick here goes in the parlay. Remove one with ×.</p>
+                </div>
+              )}
+              {removed && (
+                <div className="text-xs font-medium text-muted-foreground">
+                  <p className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-foreground">{removedHeading(removed)}</span>
+                    <button type="button" onClick={slip.dismissRemoved} className={LINK}>
+                      Dismiss
+                    </button>
                   </p>
-                  <ul className="divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
-                    {picks.map((p) => {
-                      const r = records ? bestAvailableRecord(p, records) : null;
-                      return (
-                        <li key={p.pickId} className="flex items-center gap-2.5 py-1 pl-3.5 pr-1">
-                          <div className="min-w-0 flex-1 py-1">
-                            <p className="text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{p.betDetail}</p>
-                            <p className="text-xs font-medium text-muted-foreground">
-                              <Link href={"/cappers/" + p.capperId} className="text-foreground hover:underline">
-                                {p.capperName}
-                              </Link>
-                              {records && " · " + (r ? `${r.wins}–${r.losses}` : "no record yet")}
-                            </p>
-                            {droppedNote.has(p.pickId) && <p className="text-xs font-medium text-amber-700 dark:text-amber-400">{droppedNote.get(p.pickId)}</p>}
-                          </div>
-                          <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{formatOdds(p.odds)}</span>
-                          <RemoveButton label={`Remove ${p.capperName} pick from your slip`} onClick={() => slip.removeFromPool(p.pickId)} />
-                        </li>
-                      );
-                    })}
+                  <ul className="mt-0.5 list-disc pl-4">
+                    {removed.picks.map((p) => (
+                      <li key={p.pickId}>{removedPickText(p)}</li>
+                    ))}
                   </ul>
                 </div>
-              ))}
+              )}
+              {targets.length > 0 && (
+                <div>
+                  <p className={LABEL}>Target games · {targetedGames.length}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {targetedGames.map((g) =>
+                      g.viaPicks ? (
+                        <span key={g.gameId} className={CHIP + " border-[#DADDE5] bg-muted text-foreground dark:border-border"} title="In play through your picks - remove the picks to drop it">
+                          {g.gameLabel}
+                          <span className="font-medium text-muted-foreground">· your picks</span>
+                        </span>
+                      ) : (
+                        <span key={g.gameId} className={CHIP + " border-brand-600 bg-brand-600 pr-1 text-white"}>
+                          {g.gameLabel}
+                          <button type="button" onClick={() => slip.toggleTarget(g)} aria-label={"Stop targeting " + g.gameLabel} className="flex h-7 w-7 items-center justify-center rounded-full text-base leading-none hover:bg-white/20">
+                            ×
+                          </button>
+                        </span>
+                      )
+                    )}
+                    <button type="button" onClick={slip.clearTargets} className={CHIP + " border-[#DADDE5] bg-white text-foreground hover:bg-foreground/[0.035] dark:border-border dark:bg-card"}>
+                      Use full slate
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs font-medium text-muted-foreground">
+                    The generator picks the best available legs from targeted games. Games from your picks are always included.
+                  </p>
+                </div>
+              )}
             </div>
-            <p className="mt-2 text-xs font-medium text-muted-foreground">Every pick here goes in the parlay. Remove one with ×.</p>
-          </>
-        )}
-        {removed && (
-          <div className="mt-1.5 text-xs font-medium text-muted-foreground">
-            <p className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-foreground">{removedHeading(removed)}</span>
-              <button type="button" onClick={slip.dismissRemoved} className={LINK}>
-                Dismiss
-              </button>
-            </p>
-            <ul className="mt-0.5 list-disc pl-4">
-              {removed.picks.map((p) => (
-                <li key={p.pickId}>{removedPickText(p)}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* 2 · Target games */}
-        <div className={"mt-4 " + SECTION}>
-          {targets.length === 0 ? (
-            <>
-              <SectionTitle n={2} title="Target games">
-                <Link href="/live" onClick={slip.enterSlipMode} className={ADD_FROM_LIVE}>
-                  + Add games from Live
-                </Link>
-              </SectionTitle>
-              <p className="mt-2 text-sm text-muted-foreground">Choose which games to build around, or use the full slate.</p>
-            </>
-          ) : (
-            <>
-              <SectionTitle n={2} title={`Target games · ${targetedGames.length}`}>
-                <Link href="/live" onClick={slip.enterSlipMode} className={ADD_FROM_LIVE}>
-                  + Add games from Live
-                </Link>
-              </SectionTitle>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {targetedGames.map((g) =>
-                  g.viaPicks ? (
-                    <span key={g.gameId} className={CHIP + " border-[#DADDE5] bg-muted text-foreground dark:border-border"} title="In play through your picks - remove the picks to drop it">
-                      {g.gameLabel}
-                      <span className="font-medium text-muted-foreground">· your picks</span>
-                    </span>
-                  ) : (
-                    <span key={g.gameId} className={CHIP + " border-brand-600 bg-brand-600 pr-1 text-white"}>
-                      {g.gameLabel}
-                      <button type="button" onClick={() => slip.toggleTarget(g)} aria-label={"Stop targeting " + g.gameLabel} className="flex h-7 w-7 items-center justify-center rounded-full text-base leading-none hover:bg-white/20">
-                        ×
-                      </button>
-                    </span>
-                  )
-                )}
-                <button type="button" onClick={slip.clearTargets} className={CHIP + " border-[#DADDE5] bg-white text-foreground hover:bg-foreground/[0.035] dark:border-border dark:bg-card"}>
-                  Use full slate
-                </button>
-              </div>
-              <p className="mt-2 text-xs font-medium text-muted-foreground">
-                The generator picks the best available legs from targeted games. Games from your picks are always included.
-              </p>
-            </>
           )}
-        </div>
+        </Section>
 
-        {/* 3 · Filters */}
-        <div className={"mt-4 " + SECTION}>
-          <SectionTitle n={3} title="Filters" />
-          <div className="mt-2 flex flex-wrap gap-2">
-            {leagues.map((league) => (
-              <ScopeChip
-                key={league}
-                label={league}
-                inScope={isLeagueInScope(league)}
-                onToggle={() => toggleLeague(league)}
-                ariaLabel={
-                  isLeagueLocked(league)
-                    ? league + " is on: your slip has picks or games from it"
-                    : (isLeagueInScope(league) ? "Leave out " : "Include ") + league + " games"
+        {/* 2 · Pick filters */}
+        <Section n={2} title="Pick Filters" description="Choose which games to build around, or use the full slate.">
+          <div className="space-y-3">
+            <FilterRow label="Leagues">
+              {leagues.map((league) => (
+                <ScopeChip
+                  key={league}
+                  label={league}
+                  inScope={isLeagueInScope(league)}
+                  onToggle={() => toggleLeague(league)}
+                  ariaLabel={
+                    isLeagueLocked(league)
+                      ? league + " is on: your slip has picks or games from it"
+                      : (isLeagueInScope(league) ? "Leave out " : "Include ") + league + " games"
+                  }
+                />
+              ))}
+            </FilterRow>
+            {/* relative: the Pick Mix popover opens under this row, at its width. */}
+            <FilterRow label="Bet types" className="relative">
+              <IncludePicksChips value={include} onToggle={onToggleInclude} />
+              {categories.length > 1 && <PickMixControl categories={categories} mix={mix} legCount={legCount} onChange={setMix} />}
+            </FilterRow>
+            <SettingsBlock>
+              <SettingRow
+                icon={<GamepadIcon className="h-5 w-5" />}
+                label="Max legs per game"
+                note={maxPerGame === 1 ? "One leg per game, your picks included." : "Same-game legs only when games run out · never opposing or duplicate."}
+              >
+                <StepperControl label="Max legs per game" value={maxPerGame} min={1} max={MAX_LEGS_PER_GAME} onChange={(n) => setMaxPerGame(Math.max(1, Math.min(MAX_LEGS_PER_GAME, n)))} />
+              </SettingRow>
+              <SettingRow
+                icon={<TrophyIcon className="h-5 w-5" />}
+                label="Minimum capper win rate"
+                note={
+                  "Only cappers at or above this win rate on that bet type are used. Lower lets more in; higher is stricter." +
+                  (minWinPct < GATE_DEFAULT ? " Under " + GATE_DEFAULT + "% means more risk." : "")
                 }
-              />
-            ))}
+              >
+                <StepperControl label="Minimum capper win rate" value={minWinPct} min={GATE_MIN} max={GATE_MAX} step={GATE_STEP} unit="%" onChange={setMinWinPct} />
+              </SettingRow>
+              <SettingRow
+                icon={<DatabaseIcon className="h-5 w-5" />}
+                label="Fill from"
+                note={pool.length === 0 ? "Add picks to build from your picks only" : undefined}
+              >
+                <TextSegments label="Fill from" options={FILL_FROM_OPTIONS} value={fillFrom} onChange={(v) => setFillFrom(pool.length === 0 ? "BEST_AVAILABLE" : v)} />
+              </SettingRow>
+            </SettingsBlock>
           </div>
-          {/* relative: the Pick Mix popover opens under this row, at its width. */}
-          <div className="relative mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className={LABEL}>Include picks</span>
-            <IncludePicksChips value={include} onToggle={onToggleInclude} />
-            {categories.length > 1 && <PickMixControl categories={categories} mix={mix} legCount={legCount} onChange={setMix} />}
-          </div>
-          <div className="mt-3.5">
-            <CountStepper
-              label="Max legs per game"
-              value={maxPerGame}
-              min={1}
-              max={MAX_LEGS_PER_GAME}
-              onChange={(n) => setMaxPerGame(Math.max(1, Math.min(MAX_LEGS_PER_GAME, n)))}
-              note={maxPerGame === 1 ? "one leg per game, your picks included" : "same-game legs only when games run out · never opposing or duplicate"}
-            />
-          </div>
-          <div className="mt-3.5">
-            <CountStepper
-              label="Minimum win rate"
-              value={minWinPct}
-              min={GATE_MIN}
-              max={GATE_MAX}
-              step={GATE_STEP}
-              unit="%"
-              onChange={setMinWinPct}
-              note={
-                "Only cappers at or above this win rate on that bet type are used. Lower lets more in; higher is stricter." +
-                (minWinPct < GATE_DEFAULT ? " Under " + GATE_DEFAULT + "% means more risk." : "")
-              }
-            />
-          </div>
-          <div className="mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className={LABEL}>Fill from</span>
-            <TextSegments label="Fill from" options={FILL_FROM_OPTIONS} value={fillFrom} onChange={(v) => setFillFrom(pool.length === 0 ? "BEST_AVAILABLE" : v)} />
-            {pool.length === 0 && <span className="text-xs font-medium text-muted-foreground">Add picks to build from your picks only</span>}
-          </div>
-        </div>
+        </Section>
 
         {/* Legs · Clear · Generate */}
-        <div className={"mt-4 flex flex-wrap items-center justify-between gap-3 " + SECTION}>
+        <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3 border-t border-[#0F1420]/[0.08] pt-3.5 dark:border-white/10">
           <LegStepper
             value={legCount}
             max={maxLegs}
             onChange={(n) => setLegCount(Math.max(minLegs, Math.min(n, maxLegs)))}
             note={`up to ${MAX_PARLAY_LEGS} · ${slipLegFloor(pool, maxPerGame)} from your picks, ${generatedLegs} from your cappers`}
           />
-          <div className="flex flex-wrap gap-2">
+          <div className="ml-auto flex flex-wrap justify-end gap-2">
             <button type="button" onClick={clear} disabled={!parlay && !error} className={PILL_OUTLINE}>
               Clear result
             </button>
