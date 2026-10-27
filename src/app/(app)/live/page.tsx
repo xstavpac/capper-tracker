@@ -3,6 +3,7 @@ import { matchScoreToGame, LIVE_SPORTS } from "@/server/data/odds";
 import { chipSetForLeague, DEFAULT_CHIP_SET, PICK_CATEGORY_LABELS } from "@/server/data/stats";
 import { getSportCategoryPanelData } from "@/server/data/pick-aggregates-cappers-adapter";
 import { getLiveBoardData } from "@/server/data/live-board-picks";
+import { getHeavyConsensusRate } from "@/server/data/heavy-consensus";
 import { getDefaultLiveSport } from "@/server/data/live-default-sport";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
 import { GridLiveBoard } from "@/components/live/grid-live-board";
@@ -37,9 +38,13 @@ export default async function LivePage({
   const leagueChipSet = chipSetForLeague(sportLabel);
   const hasSportSpecificCategories = leagueChipSet.length > DEFAULT_CHIP_SET.length;
 
-  const [{ odds, scores, expanderPicksByGame }, sportCategoryPanel] = await Promise.all([
+  // The Heavy Consensus hit rate is one cached number shared by every viewer (24 h TTL,
+  // refreshed by refresh-scores); each game's consensus itself is worked out from the
+  // picks below, client-side, so it costs no query of its own.
+  const [{ odds, scores, expanderPicksByGame }, sportCategoryPanel, heavyRate] = await Promise.all([
     getLiveBoardData(user.id, activeSport, sportLabel),
     hasSportSpecificCategories ? getSportCategoryPanelData(user.id, sportLabel) : Promise.resolve(null),
+    getHeavyConsensusRate(),
   ]);
   const sportCategoryBreakdown = sportCategoryPanel?.breakdown ?? [];
 
@@ -170,6 +175,7 @@ export default async function LivePage({
               initialScores={scores}
               matchedPicksByGame={expanderPicksByGame}
               initialSelection={initialSelection}
+              heavyRate={heavyRate}
             />
           )}
           {showFeed && (
@@ -183,6 +189,7 @@ export default async function LivePage({
                 initialScores={scores}
                 matchedPicksByGame={expanderPicksByGame}
                 showBoardPulse={showBoardPulse}
+                heavyRate={heavyRate}
               />
             </div>
           )}

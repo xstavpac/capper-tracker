@@ -13,6 +13,8 @@ import { TINTS } from "@/components/dashboard/panel-shell";
 import { TargetGameCheckbox } from "@/components/parlay/target-game-checkbox";
 import type { SlipGame } from "@/components/parlay/parlay-pool-context";
 import type { GameClock } from "@/lib/parlay/game-over";
+import { HeavyConsensusBadge } from "@/components/live/heavy-consensus-badge";
+import { heavyBadgesForGame, type HeavyBadge, type HeavyConsensusRate } from "@/lib/heavy-consensus";
 
 // Grid Live's fixed detail panel - shows BOTH teams' picks at once,
 // stacked in one card, unlike GamePicksExpander (which lists AWAY/HOME/OTHER
@@ -43,7 +45,14 @@ function TeamPickSection({
   headerRef,
   orderClass,
   splitBySide = false,
-}: GridLiveTeamSideData & { headerRef?: Ref<HTMLDivElement>; orderClass: string; splitBySide?: boolean }) {
+  heavy,
+}: GridLiveTeamSideData & {
+  headerRef?: Ref<HTMLDivElement>;
+  orderClass: string;
+  splitBySide?: boolean;
+  // Heavy Consensus pills: a team section's own, or Totals' Over / Under (see GameDetailPanel).
+  heavy?: { team?: HeavyBadge; OVER?: HeavyBadge; UNDER?: HeavyBadge };
+}) {
   const violet = tone === "violet";
   const [loading, setLoading] = useState(false);
   const [records, setRecords] = useState<CapperLeagueRecords | null>(null);
@@ -83,6 +92,7 @@ function TeamPickSection({
       }
       style={!violet && teamColor ? { backgroundColor: teamColor + "14", borderColor: teamColor + "47" } : undefined}
     >
+      {heavy?.team && <HeavyConsensusBadge badge={heavy.team} className="mb-1 ml-1" />}
       <div
         ref={headerRef}
         // -1 so this is never in the tab sequence itself but IS a valid
@@ -117,6 +127,7 @@ function TeamPickSection({
         <TotalsSideList
           picks={picks}
           renderPick={(pick) => <PickCard key={pick.pickId} pick={pick} records={records} loading={loading} selectable />}
+          sideBadge={(side) => heavy?.[side] && <HeavyConsensusBadge badge={heavy[side]!} className="mb-1 ml-1" />}
         />
       ) : (
         <div className="space-y-1.5">
@@ -143,8 +154,11 @@ export function GameDetailPanel({
   progress,
   firstHeaderRef,
   slipGame,
+  heavyRate = null,
 }: {
   data: GridLiveGamePanelData;
+  // The pooled Heavy Consensus hit rate; null / absent shows no pill.
+  heavyRate?: HeavyConsensusRate | null;
   // The game as the Parlay slip names it, for "Target game" in slip mode.
   slipGame?: SlipGame & GameClock;
   // The selected game's start and its total matched picks (every group), for the panel's header -
@@ -161,15 +175,18 @@ export function GameDetailPanel({
   firstHeaderRef?: Ref<HTMLDivElement>;
 }) {
   const [first, second] = orderTeamSections(data.away, data.home);
+  // One game's Heavy Consensus pills, from every group's picks (the same picks the sections show).
+  const heavy = heavyBadgesForGame([...data.away.picks, ...data.home.picks, ...data.totals.picks, ...data.other.picks], heavyRate);
+  const teamHeavy = (side: typeof first) => ({ team: side === data.away ? heavy.AWAY : heavy.HOME });
   const placement = placeNonTeamSections(first.picks.length, second.picks.length, data.totals.picks.length, data.other.picks.length);
   const column = (side: "left" | "right") => (
     <div className="contents min-[1200px]:block min-[1200px]:min-w-0">
       {side === "left" ? (
-        <TeamPickSection key="first" {...first} headerRef={firstHeaderRef} orderClass="order-1" />
+        <TeamPickSection key="first" {...first} headerRef={firstHeaderRef} orderClass="order-1" heavy={teamHeavy(first)} />
       ) : (
-        <TeamPickSection key="second" {...second} orderClass="order-2" />
+        <TeamPickSection key="second" {...second} orderClass="order-2" heavy={teamHeavy(second)} />
       )}
-      {placement.totals === side && <TeamPickSection key="totals" {...data.totals} orderClass="order-3" splitBySide />}
+      {placement.totals === side && <TeamPickSection key="totals" {...data.totals} orderClass="order-3" splitBySide heavy={{ OVER: heavy.OVER, UNDER: heavy.UNDER }} />}
       {placement.other === side && <TeamPickSection key="other" {...data.other} orderClass="order-4" />}
     </div>
   );

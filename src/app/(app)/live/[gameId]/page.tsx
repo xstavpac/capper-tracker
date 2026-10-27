@@ -22,6 +22,7 @@ import { getTeamColor } from "@/lib/team-colors";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { GameHeadToHeadHeader, type HeadToHeadSide } from "@/components/live/game-head-to-head-header";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
+import { getHeavyConsensusRate } from "@/server/data/heavy-consensus";
 import { teamScore } from "@/components/live/live-scoreboard-ordering";
 import { unplayedLabel } from "@/lib/feed-game-status";
 
@@ -162,12 +163,16 @@ export default async function GameDetailPage({
     }
   }
 
-  const matchedPicks = await getPicksForGame(user.id, {
-    sportName: sportMeta.label,
-    homeTeam: game.homeTeam,
-    awayTeam: game.awayTeam,
-    commenceTime: new Date(game.commenceTime),
-  });
+  // The Heavy Consensus hit rate: one cached number shared by every viewer (see live/page.tsx).
+  const [matchedPicks, heavyRate] = await Promise.all([
+    getPicksForGame(user.id, {
+      sportName: sportMeta.label,
+      homeTeam: game.homeTeam,
+      awayTeam: game.awayTeam,
+      commenceTime: new Date(game.commenceTime),
+    }),
+    isMlb || isNfl ? getHeavyConsensusRate() : Promise.resolve(null),
+  ]);
 
   // MLB/NFL only - the richer picks-list component from the /live tab
   // (GamePicksExpander), reused directly rather than rebuilt. Mapping logic
@@ -201,6 +206,8 @@ export default async function GameDetailPage({
             homeTeam: game.homeTeam,
             awayTeam: game.awayTeam,
             gameTime: game.commenceTime,
+            // Heavy Consensus counts only picks posted before the start.
+            datePosted: p.datePosted.toISOString(),
             teamGroup,
             teamLabel:
               teamGroup === "AWAY"
@@ -355,7 +362,7 @@ export default async function GameDetailPage({
         // of a bare header.
         expanderPicks.length > 0 ? (
           <div className="mt-4 rounded-card bg-card p-4 shadow-soft">
-            <GamePicksExpander picks={expanderPicks} />
+            <GamePicksExpander picks={expanderPicks} heavyRate={heavyRate} />
           </div>
         ) : (
           <div className="mt-4 rounded-card bg-card shadow-soft">

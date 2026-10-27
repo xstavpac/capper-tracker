@@ -5,6 +5,9 @@
 //   npx tsx src/lib/heavy-consensus-acceptance-test.ts
 import {
   buildHeavyConsensusInstances,
+  heavyBadgeDetails,
+  heavyBadgeText,
+  heavyBadgesForGame,
   heavyBandOf,
   heavyConsensusByHeader,
   pooledHeavyConsensusRate,
@@ -147,6 +150,22 @@ check("equal cappers -> the higher share", pooledHeavyConsensusRate([row("A", "g
 check("equal cappers and share -> the lower userId", pooledHeavyConsensusRate([row("B", "g1", 10, 90, "WIN"), row("A", "g1", 10, 90, "LOSS")]), { hitRatePct: 0, games: 1 });
 check("no-outcome markets are left out", pooledHeavyConsensusRate([row("A", "g1", 9, 90, null), row("A", "g2", 9, 90, "WIN"), row("A", "g3", 9, 90, "LOSS"), row("A", "g4", 9, 90, "LOSS")]), { hitRatePct: 33, games: 3 });
 check("minimum is overridable (10)", pooledHeavyConsensusRate([row("A", "g1", 9, 90, "WIN"), row("A", "g2", 10, 90, "LOSS")], 10), { hitRatePct: 0, games: 1 });
+
+// ---- The Live badge ----
+const rate = { hitRatePct: 46, games: 92 };
+// Live picks: betDetail is the display label, rawBetDetail the stored text (the total's side is read from it).
+const live = [
+  ...many(9, (i) => ({ ...ml("m" + i, "HOME"), rawBetDetail: "Bulls ML" })),
+  { ...ml("m9", "AWAY"), rawBetDetail: "Knicks ML" },
+  ...many(8, (i) => ({ ...total("t" + i, "Total 221.5"), rawBetDetail: "u221.5" })),
+];
+const badges = heavyBadgesForGame(live, rate);
+check("badge: the team header", badges.HOME, { market: "MONEYLINE", sharePct: 90, heavyCappers: 9, cappers: 10, hitRatePct: 46, games: 92 });
+check("badge: the total's side is read from rawBetDetail, not the label", [badges.UNDER?.market, badges.OVER], ["TOTAL", undefined]);
+check("badge: no rate behind it -> no badges", [heavyBadgesForGame(live, null), heavyBadgesForGame(live, { hitRatePct: null, games: 0 })], [{}, {}]);
+check("badge text, exactly", heavyBadgeText({ sharePct: 82, hitRatePct: 46 }), "HEAVY CONS 82% · HIT RATE 46%");
+check("badge details", heavyBadgeDetails(badges.HOME!), "Moneyline · 9 of 10 cappers · Based on 92 games");
+check("badge details, spread / one game", heavyBadgeDetails({ market: "SPREAD", sharePct: 100, heavyCappers: 8, cappers: 8, hitRatePct: 0, games: 1 }), "Spread · 8 of 8 cappers · Based on 1 game");
 
 if (failures > 0) {
   console.log(`\n${failures} FAILED`);
