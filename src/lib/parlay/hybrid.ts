@@ -42,19 +42,41 @@
 // middle. With nothing in band, the combination closest to the band.
 //
 // Games: a box needs a qualifying team side AND a qualifying total on the same
-// game (one of each - never both teams, never Over and Under); a game scores the
-// sum of the two. The top HYBRID_CANDIDATE_GAMES are built; the result is a
+// game (one of each - never both teams); a game scores the sum of the two. The
+// top HYBRID_CANDIDATE_GAMES are built; the result is a
 // primary plus up to HYBRID_ALTERNATES alternates, each on a different game.
 // Only when no box lands in the band, each box may take up to two more single
 // edge-placed legs from other games (next-best position first, kept only when
 // it gets strictly closer; HYBRID_MAX_LEGS in all). With no box-eligible game,
 // the top two positions on different games make a cross-game hybrid.
 //
-// Pricing: the product of the legs' decimal prices (combine-odds.ts). FanDuel
-// prices a same-game combination as an SGP, which we do not get, so any hybrid
-// with two legs on one game is `isEstimate: true` - no correlation adjustment is
-// guessed. A cross-game hybrid's product is exact.
-import { americanToDecimal, combineOdds, hasUsablePrice } from "@/lib/parlay/combine-odds";
+// 3-leg box (`boxLegs`): the third leg is the other side of the box's own total
+// (Over 204.5 -> + Under 254.5), so the total is boxed from both sides. Hybrid
+// alone allows Over + Under on one game (same-game-rules.ts R-B is never
+// consulted here). That leg is not a consensus position: it is the box's total
+// turned around (no supporters, score 0), anchored at tonight's line (or the
+// total's own anchor when that is further out), and placed by the same
+// placeEdge / snap / tune as any leg - an Under from the recent over-misses or
+// highest totals, an Over from the under-misses or lowest totals. The -600
+// floor applies to it too.
+//   "2"    the 2-leg box only.
+//   "3"    always the 3-leg box when the third leg has a ladder.
+//   "auto" the 3-leg box only when the 2-leg box at its edges is shorter than
+//          the band and the 3-leg one either lands in the band with the side
+//          and the total still on their edges, or gets strictly closer than the
+//          tuned 2-leg box. The third leg is tuned first with the other two
+//          fixed; only if that misses the band do all three tune.
+// The third leg does not count as a leg when boxes are ranked against each other.
+//
+// Pricing: the product of the legs' decimal prices (combine-odds.ts), except an
+// Over and an Under on one game's total: both win only when the total lands
+// between them, and they can never both lose, so the pair's chance is
+// pOver + pUnder - 1 (from FanDuel's implied probabilities), multiplied by the
+// other legs. Fine-tuning uses the same number. FanDuel prices a same-game
+// combination as an SGP, which we do not get, so any hybrid with two legs on
+// one game is `isEstimate: true` - no other correlation adjustment is guessed.
+// A cross-game hybrid's product is exact.
+import { americanToDecimal, combineOdds, decimalToAmerican, hasUsablePrice } from "@/lib/parlay/combine-odds";
 import type { ConsensusPosition, HybridFamily, HybridMarket, PositionCapper } from "@/lib/parlay/consensus";
 import type { SwingGame } from "@/lib/parlay/recent-swings";
 import { normalizeTeamName, teamNamesMatch } from "@/lib/team-name-match";
@@ -87,6 +109,9 @@ export type HybridLadders = Record<string, Partial<Record<HybridMarketKey, Hybri
 
 export type HybridWidth = "balanced" | "wider";
 
+// The box's legs: 2, 3 (the total boxed from both sides) or auto (see the header).
+export type HybridBoxLegs = "2" | "3" | "auto";
+
 export type HybridSettings = {
   // American odds; either order. Absent or unusable: -140 / -110.
   targetMin?: number;
@@ -96,6 +121,8 @@ export type HybridSettings = {
   legRange?: { min: number; max: number } | null;
   // Default and hard cap HYBRID_MAX_LEGS; at least 2.
   maxLegs?: number;
+  // Absent: "2". A third box leg needs maxLegs >= 3.
+  boxLegs?: HybridBoxLegs;
 };
 
 export type HybridInput = {
@@ -120,6 +147,9 @@ export type HybridLeg = {
   family: HybridFamily;
   // The team name, or "OVER" / "UNDER".
   direction: string;
+  // True for a 3-leg box's third leg: the other side of the box's total, with
+  // no consensus of its own (supporters 0, score 0).
+  opposite: boolean;
   marketKey: HybridMarketKey;
   // The outcome as FanDuel names it (a team, "Over" or "Under"): what the exact-line
   // handoff (hybrid-link.ts) matches on.
@@ -211,6 +241,39 @@ export function distanceToBand(p: number, band: TargetBand): number {
   if (p > band.high + EPS) return p - band.high;
   if (p < band.low - EPS) return band.low - p;
   return 0;
+}
+
+export type PricedLeg = { eventId: string; family: HybridFamily; direction: string; point: number | null; price: number };
+
+// The chance every leg wins, from the legs' implied probabilities. Legs
+// multiply, except an Over and an Under on one game's total: they never both
+// lose, so the pair is pOver + pUnder - 1. null when a price is unusable or the
+// pair leaves no room (the Under's line not above the Over's, or no chance left).
+// With no such pair it is 1 / the product of the decimal prices, exactly.
+export function jointImplied(legs: PricedLeg[]): number | null {
+  const totals = new Map<string, { over?: PricedLeg; under?: PricedLeg }>();
+  for (const l of legs) {
+    if (!hasUsablePrice(l.price)) return null;
+    if (l.family !== "TOTAL") continue;
+    const t = totals.get(l.eventId) ?? {};
+    if (l.direction === "OVER") t.over = l;
+    else t.under = l;
+    totals.set(l.eventId, t);
+  }
+  const boxed = Array.from(totals.values()).filter((t) => t.over && t.under);
+  if (boxed.length === 0) return 1 / legs.reduce((d, l) => d * americanToDecimal(l.price)!, 1);
+  let p = 1;
+  for (const l of legs) {
+    if (l.family === "TOTAL" && boxed.some((t) => t.over === l || t.under === l)) continue;
+    p *= impliedProbability(l.price)!;
+  }
+  for (const { over, under } of boxed) {
+    if (over!.point === null || under!.point === null || under!.point <= over!.point) return null;
+    const both = impliedProbability(over!.price)! + impliedProbability(under!.price)! - 1;
+    if (both <= EPS) return null;
+    p *= both;
+  }
+  return p;
 }
 
 function legPriceAllowed(price: number, range: { low: number; high: number } | null): boolean {
@@ -496,9 +559,34 @@ type Placed = {
   // What stopped the leg short of its edge: the ladder's end, or the price
   // floor / per-leg range.
   edgeStop: "ladder" | "price" | null;
+  // A 3-leg box's third leg (oppositeTotal).
+  opposite: boolean;
 };
 
-function place(p: ConsensusPosition, input: HybridInput, settings: HybridSettings): Placed | null {
+// The box total turned around: the same game's other side of the total, with
+// no supporters, anchored at tonight's line - or at the total's own anchor when
+// that is further toward this side, so the two legs always leave room between
+// them. Placed like any position from there.
+export function oppositeTotal(total: ConsensusPosition, ladders: HybridLadders): ConsensusPosition {
+  const direction = total.direction === "OVER" ? "UNDER" : "OVER";
+  const tonight = tonightLine(total, ladders) ?? total.anchorLine;
+  // An Under anchors at the higher of the two, an Over at the lower.
+  const anchorLine = direction === "UNDER" ? Math.max(tonight, total.anchorLine) : Math.min(tonight, total.anchorLine);
+  return {
+    ...total,
+    key: total.key + "|OPPOSITE",
+    direction,
+    anchorLine,
+    anchorIsMoneyline: false,
+    postedLines: { hardest: anchorLine, easiest: anchorLine },
+    lineSpread: 0,
+    supporters: [],
+    opposers: [],
+    score: 0,
+  };
+}
+
+function place(p: ConsensusPosition, input: HybridInput, settings: HybridSettings, opposite = false): Placed | null {
   const rungs = legRungs(p, input.ladders, settings);
   if (rungs.length === 0) return null;
   const pair = tonightPair(p, input.ladders);
@@ -508,24 +596,30 @@ function place(p: ConsensusPosition, input: HybridInput, settings: HybridSetting
   const snap = snapIndex(rungs, edgeOrder);
   let edgeStop: Placed["edgeStop"] = null;
   if (!snap.reached) edgeStop = snapIndex(legRungs(p, input.ladders, settings, { anyPrice: true }), edgeOrder).reached ? "price" : "ladder";
-  return { position: p, rungs, tonight, tonightMoneyline: pair?.moneyline ?? null, placement, edgeIndex: snap.index, edgeReached: snap.reached, edgeStop };
+  return { position: p, rungs, tonight, tonightMoneyline: pair?.moneyline ?? null, placement, edgeIndex: snap.index, edgeReached: snap.reached, edgeStop, opposite };
 }
 
-const decimalOf = (r: Rung) => americanToDecimal(r.price)!;
+const pricedOf = (l: Placed, r: Rung): PricedLeg => ({ eventId: l.position.eventId, family: l.position.family, direction: l.position.direction, point: r.point, price: r.price });
 
 type Tuned = { indexes: number[]; implied: number; distance: number; rungsMoved: number; direction: "kept" | "tighten" | "push" };
 
+// The legs' joint chance (jointImplied) on the given rungs.
+function impliedOn(legs: Placed[], idx: number[]): number | null {
+  return jointImplied(legs.map((l, k) => pricedOf(l, l.rungs[idx[k]])));
+}
+
 // The best rungs for `legs`. Legs from `tunable` on may move (in the one
 // direction the edge-placed price calls for); the ones before it stay on their
-// edges.
-function tune(legs: Placed[], tunableFrom: number, band: TargetBand): Tuned {
+// edges. Rungs where a boxed total leaves no room are never chosen; null when
+// no choice is left.
+function tune(legs: Placed[], tunableFrom: number, band: TargetBand): Tuned | null {
   const edges = legs.map((l) => l.edgeIndex);
-  const impliedAt = (idx: number[]) => 1 / idx.reduce((d, i, k) => d * decimalOf(legs[k].rungs[i]), 1);
+  const impliedAt = (idx: number[]) => impliedOn(legs, idx);
   const start = impliedAt(edges);
-  if (distanceToBand(start, band) === 0) return { indexes: edges, implied: start, distance: 0, rungsMoved: 0, direction: "kept" };
+  if (start !== null && distanceToBand(start, band) === 0) return { indexes: edges, implied: start, distance: 0, rungsMoved: 0, direction: "kept" };
 
-  // More likely than the band: tighten. Less likely: push out.
-  const direction: Tuned["direction"] = start > band.high ? "tighten" : "push";
+  // More likely than the band: tighten. Less likely (or a boxed total with no room): push out.
+  const direction: Tuned["direction"] = start !== null && start > band.high ? "tighten" : "push";
   const choices = legs.map((l, k) => {
     if (k < tunableFrom) return [l.edgeIndex];
     const out: number[] = [];
@@ -538,6 +632,7 @@ function tune(legs: Placed[], tunableFrom: number, band: TargetBand): Tuned {
   const visit = (k: number, idx: number[]) => {
     if (k === legs.length) {
       const implied = impliedAt(idx);
+      if (implied === null) return;
       const devs = idx.map((i, j) => Math.abs(i - edges[j]));
       const cand = {
         indexes: [...idx],
@@ -554,7 +649,8 @@ function tune(legs: Placed[], tunableFrom: number, band: TargetBand): Tuned {
     for (const i of choices[k]) visit(k + 1, [...idx, i]);
   };
   visit(0, []);
-  const b = found.best!;
+  const b = found.best;
+  if (!b) return null;
   return { indexes: b.indexes, implied: b.implied, distance: b.distance, rungsMoved: b.rungsMoved, direction: b.direction };
 }
 
@@ -608,8 +704,30 @@ function legClause(p: ConsensusPosition, r: Rung, withGame: boolean): string {
   return `${p.direction} win by ${Math.floor(-x) + 1} or more`;
 }
 
+// A boxed total as one clause: Over 218.5 + Under 248.5 -> "219–248 total points".
+function corridorClause(over: { p: ConsensusPosition; r: Rung }, under: { p: ConsensusPosition; r: Rung }, withGame: boolean): string {
+  const p = over.p;
+  const text = `${Math.floor(over.r.point!) + 1}–${Math.ceil(under.r.point!) - 1} total ${totalNoun(p.sport)}`;
+  return withGame ? `${text} in ${p.awayTeam} @ ${p.homeTeam}` : text;
+}
+
 function describe(legs: { p: ConsensusPosition; r: Rung }[], boxEvent: string | null): string {
-  const clauses = legs.map(({ p, r }) => legClause(p, r, p.eventId !== boxEvent));
+  const clauses: string[] = [];
+  const done = new Set<number>();
+  legs.forEach((l, i) => {
+    if (done.has(i)) return;
+    const withGame = l.p.eventId !== boxEvent;
+    if (l.p.family === "TOTAL") {
+      const j = legs.findIndex((m, k) => k !== i && m.p.eventId === l.p.eventId && m.p.family === "TOTAL" && m.p.direction !== l.p.direction);
+      if (j >= 0) {
+        done.add(j);
+        const [over, under] = l.p.direction === "OVER" ? [l, legs[j]] : [legs[j], l];
+        clauses.push(corridorClause(over, under, withGame));
+        return;
+      }
+    }
+    clauses.push(legClause(l.p, l.r, withGame));
+  });
   const joined = clauses.length <= 2 ? clauses.join(" and ") : clauses.slice(0, -1).join(", ") + " and " + clauses[clauses.length - 1];
   return "Wins if " + joined;
 }
@@ -673,8 +791,13 @@ function topSupporters(cappers: PositionCapper[]) {
 
 function buildHybrid(structure: HybridStructure, legs: Placed[], tuned: Tuned): Hybrid {
   const chosen = legs.map((l, k) => ({ l, r: l.rungs[tuned.indexes[k]], i: tuned.indexes[k] }));
-  const combined = combineOdds(chosen.map(({ r }) => ({ odds: r.price })));
-  if (combined.status !== "AVAILABLE") throw new Error("hybrid: a candidate rung had no usable price");
+  const product = combineOdds(chosen.map(({ r }) => ({ odds: r.price })));
+  if (product.status !== "AVAILABLE") throw new Error("hybrid: a candidate rung had no usable price");
+  // A boxed total is priced as pOver + pUnder - 1 (jointImplied); otherwise the plain product.
+  const boxedTotal = chosen.some(({ l }) => l.opposite);
+  const joint = boxedTotal ? jointImplied(chosen.map(({ l, r }) => pricedOf(l, r))) : null;
+  if (boxedTotal && joint === null) throw new Error("hybrid: a boxed total left no room");
+  const combined = joint === null ? product : { decimal: 1 / joint, american: decimalToAmerican(1 / joint)! };
   const events = chosen.map(({ l }) => l.position.eventId);
   const sameGame = new Set(events).size < events.length;
   const boxEvent = structure === "same-game-box" ? events[0] : null;
@@ -692,6 +815,7 @@ function buildHybrid(structure: HybridStructure, legs: Placed[], tuned: Tuned): 
       sport: p.sport,
       family: p.family,
       direction: p.direction,
+      opposite: l.opposite,
       marketKey: r.marketKey,
       outcomeName: r.outcomeName,
       point: r.point,
@@ -758,7 +882,7 @@ function expand(c: Candidate, ranked: ConsensusPosition[], placedOf: (p: Consens
     // Fixed (extra) legs first, the core after them.
     const order = [...extras, ...current.core];
     const t = tune(order, extras.length, band);
-    if (t.distance >= current.tuned.distance - EPS) break;
+    if (!t || t.distance >= current.tuned.distance - EPS) break;
     used.add(next.position.eventId);
     const coreIdx = t.indexes.slice(extras.length);
     current = {
@@ -774,14 +898,16 @@ function toHybrid(c: Candidate): Hybrid {
   return buildHybrid(c.structure, [...c.core, ...c.extras], c.tuned);
 }
 
-// In band first; fewer legs; then the stronger consensus, fewest rungs moved,
-// the more even split. Out of band: closest first, then consensus.
+// In band first; fewer legs (a 3-leg box's third leg not counted); then the
+// stronger consensus, fewest rungs moved, the more even split. Out of band:
+// closest first, then consensus.
 function rankCandidates(a: Candidate, b: Candidate): number {
   const ai = a.tuned.distance === 0;
   const bi = b.tuned.distance === 0;
   if (ai !== bi) return ai ? -1 : 1;
-  const al = a.core.length + a.extras.length;
-  const bl = b.core.length + b.extras.length;
+  const legCount = (c: Candidate) => [...c.core, ...c.extras].filter((l) => !l.opposite).length;
+  const al = legCount(a);
+  const bl = legCount(b);
   if (al !== bl) return al - bl;
   if (!ai && Math.abs(a.tuned.distance - b.tuned.distance) > EPS) return a.tuned.distance - b.tuned.distance;
   if (Math.abs(a.coreScore - b.coreScore) > EPS) return b.coreScore - a.coreScore;
@@ -790,9 +916,36 @@ function rankCandidates(a: Candidate, b: Candidate): number {
   return key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0;
 }
 
-export function normalizeSettings(s?: HybridSettings): Required<Pick<HybridSettings, "width" | "maxLegs">> & HybridSettings {
+export function normalizeSettings(s?: HybridSettings): Required<Pick<HybridSettings, "width" | "maxLegs" | "boxLegs">> & HybridSettings {
   const maxLegs = Math.min(HYBRID_MAX_LEGS, Math.max(2, Math.floor(s?.maxLegs ?? HYBRID_MAX_LEGS) || HYBRID_MAX_LEGS));
-  return { ...s, width: s?.width === "wider" ? "wider" : "balanced", maxLegs };
+  const boxLegs: HybridBoxLegs = s?.boxLegs === "3" || s?.boxLegs === "auto" ? s.boxLegs : "2";
+  return { ...s, width: s?.width === "wider" ? "wider" : "balanced", maxLegs, boxLegs };
+}
+
+// A 3-leg box's tuning: the third leg alone first (the side and the total stay
+// on their edges); all three when that misses the band and gets closer.
+function tuneThree(legs: Placed[], band: TargetBand): Tuned | null {
+  const own = tune(legs, 2, band);
+  if (own && own.distance === 0) return own;
+  const all = tune(legs, 0, band);
+  if (!own || !all) return own ?? all;
+  return all.distance < own.distance - EPS ? all : own;
+}
+
+// The box for one game: [side, total], or [side, total, the total's other side]
+// per `boxLegs` (see the header).
+function chooseBox(side: Placed, total: Placed, opposite: Placed | null, settings: ReturnType<typeof normalizeSettings>, band: TargetBand): { core: Placed[]; tuned: Tuned } {
+  const two = { core: [side, total], tuned: tune([side, total], 0, band)! };
+  if (!opposite || settings.boxLegs === "2" || settings.maxLegs < 3) return two;
+  const core = [side, total, opposite];
+  const tuned = tuneThree(core, band);
+  if (!tuned) return two;
+  if (settings.boxLegs === "3") return { core, tuned };
+  // auto: only when the 2-leg box at its edges is too short.
+  const atEdges = impliedOn(two.core, two.core.map((l) => l.edgeIndex))!;
+  if (atEdges <= band.high + EPS) return two;
+  const edgesKept = tuned.indexes[0] === side.edgeIndex && tuned.indexes[1] === total.edgeIndex;
+  return (tuned.distance === 0 && edgesKept) || tuned.distance < two.tuned.distance - EPS ? { core, tuned } : two;
 }
 
 export type BoxGame = { eventId: string; side: ConsensusPosition; total: ConsensusPosition; score: number };
@@ -820,8 +973,8 @@ export function optimizeHybrid(input: HybridInput): HybridResult {
   const ranked = input.positions;
 
   const placedCache = new Map<string, Placed | null>();
-  const placedOf = (p: ConsensusPosition): Placed | null => {
-    if (!placedCache.has(p.key)) placedCache.set(p.key, place(p, input, settings));
+  const placedOf = (p: ConsensusPosition, opposite = false): Placed | null => {
+    if (!placedCache.has(p.key)) placedCache.set(p.key, place(p, input, settings, opposite));
     return placedCache.get(p.key)!;
   };
 
@@ -831,8 +984,9 @@ export function optimizeHybrid(input: HybridInput): HybridResult {
     const side = placedOf(g.side);
     const total = placedOf(g.total);
     if (!side || !total) continue;
-    const core = [side, total];
-    boxes.push({ structure: "same-game-box", core, extras: [], tuned: tune(core, 0, band), coreScore: g.score });
+    const opposite = settings.boxLegs === "2" ? null : placedOf(oppositeTotal(g.total, input.ladders), true);
+    const { core, tuned } = chooseBox(side, total, opposite, settings, band);
+    boxes.push({ structure: "same-game-box", core, extras: [], tuned, coreScore: g.score });
   }
 
   if (boxes.length > 0) {
@@ -858,7 +1012,7 @@ export function optimizeHybrid(input: HybridInput): HybridResult {
     return { primary: null, alternates: [], note: first ? "Only one game has a placeable consensus position." : "No consensus position has a usable FanDuel ladder." };
   }
   const core = [first, second];
-  let cross: Candidate = { structure: "cross-game", core, extras: [], tuned: tune(core, 0, band), coreScore: first.position.score + second.position.score };
+  let cross: Candidate = { structure: "cross-game", core, extras: [], tuned: tune(core, 0, band)!, coreScore: first.position.score + second.position.score };
   if (cross.tuned.distance > 0 && settings.maxLegs > 2) cross = expand(cross, ranked, placedOf, band, settings.maxLegs);
   return { primary: toHybrid(cross), alternates: [], note: null };
 }

@@ -58,6 +58,7 @@ function leg(over: Partial<HybridLeg> = {}): HybridLeg {
     sport: "NFL",
     family: "SIDE",
     direction: "Chicago Bears",
+    opposite: false,
     marketKey: "alternate_spreads",
     outcomeName: "Chicago Bears",
     point: 14.5,

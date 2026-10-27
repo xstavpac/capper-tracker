@@ -2,20 +2,21 @@
 // placement for Over / Under / favorite / dog, home and away, balanced vs wider,
 // the opponent flip and the raw-score fallback; football key numbers; snapping
 // against the anchor and the -600 floor; fine-tuning toward the target band;
-// box eligibility, expansion, the cross-game fallback, no-fit, stale flags and
-// the odds math. Ladders are the real FanDuel captures in __fixtures__. Pure -
+// box eligibility, the 3-leg box (2 / 3 / auto, corridor pricing), expansion,
+// the cross-game fallback, no-fit, stale flags and the odds math. Ladders are the real FanDuel captures in __fixtures__. Pure -
 // no DB, no fetch. Run with:
 //   npx tsx src/lib/parlay/hybrid-acceptance-test.ts
 import nflEvent from "@/lib/parlay/__fixtures__/fanduel-event-nfl.json";
 import nhlEvent from "@/lib/parlay/__fixtures__/fanduel-event-nhl.json";
 import mlbEvent from "@/lib/parlay/__fixtures__/fanduel-event-mlb.json";
 import nbaEvent from "@/lib/parlay/__fixtures__/fanduel-event-nba.json";
-import { americanToDecimal, combineOdds } from "@/lib/parlay/combine-odds";
+import { americanToDecimal, combineOdds, decimalToAmerican } from "@/lib/parlay/combine-odds";
 import type { ConsensusPosition, PositionCapper } from "@/lib/parlay/consensus";
 import {
   distanceToBand,
   HYBRID_MIN_LEG_PRICE,
   impliedProbability,
+  jointImplied,
   legRungs,
   optimizeHybrid,
   placeEdge,
@@ -446,6 +447,68 @@ function nflBox(overMisses: number[], sideCover: number[] | null, settings: Hybr
   check("NBA: tuned to +17.5 (-410) / 226.5 (-250)", r.legs.map((l) => [l.point, l.price, l.move.rungs]), [[17.5, -410, -1], [226.5, -250, -2]]);
   check("NBA: -135, in target, estimate", [Math.round(r.combinedAmerican), r.inTarget, r.isEstimate], [-135, true, true]);
   check("NBA: description", r.boxDescription, "Wins if Golden State Warriors lose by 17 or fewer and 227+ total points");
+
+  // Same games, 3-leg forced: the Under comes from the same over-misses (7 15 + 3 6; balanced sets
+  // 15 aside -> 7) -> Under 243.5. The corridor at the edges is far too long, so it pushes out.
+  const three = optimizeHybrid({ positions: [pos("b1", NBA, "SIDE", GSW, 7.5), pos("b1", NBA, "TOTAL", "OVER", 236.5)], ladders, swings, settings: { boxLegs: "3" } }).primary!;
+  check("NBA 3-leg: side, Over, then the opposite Under", three.legs.map((l) => [l.family, l.direction, l.opposite]), [["SIDE", GSW, false], ["TOTAL", "OVER", false], ["TOTAL", "UNDER", true]]);
+  const under = three.legs[2];
+  check("NBA 3-leg: the Under's edge is tonight + the balanced over-miss (236.5 + 7)", [under.tonightLine, under.edge, under.snappedPoint, under.edgeSource], [236.5, 243.5, 243.5, "stored"]);
+  check("NBA 3-leg: the Under has no consensus of its own", [under.consensus.supporters, under.consensus.score, three.consensusScore], [0, 0, r2(0.95 * 2)]);
+  check("NBA 3-leg: every leg at or above the -600 floor", three.legs.every((l) => l.price >= HYBRID_MIN_LEG_PRICE), true);
+  check("NBA 3-leg: Over below Under", three.legs[1].point! < under.point!, true);
+  check("NBA 3-leg: still an estimate", [three.structure, three.isEstimate], ["same-game-box", true]);
+  // Auto: the 2-leg edges (0.625) are too short, but the 3-leg box can't reach the band without moving the side and
+  // the Over, and gets no closer than the tuned 2-leg box (in band) - so Auto keeps the 2-leg box.
+  const auto = optimizeHybrid({ positions: [pos("b1", NBA, "SIDE", GSW, 7.5), pos("b1", NBA, "TOTAL", "OVER", 236.5)], ladders, swings, settings: { boxLegs: "auto" } }).primary!;
+  check("NBA auto: keeps the tuned 2-leg box here", auto.legs.map((l) => [l.point, l.price]), [[17.5, -410], [226.5, -250]]);
+}
+
+// ============================================================================
+// 3-leg box: corridor pricing, Auto, the opposite Over, the wording
+// ============================================================================
+{
+  // The corridor: Over 225.5 (-275) + Under 248.5 (-320) can never both lose, so the pair is
+  // pOver + pUnder - 1 = 0.7333 + 0.7619 - 1 = 0.4952 (about +102), not the product 0.5587 (about -127).
+  const leg = (direction: string, point: number, price: number) => ({ eventId: "b1", family: "TOTAL" as const, direction, point, price });
+  const corridor = jointImplied([leg("OVER", 225.5, -275), leg("UNDER", 248.5, -320)])!;
+  check("corridor 225.5 / 248.5: 0.4952", Math.round(corridor * 10000) / 10000, 0.4952);
+  check("corridor 225.5 / 248.5: about +102 (the product would be -127)", [Math.round(decimalToAmerican(1 / corridor)!), Math.round(combineOdds([{ odds: -275 }, { odds: -320 }]).status === "AVAILABLE" ? (combineOdds([{ odds: -275 }, { odds: -320 }]) as { american: number }).american : 0)], [102, -127]);
+  const side = { eventId: "b1", family: "SIDE" as const, direction: "Golden State Warriors", point: 17.5, price: -410 };
+  check("the side leg multiplies the corridor", r2(jointImplied([side, leg("OVER", 225.5, -275), leg("UNDER", 248.5, -320)])! * 1000), r2(corridor * impliedProbability(-410)! * 1000));
+  check("no corridor: the plain product", jointImplied([side, leg("OVER", 225.5, -275)]), 1 / (americanToDecimal(-410)! * americanToDecimal(-275)!));
+  check("an Under at or below the Over leaves no room", [jointImplied([leg("OVER", 236.5, -106), leg("UNDER", 236.5, -114)]), jointImplied([leg("OVER", 240.5, -150), leg("UNDER", 230.5, -150)])], [null, null]);
+  check("another game's totals don't box each other", jointImplied([leg("OVER", 225.5, -275), { ...leg("UNDER", 248.5, -320), eventId: "b2" }]), 1 / (americanToDecimal(-275)! * americanToDecimal(-320)!));
+}
+{
+  // Auto adds the third leg. Wide edges: Warriors +19.5 (-590; misses 12 20, balanced 12) and Over 218.5
+  // (-590; under-misses 18 25, balanced 18) price 0.731 - too short. The Under starts at 245.5
+  // (over-misses 9 12, balanced 9) and only it moves: pushed out to Under 248.5 (-320) the box is
+  // 0.855 x (0.855 + 0.762 - 1) = 0.528, in the band with the side and the Over on their edges.
+  const GSW = NBA.away_team;
+  const DEN_NBA = NBA.home_team;
+  const ladders = { b1: laddersOf(NBA) };
+  const swings = {
+    [GSW]: games(GSW, "X", [-12, -20, 0, 0, 0], [-18, -25, 9, 12, 0]),
+    [DEN_NBA]: games(DEN_NBA, "Y", [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]),
+  };
+  const positions = [pos("b1", NBA, "SIDE", GSW, 7.5), pos("b1", NBA, "TOTAL", "OVER", 236.5)];
+  const two = optimizeHybrid({ positions, ladders, swings, settings: { boxLegs: "2" } }).primary!;
+  check("wide edges, 2-leg: tightened back from +19.5 / 218.5", [two.legs.length, two.rungsMoved > 0, two.legs.every((l) => l.move.rungs <= 0)], [2, true, true]);
+  const auto = optimizeHybrid({ positions, ladders, swings, settings: { boxLegs: "auto" } }).primary!;
+  check("auto: three legs, the side and Over on their edges", auto.legs.map((l) => [l.direction, l.point, l.price, l.move.rungs]), [[GSW, 19.5, -590, 0], ["OVER", 218.5, -590, 0], ["UNDER", 248.5, -320, 3]]);
+  check("auto: the Under's edge 245.5, pushed 3 rungs", [auto.legs[2].edge, auto.legs[2].snappedPoint], [245.5, 245.5]);
+  const p = impliedProbability(-590)! * (impliedProbability(-590)! + impliedProbability(-320)! - 1);
+  check("auto: priced as side x corridor, in target", [r2(auto.impliedProbability), r2(p), auto.inTarget, Math.round(auto.combinedAmerican)], [r2(p), r2(p), true, Math.round(decimalToAmerican(1 / p)!)]);
+  check("auto: corridor wording", auto.boxDescription, "Wins if Golden State Warriors lose by 19 or fewer and 219–248 total points");
+  check("auto: the third leg's reason reads like any Under", auto.legs[2].reason.split(" · ").slice(0, 3), ["Under 248.5", "tonight 236.5", "their games go over the total by up to 9"]);
+  check("maxLegs 2 never takes a third leg", optimizeHybrid({ positions, ladders, swings, settings: { boxLegs: "3", maxLegs: 2 } }).primary!.legs.length, 2);
+  check("unset boxLegs is the 2-leg box", optimizeHybrid({ positions, ladders, swings }).primary!.legs.length, 2);
+
+  // An Under box: the opposite Over comes from the under-misses (18 25 -> balanced 18) -> Over 218.5.
+  const underBox = optimizeHybrid({ positions: [positions[0], pos("b1", NBA, "TOTAL", "UNDER", 236.5)], ladders, swings, settings: { boxLegs: "3" } }).primary!;
+  check("Under box: the opposite leg is an Over from tonight - the balanced under-miss", [underBox.legs[2].direction, underBox.legs[2].opposite, underBox.legs[2].edge], ["OVER", true, 218.5]);
+  check("Under box: Over below Under", underBox.legs[2].point! < underBox.legs[1].point!, true);
 }
 
 // ============================================================================
