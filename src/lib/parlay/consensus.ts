@@ -16,8 +16,9 @@
 //   - Total: a game + Over, or a game + Under.
 //
 // Supporters are DISTINCT cappers. A post counts when its capper's record in
-// that bet clears the generator's gate (pick-record.ts recordForGate: the
-// league-specific category record, else the all-time category record; the
+// that bet clears the generator's gate (pick-record.ts leagueFirstRecord: the
+// league-specific category record, else the all-time category record - not yet
+// the Standard generator's best-of-two recordForGate; the
 // win-% gate of gate.ts, 55 by default). A capper's score is the Wilson lower
 // bound of that record at the generator's own softer z (GENERATOR_Z, #324), so
 // a mid-volume record sits close to a huge one. Only gated posts count at all:
@@ -49,7 +50,7 @@ import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import { GENERATOR_Z, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { GATE_DEFAULT, normalizeMinWinPct } from "@/lib/parlay/gate";
 import { hasKickedOff, isGameOver, OFF_BOARD_GAME_PREFIX } from "@/lib/parlay/game-over";
-import { recordForGate } from "@/lib/parlay/pick-record";
+import { leagueFirstRecord } from "@/lib/parlay/pick-record";
 import { qualifies, wilsonLowerBound } from "@/lib/parlay/qualification-core";
 import { describePick } from "@/lib/parlay/relationship-classifier";
 
@@ -168,7 +169,7 @@ function toPost(pick: GeneratorPick, game: GeneratorGame, snapshot: Pick<Generat
     }
   }
 
-  const record = recordForGate(pick, snapshot.leagueRecords, snapshot.categoryRecords);
+  const record = leagueFirstRecord(pick, snapshot.leagueRecords, snapshot.categoryRecords);
   if (!record || !qualifies(record, gate)) return null;
   return {
     pick,
