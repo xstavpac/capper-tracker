@@ -19,11 +19,15 @@
 import { PrismaClient, type Prisma } from "@prisma/client";
 import type { OddsGame } from "@/server/data/odds";
 import type { GeneratorSettings } from "@/lib/parlay/generator";
+import { drainQueryLog } from "@/server/data/query-log-drain";
 
 const queries: string[] = [];
 const logged = new PrismaClient({ log: [{ emit: "event", level: "query" }] });
 logged.$on("query", (e) => queries.push(e.query));
 (globalThis as unknown as { prisma: PrismaClient }).prisma = logged;
+// Wait for every event of the calls so far before a snapshot or a count (the engine
+// delivers them separately from the awaited promise).
+const drain = () => drainQueryLog(logged, queries);
 
 function hostOf(url: string | undefined): string {
   try {
@@ -163,9 +167,11 @@ async function main() {
   const settings: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
   const bundleCalls = () => queries.filter((q) => q.includes('"cardReq"')).length;
 
+  await drain();
   const q0 = queries.length;
   const first = await session.generate(inputs, settings);
   if ("error" in first) throw new Error(first.error);
+  await drain();
   const generateReads = queries.length - q0;
   console.log(`Generate: ${generateReads} SQL statement(s), ${bundleCalls()} record bundle(s)`);
   check("Generate fetched and read the database", first.fetched && generateReads > 0, `${generateReads} statements`);
@@ -174,6 +180,7 @@ async function main() {
   check("Generate: Hedge and Contrarian came with it", first.parlay.hedge.legs.length === 3 && first.parlay.contrarian.legs.length === 3);
 
   // ---- 5 Regenerates: zero reads.
+  await drain();
   const afterGenerate = queries.length;
   const keys = [first.parlay.generatedKey];
   let anyFetched = false;
@@ -184,6 +191,7 @@ async function main() {
     keys.push(r.parlay.generatedKey);
     check(`Regenerate ${i}: slip pick still in, Hedge/Contrarian present`, r.parlay.legs.some((l) => l.pick.pickId === slipId) && r.parlay.hedge.legs.length === r.parlay.legs.length);
   }
+  await drain();
   const regenerateReads = queries.length - afterGenerate;
   console.log(`5 Regenerates: ${regenerateReads} SQL statement(s)`);
   check("5 consecutive Regenerates after one Generate: ZERO additional DB reads", regenerateReads === 0 && !anyFetched, `${regenerateReads} statements`);
@@ -191,23 +199,37 @@ async function main() {
   check("the session made exactly one request", session.requestCount() === 1, `${session.requestCount()}`);
 
   // ---- Settings that don't change the pool: zero reads.
+  await drain();
   const beforeSettings = queries.length;
   for (const s of [{ legCount: 4 }, { maxLegsPerGame: 2, legCount: 6 }, { include: ["MONEYLINE", "SPREAD", "TOTALS"] as GeneratorSettings["include"] }, { mix: { MONEYLINE: 50, PROPS: 50 } }]) {
     const r = await session.generate(inputs, { ...settings, ...s });
     if ("error" in r) throw new Error(r.error);
     check(`settings ${JSON.stringify(s)}: rebuilt without a request`, !r.fetched);
   }
+  await drain();
   check("settings changes: ZERO DB reads", queries.length === beforeSettings, `${queries.length - beforeSettings} statements`);
 
   // ---- The pool changes: one reload.
+  await drain();
   const beforePool = queries.length;
   const changed = await session.generate({ ...inputs, slipPickIds: [] }, settings);
-  check("slip pick removed: reloaded", !("error" in changed) && changed.fetched && queries.length > beforePool && bundleCalls() === 2);
+  await drain();
+  const noError = !("error" in changed);
+  const fetchedAgain = !("error" in changed) && changed.fetched;
+  const queriesGrew = queries.length > beforePool;
+  const secondBundle = bundleCalls() === 2;
+  check(
+    "slip pick removed: reloaded",
+    noError && fetchedAgain && queriesGrew && secondBundle,
+    `noError=${noError} fetched=${fetchedAgain} queriesGrew=${queriesGrew} bundleCalls=${bundleCalls()}`
+  );
 
   // ---- Stale: older than ~2 minutes reloads before drawing.
   clock = NOW + 3 * 60 * 1000;
+  await drain();
   const beforeStale = queries.length;
   const stale = await session.regenerate({ ...inputs, slipPickIds: [] }, settings);
+  await drain();
   check("snapshot older than 2 minutes: Regenerate reloads first", !("error" in stale) && stale.fetched && queries.length > beforeStale);
 }
 
