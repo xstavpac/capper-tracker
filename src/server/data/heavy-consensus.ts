@@ -140,12 +140,18 @@ export async function loadHeavyConsensusInstances(now: Date, fromDate: string | 
   return { picksRead: rows.length, instances };
 }
 
-// The pooled hit rate the Live badge shows, cached for every viewer.
-export function getHeavyConsensusRate(): Promise<HeavyConsensusRate> {
+// The pooled hit rate the Live badge shows, cached for every viewer. A failed
+// read is null (no pill anywhere) rather than an error: the badge is optional,
+// and the Live page must still render. Errors are never cached (cachedByTag),
+// so the next load retries.
+export function getHeavyConsensusRate(): Promise<HeavyConsensusRate | null> {
   return cachedByTag(cacheKeys.heavyConsensusRate(), RATE_TTL_SECONDS, async () => {
     const rows = await prisma.heavyConsensusMarket.findMany({
       select: { userId: true, worldKey: true, cappers: true, sharePct: true, outcome: true },
     });
     return pooledHeavyConsensusRate(rows.map((r) => ({ ...r, outcome: r.outcome as HeavyOutcome | null })));
+  }).catch((err: unknown) => {
+    console.error("getHeavyConsensusRate failed", err);
+    return null;
   });
 }
