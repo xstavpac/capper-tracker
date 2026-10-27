@@ -263,3 +263,17 @@ to the first in array order). Parity, including against real stored boards, is
 locked in by `odds-projections-parity-acceptance-test.ts`. The "Option A" fix
 above (read `GameResult.favTeam` / `totalLine`) is still not taken — it changes
 counts for rows persisted before those columns existed.
+
+## 11. Paused by flag (2026-10-27)
+
+The nightly tendency steps in the `refresh-scores` cron - `recomputeTeamTendencies`,
+`snapshotTeamTendencies` and the MLB Decay Delta sync (`syncDecayDeltaPredictions`,
+which reads the tendency snapshots) - run only when `TENDENCY_PIPELINE_ENABLED=true`
+(`src/lib/tendency-pipeline.ts`). Unset means paused, and a paused run logs one
+`refresh-scores-tendency-pipeline-skipped` line. Nothing was deleted: tables, data, code
+and tests stay. The Zone Model page shows "Data paused (last updated <date>)" while off.
+
+To resume (before the next MLB season): set `TENDENCY_PIPELINE_ENABLED=true` in the Vercel
+production env and redeploy. The first run recomputes tendencies from all history, so the
+counts catch up, but the days skipped while paused are **not backfilled**: the daily
+`team_tendency_snapshots` series has a gap, and no Decay Delta rows exist for those days.

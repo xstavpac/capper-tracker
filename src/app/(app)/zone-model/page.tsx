@@ -3,6 +3,8 @@ import { requireUser } from "@/server/auth";
 import { isFeatureEnabledForUser, ZONE_MODEL_FLAG_KEY } from "@/server/data/feature-flags";
 import { computeZoneModel, computePendingZoneGames } from "@/server/data/zone-model";
 import { MLB_SPORT_KEY } from "@/server/data/chart-team-name";
+import { getLatestTendencySnapshotDate } from "@/server/data/team-tendencies";
+import { isTendencyPipelineEnabled, tendencyPausedNote } from "@/lib/tendency-pipeline";
 import { ZoneModelView } from "@/components/zone-model/zone-model-view";
 
 // Gated server-side on the zone_model feature flag, independent of whether
@@ -16,6 +18,13 @@ export default async function ZoneModelPage() {
   const enabled = await isFeatureEnabledForUser(ZONE_MODEL_FLAG_KEY, user.id);
   if (!enabled) notFound();
 
-  const [report, pending] = await Promise.all([computeZoneModel(MLB_SPORT_KEY), computePendingZoneGames(MLB_SPORT_KEY)]);
-  return <ZoneModelView report={report} pending={pending} />;
+  // While the nightly tendency pipeline is paused the tendency numbers are
+  // frozen at the last snapshot; say so rather than let them read as current.
+  const paused = !isTendencyPipelineEnabled();
+  const [report, pending, lastSnapshotDate] = await Promise.all([
+    computeZoneModel(MLB_SPORT_KEY),
+    computePendingZoneGames(MLB_SPORT_KEY),
+    paused ? getLatestTendencySnapshotDate(MLB_SPORT_KEY) : Promise.resolve(null),
+  ]);
+  return <ZoneModelView report={report} pending={pending} pausedNote={paused ? tendencyPausedNote(lastSnapshotDate) : null} />;
 }

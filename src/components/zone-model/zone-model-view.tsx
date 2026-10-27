@@ -187,7 +187,7 @@ function BucketGrid({
   );
 }
 
-export function ZoneModelView({ report, pending }: { report: ZoneModelReport; pending: PendingZoneReport }) {
+export function ZoneModelView({ report, pending, pausedNote = null }: { report: ZoneModelReport; pending: PendingZoneReport; pausedNote?: string | null }) {
   const [expandedTile, setExpandedTile] = useState<string | null>(null);
 
   function toggleTile(tileKey: string) {
@@ -201,6 +201,7 @@ export function ZoneModelView({ report, pending }: { report: ZoneModelReport; pe
     <div className="mx-auto max-w-5xl">
       <div className="mb-6">
         <h1 className="text-xl font-semibold">Zone Model</h1>
+        {pausedNote && <p className="mt-1 text-xs text-muted-foreground">{pausedNote}</p>}
         <p className="mt-1 text-sm text-muted-foreground">
           Bucketed delta calibration - admin-only. Each game is placed into a range using each team&apos;s
           BettingView tendency/stat history exactly as it stood the day before that game - never a current or
