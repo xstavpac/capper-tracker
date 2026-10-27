@@ -183,7 +183,7 @@ export const SUPPORTED_PICK_FORMATS: FormatGroup[] = [
       },
       {
         market: "Rushing attempts",
-        examples: ["Jahmyr Gibbs over 15.5 rushing attempts"],
+        examples: ["Jahmyr Gibbs over 15.5 rushing attempts", "Jahmyr Gibbs over 15.5 carries"],
         status: "supported",
         check: { via: "nfl-prop", market: "RUSH_ATTEMPTS" },
       },
@@ -398,7 +398,6 @@ export const SUPPORTED_PICK_FORMATS: FormatGroup[] = [
       {
         market: "Other NFL stats",
         examples: [
-          "Jahmyr Gibbs over 15.5 carries",
           "Amon-Ra St. Brown over 24.5 longest reception",
           "Aidan Hutchinson over 0.5 sacks",
           "Jack Campbell over 7.5 tackles",

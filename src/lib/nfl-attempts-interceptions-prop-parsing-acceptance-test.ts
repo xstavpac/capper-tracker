@@ -45,6 +45,10 @@ const FORMS: [string, string, string][] = [
   ["Josh Allen over 33.5 pass atts", "Josh Allen", "PASS_ATTEMPTS"],
   ["Derrick Henry over 20.5 rush attempts", "Derrick Henry", "RUSH_ATTEMPTS"],
   ["Derrick Henry u19.5 rushing att", "Derrick Henry", "RUSH_ATTEMPTS"],
+  ["Derrick Henry o19.5 rush att", "Derrick Henry", "RUSH_ATTEMPTS"],
+  ["Bijan over 17.5 carries", "Bijan", "RUSH_ATTEMPTS"],
+  ["Bijan Robinson under 17.5 Carries", "Bijan Robinson", "RUSH_ATTEMPTS"],
+  ["Bijan Robinson o17.5 rushing carries", "Bijan Robinson", "RUSH_ATTEMPTS"],
   ["Patrick Mahomes over 22.5 completions", "Patrick Mahomes", "PASS_COMPLETIONS"],
   ["Patrick Mahomes over 22.5 pass completions", "Patrick Mahomes", "PASS_COMPLETIONS"],
   ["Patrick Mahomes under 23.5 passing completions", "Patrick Mahomes", "PASS_COMPLETIONS"],
@@ -63,6 +67,7 @@ for (const [text, line, market] of [
   ["Derrick Henry 20+ rushing attempts", 19.5, "RUSH_ATTEMPTS"],
   ["Patrick Mahomes 25+ passing completions", 24.5, "PASS_COMPLETIONS"],
   ["Josh Allen 35+ pass attempts", 34.5, "PASS_ATTEMPTS"],
+  ["Bijan Robinson 18+ carries", 17.5, "RUSH_ATTEMPTS"],
 ] as const) {
   const desc = parsePickText(text).cleanDescription;
   check(`N+ stored normalized: "${text}"`, [parsePlayerProp(desc)?.propMarket, parsePlayerPropLine(desc)], [market, { direction: "OVER", line }]);
@@ -84,7 +89,7 @@ for (const text of [
   "Josh Allen over 39.5 longest completion",
   "CeeDee Lamb longest reception over 24.5",
   "Josh Allen over 34.5 attempts", // bare: pass or rush?
-  "Derrick Henry over 15.5 carries",
+  "Josh Allen 35+ attempts",
   "Amon-Ra St. Brown over 5.5 targets",
   "Amon-Ra St. Brown over 5.5 receiving targets",
 ]) {
@@ -98,7 +103,7 @@ for (const text of [
 check("receiving targets never reads as REC_YDS via the catalog either", parseCatalog("Capper\nNFL Amon-Ra St. Brown over 5.5 receiving targets", ["Capper"]).picks.length, 0);
 
 // ---- catalog import: sport-prefixed lines import straight to PLAYER_PROP ----
-for (const text of ["Sam Darnold over 0.5 interceptions", "JK Dobbins over 13.5 rushing attempts", "Rodgers Over 34.5 Pass Attempts", "Patrick Mahomes over 22.5 completions", "Kyren Williams over 89.5 rush + receive yards"]) {
+for (const text of ["Sam Darnold over 0.5 interceptions", "JK Dobbins over 13.5 rushing attempts", "Bijan Robinson over 17.5 carries", "Rodgers Over 34.5 Pass Attempts", "Patrick Mahomes over 22.5 completions", "Kyren Williams over 89.5 rush + receive yards"]) {
   const r = parseCatalog("Capper\nNFL " + text, ["Capper"]);
   check(`catalog: "NFL ${text}" -> one NFL PLAYER_PROP`, r.picks.map((p) => [p.sportName, p.betType, p.description]), [["NFL", "PLAYER_PROP", text]]);
 }

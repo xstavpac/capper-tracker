@@ -91,7 +91,7 @@ function main() {
   // wasn't there. "rushing attempts" is its own market (RUSH_ATTEMPTS, 2026-10),
   // checked before RUSH_YDS, so a stray "yards" never turns it into yardage.
   check("'yards rushing attempts' is never a yardage market", parsePlayerProp("Gibbs over 9.5 yards rushing attempts")?.propMarket, "RUSH_ATTEMPTS");
-  check("carries line unaffected (still no market)", parsePlayerProp("Gibbs over 9.5 carries"), null);
+  check("carries is rushing attempts, never yardage", parsePlayerProp("Gibbs over 9.5 carries"), { playerName: "Gibbs", propMarket: "RUSH_ATTEMPTS" });
 
   console.log(failures === 0 ? `\nAll checks passed.` : `\n${failures} check(s) FAILED.`);
   process.exit(failures === 0 ? 0 : 1);

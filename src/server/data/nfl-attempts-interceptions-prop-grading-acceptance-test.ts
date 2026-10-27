@@ -90,6 +90,17 @@ async function main() {
   check("RUSH_ATTEMPTS over 6.5 (Nix 7, a QB) -> WIN", await run(DEN_ARI, "Bo Nix over 6.5 rush attempts"), { outcome: "WIN" });
   check("RUSH_ATTEMPTS over 4 (Maye 4) -> PUSH", await run(NE_CHI, "Drake Maye over 4 rushing attempts"), { outcome: "PUSH" });
   check("RUSH_ATTEMPTS: a QB's carries, not his pass attempts (Rodgers 3 car)", await run(PIT_ATL, "Aaron Rodgers over 2.5 rushing attempts"), { outcome: "WIN" });
+  // Every RUSH_ATTEMPTS spelling grades from the same CAR column (Bijan Robinson 21 car in PIT @ ATL).
+  check("'carries': Bijan Robinson over 17.5 carries (21) -> WIN", await run(PIT_ATL, "Bijan Robinson over 17.5 carries"), { outcome: "WIN" });
+  check("'carries': Bijan Robinson under 17.5 Carries (21) -> LOSS", await run(PIT_ATL, "Bijan Robinson under 17.5 Carries"), { outcome: "LOSS" });
+  check("'carries': Bijan Robinson over 21 carries (21) -> PUSH", await run(PIT_ATL, "Bijan Robinson over 21 carries"), { outcome: "PUSH" });
+  check("'carries' N+: Bijan Robinson 22+ carries (21) -> LOSS", await run(PIT_ATL, "Bijan Robinson 22+ carries"), { outcome: "LOSS" });
+  check("'rush att': J.K. Dobbins under 6.5 rush att (6) -> WIN", await run(DEN_ARI, "J.K. Dobbins under 6.5 rush att"), { outcome: "WIN" });
+  check("'rushing att': JK Dobbins over 5.5 rushing att (6) -> WIN", await run(DEN_ARI, "JK Dobbins over 5.5 rushing att"), { outcome: "WIN" });
+  check("'carries', unstored row: Bijan Robinson over 17.5 carries", await run(PIT_ATL, "Bijan Robinson over 17.5 carries", { stored: false }), { outcome: "WIN" });
+  // A first name alone is not a name the box-score matcher resolves (it matches full names and surnames) -
+  // existing matching behavior, the same for every market; the pick stays pending, never mis-graded.
+  check("'Bijan over 17.5 carries' (first name only) -> stays pending", await run(PIT_ATL, "Bijan over 17.5 carries"), { outcome: null, reason: 'couldn\'t find "Bijan" in the box score' });
 
   // ---- legacy / manual row: no stored propMarket, grading re-parses the text ----
   check("unstored row: interceptions text grades as PASS_INTERCEPTIONS", await run(KC_SEA, "Sam Darnold over 0.5 interceptions", { stored: false }), { outcome: "WIN" });

@@ -601,11 +601,12 @@ const PLAYER_PROP_STAT_PATTERNS: [Exclude<PlayerPropMarket, "TD">, RegExp][] = [
   ["PASS_TDS", PASSING_TDS_PATTERN],
   // Attempts / completions / interceptions, ahead of the bare "pass"/"rush" patterns for the same
   // reason: "rushing attempts" would otherwise be RUSH_YDS with "attempts" left in the player name.
-  // A bare "attempts" (no pass/rush word) is not claimed - it could be either market. Completions and
+  // A bare "attempts" (no pass/rush word) is not claimed - it could be either market. "Carries" is the box
+  // score's own word for rushing attempts (the CAR column), so it needs no qualifier. Completions and
   // interceptions are passing-only stats, so the bare word is enough; "INT"/"INTs" is the box score's
   // own column name.
   ["PASS_ATTEMPTS", /\bpass(?:ing)?\s+att(?:empt)?s?\b/i],
-  ["RUSH_ATTEMPTS", /\brush(?:ing)?\s+att(?:empt)?s?\b/i],
+  ["RUSH_ATTEMPTS", /\b(?:rush(?:ing)?\s+att(?:empt)?s?|(?:rush(?:ing)?\s+)?carries)\b/i],
   ["PASS_COMPLETIONS", /\b(?:pass(?:ing)?\s+)?completions?\b/i],
   ["PASS_INTERCEPTIONS", /\b(?:pass(?:ing)?\s+)?(?:interceptions?|ints?)(?:\s+thrown)?\b/i],
   [

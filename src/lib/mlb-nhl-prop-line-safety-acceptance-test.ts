@@ -416,10 +416,8 @@ function main() {
     "Saquon Barkley over 19.5 longest rush",
     "T.J. Watt over 0.5 sacks",
     "Micah Parsons over 6.5 tackles",
-    "Derrick Henry over 15.5 carries",
     "Amon-Ra St. Brown over 5.5 targets",
     "Brandon Aubrey over 1.5 field goals",
-    "Derrick Henry o15.5 carries",
   ]) {
     const r = parseCatalog("Krash\n" + line);
     check(`unsupported NFL over/under -> unresolved: "${line}"`, [r.picks.length, r.unresolved.length], [0, 1]);
@@ -440,6 +438,8 @@ function main() {
     "Josh Allen under 34.5 pass attempts",
     "Patrick Mahomes over 22.5 passing completions",
     "Sam Darnold over 0.5 interceptions",
+    "Derrick Henry over 15.5 carries",
+    "Derrick Henry o15.5 carries",
   ]) {
     const r = parseCatalog("Krash\nNFL " + line);
     check(`supported NFL prop unaffected: "${line}"`, r.picks.map((p) => [p.sportName, p.betType, p.description]), [["NFL", "PLAYER_PROP", line]]);

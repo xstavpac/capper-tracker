@@ -99,11 +99,12 @@ const PERSON_ONLY_WORDS = /^(?:3pm|stl)$/i;
 
 // NFL stats that only exist as N+ props this app can't grade. Deliberately
 // excludes the supported yardage/receptions/attempts/completions/interceptions
-// markets and TDs - those are handled by normalizeNPlusPlayerProp /
-// parseTouchdownProp (bet-line.ts). A bare "attempts" (no pass/rush word) and
-// "receiving attempts/completions" stay here: neither names one market.
+// markets (carries = rushing attempts) and TDs - those are handled by
+// normalizeNPlusPlayerProp / parseTouchdownProp (bet-line.ts). A bare "attempts"
+// (no pass/rush word) and "receiving attempts/completions" stay here: neither
+// names one market.
 const NFL_UNSUPPORTED_WORDS = [
-  String.raw`(?:(?:pass(?:ing)?|rush(?:ing)?|rec(?:eiving)?)\s+)?(?:carries|targets?)`,
+  String.raw`(?:(?:pass(?:ing)?|rush(?:ing)?|rec(?:eiving)?)\s+)?targets?`,
   String.raw`rec(?:eiving)?\s+(?:completions?|attempts?)`,
   String.raw`attempts?`,
   String.raw`sacks?`,
