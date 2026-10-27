@@ -3278,6 +3278,13 @@ function extractCapperNameFromTagline(text: string): string | null {
 // skipped-line log only; never affects parse results.
 export type DroppedLine = { text: string; capperName: string };
 
+// Phone keyboards write typographic punctuation: "De’Aaron" with a curly apostrophe, "Gilgeous‑Alexander"
+// with a non-breaking hyphen. Every name-shape test and roster key in the parser knows the straight
+// ' and - only, so the paste is made straight once, here, before any line is read.
+export function normalizeTypography(text: string): string {
+  return text.replace(/[‘’ʼ´`]/g, "'").replace(/[–—‑]/g, "-");
+}
+
 export function parseCatalog(
   text: string,
   knownCapperNames: string[] = [],
@@ -3309,7 +3316,7 @@ export function parseCatalog(
   droppedAsHeaders: DroppedLine[];
 } {
   const sortedNames = [...knownCapperNames].sort((a, b) => b.length - a.length);
-  const rawLines = text.split("\n").map((l) => normalizeMarketShorthand(l.trim()));
+  const rawLines = normalizeTypography(text).split("\n").map((l) => normalizeMarketShorthand(l.trim()));
 
   const results: ParsedPick[] = [];
   const parlays: ParsedParlay[] = [];

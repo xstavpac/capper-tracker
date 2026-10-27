@@ -207,7 +207,10 @@ export function resolveNameAgainstRoster(
   // Bare-surname tier - only for a single typed token, and only after both
   // full-name tiers above found nothing at all (see header comment for why
   // this never loosens into "one token is always enough").
-  if (!/\s/.test(typedName)) {
+  // A multi-word typed name is a surname only when the whole of it IS a roster surname
+  // ("Gilgeous Alexander" for "Gilgeous-Alexander", the hyphen having become a space): a first
+  // name plus a surname that failed both tiers above is still a real miss, never re-guessed.
+  if (!/\s/.test(typedName) || roster.some((p) => normalizeName(plain(p.lastName)) === normalizedTyped)) {
     // stripNameSuffix again here: ESPN's own `lastName` field can carry the
     // generational suffix itself (confirmed live - Kenneth Walker III's
     // lastName is literally "Walker III", not "Walker"), so a bare "Walker"
@@ -319,6 +322,8 @@ export function resolvePassingTdQuarterback(
 export function withRosterName(text: string, typedName: string, rosterName: string): string {
   const typed = typedName.trim();
   if (!typed) return text;
-  const re = new RegExp(typed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  // A space in the typed name also matches a hyphen in the text: the parsers read "Gilgeous-Alexander"
+  // as "Gilgeous Alexander".
+  const re = new RegExp(typed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "[\\s-]+"), "i");
   return text.replace(re, () => rosterName);
 }

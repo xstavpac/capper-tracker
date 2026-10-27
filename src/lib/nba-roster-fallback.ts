@@ -64,9 +64,15 @@ export type NbaRosterContext = {
 
 const describe = (matches: PlayerCandidate[]) => matches.map((m) => m.playerName + " (" + m.team + ")").join(", ");
 
+// The pick text should take the roster's spelling: a typo-tier match, or several typed words that
+// are only the player's surname ("Gilgeous Alexander") - the grader reads the stored name.
+function takesRosterSpelling(res: Extract<PlayerPropResolution, { status: "resolved" }>, typedName: string): boolean {
+  return res.via === "fuzzy" || (res.via === "surname" && /\s/.test(typedName.trim()));
+}
+
 // One league's answer, in this module's terms.
 function fromLeague(res: PlayerPropResolution, sport: "NBA" | "NHL", typedName: string): NbaRosterResolution {
-  if (res.status === "resolved") return { status: "resolved", sport, team: res.team, playerName: res.playerName, nearMiss: res.via === "fuzzy" };
+  if (res.status === "resolved") return { status: "resolved", sport, team: res.team, playerName: res.playerName, nearMiss: takesRosterSpelling(res, typedName) };
   if (res.status === "ambiguous") {
     if (res.tier === "surname" || res.tier === "near-miss")
       return { status: "ask", typedName, candidates: res.matches.map((m) => ({ ...m, sport })), nearMiss: res.tier === "near-miss" };

@@ -107,7 +107,14 @@ export function matchMlbName<T>(
   const tLast = t[t.length - 1];
   const distinct = (xs: T[]) => [...new Map(xs.map((x) => [id(x), x])).values()];
 
-  const tiers: { tier: MlbNameTier; hits: T[] }[] = [{ tier: "exact", hits: items.filter((i) => mlbNameKey(fullName(i)) === tKey) }];
+  // Exact compares with the spaces collapsed, so a hyphen or apostrophe written as a space, or not
+  // written at all, is the same name: "Ha-Seong Kim" = "HaSeong Kim" = "Ha Seong Kim". Still one
+  // player or "many" - two players sharing a collapsed key are never settled here.
+  const collapsed = (key: string) => key.replace(/ /g, "");
+  const tCollapsed = collapsed(tKey);
+  const tiers: { tier: MlbNameTier; hits: T[] }[] = [
+    { tier: "exact", hits: items.filter((i) => collapsed(mlbNameKey(fullName(i))) === tCollapsed) },
+  ];
   if (t.length >= 2) {
     tiers.push({
       tier: "short-form",
