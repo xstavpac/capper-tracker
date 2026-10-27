@@ -1,0 +1,1959 @@
+{
+  "id": "d7f8398941d7c90befa60f35876a3ae7",
+  "sport_key": "basketball_nba",
+  "commence_time": "2026-10-27T02:10:00Z",
+  "home_team": "Denver Nuggets",
+  "away_team": "Golden State Warriors",
+  "bookmakers": [
+    {
+      "key": "fanduel",
+      "markets": [
+        {
+          "key": "h2h",
+          "outcomes": [
+            {
+              "name": "Denver Nuggets",
+              "price": -260,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619219666&selectionId=237492",
+              "sid": "237492"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 215,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619219666&selectionId=237493",
+              "sid": "237493"
+            }
+          ]
+        },
+        {
+          "key": "alternate_spreads",
+          "outcomes": [
+            {
+              "name": "Denver Nuggets",
+              "price": 2500,
+              "point": -37.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889670",
+              "sid": "7889670"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 2200,
+              "point": -36.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=8020309",
+              "sid": "8020309"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 2200,
+              "point": -35.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7941733",
+              "sid": "7941733"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 2000,
+              "point": -34.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889621",
+              "sid": "7889621"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 1800,
+              "point": -33.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=8055202",
+              "sid": "8055202"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 1400,
+              "point": -32.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7941639",
+              "sid": "7941639"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 1300,
+              "point": -31.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889627",
+              "sid": "7889627"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 1300,
+              "point": -30.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=8055206",
+              "sid": "8055206"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 1100,
+              "point": -29.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7941762",
+              "sid": "7941762"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 1000,
+              "point": -28.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889655",
+              "sid": "7889655"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 920,
+              "point": -27.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=8020307",
+              "sid": "8020307"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 870,
+              "point": -26.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7941661",
+              "sid": "7941661"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 790,
+              "point": -25.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889563",
+              "sid": "7889563"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 700,
+              "point": -24.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=8020315",
+              "sid": "8020315"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 600,
+              "point": -23.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7941655",
+              "sid": "7941655"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 540,
+              "point": -22.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889539",
+              "sid": "7889539"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 480,
+              "point": -21.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7954549",
+              "sid": "7954549"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 440,
+              "point": -20.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7914241",
+              "sid": "7914241"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 385,
+              "point": -19.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889607",
+              "sid": "7889607"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 340,
+              "point": -18.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7914233",
+              "sid": "7914233"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 290,
+              "point": -17.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889505",
+              "sid": "7889505"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 265,
+              "point": -16.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889571",
+              "sid": "7889571"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 235,
+              "point": -15.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889487",
+              "sid": "7889487"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 215,
+              "point": -14.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7913847",
+              "sid": "7913847"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 188,
+              "point": -13.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889595",
+              "sid": "7889595"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 172,
+              "point": -12.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7914255",
+              "sid": "7914255"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 154,
+              "point": -11.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889628",
+              "sid": "7889628"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 134,
+              "point": -10.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889462",
+              "sid": "7889462"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 120,
+              "point": -9.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889517",
+              "sid": "7889517"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": 108,
+              "point": -8.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7914218",
+              "sid": "7914218"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -106,
+              "point": -7.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889590",
+              "sid": "7889590"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -124,
+              "point": -6.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7914300",
+              "sid": "7914300"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -140,
+              "point": -5.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889467",
+              "sid": "7889467"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -156,
+              "point": -4.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889560",
+              "sid": "7889560"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -180,
+              "point": -3.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889512",
+              "sid": "7889512"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -194,
+              "point": -2.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=2643775",
+              "sid": "2643775"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -230,
+              "point": -1.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=2643779",
+              "sid": "2643779"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -280,
+              "point": 1.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889677",
+              "sid": "7889677"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -320,
+              "point": 2.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889492",
+              "sid": "7889492"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -350,
+              "point": 3.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7914215",
+              "sid": "7914215"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -390,
+              "point": 4.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889533",
+              "sid": "7889533"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -480,
+              "point": 5.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7914293",
+              "sid": "7914293"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -560,
+              "point": 6.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889479",
+              "sid": "7889479"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -700,
+              "point": 7.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889675",
+              "sid": "7889675"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -850,
+              "point": 8.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889495",
+              "sid": "7889495"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -1000,
+              "point": 9.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7914258",
+              "sid": "7914258"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -1350,
+              "point": 10.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889530",
+              "sid": "7889530"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -1800,
+              "point": 11.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7914264",
+              "sid": "7914264"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -2200,
+              "point": 12.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889514",
+              "sid": "7889514"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -3000,
+              "point": 13.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889556",
+              "sid": "7889556"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -3000,
+              "point": 14.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889475",
+              "sid": "7889475"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -3500,
+              "point": 15.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7914671",
+              "sid": "7914671"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -4500,
+              "point": 16.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889510",
+              "sid": "7889510"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -4500,
+              "point": 17.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7914694",
+              "sid": "7914694"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -5000,
+              "point": 18.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889599",
+              "sid": "7889599"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -7000,
+              "point": 19.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889585",
+              "sid": "7889585"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -7000,
+              "point": 20.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889537",
+              "sid": "7889537"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -10000,
+              "point": 21.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7941763",
+              "sid": "7941763"
+            },
+            {
+              "name": "Denver Nuggets",
+              "price": -10000,
+              "point": 22.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889651",
+              "sid": "7889651"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -10000,
+              "point": 37.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7901396",
+              "sid": "7901396"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -10000,
+              "point": 36.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7949892",
+              "sid": "7949892"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -7000,
+              "point": 35.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=8000452",
+              "sid": "8000452"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -7000,
+              "point": 34.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7901320",
+              "sid": "7901320"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -6000,
+              "point": 33.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7949870",
+              "sid": "7949870"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -5000,
+              "point": 32.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889153",
+              "sid": "7889153"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -4500,
+              "point": 31.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7901431",
+              "sid": "7901431"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -4500,
+              "point": 30.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7949790",
+              "sid": "7949790"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -3500,
+              "point": 29.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889301",
+              "sid": "7889301"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -3000,
+              "point": 28.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7901412",
+              "sid": "7901412"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -2500,
+              "point": 27.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7949888",
+              "sid": "7949888"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -2200,
+              "point": 26.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889289",
+              "sid": "7889289"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -1800,
+              "point": 25.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7901402",
+              "sid": "7901402"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -1450,
+              "point": 24.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7949881",
+              "sid": "7949881"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -1100,
+              "point": 23.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889370",
+              "sid": "7889370"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -950,
+              "point": 22.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7901362",
+              "sid": "7901362"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -800,
+              "point": 21.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7901327",
+              "sid": "7901327"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -700,
+              "point": 20.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889020",
+              "sid": "7889020"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -590,
+              "point": 19.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7901335",
+              "sid": "7901335"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -500,
+              "point": 18.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7949791",
+              "sid": "7949791"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -410,
+              "point": 17.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7888974",
+              "sid": "7888974"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -370,
+              "point": 16.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7901394",
+              "sid": "7901394"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -320,
+              "point": 15.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7901393",
+              "sid": "7901393"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -290,
+              "point": 14.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889330",
+              "sid": "7889330"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -250,
+              "point": 13.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889032",
+              "sid": "7889032"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -225,
+              "point": 12.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7949825",
+              "sid": "7949825"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -200,
+              "point": 11.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889076",
+              "sid": "7889076"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -170,
+              "point": 10.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7901369",
+              "sid": "7901369"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -148,
+              "point": 9.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889189",
+              "sid": "7889189"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -132,
+              "point": 8.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889034",
+              "sid": "7889034"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": -116,
+              "point": 7.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7888967",
+              "sid": "7888967"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 102,
+              "point": 6.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889079",
+              "sid": "7889079"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 114,
+              "point": 5.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889131",
+              "sid": "7889131"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 126,
+              "point": 4.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889023",
+              "sid": "7889023"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 140,
+              "point": 3.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7888964",
+              "sid": "7888964"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 150,
+              "point": 2.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7888965",
+              "sid": "7888965"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 176,
+              "point": 1.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889087",
+              "sid": "7889087"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 210,
+              "point": -1.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889045",
+              "sid": "7889045"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 235,
+              "point": -2.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889116",
+              "sid": "7889116"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 255,
+              "point": -3.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889102",
+              "sid": "7889102"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 280,
+              "point": -4.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889313",
+              "sid": "7889313"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 330,
+              "point": -5.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7815464",
+              "sid": "7815464"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 370,
+              "point": -6.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889115",
+              "sid": "7889115"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 440,
+              "point": -7.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889019",
+              "sid": "7889019"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 500,
+              "point": -8.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889283",
+              "sid": "7889283"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 540,
+              "point": -9.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889010",
+              "sid": "7889010"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 670,
+              "point": -10.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889044",
+              "sid": "7889044"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 790,
+              "point": -11.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889098",
+              "sid": "7889098"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 870,
+              "point": -12.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889360",
+              "sid": "7889360"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 920,
+              "point": -13.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889052",
+              "sid": "7889052"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 1000,
+              "point": -14.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889182",
+              "sid": "7889182"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 1100,
+              "point": -15.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889148",
+              "sid": "7889148"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 1300,
+              "point": -16.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889286",
+              "sid": "7889286"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 1300,
+              "point": -17.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7949841",
+              "sid": "7949841"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 1400,
+              "point": -18.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889144",
+              "sid": "7889144"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 1800,
+              "point": -19.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7901446",
+              "sid": "7901446"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 2000,
+              "point": -20.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889064",
+              "sid": "7889064"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 2200,
+              "point": -21.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889367",
+              "sid": "7889367"
+            },
+            {
+              "name": "Golden State Warriors",
+              "price": 2200,
+              "point": -22.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721557&selectionId=7889229",
+              "sid": "7889229"
+            }
+          ]
+        },
+        {
+          "key": "alternate_totals",
+          "outcomes": [
+            {
+              "name": "Over",
+              "price": -10000,
+              "point": 200.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7707476",
+              "sid": "7707476"
+            },
+            {
+              "name": "Over",
+              "price": -10000,
+              "point": 201.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711074",
+              "sid": "7711074"
+            },
+            {
+              "name": "Over",
+              "price": -8000,
+              "point": 202.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733196",
+              "sid": "7733196"
+            },
+            {
+              "name": "Over",
+              "price": -7000,
+              "point": 203.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711983",
+              "sid": "7711983"
+            },
+            {
+              "name": "Over",
+              "price": -6000,
+              "point": 204.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711503",
+              "sid": "7711503"
+            },
+            {
+              "name": "Over",
+              "price": -5000,
+              "point": 205.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7707157",
+              "sid": "7707157"
+            },
+            {
+              "name": "Over",
+              "price": -4500,
+              "point": 206.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711048",
+              "sid": "7711048"
+            },
+            {
+              "name": "Over",
+              "price": -3500,
+              "point": 207.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733045",
+              "sid": "7733045"
+            },
+            {
+              "name": "Over",
+              "price": -3000,
+              "point": 208.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7712036",
+              "sid": "7712036"
+            },
+            {
+              "name": "Over",
+              "price": -2300,
+              "point": 209.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711204",
+              "sid": "7711204"
+            },
+            {
+              "name": "Over",
+              "price": -2200,
+              "point": 210.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7707590",
+              "sid": "7707590"
+            },
+            {
+              "name": "Over",
+              "price": -1900,
+              "point": 211.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711063",
+              "sid": "7711063"
+            },
+            {
+              "name": "Over",
+              "price": -1600,
+              "point": 212.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733132",
+              "sid": "7733132"
+            },
+            {
+              "name": "Over",
+              "price": -1450,
+              "point": 213.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7712127",
+              "sid": "7712127"
+            },
+            {
+              "name": "Over",
+              "price": -1200,
+              "point": 214.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711347",
+              "sid": "7711347"
+            },
+            {
+              "name": "Over",
+              "price": -950,
+              "point": 215.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7674032",
+              "sid": "7674032"
+            },
+            {
+              "name": "Over",
+              "price": -800,
+              "point": 216.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711020",
+              "sid": "7711020"
+            },
+            {
+              "name": "Over",
+              "price": -700,
+              "point": 217.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733110",
+              "sid": "7733110"
+            },
+            {
+              "name": "Over",
+              "price": -590,
+              "point": 218.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711824",
+              "sid": "7711824"
+            },
+            {
+              "name": "Over",
+              "price": -550,
+              "point": 219.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711256",
+              "sid": "7711256"
+            },
+            {
+              "name": "Over",
+              "price": -460,
+              "point": 220.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7707378",
+              "sid": "7707378"
+            },
+            {
+              "name": "Over",
+              "price": -410,
+              "point": 221.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7710983",
+              "sid": "7710983"
+            },
+            {
+              "name": "Over",
+              "price": -380,
+              "point": 222.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733040",
+              "sid": "7733040"
+            },
+            {
+              "name": "Over",
+              "price": -330,
+              "point": 223.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7712377",
+              "sid": "7712377"
+            },
+            {
+              "name": "Over",
+              "price": -300,
+              "point": 224.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711322",
+              "sid": "7711322"
+            },
+            {
+              "name": "Over",
+              "price": -275,
+              "point": 225.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7707149",
+              "sid": "7707149"
+            },
+            {
+              "name": "Over",
+              "price": -250,
+              "point": 226.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711004",
+              "sid": "7711004"
+            },
+            {
+              "name": "Over",
+              "price": -230,
+              "point": 227.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7732980",
+              "sid": "7732980"
+            },
+            {
+              "name": "Over",
+              "price": -205,
+              "point": 228.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711841",
+              "sid": "7711841"
+            },
+            {
+              "name": "Over",
+              "price": -192,
+              "point": 229.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711379",
+              "sid": "7711379"
+            },
+            {
+              "name": "Over",
+              "price": -176,
+              "point": 230.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7700282",
+              "sid": "7700282"
+            },
+            {
+              "name": "Over",
+              "price": -164,
+              "point": 231.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711028",
+              "sid": "7711028"
+            },
+            {
+              "name": "Over",
+              "price": -150,
+              "point": 232.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733029",
+              "sid": "7733029"
+            },
+            {
+              "name": "Over",
+              "price": -138,
+              "point": 233.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711875",
+              "sid": "7711875"
+            },
+            {
+              "name": "Over",
+              "price": -126,
+              "point": 234.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711363",
+              "sid": "7711363"
+            },
+            {
+              "name": "Over",
+              "price": -116,
+              "point": 235.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7729447",
+              "sid": "7729447"
+            },
+            {
+              "name": "Over",
+              "price": -106,
+              "point": 236.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711078",
+              "sid": "7711078"
+            },
+            {
+              "name": "Over",
+              "price": 104,
+              "point": 237.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=3715001",
+              "sid": "3715001"
+            },
+            {
+              "name": "Over",
+              "price": 112,
+              "point": 238.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7712358",
+              "sid": "7712358"
+            },
+            {
+              "name": "Over",
+              "price": 120,
+              "point": 239.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711397",
+              "sid": "7711397"
+            },
+            {
+              "name": "Over",
+              "price": 132,
+              "point": 240.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7729373",
+              "sid": "7729373"
+            },
+            {
+              "name": "Over",
+              "price": 142,
+              "point": 241.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7747630",
+              "sid": "7747630"
+            },
+            {
+              "name": "Over",
+              "price": 150,
+              "point": 242.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7760686",
+              "sid": "7760686"
+            },
+            {
+              "name": "Over",
+              "price": 158,
+              "point": 243.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=3794661",
+              "sid": "3794661"
+            },
+            {
+              "name": "Over",
+              "price": 170,
+              "point": 244.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7695583",
+              "sid": "7695583"
+            },
+            {
+              "name": "Over",
+              "price": 186,
+              "point": 245.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7700494",
+              "sid": "7700494"
+            },
+            {
+              "name": "Over",
+              "price": 200,
+              "point": 246.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7747569",
+              "sid": "7747569"
+            },
+            {
+              "name": "Over",
+              "price": 215,
+              "point": 247.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733080",
+              "sid": "7733080"
+            },
+            {
+              "name": "Over",
+              "price": 235,
+              "point": 248.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711957",
+              "sid": "7711957"
+            },
+            {
+              "name": "Over",
+              "price": 255,
+              "point": 249.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7755151",
+              "sid": "7755151"
+            },
+            {
+              "name": "Over",
+              "price": 275,
+              "point": 250.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7729459",
+              "sid": "7729459"
+            },
+            {
+              "name": "Over",
+              "price": 300,
+              "point": 251.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711031",
+              "sid": "7711031"
+            },
+            {
+              "name": "Over",
+              "price": 340,
+              "point": 252.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7807552",
+              "sid": "7807552"
+            },
+            {
+              "name": "Over",
+              "price": 370,
+              "point": 253.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7792064",
+              "sid": "7792064"
+            },
+            {
+              "name": "Over",
+              "price": 420,
+              "point": 254.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7695578",
+              "sid": "7695578"
+            },
+            {
+              "name": "Over",
+              "price": 450,
+              "point": 255.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7729380",
+              "sid": "7729380"
+            },
+            {
+              "name": "Over",
+              "price": 500,
+              "point": 256.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7889754",
+              "sid": "7889754"
+            },
+            {
+              "name": "Over",
+              "price": 560,
+              "point": 257.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7867413",
+              "sid": "7867413"
+            },
+            {
+              "name": "Over",
+              "price": 600,
+              "point": 258.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7889004",
+              "sid": "7889004"
+            },
+            {
+              "name": "Over",
+              "price": 650,
+              "point": 259.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7695549",
+              "sid": "7695549"
+            },
+            {
+              "name": "Over",
+              "price": 720,
+              "point": 260.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=4516621",
+              "sid": "4516621"
+            },
+            {
+              "name": "Over",
+              "price": 800,
+              "point": 261.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7710963",
+              "sid": "7710963"
+            },
+            {
+              "name": "Over",
+              "price": 900,
+              "point": 262.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7883448",
+              "sid": "7883448"
+            },
+            {
+              "name": "Over",
+              "price": 940,
+              "point": 263.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=3686990",
+              "sid": "3686990"
+            },
+            {
+              "name": "Over",
+              "price": 1100,
+              "point": 264.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7891640",
+              "sid": "7891640"
+            },
+            {
+              "name": "Over",
+              "price": 1120,
+              "point": 265.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7729468",
+              "sid": "7729468"
+            },
+            {
+              "name": "Over",
+              "price": 1200,
+              "point": 266.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7889858",
+              "sid": "7889858"
+            },
+            {
+              "name": "Over",
+              "price": 1300,
+              "point": 267.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7884458",
+              "sid": "7884458"
+            },
+            {
+              "name": "Over",
+              "price": 1400,
+              "point": 268.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7888968",
+              "sid": "7888968"
+            },
+            {
+              "name": "Over",
+              "price": 1500,
+              "point": 269.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7891569",
+              "sid": "7891569"
+            },
+            {
+              "name": "Over",
+              "price": 1600,
+              "point": 270.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7729461",
+              "sid": "7729461"
+            },
+            {
+              "name": "Over",
+              "price": 1800,
+              "point": 271.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7889775",
+              "sid": "7889775"
+            },
+            {
+              "name": "Over",
+              "price": 2000,
+              "point": 272.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7884682",
+              "sid": "7884682"
+            },
+            {
+              "name": "Over",
+              "price": 2200,
+              "point": 273.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7889089",
+              "sid": "7889089"
+            },
+            {
+              "name": "Over",
+              "price": 2500,
+              "point": 274.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7891710",
+              "sid": "7891710"
+            },
+            {
+              "name": "Under",
+              "price": 5000,
+              "point": 194.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711357",
+              "sid": "7711357"
+            },
+            {
+              "name": "Under",
+              "price": 5000,
+              "point": 195.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7707053",
+              "sid": "7707053"
+            },
+            {
+              "name": "Under",
+              "price": 4000,
+              "point": 196.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7710977",
+              "sid": "7710977"
+            },
+            {
+              "name": "Under",
+              "price": 4000,
+              "point": 197.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733095",
+              "sid": "7733095"
+            },
+            {
+              "name": "Under",
+              "price": 3500,
+              "point": 198.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711901",
+              "sid": "7711901"
+            },
+            {
+              "name": "Under",
+              "price": 3000,
+              "point": 199.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711276",
+              "sid": "7711276"
+            },
+            {
+              "name": "Under",
+              "price": 2500,
+              "point": 200.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7707474",
+              "sid": "7707474"
+            },
+            {
+              "name": "Under",
+              "price": 2500,
+              "point": 201.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711075",
+              "sid": "7711075"
+            },
+            {
+              "name": "Under",
+              "price": 2000,
+              "point": 202.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733198",
+              "sid": "7733198"
+            },
+            {
+              "name": "Under",
+              "price": 1800,
+              "point": 203.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711981",
+              "sid": "7711981"
+            },
+            {
+              "name": "Under",
+              "price": 1600,
+              "point": 204.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711501",
+              "sid": "7711501"
+            },
+            {
+              "name": "Under",
+              "price": 1400,
+              "point": 205.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7707161",
+              "sid": "7707161"
+            },
+            {
+              "name": "Under",
+              "price": 1300,
+              "point": 206.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711047",
+              "sid": "7711047"
+            },
+            {
+              "name": "Under",
+              "price": 1200,
+              "point": 207.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733046",
+              "sid": "7733046"
+            },
+            {
+              "name": "Under",
+              "price": 1100,
+              "point": 208.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7712038",
+              "sid": "7712038"
+            },
+            {
+              "name": "Under",
+              "price": 940,
+              "point": 209.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711203",
+              "sid": "7711203"
+            },
+            {
+              "name": "Under",
+              "price": 900,
+              "point": 210.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7707592",
+              "sid": "7707592"
+            },
+            {
+              "name": "Under",
+              "price": 820,
+              "point": 211.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711061",
+              "sid": "7711061"
+            },
+            {
+              "name": "Under",
+              "price": 750,
+              "point": 212.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733130",
+              "sid": "7733130"
+            },
+            {
+              "name": "Under",
+              "price": 700,
+              "point": 213.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7712128",
+              "sid": "7712128"
+            },
+            {
+              "name": "Under",
+              "price": 630,
+              "point": 214.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711349",
+              "sid": "7711349"
+            },
+            {
+              "name": "Under",
+              "price": 540,
+              "point": 215.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7700513",
+              "sid": "7700513"
+            },
+            {
+              "name": "Under",
+              "price": 500,
+              "point": 216.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711018",
+              "sid": "7711018"
+            },
+            {
+              "name": "Under",
+              "price": 440,
+              "point": 217.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733112",
+              "sid": "7733112"
+            },
+            {
+              "name": "Under",
+              "price": 390,
+              "point": 218.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711825",
+              "sid": "7711825"
+            },
+            {
+              "name": "Under",
+              "price": 370,
+              "point": 219.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711254",
+              "sid": "7711254"
+            },
+            {
+              "name": "Under",
+              "price": 320,
+              "point": 220.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7707374",
+              "sid": "7707374"
+            },
+            {
+              "name": "Under",
+              "price": 290,
+              "point": 221.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7710984",
+              "sid": "7710984"
+            },
+            {
+              "name": "Under",
+              "price": 270,
+              "point": 222.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733038",
+              "sid": "7733038"
+            },
+            {
+              "name": "Under",
+              "price": 240,
+              "point": 223.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7712379",
+              "sid": "7712379"
+            },
+            {
+              "name": "Under",
+              "price": 225,
+              "point": 224.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711320",
+              "sid": "7711320"
+            },
+            {
+              "name": "Under",
+              "price": 205,
+              "point": 225.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7707147",
+              "sid": "7707147"
+            },
+            {
+              "name": "Under",
+              "price": 190,
+              "point": 226.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711003",
+              "sid": "7711003"
+            },
+            {
+              "name": "Under",
+              "price": 176,
+              "point": 227.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7732979",
+              "sid": "7732979"
+            },
+            {
+              "name": "Under",
+              "price": 162,
+              "point": 228.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711839",
+              "sid": "7711839"
+            },
+            {
+              "name": "Under",
+              "price": 154,
+              "point": 229.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711381",
+              "sid": "7711381"
+            },
+            {
+              "name": "Under",
+              "price": 142,
+              "point": 230.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7700284",
+              "sid": "7700284"
+            },
+            {
+              "name": "Under",
+              "price": 132,
+              "point": 231.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711027",
+              "sid": "7711027"
+            },
+            {
+              "name": "Under",
+              "price": 122,
+              "point": 232.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733027",
+              "sid": "7733027"
+            },
+            {
+              "name": "Under",
+              "price": 112,
+              "point": 233.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711877",
+              "sid": "7711877"
+            },
+            {
+              "name": "Under",
+              "price": 102,
+              "point": 234.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711361",
+              "sid": "7711361"
+            },
+            {
+              "name": "Under",
+              "price": -106,
+              "point": 235.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7729448",
+              "sid": "7729448"
+            },
+            {
+              "name": "Under",
+              "price": -116,
+              "point": 236.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711076",
+              "sid": "7711076"
+            },
+            {
+              "name": "Under",
+              "price": -128,
+              "point": 237.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733134",
+              "sid": "7733134"
+            },
+            {
+              "name": "Under",
+              "price": -138,
+              "point": 238.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7712356",
+              "sid": "7712356"
+            },
+            {
+              "name": "Under",
+              "price": -148,
+              "point": 239.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711399",
+              "sid": "7711399"
+            },
+            {
+              "name": "Under",
+              "price": -164,
+              "point": 240.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7729371",
+              "sid": "7729371"
+            },
+            {
+              "name": "Under",
+              "price": -176,
+              "point": 241.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7747629",
+              "sid": "7747629"
+            },
+            {
+              "name": "Under",
+              "price": -188,
+              "point": 242.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7760688",
+              "sid": "7760688"
+            },
+            {
+              "name": "Under",
+              "price": -198,
+              "point": 243.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711818",
+              "sid": "7711818"
+            },
+            {
+              "name": "Under",
+              "price": -220,
+              "point": 244.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7695584",
+              "sid": "7695584"
+            },
+            {
+              "name": "Under",
+              "price": -245,
+              "point": 245.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7700492",
+              "sid": "7700492"
+            },
+            {
+              "name": "Under",
+              "price": -265,
+              "point": 246.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7747570",
+              "sid": "7747570"
+            },
+            {
+              "name": "Under",
+              "price": -295,
+              "point": 247.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7733081",
+              "sid": "7733081"
+            },
+            {
+              "name": "Under",
+              "price": -320,
+              "point": 248.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711958",
+              "sid": "7711958"
+            },
+            {
+              "name": "Under",
+              "price": -350,
+              "point": 249.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7755153",
+              "sid": "7755153"
+            },
+            {
+              "name": "Under",
+              "price": -385,
+              "point": 250.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7729460",
+              "sid": "7729460"
+            },
+            {
+              "name": "Under",
+              "price": -430,
+              "point": 251.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7711029",
+              "sid": "7711029"
+            },
+            {
+              "name": "Under",
+              "price": -500,
+              "point": 252.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7807551",
+              "sid": "7807551"
+            },
+            {
+              "name": "Under",
+              "price": -550,
+              "point": 253.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7792066",
+              "sid": "7792066"
+            },
+            {
+              "name": "Under",
+              "price": -650,
+              "point": 254.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7695579",
+              "sid": "7695579"
+            },
+            {
+              "name": "Under",
+              "price": -720,
+              "point": 255.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7729382",
+              "sid": "7729382"
+            },
+            {
+              "name": "Under",
+              "price": -850,
+              "point": 256.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7889755",
+              "sid": "7889755"
+            },
+            {
+              "name": "Under",
+              "price": -1000,
+              "point": 257.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7867411",
+              "sid": "7867411"
+            },
+            {
+              "name": "Under",
+              "price": -1100,
+              "point": 258.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7889006",
+              "sid": "7889006"
+            },
+            {
+              "name": "Under",
+              "price": -1300,
+              "point": 259.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7695550",
+              "sid": "7695550"
+            },
+            {
+              "name": "Under",
+              "price": -1500,
+              "point": 260.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=4516620",
+              "sid": "4516620"
+            },
+            {
+              "name": "Under",
+              "price": -1800,
+              "point": 261.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7710962",
+              "sid": "7710962"
+            },
+            {
+              "name": "Under",
+              "price": -2200,
+              "point": 262.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7883446",
+              "sid": "7883446"
+            },
+            {
+              "name": "Under",
+              "price": -2300,
+              "point": 263.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7738200",
+              "sid": "7738200"
+            },
+            {
+              "name": "Under",
+              "price": -3000,
+              "point": 264.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7891641",
+              "sid": "7891641"
+            },
+            {
+              "name": "Under",
+              "price": -3500,
+              "point": 265.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7729469",
+              "sid": "7729469"
+            },
+            {
+              "name": "Under",
+              "price": -4000,
+              "point": 266.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7889859",
+              "sid": "7889859"
+            },
+            {
+              "name": "Under",
+              "price": -4500,
+              "point": 267.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7884456",
+              "sid": "7884456"
+            },
+            {
+              "name": "Under",
+              "price": -5000,
+              "point": 268.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7888970",
+              "sid": "7888970"
+            },
+            {
+              "name": "Under",
+              "price": -6000,
+              "point": 269.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7891568",
+              "sid": "7891568"
+            },
+            {
+              "name": "Under",
+              "price": -6000,
+              "point": 270.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7729463",
+              "sid": "7729463"
+            },
+            {
+              "name": "Under",
+              "price": -7000,
+              "point": 271.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7889776",
+              "sid": "7889776"
+            },
+            {
+              "name": "Under",
+              "price": -8000,
+              "point": 272.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7884684",
+              "sid": "7884684"
+            },
+            {
+              "name": "Under",
+              "price": -10000,
+              "point": 273.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7889088",
+              "sid": "7889088"
+            },
+            {
+              "name": "Under",
+              "price": -10000,
+              "point": 274.5,
+              "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619721558&selectionId=7891709",
+              "sid": "7891709"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
