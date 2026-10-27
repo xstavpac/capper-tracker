@@ -91,7 +91,7 @@ async function main() {
     check("hockey's filter options still offer the six NHL markets", ["ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "ASSISTS", "SAVES"].filter((k) => !betTypeOptionsForChipSet(chipSetForLeague("NHL")).has(k as never)), []);
     check("NHL POINTS pick -> category TD_PROP (unchanged)", pickCategory(categoryPick("NHL", "POINTS", "Connor McDavid Over 1.5 Points")), "TD_PROP");
     check("NHL POINTS label", buildPickDisplayLabel(labelInput("NHL", "Connor McDavid", "POINTS", "Connor McDavid Over 1.5 Points")), "Connor McDavid Over 1.5 Points");
-    check("NHL POINTS dedup key", dedupCategory("TD_PROP", "PLAYER_PROP", "Connor McDavid Over 1.5 Points", null, { propMarket: "POINTS", playerName: "Connor McDavid" }), "TD_PROP:POINTS:connor mcdavid");
+    check("NHL POINTS dedup key", dedupCategory("TD_PROP", "PLAYER_PROP", "Connor McDavid Over 1.5 Points", null, { propMarket: "POINTS", playerName: "Connor McDavid" }), "TD_PROP:POINTS:connormcdavid"); // the player part is normalizeName-d (no spaces/punctuation) so an alias and its full name share a key
     // The sport-blind text parser still reads a low points / assists line as the NHL market, and nothing as an NBA one.
     check("text parser: 'Connor McDavid over 1.5 points' -> NHL POINTS", parseAnyPlayerProp("Connor McDavid over 1.5 points")?.propMarket, "POINTS");
     check("text parser: no line returns an NBA-only market", ["LeBron James over 7.5 rebounds", "Stephen Curry over 4.5 threes", "Nikola Jokic over 48.5 PRA", "Nikola Jokic double-double"].map((t) => parseAnyPlayerProp(t)?.propMarket ?? null), [null, null, null, null]);
@@ -139,7 +139,7 @@ async function main() {
     check("label: NBA REBOUNDS has no phrase yet", buildPickDisplayLabel(labelInput("NBA", "Nikola Jokic", "REBOUNDS", "Nikola Jokic Over 12.5 Rebounds")), null);
 
     // Dedup: market + player, no sport in the key.
-    check("dedup: NBA REBOUNDS key", dedupCategory("TD_PROP", "PLAYER_PROP", "Nikola Jokic Over 12.5 Rebounds", null, { propMarket: "REBOUNDS", playerName: "Nikola Jokic" }), "TD_PROP:REBOUNDS:nikola jokic");
+    check("dedup: NBA REBOUNDS key", dedupCategory("TD_PROP", "PLAYER_PROP", "Nikola Jokic Over 12.5 Rebounds", null, { propMarket: "REBOUNDS", playerName: "Nikola Jokic" }), "TD_PROP:REBOUNDS:nikolajokic");
   }
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

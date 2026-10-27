@@ -102,7 +102,9 @@ export function resolveNbaPropAgainstRosters(line: string, prop: ParsedNbaProp, 
   const alias = ctx.league === "NHL" ? null : nbaPlayerAliasName(typedName);
   if (alias) {
     const res = resolveNameAgainstRoster(alias, ctx.nbaRoster, ctx.nbaSlate, "NBA");
-    if (res.status === "resolved") return { status: "resolved", sport: "NBA", team: res.team, playerName: res.playerName, nearMiss: res.via === "fuzzy" };
+    // nearMiss: the pick text takes the roster's spelling - "SGA over 30.5 points" is stored under his
+    // name, the one the box score and the grader know.
+    if (res.status === "resolved") return { status: "resolved", sport: "NBA", team: res.team, playerName: res.playerName, nearMiss: true };
     // Not on the roster (any more): match what was typed, as below.
   }
 

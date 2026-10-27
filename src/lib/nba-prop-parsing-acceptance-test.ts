@@ -256,7 +256,7 @@ async function main() {
     // ---- the examples from the spec ----
     check('"Brunson 25+ points"', outcome("Brunson 25+ points"), { sport: "NBA", betType: "PLAYER_PROP", team: [nbaTeamOf("Jalen Brunson")], desc: "Brunson Over 24.5 points" });
     check('"Tatum PRA o38.5"', outcome("Tatum PRA o38.5"), { sport: "NBA", betType: "PLAYER_PROP", team: [nbaTeamOf("Jayson Tatum")], desc: "Tatum PRA o38.5" });
-    check('"Embiid P+R over 40.5"', outcome("Embiid P+R over 40.5"), { sport: "NBA", betType: "PLAYER_PROP", team: [nbaTeamOf("Joel Embiid")], desc: "Embiid P+R over 40.5" });
+    check('"Embiid P+R over 40.5"', outcome("Embiid P+R over 40.5"), { sport: "NBA", betType: "PLAYER_PROP", team: [nbaTeamOf("Joel Embiid")], desc: "Joel Embiid P+R over 40.5" }); // "Embiid" is an alias: the stored text takes his roster name
     check('"Jokic double-double"', outcome("Jokic double-double"), { sport: "NBA", betType: "PLAYER_PROP", team: [jokic], desc: "Jokic double-double" });
 
     // ---- NBA vs NHL on the shared markets ----

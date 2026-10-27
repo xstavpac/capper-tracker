@@ -1,4 +1,5 @@
 import { normalizeSpelledOutPropNumber } from "@/lib/number-words";
+import { nbaPlayerAliasName } from "@/lib/nba-player-aliases";
 // NBA player-prop text parsing - the NBA twin of nhl-prop.ts, kept in its own
 // pure module (no imports) so the NFL / NHL / MLB parsers are untouched.
 //
@@ -240,7 +241,11 @@ export function parseNbaProp(text: string, opts: { abbreviations?: boolean } = {
     .replace(/(?<![\w.])\d+(?:\.\d+)?\s*u(?:nits?)?\b/gi, " ")
     .replace(/\b(over|under)\b/gi, " ")
     .replace(/\b[ou]\s*(?=\d)/gi, " ")
-    .replace(/[+-]?\d+(?:\.\d+)?\+?/g, " ")
+    // Numbers go, except the digits of a capper alias (PG13): "PG13 over 20.5 points" must reach the
+    // alias lookup as "PG13", not as "PG" (a position). Any other letters+digits token loses its digits as before.
+    .replace(/(?<![A-Za-z0-9])([A-Za-z]{1,4}\d{1,2})(?![\d.])|[+-]?\d+(?:\.\d+)?\+?/g, (_m, token?: string) =>
+      token ? (nbaPlayerAliasName(token) ? token : token.replace(/\d+/, " ")) : " "
+    )
     .replace(/\b(?:yes|no)\b/gi, " ")
     .replace(/[+\-:,/&]/g, " ")
     .replace(/\s{2,}/g, " ")

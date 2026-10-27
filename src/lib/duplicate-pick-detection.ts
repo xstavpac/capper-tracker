@@ -24,6 +24,9 @@ import type { BetType } from "@prisma/client";
 import { parseAnyPlayerProp, type AnyPlayerPropMarket } from "@/lib/bet-line";
 import { parseNbaProp } from "@/lib/nba-prop";
 import { teamNamesMatch } from "@/lib/team-name-match";
+import { normalizeName } from "@/lib/fuzzy-match";
+import { nbaPlayerAliasName } from "@/lib/nba-player-aliases";
+import { nflPlayerAliasName } from "@/lib/nfl-player-aliases";
 
 export type DuplicateFlag = { message: string };
 
@@ -49,6 +52,18 @@ export type KnownPlayerProp = { propMarket: AnyPlayerPropMarket; playerName: str
 // way, for PLAYER_PROP (folding in propMarket + the player's name - see
 // below). Every other bet type's pickCategory output is already side-aware
 // and passes through unchanged.
+// The player part of a prop's dedup key. A capper alias is mapped to the full name its league's alias
+// table gives it, on the logged pick and the new one alike, so a pick logged as "SGA over 30.5 points"
+// (before the importer stored the roster name) and the same pick pasted again as "Shai Gilgeous-Alexander
+// ..." are one bet. The table is the sport's own - an NBA alias never maps for an NHL or NFL pick, CMC
+// only for NFL - and nothing else is canonicalized (no roster, no surnames). Both sides then go through
+// the same normalizeName, so punctuation and case cannot tell two spellings apart.
+function dedupPlayerKey(playerName: string, sportName?: string | null): string {
+  const sport = sportName?.toUpperCase();
+  const full = sport === "NBA" ? nbaPlayerAliasName(playerName) : sport === "NFL" ? nflPlayerAliasName(playerName) : null;
+  return normalizeName(full ?? playerName);
+}
+
 export function dedupCategory(
   category: string,
   betType: BetType,
@@ -84,10 +99,10 @@ export function dedupCategory(
     if (!known) {
       // An NBA prop with no graded market (triple-double, first basket) still names its player.
       const ungraded = sportName && sportName.toUpperCase() === "NBA" ? parseNbaProp(betDetail ?? "") : null;
-      if (ungraded) return category + ":UNGRADED:" + ungraded.playerName.trim().toLowerCase();
+      if (ungraded) return category + ":UNGRADED:" + dedupPlayerKey(ungraded.playerName, sportName);
       return category; // unparseable prop text - no worse than the old behavior
     }
-    return category + ":" + known.propMarket + ":" + known.playerName.trim().toLowerCase();
+    return category + ":" + known.propMarket + ":" + dedupPlayerKey(known.playerName, sportName);
   }
   return category;
 }

@@ -45,6 +45,7 @@ import {
   type PlayerCandidate,
   type SlateContext,
 } from "@/lib/player-roster-fallback";
+import { nflPlayerAliasName } from "@/lib/nfl-player-aliases";
 import { resolveMlbPropAgainstRoster } from "@/lib/mlb-roster-fallback";
 import { resolveNbaPropAgainstRosters, type LeagueCandidate } from "@/lib/nba-roster-fallback";
 import type { ParsedNbaProp } from "@/lib/nba-prop";
@@ -481,7 +482,8 @@ export function recoverUnresolvedLines(
           continue;
         }
         team = res.team;
-        if (res.via === "fuzzy" || (res.via === "surname" && /\s/.test(typed))) rosterName = res.playerName;
+        // The pick text takes the roster's name for a typo, a multi-word surname or an alias ("CMC").
+        if (res.via === "fuzzy" || (res.via === "surname" && /\s/.test(typed)) || nflPlayerAliasName(typed) !== null) rosterName = res.playerName;
       }
 
       const parsed = parsePickText(lineForParsing);

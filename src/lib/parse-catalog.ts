@@ -23,6 +23,7 @@ import { findFeedTeamHits, findSharedMascotTeams, type FeedTeam } from "@/lib/fe
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { parseMlbPlayerProp, normalizeMlbNPlus } from "@/lib/mlb-prop";
 import { parseNbaProp, normalizeNbaNPlus, type ParsedNbaProp } from "@/lib/nba-prop";
+import { nbaPlayerAliasName } from "@/lib/nba-player-aliases";
 import {
   detectUnsupportedProp,
   detectUnsupportedNflStat,
@@ -1732,7 +1733,10 @@ export function parseSupportedNbaProp(
   const plainName = foldDiacritics(name);
   const nameSport = detectSport(plainName, true).sportName;
   if (!nameSport && !RECOGNIZED_TEAM_PHRASES.has(plainName.toLowerCase())) {
-    return (opts.anyCase ? BARE_NAME_SHAPE : NBA_PROP_PERSON_SHAPE).test(plainName) ? { prop, subject: "person" } : null;
+    // A capper alias is a name whatever its shape ("PG13" has a digit); the roster pass still has to find the player.
+    return (opts.anyCase ? BARE_NAME_SHAPE : NBA_PROP_PERSON_SHAPE).test(plainName) || nbaPlayerAliasName(plainName) !== null
+      ? { prop, subject: "person" }
+      : null;
   }
   // Exactly one NBA team plus something else that is not a matchup ("Lakers vs Nuggets over 220.5
   // pts" is the game's total).

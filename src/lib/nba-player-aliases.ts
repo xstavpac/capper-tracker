@@ -33,7 +33,8 @@ const ALIASES: Record<string, string[]> = {
   "Jaren Jackson Jr.": ["JJJ", "Triple J"],
   "Kevin Durant": ["KD"],
   "Donovan Mitchell": ["Spida"],
-  "Paul George": ["PG", "PG13", "PG-13"],
+  // Not bare "PG": that is a position (point guard), so it prompts or is rejected, never a guess.
+  "Paul George": ["PG13"],
   "Zion Williamson": ["Zion"],
   "Ja Morant": ["Ja"],
   "Trae Young": ["Trae", "Ice Trae"],
