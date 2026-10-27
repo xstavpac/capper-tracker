@@ -118,7 +118,7 @@ export function ChevronIcon({ up }: { up: boolean }) {
   );
 }
 
-// `heavyRate` is the pooled Heavy Consensus hit rate (server/data/heavy-consensus.ts);
+// `heavyRate` is the viewer's own Heavy Consensus hit rate (server/data/heavy-consensus.ts);
 // null / absent shows no Heavy Consensus pill at all.
 export function GamePicksExpander({ picks, heavyRate = null }: { picks: ExpanderPick[]; heavyRate?: HeavyConsensusRate | null }) {
   const [open, setOpen] = useState(false);

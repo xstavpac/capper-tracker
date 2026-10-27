@@ -32,13 +32,12 @@
 // no graded picks at all) = no outcome, left out of the rate. Pushes and voids
 // drop out.
 //
-// The hit rate is ONE pooled number across every league and market type. The
-// history qualifies per viewer, then each real-world market (game + market
-// type + heavy side) counts ONCE however many viewers' cappers were heavy on
-// it: the viewer with the most cappers on it stands for it (then the higher
-// share, then the lower userId). Each stored market keeps its band so the rate
-// can be split 80-89 / 90+ later; it is not split today (too few markets per
-// band - see the 2026-10-27 count in the PR).
+// The hit rate is ONE pooled number across every league and market type, and
+// it is the VIEWER'S OWN: each user has their own cappers and picks, so the
+// badge shows how often a heavy side has won in that user's history. It never
+// pools across users - another user's picks cannot move it. Each stored market
+// keeps its band so the rate can be split 80-89 / 90+ later; it is not split
+// today (too few markets per band).
 import type { PickStatus } from "@prisma/client";
 import { totalSideFromText } from "@/lib/bet-line";
 import type { PickTeamGroup } from "@/lib/pick-team-group";
@@ -225,7 +224,7 @@ export function buildHeavyConsensusInstances(picks: HistoryPick[], minCappers = 
 }
 
 // What the rate reads back from storage.
-export type StoredHeavyMarket = Pick<HeavyConsensusInstance, "userId" | "worldKey" | "cappers" | "sharePct" | "outcome">;
+export type StoredHeavyMarket = Pick<HeavyConsensusInstance, "userId" | "cappers" | "outcome">;
 
 export type HeavyConsensusRate = {
   // Rounded; null when no qualifying market has an outcome yet.
@@ -234,21 +233,16 @@ export type HeavyConsensusRate = {
   games: number;
 };
 
-// The pooled hit rate: markets at `minCappers` or more, one per real-world
-// market, outcome-less ones left out.
-export function pooledHeavyConsensusRate(rows: StoredHeavyMarket[], minCappers = HEAVY_CONSENSUS_MIN_CAPPERS): HeavyConsensusRate {
-  const byWorld = new Map<string, StoredHeavyMarket>();
-  for (const r of rows) {
-    if (r.cappers < minCappers) continue;
-    const held = byWorld.get(r.worldKey);
-    if (!held || r.cappers > held.cappers || (r.cappers === held.cappers && (r.sharePct > held.sharePct || (r.sharePct === held.sharePct && r.userId < held.userId)))) {
-      byWorld.set(r.worldKey, r);
-    }
-  }
+// The viewer's hit rate, pooled across every league and market type: their
+// stored markets at `minCappers` or more, outcome-less ones left out. A viewer's
+// markets are already one per real-world market (unique per userId + worldKey),
+// so nothing is de-duplicated. Rows of any other user are ignored here as well
+// as by the read, so passing a wider set can never change the answer.
+export function viewerHeavyConsensusRate(rows: StoredHeavyMarket[], viewerId: string, minCappers = HEAVY_CONSENSUS_MIN_CAPPERS): HeavyConsensusRate {
   let games = 0;
   let hits = 0;
-  for (const r of Array.from(byWorld.values())) {
-    if (r.outcome === null) continue;
+  for (const r of rows) {
+    if (r.userId !== viewerId || r.cappers < minCappers || r.outcome === null) continue;
     games++;
     if (r.outcome === "WIN") hits++;
   }

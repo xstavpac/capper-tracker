@@ -158,7 +158,7 @@ async function run(): Promise<Response> {
   let heavyConsensus: Awaited<ReturnType<typeof recomputeHeavyConsensusMarkets>> | { error: string };
   try {
     heavyConsensus = await recomputeHeavyConsensusMarkets();
-    revalidateTag(cacheKeys.heavyConsensusRate());
+    revalidateTag(cacheKeys.heavyConsensusRateTag());
   } catch (err) {
     heavyConsensus = { error: err instanceof Error ? err.message : String(err) };
     console.error("refresh-scores: heavy consensus recompute failed", err);

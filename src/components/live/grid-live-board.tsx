@@ -58,7 +58,7 @@ export function GridLiveBoard({
   initialScores: ScoreGame[];
   matchedPicksByGame: ExpanderPick[][];
   initialSelection: GridLiveSelection;
-  // The pooled Heavy Consensus hit rate, for the detail panel's pills.
+  // The viewer's own Heavy Consensus hit rate, for the detail panel's pills.
   heavyRate: HeavyConsensusRate | null;
 }) {
   const router = useRouter();

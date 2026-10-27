@@ -38,13 +38,13 @@ export default async function LivePage({
   const leagueChipSet = chipSetForLeague(sportLabel);
   const hasSportSpecificCategories = leagueChipSet.length > DEFAULT_CHIP_SET.length;
 
-  // The Heavy Consensus hit rate is one cached number shared by every viewer (24 h TTL,
-  // refreshed by refresh-scores); each game's consensus itself is worked out from the
+  // The Heavy Consensus hit rate is the viewer's own, cached per viewer (24 h TTL,
+  // cleared by refresh-scores); each game's consensus itself is worked out from the
   // picks below, client-side, so it costs no query of its own.
   const [{ odds, scores, expanderPicksByGame }, sportCategoryPanel, heavyRate] = await Promise.all([
     getLiveBoardData(user.id, activeSport, sportLabel),
     hasSportSpecificCategories ? getSportCategoryPanelData(user.id, sportLabel) : Promise.resolve(null),
-    getHeavyConsensusRate(),
+    getHeavyConsensusRate(user.id),
   ]);
   const sportCategoryBreakdown = sportCategoryPanel?.breakdown ?? [];
 

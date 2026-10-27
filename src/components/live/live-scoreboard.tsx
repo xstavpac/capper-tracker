@@ -53,7 +53,7 @@ export function LiveScoreboard({
   initialScores: ScoreGame[];
   matchedPicksByGame: ExpanderPick[][];
   showBoardPulse: boolean;
-  // The pooled Heavy Consensus hit rate, for the expanders' pills.
+  // The viewer's own Heavy Consensus hit rate, for the expanders' pills.
   heavyRate: HeavyConsensusRate | null;
 }) {
   const scores = useSharedLiveScores();

@@ -470,6 +470,35 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     source: "getCachedNflRosterFullNames (nfl-roster-cache.ts, 1h Data Cache)",
     matches: (s) => reads(s, "nfl_roster_players") && whereIs(s, /^"nfl_roster_players"\."active" = \$\d+$/),
   },
+  // ---- Heavy Consensus (heavy-consensus.ts; the Live tab's hit rate and its nightly history) ----
+  {
+    // One viewer's settled markets at the 8-capper minimum, behind a per-user Data
+    // Cache entry (24 h; the nightly recompute clears them all with one tag).
+    label: "Heavy Consensus rate (per user)",
+    source: "getHeavyConsensusRate (heavy-consensus.ts, /live and /live/[gameId])",
+    matches: (s) =>
+      reads(s, "heavy_consensus_markets") &&
+      whereIs(s, /^"heavy_consensus_markets"\."userId" = \$\d+ AND "heavy_consensus_markets"\."cappers" >= \$\d+ AND "heavy_consensus_markets"\."outcome" IS NOT NULL$/),
+  },
+  {
+    // The window's stored rows (id, userId, worldKey), to find the ones that no longer qualify.
+    label: "Heavy Consensus stored ids",
+    source: "recomputeHeavyConsensusMarkets (heavy-consensus.ts, refresh-scores cron; backfill script with no filter)",
+    matches: (s) => reads(s, "heavy_consensus_markets") && (whereIs(s, /^"heavy_consensus_markets"\."gameDate" >= \$\d+$/) || whereIs(s, ALWAYS_TRUE)),
+  },
+  {
+    label: "Heavy Consensus upsert",
+    source: "recomputeHeavyConsensusMarkets (heavy-consensus.ts, refresh-scores cron / backfill --apply)",
+    matches: (s) => inserts(s, "heavy_consensus_markets"),
+  },
+  {
+    // Every user's full-game ML / spread / total picks that have started, test cappers
+    // left out: the last few Eastern dates nightly, all history from the backfill script.
+    label: "Heavy Consensus history (nightly / backfill)",
+    source: "loadHeavyConsensusInstances (heavy-consensus.ts, refresh-scores cron; scripts/backfill-heavy-consensus.ts)",
+    matches: (s) => reads(s, "picks") && has(s, /LEFT JOIN "cappers" AS "j1" ON/) && has(s, /"j1"\."isTest" = \$\d+/) && has(s, GAME_TIME_LT),
+    expected: DAILY_FULL_HISTORY,
+  },
 ];
 
 export function labelEntryFor(s: StatementShape): StatementLabel | null {

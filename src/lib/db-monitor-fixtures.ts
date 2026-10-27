@@ -592,5 +592,40 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "sql": "\n    SELECT c.id, c.name, COALESCE(p.n, 0)::int AS \"pickCount\"\n    FROM cappers c\n    LEFT JOIN (SELECT \"capperId\", count(*)::int AS n FROM picks WHERE \"userId\" = $1 GROUP BY \"capperId\") p\n      ON p.\"capperId\" = c.id\n    WHERE c.\"userId\" = $2\n    ORDER BY c.name ASC",
     "expectLabel": "Cappers with pick counts",
     "expectFlags": []
+  },
+  {
+    "name": "Heavy Consensus rate, one viewer's settled markets (getHeavyConsensusRate)",
+    "run": "95c88d8+per-user",
+    "sql": "SELECT \"public\".\"heavy_consensus_markets\".\"id\", \"public\".\"heavy_consensus_markets\".\"userId\", \"public\".\"heavy_consensus_markets\".\"cappers\", \"public\".\"heavy_consensus_markets\".\"outcome\" FROM \"public\".\"heavy_consensus_markets\" WHERE (\"public\".\"heavy_consensus_markets\".\"userId\" = $1 AND \"public\".\"heavy_consensus_markets\".\"cappers\" >= $2 AND \"public\".\"heavy_consensus_markets\".\"outcome\" IS NOT NULL) OFFSET $3",
+    "expectLabel": "Heavy Consensus rate (per user)",
+    "expectFlags": []
+  },
+  {
+    "name": "Heavy Consensus history, nightly window (loadHeavyConsensusInstances)",
+    "run": "95c88d8+per-user",
+    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"userId\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"datePosted\", \"public\".\"picks\".\"sportId\" FROM \"public\".\"picks\" LEFT JOIN \"public\".\"cappers\" AS \"j1\" ON (\"j1\".\"id\") = (\"public\".\"picks\".\"capperId\") WHERE (\"public\".\"picks\".\"period\" = CAST($1::text AS \"public\".\"Period\") AND \"public\".\"picks\".\"betType\" IN (CAST($2::text AS \"public\".\"BetType\"),CAST($3::text AS \"public\".\"BetType\"),CAST($4::text AS \"public\".\"BetType\")) AND \"public\".\"picks\".\"status\" <> CAST($5::text AS \"public\".\"PickStatus\") AND \"public\".\"picks\".\"gameTime\" < $6 AND \"public\".\"picks\".\"gameTime\" >= $7 AND (\"j1\".\"isTest\" = $8 AND (\"j1\".\"id\" IS NOT NULL))) OFFSET $9",
+    "expectLabel": "Heavy Consensus history (nightly / backfill)",
+    "expectFlags": []
+  },
+  {
+    "name": "Heavy Consensus stored ids, window (recomputeHeavyConsensusMarkets)",
+    "run": "95c88d8+per-user",
+    "sql": "SELECT \"public\".\"heavy_consensus_markets\".\"id\", \"public\".\"heavy_consensus_markets\".\"userId\", \"public\".\"heavy_consensus_markets\".\"worldKey\" FROM \"public\".\"heavy_consensus_markets\" WHERE \"public\".\"heavy_consensus_markets\".\"gameDate\" >= $1 OFFSET $2",
+    "expectLabel": "Heavy Consensus stored ids",
+    "expectFlags": []
+  },
+  {
+    "name": "Heavy Consensus upsert (recomputeHeavyConsensusMarkets)",
+    "run": "95c88d8+per-user",
+    "sql": "INSERT INTO \"public\".\"heavy_consensus_markets\" (\"id\",\"userId\",\"worldKey\",\"sport\",\"gameDate\",\"gameTime\",\"market\",\"heavySide\",\"cappers\",\"heavyCappers\",\"sharePct\",\"band\",\"outcome\",\"computedAt\") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT (\"userId\",\"worldKey\") DO UPDATE SET \"sport\" = $15, \"gameDate\" = $16, \"gameTime\" = $17, \"market\" = $18, \"heavySide\" = $19, \"cappers\" = $20, \"heavyCappers\" = $21, \"sharePct\" = $22, \"band\" = $23, \"outcome\" = $24, \"computedAt\" = $25 WHERE ((\"public\".\"heavy_consensus_markets\".\"userId\" = $26 AND \"public\".\"heavy_consensus_markets\".\"worldKey\" = $27) AND 1=1) RETURNING \"public\".\"heavy_consensus_markets\".\"id\", \"public\".\"heavy_consensus_markets\".\"userId\", \"public\".\"heavy_consensus_markets\".\"worldKey\", \"public\".\"heavy_consensus_markets\".\"sport\", \"public\".\"heavy_consensus_markets\".\"gameDate\", \"public\".\"heavy_consensus_markets\".\"gameTime\", \"public\".\"heavy_consensus_markets\".\"market\", \"public\".\"heavy_consensus_markets\".\"heavySide\", \"public\".\"heavy_consensus_markets\".\"cappers\", \"public\".\"heavy_consensus_markets\".\"heavyCappers\", \"public\".\"heavy_consensus_markets\".\"sharePct\", \"public\".\"heavy_consensus_markets\".\"band\", \"public\".\"heavy_consensus_markets\".\"outcome\", \"public\".\"heavy_consensus_markets\".\"computedAt\"",
+    "expectLabel": "Heavy Consensus upsert",
+    "expectFlags": []
+  },
+  {
+    "name": "Heavy Consensus history, all history (backfill script)",
+    "run": "95c88d8+per-user",
+    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"userId\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"datePosted\", \"public\".\"picks\".\"sportId\" FROM \"public\".\"picks\" LEFT JOIN \"public\".\"cappers\" AS \"j1\" ON (\"j1\".\"id\") = (\"public\".\"picks\".\"capperId\") WHERE (\"public\".\"picks\".\"period\" = CAST($1::text AS \"public\".\"Period\") AND \"public\".\"picks\".\"betType\" IN (CAST($2::text AS \"public\".\"BetType\"),CAST($3::text AS \"public\".\"BetType\"),CAST($4::text AS \"public\".\"BetType\")) AND \"public\".\"picks\".\"status\" <> CAST($5::text AS \"public\".\"PickStatus\") AND \"public\".\"picks\".\"gameTime\" < $6 AND (\"j1\".\"isTest\" = $7 AND (\"j1\".\"id\" IS NOT NULL))) OFFSET $8",
+    "expectLabel": "Heavy Consensus history (nightly / backfill)",
+    "expectFlags": []
   }
 ];

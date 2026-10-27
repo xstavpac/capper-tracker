@@ -157,7 +157,7 @@ export function GameDetailPanel({
   heavyRate = null,
 }: {
   data: GridLiveGamePanelData;
-  // The pooled Heavy Consensus hit rate; null / absent shows no pill.
+  // The viewer's own Heavy Consensus hit rate; null / absent shows no pill.
   heavyRate?: HeavyConsensusRate | null;
   // The game as the Parlay slip names it, for "Target game" in slip mode.
   slipGame?: SlipGame & GameClock;

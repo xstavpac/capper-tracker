@@ -107,6 +107,10 @@ expect(
     "Grading pending",
     "Grading pending legs",
     "Grading sport lookup",
+    "Heavy Consensus history (nightly / backfill)",
+    "Heavy Consensus rate (per user)",
+    "Heavy Consensus stored ids",
+    "Heavy Consensus upsert",
     "NFL roster names (bulk import)",
     "NFL team stat upsert",
     "Odds for tendencies",
@@ -201,13 +205,14 @@ const fixture = (name: string) => {
 // ---- 4b. Expected-heavy cron reads (rows 1, 5, 8 of the 2026-10-19 prod top 30, and the roster refresh) ----
 {
   expect(
-    "exactly the four daily full-history reads are expected-heavy, at the configured ceiling",
+    "exactly the five daily cron reads (four full-history, plus Heavy Consensus's nightly window) are expected-heavy, at the configured ceiling",
     STATEMENT_LABELS.filter((l) => l.expected).map((l) => [l.label, l.expected!.maxAvgRows, l.expected!.note]),
     [
       ["Odds for tendencies", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
       ["Game observations (model)", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
       ["Decay-delta persisted ids", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
       ["Roster refresh diff", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
+      ["Heavy Consensus history (nightly / backfill)", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
     ]
   );
   expect("ceiling 5,000, note as agreed", [EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE], [5000, "expected (daily cron, full history)"]);
