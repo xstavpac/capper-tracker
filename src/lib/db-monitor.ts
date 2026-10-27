@@ -482,10 +482,10 @@ export const STATEMENT_LABELS: StatementLabel[] = [
   },
   // ---- Capper merge, build-time migrations ----
   {
-    // mergeCappers reads the kept and the moved capper's picks inside its transaction: one
+    // The capper merge reads the kept and the moved capper's picks inside its transaction: one
     // statement shape for both (userId + capperId, id order, no LIMIT).
     label: "Capper merge (pick read)",
-    source: "mergeCappers (cappers.ts, Merge cappers on /cappers)",
+    source: "the Merge cappers action on /cappers (cappers.ts): the kept and the moved capper's picks, read in its transaction",
     matches: (s) =>
       reads(s, "picks") && whereIs(s, /^"picks"\."userId" = \$\d+ AND "picks"\."capperId" = \$\d+$/) && has(s, /ORDER BY "picks"\."id" ASC/) && !s.hasLimit,
   },

@@ -650,7 +650,7 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "expectFlags": []
   },
   {
-    "name": "mergeCappers pick read (prod DB Monitor text, 2026-10-27)",
+    "name": "capper merge pick read (prod DB Monitor text, 2026-10-27)",
     "run": "prod-2026-10-27",
     "sql": "SELECT \"public\".\"picks\".\"id\" FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"userId\" = $1 AND \"public\".\"picks\".\"capperId\" = $2) ORDER BY \"public\".\"picks\".\"id\" ASC OFFSET $3",
     "expectLabel": "Capper merge (pick read)",
