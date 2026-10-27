@@ -387,7 +387,7 @@ export function recoverUnresolvedLines(
         capperName,
         sportName: res.sport,
         description: withGameNumberSuffix(
-          res.via === "fuzzy" ? withRosterName(parsed.cleanDescription, nhlTyped, res.playerName) : parsed.cleanDescription,
+          res.via === "fuzzy" || (res.via === "surname" && /\s/.test(nhlTyped)) ? withRosterName(parsed.cleanDescription, nhlTyped, res.playerName) : parsed.cleanDescription,
           gameNumber
         ),
         betType: parsed.betType,
@@ -481,7 +481,7 @@ export function recoverUnresolvedLines(
           continue;
         }
         team = res.team;
-        if (res.via === "fuzzy") rosterName = res.playerName;
+        if (res.via === "fuzzy" || (res.via === "surname" && /\s/.test(typed))) rosterName = res.playerName;
       }
 
       const parsed = parsePickText(lineForParsing);
