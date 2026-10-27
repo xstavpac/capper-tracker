@@ -12,6 +12,9 @@ import { captureSituationalRateSnapshots } from "@/server/data/situational-snaps
 import { syncDecayDeltaPredictions } from "@/server/data/model-engine/decay-delta-predictions";
 import { isTendencyPipelineEnabled, runTendencyPhase, tendencyPipelineSkippedLog } from "@/lib/tendency-pipeline";
 import { runCronLogged } from "@/server/data/cron-runs";
+import { recomputeHeavyConsensusMarkets } from "@/server/data/heavy-consensus";
+import { cacheKeys } from "@/lib/cache-keys";
+import { revalidateTag } from "next/cache";
 
 const MLB_SPORT_KEY = "baseball_mlb";
 const NFL_SPORT_KEY = "americanfootball_nfl";
@@ -146,6 +149,21 @@ async function run(): Promise<Response> {
   // Paused with the tendency steps: it reads the tendency snapshots they write.
   const decayDeltaPredictions = pipelineEnabled ? await syncDecayDeltaPredictions(MLB_SPORT_KEY) : null;
 
+  // The Live tab's Heavy Consensus history (lib/heavy-consensus.ts): the last
+  // few Eastern dates' markets recomputed from the picks as graded now, then the
+  // pooled hit rate's cache dropped so the next Live load reads the new number.
+  // Not part of the tendency pipeline, so never paused with it. Last, and on its
+  // own catch: a failure here leaves the previous rate showing and must not cost
+  // the steps above their run.
+  let heavyConsensus: Awaited<ReturnType<typeof recomputeHeavyConsensusMarkets>> | { error: string };
+  try {
+    heavyConsensus = await recomputeHeavyConsensusMarkets();
+    revalidateTag(cacheKeys.heavyConsensusRate());
+  } catch (err) {
+    heavyConsensus = { error: err instanceof Error ? err.message : String(err) };
+    console.error("refresh-scores: heavy consensus recompute failed", err);
+  }
+
   // Measurement only (see docs/m9-team-tendencies.md). One line per run so the
   // tendency-recompute scan size and per-phase timing are queryable from
   // Vercel runtime logs without opening each response body.
@@ -170,6 +188,7 @@ async function run(): Promise<Response> {
     nflRecordSnapshots,
     nflSituationalSnapshots,
     decayDeltaPredictions,
+    heavyConsensus,
     tendencyPipeline: pipelineEnabled ? "enabled" : "paused",
   });
 }

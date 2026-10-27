@@ -91,9 +91,13 @@ const T = (iso: string) => new Date(iso);
     nflRecordSnapshots: 32,
     nflSituationalSnapshots: 192,
     decayDeltaPredictions: { graded: { newlyPersisted: 5 }, pregame: { newlyPersisted: 7 } },
+    heavyConsensus: { fromDate: "2026-10-17", picksRead: 400, markets: 4, upserted: 4, deleted: 1 },
   });
-  expect("refresh-scores: rows = every write count (errors not counted)", [rs.status, rs.rowsTouched], ["OK", 3 + 30 + 30 + 30 + 12 + 28 + 32 + 192 + 12]);
+  expect("refresh-scores: rows = every write count (errors not counted)", [rs.status, rs.rowsTouched], ["OK", 3 + 30 + 30 + 30 + 12 + 28 + 32 + 192 + 12 + 4 + 1]);
   expect("refresh-scores: NFL snapshot errors kept in the summary", rs.summary?.nflTeamSnapshotErrors, 1);
+  expect("refresh-scores: heavy consensus writes in the summary", [rs.summary?.heavyConsensusUpserted, rs.summary?.heavyConsensusDeleted, rs.summary?.heavyConsensusFailed], [4, 1, 0]);
+  const rsFailed = outcomeFromResponse("refresh-scores", 200, { ok: true, results: [], heavyConsensus: { error: "boom" } });
+  expect("refresh-scores: a failed heavy consensus recompute is flagged, not counted as a write", [rsFailed.rowsTouched, rsFailed.summary?.heavyConsensusFailed], [0, 1]);
 
   const ro = outcomeFromResponse("refresh-odds", 500, {
     ok: false,

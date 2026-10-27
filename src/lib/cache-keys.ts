@@ -22,6 +22,11 @@ export const cacheKeys = {
   // by all users (see feature-flags.ts). Nothing writes flags at request time
   // (they are flipped in SQL), so there is no revalidateTag for it: TTL only.
   featureFlags: () => "feature-flags:all",
+  // The Live tab's pooled Heavy Consensus hit rate - one entry shared by all
+  // users (the rate pools every viewer's history). Written only by the nightly
+  // recompute in refresh-scores, which revalidates this tag after it runs; the
+  // one-off backfill script has no Next context and relies on the TTL.
+  heavyConsensusRate: () => "heavy-consensus-rate:all",
   // One /cappers panel at one window for one user (the dropdown fetch, api/cappers/panel).
   cappersPanel: (userId: string, panel: string, window: string) => `cappers-panel:${userId}:${panel}:${window}`,
   // Dated: the underlying OddsSnapshot row is itself (sportKey, fetchDate)-

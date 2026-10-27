@@ -142,8 +142,12 @@ const SUMMARIZE: Record<CronName, (b: any) => { rowsTouched: number; summary: Re
       nflRecordSnapshots: num(b.nflRecordSnapshots),
       nflSituationalSnapshots: num(b.nflSituationalSnapshots),
       decayDeltaPersisted: num(b.decayDeltaPredictions?.graded?.newlyPersisted) + num(b.decayDeltaPredictions?.pregame?.newlyPersisted),
+      heavyConsensusUpserted: num(b.heavyConsensus?.upserted),
+      heavyConsensusDeleted: num(b.heavyConsensus?.deleted),
+      // 1 when the recompute threw (the route catches it, so the run itself is still OK).
+      heavyConsensusFailed: b.heavyConsensus?.error ? 1 : 0,
     };
-    const { nflTeamSnapshotErrors: _e, ...written } = summary;
+    const { nflTeamSnapshotErrors: _e, heavyConsensusFailed: _h, ...written } = summary;
     return { rowsTouched: Object.values(written).reduce((a, v) => a + v, 0), summary: { ...summary, ...gameResultChangeSummary(r) } };
   },
   "refresh-odds": (b) => {
