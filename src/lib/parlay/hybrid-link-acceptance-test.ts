@@ -60,6 +60,30 @@ const none = () => null;
 }
 
 // ============================================================================
+// 3-leg box: alt spread + alt Over + alt Under on ONE event, each at its exact line
+// ============================================================================
+{
+  const legs = [leg("NBA1", "alternate_spreads", WARRIORS, 19.5), leg("NBA1", "alternate_totals", "Over", 218.5), leg("NBA1", "alternate_totals", "Under", 248.5)];
+  const parsed = parseHybridLinkLegs(legs, new Set(["basketball_nba"]));
+  check("3-leg box: Over and Under on one game parse (not a duplicate)", Array.isArray(parsed) && parsed.length, 3);
+  const r = buildHybridLink(legs, NBA_LADDERS, none);
+  const sp = outcome(nba, "alternate_spreads", WARRIORS, 19.5);
+  const ov = outcome(nba, "alternate_totals", "Over", 218.5);
+  const un = outcome(nba, "alternate_totals", "Under", 248.5);
+  const mid = (o: AltLadderOutcome) => new URL(o.link!).searchParams.get("marketId")!;
+  check("3-leg box: all three matched", r.legs.map((l) => l.status), ["matched", "matched", "matched"]);
+  check(
+    "3-leg box: one betslip with all three exact selections",
+    decoded(r.url),
+    `${FANDUEL_BETSLIP_URL}?marketId[0]=${mid(sp)}&selectionId[0]=${sp.sid}&marketId[1]=${mid(ov)}&selectionId[1]=${ov.sid}&marketId[2]=${mid(un)}&selectionId[2]=${un.sid}`
+  );
+  check("3-leg box: FanDuel's prices back, exact lines", r.legs.map((l) => l.status === "matched" && [l.leg.point, l.price]), [[19.5, sp.price], [218.5, ov.price], [248.5, un.price]]);
+  // A pulled Under withholds the whole slip.
+  const pulled: AltLadderResult = { NBA1: { ...NBA_LADDERS.NBA1, alternate_totals: ladderOf(nba, "alternate_totals", { edit: (o) => o.filter((x) => !(x.name === "Under" && x.point === 248.5)) }) } };
+  check("3-leg box: a pulled Under -> no url", buildHybridLink(legs, pulled, none).url, null);
+}
+
+// ============================================================================
 // Exact point or nothing: a moved line builds no link and reports the nearest
 // ============================================================================
 {
