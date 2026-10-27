@@ -45,11 +45,19 @@ export function recordText(record: LegRecord | null, basis: EngineLeg["basis"], 
   return base;
 }
 
-function LegRow({ n, pick, record, mine, sgp, children }: { n: number; pick: ExpanderPick; record: { text: string; winPct: number | null }; mine: boolean; sgp: boolean; children?: ReactNode }) {
+// A leg the open variant swapped in: a 1.5px accent frame (an inset ring, so
+// the thicker edge moves nothing), a faint accent wash, and a soft halo. The
+// -mx/px pair pushes the frame out 10px and keeps the text where it was; the
+// panel's 14px padding holds the frame and halo. The frame alone is the signal.
+const SWAPPED_FRAME =
+  "-mx-2.5 rounded-xl px-2.5 bg-brand-600/[0.06] ring-[1.5px] ring-inset ring-brand-600 shadow-[0_0_0_3px_var(--tw-shadow-color)] shadow-brand-600/[0.12] dark:bg-brand-400/[0.08] dark:ring-brand-400 dark:shadow-brand-400/[0.12]";
+const SWAPPED_TEXT = "text-brand-700 dark:text-brand-300";
+
+function LegRow({ n, pick, record, mine, sgp, swappedBy, children }: { n: number; pick: ExpanderPick; record: { text: string; winPct: number | null }; mine: boolean; sgp: boolean; swappedBy?: string; children?: ReactNode }) {
   const tone = record.winPct === null ? MUTED : getRecordColor(record.winPct) === "green" ? GREEN : RED;
   const live = isGameLive(pick, new Date());
   return (
-    <li className="flex gap-3 py-3">
+    <li className={"flex gap-3 py-3 " + (swappedBy ? SWAPPED_FRAME : "")}>
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-banner text-xs font-bold tabular-nums text-white">{n}</span>
       <div className="min-w-0 flex-1">
         <p className={LABEL}>
@@ -64,8 +72,11 @@ function LegRow({ n, pick, record, mine, sgp, children }: { n: number; pick: Exp
           )}
         </p>
         <div className="mt-0.5 flex items-baseline justify-between gap-3">
-          <p className="min-w-0 text-[15px] font-bold leading-snug text-foreground [overflow-wrap:anywhere]">{pick.betDetail}</p>
-          <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatOdds(pick.odds)}</p>
+          <p className={"min-w-0 text-[15px] font-bold leading-snug [overflow-wrap:anywhere] " + (swappedBy ? SWAPPED_TEXT : "text-foreground")}>
+            {swappedBy && <span className="sr-only">Swapped by {swappedBy}: </span>}
+            {pick.betDetail}
+          </p>
+          <p className={"shrink-0 text-sm font-semibold tabular-nums " + (swappedBy ? SWAPPED_TEXT : "text-foreground")}>{formatOdds(pick.odds)}</p>
         </div>
         <p className="text-xs font-medium text-muted-foreground">
           <Link href={"/cappers/" + pick.capperId} className="text-foreground hover:underline">
@@ -109,7 +120,7 @@ function SwapLegRow({ n, leg, mode }: { n: number; leg: EngineSwapLeg; mode: Eng
   }
   const { swap } = leg;
   return (
-    <LegRow n={n} pick={swap.pick} record={{ text: recordText(swap.record, swap.basis ?? "MARKET", swap.pick), winPct: swap.record.winPct }} mine={false} sgp={original.sameGame}>
+    <LegRow n={n} pick={swap.pick} record={{ text: recordText(swap.record, swap.basis ?? "MARKET", swap.pick), winPct: swap.record.winPct }} mine={false} sgp={original.sameGame} swappedBy={SWAP_COPY[mode].title}>
       <p className={NOTE}>
         Replaces <span className="line-through">{original.pick.betDetail}</span> · {original.pick.capperName}
       </p>
