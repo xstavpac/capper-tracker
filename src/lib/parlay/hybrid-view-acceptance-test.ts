@@ -11,16 +11,24 @@ import {
   combinedPrice,
   consensusLine,
   crossGameText,
+  clampTotalLegs,
   DEFAULT_FORM,
   FAR_TARGET_TEXT,
   formatPrice,
+  BUDGET_NOTE,
+  canSendToFanDuel,
+  deliveryView,
   GENERIC_ERROR,
   hybridFor,
+  isMultiBox,
   IN_TARGET_TEXT,
+  boxesInTargetText,
+  boxLegsPatch,
+  boxViews,
   legViews,
   linkLegs,
   linkView,
-  maxLegsFor,
+  minTotalLegs,
   normalizePriceText,
   oddsAsOfText,
   pageState,
@@ -28,7 +36,10 @@ import {
   priceMoves,
   reasonLine,
   staleText,
+  TARGET_ODDS_PER_GAME_HINT,
+  targetOddsLabel,
   targetStatus,
+  TOTAL_LEGS_HINT,
   type HybridForm,
   type PageInput,
 } from "@/lib/parlay/hybrid-view";
@@ -141,16 +152,25 @@ check("combined exact (cross-game)", combinedPrice(hybrid({ isEstimate: false, c
 // ---- The form -> settings ----
 
 const form = (over: Partial<HybridForm> = {}): HybridForm => ({ ...DEFAULT_FORM, ...over });
-check("defaults are -140 / -110, balanced, Total Legs Auto (cap 3), 55%", buildSettings(form()), { ok: true, settings: { targetMin: -140, targetMax: -110, width: "balanced", perLegRange: null, maxLegs: 3, minWinPct: 55, boxLegs: "auto" } });
+check("defaults are -140 / -110, balanced, Legs per game Auto, Total legs 3, 55%", buildSettings(form()), { ok: true, settings: { targetMin: -140, targetMax: -110, width: "balanced", perLegRange: null, maxLegs: 3, minWinPct: 55, boxLegs: "auto" } });
 
-// ---- Total Legs: 2 · 3 · Auto ----
-check("Total Legs options read 2 Legs · 3 Legs · Auto", BOX_LEGS_OPTIONS.map((o) => o.label), ["2 Legs", "3 Legs", "Auto"]);
-check("the leg cap comes from Total Legs alone: 2 -> 2, 3 -> 3, Auto -> 3", [maxLegsFor("2"), maxLegsFor("3"), maxLegsFor("auto")], [2, 3, 3]);
-const capOf = (over: Partial<HybridForm>) => (buildSettings(form(over)) as { settings: { maxLegs: number; boxLegs: string } }).settings;
-check("Total Legs 2 sends 2 legs", [capOf({ boxLegs: "2" }).boxLegs, capOf({ boxLegs: "2" }).maxLegs], ["2", 2]);
-check("Total Legs 3 sends 3 legs", [capOf({ boxLegs: "3" }).boxLegs, capOf({ boxLegs: "3" }).maxLegs], ["3", 3]);
-check("Total Legs Auto sends 3 legs of room", [capOf({ boxLegs: "auto" }).boxLegs, capOf({ boxLegs: "auto" }).maxLegs], ["auto", 3]);
-check("the form no longer carries a Max legs value, so a stale one is ignored", capOf({ boxLegs: "2", ...({ maxLegs: 4 } as object) }).maxLegs, 2);
+// ---- Legs per game: 2 · 3 · Auto, and Total legs: the cap ----
+check("Legs per game options read 2 Legs · 3 Legs · Auto", BOX_LEGS_OPTIONS.map((o) => o.label), ["2 Legs", "3 Legs", "Auto"]);
+const capOf = (over: Partial<HybridForm>) => {
+  const s = (buildSettings(form(over)) as { settings: { maxLegs: number; boxLegs: string } }).settings;
+  return { maxLegs: s.maxLegs, boxLegs: s.boxLegs };
+};
+check("Total legs defaults to 3, the old behaviour", [DEFAULT_FORM.maxLegs, capOf({}).maxLegs], [3, 3]);
+check("the stepper value is what is sent, with Legs per game beside it", [capOf({ boxLegs: "2", maxLegs: 2 }), capOf({ boxLegs: "auto", maxLegs: 15 }), capOf({ boxLegs: "3", maxLegs: 25 })], [{ maxLegs: 2, boxLegs: "2" }, { maxLegs: 15, boxLegs: "auto" }, { maxLegs: 25, boxLegs: "3" }]);
+check("the range is 2 to 25 whatever the form holds", [capOf({ maxLegs: 1 }).maxLegs, capOf({ maxLegs: 99 }).maxLegs, capOf({ maxLegs: 7.9 }).maxLegs, capOf({ maxLegs: NaN }).maxLegs], [2, 25, 7, 2]);
+check("3 Legs needs at least 3 total legs; 2 Legs and Auto allow 2", [minTotalLegs("3"), minTotalLegs("2"), minTotalLegs("auto")], [3, 2, 2]);
+check("clampTotalLegs: 3 Legs lifts 2 to 3", [clampTotalLegs(2, "3"), clampTotalLegs(2, "auto"), clampTotalLegs(30, "2")], [3, 2, 25]);
+check("choosing 3 Legs lifts a Total legs of 2 to 3", boxLegsPatch({ maxLegs: 2 }, "3"), { boxLegs: "3", maxLegs: 3 });
+check("choosing 3 Legs leaves a bigger cap alone", boxLegsPatch({ maxLegs: 15 }, "3"), { boxLegs: "3", maxLegs: 15 });
+check("choosing 2 Legs or Auto never moves Total legs", [boxLegsPatch({ maxLegs: 2 }, "auto").maxLegs, boxLegsPatch({ maxLegs: 9 }, "2").maxLegs], [2, 9]);
+check("a 3-leg choice with a cap of 2 can never be sent", capOf({ boxLegs: "3", maxLegs: 2 }).maxLegs, 3);
+check("Target odds reads (per game) from 4 total legs", [targetOddsLabel(2), targetOddsLabel(3), targetOddsLabel(4), targetOddsLabel(25)], ["Target odds", "Target odds", "Target odds (per game)", "Target odds (per game)"]);
+check("the helper texts say cap, whole games, one box per game", [TOTAL_LEGS_HINT.includes("cap"), TOTAL_LEGS_HINT.includes("whole games"), TOTAL_LEGS_HINT.includes("one per game"), TARGET_ODDS_PER_GAME_HINT.includes("each game") || TARGET_ODDS_PER_GAME_HINT.includes("Each game")], [true, true, true, true]);
 check("positive targets accepted", buildSettings(form({ targetMin: "+100", targetMax: "+150" })).ok, true);
 check("a range across the sign accepted", buildSettings(form({ targetMin: "-110", targetMax: "+120" })).ok, true);
 check("min above max is an error on the target field", Object.keys((buildSettings(form({ targetMin: "-110", targetMax: "-140" })) as { errors: object }).errors), ["target"]);
@@ -218,12 +238,12 @@ check("state: done without a response is an error, not a crash", pageState(page(
 check(
   "state: in-target result",
   pageState(page()),
-  { kind: "result", flags: { outsideTarget: false, crossGame: false, skippedGames: [], pricingGames: [], unavailableGames: [], stale: false } }
+  { kind: "result", flags: { outsideTarget: false, crossGame: false, skippedGames: [], pricingGames: [], unavailableGames: [], stale: false, budgetLimited: false } }
 );
 check(
   "state: no fit",
   pageState(page({ response: response({ primary: hybrid({ inTarget: false, combinedAmerican: -250 }) }) })),
-  { kind: "no-fit", flags: { outsideTarget: true, crossGame: false, skippedGames: [], pricingGames: [], unavailableGames: [], stale: false } }
+  { kind: "no-fit", flags: { outsideTarget: true, crossGame: false, skippedGames: [], pricingGames: [], unavailableGames: [], stale: false, budgetLimited: false } }
 );
 check("state: cross-game fallback", (pageState(page({ response: response({ primary: hybrid({ structure: "cross-game", isEstimate: false }) }) })) as { flags: { crossGame: boolean } }).flags.crossGame, true);
 check("cross-game wording, two legs", crossGameText(hybrid({ structure: "cross-game" })), "No game has qualifying consensus on both a side and a total. Built from two different games, so the price is exact.");
@@ -306,6 +326,56 @@ check("stale text with a time", staleText("2026-10-27T15:12:00.000Z", clock), "F
 check("stale text without a time", staleText(null, clock), "FanDuel's odds couldn't be refreshed - try again.");
 check("a stale leg never leaks a raw ISO string", (linkView(hybrid(), link({ url: null, anyStale: true, staleAsOf: "2026-10-27T15:12:00.000Z", legs: [staleGone, matched(1, -150)] }), RANGE, clock) as { lines: string[] }).lines.some((l) => /d{4}-d{2}-d{2}T/.test(l)), false);
 check("plain hyphen-minus everywhere: no U+2212 in any price", [formatPrice(-135), targetStatus(-143, RANGE).text, combinedPrice(hybrid()).text, legViews(hybrid())[0].price].some((t) => t.includes("−")), false);
+
+// ---- A multi-box result: delivery, one row per game, the flags, the FanDuel limit ----
+
+const gameLegs = (id: string, home: string, away: string) => [
+  leg({ positionKey: id + "s", eventId: id, homeTeam: home, awayTeam: away }),
+  { ...OVER, positionKey: id + "t", eventId: id, homeTeam: home, awayTeam: away },
+];
+const boxOf = (id: string, home: string, away: string, over: Partial<Hybrid> = {}): Hybrid => hybrid({ legs: gameLegs(id, home, away), ...over });
+const multi = (boxes: Hybrid[], over: Partial<Hybrid> = {}): Hybrid =>
+  hybrid({
+    structure: "multi-box",
+    legs: boxes.flatMap((b) => b.legs),
+    boxes,
+    combinedAmerican: 265,
+    boxDescription: boxes.map((b) => b.boxDescription).join(" · "),
+    inTarget: boxes.every((b) => b.inTarget),
+    ...over,
+  });
+const m3 = multi([boxOf("A", "Lions", "Bears"), boxOf("B", "Packers", "Vikings", { inTarget: false, combinedAmerican: -151 }), boxOf("C", "Jets", "Bills")]);
+check("isMultiBox: only the multi-box structure with boxes", [isMultiBox(m3), isMultiBox(hybrid()), isMultiBox(hybrid({ structure: "multi-box" }))], [true, false, false]);
+const rows = boxViews(m3, RANGE);
+check("one row per game, in box order, with the game's name", rows.map((r) => r.game), ["NFL · Bears @ Lions", "NFL · Vikings @ Packers", "NFL · Bills @ Jets"]);
+check("each row has its own two legs", rows.map((r) => r.legs.length), [2, 2, 2]);
+check("each row carries its own price, an estimate with two legs on a game", rows[0].price, { text: "≈ " + M + "118", note: "FanDuel shows final price" });
+check("the box outside the band is flagged on its own row", rows.map((r) => r.status.kind === "in"), [true, false, true]);
+check("in-target rows say so", rows[0].status.text, IN_TARGET_TEXT);
+check("the combined price is the estimate, labelled", combinedPrice(m3), { text: "≈ +265", note: "FanDuel shows final price" });
+check("the combined row counts boxes in target, not its own band", boxesInTargetText(m3), { kind: "far", text: "2 of 3 games in your target" });
+check("all boxes in target", boxesInTargetText(multi([boxOf("A", "Lions", "Bears"), boxOf("C", "Jets", "Bills")])), { kind: "in", text: "✓ All 2 games in your target" });
+check("an exact combined price (no estimate) is shown plain", combinedPrice(multi([boxOf("A", "Lions", "Bears")], { isEstimate: false })), { text: "+265", note: null });
+
+const delivery = (over: Partial<{ requestedLegs: number; deliveredLegs: number; boxes: number; qualifyingGames: number; shortOfGames: boolean }>) => ({ requestedLegs: 15, deliveredLegs: 14, boxes: 7, qualifyingGames: 9, shortOfGames: false, ...over });
+check("delivery: under 4 total legs there is no delivery line (today's look)", [deliveryView(delivery({ requestedLegs: 2, deliveredLegs: 2 })), deliveryView(delivery({ requestedLegs: 3, deliveredLegs: 2 }))], [null, null]);
+check("delivery: fewer games than the cap says why", deliveryView(delivery({ deliveredLegs: 6, boxes: 3, qualifyingGames: 3, shortOfGames: true })), { text: "Delivered 6 of 15 legs · only 3 games qualified", short: true });
+check("delivery: one qualifying game reads singular", deliveryView(delivery({ deliveredLegs: 2, boxes: 1, qualifyingGames: 1, shortOfGames: true }))?.text, "Delivered 2 of 15 legs · only 1 game qualified");
+check("delivery: a leg short of the cap because boxes are whole", deliveryView(delivery({})), { text: "Delivered 14 of 15 legs · boxes are whole games", short: false });
+check("delivery: the cap met exactly", deliveryView(delivery({ requestedLegs: 14, deliveredLegs: 14 })), { text: "Delivered 14 of 14 legs", short: false });
+check("delivery: no qualifying game at all (the cross-game pair) just counts legs", deliveryView(delivery({ deliveredLegs: 2, boxes: 0, qualifyingGames: 0, shortOfGames: true })), { text: "Delivered 2 of 15 legs · only 0 games qualified".replace(" · only 0 games qualified", ""), short: true });
+
+check("FanDuel: 4 or fewer legs can be sent", [canSendToFanDuel(hybrid(), true), canSendToFanDuel(multi([boxOf("A", "Lions", "Bears"), boxOf("C", "Jets", "Bills")]), true)], [true, true]);
+check("FanDuel: more than 4 legs can't, whatever the response says", [canSendToFanDuel(m3, true), canSendToFanDuel(m3, false), canSendToFanDuel(hybrid(), false)], [false, false, false]);
+check("FanDuel: an older response with no flag falls back to the leg count", [canSendToFanDuel(hybrid(), undefined), canSendToFanDuel(m3, undefined)], [true, false]);
+
+const budgetNote = (cause: "budget" | "usage-gate" | "api-failure"): HybridEventNote => ({ ...note("ladders-unavailable", "E9", "A @ B"), cause });
+const flagsOf = (notes: HybridEventNote[]) => (pageState(page({ response: response({ primary: m3 }, notes) })) as { flags: { budgetLimited: boolean; unavailableGames: string[] } }).flags;
+check("flags: a budget skip is called out", [flagsOf([budgetNote("budget")]).budgetLimited, flagsOf([budgetNote("usage-gate")]).budgetLimited], [true, true]);
+check("flags: an API failure is not the budget", [flagsOf([budgetNote("api-failure")]).budgetLimited, flagsOf([budgetNote("api-failure")]).unavailableGames], [false, ["A @ B"]]);
+check("flags: no notes, no budget message", flagsOf([]).budgetLimited, false);
+check("the budget message says what happened", BUDGET_NOTE.includes("used up") && BUDGET_NOTE.includes("skipped"), true);
+check("a multi-box primary that misses its boxes' bands reads as a no-fit state, not an error", pageState(page({ response: response({ primary: multi([boxOf("B", "Packers", "Vikings", { inTarget: false })]) }) })).kind, "no-fit");
 
 if (failures > 0) {
   console.log(`\n${failures} FAILED`);

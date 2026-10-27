@@ -8,7 +8,8 @@
 //   - the box in plain words (and a fallback when the optimizer sent none)
 //   - one compact line per leg: pick + price, consensus, reason
 //   - which state the page is in (idle .. result), from the action's response
-//   - Total Legs: 2 · 3 · Auto, the one source of the leg count (maxLegsFor)
+//   - Legs per game: 2 · 3 · Auto (boxLegs), and Total legs: a 2-25 cap on the whole
+//     parlay (maxLegs); a multi-box result: delivery, one row per game's box
 //   - the Send to FanDuel outcome: the link legs, "no longer posted", and the
 //     price-moved diff with the re-priced combined estimate
 //
@@ -16,20 +17,23 @@
 import { combineOdds, decimalToAmerican, hasUsablePrice } from "@/lib/parlay/combine-odds";
 import {
   distanceToBand,
+  HYBRID_DEFAULT_MAX_LEGS,
   HYBRID_DEFAULT_TARGET_MAX,
   HYBRID_DEFAULT_TARGET_MIN,
+  HYBRID_MAX_LEGS,
   HYBRID_MIN_LEG_PRICE,
   impliedProbability,
   jointImplied,
   targetBand,
   type Hybrid,
   type HybridBoxLegs,
+  type HybridDelivery,
   type HybridLeg,
   type HybridWidth,
   type PricedLeg,
 } from "@/lib/parlay/hybrid";
 import type { HybridGenerateSettings } from "@/lib/parlay/hybrid-request";
-import { STALE_REASON, type HybridLinkLegInput, type HybridLinkResponse } from "@/lib/parlay/hybrid-link";
+import { HYBRID_LINK_MAX_LEGS, STALE_REASON, type HybridLinkLegInput, type HybridLinkResponse } from "@/lib/parlay/hybrid-link";
 import { GATE_DEFAULT } from "@/lib/parlay/gate";
 import type { HybridEventNote, HybridGenerateResponse } from "@/server/data/hybrid-generate";
 
@@ -50,6 +54,8 @@ export const IN_TARGET_TEXT = "✓ In your target";
 export const FAR_TARGET_TEXT = "Closest match · outside your range";
 // The consensus line of a 3-leg box's third leg, which has no cappers of its own.
 export const OPPOSITE_LEG_TEXT = "Boxes the total from the other side";
+export const BUDGET_NOTE = "Today's FanDuel price lookups are used up, so some games were skipped. Games with prices on file are still used.";
+export const LINK_TOO_MANY_TEXT = "Send to FanDuel isn't available yet for more than 4 legs. Place this parlay's legs on FanDuel by hand.";
 
 // ---- Prices ----
 
@@ -82,7 +88,10 @@ export type HybridForm = {
   targetMin: string;
   targetMax: string;
   width: HybridWidth;
+  // Legs per game: 2 · 3 · Auto.
   boxLegs: HybridBoxLegs;
+  // Total legs: a cap on the whole parlay, 2-25.
+  maxLegs: number;
   minWinPct: number;
   // The per-leg price range sits behind "Advanced" and is off by default.
   advanced: boolean;
@@ -95,6 +104,7 @@ export const DEFAULT_FORM: HybridForm = {
   targetMax: formatPrice(HYBRID_DEFAULT_TARGET_MAX),
   width: "balanced",
   boxLegs: "auto",
+  maxLegs: HYBRID_DEFAULT_MAX_LEGS,
   minWinPct: GATE_DEFAULT,
   advanced: false,
   legMin: "",
@@ -120,10 +130,10 @@ export function buildSettings(form: HybridForm): { ok: true; settings: HybridGen
     else perLegRange = { min, max };
   }
   if (errors.target || errors.perLeg || targetMin === null || targetMax === null) return { ok: false, errors };
-  return { ok: true, settings: { targetMin, targetMax, width: form.width, perLegRange, maxLegs: maxLegsFor(form.boxLegs), minWinPct: form.minWinPct, boxLegs: form.boxLegs } };
+  return { ok: true, settings: { targetMin, targetMax, width: form.width, perLegRange, maxLegs: clampTotalLegs(form.maxLegs, form.boxLegs), minWinPct: form.minWinPct, boxLegs: form.boxLegs } };
 }
 
-// ---- Total Legs: 2 · 3 · Auto ----
+// ---- Legs per game: 2 · 3 · Auto, and Total legs: the cap ----
 
 export const BOX_LEGS_OPTIONS: { key: HybridBoxLegs; label: string }[] = [
   { key: "2", label: "2 Legs" },
@@ -131,11 +141,29 @@ export const BOX_LEGS_OPTIONS: { key: HybridBoxLegs; label: string }[] = [
   { key: "auto", label: "Auto" },
 ];
 export const BOX_LEGS_HINT = "Auto uses 2 legs when possible and adds a third when needed.";
+export const TOTAL_LEGS_HINT = "A cap, not a target: the parlay is built from whole games' boxes, one per game.";
+// Target odds apply to each game's box once the cap leaves room for more than one.
+export const MULTI_BOX_FROM = 4;
+export const TARGET_ODDS_PER_GAME_HINT = "Each game's box is tuned to this range.";
 
-// The leg cap the request carries, from Total Legs alone: 2 is two legs, 3 and Auto
-// leave room for the box's third leg.
-export function maxLegsFor(boxLegs: HybridBoxLegs): number {
-  return boxLegs === "2" ? 2 : 3;
+export function targetOddsLabel(maxLegs: number): string {
+  return maxLegs >= MULTI_BOX_FROM ? "Target odds (per game)" : "Target odds";
+}
+
+// The fewest total legs a box choice allows: only "3 Legs" needs room for a third.
+export function minTotalLegs(boxLegs: HybridBoxLegs): number {
+  return boxLegs === "3" ? 3 : 2;
+}
+
+// A whole number from the choice's floor to the engine's cap (a bad value falls to the floor).
+export function clampTotalLegs(n: number, boxLegs: HybridBoxLegs): number {
+  const floor = minTotalLegs(boxLegs);
+  return Math.max(floor, Math.min(HYBRID_MAX_LEGS, Math.floor(n) || floor));
+}
+
+// Picking "3 Legs" raises Total legs to 3 when it is below; the other choices leave it.
+export function boxLegsPatch(form: Pick<HybridForm, "maxLegs">, boxLegs: HybridBoxLegs): Pick<HybridForm, "boxLegs" | "maxLegs"> {
+  return { boxLegs, maxLegs: boxLegs === "3" && form.maxLegs < 3 ? 3 : form.maxLegs };
 }
 
 // ---- Target status ----
@@ -222,6 +250,52 @@ export function oddsAsOfText(iso: string | null, formatTime: (iso: string) => st
   return iso ? `Odds as of ${formatTime(iso)}` : null;
 }
 
+// ---- A multi-box result: one row per game's box ----
+
+export function isMultiBox(h: Hybrid): boolean {
+  return h.structure === "multi-box" && (h.boxes?.length ?? 0) > 0;
+}
+
+export type DeliveryView = { text: string; short: boolean };
+
+// "Delivered 6 of 15 legs · only 3 games qualified". Null under the multi-box range (Total legs below 4).
+export function deliveryView(d: HybridDelivery): DeliveryView | null {
+  if (d.requestedLegs < MULTI_BOX_FROM) return null;
+  const head = `Delivered ${d.deliveredLegs} of ${d.requestedLegs} legs`;
+  if (d.shortOfGames && d.qualifyingGames > 0) return { text: `${head} · only ${d.qualifyingGames} game${d.qualifyingGames === 1 ? "" : "s"} qualified`, short: true };
+  if (d.deliveredLegs < d.requestedLegs && !d.shortOfGames) return { text: `${head} · boxes are whole games`, short: false };
+  return { text: head, short: d.shortOfGames };
+}
+
+export type BoxView = { key: string; game: string; description: string; price: { text: string; note: string | null }; status: TargetStatus; legs: LegView[] };
+
+export function boxViews(h: Hybrid, range: { targetMin: number; targetMax: number }): BoxView[] {
+  return (h.boxes ?? []).map((b) => {
+    const first = b.legs[0];
+    return {
+      key: first.eventId,
+      game: `${first.sport} · ${first.awayTeam} @ ${first.homeTeam}`,
+      description: boxText(b),
+      price: combinedPrice(b),
+      status: targetStatus(b.combinedAmerican, range),
+      legs: legViews(b),
+    };
+  });
+}
+
+// The band applies to each box, so the combined price has no target of its own: say how many boxes made it.
+export function boxesInTargetText(h: Hybrid): TargetStatus {
+  const boxes = h.boxes ?? [];
+  const inBand = boxes.filter((b) => b.inTarget).length;
+  if (inBand === boxes.length) return { kind: "in", text: `✓ All ${boxes.length} games in your target` };
+  return { kind: "far", text: `${inBand} of ${boxes.length} games in your target` };
+}
+
+// Send to FanDuel works for up to HYBRID_LINK_MAX_LEGS legs (the response says so; the leg count is the fallback).
+export function canSendToFanDuel(h: Hybrid, linkable: boolean | undefined): boolean {
+  return linkable !== false && h.legs.length <= HYBRID_LINK_MAX_LEGS;
+}
+
 export type HybridCardKey = "primary" | "alt-1" | "alt-2";
 
 export function cardTabs(response: HybridGenerateResponse): { key: HybridCardKey; label: string }[] {
@@ -259,6 +333,8 @@ export type ResultFlags = {
   unavailableGames: string[];
   // The primary rests on prices that couldn't be refreshed.
   stale: boolean;
+  // Some games weren't priced because the daily credit budget or the usage gate stopped it.
+  budgetLimited: boolean;
 };
 
 export type PageState =
@@ -300,6 +376,7 @@ export function pageState(input: PageInput): PageState {
     pricingGames,
     unavailableGames,
     stale: primary.anyStale,
+    budgetLimited: notes.some((n) => n.kind === "ladders-unavailable" && (n.cause === "budget" || n.cause === "usage-gate")),
   };
   return { kind: flags.outsideTarget ? "no-fit" : "result", flags };
 }

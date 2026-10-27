@@ -8,7 +8,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { hybridFanDuelLinkAction } from "@/server/actions/parlay-hybrid";
 import { PanelShell, TINTS } from "@/components/dashboard/panel-shell";
-import { BoltIcon, LayersIcon, SlidersIcon, TrophyIcon, WidthIcon } from "@/components/dashboard/cappers-icons";
+import { BoltIcon, GamepadIcon, LayersIcon, SlidersIcon, TrophyIcon, WidthIcon } from "@/components/dashboard/cappers-icons";
 import { GREEN } from "@/components/dashboard/stat-card";
 import { FilterRow, LABEL, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Section, SettingRow, SettingsBlock, StepperControl, Tabs, TextSegments } from "@/components/parlay/parlay-controls";
 import { IncludePicksChips } from "@/components/parlay/pick-mix-control";
@@ -16,7 +16,7 @@ import { formatGameTime } from "@/components/parlay/generator-result";
 import type { HybridGenerator } from "@/components/parlay/use-hybrid-generator";
 import type { TargetedGame } from "@/lib/parlay/slip-state";
 import { GATE_MAX, GATE_MIN, GATE_STEP } from "@/lib/parlay/gate";
-import type { Hybrid, HybridBoxLegs, HybridWidth } from "@/lib/parlay/hybrid";
+import { HYBRID_MAX_LEGS, type Hybrid, type HybridBoxLegs, type HybridWidth } from "@/lib/parlay/hybrid";
 import type { HybridLinkResponse } from "@/lib/parlay/hybrid-link";
 import type { HybridGenerateSettings } from "@/lib/parlay/hybrid-request";
 import type { HybridGenerateResponse } from "@/server/data/hybrid-generate";
@@ -24,26 +24,41 @@ import {
   ALT_LINES_NOTE,
   BOX_LEGS_HINT,
   BOX_LEGS_OPTIONS,
+  boxesInTargetText,
+  boxLegsPatch,
   boxText,
+  boxViews,
+  BUDGET_NOTE,
+  canSendToFanDuel,
   cardTabs,
   combinedPrice,
   crossGameText,
+  deliveryView,
   FOOTER_NOTE,
   hybridFor,
   hybridGames,
+  isMultiBox,
   legViews,
+  LINK_TOO_MANY_TEXT,
   linkLegs,
   linkView,
+  minTotalLegs,
   MODE_NOTE,
+  MULTI_BOX_FROM,
   normalizePriceText,
   oddsAsOfText,
   PRICING_NOTE,
   SEND_NOTE,
   STALE_NOTE,
+  TARGET_ODDS_PER_GAME_HINT,
+  targetOddsLabel,
   targetStatus,
+  TOTAL_LEGS_HINT,
   UNAVAILABLE_NOTE,
   WIDTH_HINT,
+  type BoxView,
   type HybridCardKey,
+  type LegView,
   type PageState,
 } from "@/lib/parlay/hybrid-view";
 
@@ -214,7 +229,12 @@ export function HybridControls({
       {/* 3 · Line flexibility */}
       <Section n={3} title="Line Flexibility" description="Adjust how far from consensus we can go when building your parlay.">
         <div className="space-y-1">
-          <SettingRow soft icon={<SlidersIcon className="h-5 w-5" />} label="Target odds">
+          <SettingRow
+            soft
+            icon={<SlidersIcon className="h-5 w-5" />}
+            label={targetOddsLabel(form.maxLegs)}
+            note={form.maxLegs >= MULTI_BOX_FROM ? TARGET_ODDS_PER_GAME_HINT : undefined}
+          >
             <PriceField label="Minimum target odds" value={form.targetMin} onChange={(v) => patchForm({ targetMin: v })} invalid={!!errors.target} />
             <span className="px-1 text-sm text-muted-foreground" aria-hidden>
               to
@@ -229,9 +249,22 @@ export function HybridControls({
           <SettingRow soft icon={<WidthIcon className="h-5 w-5" />} label="Line range" note={WIDTH_HINT}>
             <TextSegments<HybridWidth> label="Line range" options={WIDTH_OPTIONS} value={form.width} onChange={(width) => patchForm({ width })} />
           </SettingRow>
-          <SettingRow soft icon={<LayersIcon className="h-5 w-5" />} label="Total legs" note={BOX_LEGS_HINT}>
-            <TextSegments<HybridBoxLegs> label="Total legs" options={BOX_LEGS_OPTIONS} value={form.boxLegs} onChange={(boxLegs) => patchForm({ boxLegs })} />
-          </SettingRow>
+        </div>
+        <div className="mt-2">
+          <SettingsBlock>
+            <SettingRow icon={<GamepadIcon className="h-5 w-5" />} label="Legs per game" note={BOX_LEGS_HINT}>
+              <TextSegments<HybridBoxLegs> label="Legs per game" options={BOX_LEGS_OPTIONS} value={form.boxLegs} onChange={(boxLegs) => patchForm(boxLegsPatch(form, boxLegs))} />
+            </SettingRow>
+            <SettingRow icon={<LayersIcon className="h-5 w-5" />} label="Total legs" note={TOTAL_LEGS_HINT}>
+              <StepperControl
+                label="Total legs"
+                value={form.maxLegs}
+                min={minTotalLegs(form.boxLegs)}
+                max={HYBRID_MAX_LEGS}
+                onChange={(n) => patchForm({ maxLegs: Math.max(minTotalLegs(form.boxLegs), Math.min(HYBRID_MAX_LEGS, n)) })}
+              />
+            </SettingRow>
+          </SettingsBlock>
         </div>
         <div className="mt-2 flex flex-col items-end">
           <button type="button" onClick={() => patchForm({ advanced: !form.advanced })} aria-expanded={form.advanced} className="text-[13px] font-semibold text-brand-600 hover:underline dark:text-brand-400">
@@ -313,6 +346,47 @@ function StatusText({ kind, text }: { kind: "in" | "near" | "far"; text: string 
   return <span className={"text-[13px] font-semibold " + (kind === "in" ? GREEN : "text-muted-foreground")}>{text}</span>;
 }
 
+function LegList({ legs }: { legs: LegView[] }) {
+  return (
+    <ol className="mt-3 divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
+      {legs.map((l, i) => (
+        <li key={l.key + i} className="py-2.5">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="min-w-0 text-[15px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">
+              {l.title}
+              {l.game && <span className="ml-2 text-xs font-medium text-muted-foreground">{l.game}</span>}
+            </p>
+            <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{l.price}</p>
+          </div>
+          <p className="mt-0.5 text-xs font-medium text-muted-foreground">{l.consensus}</p>
+          {l.reason && <p className="text-xs font-medium text-muted-foreground">{l.reason}</p>}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+// One game's box in a multi-box parlay: its own price and its own in-target flag.
+function BoxSection({ box, n }: { box: BoxView; n: number }) {
+  return (
+    <section aria-label={`Game ${n}: ${box.game}`} className="rounded-[12px] border border-[#E6E8EF] px-3.5 py-3 dark:border-border">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <p className="min-w-0 text-xs font-semibold text-muted-foreground [overflow-wrap:anywhere]">
+          {n} · {box.game}
+        </p>
+        <p className="flex flex-wrap items-baseline gap-x-2.5">
+          <span className="text-lg font-semibold tabular-nums text-foreground" aria-label={`Game ${n} price`}>
+            {box.price.text}
+          </span>
+          <StatusText kind={box.status.kind} text={box.status.text} />
+        </p>
+      </div>
+      <p className="mt-1 text-[15px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{box.description}</p>
+      <LegList legs={box.legs} />
+    </section>
+  );
+}
+
 function HybridCard({
   hybrid,
   settings,
@@ -337,6 +411,10 @@ function HybridCard({
   const asOf = oddsAsOfText(hybrid.oddsAsOf, formatGameTime);
   const games = hybridGames(hybrid, formatGameTime);
   const legs = legViews(hybrid);
+  const multi = isMultiBox(hybrid);
+  const boxes = multi ? boxViews(hybrid, settings) : [];
+  const boxesStatus = multi ? boxesInTargetText(hybrid) : null;
+  const delivery = cardKey === "primary" ? deliveryView(response.result.delivery) : null;
   return (
     <div className="mt-1">
       {hybrid.anyStale && (
@@ -352,39 +430,38 @@ function HybridCard({
       )}
 
       <p className="mt-3 text-[18px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{boxText(hybrid)}</p>
-      <p className="mt-1 text-xs font-medium text-muted-foreground">{games.map((g) => g.text).join("  ·  ")}</p>
+      {!multi && <p className="mt-1 text-xs font-medium text-muted-foreground">{games.map((g) => g.text).join("  ·  ")}</p>}
 
       <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <p className="text-2xl font-semibold tabular-nums text-foreground" aria-label="Combined price">
           {price.text}
         </p>
         {price.note && <p className="text-xs font-medium text-muted-foreground">{price.note}</p>}
-        <StatusText kind={status.kind} text={status.text} />
+        <StatusText kind={(boxesStatus ?? status).kind} text={(boxesStatus ?? status).text} />
       </div>
+      {delivery && (
+        <p role="status" className={"mt-1 text-[13px] font-semibold " + (delivery.short ? "text-amber-700 dark:text-amber-400" : "text-foreground")}>
+          {delivery.text}
+        </p>
+      )}
       {asOf && <p className="mt-0.5 text-xs font-medium text-muted-foreground">{asOf}</p>}
 
-      <ol className="mt-3 divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
-        {legs.map((l, i) => (
-          <li key={l.key + i} className="py-2.5">
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="min-w-0 text-[15px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">
-                {l.title}
-                {l.game && <span className="ml-2 text-xs font-medium text-muted-foreground">{l.game}</span>}
-              </p>
-              <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{l.price}</p>
-            </div>
-            <p className="mt-0.5 text-xs font-medium text-muted-foreground">{l.consensus}</p>
-            {l.reason && <p className="text-xs font-medium text-muted-foreground">{l.reason}</p>}
-          </li>
-        ))}
-      </ol>
+      {multi ? (
+        <div className="mt-3 space-y-2.5">
+          {boxes.map((b, i) => (
+            <BoxSection key={b.key + i} box={b} n={i + 1} />
+          ))}
+        </div>
+      ) : (
+        <LegList legs={legs} />
+      )}
 
-      <HybridSend key={cardKey + "|" + response.generatedAt} hybrid={hybrid} settings={settings} eventSportKeys={eventSportKeys} onRegenerate={onGenerate} />
+      <HybridSend key={cardKey + "|" + response.generatedAt} hybrid={hybrid} settings={settings} eventSportKeys={eventSportKeys} linkable={response.linkable} onRegenerate={onGenerate} />
     </div>
   );
 }
 
-function HybridSend({ hybrid, settings, eventSportKeys, onRegenerate }: { hybrid: Hybrid; settings: HybridGenerateSettings; eventSportKeys: Record<string, string>; onRegenerate: () => void }) {
+function HybridSend({ hybrid, settings, eventSportKeys, linkable, onRegenerate }: { hybrid: Hybrid; settings: HybridGenerateSettings; eventSportKeys: Record<string, string>; linkable: boolean | undefined; onRegenerate: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<HybridLinkResponse | null>(null);
@@ -416,7 +493,20 @@ function HybridSend({ hybrid, settings, eventSportKeys, onRegenerate }: { hybrid
   }
 
   const view = link ? linkView(hybrid, link, settings, formatGameTime) : null;
+  const tooMany = !canSendToFanDuel(hybrid, linkable);
   const blocked = hybrid.anyStale;
+  if (tooMany) {
+    return (
+      <div className="border-t border-[#0F1420]/[0.08] py-3 dark:border-white/10">
+        <button type="button" disabled className={PILL_OUTLINE} title={LINK_TOO_MANY_TEXT}>
+          Send to FanDuel
+        </button>
+        <p role="status" className="mt-2 text-xs font-medium text-muted-foreground">
+          {LINK_TOO_MANY_TEXT}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="border-t border-[#0F1420]/[0.08] py-3 dark:border-white/10">
       <button type="button" onClick={() => void send()} disabled={loading || blocked || !legs} className={PILL_OUTLINE} title={blocked ? STALE_NOTE : undefined}>
@@ -560,7 +650,9 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
       theme={{
         ...TINTS.neutral,
         title: "Your hybrid",
-        subtitle: `${hybrid.legs.length} legs · ${new Set(hybrid.legs.map((l) => l.eventId)).size === 1 ? "one game" : "different games"}${key === "primary" ? "" : " · alternate"}`,
+        subtitle: isMultiBox(hybrid)
+          ? `${hybrid.legs.length} legs · ${hybrid.boxes!.length} games`
+          : `${hybrid.legs.length} legs · ${new Set(hybrid.legs.map((l) => l.eventId)).size === 1 ? "one game" : "different games"}${key === "primary" ? "" : " · alternate"}`,
         icon: <BoltIcon className="h-[17px] w-[17px] stroke-[2.2]" />,
       }}
       footer={<p className="min-w-0 flex-1 truncate text-xs font-medium text-[#3A4152] dark:text-foreground/75">{FOOTER_NOTE}</p>}
@@ -579,6 +671,11 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
           <p className="text-xs font-medium text-foreground">
             {UNAVAILABLE_NOTE} Skipped: {flags.unavailableGames.join(", ")}.
           </p>
+        </div>
+      )}
+      {flags.budgetLimited && (
+        <div role="status" className={INFO}>
+          <p className="text-xs font-medium text-foreground">{BUDGET_NOTE}</p>
         </div>
       )}
       {flags.pricingGames.length > 0 && (
