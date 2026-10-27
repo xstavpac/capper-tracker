@@ -325,7 +325,8 @@ const slate = makeSlate(BASE);
 }
 
 // ============================================================================
-// Hedge / Contrarian: generated legs only.
+// Hedge / Contrarian with Swap: Suggested - generated legs only (the other
+// scopes: swap-scope-acceptance-test.ts).
 // ============================================================================
 {
   const s = makeSlate([
@@ -336,10 +337,10 @@ const slate = makeSlate(BASE);
   ]);
   const r = run(snap(s, ["slipMl"]), { legCount: 2 });
   check("parlay: the slip ML plus the best generated leg (G1 ML)", ids(r).sort(), ["genMl", "slipMl"]);
-  check("Hedge: the slip pick is never swapped", r.hedge.legs.find((l) => l.original.pick.pickId === "slipMl")?.unchangedReason, "SLIP_PICK");
-  check("Hedge: the generated ML swaps to its game's qualifying total (R4)", r.hedge.legs.find((l) => l.original.pick.pickId === "genMl")?.swap?.pick.pickId, "genOver");
-  check("Hedge: never to a slip pick (G0's Over is unused but G0 is the slip's)", r.hedge.legs.some((l) => l.swap?.pick.pickId === "slipOver"), false);
-  check("Contrarian: slip pick unchanged too", r.contrarian.legs.find((l) => l.original.pick.pickId === "slipMl")?.unchangedReason, "SLIP_PICK");
+  check("Hedge: the slip pick is not swapped", r.hedge.SUGGESTED.legs.find((l) => l.original.pick.pickId === "slipMl")?.unchangedReason, "OUT_OF_SCOPE");
+  check("Hedge: the generated ML swaps to its game's qualifying total (R4)", r.hedge.SUGGESTED.legs.find((l) => l.original.pick.pickId === "genMl")?.swap?.pick.pickId, "genOver");
+  check("Hedge: never to a slip pick (G0's Over is unused but G0 is the slip's)", r.hedge.SUGGESTED.legs.some((l) => l.swap?.pick.pickId === "slipOver"), false);
+  check("Contrarian: slip pick unchanged too", r.contrarian.SUGGESTED.legs.find((l) => l.original.pick.pickId === "slipMl")?.unchangedReason, "OUT_OF_SCOPE");
 }
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);

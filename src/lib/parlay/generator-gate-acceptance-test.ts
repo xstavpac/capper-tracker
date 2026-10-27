@@ -125,14 +125,14 @@ check("out of range (80, 30) falls back to 55, not to a stricter or looser gate"
     { id: "a1", game: 1, side: "HOME", rec: [9, 1] },
     { id: "b1", game: 1, side: "AWAY", rec: [29, 21] },
   ]);
-  const alt = (p: GeneratedParlay["contrarian"], pickId: string) => {
+  const alt = (p: GeneratedParlay["contrarian"]["SUGGESTED"], pickId: string) => {
     const l = p.legs.find((x) => x.original.pick.pickId === pickId)!;
     return l.swap ? l.swap.pick.pickId : l.unchangedReason;
   };
   const at = (g?: number) => run(snap, { legCount: 2, minWinPct: g });
-  check("default: Contrarian takes the 58% alternate, not the 52% one", [alt(at().contrarian, "a0"), alt(at().contrarian, "a1")], ["NO_ALTERNATE", "b1"]);
-  check("lower (50): Contrarian takes the 52% alternate too", [alt(at(50).contrarian, "a0"), alt(at(50).contrarian, "a1")], ["b0", "b1"]);
-  check("higher (60): Contrarian drops the 58% alternate", [alt(at(60).contrarian, "a0"), alt(at(60).contrarian, "a1")], ["NO_ALTERNATE", "NO_ALTERNATE"]);
+  check("default: Contrarian takes the 58% alternate, not the 52% one", [alt(at().contrarian.SUGGESTED, "a0"), alt(at().contrarian.SUGGESTED, "a1")], ["NO_ALTERNATE", "b1"]);
+  check("lower (50): Contrarian takes the 52% alternate too", [alt(at(50).contrarian.SUGGESTED, "a0"), alt(at(50).contrarian.SUGGESTED, "a1")], ["b0", "b1"]);
+  check("higher (60): Contrarian drops the 58% alternate", [alt(at(60).contrarian.SUGGESTED, "a0"), alt(at(60).contrarian.SUGGESTED, "a1")], ["NO_ALTERNATE", "NO_ALTERNATE"]);
 }
 
 // ---- LEGACY_RULES ignores it ---------------------------------------------------------
