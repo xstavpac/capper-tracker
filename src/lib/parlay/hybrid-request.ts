@@ -5,7 +5,7 @@
 // Pure and client-safe.
 import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP } from "@/lib/parlay/gate";
 import { hasUsablePrice } from "@/lib/parlay/combine-odds";
-import { HYBRID_MAX_LEGS, HYBRID_MIN_LEG_PRICE, type HybridWidth } from "@/lib/parlay/hybrid";
+import { HYBRID_MAX_LEGS, HYBRID_MIN_LEG_PRICE, type HybridBoxLegs, type HybridWidth } from "@/lib/parlay/hybrid";
 import { selectedCategories, toIncludeSelection, type IncludeSelection } from "@/lib/parlay/include-picks";
 import { MAX_POOL_REQUEST_PICKS, type ParlayRejection } from "@/lib/parlay/leg-cap";
 
@@ -18,6 +18,8 @@ export type HybridGenerateSettings = {
   maxLegs: number;
   // The win-% gate (gate.ts, #327): 45-75 in steps of 5, default 55.
   minWinPct: number;
+  // The box's legs (hybrid.ts): absent from the request is "2". "3" needs maxLegs >= 3.
+  boxLegs: HybridBoxLegs;
 };
 
 export type HybridGenerateRequest = {
@@ -74,6 +76,13 @@ export function parseHybridRequest(raw: unknown, liveLabels: ReadonlySet<string>
     return reject(`Legs must be a whole number from 2 to ${HYBRID_MAX_LEGS}.`);
   }
 
+  let boxLegs: HybridBoxLegs = "2";
+  if (s.boxLegs !== undefined && s.boxLegs !== null) {
+    if (s.boxLegs !== "2" && s.boxLegs !== "3" && s.boxLegs !== "auto") return reject("Legs must be \"2\", \"3\" or \"auto\".");
+    if (s.boxLegs === "3" && maxLegs < 3) return reject("A 3-leg box needs at least 3 legs.");
+    boxLegs = s.boxLegs;
+  }
+
   let minWinPct = GATE_DEFAULT;
   if (s.minWinPct !== undefined && s.minWinPct !== null) {
     const g = s.minWinPct;
@@ -99,6 +108,6 @@ export function parseHybridRequest(raw: unknown, liveLabels: ReadonlySet<string>
     leagues: uniqueLeagues,
     targets: parsedTargets,
     include: cleanInclude,
-    settings: { targetMin, targetMax, width: s.width, perLegRange, maxLegs, minWinPct },
+    settings: { targetMin, targetMax, width: s.width, perLegRange, maxLegs, minWinPct, boxLegs },
   };
 }

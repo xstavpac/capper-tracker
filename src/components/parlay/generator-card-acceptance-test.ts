@@ -292,8 +292,11 @@ async function main() {
   check("Hybrid: switching modes sends no request", requests.length === standardRequests && hybridRequests.length === 0);
   await click(button("Generate hybrid"));
   check("Hybrid: the Generate button sends exactly one hybrid request, none to Standard", hybridRequests.length === 1 && requests.length === standardRequests);
-  const sent = hybridRequests[0] as { settings: { targetMin: number; targetMax: number; maxLegs: number; width: string; minWinPct: number } };
-  check("Hybrid: defaults are -140 / -110, 2 legs, balanced, 55%", sent.settings.targetMin === -140 && sent.settings.targetMax === -110 && sent.settings.maxLegs === 2 && sent.settings.width === "balanced" && sent.settings.minWinPct === 55);
+  const sent = hybridRequests[0] as { settings: { targetMin: number; targetMax: number; maxLegs: number; width: string; minWinPct: number; boxLegs: string } };
+  check(
+    "Hybrid: defaults are -140 / -110, Legs Auto with 3 max legs, balanced, 55%",
+    sent.settings.targetMin === -140 && sent.settings.targetMax === -110 && sent.settings.boxLegs === "auto" && sent.settings.maxLegs === 3 && sent.settings.width === "balanced" && sent.settings.minWinPct === 55
+  );
   check("Hybrid: no-box result is explained in plain words", text().includes("No game has qualifying consensus on both a side and a total."));
   await click(button("Standard"));
   check("back on Standard: its controls and its leg count (25) are still there", text().includes("Max legs per game") && ctx.legCount === 25 && !text().includes("Hybrid builds from capper consensus"));

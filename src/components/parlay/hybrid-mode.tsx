@@ -17,12 +17,15 @@ import type { HybridGenerator } from "@/components/parlay/use-hybrid-generator";
 import type { TargetedGame } from "@/lib/parlay/slip-state";
 import { GATE_MAX, GATE_MIN, GATE_STEP } from "@/lib/parlay/gate";
 import { HYBRID_MAX_LEGS } from "@/lib/parlay/hybrid";
-import type { Hybrid, HybridWidth } from "@/lib/parlay/hybrid";
+import type { Hybrid, HybridBoxLegs, HybridWidth } from "@/lib/parlay/hybrid";
 import type { HybridLinkResponse } from "@/lib/parlay/hybrid-link";
 import type { HybridGenerateSettings } from "@/lib/parlay/hybrid-request";
 import type { HybridGenerateResponse } from "@/server/data/hybrid-generate";
 import {
   ALT_LINES_NOTE,
+  BOX_LEGS_HINT,
+  BOX_LEGS_OPTIONS,
+  boxLegsPatch,
   boxText,
   bumpMaxLegs,
   cardTabs,
@@ -34,6 +37,7 @@ import {
   legViews,
   linkLegs,
   linkView,
+  minMaxLegs,
   MODE_NOTE,
   normalizePriceText,
   oddsAsOfText,
@@ -231,8 +235,20 @@ export function HybridControls({
           <TextSegments<HybridWidth> label="Box width" options={WIDTH_OPTIONS} value={form.width} onChange={(width) => patchForm({ width })} />
           <span className="text-xs font-medium text-muted-foreground">{WIDTH_HINT}</span>
         </div>
+        <div className="mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className={LABEL}>Legs</span>
+          <TextSegments<HybridBoxLegs> label="Legs" options={BOX_LEGS_OPTIONS} value={form.boxLegs} onChange={(boxLegs) => patchForm(boxLegsPatch(form, boxLegs))} />
+          <span className="text-xs font-medium text-muted-foreground">{BOX_LEGS_HINT}</span>
+        </div>
         <div className="mt-3.5">
-          <CountStepper label="Max legs" value={form.maxLegs} min={2} max={HYBRID_MAX_LEGS} onChange={(n) => patchForm({ maxLegs: Math.max(2, Math.min(HYBRID_MAX_LEGS, n)) })} note="two is a side and a total from one game" />
+          <CountStepper
+            label="Max legs"
+            value={form.maxLegs}
+            min={minMaxLegs(form.boxLegs)}
+            max={HYBRID_MAX_LEGS}
+            onChange={(n) => patchForm({ maxLegs: Math.max(minMaxLegs(form.boxLegs), Math.min(HYBRID_MAX_LEGS, n)) })}
+            note="two is a side and a total from one game"
+          />
         </div>
         <div className="mt-3.5">
           <button type="button" onClick={() => patchForm({ advanced: !form.advanced })} aria-expanded={form.advanced} className="text-[13px] font-semibold text-brand-600 hover:underline dark:text-brand-400">

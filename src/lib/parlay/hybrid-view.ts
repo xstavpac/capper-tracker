@@ -8,13 +8,27 @@
 //   - the box in plain words (and a fallback when the optimizer sent none)
 //   - one compact line per leg: pick + price, consensus, reason
 //   - which state the page is in (idle .. result), from the action's response
-//   - the "Allow more legs" bump
+//   - the "Allow more legs" bump, and Legs: 2 · 3 · Auto (raising Max legs)
 //   - the Send to FanDuel outcome: the link legs, "no longer posted", and the
 //     price-moved diff with the re-priced combined estimate
 //
 // The optimizer (hybrid.ts) and the actions are used as they are.
-import { combineOdds, hasUsablePrice } from "@/lib/parlay/combine-odds";
-import { distanceToBand, HYBRID_DEFAULT_TARGET_MAX, HYBRID_DEFAULT_TARGET_MIN, HYBRID_MAX_LEGS, HYBRID_MIN_LEG_PRICE, impliedProbability, targetBand, type Hybrid, type HybridLeg, type HybridWidth } from "@/lib/parlay/hybrid";
+import { combineOdds, decimalToAmerican, hasUsablePrice } from "@/lib/parlay/combine-odds";
+import {
+  distanceToBand,
+  HYBRID_DEFAULT_TARGET_MAX,
+  HYBRID_DEFAULT_TARGET_MIN,
+  HYBRID_MAX_LEGS,
+  HYBRID_MIN_LEG_PRICE,
+  impliedProbability,
+  jointImplied,
+  targetBand,
+  type Hybrid,
+  type HybridBoxLegs,
+  type HybridLeg,
+  type HybridWidth,
+  type PricedLeg,
+} from "@/lib/parlay/hybrid";
 import type { HybridGenerateSettings } from "@/lib/parlay/hybrid-request";
 import { STALE_REASON, type HybridLinkLegInput, type HybridLinkResponse } from "@/lib/parlay/hybrid-link";
 import { GATE_DEFAULT } from "@/lib/parlay/gate";
@@ -35,6 +49,8 @@ export const UNAVAILABLE_NOTE = "Live alternate prices are unavailable right now
 export const NO_BOX_NOTE = "No game has qualifying consensus on both a side and a total.";
 export const IN_TARGET_TEXT = "✓ In your target";
 export const FAR_TARGET_TEXT = "Closest match · outside your range";
+// The consensus line of a 3-leg box's third leg, which has no cappers of its own.
+export const OPPOSITE_LEG_TEXT = "Boxes the total from the other side";
 
 // ---- Prices ----
 
@@ -67,6 +83,7 @@ export type HybridForm = {
   targetMin: string;
   targetMax: string;
   width: HybridWidth;
+  boxLegs: HybridBoxLegs;
   maxLegs: number;
   minWinPct: number;
   // The per-leg price range sits behind "Advanced" and is off by default.
@@ -79,7 +96,9 @@ export const DEFAULT_FORM: HybridForm = {
   targetMin: formatPrice(HYBRID_DEFAULT_TARGET_MIN),
   targetMax: formatPrice(HYBRID_DEFAULT_TARGET_MAX),
   width: "balanced",
-  maxLegs: 2,
+  // Auto needs room for the third box leg, so the default allows 3.
+  boxLegs: "auto",
+  maxLegs: 3,
   minWinPct: GATE_DEFAULT,
   advanced: false,
   legMin: "",
@@ -105,8 +124,27 @@ export function buildSettings(form: HybridForm): { ok: true; settings: HybridGen
     else perLegRange = { min, max };
   }
   if (errors.target || errors.perLeg || targetMin === null || targetMax === null) return { ok: false, errors };
-  const maxLegs = Math.max(2, Math.min(HYBRID_MAX_LEGS, Math.floor(form.maxLegs) || 2));
-  return { ok: true, settings: { targetMin, targetMax, width: form.width, perLegRange, maxLegs, minWinPct: form.minWinPct } };
+  const maxLegs = Math.max(minMaxLegs(form.boxLegs), Math.min(HYBRID_MAX_LEGS, Math.floor(form.maxLegs) || 2));
+  return { ok: true, settings: { targetMin, targetMax, width: form.width, perLegRange, maxLegs, minWinPct: form.minWinPct, boxLegs: form.boxLegs } };
+}
+
+// ---- Legs: 2 · 3 · Auto ----
+
+export const BOX_LEGS_OPTIONS: { key: HybridBoxLegs; label: string }[] = [
+  { key: "2", label: "2" },
+  { key: "3", label: "3" },
+  { key: "auto", label: "Auto" },
+];
+export const BOX_LEGS_HINT = "3 adds the other side of the total. Auto adds it only when 2 legs come back too short.";
+
+// The fewest Max legs the choice allows: a forced 3-leg box needs 3.
+export function minMaxLegs(boxLegs: HybridBoxLegs): number {
+  return boxLegs === "3" ? 3 : 2;
+}
+
+// Picking 3 or Auto raises Max legs to 3 when it was 2, so the third leg has room.
+export function boxLegsPatch(form: Pick<HybridForm, "maxLegs">, boxLegs: HybridBoxLegs): Pick<HybridForm, "boxLegs" | "maxLegs"> {
+  return { boxLegs, maxLegs: boxLegs !== "2" && form.maxLegs < 3 ? 3 : form.maxLegs };
 }
 
 // ---- "Allow more legs" ----
@@ -157,6 +195,7 @@ const RECORD_NOUN: Record<HybridLeg["consensus"]["topSupporters"][number]["recor
 // "5 cappers · 61% NFL spreads (n=212)": the top supporter's record, and its sample size.
 // The noun is the market that record is for (the data's recordMarket), not the leg's rung.
 export function consensusLine(leg: HybridLeg): string {
+  if (leg.opposite) return OPPOSITE_LEG_TEXT;
   const n = leg.consensus.supporters;
   const head = `${n} capper${n === 1 ? "" : "s"}`;
   const top = leg.consensus.topSupporters[0];
@@ -315,13 +354,21 @@ export function priceMoves(h: Hybrid, link: HybridLinkResponse): { moves: PriceM
   const byKey = new Map(h.legs.map((l) => [legKey(l), l]));
   const moves: PriceMove[] = [];
   const nowPrices: number[] = [];
+  const priced: PricedLeg[] = [];
   for (const r of link.legs) {
     if (r.status !== "matched") continue;
     nowPrices.push(r.price);
     const shown = byKey.get(legKey(r.leg));
+    if (shown) priced.push({ eventId: shown.eventId, family: shown.family, direction: shown.direction, point: shown.point, price: r.price });
     if (shown && shown.price !== r.price) moves.push({ label: shown.label, from: shown.price, to: r.price, text: `${shown.label} moved ${formatPrice(shown.price)} → ${formatPrice(r.price)}` });
   }
   if (moves.length === 0 || nowPrices.length !== h.legs.length) return { moves, combined: null };
+  // A boxed total re-prices as pOver + pUnder - 1, like the optimizer (jointImplied).
+  if (h.legs.some((l) => l.opposite)) {
+    const joint = priced.length === h.legs.length ? jointImplied(priced) : null;
+    const american = joint === null ? null : decimalToAmerican(1 / joint);
+    return { moves, combined: american === null ? null : { american, text: combinedPrice(h, american).text } };
+  }
   const c = combineOdds(nowPrices.map((odds) => ({ odds })));
   if (c.status !== "AVAILABLE") return { moves, combined: null };
   return { moves, combined: { american: c.american, text: combinedPrice(h, c.american).text } };
