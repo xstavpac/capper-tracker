@@ -24,6 +24,12 @@
 //     day's hybrid budget (HYBRID_DAILY_CREDIT_BUDGET, counted from
 //     odds_api_usage_log by caller and Eastern day) is spent. Either way the cached
 //     ladders come back with their stale flag.
+//   - Alternate lines not posted yet: FanDuel posts some leagues' alternate lines
+//     (NBA) only on game day, and a fetch before then returns the market empty.
+//     That empty ladder is stored (fetchedAt set, outcomes []), and an empty
+//     alternate_spreads / alternate_totals row is held fresh until 06:00 ET on the
+//     game's Eastern day, or the tier's normal life if that ends later. Rows with
+//     outcomes, and h2h, keep the tiers above exactly.
 //   - getAltLadders never throws. A failed, timed-out or skipped fetch returns
 //     the cached ladder marked stale, or nothing for that pair. A request that
 //     outlives the timeout is not cancelled (it may already be paid for): it
@@ -33,7 +39,7 @@
 // "hybrid-ladders". Shape: __fixtures__ of the real FanDuel event responses in
 // lib/parlay/__fixtures__/fanduel-event-*.json (same call, same fields).
 import { prisma } from "@/lib/prisma";
-import { easternDateKey, easternDayStart } from "@/lib/dates";
+import { easternDateKey, easternDayStart, easternWallTime } from "@/lib/dates";
 import { ODDS_API_BASE_URL, readOddsApiCredits } from "@/server/data/odds";
 import { getLatestCreditUsageLevel, persistOddsApiUsage } from "@/server/data/odds-api-usage";
 
@@ -84,10 +90,26 @@ export function altLadderTtlMs(msToStart: number): number {
   return 15 * 60_000;
 }
 
+// Alternate lines are looked for again from this Eastern hour on game day.
+export const ALT_LINES_POST_HOUR_ET = 6;
+
 // Pure.
 export function isAltLadderFresh(commenceTime: Date, fetchedAt: Date | null, now: Date): boolean {
   if (!fetchedAt) return false;
   return now.getTime() - fetchedAt.getTime() < altLadderTtlMs(commenceTime.getTime() - now.getTime());
+}
+
+// Pure. isAltLadderFresh, plus the hold on a NOT-YET-POSTED alternate market (a
+// fetched, empty alternate_spreads / alternate_totals ladder): it stays fresh
+// until 06:00 ET on the game's Eastern day, so a fetch the day before is not
+// repeated on every request. After that, and for every ladder that has outcomes
+// or is h2h, it is the normal tier. 06:00 is read as an Eastern wall-clock time,
+// so it is right on both DST switch days.
+export function isAltLadderRowFresh(args: { marketKey: string; outcomes: unknown; commenceTime: Date; fetchedAt: Date | null; now: Date }): boolean {
+  const { marketKey, outcomes, commenceTime, fetchedAt, now } = args;
+  if (isAltLadderFresh(commenceTime, fetchedAt, now)) return true;
+  if (!fetchedAt || marketKey === "h2h" || !Array.isArray(outcomes) || outcomes.length > 0) return false;
+  return now.getTime() < easternWallTime(easternDateKey(commenceTime), ALT_LINES_POST_HOUR_ET).getTime();
 }
 
 // Pure. FanDuel's outcomes cut to AltLadderOutcome; anything without a name and
@@ -266,7 +288,7 @@ async function raceTimeout<T>(p: Promise<T>, ms: number): Promise<T | undefined>
 // A pair with nothing to show is absent from the result.
 export async function getAltLadders(requests: AltLadderRequest[]): Promise<AltLadderResult> {
   try {
-    return await load(requests);
+    return (await load(requests)).out;
   } catch (err) {
     console.error("[alt-ladders] lookup failed", logTag({ error: err instanceof Error ? err.message : String(err) }));
     return {};
@@ -277,7 +299,12 @@ type Event = { eventId: string; sport: string; commenceTime: Date; markets: AltL
 // An event this call registered in inFlight; settle() resolves what its waiters see.
 type Owned = Event & { promise: Promise<Map<string, FetchedMarket> | null>; settle: (v: Map<string, FetchedMarket> | null) => void };
 
-async function load(requests: AltLadderRequest[]): Promise<AltLadderResult> {
+// A pair another request was buying when this call asked: held by another
+// instance's claim, or by a fetch on this instance that did not deliver in time.
+type LostPair = { eventId: string; market: AltLadderMarket; commenceTime: Date };
+type Loaded = { out: AltLadderResult; lost: LostPair[] };
+
+async function load(requests: AltLadderRequest[]): Promise<Loaded> {
   const now = new Date();
 
   // One entry per event; a repeated event asks for the union of its markets.
@@ -289,7 +316,7 @@ async function load(requests: AltLadderRequest[]): Promise<AltLadderResult> {
     for (const m of r.markets) if (!e.markets.includes(m)) e.markets.push(m);
     events.set(r.eventId, e);
   }
-  if (events.size === 0) return {};
+  if (events.size === 0) return { out: {}, lost: [] };
 
   const rows: Row[] = await prisma.oddsAltLadder.findMany({
     where: { eventId: { in: [...events.keys()] }, marketKey: { in: [...new Set([...events.values()].flatMap((e) => e.markets))] } },
@@ -305,7 +332,10 @@ async function load(requests: AltLadderRequest[]): Promise<AltLadderResult> {
   const toFetch: Owned[] = [];
   const waiting = new Map<string, Promise<Map<string, FetchedMarket> | null>>();
   events.forEach((e) => {
-    const stale = e.markets.filter((m) => !isAltLadderFresh(e.commenceTime, cached.get(pairKey(e.eventId, m))?.fetchedAt ?? null, now));
+    const stale = e.markets.filter((m) => {
+      const r = cached.get(pairKey(e.eventId, m));
+      return !isAltLadderRowFresh({ marketKey: m, outcomes: r?.outcomes, commenceTime: e.commenceTime, fetchedAt: r?.fetchedAt ?? null, now });
+    });
     // Started: the feed would answer with in-play prices.
     if (stale.length === 0 || e.commenceTime.getTime() <= now.getTime()) return;
     const mine = stale.filter((m) => {
@@ -333,6 +363,7 @@ async function load(requests: AltLadderRequest[]): Promise<AltLadderResult> {
 
   let bought = false;
   const started = new Set<string>();
+  const lost: LostPair[] = [];
   try {
     const admitted = apiKey && toFetch.length > 0 ? await admit(toFetch, now) : [];
     for (const e of admitted) {
@@ -342,6 +373,7 @@ async function load(requests: AltLadderRequest[]): Promise<AltLadderResult> {
         const freshCutoff = new Date(now.getTime() - altLadderTtlMs(e.commenceTime.getTime() - now.getTime()));
         if (await claimPair({ eventId: e.eventId, market: m, commenceTime: e.commenceTime, exists: !!row, freshCutoff, now })) claimed.push(m);
       }
+      for (const m of e.markets) if (!claimed.includes(m)) lost.push({ eventId: e.eventId, market: m, commenceTime: e.commenceTime });
       // Another instance holds them all; its result is what the cache will show.
       if (claimed.length === 0) continue;
       started.add(e.eventId);
@@ -371,6 +403,13 @@ async function load(requests: AltLadderRequest[]): Promise<AltLadderResult> {
     pending.push(collect(eventId, p, [market]));
   });
   await Promise.all(pending);
+  // A fetch on this instance that came back empty-handed (it failed, or outlived
+  // the timeout): its pair is still being bought as far as this call can tell.
+  waiting.forEach((_, key) => {
+    if (fetched.has(key)) return;
+    const [eventId, market] = key.split("|");
+    lost.push({ eventId, market: market as AltLadderMarket, commenceTime: events.get(eventId)!.commenceTime });
+  });
   if (bought) await deleteOldLadders(now);
 
   const out: AltLadderResult = {};
@@ -387,13 +426,94 @@ async function load(requests: AltLadderRequest[]): Promise<AltLadderResult> {
           outcomes: row.outcomes as AltLadderOutcome[],
           fetchedAt: row.fetchedAt,
           marketLastUpdate: row.marketLastUpdate,
-          isStale: !isAltLadderFresh(e.commenceTime, row.fetchedAt, now),
+          isStale: !isAltLadderRowFresh({ marketKey: market, outcomes: row.outcomes, commenceTime: e.commenceTime, fetchedAt: row.fetchedAt, now }),
         };
       }
       if (ladder) (out[e.eventId] ??= {})[market] = ladder;
     }
   });
-  return out;
+  return { out, lost };
+}
+
+// ---- Waiting on another request's claim ----
+
+// Between re-reads of a pair another request is buying: about 3 s in all.
+export const HYBRID_CLAIM_REREAD_BACKOFF_MS: readonly number[] = [100, 200, 400, 800, 1500];
+
+export type AltLadderLookup = {
+  ladders: AltLadderResult;
+  // Pairs still held by another request's claim, with nothing cached, once the
+  // wait ran out. Not "no ladder": the price is on its way.
+  pricingInProgress: { eventId: string; market: AltLadderMarket }[];
+};
+
+type ClaimRow = Row & { claimedAt: Date | null };
+
+// getAltLadders for a caller that must not mistake a request in flight for a
+// missing market. A pair this call lost the claim on is re-read with a short
+// bounded backoff until the claim clears, then used (fresh, or stale-flagged); a
+// claim that outlasts the wait with nothing cached is reported in
+// pricingInProgress. A claim that cleared with nothing stored (that fetch
+// failed) is simply absent, as in getAltLadders. Never throws. `sleep` is
+// injected so a test waits on a promise, not a timer.
+export async function getAltLaddersAwaitingClaims(
+  requests: AltLadderRequest[],
+  opts: { sleep?: (ms: number) => Promise<void>; backoffMs?: readonly number[] } = {}
+): Promise<AltLadderLookup> {
+  let loaded: Loaded;
+  try {
+    loaded = await load(requests);
+  } catch (err) {
+    console.error("[alt-ladders] lookup failed", logTag({ error: err instanceof Error ? err.message : String(err) }));
+    return { ladders: {}, pricingInProgress: [] };
+  }
+  const ladders = loaded.out;
+  if (loaded.lost.length === 0) return { ladders, pricingInProgress: [] };
+
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const backoff = opts.backoffMs ?? HYBRID_CLAIM_REREAD_BACKOFF_MS;
+  let waiting = loaded.lost;
+  const inProgress: LostPair[] = [];
+
+  const apply = (pair: LostPair, row: ClaimRow, now: Date) => {
+    if (!row.fetchedAt || !Array.isArray(row.outcomes)) return;
+    (ladders[pair.eventId] ??= {})[pair.market] = {
+      outcomes: row.outcomes as AltLadderOutcome[],
+      fetchedAt: row.fetchedAt,
+      marketLastUpdate: row.marketLastUpdate,
+      isStale: !isAltLadderRowFresh({ marketKey: pair.market, outcomes: row.outcomes, commenceTime: pair.commenceTime, fetchedAt: row.fetchedAt, now }),
+    };
+  };
+
+  try {
+    for (let attempt = 0; waiting.length > 0; attempt++) {
+      const now = new Date();
+      const rows: ClaimRow[] = await prisma.oddsAltLadder.findMany({
+        where: { eventId: { in: [...new Set(waiting.map((w) => w.eventId))] }, marketKey: { in: [...new Set(waiting.map((w) => w.market))] } },
+        select: { eventId: true, marketKey: true, outcomes: true, fetchedAt: true, marketLastUpdate: true, claimedAt: true },
+      });
+      const byPair = new Map(rows.map((r) => [pairKey(r.eventId, r.marketKey), r]));
+      const stillHeld: LostPair[] = [];
+      for (const pair of waiting) {
+        const row = byPair.get(pairKey(pair.eventId, pair.market));
+        if (row) apply(pair, row, now);
+        // No row yet means the claimer's insert is not visible: a claim in flight too.
+        const held = !row || (!!row.claimedAt && now.getTime() - row.claimedAt.getTime() < HYBRID_LADDER_CLAIM_MS);
+        if (held) stillHeld.push(pair);
+      }
+      // A ladder showing while its pair is still held is the old one; it keeps waiting for the new.
+      if (attempt >= backoff.length) {
+        for (const pair of stillHeld) if (!ladders[pair.eventId]?.[pair.market]) inProgress.push(pair);
+        break;
+      }
+      waiting = stillHeld;
+      if (waiting.length > 0) await sleep(backoff[attempt]);
+    }
+  } catch (err) {
+    console.error("[alt-ladders] claim re-read failed", logTag({ error: err instanceof Error ? err.message : String(err) }));
+    for (const pair of waiting) if (!ladders[pair.eventId]?.[pair.market]) inProgress.push(pair);
+  }
+  return { ladders, pricingInProgress: inProgress.map(({ eventId, market }) => ({ eventId, market })) };
 }
 
 // The events this call may buy, after the two credit controls. Both checks are

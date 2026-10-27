@@ -1,7 +1,8 @@
 "use server";
 
 // The Parlay Generator's one server action (PR 4 of the consolidation). It
-// loads the generator's SNAPSHOT - the pool of games and picks, the slip's
+// loads the generator's SNAPSHOT (server/data/generator-snapshot.ts, shared with
+// Consensus Hybrid) - the pool of games and picks, the slip's
 // picks and both record maps - and answers with it plus the Primary built from
 // it (buildGeneratedParlay, lib/parlay/generator.ts).
 //
@@ -19,17 +20,10 @@
 // is taken from the client: the request names picks and games by id.
 import { requireUser } from "@/server/auth";
 import { LIVE_SPORTS } from "@/server/data/odds";
-import { getCapperRecordBundle } from "@/server/data/picks";
-import { gameStatusFor } from "@/server/data/expander-pick";
-import { isGameOver } from "@/lib/parlay/game-over";
-import { getOwnedSlipPickRows, loadSlipBoards, offBoardSlipPick, picksOnBoards } from "@/server/data/parlay-slip-picks";
-import type { PickCategoryKey } from "@/server/data/stats";
-import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
-import { doubleheaderGameIds } from "@/lib/parlay/doubleheader";
+import { loadGeneratorSnapshot } from "@/server/data/generator-snapshot";
 import { normalizeMinWinPct } from "@/lib/parlay/gate";
 import { legCapRejection, MAX_POOL_REQUEST_PICKS, type ParlayRejection } from "@/lib/parlay/leg-cap";
 import { selectedCategories, toIncludeSelection, toPickMix } from "@/lib/parlay/include-picks";
-import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import {
   buildGeneratedParlay,
   type FillFrom,
@@ -53,7 +47,6 @@ export type GenerateResponse = { snapshot: GeneratorSnapshot; parlay: GeneratedP
 
 const INVALID_REQUEST = "That request isn't valid - refresh the page and try again.";
 const TOO_MANY = `Too many picks or games in one request - ${MAX_POOL_REQUEST_PICKS} at most.`;
-const SLIP_CHANGED = "Your slip has changed - a pick was graded or removed. Refresh the page and try again.";
 const MAX_ID_LENGTH = 64;
 const LIVE_LABELS = new Set(LIVE_SPORTS.map((s) => s.label));
 const okId = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= MAX_ID_LENGTH;
@@ -102,68 +95,9 @@ export async function generateParlayAction(request: GenerateRequest): Promise<Ge
   const req = parseRequest(request);
   if ("error" in req) return req;
 
-  const rows = await getOwnedSlipPickRows(user.id, req.slipPickIds);
-  if (rows.length !== req.slipPickIds.length || rows.some((r) => r.status !== "PENDING")) return { error: SLIP_CHANGED };
-
-  // Every league anything comes from: the scope, the targets, the slip.
-  const boards = await loadSlipBoards(user.id, rows, [...req.leagues, ...req.targets.map((t) => t.leagueName)]);
   const now = new Date();
-  const onBoard = picksOnBoards(boards, req.slipPickIds);
-  const rowById = new Map(rows.map((r) => [r.id, r]));
-  const slipPicks: GeneratorPick[] = req.slipPickIds.map((id) => onBoard.get(id) ?? offBoardSlipPick(rowById.get(id)!, boards));
-  const slipGameIds = new Set(slipPicks.map((p) => p.gameId));
-  const targetIds = new Set(req.targets.map((t) => t.gameId));
-  const fullSlate = req.targets.length === 0;
-
-  const games: GeneratorGame[] = [];
-  for (const { key, label, board } of boards) {
-    const inWindow = autoGenerateWindow(label, board.odds.map((g) => g.commenceTime), now);
-    // From the whole board: the other game of a doubleheader may already be under way.
-    const doubleheaders = doubleheaderGameIds(board.odds, board.scores);
-    board.odds.forEach((game, i) => {
-      // A live game is fine for a target or a slip pick (it is priced as posted);
-      // only a game that is over is skipped, and the full slate never reaches
-      // for a game already under way (inWindow).
-      const gameStatus = gameStatusFor(board.scores, game, key);
-      if (isGameOver({ gameTime: game.commenceTime, gameStatus }, now)) return;
-      const wanted =
-        targetIds.has(game.id) || slipGameIds.has(game.id) || (fullSlate && req.leagues.includes(label) && inWindow(game.commenceTime));
-      if (!wanted) return;
-      const picks = board.expanderPicksByGame[i].filter(
-        (p): p is GeneratorPick => p.status === "PENDING" && typeof p.datePosted === "string"
-      );
-      games.push({
-        gameId: game.id,
-        gameLabel: picks[0]?.gameLabel ?? game.awayTeam + " @ " + game.homeTeam,
-        gameTime: game.commenceTime,
-        gameStatus,
-        leagueName: label,
-        picks,
-        doubleheader: doubleheaders.has(game.id),
-      });
-    });
-  }
-
-  // ONE record bundle: every slip pick's and candidate's card. A slip pick's
-  // is what its row shows and how two conflicting slip picks are ranked; a
-  // candidate's in-league record (all-time when it has none) is the 55% gate,
-  // the Wilson ranking, Hedge and Contrarian (recordForGate). The all-leagues
-  // market records cover a pick with no card, and LEGACY_RULES.
-  const candidates = games.flatMap((g) => g.picks);
-  const { leagueRecords, categoryRecords } = await getCapperRecordBundle(user.id, {
-    leagueEntries: [...slipPicks, ...candidates].map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category })),
-    categoryPairs: candidates
-      .filter((p): p is GeneratorPick & { category: PickCategoryKey } => p.category !== null)
-      .map((p) => ({ capperId: p.capperId, category: p.category })),
-  });
-
-  const snapshot: GeneratorSnapshot = {
-    builtAt: now.toISOString(),
-    games,
-    slipPicks,
-    targets: req.targets.map((t) => t.gameId),
-    leagueRecords,
-    categoryRecords,
-  };
+  const loaded = await loadGeneratorSnapshot(user.id, req, now);
+  if ("error" in loaded) return loaded;
+  const { snapshot } = loaded;
   return { snapshot, parlay: buildGeneratedParlay(snapshot, req.settings, null, now) };
 }

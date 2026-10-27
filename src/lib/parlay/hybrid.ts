@@ -121,6 +121,9 @@ export type HybridLeg = {
   // The team name, or "OVER" / "UNDER".
   direction: string;
   marketKey: HybridMarketKey;
+  // The outcome as FanDuel names it (a team, "Over" or "Under"): what the exact-line
+  // handoff (hybrid-link.ts) matches on.
+  outcomeName: string;
   // The leg's point on its own scale (a team's spread; a total). null on h2h.
   point: number | null;
   price: number;
@@ -233,6 +236,7 @@ function legRangeBand(settings?: HybridSettings): { low: number; high: number } 
 // (the moneyline at 0), an Under's line, an Over's line negated.
 export type Rung = {
   marketKey: HybridMarketKey;
+  outcomeName: string;
   point: number | null;
   order: number;
   price: number;
@@ -253,6 +257,7 @@ function isoOrNull(d: Date | string | null): string | null {
 function toRung(o: HybridLadderOutcome, marketKey: HybridMarketKey, ladder: HybridLadder, order: number): Rung {
   return {
     marketKey,
+    outcomeName: o.name,
     point: marketKey === "h2h" ? null : o.point!,
     order,
     price: o.price,
@@ -687,6 +692,7 @@ function buildHybrid(structure: HybridStructure, legs: Placed[], tuned: Tuned): 
       family: p.family,
       direction: p.direction,
       marketKey: r.marketKey,
+      outcomeName: r.outcomeName,
       point: r.point,
       price: r.price,
       sid: r.sid,
@@ -788,6 +794,25 @@ export function normalizeSettings(s?: HybridSettings): Required<Pick<HybridSetti
   return { ...s, width: s?.width === "wider" ? "wider" : "balanced", maxLegs };
 }
 
+export type BoxGame = { eventId: string; side: ConsensusPosition; total: ConsensusPosition; score: number };
+
+// Box-eligible games, best first: the best team side and the best total on one
+// game, scored as their sum. Exported so the action fetches ladders for exactly
+// the games the optimizer will walk.
+export function boxEligibleGames(ranked: ConsensusPosition[]): BoxGame[] {
+  const games = new Map<string, { side?: ConsensusPosition; total?: ConsensusPosition }>();
+  for (const p of ranked) {
+    const g = games.get(p.eventId) ?? {};
+    if (p.family === "SIDE" && !g.side) g.side = p;
+    if (p.family === "TOTAL" && !g.total) g.total = p;
+    games.set(p.eventId, g);
+  }
+  return Array.from(games.entries())
+    .filter(([, g]) => g.side && g.total)
+    .map(([eventId, g]) => ({ eventId, side: g.side!, total: g.total!, score: g.side!.score + g.total!.score }))
+    .sort((a, b) => (Math.abs(a.score - b.score) > EPS ? b.score - a.score : a.eventId < b.eventId ? -1 : a.eventId > b.eventId ? 1 : 0));
+}
+
 export function optimizeHybrid(input: HybridInput): HybridResult {
   const settings = normalizeSettings(input.settings);
   const band = targetBand(settings);
@@ -799,21 +824,8 @@ export function optimizeHybrid(input: HybridInput): HybridResult {
     return placedCache.get(p.key)!;
   };
 
-  // Box-eligible games: the best team side and the best total on one game.
-  const games = new Map<string, { side?: ConsensusPosition; total?: ConsensusPosition }>();
-  for (const p of ranked) {
-    const g = games.get(p.eventId) ?? {};
-    if (p.family === "SIDE" && !g.side) g.side = p;
-    if (p.family === "TOTAL" && !g.total) g.total = p;
-    games.set(p.eventId, g);
-  }
-  const boxGames = Array.from(games.entries())
-    .filter(([, g]) => g.side && g.total)
-    .map(([eventId, g]) => ({ eventId, side: g.side!, total: g.total!, score: g.side!.score + g.total!.score }))
-    .sort((a, b) => (Math.abs(a.score - b.score) > EPS ? b.score - a.score : a.eventId < b.eventId ? -1 : a.eventId > b.eventId ? 1 : 0));
-
   const boxes: Candidate[] = [];
-  for (const g of boxGames) {
+  for (const g of boxEligibleGames(ranked)) {
     if (boxes.length >= HYBRID_CANDIDATE_GAMES) break;
     const side = placedOf(g.side);
     const total = placedOf(g.total);
