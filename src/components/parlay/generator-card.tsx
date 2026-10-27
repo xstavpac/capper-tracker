@@ -23,6 +23,8 @@ import { BoltIcon } from "@/components/dashboard/cappers-icons";
 import { useParlayPool, type PooledPick } from "@/components/parlay/parlay-pool-context";
 import { CountStepper, LABEL, LegStepper, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, TextSegments } from "@/components/parlay/parlay-controls";
 import { IncludePicksChips, PickMixControl } from "@/components/parlay/pick-mix-control";
+import { HybridControls, HybridResults, ModeToggle, type Mode } from "@/components/parlay/hybrid-mode";
+import { useHybridGenerator } from "@/components/parlay/use-hybrid-generator";
 import { formatGameTime, formatOdds, GeneratorResult } from "@/components/parlay/generator-result";
 import { reconcileMix, selectedCategories, toggleInclude, type IncludeSelection, type PickMix } from "@/lib/parlay/include-picks";
 import type { BetCategory } from "@/lib/parlay/bet-category";
@@ -70,6 +72,14 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
 export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSummary?: (s: GeneratorSummary) => void }) {
   const slip = useParlayPool();
   const { pool, targets, targetedGames, removed, isLeagueInScope, isLeagueLocked, toggleLeague, legCount, setLegCount, userId } = slip;
+
+  // Standard (this card, as ever) or Hybrid (use-hybrid-generator.ts). Each keeps its own state.
+  const [mode, setMode] = useState<Mode>("standard");
+  const hybridScope = useMemo(
+    () => ({ leagues: leagues.filter(isLeagueInScope), targets: targets.map((t) => ({ gameId: t.gameId, leagueName: t.leagueName })) }),
+    [leagues, isLeagueInScope, targets]
+  );
+  const hybrid = useHybridGenerator(hybridScope);
 
   const [include, setInclude] = useState<IncludeSelection>("ALL");
   // Rows for the selected categories only; follows the selection (reconcileMix).
@@ -210,6 +220,27 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
   const droppedNote = new Map((parlay && builtFor === key ? parlay.dropped : []).map((d) => [d.pickId, d.note]));
   const targetLabel = new Map(targets.map((t) => [t.gameId, t.gameLabel]));
 
+  const modeToggle = <ModeToggle mode={mode} onChange={setMode} />;
+  if (mode === "hybrid") {
+    return (
+      <>
+        <HybridControls
+          gen={hybrid}
+          leagues={leagues}
+          isLeagueInScope={isLeagueInScope}
+          isLeagueLocked={isLeagueLocked}
+          toggleLeague={toggleLeague}
+          targetedGames={targetedGames}
+          onToggleTarget={slip.toggleTarget}
+          onClearTargets={slip.clearTargets}
+          canGenerate={hybridScope.leagues.length > 0 || hybridScope.targets.length > 0}
+          modeToggle={modeToggle}
+        />
+        <HybridResults gen={hybrid} />
+      </>
+    );
+  }
+
   return (
     <>
       <PanelShell
@@ -222,6 +253,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
         footer={undefined}
         wrapSubtitle
       >
+        {modeToggle}
         {/* 1 · Your picks */}
         <SectionTitle n={1} title={`Your picks${pool.length > 0 ? " · " + pool.length : ""}`}>
           <span className="flex items-center gap-3">
