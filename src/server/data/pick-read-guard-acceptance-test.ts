@@ -51,6 +51,9 @@ const ALLOWLIST: Record<string, string[]> = {
   "src/server/data/backfill-pick-category.ts": ["keyset batches, take: batchSize", "keyset batches, take: batchSize (in a transaction)"],
   "src/server/data/capper-comparison.ts": ["ONE capper's history (userId + capperId), 15 columns - grows with that capper's history; an explicit comparison click"],
   "src/server/data/cappers.ts": ["mergeCappers: the primary capper's picks, select-only", "mergeCappers: the duplicate capper's picks, select-only"],
+  "src/server/data/heavy-consensus.ts": [
+    "loadHeavyConsensusInstances: full-game ML/spread/total, not CANCELLED, 13 columns; nightly = the last HEAVY_CONSENSUS_WINDOW_DAYS + 1 days of gameTime, every user; ALL history only from the hand-run backfill script",
+  ],
   "src/server/data/grading.ts": [
     "one user + sport: PENDING within the regrade lookback",
     "one user + sport: fuzzy-graded within the lookback, take REGRADE_MAX_ROWS",
