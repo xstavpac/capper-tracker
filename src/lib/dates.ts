@@ -39,6 +39,17 @@ export function startOfEasternDay(reference: Date): Date {
   return new Date(utcMidnightGuess.getTime() + offsetMin * 60000);
 }
 
+// The real UTC instant of `hour`:00 Eastern wall-clock time on the Eastern
+// calendar day `dateKey` ("YYYY-MM-DD"). Two passes, because the UTC/ET offset
+// has to be read at the answer, not at the guess: on a DST switch day the two
+// differ. Meant for hours outside the 2-3 AM gap/overlap (06:00 is safe).
+export function easternWallTime(dateKey: string, hour: number): Date {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const guess = Date.UTC(y, m - 1, d, hour, 0, 0);
+  const first = guess + easternOffsetMinutes(new Date(guess)) * 60000;
+  return new Date(guess + easternOffsetMinutes(new Date(first)) * 60000);
+}
+
 // "YYYY-MM-DD" for the Eastern calendar day `date` falls on - replaces the
 // old todayKey()'s raw toISOString().slice(0,10), which keyed by UTC day and
 // let evening ET games straddle the cache/window boundary a few hours early.

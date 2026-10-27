@@ -207,7 +207,7 @@ function seed(market: string, args: { fetchedAgoMs: number | null; commence: str
 }
 
 async function main() {
-  const { altLadderTtlMs, isAltLadderFresh, trimOutcomes, getAltLadders, HYBRID_DAILY_CREDIT_BUDGET, HYBRID_LADDER_CLAIM_MS } = await import("./alt-ladders");
+  const { altLadderTtlMs, isAltLadderFresh, isAltLadderRowFresh, trimOutcomes, getAltLadders, getAltLaddersAwaitingClaims, HYBRID_CLAIM_REREAD_BACKOFF_MS, HYBRID_DAILY_CREDIT_BUDGET, HYBRID_LADDER_CLAIM_MS } = await import("./alt-ladders");
   const SP = "alternate_spreads" as const;
   const TO = "alternate_totals" as const;
   const ML = "h2h" as const;
@@ -523,6 +523,199 @@ async function main() {
     answer = (call) => new Response(JSON.stringify({ ...responseFor([SP], call.eventId) }), { status: 200, headers: OK_HEADERS });
     const thin = await getAltLadders(req([SP, TO]));
     expect("a market the book lacks: stored empty and fresh", [thin[EVENT]?.[TO]?.outcomes, thin[EVENT]?.[TO]?.isStale, row(TO)?.fetchedAt !== null], [[], false, true]);
+  }
+
+  // ---- 14. the claim loser waits for the claim to clear (getAltLaddersAwaitingClaims) ----
+  {
+    // The sleeper stands in for setTimeout: an awaited promise that moves the frozen
+    // clock and lets the test play the claim holder. No real time passes.
+    const slept: number[] = [];
+    const sleeper = (onSleep?: (n: number) => void) => async (ms: number) => {
+      slept.push(ms);
+      nowMs += ms;
+      onSleep?.(slept.length);
+    };
+    const finish = (market: string, outcomes: unknown[]) => {
+      const r = row(market)!;
+      Object.assign(r, { outcomes, fetchedAt: new RealDate(nowMs), marketLastUpdate: new RealDate(nowMs - 60_000), claimedAt: null });
+    };
+    const freshOutcomes = [{ name: "Over", price: -110, point: 41.5, sid: "9", link: "https://sportsbook.fanduel.com/addToBetslip?marketId=42.1&selectionId=9" }, { name: "Under", price: -110, point: 41.5, sid: "8", link: "https://sportsbook.fanduel.com/addToBetslip?marketId=42.1&selectionId=8" }];
+    expect("the re-read schedule is bounded: about 3 s in all", [HYBRID_CLAIM_REREAD_BACKOFF_MS.reduce((a, b) => a + b, 0), HYBRID_CLAIM_REREAD_BACKOFF_MS.length], [3000, 5]);
+
+    // The holder finishes during the second wait: the fresh row is used, and nothing was bought here.
+    reset();
+    slept.length = 0;
+    seed(SP, { fetchedAgoMs: 7 * HOUR, commence: startsIn(30), claimedAgoMs: 1_000 });
+    const cleared = await getAltLaddersAwaitingClaims(req([SP], 30), { sleep: sleeper((n) => n === 2 && finish(SP, freshOutcomes)) });
+    expect("claim clears: waited 100 + 200 ms (injected), then stopped", slept, [100, 200]);
+    expect("claim clears: no Odds API call from the loser", oddsApiCalls.length, 0);
+    expect("claim clears: the holder's fresh row is used", [cleared.ladders[EVENT]?.[SP]?.isStale, cleared.ladders[EVENT]?.[SP]?.outcomes.length, cleared.pricingInProgress], [false, 2, []]);
+
+    // The claim never clears and an older ladder exists: use it, stale-flagged. The wait stays inside its bound.
+    reset();
+    slept.length = 0;
+    seed(SP, { fetchedAgoMs: 7 * HOUR, commence: startsIn(30), claimedAgoMs: 1_000 });
+    const held = await getAltLaddersAwaitingClaims(req([SP], 30), { sleep: sleeper() });
+    expect("never clears: every wait was taken, 3000 ms in total", [slept, slept.reduce((a, b) => a + b, 0)], [[...HYBRID_CLAIM_REREAD_BACKOFF_MS], 3000]);
+    expect("never clears, older ladder cached: used, stale-flagged, not 'in progress'", [held.ladders[EVENT]?.[SP]?.isStale, held.ladders[EVENT]?.[SP]?.outcomes.length, held.pricingInProgress], [true, 1, []]);
+    expect("never clears: still nothing bought", oddsApiCalls.length, 0);
+
+    // The claim never clears and there is nothing to show: "pricing in progress", not "no fit".
+    reset();
+    slept.length = 0;
+    seed(SP, { fetchedAgoMs: null, commence: startsIn(30), claimedAgoMs: 1_000, outcomes: null });
+    const nothing = await getAltLaddersAwaitingClaims(req([SP], 30), { sleep: sleeper() });
+    expect("never clears, empty row: no ladder", nothing.ladders[EVENT]?.[SP], undefined);
+    expect("never clears, empty row: reported as pricing in progress", nothing.pricingInProgress, [{ eventId: EVENT, market: SP }]);
+    expect("...after the full bounded wait", slept.reduce((a, b) => a + b, 0), 3000);
+
+    // The claim clears with nothing stored (that fetch failed): absent, and NOT 'in progress'.
+    reset();
+    slept.length = 0;
+    seed(SP, { fetchedAgoMs: null, commence: startsIn(30), claimedAgoMs: 1_000, outcomes: null });
+    const failedHolder = await getAltLaddersAwaitingClaims(req([SP], 30), { sleep: sleeper((n) => n === 1 && Object.assign(row(SP)!, { claimedAt: null })) });
+    expect("claim released empty-handed: no ladder, not in progress, stopped after one wait", [failedHolder.ladders[EVENT]?.[SP], failedHolder.pricingInProgress, slept], [undefined, [], [100]]);
+
+    // Two pairs: one clears at the third wait, the other never. The wait ends only for the one still held.
+    reset();
+    slept.length = 0;
+    seed(SP, { fetchedAgoMs: null, commence: startsIn(30), claimedAgoMs: 1_000, outcomes: null });
+    seed(TO, { fetchedAgoMs: null, commence: startsIn(30), claimedAgoMs: 1_000, outcomes: null });
+    const mixed = await getAltLaddersAwaitingClaims(req([SP, TO], 30), { sleep: sleeper((n) => n === 3 && finish(SP, freshOutcomes)) });
+    expect("two pairs: one resolved, one still pricing", [mixed.ladders[EVENT]?.[SP]?.outcomes.length, mixed.ladders[EVENT]?.[TO], mixed.pricingInProgress], [2, undefined, [{ eventId: EVENT, market: TO }]]);
+
+    // Nothing lost, nothing waited for: identical to getAltLadders.
+    reset();
+    slept.length = 0;
+    const plain = await getAltLaddersAwaitingClaims(req([SP, TO]), { sleep: sleeper() });
+    expect("no claim lost: no wait, no extra read, ladders as bought", [slept, oddsApiCalls.length, plain.ladders[EVENT]?.[SP]?.outcomes.length, plain.pricingInProgress], [[], 1, 40, []]);
+    reset();
+    slept.length = 0;
+    seed(SP, { fetchedAgoMs: 60_000, commence: startsIn(5) });
+    ladderStatements.length = 0;
+    await getAltLaddersAwaitingClaims(req([SP]), { sleep: sleeper() });
+    expect("a fresh hit: one cache read, no re-read", [ladderStatements.filter((s) => s === "findMany").length, slept], [1, []]);
+
+    // A game that has started is neither fetched nor 'in progress'.
+    reset();
+    slept.length = 0;
+    seed(SP, { fetchedAgoMs: 3 * HOUR, commence: iso(nowMs - 10 * 60_000) });
+    const live = await getAltLaddersAwaitingClaims([{ eventId: EVENT, sport: SPORT, commenceTime: iso(nowMs - 10 * 60_000), markets: [SP] }], { sleep: sleeper() });
+    expect("started game: stale cache back, no wait", [live.ladders[EVENT]?.[SP]?.isStale, slept, live.pricingInProgress], [true, [], []]);
+
+    // A failing re-read never throws and never loses what was already known.
+    reset();
+    slept.length = 0;
+    seed(SP, { fetchedAgoMs: 7 * HOUR, commence: startsIn(30), claimedAgoMs: 1_000 });
+    const sleepThenBreak = sleeper(() => {
+      ladderFailsRead = true;
+    });
+    const broke = await getAltLaddersAwaitingClaims(req([SP], 30), { sleep: sleepThenBreak });
+    expect("the re-read fails mid-wait: no throw, the cached ladder stands", [broke.ladders[EVENT]?.[SP]?.isStale, broke.ladders[EVENT]?.[SP]?.outcomes.length], [true, 1]);
+  }
+
+  // ---- 15. alternate lines not posted yet (FanDuel posts NBA alternates only on game day) ----
+  {
+    const NBA = "basketball_nba";
+    // 9:10 PM ET on Oct 26 (EDT): the game's Eastern day is Oct 26, so 06:00 ET is 10:00Z.
+    const GAME = "2026-10-27T02:10:00Z";
+    const ask = (markets: ("alternate_spreads" | "alternate_totals" | "h2h")[]) => [{ eventId: EVENT, sport: NBA, commenceTime: GAME, markets }];
+    // What FanDuel answers before game day: h2h and no alternate markets at all.
+    const h2hOnly = (call: Call) => new Response(JSON.stringify(responseFor(["h2h"], call.eventId)), { status: 200, headers: OK_HEADERS });
+
+    reset();
+    nowMs = Date.parse("2026-10-25T15:00:00Z"); // two days out
+    answer = h2hOnly;
+    const early = await getAltLadders(ask([SP, TO]));
+    expect("two days out: one fetch, nothing posted", oddsApiCalls.length, 1);
+    expect("recorded as NOT YET POSTED: empty outcomes, fetchedAt set, claim released (existing columns only)", [row(SP)?.outcomes, row(TO)?.outcomes, row(SP)?.fetchedAt?.toISOString(), row(SP)?.claimedAt], [[], [], iso(nowMs), null]);
+    expect("the caller sees an empty, not-stale ladder per market", [early[EVENT]?.[SP]?.outcomes, early[EVENT]?.[TO]?.outcomes, early[EVENT]?.[SP]?.isStale], [[], [], false]);
+
+    // Hours later the normal tier (6 h beyond 24 h out, 60 min inside it) would refetch every request. It does not.
+    for (const [at, label] of [
+      ["2026-10-25T22:00:00Z", "7 h later (the 6 h tier has expired)"],
+      ["2026-10-26T05:00:00Z", "14 h later, 05:00 ET (inside the 60 min tier)"],
+      ["2026-10-26T09:59:00Z", "09:59Z = 05:59 ET, one minute before the hold ends"],
+    ] as const) {
+      nowMs = Date.parse(at);
+      await getAltLadders(ask([SP, TO]));
+      expect(`before 06:00 ET on game day, ${label}: no refetch`, oddsApiCalls.length, 1);
+    }
+    expect("...and the hold needed no budget or gate read after the first", usageReads > 0, true);
+
+    // From 06:00 ET (10:00Z) it may look again, and what it finds is stored as posted.
+    nowMs = Date.parse("2026-10-26T10:00:00Z");
+    answer = (call) => new Response(JSON.stringify(responseFor(call.params.get("markets")!.split(","), call.eventId)), { status: 200, headers: OK_HEADERS });
+    const posted = await getAltLadders(ask([SP, TO]));
+    expect("06:00 ET sharp: refetched", oddsApiCalls.length, 2);
+    expect("...and now the ladders are there", [posted[EVENT]?.[SP]?.outcomes.length, posted[EVENT]?.[TO]?.outcomes.length], [40, 26]);
+
+    // The normal window still applies if it ends later: not posted at 10:30Z -> next look at 11:30Z, not 10:31Z.
+    reset();
+    nowMs = Date.parse("2026-10-26T10:30:00Z");
+    answer = h2hOnly;
+    await getAltLadders(ask([SP]));
+    expect("game day, still not posted: fetched once", oddsApiCalls.length, 1);
+    nowMs = Date.parse("2026-10-26T11:29:00Z");
+    await getAltLadders(ask([SP]));
+    expect("...59 minutes later (inside the 60 min tier): not again", oddsApiCalls.length, 1);
+    nowMs = Date.parse("2026-10-26T11:31:00Z");
+    await getAltLadders(ask([SP]));
+    expect("...past 60 minutes: the normal window decides", oddsApiCalls.length, 2);
+
+    // The hold is for the alternate markets; h2h keeps its tier.
+    reset();
+    nowMs = Date.parse("2026-10-25T15:00:00Z");
+    answer = (call) => new Response(JSON.stringify({ ...responseFor([], call.eventId), bookmakers: [] }), { status: 200, headers: OK_HEADERS });
+    await getAltLadders(ask([ML]));
+    nowMs = Date.parse("2026-10-25T22:00:00Z"); // 7 h later: past the 6 h tier
+    await getAltLadders(ask([ML]));
+    expect("an empty h2h is not held to game day: it is looked at again on its tier", oddsApiCalls.length, 2);
+    // A row with outcomes is never held: PR 1's tiers are unchanged for posted markets.
+    reset();
+    nowMs = Date.parse("2026-10-25T15:00:00Z");
+    await getAltLadders(ask([SP]));
+    nowMs = Date.parse("2026-10-25T22:00:00Z");
+    await getAltLadders(ask([SP]));
+    expect("a posted market 7 h later is refetched on the 6 h tier, as in PR 1", oddsApiCalls.length, 2);
+  }
+
+  // ---- 16. the hold is Eastern wall-clock 06:00 on the game's Eastern day: DST and the UTC boundary ----
+  {
+    const held = (commence: string, fetchedAt: string, now: string, market = "alternate_spreads", outcomes: unknown = []) =>
+      isAltLadderRowFresh({ marketKey: market, outcomes, commenceTime: new RealDate(commence), fetchedAt: new RealDate(fetchedAt), now: new RealDate(now) });
+    // Fetched 3 days ahead: every normal tier is long expired at the checks below.
+    // Spring forward, Sunday 2026-03-08 (2 AM -> 3 AM): 06:00 is EDT, so 10:00Z. A naive "ET midnight + 6 h" says 11:00Z.
+    expect("spring-forward day: 09:59Z (05:59 EDT) is still held", held("2026-03-09T00:00:00Z", "2026-03-05T12:00:00Z", "2026-03-08T09:59:00Z"), true);
+    expect("spring-forward day: 10:00Z (06:00 EDT) is released", held("2026-03-09T00:00:00Z", "2026-03-05T12:00:00Z", "2026-03-08T10:00:00Z"), false);
+    // Fall back, Sunday 2026-11-01 (2 AM -> 1 AM): 06:00 is EST, so 11:00Z. A naive "ET midnight + 6 h" says 10:00Z.
+    expect("fall-back day: 10:59Z (05:59 EST) is still held", held("2026-11-02T00:00:00Z", "2026-10-29T12:00:00Z", "2026-11-01T10:59:00Z"), true);
+    expect("fall-back day: 11:00Z (06:00 EST) is released", held("2026-11-02T00:00:00Z", "2026-10-29T12:00:00Z", "2026-11-01T11:00:00Z"), false);
+    // A late game: 01:00Z on Oct 28 is 9 PM ET on Oct 27, so game day is Oct 27 (release 10:00Z Oct 27, not Oct 28).
+    expect("a 9 PM ET game (UTC date already tomorrow): released at 06:00 ET that same Eastern day", [held("2026-10-28T01:00:00Z", "2026-10-25T12:00:00Z", "2026-10-27T09:59:00Z"), held("2026-10-28T01:00:00Z", "2026-10-25T12:00:00Z", "2026-10-27T10:00:00Z")], [true, false]);
+    // A game at 04:30Z is 12:30 AM ET: game day is the day before in UTC terms.
+    expect("a 12:30 AM ET game: its Eastern day began at ET midnight, so 06:00 ET that day is already past", held("2026-10-27T04:30:00Z", "2026-10-25T12:00:00Z", "2026-10-27T10:00:00Z"), false);
+    // Only a fetched, empty alternate market is held.
+    expect("h2h is never held", held("2026-10-27T02:10:00Z", "2026-10-25T15:00:00Z", "2026-10-26T05:00:00Z", "h2h"), false);
+    expect("a ladder with outcomes is never held", held("2026-10-27T02:10:00Z", "2026-10-25T15:00:00Z", "2026-10-26T05:00:00Z", "alternate_spreads", [{ name: "x", price: 100 }]), false);
+    expect("never fetched is never fresh", isAltLadderRowFresh({ marketKey: "alternate_totals", outcomes: null, commenceTime: new RealDate("2026-10-27T02:10:00Z"), fetchedAt: null, now: new RealDate("2026-10-26T05:00:00Z") }), false);
+
+    // Posted markets: identical to the PR 1 tiers across a grid of ages and times to start.
+    let same = true;
+    const base = Date.parse("2026-10-15T14:00:00Z");
+    for (const hoursOut of [0.2, 1, 2.9, 3, 5, 23.9, 24, 24.1, 30, 70]) {
+      for (const ageMin of [1, 14, 15, 16, 59, 60, 61, 300, 359, 360, 361, 2000]) {
+        const commence = new RealDate(base + hoursOut * HOUR);
+        const fetchedAt = new RealDate(base - ageMin * 60_000);
+        const now = new RealDate(base);
+        for (const market of ["alternate_spreads", "alternate_totals", "h2h"]) {
+          if (isAltLadderRowFresh({ marketKey: market, outcomes: [{ name: "x", price: 100 }], commenceTime: commence, fetchedAt, now }) !== isAltLadderFresh(commence, fetchedAt, now)) same = false;
+        }
+        // An empty h2h is on the tiers too.
+        if (isAltLadderRowFresh({ marketKey: "h2h", outcomes: [], commenceTime: commence, fetchedAt, now }) !== isAltLadderFresh(commence, fetchedAt, now)) same = false;
+      }
+    }
+    expect("posted markets (and h2h): isAltLadderRowFresh == isAltLadderFresh over a 120-cell grid x 4 market/outcome shapes", same, true);
   }
 
   // ---- 13. wiring (source-level) ----
