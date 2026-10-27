@@ -177,7 +177,7 @@ async function main() {
   check("Generate fetched and read the database", first.fetched && generateReads > 0, `${generateReads} statements`);
   check("Generate: exactly one record bundle", bundleCalls() === 1, `${bundleCalls()}`);
   check("Generate: a 3-leg parlay with the slip pick in it", first.parlay.legs.length === 3 && first.parlay.legs.some((l) => l.pick.pickId === slipId && l.source === "SLIP"));
-  check("Generate: Hedge and Contrarian came with it", first.parlay.hedge.legs.length === 3 && first.parlay.contrarian.legs.length === 3);
+  check("Generate: Hedge and Contrarian came with it", first.parlay.hedge.SUGGESTED.legs.length === 3 && first.parlay.contrarian.SUGGESTED.legs.length === 3);
 
   // ---- 5 Regenerates: zero reads.
   await drain();
@@ -189,7 +189,7 @@ async function main() {
     if ("error" in r) throw new Error(r.error);
     anyFetched ||= r.fetched;
     keys.push(r.parlay.generatedKey);
-    check(`Regenerate ${i}: slip pick still in, Hedge/Contrarian present`, r.parlay.legs.some((l) => l.pick.pickId === slipId) && r.parlay.hedge.legs.length === r.parlay.legs.length);
+    check(`Regenerate ${i}: slip pick still in, Hedge/Contrarian present`, r.parlay.legs.some((l) => l.pick.pickId === slipId) && r.parlay.hedge.SUGGESTED.legs.length === r.parlay.legs.length);
   }
   await drain();
   const regenerateReads = queries.length - afterGenerate;

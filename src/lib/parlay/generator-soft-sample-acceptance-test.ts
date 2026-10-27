@@ -160,7 +160,7 @@ check("shared Wilson default is still z=1.96 (6-2 -> 0.4093)", wilsonLowerBound(
     { id: "dogMid", game: 4, bet: "AWAY", lg: [18, 4] },
   ]);
   const p = buildGeneratedParlay(snap, settings(1), null, NOW);
-  const swap = p.contrarian.legs[0].swap;
+  const swap = p.contrarian.SUGGESTED.legs[0].swap;
   check("Contrarian takes 18-4 over 3-0, scored at the generator's z", swap && [swap.pick.pickId, swap.wilsonLowerBound], ["dogMid", lb(18, 4)]);
 }
 

@@ -78,6 +78,7 @@ import {
 } from "@/lib/parlay/qualification-core";
 import { GATE_DEFAULT, normalizeMinWinPct } from "@/lib/parlay/gate";
 import { GENERATOR_Z } from "@/lib/parlay/generator-z";
+import { inSwapScope, SWAP_SCOPES, type SwapScope } from "@/lib/parlay/swap-scope";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
 import { selectConflictFreeLegs } from "@/lib/parlay/build-my-picks";
 import { toBuildCandidate } from "@/lib/parlay/pool-swap";
@@ -217,8 +218,9 @@ export type EngineSwapLeg = {
     // the all-leagues market record.
     basis?: "LEAGUE" | "OVERALL";
   } | null;
-  // A slip pick is never swapped. NOT_MAJORITY: LEGACY_RULES only.
-  unchangedReason: "SLIP_PICK" | "NO_ALTERNATE" | "NOT_MAJORITY" | null;
+  // OUT_OF_SCOPE: the Swap setting leaves this leg alone (a slip pick under
+  // Suggested, a generated leg under Your picks). NOT_MAJORITY: LEGACY_RULES only.
+  unchangedReason: "OUT_OF_SCOPE" | "NO_ALTERNATE" | "NOT_MAJORITY" | null;
 };
 
 export type EngineSwap = { mode: SwapMode; legs: EngineSwapLeg[]; swapCount: number };
@@ -246,8 +248,11 @@ export type GeneratedParlay = {
   // Targeted game ids that are not in the snapshot (over or off the board).
   unavailableTargets: string[];
   dropped: DroppedSlipPick[];
-  hedge: EngineSwap;
-  contrarian: EngineSwap;
+  // Hedge and Contrarian for each Swap setting (swap-scope.ts), all built with
+  // the parlay so switching the setting is never a rebuild: the Primary - and
+  // a Regenerate's draw - stays exactly as shown.
+  hedge: Record<SwapScope, EngineSwap>;
+  contrarian: Record<SwapScope, EngineSwap>;
   // BEST: Generate's parlay. VARIED: a Regenerate that differs from the parlays
   // in its history. NO_ALTERNATIVE: a Regenerate that found nothing else of
   // comparable strength (its legs are Generate's; the UI keeps what it shows
@@ -641,8 +646,8 @@ export function buildGeneratedParlay(
     mixNotes,
     unavailableTargets,
     dropped,
-    hedge: buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE", rules, gate),
-    contrarian: buildSwap(legs, gameById, include, snapshot, "CONTRARIAN", rules, gate),
+    hedge: bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE", scope, rules, gate)),
+    contrarian: bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "CONTRARIAN", scope, rules, gate)),
     variety,
     generatedKey: keyOf(chosen),
   };
@@ -653,23 +658,29 @@ export function buildGeneratedParlay(
 // game with rankCandidatesByRecord (qualification-core.ts - classifier, 55%
 // gate, Wilson order) on the same record as the generated legs (gateRecord).
 // Contrarian takes any capper on the other side who clears the gate - no
-// headcount, except under LEGACY_RULES. Slip picks are never swapped. An alternate is never one of the parlay's own picks or a slip pick,
-// and never breaks a same-game rule against the other legs on its game (as
-// they stand after any swap already made there).
+// headcount, except under LEGACY_RULES. Only the legs the Swap setting covers
+// (`scope`, swap-scope.ts) are searched; the others stay as they are. An
+// alternate is never one of the parlay's own picks or a slip pick, and never
+// breaks a same-game rule against the other legs on its game (as they stand
+// after any swap already made there).
 // ---------------------------------------------------------------------------
+const bySwapScope = (build: (scope: SwapScope) => EngineSwap): Record<SwapScope, EngineSwap> =>
+  Object.fromEntries(SWAP_SCOPES.map((scope) => [scope, build(scope)])) as Record<SwapScope, EngineSwap>;
+
 function buildSwap(
   legs: EngineLeg[],
   gameById: Map<string, GeneratorGame>,
   include: IncludeSelection,
   snapshot: GeneratorSnapshot,
   mode: SwapMode,
+  scope: SwapScope,
   rules: GeneratorRules,
   gate: number
 ): EngineSwap {
   const inParlay = new Set([...legs.map((l) => l.pick.pickId), ...snapshot.slipPicks.map((p) => p.pickId)]);
   const current = new Map<string, GeneratorPick>(legs.map((l) => [l.pick.pickId, l.pick]));
   const out: EngineSwapLeg[] = legs.map((leg) => {
-    if (leg.source === "SLIP") return { original: leg, swap: null, unchangedReason: "SLIP_PICK" };
+    if (!inSwapScope(scope, leg.source)) return { original: leg, swap: null, unchangedReason: "OUT_OF_SCOPE" };
     const gamePicks = (gameById.get(leg.gameId)?.picks ?? []).filter((p) => keepsPick(include, p));
     const siblings = legs.filter((l) => l !== leg && l.gameId === leg.gameId).map((l) => current.get(l.pick.pickId)!);
     const others = gamePicks.filter((p) => !inParlay.has(p.pickId) && siblings.every((s) => sameGameConflict(asCandidate(p), asCandidate(s)) === null));

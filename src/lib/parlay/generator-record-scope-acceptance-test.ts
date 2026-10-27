@@ -87,7 +87,7 @@ function makeSnapshot(specs: Spec[], last20: CapperLeagueRecords["last20"] = {})
 
 const SETTINGS: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
 const ids = (p: GeneratedParlay) => p.legs.map((l) => l.pick.pickId);
-const swapOf = (p: GeneratedParlay["hedge"], pickId: string) => {
+const swapOf = (p: GeneratedParlay["hedge"]["SUGGESTED"], pickId: string) => {
   const l = p.legs.find((x) => x.original.pick.pickId === pickId)!;
   return l.swap ? { to: l.swap.pick.pickId, basis: l.swap.basis ?? "MARKET", record: `${l.swap.record.wins}-${l.swap.record.losses}` } : l.unchangedReason;
 };
@@ -182,14 +182,14 @@ const swapOf = (p: GeneratedParlay["hedge"], pickId: string) => {
   const now = buildGeneratedParlay(snap, SETTINGS, null, NOW);
   const old = buildGeneratedParlay(snap, SETTINGS, null, NOW, LEGACY_RULES);
   check("primaries", ids(now).sort(), ["c", "h", "o", "x"]);
-  check("Hedge: alternate qualifies on its MLB record", swapOf(now.hedge, "h"), { to: "hAlt", basis: "LEAGUE", record: "6-2" });
-  check("legacy Hedge: 40% all time, no alternate", swapOf(old.hedge, "h"), "NO_ALTERNATE");
-  check("Contrarian 1 vs 1: the other side's capper clears the gate - a swap", swapOf(now.contrarian, "c"), { to: "cAlt", basis: "LEAGUE", record: "6-3" });
-  check("legacy Contrarian 1 vs 1: not the majority", swapOf(old.contrarian, "c"), "NOT_MAJORITY");
-  check("Contrarian: 2-3 in MLB no longer hides 30-10 all time", swapOf(now.contrarian, "x"), { to: "xAlt", basis: "OVERALL", record: "30-10" });
-  check("Contrarian with the other side bigger: same Wilson order as everything else", swapOf(now.contrarian, "o"), { to: "oBig", basis: "LEAGUE", record: "20-8" });
-  check("legacy: 1 vs 2 is not the majority", swapOf(old.contrarian, "o"), "NOT_MAJORITY");
-  check("NOT_MAJORITY never comes from the new rules", [...now.contrarian.legs].some((l) => l.unchangedReason === "NOT_MAJORITY"), false);
+  check("Hedge: alternate qualifies on its MLB record", swapOf(now.hedge.SUGGESTED, "h"), { to: "hAlt", basis: "LEAGUE", record: "6-2" });
+  check("legacy Hedge: 40% all time, no alternate", swapOf(old.hedge.SUGGESTED, "h"), "NO_ALTERNATE");
+  check("Contrarian 1 vs 1: the other side's capper clears the gate - a swap", swapOf(now.contrarian.SUGGESTED, "c"), { to: "cAlt", basis: "LEAGUE", record: "6-3" });
+  check("legacy Contrarian 1 vs 1: not the majority", swapOf(old.contrarian.SUGGESTED, "c"), "NOT_MAJORITY");
+  check("Contrarian: 2-3 in MLB no longer hides 30-10 all time", swapOf(now.contrarian.SUGGESTED, "x"), { to: "xAlt", basis: "OVERALL", record: "30-10" });
+  check("Contrarian with the other side bigger: same Wilson order as everything else", swapOf(now.contrarian.SUGGESTED, "o"), { to: "oBig", basis: "LEAGUE", record: "20-8" });
+  check("legacy: 1 vs 2 is not the majority", swapOf(old.contrarian.SUGGESTED, "o"), "NOT_MAJORITY");
+  check("NOT_MAJORITY never comes from the new rules", [...now.contrarian.SUGGESTED.legs].some((l) => l.unchangedReason === "NOT_MAJORITY"), false);
   check("swap shown with its record", recordText({ wins: 6, losses: 2, n: 8, winPct: 75 }, "LEAGUE", snap.games[0].picks[1]), "75% (6–2) · MLB over");
 }
 
