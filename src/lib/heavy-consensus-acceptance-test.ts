@@ -1,7 +1,7 @@
 // Heavy Consensus (heavy-consensus.ts): the markets counted, the 8-capper / 80%
 // rule on a rounded share, one count per capper, hedgers left out, the
 // point-in-time cut, the one-vote-per-capper outcome, one badge per header, the
-// per-viewer history and the pooled, de-duplicated hit rate. Pure - no DB. Run with:
+// per-viewer history and the viewer's own hit rate. Pure - no DB. Run with:
 //   npx tsx src/lib/heavy-consensus-acceptance-test.ts
 import {
   buildHeavyConsensusInstances,
@@ -10,7 +10,7 @@ import {
   heavyBadgesForGame,
   heavyBandOf,
   heavyConsensusByHeader,
-  pooledHeavyConsensusRate,
+  viewerHeavyConsensusRate,
   scoreHeavyMarket,
   HEAVY_CONSENSUS_MIN_CAPPERS,
   type ConsensusPick,
@@ -133,23 +133,29 @@ check(
   2
 );
 
-// ---- The pooled rate ----
-const row = (userId: string, worldKey: string, cappers: number, sharePct: number, outcome: "WIN" | "LOSS" | null): StoredHeavyMarket => ({ userId, worldKey, cappers, sharePct, outcome });
-check("no markets -> no rate", pooledHeavyConsensusRate([]), { hitRatePct: null, games: 0 });
+// ---- The viewer's rate ----
+const row = (userId: string, cappers: number, outcome: "WIN" | "LOSS" | null): StoredHeavyMarket => ({ userId, cappers, outcome });
+check("no markets -> no rate", viewerHeavyConsensusRate([], "A"), { hitRatePct: null, games: 0 });
+check("a viewer with only other users' markets -> no rate", viewerHeavyConsensusRate([row("B", 9, "WIN")], "A"), { hitRatePct: null, games: 0 });
 check(
-  "one real-world market counts once; the viewer with the most cappers stands for it",
-  pooledHeavyConsensusRate([row("A", "g1", 9, 90, "LOSS"), row("B", "g1", 12, 85, "WIN"), row("C", "g2", 8, 100, "LOSS")]),
-  { hitRatePct: 50, games: 2 }
+  "(a) two users with different records get different rates",
+  [
+    viewerHeavyConsensusRate([row("A", 9, "WIN"), row("A", 10, "WIN"), row("A", 8, "LOSS"), row("B", 9, "LOSS"), row("B", 9, "LOSS"), row("B", 8, "WIN")], "A"),
+    viewerHeavyConsensusRate([row("A", 9, "WIN"), row("A", 10, "WIN"), row("A", 8, "LOSS"), row("B", 9, "LOSS"), row("B", 9, "LOSS"), row("B", 8, "WIN")], "B"),
+  ],
+  [{ hitRatePct: 67, games: 3 }, { hitRatePct: 33, games: 3 }]
 );
-check(
-  "below the minimum is filtered before de-dup (B's 6 cappers never displace A's 8)",
-  pooledHeavyConsensusRate([row("A", "g1", 8, 100, "WIN"), row("B", "g1", 6, 100, "LOSS")]),
-  { hitRatePct: 100, games: 1 }
-);
-check("equal cappers -> the higher share", pooledHeavyConsensusRate([row("A", "g1", 10, 80, "LOSS"), row("B", "g1", 10, 90, "WIN")]), { hitRatePct: 100, games: 1 });
-check("equal cappers and share -> the lower userId", pooledHeavyConsensusRate([row("B", "g1", 10, 90, "WIN"), row("A", "g1", 10, 90, "LOSS")]), { hitRatePct: 0, games: 1 });
-check("no-outcome markets are left out", pooledHeavyConsensusRate([row("A", "g1", 9, 90, null), row("A", "g2", 9, 90, "WIN"), row("A", "g3", 9, 90, "LOSS"), row("A", "g4", 9, 90, "LOSS")]), { hitRatePct: 33, games: 3 });
-check("minimum is overridable (10)", pooledHeavyConsensusRate([row("A", "g1", 9, 90, "WIN"), row("A", "g2", 10, 90, "LOSS")], 10), { hitRatePct: 0, games: 1 });
+{
+  const mine = [row("A", 9, "WIN"), row("A", 8, "LOSS"), row("A", 12, "LOSS")];
+  const alone = viewerHeavyConsensusRate(mine, "A");
+  const withOthers = viewerHeavyConsensusRate([...mine, ...Array.from({ length: 40 }, () => row("B", 11, "WIN")), row("C", 8, "LOSS")], "A");
+  check("(b) other users' markets never change a viewer's rate", withOthers, alone);
+}
+check("the same real-world market held by two users counts for each of them (no cross-user de-dup)", [viewerHeavyConsensusRate([row("A", 9, "LOSS"), row("B", 12, "WIN")], "A"), viewerHeavyConsensusRate([row("A", 9, "LOSS"), row("B", 12, "WIN")], "B")], [{ hitRatePct: 0, games: 1 }, { hitRatePct: 100, games: 1 }]);
+check("below the minimum is left out", viewerHeavyConsensusRate([row("A", 8, "WIN"), row("A", 6, "LOSS")], "A"), { hitRatePct: 100, games: 1 });
+check("no-outcome markets are left out", viewerHeavyConsensusRate([row("A", 9, null), row("A", 9, "WIN"), row("A", 9, "LOSS"), row("A", 9, "LOSS")], "A"), { hitRatePct: 33, games: 3 });
+check("below 50% is reported as it is", viewerHeavyConsensusRate([row("A", 9, "LOSS"), row("A", 9, "LOSS"), row("A", 9, "WIN")], "A").hitRatePct, 33);
+check("minimum is overridable (10)", viewerHeavyConsensusRate([row("A", 9, "WIN"), row("A", 10, "LOSS")], "A", 10), { hitRatePct: 0, games: 1 });
 
 // ---- The Live badge ----
 const rate = { hitRatePct: 46, games: 92 };

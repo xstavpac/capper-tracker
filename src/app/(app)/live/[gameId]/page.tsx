@@ -163,7 +163,7 @@ export default async function GameDetailPage({
     }
   }
 
-  // The Heavy Consensus hit rate: one cached number shared by every viewer (see live/page.tsx).
+  // The Heavy Consensus hit rate: the viewer's own, cached per viewer (see live/page.tsx).
   const [matchedPicks, heavyRate] = await Promise.all([
     getPicksForGame(user.id, {
       sportName: sportMeta.label,
@@ -171,7 +171,7 @@ export default async function GameDetailPage({
       awayTeam: game.awayTeam,
       commenceTime: new Date(game.commenceTime),
     }),
-    isMlb || isNfl ? getHeavyConsensusRate() : Promise.resolve(null),
+    isMlb || isNfl ? getHeavyConsensusRate(user.id) : Promise.resolve(null),
   ]);
 
   // MLB/NFL only - the richer picks-list component from the /live tab

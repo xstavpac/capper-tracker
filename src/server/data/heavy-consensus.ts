@@ -1,11 +1,11 @@
 // Heavy Consensus history: the stored markets behind the Live tab's hit rate,
 // and the cached read of that rate. Every rule (what qualifies, the outcome
-// vote, the one-per-real-world-market pooling) lives in lib/heavy-consensus.ts;
+// vote, the viewer's own pooled rate) lives in lib/heavy-consensus.ts;
 // this file only moves rows.
 //
 // Write paths (the only ones - nothing else touches heavy_consensus_markets):
 //   - the nightly recompute in refresh-scores (recomputeHeavyConsensusMarkets
-//     with the default window), then revalidateTag(heavyConsensusRate);
+//     with the default window), then revalidateTag(heavyConsensusRateTag);
 //   - scripts/backfill-heavy-consensus.ts (window: all history), run by hand
 //     once after the migration is live. It has no Next context to revalidate
 //     in; the rate's 24 h TTL picks it up.
@@ -14,8 +14,8 @@
 //
 // Egress: the recompute reads the window's full-game ML / spread / total picks
 // (12 small columns, the last HEAVY_CONSENSUS_WINDOW_DAYS + 1 days) plus the
-// window's stored rows' (id, userId, worldKey); a cache miss on the rate reads
-// 5 small columns of every stored row (a few hundred rows, ~20 KB).
+// window's stored rows' (id, userId, worldKey); a cache miss on one viewer's rate
+// reads 3 small columns of that viewer's own settled rows (tens of rows).
 import { prisma } from "@/lib/prisma";
 import { cachedByTag } from "@/server/data/cached";
 import { cacheKeys } from "@/lib/cache-keys";
@@ -23,7 +23,8 @@ import { easternDateKey } from "@/lib/dates";
 import { classifyPickTeamGroup } from "@/lib/pick-team-group";
 import {
   buildHeavyConsensusInstances,
-  pooledHeavyConsensusRate,
+  viewerHeavyConsensusRate,
+  HEAVY_CONSENSUS_MIN_CAPPERS,
   type HeavyConsensusInstance,
   type HeavyConsensusRate,
   type HeavyOutcome,
@@ -140,17 +141,26 @@ export async function loadHeavyConsensusInstances(now: Date, fromDate: string | 
   return { picksRead: rows.length, instances };
 }
 
-// The pooled hit rate the Live badge shows, cached for every viewer. A failed
-// read is null (no pill anywhere) rather than an error: the badge is optional,
-// and the Live page must still render. Errors are never cached (cachedByTag),
-// so the next load retries.
-export function getHeavyConsensusRate(): Promise<HeavyConsensusRate | null> {
-  return cachedByTag(cacheKeys.heavyConsensusRate(), RATE_TTL_SECONDS, async () => {
-    const rows = await prisma.heavyConsensusMarket.findMany({
-      select: { userId: true, worldKey: true, cappers: true, sharePct: true, outcome: true },
-    });
-    return pooledHeavyConsensusRate(rows.map((r) => ({ ...r, outcome: r.outcome as HeavyOutcome | null })));
-  }).catch((err: unknown) => {
+// One viewer's hit rate, pooled across leagues and market types - from their own
+// stored markets only (the read is filtered by userId and the 8-capper minimum;
+// markets are unique per user, so there is nothing to de-duplicate). Cached per
+// viewer, and every entry carries the one shared tag, so the nightly recompute's
+// single revalidateTag clears them all. A failed read is null (no pill) rather
+// than an error: the badge is optional, and the Live page must still render.
+// Errors are never cached (cachedByTag), so the next load retries.
+export function getHeavyConsensusRate(userId: string): Promise<HeavyConsensusRate | null> {
+  return cachedByTag(
+    cacheKeys.heavyConsensusRate(userId),
+    RATE_TTL_SECONDS,
+    async () => {
+      const rows = await prisma.heavyConsensusMarket.findMany({
+        where: { userId, cappers: { gte: HEAVY_CONSENSUS_MIN_CAPPERS }, outcome: { not: null } },
+        select: { userId: true, cappers: true, outcome: true },
+      });
+      return viewerHeavyConsensusRate(rows.map((r) => ({ ...r, outcome: r.outcome as HeavyOutcome | null })), userId);
+    },
+    [cacheKeys.heavyConsensusRateTag()]
+  ).catch((err: unknown) => {
     console.error("getHeavyConsensusRate failed", err);
     return null;
   });
