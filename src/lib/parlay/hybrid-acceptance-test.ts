@@ -9,6 +9,7 @@
 import nflEvent from "@/lib/parlay/__fixtures__/fanduel-event-nfl.json";
 import nhlEvent from "@/lib/parlay/__fixtures__/fanduel-event-nhl.json";
 import mlbEvent from "@/lib/parlay/__fixtures__/fanduel-event-mlb.json";
+import nbaEvent from "@/lib/parlay/__fixtures__/fanduel-event-nba.json";
 import { americanToDecimal, combineOdds } from "@/lib/parlay/combine-odds";
 import type { ConsensusPosition, PositionCapper } from "@/lib/parlay/consensus";
 import {
@@ -39,7 +40,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 // ---- Fixtures ----
 
 type FdEvent = { sport_key: string; home_team: string; away_team: string; commence_time: string; bookmakers: { key: string; markets: { key: string; outcomes: HybridLadder["outcomes"] }[] }[] };
-const LEAGUE: Record<string, string> = { americanfootball_nfl: "NFL", icehockey_nhl: "NHL", baseball_mlb: "MLB" };
+const LEAGUE: Record<string, string> = { americanfootball_nfl: "NFL", icehockey_nhl: "NHL", baseball_mlb: "MLB", basketball_nba: "NBA" };
 
 // The event's FanDuel alternate_spreads / alternate_totals / h2h as getAltLadders returns them.
 function laddersOf(ev: FdEvent, opts: { stale?: string[]; updated?: Record<string, string>; noH2h?: boolean } = {}): HybridLadders[string] {
@@ -112,6 +113,7 @@ function games(team: string, opponent: string, cover: (number | null)[], miss: (
 const NFL = nflEvent as unknown as FdEvent;
 const NHL = nhlEvent as unknown as FdEvent;
 const MLB = mlbEvent as unknown as FdEvent;
+const NBA = nbaEvent as unknown as FdEvent;
 const DEN = NFL.home_team; // Denver Broncos, +2.5 tonight
 const SEA = NFL.away_team; // Seattle Seahawks, -2.5 tonight
 const DET = NHL.home_team;
@@ -404,6 +406,45 @@ function nflBox(overMisses: number[], sideCover: number[] | null, settings: Hybr
   check("MLB: side stops at +2.5 (the floor)", [r.legs[0].edge, r.legs[0].snappedPoint, r.legs[0].price], [3.5, 2.5, -410]);
   check("MLB: reason", r.legs[0].reason.startsWith("Tampa Bay Rays +2.5 · tonight pick'em (ML -132) · their games miss the spread by up to 3.5"), true);
   check("MLB: total noun", r.boxDescription.endsWith("total runs"), true);
+}
+
+// ============================================================================
+// NBA (Warriors @ Nuggets, captured 2026-10-27): deep ladders, no key numbers
+// ============================================================================
+{
+  const GSW = NBA.away_team;
+  const DEN_NBA = NBA.home_team;
+  const ladders = { b1: laddersOf(NBA) };
+  // Nuggets -7.5 (-106) / Warriors +7.5 (-116) is the closest pair; the h2h
+  // (-260 / +215) is far apart. The total ties 235.5 / 236.5 -> 236.5.
+  check("NBA: Nuggets -7.5, Warriors +7.5 tonight", [tonightLine(pos("b1", NBA, "SIDE", DEN_NBA, -7.5), ladders), tonightLine(pos("b1", NBA, "SIDE", GSW, 7.5), ladders)], [-7.5, 7.5]);
+  check("NBA total: 235.5 / 236.5 tie -> 236.5", tonightLine(pos("b1", NBA, "TOTAL", "OVER", 236.5), ladders), 236.5);
+
+  // The -600 floor on a 59-rung side: Warriors stop at +19.5 (-590); +20.5 is -700.
+  const gsw = legRungs(pos("b1", NBA, "SIDE", GSW, 7.5), ladders);
+  check("NBA floor: Warriors +7.5 .. +19.5 (-590)", [gsw[0].point, gsw[gsw.length - 1].point, gsw[gsw.length - 1].price], [7.5, 19.5, -590]);
+  // ML-backed favorite: the ML (-260), then +1.5 up to +6.5 (-560); never a minus spread.
+  const den = legRungs(pos("b1", NBA, "SIDE", DEN_NBA, 0, { ml: true }), ladders);
+  check("NBA ML-backed Nuggets: ML then +1.5 .. +6.5", den.map((r) => r.point), [null, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5]);
+
+  // No football key numbers in the NBA: an edge of exactly +7 stays +7 and snaps to +7.5.
+  const seven = placeEdge(pos("b1", NBA, "SIDE", GSW, 7.5), 3, { [GSW]: games(GSW, "X", [-4, 0, 0, 0, 0], [0, 0, 0, 0, 0]) }, "wider");
+  check("NBA: edge +7 not pushed", [seven.edge, seven.keyNumberPush], [7, null]);
+
+  // The worked example. Warriors misses 9 14 3 (+ Nuggets' negated 11 5 8):
+  // balanced 11 -> +18.5 (-500). Under-misses 12 4 9 (+ 18 2 7): balanced 12 ->
+  // Over 224.5 (-300). 0.625 is too short; no 1- or 2-rung move reaches the band;
+  // at 3 rungs the even splits are +16.5 / 225.5 (0.577) and +17.5 / 226.5
+  // (0.574), the latter nearer the middle.
+  const swings = {
+    [GSW]: games(GSW, "X", [-9, 4, -14, 6, -3], [-12, 7, -4, 15, -9]),
+    [DEN_NBA]: games(DEN_NBA, "Y", [11, -2, 5, -6, 8], [3, -18, 6, -2, -7]),
+  };
+  const r = optimizeHybrid({ positions: [pos("b1", NBA, "SIDE", GSW, 7.5), pos("b1", NBA, "TOTAL", "OVER", 236.5)], ladders, swings }).primary!;
+  check("NBA: edges +18.5 / 224.5", r.legs.map((l) => [l.edge, l.snappedPoint]), [[18.5, 18.5], [224.5, 224.5]]);
+  check("NBA: tuned to +17.5 (-410) / 226.5 (-250)", r.legs.map((l) => [l.point, l.price, l.move.rungs]), [[17.5, -410, -1], [226.5, -250, -2]]);
+  check("NBA: -135, in target, estimate", [Math.round(r.combinedAmerican), r.inTarget, r.isEstimate], [-135, true, true]);
+  check("NBA: description", r.boxDescription, "Wins if Golden State Warriors lose by 17 or fewer and 227+ total points");
 }
 
 // ============================================================================
