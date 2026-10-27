@@ -286,6 +286,13 @@ async function main() {
   await click(button("Standard"));
   check("Standard is the default view: its own controls, no Hybrid line", text().includes("Max legs per game") && !text().includes("Hybrid builds from capper consensus"));
   const standardRequests = requests.length;
+  {
+    const t = text();
+    const row = el.querySelector('section[aria-label="Pick Filters"]');
+    const footerButtons = Array.from(el.querySelectorAll(":scope button")).filter((b) => ["Clear result", "Generate parlay"].includes((b.textContent ?? "").trim()));
+    check("Standard: Total legs is the first row of the Pick Filters settings block, before Max legs per game", Boolean(row) && (row!.textContent ?? "").indexOf("Total legs") > 0 && (row!.textContent ?? "").indexOf("Total legs") < (row!.textContent ?? "").indexOf("Max legs per game"));
+    check("Standard: the leg stepper lives in Pick Filters, not beside Clear / Generate", Boolean(button("More legs")) && row!.contains(button("More legs") as Node) && footerButtons.length === 2 && !footerButtons[0].parentElement!.parentElement!.textContent!.includes("from your cappers"), t.slice(0, 80));
+  }
   await click(button("Hybrid"));
   check("Hybrid: the muted slip line, its controls", text().includes("Hybrid builds from capper consensus. Your slip isn't used in this mode.") && text().includes("Target odds") && text().includes("Line range") && text().includes("Total legs") && !text().includes("Max legs"));
   check("Hybrid: leg count, max legs per game, Pick Mix, fill toggle and Props are gone", !text().includes("Max legs per game") && !text().includes("Fill from") && !text().includes("Customize Mix") && !text().includes("Props") && !text().includes("Your picks ·"));
@@ -297,10 +304,26 @@ async function main() {
     "Hybrid: defaults are -140 / -110, Legs Auto with 3 max legs, balanced, 55%",
     sent.settings.targetMin === -140 && sent.settings.targetMax === -110 && sent.settings.boxLegs === "auto" && sent.settings.maxLegs === 3 && sent.settings.width === "balanced" && sent.settings.minWinPct === 55
   );
+  // Total Legs reaches the server as #351 intended: boxLegs says 2 / 3 / auto, so 3 and Auto stay apart.
+  const payloadFor = async (label: string) => {
+    await click(button(label));
+    await click(button("Generate parlay"));
+    const req = hybridRequests[hybridRequests.length - 1] as { settings: Record<string, unknown> };
+    console.log(`  payload · ${label}: ${JSON.stringify(req)}`);
+    return req.settings;
+  };
+  const p2 = await payloadFor("2 Legs");
+  const p3 = await payloadFor("3 Legs");
+  const pAuto = await payloadFor("Auto");
+  check("Total Legs 2 Legs sends boxLegs \"2\", maxLegs 2", p2.boxLegs === "2" && p2.maxLegs === 2, JSON.stringify(p2));
+  check("Total Legs 3 Legs sends boxLegs \"3\", maxLegs 3", p3.boxLegs === "3" && p3.maxLegs === 3, JSON.stringify(p3));
+  check("Total Legs Auto sends boxLegs \"auto\", maxLegs 3", pAuto.boxLegs === "auto" && pAuto.maxLegs === 3, JSON.stringify(pAuto));
+  check("3 Legs and Auto are distinguishable on the server (boxLegs differs)", p3.boxLegs !== pAuto.boxLegs);
+  check("the three requests differ only in boxLegs / maxLegs", [p2, p3, pAuto].every((q) => JSON.stringify({ ...q, boxLegs: 0, maxLegs: 0 }) === JSON.stringify({ ...p2, boxLegs: 0, maxLegs: 0 })));
   check("Hybrid: no-box result is explained in plain words", text().includes("No game has qualifying consensus on both a side and a total."));
   await click(button("Standard"));
   check("back on Standard: its controls and its leg count (25) are still there", text().includes("Max legs per game") && ctx.legCount === 25 && !text().includes("Hybrid builds from capper consensus"));
-  check("flipping modes never regenerated anything", requests.length === standardRequests && hybridRequests.length === 1);
+  check("flipping modes never regenerated anything", requests.length === standardRequests && hybridRequests.length === 4);
 
   await act(() => root.unmount());
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);

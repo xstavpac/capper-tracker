@@ -64,16 +64,15 @@ export function ScopeChip({
   );
 }
 
+// Just the control (the Total Legs row of Pick Filters supplies the label and the note).
 export function LegStepper({
   value,
   max,
   onChange,
-  note,
 }: {
   value: number;
   max: number;
   onChange: (n: number) => void;
-  note: string;
 }) {
   // `max` is what the caller can supply right now (a pool's in-scope picks,
   // or the cap itself); MAX_PARLAY_LEGS is the ceiling no caller goes past.
@@ -83,8 +82,7 @@ export function LegStepper({
   const atCap = value >= MAX_PARLAY_LEGS;
   const step = "flex h-11 w-11 items-center justify-center rounded-full text-lg text-foreground transition hover:bg-foreground/[0.035] disabled:opacity-30 disabled:hover:bg-transparent";
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-      <span className={LABEL}>Legs</span>
+    <>
       <div className="flex items-center rounded-full border border-[#DADDE5] bg-white dark:border-border dark:bg-card">
         <button
           type="button"
@@ -109,13 +107,12 @@ export function LegStepper({
           +
         </button>
       </div>
-      <span className="text-xs font-medium text-muted-foreground">{note}</span>
       {overCap && atCap && (
         <span role="alert" className="text-xs font-semibold text-amber-700 dark:text-amber-400">
           {MAX_PARLAY_LEGS_MESSAGE}
         </span>
       )}
-    </div>
+    </>
   );
 }
 

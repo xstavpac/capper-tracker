@@ -7,8 +7,8 @@
 //       picks' games).
 //   2 · Pick Filters - league scope, Bet Types (All Picks / Moneyline / Spread /
 //       Totals / Props) + Customize Mix, max legs per game, minimum capper win
-//       rate, Fill from.
-//   Legs, Clear, Generate parlay - and the result under it.
+//       rate, Fill from; Total legs leads the settings block.
+//   Clear, Generate parlay - and the result under it.
 //
 // Generate asks the server once (generateParlayAction) for the pool and the
 // Primary; Regenerate and every setting that doesn't change the pool run the
@@ -20,7 +20,7 @@ import { generateParlayAction } from "@/server/actions/parlay-generate";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PanelShell, TINTS } from "@/components/dashboard/panel-shell";
-import { BoltIcon, DatabaseIcon, GamepadIcon, TrophyIcon } from "@/components/dashboard/cappers-icons";
+import { BoltIcon, DatabaseIcon, GamepadIcon, LayersIcon, TrophyIcon } from "@/components/dashboard/cappers-icons";
 import { useParlayPool, type PooledPick } from "@/components/parlay/parlay-pool-context";
 import { FilterRow, LABEL, LegStepper, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Section, SettingRow, SettingsBlock, StepperControl, TextSegments } from "@/components/parlay/parlay-controls";
 import { IncludePicksChips, PickMixControl } from "@/components/parlay/pick-mix-control";
@@ -397,6 +397,13 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
             </FilterRow>
             <SettingsBlock>
               <SettingRow
+                icon={<LayersIcon className="h-5 w-5" />}
+                label="Total legs"
+                note={`Up to ${MAX_PARLAY_LEGS} · ${slipLegFloor(pool, maxPerGame)} from your picks, ${generatedLegs} from your cappers.`}
+              >
+                <LegStepper value={legCount} max={maxLegs} onChange={(n) => setLegCount(Math.max(minLegs, Math.min(n, maxLegs)))} />
+              </SettingRow>
+              <SettingRow
                 icon={<GamepadIcon className="h-5 w-5" />}
                 label="Max legs per game"
                 note={maxPerGame === 1 ? "One leg per game, your picks included." : "Same-game legs only when games run out · never opposing or duplicate."}
@@ -424,15 +431,9 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           </div>
         </Section>
 
-        {/* Legs · Clear · Generate */}
-        <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3 border-t border-[#0F1420]/[0.08] pt-3.5 dark:border-white/10">
-          <LegStepper
-            value={legCount}
-            max={maxLegs}
-            onChange={(n) => setLegCount(Math.max(minLegs, Math.min(n, maxLegs)))}
-            note={`up to ${MAX_PARLAY_LEGS} · ${slipLegFloor(pool, maxPerGame)} from your picks, ${generatedLegs} from your cappers`}
-          />
-          <div className="ml-auto flex flex-wrap justify-end gap-2">
+        {/* Clear · Generate */}
+        <div className="mt-3.5 flex flex-wrap items-center justify-end gap-3 border-t border-[#0F1420]/[0.08] pt-3.5 dark:border-white/10">
+          <div className="flex flex-wrap justify-end gap-2">
             <button type="button" onClick={clear} disabled={!parlay && !error} className={PILL_OUTLINE}>
               Clear result
             </button>
