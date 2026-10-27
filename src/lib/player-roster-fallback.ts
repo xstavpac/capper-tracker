@@ -69,6 +69,7 @@ import { parsePlayerProp } from "@/lib/bet-line";
 import { parseNhlPlayerProp } from "@/lib/nhl-prop";
 import { parseNbaProp } from "@/lib/nba-prop";
 import { foldDiacritics, normalizeName, isLikelyDuplicateName } from "@/lib/fuzzy-match";
+import { nflPlayerAliasName } from "@/lib/nfl-player-aliases";
 import type { RosterPlayer } from "@/server/data/nfl-roster";
 
 export type PlayerCandidate = { playerName: string; team: string; position: string; externalPlayerId: string };
@@ -169,6 +170,13 @@ export function resolvePlayerPropAgainstRoster(
 ): PlayerPropResolution {
   const prop = sport === "NHL" ? parseNhlPlayerProp(line) : sport === "NBA" ? parseNbaProp(line) : parsePlayerProp(line);
   if (!prop) return { status: "unresolved" };
+  // An NFL capper alias ("CMC") is read first, and only for an NFL line. Its full name still goes
+  // through the roster below; off the roster, what was typed is matched as before.
+  const alias = sport === "NFL" ? nflPlayerAliasName(prop.playerName) : null;
+  if (alias) {
+    const res = resolveNameAgainstRoster(alias, roster, slate, sport);
+    if (res.status === "resolved") return res;
+  }
   return resolveNameAgainstRoster(prop.playerName, roster, slate, sport);
 }
 
@@ -324,6 +332,7 @@ export function withRosterName(text: string, typedName: string, rosterName: stri
   if (!typed) return text;
   // A space in the typed name also matches a hyphen in the text: the parsers read "Gilgeous-Alexander"
   // as "Gilgeous Alexander".
-  const re = new RegExp(typed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "[\\s-]+"), "i");
+  // Whole words only: the alias "AD" is not the "ad" inside another word.
+  const re = new RegExp("(?<![A-Za-z0-9])" + typed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "[\\s-]+") + "(?![A-Za-z0-9])", "i");
   return text.replace(re, () => rosterName);
 }
