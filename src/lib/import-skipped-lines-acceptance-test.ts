@@ -80,7 +80,7 @@ async function main() {
   const reasonCases: [string, string][] = [
     ["Aaron Judge 1+ stolen bases", "This MLB prop market isn't supported yet"],
     ["WNBA A'ja Wilson over 9.5 rebounds", "WNBA player props aren't supported yet"],
-    ["Patrick Mahomes over 22.5 passing completions", "This NFL prop market isn't supported yet"],
+    ["T.J. Watt over 0.5 sacks", "This NFL prop market isn't supported yet"],
     ["Lakers over 45.5 rebounds", "Team stat totals aren't supported yet"],
     ["Yankees vs Red Sox over 20.5 hits", "Game stat totals aren't supported yet"],
   ];
