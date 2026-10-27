@@ -75,10 +75,13 @@ stub("../../server/actions/parlay-generate", {
 });
 // Consensus Hybrid's actions: counted, never reached by Standard.
 const hybridRequests: unknown[] = [];
+// What the Hybrid action answers; a test swaps it to show a result.
+const NO_BOX = { result: { primary: null, alternates: [], note: null, delivery: { requestedLegs: 3, deliveredLegs: 0, boxes: 0, qualifyingGames: 0, shortOfGames: true } }, notes: [], candidateEvents: [], eventSportKeys: {}, linkable: true, generatedAt: new Date().toISOString() };
+let hybridAnswer: unknown = NO_BOX;
 stub("../../server/actions/parlay-hybrid", {
   hybridGenerateAction: async (req: unknown) => {
     hybridRequests.push(req);
-    return { result: { primary: null, alternates: [], note: null }, notes: [], candidateEvents: [], eventSportKeys: {}, generatedAt: new Date().toISOString() };
+    return hybridAnswer;
   },
   hybridFanDuelLinkAction: async () => ({ error: "not used here" }),
 });
@@ -294,7 +297,7 @@ async function main() {
     check("Standard: the leg stepper lives in Pick Filters, not beside Clear / Generate", Boolean(button("More legs")) && row!.contains(button("More legs") as Node) && footerButtons.length === 2 && !footerButtons[0].parentElement!.parentElement!.textContent!.includes("from your cappers"), t.slice(0, 80));
   }
   await click(button("Hybrid"));
-  check("Hybrid: the muted slip line, its controls", text().includes("Hybrid builds from capper consensus. Your slip isn't used in this mode.") && text().includes("Target odds") && text().includes("Line range") && text().includes("Total legs") && !text().includes("Max legs"));
+  check("Hybrid: the muted slip line, its controls", text().includes("Hybrid builds from capper consensus. Your slip isn't used in this mode.") && text().includes("Target odds") && text().includes("Line range") && text().includes("Legs per game") && text().includes("Total legs") && !text().includes("Max legs"));
   check("Hybrid: leg count, max legs per game, Pick Mix, fill toggle and Props are gone", !text().includes("Max legs per game") && !text().includes("Fill from") && !text().includes("Customize Mix") && !text().includes("Props") && !text().includes("Your picks ·"));
   check("Hybrid: switching modes sends no request", requests.length === standardRequests && hybridRequests.length === 0);
   await click(button("Generate parlay"));
@@ -315,15 +318,114 @@ async function main() {
   const p2 = await payloadFor("2 Legs");
   const p3 = await payloadFor("3 Legs");
   const pAuto = await payloadFor("Auto");
-  check("Total Legs 2 Legs sends boxLegs \"2\", maxLegs 2", p2.boxLegs === "2" && p2.maxLegs === 2, JSON.stringify(p2));
-  check("Total Legs 3 Legs sends boxLegs \"3\", maxLegs 3", p3.boxLegs === "3" && p3.maxLegs === 3, JSON.stringify(p3));
-  check("Total Legs Auto sends boxLegs \"auto\", maxLegs 3", pAuto.boxLegs === "auto" && pAuto.maxLegs === 3, JSON.stringify(pAuto));
+  check("Legs per game 2 Legs sends boxLegs \"2\"; Total legs stays at its default 3", p2.boxLegs === "2" && p2.maxLegs === 3, JSON.stringify(p2));
+  check("Legs per game 3 Legs sends boxLegs \"3\", maxLegs 3", p3.boxLegs === "3" && p3.maxLegs === 3, JSON.stringify(p3));
+  check("Legs per game Auto sends boxLegs \"auto\", maxLegs 3", pAuto.boxLegs === "auto" && pAuto.maxLegs === 3, JSON.stringify(pAuto));
   check("3 Legs and Auto are distinguishable on the server (boxLegs differs)", p3.boxLegs !== pAuto.boxLegs);
   check("the three requests differ only in boxLegs / maxLegs", [p2, p3, pAuto].every((q) => JSON.stringify({ ...q, boxLegs: 0, maxLegs: 0 }) === JSON.stringify({ ...p2, boxLegs: 0, maxLegs: 0 })));
   check("Hybrid: no-box result is explained in plain words", text().includes("No game has qualifying consensus on both a side and a total."));
+
+  // ---- Total legs: a 2-25 stepper under Legs per game ----
+  const totalMore = () => button("More: Total legs") as HTMLButtonElement;
+  const totalFewer = () => button("Fewer: Total legs") as HTMLButtonElement;
+  const totalShown = () => totalMore().parentElement?.querySelector('[aria-live="polite"]')?.textContent;
+  const labels = () => Array.from(el.querySelectorAll("span")).map((s) => (s.textContent ?? "").trim());
+  const rowOrder = () => text().indexOf("Legs per game") < text().indexOf("Total legs");
+  check("Total legs: a stepper below Legs per game, starting at 3", rowOrder() && totalShown() === "3", String(totalShown()));
+  check("Total legs: both rows sit in the same tinted block as Standard's", Boolean(totalMore().closest("div.bg-\\[\\#F6F8FF\\]")) && Boolean(button("Auto")?.closest("div.bg-\\[\\#F6F8FF\\]")));
+  check("Total legs: the helper says cap, whole games, one box per game", text().includes("A cap, not a target: the parlay is built from whole games' boxes, one per game."));
+  check("Target odds at 3 total legs is plain 'Target odds'", labels().includes("Target odds") && !text().includes("Target odds (per game)"));
+  await click(totalMore());
+  check("Total legs 4: Target odds becomes '(per game)', with its note", totalShown() === "4" && labels().includes("Target odds (per game)") && text().includes("Each game's box is tuned to this range."), String(totalShown()));
+  await click(totalFewer());
+  check("...and back to plain at 3", totalShown() === "3" && !text().includes("Target odds (per game)"));
+  for (let i = 0; i < 30; i++) if (!totalMore().disabled) await click(totalMore());
+  check("Total legs stops at 25", totalMore().disabled && totalShown() === "25", String(totalShown()));
+  await click(button("Generate parlay"));
+  check("...and 25 is what the request carries", (hybridRequests[hybridRequests.length - 1] as { settings: { maxLegs: number } }).settings.maxLegs === 25);
+  for (let i = 0; i < 30; i++) if (!totalFewer().disabled) await click(totalFewer());
+  check("with Auto, Total legs goes down to 2", totalFewer().disabled && totalShown() === "2", String(totalShown()));
+  await click(button("3 Legs"));
+  check("choosing 3 Legs lifts Total legs from 2 to 3", totalShown() === "3", String(totalShown()));
+  check("with 3 Legs, Total legs can't go below 3", totalFewer().disabled);
+  await click(button("2 Legs"));
+  await click(totalFewer());
+  check("with 2 Legs, Total legs can go back to 2", totalShown() === "2");
+  for (let i = 0; i < 1; i++) await click(totalMore());
+  await click(button("Auto"));
+  check("settings are back to Auto / 3", totalShown() === "3" && !text().includes("Target odds (per game)"));
+
+  // ---- Results: a multi-box parlay, and a single box exactly as before ----
+  const leg = (eventId: string, family: "SIDE" | "TOTAL", label: string, price: number, home: string, away: string) => ({
+    positionKey: eventId + family, eventId, homeTeam: home, awayTeam: away, commenceTime: FUTURE, sport: "NFL", family, direction: family === "TOTAL" ? "OVER" : home, opposite: false,
+    marketKey: family === "TOTAL" ? "alternate_totals" : "alternate_spreads", outcomeName: family === "TOTAL" ? "Over" : home, point: family === "TOTAL" ? 41.5 : 3.5, price, sid: null, link: null, label,
+    tonightLine: null, edge: 0, edgeSource: "stored", keyNumberPush: null, snappedPoint: null, edgeReached: true, move: { rungs: 0, why: "" }, reason: label, isStale: false, marketLastUpdate: null,
+    consensus: { supporters: 3, opposers: 0, score: 1, anchorLine: 0, anchorIsMoneyline: false, topSupporters: [] },
+  });
+  const box = (id: string, home: string, away: string, inTarget: boolean, american: number) => ({
+    structure: "same-game-box", legs: [leg(id, "SIDE", home + " +3.5", -150, home, away), leg(id, "TOTAL", "Over 41.5", -130, home, away)], combinedAmerican: american, combinedDecimal: 1.8,
+    impliedProbability: 0.55, isEstimate: true, inTarget, boxDescription: "Wins if " + home + " lose by 3 or fewer and 42+ total points", oddsAsOf: null, anyStale: false, consensusScore: 2, rungsMoved: 0,
+  });
+  const keys = { A: "americanfootball_nfl", B: "americanfootball_nfl", C: "americanfootball_nfl" };
+  const boxes = [box("A", "Lions", "Bears", true, -120), box("B", "Packers", "Vikings", false, -300), box("C", "Jets", "Bills", true, -125)];
+  hybridAnswer = {
+    result: {
+      primary: { structure: "multi-box", legs: boxes.flatMap((b) => b.legs), boxes, combinedAmerican: 265, combinedDecimal: 3.65, impliedProbability: 0.27, isEstimate: true, inTarget: false, boxDescription: "", oddsAsOf: null, anyStale: false, consensusScore: 6, rungsMoved: 0 },
+      alternates: [],
+      note: null,
+      delivery: { requestedLegs: 15, deliveredLegs: 6, boxes: 3, qualifyingGames: 3, shortOfGames: true },
+    },
+    notes: [{ eventId: "X1", gameLabel: "Colts @ Titans", kind: "ladders-unavailable", message: "Live alternate prices are unavailable right now.", cause: "budget" }],
+    candidateEvents: ["A", "B", "C"],
+    eventSportKeys: keys,
+    linkable: false,
+    generatedAt: new Date().toISOString(),
+  };
+  await click(button("Generate parlay"));
+  const gameSections = () => Array.from(el.querySelectorAll('section[aria-label^="Game "]'));
+  check("multi-box: the header counts legs and games", text().includes("6 legs · 3 games"), text().slice(0, 200));
+  check("multi-box: 'Delivered 6 of 15 legs · only 3 games qualified'", text().includes("Delivered 6 of 15 legs · only 3 games qualified"));
+  check("multi-box: one section per game, each with its two legs and its own price", gameSections().length === 3 && gameSections().every((s) => s.querySelectorAll("ol > li").length === 2) && gameSections().map((s) => s.querySelector('[aria-label$="price"]')?.textContent).join() === "≈ -120,≈ -300,≈ -125", gameSections().map((s) => s.querySelector('[aria-label$="price"]')?.textContent).join());
+  check("multi-box: only the out-of-band game is flagged", (text().match(/Closest match · outside your range/g) ?? []).length === 1 && gameSections()[1].textContent!.includes("Closest match · outside your range") && gameSections()[0].textContent!.includes("✓ In your target"));
+  check("multi-box: the combined price is an estimate, and counts the games in target", text().includes("≈ +265") && text().includes("2 of 3 games in your target") && text().includes("FanDuel shows final price"));
+  check("multi-box: the budget note from the server is shown", text().includes("price lookups are used up"));
+  check("multi-box: no alternates tabs", !text().includes("Alt 1"));
+  const send = button("Send to FanDuel") as HTMLButtonElement;
+  check("multi-box over 4 legs: Send to FanDuel is disabled, with the reason", send.disabled && text().includes("Send to FanDuel isn't available yet for more than 4 legs."));
+
+  // Four legs, linkable: still sendable.
+  const two = boxes.filter((b) => b.inTarget);
+  hybridAnswer = {
+    result: { primary: { structure: "multi-box", legs: two.flatMap((b) => b.legs), boxes: two, combinedAmerican: 250, combinedDecimal: 3.5, impliedProbability: 0.28, isEstimate: true, inTarget: true, boxDescription: "", oddsAsOf: null, anyStale: false, consensusScore: 4, rungsMoved: 0 }, alternates: [], note: null, delivery: { requestedLegs: 4, deliveredLegs: 4, boxes: 2, qualifyingGames: 5, shortOfGames: false } },
+    notes: [], candidateEvents: ["A", "C"], eventSportKeys: keys, linkable: true, generatedAt: new Date().toISOString(),
+  };
+  await click(button("Generate parlay"));
+  check("4 legs: Send to FanDuel works", Boolean(button("Send to FanDuel")) && !(button("Send to FanDuel") as HTMLButtonElement).disabled && !text().includes("isn't available yet"));
+  check("4 legs: 'Delivered 4 of 4 legs', no shortfall wording", text().includes("Delivered 4 of 4 legs") && !text().includes("only"));
+
+  // A lone box at a big cap: honest about the one game.
+  hybridAnswer = {
+    result: { primary: boxes[0], alternates: [], note: null, delivery: { requestedLegs: 15, deliveredLegs: 2, boxes: 1, qualifyingGames: 1, shortOfGames: true } },
+    notes: [], candidateEvents: ["A"], eventSportKeys: keys, linkable: true, generatedAt: new Date().toISOString(),
+  };
+  await click(button("Generate parlay"));
+  check("one qualifying game at cap 15: 'Delivered 2 of 15 legs · only 1 game qualified'", text().includes("Delivered 2 of 15 legs · only 1 game qualified"));
+
+  // The single-box result (Total legs 2-3) looks as it always did: its alternates, no delivery line.
+  hybridAnswer = {
+    result: { primary: boxes[0], alternates: [boxes[2], box("D", "Giants", "Cowboys", true, -115)], note: null, delivery: { requestedLegs: 3, deliveredLegs: 2, boxes: 1, qualifyingGames: 6, shortOfGames: false } },
+    notes: [], candidateEvents: ["A", "C", "D"], eventSportKeys: { ...keys, D: "americanfootball_nfl" }, linkable: true, generatedAt: new Date().toISOString(),
+  };
+  await click(button("Generate parlay"));
+  check("single box: the Primary / Alt 1 / Alt 2 tabs", ["Primary", "Alt 1", "Alt 2"].every((t) => Boolean(button(t))));
+  check("single box: no delivery line, no game sections, the one-game header", !text().includes("Delivered") && gameSections().length === 0 && text().includes("2 legs · one game"));
+  check("single box: Send to FanDuel is live", Boolean(button("Send to FanDuel")) && !(button("Send to FanDuel") as HTMLButtonElement).disabled);
+  hybridAnswer = NO_BOX;
+  await click(button("Generate parlay"));
+  const hybridSent = hybridRequests.length;
   await click(button("Standard"));
   check("back on Standard: its controls and its leg count (25) are still there", text().includes("Max legs per game") && ctx.legCount === 25 && !text().includes("Hybrid builds from capper consensus"));
-  check("flipping modes never regenerated anything", requests.length === standardRequests && hybridRequests.length === 4);
+  check("flipping modes never regenerated anything", requests.length === standardRequests && hybridRequests.length === hybridSent);
 
   await act(() => root.unmount());
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
