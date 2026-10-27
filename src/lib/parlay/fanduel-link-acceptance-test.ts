@@ -751,7 +751,7 @@ function noEmptyReasons() {
     notSent.filter((l) => !filled(l.reason) || !filled(notSentDisplay(l).label) || notSentDisplay(l).reason !== l.reason),
     []
   );
-  check("every not-sent status but 'ambiguous' is among them", Array.from(new Set(notSent.map((l) => l.status))).sort(), ["error", "live", "not_found", "over", "unsupported"]);
+  check("every not-sent status is among them (ambiguous: the doubleheader leg)", Array.from(new Set(notSent.map((l) => l.status))).sort(), ["ambiguous", "error", "live", "not_found", "over", "unsupported"]);
 
   // What the page shows, whatever comes back: each status this build knows, and
   // ones it doesn't ("adjusted" reaching a page loaded before #254 is a leg
@@ -770,6 +770,50 @@ function noEmptyReasons() {
     label: "Not found",
     reason: "Couldn't find this game on FanDuel.",
   });
+}
+
+// ---------------------------------------------------------------------
+// 4b. The game window: same two teams, nearest start within 2 hours
+// ---------------------------------------------------------------------
+async function eventWindow() {
+  const MIN = 60 * 1000;
+  const at = (offsetMin: number) => new Date(new Date(KICKOFF).getTime() + offsetMin * MIN).toISOString();
+  const ev = (id: string, commenceTime: string): FanDuelEvent => ({ id, sportKey: "americanfootball_nfl", homeTeam: "Los Angeles Rams", awayTeam: "Buffalo Bills", commenceTime });
+  const run = async (events: FanDuelEvent[], gameTime = KICKOFF) => {
+    const deps: FanDuelDeps = { now: NOW, getEvents: async () => events, getEventMarkets: async (_s, _e, keys) => GAME_MARKETS.filter((m) => keys.includes(m.key)) };
+    const built = await build([leg({ pickId: "w", gameTime })], deps);
+    return [built.legs[0].status, built.legs[0].reason];
+  };
+
+  // Kings @ Blackhawks, 2026-10-27: 7:00 on the board, 7:11 in the feed.
+  for (const gap of [10, 11, 20, 119]) check("the feed's start " + gap + " min after the pick's is that game", await run([ev("evt-buf-lar", at(gap))]), ["matched", null]);
+  check("the feed's start 11 min BEFORE the pick's is that game", await run([ev("evt-buf-lar", at(-11))]), ["matched", null]);
+  check(
+    "125 min apart is not that game, and the reason names both times",
+    await run([ev("evt-buf-lar", at(125))]),
+    ["not_found", "FanDuel has this game at 10:20 PM ET; your pick is at 8:15 PM ET."]
+  );
+  check(
+    "the same teams on another day: both times carry their day",
+    await run([ev("evt-buf-lar", "2026-10-16T00:15:00Z")]),
+    ["not_found", "FanDuel has this game at Oct 15, 8:15 PM ET; your pick is at Oct 12, 8:15 PM ET."]
+  );
+  check("no event for the teams at all", await run([]), ["not_found", "Couldn't find this game on FanDuel."]);
+  check(
+    "another game's event is not the same teams",
+    await run([{ ...ev("evt-buf-lar", at(0)), homeTeam: "Denver Broncos" }]),
+    ["not_found", "Couldn't find this game on FanDuel."]
+  );
+
+  // A doubleheader: two events for the same teams.
+  check("two same-team events both inside the window: not sent, says so", await run([ev("evt-buf-lar", at(0)), ev("evt-buf-lar-2", at(60))]), [
+    "ambiguous",
+    "Two games found — couldn't tell which",
+  ]);
+  const hours3 = [ev("evt-buf-lar", at(0)), ev("evt-buf-lar-2", at(180))];
+  check("games 3 h apart: the first leg finds the first", await run(hours3), ["matched", null]);
+  check("games 3 h apart: the second leg finds the second", await run(hours3, at(180)), ["matched", null]);
+  check("a game the feed already has under way is Live even when its start differs", await run([ev("evt-buf-lar", at(-300))], at(-295)), ["live", LIVE_LEG_REASON]);
 }
 
 async function main() {
@@ -865,6 +909,7 @@ async function main() {
   const failed = await build([billsMl], down);
   check("the feed failing is an error on the leg, not a match", [failed.url, failed.legs[0].status], [null, "error"]);
 
+  await eventWindow();
   await realResponses();
   await preseasonListings();
   noEmptyReasons();

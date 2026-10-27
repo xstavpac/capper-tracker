@@ -482,9 +482,11 @@ export type FanDuelDeps = {
 };
 
 // How far a leg's kickoff may sit from the feed's own for the same two teams.
-// Covers two sources disagreeing by a few minutes; nowhere near the hours
-// between the two games of a doubleheader.
-export const EVENT_TIME_TOLERANCE_MS = 10 * 60 * 1000;
+// The sources round differently: Kings @ Blackhawks was 7:00 on the board and
+// 7:11 in the Odds API, one minute past the 10 this used to allow. Wide enough
+// for that and for the feed moving a start; still short of the hours between
+// the two games of a doubleheader.
+export const EVENT_TIME_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 const FEED_DOWN = "Couldn't reach FanDuel's odds right now - try again.";
 
@@ -493,16 +495,33 @@ export const LIVE_LEG_REASON = "Live — add on FanDuel";
 
 type EventMatch = { event: FanDuelEvent } | { status: "not_found" | "ambiguous" | "live"; reason: string };
 
+// "7:11 PM ET", with the day ("Oct 28, ") only when it isn't the other time's day.
+const etDay = (ms: number) => new Date(ms).toLocaleDateString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" });
+function clockET(ms: number, otherMs: number): string {
+  if (!Number.isFinite(ms)) return "an unknown time";
+  const time = new Date(ms).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" });
+  const day = Number.isFinite(otherMs) && etDay(ms) !== etDay(otherMs) ? etDay(ms) + ", " : "";
+  return day + time + " ET";
+}
+
+// The leg's game is the feed's event for the same two teams that starts within
+// EVENT_TIME_WINDOW_MS of the leg's kickoff. Two such events (a doubleheader)
+// are ambiguous: a leg carries no game number to choose between them. The same
+// two teams only outside the window is some other game, and the reason says when
+// FanDuel has it.
 function eventForLeg(leg: FanDuelLegInput, events: FanDuelEvent[], now: Date): EventMatch {
   const start = new Date(leg.gameTime).getTime();
-  const candidates = events.filter(
-    (e) =>
-      teamNamesMatch(e.homeTeam, leg.homeTeam, leg.sportKey ?? undefined) &&
-      teamNamesMatch(e.awayTeam, leg.awayTeam, leg.sportKey ?? undefined) &&
-      Math.abs(new Date(e.commenceTime).getTime() - start) <= EVENT_TIME_TOLERANCE_MS
+  const sameTeams = events.filter(
+    (e) => teamNamesMatch(e.homeTeam, leg.homeTeam, leg.sportKey ?? undefined) && teamNamesMatch(e.awayTeam, leg.awayTeam, leg.sportKey ?? undefined)
   );
-  if (candidates.length === 0) return { status: "not_found", reason: "Couldn't find this game on FanDuel." };
-  if (candidates.length > 1) return { status: "ambiguous", reason: "More than one game fits this pick." };
+  const gap = (e: FanDuelEvent) => Math.abs(new Date(e.commenceTime).getTime() - start);
+  const candidates = sameTeams.filter((e) => gap(e) <= EVENT_TIME_WINDOW_MS);
+  if (candidates.length === 0) {
+    if (sameTeams.length === 0) return { status: "not_found", reason: "Couldn't find this game on FanDuel." };
+    const nearest = new Date([...sameTeams].sort((x, y) => gap(x) - gap(y))[0].commenceTime).getTime();
+    return { status: "not_found", reason: "FanDuel has this game at " + clockET(nearest, start) + "; your pick is at " + clockET(start, nearest) + "." };
+  }
+  if (candidates.length > 1) return { status: "ambiguous", reason: "Two games found — couldn't tell which" };
   // The feed already has it under way (our clock or kickoff was a little behind).
   if (hasKickedOff(candidates[0].commenceTime, now)) return { status: "live", reason: LIVE_LEG_REASON };
   return { event: candidates[0] };
