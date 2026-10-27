@@ -8,7 +8,7 @@
 //   - the box in plain words (and a fallback when the optimizer sent none)
 //   - one compact line per leg: pick + price, consensus, reason
 //   - which state the page is in (idle .. result), from the action's response
-//   - the "Allow more legs" bump, and Legs: 2 · 3 · Auto (raising Max legs)
+//   - Total Legs: 2 · 3 · Auto, the one source of the leg count (maxLegsFor)
 //   - the Send to FanDuel outcome: the link legs, "no longer posted", and the
 //     price-moved diff with the re-priced combined estimate
 //
@@ -18,7 +18,6 @@ import {
   distanceToBand,
   HYBRID_DEFAULT_TARGET_MAX,
   HYBRID_DEFAULT_TARGET_MIN,
-  HYBRID_MAX_LEGS,
   HYBRID_MIN_LEG_PRICE,
   impliedProbability,
   jointImplied,
@@ -84,7 +83,6 @@ export type HybridForm = {
   targetMax: string;
   width: HybridWidth;
   boxLegs: HybridBoxLegs;
-  maxLegs: number;
   minWinPct: number;
   // The per-leg price range sits behind "Advanced" and is off by default.
   advanced: boolean;
@@ -96,9 +94,7 @@ export const DEFAULT_FORM: HybridForm = {
   targetMin: formatPrice(HYBRID_DEFAULT_TARGET_MIN),
   targetMax: formatPrice(HYBRID_DEFAULT_TARGET_MAX),
   width: "balanced",
-  // Auto needs room for the third box leg, so the default allows 3.
   boxLegs: "auto",
-  maxLegs: 3,
   minWinPct: GATE_DEFAULT,
   advanced: false,
   legMin: "",
@@ -124,39 +120,22 @@ export function buildSettings(form: HybridForm): { ok: true; settings: HybridGen
     else perLegRange = { min, max };
   }
   if (errors.target || errors.perLeg || targetMin === null || targetMax === null) return { ok: false, errors };
-  const maxLegs = Math.max(minMaxLegs(form.boxLegs), Math.min(HYBRID_MAX_LEGS, Math.floor(form.maxLegs) || 2));
-  return { ok: true, settings: { targetMin, targetMax, width: form.width, perLegRange, maxLegs, minWinPct: form.minWinPct, boxLegs: form.boxLegs } };
+  return { ok: true, settings: { targetMin, targetMax, width: form.width, perLegRange, maxLegs: maxLegsFor(form.boxLegs), minWinPct: form.minWinPct, boxLegs: form.boxLegs } };
 }
 
-// ---- Legs: 2 · 3 · Auto ----
+// ---- Total Legs: 2 · 3 · Auto ----
 
 export const BOX_LEGS_OPTIONS: { key: HybridBoxLegs; label: string }[] = [
-  { key: "2", label: "2" },
-  { key: "3", label: "3" },
+  { key: "2", label: "2 Legs" },
+  { key: "3", label: "3 Legs" },
   { key: "auto", label: "Auto" },
 ];
-export const BOX_LEGS_HINT = "3 adds the other side of the total. Auto adds it only when 2 legs come back too short.";
+export const BOX_LEGS_HINT = "Auto uses 2 legs when possible and adds a third when needed.";
 
-// The fewest Max legs the choice allows: a forced 3-leg box needs 3.
-export function minMaxLegs(boxLegs: HybridBoxLegs): number {
-  return boxLegs === "3" ? 3 : 2;
-}
-
-// Picking 3 or Auto raises Max legs to 3 when it was 2, so the third leg has room.
-export function boxLegsPatch(form: Pick<HybridForm, "maxLegs">, boxLegs: HybridBoxLegs): Pick<HybridForm, "boxLegs" | "maxLegs"> {
-  return { boxLegs, maxLegs: boxLegs !== "2" && form.maxLegs < 3 ? 3 : form.maxLegs };
-}
-
-// ---- "Allow more legs" ----
-
-export function bumpMaxLegs(maxLegs: number): number {
-  return Math.min(HYBRID_MAX_LEGS, Math.max(2, Math.floor(maxLegs) || 2) + 1);
-}
-
-// More legs can only help a hybrid that used every leg it was allowed; one that
-// stopped short already had the room.
-export function canAllowMoreLegs(maxLegs: number, h: Hybrid | null): boolean {
-  return h !== null && !h.inTarget && maxLegs < HYBRID_MAX_LEGS && h.legs.length >= maxLegs;
+// The leg cap the request carries, from Total Legs alone: 2 is two legs, 3 and Auto
+// leave room for the box's third leg.
+export function maxLegsFor(boxLegs: HybridBoxLegs): number {
+  return boxLegs === "2" ? 2 : 3;
 }
 
 // ---- Target status ----
@@ -265,13 +244,12 @@ export type PageInput = {
   // The message of an action rejection, or null for a thrown / unknown failure.
   errorMessage: string | null;
   // The settings the response was built with.
-  settings: Pick<HybridGenerateSettings, "targetMin" | "targetMax" | "maxLegs">;
+  settings: Pick<HybridGenerateSettings, "targetMin" | "targetMax">;
 };
 
 export type ResultFlags = {
-  // The primary is outside the target: "closest match", with "Allow more legs" when it could help.
+  // The primary is outside the target: "closest match".
   outsideTarget: boolean;
-  canAllowMoreLegs: boolean;
   // No game had a box; the primary is built from different games (exact price).
   crossGame: boolean;
   // Games whose alternate lines FanDuel hasn't posted yet / another request is pricing.
@@ -317,7 +295,6 @@ export function pageState(input: PageInput): PageState {
 
   const flags: ResultFlags = {
     outsideTarget: !primary.inTarget,
-    canAllowMoreLegs: canAllowMoreLegs(input.settings.maxLegs, primary),
     crossGame: primary.structure === "cross-game",
     skippedGames,
     pricingGames,

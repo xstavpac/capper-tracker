@@ -1,6 +1,6 @@
 "use client";
 
-// The Parlay Generator's "Include Picks" chips, its "Customize Mix" link, the
+// The Parlay Generator's Bet Types chips, its "Customize Mix" link, the
 // Pick Mix popover, and the chip that shows an active mix ("ML 40 · Totals 60
 // ✕"). Presentational: the selection and the mix live in the generator card
 // (generator-card.tsx, session-only React state) and come in as props; the
@@ -12,6 +12,7 @@
 // outside click / Escape throw it away. The chip reopens the popover; its ✕
 // clears the mix back to none (pure ranking, no shares).
 import { useEffect, useRef, useState } from "react";
+import { SlidersIcon } from "@/components/dashboard/cappers-icons";
 import { PILL_OUTLINE, PILL_PRIMARY, SEGMENT_OFF, SEGMENT_ON } from "@/components/parlay/parlay-controls";
 import { BET_CATEGORIES, BET_CATEGORY_LABELS, type BetCategory } from "@/lib/parlay/bet-category";
 import {
@@ -37,7 +38,7 @@ const INCLUDE_OPTIONS: { key: "ALL" | BetCategory; label: string }[] = [
 // `hide`: categories left off the row (Consensus Hybrid has no Props).
 export function IncludePicksChips({ value, onToggle, hide = [] }: { value: IncludeSelection; onToggle: (key: "ALL" | BetCategory) => void; hide?: BetCategory[] }) {
   return (
-    <div role="group" aria-label="Include picks" className="flex flex-wrap gap-1.5">
+    <div role="group" aria-label="Bet types" className="flex flex-wrap gap-1.5">
       {INCLUDE_OPTIONS.filter((o) => o.key === "ALL" || !hide.includes(o.key)).map((o) => {
         const on = o.key === "ALL" ? value === "ALL" : value !== "ALL" && value.includes(o.key);
         return (
@@ -98,7 +99,8 @@ export function PickMixControl({
 
   return (
     <div ref={ref} className="flex flex-wrap items-center gap-2">
-      <button type="button" onClick={openPopover} aria-haspopup="dialog" aria-expanded={open} className={LINK + " px-1 py-2.5"}>
+      <button type="button" onClick={openPopover} aria-haspopup="dialog" aria-expanded={open} className={LINK + " inline-flex items-center gap-1.5 px-1 py-2.5"}>
+        <SlidersIcon className="h-4 w-4" />
         Customize Mix
       </button>
       {mix !== null && (

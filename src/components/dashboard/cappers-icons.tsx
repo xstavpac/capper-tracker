@@ -242,3 +242,43 @@ export const LiveIcon = ({ className }: P) => (
     <path d="M19.1 4.9a10 10 0 0 1 0 14.2" />
   </svg>
 );
+
+// Parlay Generator settings rows.
+export const SlidersIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+    <circle cx="15" cy="7" r="2" />
+    <circle cx="9" cy="17" r="2" />
+  </svg>
+);
+
+export const GamepadIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <rect x="2.5" y="7" width="19" height="11" rx="5.5" />
+    <path d="M7.5 10.5v4M5.5 12.5h4" />
+    <circle cx="15.5" cy="11.5" r=".7" fill="currentColor" />
+    <circle cx="18" cy="13.5" r=".7" fill="currentColor" />
+  </svg>
+);
+
+export const DatabaseIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <ellipse cx="12" cy="5.5" rx="7.5" ry="2.8" />
+    <path d="M4.5 5.5v13c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-13" />
+    <path d="M4.5 12c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8" />
+  </svg>
+);
+
+export const WidthIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <path d="M4 5v14M20 5v14M4 12h16M7.5 9L4 12l3.5 3M16.5 9L20 12l-3.5 3" />
+  </svg>
+);
+
+export const LayersIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <path d="M12 3l9 4.5-9 4.5-9-4.5z" />
+    <path d="M3 12l9 4.5 9-4.5" />
+    <path d="M3 16.5L12 21l9-4.5" />
+  </svg>
+);

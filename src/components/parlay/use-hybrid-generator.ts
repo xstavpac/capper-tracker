@@ -31,7 +31,9 @@ export type HybridGenerator = {
   state: PageState;
   card: HybridCardKey;
   setCard: (k: HybridCardKey) => void;
-  generate: (patch?: Partial<HybridForm>) => Promise<void>;
+  generate: () => Promise<void>;
+  // Back to no result (and drops any answer still in flight).
+  clear: () => void;
 };
 
 export function useHybridGenerator(scope: { leagues: string[]; targets: { gameId: string; leagueName: string }[] }): HybridGenerator {
@@ -49,10 +51,8 @@ export function useHybridGenerator(scope: { leagues: string[]; targets: { gameId
   const keyOf = (settings: HybridGenerateSettings) => JSON.stringify({ scope, include, settings });
   const settingsChanged = built !== null && (!parsed.ok || keyOf(parsed.settings) !== built.key);
 
-  async function generate(patch?: Partial<HybridForm>) {
-    const nextForm = patch ? { ...form, ...patch } : form;
-    if (patch) setForm(nextForm);
-    const next = buildSettings(nextForm);
+  async function generate() {
+    const next = parsed;
     if (!next.ok || (scope.leagues.length === 0 && scope.targets.length === 0)) return;
     const mine = ++sequence.current;
     const request: HybridGenerateRequest = { leagues: scope.leagues, targets: scope.targets, include, settings: next.settings };
@@ -78,11 +78,20 @@ export function useHybridGenerator(scope: { leagues: string[]; targets: { gameId
     }
   }
 
+  function clear() {
+    sequence.current++;
+    setPhase("idle");
+    setResponse(null);
+    setBuilt(null);
+    setErrorMessage(null);
+    setCard("primary");
+  }
+
   const state = pageState({
     phase,
     response,
     errorMessage,
-    settings: built?.settings ?? (parsed.ok ? parsed.settings : { targetMin: -140, targetMax: -110, maxLegs: form.maxLegs }),
+    settings: built?.settings ?? (parsed.ok ? parsed.settings : { targetMin: -140, targetMax: -110 }),
   });
 
   return {
@@ -99,5 +108,6 @@ export function useHybridGenerator(scope: { leagues: string[]; targets: { gameId
     card,
     setCard,
     generate,
+    clear,
   };
 }
