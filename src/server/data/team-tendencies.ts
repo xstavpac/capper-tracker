@@ -348,3 +348,15 @@ export function computeTendencyRates(tendency: {
     totalSampleSize,
   };
 }
+
+// The newest snapshotDate for a sport (one row, one column), or null when there
+// are none. The Zone Model page shows it on its "Data paused" note while the
+// tendency pipeline is off (lib/tendency-pipeline.ts).
+export async function getLatestTendencySnapshotDate(sportKey: string): Promise<string | null> {
+  const row = await prisma.teamTendencySnapshot.findFirst({
+    where: { sportKey },
+    orderBy: { snapshotDate: "desc" },
+    select: { snapshotDate: true },
+  });
+  return row?.snapshotDate ?? null;
+}

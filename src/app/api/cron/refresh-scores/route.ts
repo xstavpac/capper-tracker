@@ -10,6 +10,7 @@ import {
 import { captureTeamRecordSnapshots } from "@/server/data/team-record";
 import { captureSituationalRateSnapshots } from "@/server/data/situational-snapshots";
 import { syncDecayDeltaPredictions } from "@/server/data/model-engine/decay-delta-predictions";
+import { isTendencyPipelineEnabled, runTendencyPhase, tendencyPipelineSkippedLog } from "@/lib/tendency-pipeline";
 import { runCronLogged } from "@/server/data/cron-runs";
 
 const MLB_SPORT_KEY = "baseball_mlb";
@@ -59,6 +60,8 @@ export async function GET(req: Request) {
 // runCronLogged - only after the auth check above passes.
 async function run(): Promise<Response> {
   const runStart = Date.now();
+  const pipelineEnabled = isTendencyPipelineEnabled();
+  if (!pipelineEnabled) console.log(tendencyPipelineSkippedLog());
 
   const results = await Promise.all(
     RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
@@ -68,13 +71,18 @@ async function run(): Promise<Response> {
       const [persisted, persistMs] = await timed(() => persistFinalScores(sportKey, gameResultChanges));
       // Recompute right after this sport's scores are persisted, so a
       // freshly-final game is reflected in tendencies the same run it
-      // lands in GameResult, not a day later on the next cron pass.
-      const [tendencies, tendencyMs] = await timed(() => recomputeTeamTendencies(sportKey));
-      // Preserves today's cumulative counts as a dated row - pure DB
-      // read-then-write of what recomputeTeamTendencies just computed, no
-      // extra API calls. Without this, TeamTendency's history is lost the
-      // moment tomorrow's recompute overwrites it in place.
-      const [tendencySnapshots, snapshotMs] = await timed(() => snapshotTeamTendencies(sportKey));
+      // lands in GameResult, not a day later on the next cron pass. Then
+      // preserve today's cumulative counts as a dated row - pure DB
+      // read-then-write of what the recompute just computed, no extra API
+      // calls. Without it, TeamTendency's history is lost the moment
+      // tomorrow's recompute overwrites it in place. Both are skipped, along
+      // with the Decay Delta sync below, while TENDENCY_PIPELINE_ENABLED is off.
+      const { tendencies, tendencySnapshots, tendencyMs, snapshotMs } = await runTendencyPhase(
+        pipelineEnabled,
+        () => recomputeTeamTendencies(sportKey),
+        () => snapshotTeamTendencies(sportKey),
+        timed
+      );
       return {
         sport: sportKey,
         persisted,
@@ -85,11 +93,11 @@ async function run(): Promise<Response> {
           persistMs,
           tendencyMs,
           snapshotMs,
-          gameResultRows: tendencies.gameResultRows,
-          oddsSnapshotRows: tendencies.oddsSnapshotRows,
-          oddsGamesFlattened: tendencies.oddsGamesFlattened,
-          gamesProcessed: tendencies.gamesProcessed,
-          teamsUpdated: tendencies.teamsUpdated,
+          gameResultRows: tendencies?.gameResultRows ?? 0,
+          oddsSnapshotRows: tendencies?.oddsSnapshotRows ?? 0,
+          oddsGamesFlattened: tendencies?.oddsGamesFlattened ?? 0,
+          gamesProcessed: tendencies?.gamesProcessed ?? 0,
+          teamsUpdated: tendencies?.teamsUpdated ?? 0,
         },
       };
     })
@@ -135,7 +143,8 @@ async function run(): Promise<Response> {
   // GameResult, not a day later. MLB-only, matching the Decay Delta fixture
   // itself (decayDeltaModel.sport === "baseball_mlb") - not looped over
   // RESOLVABLE_SPORT_KEYS like the scores/tendencies above.
-  const decayDeltaPredictions = await syncDecayDeltaPredictions(MLB_SPORT_KEY);
+  // Paused with the tendency steps: it reads the tendency snapshots they write.
+  const decayDeltaPredictions = pipelineEnabled ? await syncDecayDeltaPredictions(MLB_SPORT_KEY) : null;
 
   // Measurement only (see docs/m9-team-tendencies.md). One line per run so the
   // tendency-recompute scan size and per-phase timing are queryable from
@@ -161,5 +170,6 @@ async function run(): Promise<Response> {
     nflRecordSnapshots,
     nflSituationalSnapshots,
     decayDeltaPredictions,
+    tendencyPipeline: pipelineEnabled ? "enabled" : "paused",
   });
 }
