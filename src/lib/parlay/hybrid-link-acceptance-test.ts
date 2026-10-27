@@ -122,7 +122,9 @@ const none = () => null;
 
   const stale: AltLadderResult = { NBA1: { alternate_spreads: ladderOf(nba, "alternate_spreads", { stale: true }) } };
   const s = buildHybridLink([leg("NBA1", "alternate_spreads", NUGGETS, -7.5)], stale, none);
-  check("a stale ladder is NOT linked: gone, no url, flagged", [s.legs[0].status, s.url, s.anyStale, s.legs[0].status === "gone" && s.legs[0].reason], ["gone", null, true, "FanDuel's odds couldn't be refreshed (as of 2026-10-26T19:55:00.000Z) - try again."]);
+  check("a stale ladder is NOT linked: gone, no url, flagged", [s.legs[0].status, s.url, s.anyStale, s.legs[0].status === "gone" && s.legs[0].reason], ["gone", null, true, "FanDuel's odds couldn't be refreshed - try again."]);
+  check("a stale ladder: staleAsOf is the market update, structured", [s.staleAsOf, s.legs[0].status === "gone" && s.legs[0].stale], ["2026-10-26T19:55:00.000Z", { asOf: "2026-10-26T19:55:00.000Z" }]);
+  check("fresh ladders: staleAsOf is null", ml.staleAsOf, null);
 
   const blocked = buildHybridLink([leg("NBA1", "alternate_spreads", NUGGETS, -7.5), leg("NBA1", "alternate_totals", "Over", 220.5)], NBA_LADDERS, (l) => (l.marketKey === "alternate_totals" ? "Pricing in progress - try again in a few seconds." : null));
   check("one leg unavailable: no link, the reason is shown", [blocked.url, blocked.legs[1].status === "gone" && blocked.legs[1].reason], [null, "Pricing in progress - try again in a few seconds."]);

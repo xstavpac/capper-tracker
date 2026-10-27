@@ -55,7 +55,7 @@
 // with two legs on one game is `isEstimate: true` - no correlation adjustment is
 // guessed. A cross-game hybrid's product is exact.
 import { americanToDecimal, combineOdds, hasUsablePrice } from "@/lib/parlay/combine-odds";
-import type { ConsensusPosition, HybridFamily, PositionCapper } from "@/lib/parlay/consensus";
+import type { ConsensusPosition, HybridFamily, HybridMarket, PositionCapper } from "@/lib/parlay/consensus";
 import type { SwingGame } from "@/lib/parlay/recent-swings";
 import { normalizeTeamName, teamNamesMatch } from "@/lib/team-name-match";
 
@@ -152,7 +152,7 @@ export type HybridLeg = {
     score: number;
     anchorLine: number;
     anchorIsMoneyline: boolean;
-    topSupporters: { capperName: string; record: "LEAGUE" | "OVERALL"; wins: number; losses: number; n: number; winPct: number }[];
+    topSupporters: { capperName: string; record: "LEAGUE" | "OVERALL"; recordMarket: HybridMarket; wins: number; losses: number; n: number; winPct: number }[];
   };
 };
 
@@ -663,6 +663,7 @@ function topSupporters(cappers: PositionCapper[]) {
   return cappers.slice(0, TOP_SUPPORTERS).map((c) => ({
     capperName: c.capperName,
     record: c.record.source,
+    recordMarket: c.recordMarket,
     wins: c.record.wins,
     losses: c.record.losses,
     n: c.record.n,

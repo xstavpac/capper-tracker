@@ -2,7 +2,7 @@
 // shows, decided here so the components stay thin. Pure and client-safe: no I/O,
 // no clock (times are formatted by an injected function), no React.
 //
-//   - price display ("−135", "+120", "+100" for even money)
+//   - price display ("-135", "+120", "+100" for even money)
 //   - the settings form -> a HybridGenerateSettings, with its validation
 //   - target status (in range / just outside / closest match)
 //   - the box in plain words (and a fallback when the optimizer sent none)
@@ -16,7 +16,7 @@
 import { combineOdds, hasUsablePrice } from "@/lib/parlay/combine-odds";
 import { distanceToBand, HYBRID_DEFAULT_TARGET_MAX, HYBRID_DEFAULT_TARGET_MIN, HYBRID_MAX_LEGS, HYBRID_MIN_LEG_PRICE, impliedProbability, targetBand, type Hybrid, type HybridLeg, type HybridWidth } from "@/lib/parlay/hybrid";
 import type { HybridGenerateSettings } from "@/lib/parlay/hybrid-request";
-import type { HybridLinkLegInput, HybridLinkResponse } from "@/lib/parlay/hybrid-link";
+import { STALE_REASON, type HybridLinkLegInput, type HybridLinkResponse } from "@/lib/parlay/hybrid-link";
 import { GATE_DEFAULT } from "@/lib/parlay/gate";
 import type { HybridEventNote, HybridGenerateResponse } from "@/server/data/hybrid-generate";
 
@@ -38,15 +38,13 @@ export const FAR_TARGET_TEXT = "Closest match · outside your range";
 
 // ---- Prices ----
 
-const MINUS = "−";
-
-// "−135", "+120". Even money is "+100" either way it was posted. Not a price: "—".
+// "-135", "+120". Even money is "+100" either way it was posted. Not a price: "—".
 export function formatPrice(american: number): string {
   if (!Number.isFinite(american)) return "—";
   const r = Math.round(american);
   if (Math.abs(r) < 100) return "—";
   if (r === -100) return "+100";
-  return (r > 0 ? "+" : MINUS) + Math.abs(r).toLocaleString("en-US");
+  return (r > 0 ? "+" : "-") + Math.abs(r).toLocaleString("en-US");
 }
 
 // A typed price ("-140", "−140", "+120", "120") -> American odds, null when it isn't one.
@@ -94,7 +92,7 @@ export function buildSettings(form: HybridForm): { ok: true; settings: HybridGen
   const errors: FormErrors = {};
   const targetMin = parsePrice(form.targetMin);
   const targetMax = parsePrice(form.targetMax);
-  if (targetMin === null || targetMax === null) errors.target = "Enter both target prices as American odds, like −140 or +120.";
+  if (targetMin === null || targetMax === null) errors.target = "Enter both target prices as American odds, like -140 or +120.";
   else if (targetMin > targetMax) errors.target = `Min can't be higher than max. Put the longer price second, like ${formatPrice(-140)} to ${formatPrice(-110)}.`;
 
   let perLegRange: HybridGenerateSettings["perLegRange"] = null;
@@ -154,16 +152,17 @@ export function combinedPrice(h: Hybrid, american = h.combinedAmerican): { text:
   return h.isEstimate ? { text: "≈ " + formatPrice(american), note: FINAL_PRICE_NOTE } : { text: formatPrice(american), note: null };
 }
 
-const MARKET_NOUN: Record<HybridLeg["marketKey"], string> = { alternate_spreads: "spreads", alternate_totals: "totals", h2h: "moneylines" };
+const RECORD_NOUN: Record<HybridLeg["consensus"]["topSupporters"][number]["recordMarket"], string> = { SPREAD: "spreads", MONEYLINE: "moneylines", TOTAL: "totals" };
 
 // "5 cappers · 61% NFL spreads (n=212)": the top supporter's record, and its sample size.
+// The noun is the market that record is for (the data's recordMarket), not the leg's rung.
 export function consensusLine(leg: HybridLeg): string {
   const n = leg.consensus.supporters;
   const head = `${n} capper${n === 1 ? "" : "s"}`;
   const top = leg.consensus.topSupporters[0];
   if (!top) return head;
   const scope = top.record === "LEAGUE" ? leg.sport : "all leagues";
-  return `${head} · ${Math.round(top.winPct)}% ${scope} ${MARKET_NOUN[leg.marketKey]} (n=${top.n})`;
+  return `${head} · ${Math.round(top.winPct)}% ${scope} ${RECORD_NOUN[top.recordMarket]} (n=${top.n})`;
 }
 
 // The optimizer's reason opens with the pick's own label, which the row already
@@ -239,6 +238,8 @@ export type ResultFlags = {
   // Games whose alternate lines FanDuel hasn't posted yet / another request is pricing.
   skippedGames: string[];
   pricingGames: string[];
+  // Games FanDuel's lines couldn't be priced for (credit budget, usage gate, API failure).
+  unavailableGames: string[];
   // The primary rests on prices that couldn't be refreshed.
   stale: boolean;
 };
@@ -252,7 +253,7 @@ export type PageState =
   | { kind: "no-box"; message: string; detail: string | null }
   | { kind: "alt-lines-not-posted"; games: string[] }
   | { kind: "pricing-in-progress"; games: string[] }
-  | { kind: "prices-unavailable" };
+  | { kind: "prices-unavailable"; games: string[] };
 
 const gamesOf = (notes: HybridEventNote[], kind: HybridEventNote["kind"]) => notes.filter((n) => n.kind === kind).map((n) => n.gameLabel);
 
@@ -264,15 +265,14 @@ export function pageState(input: PageInput): PageState {
   const { result, notes, candidateEvents } = input.response;
   const skippedGames = gamesOf(notes, "alt-lines-not-posted");
   const pricingGames = gamesOf(notes, "pricing-in-progress");
+  const unavailableGames = gamesOf(notes, "ladders-unavailable");
   const primary = result.primary;
 
   if (!primary) {
     if (pricingGames.length > 0) return { kind: "pricing-in-progress", games: pricingGames };
+    if (unavailableGames.length > 0) return { kind: "prices-unavailable", games: unavailableGames };
     if (skippedGames.length > 0) return { kind: "alt-lines-not-posted", games: skippedGames };
     if (candidateEvents.length === 0) return { kind: "no-box", message: NO_BOX_NOTE, detail: null };
-    // Every candidate event asked for ladders and none came back, without a note:
-    // the budget was spent, the Odds API failed, or the game has started.
-    if (result.note !== null && /usable FanDuel ladder/.test(result.note)) return { kind: "prices-unavailable" };
     return { kind: "no-box", message: NO_BOX_NOTE, detail: result.note };
   }
 
@@ -282,6 +282,7 @@ export function pageState(input: PageInput): PageState {
     crossGame: primary.structure === "cross-game",
     skippedGames,
     pricingGames,
+    unavailableGames,
     stale: primary.anyStale,
   };
   return { kind: flags.outsideTarget ? "no-fit" : "result", flags };
@@ -326,19 +327,18 @@ export function priceMoves(h: Hybrid, link: HybridLinkResponse): { moves: PriceM
   return { moves, combined: { american: c.american, text: combinedPrice(h, c.american).text } };
 }
 
-// The action words a stale reason with "(as of <ISO>)" in local time.
-export function reasonText(reason: string, formatTime: (iso: string) => string): string {
-  return reason.replace(/\(as of (\d{4}-\d{2}-\d{2}T[^)\s]+)\)/, (_m, iso: string) => `(as of ${formatTime(iso)})`);
-}
 
-const STALE_REASON = "FanDuel's odds couldn't be refreshed";
+// "FanDuel's odds couldn't be refreshed (as of 3:12 PM) - try again."
+export function staleText(staleAsOf: string | null | undefined, formatTime: (iso: string) => string): string {
+  return STALE_REASON + (staleAsOf ? ` (as of ${formatTime(staleAsOf)})` : "") + " - try again.";
+}
 
 export type LinkView =
   | { kind: "ready"; url: string; moves: PriceMove[]; combined: { text: string; american: number; status: TargetStatus } | null }
   | { kind: "blocked"; lines: string[]; stale: boolean };
 
 function nearestText(leg: HybridLeg | undefined, point: number | null, price: number): string {
-  const where = point === null ? "" : leg?.family === "TOTAL" ? String(point) : point > 0 ? "+" + point : point === 0 ? "0" : MINUS + Math.abs(point);
+  const where = point === null ? "" : leg?.family === "TOTAL" ? String(point) : point > 0 ? "+" + point : String(point);
   return where ? `Nearest is ${where} at ${formatPrice(price)}.` : `FanDuel has it at ${formatPrice(price)}.`;
 }
 
@@ -353,9 +353,9 @@ export function linkView(h: Hybrid, link: HybridLinkResponse, range: { targetMin
     if (r.status !== "gone") continue;
     const shown = byKey.get(legKey(r.leg));
     const label = shown?.label ?? `${r.leg.outcomeName}${r.leg.point === null ? "" : " " + r.leg.point}`;
-    if (r.reason.startsWith(STALE_REASON)) lines.push(reasonText(r.reason, formatTime));
+    if (r.stale) lines.push(staleText(link.staleAsOf, formatTime));
     else if (r.nearest) lines.push(`${label} is no longer posted. ${nearestText(shown, r.nearest.point, r.nearest.price)}`);
-    else lines.push(`${label}: ${reasonText(r.reason, formatTime)}`);
+    else lines.push(`${label}: ${r.reason}`);
   }
   return { kind: "blocked", lines, stale: link.anyStale };
 }

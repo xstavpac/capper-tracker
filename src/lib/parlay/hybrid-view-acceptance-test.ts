@@ -27,7 +27,7 @@ import {
   parsePrice,
   priceMoves,
   reasonLine,
-  reasonText,
+  staleText,
   targetStatus,
   type HybridForm,
   type PageInput,
@@ -43,7 +43,7 @@ function check(label: string, actual: unknown, expected: unknown) {
   if (!pass) failures++;
 }
 
-const M = "−";
+const M = "-";
 const clock = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC" });
 
 // ---- Fixtures ----
@@ -75,7 +75,7 @@ function leg(over: Partial<HybridLeg> = {}): HybridLeg {
     reason: "Chicago Bears +14.5 · tonight +3.5 · their games miss the spread by up to 8",
     isStale: false,
     marketLastUpdate: "2026-10-27T19:12:00.000Z",
-    consensus: { supporters: 5, opposers: 1, score: 3, anchorLine: 3.5, anchorIsMoneyline: false, topSupporters: [{ capperName: "A", record: "LEAGUE", wins: 129, losses: 83, n: 212, winPct: 60.85 }] },
+    consensus: { supporters: 5, opposers: 1, score: 3, anchorLine: 3.5, anchorIsMoneyline: false, topSupporters: [{ capperName: "A", record: "LEAGUE", recordMarket: "SPREAD", wins: 129, losses: 83, n: 212, winPct: 60.85 }] },
     ...over,
   };
 }
@@ -89,7 +89,7 @@ const OVER = leg({
   price: -150,
   label: "Over 42.5",
   reason: "Over 42.5 · tonight 47.5 · their games fall short of the total by up to 5",
-  consensus: { supporters: 3, opposers: 0, score: 2, anchorLine: 44.5, anchorIsMoneyline: false, topSupporters: [{ capperName: "B", record: "OVERALL", wins: 70, losses: 40, n: 110, winPct: 63.6 }] },
+  consensus: { supporters: 3, opposers: 0, score: 2, anchorLine: 44.5, anchorIsMoneyline: false, topSupporters: [{ capperName: "B", record: "OVERALL", recordMarket: "TOTAL", wins: 70, losses: 40, n: 110, winPct: 63.6 }] },
 });
 function hybrid(over: Partial<Hybrid> = {}): Hybrid {
   return {
@@ -194,7 +194,13 @@ check("box fallback with three legs", boxText(hybrid({ boxDescription: "", legs:
 check("consensus line, league record", consensusLine(leg()), "5 cappers · 61% NFL spreads (n=212)");
 check("consensus line, overall record", consensusLine(OVER), "3 cappers · 64% all leagues totals (n=110)");
 check("consensus line with no supporter record", consensusLine(leg({ consensus: { ...leg().consensus, supporters: 1, topSupporters: [] } })), "1 capper");
-check("moneyline noun", consensusLine(leg({ marketKey: "h2h" })), "5 cappers · 61% NFL moneylines (n=212)");
+// The noun is the market of the record used (recordMarket), not the leg's rung.
+const withMarket = (recordMarket: "SPREAD" | "MONEYLINE" | "TOTAL", over: Partial<HybridLeg> = {}) =>
+  leg({ ...over, consensus: { ...leg().consensus, topSupporters: [{ ...leg().consensus.topSupporters[0], recordMarket }] } });
+check("moneyline record on a moneyline leg", consensusLine(withMarket("MONEYLINE", { marketKey: "h2h" })), "5 cappers · 61% NFL moneylines (n=212)");
+check("moneyline record on a spread rung still says moneylines", consensusLine(withMarket("MONEYLINE")), "5 cappers · 61% NFL moneylines (n=212)");
+check("spread record on a moneyline rung still says spreads", consensusLine(withMarket("SPREAD", { marketKey: "h2h" })), "5 cappers · 61% NFL spreads (n=212)");
+check("total record says totals", consensusLine(withMarket("TOTAL", { family: "TOTAL", marketKey: "alternate_totals" })), "5 cappers · 61% NFL totals (n=212)");
 check("reason drops the label the row already shows", reasonLine(leg()), "tonight +3.5 · their games miss the spread by up to 8");
 check("raw scores stay named", reasonLine(leg({ edgeSource: "raw", reason: "Chicago Bears +14.5 · tonight +3.5 · lost by up to 9 recently · raw scores (lines missing)" })), "tonight +3.5 · lost by up to 9 recently · raw scores (lines missing)");
 check("raw scores added when the reason lacks them", reasonLine(leg({ edgeSource: "raw", reason: "Chicago Bears +14.5 · tonight +3.5" })), "tonight +3.5 · raw scores");
@@ -215,12 +221,12 @@ check("state: done without a response is an error, not a crash", pageState(page(
 check(
   "state: in-target result",
   pageState(page()),
-  { kind: "result", flags: { outsideTarget: false, canAllowMoreLegs: false, crossGame: false, skippedGames: [], pricingGames: [], stale: false } }
+  { kind: "result", flags: { outsideTarget: false, canAllowMoreLegs: false, crossGame: false, skippedGames: [], pricingGames: [], unavailableGames: [], stale: false } }
 );
 check(
   "state: no fit offers more legs at maxLegs 2",
   pageState(page({ response: response({ primary: hybrid({ inTarget: false, combinedAmerican: -250 }) }) })),
-  { kind: "no-fit", flags: { outsideTarget: true, canAllowMoreLegs: true, crossGame: false, skippedGames: [], pricingGames: [], stale: false } }
+  { kind: "no-fit", flags: { outsideTarget: true, canAllowMoreLegs: true, crossGame: false, skippedGames: [], pricingGames: [], unavailableGames: [], stale: false } }
 );
 check("state: no fit at maxLegs 4 offers nothing more", (pageState(page({ settings: { ...SETTINGS, maxLegs: 4 }, response: response({ primary: hybrid({ inTarget: false, legs: [leg(), OVER, leg({ eventId: "E2" }), leg({ eventId: "E3" })] }) }) })) as { flags: { canAllowMoreLegs: boolean } }).flags.canAllowMoreLegs, false);
 check("state: cross-game fallback", (pageState(page({ response: response({ primary: hybrid({ structure: "cross-game", isEstimate: false }) }) })) as { flags: { crossGame: boolean } }).flags.crossGame, true);
@@ -231,7 +237,12 @@ check("state: no primary, alternate lines not posted", pageState(page({ response
 check("state: no primary, another user pricing", pageState(page({ response: response({ primary: null }, [note("pricing-in-progress")]) })), { kind: "pricing-in-progress", games: ["Chicago Bears @ Detroit Lions"] });
 check("state: pricing wins over not-posted", pageState(page({ response: response({ primary: null }, [note("alt-lines-not-posted", "E2"), note("pricing-in-progress")]) })).kind, "pricing-in-progress");
 check("state: no candidate game at all is the plain no-box message", pageState(page({ response: response({ primary: null, note: "No consensus position has a usable FanDuel ladder." }, [], []) })), { kind: "no-box", message: "No game has qualifying consensus on both a side and a total.", detail: null });
-check("state: ladders asked for, none came back, no note: unavailable", pageState(page({ response: response({ primary: null, note: "No consensus position has a usable FanDuel ladder." }) })), { kind: "prices-unavailable" });
+check("state: ladders asked for, none came back, no note: NOT guessed as unavailable", pageState(page({ response: response({ primary: null, note: "No consensus position has a usable FanDuel ladder." }) })).kind, "no-box");
+for (const cause of ["budget", "usage-gate", "api-failure", "no-api-key", "lookup-failed"] as const) {
+  check("state: ladders-unavailable note (" + cause + ") is the unavailable state", pageState(page({ response: response({ primary: null, note: "x" }, [{ ...note("ladders-unavailable"), cause }]) })), { kind: "prices-unavailable", games: ["Chicago Bears @ Detroit Lions"] });
+}
+check("state: pricing wins over unavailable, unavailable over not-posted", [pageState(page({ response: response({ primary: null }, [note("ladders-unavailable", "E2"), note("pricing-in-progress")]) })).kind, pageState(page({ response: response({ primary: null }, [note("alt-lines-not-posted", "E2"), note("ladders-unavailable")]) })).kind], ["pricing-in-progress", "prices-unavailable"]);
+check("state: unavailable games ride along with a result", (pageState(page({ response: response({}, [note("ladders-unavailable", "E9", "A @ B")]) })) as { flags: { unavailableGames: string[] } }).flags.unavailableGames, ["A @ B"]);
 check("state: only one placeable game", pageState(page({ response: response({ primary: null, note: "Only one game has a placeable consensus position." }) })), { kind: "no-box", message: "No game has qualifying consensus on both a side and a total.", detail: "Only one game has a placeable consensus position." });
 
 // ---- Alternates ----
@@ -277,13 +288,16 @@ const goneTotal = { status: "gone" as const, leg: L0[1], reason: "x", nearest: {
 check("no link: a total's nearest line is the bare number", (linkView(hybrid(), link({ url: null, legs: [matched(0, -135), goneTotal] }), RANGE, clock) as { lines: string[] }).lines, ["Over 42.5 is no longer posted. Nearest is 41.5 at " + M + "170."]);
 const goneNoNearest = { status: "gone" as const, leg: L0[1], reason: "This game has started.", nearest: null };
 check("no link: a gone leg with no nearest keeps the action's reason", (linkView(hybrid(), link({ url: null, legs: [matched(0, -135), goneNoNearest] }), RANGE, clock) as { lines: string[] }).lines, ["Over 42.5: This game has started."]);
-const staleGone = { status: "gone" as const, leg: L0[0], reason: "FanDuel's odds couldn't be refreshed (as of 2026-10-27T15:12:00.000Z) - try again.", nearest: null };
-check("no link: stale after the re-price names the time", linkView(hybrid(), link({ url: null, anyStale: true, legs: [staleGone, matched(1, -150)] }), RANGE, clock), {
+const staleGone = { status: "gone" as const, leg: L0[0], reason: "FanDuel's odds couldn't be refreshed - try again.", nearest: null, stale: { asOf: "2026-10-27T15:12:00.000Z" } };
+check("no link: stale after the re-price names the time, from the structured staleAsOf", linkView(hybrid(), link({ url: null, anyStale: true, staleAsOf: "2026-10-27T15:12:00.000Z", legs: [staleGone, matched(1, -150)] }), RANGE, clock), {
   kind: "blocked",
   lines: ["FanDuel's odds couldn't be refreshed (as of 3:12 PM) - try again."],
   stale: true,
 });
-check("reasonText leaves other text alone", reasonText("This game has started.", clock), "This game has started.");
+check("stale text with a time", staleText("2026-10-27T15:12:00.000Z", clock), "FanDuel's odds couldn't be refreshed (as of 3:12 PM) - try again.");
+check("stale text without a time", staleText(null, clock), "FanDuel's odds couldn't be refreshed - try again.");
+check("a stale leg never leaks a raw ISO string", (linkView(hybrid(), link({ url: null, anyStale: true, staleAsOf: "2026-10-27T15:12:00.000Z", legs: [staleGone, matched(1, -150)] }), RANGE, clock) as { lines: string[] }).lines.some((l) => /d{4}-d{2}-d{2}T/.test(l)), false);
+check("plain hyphen-minus everywhere: no U+2212 in any price", [formatPrice(-135), targetStatus(-143, RANGE).text, combinedPrice(hybrid()).text, legViews(hybrid())[0].price].some((t) => t.includes("−")), false);
 
 if (failures > 0) {
   console.log(`\n${failures} FAILED`);

@@ -60,6 +60,7 @@ function capper(name: string, wins: number, losses: number, score: number): Posi
     capperId: name.toLowerCase(),
     capperName: name,
     record: { wins, losses, n, winPct: Math.round((wins / n) * 1000) / 10, source: "LEAGUE" },
+    recordMarket: "SPREAD",
     score,
     postedMarket: "SPREAD",
     postedLine: null,
@@ -582,8 +583,8 @@ function nflBox(overMisses: number[], sideCover: number[] | null, settings: Hybr
     anchorLine: 2.5,
     anchorIsMoneyline: false,
     topSupporters: [
-      { capperName: "Ace", record: "LEAGUE", wins: 60, losses: 40, n: 100, winPct: 60 },
-      { capperName: "Bo", record: "LEAGUE", wins: 55, losses: 45, n: 100, winPct: 55 },
+      { capperName: "Ace", record: "LEAGUE", recordMarket: "SPREAD", wins: 60, losses: 40, n: 100, winPct: 60 },
+      { capperName: "Bo", record: "LEAGUE", recordMarket: "SPREAD", wins: 55, losses: 45, n: 100, winPct: 55 },
     ],
   });
   check("leg handoff fields", [r.legs[0].marketKey, typeof r.legs[0].sid, typeof r.legs[0].link], ["alternate_spreads", "string", "string"]);

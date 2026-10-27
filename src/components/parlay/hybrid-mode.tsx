@@ -546,6 +546,7 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
         }
       >
         <p>{UNAVAILABLE_NOTE}</p>
+        <GameList games={state.games} />
       </Message>
     );
   }
@@ -581,6 +582,13 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
       {flags.skippedGames.length > 0 && (
         <div role="status" className={INFO}>
           <p className="text-xs font-medium text-foreground">{ALT_LINES_NOTE} Skipped: {flags.skippedGames.join(", ")}.</p>
+        </div>
+      )}
+      {flags.unavailableGames.length > 0 && (
+        <div role="status" className={INFO}>
+          <p className="text-xs font-medium text-foreground">
+            {UNAVAILABLE_NOTE} Skipped: {flags.unavailableGames.join(", ")}.
+          </p>
         </div>
       )}
       {flags.pricingGames.length > 0 && (
