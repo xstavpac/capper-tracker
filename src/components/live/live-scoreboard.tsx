@@ -8,6 +8,7 @@ import { LocalGameTime } from "@/components/local-game-time";
 import { orderBoardGames, matchScoreToGame, teamScore } from "@/components/live/live-scoreboard-ordering";
 import { getTeamColor } from "@/lib/team-colors";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
+import type { HeavyConsensusRate } from "@/lib/heavy-consensus";
 import { TargetGameCheckbox } from "@/components/parlay/target-game-checkbox";
 import { TeamColorBar } from "@/components/live/team-color-bar";
 import { BoardPulsePanel } from "@/components/live/board-pulse-panel";
@@ -38,6 +39,7 @@ export function LiveScoreboard({
   initialScores,
   matchedPicksByGame,
   showBoardPulse,
+  heavyRate,
 }: {
   activeSport: string;
   // The league's name ("NFL"), for the slip's "Target game".
@@ -51,6 +53,8 @@ export function LiveScoreboard({
   initialScores: ScoreGame[];
   matchedPicksByGame: ExpanderPick[][];
   showBoardPulse: boolean;
+  // The pooled Heavy Consensus hit rate, for the expanders' pills.
+  heavyRate: HeavyConsensusRate | null;
 }) {
   const scores = useSharedLiveScores();
   useRegisterLiveGameJump(scrollToGameCard);
@@ -193,7 +197,7 @@ export function LiveScoreboard({
                 )}
               </Link>
 
-              <GamePicksExpander picks={matchedPicks} />
+              <GamePicksExpander picks={matchedPicks} heavyRate={heavyRate} />
             </div>
           );
         })}

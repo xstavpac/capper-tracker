@@ -10,6 +10,8 @@ import type { GameFeedStatus } from "@/lib/parlay/game-over";
 import { OTHER_GROUP_LABEL, TOTALS_GROUP_LABEL, sortTotalsPicks } from "@/lib/pick-team-group";
 import { PickCard } from "@/components/live/pick-card";
 import { TotalsSideList } from "@/components/live/totals-side-list";
+import { HeavyConsensusBadge } from "@/components/live/heavy-consensus-badge";
+import { heavyBadgesForGame, type HeavyConsensusRate } from "@/lib/heavy-consensus";
 
 export type ExpanderPick = {
   pickId: string;
@@ -116,7 +118,9 @@ export function ChevronIcon({ up }: { up: boolean }) {
   );
 }
 
-export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
+// `heavyRate` is the pooled Heavy Consensus hit rate (server/data/heavy-consensus.ts);
+// null / absent shows no Heavy Consensus pill at all.
+export function GamePicksExpander({ picks, heavyRate = null }: { picks: ExpanderPick[]; heavyRate?: HeavyConsensusRate | null }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<CapperLeagueRecords | null>(null);
@@ -161,6 +165,8 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
     const dotColor = teamGroup === "TOTALS" || teamGroup === "OTHER" ? null : groupPicks[0]?.teamColor ?? null;
     return { teamGroup, label, dotColor, violet: teamGroup === "OTHER", picks: groupPicks };
   }).filter((g) => g.picks.length > 0);
+  // At most one Heavy Consensus pill per header: a team's, or Over / Under's inside Totals.
+  const heavy = heavyBadgesForGame(picks, heavyRate);
 
   return (
     <div onClick={(e) => e.preventDefault()}>
@@ -179,6 +185,9 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
         <div className="mt-3 space-y-3">
           {groups.map((group) => (
             <div key={group.teamGroup}>
+              {(group.teamGroup === "AWAY" || group.teamGroup === "HOME") && heavy[group.teamGroup] && (
+                <HeavyConsensusBadge badge={heavy[group.teamGroup]!} className="mb-1" />
+              )}
               <div
                 className={
                   "mb-1.5 flex items-center gap-1.5 rounded-md px-2 py-1" +
@@ -212,7 +221,11 @@ export function GamePicksExpander({ picks }: { picks: ExpanderPick[] }) {
                 </span>
               </div>
               {group.teamGroup === "TOTALS" ? (
-                <TotalsSideList picks={group.picks} renderPick={renderPickCard} />
+                <TotalsSideList
+                  picks={group.picks}
+                  renderPick={renderPickCard}
+                  sideBadge={(side) => heavy[side] && <HeavyConsensusBadge badge={heavy[side]!} className="mb-1 ml-1" />}
+                />
               ) : (
                 <div className="space-y-1.5">{group.picks.map((p) => renderPickCard(p))}</div>
               )}

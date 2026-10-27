@@ -18,9 +18,12 @@ const TAG_COLOR = {
 export function TotalsSideList<T extends { pickId: string; betDetail: string; rawBetDetail?: string | null }>({
   picks,
   renderPick,
+  sideBadge,
 }: {
   picks: T[];
   renderPick: (pick: T) => ReactNode;
+  // Set above a side's header (the Heavy Consensus pill); null / absent for none.
+  sideBadge?: (side: "OVER" | "UNDER") => ReactNode;
 }) {
   const groups = groupTotalsBySide(picks);
   return (
@@ -33,6 +36,7 @@ export function TotalsSideList<T extends { pickId: string; betDetail: string; ra
           data-total-side={group.side ?? "NONE"}
           className="py-2.5 first:pt-0 last:pb-0"
         >
+          {group.side && sideBadge?.(group.side)}
           {group.side && (
             <div className="mb-1.5 flex items-center gap-1.5 px-1">
               <span

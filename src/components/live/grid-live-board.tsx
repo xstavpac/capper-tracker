@@ -10,6 +10,7 @@ import { resolveGridLiveSelection, type GridLiveSelection } from "@/lib/grid-liv
 import { buildGridLiveGamePanelData } from "@/components/live/grid-live-team-panel-data";
 import { GridLiveGameList } from "@/components/live/grid-live-game-list";
 import { GameDetailPanel } from "@/components/live/team-picks-panel";
+import type { HeavyConsensusRate } from "@/lib/heavy-consensus";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getLiveGameProgress } from "@/lib/live-game-progress";
 import { useRegisterLiveGameJump } from "@/components/live/live-game-jump";
@@ -49,6 +50,7 @@ export function GridLiveBoard({
   initialScores,
   matchedPicksByGame,
   initialSelection,
+  heavyRate,
 }: {
   activeSport: string;
   sportLabel: string;
@@ -56,6 +58,8 @@ export function GridLiveBoard({
   initialScores: ScoreGame[];
   matchedPicksByGame: ExpanderPick[][];
   initialSelection: GridLiveSelection;
+  // The pooled Heavy Consensus hit rate, for the detail panel's pills.
+  heavyRate: HeavyConsensusRate | null;
 }) {
   const router = useRouter();
   const scores = useSharedLiveScores();
@@ -223,6 +227,7 @@ export function GridLiveBoard({
             pickCount={(matchedPicksByGame[selectedEntry.gameIndex] ?? []).length}
             progress={selectedProgress}
             firstHeaderRef={firstHeaderRef}
+            heavyRate={heavyRate}
             slipGame={{
               gameId: selectedEntry.game.id,
               gameLabel: panelData.away.teamLabel + " @ " + panelData.home.teamLabel,

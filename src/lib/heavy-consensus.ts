@@ -254,3 +254,37 @@ export function pooledHeavyConsensusRate(rows: StoredHeavyMarket[], minCappers =
   }
   return { hitRatePct: games === 0 ? null : Math.round((hits / games) * 100), games };
 }
+
+// ---- The Live badge ----
+
+export type HeavyBadge = {
+  market: HeavyMarket;
+  sharePct: number;
+  heavyCappers: number;
+  cappers: number;
+  hitRatePct: number;
+  games: number;
+};
+
+// One game's badges by header, ready to render: a Live pick's raw text is
+// `rawBetDetail` (its `betDetail` is the display label). None at all when the
+// rate has nothing behind it yet.
+export function heavyBadgesForGame(
+  picks: (Omit<ConsensusPick, "betDetail"> & { betDetail: string | null; rawBetDetail?: string | null })[],
+  rate: HeavyConsensusRate | null
+): Partial<Record<HeavySide, HeavyBadge>> {
+  if (!rate || rate.hitRatePct === null) return {};
+  const byHeader = heavyConsensusByHeader(picks.map((p) => ({ ...p, betDetail: p.rawBetDetail !== undefined ? p.rawBetDetail : p.betDetail })));
+  const out: Partial<Record<HeavySide, HeavyBadge>> = {};
+  for (const [side, s] of Object.entries(byHeader) as [HeavySide, HeavyMarketScore][]) {
+    out[side] = { market: s.market, sharePct: s.sharePct, heavyCappers: s.heavyCappers, cappers: s.cappers, hitRatePct: rate.hitRatePct, games: rate.games };
+  }
+  return out;
+}
+
+// The pill's text, exactly: "HEAVY CONS 82% · HIT RATE 46%".
+export const heavyBadgeText = (b: Pick<HeavyBadge, "sharePct" | "hitRatePct">) => `HEAVY CONS ${b.sharePct}% · HIT RATE ${b.hitRatePct}%`;
+
+// The tap / hover details: "Moneyline · 9 of 10 cappers · Based on 92 games".
+export const heavyBadgeDetails = (b: HeavyBadge) =>
+  `${HEAVY_MARKET_LABELS[b.market]} · ${b.heavyCappers} of ${b.cappers} cappers · Based on ${b.games} game${b.games === 1 ? "" : "s"}`;
