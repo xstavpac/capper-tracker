@@ -98,7 +98,7 @@ function snapshotOf(games: GameSpec[], record?: (n: number) => [number, number])
 }
 
 const BOX: GameSpec = { side: "SPREAD", total: true };
-const SETTINGS = { targetMin: -140, targetMax: -110, width: "balanced" as const, perLegRange: null, maxLegs: 4, minWinPct: 55 };
+const SETTINGS = { targetMin: -140, targetMax: -110, width: "balanced" as const, perLegRange: null, maxLegs: 4, minWinPct: 55, boxLegs: "2" as const };
 const request = (over: Partial<HybridGenerateRequest> = {}): HybridGenerateRequest => ({ leagues: ["NFL"], targets: [], include: "ALL", settings: SETTINGS, ...over });
 
 // ---- The fakes, with a call log ----
@@ -160,7 +160,7 @@ async function main() {
       positions: positions.filter((p) => candidate.has(p.eventId)),
       ladders: Object.fromEntries(r.ladderRequests.flat().map((q) => [q.eventId, ladderFor(q.markets)])),
       swings: Object.fromEntries([HOME, AWAY].map((t) => [t, []])),
-      settings: { targetMin: -140, targetMax: -110, width: "balanced", legRange: null, maxLegs: 4 },
+      settings: { targetMin: -140, targetMax: -110, width: "balanced", legRange: null, maxLegs: 4, boxLegs: "2" },
     });
     check("the result is the optimizer's, untouched", res.result, direct);
     check("sport keys for the link are returned for the asked events", Object.keys(res.eventSportKeys).sort(), asked(r));
@@ -178,6 +178,14 @@ async function main() {
     const r3 = rig(eight);
     await run(r3, request({ settings: { ...SETTINGS, maxLegs: 3 } }));
     check("maxLegs 3: the top 6 + 1 more", asked(r3), ["G1", "G2", "G3", "G4", "G5", "G6", "G7"]);
+    // A 3-leg box's third leg is on the box's own game and ladder: no extra event for it.
+    const r4 = rig(eight);
+    await run(r4, request({ settings: { ...SETTINGS, maxLegs: 3, boxLegs: "auto" } }));
+    check("auto, maxLegs 3 (the default): exactly the top 6, as 2-leg maxLegs 2 asks", asked(r4), ["G1", "G2", "G3", "G4", "G5", "G6"]);
+    const r5 = rig(eight);
+    await run(r5, request({ settings: { ...SETTINGS, maxLegs: 4, boxLegs: "3" } }));
+    check("3-leg, maxLegs 4: the top 6 + 1 more", asked(r5), ["G1", "G2", "G3", "G4", "G5", "G6", "G7"]);
+    check("3-leg: the box games ask for the same markets as 2-leg", r5.ladderRequests.flat().find((q) => q.eventId === "G1")!.markets, r.ladderRequests.flat().find((q) => q.eventId === "G1")!.markets);
     check("the events above never include a game with no position", chooseCandidateEvents(buildConsensusPositions(snapshotOf([BOX, { side: null, total: false }]), { now: NOW }), 4), ["G1"]);
   }
 

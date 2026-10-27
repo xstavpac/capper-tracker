@@ -18,7 +18,14 @@ const errorOf = (r: unknown) => (r && typeof r === "object" && "error" in r ? (r
 
 const ok = parse();
 check("a valid request parses", errorOf(ok), null);
-check("...into the settings as sent", "settings" in ok && ok.settings, { targetMin: -140, targetMax: -110, width: "balanced", perLegRange: null, maxLegs: 4, minWinPct: 55 });
+check("...into the settings as sent", "settings" in ok && ok.settings, { targetMin: -140, targetMax: -110, width: "balanced", perLegRange: null, maxLegs: 4, minWinPct: 55, boxLegs: "2" });
+
+// ---- box legs (2 / 3 / auto) ----
+const boxOf = (r: unknown) => (r as { settings: { boxLegs: string } }).settings.boxLegs;
+check("boxLegs absent or null: \"2\"", [boxOf(parse()), boxOf(parse({}, { boxLegs: null }))], ["2", "2"]);
+check("\"2\", \"3\", \"auto\" are carried through", ["2", "3", "auto"].map((b) => boxOf(parse({}, { boxLegs: b }))), ["2", "3", "auto"]);
+check("anything else is rejected", [3, "4", "AUTO", ""].map((b) => errorOf(parse({}, { boxLegs: b }))), Array(4).fill("Legs must be \"2\", \"3\" or \"auto\"."));
+check("a 3-leg box with maxLegs 2 is rejected; auto with 2 is fine", [errorOf(parse({}, { boxLegs: "3", maxLegs: 2 })), errorOf(parse({}, { boxLegs: "auto", maxLegs: 2 }))], ["A 3-leg box needs at least 3 legs.", null]);
 
 // ---- win-% gate ----
 const gate = (v: unknown) => errorOf(parse({}, { minWinPct: v }));

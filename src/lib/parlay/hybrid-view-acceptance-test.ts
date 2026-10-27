@@ -4,6 +4,8 @@
 // price-moved diff). Pure - no DB, no network, no clock.
 //   npx tsx src/lib/parlay/hybrid-view-acceptance-test.ts
 import {
+  BOX_LEGS_OPTIONS,
+  boxLegsPatch,
   boxText,
   buildSettings,
   bumpMaxLegs,
@@ -21,6 +23,7 @@ import {
   legViews,
   linkLegs,
   linkView,
+  minMaxLegs,
   normalizePriceText,
   oddsAsOfText,
   pageState,
@@ -141,7 +144,16 @@ check("combined exact (cross-game)", combinedPrice(hybrid({ isEstimate: false, c
 // ---- The form -> settings ----
 
 const form = (over: Partial<HybridForm> = {}): HybridForm => ({ ...DEFAULT_FORM, ...over });
-check("defaults are -140 / -110, balanced, 2 legs, 55%", buildSettings(form()), { ok: true, settings: { targetMin: -140, targetMax: -110, width: "balanced", perLegRange: null, maxLegs: 2, minWinPct: 55 } });
+check("defaults are -140 / -110, balanced, Legs Auto with 3 max legs, 55%", buildSettings(form()), { ok: true, settings: { targetMin: -140, targetMax: -110, width: "balanced", perLegRange: null, maxLegs: 3, minWinPct: 55, boxLegs: "auto" } });
+
+// ---- Legs: 2 · 3 · Auto ----
+check("Legs options read 2 · 3 · Auto", BOX_LEGS_OPTIONS.map((o) => o.label), ["2", "3", "Auto"]);
+check("picking 3 or Auto at Max legs 2 raises it to 3", [boxLegsPatch({ maxLegs: 2 }, "3"), boxLegsPatch({ maxLegs: 2 }, "auto")], [{ boxLegs: "3", maxLegs: 3 }, { boxLegs: "auto", maxLegs: 3 }]);
+check("picking 3 at Max legs 4 keeps 4; picking 2 never lowers it", [boxLegsPatch({ maxLegs: 4 }, "3"), boxLegsPatch({ maxLegs: 3 }, "2")], [{ boxLegs: "3", maxLegs: 4 }, { boxLegs: "2", maxLegs: 3 }]);
+check("the Max legs floor: 3 for a forced 3-leg box, else 2", [minMaxLegs("3"), minMaxLegs("auto"), minMaxLegs("2")], [3, 2, 2]);
+check("a 3-leg box never sends Max legs 2", (buildSettings(form({ boxLegs: "3", maxLegs: 2 })) as { settings: { maxLegs: number } }).settings.maxLegs, 3);
+const sent2 = (buildSettings(form({ boxLegs: "2", maxLegs: 2 })) as { settings: { maxLegs: number; boxLegs: string } }).settings;
+check("Legs 2 with Max legs 2 sends both as chosen", [sent2.boxLegs, sent2.maxLegs], ["2", 2]);
 check("positive targets accepted", buildSettings(form({ targetMin: "+100", targetMax: "+150" })).ok, true);
 check("a range across the sign accepted", buildSettings(form({ targetMin: "-110", targetMax: "+120" })).ok, true);
 check("min above max is an error on the target field", Object.keys((buildSettings(form({ targetMin: "-110", targetMax: "-140" })) as { errors: object }).errors), ["target"]);
@@ -194,6 +206,7 @@ check("box fallback with three legs", boxText(hybrid({ boxDescription: "", legs:
 
 check("consensus line, league record", consensusLine(leg()), "5 cappers · 61% NFL spreads (n=212)");
 check("consensus line, overall record", consensusLine(OVER), "3 cappers · 64% all leagues totals (n=110)");
+check("consensus line of a 3-leg box's third leg", consensusLine({ ...OVER, direction: "UNDER", opposite: true, consensus: { ...OVER.consensus, supporters: 0, score: 0, topSupporters: [] } }), "Boxes the total from the other side");
 check("consensus line with no supporter record", consensusLine(leg({ consensus: { ...leg().consensus, supporters: 1, topSupporters: [] } })), "1 capper");
 // The noun is the market of the record used (recordMarket), not the leg's rung.
 const withMarket = (recordMarket: "SPREAD" | "MONEYLINE" | "TOTAL", over: Partial<HybridLeg> = {}) =>
@@ -277,6 +290,18 @@ check("ready view: the new estimate is judged against the target (far)", readyVi
 const shortLegs = hybrid({ legs: [leg({ price: -240 }), { ...OVER, price: -470 }] });
 const nearView = linkView(shortLegs, link({ legs: [matched(0, -250), matched(1, -470)] }), RANGE, clock);
 check("ready view: a re-price just outside the target", nearView.kind === "ready" && nearView.combined && { text: nearView.combined.text, kind: nearView.combined.status.kind }, { text: "≈ " + M + "143", kind: "near" });
+// A 3-leg box re-prices as side x (pOver + pUnder - 1). Over 225.5 -275 + Under 248.5 -320 with a
+// -135 side: 0.5745 x 0.4952 = 0.2845 -> +251 (the plain product would be about +68).
+{
+  const OVER2 = { ...OVER, point: 225.5, price: -275, label: "Over 225.5" };
+  const UNDER2 = { ...OVER, direction: "UNDER", outcomeName: "Under", point: 248.5, price: -300, label: "Under 248.5", opposite: true };
+  const box3 = hybrid({ legs: [leg(), OVER2, UNDER2] });
+  const L3 = linkLegs(box3, { E1: "americanfootball_nfl" })!;
+  const m3 = (i: number, price: number) => ({ status: "matched" as const, leg: L3[i], price, isStale: false });
+  const re = priceMoves(box3, link({ legs: [m3(0, -135), m3(1, -275), m3(2, -320)] }));
+  check("3-leg re-price: the Under's move reads from -> to", re.moves.map((m) => m.text), ["Under 248.5 moved " + M + "300 → " + M + "320"]);
+  check("3-leg re-price: side x corridor, about +251", re.combined && { american: Math.round(re.combined.american), text: re.combined.text }, { american: 251, text: "≈ +251" });
+}
 check("ready view: no move, no combined", linkView(hybrid(), link({ legs: [matched(0, -135), matched(1, -150)] }), RANGE, clock).kind === "ready" && (linkView(hybrid(), link({ legs: [matched(0, -135), matched(1, -150)] }), RANGE, clock) as { combined: unknown }).combined, null);
 
 const goneSpread = { status: "gone" as const, leg: L0[0], reason: "FanDuel no longer has this exact line (closest is 13.5).", nearest: { point: 13.5, price: -155 } };

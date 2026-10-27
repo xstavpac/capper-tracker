@@ -20,7 +20,7 @@
 // note for each event whose alternate lines are not posted yet or are still being
 // priced by another request.
 import { buildConsensusPositions, type ConsensusPosition } from "@/lib/parlay/consensus";
-import { boxEligibleGames, HYBRID_CANDIDATE_GAMES, optimizeHybrid, type HybridResult } from "@/lib/parlay/hybrid";
+import { boxEligibleGames, HYBRID_CANDIDATE_GAMES, optimizeHybrid, type HybridBoxLegs, type HybridResult } from "@/lib/parlay/hybrid";
 import type { HybridGenerateRequest } from "@/lib/parlay/hybrid-request";
 import { keepsPick } from "@/lib/parlay/include-picks";
 import type { ParlayRejection } from "@/lib/parlay/leg-cap";
@@ -61,21 +61,23 @@ export type HybridDeps = {
 };
 
 // Events beyond the box-eligible games that a hybrid with more than two legs can
-// take its extra legs from (one per leg past two).
-export function extraEventCount(maxLegs: number): number {
-  return Math.max(0, maxLegs - 2);
+// take its extra legs from (one per leg past the box: past two, or past three
+// when the box may take the other side of its total, which is on the box's own
+// game and ladder).
+export function extraEventCount(maxLegs: number, boxLegs: HybridBoxLegs = "2"): number {
+  return Math.max(0, maxLegs - (boxLegs === "2" ? 2 : 3));
 }
 
 // The events to buy ladders for, in order. With a box: the top K box-eligible
 // games, then the next positions' events (one per leg the settings allow beyond
 // two). With none: the cross-game fallback needs two games, plus one per extra
 // leg and one spare for a game with no ladder.
-export function chooseCandidateEvents(ranked: ConsensusPosition[], maxLegs: number): string[] {
+export function chooseCandidateEvents(ranked: ConsensusPosition[], maxLegs: number, boxLegs: HybridBoxLegs = "2"): string[] {
   const box = boxEligibleGames(ranked)
     .slice(0, HYBRID_CANDIDATE_GAMES)
     .map((g) => g.eventId);
   const chosen = new Set(box);
-  const extra = box.length > 0 ? extraEventCount(maxLegs) : maxLegs + 1;
+  const extra = box.length > 0 ? extraEventCount(maxLegs, boxLegs) : maxLegs + 1;
   let added = 0;
   for (const p of ranked) {
     if (added >= extra) break;
@@ -126,7 +128,7 @@ export async function runHybridGenerate(req: HybridGenerateRequest, deps: Hybrid
   const ranked = targetIds.size > 0 ? all.filter((p) => targetIds.has(p.eventId)) : all;
 
   // 3. The candidate events, and the positions the optimizer may see.
-  const candidateEvents = chooseCandidateEvents(ranked, req.settings.maxLegs);
+  const candidateEvents = chooseCandidateEvents(ranked, req.settings.maxLegs, req.settings.boxLegs);
   const candidates = new Set(candidateEvents);
   const sportKeyOf = (p: ConsensusPosition) => eventSportKeys[p.eventId] ?? deps.leagueKey(p.sport) ?? p.sport;
 
@@ -171,8 +173,8 @@ export async function runHybridGenerate(req: HybridGenerateRequest, deps: Hybrid
   for (const [sport, teams] of teamsBySport) Object.assign(swings, await deps.getSwings({ sport, teams: Array.from(teams), before: deps.now }));
 
   // 6. The optimizer.
-  const { targetMin, targetMax, width, perLegRange, maxLegs } = req.settings;
-  const result = optimizeHybrid({ positions, ladders: lookup.ladders, swings, settings: { targetMin, targetMax, width, legRange: perLegRange, maxLegs } });
+  const { targetMin, targetMax, width, perLegRange, maxLegs, boxLegs } = req.settings;
+  const result = optimizeHybrid({ positions, ladders: lookup.ladders, swings, settings: { targetMin, targetMax, width, legRange: perLegRange, maxLegs, boxLegs } });
 
   return { result, notes: eventNotes(requests, positions, lookup), candidateEvents, eventSportKeys: Object.fromEntries(requests.map((r) => [r.eventId, r.sport])), generatedAt: deps.now.toISOString() };
 }
