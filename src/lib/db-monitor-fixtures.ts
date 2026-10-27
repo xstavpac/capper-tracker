@@ -335,10 +335,10 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "expectFlags": []
   },
   {
-    "name": "control: sport include follow-up (sports id IN)",
+    "name": "sport include follow-up (sports id IN)",
     "run": "52f483d",
     "sql": "SELECT \"public\".\"sports\".\"id\", \"public\".\"sports\".\"name\" FROM \"public\".\"sports\" WHERE \"public\".\"sports\".\"id\" IN ($1,$2,$3) OFFSET $4",
-    "expectLabel": null,
+    "expectLabel": "Sports / leagues reference read",
     "expectFlags": []
   },
   {
@@ -626,6 +626,34 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "run": "95c88d8+per-user",
     "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"userId\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"datePosted\", \"public\".\"picks\".\"sportId\" FROM \"public\".\"picks\" LEFT JOIN \"public\".\"cappers\" AS \"j1\" ON (\"j1\".\"id\") = (\"public\".\"picks\".\"capperId\") WHERE (\"public\".\"picks\".\"period\" = CAST($1::text AS \"public\".\"Period\") AND \"public\".\"picks\".\"betType\" IN (CAST($2::text AS \"public\".\"BetType\"),CAST($3::text AS \"public\".\"BetType\"),CAST($4::text AS \"public\".\"BetType\")) AND \"public\".\"picks\".\"status\" <> CAST($5::text AS \"public\".\"PickStatus\") AND \"public\".\"picks\".\"gameTime\" < $6 AND (\"j1\".\"isTest\" = $7 AND (\"j1\".\"id\" IS NOT NULL))) OFFSET $8",
     "expectLabel": "Heavy Consensus history (nightly / backfill)",
+    "expectFlags": []
+  },
+  {
+    "name": "getSportsWithLeagues, sports read",
+    "run": "local-2026-10-27",
+    "sql": "SELECT \"public\".\"sports\".\"id\", \"public\".\"sports\".\"name\" FROM \"public\".\"sports\" WHERE 1=1 ORDER BY \"public\".\"sports\".\"name\" ASC OFFSET $1",
+    "expectLabel": "Sports / leagues reference read",
+    "expectFlags": []
+  },
+  {
+    "name": "getSportsWithLeagues, leagues follow-up",
+    "run": "local-2026-10-27",
+    "sql": "SELECT \"public\".\"leagues\".\"id\", \"public\".\"leagues\".\"name\", \"public\".\"leagues\".\"sportId\" FROM \"public\".\"leagues\" WHERE \"public\".\"leagues\".\"sportId\" IN ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) OFFSET $12",
+    "expectLabel": "Sports / leagues reference read",
+    "expectFlags": []
+  },
+  {
+    "name": "prisma migrate deploy (prod DB Monitor text, 2026-10-27)",
+    "run": "prod-2026-10-27",
+    "sql": "SELECT * FROM \"_prisma_migrations\" ORDER BY \"started_at\" ASC",
+    "expectLabel": "Migrate deploy (build-time)",
+    "expectFlags": []
+  },
+  {
+    "name": "mergeCappers pick read (prod DB Monitor text, 2026-10-27)",
+    "run": "prod-2026-10-27",
+    "sql": "SELECT \"public\".\"picks\".\"id\" FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"userId\" = $1 AND \"public\".\"picks\".\"capperId\" = $2) ORDER BY \"public\".\"picks\".\"id\" ASC OFFSET $3",
+    "expectLabel": "Capper merge (pick read)",
     "expectFlags": []
   }
 ];

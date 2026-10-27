@@ -348,6 +348,16 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     matches: (s) => reads(s, "sports") && whereIs(s, /^"sports"\."name" ILIKE \$\d+$/) && s.hasLimit,
   },
   {
+    // Reference tables that change a few times a year. getSportsWithLeagues (a sports
+    // read plus Prisma's leagues follow-up) runs uncached on /picks, /charts and
+    // /picks/import; the other sports reads are id / name-list lookups. The two
+    // single-name lookups above keep their own labels.
+    label: "Sports / leagues reference read",
+    source: "getSportsWithLeagues (picks.ts; /picks, /charts, /picks/import) and the sports id / name reads in the pick actions and imports",
+    matches: (s) =>
+      (reads(s, "sports") || reads(s, "leagues")) && !(s.hasLimit && whereIs(s, /^"sports"\."name" (?:=|ILIKE) \$\d+$/)),
+  },
+  {
     label: "Game results window",
     source: "fetchCandidatePool / findMatchingGameResult (grading.ts), parlay-grading.ts candidate pools",
     matches: (s) =>
@@ -469,6 +479,23 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     label: "NFL roster names (bulk import)",
     source: "getCachedNflRosterFullNames (nfl-roster-cache.ts, 1h Data Cache)",
     matches: (s) => reads(s, "nfl_roster_players") && whereIs(s, /^"nfl_roster_players"\."active" = \$\d+$/),
+  },
+  // ---- Capper merge, build-time migrations ----
+  {
+    // mergeCappers reads the kept and the moved capper's picks inside its transaction: one
+    // statement shape for both (userId + capperId, id order, no LIMIT).
+    label: "Capper merge (pick read)",
+    source: "mergeCappers (cappers.ts, Merge cappers on /cappers)",
+    matches: (s) =>
+      reads(s, "picks") && whereIs(s, /^"picks"\."userId" = \$\d+ AND "picks"\."capperId" = \$\d+$/) && has(s, /ORDER BY "picks"\."id" ASC/) && !s.hasLimit,
+  },
+  {
+    // `prisma migrate deploy` lists the applied migrations; deploy-migrate.mjs runs it once per
+    // production Vercel build. Any statement on the table (the INSERT / UPDATE that records a
+    // new migration) has the same source.
+    label: "Migrate deploy (build-time)",
+    source: "prisma migrate deploy (scripts/deploy-migrate.mjs, package.json build; production builds only)",
+    matches: (s) => s.tables.includes("_prisma_migrations"),
   },
   // ---- Heavy Consensus (heavy-consensus.ts; the Live tab's hit rate and its nightly history) ----
   {
