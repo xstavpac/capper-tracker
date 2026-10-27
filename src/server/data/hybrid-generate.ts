@@ -86,6 +86,11 @@ export function chooseCandidateEvents(ranked: ConsensusPosition[], maxLegs: numb
 // What each candidate event needs from the ladder cache: its team-side position
 // needs alternate_spreads (and h2h only when a supporter backs the moneyline),
 // its total needs alternate_totals.
+export function moneylineIsMainLine(sport: string): boolean {
+  const s = sport.toUpperCase();
+  return s === "NHL" || s === "MLB" || s.startsWith("ICEHOCKEY_") || s.startsWith("BASEBALL_");
+}
+
 export function ladderRequests(positions: ConsensusPosition[], eventIds: string[], sportKeyOf: (p: ConsensusPosition) => string): AltLadderRequest[] {
   const out: AltLadderRequest[] = [];
   for (const eventId of eventIds) {
@@ -95,7 +100,9 @@ export function ladderRequests(positions: ConsensusPosition[], eventIds: string[
     const sides = here.filter((p) => p.family === "SIDE");
     if (sides.length > 0) markets.push("alternate_spreads");
     if (here.some((p) => p.family === "TOTAL")) markets.push("alternate_totals");
-    if (sides.some((p) => p.supporters.some((s) => s.postedMarket === "MONEYLINE"))) markets.push("h2h");
+    // Hockey and baseball: the moneyline IS the main line (the alternate spreads start at 1.5), so
+    // tonight's line needs it. Elsewhere only a side with moneyline supporters asks for it.
+    if (sides.length > 0 && (moneylineIsMainLine(sides[0].sport) || sides.some((p) => p.supporters.some((s) => s.postedMarket === "MONEYLINE")))) markets.push("h2h");
     out.push({ eventId, sport: sportKeyOf(here[0]), commenceTime: here[0].commenceTime, markets });
   }
   return out;
@@ -112,18 +119,37 @@ export async function runHybridGenerate(req: HybridGenerateRequest, deps: Hybrid
   // 2. Positions: the Include Picks markets only, on the targeted games only.
   const games = req.include === "ALL" ? snapshot.games : snapshot.games.map((g) => ({ ...g, picks: g.picks.filter((p) => keepsPick(req.include, p)) }));
   const targetIds = new Set(req.targets.map((t) => t.gameId));
-  const all = buildConsensusPositions({ games, leagueRecords: snapshot.leagueRecords, categoryRecords: snapshot.categoryRecords }, { now: deps.now });
+  const all = buildConsensusPositions({ games, leagueRecords: snapshot.leagueRecords, categoryRecords: snapshot.categoryRecords }, { now: deps.now, minWinPct: req.settings.minWinPct });
   const ranked = targetIds.size > 0 ? all.filter((p) => targetIds.has(p.eventId)) : all;
 
   // 3. The candidate events, and the positions the optimizer may see.
   const candidateEvents = chooseCandidateEvents(ranked, req.settings.maxLegs);
   const candidates = new Set(candidateEvents);
-  const positions = ranked.filter((p) => candidates.has(p.eventId));
   const sportKeyOf = (p: ConsensusPosition) => eventSportKeys[p.eventId] ?? deps.leagueKey(p.sport) ?? p.sport;
 
   // 4. Ladders for those events only.
-  const requests = ladderRequests(positions, candidateEvents, sportKeyOf);
-  const lookup = requests.length > 0 ? await deps.getLadders(requests) : { ladders: {}, pricingInProgress: [] };
+  let requests = ladderRequests(ranked.filter((p) => candidates.has(p.eventId)), candidateEvents, sportKeyOf);
+  let lookup: AltLadderLookup = requests.length > 0 ? await deps.getLadders(requests) : { ladders: {}, pricingInProgress: [] };
+
+  // 4b. Backfill: a top-6 box game FanDuel hasn't posted alternate lines for is replaced by the next
+  // box-eligible game, once (a second pass, so the spend stays bounded). A game already known to be
+  // unposted is a held cache row - asking for it again buys nothing - and is never re-asked here.
+  const topBox = new Set(boxEligibleGames(ranked).slice(0, HYBRID_CANDIDATE_GAMES).map((g) => g.eventId));
+  const unposted = unpostedEvents(requests, lookup);
+  const lost = candidateEvents.filter((id) => topBox.has(id) && unposted.has(id)).length;
+  if (lost > 0) {
+    const have = new Set(candidateEvents);
+    const more = boxEligibleGames(ranked).map((g) => g.eventId).filter((id) => !have.has(id)).slice(0, lost);
+    if (more.length > 0) {
+      more.forEach((id) => candidates.add(id));
+      candidateEvents.push(...more);
+      const second = ladderRequests(ranked.filter((p) => more.includes(p.eventId)), more, sportKeyOf);
+      const again = await deps.getLadders(second);
+      requests = [...requests, ...second];
+      lookup = { ladders: { ...lookup.ladders, ...again.ladders }, pricingInProgress: [...lookup.pricingInProgress, ...again.pricingInProgress] };
+    }
+  }
+  const positions = ranked.filter((p) => candidates.has(p.eventId));
 
   // 5. Recent swings, one call per sport involved.
   const teamsBySport = new Map<string, Set<string>>();
@@ -144,6 +170,15 @@ export async function runHybridGenerate(req: HybridGenerateRequest, deps: Hybrid
   return { result, notes: eventNotes(requests, positions, lookup), candidateEvents, eventSportKeys: Object.fromEntries(requests.map((r) => [r.eventId, r.sport])), generatedAt: deps.now.toISOString() };
 }
 
+function isUnposted(r: AltLadderRequest, lookup: AltLadderLookup): boolean {
+  const event = lookup.ladders[r.eventId] ?? {};
+  return ALT_MARKETS.some((m) => r.markets.includes(m) && event[m] !== undefined && event[m]!.outcomes.length === 0);
+}
+
+function unpostedEvents(requests: AltLadderRequest[], lookup: AltLadderLookup): Set<string> {
+  return new Set(requests.filter((r) => isUnposted(r, lookup)).map((r) => r.eventId));
+}
+
 // One note per event that has one: alternate lines FanDuel has not posted yet (a
 // fetched ladder with no outcomes), or a ladder another request is still pricing.
 function eventNotes(requests: AltLadderRequest[], positions: ConsensusPosition[], lookup: AltLadderLookup): HybridEventNote[] {
@@ -159,8 +194,7 @@ function eventNotes(requests: AltLadderRequest[], positions: ConsensusPosition[]
       continue;
     }
     const event = lookup.ladders[r.eventId] ?? {};
-    const notPosted = ALT_MARKETS.some((m) => r.markets.includes(m) && event[m] !== undefined && event[m]!.outcomes.length === 0);
-    if (notPosted) notes.push({ eventId: r.eventId, gameLabel: labelOf(r.eventId), kind: "alt-lines-not-posted", message: ALT_LINES_NOT_POSTED_NOTE });
+    if (isUnposted(r, lookup)) notes.push({ eventId: r.eventId, gameLabel: labelOf(r.eventId), kind: "alt-lines-not-posted", message: ALT_LINES_NOT_POSTED_NOTE });
   }
   return notes;
 }

@@ -18,7 +18,15 @@ const errorOf = (r: unknown) => (r && typeof r === "object" && "error" in r ? (r
 
 const ok = parse();
 check("a valid request parses", errorOf(ok), null);
-check("...into the settings as sent", "settings" in ok && ok.settings, { targetMin: -140, targetMax: -110, width: "balanced", perLegRange: null, maxLegs: 4 });
+check("...into the settings as sent", "settings" in ok && ok.settings, { targetMin: -140, targetMax: -110, width: "balanced", perLegRange: null, maxLegs: 4, minWinPct: 55 });
+
+// ---- win-% gate ----
+const gate = (v: unknown) => errorOf(parse({}, { minWinPct: v }));
+const gateOf = (r: unknown) => (r as { settings: { minWinPct: number } }).settings.minWinPct;
+check("minWinPct absent or null: 55", [gateOf(parse()), gateOf(parse({}, { minWinPct: null }))], [55, 55]);
+check("45, 55, 60, 75 are allowed", [45, 55, 60, 75].map(gate), [null, null, null, null]);
+check("60 is carried through", gateOf(parse({}, { minWinPct: 60 })), 60);
+check("off the 45-75 / step-5 grid is rejected, not silently defaulted", [40, 80, 52, 55.5, "60", NaN].map((v) => gate(v) === "The win-% gate must be 45 to 75 in steps of 5."), [true, true, true, true, true, true]);
 
 // ---- target range ----
 check("targetMin above targetMax is rejected, saying why", errorOf(parse({}, { targetMin: -110, targetMax: -140 })), "The target range is backwards: -110 is higher than -140. Put the longer price second (e.g. -140 to -110).");

@@ -58,40 +58,46 @@ function ladderFor(markets: string[]): AltLadderLookup["ladders"][string] {
 const notPosted = (): AltLadder => ({ outcomes: [], fetchedAt: NOW, marketLastUpdate: null, isStale: false });
 
 // ---- A multi-game snapshot: game i (1-based) has two cappers on Broncos +3 (or the Broncos ML) and two on Over 41.5 ----
+const TEAMS: Record<string, [string, string, string]> = {
+  NFL: [HOME, AWAY, "Broncos"],
+  NHL: ["Detroit Red Wings", "New Jersey Devils", "Red Wings"],
+  MLB: ["Chicago Cubs", "Boston Red Sox", "Cubs"],
+};
 type SideKind = "SPREAD" | "ML" | null;
 type GameSpec = { side: SideKind; total: boolean; league?: string };
-function snapshotOf(games: GameSpec[]): GeneratorSnapshot {
+function snapshotOf(games: GameSpec[], record?: (n: number) => [number, number]): GeneratorSnapshot {
   const categoryRecords: Record<string, CategoryBreakdownItem | null> = {};
   const leagueRecords: CapperLeagueRecords = { records: {}, streaks: {}, last20: {} };
   const out: GeneratorGame[] = games.map((g, idx) => {
     const n = idx + 1;
     const league = g.league ?? "NFL";
+    const [home, away, nick] = TEAMS[league] ?? TEAMS.NFL;
     const picks: GeneratorPick[] = [];
     // Game 1 has the strongest cappers, game 2 the next, ...: a fixed ranking.
-    const wins = 30 - n;
+    const [wins, losses] = record ? record(n) : [30 - n, 5];
     const add = (capper: string, category: PickCategoryKey, detail: string, betType: string, line: number | null) => {
-      const rec = col(wins, 5);
+      const rec = col(wins, losses);
       categoryRecords[capper + "|" + category] = { key: category, label: category, ...rec };
       leagueRecords.records[capper + "|" + league + "|" + category] = { category, label: category, overall: rec, league: rec };
       picks.push({
         pickId: capper + "-" + picks.length, capperId: capper, capperName: "Capper " + capper, capperColorTag: null, capperIsFavorite: false,
-        category, leagueName: league, gameId: "G" + n, gameLabel: AWAY + " @ " + HOME, betDetail: detail, odds: -110, units: 1, status: "PENDING",
-        betType, period: "FULL_GAME", rawBetDetail: detail, propMarket: null, line, homeTeam: HOME, awayTeam: AWAY, gameTime: START,
+        category, leagueName: league, gameId: "G" + n, gameLabel: away + " @ " + home, betDetail: detail, odds: -110, units: 1, status: "PENDING",
+        betType, period: "FULL_GAME", rawBetDetail: detail, propMarket: null, line, homeTeam: home, awayTeam: away, gameTime: START,
         teamGroup: "HOME", teamLabel: "", teamColor: null, datePosted: "2026-10-14T00:00:00.000Z", gameNumber: null,
       } as unknown as GeneratorPick);
     };
     for (const c of ["a", "b"]) {
-      if (g.side === "SPREAD") add(c + n + "s", "SPREAD_PLUS", "Broncos +3", "SPREAD", 3);
-      if (g.side === "ML") add(c + n + "m", "FAV_ML", "Broncos ML", "MONEYLINE", null);
+      if (g.side === "SPREAD") add(c + n + "s", "SPREAD_PLUS", nick + (league === "NFL" ? " +3" : " +1.5"), "SPREAD", league === "NFL" ? 3 : 1.5);
+      if (g.side === "ML") add(c + n + "m", "FAV_ML", nick + " ML", "MONEYLINE", null);
       if (g.total) add(c + n + "t", "OVER", "Over 41.5", "TOTAL", 41.5);
     }
-    return { gameId: "G" + n, gameLabel: AWAY + " @ " + HOME, gameTime: START, leagueName: league, picks };
+    return { gameId: "G" + n, gameLabel: away + " @ " + home, gameTime: START, leagueName: league, picks };
   });
   return { builtAt: NOW.toISOString(), games: out, slipPicks: [], targets: [], leagueRecords, categoryRecords };
 }
 
 const BOX: GameSpec = { side: "SPREAD", total: true };
-const SETTINGS = { targetMin: -140, targetMax: -110, width: "balanced" as const, perLegRange: null, maxLegs: 4 };
+const SETTINGS = { targetMin: -140, targetMax: -110, width: "balanced" as const, perLegRange: null, maxLegs: 4, minWinPct: 55 };
 const request = (over: Partial<HybridGenerateRequest> = {}): HybridGenerateRequest => ({ leagues: ["NFL"], targets: [], include: "ALL", settings: SETTINGS, ...over });
 
 // ---- The fakes, with a call log ----
@@ -307,6 +313,109 @@ async function main() {
     check("an event with no cached row: no link, asks to generate again", [unknown.url, unknown.legs[0].status === "gone" && unknown.legs[0].reason.includes("generate again")], [null, true]);
     const waiting = await buildHybridFanDuelLink(legs, deps({ getLadders: async () => ({ ladders: {}, pricingInProgress: [{ eventId: "E1", market: "alternate_totals" }] }) }));
     check("pricing in progress on one market: no partial slip", [waiting.url, waiting.legs.map((l) => l.status)], [null, ["gone", "gone"]]);
+  }
+
+  // ---- 11. Backfill: unposted top-6 box games are replaced by the next box-eligible games, once ----
+  {
+    const unpostedSet = new Set(["G1", "G2", "G3"]);
+    const lookupWith = (unposted: Set<string>) => (reqs: AltLadderRequest[]): AltLadderLookup => ({
+      ladders: Object.fromEntries(reqs.map((q) => [q.eventId, unposted.has(q.eventId) ? { alternate_spreads: notPosted(), alternate_totals: notPosted() } : ladderFor(q.markets)])),
+      pricingInProgress: [],
+    });
+    const two = { ...SETTINGS, maxLegs: 2 };
+
+    // NBA day-before: 3 of the top 6 unposted, 10 eligible games.
+    const ten = snapshotOf(Array.from({ length: 10 }, () => BOX));
+    const r = rig(ten, { lookup: lookupWith(unpostedSet) });
+    const res = await run(r, request({ settings: two }));
+    check("two passes: the top 6, then ONLY the 3 replacements", r.ladderRequests.map((q) => q.map((x) => x.eventId).sort()), [["G1", "G2", "G3", "G4", "G5", "G6"], ["G7", "G8", "G9"]]);
+    const askedIds = r.ladderRequests.flat().map((q) => q.eventId);
+    check("the candidates reach 6 posted box games", askedIds.filter((id) => !unpostedSet.has(id)).length, 6);
+    check("no unposted game is asked for twice", new Set(askedIds).size, askedIds.length);
+    check("the result is built from posted games only", res.result.primary !== null && [res.result.primary, ...res.result.alternates].every((h) => h.legs.every((l) => !unpostedSet.has(l.eventId))), true);
+    check("the three unposted games each carry the note", res.notes.map((n) => [n.eventId, n.kind]), [["G1", "alt-lines-not-posted"], ["G2", "alt-lines-not-posted"], ["G3", "alt-lines-not-posted"]]);
+    check("candidateEvents lists all nine asked", res.candidateEvents.length, 9);
+
+    // Fewer eligible games than needed: it runs out, with no error.
+    const eight = snapshotOf(Array.from({ length: 8 }, () => BOX));
+    const r2 = rig(eight, { lookup: lookupWith(unpostedSet) });
+    const res2 = await run(r2, request({ settings: two }));
+    check("8 eligible: the second pass takes the 2 that exist", r2.ladderRequests.map((q) => q.map((x) => x.eventId).sort()), [["G1", "G2", "G3", "G4", "G5", "G6"], ["G7", "G8"]]);
+    check("...and a hybrid still comes back", res2.result.primary !== null, true);
+    const r2b = rig(snapshotOf(Array.from({ length: 6 }, () => BOX)), { lookup: lookupWith(unpostedSet) });
+    await run(r2b, request({ settings: two }));
+    check("6 eligible, 3 unposted: nothing to backfill with, no second pass", r2b.ladderRequests.length, 1);
+
+    // The replacements are unposted too: still just two passes (the spend is bounded).
+    const r3 = rig(ten, { lookup: lookupWith(new Set(["G1", "G2", "G3", "G7", "G8", "G9"])) });
+    const res3 = await run(r3, request({ settings: two }));
+    check("replacements unposted as well: exactly two passes, no third", r3.ladderRequests.length, 2);
+    check("...and the rest still build a hybrid from the 3 posted", res3.result.primary !== null, true);
+
+    // All posted: one pass.
+    const r4 = rig(ten);
+    await run(r4, request({ settings: two }));
+    check("nothing unposted: one pass", r4.ladderRequests.length, 1);
+
+    // maxLegs 4: the two extra events are fetched in pass one; the replacements come after them.
+    const r5 = rig(ten, { lookup: lookupWith(unpostedSet) });
+    await run(r5, request());
+    check("maxLegs 4: pass one is 6 box + 2 extra; pass two the 2 box games left", r5.ladderRequests.map((q) => q.length), [8, 2]);
+  }
+
+  // ---- 12. h2h for hockey and baseball (the moneyline is their main line) ----
+  {
+    for (const league of ["NHL", "MLB", "NFL"]) {
+      const r = rig(snapshotOf([{ side: "SPREAD", total: true, league }]));
+      r.deps.leagueKey = (label) => ({ NHL: "icehockey_nhl", MLB: "baseball_mlb", NFL: "americanfootball_nfl" })[label];
+      await run(r, request({ leagues: [league] }));
+      const m = r.ladderRequests.flat()[0].markets;
+      check(league + ": spread/total supporters only -> h2h " + (league === "NFL" ? "NOT " : "") + "requested", m.includes("h2h"), league !== "NFL");
+    }
+    const tot = rig(snapshotOf([{ side: null, total: true, league: "NHL" }]));
+    await run(tot, request({ leagues: ["NHL"] }));
+    check("NHL total with no team side: no h2h (nothing needs it)", tot.ladderRequests.flat()[0].markets, ["alternate_totals"]);
+  }
+
+  // ---- 13. minWinPct reaches the qualification ----
+  {
+    const weak = snapshotOf([BOX], () => [7, 3]); // 70%
+    const at55 = rig(weak);
+    await run(at55, request({ settings: { ...SETTINGS, minWinPct: 55 } }));
+    check("70% cappers qualify at a 55 gate", at55.ladderRequests.length, 1);
+    const at75 = rig(weak);
+    const res = await run(at75, request({ settings: { ...SETTINGS, minWinPct: 75 } }));
+    check("...and do not at 75: no positions, no ladder read", [at75.ladderRequests.length, res.result.primary], [0, null]);
+  }
+
+  // ---- 14. the link: a stale ladder is re-priced ONCE; still stale -> no link ----
+  {
+    const start = new Date("2026-10-15T23:00:00.000Z");
+    const legs = [
+      { eventId: "E1", sportKey: "americanfootball_nfl", marketKey: "alternate_spreads" as const, outcomeName: HOME, point: 3.5 },
+      { eventId: "E1", sportKey: "americanfootball_nfl", marketKey: "alternate_totals" as const, outcomeName: "Over", point: 38.5 },
+    ];
+    const ladders = (stale: string[]) => (reqs: AltLadderRequest[]): AltLadderLookup => ({
+      ladders: Object.fromEntries(reqs.map((q) => [q.eventId, Object.fromEntries(q.markets.map((m) => [m, { ...(ladderFor([m]) as Record<string, AltLadder>)[m], isStale: stale.includes(m) }]))])),
+      pricingInProgress: [],
+    });
+    const calls: AltLadderRequest[][] = [];
+    const mk = (answers: ((r: AltLadderRequest[]) => AltLadderLookup)[]) => {
+      calls.length = 0;
+      return { now: NOW, getCommenceTimes: async () => new Map([["E1", start]]), getLadders: async (r: AltLadderRequest[]) => (calls.push(r), answers[Math.min(calls.length - 1, answers.length - 1)](r)) };
+    };
+
+    const fixed = await buildHybridFanDuelLink(legs, mk([ladders(["alternate_totals"]), ladders([])]));
+    check("stale -> re-priced -> link built", [fixed.url !== null, fixed.legs.map((l) => l.status), fixed.anyStale], [true, ["matched", "matched"], false]);
+    check("...the re-price asked for ONLY the stale market, once", [calls.length, calls[1].map((q) => [q.eventId, q.markets])], [2, [["E1", ["alternate_totals"]]]]);
+
+    const still = await buildHybridFanDuelLink(legs, mk([ladders(["alternate_totals"])]));
+    check("stale -> still stale -> NO link, the stale leg named", [still.url, still.legs.map((l) => l.status), still.anyStale], [null, ["matched", "gone"], true]);
+    check("...exactly one re-price (two reads in all)", calls.length, 2);
+    check("...with the reason", still.legs[1].status === "gone" && still.legs[1].reason.startsWith("FanDuel's odds couldn't be refreshed"), true);
+
+    const fresh = await buildHybridFanDuelLink(legs, mk([ladders([])]));
+    check("nothing stale: one read, no re-price", [fresh.url !== null, calls.length], [true, 1]);
   }
 
   console.log(failures > 0 ? `\n${failures} check(s) FAILED.` : "\nAll checks passed.");

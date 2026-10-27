@@ -3,6 +3,7 @@
 // price or a ladder comes from it. Bad input comes back as a ParlayRejection
 // (returned, not thrown: a production build strips a thrown error's message).
 // Pure and client-safe.
+import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP } from "@/lib/parlay/gate";
 import { hasUsablePrice } from "@/lib/parlay/combine-odds";
 import { HYBRID_MAX_LEGS, HYBRID_MIN_LEG_PRICE, type HybridWidth } from "@/lib/parlay/hybrid";
 import { selectedCategories, toIncludeSelection, type IncludeSelection } from "@/lib/parlay/include-picks";
@@ -15,6 +16,8 @@ export type HybridGenerateSettings = {
   width: HybridWidth;
   perLegRange: { min: number; max: number } | null;
   maxLegs: number;
+  // The win-% gate (gate.ts, #327): 45-75 in steps of 5, default 55.
+  minWinPct: number;
 };
 
 export type HybridGenerateRequest = {
@@ -71,6 +74,15 @@ export function parseHybridRequest(raw: unknown, liveLabels: ReadonlySet<string>
     return reject(`Legs must be a whole number from 2 to ${HYBRID_MAX_LEGS}.`);
   }
 
+  let minWinPct = GATE_DEFAULT;
+  if (s.minWinPct !== undefined && s.minWinPct !== null) {
+    const g = s.minWinPct;
+    if (typeof g !== "number" || !Number.isInteger(g) || g < GATE_MIN || g > GATE_MAX || (g - GATE_MIN) % GATE_STEP !== 0) {
+      return reject(`The win-% gate must be ${GATE_MIN} to ${GATE_MAX} in steps of ${GATE_STEP}.`);
+    }
+    minWinPct = g;
+  }
+
   let perLegRange: HybridGenerateSettings["perLegRange"] = null;
   if (s.perLegRange !== undefined && s.perLegRange !== null) {
     if (typeof s.perLegRange !== "object") return reject(HYBRID_INVALID_REQUEST);
@@ -87,6 +99,6 @@ export function parseHybridRequest(raw: unknown, liveLabels: ReadonlySet<string>
     leagues: uniqueLeagues,
     targets: parsedTargets,
     include: cleanInclude,
-    settings: { targetMin, targetMax, width: s.width, perLegRange, maxLegs },
+    settings: { targetMin, targetMax, width: s.width, perLegRange, maxLegs, minWinPct },
   };
 }

@@ -10,7 +10,8 @@
 //   - Each leg is matched with matchFanDuelOutcome and NO maxLineMove: the same
 //     market, the same outcome and the same point, else nothing. The market and
 //     selection ids come from the feed's own sid / betslip link, nowhere else.
-//   - Any leg missing, changed, ambiguous or unpriced: url is null (never a partial
+//   - A stale ladder (one that could not be refreshed) is never linked.
+//   - Any leg missing, changed, ambiguous, stale or unpriced: url is null (never a partial
 //     slip), and the response says which leg is gone and the nearest point FanDuel
 //     has for it now, so the page can offer a re-generate.
 //   - Every leg comes back with FanDuel's current price, so the page can show
@@ -114,6 +115,12 @@ export function buildHybridLink(legs: HybridLinkLegInput[], ladders: AltLadderRe
       results.push({ status: "gone", leg, reason: "FanDuel's lines for this game couldn't be read right now.", nearest: null });
       continue;
     }
+    // A ladder that could not be refreshed is not a price to bet on: no link.
+    if (ladder.isStale) {
+      const asOf = ladder.marketLastUpdate ? new Date(ladder.marketLastUpdate).toISOString() : null;
+      results.push({ status: "gone", leg, reason: `FanDuel's odds couldn't be refreshed${asOf ? " (as of " + asOf + ")" : ""} - try again.`, nearest: null });
+      continue;
+    }
     // No maxLineMove: the exact point or nothing.
     const match = matchFanDuelOutcome(
       { marketKeys: [leg.marketKey], outcomeName: leg.outcomeName, ...(leg.point === null ? {} : { point: leg.point }) },
@@ -135,7 +142,7 @@ export function buildHybridLink(legs: HybridLinkLegInput[], ladders: AltLadderRe
   return {
     url: all ? buildFanDuelBetslipUrl(selections) : null,
     legs: results,
-    anyStale: results.some((r) => r.status === "matched" && r.isStale),
+    anyStale: results.some((r) => r.status === "gone" && r.reason.startsWith("FanDuel's odds couldn't be refreshed")),
     oddsAsOf: updates.sort()[0] ?? null,
   };
 }

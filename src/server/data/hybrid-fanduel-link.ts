@@ -5,6 +5,8 @@
 // credit gates), so a tap right after Generate spends nothing and a tap after the
 // cache expired spends at most one call per event for just those markets.
 //
+// A stale ladder is re-priced once and never linked (see below).
+//
 // A game's start time comes from the cached ladder rows the generate wrote (the
 // request carries none), and a game that has started is never refetched or sent:
 // its in-play prices are not the ones the hybrid was built on.
@@ -31,8 +33,19 @@ export async function buildHybridFanDuelLink(legs: HybridLinkLegInput[], deps: H
     const mine = legs.filter((l) => l.eventId === eventId);
     requests.push({ eventId, sport: mine[0].sportKey, commenceTime, markets: Array.from(new Set(mine.map((l) => l.marketKey as AltLadderMarket))) });
   }
-  const lookup = requests.length > 0 ? await deps.getLadders(requests) : { ladders: {}, pricingInProgress: [] };
-  const inProgress = new Set(lookup.pricingInProgress.map((p) => p.eventId + "|" + p.market));
+  let lookup: AltLadderLookup = requests.length > 0 ? await deps.getLadders(requests) : { ladders: {}, pricingInProgress: [] };
+
+  // A stale ladder (the first read could not refresh it) gets ONE more re-price of just those markets,
+  // through the same gates and single-flight. Still stale after that: buildHybridLink withholds the link.
+  const again = requests
+    .map((r) => ({ ...r, markets: r.markets.filter((m) => lookup.ladders[r.eventId]?.[m]?.isStale) }))
+    .filter((r) => r.markets.length > 0);
+  if (again.length > 0) {
+    const fresh = await deps.getLadders(again);
+    const ladders = { ...lookup.ladders };
+    for (const [eventId, markets] of Object.entries(fresh.ladders)) ladders[eventId] = { ...ladders[eventId], ...markets };
+    lookup = { ladders, pricingInProgress: [...lookup.pricingInProgress, ...fresh.pricingInProgress] };
+  }  const inProgress = new Set(lookup.pricingInProgress.map((p) => p.eventId + "|" + p.market));
 
   return buildHybridLink(legs, lookup.ladders, (leg) => {
     const start = starts.get(leg.eventId);
