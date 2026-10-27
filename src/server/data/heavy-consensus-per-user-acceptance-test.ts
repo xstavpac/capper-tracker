@@ -17,7 +17,7 @@
 //
 // DB-backed and WRITING, scoped to games in 2099 so nothing real is read or changed: seeded users
 // (cascading to their cappers, picks and markets), deleted by id. Refuses to run unless DATABASE_URL
-// is the local bettingview_dev database.
+// is a local database named bettingview_dev (the dev DB) or capper_ci (CI's ephemeral Postgres).
 //   node --env-file=<local env file> --require ./scripts/server-only-stub.cjs --import tsx src/server/data/heavy-consensus-per-user-acceptance-test.ts
 // HEAVY_CAPTURE_OUT=<file> also writes the statements sent (for db-monitor-fixtures.ts).
 import { readFileSync, writeFileSync } from "node:fs";
@@ -47,10 +47,11 @@ function check(label: string, actual: unknown, expected: unknown) {
   if (!pass) failures++;
 }
 
+const LOCAL_DATABASES = ["/bettingview_dev", "/capper_ci"];
 function localDevTarget(url: string | undefined): boolean {
   try {
     const u = new URL(url ?? "");
-    return ["localhost", "127.0.0.1"].includes(u.hostname) && u.pathname === "/bettingview_dev";
+    return ["localhost", "127.0.0.1"].includes(u.hostname) && LOCAL_DATABASES.includes(u.pathname);
   } catch {
     return false;
   }
@@ -66,7 +67,7 @@ const SOLO = 1;
 const repo = (rel: string) => readFileSync(rel, "utf8").replace(/\r\n/g, "\n");
 
 async function main() {
-  if (!localDevTarget(process.env.DATABASE_URL)) throw new Error("Refusing to run: DATABASE_URL is not the local bettingview_dev database.");
+  if (!localDevTarget(process.env.DATABASE_URL)) throw new Error("Refusing to run: DATABASE_URL is not a local bettingview_dev / capper_ci database.");
   const { prisma } = await import("@/lib/prisma");
   const { getHeavyConsensusRate, recomputeHeavyConsensusMarkets, loadHeavyConsensusInstances } = await import("@/server/data/heavy-consensus");
 

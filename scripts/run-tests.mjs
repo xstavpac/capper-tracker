@@ -58,6 +58,8 @@ const NEEDS_DB = new Set([
   // The same: query-logging clients for /picks page 1 and "Load older picks".
   "src/server/data/picks-page-one-statements-acceptance-test.ts",
   "src/server/actions/older-picks-acceptance-test.ts",
+  // The same: its own query-logging client, installed before a dynamic import of the app's.
+  "src/server/data/heavy-consensus-per-user-acceptance-test.ts",
 ]);
 
 // Suites that import `@/lib/prisma` but never actually query - they swap a
