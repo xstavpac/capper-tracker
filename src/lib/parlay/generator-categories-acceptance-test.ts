@@ -161,7 +161,7 @@ const full = snapOf(FULL);
   check("Max 3: all three stay, nothing left out", [s3.fromSlip, s3.dropped.length], [3, 0]);
   const leftOutGames = new Set(s1.legs.map((l) => l.gameId));
   check("a game with picks left out is full: no generated leg on it, so Hedge and Contrarian have nothing to swap there",
-    [s1.legs.filter((l) => leftOutGames.has(l.gameId) && l.source === "GENERATED").length, [...s1.hedge.legs, ...s1.contrarian.legs].filter((l) => leftOutGames.has(l.original.gameId) && l.swap !== null).length], [0, 0]);
+    [s1.legs.filter((l) => leftOutGames.has(l.gameId) && l.source === "GENERATED").length, [...s1.hedge.SUGGESTED.legs, ...s1.contrarian.SUGGESTED.legs].filter((l) => leftOutGames.has(l.original.gameId) && l.swap !== null).length], [0, 0]);
 }
 
 // ---- Pick Mix -------------------------------------------------------------------------

@@ -56,7 +56,10 @@ const SETTINGS: [string, GeneratorSettings][] = [
   ["2 legs, totals only, 60% gate", { legCount: 2, maxLegsPerGame: 1, include: ["TOTALS"], mix: null, fillFrom: "BEST_AVAILABLE", minWinPct: 60 }],
 ];
 
-const produced = SETTINGS.map(([label, settings]) => [label, buildGeneratedParlay(snapshot(), settings, null, NOW)] as const);
+const built = SETTINGS.map(([label, settings]) => [label, buildGeneratedParlay(snapshot(), settings, null, NOW)] as const);
+// Frozen before the Swap setting: Hedge and Contrarian were Suggested's (generated
+// legs only). This snapshot has no slip picks, so All must match it too.
+const produced = built.map(([label, p]) => [label, { ...p, hedge: p.hedge.SUGGESTED, contrarian: p.contrarian.SUGGESTED }] as const);
 const path = join(__dirname, "standard-generator-frozen.json");
 // Plain JSON, with the key order the engine built it in.
 const text = JSON.stringify(Object.fromEntries(produced), null, 2) + "\n";
@@ -75,6 +78,11 @@ for (const [label, parlay] of produced) {
   const pass = want === got;
   console.log(`${pass ? "PASS" : "FAIL"}: Standard output unchanged - ${label} (${parlay.legs.length} legs, hedge ${parlay.hedge.legs.length}, contrarian ${parlay.contrarian.legs.length})`);
   if (!pass) failures++;
+}
+for (const [label, p] of built) {
+  const same = JSON.stringify([p.hedge.ALL, p.contrarian.ALL]) === JSON.stringify([p.hedge.SUGGESTED, p.contrarian.SUGGESTED]);
+  console.log(`${same ? "PASS" : "FAIL"}: no slip picks - Swap: All is Suggested - ${label}`);
+  if (!same) failures++;
 }
 const nonEmpty = produced.every(([, p]) => p.legs.length > 0);
 console.log(`${nonEmpty ? "PASS" : "FAIL"}: every frozen case built at least one leg (a frozen empty parlay would prove nothing)`);

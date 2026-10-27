@@ -31,6 +31,7 @@ import type { BetCategory } from "@/lib/parlay/bet-category";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, normalizeMinWinPct, readStoredGate, writeStoredGate } from "@/lib/parlay/gate";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
+import { readStoredSwapScope, SWAP_SCOPE_DEFAULT, writeStoredSwapScope, type SwapScope } from "@/lib/parlay/swap-scope";
 import { slipLegFloor } from "@/lib/parlay/leg-cap";
 import { createGeneratorSession, poolKey, type PoolInputs } from "@/lib/parlay/generator-session";
 import { removedHeading, removedPickText } from "@/lib/parlay/slip-state";
@@ -104,6 +105,16 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
     const next = normalizeMinWinPct(Math.max(GATE_MIN, Math.min(GATE_MAX, n)));
     setMinWinPctState(next);
     writeStoredGate(userId, next);
+  }
+  // Which legs Hedge and Contrarian swap - remembered the same way. Every scope
+  // comes with each build, so changing it never rebuilds the parlay.
+  const [swapScope, setSwapScopeState] = useState<SwapScope>(SWAP_SCOPE_DEFAULT);
+  useEffect(() => {
+    setSwapScopeState(readStoredSwapScope(userId));
+  }, [userId]);
+  function setSwapScope(next: SwapScope) {
+    setSwapScopeState(next);
+    writeStoredSwapScope(userId, next);
   }
 
   const [parlay, setParlay] = useState<GeneratedParlay | null>(null);
@@ -466,6 +477,8 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           busy={busy}
           noAlternative={noAlternative}
           unavailableTargetLabels={parlay.unavailableTargets.map((id) => targetLabel.get(id) ?? "A targeted game")}
+          swapScope={swapScope}
+          onSwapScope={setSwapScope}
           onRegenerate={() => void run("regenerate")}
           onSent={() => {
             // Your picks stay; only Live's slip mode ends.

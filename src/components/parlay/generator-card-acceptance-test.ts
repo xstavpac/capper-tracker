@@ -209,12 +209,33 @@ async function main() {
   check("a settings change rebuilds without a request", requests.length === 1 && text().includes("Your parlay"));
   await click(button("Fewer: Max legs per game"));
 
-  // ---- Tabs: Send to FanDuel on every one ----
+  // ---- Tabs: Send to FanDuel on every one; Swap: on Hedge and Contrarian only ----
+  const tabButton = (tab: string) => Array.from(el.querySelectorAll('[role="tab"]')).find((b) => (b.textContent ?? "").startsWith(tab));
+  const swapGroup = () => el.querySelector('[role="radiogroup"][aria-label="Swap"]');
+  const swapChoice = (label: string) => Array.from(swapGroup()?.querySelectorAll('[role="radio"]') ?? []).find((b) => (b.textContent ?? "").trim() === label);
+  const legList = () => el.querySelector("ol")?.textContent ?? "";
+  const primaryBefore = legList();
+  check("Primary: no Swap control", swapGroup() === null && !text().includes("Swap:"));
   for (const tab of ["Hedge", "Contrarian"]) {
-    await click(Array.from(el.querySelectorAll('[role="tab"]')).find((b) => (b.textContent ?? "").startsWith(tab)));
+    await click(tabButton(tab));
     check(`${tab}: Send to FanDuel is there`, Boolean(button("Send to FanDuel")));
-    check(`${tab}: the slip picks are unchanged`, (text().match(/your pick - never swapped/g) ?? []).length === 2);
+    check(
+      `${tab}: Swap: Suggested · Your picks · All, All by default`,
+      text().includes("Swap:") && ["Suggested", "Your picks", "All"].every((l) => swapChoice(l)) && swapChoice("All")?.getAttribute("aria-checked") === "true"
+    );
+    await click(swapChoice("Suggested"));
+    check(`${tab} · Suggested: the slip picks are unchanged`, (text().match(/your pick - Swap is set to Suggested/g) ?? []).length === 2);
+    await click(swapChoice("Your picks"));
+    check(`${tab} · Your picks: the generated leg is unchanged, the slip picks are not`, (text().match(/suggested leg - Swap is set to Your picks/g) ?? []).length === 1 && !text().includes("Swap is set to Suggested"));
+    check(`${tab} · Your picks: remembered for this user`, win.localStorage.getItem("parlay-swap-scope:u1") === "YOUR_PICKS");
+    await click(swapChoice("All"));
+    check(`${tab} · All: no leg is out of scope; the default is not stored`, !text().includes("Swap is set to") && win.localStorage.getItem("parlay-swap-scope:u1") === null);
   }
+  check("Swap changes: no request", requests.length === 1, `requests=${requests.length}`);
+  await click(tabButton("Hedge"));
+  check("Hedge · All: a swapped slip pick says it replaced your pick", text().includes("Replaces your pick"), legList());
+  await click(tabButton("Primary"));
+  check("Primary: the same legs after every Swap change", legList() === primaryBefore);
 
   // ---- A pool change clears the result ----
   await click(button("Use full slate"));

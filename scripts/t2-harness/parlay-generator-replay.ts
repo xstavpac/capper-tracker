@@ -150,9 +150,9 @@ async function main() {
       }
       let changed = [...ia].some((id) => !ic.has(id)) || [...ic].some((id) => !ia.has(id));
       for (const mode of ["hedge", "contrarian"] as const) {
-        for (const cl of c[mode].legs) {
-          const al = a[mode].legs.find((x) => x.original.pick.pickId === cl.original.pick.pickId);
-          const bl = b[mode].legs.find((x) => x.original.pick.pickId === cl.original.pick.pickId);
+        for (const cl of c[mode].SUGGESTED.legs) {
+          const al = a[mode].SUGGESTED.legs.find((x) => x.original.pick.pickId === cl.original.pick.pickId);
+          const bl = b[mode].SUGGESTED.legs.find((x) => x.original.pick.pickId === cl.original.pick.pickId);
           if (!al) continue;
           const show = (l: typeof cl) => (l.swap ? `${l.swap.pick.betDetail} · ${l.swap.pick.capperName} ${l.swap.record.wins}-${l.swap.record.losses}` : `unchanged (${l.unchangedReason})`);
           if (show(al) === show(cl)) continue;

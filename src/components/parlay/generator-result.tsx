@@ -10,7 +10,9 @@
 //     tagged SGP.
 //   - Combined odds only for a parlay with no same-game legs: legs on one game
 //     aren't independent, and FanDuel prices them itself.
-//   - Hedge and Contrarian never change a slip pick.
+//   - Hedge and Contrarian swap the legs the "Swap:" control (on those two tabs
+//     only) covers: Suggested (generated legs), Your picks (slip legs) or All.
+//     The Primary always keeps every slip pick as chosen.
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { getRecordColor, PICK_CATEGORY_LABELS, PICK_CATEGORY_MARKET_NOUN } from "@/server/data/stats";
@@ -19,12 +21,13 @@ import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
 import { CONTROL, FOOTER_LINK, FOOTER_TEXT, PanelShell, TINTS } from "@/components/dashboard/panel-shell";
 import { WIN_PCT_TRACK, WinPctBar } from "@/components/dashboard/category-card";
 import { ClipboardIcon, ListChecksIcon } from "@/components/dashboard/cappers-icons";
-import { LABEL, Tabs } from "@/components/parlay/parlay-controls";
+import { LABEL, Tabs, TextSegments } from "@/components/parlay/parlay-controls";
 import { SendToFanDuel } from "@/components/parlay/send-to-fanduel";
 import { combineOdds, formatAmericanOdds, formatDecimalOdds, formatPayout, hasUsablePrice, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
 import { isGameLive, LIVE_NOTE, type GameClock } from "@/lib/parlay/game-over";
 import type { EngineLeg, EngineSwap, EngineSwapLeg, GeneratedParlay, LegRecord } from "@/lib/parlay/generator";
 import type { RankRecordSource } from "@/lib/parlay/pick-record";
+import { SWAP_SCOPE_OPTIONS, type SwapScope } from "@/lib/parlay/swap-scope";
 
 export const formatOdds = (odds: number) => (odds > 0 ? "+" : "") + odds;
 export const formatGameTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -105,8 +108,10 @@ function SwapLegRow({ n, leg, mode }: { n: number; leg: EngineSwapLeg; mode: Eng
   const { original } = leg;
   if (!leg.swap) {
     const reason =
-      leg.unchangedReason === "SLIP_PICK"
-        ? "your pick - never swapped"
+      leg.unchangedReason === "OUT_OF_SCOPE"
+        ? original.source === "SLIP"
+          ? "your pick - Swap is set to Suggested"
+          : "suggested leg - Swap is set to Your picks"
         : leg.unchangedReason === "NOT_MAJORITY"
           ? "your pick's side isn't the majority of your cappers"
           : SWAP_COPY[mode].noAlternate;
@@ -122,7 +127,8 @@ function SwapLegRow({ n, leg, mode }: { n: number; leg: EngineSwapLeg; mode: Eng
   return (
     <LegRow n={n} pick={swap.pick} record={{ text: recordText(swap.record, swap.basis ?? "MARKET", swap.pick), winPct: swap.record.winPct }} mine={false} sgp={original.sameGame} swappedBy={SWAP_COPY[mode].title}>
       <p className={NOTE}>
-        Replaces <span className="line-through">{original.pick.betDetail}</span> · {original.pick.capperName}
+        Replaces {original.source === "SLIP" && "your pick "}
+        <span className="line-through">{original.pick.betDetail}</span> · {original.pick.capperName}
       </p>
     </LegRow>
   );
@@ -207,11 +213,16 @@ export function GeneratorResult({
   busy,
   noAlternative,
   unavailableTargetLabels,
+  swapScope,
+  onSwapScope,
   onRegenerate,
   onSent,
 }: {
   parlay: GeneratedParlay;
   busy: boolean;
+  // Which legs Hedge and Contrarian swap (swap-scope.ts); remembered by the card.
+  swapScope: SwapScope;
+  onSwapScope: (scope: SwapScope) => void;
   // The last Regenerate found nothing else of comparable strength.
   noAlternative: boolean;
   // Targeted games that are over or have left the board, by name.
@@ -223,7 +234,9 @@ export function GeneratorResult({
   const [tab, setTab] = useState<Tab>("PRIMARY");
   const legs = parlay.legs;
   const sameGame = parlay.sameGameGames > 0;
-  const swap = tab === "AUTO_HEDGE" ? parlay.hedge : tab === "CONTRARIAN" ? parlay.contrarian : null;
+  const hedge = parlay.hedge[swapScope];
+  const contrarian = parlay.contrarian[swapScope];
+  const swap = tab === "AUTO_HEDGE" ? hedge : tab === "CONTRARIAN" ? contrarian : null;
   const shownPicks = swap ? swap.legs.map((l) => (l.swap ?? l.original).pick) : legs.map((l) => l.pick);
   const notes = [
     ...parlay.dropped.filter((d) => d.reason === "left_out").map((d) => `${d.label}: ${d.note}`),
@@ -263,10 +276,16 @@ export function GeneratorResult({
         onChange={setTab}
         tabs={[
           { key: "PRIMARY", label: "Primary" },
-          { key: "AUTO_HEDGE", label: "Hedge", note: `${parlay.hedge.swapCount}/${parlay.hedge.legs.length}` },
-          { key: "CONTRARIAN", label: "Contrarian", note: `${parlay.contrarian.swapCount}/${parlay.contrarian.legs.length}` },
+          { key: "AUTO_HEDGE", label: "Hedge", note: `${hedge.swapCount}/${hedge.legs.length}` },
+          { key: "CONTRARIAN", label: "Contrarian", note: `${contrarian.swapCount}/${contrarian.legs.length}` },
         ]}
       />
+      {swap && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className={LABEL}>Swap:</span>
+          <TextSegments label="Swap" options={SWAP_SCOPE_OPTIONS} value={swapScope} onChange={onSwapScope} />
+        </div>
+      )}
       {notes.length > 0 && (
         <div role="status" className="mt-3 rounded-[12px] border border-amber-300 bg-amber-50/60 px-3.5 py-2.5 dark:border-amber-800 dark:bg-amber-500/10">
           {notes.map((n) => (
