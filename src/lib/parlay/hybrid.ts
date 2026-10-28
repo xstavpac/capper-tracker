@@ -1015,7 +1015,26 @@ function deliveryOf(cap: number, deliveredLegs: number, boxes: number, qualifyin
   return { requestedLegs: cap, deliveredLegs, boxes, qualifyingGames, shortOfGames: boxes === qualifyingGames && cap - deliveredLegs >= minBox };
 }
 
+// What happened to each box-eligible game the result does not use - for the
+// "Why only N games?" diagnostic (hybrid-diagnostics.ts). Reported beside the
+// result, never part of it: optimizeHybrid's result is the same with or without it.
+export type HybridBoxReport = {
+  // Box-eligible games past the optimizer's box limit, never built.
+  notReached: string[];
+  // Box-eligible games whose side or total had no usable FanDuel rung (no ladder,
+  // or nothing within the -600 floor / per-leg range).
+  noLine: { eventId: string; leg: "side" | "total" }[];
+  // Boxes built but left out: the Total legs cap (multi-box), or ranked below the
+  // primary and its alternates.
+  leftOut: { eventId: string; why: "cap" | "ranked" }[];
+};
+
 export function optimizeHybrid(input: HybridInput): HybridResult {
+  return optimizeHybridReport(input).result;
+}
+
+export function optimizeHybridReport(input: HybridInput): { result: HybridResult; report: HybridBoxReport } {
+  const report: HybridBoxReport = { notReached: [], noLine: [], leftOut: [] };
   const settings = normalizeSettings(input.settings);
   const band = targetBand(settings);
   const ranked = input.positions;
@@ -1033,19 +1052,27 @@ export function optimizeHybrid(input: HybridInput): HybridResult {
   const boxes: Candidate[] = [];
   const limit = multi ? HYBRID_MAX_LADDER_GAMES : HYBRID_CANDIDATE_GAMES;
   for (const g of boxEligibleGames(ranked)) {
-    if (boxes.length >= limit) break;
+    if (boxes.length >= limit) {
+      report.notReached.push(g.eventId);
+      continue;
+    }
     const side = placedOf(g.side);
     const total = placedOf(g.total);
-    if (!side || !total) continue;
+    if (!side || !total) {
+      report.noLine.push({ eventId: g.eventId, leg: side ? "total" : "side" });
+      continue;
+    }
     const opposite = settings.boxLegs === "2" ? null : placedOf(oppositeTotal(g.total, input.ladders), true);
     const { core, tuned, fallback } = chooseBox(side, total, opposite, settings, band);
     boxes.push({ structure: "same-game-box", core, tuned, coreScore: g.score, fallback });
   }
 
   if (boxes.length > 0 && !multi) {
-    const sorted = [...boxes].sort(rankCandidates).map(toHybrid);
+    const order = [...boxes].sort(rankCandidates);
+    order.slice(1 + HYBRID_ALTERNATES).forEach((b) => report.leftOut.push({ eventId: b.core[0].position.eventId, why: "ranked" }));
+    const sorted = order.map(toHybrid);
     const primary = sorted[0];
-    return { primary, alternates: sorted.slice(1, 1 + HYBRID_ALTERNATES), note: null, delivery: deliveryOf(cap, primary.legs.length, 1, boxes.length, minBox) };
+    return { result: { primary, alternates: sorted.slice(1, 1 + HYBRID_ALTERNATES), note: null, delivery: deliveryOf(cap, primary.legs.length, 1, boxes.length, minBox) }, report };
   }
 
   if (boxes.length > 0) {
@@ -1056,13 +1083,16 @@ export function optimizeHybrid(input: HybridInput): HybridResult {
     for (const b of ordered) {
       if (used + b.core.length <= cap) picked.push(b);
       else if (b.fallback && used + b.fallback.core.length <= cap) picked.push({ structure: b.structure, ...b.fallback });
-      else continue;
+      else {
+        report.leftOut.push({ eventId: b.core[0].position.eventId, why: "cap" });
+        continue;
+      }
       used += picked[picked.length - 1].core.length;
     }
     const hybrids = picked.map(toHybrid);
     // A slate that holds one box is that box, in the plain shape.
     const primary = hybrids.length === 1 ? hybrids[0] : combineBoxes(hybrids);
-    return { primary, alternates: [], note: null, delivery: deliveryOf(cap, used, picked.length, boxes.length, minBox) };
+    return { result: { primary, alternates: [], note: null, delivery: deliveryOf(cap, used, picked.length, boxes.length, minBox) }, report };
   }
 
   // No box: the top two placeable positions on different games.
@@ -1079,13 +1109,16 @@ export function optimizeHybrid(input: HybridInput): HybridResult {
   }
   if (!first || !second) {
     return {
-      primary: null,
-      alternates: [],
-      note: first ? "Only one game has a placeable consensus position." : "No consensus position has a usable FanDuel ladder.",
-      delivery: deliveryOf(cap, 0, 0, 0, minBox),
+      result: {
+        primary: null,
+        alternates: [],
+        note: first ? "Only one game has a placeable consensus position." : "No consensus position has a usable FanDuel ladder.",
+        delivery: deliveryOf(cap, 0, 0, 0, minBox),
+      },
+      report,
     };
   }
   const core = [first, second];
   const cross: Candidate = { structure: "cross-game", core, tuned: tune(core, 0, band)!, coreScore: first.position.score + second.position.score, fallback: null };
-  return { primary: toHybrid(cross), alternates: [], note: null, delivery: deliveryOf(cap, 2, 0, 0, minBox) };
+  return { result: { primary: toHybrid(cross), alternates: [], note: null, delivery: deliveryOf(cap, 2, 0, 0, minBox) }, report };
 }

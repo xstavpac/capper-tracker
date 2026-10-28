@@ -76,7 +76,21 @@ stub("../../server/actions/parlay-generate", {
 // Consensus Hybrid's actions: counted, never reached by Standard.
 const hybridRequests: unknown[] = [];
 // What the Hybrid action answers; a test swaps it to show a result.
-const NO_BOX = { result: { primary: null, alternates: [], note: null, delivery: { requestedLegs: 3, deliveredLegs: 0, boxes: 0, qualifyingGames: 0, shortOfGames: true } }, notes: [], candidateEvents: [], eventSportKeys: {}, linkable: true, generatedAt: new Date().toISOString() };
+const WHY = {
+  gamesWithPicks: 4,
+  gamesUsed: 0,
+  skipped: [
+    { eventId: "N1", gameLabel: "Panthers @ Jets", leagueName: "NHL", picks: 3, reason: "no-total-picks", text: "No full-game total picks" },
+    { eventId: "N2", gameLabel: "Kings @ Blackhawks", leagueName: "NHL", picks: 8, reason: "not-enough-supporters", text: "Only 1 capper at 55%+ on the total (Over); needs 2" },
+    { eventId: "N3", gameLabel: "Bills @ Jets", leagueName: "NFL", picks: 2, reason: "started", text: "Already started" },
+  ],
+  counts: [
+    { reason: "started", label: "Already started", count: 1 },
+    { reason: "no-total-picks", label: "No total picks", count: 1 },
+    { reason: "not-enough-supporters", label: "Fewer than 2 cappers agree", count: 1 },
+  ],
+};
+const NO_BOX = { result: { primary: null, alternates: [], note: null, delivery: { requestedLegs: 3, deliveredLegs: 0, boxes: 0, qualifyingGames: 0, shortOfGames: true } }, notes: [], candidateEvents: [], eventSportKeys: {}, linkable: true, diagnostics: WHY, generatedAt: new Date().toISOString() };
 let hybridAnswer: unknown = NO_BOX;
 stub("../../server/actions/parlay-hybrid", {
   hybridGenerateAction: async (req: unknown) => {
@@ -324,6 +338,20 @@ async function main() {
   check("3 Legs and Auto are distinguishable on the server (boxLegs differs)", p3.boxLegs !== pAuto.boxLegs);
   check("the three requests differ only in boxLegs / maxLegs", [p2, p3, pAuto].every((q) => JSON.stringify({ ...q, boxLegs: 0, maxLegs: 0 }) === JSON.stringify({ ...p2, boxLegs: 0, maxLegs: 0 })));
   check("Hybrid: no-box result is explained in plain words", text().includes("No game has qualifying consensus on both a side and a total."));
+  const whyBox = () => Array.from(el.querySelectorAll("details")).find((x) => (x.querySelector("summary")?.textContent ?? "").includes("Why ")) as HTMLDetailsElement | undefined;
+  check("no-box: a collapsed 'Why no games?' section", Boolean(whyBox()) && !whyBox()!.open && (whyBox()!.querySelector("summary")!.textContent ?? "").includes("Why no games?"));
+  const countRows = Array.from(whyBox()!.querySelectorAll('ul[aria-label="Games left out, by reason"] > li')).map((li) => (li.textContent ?? "").replace(/\s+/g, " ").trim());
+  check("no-box: its counts by reason, in order", JSON.stringify(countRows) === JSON.stringify(["Already started1", "No total picks1", "Fewer than 2 cappers agree1"]), JSON.stringify(countRows));
+  const each = whyBox()!.querySelector("details") as HTMLDetailsElement;
+  check("no-box: the per-game list sits behind its own toggle, closed", Boolean(each) && !each.open && (each.querySelector("summary")!.textContent ?? "") === "Show each game");
+  const gameRows = Array.from(each.querySelectorAll('ul[aria-label="Games left out"] > li')).map((li) => li.textContent);
+  const wantRows = [
+    "NHL · Panthers @ Jets · 3 picksNo full-game total picks",
+    "NHL · Kings @ Blackhawks · 8 picksOnly 1 capper at 55%+ on the total (Over); needs 2",
+    "NFL · Bills @ Jets · 2 picksAlready started",
+  ];
+  check("no-box: each game with its league, picks and reason", JSON.stringify(gameRows) === JSON.stringify(wantRows), JSON.stringify(gameRows));
+  check("no-box: the summary line", text().includes("3 of 4 games with picks left out"));
 
   // ---- Total legs: a 2-25 stepper under Legs per game ----
   const totalMore = () => button("More: Total legs") as HTMLButtonElement;
@@ -420,6 +448,10 @@ async function main() {
   check("single box: the Primary / Alt 1 / Alt 2 tabs", ["Primary", "Alt 1", "Alt 2"].every((t) => Boolean(button(t))));
   check("single box: no delivery line, no game sections, the one-game header", !text().includes("Delivered") && gameSections().length === 0 && text().includes("2 legs · one game"));
   check("single box: Send to FanDuel is live", Boolean(button("Send to FanDuel")) && !(button("Send to FanDuel") as HTMLButtonElement).disabled);
+  check("single box: no diagnostics on the response -> no 'Why' section", !Array.from(el.querySelectorAll("summary")).some((x) => (x.textContent ?? "").includes("Why ")));
+  hybridAnswer = { ...(hybridAnswer as object), diagnostics: { ...WHY, gamesUsed: 1 } };
+  await click(button("Generate parlay"));
+  check("results panel: a collapsed 'Why only 1 game?' section under the card", Boolean(whyBox()) && !whyBox()!.open && (whyBox()!.querySelector("summary")!.textContent ?? "").includes("Why only 1 game?"));
   hybridAnswer = NO_BOX;
   await click(button("Generate parlay"));
   const hybridSent = hybridRequests.length;

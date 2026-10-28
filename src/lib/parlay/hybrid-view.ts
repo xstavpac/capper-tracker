@@ -10,6 +10,7 @@
 //   - which state the page is in (idle .. result), from the action's response
 //   - Legs per game: 2 · 3 · Auto (boxLegs), and Total legs: a 2-25 cap on the whole
 //     parlay (maxLegs); a multi-box result: delivery, one row per game's box
+//   - "Why only N games?": the games with picks left out, by reason, then one by one
 //   - the Send to FanDuel outcome: the link legs, "no longer posted", and the
 //     price-moved diff with the re-priced combined estimate
 //
@@ -36,6 +37,7 @@ import type { HybridGenerateSettings } from "@/lib/parlay/hybrid-request";
 import { HYBRID_LINK_MAX_LEGS, STALE_REASON, type HybridLinkLegInput, type HybridLinkResponse } from "@/lib/parlay/hybrid-link";
 import { GATE_DEFAULT } from "@/lib/parlay/gate";
 import type { HybridEventNote, HybridGenerateResponse } from "@/server/data/hybrid-generate";
+import type { HybridDiagnostics } from "@/lib/parlay/hybrid-diagnostics";
 
 // ---- Copy (pinned by the tests) ----
 
@@ -294,6 +296,28 @@ export function boxesInTargetText(h: Hybrid): TargetStatus {
 // Send to FanDuel works for up to HYBRID_LINK_MAX_LEGS legs (the response says so; the leg count is the fallback).
 export function canSendToFanDuel(h: Hybrid, linkable: boolean | undefined): boolean {
   return linkable !== false && h.legs.length <= HYBRID_LINK_MAX_LEGS;
+}
+
+// ---- "Why only N games?" ----
+
+export type WhyView = {
+  title: string;
+  summary: string;
+  counts: { key: string; label: string; count: number }[];
+  rows: { key: string; game: string; picks: string; text: string }[];
+};
+
+// Null when nothing with picks was left out (or an older response has no diagnostics).
+export function whySkippedView(d: HybridDiagnostics | null | undefined): WhyView | null {
+  if (!d || d.skipped.length === 0) return null;
+  const n = d.gamesUsed;
+  const left = d.skipped.length;
+  return {
+    title: n === 0 ? "Why no games?" : `Why only ${n} game${n === 1 ? "" : "s"}?`,
+    summary: `${left} of ${d.gamesWithPicks} game${d.gamesWithPicks === 1 ? "" : "s"} with picks left out`,
+    counts: d.counts.map((c) => ({ key: c.reason, label: c.label, count: c.count })),
+    rows: d.skipped.map((r, i) => ({ key: r.eventId + "|" + i, game: `${r.leagueName} · ${r.gameLabel}`, picks: `${r.picks} pick${r.picks === 1 ? "" : "s"}`, text: r.text })),
+  };
 }
 
 export type HybridCardKey = "primary" | "alt-1" | "alt-2";

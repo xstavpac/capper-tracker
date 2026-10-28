@@ -133,10 +133,13 @@ type Post = {
 
 const MARKET_BY_BET_TYPE: Record<string, HybridMarket> = { SPREAD: "SPREAD", MONEYLINE: "MONEYLINE", TOTAL: "TOTAL" };
 
-// The pick as a Post, or null when it is not one a hybrid position can use: not
-// a full-game spread / moneyline / game total, the side or line cannot be read,
-// or no gated record.
-function toPost(pick: GeneratorPick, game: GeneratorGame, snapshot: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords">, gate: number, z: number): Post | null {
+// A full-game spread / moneyline / game-total pick read as a post, with its
+// record (null when the capper has none) - before the win-% gate. Null when it is
+// not one a hybrid position can use: not one of those markets, or the side or
+// line cannot be read.
+type ReadPost = Omit<Post, "record" | "score"> & { record: HybridRecord | null; score: number };
+
+function readPost(pick: GeneratorPick, game: GeneratorGame, snapshot: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords">, z: number): ReadPost | null {
   const market = MARKET_BY_BET_TYPE[pick.betType];
   if (!market || pick.period !== "FULL_GAME") return null;
   // The board cannot tell which game of a doubleheader a pick with no game number is on.
@@ -172,7 +175,6 @@ function toPost(pick: GeneratorPick, game: GeneratorGame, snapshot: Pick<Generat
 
   // Chosen at the same z the score uses.
   const record = recordForGate(pick, snapshot.leagueRecords, snapshot.categoryRecords, z);
-  if (!record || !qualifies(record, gate)) return null;
   return {
     pick,
     family,
@@ -180,9 +182,17 @@ function toPost(pick: GeneratorPick, game: GeneratorGame, snapshot: Pick<Generat
     market,
     postedLine,
     endorsedLine,
-    record: { wins: record.wins, losses: record.losses, n: record.n, winPct: record.winPct, source: record.source },
-    score: wilsonLowerBound(record.wins, record.losses, z),
+    record: record && { wins: record.wins, losses: record.losses, n: record.n, winPct: record.winPct, source: record.source },
+    score: record ? wilsonLowerBound(record.wins, record.losses, z) : 0,
   };
+}
+
+// The pick as a Post, or null when it is not one a hybrid position can use (readPost)
+// or its record does not clear the gate.
+function toPost(pick: GeneratorPick, game: GeneratorGame, snapshot: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords">, gate: number, z: number): Post | null {
+  const read = readPost(pick, game, snapshot, z);
+  if (!read || !read.record || !qualifies(read.record, gate)) return null;
+  return read as Post;
 }
 
 // The line a post endorses is harder the further it is from the forgiving end:
@@ -294,4 +304,61 @@ export function buildConsensusPositions(
   }
 
   return positions.sort((a, b) => (b.score !== a.score ? b.score - a.score : b.supporters.length !== a.supporters.length ? b.supporters.length - a.supporters.length : a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+// ---- Why a game has no position (the "Why only N games?" diagnostic) ----
+//
+// What buildConsensusPositions saw on one game, per family, before and after the
+// gate - read with the same readPost / gate / hedge rules, so it can say which of
+// them stopped the game. Never used to build a position.
+
+export type FamilyDiagnosis = {
+  // Full-game posts of the family that could be read, gated or not.
+  posts: number;
+  // The highest win % among those posts' records (then the larger sample); null when none had a record.
+  best: { direction: string; winPct: number; wins: number; losses: number } | null;
+  // Distinct cappers clearing the gate on each direction, hedged cappers set aside.
+  gatedByDirection: Record<string, number>;
+  // Cappers who cleared the gate on both directions of the family (hedged), set aside.
+  hedged: number;
+};
+
+export type GameDiagnosis = { gameId: string; side: FamilyDiagnosis; total: FamilyDiagnosis; otherPicks: number };
+
+export function diagnoseConsensusGame(
+  game: GeneratorGame,
+  snapshot: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords">,
+  opts: Pick<ConsensusOptions, "minWinPct" | "z"> = {}
+): GameDiagnosis {
+  const gate = normalizeMinWinPct(opts.minWinPct ?? GATE_DEFAULT);
+  const z = opts.z ?? GENERATOR_Z;
+  const read: ReadPost[] = [];
+  let otherPicks = 0;
+  for (const pick of game.picks) {
+    const post = readPost(pick, game, snapshot, z);
+    if (post) read.push(post);
+    else otherPicks++;
+  }
+  const family = (f: HybridFamily): FamilyDiagnosis => {
+    const posts = read.filter((p) => p.family === f);
+    let best: FamilyDiagnosis["best"] = null;
+    for (const p of posts) {
+      if (!p.record) continue;
+      if (!best || p.record.winPct > best.winPct || (p.record.winPct === best.winPct && p.record.wins + p.record.losses > best.wins + best.losses)) {
+        best = { direction: p.direction, winPct: p.record.winPct, wins: p.record.wins, losses: p.record.losses };
+      }
+    }
+    const gated = posts.filter((p) => p.record && qualifies(p.record, gate));
+    const directionsOf = new Map<string, Set<string>>();
+    for (const p of gated) directionsOf.set(p.pick.capperId, (directionsOf.get(p.pick.capperId) ?? new Set<string>()).add(p.direction));
+    const gatedByDirection: Record<string, number> = {};
+    for (const dirs of directionsOf.values()) {
+      if (dirs.size !== 1) continue;
+      const d = Array.from(dirs)[0];
+      gatedByDirection[d] = (gatedByDirection[d] ?? 0) + 1;
+    }
+    const hedged = Array.from(directionsOf.values()).filter((d) => d.size > 1).length;
+    return { posts: posts.length, best, gatedByDirection, hedged };
+  };
+  return { gameId: game.gameId, side: family("SIDE"), total: family("TOTAL"), otherPicks };
 }

@@ -21,6 +21,7 @@ import type { SwingGame } from "@/lib/parlay/recent-swings";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import type { AltLadder, AltLadderLookup, AltLadderRequest } from "@/server/data/alt-ladders";
+import type { SnapshotSkippedGame } from "@/server/data/generator-snapshot";
 import {
   ALT_LINES_NOT_POSTED_NOTE,
   LADDERS_UNAVAILABLE_NOTE,
@@ -112,7 +113,7 @@ type Rig = {
   swingCalls: { sport: string; teams: string[] }[];
   deps: HybridDeps;
 };
-function rig(snapshot: GeneratorSnapshot, opts: { lookup?: (reqs: AltLadderRequest[]) => AltLadderLookup; swings?: Record<string, SwingGame[]> } = {}): Rig {
+function rig(snapshot: GeneratorSnapshot, opts: { lookup?: (reqs: AltLadderRequest[]) => AltLadderLookup; swings?: Record<string, SwingGame[]>; skipped?: SnapshotSkippedGame[] } = {}): Rig {
   const r: Rig = { log: [], scopes: [], ladderRequests: [], swingCalls: [], deps: null as unknown as HybridDeps };
   r.deps = {
     now: NOW,
@@ -121,7 +122,7 @@ function rig(snapshot: GeneratorSnapshot, opts: { lookup?: (reqs: AltLadderReque
       r.scopes.push(scope);
       const targets = new Set(scope.targets.map((t) => t.gameId));
       // Like the real loader: a targeted request carries only those games.
-      return { snapshot: targets.size > 0 ? { ...snapshot, games: snapshot.games.filter((g) => targets.has(g.gameId)) } : snapshot, eventSportKeys: Object.fromEntries(snapshot.games.map((g) => [g.gameId, "americanfootball_nfl"])) };
+      return { snapshot: targets.size > 0 ? { ...snapshot, games: snapshot.games.filter((g) => targets.has(g.gameId)) } : snapshot, eventSportKeys: Object.fromEntries(snapshot.games.map((g) => [g.gameId, "americanfootball_nfl"])), skippedGames: opts.skipped ?? [] };
     },
     getLadders: async (reqs) => {
       r.log.push("ladders");
@@ -227,7 +228,7 @@ async function main() {
     r.deps.loadSnapshot = async (scope) => {
       r.log.push("snapshot");
       r.scopes.push(scope);
-      return { snapshot: eight, eventSportKeys: {} }; // a loader that ignores the targets
+      return { snapshot: eight, eventSportKeys: {}, skippedGames: [] }; // a loader that ignores the targets
     };
     await run(r, request({ targets: [{ gameId: "G3", leagueName: "NFL" }, { gameId: "G5", leagueName: "NFL" }] }));
     check("targets G3 + G5: ladders asked for those two only", asked(r), ["G3", "G5"]);
@@ -511,6 +512,43 @@ async function main() {
     const spent = rig(fourteen, { lookup: (reqs) => ({ ladders: {}, pricingInProgress: [], unavailable: reqs.flatMap((q) => q.markets.map((market) => ({ eventId: q.eventId, market, cause: "budget" as const }))) }) });
     const rz = await run(spent, request({ settings: { ...SETTINGS, maxLegs: 15 } }));
     check("budget spent, nothing cached: no primary, a note per game, delivered 0", [rz.result.primary, rz.notes.length > 0, rz.result.delivery.deliveredLegs, rz.linkable], [null, true, 0, true]);
+  }
+
+  // ---- 16. "Why only N games?" rides along, from what the generation already read ----
+  {
+    const started: SnapshotSkippedGame = { gameId: "S1", gameLabel: "Bills @ Jets", gameTime: START, leagueName: "NFL", picks: 3, reason: "started" };
+    const mixed = snapshotOf([BOX, BOX, BOX, BOX, BOX, BOX, BOX, BOX, { side: "SPREAD", total: false }, { side: null, total: true }]);
+    const r = rig(mixed, { skipped: [started] });
+    const res = await run(r, request({ settings: { ...SETTINGS, maxLegs: 2 } }));
+    const d = res.diagnostics;
+    const reasonOf = (id: string) => d.skipped.find((x) => x.eventId === id)?.reason ?? null;
+    check("no extra read for the diagnostic: snapshot, ladders once, swings once", r.log, ["snapshot", "ladders", "swings:americanfootball_nfl"]);
+    check("the primary and its two alternates are not listed", ["G1", "G2", "G3"].map(reasonOf), [null, null, null]);
+    check("the other three built boxes ranked below", ["G4", "G5", "G6"].map(reasonOf), ["not-used", "not-used", "not-used"]);
+    check("two more box games past the 6-game pricing limit", [reasonOf("G7"), reasonOf("G8")], ["beyond-ladder-limit", "beyond-ladder-limit"]);
+    check("a side-only game and a total-only game", [reasonOf("G9"), reasonOf("G10")], ["no-total-picks", "no-side-picks"]);
+    check("the snapshot's started game is listed first", [d.skipped[0].eventId, d.skipped[0].text], ["S1", "Already started"]);
+    check("games with picks: 10 on the slate + 1 started; used: 1", [d.gamesWithPicks, d.gamesUsed], [11, 1]);
+    check("counts in gate order", d.counts.map((c) => [c.reason, c.count]), [["started", 1], ["no-side-picks", 1], ["no-total-picks", 1], ["beyond-ladder-limit", 2], ["not-used", 3]]);
+
+    // Multi-box at 4 legs: the cap leaves built boxes out.
+    const four = await run(rig(mixed), request({ settings: { ...SETTINGS, maxLegs: 4 } }));
+    check("cap 4: two boxes used, the rest built and left out by the cap", [four.diagnostics.gamesUsed, four.diagnostics.skipped.filter((x) => x.text === "Total legs cap reached").length], [2, 4]);
+
+    // A spent budget: the unpriced games say so.
+    const spent = await run(rig(snapshotOf([BOX, BOX]), { lookup: (reqs) => ({ ladders: {}, pricingInProgress: [], unavailable: reqs.flatMap((q) => q.markets.map((market) => ({ eventId: q.eventId, market, cause: "budget" as const }))) }) }), request());
+    check("budget spent: each game's reason is the budget", spent.diagnostics.skipped.map((x) => [x.eventId, x.reason, x.text]), [["G1", "ladder-unavailable", "Today's FanDuel price lookups are used up"], ["G2", "ladder-unavailable", "Today's FanDuel price lookups are used up"]]);
+
+    // The result is untouched by it.
+    const positions = buildConsensusPositions(mixed, { now: NOW });
+    const candidate = new Set(res.candidateEvents);
+    const direct = optimizeHybrid({
+      positions: positions.filter((p) => candidate.has(p.eventId)),
+      ladders: Object.fromEntries(r.ladderRequests.flat().map((q) => [q.eventId, ladderFor(q.markets)])),
+      swings: Object.fromEntries([HOME, AWAY].map((t) => [t, []])),
+      settings: { targetMin: -140, targetMax: -110, width: "balanced", legRange: null, maxLegs: 2, boxLegs: "2" },
+    });
+    check("with the diagnostic, the result is still exactly the optimizer's", res.result, direct);
   }
 
   console.log(failures > 0 ? `\n${failures} check(s) FAILED.` : "\nAll checks passed.");

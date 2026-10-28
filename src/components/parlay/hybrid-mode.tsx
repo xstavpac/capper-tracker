@@ -60,6 +60,8 @@ import {
   type HybridCardKey,
   type LegView,
   type PageState,
+  type WhyView,
+  whySkippedView,
 } from "@/lib/parlay/hybrid-view";
 
 const NOTICE = "mt-3 rounded-[12px] border border-amber-300 bg-amber-50/60 px-3.5 py-2.5 dark:border-amber-800 dark:bg-amber-500/10";
@@ -332,6 +334,41 @@ function Message({ title, children, action }: { title: string; children?: ReactN
   );
 }
 
+// "Why only N games?": collapsed; open, the counts by reason, then each game behind a second toggle.
+function WhySkipped({ view }: { view: WhyView | null }) {
+  if (!view) return null;
+  return (
+    <details className="group mt-3 rounded-[12px] border border-[#E6E8EF] bg-muted/40 px-3.5 py-2.5 dark:border-border">
+      <summary className="cursor-pointer list-none text-[13px] font-semibold text-brand-600 marker:hidden hover:underline [&::-webkit-details-marker]:hidden dark:text-brand-400">
+        <span aria-hidden className="mr-1.5 inline-block transition-transform group-open:rotate-90">›</span>
+        {view.title}
+      </summary>
+      <p className="mt-2 text-xs font-medium text-muted-foreground">{view.summary}</p>
+      <ul className="mt-1.5 space-y-0.5" aria-label="Games left out, by reason">
+        {view.counts.map((c) => (
+          <li key={c.key} className="flex items-baseline justify-between gap-3 text-[13px] text-foreground">
+            <span className="min-w-0 [overflow-wrap:anywhere]">{c.label}</span>
+            <span className="shrink-0 font-semibold tabular-nums">{c.count}</span>
+          </li>
+        ))}
+      </ul>
+      <details className="mt-2">
+        <summary className="cursor-pointer text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400">Show each game</summary>
+        <ul className="mt-1.5 divide-y divide-[#0F1420]/[0.06] dark:divide-white/10" aria-label="Games left out">
+          {view.rows.map((r) => (
+            <li key={r.key} className="py-1.5">
+              <p className="text-[13px] font-semibold text-foreground [overflow-wrap:anywhere]">
+                {r.game} <span className="text-xs font-medium text-muted-foreground">· {r.picks}</span>
+              </p>
+              <p className="text-xs font-medium text-muted-foreground [overflow-wrap:anywhere]">{r.text}</p>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </details>
+  );
+}
+
 function GameList({ games }: { games: string[] }) {
   return (
     <ul className="mt-1.5 list-disc pl-5 text-sm text-muted-foreground">
@@ -574,6 +611,7 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
   const { state, response, builtSettings } = gen;
   const busy = gen.phase === "loading";
   const retry = () => void gen.generate();
+  const why = whySkippedView(response?.diagnostics);
 
   if (state.kind === "idle") return null;
   if (state.kind === "loading") return <Skeleton />;
@@ -603,6 +641,7 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
       >
         <p>{PRICING_NOTE}</p>
         <GameList games={state.games} />
+        <WhySkipped view={why} />
       </Message>
     );
   }
@@ -612,6 +651,7 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
         <p>{ALT_LINES_NOTE}</p>
         <p className="mt-2 text-xs font-medium text-muted-foreground">Skipped:</p>
         <GameList games={state.games} />
+        <WhySkipped view={why} />
       </Message>
     );
   }
@@ -627,6 +667,7 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
       >
         <p>{UNAVAILABLE_NOTE}</p>
         <GameList games={state.games} />
+        <WhySkipped view={why} />
       </Message>
     );
   }
@@ -635,6 +676,7 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
       <Message title="No hybrid to build right now">
         <p>{state.message}</p>
         {state.detail && <p className="mt-1 text-xs font-medium text-muted-foreground">{state.detail}</p>}
+        <WhySkipped view={why} />
       </Message>
     );
   }
@@ -694,6 +736,7 @@ export function HybridResults({ gen }: { gen: HybridGenerator }) {
         onGenerate={retry}
         cardKey={key}
       />
+      <WhySkipped view={why} />
     </PanelShell>
   );
 }

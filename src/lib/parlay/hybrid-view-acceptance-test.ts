@@ -42,7 +42,9 @@ import {
   TOTAL_LEGS_HINT,
   type HybridForm,
   type PageInput,
+  whySkippedView,
 } from "@/lib/parlay/hybrid-view";
+import type { HybridDiagnostics } from "@/lib/parlay/hybrid-diagnostics";
 import type { Hybrid, HybridLeg, HybridResult } from "@/lib/parlay/hybrid";
 import type { HybridLinkResponse } from "@/lib/parlay/hybrid-link";
 import type { HybridEventNote, HybridGenerateResponse } from "@/server/data/hybrid-generate";
@@ -122,7 +124,7 @@ function hybrid(over: Partial<Hybrid> = {}): Hybrid {
 }
 const note = (kind: HybridEventNote["kind"], eventId = "E1", gameLabel = "Chicago Bears @ Detroit Lions"): HybridEventNote => ({ eventId, gameLabel, kind, message: "x" });
 function response(result: Partial<HybridResult> = {}, notes: HybridEventNote[] = [], candidateEvents = ["E1"]): HybridGenerateResponse {
-  return { result: { primary: hybrid(), alternates: [], note: null, delivery: { requestedLegs: 3, deliveredLegs: 2, boxes: 1, qualifyingGames: 1, shortOfGames: false }, ...result }, notes, candidateEvents, eventSportKeys: { E1: "americanfootball_nfl" }, linkable: true, generatedAt: "2026-10-27T19:15:00.000Z" };
+  return { result: { primary: hybrid(), alternates: [], note: null, delivery: { requestedLegs: 3, deliveredLegs: 2, boxes: 1, qualifyingGames: 1, shortOfGames: false }, ...result }, notes, candidateEvents, eventSportKeys: { E1: "americanfootball_nfl" }, linkable: true, diagnostics: { gamesWithPicks: 1, gamesUsed: 1, skipped: [], counts: [] }, generatedAt: "2026-10-27T19:15:00.000Z" };
 }
 const SETTINGS = { targetMin: -140, targetMax: -110 };
 const page = (over: Partial<PageInput> = {}): PageInput => ({ phase: "done", response: response(), errorMessage: null, settings: SETTINGS, ...over });
@@ -376,6 +378,29 @@ check("flags: an API failure is not the budget", [flagsOf([budgetNote("api-failu
 check("flags: no notes, no budget message", flagsOf([]).budgetLimited, false);
 check("the budget message says what happened", BUDGET_NOTE.includes("used up") && BUDGET_NOTE.includes("skipped"), true);
 check("a multi-box primary that misses its boxes' bands reads as a no-fit state, not an error", pageState(page({ response: response({ primary: multi([boxOf("B", "Packers", "Vikings", { inTarget: false })]) }) })).kind, "no-fit");
+
+// ---- "Why only N games?" ----
+
+const diag = (over: Partial<HybridDiagnostics> = {}): HybridDiagnostics => ({
+  gamesWithPicks: 16,
+  gamesUsed: 1,
+  skipped: [
+    { eventId: "a", gameLabel: "Panthers @ Jets", leagueName: "NHL", picks: 3, reason: "no-total-picks", text: "No full-game total picks" },
+    { eventId: "b", gameLabel: "Kings @ Blackhawks", leagueName: "NHL", picks: 1, reason: "not-enough-supporters", text: "Only 1 capper at 55%+ on the total (Over); needs 2" },
+  ],
+  counts: [
+    { reason: "no-total-picks", label: "No total picks", count: 1 },
+    { reason: "not-enough-supporters", label: "Fewer than 2 cappers agree", count: 1 },
+  ],
+  ...over,
+});
+const why = whySkippedView(diag())!;
+check("why: the title counts the games used", [why.title, whySkippedView(diag({ gamesUsed: 3 }))!.title, whySkippedView(diag({ gamesUsed: 0 }))!.title], ["Why only 1 game?", "Why only 3 games?", "Why no games?"]);
+check("why: the summary says how many with picks were left out", why.summary, "2 of 16 games with picks left out");
+check("why: the counts, by reason", why.counts.map((c) => [c.label, c.count]), [["No total picks", 1], ["Fewer than 2 cappers agree", 1]]);
+check("why: one row per game, league first, with its picks and reason", why.rows.map((r) => [r.game, r.picks, r.text]), [["NHL · Panthers @ Jets", "3 picks", "No full-game total picks"], ["NHL · Kings @ Blackhawks", "1 pick", "Only 1 capper at 55%+ on the total (Over); needs 2"]]);
+check("why: nothing left out -> no section", whySkippedView(diag({ skipped: [], counts: [] })), null);
+check("why: an older response without diagnostics -> no section", [whySkippedView(undefined), whySkippedView(null)], [null, null]);
 
 if (failures > 0) {
   console.log(`\n${failures} FAILED`);
