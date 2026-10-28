@@ -23,6 +23,17 @@ import { normalizeName } from "@/lib/fuzzy-match";
 import { oddsApiRequestKeys } from "@/lib/sport-seasons";
 import { hasKickedOff, isGameOver, type GameFeedStatus } from "@/lib/parlay/game-over";
 import { resolveFanDuelPlayer } from "@/lib/parlay/fanduel-player-match";
+import {
+  gameNotOnFanDuel,
+  gameTimeMismatch,
+  marketLabel,
+  marketNotOffered,
+  marketNotSupported,
+  playerNotMatched,
+  playersAmbiguous,
+  propMarketLabel,
+  twoGamesFound,
+} from "@/lib/parlay/fanduel-reasons";
 
 export type FanDuelLegStatus = "matched" | "adjusted" | "live" | "over" | "not_found" | "ambiguous" | "unsupported" | "error";
 
@@ -255,11 +266,11 @@ function playerPropTarget(leg: FanDuelLegInput): TargetResult {
   // both, and only the league says which).
   const stored = leg.playerName && leg.propMarket ? { playerName: leg.playerName, propMarket: leg.propMarket } : null;
   const prop: { playerName: string; propMarket: string } | null = stored ?? parseAnyPlayerProp(text, leg.leagueName);
-  if (!prop) return unsupported("Couldn't read this player prop.");
+  if (!prop) return unsupported("Couldn't read this player prop" + (text.trim() ? ": \"" + text.trim() + "\"" : "") + ".");
 
   if (prop.propMarket === "TD") {
     if (!FOOTBALL_SPORT_KEYS.has(leg.sportKey ?? "") || !isAnytimeTdPick(text)) {
-      return unsupported("Only anytime-touchdown scorer props can be sent.");
+      return unsupported(marketNotSupported(leg.leagueName, "only anytime-touchdown scorer props"));
     }
     return { ok: true, target: { marketKey: ANYTIME_TD_KEY, outcome: { name: "Yes" }, player: prop.playerName } };
   }
@@ -275,7 +286,7 @@ function playerPropTarget(leg: FanDuelLegInput): TargetResult {
       : sportKey === NHL_SPORT_KEY
         ? NHL_LINE_PROP_KEYS[prop.propMarket]
         : undefined;
-  if (!marketKey) return unsupported("This player prop market can't be sent yet.");
+  if (!marketKey) return unsupported(marketNotSupported(leg.leagueName, propMarketLabel(prop.propMarket) + " props"));
   // The side is only ever in the text; the line is the pick's own when the row
   // has one (props normally don't), else the text's. Two that disagree are not a bet to guess.
   const lineInfo = parsePlayerPropLine(text);
@@ -319,7 +330,7 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
   if (!leg.sportKey) return unsupported(leg.leagueName + " isn't available to send.");
 
   if (leg.betType === "PLAYER_PROP") {
-    if (leg.period !== "FULL_GAME") return unsupported("Only full-game player props can be sent.");
+    if (leg.period !== "FULL_GAME") return unsupported(marketNotSupported(leg.leagueName, "only full-game player props"));
     return playerPropTarget(leg);
   }
 
@@ -328,7 +339,7 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
   const teamOf = (betType: string) => derivePickSide({ betType, betDetail: leg.betDetail }, leg, leg.leagueName);
 
   if (leg.period === "REGULATION") {
-    if (leg.sportKey !== NHL_SPORT_KEY || leg.betType !== "MONEYLINE") return unsupported("This bet type can't be sent yet.");
+    if (leg.sportKey !== NHL_SPORT_KEY || leg.betType !== "MONEYLINE") return unsupported(marketNotSupported(leg.leagueName, "only the moneyline in regulation"));
     if (threeWayWording(leg.betDetail) === "DRAW") return { ok: true, target: { marketKey: HOCKEY_THREE_WAY_KEY, outcome: { name: "Draw" } } };
     const side = teamOf("MONEYLINE");
     if (!side) return unsupported("Couldn't tell which team this pick is on.");
@@ -336,7 +347,7 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
   }
 
   const period = (PERIOD_MARKETS[leg.sportKey] ?? OTHER_LEAGUE_MARKETS)[leg.period];
-  if (!period) return unsupported("FanDuel doesn't offer this period for " + leg.leagueName + ".");
+  if (!period) return unsupported(marketNotOffered("no " + leg.period.toLowerCase().replace(/_/g, " ") + " bets for " + leg.leagueName));
 
   if (leg.betType === "MONEYLINE" || leg.betType === "SPREAD") {
     const side = teamOf(leg.betType);
@@ -349,7 +360,7 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
 
   if (leg.betType === "TOTAL" || leg.betType === "TEAM_TOTAL") {
     const teamTotal = leg.betType === "TEAM_TOTAL";
-    if (teamTotal && !period.teamTotals) return unsupported("FanDuel doesn't offer this team total for " + leg.leagueName + ".");
+    if (teamTotal && !period.teamTotals) return unsupported(marketNotOffered("no team totals for " + leg.leagueName + " " + leg.period.toLowerCase().replace(/_/g, " ")));
     const team = teamTotal ? teamOf("MONEYLINE") : null;
     if (teamTotal && !team) return unsupported("Couldn't tell which team this total is for.");
     const side = totalSideFromText(leg.betDetail);
@@ -365,7 +376,7 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
     });
   }
 
-  return unsupported("This bet type can't be sent yet.");
+  return unsupported(marketNotSupported(leg.leagueName, "the " + leg.betType.toLowerCase().replace(/_/g, " ") + " bet type"));
 }
 
 // ---------------------------------------------------------------------
@@ -451,8 +462,7 @@ const AMBIGUOUS = "More than one FanDuel selection fits this pick.";
 // the first of marketKeys that has it.
 export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMarket[]): FanDuelMatch {
   if (!markets.some((m) => query.marketKeys.includes(m.key))) {
-    const teamTotal = query.marketKeys[0].startsWith("team_totals");
-    return { status: "not_found", reason: teamTotal ? "FanDuel isn't offering a team total for this game." : "FanDuel isn't offering this market right now." };
+    return { status: "not_found", reason: marketNotOffered("no " + marketLabel(query.marketKeys[0]) + " market for this game right now") };
   }
 
   let description = query.description === undefined ? null : normalizeName(query.description);
@@ -460,9 +470,18 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
     const names = markets.flatMap((m) => m.outcomes.map((o) => o.description ?? "")).filter((n) => n !== "");
     const player = resolveFanDuelPlayer(query.player.name, query.player.sportKey, names);
     if (player.status === "ambiguous") {
-      return { status: "ambiguous", reason: "More than one player on FanDuel fits \"" + query.player.name + "\": " + player.names.slice(0, 3).join(", ") + "." };
+      return { status: "ambiguous", reason: playersAmbiguous(query.player.name, player.names) };
     }
     description = normalizeName(player.status === "found" ? player.name : query.player.name);
+    // Nobody by that name has a line in this market: say whose line is missing.
+    const hasLine = markets.some((m) => query.marketKeys.includes(m.key) && m.outcomes.some((o) => normalizeName(o.description ?? "") === description));
+    if (!hasLine) {
+      const what = marketLabel(query.marketKeys[0]);
+      return {
+        status: "not_found",
+        reason: player.status === "found" ? marketNotOffered("FanDuel has no " + what + " line for " + player.name) : playerNotMatched(query.player.name, what),
+      };
+    }
   }
   type Found = { selection: FanDuelSelection; price: number };
   // By line (null for a bet with no line), from the best-ranked market there.
@@ -493,7 +512,7 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
   if (exact.length > 1) return { status: "ambiguous", reason: AMBIGUOUS };
   if (exact.length === 1) return { status: "matched", ...exact[0] };
   if (withoutIds > 0) return { status: "not_found", reason: "FanDuel has this bet, but no betslip link for it." };
-  if (query.point === undefined) return { status: "not_found", reason: "FanDuel isn't offering this selection right now." };
+  if (query.point === undefined) return { status: "not_found", reason: marketNotOffered("this " + marketLabel(query.marketKeys[0]) + " selection isn't posted right now") };
   if (query.maxLineMove === undefined || byLine.size === 0) {
     return { status: "not_found", reason: "FanDuel isn't offering this exact line right now." };
   }
@@ -573,11 +592,11 @@ function eventForLeg(leg: FanDuelLegInput, events: FanDuelEvent[], now: Date): E
   const gap = (e: FanDuelEvent) => Math.abs(new Date(e.commenceTime).getTime() - start);
   const candidates = sameTeams.filter((e) => gap(e) <= EVENT_TIME_WINDOW_MS);
   if (candidates.length === 0) {
-    if (sameTeams.length === 0) return { status: "not_found", reason: "Couldn't find this game on FanDuel." };
+    if (sameTeams.length === 0) return { status: "not_found", reason: gameNotOnFanDuel(leg.awayTeam, leg.homeTeam) };
     const nearest = new Date([...sameTeams].sort((x, y) => gap(x) - gap(y))[0].commenceTime).getTime();
-    return { status: "not_found", reason: "FanDuel has this game at " + clockET(nearest, start) + "; your pick is at " + clockET(start, nearest) + "." };
+    return { status: "not_found", reason: gameTimeMismatch(clockET(nearest, start), clockET(start, nearest)) };
   }
-  if (candidates.length > 1) return { status: "ambiguous", reason: "Two games found — couldn't tell which" };
+  if (candidates.length > 1) return { status: "ambiguous", reason: twoGamesFound(candidates.map((e) => clockET(new Date(e.commenceTime).getTime(), start))) };
   // The feed already has it under way (our clock or kickoff was a little behind).
   if (hasKickedOff(candidates[0].commenceTime, now)) return { status: "live", reason: LIVE_LEG_REASON };
   return { event: candidates[0] };
