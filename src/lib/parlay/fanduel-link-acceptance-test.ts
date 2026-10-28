@@ -23,7 +23,6 @@ import {
   buildFanDuelBetslipUrl,
   buildFanDuelLink,
   fanDuelLegTarget,
-  LIVE_LEG_REASON,
   matchFanDuelOutcome,
   notSentDisplay,
   FANDUEL_BETSLIP_URL,
@@ -34,6 +33,7 @@ import {
   type FanDuelMarket,
 } from "@/lib/parlay/fanduel-link";
 import { SPORT_SEASON_CONFIG } from "@/lib/sport-seasons";
+import { incompleteSameGameGroups } from "@/lib/parlay/same-game-display";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -352,14 +352,27 @@ check("a total with no Over/Under", target({ betType: "TOTAL", betDetail: "Total
 check("a league the odds feed doesn't carry", target({ sportKey: null, leagueName: "ATP" }), "unsupported");
 
 // ---------------------------------------------------------------------
-// 4. Legs -> link: started games, one call per event, only the needed markets
+// 4. Legs -> link: live games, one call per event, only the needed markets
 // ---------------------------------------------------------------------
 const EVENTS: Record<string, FanDuelEvent[]> = {
   americanfootball_nfl: [
     { id: "evt-buf-lar", sportKey: "americanfootball_nfl", homeTeam: "Los Angeles Rams", awayTeam: "Buffalo Bills", commenceTime: KICKOFF },
     { id: "evt-sea-den", sportKey: "americanfootball_nfl", homeTeam: "Denver Broncos", awayTeam: "Seattle Seahawks", commenceTime: "2026-10-16T00:15:00Z" },
+    // Under way at NOW (kicked off 17:00Z): the listing carries in-play events.
+    { id: "evt-nyg-dal", sportKey: "americanfootball_nfl", homeTeam: "Dallas Cowboys", awayTeam: "New York Giants", commenceTime: "2026-10-12T17:00:00Z" },
   ],
 };
+// Synthetic in-play ids (no live capture yet): the same shape as the pre-game ones.
+const DAL_LIVE_MARKETS: FanDuelMarket[] = [
+  {
+    key: "h2h",
+    sid: null,
+    outcomes: [
+      { name: "Dallas Cowboys", price: -400, sid: "60101", link: link("42.690000001", "60101") },
+      { name: "New York Giants", price: 300, sid: "60102", link: link("42.690000001", "60102") },
+    ],
+  },
+];
 const DEN_MARKETS: FanDuelMarket[] = [
   {
     key: "h2h",
@@ -388,7 +401,8 @@ function fakeDeps(now: Date) {
     },
     async getEventMarkets(_sportKey, eventId, marketKeys) {
       calls.odds.push({ eventId, marketKeys });
-      const all = eventId === "evt-buf-lar" ? [...GAME_MARKETS, ...PROP_MARKETS] : eventId === "evt-sea-den" ? DEN_MARKETS : [];
+      const all =
+        eventId === "evt-buf-lar" ? [...GAME_MARKETS, ...PROP_MARKETS] : eventId === "evt-sea-den" ? DEN_MARKETS : eventId === "evt-nyg-dal" ? DAL_LIVE_MARKETS : [];
       return all.filter((m) => marketKeys.includes(m.key));
     },
   };
@@ -616,6 +630,137 @@ async function realResponses() {
 }
 
 // ---------------------------------------------------------------------
+// 5b. Live games: sent like any other leg, with the line FanDuel has in play
+// ---------------------------------------------------------------------
+// The 2026-10-27 slip: five NHL legs in games under way. The ids and in-play
+// lines are synthetic (no in-play capture yet), in the same shape as the
+// pre-game captures: market sid null, the marketId in each outcome's link.
+async function liveGames() {
+  const LIVE_NOW = new Date("2026-10-28T02:40:00Z");
+  const PUCK_DROP = "2026-10-28T02:00:00Z";
+  const nhlEvent = (id: string, awayTeam: string, homeTeam: string): FanDuelEvent => ({ id, sportKey: "icehockey_nhl", homeTeam, awayTeam, commenceTime: PUCK_DROP });
+  const overs = (marketId: string, lines: number[]) =>
+    lines.map((point, i) => ({ name: "Over", price: -110 + i * 40, point, sid: marketId.slice(-3) + String(point * 10), link: link(marketId, marketId.slice(-3) + String(point * 10)) }));
+  const events = [
+    nhlEvent("evt-ott-vgk", "Ottawa Senators", "Vegas Golden Knights"),
+    nhlEvent("evt-ana-uta", "Anaheim Ducks", "Utah Mammoth"),
+    nhlEvent("evt-sjs-chi", "San Jose Sharks", "Chicago Blackhawks"),
+    nhlEvent("evt-cbj-stl", "Columbus Blue Jackets", "St. Louis Blues"),
+  ];
+  // Per event, per market key: what FanDuel has in play right now.
+  const inPlay: Record<string, FanDuelMarket[]> = {
+    // Two goals in: the main total moved 6.5 -> 7.5, and the ladder starts there.
+    "evt-ott-vgk": [
+      {
+        key: "h2h",
+        sid: null,
+        outcomes: [
+          { name: "Vegas Golden Knights", price: -210, sid: "70201", link: link("42.700000201", "70201") },
+          { name: "Ottawa Senators", price: 172, sid: "70202", link: link("42.700000201", "70202") },
+        ],
+      },
+      { key: "totals", sid: null, outcomes: overs("42.700000202", [7.5]) },
+      { key: "alternate_totals", sid: null, outcomes: overs("42.700000203", [7.5, 8.5, 9.5]) },
+    ],
+    // Four goals in: nothing left within 1.5 of the pick's 6.5.
+    "evt-ana-uta": [
+      { key: "totals", sid: null, outcomes: overs("42.700000302", [8.5]) },
+      { key: "alternate_totals", sid: null, outcomes: overs("42.700000303", [8.5, 9.5]) },
+    ],
+    // The totals market is posted but suspended (no outcomes) and the ladder is down.
+    "evt-sjs-chi": [{ key: "totals", sid: null, outcomes: [] }],
+    // No totals market in play at all.
+    "evt-cbj-stl": [],
+  };
+  const calls: { eventId: string; marketKeys: string[] }[] = [];
+  const deps: FanDuelDeps = {
+    now: LIVE_NOW,
+    getEvents: async (sportKey) => (sportKey === "icehockey_nhl" ? events : []),
+    getEventMarkets: async (_s, eventId, marketKeys) => {
+      calls.push({ eventId, marketKeys });
+      return (inPlay[eventId] ?? []).filter((m) => marketKeys.includes(m.key));
+    },
+  };
+  const nhlLeg = (pickId: string, e: FanDuelEvent, over: Partial<FanDuelLegInput>): FanDuelLegInput => ({
+    pickId,
+    sportKey: "icehockey_nhl",
+    leagueName: "NHL",
+    betType: "TOTAL",
+    period: "FULL_GAME",
+    betDetail: "Over 6.5",
+    line: 6.5,
+    homeTeam: e.homeTeam,
+    awayTeam: e.awayTeam,
+    gameTime: PUCK_DROP,
+    gameStatus: "live",
+    odds: -115,
+    onBoard: true,
+    ...over,
+  });
+  const legs = [
+    nhlLeg("Senators o6.5", events[0], {}),
+    nhlLeg("Golden Knights ML", events[0], { betType: "MONEYLINE", betDetail: "Golden Knights ML", line: null, odds: -180 }),
+    nhlLeg("Ducks o6.5", events[1], {}),
+    nhlLeg("Sharks o6.5", events[2], {}),
+    nhlLeg("Blue Jackets o6.5", events[3], {}),
+  ];
+  const built = await build(legs, deps);
+  const byPick = Object.fromEntries(built.legs.map((l) => [l.pickId, [l.status, l.fanDuelOdds, l.sentLine, l.reason]]));
+
+  check("live, line moved o6.5 -> 7.5: sent as adjusted, both lines shown, flagged as the harder line", byPick["Senators o6.5"], [
+    "adjusted",
+    -110,
+    { pick: 6.5, fanDuel: 7.5, side: "Over", worse: true },
+    null,
+  ]);
+  check("live moneyline: matched at FanDuel's in-play price", byPick["Golden Knights ML"], ["matched", -210, null, null]);
+  check("live, past the movement limit: the real reason, not 'add on FanDuel'", byPick["Ducks o6.5"], [
+    "not_found",
+    null,
+    null,
+    "FanDuel's closest line is Over 8.5, more than 1.5 away from your pick.",
+  ]);
+  check("live, FanDuel posts no line (market suspended): isn't offering this exact line right now", byPick["Sharks o6.5"], [
+    "not_found",
+    null,
+    null,
+    "FanDuel isn't offering this exact line right now.",
+  ]);
+  check("live, no totals market in play at all: says the market isn't offered", byPick["Blue Jackets o6.5"], [
+    "not_found",
+    null,
+    null,
+    "Market not offered by FanDuel — no total market for this game right now.",
+  ]);
+  check("no live leg is told to add itself on FanDuel", built.legs.filter((l) => /add (it )?on FanDuel/i.test(l.reason ?? "")), []);
+  check("the link: the same-game pair, in leg order, at the in-play ids (Over 7.5 from the main market, which has that line)", Array.from(new URL(built.url!).searchParams.values()), [
+    "42.700000202", "20275", // Senators o6.5 -> Over 7.5
+    "42.700000201", "70201", // Golden Knights ML
+  ]);
+  check("every live event is asked for its markets at send time; the alternate ladder only for legs the main market missed", calls.sort((x, y) => x.eventId.localeCompare(y.eventId) || x.marketKeys.join().localeCompare(y.marketKeys.join())), [
+    { eventId: "evt-ana-uta", marketKeys: ["alternate_totals"] },
+    { eventId: "evt-ana-uta", marketKeys: ["totals"] },
+    { eventId: "evt-cbj-stl", marketKeys: ["alternate_totals"] },
+    { eventId: "evt-cbj-stl", marketKeys: ["totals"] },
+    { eventId: "evt-ott-vgk", marketKeys: ["alternate_totals"] },
+    { eventId: "evt-ott-vgk", marketKeys: ["h2h", "totals"] },
+    { eventId: "evt-sjs-chi", marketKeys: ["alternate_totals"] },
+    { eventId: "evt-sjs-chi", marketKeys: ["totals"] },
+  ]);
+
+  // The same-game notice reads which picks are in the link: with live legs
+  // sent, Senators @ Golden Knights is whole (2 of 2) and not named.
+  const slip = legs.map((l) => ({ pickId: l.pickId, gameId: l.homeTeam, gameLabel: l.awayTeam + " @ " + l.homeTeam }));
+  const sentIds = new Set(built.legs.filter((l) => l.status === "matched" || l.status === "adjusted").map((l) => l.pickId));
+  check("same-game notice: both live Senators @ Golden Knights legs are sent - no incomplete group", incompleteSameGameGroups(slip, sentIds), []);
+  check(
+    "same-game notice still names a pair when one of its legs is left out (1 of 2)",
+    incompleteSameGameGroups(slip, new Set(["Golden Knights ML"])),
+    [{ gameId: "Vegas Golden Knights", gameLabel: "Ottawa Senators @ Vegas Golden Knights", sent: 1, total: 2 }]
+  );
+}
+
+// ---------------------------------------------------------------------
 // 6. Preseason listings (2026-10-13): a league's games under two Odds API keys
 // ---------------------------------------------------------------------
 type ListedEvent = { id: string; sport_key: string; commence_time: string; home_team: string; away_team: string };
@@ -751,13 +896,15 @@ function noEmptyReasons() {
     notSent.filter((l) => !filled(l.reason) || !filled(notSentDisplay(l).label) || notSentDisplay(l).reason !== l.reason),
     []
   );
-  check("every not-sent status is among them (ambiguous: the doubleheader leg)", Array.from(new Set(notSent.map((l) => l.status))).sort(), ["ambiguous", "error", "live", "not_found", "over", "unsupported"]);
+  check("every not-sent status is among them (ambiguous: the doubleheader leg)", Array.from(new Set(notSent.map((l) => l.status))).sort(), ["ambiguous", "error", "not_found", "over", "unsupported"]);
+  check("no leg in any scenario is told to add itself on FanDuel", ALL_RESULTS.filter((l) => /add (it )?on FanDuel/i.test(l.reason ?? "")), []);
 
   // What the page shows, whatever comes back: each status this build knows, and
   // ones it doesn't ("adjusted" reaching a page loaded before #254 is a leg
-  // with no label and a null reason - the empty grey chip).
+  // with no label and a null reason - the empty grey chip; "live" from a server
+  // still on the build before live legs were sent).
   const statuses = ["live", "over", "not_found", "ambiguous", "unsupported", "error", "adjusted", "matched", "some_future_status", ""];
-  const reasons = [null, undefined, "", "   ", LIVE_LEG_REASON];
+  const reasons = [null, undefined, "", "   ", "Game is over."];
   const blank = statuses
     .flatMap((status) => reasons.map((reason) => ({ status, reason, shown: notSentDisplay({ status, reason }) })))
     .filter((x) => !filled(x.shown.label) || !filled(x.shown.reason));
@@ -813,7 +960,7 @@ async function eventWindow() {
   const hours3 = [ev("evt-buf-lar", at(0)), ev("evt-buf-lar-2", at(180))];
   check("games 3 h apart: the first leg finds the first", await run(hours3), ["matched", null]);
   check("games 3 h apart: the second leg finds the second", await run(hours3, at(180)), ["matched", null]);
-  check("a game the feed already has under way is Live even when its start differs", await run([ev("evt-buf-lar", at(-300))], at(-295)), ["live", LIVE_LEG_REASON]);
+  check("a game the feed already has under way is matched even when its start differs", await run([ev("evt-buf-lar", at(-300))], at(-295)), ["matched", null]);
 }
 
 async function main() {
@@ -832,40 +979,52 @@ async function main() {
     built.legs.map((l) => [l.pickId, l.status, l.pickOdds, l.fanDuelOdds]),
     [
       ["bills-ml", "matched", 150, 154],
-      ["started", "live", 150, null],
+      ["started", "matched", 150, -400],
       ["broncos-ml", "matched", 132, 132],
       ["allen", "matched", -110, -113],
       ["over", "over", 150, null],
     ]
   );
-  check("the live leg is named, not an error: Live — add on FanDuel", built.legs[1].reason, "Live — add on FanDuel");
+  check("the live leg is sent like any other, with no reason", built.legs[1].reason, null);
   check("the game-over leg says why", built.legs[4].reason, "Game is over.");
   check(
-    "the link holds the matched legs only, in leg order",
+    "the link holds every matched leg, the live one included, in leg order",
     Array.from(new URL(built.url!).searchParams.values()),
-    ["42.612291277", "50203", "42.614182869", "50211", "42.613952802", "16503660"]
+    ["42.612291277", "50203", "42.690000001", "60101", "42.614182869", "50211", "42.613952802", "16503660"]
   );
   check("one listing per league", a.calls.events, ["americanfootball_nfl"]);
   check(
-    "one odds call per event, for only the markets its legs need - none for the live and game-over legs",
+    "one odds call per event, for only the markets its legs need - the live game's read at send time, none for the game-over leg",
     a.calls.odds.sort((x, y) => x.eventId.localeCompare(y.eventId)),
     [
       { eventId: "evt-buf-lar", marketKeys: ["h2h", "player_pass_yds"] },
+      { eventId: "evt-nyg-dal", marketKeys: ["h2h"] },
       { eventId: "evt-sea-den", marketKeys: ["h2h"] },
     ]
   );
 
   const b = fakeDeps(NOW);
-  const onlyStarted = await build([started, leg({ pickId: "nrfi", betType: "NRFI", betDetail: "NRFI" })], b.deps);
-  check("nothing sendable: no link, each leg with a reason, the feed never asked", [onlyStarted.url, onlyStarted.legs.map((l) => l.status), b.calls], [
+  const liveAndNrfi = await build([started, leg({ pickId: "nrfi", betType: "NRFI", betDetail: "NRFI" })], b.deps);
+  check("a live leg beside an unsupported one: the live leg is in the link, the unsupported one says why", [liveAndNrfi.url, liveAndNrfi.legs.map((l) => l.status), b.calls], [
+    buildFanDuelBetslipUrl([{ marketId: "42.690000001", selectionId: "60101" }]),
+    ["matched", "unsupported"],
+    { events: ["americanfootball_nfl"], odds: [{ eventId: "evt-nyg-dal", marketKeys: ["h2h"] }] },
+  ]);
+  const b2 = fakeDeps(NOW);
+  const nothingSendable = await build([over, leg({ pickId: "nrfi", betType: "NRFI", betDetail: "NRFI" })], b2.deps);
+  check("nothing sendable: no link, each leg with a reason, the feed never asked", [nothingSendable.url, nothingSendable.legs.map((l) => l.status), b2.calls], [
     null,
-    ["live", "unsupported"],
+    ["over", "unsupported"],
     { events: [], odds: [] },
   ]);
 
   const c = fakeDeps(new Date("2026-10-13T00:20:00Z"));
   const afterKickoff = await build([leg({ pickId: "late", gameTime: "2026-10-13T00:25:00Z" })], c.deps);
-  check("a leg whose own time is still ahead but whose game has kicked off is skipped", [afterKickoff.legs[0].status, afterKickoff.url, c.calls.odds], ["live", null, []]);
+  check(
+    "a leg whose own time is still ahead but whose game the feed has under way is sent",
+    [afterKickoff.legs[0].status, afterKickoff.url, c.calls.odds],
+    ["matched", buildFanDuelBetslipUrl([{ marketId: "42.612291277", selectionId: "50203" }]), [{ eventId: "evt-buf-lar", marketKeys: ["h2h"] }]]
+  );
 
   const d = fakeDeps(NOW);
   const wrongLine = await build([leg({ pickId: "alt", betType: "SPREAD", betDetail: "Bills +4.5", line: 4.5 }), billsMl], d.deps);
@@ -911,6 +1070,7 @@ async function main() {
 
   await eventWindow();
   await realResponses();
+  await liveGames();
   await preseasonListings();
   noEmptyReasons();
 
