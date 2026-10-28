@@ -133,6 +133,8 @@
     ],
     "requested": 3,
     "fromSlip": 0,
+    "slipTotal": 0,
+    "slipUsed": 0,
     "generated": 3,
     "gamesUsed": 3,
     "sameGameGames": 0,
@@ -551,6 +553,12 @@
       "swapCount": 0
     },
     "variety": "BEST",
+    "noAlternativeReason": null,
+    "historyIds": [
+      "p-0-spread",
+      "p-1-spread",
+      "p-2-spread"
+    ],
     "generatedKey": "p-0-spread,p-1-spread,p-2-spread"
   },
   "4 legs, 2 per game, game lines": {
@@ -730,6 +738,8 @@
     ],
     "requested": 4,
     "fromSlip": 0,
+    "slipTotal": 0,
+    "slipUsed": 0,
     "generated": 4,
     "gamesUsed": 4,
     "sameGameGames": 0,
@@ -1280,6 +1290,13 @@
       "swapCount": 0
     },
     "variety": "BEST",
+    "noAlternativeReason": null,
+    "historyIds": [
+      "p-0-spread",
+      "p-1-spread",
+      "p-2-spread",
+      "p-3-spread"
+    ],
     "generatedKey": "p-0-spread,p-1-spread,p-2-spread,p-3-spread"
   },
   "2 legs, totals only, 60% gate": {
@@ -1373,6 +1390,8 @@
     ],
     "requested": 2,
     "fromSlip": 0,
+    "slipTotal": 0,
+    "slipUsed": 0,
     "generated": 2,
     "gamesUsed": 2,
     "sameGameGames": 0,
@@ -1583,6 +1602,11 @@
       "swapCount": 0
     },
     "variety": "BEST",
+    "noAlternativeReason": null,
+    "historyIds": [
+      "p-0-over",
+      "p-1-over"
+    ],
     "generatedKey": "p-0-over,p-1-over"
   }
 }

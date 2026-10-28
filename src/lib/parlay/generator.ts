@@ -53,6 +53,18 @@
 //      and never beats max legs per game or a same-game rule. A category that
 //      came up short is said (mixNotes). An unclassified pick (All Picks only)
 //      counts toward no share.
+//   6. Fill from = Your picks only with more usable slip picks than the leg
+//      count (more than rule 1 would put in): the parlay is the leg count of
+//      them, not all of them. Every slip pick whose game isn't over is a
+//      candidate - two that can't both be legs (blocks(), as in rule 1) are
+//      either/or, so both sides of an opposing pair can appear across builds -
+//      and max legs per game holds. Generate takes the strongest by Wilson
+//      lower bound; Regenerate draws them one at a time, weighted toward the
+//      stronger (Wilson ^ SUBSET_SHARPEN) and away from the last few parlays'
+//      legs. The picks not used are listed in `dropped` as not_selected. Pick
+//      Mix and Include Picks never shape this mode: slip picks are never
+//      filtered. With no more usable picks than the leg count, rule 1 holds
+//      unchanged: every one is in.
 //
 // Generate (no `variation`) is deterministic: the same snapshot and settings
 // always give the same parlay. Regenerate (`variation`) gives another parlay of
@@ -80,7 +92,7 @@ import { GATE_DEFAULT, normalizeMinWinPct } from "@/lib/parlay/gate";
 import { GENERATOR_Z } from "@/lib/parlay/generator-z";
 import { inSwapScope, SWAP_SCOPES, type SwapScope } from "@/lib/parlay/swap-scope";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
-import { selectConflictFreeLegs } from "@/lib/parlay/build-my-picks";
+import { blocks, selectConflictFreeLegs } from "@/lib/parlay/build-my-picks";
 import { toBuildCandidate } from "@/lib/parlay/pool-swap";
 import { betCategory, type BetCategoryResult } from "@/lib/parlay/bet-category";
 import {
@@ -200,7 +212,9 @@ export type EngineLeg = {
 export type DroppedSlipPick = {
   pickId: string;
   label: string;
-  reason: "duplicate" | "opposes" | "over" | "left_out";
+  // not_selected: Your picks only with more picks than legs (rule 6) - not
+  // drawn into this parlay; another build may use it.
+  reason: "duplicate" | "opposes" | "over" | "left_out" | "not_selected";
   // The slip pick that stayed (duplicate / opposes / left out).
   against: { pickId: string; label: string } | null;
   // "duplicates Capper — Over 53.5 — not used"
@@ -228,9 +242,15 @@ export type EngineSwap = { mode: SwapMode; legs: EngineSwapLeg[]; swapCount: num
 export type GeneratedParlay = {
   // Grouped by game (earliest first), slip picks first within a game.
   legs: EngineLeg[];
-  // The leg count asked for - or the slip's size, when the slip alone is more.
+  // The leg count asked for - or the slip's size, when the slip alone is more
+  // (never under Your picks only, rule 6: it is the leg count).
   requested: number;
   fromSlip: number;
+  // Slip picks whose game isn't over, and how many of them are in this parlay
+  // (fromSlip) - "7 of your 20 picks used". The most legs they can make is
+  // `capacity` under Your picks only.
+  slipTotal: number;
+  slipUsed: number;
   generated: number;
   gamesUsed: number;
   // Games with two or more legs.
@@ -258,7 +278,13 @@ export type GeneratedParlay = {
   // comparable strength (its legs are Generate's; the UI keeps what it shows
   // and says so).
   variety: "BEST" | "VARIED" | "NO_ALTERNATIVE";
-  // legSetKey of the generated legs - what the client adds to its history.
+  // Why a NO_ALTERNATIVE: ALL_PICKS_USED - nothing could vary, every usable
+  // slip pick is already in and no leg is generated; NO_COMPARABLE - the
+  // draws found nothing new of comparable strength. Null otherwise.
+  noAlternativeReason: "ALL_PICKS_USED" | "NO_COMPARABLE" | null;
+  // The legs a Regenerate varies - the generated legs, or the slip picks drawn
+  // under rule 6 - which the client adds to its history, and their legSetKey.
+  historyIds: string[];
   generatedKey: string;
 };
 
@@ -267,6 +293,13 @@ export const RECENT_PARLAYS = 3;
 export const RECENT_WEIGHT = 0.35;
 // Draws a Regenerate tries before settling for one that only differs from the last parlay.
 const VARIATION_TRIES = 12;
+// Rule 6's draw weight is Wilson lower bound to this power: Wilson alone barely
+// separates a 70% record from a 55% one (0.627 vs 0.475 at 100 picks), so a
+// subset would be close to uniform. At 8 the 70% pick weighs ~9x the 55% one,
+// and 20 Regenerates of 7 from 20 picks still give 20 different parlays with
+// every pick appearing; from 12 up one side of an opposing pair stops
+// appearing, from 15 up taps repeat (generator-subset-acceptance-test.ts).
+export const SUBSET_SHARPEN = 8;
 // A snapshot older than this is reloaded before the next build.
 export const SNAPSHOT_MAX_AGE_MS = 2 * 60 * 1000;
 
@@ -397,7 +430,7 @@ export function buildGeneratedParlay(
   // Max legs per game applies to the slip's own picks too: of the picks chosen
   // on one game, the best (settled.legs is already best first) stay and the
   // rest are named as left out. Nothing leaves the slip itself.
-  const slipLegs: GeneratorPick[] = [];
+  const allInLegs: GeneratorPick[] = [];
   const keptOnGame = new Map<string, GeneratorPick[]>();
   for (const c of settled.legs) {
     const p = slipById.get(c.pickId)!;
@@ -413,7 +446,56 @@ export function buildGeneratedParlay(
       continue;
     }
     keptOnGame.set(p.gameId, [...kept, p]);
-    slipLegs.push(p);
+    allInLegs.push(p);
+  }
+
+  // ---- 1b. Your picks only, more picks than legs (rule 6) -------------------
+  // allInLegs is every slip pick that fits one parlay; when that is more than
+  // the leg count, the leg count of them are drawn instead, and every live
+  // slip pick not drawn is not_selected (the conflicts and per-game cap above
+  // are only either/or here, not a loss).
+  const subset = settings.fillFrom === "YOUR_PICKS_ONLY" && allInLegs.length > legCount;
+  let slipLegs = allInLegs;
+  let subsetVariety: GeneratedParlay["variety"] = "BEST";
+  if (subset) {
+    const options = liveSlip
+      .map((pick) => {
+        const r = bestAvailableRecord(pick, snapshot.leagueRecords);
+        return { pick, build: toBuildCandidate(pick, snapshot.leagueRecords), wilsonLowerBound: r ? wilsonLowerBound(r.wins, r.losses, rules.z) : 0, record: { n: r?.n ?? 0 } };
+      })
+      .sort((a, b) => compareByWilson({ pickId: a.pick.pickId, ...a }, { pickId: b.pick.pickId, ...b }));
+    // Two slip picks that can't both be legs, worked out once (only picks on
+    // one game ever block each other).
+    const blocked = new Set<string>();
+    for (const a of options)
+      for (const b of options)
+        if (a !== b && a.pick.gameId === b.pick.gameId && blocks(a.build, b.build).blocked) blocked.add(a.pick.pickId + "|" + b.pick.pickId);
+    const draw = (rng: Rng | null, recent: ReadonlySet<string>): GeneratorPick[] => {
+      const order = rng
+        ? weightedOrder(options, (o) => Math.pow(o.wilsonLowerBound, SUBSET_SHARPEN) * (recent.has(o.pick.pickId) ? RECENT_WEIGHT : 1), rng)
+        : options;
+      const taken: GeneratorPick[] = [];
+      for (const { pick } of order) {
+        if (taken.length >= legCount) break;
+        const onGame = taken.filter((t) => t.gameId === pick.gameId);
+        if (onGame.length >= maxPerGame || onGame.some((t) => blocked.has(pick.pickId + "|" + t.pickId))) continue;
+        taken.push(pick);
+      }
+      return taken;
+    };
+    const pickIdsKey = (ps: GeneratorPick[]) => legSetKey(ps.map((p) => p.pickId));
+    if (!variation) slipLegs = draw(null, new Set());
+    else {
+      const v = varyDraw(variation, draw, pickIdsKey, () => draw(null, new Set()));
+      slipLegs = v.chosen;
+      subsetVariety = v.varied ? "VARIED" : "NO_ALTERNATIVE";
+    }
+    const used = new Set(slipLegs.map((p) => p.pickId));
+    dropped.splice(0, dropped.length, ...dropped.filter((d) => d.reason === "over"));
+    for (const p of liveSlip) {
+      if (used.has(p.pickId)) continue;
+      dropped.push({ pickId: p.pickId, label: pickLabel(p), reason: "not_selected", against: null, note: `not in this parlay — Total legs is ${legCount}` });
+    }
   }
   const target = Math.max(legCount, slipLegs.length);
   const fillFrom: FillFrom = slipLegs.length === 0 ? "BEST_AVAILABLE" : settings.fillFrom;
@@ -454,7 +536,8 @@ export function buildGeneratedParlay(
   const roomOn = (gameId: string) => Math.max(0, maxPerGame - (slipOnGame.get(gameId)?.length ?? 0));
   const gamesWithCandidates = eligible.filter((g) => (candidatesOf.get(g.gameId)?.length ?? 0) > 0);
   const generatable = fillFrom === "YOUR_PICKS_ONLY" ? 0 : eligible.reduce((s, g) => s + Math.min(roomOn(g.gameId), candidatesOf.get(g.gameId)!.length), 0);
-  const capacity = Math.max(slipLegs.length, Math.min(MAX_PARLAY_LEGS, slipLegs.length + generatable));
+  // Under rule 6 the slip can make more legs than this parlay has: allInLegs.
+  const capacity = Math.max(allInLegs.length, Math.min(MAX_PARLAY_LEGS, slipLegs.length + generatable));
   const capacityText =
     fillFrom === "YOUR_PICKS_ONLY"
       ? `${capacity} max from your picks only`
@@ -541,24 +624,22 @@ export function buildGeneratedParlay(
   };
 
   const keyOf = (cs: Candidate[]) => legSetKey(cs.map((c) => c.pick.pickId));
-  let chosen: Candidate[];
+  let chosen: Candidate[] = [];
   let variety: GeneratedParlay["variety"] = "BEST";
-  if (!variation) {
+  if (subset) {
+    // The slip picks were drawn above (1b); nothing is generated.
+    variety = subsetVariety;
+  } else if (!variation) {
     chosen = select(null, new Set());
   } else {
-    const shown = variation.history.map((ids) => legSetKey(ids));
-    const recent = new Set(variation.history.slice(0, RECENT_PARLAYS).flat());
-    let fallback: Candidate[] | null = null;
-    let found: Candidate[] | null = null;
-    for (let i = 0; i < VARIATION_TRIES && !found; i++) {
-      const draw = select(seededRng(variation.seed + i * 7919), recent);
-      const key = keyOf(draw);
-      if (!shown.includes(key)) found = draw;
-      else if (!fallback && key !== shown[0]) fallback = draw;
-    }
-    chosen = found ?? fallback ?? select(null, new Set());
-    variety = found || fallback ? "VARIED" : "NO_ALTERNATIVE";
+    const v = varyDraw(variation, select, keyOf, () => select(null, new Set()));
+    chosen = v.chosen;
+    variety = v.varied ? "VARIED" : "NO_ALTERNATIVE";
   }
+  // Nothing to draw (every usable slip pick is in and no leg is generated) is
+  // not the same as nothing new of comparable strength.
+  const noAlternativeReason: GeneratedParlay["noAlternativeReason"] = variety !== "NO_ALTERNATIVE" ? null : !subset && need <= 0 ? "ALL_PICKS_USED" : "NO_COMPARABLE";
+  const historyIds = subset ? slipLegs.map((p) => p.pickId) : chosen.map((c) => c.pick.pickId);
 
   // ---- 6. Assemble ------------------------------------------------------------
   const legs: EngineLeg[] = [
@@ -607,7 +688,9 @@ export function buildGeneratedParlay(
   const shortfall: string[] = [];
   const gamesUsed = perGame.size;
   if (legs.length < target) {
-    if (fillFrom === "YOUR_PICKS_ONLY") {
+    if (subset) {
+      shortfall.push(`${legs.length} of ${target} legs: no ${target}-leg mix of your picks fits Max legs per game and the same-game rules.`);
+    } else if (fillFrom === "YOUR_PICKS_ONLY") {
       shortfall.push(`Your picks only: ${plural(slipLegs.length, "pick")} in your slip. Switch Fill from to Best available to add legs.`);
     } else if (targeted) {
       shortfall.push(`${legs.length} of ${target} legs: the targeted games have no more picks that clear 55% and fit.`);
@@ -637,6 +720,8 @@ export function buildGeneratedParlay(
     legs,
     requested: target,
     fromSlip: slipLegs.length,
+    slipTotal: liveSlip.length,
+    slipUsed: slipLegs.length,
     generated: chosen.length,
     gamesUsed,
     sameGameGames: Array.from(perGame.values()).filter((n) => n > 1).length,
@@ -649,8 +734,33 @@ export function buildGeneratedParlay(
     hedge: bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE", scope, rules, gate)),
     contrarian: bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "CONTRARIAN", scope, rules, gate)),
     variety,
-    generatedKey: keyOf(chosen),
+    noAlternativeReason,
+    historyIds,
+    generatedKey: legSetKey(historyIds),
   };
+}
+
+// Regenerate's draws: up to VARIATION_TRIES seeded draws, keeping the first
+// that is not in the history - or, failing that, the first that at least
+// differs from the last parlay. Neither: `primary`, not varied.
+function varyDraw<T>(
+  variation: Variation,
+  draw: (rng: Rng, recent: ReadonlySet<string>) => T[],
+  keyOf: (ts: T[]) => string,
+  primary: () => T[]
+): { chosen: T[]; varied: boolean } {
+  const shown = variation.history.map((ids) => legSetKey(ids));
+  const recent = new Set(variation.history.slice(0, RECENT_PARLAYS).flat());
+  let fallback: T[] | null = null;
+  let found: T[] | null = null;
+  for (let i = 0; i < VARIATION_TRIES && !found; i++) {
+    const d = draw(seededRng(variation.seed + i * 7919), recent);
+    const key = keyOf(d);
+    if (!shown.includes(key)) found = d;
+    else if (!fallback && key !== shown[0]) fallback = d;
+  }
+  const chosen = found ?? fallback;
+  return chosen ? { chosen, varied: true } : { chosen: primary(), varied: false };
 }
 
 // ---------------------------------------------------------------------------
