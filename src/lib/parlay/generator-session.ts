@@ -52,9 +52,10 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
   let seed = deps.firstSeed ?? 1;
   let requests = 0;
 
-  const generatedIds = (p: GeneratedParlay) => p.legs.filter((l) => l.source === "GENERATED").map((l) => l.pick.pickId);
+  // The legs a Regenerate varies: the generated ones, or the slip picks drawn
+  // under Your picks only with more picks than legs (historyIds, generator.ts).
   const remember = (p: GeneratedParlay) => {
-    history = [generatedIds(p), ...history].slice(0, HISTORY_KEPT);
+    history = [p.historyIds, ...history].slice(0, HISTORY_KEPT);
   };
 
   async function load(inputs: PoolInputs, settings: GeneratorSettings): Promise<{ snapshot: GeneratorSnapshot; parlay: GeneratedParlay } | ParlayRejection> {
