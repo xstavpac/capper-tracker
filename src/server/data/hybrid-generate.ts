@@ -18,11 +18,15 @@
 //      with moneyline supporters.
 //   5. getRecentSwings per sport involved (cached per sport and Eastern day).
 //   6. optimizeHybrid.
+//   7. "Why only N games?" (hybrid-diagnostics.ts): every game with picks the
+//      parlay does not use and the first gate it failed - from what steps 1-6
+//      already hold, no further read.
 // The slip is ignored. The result comes back as the optimizer made it, plus a
 // note for each event whose alternate lines are not posted yet or are still being
 // priced by another request.
 import { buildConsensusPositions, type ConsensusPosition } from "@/lib/parlay/consensus";
-import { boxEligibleGames, HYBRID_MAX_LADDER_GAMES, ladderGameCount, optimizeHybrid, type HybridBoxLegs, type HybridResult } from "@/lib/parlay/hybrid";
+import { boxEligibleGames, HYBRID_MAX_LADDER_GAMES, ladderGameCount, optimizeHybridReport, type HybridBoxLegs, type HybridResult } from "@/lib/parlay/hybrid";
+import { explainSkips, type HybridDiagnostics } from "@/lib/parlay/hybrid-diagnostics";
 import { HYBRID_LINK_MAX_LEGS } from "@/lib/parlay/hybrid-link";
 import type { HybridGenerateRequest } from "@/lib/parlay/hybrid-request";
 import { keepsPick } from "@/lib/parlay/include-picks";
@@ -53,6 +57,8 @@ export type HybridGenerateResponse = {
   eventSportKeys: Record<string, string>;
   // False when the parlay has more legs than the FanDuel handoff takes (HYBRID_LINK_MAX_LEGS).
   linkable: boolean;
+  // "Why only N games?": each unused game with picks and the first gate it failed.
+  diagnostics: HybridDiagnostics;
   generatedAt: string;
 };
 
@@ -109,7 +115,7 @@ export async function runHybridGenerate(req: HybridGenerateRequest, deps: Hybrid
   // 1. The Standard generator's snapshot, with an empty slip.
   const loaded = await deps.loadSnapshot({ leagues: req.leagues, slipPickIds: [], targets: req.targets });
   if ("error" in loaded) return loaded;
-  const { snapshot, eventSportKeys } = loaded;
+  const { snapshot, eventSportKeys, skippedGames } = loaded;
 
   // 2. Positions: the Include Picks markets only, on the targeted games only.
   const games = req.include === "ALL" ? snapshot.games : snapshot.games.map((g) => ({ ...g, picks: g.picks.filter((p) => keepsPick(req.include, p)) }));
@@ -166,9 +172,25 @@ export async function runHybridGenerate(req: HybridGenerateRequest, deps: Hybrid
 
   // 6. The optimizer.
   const { targetMin, targetMax, width, perLegRange, maxLegs, boxLegs } = req.settings;
-  const result = optimizeHybrid({ positions, ladders: lookup.ladders, swings, settings: { targetMin, targetMax, width, legRange: perLegRange, maxLegs, boxLegs } });
+  const { result, report } = optimizeHybridReport({ positions, ladders: lookup.ladders, swings, settings: { targetMin, targetMax, width, legRange: perLegRange, maxLegs, boxLegs } });
+  const notes = eventNotes(requests, positions, lookup);
 
-  return { result, notes: eventNotes(requests, positions, lookup), candidateEvents, eventSportKeys: Object.fromEntries(requests.map((r) => [r.eventId, r.sport])), linkable: (result.primary?.legs.length ?? 0) <= HYBRID_LINK_MAX_LEGS, generatedAt: deps.now.toISOString() };
+  // 7. Why the other games with picks are not in it.
+  const diagnostics = explainSkips({
+    games: targetIds.size > 0 ? games.filter((g) => targetIds.has(g.gameId)) : games,
+    pickCounts: Object.fromEntries(snapshot.games.map((g) => [g.gameId, g.picks.length])),
+    snapshotSkipped: skippedGames ?? [],
+    records: snapshot,
+    minWinPct: req.settings.minWinPct,
+    filtered: games.some((g, i) => g.picks.length !== snapshot.games[i].picks.length),
+    positions: ranked,
+    candidateEvents,
+    notes,
+    report,
+    result,
+  });
+
+  return { result, notes, candidateEvents, eventSportKeys: Object.fromEntries(requests.map((r) => [r.eventId, r.sport])), linkable: (result.primary?.legs.length ?? 0) <= HYBRID_LINK_MAX_LEGS, diagnostics, generatedAt: deps.now.toISOString() };
 }
 
 function isUnposted(r: AltLadderRequest, lookup: AltLadderLookup): boolean {

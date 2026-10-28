@@ -12,7 +12,7 @@
 // names picks and games by id.
 import { getCapperRecordBundle } from "@/server/data/picks";
 import { gameStatusFor } from "@/server/data/expander-pick";
-import { isGameOver } from "@/lib/parlay/game-over";
+import { hasKickedOff, isGameOver } from "@/lib/parlay/game-over";
 import { getOwnedSlipPickRows, loadSlipBoards, offBoardSlipPick, picksOnBoards } from "@/server/data/parlay-slip-picks";
 import type { PickCategoryKey } from "@/server/data/stats";
 import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
@@ -31,8 +31,15 @@ export type SnapshotScope = {
   targets: { gameId: string; leagueName: string }[];
 };
 
+// A full-slate game with pending picks that the snapshot left out: it has
+// started (or is over), or it is outside Auto-Generate's window. From the boards
+// already loaded - no read of its own. Only Consensus Hybrid's "Why only N games?"
+// reads it.
+export type SnapshotSkippedGame = { gameId: string; gameLabel: string; gameTime: string; leagueName: string; picks: number; reason: "started" | "outside-window" };
+
 export type LoadedSnapshot = {
   snapshot: GeneratorSnapshot;
+  skippedGames: SnapshotSkippedGame[];
   // The Odds API sport key each game lists under (gameId -> key), from its board
   // row: the key its event-level odds are asked for under.
   eventSportKeys: Record<string, string>;
@@ -52,6 +59,7 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
   const fullSlate = scope.targets.length === 0;
 
   const games: GeneratorGame[] = [];
+  const skippedGames: SnapshotSkippedGame[] = [];
   const eventSportKeys: Record<string, string> = {};
   for (const { key, label, board } of boards) {
     const inWindow = autoGenerateWindow(label, board.odds.map((g) => g.commenceTime), now);
@@ -62,13 +70,19 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
       // only a game that is over is skipped, and the full slate never reaches
       // for a game already under way (inWindow).
       const gameStatus = gameStatusFor(board.scores, game, key);
-      if (isGameOver({ gameTime: game.commenceTime, gameStatus }, now)) return;
-      const wanted =
-        targetIds.has(game.id) || slipGameIds.has(game.id) || (fullSlate && scope.leagues.includes(label) && inWindow(game.commenceTime));
-      if (!wanted) return;
       const picks = board.expanderPicksByGame[i].filter(
         (p): p is GeneratorPick => p.status === "PENDING" && typeof p.datePosted === "string"
       );
+      const over = isGameOver({ gameTime: game.commenceTime, gameStatus }, now);
+      const wanted =
+        !over && (targetIds.has(game.id) || slipGameIds.has(game.id) || (fullSlate && scope.leagues.includes(label) && inWindow(game.commenceTime)));
+      if (!wanted) {
+        if (fullSlate && scope.leagues.includes(label) && picks.length > 0) {
+          const reason = over || hasKickedOff(game.commenceTime, now) ? "started" : "outside-window";
+          skippedGames.push({ gameId: game.id, gameLabel: picks[0].gameLabel ?? game.awayTeam + " @ " + game.homeTeam, gameTime: game.commenceTime, leagueName: label, picks: picks.length, reason });
+        }
+        return;
+      }
       games.push({
         gameId: game.id,
         gameLabel: picks[0]?.gameLabel ?? game.awayTeam + " @ " + game.homeTeam,
@@ -105,5 +119,6 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
       categoryRecords,
     },
     eventSportKeys,
+    skippedGames,
   };
 }
