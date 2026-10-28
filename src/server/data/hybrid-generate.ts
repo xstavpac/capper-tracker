@@ -120,7 +120,10 @@ export async function runHybridGenerate(req: HybridGenerateRequest, deps: Hybrid
   // 2. Positions: the Include Picks markets only, on the targeted games only.
   const games = req.include === "ALL" ? snapshot.games : snapshot.games.map((g) => ({ ...g, picks: g.picks.filter((p) => keepsPick(req.include, p)) }));
   const targetIds = new Set(req.targets.map((t) => t.gameId));
-  const all = buildConsensusPositions({ games, leagueRecords: snapshot.leagueRecords, categoryRecords: snapshot.categoryRecords }, { now: deps.now, minWinPct: req.settings.minWinPct });
+  const all = buildConsensusPositions(
+    { games, leagueRecords: snapshot.leagueRecords, categoryRecords: snapshot.categoryRecords, propMarketRecords: snapshot.propMarketRecords },
+    { now: deps.now, minWinPct: req.settings.minWinPct }
+  );
   const ranked = targetIds.size > 0 ? all.filter((p) => targetIds.has(p.eventId)) : all;
 
   // 3. The candidate events, and the positions the optimizer may see.

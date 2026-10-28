@@ -142,7 +142,7 @@ const MARKET_BY_BET_TYPE: Record<string, HybridMarket> = { SPREAD: "SPREAD", MON
 // line cannot be read.
 type ReadPost = Omit<Post, "record" | "score"> & { record: HybridRecord | null; score: number };
 
-function readPost(pick: GeneratorPick, game: GeneratorGame, snapshot: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords">, z: number): ReadPost | null {
+function readPost(pick: GeneratorPick, game: GeneratorGame, snapshot: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords" | "propMarketRecords">, z: number): ReadPost | null {
   const market = MARKET_BY_BET_TYPE[pick.betType];
   if (!market || pick.period !== "FULL_GAME") return null;
   // The board cannot tell which game of a doubleheader a pick with no game number is on.
@@ -177,7 +177,7 @@ function readPost(pick: GeneratorPick, game: GeneratorGame, snapshot: Pick<Gener
   }
 
   // Chosen at the same z the score uses.
-  const record = recordForGate(pick, snapshot.leagueRecords, snapshot.categoryRecords, z);
+  const record = recordForGate(pick, snapshot.leagueRecords, snapshot.categoryRecords, z, snapshot.propMarketRecords);
   return {
     pick,
     family,
@@ -192,7 +192,7 @@ function readPost(pick: GeneratorPick, game: GeneratorGame, snapshot: Pick<Gener
 
 // The pick as a Post, or null when it is not one a hybrid position can use (readPost)
 // or its record does not clear the gate.
-function toPost(pick: GeneratorPick, game: GeneratorGame, snapshot: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords">, gate: number, z: number): Post | null {
+function toPost(pick: GeneratorPick, game: GeneratorGame, snapshot: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords" | "propMarketRecords">, gate: number, z: number): Post | null {
   const read = readPost(pick, game, snapshot, z);
   if (!read || !read.record || !qualifies(read.record, gate)) return null;
   return read as Post;
@@ -239,7 +239,7 @@ const byCapperScore = (a: PositionCapper, b: PositionCapper) =>
   b.score !== a.score ? b.score - a.score : b.record.n !== a.record.n ? b.record.n - a.record.n : a.capperId < b.capperId ? -1 : a.capperId > b.capperId ? 1 : 0;
 
 export function buildConsensusPositions(
-  snapshot: Pick<GeneratorSnapshot, "games" | "leagueRecords" | "categoryRecords">,
+  snapshot: Pick<GeneratorSnapshot, "games" | "leagueRecords" | "categoryRecords" | "propMarketRecords">,
   opts: ConsensusOptions
 ): ConsensusPosition[] {
   const gate = normalizeMinWinPct(opts.minWinPct ?? GATE_DEFAULT);
@@ -330,7 +330,7 @@ export type GameDiagnosis = { gameId: string; side: FamilyDiagnosis; total: Fami
 
 export function diagnoseConsensusGame(
   game: GeneratorGame,
-  snapshot: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords">,
+  snapshot: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords" | "propMarketRecords">,
   opts: Pick<ConsensusOptions, "minWinPct" | "z"> = {}
 ): GameDiagnosis {
   const gate = normalizeMinWinPct(opts.minWinPct ?? GATE_DEFAULT);

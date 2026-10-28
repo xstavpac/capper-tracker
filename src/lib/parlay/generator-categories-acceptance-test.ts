@@ -8,6 +8,7 @@ import { buildGeneratedParlay, type GeneratedParlay, type GeneratorSettings, typ
 import { betCategory } from "@/lib/parlay/bet-category";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
+import type { PropMarketRecord } from "@/server/data/picks";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -74,17 +75,23 @@ function pickOf(s: Spec): GeneratorPick {
 
 function snapOf(specs: Spec[], slip: string[] = []): GeneratorSnapshot {
   const categoryRecords: Record<string, CategoryBreakdownItem | null> = {};
+  // A HITS prop is gated on its per-market record (recordForGate) - the same W-L.
+  const propMarketRecords: Record<string, PropMarketRecord | null> = {};
   const byGame = new Map<number, GeneratorPick[]>();
   const picks = new Map<string, GeneratorPick>();
   for (const s of specs) {
     const p = pickOf(s);
     const [wins, losses] = s.wl;
     categoryRecords[p.capperId + "|" + p.category] = { key: p.category!, label: p.category!, wins, losses, pushes: 0, winPct: (wins / (wins + losses)) * 100, count: wins + losses };
+    if (s.market === "PROP") {
+      const c = { wins, losses, pushes: 0, winPct: (wins / (wins + losses)) * 100, count: wins + losses };
+      propMarketRecords[p.capperId + "|MLB|BASEBALL:HITS"] = { key: "BASEBALL:HITS", league: { wins: 0, losses: 0, pushes: 0, winPct: 0, count: 0 }, allTime: c };
+    }
     picks.set(s.id, p);
     byGame.set(s.game, [...(byGame.get(s.game) ?? []), p]);
   }
   const games: GeneratorGame[] = Array.from(byGame.entries()).map(([n, ps]) => ({ gameId: "G" + n, gameLabel: TEAMS[n][1] + " @ " + TEAMS[n][0], gameTime: START, leagueName: "MLB", picks: ps }));
-  return { builtAt: NOW.toISOString(), games, slipPicks: slip.map((id) => picks.get(id)!), targets: [], leagueRecords: { records: {}, streaks: {}, last20: {} }, categoryRecords };
+  return { builtAt: NOW.toISOString(), games, slipPicks: slip.map((id) => picks.get(id)!), targets: [], leagueRecords: { records: {}, streaks: {}, last20: {} }, categoryRecords, propMarketRecords };
 }
 
 const BASE: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };

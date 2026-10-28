@@ -8,10 +8,11 @@
 //
 // Pure and client-safe: type-only imports, and import-free modules
 // (record-keys.ts, wilson-lower-bound.ts, generator-z.ts).
-import type { CapperLeagueRecords } from "@/server/data/picks";
+import type { CapperLeagueRecords, PropMarketRecord } from "@/server/data/picks";
 import type { CategoryBreakdownItem } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
-import { categoryRecordKey, leagueRecordKey } from "@/lib/record-keys";
+import { categoryRecordKey, leagueRecordKey, propMarketRecordKey } from "@/lib/record-keys";
+import { propMarketKey, type PropMarketKey } from "@/lib/prop-market-key";
 import { wilsonLowerBound } from "@/lib/wilson-lower-bound";
 import { GENERATOR_Z } from "@/lib/parlay/generator-z";
 
@@ -60,25 +61,42 @@ export function bestAvailableRecord(pick: RecordInput, records: CapperLeagueReco
 //
 // The all-time record is the card's overall column; `allTime` (the bundle's
 // categoryRecords - the same numbers) covers a pick that has no card.
+//
+// A player prop with a market key (prop-market-key.ts - "NBA points", "NHL
+// shots on goal") is gated on its per-market records instead (`propMarkets`,
+// the snapshot's propMarketRecords): in-league, and all-time across the
+// market's sport family, the same best-of-two. Never its category's: TD_PROP
+// blends every prop market of every league into one record, so it can't say
+// whether a capper is good at this one - no record on the market is no record.
+// A prop with no key (no propMarket) and every game line keep the category path.
 export type GateRecord = {
   wins: number;
   losses: number;
   winPct: number;
   n: number;
   source: "LEAGUE" | "OVERALL";
+  // Set when the record is a per-market prop record: which market.
+  propMarket?: PropMarketKey;
 };
 
 type Column = { wins: number; losses: number; winPct: number };
+type GateInput = RecordInput & Pick<ExpanderPick, "betType" | "propMarket">;
 
 function gateCandidates(
-  pick: RecordInput,
+  pick: GateInput,
   records: CapperLeagueRecords,
-  allTime: Record<string, CategoryBreakdownItem | null>
+  allTime: Record<string, CategoryBreakdownItem | null>,
+  propMarkets: Record<string, PropMarketRecord | null>
 ): { league: GateRecord | null; overall: GateRecord | null } | null {
+  const toRecord = (c: Column | null | undefined, source: GateRecord["source"], propMarket?: PropMarketKey): GateRecord | null =>
+    c && c.wins + c.losses > 0 ? { wins: c.wins, losses: c.losses, winPct: c.winPct, n: c.wins + c.losses, source, ...(propMarket ? { propMarket } : {}) } : null;
+  const key = propMarketKey({ betType: pick.betType, sportName: pick.leagueName, propMarket: pick.propMarket });
+  if (key) {
+    const r = propMarkets[propMarketRecordKey(pick.capperId, pick.leagueName, key)] ?? null;
+    return { league: toRecord(r?.league, "LEAGUE", key), overall: toRecord(r?.allTime, "OVERALL", key) };
+  }
   if (!pick.category) return null;
   const card = records.records[leagueRecordKey(pick.capperId, pick.leagueName, pick.category)] ?? null;
-  const toRecord = (c: Column | null | undefined, source: GateRecord["source"]): GateRecord | null =>
-    c && c.wins + c.losses > 0 ? { wins: c.wins, losses: c.losses, winPct: c.winPct, n: c.wins + c.losses, source } : null;
   return {
     league: toRecord(card?.league, "LEAGUE"),
     overall: toRecord(card?.overall ?? allTime[categoryRecordKey(pick.capperId, pick.category)], "OVERALL"),
@@ -86,12 +104,13 @@ function gateCandidates(
 }
 
 export function recordForGate(
-  pick: RecordInput,
+  pick: GateInput,
   records: CapperLeagueRecords,
   allTime: Record<string, CategoryBreakdownItem | null> = {},
-  z: number = GENERATOR_Z
+  z: number = GENERATOR_Z,
+  propMarkets: Record<string, PropMarketRecord | null> = {}
 ): GateRecord | null {
-  const c = gateCandidates(pick, records, allTime);
+  const c = gateCandidates(pick, records, allTime, propMarkets);
   if (!c) return null;
   if (!c.league || !c.overall) return c.league ?? c.overall;
   return wilsonLowerBound(c.overall.wins, c.overall.losses, z) > wilsonLowerBound(c.league.wins, c.league.losses, z) ? c.overall : c.league;

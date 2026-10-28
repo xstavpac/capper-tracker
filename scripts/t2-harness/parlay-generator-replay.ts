@@ -49,7 +49,7 @@ function candidateScores(snapshot: GeneratorSnapshot, settings: GeneratorSetting
   return snapshot.games.map((g) =>
     g.picks
       .filter((p) => keepsPick(settings.include, p))
-      .map((p) => recordForGate(p, snapshot.leagueRecords, snapshot.categoryRecords))
+      .map((p) => recordForGate(p, snapshot.leagueRecords, snapshot.categoryRecords, undefined, snapshot.propMarketRecords))
       .filter((r): r is NonNullable<typeof r> => r !== null && qualifies(r))
       .map((r) => wilsonLowerBound(r.wins, r.losses, z))
       .sort((a, b) => b - a)
@@ -120,7 +120,7 @@ async function main() {
       const describe = (leg: Leg, kind: "gained" | "lost") => {
         const p = leg.pick;
         const all = snapshot.categoryRecords[categoryRecordKey(p.capperId, p.category!)];
-        const gate = recordForGate(p, snapshot.leagueRecords, snapshot.categoryRecords);
+        const gate = recordForGate(p, snapshot.leagueRecords, snapshot.categoryRecords, undefined, snapshot.propMarketRecords);
         const card = snapshot.leagueRecords.records[leagueRecordKey(p.capperId, p.leagueName, p.category!)];
         const byLeague = kind === "gained" ? ib.has(p.pickId) : !ib.has(p.pickId);
         let detail: string;
@@ -144,7 +144,7 @@ async function main() {
         if (ib.has(l.pick.pickId)) continue;
         const p = l.pick;
         const all = snapshot.categoryRecords[categoryRecordKey(p.capperId, p.category!)];
-        const gate = recordForGate(p, snapshot.leagueRecords, snapshot.categoryRecords);
+        const gate = recordForGate(p, snapshot.leagueRecords, snapshot.categoryRecords, undefined, snapshot.propMarketRecords);
         const sameRecord = !!gate && !!all && gate.wins === all.wins && gate.losses === all.losses;
         if (qualifies(gate) && !sameRecord) rankedLower.push({ day, user, setting: name, pick: p.betDetail, capper: p.capperName, inLeague: wl(gate), inC: ic.has(p.pickId) });
       }

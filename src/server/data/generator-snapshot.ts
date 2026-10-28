@@ -7,10 +7,12 @@
 // Reads, per call: the slip's own rows (getOwnedSlipPickRows - none for an empty
 // slip), one board per league needed (getLiveBoardData - sequential, as
 // everywhere), and ONE record bundle (getCapperRecordBundle: every slip pick's
-// and candidate's card - its in-league and all-time market record - in a single
-// query). Nothing about a pick or a game is taken from the client: the request
+// and candidate's card - its in-league and all-time market record - and every
+// candidate prop's per-market record, in a single query). Nothing about a pick or a game is taken from the client: the request
 // names picks and games by id.
-import { getCapperRecordBundle } from "@/server/data/picks";
+import { getCapperRecordBundle, type PropMarketEntry } from "@/server/data/picks";
+import { propMarketKey } from "@/lib/prop-market-key";
+import { propMarketRecordKey } from "@/lib/record-keys";
 import { gameStatusFor } from "@/server/data/expander-pick";
 import { hasKickedOff, isGameOver } from "@/lib/parlay/game-over";
 import { getOwnedSlipPickRows, loadSlipBoards, offBoardSlipPick, picksOnBoards } from "@/server/data/parlay-slip-picks";
@@ -44,6 +46,17 @@ export type LoadedSnapshot = {
   // row: the key its event-level odds are asked for under.
   eventSportKeys: Record<string, string>;
 };
+
+// Every candidate prop's (capper, league, market key), deduped - picks with no
+// key (game lines, a prop with no propMarket) send nothing.
+export function propMarketEntriesOf(picks: GeneratorPick[]): PropMarketEntry[] {
+  const out = new Map<string, PropMarketEntry>();
+  for (const p of picks) {
+    const key = propMarketKey({ betType: p.betType, sportName: p.leagueName, propMarket: p.propMarket });
+    if (key) out.set(propMarketRecordKey(p.capperId, p.leagueName, key), { capperId: p.capperId, leagueSport: p.leagueName, propMarketKey: key });
+  }
+  return Array.from(out.values());
+}
 
 export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope, now: Date): Promise<LoadedSnapshot | ParlayRejection> {
   const rows = await getOwnedSlipPickRows(userId, scope.slipPickIds);
@@ -100,13 +113,18 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
   // is what its row shows and how two conflicting slip picks are ranked; a
   // candidate's in-league record (all-time when it has none) is the 55% gate,
   // the Wilson ranking, Hedge and Contrarian (recordForGate). The all-leagues
-  // market records cover a pick with no card, and LEGACY_RULES.
+  // market records cover a pick with no card, and LEGACY_RULES. A candidate
+  // player prop with a market key (prop-market-key.ts) also gets its per-market
+  // record - only the slate's own (capper, league, market) entries - which is
+  // what recordForGate gates and ranks it on; counted from games before `now`.
   const candidates = games.flatMap((g) => g.picks);
-  const { leagueRecords, categoryRecords } = await getCapperRecordBundle(userId, {
+  const { leagueRecords, categoryRecords, propMarketRecords } = await getCapperRecordBundle(userId, {
     leagueEntries: [...slipPicks, ...candidates].map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category })),
     categoryPairs: candidates
       .filter((p): p is GeneratorPick & { category: PickCategoryKey } => p.category !== null)
       .map((p) => ({ capperId: p.capperId, category: p.category })),
+    propMarketEntries: propMarketEntriesOf(candidates),
+    asOf: now,
   });
 
   return {
@@ -117,6 +135,7 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
       targets: scope.targets.map((t) => t.gameId),
       leagueRecords,
       categoryRecords,
+      propMarketRecords,
     },
     eventSportKeys,
     skippedGames,
