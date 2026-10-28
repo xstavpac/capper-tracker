@@ -34,6 +34,7 @@ import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, normalizeMinWinPct, readSt
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import { readStoredSwapScope, SWAP_SCOPE_DEFAULT, writeStoredSwapScope, type SwapScope } from "@/lib/parlay/swap-scope";
 import { slipLegFloor } from "@/lib/parlay/leg-cap";
+import { legRange, legsNote, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
 import { createGeneratorSession, poolKey, type PoolInputs } from "@/lib/parlay/generator-session";
 import { removedHeading, removedPickText } from "@/lib/parlay/slip-state";
 import type { FillFrom, GeneratedParlay, GeneratorSettings } from "@/lib/parlay/generator";
@@ -110,7 +111,8 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
   const [builtFor, setBuiltFor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [noAlternative, setNoAlternative] = useState(false);
+  // Set by a Regenerate that couldn't vary: why (subset-ui.ts). The parlay shown stays.
+  const [noAlternative, setNoAlternative] = useState<NoAlternativeReason | null>(null);
   const session = useRef(createGeneratorSession({ generate: (req) => generateParlayAction(req) }));
 
   const inputs: PoolInputs = useMemo(
@@ -163,10 +165,10 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
         return;
       }
       if (kind === "regenerate" && res.parlay.variety === "NO_ALTERNATIVE") {
-        setNoAlternative(true);
+        setNoAlternative(res.parlay.noAlternativeReason ?? "NO_COMPARABLE");
         return;
       }
-      setNoAlternative(false);
+      setNoAlternative(null);
       setParlay(res.parlay);
       setBuiltFor(key);
     } catch {
@@ -183,7 +185,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
     if (!parlay) return;
     if (builtFor !== key) {
       setParlay(null);
-      setNoAlternative(false);
+      setNoAlternative(null);
       return;
     }
     void run("generate");
@@ -198,18 +200,21 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
     setParlay(null);
     setBuiltFor(null);
     setError(null);
-    setNoAlternative(false);
+    setNoAlternative(null);
   }
 
-  // The leg count: never fewer than the picks (every one goes in), and - once
-  // a build has said what the pool holds - never more than it can supply.
-  const minLegs = Math.min(MAX_PARLAY_LEGS, Math.max(1, slipLegFloor(pool, maxPerGame)));
-  const capacity = parlay && builtFor === key ? parlay.capacity : MAX_PARLAY_LEGS;
-  const maxLegs = Math.max(minLegs, Math.min(MAX_PARLAY_LEGS, capacity));
+  // The leg count. Best available: never fewer than the picks (every one goes in). Your picks only:
+  // from 1 - the parlay is that many of them. Either way, once a build has said what the pool holds,
+  // never more than it can supply.
+  const yourPicksOnly = fillFrom === "YOUR_PICKS_ONLY";
+  const built = parlay && builtFor === key ? parlay : null;
+  const slipFloor = slipLegFloor(pool, maxPerGame);
+  const capacity = built ? built.capacity : MAX_PARLAY_LEGS;
+  const { min: minLegs, max: maxLegs } = legRange({ yourPicksOnly, slipFloor, capacity });
   useEffect(() => {
-    if (legCount < minLegs) setLegCount(minLegs);
-  }, [legCount, minLegs, setLegCount]);
-  const generatedLegs = Math.max(0, legCount - slipLegFloor(pool, maxPerGame));
+    if (!yourPicksOnly && legCount < minLegs) setLegCount(minLegs);
+  }, [yourPicksOnly, legCount, minLegs, setLegCount]);
+  const generatedLegs = Math.max(0, legCount - slipFloor);
 
   // Your picks, by game, in the order they were added.
   const byGame = useMemo(() => {
@@ -217,7 +222,9 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
     for (const p of pool) groups.set(p.gameId, [...(groups.get(p.gameId) ?? []), p]);
     return Array.from(groups.values());
   }, [pool]);
-  const droppedNote = new Map((parlay && builtFor === key ? parlay.dropped : []).map((d) => [d.pickId, d.note]));
+  // Per-pick notes for the drops that name a reason (a duplicate, a conflict, a per-game cap). The picks
+  // a smaller Total legs left out are one collapsed line in the result instead (subset-ui.ts).
+  const droppedNote = new Map((built ? built.dropped.filter((d) => d.reason !== "not_selected") : []).map((d) => [d.pickId, d.note]));
   const targetLabel = new Map(targets.map((t) => [t.gameId, t.gameLabel]));
 
   const modeToggle = <ModeToggle mode={mode} onChange={setMode} />;
@@ -399,7 +406,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
               <SettingRow
                 icon={<LayersIcon className="h-5 w-5" />}
                 label="Total legs"
-                note={`Up to ${MAX_PARLAY_LEGS} · ${slipLegFloor(pool, maxPerGame)} from your picks, ${generatedLegs} from your cappers.`}
+                note={legsNote({ yourPicksOnly, legCount, slipFloor, generatedLegs, usable: built ? built.capacity : pool.length, total: built ? built.slipTotal : pool.length })}
               >
                 <LegStepper value={legCount} max={maxLegs} onChange={(n) => setLegCount(Math.max(minLegs, Math.min(n, maxLegs)))} />
               </SettingRow>

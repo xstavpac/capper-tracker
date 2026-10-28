@@ -28,6 +28,7 @@ import { isGameLive, LIVE_NOTE, type GameClock } from "@/lib/parlay/game-over";
 import type { EngineLeg, EngineSwap, EngineSwapLeg, GeneratedParlay, LegRecord } from "@/lib/parlay/generator";
 import type { RankRecordSource } from "@/lib/parlay/pick-record";
 import { SWAP_SCOPE_OPTIONS, type SwapScope } from "@/lib/parlay/swap-scope";
+import { noAlternativeText, pickSummary, regenerateState, unusedLine, unusedPicks, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
 
 export const formatOdds = (odds: number) => (odds > 0 ? "+" : "") + odds;
 export const formatGameTime = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -205,6 +206,35 @@ export function CombinedPrice({ legs, sameGame }: { legs: (CombineLeg & Partial<
   );
 }
 
+// Your picks only with more picks than Total legs: the picks this parlay left out, one collapsed line
+// ("13 picks not used this time") that opens to the list. Another Regenerate may use them.
+export function UnusedPicks({ picks }: { picks: { pickId: string; label: string }[] }) {
+  const [open, setOpen] = useState(false);
+  if (picks.length === 0) return null;
+  return (
+    <div className="mb-2 text-xs font-medium text-muted-foreground">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="inline-flex min-h-[44px] items-center gap-1 font-semibold text-foreground hover:underline sm:min-h-0"
+      >
+        <span aria-hidden="true" className={"inline-block transition-transform " + (open ? "rotate-90" : "")}>›</span>
+        {unusedLine(picks.length)}
+      </button>
+      {open && (
+        <ul className="list-disc pl-5">
+          {picks.map((p) => (
+            <li key={p.pickId} className="[overflow-wrap:anywhere]">
+              {p.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // The header's Regenerate: an accent-outlined pill exactly as tall as the "N legs" chip (26px), with an
 // invisible 10px of hit area above and below (from inside the 1px border) so the tap target is 44px.
 const REGENERATE =
@@ -228,8 +258,8 @@ export function GeneratorResult({
   // Which legs Hedge and Contrarian swap (swap-scope.ts); remembered by the card.
   swapScope: SwapScope;
   onSwapScope: (scope: SwapScope) => void;
-  // The last Regenerate found nothing else of comparable strength.
-  noAlternative: boolean;
+  // Why the last Regenerate couldn't vary the parlay (subset-ui.ts); null when it could.
+  noAlternative: NoAlternativeReason | null;
   // Targeted games that are over or have left the board, by name.
   unavailableTargetLabels: string[];
   onRegenerate: () => void;
@@ -243,7 +273,7 @@ export function GeneratorResult({
   const contrarian = parlay.contrarian[swapScope];
   const swap = tab === "AUTO_HEDGE" ? hedge : tab === "CONTRARIAN" ? contrarian : null;
   const shownPicks = swap ? swap.legs.map((l) => (l.swap ?? l.original).pick) : legs.map((l) => l.pick);
-  const regenerateHint = noAlternative ? "No other parlays of comparable strength" : "Another parlay of comparable strength";
+  const regenerate = regenerateState(parlay, noAlternative);
   const notes = [
     ...parlay.dropped.filter((d) => d.reason === "left_out").map((d) => `${d.label}: ${d.note}`),
     ...parlay.shortfall,
@@ -261,7 +291,7 @@ export function GeneratorResult({
         subtitle:
           `${parlay.gamesUsed} game${plural(parlay.gamesUsed)}` +
           (sameGame ? ` · ${parlay.sameGameGames} same-game pair${plural(parlay.sameGameGames)}` : "") +
-          ` · ${parlay.fromSlip} from your picks, ${parlay.generated} generated`,
+          ` · ${pickSummary(parlay)}`,
         icon: <ListChecksIcon className="h-[17px] w-[17px] stroke-[2.2]" />,
       }}
       control={
@@ -269,9 +299,9 @@ export function GeneratorResult({
           <button
             type="button"
             onClick={onRegenerate}
-            disabled={busy}
-            title={regenerateHint}
-            aria-label={"Regenerate: " + regenerateHint}
+            disabled={busy || regenerate.disabled}
+            title={regenerate.hint}
+            aria-label={"Regenerate: " + regenerate.hint}
             className={REGENERATE}
           >
             <RefreshIcon className="h-3.5 w-3.5 stroke-[2.4]" />
@@ -287,9 +317,10 @@ export function GeneratorResult({
     >
       {noAlternative && (
         <p role="status" className="mb-2 text-xs font-medium text-muted-foreground">
-          No other parlays of comparable strength
+          {noAlternativeText(noAlternative)}
         </p>
       )}
+      <UnusedPicks picks={unusedPicks(parlay)} />
       <Tabs<Tab>
         label="Parlay variant"
         value={tab}
