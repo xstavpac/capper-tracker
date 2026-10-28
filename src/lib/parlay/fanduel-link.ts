@@ -22,6 +22,7 @@ import { teamNamesMatch } from "@/lib/team-name-match";
 import { normalizeName } from "@/lib/fuzzy-match";
 import { oddsApiRequestKeys } from "@/lib/sport-seasons";
 import { hasKickedOff, isGameOver, type GameFeedStatus } from "@/lib/parlay/game-over";
+import { resolveFanDuelPlayer } from "@/lib/parlay/fanduel-player-match";
 
 export type FanDuelLegStatus = "matched" | "adjusted" | "live" | "over" | "not_found" | "ambiguous" | "unsupported" | "error";
 
@@ -76,6 +77,10 @@ export type FanDuelLegInput = {
   period: string;
   betDetail: string | null;
   line: number | null;
+  // A player prop's subject and stat as the import stored them (Pick.playerName /
+  // Pick.propMarket), when it did. Preferred over reading betDetail's text.
+  playerName?: string | null;
+  propMarket?: string | null;
   homeTeam: string;
   awayTeam: string;
   gameTime: string;
@@ -159,6 +164,31 @@ const FOOTBALL_LINE_PROP_KEYS: Record<string, string> = {
 };
 // Passing touchdowns is neither yardage nor receptions: exact line only.
 const EXACT_LINE_PROP_KEYS = new Set(["player_pass_tds"]);
+// Not yet mapped, because no live FanDuel response has carried them: NFL pass
+// attempts / pass completions / interceptions / rushing attempts (#360), and NHL
+// points / assists. Their keys were accepted by the Odds API on 2026-10-27 but
+// FanDuel had nothing posted for them, so they stay "can't be sent yet".
+//
+// NBA and NHL line props below: each key came back from FanDuel on 2026-10-27
+// (NBA: Trail Blazers @ Lakers, all ten; NHL: Sabres @ Sharks), Over/Under with
+// the player's full name as the outcome's description and a point.
+const NBA_LINE_PROP_KEYS: Record<string, string> = {
+  POINTS: "player_points",
+  REBOUNDS: "player_rebounds",
+  ASSISTS: "player_assists",
+  THREES_MADE: "player_threes",
+  STEALS: "player_steals",
+  BLOCKS: "player_blocks",
+  POINTS_REBOUNDS_ASSISTS: "player_points_rebounds_assists",
+  POINTS_REBOUNDS: "player_points_rebounds",
+  POINTS_ASSISTS: "player_points_assists",
+  REBOUNDS_ASSISTS: "player_rebounds_assists",
+};
+const NHL_LINE_PROP_KEYS: Record<string, string> = {
+  SHOTS_ON_GOAL: "player_shots_on_goal",
+  SAVES: "player_total_saves",
+};
+const NBA_SPORT_KEY = "basketball_nba";
 const ANYTIME_TD_KEY = "player_anytime_td";
 const ANYTIME_GOAL_KEY = "player_goal_scorer_anytime";
 const HOCKEY_THREE_WAY_KEY = "h2h_3_way";
@@ -220,7 +250,11 @@ const unsupported = (reason: string): TargetResult => ({ ok: false, reason });
 
 function playerPropTarget(leg: FanDuelLegInput): TargetResult {
   const text = leg.betDetail ?? "";
-  const prop = parseAnyPlayerProp(text);
+  // The import's own subject and stat when it stored them, else the text read
+  // for this pick's league (POINTS / ASSISTS are basketball and hockey words
+  // both, and only the league says which).
+  const stored = leg.playerName && leg.propMarket ? { playerName: leg.playerName, propMarket: leg.propMarket } : null;
+  const prop: { playerName: string; propMarket: string } | null = stored ?? parseAnyPlayerProp(text, leg.leagueName);
   if (!prop) return unsupported("Couldn't read this player prop.");
 
   if (prop.propMarket === "TD") {
@@ -233,10 +267,20 @@ function playerPropTarget(leg: FanDuelLegInput): TargetResult {
     return { ok: true, target: { marketKey: ANYTIME_GOAL_KEY, outcome: { name: "Yes" }, player: prop.playerName } };
   }
 
-  const marketKey = FOOTBALL_SPORT_KEYS.has(leg.sportKey ?? "") ? FOOTBALL_LINE_PROP_KEYS[prop.propMarket] : undefined;
+  const sportKey = leg.sportKey ?? "";
+  const marketKey = FOOTBALL_SPORT_KEYS.has(sportKey)
+    ? FOOTBALL_LINE_PROP_KEYS[prop.propMarket]
+    : sportKey === NBA_SPORT_KEY
+      ? NBA_LINE_PROP_KEYS[prop.propMarket]
+      : sportKey === NHL_SPORT_KEY
+        ? NHL_LINE_PROP_KEYS[prop.propMarket]
+        : undefined;
   if (!marketKey) return unsupported("This player prop market can't be sent yet.");
+  // The side is only ever in the text; the line is the pick's own when the row
+  // has one (props normally don't), else the text's. Two that disagree are not a bet to guess.
   const lineInfo = parsePlayerPropLine(text);
   if (!lineInfo) return unsupported("This prop has no Over/Under line to match.");
+  if (leg.line !== null && leg.line !== lineInfo.line) return unsupported("This prop's saved line and its text disagree.");
   const over = lineInfo.direction === "OVER";
   return {
     ok: true,
@@ -378,6 +422,10 @@ export type FanDuelMatchQuery = {
   marketKeys: string[];
   outcomeName: string;
   description?: string;
+  // A player prop's subject, as the pick spells it: resolved to the one name
+  // FanDuel has for that player in these markets (fanduel-player-match.ts), so
+  // "Sabonis" finds "Domantas Sabonis". Used in place of `description`.
+  player?: { name: string; sportKey?: string };
   point?: number;
   maxLineMove?: number;
   easier?: "lower" | "higher";
@@ -407,7 +455,15 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
     return { status: "not_found", reason: teamTotal ? "FanDuel isn't offering a team total for this game." : "FanDuel isn't offering this market right now." };
   }
 
-  const description = query.description === undefined ? null : normalizeName(query.description);
+  let description = query.description === undefined ? null : normalizeName(query.description);
+  if (query.player) {
+    const names = markets.flatMap((m) => m.outcomes.map((o) => o.description ?? "")).filter((n) => n !== "");
+    const player = resolveFanDuelPlayer(query.player.name, query.player.sportKey, names);
+    if (player.status === "ambiguous") {
+      return { status: "ambiguous", reason: "More than one player on FanDuel fits \"" + query.player.name + "\": " + player.names.slice(0, 3).join(", ") + "." };
+    }
+    description = normalizeName(player.status === "found" ? player.name : query.player.name);
+  }
   type Found = { selection: FanDuelSelection; price: number };
   // By line (null for a bet with no line), from the best-ranked market there.
   const byLine = new Map<number | null, { rank: number; found: Map<string, Found> }>();
@@ -615,10 +671,10 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
       const { event } = wanted[0];
       const sportKey = event.sportKey;
       const teamName = (side: "HOME" | "AWAY") => (side === "HOME" ? event.homeTeam : event.awayTeam);
-      const query = ({ target }: Wanted, marketKeys: string[], nearest: boolean): FanDuelMatchQuery => ({
+      const query = ({ leg, target }: Wanted, marketKeys: string[], nearest: boolean): FanDuelMatchQuery => ({
         marketKeys,
         outcomeName: "side" in target.outcome ? teamName(target.outcome.side) : target.outcome.name,
-        description: target.team ? teamName(target.team) : target.player,
+        ...(target.team ? { description: teamName(target.team) } : target.player ? { player: { name: target.player, sportKey: leg.sportKey ?? undefined } } : {}),
         point: target.point,
         ...(nearest ? { maxLineMove: target.maxLineMove, easier: target.easier } : {}),
       });
