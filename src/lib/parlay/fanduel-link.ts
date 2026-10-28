@@ -35,7 +35,7 @@ import {
   twoGamesFound,
 } from "@/lib/parlay/fanduel-reasons";
 
-export type FanDuelLegStatus = "matched" | "adjusted" | "live" | "over" | "not_found" | "ambiguous" | "unsupported" | "error";
+export type FanDuelLegStatus = "matched" | "adjusted" | "over" | "not_found" | "ambiguous" | "unsupported" | "error";
 
 // The pick's line and the FanDuel line sent in its place. `side` is null for a
 // spread, whose lines are signed for the pick's own team. `worse`: the sent
@@ -57,8 +57,6 @@ export type FanDuelLegResult = {
 export type FanDuelLinkResponse = { url: string | null; legs: FanDuelLegResult[] };
 
 const NOT_SENT_LABEL: Record<Exclude<FanDuelLegStatus, "matched" | "adjusted">, string> = {
-  // A game under way is not an error: its leg is left off the link and named.
-  live: "Live",
   over: "Game over",
   not_found: "Not found",
   ambiguous: "Ambiguous",
@@ -565,10 +563,7 @@ export const EVENT_TIME_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 const FEED_DOWN = "Couldn't reach FanDuel's odds right now - try again.";
 
-// Why a live leg is not in the link.
-export const LIVE_LEG_REASON = "Live — add on FanDuel";
-
-type EventMatch = { event: FanDuelEvent } | { status: "not_found" | "ambiguous" | "live"; reason: string };
+type EventMatch = { event: FanDuelEvent } | { status: "not_found" | "ambiguous"; reason: string };
 
 // "7:11 PM ET", with the day ("Oct 28, ") only when it isn't the other time's day.
 const etDay = (ms: number) => new Date(ms).toLocaleDateString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" });
@@ -583,8 +578,9 @@ function clockET(ms: number, otherMs: number): string {
 // EVENT_TIME_WINDOW_MS of the leg's kickoff. Two such events (a doubleheader)
 // are ambiguous: a leg carries no game number to choose between them. The same
 // two teams only outside the window is some other game, and the reason says when
-// FanDuel has it.
-function eventForLeg(leg: FanDuelLegInput, events: FanDuelEvent[], now: Date): EventMatch {
+// FanDuel has it. A game under way is matched like any other: the listing
+// carries in-play events, and their markets are read at send time.
+function eventForLeg(leg: FanDuelLegInput, events: FanDuelEvent[]): EventMatch {
   const start = new Date(leg.gameTime).getTime();
   const sameTeams = events.filter(
     (e) => teamNamesMatch(e.homeTeam, leg.homeTeam, leg.sportKey ?? undefined) && teamNamesMatch(e.awayTeam, leg.awayTeam, leg.sportKey ?? undefined)
@@ -597,8 +593,6 @@ function eventForLeg(leg: FanDuelLegInput, events: FanDuelEvent[], now: Date): E
     return { status: "not_found", reason: gameTimeMismatch(clockET(nearest, start), clockET(start, nearest)) };
   }
   if (candidates.length > 1) return { status: "ambiguous", reason: twoGamesFound(candidates.map((e) => clockET(new Date(e.commenceTime).getTime(), start))) };
-  // The feed already has it under way (our clock or kickoff was a little behind).
-  if (hasKickedOff(candidates[0].commenceTime, now)) return { status: "live", reason: LIVE_LEG_REASON };
   return { event: candidates[0] };
 }
 
@@ -625,16 +619,13 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
     sentLine: FanDuelSentLine | null = null
   ) => results.set(leg.pickId, { pickId: leg.pickId, status, reason, pickOdds: leg.odds, fanDuelOdds, sentLine });
 
-  // 1. Games that are over, live games and unsupported markets never reach the
-  // feed. A live leg is named, not an error: its odds move, so it is added on FanDuel.
+  // 1. Games that are over and unsupported markets never reach the feed. A live
+  // game's leg goes on like any other: its ids and line are read from FanDuel
+  // now, so a line that moved in play is sent as "adjusted" or says why not.
   const pending: { leg: FanDuelLegInput; target: FanDuelLegTarget }[] = [];
   for (const leg of legs) {
     if (isGameOver(leg, deps.now) || (!leg.onBoard && hasKickedOff(leg.gameTime, deps.now))) {
       settle(leg, "over", leg.onBoard ? "Game is over." : "Game is over or no longer on the board.");
-      continue;
-    }
-    if (hasKickedOff(leg.gameTime, deps.now)) {
-      settle(leg, "live", LIVE_LEG_REASON);
       continue;
     }
     const target = fanDuelLegTarget(leg);
@@ -658,7 +649,7 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
       settle(leg, "error", FEED_DOWN);
       continue;
     }
-    const match = eventForLeg(leg, listing.events, deps.now);
+    const match = eventForLeg(leg, listing.events);
     if (!("event" in match)) {
       // Not in the listings that were read is not "not on FanDuel" while the
       // preseason listing is unread.
