@@ -91,18 +91,18 @@ async function main() {
   check("an NBA double-double has no key", targetOf(nbaLeg({ betDetail: "Nikola Jokic double double" }))[0], "unsupported");
   check("NHL shots on goal -> player_shots_on_goal", targetOf(nhlLeg({ betDetail: "Tage Thompson over 3.5 shots on goal" }))[0], "player_shots_on_goal");
   check("NHL saves -> player_total_saves", targetOf(nhlLeg({ betDetail: "Yaroslav Askarov over 25.5 saves" }))[0], "player_total_saves");
-  check("NHL points: not mapped (no live FanDuel response carried it)", targetOf(nhlLeg({ betDetail: "Tage Thompson over 1.5 points" })), ["unsupported", "This player prop market can't be sent yet."]);
+  check("NHL points: not mapped (no live FanDuel response carried it)", targetOf(nhlLeg({ betDetail: "Tage Thompson over 1.5 points" })), ["unsupported", "Market not supported for NHL yet — points props."]);
   check("NHL assists: not mapped", targetOf(nhlLeg({ betDetail: "Tage Thompson over 0.5 assists" }))[0], "unsupported");
   const nfl = (betDetail: string) => targetOf({ ...base, sportKey: "americanfootball_nfl", leagueName: "NFL", betDetail });
   check("NFL passing yards still maps", nfl("Josh Allen over 244.5 passing yards")[0], "player_pass_yds");
   check("NFL rush + receive yards still maps", nfl("Josh Jacobs over 77.5 rush + receive yards")[0], "player_rush_reception_yds");
-  for (const [text, label] of [
-    ["Josh Allen over 33.5 pass attempts", "pass attempts"],
-    ["Josh Allen over 21.5 completions", "pass completions"],
-    ["Josh Allen over 0.5 interceptions", "interceptions"],
-    ["Josh Jacobs over 17.5 carries", "rushing attempts"],
+  for (const [text, label, words] of [
+    ["Josh Allen over 33.5 pass attempts", "pass attempts", "pass attempts"],
+    ["Josh Allen over 21.5 completions", "pass completions", "pass completions"],
+    ["Josh Allen over 0.5 interceptions", "interceptions", "pass interceptions"],
+    ["Josh Jacobs over 17.5 carries", "rushing attempts", "rush attempts"],
   ]) {
-    check("NFL " + label + ": not mapped (no live FanDuel response carried it)", nfl(text), ["unsupported", "This player prop market can't be sent yet."]);
+    check("NFL " + label + ": not mapped (no live FanDuel response carried it)", nfl(text), ["unsupported", "Market not supported for NFL yet — " + words + " props."]);
   }
 
   // ---- 3. The stored subject and stat win over the text ----
@@ -175,7 +175,7 @@ async function main() {
     [["camara", "matched"]]
   );
   const shared = await send([nbaLeg({ pickId: "williams", betDetail: "Williams over 9.5 points" })], nba, "basketball_nba");
-  check("a surname two players on that game share is not sent", [shared[0][1], shared[0][2]], ["ambiguous", 'More than one player on FanDuel fits "Williams": Ziaire Williams, Robert Williams.']);
+  check("a surname two players on that game share is not sent", [shared[0][1], shared[0][2]], ["ambiguous", 'Player not matched — more than one player on FanDuel fits "Williams": Ziaire Williams, Robert Williams.']);
   const lukaLine = nba.bookmakers[0].markets.find((m: FanDuelMarket) => m.key === "player_points").outcomes.find((o: { description: string }) => o.description === "Luka Doncic").point;
   check(
     "an alias (Luka) finds Luka Doncic's line",

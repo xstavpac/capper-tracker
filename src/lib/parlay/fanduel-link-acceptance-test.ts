@@ -147,7 +147,7 @@ check(
 check(
   "a market FanDuel didn't return: not found",
   matchFanDuelOutcome({ marketKeys: ["player_rush_yds"], outcomeName: "Over", description: "Josh Allen", point: 30.5 }, PROP_MARKETS),
-  { status: "not_found", reason: "FanDuel isn't offering this market right now." }
+  { status: "not_found", reason: "Market not offered by FanDuel — no rushing yards market for this game right now." }
 );
 
 const twoCandidates: FanDuelMarket[] = [
@@ -320,12 +320,12 @@ check(
     reason({ betType: "PLAYER_PROP", betDetail: "Josh Allen Over 120.5 Passing Yards", period: "FIRST_HALF" }),
   ],
   [
-    "FanDuel doesn't offer this period for NCAAF.",
+    "Market not offered by FanDuel — no second half bets for NCAAF.",
     "sendable",
-    "FanDuel doesn't offer this period for MLB.",
-    "FanDuel doesn't offer this team total for MLB.",
-    "FanDuel doesn't offer this period for WNBA.",
-    "Only full-game player props can be sent.",
+    "Market not offered by FanDuel — no first quarter bets for MLB.",
+    "Market not offered by FanDuel — no team totals for MLB first half.",
+    "Market not offered by FanDuel — no first half bets for WNBA.",
+    "Market not supported for NFL yet — only full-game player props.",
   ]
 );
 check(
@@ -463,7 +463,7 @@ async function realResponses() {
   check("FIU +7.5 with the main spread at +2.5: the exact line on the alternate market, at the alternate's own price (-230, not the main +102)", fiu.legs["FIU +7.5"], ["matched", -230, null, null]);
   check("team total Under 23.5: Jacksonville State's own team-total market", fiu.legs["Jacksonville State Team Total Under 23.5"], ["matched", -120, null, null]);
   check("first-half moneyline: the h2h_h1 market", fiu.legs["Jacksonville State First Half Moneyline"], ["matched", -138, null, null]);
-  check("NCAAF second half, which FanDuel doesn't sell, never reaches the feed", fiu.legs["FIU 2H ML"], ["unsupported", null, null, "FanDuel doesn't offer this period for NCAAF."]);
+  check("NCAAF second half, which FanDuel doesn't sell, never reaches the feed", fiu.legs["FIU 2H ML"], ["unsupported", null, null, "Market not offered by FanDuel — no second half bets for NCAAF."]);
   check("the link: alternate-spread, team-total and first-half selections, in leg order", [fiu.ids[0], fiu.ids[1], fiu.ids[2], fiu.ids[3], fiu.ids[5]], ["42.615585290", "61300718", "42.615585266", "7017917", "4943282"]);
   check("credits: one main call for the three markets, one alternate call for the one leg that missed", fiu.calls, {
     NCAAF: [["h2h_h1", "spreads", "team_totals"], ["alternate_spreads"]],
@@ -542,7 +542,7 @@ async function realResponses() {
       { marketKeys: ["team_totals", "alternate_team_totals"], outcomeName: "Over", description: "Detroit Red Wings", point: 6.5, maxLineMove: 1.5, easier: "lower" },
       marketsOf("NHL").filter((m) => m.key.includes("totals") && !m.key.includes("team"))
     ),
-    { status: "not_found", reason: "FanDuel isn't offering a team total for this game." }
+    { status: "not_found", reason: "Market not offered by FanDuel — no team total market for this game right now." }
   );
   check(
     "a tie with nothing to say which way is easier is ambiguous, not a coin flip",
@@ -575,7 +575,7 @@ async function realResponses() {
       { marketKeys: ["team_totals"], outcomeName: "Under", description: "Cleveland Guardians", point: 4.5, maxLineMove: 1.5, easier: "higher" },
       marketsOf("MLB").filter((m) => m.key !== "team_totals")
     ),
-    { status: "not_found", reason: "FanDuel isn't offering a team total for this game." }
+    { status: "not_found", reason: "Market not offered by FanDuel — no team total market for this game right now." }
   );
   check("first-five moneyline: the h2h_1st_5_innings market", guardians.legs["Guardians F5 ML"], ["matched", 104, null, null]);
   check("first-five Under 4 between 3.5 and 4.5: the higher line, from the first-five alternates", guardians.legs["F5 Under 4"]?.[2], { pick: 4, fanDuel: 4.5, side: "Under", worse: false });
@@ -791,24 +791,24 @@ async function eventWindow() {
   check(
     "125 min apart is not that game, and the reason names both times",
     await run([ev("evt-buf-lar", at(125))]),
-    ["not_found", "FanDuel has this game at 10:20 PM ET; your pick is at 8:15 PM ET."]
+    ["not_found", "Game time mismatch — FanDuel has this game at 10:20 PM ET; your pick is at 8:15 PM ET."]
   );
   check(
     "the same teams on another day: both times carry their day",
     await run([ev("evt-buf-lar", "2026-10-16T00:15:00Z")]),
-    ["not_found", "FanDuel has this game at Oct 15, 8:15 PM ET; your pick is at Oct 12, 8:15 PM ET."]
+    ["not_found", "Game time mismatch — FanDuel has this game at Oct 15, 8:15 PM ET; your pick is at Oct 12, 8:15 PM ET."]
   );
-  check("no event for the teams at all", await run([]), ["not_found", "Couldn't find this game on FanDuel."]);
+  check("no event for the teams at all", await run([]), ["not_found", "Game not on FanDuel — couldn't find Buffalo Bills @ Los Angeles Rams."]);
   check(
     "another game's event is not the same teams",
     await run([{ ...ev("evt-buf-lar", at(0)), homeTeam: "Denver Broncos" }]),
-    ["not_found", "Couldn't find this game on FanDuel."]
+    ["not_found", "Game not on FanDuel — couldn't find Buffalo Bills @ Los Angeles Rams."]
   );
 
   // A doubleheader: two events for the same teams.
   check("two same-team events both inside the window: not sent, says so", await run([ev("evt-buf-lar", at(0)), ev("evt-buf-lar-2", at(60))]), [
     "ambiguous",
-    "Two games found — couldn't tell which",
+    "Two games found — couldn't tell which (8:15 PM ET and 9:15 PM ET).",
   ]);
   const hours3 = [ev("evt-buf-lar", at(0)), ev("evt-buf-lar-2", at(180))];
   check("games 3 h apart: the first leg finds the first", await run(hours3), ["matched", null]);
