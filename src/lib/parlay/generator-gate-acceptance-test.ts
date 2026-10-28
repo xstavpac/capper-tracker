@@ -1,12 +1,12 @@
 // The adjustable win-rate gate (gate.ts, settings.minWinPct): 55 stays the
 // default, a lower value admits cappers the default rejects, a higher one
-// rejects cappers it admits, anything that isn't a whole 5-point step from 45
-// to 75 is 55, Hedge and Contrarian honour it, LEGACY_RULES ignores it, and the
+// rejects cappers it admits, anything that isn't a whole 5-point step from 0
+// to 75 is 55, 0 is allowed (any capper with a graded record), Hedge and Contrarian honour it, LEGACY_RULES ignores it, and the
 // result is deterministic. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/generator-gate-acceptance-test.ts
 import { readFileSync } from "node:fs";
 import { buildGeneratedParlay, GENERATOR_RULES, LEGACY_RULES, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
-import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, normalizeMinWinPct } from "@/lib/parlay/gate";
+import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, gateRiskNote, normalizeMinWinPct } from "@/lib/parlay/gate";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
@@ -28,10 +28,10 @@ const TEAMS: [string, string, string, string][] = [
   ["Seattle Mariners", "Texas Rangers", "Mariners", "Rangers"],
 ];
 
-const col = (wins: number, losses: number) => ({ wins, losses, pushes: 0, winPct: (wins / (wins + losses)) * 100, count: wins + losses });
+const col = (wins: number, losses: number, pushes = 0) => ({ wins, losses, pushes, winPct: wins + losses > 0 ? (wins / (wins + losses)) * 100 : 0, count: wins + losses });
 
 // One in-league record per pick; every pick is a moneyline, HOME or AWAY.
-type Spec = { id: string; game: number; side: "HOME" | "AWAY"; rec: [number, number] };
+type Spec = { id: string; game: number; side: "HOME" | "AWAY"; rec: [number, number]; pushes?: number };
 
 function makeSnapshot(specs: Spec[]): GeneratorSnapshot {
   const categoryRecords: Record<string, CategoryBreakdownItem | null> = {};
@@ -42,7 +42,7 @@ function makeSnapshot(specs: Spec[]): GeneratorSnapshot {
     const detail = (s.side === "HOME" ? homeNick : awayNick) + " ML";
     const category: PickCategoryKey = s.side === "HOME" ? "FAV_ML" : "DOG_ML";
     const capperId = "cap-" + s.id;
-    const c = col(s.rec[0], s.rec[1]);
+    const c = col(s.rec[0], s.rec[1], s.pushes);
     categoryRecords[capperId + "|" + category] = { key: category, label: category, ...c };
     leagueRecords.records[capperId + "|MLB|" + category] = { category, label: category, overall: c, league: c };
     const pick = {
@@ -92,18 +92,18 @@ const ladder = makeSnapshot([
 ]);
 
 // ---- the bounds and the normalizer ------------------------------------------
-check("bounds are 45..75 in steps of 5, default 55", [GATE_MIN, GATE_MAX, GATE_STEP, GATE_DEFAULT], [45, 75, 5, 55]);
-check("every whole step in range is kept", [45, 50, 55, 60, 65, 70, 75].map(normalizeMinWinPct), [45, 50, 55, 60, 65, 70, 75]);
+check("bounds are 0..75 in steps of 5, default 55", [GATE_MIN, GATE_MAX, GATE_STEP, GATE_DEFAULT], [0, 75, 5, 55]);
+check("every whole step in range is kept", [0, 5, 40, 45, 50, 55, 60, 65, 70, 75].map(normalizeMinWinPct), [0, 5, 40, 45, 50, 55, 60, 65, 70, 75]);
 check(
   "anything else is 55 (below, above, off-step, fraction, NaN, Infinity, string, null, undefined, object)",
-  [40, 80, 100, 0, -55, 57, 52.5, 55.5, NaN, Infinity, "60", null, undefined, {}].map(normalizeMinWinPct),
+  [80, 100, -5, -55, 57, 52.5, 55.5, NaN, Infinity, "60", "0", null, undefined, {}].map(normalizeMinWinPct),
   Array(14).fill(55)
 );
 
 // ---- default equals today ----------------------------------------------------
 {
   const today = JSON.stringify(run(ladder));
-  check("default: setting absent, 55, undefined and invalid values are byte-identical", [55, undefined, 57, 30, 80, NaN].map((v) => JSON.stringify(run(ladder, { minWinPct: v as number }))).every((j) => j === today), true);
+  check("default: setting absent, 55, undefined and invalid values are byte-identical", [55, undefined, 57, 12, 80, NaN].map((v) => JSON.stringify(run(ladder, { minWinPct: v as number }))).every((j) => j === today), true);
   check("default gate: 55% exactly passes, 52% does not", ids(run(ladder)), ["p55", "p58", "p65", "p70"]);
 }
 
@@ -113,7 +113,27 @@ check("higher (60) rejects the 55% and 58% cappers the default admits", ids(run(
 check("higher (75) leaves nobody", ids(run(ladder, { minWinPct: 75 })), []);
 check("the gate is inclusive: exactly 65% passes at 65", ids(run(ladder, { minWinPct: 65 })), ["p65", "p70"]);
 check("45 admits all five", ids(run(ladder, { minWinPct: 45 })).length, 5);
-check("out of range (80, 30) falls back to 55, not to a stricter or looser gate", [80, 30].map((v) => ids(run(ladder, { minWinPct: v }))), [ids(run(ladder)), ids(run(ladder))]);
+check("out of range (80, -5) falls back to 55, not to a stricter or looser gate", [80, -5].map((v) => ids(run(ladder, { minWinPct: v }))), [ids(run(ladder)), ids(run(ladder))]);
+
+// ---- 0%: no gate on the win rate, still ordered by strength; no record, no leg -----------
+{
+  // A 0-5 capper, a 5-5 capper, a 9-1 capper, a 0-0 capper and a pushes-only capper, one per game.
+  const zero = makeSnapshot([
+    { id: "z05", game: 0, side: "HOME", rec: [0, 5] },
+    { id: "z55", game: 1, side: "HOME", rec: [5, 5] },
+    { id: "z91", game: 2, side: "HOME", rec: [9, 1] },
+    { id: "z00", game: 3, side: "HOME", rec: [0, 0] },
+    { id: "zpush", game: 4, side: "HOME", rec: [0, 0], pushes: 4 },
+  ]);
+  check("0% admits a 0-5 capper (any graded record)", ids(run(zero, { minWinPct: 0, legCount: 5 })), ["z05", "z55", "z91"]);
+  check("55% (default) admits only the 9-1 capper here", ids(run(zero, { legCount: 5 })), ["z91"]);
+  check("0-0 and pushes-only cappers are excluded even at 0%", ids(run(zero, { minWinPct: 0, legCount: 5 })).filter((id) => id === "z00" || id === "zpush"), []);
+  check("0% is not random: two legs from three games are the two strongest, the 0-5 capper is left out", ids(run(zero, { minWinPct: 0, legCount: 2 })), ["z55", "z91"]);
+  check("0% with one leg is the strongest record", ids(run(zero, { minWinPct: 0, legCount: 1 })), ["z91"]);
+  const onlyWeak = makeSnapshot([{ id: "w05", game: 0, side: "HOME", rec: [0, 5] }, { id: "w14", game: 1, side: "HOME", rec: [1, 4] }]);
+  check("with only weak cappers, 0% still takes the stronger one first", ids(run(onlyWeak, { minWinPct: 0, legCount: 1 })), ["w14"]);
+  check("the note under the control: empty at 55 and above, a risk note with the 0% rule below", [gateRiskNote(55), gateRiskNote(75), gateRiskNote(50).startsWith(" Under 55% means more risk."), gateRiskNote(0).includes("any capper with a graded record"), gateRiskNote(0).includes("no record are still left out")], ["", "", true, true, true]);
+}
 
 // ---- Hedge and Contrarian honour it ----------------------------------------------
 {

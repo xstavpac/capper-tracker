@@ -15,7 +15,7 @@ import { IncludePicksChips } from "@/components/parlay/pick-mix-control";
 import { formatGameTime } from "@/components/parlay/generator-result";
 import type { HybridGenerator } from "@/components/parlay/use-hybrid-generator";
 import type { TargetedGame } from "@/lib/parlay/slip-state";
-import { GATE_MAX, GATE_MIN, GATE_STEP } from "@/lib/parlay/gate";
+import { GATE_MAX, GATE_MIN, GATE_STEP, gateRiskNote } from "@/lib/parlay/gate";
 import { HYBRID_MAX_LEGS, type Hybrid, type HybridBoxLegs, type HybridWidth } from "@/lib/parlay/hybrid";
 import type { HybridLinkResponse } from "@/lib/parlay/hybrid-link";
 import type { HybridGenerateSettings } from "@/lib/parlay/hybrid-request";
@@ -213,7 +213,7 @@ export function HybridControls({
             <IncludePicksChips value={gen.include} onToggle={gen.toggleInclude} hide={[...CATEGORIES_HIDDEN]} />
           </FilterRow>
           <SettingsBlock>
-            <SettingRow icon={<TrophyIcon className="h-5 w-5" />} label="Minimum capper win rate" note="Only cappers at or above this win rate can drive a leg.">
+            <SettingRow icon={<TrophyIcon className="h-5 w-5" />} label="Minimum capper win rate" note={"Only cappers at or above this win rate can drive a leg." + gateRiskNote(form.minWinPct)}>
               <StepperControl
                 label="Minimum capper win rate"
                 value={form.minWinPct}

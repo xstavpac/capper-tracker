@@ -136,6 +136,8 @@ function consensusGate(
   if (d.side.posts === 0) return { reason: "no-side-picks", text: `No full-game side picks (spread or moneyline)${scope}` };
   if (d.total.posts === 0) return { reason: "no-total-picks", text: `No full-game total picks${scope}` };
   const gate = input.minWinPct;
+  // At 0% the gate is "has a record", so "at 0%+" would read oddly.
+  const who = gate === 0 ? "with a record" : `at ${gate}%+`;
   const families: [string, FamilyDiagnosis][] = [
     ["side", d.side],
     ["total", d.total],
@@ -143,14 +145,14 @@ function consensusGate(
   for (const [noun, f] of families) {
     const gated = Object.values(f.gatedByDirection).reduce((a, b) => a + b, 0) + f.hedged;
     if (gated > 0) continue;
-    if (!f.best) return { reason: "below-gate", text: `No ${noun} capper has a record in this bet yet (needs ${gate}%)` };
+    if (!f.best) return { reason: "below-gate", text: gate === 0 ? `No ${noun} capper has a graded record in this bet yet` : `No ${noun} capper has a record in this bet yet (needs ${gate}%)` };
     return { reason: "below-gate", text: `Best ${directionLabel(f.best.direction)} capper ${pct(f.best.winPct)} (${f.best.wins}-${f.best.losses}), needs ${gate}%` };
   }
   for (const [noun, f] of families) {
     const entries = Object.entries(f.gatedByDirection).sort((a, b) => b[1] - a[1]);
-    if (entries.length === 0) return { reason: "not-enough-supporters", text: `Cappers at ${gate}%+ took both sides of the ${noun}, so neither side counts` };
+    if (entries.length === 0) return { reason: "not-enough-supporters", text: `Cappers ${who} took both sides of the ${noun}, so neither side counts` };
     const [direction, count] = entries[0];
-    if (count < minSupporters) return { reason: "not-enough-supporters", text: `Only ${count} capper${s(count)} at ${gate}%+ on the ${noun} (${directionLabel(direction)}); needs ${minSupporters}` };
+    if (count < minSupporters) return { reason: "not-enough-supporters", text: `Only ${count} capper${s(count)} ${who} on the ${noun} (${directionLabel(direction)}); needs ${minSupporters}` };
   }
   const has = (family: "SIDE" | "TOTAL") => input.positions.some((p) => p.eventId === game.gameId && p.family === family);
   if (!has("SIDE") || !has("TOTAL")) return { reason: "not-enough-supporters", text: `No ${has("SIDE") ? "total" : "side"} that enough cappers agree on` };

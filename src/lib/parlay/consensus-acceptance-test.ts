@@ -442,6 +442,38 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
   check("a position carries its game", [ps[0].eventId, ps[0].homeTeam, ps[0].awayTeam, ps[0].commenceTime, ps[0].sport], ["G1", HOME, AWAY, START, LEAGUE]);
 }
 
+// ============================================================================
+// A 0% gate: weak cappers get in, but a capper who took both sides never cancels anyone
+// (consensus.ts: a capper with gated posts on two directions of a family is on neither side)
+// ============================================================================
+{
+  const WEAK: [number, number] = [0, 5];
+  const over = (id: string, capper: string, lg: [number, number]): Spec => ({ id, capper, bet: { kind: "TOTAL", side: "Over", line: 44 }, lg });
+  const under = (id: string, capper: string, lg: [number, number]): Spec => ({ id, capper, bet: { kind: "TOTAL", side: "Under", line: 44 }, lg });
+  const at0 = (specs: Spec[]) => build(specs, { minWinPct: 0 });
+  const shape = (ps: ConsensusPosition[]) => ps.map((p) => [p.direction, p.supporters.map((c) => c.capperId), p.opposers.map((c) => c.capperId)]);
+
+  // A weak capper on both sides is set aside; the one-sided strong capper keeps the position.
+  check("0%: a 0-5 capper on both sides does not cancel the Over a strong capper took", shape(at0([over("a", "A", GOOD), over("h1", "H", WEAK), under("h2", "H", WEAK)])), [["OVER", ["A"], []]]);
+  // Hedging with a strong record is no different: still on neither side.
+  check("0%: a 30-5 capper on both sides is on neither side either, so the weaker one-sided capper decides", shape(at0([over("a", "A", [3, 4]), over("h1", "H", [30, 5]), under("h2", "H", [30, 5])])), [["OVER", ["A"], []]]);
+  // Only hedgers: nothing is left, so there is no position.
+  check("0%: when every capper on the family hedged, no position", at0([over("h1", "H", WEAK), under("h2", "H", WEAK)]).length, 0);
+  // One-sided cappers on both directions: the strongest decides, the hedger is nowhere.
+  check("0%: with one-sided cappers on both directions the strongest decides, the hedger is on neither list", shape(at0([over("a", "A", GOOD), under("b", "B", [3, 4]), over("h1", "H", WEAK), under("h2", "H", WEAK)])), [["OVER", ["A"], ["B"]]]);
+
+  // Ordering at 0%: strength, not arrival order. The 0-5 capper sorts last among supporters.
+  const order = find(at0([over("w", "W", WEAK), over("m", "M", [5, 5]), over("g", "G", GOOD)]), "OVER")!;
+  check("0%: supporters are ordered by strength, the 0-5 capper last", order.supporters.map((c) => c.capperId), ["G", "M", "W"]);
+  check("0%: the position scores its strongest supporter, not the weak one", order.score, lb(8, 2));
+  const onlyWeak = find(at0([over("w", "W", WEAK)]), "OVER")!;
+  check("0%: a 0-5 capper alone is a position (any graded record), scoring about 0", [onlyWeak.supporters.map((c) => c.capperId), onlyWeak.score < 1e-9], [["W"], true]);
+
+  // No graded record, no post: a 0-0 capper stays out at 0%.
+  check("0%: a 0-0 capper (also a pushes-only one: no decided picks) is excluded", at0([over("z", "Z", [0, 0])]).length, 0);
+  check("55%: the same 0-5 capper is out", build([over("w", "W", WEAK)]).length, 0);
+}
+
 if (failures > 0) {
   console.error(`\n${failures} FAILED`);
   process.exit(1);

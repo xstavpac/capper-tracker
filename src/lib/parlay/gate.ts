@@ -3,7 +3,7 @@
 // and import-free: the server (parseRequest), the engine and the card all read
 // the same bounds and the same normalizer, so a bad value is 55 everywhere.
 export const GATE_DEFAULT = 55;
-export const GATE_MIN = 45;
+export const GATE_MIN = 0;
 export const GATE_MAX = 75;
 export const GATE_STEP = 5;
 
@@ -11,6 +11,12 @@ export const GATE_STEP = 5;
 export function normalizeMinWinPct(x: unknown): number {
   if (typeof x !== "number" || !Number.isInteger(x) || x < GATE_MIN || x > GATE_MAX || (x - GATE_MIN) % GATE_STEP !== 0) return GATE_DEFAULT;
   return x;
+}
+
+// The note under the control once the gate sits below the default. Empty at 55 and above.
+export function gateRiskNote(value: number): string {
+  if (value >= GATE_DEFAULT) return "";
+  return ` Under ${GATE_DEFAULT}% means more risk. At 0%, any capper with a graded record in that bet type counts; cappers with no record are still left out.`;
 }
 
 // Per-user, best-effort: the card remembers the value apart from the slip.
