@@ -301,7 +301,7 @@ async function main() {
 
   // ---- Standard | Hybrid ----
   await click(button("Standard"));
-  check("Standard is the default view: its own controls, no Hybrid line", text().includes("Max legs per game") && !text().includes("Hybrid builds from capper consensus"));
+  check("Standard is the default view: its own controls, no Hybrid line", text().includes("Max legs per game") && !text().includes("Hybrid builds from your strongest cappers"));
   const standardRequests = requests.length;
   {
     const t = text();
@@ -311,7 +311,7 @@ async function main() {
     check("Standard: the leg stepper lives in Pick Filters, not beside Clear / Generate", Boolean(button("More legs")) && row!.contains(button("More legs") as Node) && footerButtons.length === 2 && !footerButtons[0].parentElement!.parentElement!.textContent!.includes("from your cappers"), t.slice(0, 80));
   }
   await click(button("Hybrid"));
-  check("Hybrid: the muted slip line, its controls", text().includes("Hybrid builds from capper consensus. Your slip isn't used in this mode.") && text().includes("Target odds") && text().includes("Line range") && text().includes("Legs per game") && text().includes("Total legs") && !text().includes("Max legs"));
+  check("Hybrid: the muted slip line, its controls", text().includes("Hybrid builds from your strongest cappers. Your slip isn't used in this mode.") && text().includes("Target odds") && text().includes("Line range") && text().includes("Legs per game") && text().includes("Total legs") && !text().includes("Max legs"));
   check("Hybrid: leg count, max legs per game, Pick Mix, fill toggle and Props are gone", !text().includes("Max legs per game") && !text().includes("Fill from") && !text().includes("Customize Mix") && !text().includes("Props") && !text().includes("Your picks ·"));
   check("Hybrid: switching modes sends no request", requests.length === standardRequests && hybridRequests.length === 0);
   await click(button("Generate parlay"));
@@ -337,7 +337,7 @@ async function main() {
   check("Legs per game Auto sends boxLegs \"auto\", maxLegs 3", pAuto.boxLegs === "auto" && pAuto.maxLegs === 3, JSON.stringify(pAuto));
   check("3 Legs and Auto are distinguishable on the server (boxLegs differs)", p3.boxLegs !== pAuto.boxLegs);
   check("the three requests differ only in boxLegs / maxLegs", [p2, p3, pAuto].every((q) => JSON.stringify({ ...q, boxLegs: 0, maxLegs: 0 }) === JSON.stringify({ ...p2, boxLegs: 0, maxLegs: 0 })));
-  check("Hybrid: no-box result is explained in plain words", text().includes("No game has qualifying consensus on both a side and a total."));
+  check("Hybrid: no-box result is explained in plain words", text().includes("No game has a qualifying capper on both a side and a total."));
   const whyBox = () => Array.from(el.querySelectorAll("details")).find((x) => (x.querySelector("summary")?.textContent ?? "").includes("Why ")) as HTMLDetailsElement | undefined;
   check("no-box: a collapsed 'Why no games?' section", Boolean(whyBox()) && !whyBox()!.open && (whyBox()!.querySelector("summary")!.textContent ?? "").includes("Why no games?"));
   const countRows = Array.from(whyBox()!.querySelectorAll('ul[aria-label="Games left out, by reason"] > li')).map((li) => (li.textContent ?? "").replace(/\s+/g, " ").trim());
@@ -456,7 +456,7 @@ async function main() {
   await click(button("Generate parlay"));
   const hybridSent = hybridRequests.length;
   await click(button("Standard"));
-  check("back on Standard: its controls and its leg count (25) are still there", text().includes("Max legs per game") && ctx.legCount === 25 && !text().includes("Hybrid builds from capper consensus"));
+  check("back on Standard: its controls and its leg count (25) are still there", text().includes("Max legs per game") && ctx.legCount === 25 && !text().includes("Hybrid builds from your strongest cappers"));
   check("flipping modes never regenerated anything", requests.length === standardRequests && hybridRequests.length === hybridSent);
 
   await act(() => root.unmount());

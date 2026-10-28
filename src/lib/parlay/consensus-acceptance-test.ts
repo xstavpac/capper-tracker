@@ -1,6 +1,9 @@
-// Consensus Hybrid's position builder (consensus.ts): distinct-capper supporters,
-// ML + spread merged into one team side, the easiest endorsed line as the
-// anchor, gated opposers only, the supporter threshold, the markets left out,
+// Consensus Hybrid's position builder (consensus.ts): one strong capper is enough;
+// the direction is the one whose single strongest capper is strongest (Wilson score,
+// then sample size, then capper id), the other yields no position; agreeing cappers
+// only break ranking ties; opposers never move the score; distinct-capper supporters,
+// ML + spread merged into one team side, the easiest endorsed line as the anchor,
+// gated opposers only, hedged cappers on neither side, the markets left out,
 // and the record hierarchy / win-% lever / soft sample-size adjustment it reuses
 // from the generator. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/consensus-acceptance-test.ts
@@ -116,7 +119,7 @@ const find = (ps: ConsensusPosition[], direction: string) => ps.find((p) => p.di
 const lb = (w: number, l: number) => wilsonLowerBound(w, l, GENERATOR_Z);
 const GOOD: [number, number] = [8, 2];
 
-check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS, 2);
+check("the supporter threshold is a named constant at 1: one strong capper is enough", HYBRID_MIN_SUPPORTERS, 1);
 
 // ============================================================================
 // Distinct cappers; a capper's posts resolve to their hardest line
@@ -133,8 +136,9 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
   check("the capper's endorsed line is their hardest post (-6.5, not -3)", p.supporters.find((s) => s.capperId === "A")!.endorsedLine, -6.5);
   check("the anchor is the easiest endorsed line (-1, not -6.5)", p.anchorLine, -1);
   check("posted-line spread is recorded", [p.postedLines, p.lineSpread], [{ hardest: -6.5, easiest: -1 }, 5.5]);
-  check("the score counts the capper once", p.score, 2 * lb(8, 2));
-  check("one capper alone is not a position", build([{ id: "a1", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: GOOD }, { id: "a2", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -6.5 }, lg: GOOD }]).length, 0);
+  check("the score is the strongest supporter's, counted once", p.score, lb(8, 2));
+  const alone = build([{ id: "a1", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: GOOD }, { id: "a2", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -6.5 }, lg: GOOD }]);
+  check("one capper alone is a position (their hardest post is the anchor)", alone.map((x) => [x.direction, x.supporters.length, x.anchorLine]), [[HOME, 1, -6.5]]);
 }
 
 // ============================================================================
@@ -170,7 +174,7 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
     { id: "c", capper: "C", bet: { kind: "ML", team: "AWAY" }, lg: GOOD },
     { id: "d", capper: "D", bet: { kind: "SPREAD", team: "AWAY", line: 3 }, lg: GOOD },
   ]);
-  check("each team's merged side is its own position", ps.map((p) => p.direction).sort(), [AWAY, HOME].sort());
+  check("both teams backed at equal records: ONE side position (the tie goes to capper id A)", ps.map((p) => p.direction), [HOME]);
   check("the other team's backers are the opposers", find(ps, HOME)!.opposers.map((o) => o.capperId).sort(), ["C", "D"]);
 }
 
@@ -206,7 +210,7 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
 }
 
 // ============================================================================
-// Opposers: gated ones are subtracted, ungated ones are ignored
+// Opposers: shown, never subtracted; ungated ones are ignored
 // ============================================================================
 {
   const base: Spec[] = [
@@ -214,23 +218,23 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
     { id: "b", capper: "B", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [6, 4] },
   ];
   const noOpp = find(build(base), "OVER")!;
-  check("score without opposers", noOpp.score, lb(8, 2) + lb(6, 4));
+  check("score is the strongest supporter's (8-2), not a sum", noOpp.score, lb(8, 2));
   const gated = find(build([...base, { id: "c", capper: "C", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: [7, 3] }]), "OVER")!;
-  check("a gated opposer is subtracted", [gated.opposers.map((o) => o.capperId), gated.score], [["C"], lb(8, 2) + lb(6, 4) - lb(7, 3)]);
+  check("a gated opposer is listed but never subtracted", [gated.opposers.map((o) => o.capperId), gated.score], [["C"], lb(8, 2)]);
   const ungated = find(build([...base, { id: "c", capper: "C", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: [3, 7] }]), "OVER")!;
   check("an ungated opposer (30%) is ignored", [ungated.opposers.length, ungated.score], [0, noOpp.score]);
   const opposerOnly = build([...base, { id: "c", capper: "C", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: [7, 3] }]);
   check("one opposer alone does not make a position of the other side", opposerOnly.map((p) => p.direction), ["OVER"]);
   // Opposers count by capper: two posts, one opposer.
   const twoPosts = find(build([...base, { id: "c1", capper: "C", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: [7, 3] }, { id: "c2", capper: "C", bet: { kind: "TOTAL", side: "Under", line: 46 }, lg: [7, 3] }]), "OVER")!;
-  check("an opposer with two posts is subtracted once", twoPosts.score, lb(8, 2) + lb(6, 4) - lb(7, 3));
+  check("an opposer with two posts is listed once, the score untouched", [twoPosts.opposers.map((o) => o.capperId), twoPosts.score], [["C"], lb(8, 2)]);
   // A capper who backed both directions has hedged: on neither side.
   const hedged = build([...base, { id: "h1", capper: "H", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: GOOD }, { id: "h2", capper: "H", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: GOOD }]);
   check("a capper on both directions is neither supporter nor opposer", [find(hedged, "OVER")!.supporters.map((s) => s.capperId).sort(), find(hedged, "OVER")!.opposers.length], [["A", "B"], 0]);
 }
 
 // ============================================================================
-// The N threshold, and the markets left out
+// The threshold (one is enough), and the markets left out
 // ============================================================================
 {
   const two: Spec[] = [
@@ -238,8 +242,8 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
     { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: GOOD },
   ];
   check("two supporters qualify", build(two).length, 1);
-  check("one supporter does not", build(two.slice(0, 1)).length, 0);
-  check("minSupporters is adjustable", [build(two.slice(0, 1), { minSupporters: 1 }).length, build(two, { minSupporters: 3 }).length], [1, 0]);
+  check("one supporter qualifies", build(two.slice(0, 1)).length, 1);
+  check("minSupporters is still adjustable", [build(two.slice(0, 1), { minSupporters: 2 }).length, build(two, { minSupporters: 3 }).length], [0, 0]);
 
   const other = (id: string, capper: string, bet: Bet): Spec => ({ id, capper, bet, lg: GOOD });
   for (const [name, bet] of [
@@ -250,7 +254,7 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
     ["regulation (3-way) moneylines", { kind: "REG_ML", team: "HOME" }],
   ] as [string, Bet][]) {
     check(`${name} never make a position`, build([other("x", "A", bet), other("y", "B", bet), other("z", "C", bet)]).length, 0);
-    check(`${name} do not count as a supporter beside a real post`, build([...two.slice(0, 1), other("x", "B", bet)]).length, 0);
+    check(`${name} do not count as a supporter beside a real post`, build([...two.slice(0, 1), other("x", "B", bet)]).map((p) => p.supporters.map((s) => s.capperId)), [["A"]]);
   }
 }
 {
@@ -259,7 +263,7 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
     { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -1.5 }, lg: GOOD, gameNumber: 1 },
     { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -1.5 }, lg: GOOD, gameNumber: null },
   ];
-  check("doubleheader: a pick with no game number is not used", build(specs, {}, { doubleheader: true }).length, 0);
+  check("doubleheader: a pick with no game number is not used", build(specs, {}, { doubleheader: true }).map((p) => p.supporters.map((s) => s.capperId)), [["A"]]);
   check("not a doubleheader: the same picks make a position", build(specs).length, 1);
   check("doubleheader: both picks with a game number do", build(specs.map((s) => ({ ...s, gameNumber: 1 })), {}, { doubleheader: true }).length, 1);
 }
@@ -274,6 +278,73 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
 }
 
 // ============================================================================
+// One strong capper per leg: the direction is the strongest single capper's
+// ============================================================================
+{
+  // A side by one capper and a total by a different capper: both positions (a box).
+  const ps = build([
+    { id: "s", capper: "S", bet: { kind: "SPREAD", team: "HOME", line: -4 }, lg: [12, 5] },
+    { id: "t", capper: "T", bet: { kind: "TOTAL", side: "Under", line: 234.5 }, lg: [9, 4] },
+  ]);
+  check("one capper on the side + a different capper on the total = a side and a total position", ps.map((p) => [p.family, p.direction, p.supporters.map((s) => s.capperId)]).sort(), [["SIDE", HOME, ["S"]], ["TOTAL", "UNDER", ["T"]]]);
+
+  // Over vs Under: the stronger single record wins, not the bigger crowd.
+  const crowd = build([
+    { id: "o1", capper: "O1", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [6, 4] },
+    { id: "o2", capper: "O2", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [6, 4] },
+    { id: "o3", capper: "O3", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [6, 4] },
+    { id: "u1", capper: "U1", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: [30, 10] },
+  ]);
+  check("Over vs Under: one 30-10 Under beats three 6-4 Overs; the Over yields no position", crowd.map((p) => [p.direction, p.supporters.map((s) => s.capperId), p.opposers.map((o) => o.capperId)]), [["UNDER", ["U1"], ["O1", "O2", "O3"]]]);
+  // Equal score: the larger sample wins. 6-4 and 12-8 are both 60%, and 12-8 scores higher anyway - so use
+  // equal records and decide on capper id.
+  const tie = build([
+    { id: "o", capper: "B", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [8, 2] },
+    { id: "u", capper: "A", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: [8, 2] },
+  ]);
+  check("Over vs Under with identical records: capper id decides (A's Under)", tie.map((p) => p.direction), ["UNDER"]);
+  const sample = build([
+    { id: "o", capper: "A", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [8, 2] },
+    { id: "u", capper: "B", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: [80, 20] },
+  ]);
+  check("Over vs Under at the same 80%: the larger sample (80-20) wins", sample.map((p) => p.direction), ["UNDER"]);
+
+  // Opposing sides resolve the same way.
+  const sides = build([
+    { id: "h1", capper: "H1", bet: { kind: "ML", team: "HOME" }, lg: [11, 9] },
+    { id: "h2", capper: "H2", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [11, 9] },
+    { id: "a1", capper: "A1", bet: { kind: "SPREAD", team: "AWAY", line: 3 }, lg: [40, 15] },
+  ]);
+  check("opposing sides: one 40-15 road backer beats two 11-9 home backers", sides.map((p) => [p.direction, p.supporters.map((s) => s.capperId)]), [[AWAY, ["A1"]]]);
+  check("...the losing side's cappers are its opposers", sides[0].opposers.map((o) => o.capperId).sort(), ["H1", "H2"]);
+
+  // Agreeing cappers are confidence: they never decide a direction, but they order equal positions.
+  const agreeing = build([
+    { id: "s1", capper: "S1", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [8, 2] },
+    { id: "s2", capper: "S2", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [8, 2] },
+    { id: "t1", capper: "T1", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [8, 2] },
+  ]);
+  check("equal strongest records: the position with more agreeing cappers ranks first", agreeing.map((p) => [p.family, p.supporters.length, p.score === lb(8, 2)]), [["SIDE", 2, true], ["TOTAL", 1, true]]);
+  check("agreeing cappers stay on the position, strongest first", agreeing[0].supporters.map((s) => s.capperId), ["S1", "S2"]);
+
+  // The anchor is the easiest line among the WINNING direction's cappers only.
+  const anchor = build([
+    { id: "u1", capper: "U1", bet: { kind: "TOTAL", side: "Under", line: 44.5 }, lg: [20, 5] },
+    { id: "u2", capper: "U2", bet: { kind: "TOTAL", side: "Under", line: 46.5 }, lg: [7, 3] },
+    { id: "o1", capper: "O1", bet: { kind: "TOTAL", side: "Over", line: 41.5 }, lg: [7, 3] },
+  ]);
+  check("anchor: the easiest Under among the Under cappers (46.5); the Over's 41.5 plays no part", [anchor[0].direction, anchor[0].anchorLine, anchor[0].postedLines], ["UNDER", 46.5, { hardest: 44.5, easiest: 46.5 }]);
+
+  // A hedged capper is still on neither side, even when they would be the strongest.
+  const hedged = build([
+    { id: "h1", capper: "H", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [90, 10] },
+    { id: "h2", capper: "H", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: [90, 10] },
+    { id: "u", capper: "U", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: [7, 3] },
+  ]);
+  check("a hedged capper is dropped: the next strongest decides", hedged.map((p) => [p.direction, p.supporters.map((s) => s.capperId), p.opposers.length]), [["UNDER", ["U"], 0]]);
+}
+
+// ============================================================================
 // The record hierarchy, the win-% lever and the soft sample-size adjustment
 // ============================================================================
 {
@@ -283,7 +354,7 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
     { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [6, 4], all: [90, 10] },
   ]), HOME)!;
   check("a stronger all-time record beats the league one", allTimeWins.supporters.map((s) => [s.record.source, s.record.wins, s.record.losses]), [["OVERALL", 90, 10], ["OVERALL", 90, 10]]);
-  check("the score is the chosen record's", allTimeWins.score, 2 * lb(90, 10));
+  check("the score is the chosen record's", allTimeWins.score, lb(90, 10));
   const leagueWins = find(build([
     { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [8, 0], all: [60, 40] },
     { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [1, 2], all: [60, 40] },
@@ -304,7 +375,7 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
     { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [7, 3] },
   ];
   check("gated on the chosen record: 50-40 passes 55", find(build(gateSpecs), HOME)?.supporters.map((s) => [s.capperId, s.record.source, s.record.wins]), [["A", "LEAGUE", 50], ["B", "LEAGUE", 7]]);
-  check("gated on the chosen record only: 50-40 fails 60, no fallback to 2-0", build(gateSpecs, { minWinPct: 60 }).length, 0);
+  check("gated on the chosen record only: 50-40 fails 60, no fallback to 2-0", build(gateSpecs, { minWinPct: 60 }).map((p) => p.supporters.map((s) => s.capperId)), [["B"]]);
   // The record's own market travels with it: A's best record is the moneyline (9-1), though the
   // hardest post (the endorsed line) is the spread, so recordMarket and postedMarket differ.
   const mixed = find(build([
@@ -337,10 +408,12 @@ check("the supporter threshold is a named constant at 2", HYBRID_MIN_SUPPORTERS,
   ];
   check("default gate 55: both qualify", build(specs).length, 1);
   check("gate 60 keeps a 60% record (>=)", build(specs, { minWinPct: 60 }).length, 1);
-  check("gate 65 drops the 60% capper: one supporter left", build(specs, { minWinPct: 65 }).length, 0);
+  check("gate 65 drops the 60% capper: the 70% one alone carries it", build(specs, { minWinPct: 65 }).map((p) => p.supporters.map((s) => s.capperId)), [["B"]]);
+  check("gate 75 drops both: no position", build(specs, { minWinPct: 75 }).length, 0);
   check("gate 70 drops the 60%", build([specs[1], { ...specs[1], id: "c", capper: "C" }], { minWinPct: 70 }).length, 1);
   check("an invalid lever is the 55 default", build(specs, { minWinPct: 63 }).length, 1);
-  check("gate 55 with a 52% record: not a supporter", build([specs[1], { id: "c", capper: "C", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [13, 12] }]).length, 0);
+  check("gate 55 with a 52% record: not a supporter", build([specs[1], { id: "c", capper: "C", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [13, 12] }]).map((p) => p.supporters.map((s) => s.capperId)), [["B"]]);
+  check("a below-gate capper alone never makes a position", build([{ id: "c", capper: "C", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [13, 12] }]).length, 0);
   check("gate 50 lets the 52% record in", build([specs[1], { id: "c", capper: "C", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [13, 12] }], { minWinPct: 50 }).length, 1);
 }
 {

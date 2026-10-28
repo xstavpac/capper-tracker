@@ -10,7 +10,8 @@
 //   b. no full-game side or total picks            (consensus.ts readPost)
 //   c. no side picks / no total picks
 //   d. the best capper on the side / total is below the win-rate gate
-//   e. too few cappers agree (HYBRID_MIN_SUPPORTERS per direction; hedged cappers set aside)
+//   e. no capper left on one side only: every gated capper took both sides (hedged) -
+//      or, with a minimum above HYBRID_MIN_SUPPORTERS (1), too few agree
 //   f. past the per-generation pricing limit       (ladderGameCount, hybrid.ts)
 //   g. FanDuel lines not available                 (the ladder notes)
 //   h. no usable FanDuel line                      (-600 floor / per-leg range)
@@ -66,7 +67,7 @@ export function skipReasonLabel(reason: HybridSkipReason, minSupporters = HYBRID
     case "below-gate":
       return "Best capper below your win rate";
     case "not-enough-supporters":
-      return `Fewer than ${minSupporters} cappers agree`;
+      return minSupporters <= 1 ? "Cappers took both sides" : `Fewer than ${minSupporters} cappers agree`;
     case "beyond-ladder-limit":
       return "Past the pricing limit";
     case "ladder-unavailable":

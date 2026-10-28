@@ -151,7 +151,7 @@ export function HybridControls({
       theme={{
         ...TINTS.neutral,
         title: "Parlay Generator",
-        subtitle: "A side and a total from one game, placed on forgiving lines by capper consensus.",
+        subtitle: "Your strongest capper on each side and total, placed on forgiving lines.",
         icon: <BoltIcon className="h-[17px] w-[17px] stroke-[2.2]" />,
       }}
       footer={undefined}
@@ -213,7 +213,7 @@ export function HybridControls({
             <IncludePicksChips value={gen.include} onToggle={gen.toggleInclude} hide={[...CATEGORIES_HIDDEN]} />
           </FilterRow>
           <SettingsBlock>
-            <SettingRow icon={<TrophyIcon className="h-5 w-5" />} label="Minimum capper win rate" note="Only cappers at or above this win rate count toward consensus.">
+            <SettingRow icon={<TrophyIcon className="h-5 w-5" />} label="Minimum capper win rate" note="Only cappers at or above this win rate can drive a leg.">
               <StepperControl
                 label="Minimum capper win rate"
                 value={form.minWinPct}
@@ -229,7 +229,7 @@ export function HybridControls({
       </Section>
 
       {/* 3 · Line flexibility */}
-      <Section n={3} title="Line Flexibility" description="Adjust how far from consensus we can go when building your parlay.">
+      <Section n={3} title="Line Flexibility" description="Adjust how far from your cappers' lines we can go when building your parlay.">
         <div className="space-y-1">
           <SettingRow
             soft
@@ -312,7 +312,7 @@ export function HybridControls({
 
 function Skeleton() {
   return (
-    <PanelShell theme={{ ...TINTS.neutral, title: "Building your hybrid…", subtitle: "Reading consensus and FanDuel's alternate lines", icon: <BoltIcon className="h-[17px] w-[17px] stroke-[2.2]" /> }} footer={undefined} busy wrapSubtitle>
+    <PanelShell theme={{ ...TINTS.neutral, title: "Building your hybrid…", subtitle: "Reading your cappers' picks and FanDuel's alternate lines", icon: <BoltIcon className="h-[17px] w-[17px] stroke-[2.2]" /> }} footer={undefined} busy wrapSubtitle>
       <div className="animate-pulse space-y-3" aria-hidden>
         <div className="h-6 w-4/5 rounded-md bg-muted" />
         <div className="h-9 w-40 rounded-md bg-muted" />
@@ -325,7 +325,7 @@ function Skeleton() {
 
 function Message({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <PanelShell theme={{ ...TINTS.neutral, title: "Consensus Hybrid", subtitle: title, icon: <BoltIcon className="h-[17px] w-[17px] stroke-[2.2]" /> }} footer={<p className="min-w-0 flex-1 truncate text-xs font-medium text-[#3A4152] dark:text-foreground/75">{FOOTER_NOTE}</p>} wrapSubtitle>
+    <PanelShell theme={{ ...TINTS.neutral, title: "Hybrid", subtitle: title, icon: <BoltIcon className="h-[17px] w-[17px] stroke-[2.2]" /> }} footer={<p className="min-w-0 flex-1 truncate text-xs font-medium text-[#3A4152] dark:text-foreground/75">{FOOTER_NOTE}</p>} wrapSubtitle>
       <div role="status" className="text-sm text-foreground">
         {children}
       </div>

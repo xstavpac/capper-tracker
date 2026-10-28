@@ -119,7 +119,12 @@ check("c: a side but no total", [reasonOf("G02"), textOf("G02")], ["no-total-pic
 check("c: a total but no side", [reasonOf("G03"), textOf("G03")], ["no-side-picks", "No full-game side picks (spread or moneyline)"]);
 check("d: the best total capper is below 55%, with the record", [reasonOf("G04"), textOf("G04")], ["below-gate", "Best Over capper 50% (8-8), needs 55%"]);
 check("d: the side is checked before the total", [reasonOf("G05"), textOf("G05")], ["below-gate", "Best Denver Broncos capper 47% (47-52), needs 55%"]);
-check("e: one capper at 55%+ on the total, two needed", [reasonOf("G06"), textOf("G06")], ["not-enough-supporters", "Only 1 capper at 55%+ on the total (Over); needs 2"]);
+check("one capper at 55%+ on the total is enough now: the game is a box (here past the pricing limit)", reasonOf("G06"), "beyond-ladder-limit");
+check("\"needs 2\" never appears under the one-capper rule", d.skipped.some((r) => r.text.includes("needs 2")), false);
+// With a minimum of 2 (still supported), the agreement gate reads as before.
+const two = explainSkips({ ...base, minSupporters: 2, positions: buildConsensusPositions({ games, ...snapshot }, { now: NOW, minSupporters: 2 }) });
+check("e (minimum 2): one capper at 55%+ on the total, two needed", [two.skipped.find((r) => r.eventId === "G06")!.reason, two.skipped.find((r) => r.eventId === "G06")!.text], ["not-enough-supporters", "Only 1 capper at 55%+ on the total (Over); needs 2"]);
+check("e (minimum 2): its label", two.counts.find((c) => c.reason === "not-enough-supporters")!.label, "Fewer than 2 cappers agree");
 check("e: a capper on both sides of the total is set aside", [reasonOf("G07"), textOf("G07")], ["not-enough-supporters", "Cappers at 55%+ took both sides of the total, so neither side counts"]);
 
 // ---- f-i: after consensus ----
@@ -139,14 +144,14 @@ check("one row per left-out game", d.skipped.length, 14);
 check(
   "counts by reason, in gate order, only those that occur",
   d.counts.map((c) => [c.reason, c.count]),
-  [["started", 1], ["outside-window", 2], ["no-eligible-picks", 1], ["no-side-picks", 1], ["no-total-picks", 1], ["below-gate", 2], ["not-enough-supporters", 2], ["beyond-ladder-limit", 1], ["ladder-unavailable", 1], ["no-usable-line", 1], ["not-used", 1]]
+  [["started", 1], ["outside-window", 2], ["no-eligible-picks", 1], ["no-side-picks", 1], ["no-total-picks", 1], ["below-gate", 2], ["not-enough-supporters", 1], ["beyond-ladder-limit", 2], ["ladder-unavailable", 1], ["no-usable-line", 1], ["not-used", 1]]
 );
-check("the counts' labels", d.counts.find((c) => c.reason === "not-enough-supporters")!.label, "Fewer than 2 cappers agree");
+check("the counts' labels: under the one-capper rule this reason is only hedging", d.counts.find((c) => c.reason === "not-enough-supporters")!.label, "Cappers took both sides");
 check("every reason has a label", SKIP_REASON_ORDER.every((r) => skipReasonLabel(r).length > 0), true);
 
 // ---- The gate and the Bet types follow the settings ----
 const at45 = explainSkips({ ...base, minWinPct: 45, positions: buildConsensusPositions({ games, ...snapshot }, { now: NOW, minWinPct: 45 }) });
-check("at 45%: the 50% Over capper now clears, so the reason moves on to agreement", [at45.skipped.find((r) => r.eventId === "G04")!.reason, at45.skipped.find((r) => r.eventId === "G04")!.text], ["not-enough-supporters", "Only 1 capper at 45%+ on the total (Over); needs 2"]);
+check("at 45%: the 50% Over capper now clears, so the game is a box (past the pricing limit here)", at45.skipped.find((r) => r.eventId === "G04")!.reason, "beyond-ladder-limit");
 const filtered = explainSkips({ ...base, filtered: true });
 check("Bet types filtering is named", filtered.skipped.find((r) => r.eventId === "G02")!.text, "No full-game total picks in your Bet types");
 check("pick counts come from before the Bet types filter", explainSkips({ ...base, pickCounts: { ...base.pickCounts, G02: 7 } }).skipped.find((r) => r.eventId === "G02")!.picks, 7);

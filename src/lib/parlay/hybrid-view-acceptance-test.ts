@@ -248,20 +248,20 @@ check(
   { kind: "no-fit", flags: { outsideTarget: true, crossGame: false, skippedGames: [], pricingGames: [], unavailableGames: [], stale: false, budgetLimited: false } }
 );
 check("state: cross-game fallback", (pageState(page({ response: response({ primary: hybrid({ structure: "cross-game", isEstimate: false }) }) })) as { flags: { crossGame: boolean } }).flags.crossGame, true);
-check("cross-game wording, two legs", crossGameText(hybrid({ structure: "cross-game" })), "No game has qualifying consensus on both a side and a total. Built from two different games, so the price is exact.");
+check("cross-game wording, two legs", crossGameText(hybrid({ structure: "cross-game" })), "No game has a qualifying capper on both a side and a total. Built from two different games, so the price is exact.");
 check("state: skipped games ride along with a result", (pageState(page({ response: response({}, [note("alt-lines-not-posted", "E9", "A @ B")]) })) as { flags: { skippedGames: string[] } }).flags.skippedGames, ["A @ B"]);
 check("state: stale primary", (pageState(page({ response: response({ primary: hybrid({ anyStale: true }) }) })) as { flags: { stale: boolean } }).flags.stale, true);
 check("state: no primary, alternate lines not posted", pageState(page({ response: response({ primary: null, note: "x" }, [note("alt-lines-not-posted"), note("alt-lines-not-posted", "E2", "C @ D")]) })), { kind: "alt-lines-not-posted", games: ["Chicago Bears @ Detroit Lions", "C @ D"] });
 check("state: no primary, another user pricing", pageState(page({ response: response({ primary: null }, [note("pricing-in-progress")]) })), { kind: "pricing-in-progress", games: ["Chicago Bears @ Detroit Lions"] });
 check("state: pricing wins over not-posted", pageState(page({ response: response({ primary: null }, [note("alt-lines-not-posted", "E2"), note("pricing-in-progress")]) })).kind, "pricing-in-progress");
-check("state: no candidate game at all is the plain no-box message", pageState(page({ response: response({ primary: null, note: "No consensus position has a usable FanDuel ladder." }, [], []) })), { kind: "no-box", message: "No game has qualifying consensus on both a side and a total.", detail: null });
-check("state: ladders asked for, none came back, no note: NOT guessed as unavailable", pageState(page({ response: response({ primary: null, note: "No consensus position has a usable FanDuel ladder." }) })).kind, "no-box");
+check("state: no candidate game at all is the plain no-box message", pageState(page({ response: response({ primary: null, note: "No qualifying pick has a usable FanDuel ladder." }, [], []) })), { kind: "no-box", message: "No game has a qualifying capper on both a side and a total.", detail: null });
+check("state: ladders asked for, none came back, no note: NOT guessed as unavailable", pageState(page({ response: response({ primary: null, note: "No qualifying pick has a usable FanDuel ladder." }) })).kind, "no-box");
 for (const cause of ["budget", "usage-gate", "api-failure", "no-api-key", "lookup-failed"] as const) {
   check("state: ladders-unavailable note (" + cause + ") is the unavailable state", pageState(page({ response: response({ primary: null, note: "x" }, [{ ...note("ladders-unavailable"), cause }]) })), { kind: "prices-unavailable", games: ["Chicago Bears @ Detroit Lions"] });
 }
 check("state: pricing wins over unavailable, unavailable over not-posted", [pageState(page({ response: response({ primary: null }, [note("ladders-unavailable", "E2"), note("pricing-in-progress")]) })).kind, pageState(page({ response: response({ primary: null }, [note("alt-lines-not-posted", "E2"), note("ladders-unavailable")]) })).kind], ["pricing-in-progress", "prices-unavailable"]);
 check("state: unavailable games ride along with a result", (pageState(page({ response: response({}, [note("ladders-unavailable", "E9", "A @ B")]) })) as { flags: { unavailableGames: string[] } }).flags.unavailableGames, ["A @ B"]);
-check("state: only one placeable game", pageState(page({ response: response({ primary: null, note: "Only one game has a placeable consensus position." }) })), { kind: "no-box", message: "No game has qualifying consensus on both a side and a total.", detail: "Only one game has a placeable consensus position." });
+check("state: only one placeable game", pageState(page({ response: response({ primary: null, note: "Only one game has a placeable pick." }) })), { kind: "no-box", message: "No game has a qualifying capper on both a side and a total.", detail: "Only one game has a placeable pick." });
 
 // ---- Alternates ----
 
