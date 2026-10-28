@@ -16,7 +16,7 @@ export type HybridGenerateSettings = {
   width: HybridWidth;
   perLegRange: { min: number; max: number } | null;
   maxLegs: number;
-  // The win-% gate (gate.ts, #327): 45-75 in steps of 5, default 55.
+  // The win-% gate (gate.ts, #327): 0-75 in steps of 5, default 55.
   minWinPct: number;
   // The box's legs (hybrid.ts): absent from the request is "2". "3" needs maxLegs >= 3.
   boxLegs: HybridBoxLegs;

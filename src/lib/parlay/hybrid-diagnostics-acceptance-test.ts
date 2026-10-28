@@ -152,6 +152,19 @@ check("every reason has a label", SKIP_REASON_ORDER.every((r) => skipReasonLabel
 // ---- The gate and the Bet types follow the settings ----
 const at45 = explainSkips({ ...base, minWinPct: 45, positions: buildConsensusPositions({ games, ...snapshot }, { now: NOW, minWinPct: 45 }) });
 check("at 45%: the 50% Over capper now clears, so the game is a box (past the pricing limit here)", at45.skipped.find((r) => r.eventId === "G04")!.reason, "beyond-ladder-limit");
+
+// ---- At 0% the strings read as "has a record", not "at 0%+" / "needs 0%" ----
+{
+  const at0 = explainSkips({ ...base, minWinPct: 0, positions: buildConsensusPositions({ games, ...snapshot }, { now: NOW, minWinPct: 0 }) });
+  check("at 0%: the 8-8 and 3-5 totals now clear, so G04 is past the pricing limit rather than below the gate", at0.skipped.find((r) => r.eventId === "G04")!.reason, "beyond-ladder-limit");
+  check("at 0%: a hedged capper reads as having a record, not \"at 0%+\"", at0.skipped.find((r) => r.eventId === "G07")!.text, "Cappers with a record took both sides of the total, so neither side counts");
+  check("at 55% the same row still says 55%+", textOf("G07"), "Cappers at 55%+ took both sides of the total, so neither side counts");
+  const noRecord = game("G15", [{ capper: "n1", kind: "HOME_SPREAD", w: 0, l: 0 }, good("n2", "OVER")]);
+  const only = (minWinPct: number) => explainSkips({ ...base, games: [noRecord], pickCounts: { G15: 2 }, snapshotSkipped: [], minWinPct, positions: buildConsensusPositions({ games: [noRecord], ...snapshot }, { now: NOW, minWinPct }) }).skipped[0];
+  check("at 0%: a side with only a 0-0 capper is below the gate, worded without a percentage", [only(0).reason, only(0).text], ["below-gate", "No side capper has a graded record in this bet yet"]);
+  check("at 55%: the same game keeps the old wording", only(55).text, "No side capper has a record in this bet yet (needs 55%)");
+  check("no text anywhere says \"0%+\" or \"needs 0%\"", [...at0.skipped, only(0)].some((r) => /0%+|needs 0%/.test(r.text)), false);
+}
 const filtered = explainSkips({ ...base, filtered: true });
 check("Bet types filtering is named", filtered.skipped.find((r) => r.eventId === "G02")!.text, "No full-game total picks in your Bet types");
 check("pick counts come from before the Bet types filter", explainSkips({ ...base, pickCounts: { ...base.pickCounts, G02: 7 } }).skipped.find((r) => r.eventId === "G02")!.picks, 7);

@@ -31,9 +31,10 @@ check("a 3-leg box with maxLegs 2 is rejected; auto with 2 is fine", [errorOf(pa
 const gate = (v: unknown) => errorOf(parse({}, { minWinPct: v }));
 const gateOf = (r: unknown) => (r as { settings: { minWinPct: number } }).settings.minWinPct;
 check("minWinPct absent or null: 55", [gateOf(parse()), gateOf(parse({}, { minWinPct: null }))], [55, 55]);
-check("45, 55, 60, 75 are allowed", [45, 55, 60, 75].map(gate), [null, null, null, null]);
+check("0, 45, 55, 60, 75 are allowed", [0, 45, 55, 60, 75].map(gate), [null, null, null, null, null]);
+check("0 is carried through as 0, never normalized to 55", gateOf(parse({}, { minWinPct: 0 })), 0);
 check("60 is carried through", gateOf(parse({}, { minWinPct: 60 })), 60);
-check("off the 45-75 / step-5 grid is rejected, not silently defaulted", [40, 80, 52, 55.5, "60", NaN].map((v) => gate(v) === "The win-% gate must be 45 to 75 in steps of 5."), [true, true, true, true, true, true]);
+check("off the 0-75 / step-5 grid is rejected, not silently defaulted", [-5, 80, 52, 55.5, "60", "0", NaN].map((v) => gate(v) === "The win-% gate must be 0 to 75 in steps of 5."), [true, true, true, true, true, true, true]);
 
 // ---- target range ----
 check("targetMin above targetMax is rejected, saying why", errorOf(parse({}, { targetMin: -110, targetMax: -140 })), "The target range is backwards: -110 is higher than -140. Put the longer price second (e.g. -140 to -110).");

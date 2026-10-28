@@ -30,7 +30,7 @@ import { formatGameTime, formatOdds, GeneratorResult } from "@/components/parlay
 import { reconcileMix, selectedCategories, toggleInclude, type IncludeSelection, type PickMix } from "@/lib/parlay/include-picks";
 import type { BetCategory } from "@/lib/parlay/bet-category";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
-import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, normalizeMinWinPct, readStoredGate, writeStoredGate } from "@/lib/parlay/gate";
+import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, gateRiskNote, normalizeMinWinPct, readStoredGate, writeStoredGate } from "@/lib/parlay/gate";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import { readStoredSwapScope, SWAP_SCOPE_DEFAULT, writeStoredSwapScope, type SwapScope } from "@/lib/parlay/swap-scope";
 import { slipLegFloor } from "@/lib/parlay/leg-cap";
@@ -422,7 +422,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
                 label="Minimum capper win rate"
                 note={
                   "Only cappers at or above this win rate on that bet type are used. Lower lets more in; higher is stricter." +
-                  (minWinPct < GATE_DEFAULT ? " Under " + GATE_DEFAULT + "% means more risk." : "")
+                  gateRiskNote(minWinPct)
                 }
               >
                 <StepperControl label="Minimum capper win rate" value={minWinPct} min={GATE_MIN} max={GATE_MAX} step={GATE_STEP} unit="%" onChange={setMinWinPct} />
