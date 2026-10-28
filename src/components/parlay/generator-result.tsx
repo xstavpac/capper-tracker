@@ -18,9 +18,9 @@ import Link from "next/link";
 import { getRecordColor, PICK_CATEGORY_LABELS, PICK_CATEGORY_MARKET_NOUN } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
-import { CONTROL, FOOTER_LINK, FOOTER_TEXT, PanelShell, TINTS } from "@/components/dashboard/panel-shell";
+import { CONTROL, PanelShell, TINTS } from "@/components/dashboard/panel-shell";
 import { WIN_PCT_TRACK, WinPctBar } from "@/components/dashboard/category-card";
-import { ClipboardIcon, ListChecksIcon } from "@/components/dashboard/cappers-icons";
+import { ClipboardIcon, ListChecksIcon, RefreshIcon } from "@/components/dashboard/cappers-icons";
 import { LABEL, Tabs, TextSegments } from "@/components/parlay/parlay-controls";
 import { SendToFanDuel } from "@/components/parlay/send-to-fanduel";
 import { combineOdds, formatAmericanOdds, formatDecimalOdds, formatPayout, hasUsablePrice, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
@@ -205,6 +205,11 @@ export function CombinedPrice({ legs, sameGame }: { legs: (CombineLeg & Partial<
   );
 }
 
+// The header's Regenerate: an accent-outlined pill exactly as tall as the "N legs" chip (26px), with an
+// invisible 10px of hit area above and below (from inside the 1px border) so the tap target is 44px.
+const REGENERATE =
+  "relative inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-brand-600 bg-white px-2.5 py-1 text-xs font-semibold text-brand-600 transition hover:bg-brand-600/[0.06] disabled:opacity-50 dark:border-brand-400 dark:bg-card dark:text-brand-400 dark:hover:bg-brand-400/10 after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-['']";
+
 type Tab = "PRIMARY" | "AUTO_HEDGE" | "CONTRARIAN";
 const sendLegs = (picks: ExpanderPick[]) => picks.map((p) => ({ pickId: p.pickId, betDetail: p.betDetail, gameId: p.gameId, gameLabel: p.gameLabel }));
 
@@ -238,6 +243,7 @@ export function GeneratorResult({
   const contrarian = parlay.contrarian[swapScope];
   const swap = tab === "AUTO_HEDGE" ? hedge : tab === "CONTRARIAN" ? contrarian : null;
   const shownPicks = swap ? swap.legs.map((l) => (l.swap ?? l.original).pick) : legs.map((l) => l.pick);
+  const regenerateHint = noAlternative ? "No other parlays of comparable strength" : "Another parlay of comparable strength";
   const notes = [
     ...parlay.dropped.filter((d) => d.reason === "left_out").map((d) => `${d.label}: ${d.note}`),
     ...parlay.shortfall,
@@ -258,18 +264,32 @@ export function GeneratorResult({
           ` · ${parlay.fromSlip} from your picks, ${parlay.generated} generated`,
         icon: <ListChecksIcon className="h-[17px] w-[17px] stroke-[2.2]" />,
       }}
-      control={<span className={CONTROL + " shrink-0 px-2.5 py-1 " + TINTS.neutral.control}>{legs.length} legs</span>}
-      footer={
-        <>
-          <p className={FOOTER_TEXT}>{noAlternative ? "No other parlays of comparable strength" : "Another parlay of comparable strength"}</p>
-          <button type="button" onClick={onRegenerate} disabled={busy} className={FOOTER_LINK + " px-1 py-2.5 disabled:opacity-50 " + TINTS.neutral.accent}>
+      control={
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={onRegenerate}
+            disabled={busy}
+            title={regenerateHint}
+            aria-label={"Regenerate: " + regenerateHint}
+            className={REGENERATE}
+          >
+            <RefreshIcon className="h-3.5 w-3.5 stroke-[2.4]" />
             {busy ? "Regenerating…" : "Regenerate"}
           </button>
-        </>
+          <span className={CONTROL + " shrink-0 px-2.5 py-1 " + TINTS.neutral.control}>{legs.length} legs</span>
+        </div>
       }
+      footer={null}
       busy={busy}
       wrapSubtitle
+      wrapControl
     >
+      {noAlternative && (
+        <p role="status" className="mb-2 text-xs font-medium text-muted-foreground">
+          No other parlays of comparable strength
+        </p>
+      )}
       <Tabs<Tab>
         label="Parlay variant"
         value={tab}
