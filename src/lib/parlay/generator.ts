@@ -73,7 +73,8 @@
 // weighted toward the stronger, and legs used in the last few parlays weigh
 // less. Nothing outside the gate is ever drawn. Slip picks and targets are the
 // same in every build.
-import type { CapperLeagueRecords } from "@/server/data/picks";
+import type { CapperLeagueRecords, PropMarketRecord } from "@/server/data/picks";
+import type { PropMarketKey } from "@/lib/prop-market-key";
 import { categoryRecordKey } from "@/lib/record-keys";
 import type { CategoryBreakdownItem } from "@/server/data/stats";
 import type { GeneratorGame, GeneratorPick, SwapMode } from "@/lib/parlay/auto-generate";
@@ -134,6 +135,11 @@ export type GeneratorSnapshot = {
   // Every candidate's all-leagues market record: recordForGate's all-time
   // record when a pick has no card, and LEGACY_RULES' gate.
   categoryRecords: Record<string, CategoryBreakdownItem | null>;
+  // Every candidate player prop's per-market record (propMarketRecordKey):
+  // what recordForGate gates and ranks a prop with a market key on, in place
+  // of its category's. Optional: a snapshot built before it existed has none,
+  // and its props then have no record.
+  propMarketRecords?: Record<string, PropMarketRecord | null>;
 };
 
 // Which record gates and ranks a generated leg and a Hedge / Contrarian
@@ -207,6 +213,9 @@ export type EngineLeg = {
   wilsonLowerBound: number | null;
   // True when its game has another leg in this parlay (an SGP).
   sameGame: boolean;
+  // A generated player prop gated on its per-market record (recordForGate):
+  // which market, so the record is labelled with it. Absent otherwise.
+  propMarket?: PropMarketKey;
 };
 
 export type DroppedSlipPick = {
@@ -231,6 +240,8 @@ export type EngineSwapLeg = {
     // Which record it was gated on (recordForGate). Absent under LEGACY_RULES:
     // the all-leagues market record.
     basis?: "LEAGUE" | "OVERALL";
+    // As EngineLeg.propMarket.
+    propMarket?: PropMarketKey;
   } | null;
   // OUT_OF_SCOPE: the Swap setting leaves this leg alone (a slip pick under
   // Suggested, a generated leg under Your picks). NOT_MAJORITY: LEGACY_RULES only.
@@ -345,6 +356,7 @@ type Candidate = {
   game: GeneratorGame;
   record: LegRecord;
   basis: "LEAGUE" | "OVERALL" | "MARKET";
+  propMarket?: PropMarketKey;
   wilsonLowerBound: number;
   category: BetCategoryResult;
 };
@@ -370,13 +382,13 @@ function gateRecord(
   pick: GeneratorPick,
   snapshot: GeneratorSnapshot,
   rules: GeneratorRules
-): { record: { wins: number; losses: number; winPct: number }; basis: Candidate["basis"] } | null {
+): { record: { wins: number; losses: number; winPct: number }; basis: Candidate["basis"]; propMarket?: PropMarketKey } | null {
   if (rules.recordScope === "ALL_TIME") {
     const record = marketRecord(pick, snapshot.categoryRecords);
     return record ? { record, basis: "MARKET" } : null;
   }
-  const record = recordForGate(pick, snapshot.leagueRecords, snapshot.categoryRecords, rules.z);
-  return record ? { record, basis: record.source } : null;
+  const record = recordForGate(pick, snapshot.leagueRecords, snapshot.categoryRecords, rules.z, snapshot.propMarketRecords);
+  return record ? { record, basis: record.source, ...(record.propMarket ? { propMarket: record.propMarket } : {}) } : null;
 }
 
 // The gate a build applies: the setting, or 55 under LEGACY_RULES (which is the
@@ -523,10 +535,10 @@ export function buildGeneratedParlay(
       if (allSlipIds.has(pick.pickId) || !keepsPick(include, pick)) continue;
       const gated = gateRecord(pick, snapshot, rules);
       if (!gated || !qualifies(gated.record, gate)) continue;
-      const { record, basis } = gated;
+      const { record, basis, propMarket } = gated;
       // Never against a slip pick on its game.
       if (onGame.some((s) => !(sureOfGame(game, s) && sureOfGame(game, pick)) || sameGameConflict(asCandidate(pick), asCandidate(s)) !== null)) continue;
-      list.push({ pick, game, record: toLegRecord(record), basis, wilsonLowerBound: wilsonLowerBound(record.wins, record.losses, rules.z), category: betCategory(pick) });
+      list.push({ pick, game, record: toLegRecord(record), basis, ...(propMarket ? { propMarket } : {}), wilsonLowerBound: wilsonLowerBound(record.wins, record.losses, rules.z), category: betCategory(pick) });
     }
     list.sort(byWilson);
     candidatesOf.set(game.gameId, list);
@@ -668,6 +680,7 @@ export function buildGeneratedParlay(
         basis: c.basis,
         wilsonLowerBound: c.wilsonLowerBound,
         sameGame: false,
+        ...(c.propMarket ? { propMarket: c.propMarket } : {}),
       })
     ),
   ];
@@ -797,7 +810,7 @@ function buildSwap(
     const primary = toParlayLeg(leg.pick);
     const pickById = new Map(gamePicks.map((p) => [p.pickId, p]));
     const sameGame = gamePicks.map(toParlayLeg);
-    let best: { leg: { pickId: string }; rule: Rule; record: LegRecord; wilsonLowerBound: number; basis?: "LEAGUE" | "OVERALL" } | undefined;
+    let best: { leg: { pickId: string }; rule: Rule; record: LegRecord; wilsonLowerBound: number; basis?: "LEAGUE" | "OVERALL"; propMarket?: PropMarketKey } | undefined;
     if (rules.recordScope === "ALL_TIME") {
       best = rankCandidatesBy(primary, others.map(toParlayLeg), mode, snapshot.categoryRecords, (l) => pickById.get(l.pickId)?.category ?? null, sameGame)[0];
     } else {
@@ -805,10 +818,17 @@ function buildSwap(
         primary,
         others.map(toParlayLeg),
         mode,
-        (l) => recordForGate(pickById.get(l.pickId)!, snapshot.leagueRecords, snapshot.categoryRecords, rules.z),
+        (l) => recordForGate(pickById.get(l.pickId)!, snapshot.leagueRecords, snapshot.categoryRecords, rules.z, snapshot.propMarketRecords),
         { contrarianHeadcount: rules.contrarianHeadcount, sameGamePicks: sameGame, z: rules.z, minWinPct: gate }
       )[0];
-      best = top && { leg: top.leg, rule: top.rule, record: top.record, wilsonLowerBound: top.wilsonLowerBound, basis: top.gateRecord.source };
+      best = top && {
+        leg: top.leg,
+        rule: top.rule,
+        record: top.record,
+        wilsonLowerBound: top.wilsonLowerBound,
+        basis: top.gateRecord.source,
+        ...(top.gateRecord.propMarket ? { propMarket: top.gateRecord.propMarket } : {}),
+      };
     }
     const bestPick = best ? others.find((p) => p.pickId === best!.leg.pickId) : undefined;
     if (!best || !bestPick) {
@@ -817,8 +837,12 @@ function buildSwap(
     }
     inParlay.add(bestPick.pickId);
     current.set(leg.pick.pickId, bestPick);
-    const { basis, rule, record } = best;
-    return { original: leg, swap: { pick: bestPick, rule, record, wilsonLowerBound: best.wilsonLowerBound, ...(basis ? { basis } : {}) }, unchangedReason: null };
+    const { basis, rule, record, propMarket } = best;
+    return {
+      original: leg,
+      swap: { pick: bestPick, rule, record, wilsonLowerBound: best.wilsonLowerBound, ...(basis ? { basis } : {}), ...(propMarket ? { propMarket } : {}) },
+      unchangedReason: null,
+    };
   });
   return { mode, legs: out, swapCount: out.filter((l) => l.swap !== null).length };
 }

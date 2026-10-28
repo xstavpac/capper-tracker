@@ -27,6 +27,7 @@ import { combineOdds, formatAmericanOdds, formatDecimalOdds, formatPayout, hasUs
 import { isGameLive, LIVE_NOTE, type GameClock } from "@/lib/parlay/game-over";
 import type { EngineLeg, EngineSwap, EngineSwapLeg, GeneratedParlay, LegRecord } from "@/lib/parlay/generator";
 import type { RankRecordSource } from "@/lib/parlay/pick-record";
+import { PROP_MARKET_LABELS, type PropMarketKey } from "@/lib/prop-market-key";
 import { SWAP_SCOPE_OPTIONS, type SwapScope } from "@/lib/parlay/swap-scope";
 import { noAlternativeText, pickSummary, regenerateState, unusedLine, unusedPicks, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
 
@@ -38,11 +39,13 @@ const TAG = "ml-1.5 rounded-full px-1.5 py-px text-[10px] font-bold";
 
 // "62% (106–65)" plus what the record is: "· NFL favorite spread" (this
 // league, this market), "· all leagues favorite spread" (this market, every
-// league) or "· last 20 picks" (a slip pick's card, nothing better).
-export function recordText(record: LegRecord | null, basis: EngineLeg["basis"], pick: Pick<ExpanderPick, "category" | "leagueName">): string {
+// league) or "· last 20 picks" (a slip pick's card, nothing better). A
+// generated prop gated on its per-market record (`propMarket`) names that
+// market - "· NBA points" - not its category's "player prop".
+export function recordText(record: LegRecord | null, basis: EngineLeg["basis"], pick: Pick<ExpanderPick, "category" | "leagueName">, propMarket?: PropMarketKey): string {
   if (!record) return "No record yet";
   const base = `${Math.round(record.winPct)}% (${record.wins}–${record.losses})`;
-  const market = pick.category ? PICK_CATEGORY_MARKET_NOUN[pick.category] : "this market";
+  const market = propMarket ? PROP_MARKET_LABELS[propMarket] : pick.category ? PICK_CATEGORY_MARKET_NOUN[pick.category] : "this market";
   if (basis === "LEAGUE") return `${base} · ${pick.leagueName} ${market}`;
   if (basis === "OVERALL" || basis === "MARKET") return `${base} · all leagues ${market}`;
   if (basis === "LAST20") return `${base} · last 20 picks`;
@@ -117,7 +120,7 @@ function SwapLegRow({ n, leg, mode }: { n: number; leg: EngineSwapLeg; mode: Eng
           ? "your pick's side isn't the majority of your cappers"
           : SWAP_COPY[mode].noAlternate;
     return (
-      <LegRow n={n} pick={original.pick} record={{ text: recordText(original.record, original.basis, original.pick), winPct: original.record?.winPct ?? null }} mine={original.source === "SLIP"} sgp={original.sameGame}>
+      <LegRow n={n} pick={original.pick} record={{ text: recordText(original.record, original.basis, original.pick, original.propMarket), winPct: original.record?.winPct ?? null }} mine={original.source === "SLIP"} sgp={original.sameGame}>
         <p className={NOTE}>
           <span className="rounded-full bg-muted px-1.5 py-0.5 font-semibold">Unchanged</span> {reason}
         </p>
@@ -126,7 +129,7 @@ function SwapLegRow({ n, leg, mode }: { n: number; leg: EngineSwapLeg; mode: Eng
   }
   const { swap } = leg;
   return (
-    <LegRow n={n} pick={swap.pick} record={{ text: recordText(swap.record, swap.basis ?? "MARKET", swap.pick), winPct: swap.record.winPct }} mine={false} sgp={original.sameGame} swappedBy={SWAP_COPY[mode].title}>
+    <LegRow n={n} pick={swap.pick} record={{ text: recordText(swap.record, swap.basis ?? "MARKET", swap.pick, swap.propMarket), winPct: swap.record.winPct }} mine={false} sgp={original.sameGame} swappedBy={SWAP_COPY[mode].title}>
       <p className={NOTE}>
         Replaces {original.source === "SLIP" && "your pick "}
         <span className="line-through">{original.pick.betDetail}</span> · {original.pick.capperName}
@@ -361,7 +364,7 @@ export function GeneratorResult({
                   key={l.pick.pickId}
                   n={i + 1}
                   pick={l.pick}
-                  record={{ text: recordText(l.record, l.basis, l.pick), winPct: l.record?.winPct ?? null }}
+                  record={{ text: recordText(l.record, l.basis, l.pick, l.propMarket), winPct: l.record?.winPct ?? null }}
                   mine={l.source === "SLIP"}
                   sgp={l.sameGame}
                 />

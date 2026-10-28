@@ -13,14 +13,21 @@ import {
   type LeagueRecordColumn,
   type PickCategoryKey,
 } from "@/server/data/stats";
-import { queryCapperRecordBundle, type CardRequest, type CategoryRequest } from "@/server/data/picks-by-capper-aggregates";
+import {
+  queryCapperRecordBundle,
+  type CardRequest,
+  type CategoryRequest,
+  type PropMarketRequest,
+  type PropMarketTotalsRow,
+} from "@/server/data/picks-by-capper-aggregates";
 import { LIVE_SPORTS, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
 import { clearGradeFailures } from "@/server/data/grading-failures";
 import { getCapperRoster } from "@/server/data/capper-roster";
 import { getSportIdByNameInsensitive } from "@/server/data/sport-ids";
 import type { GameCardStreak } from "@/lib/game-card-record-line";
 import { easternDateRange } from "@/lib/dates";
-import { categoryRecordKey, leagueRecordKey } from "@/lib/record-keys";
+import { categoryRecordKey, leagueRecordKey, propMarketRecordKey } from "@/lib/record-keys";
+import { propMarketOf, propSportFamily, type PropMarketKey } from "@/lib/prop-market-key";
 import { nrfiSide, betScope, periodLabel } from "@/lib/bet-line";
 import {
   findMatchingGameResult,
@@ -603,7 +610,7 @@ export async function getCapperCategoryRecord(
 }
 
 // Defined in lib/record-keys.ts (client-safe); re-exported here for every existing import.
-export { categoryRecordKey, leagueRecordKey };
+export { categoryRecordKey, leagueRecordKey, propMarketRecordKey };
 
 export type CapperLeagueRecords = {
   // keyed by leagueRecordKey(capperId, leagueSport, category)
@@ -634,14 +641,57 @@ export type CapperRecordBundleRequest = {
   leagueEntries: { capperId: string; leagueSport: string; category: PickCategoryKey | null }[];
   // Every (capper, category) pair getCapperCategoryRecords needs a record for.
   categoryPairs: { capperId: string; category: PickCategoryKey }[];
+  // Every (capper, league, prop market) a per-market prop record is wanted for
+  // (getCapperPropMarketRecords). Absent or [] for every caller that doesn't.
+  propMarketEntries?: PropMarketEntry[];
+  // Per-market prop records count only games before this (default: now).
+  asOf?: Date;
 };
+
+export type PropMarketEntry = { capperId: string; leagueSport: string; propMarketKey: PropMarketKey };
+
+// A capper's record on one prop market: in `leagueSport` alone, and all-time
+// across every league of the market's sport family (prop-market-key.ts).
+export type PropMarketRecord = { key: PropMarketKey; league: LeagueRecordColumn; allTime: LeagueRecordColumn };
 
 export type CapperRecordBundle = {
   leagueRecords: CapperLeagueRecords;
   categoryRecords: Record<string, CategoryBreakdownItem | null>;
+  // keyed by propMarketRecordKey(capperId, leagueSport, key); null when the
+  // capper has no decided pick on the market anywhere in its family.
+  propMarketRecords: Record<string, PropMarketRecord | null>;
 };
 
-const EMPTY_BUNDLE: CapperRecordBundle = { leagueRecords: { records: {}, streaks: {}, last20: {} }, categoryRecords: {} };
+const EMPTY_BUNDLE: CapperRecordBundle = { leagueRecords: { records: {}, streaks: {}, last20: {} }, categoryRecords: {}, propMarketRecords: {} };
+
+// The per-market records for `entries` from propRec's raw (capper, sport,
+// propMarket) totals: in-league is the entry's own sport's row, all-time the sum
+// of the rows whose sport is in the key's family. Pure - shared with the
+// generator replay harness, which builds the same totals from its own rows.
+export function propMarketRecordsFromTotals(entries: PropMarketEntry[], rows: PropMarketTotalsRow[]): Record<string, PropMarketRecord | null> {
+  const out: Record<string, PropMarketRecord | null> = {};
+  for (const e of entries) {
+    const family = e.propMarketKey.slice(0, e.propMarketKey.indexOf(":"));
+    const market = propMarketOf(e.propMarketKey);
+    const all = [0, 0, 0];
+    const lg = [0, 0, 0];
+    for (const r of rows) {
+      if (r.cid !== e.capperId || r.mkt !== market || propSportFamily(r.sport) !== family) continue;
+      all[0] += r.wins;
+      all[1] += r.losses;
+      all[2] += r.pushes;
+      if (r.sport.toUpperCase() === e.leagueSport.toUpperCase()) {
+        lg[0] += r.wins;
+        lg[1] += r.losses;
+        lg[2] += r.pushes;
+      }
+    }
+    const allTime = toLeagueRecordColumn(all[0], all[1], all[2]);
+    out[propMarketRecordKey(e.capperId, e.leagueSport, e.propMarketKey)] =
+      allTime.count > 0 ? { key: e.propMarketKey, league: toLeagueRecordColumn(lg[0], lg[1], lg[2]), allTime } : null;
+  }
+  return out;
+}
 
 // The one query behind getCapperLeagueRecords / getCapperCategoryRecords (see
 // docs/design/picks-by-capper-egress.md) - a single database round trip (via
@@ -665,7 +715,10 @@ export async function getCapperRecordBundle(userId: string, req: CapperRecordBun
   // categoryPairs-only capper still gets scanned (it's in the SQL `ids` set
   // below) but never appears in the exposed streaks/last20 maps.
   const leagueCapperIds = Array.from(new Set(req.leagueEntries.map((e) => e.capperId)));
-  const capperIds = Array.from(new Set([...leagueCapperIds, ...req.categoryPairs.map((p) => p.capperId)]));
+  const propEntries = req.propMarketEntries ?? [];
+  const capperIds = Array.from(
+    new Set([...leagueCapperIds, ...req.categoryPairs.map((p) => p.capperId), ...propEntries.map((e) => e.capperId)])
+  );
   if (capperIds.length === 0) return EMPTY_BUNDLE;
 
   // Output keys: every non-null-category leagueEntries triple / every
@@ -702,12 +755,21 @@ export async function getCapperRecordBundle(userId: string, req: CapperRecordBun
   const catReq: CategoryRequest[] = Array.from(catOutputKeys.values())
     .filter((c) => allCategoryKeySet.has(c.category))
     .map((c) => ({ capperId: c.capperId, category: c.category }));
+  // One (capper, propMarket) pair per market, whatever the entry's league: the
+  // SQL returns every sport's row, and the family is applied in JS.
+  const propReqByKey = new Map<string, PropMarketRequest>();
+  for (const e of propEntries) {
+    const propMarket = propMarketOf(e.propMarketKey);
+    propReqByKey.set(e.capperId + "|" + propMarket, { capperId: e.capperId, propMarket });
+  }
 
   const sql = await queryCapperRecordBundle({
     userId,
     capperIds,
     cardReq,
     catReq,
+    propReq: Array.from(propReqByKey.values()),
+    asOf: req.asOf ?? new Date(),
     last20Window: LEAGUE_RECORD_LAST_N,
   });
 
@@ -761,7 +823,28 @@ export async function getCapperRecordBundle(userId: string, req: CapperRecordBun
     last20[capperId] = l && l.decided >= LEAGUE_RECORD_LAST_N ? toLeagueRecordColumn(l.wins, l.losses, l.pushes) : null;
   }
 
-  return { leagueRecords: { records, streaks, last20 }, categoryRecords };
+  return {
+    leagueRecords: { records, streaks, last20 },
+    categoryRecords,
+    propMarketRecords: propMarketRecordsFromTotals(propEntries, sql.propRec),
+  };
+}
+
+// A capper's record on one player-prop market, in-league and all-time (that
+// market's sport family - prop-market-key.ts), for many (capper, league, market)
+// entries at once. The per-market split of what the category records blend into
+// TD_PROP "Player Props"; that category is untouched and every record surface
+// still shows it. Same one bundle statement as every other record read here -
+// a caller that also needs cards or category records should send everything in
+// one getCapperRecordBundle call instead. `asOf` keeps games from it on out of
+// the counts (default now).
+export async function getCapperPropMarketRecords(
+  userId: string,
+  entries: PropMarketEntry[],
+  opts: { asOf?: Date } = {}
+): Promise<Record<string, PropMarketRecord | null>> {
+  const { propMarketRecords } = await getCapperRecordBundle(userId, { leagueEntries: [], categoryPairs: [], propMarketEntries: entries, asOf: opts.asOf });
+  return propMarketRecords;
 }
 
 // Batched form of getCapperCategoryRecord for callers that need many

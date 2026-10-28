@@ -142,3 +142,15 @@ revisit a queued/batched background job only once the `grade-picks-run` metrics
 show the pending backlog actually approaching that ceiling - not before.
 Eventual queue recommendation (Vercel Queues, push mode) is written up in
 `docs/c4-grading-throughput.md`.
+
+### Parlay Generator record bundle over-fetch (flagged in C1, 2026-10-28)
+
+Left alone in the per-market prop records PR (C1), by decision:
+
+- (a) `loadGeneratorSnapshot` (`generator-snapshot.ts`) asks for every candidate's
+  card (`leagueEntries`) AND its all-leagues category record (`categoryPairs`).
+  The card's `overall` column and the `catrec` row carry the same totals, so the
+  all-time numbers come back twice for every candidate.
+- (b) `streaks` and `last20` are computed and returned for every candidate's
+  capper, but the generator only reads `last20`, and only for slip picks
+  (`bestAvailableRecord`); it never reads `streaks`.

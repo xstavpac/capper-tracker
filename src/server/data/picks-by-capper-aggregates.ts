@@ -16,6 +16,12 @@
 //     same shape as queryCurrentStreaks in capper-list-aggregates.ts, window = ALL).
 //   - "last20": per capper, the record over their most recent LEAGUE_RECORD_LAST_N
 //     decided picks (any category, any league).
+//   - "propRec": per requested (capperId, propMarket) pair, the win/loss/push counts
+//     of that capper's picks on that stored Pick.propMarket, one row per sport they
+//     have any in, counting only games before `asOf`. Raw columns only - the sport
+//     family that turns them into a per-market record (lib/prop-market-key.ts) is
+//     applied in JS by getCapperRecordBundle. The asOf filter is on this output
+//     alone; every other output counts every decided pick, as before.
 //
 // This file is only the SQL layer - it returns raw totals, never winPct/labels/null-
 // collapsing. picks.ts's getCapperRecordBundle applies those with the SAME shared
@@ -33,6 +39,7 @@ import { ORDER_DESC } from "@/server/data/capper-list-aggregates";
 
 export type CardRequest = { capperId: string; leagueSport: string; category: string };
 export type CategoryRequest = { capperId: string; category: string };
+export type PropMarketRequest = { capperId: string; propMarket: string };
 
 export type CardTotalsRow = {
   cid: string;
@@ -58,28 +65,33 @@ export type StreakTotalsRow = { cid: string; type: "WIN" | "LOSS"; count: number
 
 export type Last20TotalsRow = { cid: string; decided: number; wins: number; losses: number; pushes: number };
 
+export type PropMarketTotalsRow = { cid: string; sport: string; mkt: string; wins: number; losses: number; pushes: number };
+
 export type CapperRecordBundleTotals = {
   cards: CardTotalsRow[];
   catrec: CategoryTotalsRow[];
   streaks: StreakTotalsRow[];
   last20: Last20TotalsRow[];
+  propRec: PropMarketTotalsRow[];
 };
 
-const EMPTY_TOTALS: CapperRecordBundleTotals = { cards: [], catrec: [], streaks: [], last20: [] };
+const EMPTY_TOTALS: CapperRecordBundleTotals = { cards: [], catrec: [], streaks: [], last20: [], propRec: [] };
 
 export type CapperRecordBundleParams = {
   userId: string;
   capperIds: string[];
   cardReq: CardRequest[]; // deduped by the caller
   catReq: CategoryRequest[]; // deduped by the caller
+  propReq: PropMarketRequest[]; // deduped by the caller
+  asOf: Date; // propRec counts games before this only
   last20Window: number; // LEAGUE_RECORD_LAST_N
 };
 
 // The query itself, factored out so a caller can wrap it in EXPLAIN (see
 // scripts/t2-harness's EXPLAIN check, design doc §7/Q7) without duplicating
 // the SQL text. `params.capperIds` must be non-empty (queryCapperRecordBundle
-// guards the empty case before calling this).
-function buildBundleQuery(params: CapperRecordBundleParams): Prisma.Sql {
+// guards the empty case before calling this). Exported for the SQL-shape test.
+export function buildBundleQuery(params: CapperRecordBundleParams): Prisma.Sql {
   // VALUES can't be empty - when a caller wants only cards (or only category
   // records), the other request list is []. A zero-row typed SELECT keeps the
   // CTE's column shape without a conditional branch in the SQL string itself.
@@ -95,11 +107,17 @@ function buildBundleQuery(params: CapperRecordBundleParams): Prisma.Sql {
       ? Prisma.sql`VALUES ${Prisma.join(params.catReq.map((c) => Prisma.sql`(${c.capperId}::text, ${c.category}::text)`))}`
       : Prisma.sql`SELECT NULL::text, NULL::text WHERE FALSE`;
 
+  const propReqRows =
+    params.propReq.length > 0
+      ? Prisma.sql`VALUES ${Prisma.join(params.propReq.map((c) => Prisma.sql`(${c.capperId}::text, ${c.propMarket}::text)`))}`
+      : Prisma.sql`SELECT NULL::text, NULL::text WHERE FALSE`;
+
   return Prisma.sql`
     WITH
       base AS MATERIALIZED (
         SELECT p."capperId" AS "capperId", s.name AS sport, p.category, p.status,
-               p."gameTime" AS "gameTime", p."createdAt" AS "createdAt", p.id AS id
+               p."gameTime" AS "gameTime", p."createdAt" AS "createdAt", p.id AS id,
+               p."propMarket"::text AS "propMarket"
         FROM picks p
         JOIN sports s ON s.id = p."sportId"
         WHERE p."userId" = ${params.userId}
@@ -172,12 +190,27 @@ function buildBundleQuery(params: CapperRecordBundleParams): Prisma.Sql {
           (count(*) FILTER (WHERE status = 'LOSS' AND rn <= ${params.last20Window}))::int AS losses,
           (count(*) FILTER (WHERE status = 'PUSH' AND rn <= ${params.last20Window}))::int AS pushes
         FROM r GROUP BY cid
+      ),
+
+      -- Per (capper, sport, propMarket): only the requested pairs, only games
+      -- before asOf. An inner join, so a pair with no decided pick returns no row.
+      "propReq"(cid, mkt) AS (${propReqRows}),
+      "propRec" AS (
+        SELECT b."capperId" AS cid, b.sport, b."propMarket" AS mkt,
+          (count(*) FILTER (WHERE b.status = 'WIN'))::int  AS wins,
+          (count(*) FILTER (WHERE b.status = 'LOSS'))::int AS losses,
+          (count(*) FILTER (WHERE b.status = 'PUSH'))::int AS pushes
+        FROM "propReq" q
+        JOIN base b ON b."capperId" = q.cid AND b."propMarket" = q.mkt
+        WHERE b."gameTime" < ${params.asOf}
+        GROUP BY b."capperId", b.sport, b."propMarket"
       )
     SELECT jsonb_build_object(
       'cards',   COALESCE((SELECT jsonb_agg(to_jsonb(cards))   FROM cards),   '[]'::jsonb),
       'catrec',  COALESCE((SELECT jsonb_agg(to_jsonb(catrec))  FROM catrec),  '[]'::jsonb),
       'streaks', COALESCE((SELECT jsonb_agg(to_jsonb(streaks)) FROM streaks), '[]'::jsonb),
-      'last20',  COALESCE((SELECT jsonb_agg(to_jsonb(last20))  FROM last20),  '[]'::jsonb)
+      'last20',  COALESCE((SELECT jsonb_agg(to_jsonb(last20))  FROM last20),  '[]'::jsonb),
+      'propRec', COALESCE((SELECT jsonb_agg(to_jsonb("propRec")) FROM "propRec"), '[]'::jsonb)
     ) AS out
   `;
 }
@@ -199,4 +232,15 @@ export async function explainCapperRecordBundle(params: CapperRecordBundleParams
     Prisma.sql`EXPLAIN (ANALYZE, BUFFERS) ${buildBundleQuery(params)}`
   );
   return rows.map((r) => r["QUERY PLAN"]).join("\n");
+}
+
+// The size of the one result row queryCapperRecordBundle receives, measured in
+// the database (octet_length of the jsonb as text): `total` with propRec, and
+// `withoutPropRec` - the same row with the propRec key removed, i.e. the shape
+// the statement returned before propRec existed. Script-only, like the EXPLAIN.
+export async function measureCapperRecordBundleBytes(params: CapperRecordBundleParams): Promise<{ total: number; withoutPropRec: number }> {
+  const rows = await prisma.$queryRaw<{ total: number; withoutPropRec: number }[]>(
+    Prisma.sql`SELECT octet_length(q.out::text)::int AS total, octet_length((q.out - 'propRec')::text)::int AS "withoutPropRec" FROM (${buildBundleQuery(params)}) q`
+  );
+  return rows[0];
 }

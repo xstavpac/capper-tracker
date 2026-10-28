@@ -98,7 +98,7 @@ export type ExplainInput = {
   // Pending picks per game before Include Picks: what the row says the game had.
   pickCounts: Record<string, number>;
   snapshotSkipped: SnapshotSkippedGame[];
-  records: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords">;
+  records: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords" | "propMarketRecords">;
   minWinPct: number;
   // True when Include Picks leaves something out ("in your Bet types").
   filtered: boolean;

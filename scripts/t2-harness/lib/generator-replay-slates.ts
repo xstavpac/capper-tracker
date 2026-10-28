@@ -6,10 +6,14 @@
 // are point-in-time - only that user's picks graded on games before the day
 // count, per capper and category, all leagues and per league, the way
 // getCapperRecordBundle aggregates them. Categories come from pickCategory, as
-// the boards stamp them. Read-only: one SELECT.
+// the boards stamp them. A player prop's per-market records come from the same
+// history (games before the day) through propMarketRecordsFromTotals, the
+// function the bundle itself uses. Read-only: one SELECT.
 import { prisma } from "@/lib/prisma";
 import { pickCategory, PICK_CATEGORY_LABELS, type CategoryBreakdownItem, type PickCategoryKey } from "@/server/data/stats";
-import type { CapperLeagueRecords } from "@/server/data/picks";
+import { propMarketRecordsFromTotals, type CapperLeagueRecords } from "@/server/data/picks";
+import type { PropMarketTotalsRow } from "@/server/data/picks-by-capper-aggregates";
+import { propMarketEntriesOf } from "@/server/data/generator-snapshot";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { toExpanderPick } from "@/server/data/expander-pick";
 import { easternDateKey, startOfEasternDay } from "@/lib/dates";
@@ -89,7 +93,16 @@ export async function loadReplaySlates(): Promise<{ slates: ReplaySlate[]; windo
         a[s === "WIN" ? 0 : s === "LOSS" ? 1 : 2]++;
         agg.set(k, a);
       };
+      const propTotals = new Map<string, PropMarketTotalsRow>();
       for (const h of history) {
+        if (h.propMarket) {
+          const k = h.capperId + "|" + h.sport + "|" + h.propMarket;
+          const t = propTotals.get(k) ?? { cid: h.capperId, sport: h.sport, mkt: h.propMarket, wins: 0, losses: 0, pushes: 0 };
+          if (h.status === "WIN") t.wins++;
+          else if (h.status === "LOSS") t.losses++;
+          else t.pushes++;
+          propTotals.set(k, t);
+        }
         const c = catOf.get(h.id);
         if (!c) continue;
         bump(categoryRecordKey(h.capperId, c), h.status);
@@ -118,11 +131,15 @@ export async function loadReplaySlates(): Promise<{ slates: ReplaySlate[]; windo
         g.picks.push(pick);
         games.set(gameId, g);
       }
+      const propMarketRecords = propMarketRecordsFromTotals(
+        propMarketEntriesOf(Array.from(games.values()).flatMap((g) => g.picks)),
+        Array.from(propTotals.values())
+      );
       slates.push({
         day,
         user: user.slice(-6),
         now: dayStart,
-        snapshot: { builtAt: dayStart.toISOString(), games: Array.from(games.values()), slipPicks: [], targets: [], leagueRecords, categoryRecords },
+        snapshot: { builtAt: dayStart.toISOString(), games: Array.from(games.values()), slipPicks: [], targets: [], leagueRecords, categoryRecords, propMarketRecords },
       });
     }
   }

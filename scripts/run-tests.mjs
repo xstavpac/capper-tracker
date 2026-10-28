@@ -55,6 +55,7 @@ const NEEDS_DB = new Set([
   "src/lib/model-engine/weighted-accumulation-acceptance-test.ts",
   // Installs its own query-logging PrismaClient (no `@/lib/prisma` import to detect).
   "src/server/actions/parlay-generate-zero-reads-acceptance-test.ts",
+  "src/server/actions/parlay-generate-prop-records-statements-acceptance-test.ts",
   // The same: query-logging clients for /picks page 1 and "Load older picks".
   "src/server/data/picks-page-one-statements-acceptance-test.ts",
   "src/server/actions/older-picks-acceptance-test.ts",

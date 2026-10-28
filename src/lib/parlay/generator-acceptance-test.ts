@@ -18,7 +18,7 @@ import {
 } from "@/lib/parlay/generator";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
-import type { CapperLeagueRecords } from "@/server/data/picks";
+import type { CapperLeagueRecords, PropMarketRecord } from "@/server/data/picks";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -58,6 +58,8 @@ type Spec = { id: string; game: number; bet: "HOME" | "AWAY" | "OVER" | "UNDER" 
 function makeSlate(specs: Spec[], start = START) {
   const categoryRecords: Record<string, CategoryBreakdownItem | null> = {};
   const leagueRecords: CapperLeagueRecords = { records: {}, streaks: {}, last20: {} };
+  // A HITS prop is gated on its per-market record (recordForGate) - the same W-L.
+  const propMarketRecords: Record<string, PropMarketRecord | null> = {};
   const byGame = new Map<number, GeneratorPick[]>();
   const picks = new Map<string, GeneratorPick>();
   for (const s of specs) {
@@ -77,6 +79,10 @@ function makeSlate(specs: Spec[], start = START) {
       overall: { wins, losses, pushes: 0, winPct, count: wins + losses },
       league: { wins, losses, pushes: 0, winPct, count: wins + losses },
     };
+    if (s.bet === "PROP") {
+      const c = { wins, losses, pushes: 0, winPct, count: wins + losses };
+      propMarketRecords[capperId + "|MLB|BASEBALL:HITS"] = { key: "BASEBALL:HITS", league: c, allTime: c };
+    }
     const pick = {
       pickId: s.id,
       capperId,
@@ -114,7 +120,7 @@ function makeSlate(specs: Spec[], start = START) {
     leagueName: "MLB",
     picks: ps,
   }));
-  return { games, picks, categoryRecords, leagueRecords };
+  return { games, picks, categoryRecords, leagueRecords, propMarketRecords };
 }
 
 const snap = (slate: ReturnType<typeof makeSlate>, slip: string[] = [], targets: string[] = []): GeneratorSnapshot => ({
@@ -124,6 +130,7 @@ const snap = (slate: ReturnType<typeof makeSlate>, slip: string[] = [], targets:
   targets,
   leagueRecords: slate.leagueRecords,
   categoryRecords: slate.categoryRecords,
+  propMarketRecords: slate.propMarketRecords,
 });
 const SETTINGS: GeneratorSettings = { legCount: 4, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
 const run = (s: GeneratorSnapshot, over: Partial<GeneratorSettings> = {}, variation: { seed: number; history: string[][] } | null = null) =>

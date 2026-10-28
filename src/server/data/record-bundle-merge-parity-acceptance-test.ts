@@ -162,7 +162,8 @@ async function main() {
     rawCalls = 0;
     const [leagueRecords, categoryRecords] = [await getCapperLeagueRecords(userId, req.leagueEntries), await getCapperCategoryRecords(userId, req.categoryPairs)];
     const separateCalls = rawCalls;
-    const ok = json(merged) === json({ leagueRecords, categoryRecords });
+    // No prop entries in these requests, so no per-market prop records.
+    const ok = json(merged) === json({ leagueRecords, categoryRecords, propMarketRecords: {} });
     check(label, ok, ok ? "" : `merged=${json(merged).slice(0, 300)} separate=${json({ leagueRecords, categoryRecords }).slice(0, 300)}`);
     if (expectCalls && req.leagueEntries.length > 0 && req.categoryPairs.length > 0) {
       check(label + " - one round trip instead of two", mergedCalls === 1 && separateCalls === 2, `merged ${mergedCalls}, separate ${separateCalls}`);
@@ -212,7 +213,7 @@ async function main() {
       req.categoryPairs = slate(picks.slice(cut)).categoryPairs;
     }
     const merged = await getCapperRecordBundle(userId, req);
-    const separate = { leagueRecords: await getCapperLeagueRecords(userId, req.leagueEntries), categoryRecords: await getCapperCategoryRecords(userId, req.categoryPairs) };
+    const separate = { leagueRecords: await getCapperLeagueRecords(userId, req.leagueEntries), categoryRecords: await getCapperCategoryRecords(userId, req.categoryPairs), propMarketRecords: {} };
     if (json(merged) !== json(separate)) {
       randomFails++;
       if (randomFails <= 3) console.log(`   random #${i} differs: ${json(req).slice(0, 200)}`);
