@@ -722,9 +722,9 @@ function nflBox(overMisses: number[], sideCover: number[] | null, settings: Hybr
 }
 {
   const one = optimizeHybrid({ positions: [pos("e1", NFL, "SIDE", DEN, 2.5)], ladders: { e1: laddersOf(NFL) }, swings: {} });
-  check("one placeable position: no hybrid", [one.primary, one.alternates.length, one.note], [null, 0, "Only one game has a placeable consensus position."]);
+  check("one placeable position: no hybrid", [one.primary, one.alternates.length, one.note], [null, 0, "Only one game has a placeable pick."]);
   const none = optimizeHybrid({ positions: [pos("e1", NFL, "SIDE", DEN, 2.5), pos("e1", NFL, "TOTAL", "OVER", 45.5)], ladders: {}, swings: {} });
-  check("no ladders: no hybrid, never an invented price", [none.primary, none.note], [null, "No consensus position has a usable FanDuel ladder."]);
+  check("no ladders: no hybrid, never an invented price", [none.primary, none.note], [null, "No qualifying pick has a usable FanDuel ladder."]);
 }
 {
   // The consensus summary rides along.

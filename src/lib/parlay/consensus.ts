@@ -1,7 +1,7 @@
-// Consensus Hybrid's position builder: which side of each game the cappers
-// agree on, and how strongly. Capper consensus picks the side of each leg; the
-// later stages move each leg to a forgiving FanDuel alternate line and place
-// the edges. This file only answers "what do the cappers back" - it reads the
+// Consensus Hybrid's position builder: which side of each game, and which
+// direction of its total, the strongest capper backs. One strong capper is enough
+// for a leg (the side and the total may come from different cappers); the later
+// stages move each leg to a forgiving FanDuel alternate line and place the edges. This file only answers "what do the cappers back" - it reads the
 // Parlay Generator's snapshot (generator.ts GeneratorSnapshot: pending picks on
 // the in-scope games, plus both record maps), so it needs no database read of
 // its own. Pure and client-safe.
@@ -38,15 +38,18 @@
 // moneyline-backed side anchors at 0 - its ladder starts at +1.5, never -1.5);
 // for an Over the smallest, for an Under the largest.
 //
-// Opposers are gated cappers on the other side of the same family in the same
-// game (the other team's ML or spread; the other direction of the total).
-// A capper who posted BOTH sides of a family on one game has hedged, not
-// endorsed: they are on neither side (they would otherwise add to the
-// supporters' headcount and be subtracted from the same position's score).
+// One position per family per game: the direction whose single strongest
+// gated capper is strongest (byCapperScore: the Wilson score of their record,
+// then the larger sample, then capper id). The other direction - the other
+// team's ML or spread, the other side of the total - yields no position; its
+// gated cappers are kept as opposers, for display only. A capper who posted BOTH
+// sides of a family on one game has hedged, not endorsed: they are on neither
+// side.
 //
-// Score = the supporters' scores minus the opposers' scores. A position
-// qualifies with at least HYBRID_MIN_SUPPORTERS supporters; positions come back
-// best score first.
+// Score = the strongest supporter's score. Other cappers agreeing with them never
+// qualify a position and never decide the direction; they only break ties when
+// positions are ranked (more supporters first). A position qualifies with at
+// least HYBRID_MIN_SUPPORTERS (1) supporter; positions come back best score first.
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import { GENERATOR_Z, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { GATE_DEFAULT, normalizeMinWinPct } from "@/lib/parlay/gate";
@@ -55,8 +58,8 @@ import { recordForGate } from "@/lib/parlay/pick-record";
 import { qualifies, wilsonLowerBound } from "@/lib/parlay/qualification-core";
 import { describePick } from "@/lib/parlay/relationship-classifier";
 
-// Supporters a position needs. Tuned after the sparsity report (B6).
-export const HYBRID_MIN_SUPPORTERS = 2;
+// Supporters a position needs: one strong capper is enough.
+export const HYBRID_MIN_SUPPORTERS = 1;
 
 export type HybridMarket = "SPREAD" | "MONEYLINE" | "TOTAL";
 export type HybridFamily = "SIDE" | "TOTAL";
@@ -269,18 +272,18 @@ export function buildConsensusPositions(
           .map(([, posts]) => toCapper(posts))
           .sort(byCapperScore);
 
-      for (const direction of directions) {
-        const supporters = cappersOf(direction);
-        if (supporters.length < minSupporters) continue;
-        const opposite = family === "TOTAL" ? (direction === "OVER" ? "UNDER" : "OVER") : null;
-        const opposers = family === "TOTAL" ? cappersOf(opposite!) : directions.filter((d) => d !== direction).flatMap(cappersOf);
+      // The direction whose strongest capper is strongest; the other one yields no position.
+      const contenders = directions.map((d) => ({ direction: d, supporters: cappersOf(d) })).filter((c) => c.supporters.length >= minSupporters);
+      contenders.sort((a, b) => byCapperScore(a.supporters[0], b.supporters[0]));
+      for (const { direction, supporters } of contenders.slice(0, 1)) {
+        const opposers = directions.filter((d) => d !== direction).flatMap(cappersOf).sort(byCapperScore);
 
         const lines = supporters.map((s) => s.endorsedLine);
         // Easiest = the largest for a team side and an Under, the smallest for an Over.
         const easiestIsMin = family === "TOTAL" && direction === "OVER";
         const anchorLine = easiestIsMin ? Math.min(...lines) : Math.max(...lines);
         const hardestLine = easiestIsMin ? Math.max(...lines) : Math.min(...lines);
-        const score = supporters.reduce((s, c) => s + c.score, 0) - opposers.reduce((s, c) => s + c.score, 0);
+        const score = supporters[0].score;
         const sample = game.picks[0];
         positions.push({
           key: game.gameId + "|" + family + "|" + direction,

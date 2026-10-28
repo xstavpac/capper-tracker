@@ -41,9 +41,9 @@ import type { HybridDiagnostics } from "@/lib/parlay/hybrid-diagnostics";
 
 // ---- Copy (pinned by the tests) ----
 
-export const MODE_NOTE = "Hybrid builds from capper consensus. Your slip isn't used in this mode.";
+export const MODE_NOTE = "Hybrid builds from your strongest cappers. Your slip isn't used in this mode.";
 export const WIDTH_HINT = "Balanced ignores each team's single biggest outlier game.";
-export const FOOTER_NOTE = "Consensus is a signal, not a guarantee.";
+export const FOOTER_NOTE = "A strong record is a signal, not a guarantee.";
 export const FINAL_PRICE_NOTE = "FanDuel shows final price";
 export const SEND_NOTE = "FanDuel will show the final same-game parlay price.";
 export const STALE_NOTE = "Prices may be out of date";
@@ -51,7 +51,7 @@ export const GENERIC_ERROR = "Couldn't build a hybrid right now. Try again in a 
 export const ALT_LINES_NOTE = "FanDuel posts alternate lines for some games on game day.";
 export const PRICING_NOTE = "Another user is pricing this game, try again in a moment.";
 export const UNAVAILABLE_NOTE = "Live alternate prices are unavailable right now.";
-export const NO_BOX_NOTE = "No game has qualifying consensus on both a side and a total.";
+export const NO_BOX_NOTE = "No game has a qualifying capper on both a side and a total.";
 export const IN_TARGET_TEXT = "✓ In your target";
 export const FAR_TARGET_TEXT = "Closest match · outside your range";
 // The consensus line of a 3-leg box's third leg, which has no cappers of its own.

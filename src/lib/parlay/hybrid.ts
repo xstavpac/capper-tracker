@@ -1112,7 +1112,7 @@ export function optimizeHybridReport(input: HybridInput): { result: HybridResult
       result: {
         primary: null,
         alternates: [],
-        note: first ? "Only one game has a placeable consensus position." : "No consensus position has a usable FanDuel ladder.",
+        note: first ? "Only one game has a placeable pick." : "No qualifying pick has a usable FanDuel ladder.",
         delivery: deliveryOf(cap, 0, 0, 0, minBox),
       },
       report,
