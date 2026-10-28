@@ -1,0 +1,1457 @@
+{
+ "id": "82afe4e028b0fbbd9f6cf92697bec6fc",
+ "sport_key": "basketball_nba",
+ "commence_time": "2026-10-28T03:10:00Z",
+ "home_team": "Los Angeles Lakers",
+ "away_team": "Portland Trail Blazers",
+ "bookmakers": [
+  {
+   "key": "fanduel",
+   "title": "FanDuel",
+   "link": "https://sportsbook.fanduel.com/basketball/nba/portland-trail-blazers-%40-los-angeles-lakers-36237549",
+   "sid": "36237549",
+   "markets": [
+    {
+     "key": "player_assists",
+     "last_update": "2026-10-27T23:54:23Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Over",
+       "description": "Ja Morant",
+       "price": 122,
+       "point": 6.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032886&selectionId=24729422",
+       "sid": "24729422"
+      },
+      {
+       "name": "Under",
+       "description": "Ja Morant",
+       "price": -156,
+       "point": 6.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032886&selectionId=24729423",
+       "sid": "24729423"
+      },
+      {
+       "name": "Over",
+       "description": "Austin Reaves",
+       "price": -111,
+       "point": 5.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023567&selectionId=41574998",
+       "sid": "41574998"
+      },
+      {
+       "name": "Under",
+       "description": "Austin Reaves",
+       "price": -115,
+       "point": 5.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023567&selectionId=41574999",
+       "sid": "41574999"
+      },
+      {
+       "name": "Over",
+       "description": "Damian Lillard",
+       "price": -115,
+       "point": 4.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032705&selectionId=12260575",
+       "sid": "12260575"
+      },
+      {
+       "name": "Under",
+       "description": "Damian Lillard",
+       "price": -111,
+       "point": 4.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032705&selectionId=12260576",
+       "sid": "12260576"
+      },
+      {
+       "name": "Over",
+       "description": "Quentin Grimes",
+       "price": 132,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026406&selectionId=42067800",
+       "sid": "42067800"
+      },
+      {
+       "name": "Under",
+       "description": "Quentin Grimes",
+       "price": -170,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026406&selectionId=42067801",
+       "sid": "42067801"
+      },
+      {
+       "name": "Over",
+       "description": "Deni Avdija",
+       "price": 130,
+       "point": 5.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032420&selectionId=37901072",
+       "sid": "37901072"
+      },
+      {
+       "name": "Under",
+       "description": "Deni Avdija",
+       "price": -166,
+       "point": 5.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032420&selectionId=37901070",
+       "sid": "37901070"
+      },
+      {
+       "name": "Over",
+       "description": "Jrue Holiday",
+       "price": -113,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033425&selectionId=12260620",
+       "sid": "12260620"
+      },
+      {
+       "name": "Under",
+       "description": "Jrue Holiday",
+       "price": -113,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033425&selectionId=12260621",
+       "sid": "12260621"
+      },
+      {
+       "name": "Over",
+       "description": "Luka Doncic",
+       "price": -113,
+       "point": 7.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021926&selectionId=12463224",
+       "sid": "12463224"
+      },
+      {
+       "name": "Under",
+       "description": "Luka Doncic",
+       "price": -113,
+       "point": 7.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021926&selectionId=12463223",
+       "sid": "12463223"
+      }
+     ]
+    },
+    {
+     "key": "player_blocks",
+     "last_update": "2026-10-27T23:54:23Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Over",
+       "description": "Donovan Clingan",
+       "price": 116,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620256215&selectionId=50752175",
+       "sid": "50752175"
+      },
+      {
+       "name": "Under",
+       "description": "Donovan Clingan",
+       "price": -154,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620256215&selectionId=50752173",
+       "sid": "50752173"
+      },
+      {
+       "name": "Over",
+       "description": "Walker Kessler",
+       "price": -146,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620257900&selectionId=43049096",
+       "sid": "43049096"
+      },
+      {
+       "name": "Under",
+       "description": "Walker Kessler",
+       "price": 110,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620257900&selectionId=43049095",
+       "sid": "43049095"
+      }
+     ]
+    },
+    {
+     "key": "player_points",
+     "last_update": "2026-10-27T23:54:23Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Over",
+       "description": "Toumani Camara",
+       "price": -113,
+       "point": 11.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033139&selectionId=43450264",
+       "sid": "43450264"
+      },
+      {
+       "name": "Under",
+       "description": "Toumani Camara",
+       "price": -113,
+       "point": 11.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033139&selectionId=43450266",
+       "sid": "43450266"
+      },
+      {
+       "name": "Over",
+       "description": "Ja Morant",
+       "price": -122,
+       "point": 15.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032884&selectionId=24729422",
+       "sid": "24729422"
+      },
+      {
+       "name": "Under",
+       "description": "Ja Morant",
+       "price": -104,
+       "point": 15.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032884&selectionId=24729423",
+       "sid": "24729423"
+      },
+      {
+       "name": "Over",
+       "description": "Jrue Holiday",
+       "price": -111,
+       "point": 10.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033423&selectionId=12260620",
+       "sid": "12260620"
+      },
+      {
+       "name": "Under",
+       "description": "Jrue Holiday",
+       "price": -115,
+       "point": 10.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033423&selectionId=12260621",
+       "sid": "12260621"
+      },
+      {
+       "name": "Over",
+       "description": "Deni Avdija",
+       "price": -113,
+       "point": 22.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032418&selectionId=37901072",
+       "sid": "37901072"
+      },
+      {
+       "name": "Under",
+       "description": "Deni Avdija",
+       "price": -113,
+       "point": 22.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032418&selectionId=37901070",
+       "sid": "37901070"
+      },
+      {
+       "name": "Over",
+       "description": "Matisse Thybulle",
+       "price": -122,
+       "point": 5.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620024688&selectionId=27661447",
+       "sid": "27661447"
+      },
+      {
+       "name": "Under",
+       "description": "Matisse Thybulle",
+       "price": -104,
+       "point": 5.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620024688&selectionId=27661448",
+       "sid": "27661448"
+      },
+      {
+       "name": "Over",
+       "description": "Damian Lillard",
+       "price": 104,
+       "point": 20.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032703&selectionId=12260575",
+       "sid": "12260575"
+      },
+      {
+       "name": "Under",
+       "description": "Damian Lillard",
+       "price": -132,
+       "point": 20.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032703&selectionId=12260576",
+       "sid": "12260576"
+      },
+      {
+       "name": "Over",
+       "description": "Walker Kessler",
+       "price": -132,
+       "point": 12.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620024472&selectionId=43049096",
+       "sid": "43049096"
+      },
+      {
+       "name": "Under",
+       "description": "Walker Kessler",
+       "price": 104,
+       "point": 12.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620024472&selectionId=43049095",
+       "sid": "43049095"
+      },
+      {
+       "name": "Over",
+       "description": "Quentin Grimes",
+       "price": -122,
+       "point": 8.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026403&selectionId=42067800",
+       "sid": "42067800"
+      },
+      {
+       "name": "Under",
+       "description": "Quentin Grimes",
+       "price": -104,
+       "point": 8.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026403&selectionId=42067801",
+       "sid": "42067801"
+      },
+      {
+       "name": "Over",
+       "description": "Collin Sexton",
+       "price": 104,
+       "point": 10.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026401&selectionId=21175483",
+       "sid": "21175483"
+      },
+      {
+       "name": "Under",
+       "description": "Collin Sexton",
+       "price": -132,
+       "point": 10.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026401&selectionId=21175484",
+       "sid": "21175484"
+      },
+      {
+       "name": "Over",
+       "description": "Sandro Mamukelashvili",
+       "price": -122,
+       "point": 7.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026402&selectionId=42119780",
+       "sid": "42119780"
+      },
+      {
+       "name": "Under",
+       "description": "Sandro Mamukelashvili",
+       "price": -104,
+       "point": 7.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026402&selectionId=42119779",
+       "sid": "42119779"
+      },
+      {
+       "name": "Over",
+       "description": "Luka Doncic",
+       "price": -111,
+       "point": 32.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021923&selectionId=12463224",
+       "sid": "12463224"
+      },
+      {
+       "name": "Under",
+       "description": "Luka Doncic",
+       "price": -115,
+       "point": 32.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021923&selectionId=12463223",
+       "sid": "12463223"
+      },
+      {
+       "name": "Over",
+       "description": "Donovan Clingan",
+       "price": -104,
+       "point": 10.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033313&selectionId=50752175",
+       "sid": "50752175"
+      },
+      {
+       "name": "Under",
+       "description": "Donovan Clingan",
+       "price": -122,
+       "point": 10.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033313&selectionId=50752173",
+       "sid": "50752173"
+      },
+      {
+       "name": "Over",
+       "description": "Ziaire Williams",
+       "price": -122,
+       "point": 8.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620025137&selectionId=40297002",
+       "sid": "40297002"
+      },
+      {
+       "name": "Under",
+       "description": "Ziaire Williams",
+       "price": -104,
+       "point": 8.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620025137&selectionId=40297001",
+       "sid": "40297001"
+      },
+      {
+       "name": "Over",
+       "description": "Robert Williams",
+       "price": -128,
+       "point": 5.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033475&selectionId=90846389",
+       "sid": "90846389"
+      },
+      {
+       "name": "Under",
+       "description": "Robert Williams",
+       "price": 100,
+       "point": 5.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033475&selectionId=90846386",
+       "sid": "90846386"
+      },
+      {
+       "name": "Over",
+       "description": "Scoot Henderson",
+       "price": -122,
+       "point": 9.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620043790&selectionId=62064858",
+       "sid": "62064858"
+      },
+      {
+       "name": "Under",
+       "description": "Scoot Henderson",
+       "price": -104,
+       "point": 9.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620043790&selectionId=62064857",
+       "sid": "62064857"
+      },
+      {
+       "name": "Over",
+       "description": "Austin Reaves",
+       "price": -102,
+       "point": 23.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023150&selectionId=41574998",
+       "sid": "41574998"
+      },
+      {
+       "name": "Under",
+       "description": "Austin Reaves",
+       "price": -125,
+       "point": 23.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023150&selectionId=41574999",
+       "sid": "41574999"
+      }
+     ]
+    },
+    {
+     "key": "player_points_assists",
+     "last_update": "2026-10-27T23:54:23Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Over",
+       "description": "Ja Morant",
+       "price": -102,
+       "point": 22.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032889&selectionId=24729422",
+       "sid": "24729422"
+      },
+      {
+       "name": "Under",
+       "description": "Ja Morant",
+       "price": -130,
+       "point": 22.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032889&selectionId=24729423",
+       "sid": "24729423"
+      },
+      {
+       "name": "Over",
+       "description": "Damian Lillard",
+       "price": -118,
+       "point": 24.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032708&selectionId=12260575",
+       "sid": "12260575"
+      },
+      {
+       "name": "Under",
+       "description": "Damian Lillard",
+       "price": -112,
+       "point": 24.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032708&selectionId=12260576",
+       "sid": "12260576"
+      },
+      {
+       "name": "Over",
+       "description": "Luka Doncic",
+       "price": -112,
+       "point": 40.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021929&selectionId=12463224",
+       "sid": "12463224"
+      },
+      {
+       "name": "Under",
+       "description": "Luka Doncic",
+       "price": -118,
+       "point": 40.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021929&selectionId=12463223",
+       "sid": "12463223"
+      },
+      {
+       "name": "Over",
+       "description": "Austin Reaves",
+       "price": -122,
+       "point": 28.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023570&selectionId=41574998",
+       "sid": "41574998"
+      },
+      {
+       "name": "Under",
+       "description": "Austin Reaves",
+       "price": -108,
+       "point": 28.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023570&selectionId=41574999",
+       "sid": "41574999"
+      },
+      {
+       "name": "Over",
+       "description": "Quentin Grimes",
+       "price": -102,
+       "point": 11.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026410&selectionId=42067800",
+       "sid": "42067800"
+      },
+      {
+       "name": "Under",
+       "description": "Quentin Grimes",
+       "price": -130,
+       "point": 11.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026410&selectionId=42067801",
+       "sid": "42067801"
+      },
+      {
+       "name": "Over",
+       "description": "Jrue Holiday",
+       "price": -104,
+       "point": 14.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033427&selectionId=12260620",
+       "sid": "12260620"
+      },
+      {
+       "name": "Under",
+       "description": "Jrue Holiday",
+       "price": -128,
+       "point": 14.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033427&selectionId=12260621",
+       "sid": "12260621"
+      },
+      {
+       "name": "Over",
+       "description": "Deni Avdija",
+       "price": -120,
+       "point": 27.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032423&selectionId=37901072",
+       "sid": "37901072"
+      },
+      {
+       "name": "Under",
+       "description": "Deni Avdija",
+       "price": -110,
+       "point": 27.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032423&selectionId=37901070",
+       "sid": "37901070"
+      }
+     ]
+    },
+    {
+     "key": "player_points_rebounds",
+     "last_update": "2026-10-27T23:54:23Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Over",
+       "description": "Ja Morant",
+       "price": -128,
+       "point": 18.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032890&selectionId=24729422",
+       "sid": "24729422"
+      },
+      {
+       "name": "Under",
+       "description": "Ja Morant",
+       "price": 100,
+       "point": 18.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032890&selectionId=24729423",
+       "sid": "24729423"
+      },
+      {
+       "name": "Over",
+       "description": "Toumani Camara",
+       "price": -120,
+       "point": 15.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033143&selectionId=43450264",
+       "sid": "43450264"
+      },
+      {
+       "name": "Under",
+       "description": "Toumani Camara",
+       "price": -106,
+       "point": 15.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033143&selectionId=43450266",
+       "sid": "43450266"
+      },
+      {
+       "name": "Over",
+       "description": "Luka Doncic",
+       "price": -108,
+       "point": 40.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021930&selectionId=12463224",
+       "sid": "12463224"
+      },
+      {
+       "name": "Under",
+       "description": "Luka Doncic",
+       "price": -118,
+       "point": 40.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021930&selectionId=12463223",
+       "sid": "12463223"
+      },
+      {
+       "name": "Over",
+       "description": "Damian Lillard",
+       "price": -111,
+       "point": 23.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032709&selectionId=12260575",
+       "sid": "12260575"
+      },
+      {
+       "name": "Under",
+       "description": "Damian Lillard",
+       "price": -115,
+       "point": 23.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032709&selectionId=12260576",
+       "sid": "12260576"
+      },
+      {
+       "name": "Over",
+       "description": "Austin Reaves",
+       "price": -120,
+       "point": 26.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023571&selectionId=41574998",
+       "sid": "41574998"
+      },
+      {
+       "name": "Under",
+       "description": "Austin Reaves",
+       "price": -106,
+       "point": 26.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023571&selectionId=41574999",
+       "sid": "41574999"
+      },
+      {
+       "name": "Over",
+       "description": "Sandro Mamukelashvili",
+       "price": -104,
+       "point": 12.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026411&selectionId=42119780",
+       "sid": "42119780"
+      },
+      {
+       "name": "Under",
+       "description": "Sandro Mamukelashvili",
+       "price": -122,
+       "point": 12.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026411&selectionId=42119779",
+       "sid": "42119779"
+      },
+      {
+       "name": "Over",
+       "description": "Walker Kessler",
+       "price": -111,
+       "point": 23.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620024477&selectionId=43049096",
+       "sid": "43049096"
+      },
+      {
+       "name": "Under",
+       "description": "Walker Kessler",
+       "price": -115,
+       "point": 23.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620024477&selectionId=43049095",
+       "sid": "43049095"
+      },
+      {
+       "name": "Over",
+       "description": "Quentin Grimes",
+       "price": 100,
+       "point": 12.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026412&selectionId=42067800",
+       "sid": "42067800"
+      },
+      {
+       "name": "Under",
+       "description": "Quentin Grimes",
+       "price": -128,
+       "point": 12.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026412&selectionId=42067801",
+       "sid": "42067801"
+      },
+      {
+       "name": "Over",
+       "description": "Donovan Clingan",
+       "price": -122,
+       "point": 19.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033315&selectionId=50752175",
+       "sid": "50752175"
+      },
+      {
+       "name": "Under",
+       "description": "Donovan Clingan",
+       "price": -104,
+       "point": 19.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033315&selectionId=50752173",
+       "sid": "50752173"
+      },
+      {
+       "name": "Over",
+       "description": "Ziaire Williams",
+       "price": -128,
+       "point": 11.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620025140&selectionId=40297002",
+       "sid": "40297002"
+      },
+      {
+       "name": "Under",
+       "description": "Ziaire Williams",
+       "price": 100,
+       "point": 11.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620025140&selectionId=40297001",
+       "sid": "40297001"
+      },
+      {
+       "name": "Over",
+       "description": "Robert Williams",
+       "price": -108,
+       "point": 12.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033477&selectionId=90846389",
+       "sid": "90846389"
+      },
+      {
+       "name": "Under",
+       "description": "Robert Williams",
+       "price": -118,
+       "point": 12.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033477&selectionId=90846386",
+       "sid": "90846386"
+      },
+      {
+       "name": "Over",
+       "description": "Jrue Holiday",
+       "price": -128,
+       "point": 13.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033428&selectionId=12260620",
+       "sid": "12260620"
+      },
+      {
+       "name": "Under",
+       "description": "Jrue Holiday",
+       "price": 100,
+       "point": 13.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033428&selectionId=12260621",
+       "sid": "12260621"
+      },
+      {
+       "name": "Over",
+       "description": "Deni Avdija",
+       "price": -113,
+       "point": 29.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032424&selectionId=37901072",
+       "sid": "37901072"
+      },
+      {
+       "name": "Under",
+       "description": "Deni Avdija",
+       "price": -113,
+       "point": 29.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032424&selectionId=37901070",
+       "sid": "37901070"
+      }
+     ]
+    },
+    {
+     "key": "player_points_rebounds_assists",
+     "last_update": "2026-10-27T23:54:23Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Over",
+       "description": "Ja Morant",
+       "price": -111,
+       "point": 25.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032891&selectionId=24729422",
+       "sid": "24729422"
+      },
+      {
+       "name": "Under",
+       "description": "Ja Morant",
+       "price": -115,
+       "point": 25.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032891&selectionId=24729423",
+       "sid": "24729423"
+      },
+      {
+       "name": "Over",
+       "description": "Austin Reaves",
+       "price": -115,
+       "point": 32.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023572&selectionId=41574998",
+       "sid": "41574998"
+      },
+      {
+       "name": "Under",
+       "description": "Austin Reaves",
+       "price": -111,
+       "point": 32.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023572&selectionId=41574999",
+       "sid": "41574999"
+      },
+      {
+       "name": "Over",
+       "description": "Walker Kessler",
+       "price": -104,
+       "point": 25.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620024478&selectionId=43049096",
+       "sid": "43049096"
+      },
+      {
+       "name": "Under",
+       "description": "Walker Kessler",
+       "price": -122,
+       "point": 25.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620024478&selectionId=43049095",
+       "sid": "43049095"
+      },
+      {
+       "name": "Over",
+       "description": "Damian Lillard",
+       "price": -106,
+       "point": 28.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032710&selectionId=12260575",
+       "sid": "12260575"
+      },
+      {
+       "name": "Under",
+       "description": "Damian Lillard",
+       "price": -120,
+       "point": 28.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032710&selectionId=12260576",
+       "sid": "12260576"
+      },
+      {
+       "name": "Over",
+       "description": "Quentin Grimes",
+       "price": -111,
+       "point": 14.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026413&selectionId=42067800",
+       "sid": "42067800"
+      },
+      {
+       "name": "Under",
+       "description": "Quentin Grimes",
+       "price": -115,
+       "point": 14.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026413&selectionId=42067801",
+       "sid": "42067801"
+      },
+      {
+       "name": "Over",
+       "description": "Luka Doncic",
+       "price": -106,
+       "point": 48.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021931&selectionId=12463224",
+       "sid": "12463224"
+      },
+      {
+       "name": "Under",
+       "description": "Luka Doncic",
+       "price": -120,
+       "point": 48.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021931&selectionId=12463223",
+       "sid": "12463223"
+      },
+      {
+       "name": "Over",
+       "description": "Deni Avdija",
+       "price": -113,
+       "point": 34.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032425&selectionId=37901072",
+       "sid": "37901072"
+      },
+      {
+       "name": "Under",
+       "description": "Deni Avdija",
+       "price": -113,
+       "point": 34.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032425&selectionId=37901070",
+       "sid": "37901070"
+      },
+      {
+       "name": "Over",
+       "description": "Jrue Holiday",
+       "price": -118,
+       "point": 17.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033429&selectionId=12260620",
+       "sid": "12260620"
+      },
+      {
+       "name": "Under",
+       "description": "Jrue Holiday",
+       "price": -108,
+       "point": 17.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033429&selectionId=12260621",
+       "sid": "12260621"
+      }
+     ]
+    },
+    {
+     "key": "player_rebounds",
+     "last_update": "2026-10-27T23:54:23Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Over",
+       "description": "Ja Morant",
+       "price": 134,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032885&selectionId=24729422",
+       "sid": "24729422"
+      },
+      {
+       "name": "Under",
+       "description": "Ja Morant",
+       "price": -170,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032885&selectionId=24729423",
+       "sid": "24729423"
+      },
+      {
+       "name": "Over",
+       "description": "Toumani Camara",
+       "price": 134,
+       "point": 4.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033140&selectionId=43450264",
+       "sid": "43450264"
+      },
+      {
+       "name": "Under",
+       "description": "Toumani Camara",
+       "price": -172,
+       "point": 4.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033140&selectionId=43450266",
+       "sid": "43450266"
+      },
+      {
+       "name": "Over",
+       "description": "Austin Reaves",
+       "price": -118,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023566&selectionId=41574998",
+       "sid": "41574998"
+      },
+      {
+       "name": "Under",
+       "description": "Austin Reaves",
+       "price": -108,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023566&selectionId=41574999",
+       "sid": "41574999"
+      },
+      {
+       "name": "Over",
+       "description": "Damian Lillard",
+       "price": -106,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032704&selectionId=12260575",
+       "sid": "12260575"
+      },
+      {
+       "name": "Under",
+       "description": "Damian Lillard",
+       "price": -120,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032704&selectionId=12260576",
+       "sid": "12260576"
+      },
+      {
+       "name": "Over",
+       "description": "Sandro Mamukelashvili",
+       "price": 106,
+       "point": 4.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026404&selectionId=42119780",
+       "sid": "42119780"
+      },
+      {
+       "name": "Under",
+       "description": "Sandro Mamukelashvili",
+       "price": -136,
+       "point": 4.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026404&selectionId=42119779",
+       "sid": "42119779"
+      },
+      {
+       "name": "Over",
+       "description": "Walker Kessler",
+       "price": 102,
+       "point": 10.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620024473&selectionId=43049096",
+       "sid": "43049096"
+      },
+      {
+       "name": "Under",
+       "description": "Walker Kessler",
+       "price": -130,
+       "point": 10.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620024473&selectionId=43049095",
+       "sid": "43049095"
+      },
+      {
+       "name": "Over",
+       "description": "Quentin Grimes",
+       "price": 132,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026405&selectionId=42067800",
+       "sid": "42067800"
+      },
+      {
+       "name": "Under",
+       "description": "Quentin Grimes",
+       "price": -170,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026405&selectionId=42067801",
+       "sid": "42067801"
+      },
+      {
+       "name": "Over",
+       "description": "Ziaire Williams",
+       "price": -162,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620025138&selectionId=40297002",
+       "sid": "40297002"
+      },
+      {
+       "name": "Under",
+       "description": "Ziaire Williams",
+       "price": 126,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620025138&selectionId=40297001",
+       "sid": "40297001"
+      },
+      {
+       "name": "Over",
+       "description": "Luka Doncic",
+       "price": -108,
+       "point": 7.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021925&selectionId=12463224",
+       "sid": "12463224"
+      },
+      {
+       "name": "Under",
+       "description": "Luka Doncic",
+       "price": -118,
+       "point": 7.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021925&selectionId=12463223",
+       "sid": "12463223"
+      },
+      {
+       "name": "Over",
+       "description": "Deni Avdija",
+       "price": -120,
+       "point": 6.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032419&selectionId=37901072",
+       "sid": "37901072"
+      },
+      {
+       "name": "Under",
+       "description": "Deni Avdija",
+       "price": -106,
+       "point": 6.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032419&selectionId=37901070",
+       "sid": "37901070"
+      },
+      {
+       "name": "Over",
+       "description": "Donovan Clingan",
+       "price": -113,
+       "point": 9.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033314&selectionId=50752175",
+       "sid": "50752175"
+      },
+      {
+       "name": "Under",
+       "description": "Donovan Clingan",
+       "price": -113,
+       "point": 9.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033314&selectionId=50752173",
+       "sid": "50752173"
+      }
+     ]
+    },
+    {
+     "key": "player_rebounds_assists",
+     "last_update": "2026-10-27T23:54:23Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Over",
+       "description": "Ja Morant",
+       "price": 102,
+       "point": 9.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032892&selectionId=24729422",
+       "sid": "24729422"
+      },
+      {
+       "name": "Under",
+       "description": "Ja Morant",
+       "price": -130,
+       "point": 9.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032892&selectionId=24729423",
+       "sid": "24729423"
+      },
+      {
+       "name": "Over",
+       "description": "Jrue Holiday",
+       "price": -146,
+       "point": 6.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033430&selectionId=12260620",
+       "sid": "12260620"
+      },
+      {
+       "name": "Under",
+       "description": "Jrue Holiday",
+       "price": 114,
+       "point": 6.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620033430&selectionId=12260621",
+       "sid": "12260621"
+      },
+      {
+       "name": "Over",
+       "description": "Austin Reaves",
+       "price": 104,
+       "point": 9.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023573&selectionId=41574998",
+       "sid": "41574998"
+      },
+      {
+       "name": "Under",
+       "description": "Austin Reaves",
+       "price": -132,
+       "point": 9.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023573&selectionId=41574999",
+       "sid": "41574999"
+      },
+      {
+       "name": "Over",
+       "description": "Damian Lillard",
+       "price": 106,
+       "point": 8.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032711&selectionId=12260575",
+       "sid": "12260575"
+      },
+      {
+       "name": "Under",
+       "description": "Damian Lillard",
+       "price": -136,
+       "point": 8.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032711&selectionId=12260576",
+       "sid": "12260576"
+      },
+      {
+       "name": "Over",
+       "description": "Quentin Grimes",
+       "price": -102,
+       "point": 5.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026414&selectionId=42067800",
+       "sid": "42067800"
+      },
+      {
+       "name": "Under",
+       "description": "Quentin Grimes",
+       "price": -125,
+       "point": 5.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026414&selectionId=42067801",
+       "sid": "42067801"
+      },
+      {
+       "name": "Over",
+       "description": "Luka Doncic",
+       "price": -104,
+       "point": 15.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021932&selectionId=12463224",
+       "sid": "12463224"
+      },
+      {
+       "name": "Under",
+       "description": "Luka Doncic",
+       "price": -122,
+       "point": 15.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021932&selectionId=12463223",
+       "sid": "12463223"
+      },
+      {
+       "name": "Over",
+       "description": "Deni Avdija",
+       "price": -128,
+       "point": 11.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032426&selectionId=37901072",
+       "sid": "37901072"
+      },
+      {
+       "name": "Under",
+       "description": "Deni Avdija",
+       "price": 100,
+       "point": 11.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032426&selectionId=37901070",
+       "sid": "37901070"
+      }
+     ]
+    },
+    {
+     "key": "player_steals",
+     "last_update": "2026-10-27T23:54:23Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Over",
+       "description": "Toumani Camara",
+       "price": 136,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620255660&selectionId=43450264",
+       "sid": "43450264"
+      },
+      {
+       "name": "Under",
+       "description": "Toumani Camara",
+       "price": -182,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620255660&selectionId=43450266",
+       "sid": "43450266"
+      },
+      {
+       "name": "Over",
+       "description": "Luka Doncic",
+       "price": -136,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620251770&selectionId=12463224",
+       "sid": "12463224"
+      },
+      {
+       "name": "Under",
+       "description": "Luka Doncic",
+       "price": 102,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620251770&selectionId=12463223",
+       "sid": "12463223"
+      },
+      {
+       "name": "Over",
+       "description": "Matisse Thybulle",
+       "price": -136,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620251771&selectionId=27661447",
+       "sid": "27661447"
+      },
+      {
+       "name": "Under",
+       "description": "Matisse Thybulle",
+       "price": 102,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620251771&selectionId=27661448",
+       "sid": "27661448"
+      },
+      {
+       "name": "Over",
+       "description": "Jrue Holiday",
+       "price": 188,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620255661&selectionId=12260620",
+       "sid": "12260620"
+      },
+      {
+       "name": "Under",
+       "description": "Jrue Holiday",
+       "price": -260,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620255661&selectionId=12260621",
+       "sid": "12260621"
+      }
+     ]
+    },
+    {
+     "key": "player_threes",
+     "last_update": "2026-10-27T23:54:23Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Over",
+       "description": "Ja Morant",
+       "price": 122,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032887&selectionId=24729422",
+       "sid": "24729422"
+      },
+      {
+       "name": "Under",
+       "description": "Ja Morant",
+       "price": -156,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032887&selectionId=24729423",
+       "sid": "24729423"
+      },
+      {
+       "name": "Over",
+       "description": "Austin Reaves",
+       "price": 144,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023568&selectionId=41574998",
+       "sid": "41574998"
+      },
+      {
+       "name": "Under",
+       "description": "Austin Reaves",
+       "price": -186,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620023568&selectionId=41574999",
+       "sid": "41574999"
+      },
+      {
+       "name": "Over",
+       "description": "Matisse Thybulle",
+       "price": 106,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620024690&selectionId=27661447",
+       "sid": "27661447"
+      },
+      {
+       "name": "Under",
+       "description": "Matisse Thybulle",
+       "price": -136,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620024690&selectionId=27661448",
+       "sid": "27661448"
+      },
+      {
+       "name": "Over",
+       "description": "Damian Lillard",
+       "price": 148,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032706&selectionId=12260575",
+       "sid": "12260575"
+      },
+      {
+       "name": "Under",
+       "description": "Damian Lillard",
+       "price": -192,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032706&selectionId=12260576",
+       "sid": "12260576"
+      },
+      {
+       "name": "Over",
+       "description": "Sandro Mamukelashvili",
+       "price": -205,
+       "point": 0.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026408&selectionId=42119780",
+       "sid": "42119780"
+      },
+      {
+       "name": "Under",
+       "description": "Sandro Mamukelashvili",
+       "price": 158,
+       "point": 0.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026408&selectionId=42119779",
+       "sid": "42119779"
+      },
+      {
+       "name": "Over",
+       "description": "Quentin Grimes",
+       "price": 134,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026409&selectionId=42067800",
+       "sid": "42067800"
+      },
+      {
+       "name": "Under",
+       "description": "Quentin Grimes",
+       "price": -172,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026409&selectionId=42067801",
+       "sid": "42067801"
+      },
+      {
+       "name": "Over",
+       "description": "Collin Sexton",
+       "price": 172,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026407&selectionId=21175483",
+       "sid": "21175483"
+      },
+      {
+       "name": "Under",
+       "description": "Collin Sexton",
+       "price": -225,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620026407&selectionId=21175484",
+       "sid": "21175484"
+      },
+      {
+       "name": "Over",
+       "description": "Ziaire Williams",
+       "price": 142,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620025139&selectionId=40297002",
+       "sid": "40297002"
+      },
+      {
+       "name": "Under",
+       "description": "Ziaire Williams",
+       "price": -184,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620025139&selectionId=40297001",
+       "sid": "40297001"
+      },
+      {
+       "name": "Over",
+       "description": "Deni Avdija",
+       "price": -111,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032421&selectionId=37901072",
+       "sid": "37901072"
+      },
+      {
+       "name": "Under",
+       "description": "Deni Avdija",
+       "price": -115,
+       "point": 1.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620032421&selectionId=37901070",
+       "sid": "37901070"
+      },
+      {
+       "name": "Over",
+       "description": "Luka Doncic",
+       "price": -111,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021927&selectionId=12463224",
+       "sid": "12463224"
+      },
+      {
+       "name": "Under",
+       "description": "Luka Doncic",
+       "price": -115,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620021927&selectionId=12463223",
+       "sid": "12463223"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

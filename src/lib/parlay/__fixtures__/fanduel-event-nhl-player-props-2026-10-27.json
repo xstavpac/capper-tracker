@@ -1,0 +1,414 @@
+{
+ "id": "288b3a1e5241bd3885295af9aab801ca",
+ "sport_key": "icehockey_nhl",
+ "commence_time": "2026-10-28T02:40:00Z",
+ "home_team": "San Jose Sharks",
+ "away_team": "Buffalo Sabres",
+ "bookmakers": [
+  {
+   "key": "fanduel",
+   "title": "FanDuel",
+   "link": "https://sportsbook.fanduel.com/ice-hockey/nhl/buffalo-sabres-%40-san-jose-sharks-36230592",
+   "sid": "36230592",
+   "markets": [
+    {
+     "key": "player_goal_scorer_anytime",
+     "last_update": "2026-10-27T23:53:58Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Yes",
+       "description": "Macklin Celebrini",
+       "price": 135,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=70664823",
+       "sid": "70664823"
+      },
+      {
+       "name": "Yes",
+       "description": "Tage Thompson",
+       "price": 140,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=21604085",
+       "sid": "21604085"
+      },
+      {
+       "name": "Yes",
+       "description": "Will Smith",
+       "price": 210,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=64280424",
+       "sid": "64280424"
+      },
+      {
+       "name": "Yes",
+       "description": "Ivar Stenberg",
+       "price": 230,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=93492546",
+       "sid": "93492546"
+      },
+      {
+       "name": "Yes",
+       "description": "Zach Benson",
+       "price": 230,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=57479035",
+       "sid": "57479035"
+      },
+      {
+       "name": "Yes",
+       "description": "Jack Quinn",
+       "price": 230,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=36305293",
+       "sid": "36305293"
+      },
+      {
+       "name": "Yes",
+       "description": "Josh Norris",
+       "price": 250,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=37515912",
+       "sid": "37515912"
+      },
+      {
+       "name": "Yes",
+       "description": "Noah Östlund",
+       "price": 290,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=64603663",
+       "sid": "64603663"
+      },
+      {
+       "name": "Yes",
+       "description": "Josh Doan",
+       "price": 290,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=67530203",
+       "sid": "67530203"
+      },
+      {
+       "name": "Yes",
+       "description": "Jason Zucker",
+       "price": 310,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=12452427",
+       "sid": "12452427"
+      },
+      {
+       "name": "Yes",
+       "description": "Rasmus Dahlin",
+       "price": 310,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=20852686",
+       "sid": "20852686"
+      },
+      {
+       "name": "Yes",
+       "description": "Mason Marchment",
+       "price": 330,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=38732463",
+       "sid": "38732463"
+      },
+      {
+       "name": "Yes",
+       "description": "Konsta Helenius",
+       "price": 350,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=70260734",
+       "sid": "70260734"
+      },
+      {
+       "name": "Yes",
+       "description": "Kiefer Sherwood",
+       "price": 360,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=21751893",
+       "sid": "21751893"
+      },
+      {
+       "name": "Yes",
+       "description": "Tyler Toffoli",
+       "price": 370,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=12553607",
+       "sid": "12553607"
+      },
+      {
+       "name": "Yes",
+       "description": "Collin Graf",
+       "price": 390,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=68234785",
+       "sid": "68234785"
+      },
+      {
+       "name": "Yes",
+       "description": "Michael Misa",
+       "price": 400,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=83859817",
+       "sid": "83859817"
+      },
+      {
+       "name": "Yes",
+       "description": "Ryan McLeod",
+       "price": 440,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=41316049",
+       "sid": "41316049"
+      },
+      {
+       "name": "Yes",
+       "description": "Peyton Krebs",
+       "price": 600,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=24660524",
+       "sid": "24660524"
+      },
+      {
+       "name": "Yes",
+       "description": "Adam Gaudette",
+       "price": 600,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=17887090",
+       "sid": "17887090"
+      },
+      {
+       "name": "Yes",
+       "description": "Owen Power",
+       "price": 700,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=40258485",
+       "sid": "40258485"
+      },
+      {
+       "name": "Yes",
+       "description": "Ty Dellandrea",
+       "price": 700,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=38764246",
+       "sid": "38764246"
+      },
+      {
+       "name": "Yes",
+       "description": "Dmitry Orlov",
+       "price": 700,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=12862651",
+       "sid": "12862651"
+      },
+      {
+       "name": "Yes",
+       "description": "Tyson Kozak",
+       "price": 725,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=77455777",
+       "sid": "77455777"
+      },
+      {
+       "name": "Yes",
+       "description": "Mattias Samuelsson",
+       "price": 800,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=42871367",
+       "sid": "42871367"
+      },
+      {
+       "name": "Yes",
+       "description": "Olen Zellweger",
+       "price": 800,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=58222964",
+       "sid": "58222964"
+      },
+      {
+       "name": "Yes",
+       "description": "Beck Malenstyn",
+       "price": 850,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=41302810",
+       "sid": "41302810"
+      },
+      {
+       "name": "Yes",
+       "description": "Zack Ostapchuk",
+       "price": 900,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=67026572",
+       "sid": "67026572"
+      },
+      {
+       "name": "Yes",
+       "description": "Darnell Nurse",
+       "price": 1100,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=22105201",
+       "sid": "22105201"
+      },
+      {
+       "name": "Yes",
+       "description": "Barclay Goodrow",
+       "price": 1100,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=22262171",
+       "sid": "22262171"
+      },
+      {
+       "name": "Yes",
+       "description": "Luca Cagnoni",
+       "price": 1100,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=81555259",
+       "sid": "81555259"
+      },
+      {
+       "name": "Yes",
+       "description": "Louis Crevier",
+       "price": 1300,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=63547167",
+       "sid": "63547167"
+      },
+      {
+       "name": "Yes",
+       "description": "Jacob Trouba",
+       "price": 1300,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=15300180",
+       "sid": "15300180"
+      },
+      {
+       "name": "Yes",
+       "description": "Michael Kesselring",
+       "price": 1500,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=63417661",
+       "sid": "63417661"
+      },
+      {
+       "name": "Yes",
+       "description": "Sam Dickinson",
+       "price": 1900,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.619935814&selectionId=70260725",
+       "sid": "70260725"
+      }
+     ]
+    },
+    {
+     "key": "player_shots_on_goal",
+     "last_update": "2026-10-27T23:53:58Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Over",
+       "description": "Tage Thompson",
+       "price": -113,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620099180&selectionId=61655627",
+       "sid": "61655627"
+      },
+      {
+       "name": "Under",
+       "description": "Tage Thompson",
+       "price": -115,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620099180&selectionId=61655632",
+       "sid": "61655632"
+      },
+      {
+       "name": "Over",
+       "description": "Zach Benson",
+       "price": 122,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620099183&selectionId=62274400",
+       "sid": "62274400"
+      },
+      {
+       "name": "Under",
+       "description": "Zach Benson",
+       "price": -160,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620099183&selectionId=62274401",
+       "sid": "62274401"
+      },
+      {
+       "name": "Over",
+       "description": "Rasmus Dahlin",
+       "price": -132,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620099182&selectionId=61655647",
+       "sid": "61655647"
+      },
+      {
+       "name": "Under",
+       "description": "Rasmus Dahlin",
+       "price": 102,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620099182&selectionId=61655646",
+       "sid": "61655646"
+      },
+      {
+       "name": "Over",
+       "description": "Will Smith",
+       "price": 100,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620099962&selectionId=74864155",
+       "sid": "74864155"
+      },
+      {
+       "name": "Under",
+       "description": "Will Smith",
+       "price": -130,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620099962&selectionId=74864152",
+       "sid": "74864152"
+      },
+      {
+       "name": "Over",
+       "description": "Macklin Celebrini",
+       "price": 120,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620099961&selectionId=74864153",
+       "sid": "74864153"
+      },
+      {
+       "name": "Under",
+       "description": "Macklin Celebrini",
+       "price": -156,
+       "point": 3.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620099961&selectionId=74864157",
+       "sid": "74864157"
+      },
+      {
+       "name": "Over",
+       "description": "Jack Quinn",
+       "price": -106,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620098841&selectionId=64253980",
+       "sid": "64253980"
+      },
+      {
+       "name": "Under",
+       "description": "Jack Quinn",
+       "price": -122,
+       "point": 2.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620098841&selectionId=64253979",
+       "sid": "64253979"
+      }
+     ]
+    },
+    {
+     "key": "player_total_saves",
+     "last_update": "2026-10-27T23:53:58Z",
+     "link": null,
+     "sid": null,
+     "outcomes": [
+      {
+       "name": "Over",
+       "description": "Yaroslav Askarov",
+       "price": -106,
+       "point": 25.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620271387&selectionId=77385758",
+       "sid": "77385758"
+      },
+      {
+       "name": "Under",
+       "description": "Yaroslav Askarov",
+       "price": -125,
+       "point": 25.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620271387&selectionId=77385757",
+       "sid": "77385757"
+      },
+      {
+       "name": "Over",
+       "description": "Colten Ellis",
+       "price": 100,
+       "point": 25.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620269673&selectionId=90265835",
+       "sid": "90265835"
+      },
+      {
+       "name": "Under",
+       "description": "Colten Ellis",
+       "price": -132,
+       "point": 25.5,
+       "link": "https://sportsbook.fanduel.com/addToBetslip?marketId=42.620269673&selectionId=90265834",
+       "sid": "90265834"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
