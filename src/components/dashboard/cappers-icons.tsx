@@ -156,6 +156,14 @@ export const BoltIcon = ({ className }: P) => (
   </svg>
 );
 
+// A circular arrow: rebuild / regenerate.
+export const RefreshIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <path d="M20 11a8 8 0 1 0 -2.3 5.7" />
+    <path d="M20 4v7h-7" />
+  </svg>
+);
+
 export const ListIcon = ({ className }: P) => (
   <svg {...svgProps(className)}>
     <rect x="4" y="4" width="16" height="16" rx="3" />

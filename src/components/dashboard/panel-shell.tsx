@@ -95,12 +95,14 @@ export function FooterLine({ name, children }: { name: string; children: ReactNo
 }
 
 // `wrapSubtitle` lets a subtitle that is a full sentence run onto a second line rather than end in an ellipsis.
-export function PanelShell({ theme: t, control, footer, busy, wrapSubtitle, children }: { theme: PanelTheme; control?: ReactNode; footer: ReactNode; busy?: boolean; wrapSubtitle?: boolean; children: ReactNode }) {
+// `wrapControl`: a control too wide to share the title's line (phone width) drops to its own row under it,
+// right-aligned, instead of squeezing the title; the control should carry its own `ml-auto`.
+export function PanelShell({ theme: t, control, footer, busy, wrapSubtitle, wrapControl, children }: { theme: PanelTheme; control?: ReactNode; footer: ReactNode; busy?: boolean; wrapSubtitle?: boolean; wrapControl?: boolean; children: ReactNode }) {
   return (
     <section className={"flex h-full flex-col rounded-[18px] border p-3.5 " + t.card}>
-      <div className="flex items-center gap-3">
+      <div className={"flex items-center gap-3" + (wrapControl ? " flex-wrap gap-y-1.5" : "")}>
         <span className={"flex h-[26px] w-[26px] shrink-0 items-center justify-center " + t.iconWrap}>{t.icon}</span>
-        <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">{t.title}</h2>
+        <h2 className={"min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground " + (wrapControl ? "max-w-full flex-[1_0_auto]" : "flex-1")}>{t.title}</h2>
         {control}
       </div>
       {/* Under the whole header row, so it never has to share a line with the control. */}
