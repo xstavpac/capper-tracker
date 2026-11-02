@@ -5,10 +5,9 @@
 // and a later price written over one would silently turn "the price when posted" into "some later price" with no way
 // to see it happened. There is deliberately no runtime check; this test is the enforcement.
 //
-// Two rules, both over src/ with comments stripped and test files skipped:
-//   1. No pick.update / updateMany / upsert call and no raw `UPDATE picks` statement may name any of the four fields.
-//   2. Only the files that capture them at insert may mention them at all, so a NEW writer has to be added to ALLOWED
-//      here, in review, on purpose.
+// One rule, over src/ with comments stripped and test files skipped: no pick.update / updateMany / upsert call and no
+// raw `UPDATE picks` statement may name any of the four fields. WRITES only - reading them is free (the scoring and
+// closing-line-value code select them), so no file is barred from mentioning them.
 // Limits (honest): a text scan. It cannot see a field built through dynamic property access or SQL assembled from
 // pieces. It is a tripwire for the ordinary ways of writing the code, not a proof.
 //
@@ -20,18 +19,8 @@ import { join, relative } from "node:path";
 const repoRoot = process.cwd();
 const FIELDS = ["postedLine", "oddsCapturedAt", "oddsBook", "oddsNullReason"];
 const FIELD_RE = new RegExp("\\b(" + FIELDS.join("|") + ")\\b");
-// Rule 2 leaves postedLine out: lib/parlay/consensus.ts has its own, unrelated `postedLine` (a capper's line in a
-// consensus position). Rule 1 still covers it, because it only looks inside Pick update calls.
-const MENTION_RE = /\b(oddsCapturedAt|oddsBook|oddsNullReason)\b/;
-
-// The only files that may mention the fields: the pure decision, the insert's type, the two creators, and the
-// import's resolver. Nothing here updates a pick.
-const ALLOWED = new Set([
-  "src/lib/odds-source.ts",
-  "src/server/data/subscriptions.ts",
-  "src/server/data/picks.ts",
-  "src/server/actions/bulk-picks.ts",
-]);
+// Note: lib/parlay/consensus.ts has its own, unrelated `postedLine` (a capper's line in a consensus position). It is not
+// flagged because the scan only looks inside Pick update calls and raw UPDATE picks statements.
 
 let failures = 0;
 function check(label: string, pass: boolean, detail = "") {
@@ -95,15 +84,13 @@ check("scanner: a mention in a comment is ignored", findPostedOddsUpdates("// pi
 // --- the repo ---------------------------------------------------------------------------------------------------------
 const files = walk(join(repoRoot, "src"));
 const updaters: string[] = [];
-const mentioners: string[] = [];
 for (const f of files) {
   const rel = relative(repoRoot, f).replace(/\\/g, "/");
   const text = readFileSync(f, "utf8");
   for (const fnd of findPostedOddsUpdates(text)) updaters.push(`${rel}:${fnd.line} ${fnd.what}`);
-  if (MENTION_RE.test(stripComments(text)) && !ALLOWED.has(rel)) mentioners.push(rel);
 }
 check("no UPDATE path touches a posted-odds field", updaters.length === 0, "\n  " + updaters.join("\n  "));
-check("only the capture files mention the fields", mentioners.length === 0, "\n  " + mentioners.join("\n  ") + "\n  (add a new writer to ALLOWED in review, on purpose)");
+check("reading the fields is allowed: a select naming them is not flagged", findPostedOddsUpdates("await prisma.pick.findMany({ select: { oddsCapturedAt: true, oddsBook: true, postedLine: true } });").length === 0);
 check("the guard saw the repo", files.length > 100, `only ${files.length} files`);
 
 if (failures > 0) {

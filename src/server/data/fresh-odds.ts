@@ -189,29 +189,90 @@ async function readFresh(sportKey: string, since: Date): Promise<FreshListing | 
   return fetchedAt.getTime() >= since.getTime() ? { games: stored.games, fetchedAt } : null;
 }
 
-async function buyFresh(sportKey: string, now: Date): Promise<FreshListing | null> {
-  const apiKey = process.env.ODDS_API_KEY;
-  if (!apiKey || !isSportInSeason(sportKey)) return null;
+// A claim that has not completed within this long is dead (the request that made it timed out or the instance went
+// away): the next import may take it over and fetch. Age is measured from the claim's createdAt, which a takeover
+// re-stamps, so a live takeover is itself protected for another 5 minutes.
+export const FRESH_CLAIM_EXPIRY_MS = 5 * 60_000;
 
-  const [level, callsToday] = await Promise.all([
-    getLatestCreditUsageLevel(),
+export function claimExpired(claim: { createdAt: Date; fetchedAt: Date | null }, now: Date, expiryMs = FRESH_CLAIM_EXPIRY_MS): boolean {
+  if (claim.fetchedAt) return false; // completed: not a stuck claim, whatever its age
+  return now.getTime() - claim.createdAt.getTime() >= expiryMs;
+}
+
+export type BuyFreshDeps = {
+  apiKey: string | undefined;
+  inSeason: (sportKey: string) => boolean;
+  creditLevel: () => Promise<ReturnType<typeof classifyCreditUsage>>;
+  callsToday: (now: Date) => Promise<number>;
+  // Creates the claim row; null when the (sport, bucket) claim already exists.
+  createClaim: (sportKey: string, bucket: number) => Promise<string | null>;
+  readClaim: (sportKey: string, bucket: number) => Promise<{ id: string; createdAt: Date; fetchedAt: Date | null } | null>;
+  // Takes over an expired claim by id: true only if the row is still incomplete and still older than `expiredBefore`
+  // (a conditional UPDATE, so two instances cannot both take it). Re-stamps createdAt to `now`.
+  retakeClaim: (id: string, expiredBefore: Date, now: Date) => Promise<boolean>;
+  releaseClaim: (id: string) => Promise<void>;
+  // The bulk request itself, usage log included. null when the API failed.
+  fetchListing: (sportKey: string, now: Date) => Promise<FreshListing | null>;
+  // Fills the claim row, prunes old rows, revalidates the read cache.
+  store: (id: string, sportKey: string, listing: FreshListing, now: Date) => Promise<void>;
+};
+
+// The purchase: gate and cap first (a dead claim buys nothing it was not already allowed to), then the claim, then the
+// request. Every "no" is null, which the caller prices from the snapshot.
+export async function buyFreshWith(deps: BuyFreshDeps, sportKey: string, now: Date): Promise<FreshListing | null> {
+  if (!deps.apiKey || !deps.inSeason(sportKey)) return null;
+
+  const [level, callsToday] = await Promise.all([deps.creditLevel(), deps.callsToday(now)]);
+  if (!freshPurchaseAllowed({ level, callsToday })) return null;
+
+  const bucket = freshBucket(now);
+  let claimId = await deps.createClaim(sportKey, bucket);
+  if (claimId === null) {
+    const existing = await deps.readClaim(sportKey, bucket);
+    if (!existing || !claimExpired(existing, now)) return null; // a live (or finished) claim: someone else has it
+    if (!(await deps.retakeClaim(existing.id, new Date(now.getTime() - FRESH_CLAIM_EXPIRY_MS), now))) return null;
+    claimId = existing.id;
+  }
+
+  try {
+    const listing = await deps.fetchListing(sportKey, now);
+    if (!listing) {
+      await deps.releaseClaim(claimId);
+      return null;
+    }
+    await deps.store(claimId, sportKey, listing, now);
+    return listing;
+  } catch (err) {
+    await deps.releaseClaim(claimId);
+    throw err;
+  }
+}
+
+const prismaBuyDeps: BuyFreshDeps = {
+  apiKey: undefined, // read per call below
+  inSeason: isSportInSeason,
+  creditLevel: getLatestCreditUsageLevel,
+  callsToday: (now) =>
     prisma.oddsApiUsageLog.count({
       where: { caller: "import-fresh", pollTimestamp: { gte: easternDayStart(easternDateKey(now)) }, httpStatus: { gte: 200, lt: 300 } },
     }),
-  ]);
-  if (!freshPurchaseAllowed({ level, callsToday })) return null;
-
-  // The claim, BEFORE the request: the unique key lets exactly one buyer through.
-  let claimId: string;
-  try {
-    claimId = (await prisma.oddsFreshFetch.create({ data: { sportKey, bucket: freshBucket(now) }, select: { id: true } })).id;
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return null;
-    throw err;
-  }
-
-  const releaseClaim = () => prisma.oddsFreshFetch.deleteMany({ where: { id: claimId } }).catch(() => undefined);
-  try {
+  createClaim: async (sportKey, bucket) => {
+    try {
+      return (await prisma.oddsFreshFetch.create({ data: { sportKey, bucket }, select: { id: true } })).id;
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return null;
+      throw err;
+    }
+  },
+  readClaim: (sportKey, bucket) =>
+    prisma.oddsFreshFetch.findUnique({ where: { sportKey_bucket: { sportKey, bucket } }, select: { id: true, createdAt: true, fetchedAt: true } }),
+  retakeClaim: async (id, expiredBefore, now) =>
+    (await prisma.oddsFreshFetch.updateMany({ where: { id, fetchedAt: null, createdAt: { lt: expiredBefore } }, data: { createdAt: now } })).count === 1,
+  releaseClaim: async (id) => {
+    await prisma.oddsFreshFetch.deleteMany({ where: { id } }).catch(() => undefined);
+  },
+  fetchListing: async (sportKey, now) => {
+    const apiKey = process.env.ODDS_API_KEY as string;
     const fetchDate = easternDateKey(now);
     const { games: raw, primaryFailed, credits, httpStatus } = await fetchMergedOddsListing(sportKey, oddsApiRequestKeys(sportKey), apiKey, { fetchDate });
     if (credits) {
@@ -219,14 +280,13 @@ async function buyFresh(sportKey: string, now: Date): Promise<FreshListing | nul
         (err) => console.error("[fresh-odds] failed to persist usage log", JSON.stringify({ sportKey, error: err instanceof Error ? err.message : String(err) }))
       );
     }
-    if (primaryFailed) {
-      await releaseClaim();
-      return null;
-    }
+    if (primaryFailed) return null;
     const fetchedAt = new Date();
     // Same rule as the seed: an in-play price is not a pregame price.
-    const games = raw.filter((g) => new Date(g.commenceTime) > fetchedAt);
-    await prisma.oddsFreshFetch.update({ where: { id: claimId }, data: { data: games as unknown as Prisma.InputJsonValue, fetchedAt } });
+    return { games: raw.filter((g) => new Date(g.commenceTime) > fetchedAt), fetchedAt };
+  },
+  store: async (id, sportKey, listing, now) => {
+    await prisma.oddsFreshFetch.update({ where: { id }, data: { data: listing.games as unknown as Prisma.InputJsonValue, fetchedAt: listing.fetchedAt } });
     await pruneFresh(now);
     try {
       revalidateTag(cacheKeys.oddsFresh(sportKey));
@@ -234,12 +294,10 @@ async function buyFresh(sportKey: string, now: Date): Promise<FreshListing | nul
       // The write succeeded; the read cache catches up within FRESH_READ_TTL_SECONDS.
       console.error("[fresh-odds] revalidateTag failed - listing stored, cache catches up on its TTL", JSON.stringify({ sportKey, error: err instanceof Error ? err.message : String(err) }));
     }
-    return { games, fetchedAt };
-  } catch (err) {
-    await releaseClaim();
-    throw err;
-  }
-}
+  },
+};
+
+const buyFresh = (sportKey: string, now: Date) => buyFreshWith({ ...prismaBuyDeps, apiKey: process.env.ODDS_API_KEY }, sportKey, now);
 
 // Rows past FRESH_RETAIN_MS, read as ids then deleted by id.
 async function pruneFresh(now: Date): Promise<void> {
