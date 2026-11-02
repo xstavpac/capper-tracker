@@ -87,7 +87,7 @@ check("a stated price is never replaced by the feed's", resolvePickPrice({ odds:
 {
   const src = readFileSync(join(process.cwd(), "src/server/data/bulk-import-core.ts"), "utf8").replace(/\r\n/g, "\n");
   const start = src.indexOf("async function resolveGameAndOdds(");
-  const end = src.indexOf("\nexport async function previewBulkImportMatchesCore");
+  const end = src.indexOf("\n// The game a preview row resolved to");
   const resolver = src.slice(start, end);
   check("wiring: resolveGameAndOdds found", start >= 0 && end > start, true);
   check("wiring: its odds + oddsSource come from one resolvePickPrice(item, feedPrice) call", (resolver.match(/const \{ odds, oddsSource \} = resolvePickPrice\(item, feedPrice\);/g) ?? []).length, 1);
