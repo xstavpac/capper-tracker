@@ -101,4 +101,7 @@ export const cacheKeys = {
   // Eastern day - shared by every user that day. TTL only: the games it reads
   // started before the day began, and no write path needs to bust it.
   recentSwings: (sportKey: string, day: string, n: number) => `recent-swings:${sportKey}:${day}:${n}`,
+  // How many PENDING Telegram-ingest review items a user has (the sidebar badge): one entry per user, revalidated by
+  // exactly the writes that change the PENDING set (ingest creates items, resolve, dismiss). TTL is a backstop.
+  ingestReviewCount: (userId: string) => `ingest-review-count:${userId}`,
 } as const;

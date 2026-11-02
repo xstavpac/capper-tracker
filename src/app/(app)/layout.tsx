@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/layout/theme-provider";
 import { ParlayPoolProvider } from "@/components/parlay/parlay-pool-context";
 import { getLiveTickerGames } from "@/server/data/live-ticker";
 import { requireUser } from "@/server/auth";
+import { getPendingReviewCount } from "@/server/data/ingest-review-queue";
 import { getNavFeatureFlags, ZONE_MODEL_FLAG_KEY, ADMIN_OPS_CONSOLE_FLAG_KEY } from "@/server/data/feature-flags";
 
 // Every route under here needs a live, per-request session - never
@@ -17,10 +18,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [user, tickerGames] = await Promise.all([requireUser(), getLiveTickerGames()]);
   // Sidebar visibility only, from the shared flag snapshot (no per-request
   // query). The gated pages do their own uncached check - see feature-flags.ts.
-  const [showZoneModel, showAdminOps] = await getNavFeatureFlags(
-    [ZONE_MODEL_FLAG_KEY, ADMIN_OPS_CONSOLE_FLAG_KEY],
-    user.id
-  );
+  // Pending Telegram-ingest review items for the Catalog Import badge: a cached per-user count, never a per-render query.
+  const [[showZoneModel, showAdminOps], reviewCount] = await Promise.all([
+    getNavFeatureFlags([ZONE_MODEL_FLAG_KEY, ADMIN_OPS_CONSOLE_FLAG_KEY], user.id),
+    getPendingReviewCount(user.id),
+  ]);
 
   return (
     <ThemeProvider initialTheme={user.themePreference}>
@@ -32,6 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               user={{ name: user.name, email: user.email, profilePictureUrl: user.profilePictureUrl }}
               showZoneModel={showZoneModel}
               showAdminOps={showAdminOps}
+              reviewCount={reviewCount}
             />
             <main className="flex-1 bg-background p-4 md:rounded-xl md:border md:border-border md:bg-card md:p-8 md:shadow-soft">
               {children}

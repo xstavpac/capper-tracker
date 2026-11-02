@@ -271,13 +271,21 @@ function LogoMark() {
 // Same look as the compact pill instances (Dashboard/Picks header, catalog
 // page) via dropCatalogButtonBaseClass, just stretched full-width for the
 // sidebar rail instead of hugging its own content.
-function SidebarDropCatalog({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarDropCatalog({ onNavigate, reviewCount = 0 }: { onNavigate?: () => void; reviewCount?: number }) {
   return (
     <>
       <div className="my-3 border-t border-border-subtle" />
       <a href="/picks/import" onClick={onNavigate} className={dropCatalogButtonBaseClass + " w-full"}>
         <LightningIcon />
         Drop Catalog
+        {reviewCount > 0 && (
+          <span
+            aria-label={reviewCount + " to review"}
+            className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-semibold text-brand-700"
+          >
+            {reviewCount}
+          </span>
+        )}
       </a>
     </>
   );
@@ -346,10 +354,13 @@ export function AppSidebar({
   user,
   showZoneModel = false,
   showAdminOps = false,
+  reviewCount = 0,
 }: {
   user: SidebarUser;
   showZoneModel?: boolean;
   showAdminOps?: boolean;
+  // Pending Telegram-ingest review items; shown as a badge on Drop Catalog (the link to the Catalog Import page).
+  reviewCount?: number;
 }) {
   const [open, setOpen] = useState(false);
   const { slipSize } = useParlayPool();
@@ -380,7 +391,7 @@ export function AppSidebar({
           <LogoMark />
         </div>
         <NavLinks items={navItems} />
-        <SidebarDropCatalog />
+        <SidebarDropCatalog reviewCount={reviewCount} />
         <AccountRow user={user} />
       </aside>
 
@@ -399,7 +410,7 @@ export function AppSidebar({
               </button>
             </div>
             <NavLinks items={navItems} onNavigate={() => setOpen(false)} />
-            <SidebarDropCatalog onNavigate={() => setOpen(false)} />
+            <SidebarDropCatalog onNavigate={() => setOpen(false)} reviewCount={reviewCount} />
             <AccountRow user={user} />
           </aside>
         </div>
