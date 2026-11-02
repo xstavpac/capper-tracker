@@ -250,7 +250,7 @@ async function main() {
           /insertPicksInTransaction\(tx, userId, survivors\.length, async \(db\) => \{/.test(dedup) &&
           /resolveImportRefs\(db, userId, /.test(dedup)
       );
-      check("8 every item is resolved concurrently, without its own retry wait", /Promise\.all\(items\.map\(\(item\) => resolveOne\(item, getOdds\)\)\)/.test(fn) && /retryOnMiss: false/.test(fn));
+      check("8 every item is resolved concurrently, without its own retry wait", /Promise\.all\(items\.map\(\(item\) => resolveOne\(item, getOdds, pricingOdds\)\)\)/.test(fn) && /retryOnMiss: false/.test(fn));
       check("8 exactly one wait in the whole action", (fn.match(/setTimeout\(/g) ?? []).length === 1);
       const loop = code(fn.slice(fn.indexOf("for (let i = 0; i < items.length; i++)"), txStart));
       check("8 the per-item loop awaits nothing", !/\bawait\b/.test(loop));
