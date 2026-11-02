@@ -50,6 +50,7 @@ import {
 } from "@/server/data/duplicate-db-match";
 import { recordImportSkippedLines, type SkippedLineEntry } from "@/server/data/import-skipped-lines";
 import { recordImportRun } from "@/server/data/import-runs";
+import { fanOutImportedPicks } from "@/server/data/pick-recipients";
 import type { BetType, Period } from "@prisma/client";
 
 export type BulkImportItem = {
@@ -110,6 +111,9 @@ export type BulkImportResult =
       // per-item failures unrelated to billing (bad data, unresolved game,
       // etc). See createPicksWithEntitlementCheck.
       pickLimitBlocked?: { message: string; remaining: number };
+      // Recipient copies that could not be delivered (pick-recipients.ts). The import itself succeeded; this is only
+      // here so a caller can record it (the Telegram batch row does). Absent when nothing failed.
+      recipientsFailed?: number;
     }
   | { success: false; error: string };
 
@@ -943,6 +947,23 @@ export async function importPicksForUser(
   const result = outcome.result;
   const duplicatesSkipped = result.skippedDuplicates.map((d) => d.capperName + " - " + d.label);
 
+  // Imported picks also go to this user's active pick recipients (pick-recipients.ts). Best-effort and after the
+  // source's own commit: it never throws, so it cannot fail or undo this import.
+  let recipientsFailed = 0;
+  if (result.allowed && result.created.length > 0) {
+    try {
+      const delivery = await fanOutImportedPicks(
+        user.id,
+        result.insertedIndexes.map((rowIndex, k) => ({ row: toInsert[rowIndex], sourcePickId: result.created[k].id }))
+      );
+      recipientsFailed = delivery.failed;
+    } catch (err) {
+      // fanOutImportedPicks does not throw; this is a belt for the day it does. The source import is already committed.
+      console.error("[pick-recipients] fan-out threw - source import unaffected", err instanceof Error ? err.message : err);
+      recipientsFailed = result.created.length;
+    }
+  }
+
   // Bust this user's cached Dashboard aggregations by tag (see
   // getDashboardSummary) - revalidatePath does not reliably evict
   // unstable_cache entries.
@@ -990,6 +1011,7 @@ export async function importPicksForUser(
     unmatchedGames,
     doubleheaderBothFinal,
     duplicatesSkipped,
+    ...(recipientsFailed > 0 ? { recipientsFailed } : {}),
   };
 }
 

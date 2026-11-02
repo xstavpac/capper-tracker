@@ -15,6 +15,7 @@ import {
 import { createPickRowResolver, type PickRowResolution } from "@/server/data/bulk-import-core";
 import { toItem, type CatalogQuestion } from "@/server/data/catalog-import-orchestrator";
 import { insertPicksDeduped } from "@/server/data/pick-dedup";
+import { fanOutImportedPicks } from "@/server/data/pick-recipients";
 import { revalidateCapperRoster } from "@/server/data/capper-roster";
 import { revalidateReviewQueue } from "@/server/data/ingest-review-queue";
 import type { IngestQuestionType, Prisma } from "@prisma/client";
@@ -141,6 +142,8 @@ export async function resolveReviewItem(userId: string, itemId: string, choiceId
     return { ok: false, error: "duplicate", message: "This pick is already logged." };
   }
   const pickId = result.created[0].id;
+  // An approved review item is an imported pick: it goes to the active recipients like the rest of the batch did.
+  await fanOutImportedPicks(userId, [{ row: storedToPickRow(choice.pick, choice.capperName), sourcePickId: pickId }]);
   await prisma.ingestReviewItem.updateMany({ where: { id: itemId, userId }, data: { resolvedPickId: pickId } });
   revalidateTag(cacheKeys.dashboard(userId));
   revalidateCapperRoster(userId);

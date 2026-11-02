@@ -31,6 +31,7 @@ export function stuckCutoffs(now: Date): Cutoffs {
 function stuckWhere(c: Cutoffs): Prisma.Sql {
   return Prisma.sql`
     p.status = 'PENDING'
+    AND NOT p."isRecipientCopy"
     AND s.name = ANY(${AUTO_GRADED_SPORTS}::text[])
     AND p."gameTime" >= ${ts(c.lookback)}
     AND (
@@ -93,7 +94,7 @@ export async function loadGradingView(now = new Date()): Promise<GradingView> {
          ORDER BY p."gameTime" ASC
          LIMIT ${GRADING_STUCK_LIST_LIMIT}
        ) x) AS stuck,
-      (SELECT count(*)::int FROM picks WHERE "gradedViaFuzzyMatch" = true AND "gradedAt" >= ${ts(fuzzyFrom)}) AS fuzzy
+      (SELECT count(*)::int FROM picks WHERE NOT "isRecipientCopy" AND "gradedViaFuzzyMatch" = true AND "gradedAt" >= ${ts(fuzzyFrom)}) AS fuzzy
   `);
   return {
     now,

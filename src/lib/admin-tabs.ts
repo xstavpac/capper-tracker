@@ -8,6 +8,7 @@ export const ADMIN_TABS = [
   { key: "bug-reports", href: "/admin/bug-reports", label: "Bug reports" },
   { key: "generator", href: "/admin/generator", label: "Generator" },
   { key: "imports", href: "/admin/imports", label: "Imports" },
+  { key: "recipients", href: "/admin/recipients", label: "Recipients" },
 ] as const;
 
 export type AdminTabKey = (typeof ADMIN_TABS)[number]["key"];

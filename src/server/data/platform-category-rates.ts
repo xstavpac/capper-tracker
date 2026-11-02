@@ -38,7 +38,7 @@ export function buildPlatformRatesRecompute(): Prisma.Sql {
       JOIN sports s ON s.id = p."sportId"
       LEFT JOIN market_keys m ON p."betType" = 'PLAYER_PROP' AND m.sport = upper(s.name) AND m.market = p."propMarket"::text
       CROSS JOIN LATERAL (SELECT ${Prisma.raw(realBreakEvenSql("p"))} AS be) x
-      WHERE p.status IN ('WIN', 'LOSS') AND COALESCE(m.key, p.category) IS NOT NULL
+      WHERE p.status IN ('WIN', 'LOSS') AND NOT p."isRecipientCopy" AND COALESCE(m.key, p.category) IS NOT NULL
       GROUP BY 1, 2, 3
     ),
     up AS (
