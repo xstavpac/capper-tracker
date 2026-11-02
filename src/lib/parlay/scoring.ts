@@ -20,8 +20,7 @@
 // the market's sport family. No recency weighting. Pushes never count.
 //
 // Score: the shrunk probability minus the break-even of the pick's own price
-// (`margin`), so a heavy favorite doesn't float to the top. The win-% gate reads
-// the shrunk probability only (passesGate); ranking reads `rankScore`.
+// (`margin`), so a heavy favorite doesn't float to the top.
 //
 // Price unknown (priceOf): no break-even and no margin, and the label says "no
 // price data". Its rankScore is the shrunk probability minus the platform's
@@ -30,11 +29,18 @@
 // probability (~0.56 against a margin of ~0.15) a no-price pick would beat every
 // priced one.
 //
+// Gate: the user's win-% lever L keeps its label but means "the edge a capper at
+// L% has at -110". A pick passes when its edge (rankScore: margin, or the no-price
+// yardstick's) reaches L minus the -110 break-even, so at -110 it is exactly the
+// plain "shrunk probability >= L". L = 0 is no gate; a pick with no record never
+// passes.
+//
 // A capper's historical break-even (their average implied probability across
 // priced picks in the category) is carried in the breakdown for the run log. It
 // does not change the score.
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
-import { americanToDecimal } from "@/lib/parlay/combine-odds";
+import { hasUsablePrice } from "@/lib/parlay/combine-odds";
+import { GATE_DEFAULT } from "@/lib/parlay/gate";
 import { propMarketKey, type PropMarketKey } from "@/lib/prop-market-key";
 import { categoryRecordKey, leagueRecordKey, propMarketRecordKey } from "@/lib/record-keys";
 import type { CapperLeagueRecords, PropMarketRecord } from "@/server/data/picks";
@@ -54,7 +60,7 @@ export const DEFAULT_PLATFORM_RATE = 0.52;
 export const DEFAULT_BREAK_EVEN = 110 / 210;
 export const NO_PRICE_LABEL = "no price data";
 // Names these rules in the run log. Any change to a constant above changes it.
-export const SCORING_VERSION = "hier-k20-margin-v1";
+export const SCORING_VERSION = "hier-k20-edge-gate-v1";
 
 const PLACEHOLDER_ODDS = -110;
 
@@ -83,6 +89,8 @@ export type ScoringContext = {
   categoryRecords?: Record<string, CategoryBreakdownItem | null>;
   propMarketRecords?: Record<string, PropMarketRecord | null>;
   platformRates: PlatformRates;
+  // The user's win-% lever (gate.ts), for the breakdown's gate. Absent is 55.
+  minWinPct?: number;
   // Keyed by scoreRecordKey. Absent or missing is null in the breakdown.
   historicalBreakEven?: Record<string, { rate: number; n: number } | null>;
 };
@@ -106,6 +114,17 @@ export type PlatformRate = { rate: number; n: number; tier: PlatformTier };
 
 export type WinLoss = { wins: number; losses: number };
 
+export type GateCheck = {
+  minWinPct: number;
+  // The lever as an edge: L minus the -110 break-even. Null at L = 0: no gate.
+  requiredEdge: number | null;
+  // The pick's: the shrunk probability minus `breakEven`.
+  edge: number;
+  // The pick's break-even, or the platform's yardstick when its price is unknown.
+  breakEven: number;
+  passes: boolean;
+};
+
 export type ScoredPick = {
   status: "SCORED";
   pickId: string;
@@ -128,6 +147,7 @@ export type ScoredPick = {
   };
   // The yardstick a no-price pick was ranked against. Null for a priced pick.
   rankYardstick: number | null;
+  gate: GateCheck;
   historicalBreakEven: { rate: number; n: number } | null;
   propMarket?: PropMarketKey;
 };
@@ -148,7 +168,7 @@ export type PickScore = ScoredPick | UnscoredPick;
 export function priceOf(pick: Pick<ScoringPick, "betType" | "odds" | "oddsSource">): PriceRead {
   const unknown = (rule: PriceRule): PriceRead => ({ status: "UNKNOWN", rule, label: NO_PRICE_LABEL });
   if (pick.oddsSource === "DEFAULTED") return unknown("DEFAULTED");
-  if (americanToDecimal(pick.odds) === null) return unknown("UNUSABLE_ODDS");
+  if (!hasUsablePrice(pick.odds)) return unknown("UNUSABLE_ODDS");
   if (pick.oddsSource === "MARKET" || pick.oddsSource === "STATED") return { status: "REAL", rule: "SOURCE_RECORDED", label: null };
   if (pick.odds !== PLACEHOLDER_ODDS) return { status: "REAL_SOURCE_UNKNOWN", rule: "NO_SOURCE_NOT_PLACEHOLDER", label: null };
   if (pick.betType === "SPREAD" || pick.betType === "TOTAL") return { status: "REAL_SOURCE_UNKNOWN", rule: "NO_SOURCE_PLACEHOLDER_SPREAD_TOTAL", label: null };
@@ -158,8 +178,8 @@ export function priceOf(pick: Pick<ScoringPick, "betType" | "odds" | "oddsSource
 // The win rate these American odds need to break even, or null for odds that
 // aren't a price.
 export function breakEvenOf(odds: number): number | null {
-  const decimal = americanToDecimal(odds);
-  return decimal === null ? null : 1 / decimal;
+  if (!hasUsablePrice(odds)) return null;
+  return odds > 0 ? 100 / (odds + 100) : -odds / (-odds + 100);
 }
 
 // ---------------------------------------------------------------------------
@@ -273,6 +293,7 @@ export function scorePick(pick: ScoringPick, ctx: ScoringContext): PickScore {
   const breakEven = price.status === "UNKNOWN" ? null : breakEvenOf(pick.odds);
   const margin = breakEven === null ? null : shrunkWinProb - breakEven;
   const rankYardstick = margin === null ? platformBreakEvenFor(ctx.platformRates, query) : null;
+  const gateBreakEven = breakEven ?? rankYardstick!;
   const recordKey = scoreRecordKey(pick);
 
   return {
@@ -286,15 +307,31 @@ export function scorePick(pick: ScoringPick, ctx: ScoringContext): PickScore {
     decided,
     levels: { ...levels, midPrior, platform },
     rankYardstick,
+    gate: gateCheck(shrunkWinProb, gateBreakEven, ctx.minWinPct ?? GATE_DEFAULT),
     historicalBreakEven: (recordKey && ctx.historicalBreakEven?.[recordKey]) || null,
     ...(propKey ? { propMarket: propKey } : {}),
   };
 }
 
-// The user's win-% lever on the shrunk probability. A pick with no record never
+// passes = edge >= requiredEdge, written so the -110 break-even cancels exactly: at
+// -110 the extra term is 0 and this is the plain "shrunk >= L" to the last bit, where
+// subtracting the break-even from both sides could round a boundary pick the other way.
+export function gateCheck(shrunkWinProb: number, breakEven: number, minWinPct: number): GateCheck {
+  const edge = shrunkWinProb - breakEven;
+  if (minWinPct === 0) return { minWinPct, requiredEdge: null, edge, breakEven, passes: true };
+  return {
+    minWinPct,
+    requiredEdge: minWinPct / 100 - DEFAULT_BREAK_EVEN,
+    edge,
+    breakEven,
+    passes: shrunkWinProb * 100 >= minWinPct + (breakEven - DEFAULT_BREAK_EVEN) * 100,
+  };
+}
+
+// The gate at any setting, from a score already built. A pick with no record never
 // passes, at any setting (gate.ts: at 0% cappers with no record are still out).
 export function passesGate(score: PickScore, minWinPct: number): boolean {
-  return score.status === "SCORED" && score.shrunkWinProb * 100 >= minWinPct;
+  return score.status === "SCORED" && gateCheck(score.shrunkWinProb, score.gate.breakEven, minWinPct).passes;
 }
 
 // The one ordering: rankScore descending, then more decided picks, then pick id,
