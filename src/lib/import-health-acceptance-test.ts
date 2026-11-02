@@ -119,8 +119,8 @@ const now = T("2026-10-19T20:00:00Z");
 
 // ---- 5. Wiring (source-level) ----
 {
-  const action = src("src/server/actions/bulk-picks.ts");
-  const fn = action.slice(action.indexOf("export async function bulkImportPicksAction"), action.indexOf("// ---- MLP (moneyline parlay) import ----"));
+  const action = src("src/server/data/bulk-import-core.ts");
+  const fn = action.slice(action.indexOf("export async function importPicksForUser"), action.length);
   expect("action: takes the ambiguity log as its 3rd arg", /skippedDuplicates: SkippedDuplicateItem\[\] = \[\],[\s\S]*?ambiguity: unknown = \[\]\s*\n\): Promise<BulkImportResult>/.test(fn), true);
   expect("action: a fallback flag per queued row (no score source)", [/toInsert\.push\(\{[\s\S]*?\}\);\s*\n\s*fallback\.push\(!resolvable\);/.test(fn), (fn.match(/toInsert\.push\(/g) ?? []).length], [true, 1]);
   expect("action: fallback picks mapped through insertedIndexes -> created ids", /result\.insertedIndexes\.flatMap\(\(rowIndex, k\) =>\s*\n?\s*fallback\[rowIndex\] \? \[\{ pickId: result\.created\[k\]\.id/.test(fn), true);

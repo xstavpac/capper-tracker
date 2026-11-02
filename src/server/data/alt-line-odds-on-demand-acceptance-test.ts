@@ -340,7 +340,7 @@ async function main() {
   expect("no key -> no request and no table read", [oddsApiCalls.length, altTableCalls], before);
 
   // ---- 10. the import itself uses the same switch as the preview ----
-  const source = readFileSync(join(__dirname, "..", "actions", "bulk-picks.ts"), "utf8");
+  const source = readFileSync(join(__dirname, "bulk-import-core.ts"), "utf8");
   expect("wiring: the import resolves with altLines on", /resolveGameAndOdds\(item, loader, \{ retryOnMiss: false, altLines: true, pricing \}\)/.test(source), true);
   expect("wiring: only the import and the preview turn it on", (source.match(/altLines: true/g) ?? []).length, 2);
 

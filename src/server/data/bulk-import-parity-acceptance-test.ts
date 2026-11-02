@@ -12,6 +12,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { Prisma } from "@prisma/client";
 import type { OddsGame } from "@/server/data/odds";
 
@@ -34,7 +35,13 @@ let currentUser = "";
 stub("../auth", { requireUser: async () => ({ id: currentUser }) });
 stub("next/cache", { revalidatePath: () => {}, revalidateTag: () => {}, unstable_cache: <T>(fn: T) => fn });
 
-const isLocal = (url: string | undefined) => /@(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(url ?? "");
+function isLocal(url: string | undefined): boolean {
+  try {
+    return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(new URL(url ?? "").hostname);
+  } catch {
+    return false;
+  }
+}
 
 const FIXTURE = [
   "Parity Pete",
@@ -46,11 +53,19 @@ const FIXTURE = [
 ].join("\n");
 
 async function main() {
+  // Same .env the Prisma client would read, loaded now so the host check below sees it.
+  if (!process.env.DATABASE_URL) {
+    try {
+      process.loadEnvFile(".env");
+    } catch {
+      /* no .env */
+    }
+  }
+  const { prisma } = await import("@/lib/prisma");
   if (!isLocal(process.env.DATABASE_URL)) {
     console.log("SKIP: DATABASE_URL is not a local database - this test writes fixtures.");
     return;
   }
-  const { prisma } = await import("@/lib/prisma");
   const { easternDateKey } = await import("@/lib/dates");
   const todayKey = easternDateKey(new Date());
   if (await prisma.oddsSnapshot.findUnique({ where: { sportKey_fetchDate: { sportKey: "americanfootball_nfl", fetchDate: todayKey } } })) {
@@ -109,12 +124,19 @@ async function main() {
     }
 
     const { parseCatalog } = await import("@/lib/parse-catalog");
-    const { bulkImportPicksAction: legacyAction } = (await import(legacyPath)) as typeof import("@/server/actions/bulk-picks");
+    const { bulkImportPicksAction: legacyAction } = (await import(pathToFileURL(legacyPath).href)) as typeof import("@/server/actions/bulk-picks");
     const { importPicksForUser } = await import("@/server/data/bulk-import-core");
     const { runCatalogImportForUser } = await import("@/server/data/catalog-import-orchestrator");
 
+    // Input prepared the way the form prepares it before it calls the import action: ambiguous teams settled by
+    // the hierarchy, flagged duplicates taken out and passed as skippedDuplicates.
+    const { autoResolveAmbiguousPicksForServer } = await import("@/server/data/catalog-import-orchestrator");
+    const { checkDuplicatePicksForUser } = await import("@/server/data/bulk-import-core");
     const parsed = parseCatalog(FIXTURE, []);
-    const items = parsed.picks.map((p) => ({
+    const auto = await autoResolveAmbiguousPicksForServer(parsed.picks);
+    const settled = auto.picks.filter((p) => !p.ambiguous);
+    const ambiguityLog = auto.logs.map((l) => ({ key: l.ambiguousName, sport: l.resolvedSport, method: l.method, count: l.pickCount }));
+    const toItem = (p: (typeof settled)[number]) => ({
       capperName: p.capperName,
       sportName: p.sportName,
       description: p.description,
@@ -128,12 +150,22 @@ async function main() {
       gameNumber: p.gameNumber,
       raw: p.raw,
       overrideDuplicate: false,
-    }));
-    expect("fixture parses into picks", items.length >= 3, true);
+    });
+    expect("fixture parses into picks", settled.length >= 3, true);
+    const prepare = async (userId: string) => {
+      const flags = await checkDuplicatePicksForUser(userId, settled.map((p) => ({ ...toItem(p), period: p.period })));
+      return {
+        items: settled.filter((_, i) => !flags[i]).map(toItem),
+        skippedDuplicates: settled.flatMap((p, i) => (flags[i] ? [{ capperName: p.capperName, sportName: p.sportName, raw: p.raw }] : [])),
+      };
+    };
 
     currentUser = users.legacy;
-    const resA = await legacyAction(items, [], []);
-    const resB = await importPicksForUser(users.core, items, [], []);
+    const prepA = await prepare(users.legacy);
+    const prepB = await prepare(users.core);
+    expect("the in-paste duplicate was flagged", prepA.skippedDuplicates.length, 1);
+    const resA = await legacyAction(prepA.items, prepA.skippedDuplicates, ambiguityLog);
+    const resB = await importPicksForUser(users.core, prepB.items, prepB.skippedDuplicates, ambiguityLog);
     const resC = await runCatalogImportForUser(users.orch, FIXTURE, todayKey);
 
     const normalizeResult = (r: unknown) => JSON.stringify(r);
@@ -151,7 +183,7 @@ async function main() {
           },
           orderBy: [{ betDetail: "asc" }, { betType: "asc" }],
         })
-      ).map((p) => JSON.stringify(p));
+      ).map((p) => JSON.stringify(p.awayTeam === "-" ? { ...p, gameTime: "placeholder" } : p));
     const a = await picksOf(users.legacy);
     expect("legacy inserted at least one pick", a.length > 0, true);
     expect("B inserted rows identical to A", await picksOf(users.core), a);

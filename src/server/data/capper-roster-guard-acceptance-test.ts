@@ -58,6 +58,7 @@ const NO_CAPPER_CREATION = new Set(["src/server/data/picks.ts"]);
 const ACTION_CALLERS: Record<string, { via?: string }> = {
   "src/server/actions/cappers.ts": { via: "revalidatePickStats" },
   "src/server/actions/bulk-picks.ts": {},
+  "src/server/data/bulk-import-core.ts": {},
 };
 
 const WRITE_PATTERNS: RegExp[] = [

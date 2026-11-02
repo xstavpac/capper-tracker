@@ -267,8 +267,8 @@ function main() {
 
   // 6. Source inspection: the action issues the batched statements, not per-pick ones.
   {
-    const src = readFileSync("src/server/actions/bulk-picks.ts", "utf8");
-    const fn = src.slice(src.indexOf("export async function checkDuplicatePicksAction"), src.indexOf("type CapperRef = "));
+    const src = readFileSync("src/server/data/bulk-import-core.ts", "utf8");
+    const fn = src.slice(src.indexOf("export async function checkDuplicatePicksForUser"), src.indexOf("export async function importPicksForUser"));
     expect("one pick read in the action", (fn.match(/prisma\.pick\.findMany\(/g) ?? []).length, 1);
     expect("one sport read in the action", (fn.match(/prisma\.sport\.find/g) ?? []).length, 1);
     expect("the sport read is a findMany (no per-name findFirst)", /prisma\.sport\.findFirst/.test(fn), false);

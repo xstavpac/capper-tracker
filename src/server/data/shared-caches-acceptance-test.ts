@@ -184,8 +184,13 @@ async function main() {
       const body = actions.slice(start, next < 0 ? undefined : next);
       expect(`${names[i]} revalidates the dashboard tag`, /revalidatePickStats\(user\.id\)/.test(body), true);
     }
-    const bulk = src("src/server/actions/bulk-picks.ts");
-    for (const name of ["bulkImportPicksAction", "bulkImportParlaysAction"]) {
+    // bulkImportPicksAction is a requireUser() wrapper now; its revalidation lives in importPicksForUser.
+    const bulkFiles: Record<string, string> = {
+      importPicksForUser: src("src/server/data/bulk-import-core.ts"),
+      bulkImportParlaysAction: src("src/server/actions/bulk-picks.ts"),
+    };
+    for (const name of Object.keys(bulkFiles)) {
+      const bulk = bulkFiles[name];
       const start = bulk.indexOf("export async function " + name);
       const next = bulk.indexOf("\nexport ", start + 10);
       const body = bulk.slice(start, next < 0 ? undefined : next);
