@@ -229,8 +229,8 @@ async function main() {
 
     // ---- 8. Source inspection ----
     {
-      const src = readFileSync("src/server/actions/bulk-picks.ts", "utf8");
-      const fn = src.slice(src.indexOf("export async function bulkImportPicksAction("), src.indexOf("// ---- MLP (moneyline parlay) import ----"));
+      const src = readFileSync("src/server/data/bulk-import-core.ts", "utf8");
+      const fn = src.slice(src.indexOf("export async function importPicksForUser("), src.length);
       // Code only: comments mention the functions this must not call.
       const code = (text: string) =>
         text

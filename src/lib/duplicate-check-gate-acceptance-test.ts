@@ -211,7 +211,7 @@ async function main() {
     if (/\binsertPicksInTransaction\(/.test(text) && !/server\/data\/(subscriptions|pick-dedup)\.ts$/.test(file)) offenders.push(file + " bypasses insertPicksDeduped");
   }
   check("no runtime code inserts a Pick except through insertPicksDeduped", offenders.length === 0, offenders.join("; "));
-  const action = readFileSync("src/server/actions/bulk-picks.ts", "utf8");
+  const action = readFileSync("src/server/data/bulk-import-core.ts", "utf8");
   check("bulkImportPicksAction inserts through insertPicksDeduped", /insertPicksDeduped\(user\.id, toInsert\)/.test(action));
   check("createPick inserts through insertPicksDeduped", /insertPicksDeduped\(userId, \[/.test(readFileSync("src/server/data/picks.ts", "utf8")));
 
