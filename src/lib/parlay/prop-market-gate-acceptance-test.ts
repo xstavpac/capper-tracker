@@ -8,7 +8,7 @@
 // The generated leg names its market: "· NBA points", not "· NBA player prop".
 // Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/prop-market-gate-acceptance-test.ts
-import { buildGeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay as engine, WILSON_RULES, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { recordForGate } from "@/lib/parlay/pick-record";
 import { recordText } from "@/components/parlay/generator-result";
 import { propMarketRecordKey } from "@/lib/record-keys";
@@ -16,6 +16,8 @@ import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { PropMarketKey } from "@/lib/prop-market-key";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords, PropMarketRecord } from "@/server/data/picks";
+// Pins the engine before scoring.ts (WILSON_RULES), unless a call names its rules.
+const buildGeneratedParlay: typeof engine = (s, settings, variation, now, rules = WILSON_RULES, trace) => engine(s, settings, variation, now, rules, trace);
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {

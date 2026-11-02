@@ -6,13 +6,15 @@
 // the other one - and there is no minimum sample. Consensus Hybrid's own cases
 // are in consensus-acceptance-test.ts. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/pick-record-best-of-two-acceptance-test.ts
-import { buildGeneratedParlay, GENERATOR_Z, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay as engine, WILSON_RULES, GENERATOR_Z, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { recordForGate } from "@/lib/parlay/pick-record";
 import { wilsonLowerBound } from "@/lib/wilson-lower-bound";
 import { recordText } from "@/components/parlay/generator-result";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
+// Pins the engine before scoring.ts (WILSON_RULES), unless a call names its rules.
+const buildGeneratedParlay: typeof engine = (s, settings, variation, now, rules = WILSON_RULES, trace) => engine(s, settings, variation, now, rules, trace);
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {

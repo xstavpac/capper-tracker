@@ -15,8 +15,8 @@ export const RUN_LIST_LIMIT = 30;
 type Mode = RunRow["mode"];
 
 const LIST_EXTRAS = Prisma.sql`CASE WHEN extras ? 'snapshot'
-  THEN jsonb_set(extras - 'swaps', '{snapshot}', (extras -> 'snapshot') - 'games')
-  ELSE extras - 'swaps' END`;
+  THEN jsonb_set((extras - 'swaps') #- '{scoring,legs}', '{snapshot}', (extras -> 'snapshot') - 'games')
+  ELSE (extras - 'swaps') #- '{scoring,legs}' END`;
 
 export async function loadRecentRuns(opts: { mode?: Mode; limit?: number } = {}): Promise<RunRow[]> {
   const limit = Math.min(Math.max(opts.limit ?? RUN_LIST_LIMIT, 1), 100);

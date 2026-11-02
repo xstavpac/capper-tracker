@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { REASON_LABELS, type ReasonCode, type SwapLegTrace, type SwapModeTrace } from "@/lib/parlay/run-trace";
-import { chainTitle, fmtUtc, funnelsOf, modeLabel, reasonBreakdown, runFlags, settingsLine, suspectIntake, type RunRow } from "@/lib/parlay/run-view";
+import { chainTitle, fmtUtc, funnelsOf, modeLabel, noPlatformRates, reasonBreakdown, runFlags, settingsLine, suspectIntake, type RunRow } from "@/lib/parlay/run-view";
 import type { RunTrace } from "@/lib/parlay/run-trace";
 
 // The admin Generator tab's markup: no state, no client code, so the page is the
@@ -46,6 +46,7 @@ function RunCard({ run, open = false }: { run: RunRow; open?: boolean }) {
           {flags.errors > 0 && <Badge tone="red">{flags.errors} error{flags.errors === 1 ? "" : "s"}</Badge>}
           {flags.collapses > 0 && <Badge tone="red">collapsed to 0</Badge>}
           {flags.suspect > 0 && <Badge tone="amber">50 / 100 / 1000</Badge>}
+          {noPlatformRates(run) && <Badge tone="red">no platform rates</Badge>}
           {run.detailTruncated && <Badge tone="muted">detail truncated</Badge>}
         </span>
         <div className="mt-0.5 text-xs text-muted-foreground">{settingsLine(run.settings)}</div>
@@ -54,6 +55,7 @@ function RunCard({ run, open = false }: { run: RunRow; open?: boolean }) {
       <div className="mt-3 space-y-4">
         <p className="text-xs text-muted-foreground">
           scoring <span className="font-mono">{run.scoringVersion}</span> · {run.durationMs ?? "?"} ms
+          {run.extras?.scoring && <> · platform rates: {run.extras.scoring.platformRows} rows</>}
           {hasDetail && (
             <>
               {" · "}
@@ -223,6 +225,21 @@ export function RunDetailView({ run }: { run: RunRow & { detail: RunTrace["detai
           {swaps.map((m) => (
             <SwapTable key={m.mode + m.scope} mode={m} />
           ))}
+        </section>
+      )}
+      {(run.extras?.scoring?.legs ?? []).length > 0 && (
+        <section className="space-y-1">
+          <h2 className="text-lg font-semibold text-foreground">Scoring, leg by leg</h2>
+          <ul className="text-xs">
+            {run.extras!.scoring!.legs.map((l) => (
+              <li key={l.role + l.id} className="flex flex-wrap justify-between gap-2 border-b border-border-subtle px-1 py-1">
+                <span className="font-mono text-foreground">{l.role} · {l.id}</span>
+                <span className="text-muted-foreground">
+                  {l.model}{l.fallback ? ` / ${l.fallback}` : ""} · {l.level ?? "-"} · {l.tier ?? "-"} · win {l.shrunkWin ?? "-"} · edge {l.edge ?? "-"} · shrunk edge {l.shrunkEdge ?? "-"} · {l.price ?? "-"} · needs {l.requiredEdge ?? "no gate"} · {l.gatePass === undefined ? "-" : l.gatePass ? "passes" : "fails"}
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
       {games.length > 0 && (

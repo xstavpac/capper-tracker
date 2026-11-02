@@ -1,0 +1,129 @@
+=== 6 legs, best available, default gate ===
+old legs: g0-small-over, g1-55-45, g2-heavy-fav, g3-no-price, g4-other-leagues, g5-home
+new legs: g0-small-over, g1-longshot, g2-mid-under, g3-defaulted, g4-other-leagues, g5-home
+Primary:
+  out: g1-55-45 (Bills -6 -110): old 55-45 raw 55.0% passes wilson 0.475; new edge model, price REAL, edge +2.2 vs +2.6 fails, -110 equivalent 54.6
+  out: g2-heavy-fav (Eagles ML -1000): old 18-4 raw 81.8% passes wilson 0.668; new edge model, price REAL, edge +4.1 vs +2.6 passes, -110 equivalent 56.5
+  out: g3-no-price (Lions ML -110): old 30-10 raw 75.0% passes wilson 0.636; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +6.7 vs +2.6 passes, -110 equivalent 59.0
+  in:  g1-longshot (Dolphins ML 200): old 10-10 raw 50.0% fails wilson 0.341; new edge model, price REAL, edge +8.3 vs +2.6 passes, -110 equivalent 60.7
+  in:  g2-mid-under (Under 47.5 -110): old 30-20 raw 60.0% passes wilson 0.494; new edge model, price REAL_SOURCE_UNKNOWN, edge +5.4 vs +2.6 passes, -110 equivalent 57.8
+  in:  g3-defaulted (Lions -7 -110): old 40-25 raw 61.5% passes wilson 0.522; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +6.9 vs +2.6 passes, -110 equivalent 59.3
+Hedge (Swap = All):
+  leg gone g1-55-45: alternate none (NO_ALTERNATE)
+  leg gone g2-heavy-fav: alternate g2-mid-under (Under 47.5 -110): old 30-20 raw 60.0% passes wilson 0.494; new edge model, price REAL_SOURCE_UNKNOWN, edge +5.4 vs +2.6 passes, -110 equivalent 57.8
+  leg gone g3-no-price: alternate g3-thin (Under 50.5 -110): old 3-1 raw 75.0% passes wilson 0.385; new win-rate model, FEW_PRICED_PICKS, capper edge binds, price REAL, edge +3.0 vs +2.6 passes, -110 equivalent 55.4
+  new leg g1-longshot: alternate none (NO_ALTERNATE)
+  new leg g2-mid-under: alternate g2-heavy-fav (Eagles ML -1000): old 18-4 raw 81.8% passes wilson 0.668; new edge model, price REAL, edge +4.1 vs +2.6 passes, -110 equivalent 56.5
+  new leg g3-defaulted: alternate g3-thin (Under 50.5 -110): old 3-1 raw 75.0% passes wilson 0.385; new win-rate model, FEW_PRICED_PICKS, capper edge binds, price REAL, edge +3.0 vs +2.6 passes, -110 equivalent 55.4
+Contrarian (Swap = All), its rules unchanged: differences follow from the legs above:
+  leg gone g1-55-45: alternate none (NO_ALTERNATE)
+  leg gone g2-heavy-fav: alternate none (NO_ALTERNATE)
+  leg gone g3-no-price: alternate none (NO_ALTERNATE)
+  new leg g1-longshot: alternate g1-55-45 (Bills -6 -110): old 55-45 raw 55.0% passes wilson 0.475; new edge model, price REAL, edge +2.2 vs +2.6 fails, -110 equivalent 54.6
+  new leg g2-mid-under: alternate none (NO_ALTERNATE)
+  new leg g3-defaulted: alternate none (NO_ALTERNATE)
+
+=== 8 legs, 2 per game, default gate ===
+old legs: g0-small-over, g0-elite-spread, g1-55-45, g2-heavy-fav, g2-mid-under, g3-no-price, g4-other-leagues, g5-home
+new legs: g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g2-heavy-fav, g3-defaulted, g4-other-leagues, g5-home
+Primary:
+  out: g1-55-45 (Bills -6 -110): old 55-45 raw 55.0% passes wilson 0.475; new edge model, price REAL, edge +2.2 vs +2.6 fails, -110 equivalent 54.6
+  out: g3-no-price (Lions ML -110): old 30-10 raw 75.0% passes wilson 0.636; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +6.7 vs +2.6 passes, -110 equivalent 59.0
+  in:  g1-longshot (Dolphins ML 200): old 10-10 raw 50.0% fails wilson 0.341; new edge model, price REAL, edge +8.3 vs +2.6 passes, -110 equivalent 60.7
+  in:  g3-defaulted (Lions -7 -110): old 40-25 raw 61.5% passes wilson 0.522; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +6.9 vs +2.6 passes, -110 equivalent 59.3
+Hedge (Swap = All):
+  leg gone g1-55-45: alternate none (NO_ALTERNATE)
+  leg gone g3-no-price: alternate g3-thin (Under 50.5 -110): old 3-1 raw 75.0% passes wilson 0.385; new win-rate model, FEW_PRICED_PICKS, capper edge binds, price REAL, edge +3.0 vs +2.6 passes, -110 equivalent 55.4
+  new leg g1-longshot: alternate none (NO_ALTERNATE)
+  new leg g3-defaulted: alternate g3-thin (Under 50.5 -110): old 3-1 raw 75.0% passes wilson 0.385; new win-rate model, FEW_PRICED_PICKS, capper edge binds, price REAL, edge +3.0 vs +2.6 passes, -110 equivalent 55.4
+Contrarian (Swap = All), its rules unchanged: differences follow from the legs above:
+  leg gone g1-55-45: alternate none (NO_ALTERNATE)
+  leg gone g3-no-price: alternate none (NO_ALTERNATE)
+  new leg g1-longshot: alternate g1-55-45 (Bills -6 -110): old 55-45 raw 55.0% passes wilson 0.475; new edge model, price REAL, edge +2.2 vs +2.6 fails, -110 equivalent 54.6
+  new leg g3-defaulted: alternate none (NO_ALTERNATE)
+
+=== 6 legs, 60% gate ===
+old legs: g0-small-over, g2-heavy-fav, g3-no-price, g4-other-leagues, g5-home
+new legs: g0-small-over, g1-longshot, g4-other-leagues, g5-home
+Primary:
+  out: g2-heavy-fav (Eagles ML -1000): old 18-4 raw 81.8% passes wilson 0.668; new edge model, price REAL, edge +4.1 vs +7.6 fails, -110 equivalent 56.5
+  out: g3-no-price (Lions ML -110): old 30-10 raw 75.0% passes wilson 0.636; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +6.7 vs +7.6 fails, -110 equivalent 59.0
+  in:  g1-longshot (Dolphins ML 200): old 10-10 raw 50.0% fails wilson 0.341; new edge model, price REAL, edge +8.3 vs +7.6 passes, -110 equivalent 60.7
+Hedge (Swap = All):
+  leg gone g2-heavy-fav: alternate g2-mid-under (Under 47.5 -110): old 30-20 raw 60.0% passes wilson 0.494; new edge model, price REAL_SOURCE_UNKNOWN, edge +5.4 vs +7.6 fails, -110 equivalent 57.8
+  leg gone g3-no-price: alternate g3-thin (Under 50.5 -110): old 3-1 raw 75.0% passes wilson 0.385; new win-rate model, FEW_PRICED_PICKS, capper edge binds, price REAL, edge +3.0 vs +7.6 fails, -110 equivalent 55.4
+  new leg g1-longshot: alternate none (NO_ALTERNATE)
+Contrarian (Swap = All), its rules unchanged: differences follow from the legs above:
+  leg gone g2-heavy-fav: alternate none (NO_ALTERNATE)
+  leg gone g3-no-price: alternate none (NO_ALTERNATE)
+  new leg g1-longshot: alternate none (NO_ALTERNATE)
+
+=== 6 legs, no gate ===
+old legs: g0-small-over, g1-55-45, g2-heavy-fav, g3-no-price, g4-other-leagues, g5-home
+new legs: g0-small-over, g1-longshot, g2-mid-under, g3-defaulted, g4-other-leagues, g5-home
+Primary:
+  out: g1-55-45 (Bills -6 -110): old 55-45 raw 55.0% passes wilson 0.475; new edge model, price REAL, edge +2.2 vs no gate passes, -110 equivalent 54.6
+  out: g2-heavy-fav (Eagles ML -1000): old 18-4 raw 81.8% passes wilson 0.668; new edge model, price REAL, edge +4.1 vs no gate passes, -110 equivalent 56.5
+  out: g3-no-price (Lions ML -110): old 30-10 raw 75.0% passes wilson 0.636; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +6.7 vs no gate passes, -110 equivalent 59.0
+  in:  g1-longshot (Dolphins ML 200): old 10-10 raw 50.0% passes wilson 0.341; new edge model, price REAL, edge +8.3 vs no gate passes, -110 equivalent 60.7
+  in:  g2-mid-under (Under 47.5 -110): old 30-20 raw 60.0% passes wilson 0.494; new edge model, price REAL_SOURCE_UNKNOWN, edge +5.4 vs no gate passes, -110 equivalent 57.8
+  in:  g3-defaulted (Lions -7 -110): old 40-25 raw 61.5% passes wilson 0.522; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +6.9 vs no gate passes, -110 equivalent 59.3
+Hedge (Swap = All):
+  leg gone g1-55-45: alternate none (NO_ALTERNATE)
+  leg gone g2-heavy-fav: alternate g2-mid-under (Under 47.5 -110): old 30-20 raw 60.0% passes wilson 0.494; new edge model, price REAL_SOURCE_UNKNOWN, edge +5.4 vs no gate passes, -110 equivalent 57.8
+  leg gone g3-no-price: alternate g3-thin (Under 50.5 -110): old 3-1 raw 75.0% passes wilson 0.385; new win-rate model, FEW_PRICED_PICKS, capper edge binds, price REAL, edge +3.0 vs no gate passes, -110 equivalent 55.4
+  new leg g1-longshot: alternate none (NO_ALTERNATE)
+  new leg g2-mid-under: alternate g2-heavy-fav (Eagles ML -1000): old 18-4 raw 81.8% passes wilson 0.668; new edge model, price REAL, edge +4.1 vs no gate passes, -110 equivalent 56.5
+  new leg g3-defaulted: alternate g3-thin (Under 50.5 -110): old 3-1 raw 75.0% passes wilson 0.385; new win-rate model, FEW_PRICED_PICKS, capper edge binds, price REAL, edge +3.0 vs no gate passes, -110 equivalent 55.4
+Contrarian (Swap = All), its rules unchanged: differences follow from the legs above:
+  leg gone g1-55-45: alternate g1-longshot (Dolphins ML 200): old 10-10 raw 50.0% passes wilson 0.341; new edge model, price REAL, edge +8.3 vs no gate passes, -110 equivalent 60.7
+  leg gone g2-heavy-fav: alternate none (NO_ALTERNATE)
+  leg gone g3-no-price: alternate none (NO_ALTERNATE)
+  new leg g1-longshot: alternate g1-55-45 (Bills -6 -110): old 55-45 raw 55.0% passes wilson 0.475; new edge model, price REAL, edge +2.2 vs no gate passes, -110 equivalent 54.6
+  new leg g2-mid-under: alternate none (NO_ALTERNATE)
+  new leg g3-defaulted: alternate none (NO_ALTERNATE)
+
+=== slip competing on one game, 4 legs ===
+old legs: g0-small-over, g2-heavy-fav, g3-no-price, g4-other-leagues
+new legs: g0-small-over, g2-mid-under, g4-other-leagues, g5-home
+Primary:
+  out: g2-heavy-fav (Eagles ML -1000): old 18-4 raw 81.8% passes wilson 0.668; new edge model, price REAL, edge +4.1 vs +2.6 passes, -110 equivalent 56.5
+  out: g3-no-price (Lions ML -110): old 30-10 raw 75.0% passes wilson 0.636; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +6.7 vs +2.6 passes, -110 equivalent 59.0
+  in:  g2-mid-under (Under 47.5 -110): old 30-20 raw 60.0% passes wilson 0.494; new edge model, price REAL_SOURCE_UNKNOWN, edge +5.4 vs +2.6 passes, -110 equivalent 57.8
+  in:  g5-home (Nuggets -5 -110): old 25-12 raw 67.6% passes wilson 0.553; new edge model, price REAL, edge +9.9 vs +2.6 passes, -110 equivalent 62.2
+Hedge (Swap = All):
+  leg gone g2-heavy-fav: alternate none (NO_ALTERNATE)
+  leg gone g3-no-price: alternate g3-thin (Under 50.5 -110): old 3-1 raw 75.0% passes wilson 0.385; new win-rate model, FEW_PRICED_PICKS, capper edge binds, price REAL, edge +3.0 vs +2.6 passes, -110 equivalent 55.4
+  new leg g2-mid-under: alternate none (NO_ALTERNATE)
+  new leg g5-home: alternate none (NO_ALTERNATE)
+Contrarian (Swap = All), its rules unchanged: differences follow from the legs above:
+  leg gone g2-heavy-fav: alternate none (NO_ALTERNATE)
+  leg gone g3-no-price: alternate none (NO_ALTERNATE)
+  new leg g2-mid-under: alternate none (NO_ALTERNATE)
+  new leg g5-home: alternate g5-away (Suns +5 -105): old 22-12 raw 64.7% passes wilson 0.519; new edge model, price REAL, edge +8.5 vs +2.6 passes, -110 equivalent 60.9
+
+=== Your picks only, 2 of 5 ===
+old legs: g2-heavy-fav, g5-away
+new legs: g2-heavy-fav, g5-away
+Primary:
+  (no change)
+Hedge (Swap = All):
+  (no change)
+Contrarian (Swap = All), its rules unchanged: differences follow from the legs above:
+  (no change)
+
+=== Records behind the pinned suites' old expectations ===
+generator-gate: 55% exactly passes: p55 (p55 -110): old 11-9 raw 55.0% passes wilson 0.387; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +1.1 vs +2.6 fails, -110 equivalent 53.5
+generator-gate: 58%, passes 55, rejected at 60: p58 (p58 -110): old 29-21 raw 58.0% passes wilson 0.474; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +3.9 vs +2.6 passes, -110 equivalent 56.3
+generator-gate: 65%, passes 60 and 65: p65 (p65 -110): old 13-7 raw 65.0% passes wilson 0.482; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +6.1 vs +2.6 passes, -110 equivalent 58.5
+generator-gate: 70%, passes 60 and 65: p70 (p70 -110): old 7-3 raw 70.0% passes wilson 0.463; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +5.6 vs +2.6 passes, -110 equivalent 58.0
+generator: a 60% target leg, capacity 5: over95 (over95 -110): old 30-20 raw 60.0% passes wilson 0.494; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +5.3 vs +2.6 passes, -110 equivalent 57.7
+generator: a 55% target leg, capacity 5: under95 (under95 -110): old 11-9 raw 55.0% passes wilson 0.387; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +1.1 vs +2.6 fails, -110 equivalent 53.5
+record-scope: 4-1 in MLB qualifies: lgGood (lgGood -110): old 4-1 raw 80.0% passes wilson 0.465; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge -3.1 vs +2.6 fails, -110 equivalent 49.3
+record-scope: no MLB record, all-time 6-4 qualifies: fallback (fallback -110): old 6-4 raw 60.0% passes wilson 0.371; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +2.3 vs +2.6 fails, -110 equivalent 54.7
+record-scope: 1-3 in MLB, all-time 11-9 reads: lgBad (lgBad -110): old 11-9 raw 55.0% passes wilson 0.387; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge -1.0 vs +2.6 fails, -110 equivalent 51.4
+soft-sample: 4-1 in NCAAF qualifies: ncaafGood (ncaafGood -110): old 4-1 raw 80.0% passes wilson 0.465; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge -3.9 vs +2.6 fails, -110 equivalent 48.5
+best-of-two: only 1-0 qualifies: onlyOne (onlyOne -110): old 1-0 raw 100.0% passes wilson 0.308; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +1.9 vs +2.6 fails, -110 equivalent 54.3
+best-of-two: 50-40 in MLB passes 55: noFallback (noFallback -110): old 50-40 raw 55.6% passes wilson 0.477; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +2.5 vs +2.6 fails, -110 equivalent 54.9
+prop-market-gate: a game line at 6-4 clears 55: line (line -110): old 6-4 raw 60.0% passes wilson 0.371; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +2.3 vs +2.6 fails, -110 equivalent 54.7
+prop-market-gate: NFL TD on its market at 6-4 clears 55: nflTd (nflTd -110): old 6-4 raw 60.0% passes wilson 0.371; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +2.3 vs +2.6 fails, -110 equivalent 54.7

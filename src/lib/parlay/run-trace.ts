@@ -16,6 +16,7 @@
 // A collector never throws: every method is wrapped, and a failure marks the
 // trace `failed` and stops recording. Pure and client-safe (the engine runs in
 // the browser; the browser sends its trace to recordGeneratorRunAction).
+import { SCORING_VERSION } from "@/lib/parlay/scoring";
 
 export type RunMode = "STANDARD" | "YOUR_PICKS" | "HYBRID";
 // FETCH: a server-built run (the snapshot was just loaded). GENERATE / REGENERATE:
@@ -137,11 +138,39 @@ export type SnapshotStats = {
 
 export type LadderStatus = { eventId: string; gameLabel: string; markets: string[]; status: "ok" | "not-posted" | "pricing-in-progress" | "unavailable" | "not-asked"; cause?: string };
 
+// One leg or Hedge alternate as scoring.ts read it. A pick with no record has only
+// id, role and model.
+export const SCORING_ROLES = ["SLIP", "GENERATED", "HEDGE"] as const;
+export const SCORING_MODELS = ["EDGE", "WIN_RATE", "NO_RECORD"] as const;
+export const SCORING_LEVELS = ["LEAGUE", "OTHER_LEAGUES"] as const;
+export type ScoringLegTrace = {
+  id: string;
+  role: (typeof SCORING_ROLES)[number];
+  model: (typeof SCORING_MODELS)[number];
+  // Why the win-rate model.
+  fallback?: string;
+  // The lowest level of the capper's own record it read; the platform tier under it.
+  level?: (typeof SCORING_LEVELS)[number];
+  tier?: string;
+  shrunkWin?: number;
+  // Edge model only.
+  shrunkEdge?: number;
+  edge?: number;
+  price?: string;
+  priceRule?: string;
+  // Null at L = 0: no gate.
+  requiredEdge?: number | null;
+  gatePass?: boolean;
+};
+// platformRows: rows in platform_category_rates when the snapshot was built. 0 is an empty table: every pick on the defaults.
+export type ScoringTrace = { platformRows: number; legs: ScoringLegTrace[] };
+
 export type RunExtras = {
   snapshotBuiltAt?: string;
   buildSha?: string;
   snapshot?: SnapshotStats;
   swaps?: SwapModeTrace[];
+  scoring?: ScoringTrace;
   ladders?: LadderStatus[];
   unavailableTargets?: number;
   notes?: string[];
@@ -291,6 +320,11 @@ export function reconcileTrace(trace: Pick<RunTrace, "stages" | "reasons">): { s
     }
   }
   return bad;
+}
+
+// A Standard or Your-picks run under SCORING. Short: the intake keeps 80 characters.
+export function standardScoringVersion(parts: { z: number }): string {
+  return `standard/${SCORING_VERSION}/contrarian-wilson-z${parts.z}`;
 }
 
 // Names the rules a run was scored under, for comparing runs across changes.

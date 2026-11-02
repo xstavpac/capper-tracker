@@ -116,6 +116,7 @@ expect(
     "NFL roster names (bulk import)",
     "NFL team stat upsert",
     "Odds for tendencies",
+    "Platform rates read",
     "Platform rates recompute",
     "Record bundle",
     "Roster cache (grading / import recovery)",

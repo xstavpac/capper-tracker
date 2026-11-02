@@ -11,11 +11,16 @@ import {
   MAX_ERROR_MESSAGE,
   MAX_LABEL,
   REASON_CODES,
+  SCORING_LEVELS,
+  SCORING_MODELS,
+  SCORING_ROLES,
   STAGE_KEYS,
   type DropEntry,
   type ErrorCode,
   type ReasonCode,
   type RunTrace,
+  type ScoringLegTrace,
+  type ScoringTrace,
   type StageKey,
   type SwapLegTrace,
   type SwapModeTrace,
@@ -123,6 +128,51 @@ function cleanSwaps(v: unknown): SwapModeTrace[] {
   return out;
 }
 
+// A leg per parlay leg (25) plus a Hedge alternate for each.
+const MAX_SCORING_LEGS = 50;
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 10 ? v : null);
+const code = (v: unknown): string | null => (typeof v === "string" && /^[A-Z0-9_]{1,40}$/.test(v) ? v : null);
+
+function cleanScoringLeg(v: unknown): ScoringLegTrace | null {
+  if (!isObj(v)) return null;
+  const id = str(v.id, 64);
+  const role = SCORING_ROLES.find((x) => x === v.role);
+  const model = SCORING_MODELS.find((x) => x === v.model);
+  if (!id || !role || !model) return null;
+  if (model === "NO_RECORD") return { id, role, model };
+  const level = SCORING_LEVELS.find((x) => x === v.level);
+  const fallback = code(v.fallback);
+  const tier = code(v.tier);
+  const shrunkWin = num(v.shrunkWin);
+  const shrunkEdge = num(v.shrunkEdge);
+  const edge = num(v.edge);
+  const price = code(v.price);
+  const priceRule = code(v.priceRule);
+  const requiredEdge = num(v.requiredEdge);
+  return {
+    id,
+    role,
+    model,
+    ...(fallback ? { fallback } : {}),
+    ...(level ? { level } : {}),
+    ...(tier ? { tier } : {}),
+    ...(shrunkWin !== null ? { shrunkWin } : {}),
+    ...(shrunkEdge !== null ? { shrunkEdge } : {}),
+    ...(edge !== null ? { edge } : {}),
+    ...(price ? { price } : {}),
+    ...(priceRule ? { priceRule } : {}),
+    ...(requiredEdge !== null || v.requiredEdge === null ? { requiredEdge } : {}),
+    ...(typeof v.gatePass === "boolean" ? { gatePass: v.gatePass } : {}),
+  };
+}
+
+function cleanScoring(v: unknown): ScoringTrace | null {
+  if (!isObj(v) || !Array.isArray(v.legs)) return null;
+  const platformRows = count(v.platformRows, 100_000);
+  if (platformRows === null) return null;
+  return { platformRows, legs: v.legs.slice(0, MAX_SCORING_LEGS).map(cleanScoringLeg).filter((l): l is ScoringLegTrace => l !== null) };
+}
+
 // A browser's trace as it may be stored, or null when it isn't one. Only a Standard
 // or Your-picks run from the browser is accepted (Hybrid runs on the server).
 export function sanitizeClientTrace(raw: unknown): RunTrace | null {
@@ -162,6 +212,8 @@ export function sanitizeClientTrace(raw: unknown): RunTrace | null {
   if (ut !== null) extras.unavailableTargets = ut;
   const swaps = cleanSwaps(x.swaps);
   if (swaps.length > 0) extras.swaps = swaps;
+  const scoring = cleanScoring(x.scoring);
+  if (scoring) extras.scoring = scoring;
 
   let detail: RunTrace["detail"] = null;
   let detailTruncated = raw.detailTruncated === true;

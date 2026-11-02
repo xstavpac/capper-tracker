@@ -22,14 +22,14 @@ import { recordForGate } from "@/lib/parlay/pick-record";
 import { qualifies } from "@/lib/parlay/qualification-core";
 import { wilsonLowerBound } from "@/lib/wilson-lower-bound";
 import { keepsPick } from "@/lib/parlay/include-picks";
-import { buildGeneratedParlay, GENERATOR_RULES, LEGACY_RULES, type GeneratedParlay, type GeneratorRules, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, WILSON_RULES, LEGACY_RULES, type GeneratedParlay, type GeneratorRules, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { loadReplaySlates, REPLAY_SETTINGS, wl } from "./lib/generator-replay-slates";
 
 const args = Object.fromEntries(process.argv.slice(3).map((a) => a.replace(/^--/, "").split("=")));
 const A: GeneratorRules = LEGACY_RULES;
 const B: GeneratorRules = { ...LEGACY_RULES, recordScope: "LEAGUE_FIRST", contrarianHeadcount: false };
 const C: GeneratorRules = {
-  ...GENERATOR_RULES,
+  ...WILSON_RULES,
   ...(args.z ? { z: Number(args.z) } : {}),
   ...(args["pick-band"] ? { pickTieBand: Number(args["pick-band"]) } : {}),
   ...(args["game-band"] ? { gameBand: Number(args["game-band"]) } : {}),

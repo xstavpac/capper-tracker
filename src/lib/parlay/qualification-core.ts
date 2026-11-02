@@ -255,6 +255,27 @@ export function rankCandidatesByRecord<R extends { wins: number; losses: number;
   return scored;
 }
 
+// The same classifier walk for a pick scored by lib/parlay/scoring.ts (Hedge):
+// `gatedScore` is the candidate's score, or null when it has no record or fails the
+// gate; `compare` is the score's own ordering. Wilson plays no part.
+export function rankCandidatesByScore<S>(
+  primary: ParlayLeg,
+  candidates: ParlayLeg[],
+  mode: "AUTO_HEDGE" | "CONTRARIAN",
+  gatedScore: (leg: ParlayLeg) => S | null,
+  compare: (a: S, b: S) => number
+): { leg: ParlayLeg; rule: Rule; score: S }[] {
+  const primaryCandidate = toParlayCandidate(primary);
+  const scored: { leg: ParlayLeg; rule: Rule; score: S }[] = [];
+  for (const candidate of candidates) {
+    const outcome = classifyPair(primaryCandidate, toParlayCandidate(candidate));
+    if (outcome.outcome !== "RULE" || outcome.mode !== mode) continue;
+    const score = gatedScore(candidate);
+    if (score !== null) scored.push({ leg: candidate, rule: outcome.rule, score });
+  }
+  return scored.sort((a, b) => compare(a.score, b.score));
+}
+
 // Section 7's one ordering for gated candidates: Wilson lower bound
 // descending, then decided-n descending, then pick id ascending. Shared with
 // Auto-Generate's same-game fill (auto-generate.ts) so both order identically.

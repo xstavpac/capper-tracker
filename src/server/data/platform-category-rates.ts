@@ -4,8 +4,8 @@
 // Write path (the only one): the nightly refresh-scores cron, then revalidateTag(platformRatesTag).
 //
 // Egress: the recompute runs inside Postgres and returns two counts. A cache miss reads the whole small table
-// (7 columns, one row per league + bet type + key), shared across users, at most daily. Nothing reads it yet: the
-// Standard generator switch does.
+// (7 columns, one row per league + bet type + key), shared across users, at most daily. The Standard generator's
+// snapshot reads it (generator-snapshot.ts).
 import { Prisma } from "@prisma/client";
 import { cacheKeys } from "@/lib/cache-keys";
 import { PROP_MARKET_KEYS, propMarketOf, sportsOfPropFamily, type PropMarketKey } from "@/lib/prop-market-key";
