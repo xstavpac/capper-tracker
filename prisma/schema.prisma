@@ -195,6 +195,7 @@ model User {
   bugReports              BugReport[]
   heavyConsensusMarkets   HeavyConsensusMarket[]
   parlayGeneratorRuns     ParlayGeneratorRun[]
+  ingestReviewItems       IngestReviewItem[]
 
   @@map("users")
 }
@@ -657,6 +658,8 @@ enum ImportSkipStage {
   TOTAL_NO_LINE // a TOTAL with no number and no confirmed inferred line
   INVALID_ODDS // resolved odds were zero / non-numeric
   DOUBLEHEADER_FINAL // a doubleheader whose every leg was already final
+  LEAGUE_NOT_ALLOWED // telegram ingest only: the pick resolved to a league outside INGEST_ALLOWED_LEAGUES
+  COMBINED_BET // telegram ingest only: one line naming more than one team or bet (a parlay / MLP / "A + B")
 }
 
 // Write-only log of every catalog line the importer failed to turn into a
@@ -1620,6 +1623,76 @@ model ImportRun {
 
   @@index([createdAt])
   @@map("import_runs")
+}
+
+// ---- Telegram pick ingest ----
+//
+// One row per batch the local Telegram reader POSTs to /api/ingest/telegram. The raw text is stored BEFORE any
+// parsing, so a bad parse never loses input. (channelId, messageId) is the idempotency key: a re-POST is a no-op.
+// Server-only (Prisma on the service connection): RLS is on with no policies.
+enum IngestBatchStatus {
+  RECEIVED // stored, not finished (or the run was interrupted - a re-POST finishes it)
+  IMPORTED // finished with nothing left over
+  PARTIAL // finished, but some lines were skipped for a real reason or are waiting in the review queue
+  FAILED // the import threw; error holds a clipped message
+}
+
+model IngestBatch {
+  id                 String            @id @default(cuid())
+  channelId          String
+  messageId          Int
+  day                String // YYYY-MM-DD the batch is about, as sent by the reader
+  text               String
+  status             IngestBatchStatus @default(RECEIVED)
+  importedCount      Int               @default(0)
+  skippedCount       Int               @default(0)
+  pendingReviewCount Int               @default(0)
+  error              String? // <= 500 chars
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  reviewItems        IngestReviewItem[]
+
+  @@unique([channelId, messageId])
+  @@index([createdAt])
+  @@map("ingest_batches")
+}
+
+// What the interactive importer would have asked, saved for later. Mirrors the questions in
+// server/data/catalog-import-orchestrator.ts.
+enum IngestQuestionType {
+  AMBIGUOUS_TEAM
+  PLAYER_AMBIGUITY
+  MISSING_TOTAL_LINE
+  CAPPER_FUZZY
+}
+
+enum IngestReviewStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+model IngestReviewItem {
+  id             String             @id @default(cuid())
+  ingestBatchId  String
+  ingestBatch    IngestBatch        @relation(fields: [ingestBatchId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  capperName     String
+  lineText       String
+  day            String // the batch day: informational; the game match is stored in options at ingest time
+  questionType   IngestQuestionType
+  // Exactly the choices the form would have shown, each with the pick it would create (game, price, line already
+  // matched at ingest time), so answering never re-matches. Shape: lib/ingest-review-options.ts.
+  options        Json
+  status         IngestReviewStatus @default(PENDING)
+  resolvedPickId String?
+  createdAt      DateTime           @default(now())
+  resolvedAt     DateTime?
+
+  @@index([userId, status])
+  @@index([ingestBatchId])
+  @@map("ingest_review_items")
 }
 
 // A user's bug report from Settings. The screenshot is NOT in the database:

@@ -993,3 +993,62 @@ export async function importPicksForUser(
   };
 }
 
+
+// ---- resolving one item to the row it would insert, without inserting ----
+//
+// For the unattended ingest path: when a pick has to wait for a person, each possible answer is matched to its game
+// and priced NOW, and the resulting row is stored with the question, so answering later inserts it directly.
+//
+// This mirrors the per-item body of importPicksForUser's resolution loop above (same resolveGameAndOdds call, same
+// invalid-odds / total-without-line refusals, same prop stamping). It is a separate function on purpose: the manual
+// loop is pinned by source-text guards and a parity test, and stays untouched.
+export type PickRowResolution = { ok: true; row: DedupPickRow } | { ok: false; reason: string };
+
+export function createPickRowResolver(): (item: BulkImportItem) => Promise<PickRowResolution> {
+  const getOdds = createRequestOddsLoader();
+  const pricing = createPricingOddsLoader(getOdds);
+  return async (item) => {
+    try {
+      if (!item.capperName.trim()) return { ok: false, reason: "Capper name is required." };
+      const r = await resolveGameAndOdds(item, getOdds, { retryOnMiss: true, altLines: true, pricing });
+      if (r.resolvable && !r.matched) {
+        return { ok: false, reason: r.doubleheaderBothLegsFinal ? "Doubleheader with every leg already final" : "No scheduled game matched" };
+      }
+      if (isInvalidOdds(r.odds)) return { ok: false, reason: "Odds must be a valid non-zero number (resolved " + r.odds + ")" };
+      const extractedLine = extractLine(item.betType, item.description);
+      if (item.betType === "TOTAL" && extractedLine === null && item.inferredLine === undefined) {
+        return { ok: false, reason: "TOTAL with no number and no confirmed inferred line" };
+      }
+      const playerProp = item.betType === "PLAYER_PROP" ? parseAnyPlayerProp(item.description, item.sportName) : null;
+      const ungradedNbaProp =
+        item.betType === "PLAYER_PROP" && !playerProp && item.sportName.toUpperCase() === "NBA" ? parseNbaProp(item.description) : null;
+      return {
+        ok: true,
+        row: {
+          capperName: item.capperName,
+          sportName: item.sportName,
+          homeTeam: r.homeTeam,
+          awayTeam: r.awayTeam,
+          betType: item.betType,
+          betDetail: item.description,
+          odds: r.odds,
+          oddsSource: r.oddsSource,
+          ...r.posted,
+          line: extractedLine ?? item.inferredLine ?? null,
+          period: item.period,
+          units: item.units,
+          gameTime: r.gameTime,
+          pickedSide: r.pickedSide,
+          mlFavoredSide: r.mlFavoredSide,
+          playerName: playerProp?.playerName ?? ungradedNbaProp?.playerName,
+          propMarket: playerProp?.propMarket,
+          gameNumber: r.resolvedGameNumber,
+          overrideDuplicate: false,
+          raw: item.raw,
+        },
+      };
+    } catch (err) {
+      return { ok: false, reason: err instanceof Error ? err.message.slice(0, 200) : "failed" };
+    }
+  };
+}
