@@ -94,6 +94,7 @@ async function main() {
   const queue = await import("@/server/data/ingest-review-queue");
   const actions = await import("@/server/actions/ingest-review");
   const { cacheKeys } = await import("@/lib/cache-keys");
+  const createdBatchIds: string[] = [];
 
   const users = { main: PREFIX + "main", other: PREFIX + "other" };
   const sportsBefore = new Set((await prisma.sport.findMany({ select: { name: true } })).map((s) => s.name));
@@ -106,6 +107,9 @@ async function main() {
     process.env.INGEST_USER_ID = users.main;
     process.env.PICKS_INGEST_TOKEN = TOKEN;
     delete process.env.INGEST_ALLOWED_LEAGUES;
+
+    (globalThis as { React?: unknown }).React = await import("react");
+    const ui0 = await import("@/components/import/review-question-ui");
 
     // ---------- hidden at 0 ----------
     expect("0 items: no cards for the user", await queue.getPendingReviewCards(users.main), []);
@@ -190,12 +194,57 @@ async function main() {
     const bad = await actions.resolveReviewItemAction(cards[2].id, "nope");
     expect("resolve: a choice that is not on the item is refused with a message", [bad.ok, !bad.ok && bad.message], [false, "That is not one of this item's choices."]);
 
+    // ---------- near-miss player questions keep their wording in the queue ----------
+    const { playerLineIsNearMiss } = await import("@/lib/ingest-review-options");
+    const { buildReviewDrafts, reviewDraftsToRows } = await import("@/server/data/ingest-review");
+    expect(
+      "near-miss vs shared name, told apart from the line (stored before typedName existed)",
+      [
+        playerLineIsNearMiss("Brad Thomas over 62.5 rec yds", ["Brian Thomas Jr.", "Brian Thomas"]),
+        playerLineIsNearMiss("Brian Thomas over 62.5 rec yds", ["Brian Thomas Jr.", "Brian Thomas"]),
+        playerLineIsNearMiss("brian thomas over 62.5", ["Brian Thomas Jr."]),
+        playerLineIsNearMiss("anything", []),
+      ],
+      [true, false, false, false]
+    );
+    expect(
+      "a near-miss player question reads 'close to this name' from a stored typedName OR the inferred flag",
+      [
+        ui0.ambiguousReasonText(true, [{ label: "A — x", typedName: "Brad Thomas" }, { label: "B — y", typedName: "Brad Thomas" }]),
+        ui0.ambiguousReasonText(true, [{ label: "A — x", nearMiss: true }, { label: "B — y", nearMiss: true }]),
+        ui0.ambiguousReasonText(true, [{ label: "A — x" }, { label: "B — y" }]),
+      ],
+      ["More than one player is close to this name - which one?", "More than one player is close to this name - which one?", "More than one player has this name - which one?"]
+    );
+    const { parseCatalog: parse } = await import("@/lib/parse-catalog");
+    const seedPick = parse("Vegas John\nJets ML -140", []).picks[0];
+    const nearMissQ = {
+      type: "PLAYER_AMBIGUITY" as const,
+      key: "player|brad thomas|a,b",
+      pick: seedPick,
+      options: [
+        { label: "Brian Thomas Jr. — Jaguars WR", sport: "NFL", nickname: "Jaguars", playerName: "Brian Thomas Jr.", typedName: "Brad Thomas" },
+        { label: "Brian Thomas — Giants TE", sport: "NFL", nickname: "Giants", playerName: "Brian Thomas", typedName: "Brad Thomas" },
+      ],
+    };
+    const drafts = await buildReviewDrafts([nearMissQ]);
+    const stored = drafts[0].options.choices.map((c) => [c.playerName, c.typedName]);
+    expect("ingest now stores the roster name and the typed name on each player choice (JSON, no migration)", stored, [["Brian Thomas Jr.", "Brad Thomas"], ["Brian Thomas", "Brad Thomas"]]);
+    const batchRow = await prisma.ingestBatch.create({ data: { channelId: channelIds[0], messageId: 90, day: "2026-11-02", text: "player fixture" }, select: { id: true } });
+    createdBatchIds.push(batchRow.id);
+    await prisma.ingestReviewItem.createMany({ data: reviewDraftsToRows(batchRow.id, users.main, "2026-11-02", drafts) });
+    // The same item as parked before the change: no playerName / typedName in its choices.
+    const oldShape = { choices: drafts[0].options.choices.map((c) => ({ id: c.id, label: c.label, sport: c.sport, nickname: c.nickname, capperName: c.capperName, pick: c.pick })) };
+    await prisma.ingestReviewItem.create({ data: { ingestBatchId: batchRow.id, userId: users.main, capperName: "Vegas John", lineText: "Brad Thomas over 62.5", day: "2026-11-02", questionType: "PLAYER_AMBIGUITY", options: oldShape } });
+    const playerCards = (await queue.getPendingReviewCards(users.main)).filter((c) => c.questionType === "PLAYER_AMBIGUITY");
+    expect("card payload carries typedName for a new item and none for an old one", playerCards.map((c) => c.choices.map((x) => x.typedName ?? null)), [["Brad Thomas", "Brad Thomas"], [null, null]]);
+
     // ---------- manual paste form: the markup it now shares with the queue is the markup it rendered before ----------
     const React = await import("react");
     // The components use the classic JSX runtime under tsx, so React must be global before they load.
     (globalThis as { React?: unknown }).React = React;
     const { renderToStaticMarkup } = await import("react-dom/server");
-    const ui = await import("@/components/import/review-question-ui");
+    const ui = ui0;
     const h = React.createElement;
     const render = (el: React.ReactElement) => renderToStaticMarkup(el).replace(/<!-- -->/g, "");
     const OLD_BTN =
@@ -236,15 +285,27 @@ async function main() {
       [true, false]
     );
   } finally {
+    // Cleanup by recorded id. The fixtures only ever exist under the two throwaway users and the one throwaway channel,
+    // so every row they own is looked up once, listed, and then deleted by id (children before parents).
     const ids = [users.main, users.other];
-    await prisma.ingestBatch.deleteMany({ where: { channelId: { in: channelIds } } });
-    await prisma.importSkippedLine.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.importRun.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.pick.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.capper.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.user.deleteMany({ where: { id: { in: ids } } });
+    const batchIds = [...new Set([...createdBatchIds, ...(await prisma.ingestBatch.findMany({ where: { channelId: { in: channelIds } }, select: { id: true } })).map((b) => b.id)])];
+    const idsOf = async (rows: Promise<{ id: string }[]>) => (await rows).map((r) => r.id);
+    const itemIds = await idsOf(prisma.ingestReviewItem.findMany({ where: { OR: [{ userId: { in: ids } }, { ingestBatchId: { in: batchIds } }] }, select: { id: true } }));
+    const skippedIds = await idsOf(prisma.importSkippedLine.findMany({ where: { userId: { in: ids } }, select: { id: true } }));
+    const runIds = await idsOf(prisma.importRun.findMany({ where: { userId: { in: ids } }, select: { id: true } }));
+    const pickIds = await idsOf(prisma.pick.findMany({ where: { userId: { in: ids } }, select: { id: true } }));
+    const capperIds = await idsOf(prisma.capper.findMany({ where: { userId: { in: ids } }, select: { id: true } }));
     const sportsNow = await prisma.sport.findMany({ select: { id: true, name: true } });
-    await prisma.sport.deleteMany({ where: { id: { in: sportsNow.filter((s) => !sportsBefore.has(s.name)).map((s) => s.id) } } });
+    const sportIds = sportsNow.filter((s) => !sportsBefore.has(s.name)).map((s) => s.id);
+    console.log("cleanup ids:", JSON.stringify({ users: ids, batches: batchIds.length, items: itemIds.length, skippedLines: skippedIds.length, runs: runIds.length, picks: pickIds.length, cappers: capperIds.length, sports: sportIds.length }));
+    await prisma.ingestReviewItem.deleteMany({ where: { id: { in: itemIds } } });
+    await prisma.ingestBatch.deleteMany({ where: { id: { in: batchIds } } });
+    await prisma.importSkippedLine.deleteMany({ where: { id: { in: skippedIds } } });
+    await prisma.importRun.deleteMany({ where: { id: { in: runIds } } });
+    await prisma.pick.deleteMany({ where: { id: { in: pickIds } } });
+    await prisma.capper.deleteMany({ where: { id: { in: capperIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: ids } } });
+    await prisma.sport.deleteMany({ where: { id: { in: sportIds } } });
     await prisma.$disconnect();
   }
   if (failures > 0) {

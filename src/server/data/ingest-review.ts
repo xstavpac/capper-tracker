@@ -60,6 +60,8 @@ export async function buildReviewDrafts(questions: CatalogQuestion[]): Promise<R
                 label: option.label + c.label,
                 sport: option.sport,
                 nickname: option.nickname,
+                ...(option.playerName ? { playerName: option.playerName } : {}),
+                ...(option.typedName ? { typedName: option.typedName } : {}),
                 capperName: c.name,
               },
               r

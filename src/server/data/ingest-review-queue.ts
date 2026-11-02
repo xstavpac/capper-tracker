@@ -29,6 +29,8 @@ export type ReviewCardChoice = {
   inferredLine?: number;
   lineReason?: "missing" | "garbled";
   capperName?: string;
+  playerName?: string;
+  typedName?: string;
   playable: boolean;
   unmatched?: string;
 };
@@ -55,6 +57,8 @@ export async function getPendingReviewCards(userId: string): Promise<ReviewCard[
           'inferredLine', c.value->'inferredLine',
           'lineReason', c.value->>'lineReason',
           'capperName', c.value->>'capperName',
+          'playerName', c.value->>'playerName',
+          'typedName', c.value->>'typedName',
           'playable', jsonb_typeof(c.value->'pick') = 'object',
           'unmatched', c.value->>'unmatched') ORDER BY c.ord)
         FROM jsonb_array_elements(i."options"->'choices') WITH ORDINALITY AS c(value, ord)) AS "choices"
@@ -70,6 +74,8 @@ export async function getPendingReviewCards(userId: string): Promise<ReviewCard[
       ...(typeof c.inferredLine === "number" ? { inferredLine: c.inferredLine } : {}),
       ...(c.lineReason ? { lineReason: c.lineReason } : {}),
       ...(c.capperName ? { capperName: c.capperName } : {}),
+      ...(c.playerName ? { playerName: c.playerName } : {}),
+      ...(c.typedName ? { typedName: c.typedName } : {}),
       playable: Boolean(c.playable),
       ...(c.unmatched ? { unmatched: c.unmatched } : {}),
     })),

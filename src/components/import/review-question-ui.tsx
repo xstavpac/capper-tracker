@@ -51,11 +51,13 @@ export function TotalLineExplainer({ reason, inferredLine }: { reason: "missing"
 
 // "More than one player is close to this name": a near-miss name (typedName set) is close to several players rather
 // than shared by them.
-export function playerQuestionShort(options: { typedName?: string }[]): string {
-  return options.some((o) => o.typedName) ? "More than one player is close to this name" : "More than one player has this name";
+export function playerQuestionShort(options: { typedName?: string; nearMiss?: boolean }[]): string {
+  return options.some((o) => o.typedName || o.nearMiss) ? "More than one player is close to this name" : "More than one player has this name";
 }
 
-export type ReasonOption = { label: string; playerName?: string; typedName?: string };
+// nearMiss: set by a caller that knows the name was a near-miss but not what was typed (a review item parked before
+// typedName was stored).
+export type ReasonOption = { label: string; playerName?: string; typedName?: string; nearMiss?: boolean };
 
 export function ambiguousReasonText(isPlayer: boolean, options: ReasonOption[]): string {
   if (options.length === 1) {

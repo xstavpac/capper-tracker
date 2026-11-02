@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { dismissReviewItemAction, resolveReviewItemAction } from "@/server/actions/ingest-review";
 import type { ReviewCard } from "@/server/data/ingest-review-queue";
+import { playerLineIsNearMiss } from "@/lib/ingest-review-options";
 import {
   CapperFuzzyPrompt,
   ChoiceButton,
@@ -30,12 +31,17 @@ const QUESTION_NAMES: Record<ReviewCard["questionType"], string> = {
 // "... - as <capper>" variants, which are one answer to the person reading the question.
 function baseOptions(card: ReviewCard) {
   const seen = new Set<string>();
-  const out: { label: string; playerName?: string }[] = [];
+  const out: { label: string; playerName?: string; typedName?: string; nearMiss?: boolean }[] = [];
   for (const c of card.choices) {
     const label = c.label.split(" - as ")[0];
     if (seen.has(label)) continue;
     seen.add(label);
-    out.push({ label, playerName: label.split(" — ")[0] });
+    out.push({ label, playerName: c.playerName ?? label.split(" — ")[0], ...(c.typedName ? { typedName: c.typedName } : {}) });
+  }
+  // Parked before typedName was stored: a near-miss is told from a shared name by comparing the roster names with the line.
+  if (card.questionType === "PLAYER_AMBIGUITY" && !out.some((o) => o.typedName)) {
+    const near = playerLineIsNearMiss(card.lineText, out.map((o) => o.playerName ?? ""));
+    return out.map((o) => ({ ...o, nearMiss: near }));
   }
   return out;
 }
