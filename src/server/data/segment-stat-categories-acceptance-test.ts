@@ -60,11 +60,12 @@ const cat = (over: {
     betType: over.betType,
     period: over.period,
     betDetail: over.betDetail,
-    odds: -110,
+    odds: -150,
     line: over.line ?? null,
     sportName: over.sportName ?? "NBA",
     pickedSide: over.pickedSide ?? null,
     mlFavoredSide: null,
+    oddsSource: "STATED",
   });
 
 // ---------------------------------------------------------------------------
@@ -166,7 +167,8 @@ const pick = (over: Partial<Pick> & { status: Pick["status"]; betType: Pick["bet
     betType: over.betType,
     period: over.period,
     betDetail: over.betDetail,
-    odds: -110,
+    odds: -150,
+    oddsSource: "STATED",
     line: over.line ?? null,
     units: 1,
     gameTime: new Date("2026-01-0" + ((pid % 8) + 1) + "T20:00:00Z"),
@@ -319,7 +321,9 @@ check(
 // Pick.odds as 0 - that made favoriteOrUnderdog / pickCategory return null and
 // the pick vanish from every category stat. parsePickText now ignores a
 // parsed 0, so odds falls through to the -110 default (and, in bulk-picks,
-// the real-market lookup), and the pick classifies normally.
+// the real-market lookup). Since PICK_CATEGORY_VERSION 4 that unresolved, DEFAULTED
+// -110 carries no side, so the pick has no FAV_ML/DOG_ML category - but it is still
+// categorized by the rule, not dropped because its odds were 0.
 for (const [label, text] of [
   ["(0)", "Cody\nLakers ML (0)"],
   ["(+0)", "Cody\nLakers ML (+0)"],
@@ -328,9 +332,9 @@ for (const [label, text] of [
   const p = parseCatalog(text).picks[0];
   check(`stray zero-odds ${label} -> odds is the -110 default, not 0`, [p.odds, p.hasExplicitOdds], [-110, false]);
   check(
-    `stray zero-odds ${label} -> pickCategory returns a real category, not null`,
-    pickCategory({ betType: p.betType, period: "FULL_GAME", betDetail: p.description, odds: p.odds, line: null, sportName: "NBA", pickedSide: null, mlFavoredSide: null }),
-    "FAV_ML",
+    `stray zero-odds ${label} -> unresolved DEFAULTED -110 has no side (not an odds-0 null)`,
+    pickCategory({ betType: p.betType, period: "FULL_GAME", betDetail: p.description, odds: p.odds, line: null, sportName: "NBA", pickedSide: null, mlFavoredSide: null, oddsSource: p.hasExplicitOdds ? "STATED" : "DEFAULTED" }),
+    null,
   );
 }
 check("a real odds token still parses through unchanged", parseCatalog("Cody\nLakers ML (-150)").picks[0].odds, -150);

@@ -71,7 +71,7 @@ const allIds: string[] = [];
 
 async function seed() {
   const gameTime = new Date("2026-01-01T00:00:00Z");
-  const base = { userId: USER_ID, capperId: CAPPER_ID, sportId, homeTeam: "H", awayTeam: "A", odds: -110, units: 1, gameTime };
+  const base = { userId: USER_ID, capperId: CAPPER_ID, sportId, homeTeam: "H", awayTeam: "A", odds: -110, oddsSource: "STATED" as const, units: 1, gameTime };
   const rows: Prisma.PickCreateManyInput[] = [];
   const add = (kind: string, i: number, tpl: Partial<Prisma.PickUncheckedCreateInput>, stamp: { category: string | null; categoryVersion: number }) => {
     const id = idFor(kind, i);
@@ -79,7 +79,7 @@ async function seed() {
     rows.push({ ...base, ...tpl, id, ...stamp } as Prisma.PickCreateManyInput);
   };
   const correct = (tpl: Partial<Prisma.PickUncheckedCreateInput>) =>
-    pickCategory({ betType: "MONEYLINE", period: "FULL_GAME", betDetail: null, odds: -110, line: null, sportName: "MLB", pickedSide: null, mlFavoredSide: null, propMarket: null, ...(tpl as object) } as Parameters<typeof pickCategory>[0]);
+    pickCategory({ betType: "MONEYLINE", period: "FULL_GAME", betDetail: null, odds: -110, line: null, sportName: "MLB", pickedSide: null, mlFavoredSide: null, oddsSource: "STATED", propMarket: null, ...(tpl as object) } as Parameters<typeof pickCategory>[0]);
 
   for (let i = 0; i < GOOD; i++) {
     const tpl = CATEGORIZED[i % CATEGORIZED.length];

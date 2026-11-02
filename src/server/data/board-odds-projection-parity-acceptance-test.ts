@@ -172,8 +172,8 @@ async function main() {
   const pick = (capperId: string, g: { homeTeam: string; awayTeam: string }, gameTime: number, status: "PENDING" | "WIN" | "LOSS", k: number): Prisma.PickCreateManyInput => {
     seq++;
     const base = k % 2 === 0
-      ? { betType: "MONEYLINE" as const, betDetail: g.homeTeam + " ML", odds: -140, line: null, period: "FULL_GAME" as const, pickedSide: "HOME" as const, mlFavoredSide: "HOME" as const, propMarket: null }
-      : { betType: "TOTAL" as const, betDetail: "Over 44.5", odds: -110, line: 44.5, period: "FULL_GAME" as const, pickedSide: null, mlFavoredSide: null, propMarket: null };
+      ? { betType: "MONEYLINE" as const, betDetail: g.homeTeam + " ML", odds: -140, line: null, period: "FULL_GAME" as const, pickedSide: "HOME" as const, mlFavoredSide: "HOME" as const, oddsSource: "STATED" as const, propMarket: null }
+      : { betType: "TOTAL" as const, betDetail: "Over 44.5", odds: -110, line: 44.5, period: "FULL_GAME" as const, pickedSide: null, mlFavoredSide: null, oddsSource: "STATED" as const, propMarket: null };
     const id = `${PREFIX}p-${seq}`;
     created.picks.push(id);
     return { id, userId, capperId, sportId: nfl.id, homeTeam: g.homeTeam, awayTeam: g.awayTeam, ...base, units: 1, gameTime: new Date(gameTime), datePosted: new Date(gameTime - H), status, gradedAt: status === "PENDING" ? null : new Date(gameTime + 4 * H), createdAt: new Date(NOW - 1e6 + seq * 1000), category: pickCategory({ ...base, sportName: "NFL" }), categoryVersion: PICK_CATEGORY_VERSION };

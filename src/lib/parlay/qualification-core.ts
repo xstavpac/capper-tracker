@@ -39,6 +39,9 @@ export type ParlayLeg = {
   betDetail: string | null;
   line: number | null;
   odds: number;
+  // Where `odds` came from. pickCategory's moneyline odds-sign fallback only trusts a
+  // STATED / MARKET price, so the category read off a leg needs it. Missing = unknown.
+  oddsSource?: "STATED" | "MARKET" | "DEFAULTED" | null;
   datePosted: Date;
   homeTeam: string;
   awayTeam: string;
@@ -65,6 +68,7 @@ export function toParlayLeg(p: GeneratorPick): ParlayLeg {
     betDetail: p.rawBetDetail,
     line: p.line,
     odds: p.odds,
+    oddsSource: p.oddsSource ?? null,
     datePosted: new Date(p.datePosted),
     homeTeam: p.homeTeam,
     awayTeam: p.awayTeam,

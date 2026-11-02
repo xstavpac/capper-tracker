@@ -163,7 +163,7 @@ function row(userId: string, s: Spec): Prisma.PickCreateManyInput {
   const status = s.status ?? "WIN";
   const category = s.unstamped
     ? null
-    : pickCategory({ betType, period, betDetail, odds, line, sportName: s.sport, pickedSide: null, mlFavoredSide: null, propMarket: null });
+    : pickCategory({ betType, period, betDetail, odds, line, sportName: s.sport, pickedSide: null, mlFavoredSide: null, oddsSource: "STATED", propMarket: null });
   return {
     id: `${PREFIX}p${String(seq).padStart(5, "0")}`,
     userId,
@@ -174,6 +174,7 @@ function row(userId: string, s: Spec): Prisma.PickCreateManyInput {
     betType,
     betDetail,
     odds,
+    oddsSource: "STATED",
     line,
     period,
     units: s.units ?? 1,

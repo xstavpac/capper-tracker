@@ -26,7 +26,7 @@ function logged(betDetail: string, sport = "NBA"): ExistingPickRow {
   const parsed = parseAnyPlayerProp(betDetail, sport)!;
   return {
     id: "logged", capperId: "c1", sportId: "nba", ...GAME, gameTime: T0, period: "FULL_GAME", betType: "PLAYER_PROP", betDetail,
-    odds: -110, line: 30.5, pickedSide: null, mlFavoredSide: null, propMarket: parsed.propMarket as ExistingPickRow["propMarket"], playerName: parsed.playerName,
+    odds: -110, oddsSource: null, line: 30.5, pickedSide: null, mlFavoredSide: null, propMarket: parsed.propMarket as ExistingPickRow["propMarket"], playerName: parsed.playerName,
   };
 }
 // A row about to be inserted, built as bulkImportPicksAction builds it (propMarket / playerName from the text).

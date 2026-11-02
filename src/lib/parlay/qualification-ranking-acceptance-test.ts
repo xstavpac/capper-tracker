@@ -44,6 +44,7 @@ function mkLeg(overrides: Partial<ParlayLeg>): ParlayLeg {
     betDetail: "Yankees ML",
     line: null,
     odds: -150,
+    oddsSource: "STATED",
     datePosted: new Date("2026-09-01T12:00:00Z"),
     homeTeam: HOME,
     awayTeam: AWAY,

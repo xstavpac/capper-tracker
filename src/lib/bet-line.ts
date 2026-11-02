@@ -61,7 +61,15 @@ export function extractLine(betType: BetTypeLike, rawText: string): number | nul
 // needs pickedSide too (which side this pick is on); when either is missing - as
 // it is for every pick predating that column, every manually entered pick, and
 // any import where the market couldn't be resolved - it falls back to the
-// original odds-sign heuristic, no better and no worse than before.
+// odds-sign heuristic, but only where the price is real evidence of a side. A
+// DEFAULTED price is the parser's -110 placeholder, a legacy row (null
+// oddsSource) can't say whether its price was ever real, and a -110 carries no
+// side either way (both sides of a pick'em sit there): all of those return null
+// (no FAV_ML / DOG_ML record) rather than be filed as a favorite. Only the
+// capper's own STATED price, or a MARKET price off the odds feed, with odds
+// other than -110, still reads by sign.
+export type OddsSourceLike = "STATED" | "MARKET" | "DEFAULTED";
+
 export function favoriteOrUnderdog(pick: {
   betType: BetTypeLike;
   odds: number;
@@ -69,11 +77,15 @@ export function favoriteOrUnderdog(pick: {
   // "DRAW" (a 3-way moneyline on the draw) is on neither side of the market.
   pickedSide?: SideLike | "DRAW" | null;
   mlFavoredSide?: SideLike | "DRAW" | null;
+  // Only the MONEYLINE odds-sign fallback reads it; omitted/null reads as unknown.
+  oddsSource?: OddsSourceLike | null;
 }): "FAVORITE" | "UNDERDOG" | null {
   if (pick.betType === "MONEYLINE") {
     if (pick.mlFavoredSide && pick.pickedSide) {
       return pick.pickedSide === pick.mlFavoredSide ? "FAVORITE" : "UNDERDOG";
     }
+    if (pick.oddsSource !== "STATED" && pick.oddsSource !== "MARKET") return null;
+    if (pick.odds === -110) return null;
     if (pick.odds < 0) return "FAVORITE";
     if (pick.odds > 0) return "UNDERDOG";
     return null;

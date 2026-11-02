@@ -179,6 +179,7 @@ function pickRow(userId: string, s: PickSpec): Prisma.PickCreateManyInput {
     sportName: sport,
     pickedSide: s.pickedSide ?? null,
     mlFavoredSide: s.mlFavoredSide ?? null,
+    oddsSource: "STATED",
     propMarket: s.propMarket ?? null,
   });
   const decidedOrCancelled = status !== "PENDING";
@@ -192,6 +193,7 @@ function pickRow(userId: string, s: PickSpec): Prisma.PickCreateManyInput {
     betType,
     betDetail,
     odds,
+    oddsSource: "STATED",
     line,
     period,
     units: s.units ?? 1,

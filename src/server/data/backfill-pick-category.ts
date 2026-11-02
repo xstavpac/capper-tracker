@@ -23,6 +23,12 @@ export type BackfillOptions = {
 export const COMBINED_YARDAGE_CATEGORIES = ["RUSH_REC_YDS_PROP", "PASS_RUSH_YDS_PROP"] as const;
 export const COMBINED_YARDAGE_SCOPE: Prisma.PickWhereInput = { betType: "PLAYER_PROP", category: "TD_PROP" };
 
+// PICK_CATEGORY_VERSION 4: TOTAL picks with no category (pickCategory now reads a total's side with
+// totalSideFromText, so one that was null may have a side), and every full-game moneyline
+// (--ml-side --verify; the --ml-side backfill itself has its own engine, backfill-ml-side.ts).
+export const NULL_TOTALS_SCOPE: Prisma.PickWhereInput = { betType: "TOTAL", category: null };
+export const ML_FULL_GAME_SCOPE: Prisma.PickWhereInput = { betType: "MONEYLINE", period: "FULL_GAME" };
+
 export type BackfillResult = {
   total: number;
   toStamp: number;
@@ -65,6 +71,7 @@ export async function backfillPickCategory(opts: BackfillOptions): Promise<Backf
         period: true,
         betDetail: true,
         odds: true,
+        oddsSource: true,
         line: true,
         pickedSide: true,
         mlFavoredSide: true,
@@ -209,6 +216,7 @@ export async function verifyPickCategory(opts: VerifyOptions): Promise<VerifyRes
           period: true,
           betDetail: true,
           odds: true,
+          oddsSource: true,
           line: true,
           pickedSide: true,
           mlFavoredSide: true,

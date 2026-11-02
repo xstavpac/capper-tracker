@@ -23,7 +23,7 @@
 // Loop order is fixed and the axes pickCategory ignores for a bet type vary
 // FASTEST, so equal outputs come out in long runs (the pinned file is
 // run-length encoded and stays small).
-import { BetType, Period, PickedSide, PropMarket } from "@prisma/client";
+import { BetType, OddsSource, Period, PickedSide, PropMarket } from "@prisma/client";
 import type { pickCategory } from "@/server/data/stats";
 
 export type MatrixInput = Parameters<typeof pickCategory>[0];
@@ -53,6 +53,10 @@ const LINES_WIDE: (number | null)[] = [null, -1.5, 0, 3.5, -0.5];
 const LINES_SWEEP: (number | null)[] = [null, -1.5, 3.5];
 // (pickedSide, mlFavoredSide) pairs: neither known, both known agreeing, both known
 // disagreeing, only one known - the four states favoriteOrUnderdog distinguishes.
+// Where a pick's price came from (null = a legacy row): the moneyline odds-sign fallback only
+// trusts STATED / MARKET, so the axis is swept for every bet type and crossed with the
+// moneyline odds and side axes below.
+const ODDS_SOURCES: (OddsSource | null)[] = [null, "STATED", "MARKET", "DEFAULTED"];
 const SIDE_PAIRS: [PickedSide | null, PickedSide | null][] = [
   [null, null],
   ["HOME", "HOME"],
@@ -70,6 +74,11 @@ const DETAILS_TOTAL: (string | null)[] = [
   "Under 44.5",
   "u 7",
   "o7",
+  "u5.5",
+  "o5.5",
+  "o/u 5.5 under",
+  "Over 5.5",
+  "Under 5.5",
   "8.5",
   "Over/Under 8.5",
   "Under and Over",
@@ -113,6 +122,7 @@ function make(
     sportName: "MLB",
     pickedSide: null,
     mlFavoredSide: null,
+    oddsSource: null,
     propMarket: null,
     ...o,
   };
@@ -128,9 +138,10 @@ function* sweep(betType: BetType): Generator<MatrixInput> {
         for (const odds of ODDS_SWEEP)
           for (const [pickedSide, mlFavoredSide] of SIDE_PAIRS)
             for (const line of LINES_SWEEP)
-              for (const propMarket of PROP_SWEEP) {
-                yield make(betType, { period, sportName, betDetail, odds, line, pickedSide, mlFavoredSide, propMarket });
-              }
+              for (const propMarket of PROP_SWEEP)
+                for (const oddsSource of ODDS_SOURCES) {
+                  yield make(betType, { period, sportName, betDetail, odds, line, pickedSide, mlFavoredSide, propMarket, oddsSource });
+                }
 }
 
 function* focusedMoneyline(): Generator<MatrixInput> {
@@ -139,9 +150,10 @@ function* focusedMoneyline(): Generator<MatrixInput> {
       for (const odds of ODDS_WIDE)
         for (const pickedSide of SIDES)
           for (const mlFavoredSide of SIDES)
-            for (const betDetail of DETAILS_MONEYLINE) {
-              yield make("MONEYLINE", { period, sportName, odds, pickedSide, mlFavoredSide, betDetail });
-            }
+            for (const betDetail of DETAILS_MONEYLINE)
+              for (const oddsSource of ODDS_SOURCES) {
+                yield make("MONEYLINE", { period, sportName, odds, pickedSide, mlFavoredSide, betDetail, oddsSource });
+              }
 }
 
 function* focusedSpread(): Generator<MatrixInput> {

@@ -59,6 +59,7 @@ async function legacyInsert(userId: string, rows: PickInsertData[]) {
                 sportName,
                 pickedSide: row.pickedSide ?? null,
                 mlFavoredSide: row.mlFavoredSide ?? null,
+                oddsSource: row.oddsSource ?? null,
                 propMarket: row.propMarket ?? null,
               }),
               categoryVersion: PICK_CATEGORY_VERSION,

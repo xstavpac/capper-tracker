@@ -80,7 +80,7 @@ const NFL_STAT_PROP: Record<string, string> = {
 };
 check("legacy null-propMarket NFL text takes the market's own category", pickCategory(input(null, "Josh Allen Over 275.5 Passing Yards", "NFL")), "PASS_YDS_PROP");
 check("NFL markets: yardage / receptions their own category, the rest TD_PROP", NFL_MARKETS.map((m) => pickCategory(input(m as PropMarket, null, "NFL"))), NFL_MARKETS.map((m) => NFL_STAT_PROP[m] ?? "TD_PROP"));
-check("PICK_CATEGORY_VERSION", PICK_CATEGORY_VERSION, 3);
+check("PICK_CATEGORY_VERSION (4: moneyline odds-source rule + totals side; no NHL prop input changed)", PICK_CATEGORY_VERSION, 4);
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

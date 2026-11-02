@@ -36,6 +36,7 @@ function toPickCategoryInput(leg: ParlayLeg) {
     odds: leg.odds,
     line: leg.line,
     sportName: leg.sportName,
+    oddsSource: leg.oddsSource ?? null,
   };
 }
 

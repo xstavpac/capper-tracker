@@ -40,6 +40,7 @@ export const EXISTING_PICK_SELECT = {
   betType: true,
   betDetail: true,
   odds: true,
+  oddsSource: true,
   line: true,
   pickedSide: true,
   mlFavoredSide: true,

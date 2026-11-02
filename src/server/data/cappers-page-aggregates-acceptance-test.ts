@@ -153,7 +153,7 @@ function pickRow(userId: string, s: PickSpec): Prisma.PickCreateManyInput {
     pickedSide: null,
     mlFavoredSide: null,
     propMarket: null,
-    category: pickCategory({ betType, period: "FULL_GAME", betDetail: null, odds, line: null, sportName: sport, pickedSide: null, mlFavoredSide: null, propMarket: null }),
+    category: pickCategory({ betType, period: "FULL_GAME", betDetail: null, odds, line: null, sportName: sport, pickedSide: null, mlFavoredSide: null, oddsSource: "STATED", propMarket: null }),
     categoryVersion: PICK_CATEGORY_VERSION,
   };
 }

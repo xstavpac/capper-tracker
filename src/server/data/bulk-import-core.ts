@@ -599,7 +599,7 @@ export async function checkDuplicatePicksForUser(userId: string, items: Duplicat
       // "same game" has nothing reliable to compare against (see
       // resolveGameAndOdds; unresolved items fall back to placeholder
       // homeTeam/awayTeam values that aren't safe to match on).
-      const { homeTeam, awayTeam, gameTime, odds, matched, pickedSide, mlFavoredSide } =
+      const { homeTeam, awayTeam, gameTime, odds, oddsSource, matched, pickedSide, mlFavoredSide } =
         await resolveGameAndOdds(item, getOdds);
       if (!matched) return null;
 
@@ -622,6 +622,7 @@ export async function checkDuplicatePicksForUser(userId: string, items: Duplicat
         sportName: item.sportName,
         pickedSide,
         mlFavoredSide,
+        oddsSource,
       });
       // TEAM_TOTAL-only widening - see dedupCategory's own comment. A no-op
       // for every other bet type (pickCategory's output already differs by

@@ -155,10 +155,10 @@ const CATEGORY: [string, string][] = [
   ["PASS_INTERCEPTIONS", "PASS_INTERCEPTIONS_PROP"],
 ];
 for (const [market, category] of CATEGORY) {
-  check(`category ${market}`, pickCategory({ betType: "PLAYER_PROP", period: "FULL_GAME", betDetail: "x", odds: -110, line: null, sportName: "NFL", pickedSide: null, mlFavoredSide: null, propMarket: market as PropMarket }), category);
+  check(`category ${market}`, pickCategory({ betType: "PLAYER_PROP", period: "FULL_GAME", betDetail: "x", odds: -110, line: null, sportName: "NFL", pickedSide: null, mlFavoredSide: null, oddsSource: "STATED", propMarket: market as PropMarket }), category);
 }
-check("category from text alone (legacy null propMarket)", pickCategory({ betType: "PLAYER_PROP", period: "FULL_GAME", betDetail: "JK Dobbins over 13.5 rushing attempts", odds: -110, line: null, sportName: "NFL", pickedSide: null, mlFavoredSide: null, propMarket: null }), "RUSH_ATTEMPTS_PROP");
-check("PICK_CATEGORY_VERSION stays 3", PICK_CATEGORY_VERSION, 3);
+check("category from text alone (legacy null propMarket)", pickCategory({ betType: "PLAYER_PROP", period: "FULL_GAME", betDetail: "JK Dobbins over 13.5 rushing attempts", odds: -110, line: null, sportName: "NFL", pickedSide: null, mlFavoredSide: null, oddsSource: "STATED", propMarket: null }), "RUSH_ATTEMPTS_PROP");
+check("PICK_CATEGORY_VERSION is 4 (moneyline odds-source rule + totals side)", PICK_CATEGORY_VERSION, 4);
 check("filter category (stored)", betTypeFilterCategory({ betType: "PLAYER_PROP", period: "FULL_GAME", betDetail: "x", propMarket: "PASS_INTERCEPTIONS" }), "PASS_INTERCEPTIONS");
 check("filter category (from text)", betTypeFilterCategory({ betType: "PLAYER_PROP", period: "FULL_GAME", betDetail: "Rodgers Over 34.5 Pass Attempts", propMarket: null }), "PASS_ATTEMPTS");
 
@@ -172,7 +172,7 @@ check("label RUSH_ATTEMPTS", label("JK Dobbins over 13.5 rushing attempts", "JK 
 
 // Dedup: same player + different market is not a duplicate; same player + same market is.
 const key = (text: string) => {
-  const cat = pickCategory({ betType: "PLAYER_PROP", period: "FULL_GAME", betDetail: text, odds: -110, line: null, sportName: "NFL", pickedSide: null, mlFavoredSide: null, propMarket: null }) ?? "";
+  const cat = pickCategory({ betType: "PLAYER_PROP", period: "FULL_GAME", betDetail: text, odds: -110, line: null, sportName: "NFL", pickedSide: null, mlFavoredSide: null, oddsSource: "STATED", propMarket: null }) ?? "";
   return dedupCategory(cat, "PLAYER_PROP", text, null, null, "NFL");
 };
 check("dedup: Rodgers pass attempts vs pass yards -> different", key("Rodgers Over 34.5 Pass Attempts") === key("Rodgers Over 249.5 Passing Yards"), false);

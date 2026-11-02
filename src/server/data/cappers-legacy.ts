@@ -44,6 +44,7 @@ export async function getCappersForUser(userId: string, filter?: CapperLeagueFil
       period: true,
       betDetail: true,
       odds: true,
+      oddsSource: true,
       line: true,
       sport: { select: { name: true } },
     },

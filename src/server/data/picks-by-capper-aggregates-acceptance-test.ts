@@ -155,7 +155,10 @@ function pickRow(userId: string, s: PickSpec): Prisma.PickCreateManyInput {
   const line = s.line ?? null;
   const status = s.status ?? "WIN";
   const betDetail = s.betDetail ?? null;
-  const computed = pickCategory({ betType, period, betDetail, odds, line, sportName: sport, pickedSide: null, mlFavoredSide: null, propMarket: null });
+  // A real stored side, as an import writes it: full-game moneylines read favorite/underdog from the sides (the
+  // old fixtures leaned on the odds sign, which only a STATED price other than -110 still gets).
+  const sides = betType === "MONEYLINE" && period === "FULL_GAME" ? { pickedSide: "HOME" as const, mlFavoredSide: odds < 0 ? ("HOME" as const) : odds > 0 ? ("AWAY" as const) : null } : { pickedSide: null, mlFavoredSide: null };
+  const computed = pickCategory({ betType, period, betDetail, odds, line, sportName: sport, ...sides, oddsSource: "STATED", propMarket: null });
   const category = s.categoryOverride !== undefined ? s.categoryOverride : computed;
   const categoryVersion = s.categoryVersionOverride !== undefined ? s.categoryVersionOverride : PICK_CATEGORY_VERSION;
   const decided = status !== "PENDING" && status !== "CANCELLED";
@@ -169,6 +172,8 @@ function pickRow(userId: string, s: PickSpec): Prisma.PickCreateManyInput {
     betType,
     betDetail,
     odds,
+    oddsSource: "STATED",
+    ...sides,
     line,
     period,
     units: s.units ?? 1,

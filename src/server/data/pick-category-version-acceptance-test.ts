@@ -29,14 +29,20 @@ const base = {
   sportName: "MLB",
   pickedSide: null,
   mlFavoredSide: null,
+  oddsSource: null,
   propMarket: null,
 } as const;
 
 const GOLDEN: [string, Partial<Input> & { betType: Input["betType"] }, string | null][] = [
   ["NRFI under", { betType: "NRFI", betDetail: "NRFI Under 0.5 1st inning" }, "NRFI"],
   ["NRFI yes-run", { betType: "NRFI", betDetail: "YRFI Over 0.5 1st inning" }, "YRFI"],
-  ["ML fav by odds", { betType: "MONEYLINE", odds: -150 }, "FAV_ML"],
-  ["ML dog by odds", { betType: "MONEYLINE", odds: 130 }, "DOG_ML"],
+  ["ML fav by odds (STATED)", { betType: "MONEYLINE", odds: -150, oddsSource: "STATED" }, "FAV_ML"],
+  ["ML dog by odds (MARKET)", { betType: "MONEYLINE", odds: 130, oddsSource: "MARKET" }, "DOG_ML"],
+  // Version 4: the odds sign is only evidence of a side for a real STATED / MARKET price.
+  ["ML legacy row, no sides, -150 (null)", { betType: "MONEYLINE", odds: -150 }, null],
+  ["ML DEFAULTED -110 placeholder (null)", { betType: "MONEYLINE", odds: -110, oddsSource: "DEFAULTED" }, null],
+  ["ML STATED -110 (null)", { betType: "MONEYLINE", odds: -110, oddsSource: "STATED" }, null],
+  ["ML sides decide whatever the source", { betType: "MONEYLINE", odds: -110, oddsSource: "DEFAULTED", pickedSide: "HOME", mlFavoredSide: "AWAY" }, "DOG_ML"],
   ["ML both-negative, mlFavoredSide decides (home fav, picked away)", { betType: "MONEYLINE", odds: -104, pickedSide: "AWAY", mlFavoredSide: "HOME" }, "DOG_ML"],
   ["ML MLB first half", { betType: "MONEYLINE", period: "FIRST_HALF" }, "F5_ML"],
   ["ML NFL first half", { betType: "MONEYLINE", period: "FIRST_HALF", sportName: "NFL" }, "FIRST_HALF_ML"],
@@ -55,6 +61,18 @@ const GOLDEN: [string, Partial<Input> & { betType: Input["betType"] }, string | 
   ["TOTAL over", { betType: "TOTAL", betDetail: "Over 8.5" }, "OVER"],
   ["TOTAL under", { betType: "TOTAL", betDetail: "under 44.5" }, "UNDER"],
   ["TOTAL no direction (null)", { betType: "TOTAL", betDetail: "8.5" }, null],
+  // Version 4: a total's side is read by totalSideFromText, the reader grading uses.
+  ["TOTAL o/u token then under", { betType: "TOTAL", betDetail: "o/u 5.5 under" }, "UNDER"],
+  ["TOTAL o/u token then over", { betType: "TOTAL", betDetail: "o/u 5.5 over" }, "OVER"],
+  ["TOTAL shorthand u5.5", { betType: "TOTAL", betDetail: "u5.5" }, "UNDER"],
+  ["TOTAL shorthand o5.5", { betType: "TOTAL", betDetail: "o5.5" }, "OVER"],
+  ["TOTAL Over 5.5", { betType: "TOTAL", betDetail: "Over 5.5" }, "OVER"],
+  ["TOTAL Under 5.5", { betType: "TOTAL", betDetail: "Under 5.5" }, "UNDER"],
+  ["TOTAL sideless Over/Under market (null)", { betType: "TOTAL", betDetail: "Over/Under 8.5" }, null],
+  ["TOTAL NHL first period shorthand", { betType: "TOTAL", period: "FIRST_PERIOD", sportName: "NHL", betDetail: "P1 u1.5" }, "FIRST_PERIOD_UNDER"],
+  ["TOTAL MLB first half o/u token then under", { betType: "TOTAL", period: "FIRST_HALF", betDetail: "F5 o/u 4.5 under" }, "F5_UNDER"],
+  ["TEAM_TOTAL shorthand is still TEAM_TOTAL", { betType: "TEAM_TOTAL", betDetail: "Yankees TT o4.5" }, "TEAM_TOTAL"],
+  ["TEAM_TOTAL o/u under is still TEAM_TOTAL", { betType: "TEAM_TOTAL", betDetail: "Yankees team total o/u 4.5 under" }, "TEAM_TOTAL"],
   ["TOTAL null detail (null)", { betType: "TOTAL", betDetail: null }, null],
   ["TOTAL MLB first half over", { betType: "TOTAL", period: "FIRST_HALF", betDetail: "F5 Over 4.5" }, "F5_OVER"],
   ["TOTAL MLB first half no direction (null)", { betType: "TOTAL", period: "FIRST_HALF", betDetail: "4.5" }, null],
@@ -78,7 +96,7 @@ const GOLDEN: [string, Partial<Input> & { betType: Input["betType"] }, string | 
 ];
 
 // The expected values above were captured at this version.
-expect("PICK_CATEGORY_VERSION matches the version the golden table was captured at", PICK_CATEGORY_VERSION, 3);
+expect("PICK_CATEGORY_VERSION matches the version the golden table was captured at", PICK_CATEGORY_VERSION, 4);
 for (const [label, overrides, expected] of GOLDEN) {
   expect(`pickCategory: ${label}`, pickCategory({ ...base, ...overrides } as Input), expected);
 }

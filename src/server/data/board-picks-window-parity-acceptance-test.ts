@@ -167,6 +167,7 @@ function pickRow(
     line: spec.line ?? null,
     pickedSide: spec.pickedSide ?? null,
     mlFavoredSide: spec.mlFavoredSide ?? null,
+    oddsSource: "STATED" as const,
     propMarket: spec.propMarket ?? null,
   };
   return {
@@ -285,7 +286,7 @@ async function main() {
 
   // ---- 0. Preconditions: the fields the projection must carry really matter -
   const sens = (spec: Spec, drop: keyof Spec) => {
-    const base = { betType: spec.betType, period: spec.period ?? "FULL_GAME", betDetail: spec.betDetail(today[0]), odds: spec.odds, line: spec.line ?? null, pickedSide: spec.pickedSide ?? null, mlFavoredSide: spec.mlFavoredSide ?? null, propMarket: spec.propMarket ?? null, sportName: SPORT };
+    const base = { betType: spec.betType, period: spec.period ?? "FULL_GAME", betDetail: spec.betDetail(today[0]), odds: spec.odds, line: spec.line ?? null, pickedSide: spec.pickedSide ?? null, mlFavoredSide: spec.mlFavoredSide ?? null, oddsSource: "STATED" as const, propMarket: spec.propMarket ?? null, sportName: SPORT };
     return [pickCategory(base), pickCategory({ ...base, [drop]: undefined })];
   };
   check("0a. precondition: dropping mlFavoredSide changes a fixture pick's category", same(sens(SPECS[1], "mlFavoredSide"), ["DOG_ML", "FAV_ML"]), json(sens(SPECS[1], "mlFavoredSide")));

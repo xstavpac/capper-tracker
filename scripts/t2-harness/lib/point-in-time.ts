@@ -107,7 +107,7 @@ export class PointInTimeIndex {
       // pickCategory types betType/period as Prisma's generated enums; PitPick
       // deliberately keeps them as plain strings (real DB rows always satisfy
       // the enum in practice) - narrow type-only cast at this one boundary.
-      const category = pickCategory({ ...p, betType: p.betType as BetType, period: p.period as Period, sportName: p.sportName });
+      const category = pickCategory({ ...p, betType: p.betType as BetType, period: p.period as Period, sportName: p.sportName, oddsSource: "STATED" });
       if (category) {
         const catKey = p.capperId + "|" + category;
         (rawByCapperCategory.get(catKey) ?? rawByCapperCategory.set(catKey, []).get(catKey)!).push(entry);

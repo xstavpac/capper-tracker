@@ -40,6 +40,7 @@ function mk(
     odds,
     line,
     sportName: "MLB",
+    oddsSource: "STATED",
   });
   return {
     pickId,
@@ -53,6 +54,7 @@ function mk(
     gameLabel: game.awayTeam + " @ " + game.homeTeam,
     betDetail,
     odds,
+    oddsSource: "STATED",
     units: 1,
     status: "PENDING",
     betType,
