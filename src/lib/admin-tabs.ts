@@ -6,6 +6,7 @@ export const ADMIN_TABS = [
   { key: "odds-api", href: "/admin/odds-api", label: "Odds API" },
   { key: "grading", href: "/admin/grading", label: "Grading" },
   { key: "bug-reports", href: "/admin/bug-reports", label: "Bug reports" },
+  { key: "generator", href: "/admin/generator", label: "Generator" },
   { key: "imports", href: "/admin/imports", label: "Imports" },
 ] as const;
 
