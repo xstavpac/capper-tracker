@@ -109,6 +109,8 @@ stub("../../server/actions/parlay-generate", {
     return { snapshot, parlay: buildGenerated(snapshot, req.settings, null, new Date()) };
   },
 });
+// The run log (parlay-run-log.ts): diagnostics the card sends fire-and-forget; nothing to do here.
+stub("../../server/actions/parlay-run-log", { recordGeneratorRunAction: async () => undefined });
 stub("../../server/actions/parlay-hybrid", { hybridGenerateAction: async () => ({}), hybridFanDuelLinkAction: async () => ({ error: "not used here" }) });
 stub("../../server/actions/picks", { getLeagueRecordsAction: async () => ({ records: {}, streaks: {}, last20: {} }) });
 stub("../../server/actions/parlay-slip", {
