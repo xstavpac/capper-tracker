@@ -12,6 +12,7 @@ import {
   resolveGameForNickname,
   resolveGameForTeams,
   findMarketPrice,
+  findMarketPricePoint,
   findMarketSpreadLine,
   findMarketTotalLine,
   findFavoredSide,
@@ -23,7 +24,8 @@ import {
 import { resolvePropOdds, isNflOddsPropMarket } from "@/server/data/nfl-prop-odds";
 import { resolveAnytimeGoalOdds, resolveThreeWayOdds } from "@/server/data/nhl-goal-scorer-odds";
 import { findAltLinePrice } from "@/server/data/alt-line-odds";
-import { resolvePickPrice, type PickOddsSource } from "@/lib/odds-source";
+import { resolvePickPrice, postedOddsCapture, unpricedReasonFor, type PickOddsSource, type PostedOddsCapture } from "@/lib/odds-source";
+import { createPricingOddsLoader, type PricingOddsLoader } from "@/server/data/fresh-odds";
 import { extractLine, parsePlayerPropLine, parseAnyPlayerProp, isAnytimeTdPick } from "@/lib/bet-line";
 import { nhlAnytimeGoalSide } from "@/lib/nhl-prop";
 import { parseNbaProp } from "@/lib/nba-prop";
@@ -170,7 +172,7 @@ function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2
 async function resolveGameAndOdds(
   item: ResolvableItem,
   getOdds: OddsLoader,
-  { retryOnMiss = true, altLines = false }: { retryOnMiss?: boolean; altLines?: boolean } = {}
+  { retryOnMiss = true, altLines = false, pricing }: { retryOnMiss?: boolean; altLines?: boolean; pricing?: PricingOddsLoader } = {}
 ): Promise<{
   homeTeam: string;
   awayTeam: string;
@@ -178,6 +180,8 @@ async function resolveGameAndOdds(
   odds: number;
   // Where `odds` came from - stored on Pick.oddsSource (see lib/odds-source.ts).
   oddsSource: PickOddsSource;
+  // The posted-odds capture stored with it (lib/odds-source.ts postedOddsCapture) - decided here, once, from the same facts.
+  posted: PostedOddsCapture;
   resolvable: boolean; // sport has a real score source wired up at all
   matched: boolean; // and a specific game was actually found in it
   // Which side of homeTeam/awayTeam this pick is actually on, captured once
@@ -221,6 +225,9 @@ async function resolveGameAndOdds(
   // A price read from the odds feed for a line that has none of its own. Every
   // lookup below runs only when !item.hasExplicitOdds.
   let feedPrice: number | null = null;
+  // Set only when feedPrice came off a game line (h2h/spreads/totals): the bookmaker and the odds event it was read off.
+  let pricedPoint: { book: string; eventId: string } | null = null;
+  const importedAt = new Date();
   let matched = false;
   let pickedSide: "HOME" | "AWAY" | "DRAW" | null = null;
   let mlFavoredSide: "HOME" | "AWAY" | null = null;
@@ -400,10 +407,14 @@ async function resolveGameAndOdds(
         // The pick's own line, same derivation the import stores on Pick.line -
         // the price has to be for that exact number (see findMarketPrice).
         const line = extractLine(item.betType, item.description) ?? item.inferredLine ?? null;
-        let marketPrice =
+        // Priced from the pricing loader: the same snapshot games, or - when that snapshot is older than the
+        // freshness window - one shared fresh listing (fresh-odds.ts). Game matching above stays on getOdds.
+        const point =
           side && item.betType !== "TEAM_TOTAL"
-            ? await findMarketPrice(liveSportKey, game, item.betType, side, { line, period: item.period ?? "UNKNOWN" }, getOdds)
+            ? await findMarketPricePoint(liveSportKey, game, item.betType, side, { line, period: item.period ?? "UNKNOWN" }, pricing?.load ?? getOdds)
             : null;
+        if (point) pricedPoint = { book: point.book, eventId: point.eventId };
+        let marketPrice: number | null = point?.price ?? null;
         // The snapshot has each book's main line only. A pick at any other
         // number is priced from the event's alternate market, same exact-line
         // rule; no match there either leaves it unpriced as before.
@@ -426,12 +437,29 @@ async function resolveGameAndOdds(
 
   const { odds, oddsSource } = resolvePickPrice(item, feedPrice);
 
+  // When the data that priced a MARKET pick was read. A game line carries its event's own time; a price read off an
+  // alternate-line or prop cache is stamped with the snapshot's time (the data is at least that new).
+  let priced: { capturedAt: Date | null; book: string | null } | null = null;
+  if (oddsSource === "MARKET" && liveSportKey) {
+    priced = pricedPoint
+      ? { capturedAt: pricing?.capturedAt(liveSportKey, pricedPoint.eventId) ?? null, book: pricedPoint.book }
+      : { capturedAt: (await pricing?.snapshotAt(liveSportKey)) ?? null, book: null };
+  }
+  const posted = postedOddsCapture({
+    oddsSource,
+    importedAt,
+    line: extractLine(item.betType, item.description) ?? item.inferredLine ?? null,
+    priced,
+    unpricedReason: oddsSource === "DEFAULTED" ? unpricedReasonFor({ betType: item.betType, gameTime, importedAt }) : null,
+  });
+
   return {
     homeTeam,
     awayTeam,
     gameTime,
     odds,
     oddsSource,
+    posted,
     resolvable,
     matched,
     pickedSide,
@@ -466,13 +494,15 @@ export async function previewBulkImportMatches(
 ): Promise<{ odds: Record<number, number>; games: Record<number, PreviewMatchedGame> }> {
   await requireUser();
   const getOdds = createRequestOddsLoader();
+  // The same pricing the import will use, so the price shown is the price stored.
+  const pricing = createPricingOddsLoader(getOdds);
 
   const enriched: Record<number, number> = {};
   const games: Record<number, PreviewMatchedGame> = {};
   await Promise.all(
     items.map(async (item, i) => {
       if (item.hasExplicitOdds) return;
-      const { odds, matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item, getOdds, { altLines: true });
+      const { odds, matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item, getOdds, { altLines: true, pricing });
       if (matched && odds !== item.odds) enriched[i] = odds;
       if (matched) games[i] = { homeTeam, awayTeam, gameTime: gameTime.toISOString() };
     })
@@ -727,17 +757,19 @@ export async function bulkImportPicksAction(
   // odds read is not just replayed.
   type Resolution = Awaited<ReturnType<typeof resolveGameAndOdds>>;
   type Outcome = { ok: true; resolved: Resolution } | { ok: false; err: unknown };
-  const resolveOne = (item: BulkImportItem, loader: OddsLoader): Promise<Outcome> =>
-    resolveGameAndOdds(item, loader, { retryOnMiss: false, altLines: true }).then(
+  const resolveOne = (item: BulkImportItem, loader: OddsLoader, pricing: PricingOddsLoader): Promise<Outcome> =>
+    resolveGameAndOdds(item, loader, { retryOnMiss: false, altLines: true, pricing }).then(
       (resolved): Outcome => ({ ok: true, resolved }),
       (err: unknown): Outcome => ({ ok: false, err })
     );
-  const outcomes = await Promise.all(items.map((item) => resolveOne(item, getOdds)));
+  const pricingOdds = createPricingOddsLoader(getOdds);
+  const outcomes = await Promise.all(items.map((item) => resolveOne(item, getOdds, pricingOdds)));
   const missed = outcomes.flatMap((o, i) => (o.ok && o.resolved.resolvable && !o.resolved.matched ? [i] : []));
   if (missed.length > 0) {
     await new Promise((resolve) => setTimeout(resolve, UNMATCHED_RETRY_DELAY_MS));
     const retryOdds = createRequestOddsLoader();
-    const second = await Promise.all(missed.map((i) => resolveOne(items[i], retryOdds)));
+    const retryPricing = createPricingOddsLoader(retryOdds);
+    const second = await Promise.all(missed.map((i) => resolveOne(items[i], retryOdds, retryPricing)));
     missed.forEach((i, k) => {
       outcomes[i] = second[k];
     });
@@ -788,6 +820,7 @@ export async function bulkImportPicksAction(
         gameTime,
         odds,
         oddsSource,
+        posted,
         resolvable,
         matched,
         pickedSide,
@@ -862,6 +895,7 @@ export async function bulkImportPicksAction(
         betDetail: item.description,
         odds,
         oddsSource,
+        ...posted,
         line: extractedLine ?? item.inferredLine ?? null,
         period: item.period,
         units: item.units,

@@ -21,3 +21,48 @@ export function resolvePickPrice(
   if (feedPrice !== null) return { odds: feedPrice, oddsSource: "MARKET" };
   return { odds: line.odds, oddsSource: "DEFAULTED" };
 }
+
+// ---------------------------------------------------------------------------
+// Posted-odds capture - Pick.postedLine / oddsCapturedAt / oddsBook / oddsNullReason.
+//
+// Decided once, at insert, from the same facts resolvePickPrice used; stored with `odds` and `oddsSource` and
+// written by nothing afterwards (posted-odds-write-once-guard-acceptance-test.ts). Point-in-time only: a price is
+// never re-read from a later snapshot to fill a pick in.
+//   STATED    - the capper's own price. oddsCapturedAt is our import time (the capper's own post time is not in
+//               the pasted text); no book.
+//   MARKET    - oddsCapturedAt is when the data that priced it was read (a fresh fetch's fetchedAt, or the snapshot
+//               row's createdAt - the data is at least that new); oddsBook is the bookmaker for a game line.
+//   DEFAULTED - the -110 placeholder is NOT a real price: no capture time, no book, and a reason.
+// ---------------------------------------------------------------------------
+export type OddsNullReason = "no_market" | "game_started" | "unsupported_prop";
+
+export type PostedOddsCapture = {
+  postedLine: number | null;
+  oddsCapturedAt: Date | null;
+  oddsBook: string | null;
+  oddsNullReason: OddsNullReason | null;
+};
+
+export function postedOddsCapture(args: {
+  oddsSource: PickOddsSource;
+  importedAt: Date;
+  // The number stored on Pick.line. A feed price is only ever taken at this exact number, so it is the price's line too.
+  line: number | null;
+  // For MARKET: what the pricing data said about itself. capturedAt null = the data's own time was not readable.
+  priced: { capturedAt: Date | null; book: string | null } | null;
+  // For DEFAULTED: why nothing priced it.
+  unpricedReason: OddsNullReason | null;
+}): PostedOddsCapture {
+  const { oddsSource, importedAt, line, priced, unpricedReason } = args;
+  if (oddsSource === "STATED") return { postedLine: line, oddsCapturedAt: importedAt, oddsBook: null, oddsNullReason: null };
+  if (oddsSource === "MARKET") return { postedLine: line, oddsCapturedAt: priced?.capturedAt ?? null, oddsBook: priced?.book ?? null, oddsNullReason: null };
+  return { postedLine: line, oddsCapturedAt: null, oddsBook: null, oddsNullReason: unpricedReason ?? "no_market" };
+}
+
+// Why a DEFAULTED pick got no feed price, from what the import knows. A started game outranks the others: the
+// feed's pregame listing no longer has it.
+export function unpricedReasonFor(args: { betType: string; gameTime: Date; importedAt: Date }): OddsNullReason {
+  if (args.gameTime.getTime() <= args.importedAt.getTime()) return "game_started";
+  if (args.betType === "PLAYER_PROP") return "unsupported_prop";
+  return "no_market";
+}

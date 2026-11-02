@@ -120,6 +120,11 @@ export type PickInsertData = {
   // Where `odds` came from (lib/odds-source.ts). Set by bulkImportPicksAction
   // and createPick; a caller that omits it leaves the column null (unknown).
   oddsSource?: PickOddsSource | null;
+  // Posted-odds capture (lib/odds-source.ts postedOddsCapture): written here, in the insert, and by nothing after it.
+  postedLine?: number | null;
+  oddsCapturedAt?: Date | null;
+  oddsBook?: string | null;
+  oddsNullReason?: string | null;
 };
 
 // Explicit interactive-transaction bounds for the entitlement + insert transaction

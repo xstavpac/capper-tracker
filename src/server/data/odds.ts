@@ -2305,6 +2305,20 @@ export async function findMarketPrice(
   pick: { line: number | null; period: string },
   getOdds: OddsLoader = getOddsForSport
 ): Promise<number | null> {
+  return (await findMarketPricePoint(sportKey, game, betType, side, pick, getOdds))?.price ?? null;
+}
+
+// findMarketPrice, with where the price came from: the bookmaker key that listed it and the odds event it was read
+// off (the posted-odds capture needs both - lib/odds-source.ts postedOddsCapture). Same rules, same price.
+export async function findMarketPricePoint(
+  sportKey: string,
+  game: { homeTeam: string; awayTeam: string; commenceTime: string },
+  betType: "SPREAD" | "MONEYLINE" | "TOTAL" | "PLAYER_PROP" | "NRFI",
+  side: "home" | "away" | "over" | "under",
+  // line: the pick's signed spread ("-3.5") or its total; ignored for MONEYLINE.
+  pick: { line: number | null; period: string },
+  getOdds: OddsLoader = getOddsForSport
+): Promise<{ price: number; book: string; eventId: string } | null> {
   if (pick.period !== "FULL_GAME") return null;
 
   // No odds-API market exists for NRFI, so it falls through to null (default -110)
@@ -2325,7 +2339,7 @@ export async function findMarketPrice(
   for (const bookmaker of oddsGame.bookmakers) {
     const market = bookmaker.markets.find((m) => m.key === marketKey);
     const outcome = market?.outcomes.find((o) => o.name === outcomeName && (!needsLine || o.point === pick.line));
-    if (outcome) return outcome.price;
+    if (outcome) return { price: outcome.price, book: bookmaker.key, eventId: oddsGame.id };
   }
 
   return null;

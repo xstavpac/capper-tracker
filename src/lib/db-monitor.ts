@@ -120,9 +120,12 @@ export function describeStatement(query: string): StatementShape {
 // A Prisma findMany/findFirst with no `select` names every scalar column. The
 // count comes from the generated client so it follows the schema; the slack
 // covers statements recorded before the last few columns were added (the
-// retired shapes were 29 columns, the schema is 30 today).
+// retired shapes were 29 columns, the schema was 30 before the four posted-odds
+// columns, 34 with them).
 export const PICK_COLUMN_COUNT = Object.keys(Prisma.PickScalarFieldEnum).length;
-const FULL_ROW_SLACK = 3;
+// 3 + the 4 posted-odds columns (postedLine, oddsCapturedAt, oddsBook, oddsNullReason): the same statements stay full-row
+// reads, and the 18-column projected board read still does not.
+const FULL_ROW_SLACK = 7;
 
 export function isFullRowPicks(s: StatementShape): boolean {
   return s.picksColumnsSelected >= PICK_COLUMN_COUNT - FULL_ROW_SLACK;

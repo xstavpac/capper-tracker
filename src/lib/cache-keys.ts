@@ -57,6 +57,9 @@ export const cacheKeys = {
   // The "who fetches from the Odds API when today's row is missing" claim (see
   // odds-seed-claim.ts) - with a time bucket appended, the claim entry itself.
   oddsSeedClaim: (sportKey: string, fetchDate: string) => `odds-seed-claim:${sportKey}:${fetchDate}`,
+  // The newest stored fresh bulk listing for a sport (fresh-odds.ts): read once per 10 minutes fleet-wide instead of
+  // once per import request. Its own key, revalidated by the one writer (the purchase) so a new listing is seen at once.
+  oddsFresh: (sportKey: string) => `odds-fresh:${sportKey}`,
   liveScores: (sportKey: string) => `live-scores:${sportKey}`,
   // Page-load persistFinalScores throttle (see page-grading.ts): the memo key
   // per sport, and - with a time bucket appended - the window-claim entry.
