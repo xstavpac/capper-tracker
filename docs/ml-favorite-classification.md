@@ -171,3 +171,35 @@ A one-time backfill of `Pick.mlFavoredSide` for historical rows:
 That is a schema-free data migration + a stat cache invalidation; decide
 priority against the impact numbers from the read-only analysis query before
 committing to it.
+
+---
+
+## 6. Version 4 (2026-11): the odds-sign fallback only trusts a real price
+
+`PICK_CATEGORY_VERSION` 4 narrows the fallback in §2. With no usable
+`mlFavoredSide` + `pickedSide`, `favoriteOrUnderdog` reads the odds sign only when
+`oddsSource` is `STATED` or `MARKET` **and** the price is not `-110`. A `DEFAULTED`
+placeholder, a legacy row (null `oddsSource`) and any `-110` return no category.
+`PickCategoryInput.oddsSource` is required, so a call site cannot forget it.
+
+Why: legacy moneylines were filed by sign, so every `-110` placeholder was a
+favorite and a dog priced `-110` was counted as a favorite (MLB FAV_ML legacy
+picks won 51.3% against a 57.1% implied price; picks with a stored side 55.5%).
+
+**Backfill** (the §5 idea, run in two steps, nothing is written without `--apply`):
+
+```
+npx tsx scripts/backfill-pick-category.ts --ml-side [--sport=MLB]          # dry run
+npx tsx scripts/backfill-pick-category.ts --ml-side [--sport=MLB] --apply
+npx tsx scripts/backfill-pick-category.ts --verify --ml-side               # read-only audit, moneylines only
+```
+
+For each full-game MONEYLINE row with no `mlFavoredSide` filed FAV_ML / DOG_ML, it
+finds the game with the grader's own matcher (`matchGameResult`, exact team names
+only), reads `GameResult.favTeam`, and takes the picked side from `pickedSide` or,
+failing that, the text (`textPickedSide`, the same fallback grading uses). It
+stores `mlFavoredSide` (and `pickedSide` where it was null) and restamps the
+category with the real `pickCategory`. A pick it cannot resolve is restamped from
+what it has, which for a placeholder / legacy price is no category. The dry run
+prints the old -> new moves, before/after FAV_ML / DOG_ML records per sport, and
+regrades every newly stored side; the apply refuses if any grade would change.

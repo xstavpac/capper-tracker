@@ -105,6 +105,7 @@ async function matchers(userId: string, r: DedupPickRow) {
     sportName: r.sportName,
     pickedSide: r.pickedSide ?? null,
     mlFavoredSide: r.mlFavoredSide ?? null,
+    oddsSource: r.oddsSource ?? null,
   });
   const rows = await prisma.pick.findMany({ where: { userId }, select: EXISTING_PICK_SELECT, orderBy: { id: "asc" } });
   const legacy = category

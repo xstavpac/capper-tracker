@@ -106,6 +106,7 @@ export function rowBetIdentity(row: DedupPickRow): BetIdentity {
     sportName: row.sportName,
     pickedSide: row.pickedSide ?? null,
     mlFavoredSide: row.mlFavoredSide ?? null,
+    oddsSource: row.oddsSource ?? null,
     propMarket: row.propMarket ?? null,
   });
   const knownPlayerProp = row.propMarket && row.playerName ? { propMarket: row.propMarket, playerName: row.playerName } : null;

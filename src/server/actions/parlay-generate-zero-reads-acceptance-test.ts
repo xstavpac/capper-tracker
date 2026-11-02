@@ -116,10 +116,10 @@ async function main() {
   const add = (capperId: string, home: string, away: string, gameTime: number, kind: "FAV" | "OVER" | "DOG", status: "PENDING" | "WIN" | "LOSS", nick: string) => {
     const base =
       kind === "FAV"
-        ? { betType: "MONEYLINE" as const, betDetail: nick + " ML", odds: -150, line: null, pickedSide: "HOME" as const, mlFavoredSide: "HOME" as const }
+        ? { betType: "MONEYLINE" as const, betDetail: nick + " ML", odds: -150, line: null, pickedSide: "HOME" as const, mlFavoredSide: "HOME" as const, oddsSource: "STATED" as const }
         : kind === "DOG"
-          ? { betType: "MONEYLINE" as const, betDetail: away.split(" ").pop() + " ML", odds: 130, line: null, pickedSide: "AWAY" as const, mlFavoredSide: "HOME" as const }
-          : { betType: "TOTAL" as const, betDetail: "Over 44.5", odds: -110, line: 44.5, pickedSide: null, mlFavoredSide: null };
+          ? { betType: "MONEYLINE" as const, betDetail: away.split(" ").pop() + " ML", odds: 130, line: null, pickedSide: "AWAY" as const, mlFavoredSide: "HOME" as const, oddsSource: "STATED" as const }
+          : { betType: "TOTAL" as const, betDetail: "Over 44.5", odds: -110, line: 44.5, pickedSide: null, mlFavoredSide: null, oddsSource: "STATED" as const };
     const id = `${PREFIX}p-${++seq}`;
     created.picks.push(id);
     rows.push({

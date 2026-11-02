@@ -129,7 +129,7 @@ function row(userId: string, capperId: string, status: "WIN" | "LOSS" | "PUSH" |
     pickedSide: null,
     mlFavoredSide: null,
     propMarket: null,
-    category: pickCategory({ betType, period, betDetail, odds, line, sportName: sport, pickedSide: null, mlFavoredSide: null, propMarket: null }),
+    category: pickCategory({ betType, period, betDetail, odds, line, sportName: sport, pickedSide: null, mlFavoredSide: null, oddsSource: "STATED", propMarket: null }),
     categoryVersion: PICK_CATEGORY_VERSION,
   };
 }

@@ -119,10 +119,10 @@ async function main() {
   const add = (capperId: string, sport: { id: string; name: string }, home: string, away: string, gameTime: number, kind: Kind, status: "PENDING" | "WIN" | "LOSS", nick: string) => {
     const base =
       kind === "FAV"
-        ? { betType: "MONEYLINE" as const, betDetail: nick + " ML", odds: -150, line: null, pickedSide: "HOME" as const, mlFavoredSide: "HOME" as const, propMarket: null, playerName: null }
+        ? { betType: "MONEYLINE" as const, betDetail: nick + " ML", odds: -150, line: null, pickedSide: "HOME" as const, mlFavoredSide: "HOME" as const, oddsSource: "STATED" as const, propMarket: null, playerName: null }
         : kind === "YDS"
-          ? { betType: "PLAYER_PROP" as const, betDetail: "Patrick Mahomes Over 250.5 Passing Yards", odds: -110, line: null, pickedSide: null, mlFavoredSide: null, propMarket: "PASS_YDS" as const, playerName: "Patrick Mahomes" }
-          : { betType: "PLAYER_PROP" as const, betDetail: "Travis Kelce Anytime TD", odds: 120, line: null, pickedSide: null, mlFavoredSide: null, propMarket: kind === "TD" ? ("TD" as const) : null, playerName: kind === "TD" ? "Travis Kelce" : null };
+          ? { betType: "PLAYER_PROP" as const, betDetail: "Patrick Mahomes Over 250.5 Passing Yards", odds: -110, line: null, pickedSide: null, mlFavoredSide: null, oddsSource: "STATED" as const, propMarket: "PASS_YDS" as const, playerName: "Patrick Mahomes" }
+          : { betType: "PLAYER_PROP" as const, betDetail: "Travis Kelce Anytime TD", odds: 120, line: null, pickedSide: null, mlFavoredSide: null, oddsSource: "STATED" as const, propMarket: kind === "TD" ? ("TD" as const) : null, playerName: kind === "TD" ? "Travis Kelce" : null };
     const id = `${PREFIX}p-${++seq}`;
     created.picks.push(id);
     rows.push({

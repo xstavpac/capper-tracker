@@ -122,6 +122,7 @@ async function makeSynthetic(n: number) {
       betType,
       betDetail,
       odds,
+      oddsSource: "STATED",
       line,
       period: "FULL_GAME",
       units: 1,
@@ -129,7 +130,7 @@ async function makeSynthetic(n: number) {
       gameTime,
       status,
       gradedAt: new Date(gameTime.getTime() + 3 * 3600000),
-      category: pickCategory({ betType, period: "FULL_GAME", betDetail, odds, line, sportName: sport.name, pickedSide: null, mlFavoredSide: null, propMarket: null }),
+      category: pickCategory({ betType, period: "FULL_GAME", betDetail, odds, line, sportName: sport.name, pickedSide: null, mlFavoredSide: null, oddsSource: "STATED", propMarket: null }),
       categoryVersion: PICK_CATEGORY_VERSION,
     });
   }

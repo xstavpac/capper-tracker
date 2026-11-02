@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import type { Pick, PickStatus, PickedSide } from "@prisma/client";
-import { favoriteOrUnderdog, extractLine, nrfiSide, oddsBucket, ODDS_BUCKET_LABELS, parsePlayerProp, betTypeLabel, type OddsBucketKey } from "@/lib/bet-line";
+import type { OddsSource, Pick, PickStatus, PickedSide } from "@prisma/client";
+import { favoriteOrUnderdog, extractLine, nrfiSide, totalSideFromText, oddsBucket, ODDS_BUCKET_LABELS, parsePlayerProp, betTypeLabel, type OddsBucketKey } from "@/lib/bet-line";
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
 import { yesterdayRange } from "@/lib/cappers-panels";
 import { comparePicksChronological, comparePicksChronologicalDesc } from "@/lib/pick-order";
@@ -1084,6 +1084,10 @@ type PickCategoryInput = {
   // partial object by hand simply fall back to the odds-sign heuristic.
   pickedSide?: PickedSide | null;
   mlFavoredSide?: PickedSide | null;
+  // Required (null = a legacy row): the MONEYLINE odds-sign fallback only trusts a
+  // STATED / MARKET price (see favoriteOrUnderdog), so a call site that forgot it
+  // would silently file every unresolved moneyline as no category.
+  oddsSource: OddsSource | null;
   // Optional for the same reason - only the PLAYER_PROP branch reads it, and
   // only real Pick rows created after PR #72's schema migration have it; a
   // hand-built partial object (e.g. the pre-insert duplicate check in
@@ -1100,7 +1104,7 @@ type PickCategoryInput = {
 // value - so until that backfill runs they reflect the old classification.
 // pick-category-version-acceptance-test.ts pins pickCategory's outputs so changing
 // them without bumping this fails a test.
-export const PICK_CATEGORY_VERSION = 3;
+export const PICK_CATEGORY_VERSION = 4;
 
 export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
   if (pick.betType === "NRFI") {
@@ -1155,9 +1159,12 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
   }
 
   if (pick.betType === "TOTAL") {
-    const detail = (pick.betDetail ?? "").toLowerCase();
-    const isOver = detail.includes("over");
-    const isUnder = detail.includes("under");
+    // The same reader grading uses (totalSideFromText), so the tile a total counts
+    // toward is always the side it was graded on: "o/u 5.5 under" is an under,
+    // "o5.5" / "u5.5" are read, and a sideless "Over/Under 8.5" has no side.
+    const totalSide = totalSideFromText(pick.betDetail);
+    const isOver = totalSide === "OVER";
+    const isUnder = totalSide === "UNDER";
     if (pick.period === "FIRST_HALF") {
       // Same MLB-only vs everyone-else split as F5_ML/FIRST_HALF_ML above -
       // F5 is baseball-only terminology, every other sport's first-half

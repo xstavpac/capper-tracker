@@ -43,6 +43,7 @@ function propPick(over: { betDetail: string | null; propMarket?: Pick["propMarke
     sportName: over.sportName ?? "NFL",
     pickedSide: null,
     mlFavoredSide: null,
+    oddsSource: null,
     propMarket: over.propMarket ?? null,
   });
 }

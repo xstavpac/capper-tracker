@@ -3,6 +3,12 @@
 //   npx tsx scripts/backfill-pick-category.ts            # DRY RUN (default): reads, reports, writes nothing
 //   npx tsx scripts/backfill-pick-category.ts --apply    # actually writes
 //   npx tsx scripts/backfill-pick-category.ts --verify   # READ-ONLY audit of every stored stamp (see below)
+//   npx tsx scripts/backfill-pick-category.ts --ml-side [--sport=MLB] [--apply]
+//   npx tsx scripts/backfill-pick-category.ts --null-totals [--apply]
+//
+// PICK_CATEGORY_VERSION 4 (moneyline odds-source rule + totals side): run --ml-side
+// FIRST. The default mode restamps every pick from its stored columns, so legacy
+// moneylines with no stored side would be restamped without the ledger lookup.
 //   options: --batch=500   rows read per batch (default 500)
 //            --combined-yardage   only PLAYER_PROP picks stored as TD_PROP whose
 //                                 category is now RUSH_REC_YDS_PROP / PASS_RUSH_YDS_PROP
@@ -37,14 +43,21 @@ import {
   backfillPickCategory,
   COMBINED_YARDAGE_CATEGORIES,
   COMBINED_YARDAGE_SCOPE,
+  ML_FULL_GAME_SCOPE,
+  NULL_TOTALS_SCOPE,
   verifyPickCategory,
 } from "@/server/data/backfill-pick-category";
+import { backfillMlSide } from "@/server/data/backfill-ml-side";
 
 const apply = process.argv.includes("--apply");
 const verify = process.argv.includes("--verify");
 const combinedYardage = process.argv.includes("--combined-yardage");
-const known = new Set(["--apply", "--verify", "--combined-yardage"]);
-const unknownArg = process.argv.slice(2).find((a) => !known.has(a) && !a.startsWith("--batch="));
+const mlSide = process.argv.includes("--ml-side");
+const nullTotals = process.argv.includes("--null-totals");
+const sportArg = process.argv.find((a) => a.startsWith("--sport="));
+const sportName = sportArg ? sportArg.slice("--sport=".length) : undefined;
+const known = new Set(["--apply", "--verify", "--combined-yardage", "--ml-side", "--null-totals"]);
+const unknownArg = process.argv.slice(2).find((a) => !known.has(a) && !a.startsWith("--batch=") && !a.startsWith("--sport="));
 const batchArg = process.argv.find((a) => a.startsWith("--batch="));
 const batchSize = batchArg ? Math.max(1, parseInt(batchArg.slice("--batch=".length), 10) || 500) : 500;
 
@@ -61,12 +74,26 @@ async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set.");
   if (verify && apply) throw new Error("--verify is read-only and cannot be combined with --apply.");
   if (unknownArg) throw new Error(`Unknown argument ${unknownArg} - nothing was run.`);
-  const scope = combinedYardage ? COMBINED_YARDAGE_SCOPE : undefined;
+  if ([combinedYardage, mlSide, nullTotals].filter(Boolean).length > 1) throw new Error("--combined-yardage, --ml-side and --null-totals are separate modes; pass one.");
+  if (sportArg && !mlSide) throw new Error("--sport only narrows --ml-side.");
+  const scope = combinedYardage ? COMBINED_YARDAGE_SCOPE : nullTotals ? NULL_TOTALS_SCOPE : mlSide && verify ? ML_FULL_GAME_SCOPE : undefined;
+  const scopeLabel = combinedYardage
+    ? "combined-yardage props stored as TD_PROP -> " + COMBINED_YARDAGE_CATEGORIES.join(" / ")
+    : nullTotals
+      ? "TOTAL picks with no category"
+      : mlSide
+        ? "full-game MONEYLINE picks" + (verify ? "" : " with no mlFavoredSide, filed FAV_ML/DOG_ML") + (sportName ? ` (${sportName} only)` : ", every sport")
+        : "every pick";
 
   console.log(`Target:            ${targetHost()}`);
   console.log(`Mode:              ${verify ? "VERIFY (read-only, enforced by the database)" : apply ? "APPLY (writes)" : "DRY RUN (no writes)"}`);
-  console.log(`Scope:             ${combinedYardage ? "combined-yardage props stored as TD_PROP -> " + COMBINED_YARDAGE_CATEGORIES.join(" / ") : "every pick"}`);
+  console.log(`Scope:             ${scopeLabel}`);
   console.log(`PICK_CATEGORY_VERSION: ${PICK_CATEGORY_VERSION}`);
+
+  if (mlSide && !verify) {
+    await backfillMlSide({ apply, batchSize, sportName, log: (line) => console.log(line) });
+    return;
+  }
 
   if (verify) {
     const r = await verifyPickCategory({ batchSize, scope, maxSamples: 20, log: (line) => console.log(line) });

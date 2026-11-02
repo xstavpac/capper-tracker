@@ -39,6 +39,7 @@ function mlPick(status: Status, dayIndex: number, side: "fav" | "dog" = "fav"): 
     period: "FULL_GAME",
     betDetail: side === "fav" ? "Team ML" : "Dog ML",
     odds: side === "fav" ? -150 : 130,
+    oddsSource: "STATED",
     line: null,
     units: 1,
     sport: { name: "MLB" },

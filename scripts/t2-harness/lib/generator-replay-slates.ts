@@ -41,6 +41,7 @@ type Row = {
   betType: string;
   betDetail: string | null;
   odds: number;
+  oddsSource: string | null;
   line: number | null;
   period: string;
   units: number;
@@ -66,7 +67,8 @@ export async function loadReplaySlates(): Promise<{ slates: ReplaySlate[]; windo
     SELECT p.id, p."userId", p."capperId", c.name AS "capperName", s.name AS sport, p."homeTeam", p."awayTeam",
            p."betType"::text AS "betType", p."betDetail", p.odds, p.line, p.period::text AS period, p.units,
            p.status::text AS status, p."datePosted", p."gameTime", p."pickedSide"::text AS "pickedSide",
-           p."mlFavoredSide"::text AS "mlFavoredSide", p."propMarket"::text AS "propMarket"
+           p."mlFavoredSide"::text AS "mlFavoredSide", p."propMarket"::text AS "propMarket",
+           p."oddsSource"::text AS "oddsSource"
     FROM picks p JOIN cappers c ON c.id = p."capperId" JOIN sports s ON s.id = p."sportId"
     WHERE p.status::text <> 'CANCELLED'
     ORDER BY p."gameTime", p.id`)) as Row[];

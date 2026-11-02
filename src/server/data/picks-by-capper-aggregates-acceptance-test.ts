@@ -155,7 +155,7 @@ function pickRow(userId: string, s: PickSpec): Prisma.PickCreateManyInput {
   const line = s.line ?? null;
   const status = s.status ?? "WIN";
   const betDetail = s.betDetail ?? null;
-  const computed = pickCategory({ betType, period, betDetail, odds, line, sportName: sport, pickedSide: null, mlFavoredSide: null, propMarket: null });
+  const computed = pickCategory({ betType, period, betDetail, odds, line, sportName: sport, pickedSide: null, mlFavoredSide: null, oddsSource: "STATED", propMarket: null });
   const category = s.categoryOverride !== undefined ? s.categoryOverride : computed;
   const categoryVersion = s.categoryVersionOverride !== undefined ? s.categoryVersionOverride : PICK_CATEGORY_VERSION;
   const decided = status !== "PENDING" && status !== "CANCELLED";

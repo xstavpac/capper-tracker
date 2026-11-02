@@ -42,6 +42,7 @@ const categoryPick = (sportName: string, propMarket: PropMarket | null, betDetai
   odds: -110,
   line: null,
   sportName,
+  oddsSource: null,
   propMarket,
 });
 const labelInput = (sportName: string, playerName: string, propMarket: string, betDetail: string) => ({

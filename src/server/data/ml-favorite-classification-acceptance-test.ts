@@ -3,9 +3,10 @@
 // near-pick'em where BOTH sides are priced negative (Phillies -112 / Diamondbacks
 // -104) - both read as "favorite". The fix stores the real favored side
 // (Pick.mlFavoredSide, captured from the h2h market at bulk-import time) and has
-// favoriteOrUnderdog prefer it, falling back to the odds sign only when it (or
-// pickedSide) is missing - which is the case for every pre-existing pick, so
-// historical behavior is unchanged, not worse.
+// favoriteOrUnderdog prefer it. When it (or pickedSide) is missing the odds sign is
+// still read, but only for a STATED / MARKET price other than -110 (PICK_CATEGORY_VERSION
+// 4): a DEFAULTED -110 placeholder, a legacy row with no oddsSource, or a -110 carries no
+// side, so those return no category instead of being filed as favorites.
 //
 // Pure: favoriteOrUnderdog / pickCategory / computeCategoryBreakdown all take
 // plain objects, and favoredSideFromOddsGame takes a plain OddsGame. Run with:
@@ -63,16 +64,26 @@ function main() {
       favoriteOrUnderdog({ betType: "MONEYLINE", odds: -112, line: null, pickedSide: "HOME", mlFavoredSide: "HOME" }),
       "FAVORITE"
     );
-    // No mlFavoredSide (every pre-existing pick) -> unchanged odds-sign fallback.
+    // No mlFavoredSide -> odds-sign fallback, for a real (STATED / MARKET) price only.
     check(
-      "A: mlFavoredSide null -> falls back to odds sign (unchanged historical behavior)",
-      favoriteOrUnderdog({ betType: "MONEYLINE", odds: -104, line: null, pickedSide: "AWAY", mlFavoredSide: null }),
+      "A: mlFavoredSide null, STATED -104 -> falls back to odds sign",
+      favoriteOrUnderdog({ betType: "MONEYLINE", odds: -104, line: null, pickedSide: "AWAY", mlFavoredSide: null, oddsSource: "STATED" }),
       "FAVORITE"
     );
+    check("A: fallback, MARKET -145 -> FAVORITE", favoriteOrUnderdog({ betType: "MONEYLINE", odds: -145, line: null, oddsSource: "MARKET" }), "FAVORITE");
+    check("A: fallback, MARKET +130 -> UNDERDOG", favoriteOrUnderdog({ betType: "MONEYLINE", odds: 130, line: null, oddsSource: "MARKET" }), "UNDERDOG");
+    check("A: fallback, STATED -110 -> null (carries no side)", favoriteOrUnderdog({ betType: "MONEYLINE", odds: -110, line: null, oddsSource: "STATED" }), null);
+    check("A: fallback, MARKET -110 -> null", favoriteOrUnderdog({ betType: "MONEYLINE", odds: -110, line: null, oddsSource: "MARKET" }), null);
+    check("A: fallback, DEFAULTED -110 placeholder -> null", favoriteOrUnderdog({ betType: "MONEYLINE", odds: -110, line: null, oddsSource: "DEFAULTED" }), null);
+    check("A: fallback, DEFAULTED -150 -> null (a placeholder is never evidence)", favoriteOrUnderdog({ betType: "MONEYLINE", odds: -150, line: null, oddsSource: "DEFAULTED" }), null);
+    check("A: fallback, legacy row (null source) -145 -> null", favoriteOrUnderdog({ betType: "MONEYLINE", odds: -145, line: null, oddsSource: null }), null);
+    check("A: fallback, source omitted -145 -> null", favoriteOrUnderdog({ betType: "MONEYLINE", odds: -145, line: null }), null);
+    check("A: stored sides win over a DEFAULTED price", favoriteOrUnderdog({ betType: "MONEYLINE", odds: -110, line: null, pickedSide: "AWAY", mlFavoredSide: "HOME", oddsSource: "DEFAULTED" }), "UNDERDOG");
+    check("A: SPREAD ignores oddsSource", favoriteOrUnderdog({ betType: "SPREAD", odds: -110, line: 1.5, oddsSource: "DEFAULTED" }), "UNDERDOG");
     // mlFavoredSide known but pickedSide null -> can't compare -> fallback.
     check(
       "A: mlFavoredSide set but pickedSide null -> odds-sign fallback",
-      favoriteOrUnderdog({ betType: "MONEYLINE", odds: -104, line: null, pickedSide: null, mlFavoredSide: "HOME" }),
+      favoriteOrUnderdog({ betType: "MONEYLINE", odds: -104, line: null, pickedSide: null, mlFavoredSide: "HOME", oddsSource: "STATED" }),
       "FAVORITE"
     );
     // Stored value wins even against a positive price (a coin-flip game where
@@ -96,7 +107,7 @@ function main() {
       "B: Diamondbacks -104 (AWAY, fav HOME) -> DOG_ML",
       pickCategory({
         betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Diamondbacks ML",
-        odds: -104, line: null, sportName: "MLB", pickedSide: "AWAY", mlFavoredSide: "HOME",
+        odds: -104, line: null, sportName: "MLB", pickedSide: "AWAY", mlFavoredSide: "HOME", oddsSource: "DEFAULTED",
       }),
       "DOG_ML"
     );
@@ -104,16 +115,26 @@ function main() {
       "B: Phillies -112 (HOME, fav HOME) -> FAV_ML",
       pickCategory({
         betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Phillies ML",
-        odds: -112, line: null, sportName: "MLB", pickedSide: "HOME", mlFavoredSide: "HOME",
+        odds: -112, line: null, sportName: "MLB", pickedSide: "HOME", mlFavoredSide: "HOME", oddsSource: null,
       }),
       "FAV_ML"
     );
     check(
-      "B: legacy pick (-104, no pickedSide/mlFavoredSide) -> FAV_ML (documented, unchanged)",
+      "B: legacy pick (-104, no sides, no oddsSource) -> no category (was FAV_ML)",
       pickCategory({
         betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Diamondbacks ML",
-        odds: -104, line: null, sportName: "MLB",
+        odds: -104, line: null, sportName: "MLB", oddsSource: null,
       }),
+      null
+    );
+    check(
+      "B: DEFAULTED -110 with no sides -> no category (was FAV_ML)",
+      pickCategory({ betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Diamondbacks ML", odds: -110, line: null, sportName: "MLB", oddsSource: "DEFAULTED" }),
+      null
+    );
+    check(
+      "B: STATED -150 with no sides -> FAV_ML (manual picks keep reading by sign)",
+      pickCategory({ betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Phillies ML", odds: -150, line: null, sportName: "MLB", oddsSource: "STATED" }),
       "FAV_ML"
     );
   }

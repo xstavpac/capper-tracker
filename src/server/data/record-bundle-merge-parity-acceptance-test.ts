@@ -121,7 +121,7 @@ async function main() {
       const sport = sports[k % 3 === 0 ? 1 : 0];
       const status = k >= n - 4 && ci % 2 === 0 ? "WIN" : STATUSES[Math.floor(rand() * STATUSES.length)];
       const gameTime = new Date(T0 + Math.floor(k / 2) * DAY); // pairs share a gameTime
-      const base = { betType: spec.betType, period: spec.period ?? "FULL_GAME", betDetail: spec.betDetail, odds: spec.odds, line: spec.line ?? null, propMarket: spec.propMarket ?? null, pickedSide: null, mlFavoredSide: null };
+      const base = { betType: spec.betType, period: spec.period ?? "FULL_GAME", betDetail: spec.betDetail, odds: spec.odds, line: spec.line ?? null, propMarket: spec.propMarket ?? null, pickedSide: null, mlFavoredSide: null, oddsSource: "STATED" as const };
       const id = `${PREFIX}p-${ci}-${k}`;
       created.picks.push(id);
       rows.push({
