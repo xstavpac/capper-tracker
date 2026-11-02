@@ -311,15 +311,27 @@ async function main() {
     const logCalls = routeSrc.match(/console\.(log|error|warn)\([^;]*;/g) ?? [];
     expect("no log call mentions the token or the text", logCalls.some((l) => /\btoken\b|\btext\b|x-picks-token/i.test(l)), false);
   } finally {
+    // Cleanup by recorded id: the fixtures only exist under the throwaway users and channel, so each table's rows are
+    // listed once and then deleted by id (children before parents).
     const ids = [users.main, users.other, users.ghost];
-    await prisma.ingestBatch.deleteMany({ where: { channelId: { in: channelIds } } });
-    await prisma.importSkippedLine.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.importRun.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.pick.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.capper.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.user.deleteMany({ where: { id: { in: ids } } });
+    const idsOf = async (rows: Promise<{ id: string }[]>) => (await rows).map((r) => r.id);
+    const batchIds = await idsOf(prisma.ingestBatch.findMany({ where: { channelId: { in: channelIds } }, select: { id: true } }));
+    const itemIds = await idsOf(prisma.ingestReviewItem.findMany({ where: { OR: [{ userId: { in: ids } }, { ingestBatchId: { in: batchIds } }] }, select: { id: true } }));
+    const skippedIds = await idsOf(prisma.importSkippedLine.findMany({ where: { userId: { in: ids } }, select: { id: true } }));
+    const runIds = await idsOf(prisma.importRun.findMany({ where: { userId: { in: ids } }, select: { id: true } }));
+    const pickIds = await idsOf(prisma.pick.findMany({ where: { userId: { in: ids } }, select: { id: true } }));
+    const capperIds = await idsOf(prisma.capper.findMany({ where: { userId: { in: ids } }, select: { id: true } }));
     const sportsNow = await prisma.sport.findMany({ select: { id: true, name: true } });
-    await prisma.sport.deleteMany({ where: { id: { in: sportsNow.filter((s) => !sportsBefore.has(s.name)).map((s) => s.id) } } });
+    const sportIds = sportsNow.filter((s) => !sportsBefore.has(s.name)).map((s) => s.id);
+    console.log("cleanup ids:", JSON.stringify({ users: ids, batches: batchIds.length, items: itemIds.length, skippedLines: skippedIds.length, runs: runIds.length, picks: pickIds.length, cappers: capperIds.length, sports: sportIds.length }));
+    await prisma.ingestReviewItem.deleteMany({ where: { id: { in: itemIds } } });
+    await prisma.ingestBatch.deleteMany({ where: { id: { in: batchIds } } });
+    await prisma.importSkippedLine.deleteMany({ where: { id: { in: skippedIds } } });
+    await prisma.importRun.deleteMany({ where: { id: { in: runIds } } });
+    await prisma.pick.deleteMany({ where: { id: { in: pickIds } } });
+    await prisma.capper.deleteMany({ where: { id: { in: capperIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: ids } } });
+    await prisma.sport.deleteMany({ where: { id: { in: sportIds } } });
     await prisma.$disconnect();
   }
   if (failures > 0) {
