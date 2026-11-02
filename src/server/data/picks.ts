@@ -533,7 +533,9 @@ export async function getPicksForGame(
 export async function getPicksForGames(
   userId: string,
   sportName: string,
-  games: { homeTeam: string; awayTeam: string; commenceTime: Date; gameNumber?: number | null }[]
+  games: { homeTeam: string; awayTeam: string; commenceTime: Date; gameNumber?: number | null }[],
+  // Diagnostics only (run trace): filled with how many rows the window read and how many reached a card.
+  stats?: { fetched: number; matched: number }
 ) {
   if (games.length === 0) return [];
 
@@ -545,12 +547,15 @@ export async function getPicksForGames(
     sportId,
     games.map((g) => g.commenceTime.getTime())
   );
+  if (stats) stats.fetched = allPicks.length;
   if (allPicks.length === 0) return games.map(() => []);
 
   // No per-game pre-filter: matchPicksToGame applies each game's own drift
   // window itself (the +-2-day slice that used to sit here was always wider).
   const matchedPerGame = games.map((game) => matchPicksToGame(allPicks, game, sportName));
-  return assignPicksToNearestGame(matchedPerGame, games);
+  const assigned = assignPicksToNearestGame(matchedPerGame, games);
+  if (stats) stats.matched = assigned.reduce((n, g) => n + g.length, 0);
+  return assigned;
 }
 
 // matchPicksToGame matches each game independently, so a pick can land on

@@ -25,8 +25,8 @@
 // note for each event whose alternate lines are not posted yet or are still being
 // priced by another request.
 import { buildConsensusPositions, type ConsensusPosition } from "@/lib/parlay/consensus";
-import { boxEligibleGames, HYBRID_MAX_LADDER_GAMES, ladderGameCount, optimizeHybridReport, type HybridBoxLegs, type HybridResult } from "@/lib/parlay/hybrid";
-import { explainSkips, type HybridDiagnostics } from "@/lib/parlay/hybrid-diagnostics";
+import { boxEligibleGames, HYBRID_MAX_LADDER_GAMES, ladderGameCount, optimizeHybridReport, type HybridBoxLegs, type HybridBoxReport, type HybridResult } from "@/lib/parlay/hybrid";
+import { explainSkips, type HybridDiagnostics, type HybridSkipReason } from "@/lib/parlay/hybrid-diagnostics";
 import { HYBRID_LINK_MAX_LEGS } from "@/lib/parlay/hybrid-link";
 import type { HybridGenerateRequest } from "@/lib/parlay/hybrid-request";
 import { keepsPick } from "@/lib/parlay/include-picks";
@@ -34,6 +34,7 @@ import type { ParlayRejection } from "@/lib/parlay/leg-cap";
 import type { SwingGame } from "@/lib/parlay/recent-swings";
 import type { AltLadderLookup, AltLadderMarket, AltLadderRequest, AltLadderUnavailableCause } from "@/server/data/alt-ladders";
 import type { LoadedSnapshot, SnapshotScope } from "@/server/data/generator-snapshot";
+import type { LadderStatus, ReasonCode, TraceCollector } from "@/lib/parlay/run-trace";
 
 export const ALT_LINES_NOT_POSTED_NOTE = "Alternate lines post on game day (FanDuel).";
 export const LADDERS_UNAVAILABLE_NOTE = "Live alternate prices are unavailable right now.";
@@ -69,6 +70,8 @@ export type HybridDeps = {
   getSwings: (args: { sport: string; teams: string[]; before: Date }) => Promise<Record<string, SwingGame[]>>;
   // League label ("NBA") -> the Odds API key of its regular season ("basketball_nba").
   leagueKey: (label: string) => string | undefined;
+  // Diagnostics only (run-trace.ts): told what each stage kept and dropped. Never read from.
+  trace?: TraceCollector;
 };
 
 // The events to buy ladders for, in order. With a box: the top ladderGameCount
@@ -193,7 +196,77 @@ export async function runHybridGenerate(req: HybridGenerateRequest, deps: Hybrid
     result,
   });
 
+  if (deps.trace) {
+    try {
+      traceHybridRun(deps.trace, { diagnostics, report, result, notes, requests, lookup, ranked, candidateEvents });
+    } catch (err) {
+      deps.trace.error("TRACE_ERROR", err, "hybrid");
+    }
+  }
+
   return { result, notes, candidateEvents, eventSportKeys: Object.fromEntries(requests.map((r) => [r.eventId, r.sport])), linkable: (result.primary?.legs.length ?? 0) <= HYBRID_LINK_MAX_LEGS, diagnostics, generatedAt: deps.now.toISOString() };
+}
+
+// The funnel for a Hybrid run, from what the run already holds (the diagnostics, the box report, the ladder
+// lookup): games with picks -> games in the parlay or its alternates, one dropped game per row of
+// "Why only N games?" under the shared reason vocabulary, and each priced game's ladder status.
+const HYBRID_REASON: Record<Exclude<HybridSkipReason, "not-used">, ReasonCode> = {
+  started: "GAME_STARTED",
+  "outside-window": "OUTSIDE_WINDOW",
+  "no-eligible-picks": "NO_ELIGIBLE_PICKS",
+  "no-side-picks": "NO_SIDE_PICKS",
+  "no-total-picks": "NO_TOTAL_PICKS",
+  "below-gate": "BELOW_GATE",
+  "not-enough-supporters": "NOT_ENOUGH_SUPPORTERS",
+  "beyond-ladder-limit": "BEYOND_LADDER_LIMIT",
+  "ladder-unavailable": "LADDER_UNAVAILABLE",
+  "no-usable-line": "NO_ODDS",
+};
+
+export function traceHybridRun(
+  trace: TraceCollector,
+  input: {
+    diagnostics: HybridDiagnostics;
+    report: HybridBoxReport;
+    result: HybridResult;
+    notes: HybridEventNote[];
+    requests: AltLadderRequest[];
+    lookup: AltLadderLookup;
+    ranked: ConsensusPosition[];
+    candidateEvents: string[];
+  }
+): void {
+  const { diagnostics, report, result, notes, requests, lookup, ranked, candidateEvents } = input;
+  const kept = new Set([...(result.primary?.legs ?? []), ...result.alternates.flatMap((h) => h.legs)].map((l) => l.eventId));
+  trace.stage("HYB_GAMES_WITH_PICKS", diagnostics.gamesWithPicks);
+  trace.stage("HYB_GAMES_KEPT", kept.size);
+  const noteOf = new Map(notes.map((n) => [n.eventId, n]));
+  const leftOut = new Map(report.leftOut.map((x) => [x.eventId, x.why]));
+  for (const row of diagnostics.skipped) {
+    const note = noteOf.get(row.eventId);
+    const reason: ReasonCode = row.reason === "not-used" ? (leftOut.get(row.eventId) === "cap" ? "LEG_CAP" : "RANKED_LOWER") : HYBRID_REASON[row.reason];
+    const sub = row.reason === "ladder-unavailable" && note ? (note.cause ?? note.kind) : undefined;
+    trace.drop("HYB_GAMES_KEPT", reason, { id: row.eventId, label: `${row.gameLabel} — ${row.text}` }, sub);
+  }
+
+  // Per priced game: did FanDuel have its lines, and if not why.
+  const inProgress = new Set(lookup.pricingInProgress.map((x) => x.eventId));
+  const causeOf = new Map((lookup.unavailable ?? []).map((u) => [u.eventId, u.cause]));
+  const labelOf = new Map(ranked.map((p) => [p.eventId, `${p.awayTeam} @ ${p.homeTeam}`]));
+  const ladders: LadderStatus[] = requests.map((r) => {
+    const cause = causeOf.get(r.eventId);
+    const status: LadderStatus["status"] = cause && !inProgress.has(r.eventId) ? "unavailable" : inProgress.has(r.eventId) ? "pricing-in-progress" : isUnposted(r, lookup) ? "not-posted" : "ok";
+    return { eventId: r.eventId, gameLabel: labelOf.get(r.eventId) ?? r.eventId, markets: r.markets, status, ...(status === "unavailable" && cause ? { cause } : {}) };
+  });
+  const boxGames = boxEligibleGames(ranked).length;
+  trace.extras({
+    ladders,
+    notes: [`positions:${ranked.length}`, `boxEligible:${boxGames}`, `priced:${candidateEvents.length}`, `legs:${result.delivery.deliveredLegs}/${result.delivery.requestedLegs}`, `boxes:${result.delivery.boxes}`],
+  });
+  // A lookup that failed (not one that was merely out of credits) is an error worth a row.
+  for (const [eventId, cause] of causeOf) {
+    if (cause === "api-failure" || cause === "no-api-key" || cause === "lookup-failed") trace.error("LADDER_ERROR", cause, labelOf.get(eventId) ?? eventId);
+  }
 }
 
 function isUnposted(r: AltLadderRequest, lookup: AltLadderLookup): boolean {

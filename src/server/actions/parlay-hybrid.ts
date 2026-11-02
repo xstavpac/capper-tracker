@@ -25,6 +25,9 @@ import { parseHybridRequest, type HybridGenerateRequest } from "@/lib/parlay/hyb
 import { parseHybridLinkLegs, type HybridLinkLegInput, type HybridLinkResponse } from "@/lib/parlay/hybrid-link";
 import type { ParlayRejection } from "@/lib/parlay/leg-cap";
 import { oddsApiRequestKeys } from "@/lib/sport-seasons";
+import { recordGeneratorRun } from "@/server/data/generator-runs";
+import { TraceCollector, scoringVersionOf } from "@/lib/parlay/run-trace";
+import { GENERATOR_RULES } from "@/lib/parlay/generator";
 
 const LIVE_LABELS = new Set(LIVE_SPORTS.map((s) => s.label));
 
@@ -34,13 +37,35 @@ export async function hybridGenerateAction(request: HybridGenerateRequest): Prom
   if ("error" in req) return req;
 
   const now = new Date();
-  return runHybridGenerate(req, {
-    now,
-    loadSnapshot: (scope) => loadGeneratorSnapshot(user.id, scope, now),
-    getLadders: (requests) => getAltLaddersAwaitingClaims(requests),
-    getSwings: (args) => getRecentSwings(args),
-    leagueKey: (label) => LIVE_SPORTS.find((s) => s.label === label)?.key,
-  });
+  // The run log (run-trace.ts): diagnostics only. A failure is recorded on the trace and rethrown, never swallowed.
+  const { settings } = req;
+  const trace = new TraceCollector(
+    {
+      mode: "HYBRID",
+      trigger: "FETCH",
+      origin: "SERVER",
+      scoringVersion: scoringVersionOf(GENERATOR_RULES, true),
+      settings: { leagues: req.leagues, targets: req.targets.length, include: req.include, ...settings },
+    },
+    true
+  );
+  let response: HybridGenerateResponse | ParlayRejection;
+  try {
+    response = await runHybridGenerate(req, {
+      now,
+      loadSnapshot: (scope) => loadGeneratorSnapshot(user.id, scope, now, trace),
+      getLadders: (requests) => getAltLaddersAwaitingClaims(requests),
+      getSwings: (args) => getRecentSwings(args),
+      leagueKey: (label) => LIVE_SPORTS.find((s) => s.label === label)?.key,
+      trace,
+    });
+  } catch (err) {
+    trace.error("ENGINE_ERROR", err, "hybrid");
+    await recordGeneratorRun(user.id, trace.finish());
+    throw err;
+  }
+  if (!("error" in response)) await recordGeneratorRun(user.id, trace.finish());
+  return response;
 }
 
 export async function hybridFanDuelLinkAction(legs: HybridLinkLegInput[]): Promise<HybridLinkResponse | ParlayRejection> {

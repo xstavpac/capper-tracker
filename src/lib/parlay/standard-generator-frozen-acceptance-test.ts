@@ -7,7 +7,8 @@
 //   (re-freeze, only for an intended Standard change: add --write)
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildGeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, GENERATOR_RULES, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { reconcileTrace, TraceCollector } from "@/lib/parlay/run-trace";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
@@ -83,6 +84,17 @@ for (const [label, p] of built) {
   const same = JSON.stringify([p.hedge.ALL, p.contrarian.ALL]) === JSON.stringify([p.hedge.SUGGESTED, p.contrarian.SUGGESTED]);
   console.log(`${same ? "PASS" : "FAIL"}: no slip picks - Swap: All is Suggested - ${label}`);
   if (!same) failures++;
+}
+// The run log (run-trace.ts) is diagnostics only: the same frozen output with a collector writing to it.
+for (const [label, settings] of SETTINGS) {
+  const trace = new TraceCollector({ mode: "STANDARD", trigger: "GENERATE", origin: "CLIENT", scoringVersion: "frozen", settings: {} }, true);
+  const p = buildGeneratedParlay(snapshot(), settings, null, NOW, GENERATOR_RULES, trace);
+  const got = JSON.stringify({ ...p, hedge: p.hedge.SUGGESTED, contrarian: p.contrarian.SUGGESTED });
+  const want = JSON.stringify(JSON.parse(frozen)[label]);
+  const t = trace.finish();
+  const pass = got === want && reconcileTrace(t).length === 0 && !t.failed;
+  console.log(`${pass ? "PASS" : "FAIL"}: Standard output unchanged WITH a run-log collector, and its funnel reconciles - ${label}`);
+  if (!pass) failures++;
 }
 const nonEmpty = produced.every(([, p]) => p.legs.length > 0);
 console.log(`${nonEmpty ? "PASS" : "FAIL"}: every frozen case built at least one leg (a frozen empty parlay would prove nothing)`);

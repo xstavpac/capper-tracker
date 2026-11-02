@@ -21,11 +21,15 @@
 import { requireUser } from "@/server/auth";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { loadGeneratorSnapshot } from "@/server/data/generator-snapshot";
+import { recordGeneratorRun } from "@/server/data/generator-runs";
+import { TraceCollector, scoringVersionOf } from "@/lib/parlay/run-trace";
+import { traceModeOf, traceSettings } from "@/lib/parlay/generator-trace";
 import { normalizeMinWinPct } from "@/lib/parlay/gate";
 import { legCapRejection, MAX_POOL_REQUEST_PICKS, type ParlayRejection } from "@/lib/parlay/leg-cap";
 import { selectedCategories, toIncludeSelection, toPickMix } from "@/lib/parlay/include-picks";
 import {
   buildGeneratedParlay,
+  GENERATOR_RULES,
   type FillFrom,
   type GeneratedParlay,
   type GeneratorSettings,
@@ -96,8 +100,31 @@ export async function generateParlayAction(request: GenerateRequest): Promise<Ge
   if ("error" in req) return req;
 
   const now = new Date();
-  const loaded = await loadGeneratorSnapshot(user.id, req, now);
+  // The run log (run-trace.ts): diagnostics only, written after the parlay is built. A failure is recorded
+  // on the trace and rethrown - never swallowed - and nothing the trace does reaches the parlay.
+  const trace = new TraceCollector(
+    { mode: traceModeOf(req, req.settings), trigger: "FETCH", origin: "SERVER", scoringVersion: scoringVersionOf(GENERATOR_RULES), settings: traceSettings(req, req.settings) },
+    true
+  );
+  let loaded: Awaited<ReturnType<typeof loadGeneratorSnapshot>>;
+  try {
+    loaded = await loadGeneratorSnapshot(user.id, req, now, trace);
+  } catch (err) {
+    trace.error("SNAPSHOT_ERROR", err);
+    await recordGeneratorRun(user.id, trace.finish());
+    throw err;
+  }
   if ("error" in loaded) return loaded;
   const { snapshot } = loaded;
-  return { snapshot, parlay: buildGeneratedParlay(snapshot, req.settings, null, now) };
+  let parlay: GeneratedParlay;
+  try {
+    parlay = buildGeneratedParlay(snapshot, req.settings, null, now, GENERATOR_RULES, trace);
+  } catch (err) {
+    trace.error("ENGINE_ERROR", err);
+    await recordGeneratorRun(user.id, trace.finish());
+    throw err;
+  }
+  trace.extras({ snapshotBuiltAt: snapshot.builtAt });
+  await recordGeneratorRun(user.id, trace.finish());
+  return { snapshot, parlay };
 }

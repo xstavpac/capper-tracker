@@ -33,6 +33,7 @@ import {
   type HybridGenerateResponse,
 } from "@/server/data/hybrid-generate";
 import { buildHybridFanDuelLink } from "@/server/data/hybrid-fanduel-link";
+import { reconcileTrace, TraceCollector } from "@/lib/parlay/run-trace";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -549,6 +550,62 @@ async function main() {
       settings: { targetMin: -140, targetMax: -110, width: "balanced", legRange: null, maxLegs: 2, boxLegs: "2" },
     });
     check("with the diagnostic, the result is still exactly the optimizer's", res.result, direct);
+  }
+
+  // ---- 17. The run log (run-trace.ts): diagnostics from what the run already holds, never a change to it ----
+  {
+    const started: SnapshotSkippedGame = { gameId: "S1", gameLabel: "Bills @ Jets", gameTime: START, leagueName: "NFL", picks: 3, reason: "started" };
+    const mixed = snapshotOf([BOX, BOX, BOX, BOX, BOX, BOX, BOX, BOX, { side: "SPREAD", total: false }, { side: null, total: true }]);
+    const req = request({ settings: { ...SETTINGS, maxLegs: 2 } });
+    const newTrace = () => new TraceCollector({ mode: "HYBRID", trigger: "FETCH", origin: "SERVER", scoringVersion: "hybrid", settings: {} }, true);
+    const plain = await run(rig(mixed, { skipped: [started] }), req);
+    const tr = newTrace();
+    const rt = rig(mixed, { skipped: [started] });
+    rt.deps.trace = tr;
+    const traced = await run(rt, req);
+    check("zero diff: the same response with a collector", JSON.stringify(traced), JSON.stringify(plain));
+    const boom = () => {
+      throw new Error("x");
+    };
+    const hostile = { stage: boom, tally: boom, drop: boom, extras: boom, error: () => undefined } as unknown as TraceCollector;
+    const rh = rig(mixed, { skipped: [started] });
+    rh.deps.trace = hostile;
+    check("zero diff: the same response with a collector that throws", JSON.stringify(await run(rh, req)), JSON.stringify(plain));
+
+    const t = tr.finish();
+    check("the Hybrid funnel reconciles", reconcileTrace(t), []);
+    check("games with picks -> games kept (primary + alternates)", t.stages.map((s) => [s.key, s.count]), [["HYB_GAMES_WITH_PICKS", 11], ["HYB_GAMES_KEPT", 3]]);
+    const codes = t.reasons.map((r) => [r.reason, r.count]).sort();
+    check("one reason per dropped game, in the shared vocabulary", codes, [["BEYOND_LADDER_LIMIT", 2], ["GAME_STARTED", 1], ["NO_SIDE_PICKS", 1], ["NO_TOTAL_PICKS", 1], ["RANKED_LOWER", 3]]);
+    check("each dropped game is listed", t.detail!.drops.length, 8);
+    check("every priced game has a ladder status", t.extras.ladders!.map((l) => [l.eventId, l.status]), ["G1", "G2", "G3", "G4", "G5", "G6"].map((id) => [id, "ok"]));
+    check("no errors on a clean run", t.errors, []);
+
+    // Ladder trouble: not posted, a spent budget, an API failure - each visible, the API failure as an error.
+    const unposted = newTrace();
+    const ru = rig(snapshotOf([BOX, BOX]), {
+      lookup: (reqs) => ({ ladders: Object.fromEntries(reqs.map((q) => [q.eventId, q.eventId === "G1" ? { alternate_spreads: notPosted(), alternate_totals: notPosted() } : ladderFor(q.markets)])), pricingInProgress: [] }),
+    });
+    ru.deps.trace = unposted;
+    await run(ru, request());
+    check("alt lines not posted: the ladder status says so", unposted.finish().extras.ladders!.map((l) => [l.eventId, l.status]), [["G1", "not-posted"], ["G2", "ok"]]);
+
+    const budget = newTrace();
+    const rb = rig(snapshotOf([BOX, BOX]), { lookup: (reqs) => ({ ladders: {}, pricingInProgress: [], unavailable: reqs.flatMap((q) => q.markets.map((market) => ({ eventId: q.eventId, market, cause: "budget" as const }))) }) });
+    rb.deps.trace = budget;
+    await run(rb, request());
+    const bt = budget.finish();
+    check("spent budget: LADDER_UNAVAILABLE with the cause", bt.reasons.map((r) => [r.reason, r.sub, r.count]), [["LADDER_UNAVAILABLE", "budget", 2]]);
+    check("...the ladder status carries the cause", bt.extras.ladders!.map((l) => [l.status, l.cause]), [["unavailable", "budget"], ["unavailable", "budget"]]);
+    check("...and a spent budget is not an error", bt.errors, []);
+
+    const failing = newTrace();
+    const rf = rig(snapshotOf([BOX]), { lookup: (reqs) => ({ ladders: {}, pricingInProgress: [], unavailable: reqs.flatMap((q) => q.markets.map((market) => ({ eventId: q.eventId, market, cause: "api-failure" as const }))) }) });
+    rf.deps.trace = failing;
+    await run(rf, request());
+    const ft = failing.finish();
+    check("an API failure is a LADDER_ERROR", [ft.errors.length > 0, ft.errors[0]?.code], [true, "LADDER_ERROR"]);
+    check("every funnel still reconciles", [reconcileTrace(bt), reconcileTrace(ft), reconcileTrace(unposted.finish())], [[], [], []]);
   }
 
   console.log(failures > 0 ? `\n${failures} check(s) FAILED.` : "\nAll checks passed.");

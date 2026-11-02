@@ -17,6 +17,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { generateParlayAction } from "@/server/actions/parlay-generate";
+import { recordGeneratorRunAction } from "@/server/actions/parlay-run-log";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PanelShell, TINTS } from "@/components/dashboard/panel-shell";
@@ -113,7 +114,14 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
   const [error, setError] = useState<string | null>(null);
   // Set by a Regenerate that couldn't vary: why (subset-ui.ts). The parlay shown stays.
   const [noAlternative, setNoAlternative] = useState<NoAlternativeReason | null>(null);
-  const session = useRef(createGeneratorSession({ generate: (req) => generateParlayAction(req) }));
+  // The run log (run-trace.ts): the trace of a build made here is sent to the server, fire and forget. It is
+  // diagnostics - a failure is ignored and never touches the parlay.
+  const session = useRef(
+    createGeneratorSession({
+      generate: (req) => generateParlayAction(req),
+      onTrace: (trace) => void recordGeneratorRunAction(trace).catch(() => undefined),
+    })
+  );
 
   const inputs: PoolInputs = useMemo(
     () => ({ leagues: leagues.filter(isLeagueInScope), slipPickIds: pool.map((p) => p.pickId), targets: targets.map((t) => ({ gameId: t.gameId, leagueName: t.leagueName })) }),

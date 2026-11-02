@@ -194,6 +194,7 @@ model User {
   importRuns              ImportRun[]
   bugReports              BugReport[]
   heavyConsensusMarkets   HeavyConsensusMarket[]
+  parlayGeneratorRuns     ParlayGeneratorRun[]
 
   @@map("users")
 }
@@ -1646,4 +1647,52 @@ model HeavyConsensusMarket {
   @@unique([userId, worldKey])
   @@index([gameDate])
   @@map("heavy_consensus_markets")
+}
+
+// Which generator a run was: Standard, Standard with Fill from = Your picks only, or
+// Consensus Hybrid. Hedge and Contrarian are built with every Standard run and live
+// in its extras.
+enum ParlayRunMode {
+  STANDARD
+  YOUR_PICKS
+  HYBRID
+}
+
+// GENERATE / REGENERATE: the engine run again in the browser on a held snapshot;
+// FETCH: a server-built run (it loaded the snapshot itself).
+enum ParlayRunTrigger {
+  GENERATE
+  REGENERATE
+  FETCH
+}
+
+// One row per Parlay Generator run, for the admin Generator tab: how many picks
+// survive each stage and why each dropped pick was dropped (lib/parlay/run-trace.ts).
+// Diagnostics only - written best-effort after the parlay is built, read only by the
+// admin page. Lean on purpose (Supabase egress): counts, reasons and errors are small
+// and kept ~180 days; the per-pick `detail` is nulled after ~30 days (and is absent
+// for a Regenerate). Retention runs in refresh-scores, selecting ids first and
+// changing rows by id only (server/data/generator-runs.ts).
+model ParlayGeneratorRun {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt       DateTime         @default(now())
+  mode            ParlayRunMode
+  trigger         ParlayRunTrigger
+  origin          String // SERVER | CLIENT - who built the trace (a CLIENT trace is untrusted diagnostics)
+  scoringVersion  String
+  settings        Json // the settings the run saw
+  stages          Json // [{ key, count }]
+  reasons         Json // [{ stage, reason, sub?, count }]
+  errors          Json? // [{ code, message, where? }]
+  extras          Json? // snapshot counts, Hedge / Contrarian funnels, Hybrid ladder status
+  detail          Json? // { picks, drops } - per-pick, nulled after ~30 days
+  detailTruncated Boolean          @default(false)
+  traceFailed     Boolean          @default(false)
+  durationMs      Int?
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@map("parlay_generator_runs")
 }

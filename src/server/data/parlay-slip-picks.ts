@@ -41,11 +41,18 @@ function liveSportFor(row: SlipPickRow) {
 // about.
 // `alsoLeagues` (Live league labels) adds boards no row needs - a slip game
 // item's league, or the leagues Build from slip fills from.
-export async function loadSlipBoards(userId: string, rows: SlipPickRow[], alsoLeagues: string[] = []): Promise<SlipBoard[]> {
+// `pickStats` (run trace only) is filled per league label with the rows each board read and matched.
+export async function loadSlipBoards(
+  userId: string,
+  rows: SlipPickRow[],
+  alsoLeagues: string[] = [],
+  pickStats?: Record<string, { fetched: number; matched: number }>
+): Promise<SlipBoard[]> {
   const boards: SlipBoard[] = [];
   for (const sport of LIVE_SPORTS) {
     if (!rows.some((r) => liveSportFor(r) === sport) && !alsoLeagues.includes(sport.label)) continue;
-    boards.push({ key: sport.key, label: sport.label, board: await getLiveBoardData(userId, sport.key, sport.label) });
+    if (pickStats) pickStats[sport.label] = { fetched: 0, matched: 0 };
+    boards.push({ key: sport.key, label: sport.label, board: await getLiveBoardData(userId, sport.key, sport.label, pickStats?.[sport.label]) });
   }
   return boards;
 }

@@ -92,6 +92,8 @@ const WHY = {
 };
 const NO_BOX = { result: { primary: null, alternates: [], note: null, delivery: { requestedLegs: 3, deliveredLegs: 0, boxes: 0, qualifyingGames: 0, shortOfGames: true } }, notes: [], candidateEvents: [], eventSportKeys: {}, linkable: true, diagnostics: WHY, generatedAt: new Date().toISOString() };
 let hybridAnswer: unknown = NO_BOX;
+// The run log (parlay-run-log.ts): diagnostics the card sends fire-and-forget; nothing to do here.
+stub("../../server/actions/parlay-run-log", { recordGeneratorRunAction: async () => undefined });
 stub("../../server/actions/parlay-hybrid", {
   hybridGenerateAction: async (req: unknown) => {
     hybridRequests.push(req);
