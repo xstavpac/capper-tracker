@@ -16,6 +16,9 @@
 //     same shape as queryCurrentStreaks in capper-list-aggregates.ts, window = ALL).
 //   - "last20": per capper, the record over their most recent LEAGUE_RECORD_LAST_N
 //     decided picks (any category, any league).
+//   - includePricing (off by default): each card and propRec row also carries its picks with a real price, wins,
+//     losses and the sum of their break-evens (real-price-sql.ts), for the Parlay Generator's scoring. Off, the
+//     statement is byte for byte what it was.
 //   - "propRec": per requested (capperId, propMarket) pair, the win/loss/push counts
 //     of that capper's picks on that stored Pick.propMarket, one row per sport they
 //     have any in, counting only games before `asOf`. Raw columns only - the sport
@@ -36,6 +39,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ORDER_DESC } from "@/server/data/capper-list-aggregates";
+import { realBreakEvenSql } from "@/server/data/real-price-sql";
 
 export type CardRequest = { capperId: string; leagueSport: string; category: string };
 export type CategoryRequest = { capperId: string; category: string };
@@ -51,6 +55,13 @@ export type CardTotalsRow = {
   lWins: number;
   lLosses: number;
   lPushes: number;
+  // includePricing only.
+  oPW?: number;
+  oPL?: number;
+  oImp?: number;
+  lPW?: number;
+  lPL?: number;
+  lImp?: number;
 };
 
 export type CategoryTotalsRow = {
@@ -65,7 +76,7 @@ export type StreakTotalsRow = { cid: string; type: "WIN" | "LOSS"; count: number
 
 export type Last20TotalsRow = { cid: string; decided: number; wins: number; losses: number; pushes: number };
 
-export type PropMarketTotalsRow = { cid: string; sport: string; mkt: string; wins: number; losses: number; pushes: number };
+export type PropMarketTotalsRow = { cid: string; sport: string; mkt: string; wins: number; losses: number; pushes: number; pW?: number; pL?: number; imp?: number };
 
 export type CapperRecordBundleTotals = {
   cards: CardTotalsRow[];
@@ -85,6 +96,7 @@ export type CapperRecordBundleParams = {
   propReq: PropMarketRequest[]; // deduped by the caller
   asOf: Date; // propRec counts games before this only
   last20Window: number; // LEAGUE_RECORD_LAST_N
+  includePricing?: boolean;
 };
 
 // The query itself, factored out so a caller can wrap it in EXPLAIN (see
@@ -112,12 +124,32 @@ export function buildBundleQuery(params: CapperRecordBundleParams): Prisma.Sql {
       ? Prisma.sql`VALUES ${Prisma.join(params.propReq.map((c) => Prisma.sql`(${c.capperId}::text, ${c.propMarket}::text)`))}`
       : Prisma.sql`SELECT NULL::text, NULL::text WHERE FALSE`;
 
+  // Each is empty when pricing is off, leaving the statement's text exactly as it was.
+  const on = params.includePricing === true;
+  const basePricing = on ? Prisma.raw(`,
+               ${realBreakEvenSql("p")} AS be`) : Prisma.empty;
+  const cardPricing = on
+    ? Prisma.raw(`,
+          (count(*) FILTER (WHERE b.status = 'WIN' AND b.be IS NOT NULL))::int AS "oPW",
+          (count(*) FILTER (WHERE b.status = 'LOSS' AND b.be IS NOT NULL))::int AS "oPL",
+          COALESCE(round(sum(b.be) FILTER (WHERE b.status IN ('WIN', 'LOSS')), 4), 0)::float8 AS "oImp",
+          (count(*) FILTER (WHERE b.status = 'WIN' AND b.be IS NOT NULL AND b.sport = r.sport))::int AS "lPW",
+          (count(*) FILTER (WHERE b.status = 'LOSS' AND b.be IS NOT NULL AND b.sport = r.sport))::int AS "lPL",
+          COALESCE(round(sum(b.be) FILTER (WHERE b.status IN ('WIN', 'LOSS') AND b.sport = r.sport), 4), 0)::float8 AS "lImp"`)
+    : Prisma.empty;
+  const propPricing = on
+    ? Prisma.raw(`,
+          (count(*) FILTER (WHERE b.status = 'WIN' AND b.be IS NOT NULL))::int AS "pW",
+          (count(*) FILTER (WHERE b.status = 'LOSS' AND b.be IS NOT NULL))::int AS "pL",
+          COALESCE(round(sum(b.be) FILTER (WHERE b.status IN ('WIN', 'LOSS')), 4), 0)::float8 AS imp`)
+    : Prisma.empty;
+
   return Prisma.sql`
     WITH
       base AS MATERIALIZED (
         SELECT p."capperId" AS "capperId", s.name AS sport, p.category, p.status,
                p."gameTime" AS "gameTime", p."createdAt" AS "createdAt", p.id AS id,
-               p."propMarket"::text AS "propMarket"
+               p."propMarket"::text AS "propMarket"${basePricing}
         FROM picks p
         JOIN sports s ON s.id = p."sportId"
         WHERE p."userId" = ${params.userId}
@@ -146,7 +178,7 @@ export function buildBundleQuery(params: CapperRecordBundleParams): Prisma.Sql {
           (count(*) FILTER (WHERE b.status = 'PUSH'))::int                         AS "oPushes",
           (count(*) FILTER (WHERE b.status = 'WIN'  AND b.sport = r.sport))::int   AS "lWins",
           (count(*) FILTER (WHERE b.status = 'LOSS' AND b.sport = r.sport))::int   AS "lLosses",
-          (count(*) FILTER (WHERE b.status = 'PUSH' AND b.sport = r.sport))::int   AS "lPushes"
+          (count(*) FILTER (WHERE b.status = 'PUSH' AND b.sport = r.sport))::int   AS "lPushes"${cardPricing}
         FROM "cardReq" r
         LEFT JOIN base b ON b."capperId" = r.cid AND b.category = r.cat
         GROUP BY r.cid, r.sport, r.cat
@@ -199,7 +231,7 @@ export function buildBundleQuery(params: CapperRecordBundleParams): Prisma.Sql {
         SELECT b."capperId" AS cid, b.sport, b."propMarket" AS mkt,
           (count(*) FILTER (WHERE b.status = 'WIN'))::int  AS wins,
           (count(*) FILTER (WHERE b.status = 'LOSS'))::int AS losses,
-          (count(*) FILTER (WHERE b.status = 'PUSH'))::int AS pushes
+          (count(*) FILTER (WHERE b.status = 'PUSH'))::int AS pushes${propPricing}
         FROM "propReq" q
         JOIN base b ON b."capperId" = q.cid AND b."propMarket" = q.mkt
         WHERE b."gameTime" < ${params.asOf}
