@@ -177,7 +177,7 @@ async function main() {
       return tx.$queryRawUnsafe<Record<string, unknown>[]>(file.replace(/;\s*$/, ""));
     });
     check("backtest: runs in a read-only transaction and returns rows", whole.length > 0, true);
-    check("backtest: its columns are aggregates only", Object.keys(whole[0]).sort(), ["avg_edge_pct", "avg_score_pct", "grp", "gating", "hit_pct", "picks", "priced", "scope", "section", "variant"]);
+    check("backtest: its columns are aggregates only", Object.keys(whole[0]).sort(), ["avg_edge_pct", "avg_score_pct", "gating", "grp", "hit_pct", "picks", "priced", "scope", "section", "variant"]);
   } finally {
     // By id, everything seeded; then the rollup again so nothing of this test remains in it.
     await prisma.pick.deleteMany({ where: { id: { in: allIds } } });
