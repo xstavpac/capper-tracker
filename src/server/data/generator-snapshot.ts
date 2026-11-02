@@ -22,6 +22,7 @@ import { doubleheaderGameIds } from "@/lib/parlay/doubleheader";
 import type { ParlayRejection } from "@/lib/parlay/leg-cap";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { GeneratorSnapshot } from "@/lib/parlay/generator";
+import type { SnapshotLeagueStats, SnapshotStats, TraceCollector } from "@/lib/parlay/run-trace";
 
 export const SLIP_CHANGED = "Your slip has changed - a pick was graded or removed. Refresh the page and try again.";
 
@@ -58,12 +59,15 @@ export function propMarketEntriesOf(picks: GeneratorPick[]): PropMarketEntry[] {
   return Array.from(out.values());
 }
 
-export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope, now: Date): Promise<LoadedSnapshot | ParlayRejection> {
+// `trace` (diagnostics only, run-trace.ts) is told what the loader read and where the picks went; nothing it
+// does reaches the snapshot.
+export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope, now: Date, trace?: TraceCollector): Promise<LoadedSnapshot | ParlayRejection> {
   const rows = await getOwnedSlipPickRows(userId, scope.slipPickIds);
   if (rows.length !== scope.slipPickIds.length || rows.some((r) => r.status !== "PENDING")) return { error: SLIP_CHANGED };
 
   // Every league anything comes from: the scope, the targets, the slip.
-  const boards = await loadSlipBoards(userId, rows, [...scope.leagues, ...scope.targets.map((t) => t.leagueName)]);
+  const pickStats: Record<string, { fetched: number; matched: number }> | undefined = trace ? {} : undefined;
+  const boards = await loadSlipBoards(userId, rows, [...scope.leagues, ...scope.targets.map((t) => t.leagueName)], pickStats);
   const onBoard = picksOnBoards(boards, scope.slipPickIds);
   const rowById = new Map(rows.map((r) => [r.id, r]));
   const slipPicks: GeneratorPick[] = scope.slipPickIds.map((id) => onBoard.get(id) ?? offBoardSlipPick(rowById.get(id)!, boards));
@@ -74,7 +78,11 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
   const games: GeneratorGame[] = [];
   const skippedGames: SnapshotSkippedGame[] = [];
   const eventSportKeys: Record<string, string> = {};
+  const leagueStats: SnapshotLeagueStats[] = [];
+  const gameStats: SnapshotStats["games"] = [];
   for (const { key, label, board } of boards) {
+    const stats: SnapshotLeagueStats = { league: label, boardGames: board.odds.length, pickRowsFetched: pickStats?.[label]?.fetched ?? 0, pickRowsMatched: pickStats?.[label]?.matched ?? 0, pickRowsUnmatched: 0, matchedPending: 0, gamesWithPending: 0, gamesKept: 0 };
+    leagueStats.push(stats);
     const inWindow = autoGenerateWindow(label, board.odds.map((g) => g.commenceTime), now);
     // From the whole board: the other game of a doubleheader may already be under way.
     const doubleheaders = doubleheaderGameIds(board.odds, board.scores);
@@ -89,6 +97,16 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
       const over = isGameOver({ gameTime: game.commenceTime, gameStatus }, now);
       const wanted =
         !over && (targetIds.has(game.id) || slipGameIds.has(game.id) || (fullSlate && scope.leagues.includes(label) && inWindow(game.commenceTime)));
+      if (trace) {
+        const matched = board.expanderPicksByGame[i].length;
+        stats.matchedPending += picks.length;
+        if (picks.length > 0) stats.gamesWithPending++;
+        if (wanted) stats.gamesKept++;
+        if (matched > 0 && gameStats.length < 80) {
+          const why = wanted ? "kept" : over ? "over" : hasKickedOff(game.commenceTime, now) ? "started" : fullSlate && scope.leagues.includes(label) ? "outside-window" : "not-targeted";
+          gameStats.push([label, picks[0]?.gameLabel ?? game.awayTeam + " @ " + game.homeTeam, matched, picks.length, why]);
+        }
+      }
       if (!wanted) {
         if (fullSlate && scope.leagues.includes(label) && picks.length > 0) {
           const reason = over || hasKickedOff(game.commenceTime, now) ? "started" : "outside-window";
@@ -118,6 +136,10 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
   // record - only the slate's own (capper, league, market) entries - which is
   // what recordForGate gates and ranks it on; counted from games before `now`.
   const candidates = games.flatMap((g) => g.picks);
+  if (trace) {
+    for (const s of leagueStats) s.pickRowsUnmatched = Math.max(0, s.pickRowsFetched - s.pickRowsMatched);
+    trace.extras({ snapshot: { leagues: leagueStats, poolPicks: candidates.length, games: gameStats } });
+  }
   const { leagueRecords, categoryRecords, propMarketRecords } = await getCapperRecordBundle(userId, {
     leagueEntries: [...slipPicks, ...candidates].map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category })),
     categoryPairs: candidates

@@ -21,8 +21,10 @@
 //
 // Client-safe: no React, no server imports at runtime - the action is passed
 // in, so a test can count what it does.
-import { buildGeneratedParlay, snapshotIsStale, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, GENERATOR_RULES, snapshotIsStale, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
 import type { ParlayRejection } from "@/lib/parlay/leg-cap";
+import { traceModeOf, traceSettings } from "@/lib/parlay/generator-trace";
+import { scoringVersionOf, TraceCollector, type RunTrace } from "@/lib/parlay/run-trace";
 
 export type PoolInputs = {
   leagues: string[];
@@ -44,7 +46,10 @@ const HISTORY_KEPT = 20;
 
 export type SessionResult = { parlay: GeneratedParlay; fetched: boolean } | ParlayRejection;
 
-export function createGeneratorSession(deps: { generate: GenerateCall; now?: () => Date; firstSeed?: number }) {
+// `onTrace` (diagnostics only, run-trace.ts) receives the trace of every build the engine runs here, in the
+// browser; a build that came back from the server was traced there. It never affects a build: the trace is
+// written to, never read from, and a throwing handler is ignored.
+export function createGeneratorSession(deps: { generate: GenerateCall; now?: () => Date; firstSeed?: number; onTrace?: (trace: RunTrace) => void }) {
   const now = deps.now ?? (() => new Date());
   let snapshot: GeneratorSnapshot | null = null;
   let key: string | null = null;
@@ -67,6 +72,38 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
     return res;
   }
 
+  // The engine on the held snapshot, traced when someone is listening. Regenerate keeps counts only.
+  function build(inputs: PoolInputs, settings: GeneratorSettings, variation: Variation | null): GeneratedParlay {
+    if (!deps.onTrace) return buildGeneratedParlay(snapshot!, settings, variation, now());
+    const trace = new TraceCollector(
+      {
+        mode: traceModeOf(inputs, settings),
+        trigger: variation ? "REGENERATE" : "GENERATE",
+        origin: "CLIENT",
+        scoringVersion: scoringVersionOf(GENERATOR_RULES),
+        settings: traceSettings(inputs, settings),
+      },
+      !variation
+    );
+    const emit = () => {
+      try {
+        deps.onTrace!(trace.finish());
+      } catch {
+        // Diagnostics only.
+      }
+    };
+    try {
+      const parlay = buildGeneratedParlay(snapshot!, settings, variation, now(), GENERATOR_RULES, trace);
+      trace.extras({ snapshotBuiltAt: snapshot!.builtAt });
+      emit();
+      return parlay;
+    } catch (err) {
+      trace.error("ENGINE_ERROR", err);
+      emit();
+      throw err;
+    }
+  }
+
   const usable = (inputs: PoolInputs) => snapshot !== null && key === poolKey(inputs) && !snapshotIsStale(snapshot, now());
 
   return {
@@ -74,7 +111,7 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
     async generate(inputs: PoolInputs, settings: GeneratorSettings): Promise<SessionResult> {
       history = [];
       if (usable(inputs)) {
-        const parlay = buildGeneratedParlay(snapshot!, settings, null, now());
+        const parlay = build(inputs, settings, null);
         remember(parlay);
         return { parlay, fetched: false };
       }
@@ -102,7 +139,7 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
         fetched = true;
       }
       seed++;
-      const parlay = buildGeneratedParlay(snapshot!, settings, { seed, history }, now());
+      const parlay = build(inputs, settings, { seed, history });
       if (parlay.variety !== "NO_ALTERNATIVE") remember(parlay);
       return { parlay, fetched };
     },

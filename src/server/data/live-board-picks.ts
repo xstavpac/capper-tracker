@@ -37,7 +37,9 @@ export type LiveBoardData = {
 export async function getLiveBoardData(
   userId: string,
   activeSport: string,
-  sportLabel: string
+  sportLabel: string,
+  // Diagnostics only (run trace): see getPicksForGames.
+  pickStats?: { fetched: number; matched: number }
 ): Promise<LiveBoardData> {
   const [allOdds, yesterdayOdds, scores] = await Promise.all([
     getBoardOddsForSport(activeSport),
@@ -76,7 +78,8 @@ export async function getLiveBoardData(
       // MLB doubleheader leg, when the schedule feed assigned this card one;
       // null for a single game ("N") so it can never exclude a card.
       gameNumber: scheduleGames[i]?.doubleHeaderStatus === "N" ? null : (scheduleGames[i]?.gameNumber ?? null),
-    }))
+    })),
+    pickStats
   );
 
   const expanderPicksByGame: ExpanderPick[][] = matchedPicksByGame.map((matchedPicks, gameIndex) =>

@@ -13,6 +13,7 @@ import { syncDecayDeltaPredictions } from "@/server/data/model-engine/decay-delt
 import { isTendencyPipelineEnabled, runTendencyPhase, tendencyPipelineSkippedLog } from "@/lib/tendency-pipeline";
 import { runCronLogged } from "@/server/data/cron-runs";
 import { recomputeHeavyConsensusMarkets } from "@/server/data/heavy-consensus";
+import { pruneGeneratorRuns } from "@/server/data/generator-runs";
 import { cacheKeys } from "@/lib/cache-keys";
 import { revalidateTag } from "next/cache";
 
@@ -164,6 +165,17 @@ async function run(): Promise<Response> {
     console.error("refresh-scores: heavy consensus recompute failed", err);
   }
 
+  // The Parlay Generator's run log retention (server/data/generator-runs.ts): one small chunk per day - per-pick
+  // detail cleared after ~30 days, rows deleted after ~180, each by id. On its own catch, last: a failure
+  // here is only a log that stays longer and must not cost the steps above their run.
+  let generatorRuns: Awaited<ReturnType<typeof pruneGeneratorRuns>> | { error: string };
+  try {
+    generatorRuns = await pruneGeneratorRuns();
+  } catch (err) {
+    generatorRuns = { error: err instanceof Error ? err.message : String(err) };
+    console.error("refresh-scores: generator run log prune failed", err);
+  }
+
   // Measurement only (see docs/m9-team-tendencies.md). One line per run so the
   // tendency-recompute scan size and per-phase timing are queryable from
   // Vercel runtime logs without opening each response body.
@@ -189,6 +201,7 @@ async function run(): Promise<Response> {
     nflSituationalSnapshots,
     decayDeltaPredictions,
     heavyConsensus,
+    generatorRuns,
     tendencyPipeline: pipelineEnabled ? "enabled" : "paused",
   });
 }

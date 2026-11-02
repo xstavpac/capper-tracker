@@ -110,6 +110,8 @@ import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { legSetKey } from "@/lib/parlay/parlay-set";
 import { hasKickedOff, isGameOver, type GameClock } from "@/lib/parlay/game-over";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
+import type { SwapLegTrace, TraceCollector } from "@/lib/parlay/run-trace";
+import { conflictSub, noRecordReason, pickRef, traceSelection, traceSlip, traceSwapLeg } from "@/lib/parlay/generator-trace";
 
 // ---------------------------------------------------------------------------
 // Inputs
@@ -407,9 +409,20 @@ export function buildGeneratedParlay(
   settings: GeneratorSettings,
   variation: Variation | null,
   now: Date,
-  rules: GeneratorRules = GENERATOR_RULES
+  rules: GeneratorRules = GENERATOR_RULES,
+  // Diagnostics only (run-trace.ts): written to, never read from - the parlay is the same with or without one.
+  trace?: TraceCollector
 ): GeneratedParlay {
   const gate = effectiveGate(settings, rules);
+  // A trace step that throws (even while building its arguments) is reported on the trace, never into the build.
+  const traced = (fn: (t: TraceCollector) => void): void => {
+    if (!trace) return;
+    try {
+      fn(trace);
+    } catch (err) {
+      trace.error("TRACE_ERROR", err, "engine");
+    }
+  };
   const over = (g: GameClock) => isGameOver(g, now);
   const include = toIncludeSelection(settings.include);
   const categories = selectedCategories(include);
@@ -528,16 +541,41 @@ export function buildGeneratedParlay(
   const slipOnGame = new Map<string, GeneratorPick[]>();
   for (const p of slipLegs) slipOnGame.set(p.gameId, [...(slipOnGame.get(p.gameId) ?? []), p]);
   const candidatesOf = new Map<string, Candidate[]>();
+  // How many picks passed each step, for the run trace.
+  const passed = { scope: 0, notSlip: 0, included: 0, record: 0, gate: 0, noConflict: 0 };
   for (const game of eligible) {
     const onGame = slipOnGame.get(game.gameId) ?? [];
     const list: Candidate[] = [];
     for (const pick of game.picks) {
-      if (allSlipIds.has(pick.pickId) || !keepsPick(include, pick)) continue;
+      passed.scope++;
+      if (allSlipIds.has(pick.pickId)) {
+        traced((t) => t.drop("NOT_SLIP", "IS_SLIP_PICK", pickRef(pick)));
+        continue;
+      }
+      passed.notSlip++;
+      if (!keepsPick(include, pick)) {
+        traced((t) => t.drop("INCLUDED", "FILTER_BET_TYPE", pickRef(pick), betCategory(pick)));
+        continue;
+      }
+      passed.included++;
       const gated = gateRecord(pick, snapshot, rules);
-      if (!gated || !qualifies(gated.record, gate)) continue;
+      if (!gated) {
+        traced((t) => t.drop("HAS_RECORD", noRecordReason(pick), pickRef(pick), pick.propMarket ?? pick.category ?? undefined));
+        continue;
+      }
+      passed.record++;
+      if (!qualifies(gated.record, gate)) {
+        traced((t) => t.drop("PASSES_GATE", "BELOW_GATE", pickRef(pick), `${Math.round(gated.record.winPct)}% (${gated.record.wins}-${gated.record.losses}) < ${gate}%`));
+        continue;
+      }
+      passed.gate++;
       const { record, basis, propMarket } = gated;
       // Never against a slip pick on its game.
-      if (onGame.some((s) => !(sureOfGame(game, s) && sureOfGame(game, pick)) || sameGameConflict(asCandidate(pick), asCandidate(s)) !== null)) continue;
+      if (onGame.some((s) => !(sureOfGame(game, s) && sureOfGame(game, pick)) || sameGameConflict(asCandidate(pick), asCandidate(s)) !== null)) {
+        traced((t) => t.drop("NO_SLIP_CONFLICT", "SLIP_CONFLICT", pickRef(pick), conflictSub(game, pick, onGame) ?? undefined));
+        continue;
+      }
+      passed.noConflict++;
       list.push({ pick, game, record: toLegRecord(record), basis, ...(propMarket ? { propMarket } : {}), wilsonLowerBound: wilsonLowerBound(record.wins, record.losses, rules.z), category: betCategory(pick) });
     }
     list.sort(byWilson);
@@ -653,6 +691,29 @@ export function buildGeneratedParlay(
   const noAlternativeReason: GeneratedParlay["noAlternativeReason"] = variety !== "NO_ALTERNATIVE" ? null : !subset && need <= 0 ? "ALL_PICKS_USED" : "NO_COMPARABLE";
   const historyIds = subset ? slipLegs.map((p) => p.pickId) : chosen.map((c) => c.pick.pickId);
 
+  // The funnel, for the run trace: counted from what the steps above actually did.
+  traced((t) => {
+    const eligibleIds = new Set(eligible.map((g) => g.gameId));
+    for (const g of snapshot.games) {
+      if (eligibleIds.has(g.gameId)) continue;
+      t.tally("IN_SCOPE_GAMES", over(g) ? "GAME_OVER" : "NOT_TARGETED", g.picks.length);
+    }
+    t.stage("POOL", snapshot.games.reduce((n, g) => n + g.picks.length, 0));
+    t.stage("IN_SCOPE_GAMES", passed.scope);
+    t.stage("NOT_SLIP", passed.notSlip);
+    t.stage("INCLUDED", passed.included);
+    t.stage("HAS_RECORD", passed.record);
+    t.stage("PASSES_GATE", passed.gate);
+    t.stage("NO_SLIP_CONFLICT", passed.noConflict);
+    t.stage("SELECTED", chosen.length);
+    traceSelection(t, { candidates: Array.from(candidatesOf.values()).flat(), chosen, slipOnGame, maxPerGame, need, quota });
+    traceSlip(t, snapshot.slipPicks.length, dropped, slipLegs.length);
+    t.extras({
+      ...(unavailableTargets.length > 0 ? { unavailableTargets: unavailableTargets.length } : {}),
+      notes: [`variety:${variety}`, ...(noAlternativeReason ? [`noAlternative:${noAlternativeReason}`] : []), `need:${need}`, `slipLegs:${slipLegs.length}`],
+    });
+  });
+
   // ---- 6. Assemble ------------------------------------------------------------
   const legs: EngineLeg[] = [
     ...slipLegs.map((p): EngineLeg => {
@@ -744,8 +805,8 @@ export function buildGeneratedParlay(
     mixNotes,
     unavailableTargets,
     dropped,
-    hedge: bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE", scope, rules, gate)),
-    contrarian: bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "CONTRARIAN", scope, rules, gate)),
+    hedge: bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE", scope, rules, gate, trace)),
+    contrarian: bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "CONTRARIAN", scope, rules, gate, trace)),
     variety,
     noAlternativeReason,
     historyIds,
@@ -798,8 +859,12 @@ function buildSwap(
   mode: SwapMode,
   scope: SwapScope,
   rules: GeneratorRules,
-  gate: number
+  gate: number,
+  trace?: TraceCollector
 ): EngineSwap {
+  // Swap = All sees every leg; the other settings search a subset of them, so only All is traced leg by leg.
+  const legTraces: SwapLegTrace[] = [];
+  const traceLeg = trace && scope === "ALL" ? (fn: () => SwapLegTrace) => { try { legTraces.push(fn()); } catch (err) { trace.error("TRACE_ERROR", err, "swap"); } } : null;
   const inParlay = new Set([...legs.map((l) => l.pick.pickId), ...snapshot.slipPicks.map((p) => p.pickId)]);
   const current = new Map<string, GeneratorPick>(legs.map((l) => [l.pick.pickId, l.pick]));
   const out: EngineSwapLeg[] = legs.map((leg) => {
@@ -810,6 +875,32 @@ function buildSwap(
     const primary = toParlayLeg(leg.pick);
     const pickById = new Map(gamePicks.map((p) => [p.pickId, p]));
     const sameGame = gamePicks.map(toParlayLeg);
+    // Read before this leg changes inParlay / current, so it is the state the search ran on.
+    const analysis = traceLeg
+      ? (() => {
+          try {
+            return traceSwapLeg({
+              mode,
+              leg: leg.pick,
+              gamePicks,
+              allGamePicks: gameById.get(leg.gameId)?.picks.length ?? 0,
+              slipIds: new Set(snapshot.slipPicks.map((p) => p.pickId)),
+              inParlay,
+              siblings,
+              recordOk: (p) => {
+                const g = gateRecord(p, snapshot, rules);
+                return !g ? "NO_RECORD" : qualifies(g.record, gate) ? "OK" : "BELOW_GATE";
+              },
+            });
+          } catch (err) {
+            trace!.error("TRACE_ERROR", err, "swap");
+            return null;
+          }
+        })()
+      : null;
+    const note = (result: SwapLegTrace["result"], rule?: string) => {
+      if (analysis) traceLeg!(() => ({ pick: pickRef(leg.pick), result, ...(rule ? { rule } : {}), ...analysis }));
+    };
     let best: { leg: { pickId: string }; rule: Rule; record: LegRecord; wilsonLowerBound: number; basis?: "LEAGUE" | "OVERALL"; propMarket?: PropMarketKey } | undefined;
     if (rules.recordScope === "ALL_TIME") {
       best = rankCandidatesBy(primary, others.map(toParlayLeg), mode, snapshot.categoryRecords, (l) => pickById.get(l.pickId)?.category ?? null, sameGame)[0];
@@ -833,8 +924,10 @@ function buildSwap(
     const bestPick = best ? others.find((p) => p.pickId === best!.leg.pickId) : undefined;
     if (!best || !bestPick) {
       const notMajority = mode === "CONTRARIAN" && rules.contrarianHeadcount && !contrarianHeadcountPasses(primary, sameGame);
+      note(notMajority ? "NOT_MAJORITY" : "NO_ALTERNATE");
       return { original: leg, swap: null, unchangedReason: notMajority ? "NOT_MAJORITY" : "NO_ALTERNATE" };
     }
+    note("SWAPPED", best.rule);
     inParlay.add(bestPick.pickId);
     current.set(leg.pick.pickId, bestPick);
     const { basis, rule, record, propMarket } = best;
@@ -844,5 +937,13 @@ function buildSwap(
       unchangedReason: null,
     };
   });
-  return { mode, legs: out, swapCount: out.filter((l) => l.swap !== null).length };
+  const swapCount = out.filter((l) => l.swap !== null).length;
+  if (trace) {
+    try {
+      trace.swapMode({ mode: mode === "AUTO_HEDGE" ? "AUTO_HEDGE" : "CONTRARIAN", scope, swapCount, legs: legTraces });
+    } catch (err) {
+      trace.error("TRACE_ERROR", err, "swap");
+    }
+  }
+  return { mode, legs: out, swapCount };
 }
