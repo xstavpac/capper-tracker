@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { dropCombinedBetLines, filterPicksByLeague, narrowAmbiguousByLeague } from "@/lib/ingest-filters";
 import { runCatalogImportForUser } from "@/server/data/catalog-import-orchestrator";
 import { buildReviewDrafts, reviewDraftsToRows } from "@/server/data/ingest-review";
+import { revalidateReviewQueue } from "@/server/data/ingest-review-queue";
 
 export type IngestBatchInput = { channelId: string; messageId: number; day: string; text: string };
 export type IngestConfig = { userId: string; allowedLeagues: Set<string> };
@@ -79,6 +80,7 @@ export async function ingestTelegramBatch(input: IngestBatchInput, config: Inges
         data: { status, importedCount: imported, skippedCount: skipped, pendingReviewCount: pendingReview, error },
       }),
     ]);
+    if (pendingReview > 0) revalidateReviewQueue(config.userId);
     console.log("[ingest-telegram]", { batchId, channelId, messageId, status, imported, skipped, pendingReview });
     return { status: status.toLowerCase() as "imported" | "partial" | "failed", batchId, imported, skipped, pendingReview };
   } catch (err) {

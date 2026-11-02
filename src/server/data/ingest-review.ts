@@ -16,6 +16,7 @@ import { createPickRowResolver, type PickRowResolution } from "@/server/data/bul
 import { toItem, type CatalogQuestion } from "@/server/data/catalog-import-orchestrator";
 import { insertPicksDeduped } from "@/server/data/pick-dedup";
 import { revalidateCapperRoster } from "@/server/data/capper-roster";
+import { revalidateReviewQueue } from "@/server/data/ingest-review-queue";
 import type { IngestQuestionType, Prisma } from "@prisma/client";
 
 export type ReviewItemDraft = {
@@ -59,6 +60,8 @@ export async function buildReviewDrafts(questions: CatalogQuestion[]): Promise<R
                 label: option.label + c.label,
                 sport: option.sport,
                 nickname: option.nickname,
+                ...(option.playerName ? { playerName: option.playerName } : {}),
+                ...(option.typedName ? { typedName: option.typedName } : {}),
                 capperName: c.name,
               },
               r
@@ -141,6 +144,7 @@ export async function resolveReviewItem(userId: string, itemId: string, choiceId
   await prisma.ingestReviewItem.updateMany({ where: { id: itemId, userId }, data: { resolvedPickId: pickId } });
   revalidateTag(cacheKeys.dashboard(userId));
   revalidateCapperRoster(userId);
+  revalidateReviewQueue(userId);
   return { ok: true, pickId };
 }
 
@@ -149,7 +153,10 @@ export async function dismissReviewItem(userId: string, itemId: string): Promise
     where: { id: itemId, userId, status: "PENDING" },
     data: { status: "DISMISSED", resolvedAt: new Date() },
   });
-  if (done.count === 1) return { ok: true };
+  if (done.count === 1) {
+    revalidateReviewQueue(userId);
+    return { ok: true };
+  }
   const exists = await prisma.ingestReviewItem.findFirst({ where: { id: itemId, userId }, select: { id: true } });
   return { ok: false, error: exists ? "not_pending" : "not_found" };
 }

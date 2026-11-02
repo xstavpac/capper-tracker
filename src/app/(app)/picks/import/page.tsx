@@ -1,6 +1,8 @@
 import { requireUser } from "@/server/auth";
 import { getCappersForUser } from "@/server/data/cappers";
 import { getSportsWithLeagues, getPickPlanStatus } from "@/server/data/picks";
+import { getPendingReviewCards } from "@/server/data/ingest-review-queue";
+import { ReviewQueue } from "@/components/import/review-queue";
 import { BulkImportForm } from "@/components/dashboard/bulk-import-form";
 import { ImportPageHeader } from "@/components/import/import-page-header";
 import { SupportedFormatsSection, WherePicksLandCard } from "@/components/import/supported-formats";
@@ -14,16 +16,18 @@ export const maxDuration = 60;
 
 export default async function BulkImportPage() {
   const user = await requireUser();
-  const [cappers, sports, planStatus] = await Promise.all([
+  const [cappers, sports, planStatus, reviewCards] = await Promise.all([
     getCappersForUser(user.id),
     getSportsWithLeagues(),
     getPickPlanStatus(user.id),
+    getPendingReviewCards(user.id),
   ]);
 
   return (
     <div className="mx-auto max-w-[1200px]">
       {/* Header + manual single-pick entry: the same PickForm, opened from the header button. */}
       <ImportPageHeader cappers={cappers.map((c) => ({ id: c.id, name: c.name }))} sports={sports} atLimit={planStatus.atLimit} />
+      <ReviewQueue initialCards={reviewCards} />
       <BulkImportForm existingCapperNames={cappers.map((c) => c.name)} />
       <WherePicksLandCard />
       <SupportedFormatsSection />

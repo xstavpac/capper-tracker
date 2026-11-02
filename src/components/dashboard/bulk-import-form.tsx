@@ -52,6 +52,18 @@ import {
 } from "@/lib/bulk-import-summary";
 import { betTypeLabel } from "@/lib/bet-line";
 import { capperInitials, formatOdds } from "@/lib/pick-display";
+import {
+  CapperFuzzyPrompt,
+  ChoiceButton,
+  ChoiceRow,
+  QuestionItem,
+  TotalLineExplainer,
+  ambiguousKindText,
+  ambiguousReasonText,
+  promptButtonClass,
+  promptLinkClass,
+  questionGroupTitleClass,
+} from "@/components/import/review-question-ui";
 
 // Sentinel stored in capperFuzzyChoices when the user explicitly confirms a
 // name really is a new capper, not a typo of an existing one - distinct from
@@ -824,23 +836,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   }
 
   function ambiguousReason(group: (typeof ambiguousGroups)[number]): string {
-    if (group.options.length === 1) {
-      // A player prompt with one option is a near-miss name's suggestion: "Brian Thomas Jr. — Jaguars WR".
-      const [only] = group.options;
-      if (isPlayerAmbiguityKey(group.key) && only.playerName) {
-        const detail = only.label.split(" — ")[1];
-        return "Did you mean " + only.playerName + (detail ? " (" + detail + ")" : "") + "?";
-      }
-      return "Line plausibility narrowed this to " + only.label + ", but another signal disagreed - confirm it.";
-    }
-    return isPlayerAmbiguityKey(group.key)
-      ? playerQuestionShort(group) + " - which one?"
-      : "Ambiguous team - could mean " + group.options.map((o) => o.label).join(" or ") + ".";
-  }
-
-  // A near-miss name (options carry the typed name) is close to several players rather than shared by them.
-  function playerQuestionShort(group: (typeof ambiguousGroups)[number]): string {
-    return group.options.some((o) => o.typedName) ? "More than one player is close to this name" : "More than one player has this name";
+    return ambiguousReasonText(isPlayerAmbiguityKey(group.key), group.options);
   }
 
   function handleClear() {
@@ -1208,41 +1204,32 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                       </div>
 
                       {fuzzy.map(({ name, suggestion }) => (
-                        <div
-                          key={"fuzzy-" + name}
-                          className="mt-2 rounded-lg border border-amber-400 bg-amber-50/60 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-500/5 dark:text-amber-200"
-                        >
-                          <div>
-                            <span className="font-semibold">&quot;{name}&quot;</span> isn&apos;t an exact match for any saved
-                            capper. Did you mean <span className="font-semibold">{suggestion}</span>?
-                          </div>
-                          <div className="mt-1.5 flex flex-wrap gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                // Checked under the NEW choice - the state set
-                                // here is not visible until the next render.
-                                const nextChoices = { ...capperFuzzyChoices, [name]: suggestion };
-                                setCapperFuzzyChoices(nextChoices);
-                                checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name), nextChoices);
-                              }}
-                              className={promptButtonClass}
-                            >
-                              Yes, same as {suggestion}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const nextChoices = { ...capperFuzzyChoices, [name]: CONFIRMED_NEW };
-                                setCapperFuzzyChoices(nextChoices);
-                                checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name), nextChoices);
-                              }}
-                              className={promptButtonClass}
-                            >
-                              No, &quot;{name}&quot; is a different capper
-                            </button>
-                          </div>
-                        </div>
+                        <CapperFuzzyPrompt key={"fuzzy-" + name} name={name} suggestion={suggestion}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Checked under the NEW choice - the state set
+                              // here is not visible until the next render.
+                              const nextChoices = { ...capperFuzzyChoices, [name]: suggestion };
+                              setCapperFuzzyChoices(nextChoices);
+                              checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name), nextChoices);
+                            }}
+                            className={promptButtonClass}
+                          >
+                            Yes, same as {suggestion}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextChoices = { ...capperFuzzyChoices, [name]: CONFIRMED_NEW };
+                              setCapperFuzzyChoices(nextChoices);
+                              checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name), nextChoices);
+                            }}
+                            className={promptButtonClass}
+                          >
+                            No, &quot;{name}&quot; is a different capper
+                          </button>
+                        </CapperFuzzyPrompt>
                       ))}
 
                       <ul className="mt-2 space-y-1.5">{group.entries.map(renderRow)}</ul>
@@ -1330,25 +1317,16 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                                   capperSummary(g.cappers) +
                                   (g.count > 1 ? " · " + g.count + " picks" : "") +
                                   " · " +
-                                  (g.options.length === 1
-                                    ? ambiguousReason(g)
-                                    : isPlayerAmbiguityKey(g.key)
-                                      ? playerQuestionShort(g)
-                                      : "Ambiguous team")
+                                  ambiguousKindText(isPlayerAmbiguityKey(g.key), g.options)
                                 }
                               >
-                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                <ChoiceRow>
                                   {g.options.map((opt) => (
-                                    <button
-                                      key={opt.label}
-                                      type="button"
-                                      onClick={() => resolveAmbiguousGroup(g.key, opt)}
-                                      className={promptButtonClass}
-                                    >
+                                    <ChoiceButton key={opt.label} onClick={() => resolveAmbiguousGroup(g.key, opt)}>
                                       {opt.label}
-                                    </button>
+                                    </ChoiceButton>
                                   ))}
-                                </div>
+                                </ChoiceRow>
                                 <div className="mt-1 text-amber-800 dark:text-amber-300">
                                   {g.count > 1
                                     ? isPlayerAmbiguityKey(g.key)
@@ -1426,13 +1404,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                                   text={p.description}
                                   meta={resolvedCapperName(p.capperName) + " · " + p.sportName}
                                 >
-                                  <div className="mt-1.5">
-                                    {flag.reason === "missing"
-                                      ? "No number found in this pick's text."
-                                      : "Couldn't read a valid number in this pick's text."}{" "}
-                                    Today&apos;s market total for this game is{" "}
-                                    <span className="font-semibold">{flag.inferredLine}</span>.
-                                  </div>
+                                  <TotalLineExplainer reason={flag.reason} inferredLine={flag.inferredLine} />
                                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                                     <button
                                       type="button"
@@ -1646,11 +1618,6 @@ const EDITOR_ROWS = 12;
 
 const cardClass = "rounded-card border border-border bg-card shadow-soft";
 
-// Review-prompt choices: real buttons, 44px tall for touch.
-const promptButtonClass =
-  "inline-flex min-h-[44px] items-center rounded-full border border-amber-500 bg-card px-3.5 text-left text-xs font-semibold text-amber-900 transition hover:bg-amber-100 dark:border-amber-600 dark:text-amber-200 dark:hover:bg-amber-900/30";
-const promptLinkClass =
-  "inline-flex min-h-[44px] items-center font-semibold underline hover:text-amber-950 dark:hover:text-amber-100";
 const summaryClass = "flex min-h-[44px] cursor-pointer items-center px-3 text-sm font-semibold";
 
 function formatGameTime(iso: string): string {
@@ -1677,28 +1644,10 @@ const ambiguousQuestionId = (key: string) => "review-q-ambiguous-" + key.replace
 const duplicateQuestionId = (idx: number) => "review-q-duplicate-" + idx;
 const totalLineQuestionId = (idx: number) => "review-q-total-" + idx;
 
-const questionGroupTitleClass = "text-xs font-semibold uppercase tracking-wide";
-
 // "Vegas John" / "Vegas John + 2 more cappers".
 function capperSummary(cappers: string[]): string {
   if (cappers.length <= 1) return cappers[0] ?? "";
   return cappers[0] + " + " + (cappers.length - 1) + " more capper" + (cappers.length === 2 ? "" : "s");
-}
-
-// One question in the "Needs your answer" panel. Focusable so a row's
-// "Answer below" link can land on it.
-function QuestionItem({ id, text, meta, children }: { id: string; text: string; meta: string; children: ReactNode }) {
-  return (
-    <li
-      id={id}
-      tabIndex={-1}
-      className="scroll-mt-4 rounded-lg border border-amber-300 bg-card px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-amber-500/40"
-    >
-      <div className="break-words text-sm font-medium text-foreground">{text}</div>
-      <div className="mt-0.5 break-words text-xs text-muted-foreground">{meta}</div>
-      {children}
-    </li>
-  );
 }
 
 function StatusBadge({ kind }: { kind: "ready" | "review" | "skipped" }) {
