@@ -59,7 +59,7 @@ async function main() {
   const route = src("src/app/api/cron/refresh-scores/route.ts");
   expect("route: flag read once per run, skip line logged when off", [/const pipelineEnabled = isTendencyPipelineEnabled\(\);/.test(route), /if \(!pipelineEnabled\) console\.log\(tendencyPipelineSkippedLog\(\)\);/.test(route)], [true, true]);
   expect("route: Decay Delta sync gated on the flag", /pipelineEnabled \? await syncDecayDeltaPredictions\(MLB_SPORT_KEY\) : null/.test(route), true);
-  expect("route: tendency steps only run through runTendencyPhase", [/runTendencyPhase\(\s*pipelineEnabled,/.test(route), /await timed\(\(\) => (recompute|snapshot)TeamTendencies/.test(route)], [true, false]);
+  expect("route: tendency steps only run through runTendencyPhase", [/runTendencyPhase\(\s*tendencyPhaseEnabled\(pipelineEnabled, sportKey\),/.test(route), /await timed\(\(\) => (recompute|snapshot)TeamTendencies/.test(route)], [true, false]);
   const ungated = [
     "persistFinalScores(sportKey, gameResultChanges)",
     "await captureTeamStatSnapshots()",

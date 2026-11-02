@@ -148,6 +148,7 @@ export const LIVE_SPORTS = [
   { key: "icehockey_nhl", label: "NHL" },
   { key: "basketball_wnba", label: "WNBA" },
   { key: "americanfootball_ncaaf", label: "NCAAF" },
+  { key: "basketball_ncaab", label: "NCAAB" },
 ];
 
 // Exported for nfl-prop-odds.ts's event-level fetch, which is otherwise the
@@ -1077,7 +1078,7 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
 
 // Maps one ESPN scoreboard event to our ScoreGame shape - shared by every
 // per-date fetch getEspnScores fans out (see below).
-function espnEventToScoreGame(e: any, options: { teamDetail?: boolean } = {}): ScoreGame {
+function espnEventToScoreGame(e: any, options: { teamDetail?: boolean; flagNoDivisionGames?: boolean } = {}): ScoreGame {
   const competitors = e.competitions?.[0]?.competitors ?? [];
   const home = competitors.find((c: any) => c.homeAway === "home");
   const away = competitors.find((c: any) => c.homeAway === "away");
@@ -1109,6 +1110,15 @@ function espnEventToScoreGame(e: any, options: { teamDetail?: boolean } = {}): S
           homeShortName: home?.team?.shortDisplayName,
           awayShortName: away?.team?.shortDisplayName,
         }
+      : {}),
+    // NCAAB: a game with NO side in a Division I conference (ESPN sends no
+    // team.conferenceId for it). Kept on the feed for import matching and
+    // grading, hidden from browsers - same as NCAAF's fcsOnly. A game with
+    // exactly ONE such side (a D1 team's exhibition vs a D2/NAIA school) is
+    // deliberately NOT flagged: the odds board can carry it, and flagging would
+    // drop its score from /live. See getNcaabLiveScores.
+    ...(options.flagNoDivisionGames && competitors.length > 0 && competitors.every((c: any) => !c?.team?.conferenceId)
+      ? { fcsOnly: true as const }
       : {}),
   } as ScoreGame;
 }
@@ -1186,7 +1196,7 @@ async function getEspnScoresForDate(
 // no odds-feed fallback to hide behind.
 async function getEspnScores(
   sportPath: string,
-  options: { groups?: string; teamDetail?: boolean } = {}
+  options: { groups?: string; teamDetail?: boolean; flagNoDivisionGames?: boolean } = {}
 ): Promise<ScoreGame[]> {
   const fmt = (d: Date) => easternDateKey(d).replace(/-/g, "");
   const dateKeys = [
@@ -1277,6 +1287,16 @@ export async function getNcaafLiveScores(): Promise<ScoreGame[]> {
     fbs,
     fcs.map((g) => (fbsIds.has(g.id) ? g : { ...g, fcsOnly: true as const }))
   );
+}
+
+// NCAAB (men's college basketball). groups=50 is all of Division I: the default
+// response is only the ~18 featured games (verified live 2026-11-02: 18 events
+// without it, 182 with it, the 18 all inside the 182). Same per-date fan-out
+// as every ESPN sport (a YYYYMMDD-YYYYMMDD range is HTTP 400) and, as for
+// NCAAF, NO `limit` param. teamDetail carries the school / short name the
+// catalog import will derive team recognition from; toClientScores strips it.
+export function getNcaabLiveScores(): Promise<ScoreGame[]> {
+  return getEspnScores("basketball/mens-college-basketball", { groups: "50", teamDetail: true, flagNoDivisionGames: true });
 }
 
 // The score feed as a browser should get it: no FCS-only games (see
@@ -1478,6 +1498,9 @@ export const RESOLVABLE_SPORT_KEYS = [
   "basketball_wnba",
   "americanfootball_nfl",
   "americanfootball_ncaaf",
+  // NCAAB: picks stay PENDING for every period but FULL_GAME until halves
+  // grading lands (resolveOutcome's NCAAB-PR-C guard in grading.ts).
+  "basketball_ncaab",
   // NHL: free score source (getNhlLiveScores) is confirmed live and has an
   // acceptance test; full-game grading needs no NHL-specific code (see
   // nhl-grading-acceptance-test.ts), and per-period grading (P1-P3) is wired
@@ -1507,6 +1530,12 @@ async function dispatchLiveScoresForSport(sportKey: string): Promise<ScoreGame[]
     // pure noise.
     if (!isSportInSeason(sportKey)) return [];
     return getNcaafLiveScores();
+  }
+  if (sportKey === "basketball_ncaab") {
+    // Same season gate as NFL/NCAAF above - keeps exhibitions and the
+    // off-season out of live display, game resolution and grading.
+    if (!isSportInSeason(sportKey)) return [];
+    return getNcaabLiveScores();
   }
   if (sportKey === "icehockey_nhl") {
     // Same season gate as NFL/NCAAF above - NHL preseason (late September)

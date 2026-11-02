@@ -162,5 +162,23 @@ check("WNBA 2026-11-01T00:30Z (Game 7 tip window, Oct 31 ET): in season", isSpor
 check("WNBA 2026-11-01: last day in season", isSportLabelInSeason("WNBA", d("2026-11-01")), true);
 check("WNBA 2026-11-02: over", isSportLabelInSeason("WNBA", d("2026-11-02")), false);
 
+// --- NCAAB: 2026-11-01 (first regular-season games, ESPN) .. 2027-04-10 (title game ~04-05/06 + buffer).
+//     No preseason key: ESPN carries nothing before 11-01. ---
+const NCAAB = "basketball_ncaab";
+check("NCAAB 2026-10-31 (day before the first games): out of season", isSportInSeason(NCAAB, d("2026-10-31")), false);
+check("NCAAB 2026-11-01 (first day): in season", isSportInSeason(NCAAB, d("2026-11-01")), true);
+check("NCAAB 2027-03-20 (tournament): in season", isSportInSeason(NCAAB, d("2027-03-20")), true);
+check("NCAAB 2027-04-10 (last day): in season", isSportInSeason(NCAAB, d("2027-04-10")), true);
+check("NCAAB 2027-04-11: out of season", isSportInSeason(NCAAB, d("2027-04-11")), false);
+check("NCAAB label is in season mid-winter", isSportLabelInSeason("NCAAB", d("2027-01-15")), true);
+check("NCAAB label is eliminated in September (so a school name can't be NCAAB then)", isSportLabelInSeason("NCAAB", d("2026-09-15")), false);
+check("NCAAB label is eliminated after the title game", isSportLabelInSeason("NCAAB", d("2027-05-01")), false);
+check("NCAAF label still in season in early November (the overlap is schedule-resolved, not season-resolved)", isSportLabelInSeason("NCAAF", d("2026-11-05")), true);
+check("NCAAF label out in mid-February while NCAAB is in (NCAAB-only window)", [isSportLabelInSeason("NCAAF", d("2027-02-20")), isSportLabelInSeason("NCAAB", d("2027-02-20"))], [false, true]);
+check("NCAAB sends a single Odds API key", oddsApiRequestKeys(NCAAB, d("2026-11-15")), [NCAAB]);
+check("NCAAB has no preseason window", isPreseasonGame(NCAAB, d("2026-11-01")), false);
+
+
+
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);

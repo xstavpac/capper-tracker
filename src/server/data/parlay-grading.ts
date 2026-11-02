@@ -8,6 +8,7 @@ import {
   regradeLookbackCutoff,
   REGRADE_MAX_ROWS,
   CANDIDATE_GAME_RESULT_SELECT,
+  withSportKey,
 } from "@/server/data/grading";
 
 // Concurrency cap for the bulk write passes below - same value and same
@@ -147,10 +148,13 @@ export async function gradeAllPendingLegs(
 
   const minTime = Math.min(...toProcess.map((l) => l.gameTime.getTime())) - 2 * 86400000;
   const maxTime = Math.max(...toProcess.map((l) => l.gameTime.getTime())) + 2 * 86400000;
-  const candidates = await prisma.gameResult.findMany({
-    where: { sportKey, gameDate: { gte: new Date(minTime), lt: new Date(maxTime) } },
-    select: CANDIDATE_GAME_RESULT_SELECT,
-  });
+  const candidates = withSportKey(
+    await prisma.gameResult.findMany({
+      where: { sportKey, gameDate: { gte: new Date(minTime), lt: new Date(maxTime) } },
+      select: CANDIDATE_GAME_RESULT_SELECT,
+    }),
+    sportKey
+  );
 
   let graded = 0;
   let notMatched = 0;
@@ -216,10 +220,13 @@ export async function regradeAllFuzzyMatchedLegs(
 
   const minTime = Math.min(...fuzzyGraded.map((l) => l.gameTime.getTime())) - 2 * 86400000;
   const maxTime = Math.max(...fuzzyGraded.map((l) => l.gameTime.getTime())) + 2 * 86400000;
-  const candidates = await prisma.gameResult.findMany({
-    where: { sportKey, gameDate: { gte: new Date(minTime), lt: new Date(maxTime) } },
-    select: CANDIDATE_GAME_RESULT_SELECT,
-  });
+  const candidates = withSportKey(
+    await prisma.gameResult.findMany({
+      where: { sportKey, gameDate: { gte: new Date(minTime), lt: new Date(maxTime) } },
+      select: CANDIDATE_GAME_RESULT_SELECT,
+    }),
+    sportKey
+  );
 
   let upgraded = 0;
 

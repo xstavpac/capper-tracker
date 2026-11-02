@@ -32,6 +32,8 @@ const QUARTER_SPORT_CONFIG: Record<string, { periods: number; periodMinutes: num
   americanfootball_ncaaf: { periods: 4, periodMinutes: 15, abbrev: "Q" },
   basketball_nba: { periods: 4, periodMinutes: 12, abbrev: "Q" },
   basketball_wnba: { periods: 4, periodMinutes: 10, abbrev: "Q" },
+  // Two 20-minute halves; ESPN reports status.period 1-2, then 3+ for overtime.
+  basketball_ncaab: { periods: 2, periodMinutes: 20, abbrev: "H" },
   icehockey_nhl: { periods: 3, periodMinutes: 20, abbrev: "P" },
 };
 

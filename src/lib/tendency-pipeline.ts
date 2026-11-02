@@ -12,6 +12,8 @@
 // Days that ran while paused are NOT backfilled: the tendency snapshot series
 // has a gap, and no Decay Delta rows are written for those days.
 
+import { PICK_GATED_SPORT_KEYS } from "@/lib/final-pick-gate";
+
 export const TENDENCY_PIPELINE_ENV = "TENDENCY_PIPELINE_ENABLED";
 
 export const TENDENCY_PIPELINE_SKIPPED_STEPS = ["recomputeTeamTendencies", "snapshotTeamTendencies", "syncDecayDeltaPredictions"] as const;
@@ -33,6 +35,15 @@ export function tendencyPipelineSkippedLog(): string {
 // calls neither. `timed` is the cron's timing wrapper, passed in so this stays
 // free of the data layer.
 export type TendencyPhase<T> = { tendencies: T | null; tendencySnapshots: number; tendencyMs: number; snapshotMs: number };
+
+// Whether one sport takes part in the tendency phase. A pick-gated sport (NCAAB)
+// keeps GameResult rows only for games somebody picked, so its tendencies would
+// be computed from a sample chosen by what cappers bet on - and each recompute
+// re-reads that sport's whole OddsSnapshot history, ~1 MB of posted games a day.
+// Neither is worth it, so the phase is off for it whatever the pipeline flag says.
+export function tendencyPhaseEnabled(pipelineEnabled: boolean, sportKey: string): boolean {
+  return pipelineEnabled && !PICK_GATED_SPORT_KEYS.has(sportKey);
+}
 
 export async function runTendencyPhase<T, S extends number>(
   enabled: boolean,
