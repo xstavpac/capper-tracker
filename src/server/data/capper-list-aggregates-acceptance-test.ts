@@ -193,6 +193,7 @@ function pickRow(userId: string, s: PickSpec): Prisma.PickCreateManyInput {
     betType,
     betDetail,
     odds,
+    oddsSource: "STATED",
     line,
     period,
     units: s.units ?? 1,

@@ -118,6 +118,7 @@ function row(userId: string, capperId: string, status: "WIN" | "LOSS" | "PUSH" |
     betType,
     betDetail,
     odds,
+    oddsSource: "STATED",
     line,
     period,
     units: 1,
