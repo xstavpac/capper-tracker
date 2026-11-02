@@ -14,6 +14,7 @@ import { isTendencyPipelineEnabled, runTendencyPhase, tendencyPipelineSkippedLog
 import { runCronLogged } from "@/server/data/cron-runs";
 import { recomputeHeavyConsensusMarkets } from "@/server/data/heavy-consensus";
 import { pruneGeneratorRuns } from "@/server/data/generator-runs";
+import { recomputePlatformCategoryRates } from "@/server/data/platform-category-rates";
 import { cacheKeys } from "@/lib/cache-keys";
 import { revalidateTag } from "next/cache";
 
@@ -165,6 +166,17 @@ async function run(): Promise<Response> {
     console.error("refresh-scores: heavy consensus recompute failed", err);
   }
 
+  // The platform rates behind the Parlay Generator's scoring (server/data/platform-category-rates.ts): one
+  // statement inside Postgres, returning two counts. On its own catch: a failure leaves yesterday's rates.
+  let platformRates: Awaited<ReturnType<typeof recomputePlatformCategoryRates>> | { error: string };
+  try {
+    platformRates = await recomputePlatformCategoryRates();
+    revalidateTag(cacheKeys.platformRates());
+  } catch (err) {
+    platformRates = { error: err instanceof Error ? err.message : String(err) };
+    console.error("refresh-scores: platform rates recompute failed", err);
+  }
+
   // The Parlay Generator's run log retention (server/data/generator-runs.ts): one small chunk per day - per-pick
   // detail cleared after ~30 days, rows deleted after ~180, each by id. On its own catch, last: a failure
   // here is only a log that stays longer and must not cost the steps above their run.
@@ -201,6 +213,7 @@ async function run(): Promise<Response> {
     nflSituationalSnapshots,
     decayDeltaPredictions,
     heavyConsensus,
+    platformRates,
     generatorRuns,
     tendencyPipeline: pipelineEnabled ? "enabled" : "paused",
   });

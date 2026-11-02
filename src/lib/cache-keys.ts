@@ -29,6 +29,9 @@ export const cacheKeys = {
   // relies on the TTL.
   heavyConsensusRate: (userId: string) => `heavy-consensus-rate:${userId}`,
   heavyConsensusRateTag: () => "heavy-consensus-rate",
+  // The platform rates table (platform-category-rates.ts), one entry shared by every user; its own tag, which the
+  // nightly recompute in refresh-scores clears.
+  platformRates: () => "platform-category-rates",
   // One /cappers panel at one window for one user (the dropdown fetch, api/cappers/panel).
   cappersPanel: (userId: string, panel: string, window: string) => `cappers-panel:${userId}:${panel}:${window}`,
   // Dated: the underlying OddsSnapshot row is itself (sportKey, fetchDate)-

@@ -34,6 +34,13 @@ const FAMILY_BY_SPORT: Record<string, PropSportFamily> = {
   MLB: "BASEBALL",
 };
 
+// The leagues of a family, upper-case: what the platform rollup's SQL joins on.
+export function sportsOfPropFamily(family: string): string[] {
+  return Object.entries(FAMILY_BY_SPORT)
+    .filter(([, f]) => f === family)
+    .map(([sport]) => sport);
+}
+
 export function propSportFamily(sportName: string): PropSportFamily | null {
   return FAMILY_BY_SPORT[sportName.toUpperCase()] ?? null;
 }

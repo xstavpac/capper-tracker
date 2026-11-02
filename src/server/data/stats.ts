@@ -1533,11 +1533,16 @@ export function categoryBreakdownFromCounts(
 export const LEAGUE_RECORD_LAST_N = 20;
 
 export type LeagueRecordColumn = { wins: number; losses: number; pushes: number; winPct: number; count: number };
+// A record's picks with a real price (priceOf, lib/parlay/scoring.ts), pushes out, and the sum of their
+// break-evens: wins - impliedSum is the record's total edge.
+export type PricedColumn = { wins: number; losses: number; impliedSum: number };
 export type LeagueRecordCard = {
   category: PickCategoryKey;
   label: string;
   overall: LeagueRecordColumn;
   league: LeagueRecordColumn;
+  // Only when the bundle was asked for pricing (CapperRecordBundleRequest.includePricing).
+  priced?: { overall: PricedColumn; league: PricedColumn };
 };
 
 const EMPTY_LEAGUE_RECORD_COLUMN: LeagueRecordColumn = { wins: 0, losses: 0, pushes: 0, winPct: 0, count: 0 };

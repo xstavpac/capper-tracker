@@ -1723,3 +1723,21 @@ model ParlayGeneratorRun {
   @@index([userId, createdAt])
   @@map("parlay_generator_runs")
 }
+
+// Platform win and break-even totals per league + bet type + key, across every user: the rollup the Parlay
+// Generator's scoring module falls back on (lib/parlay/scoring.ts). Aggregates only, rebuilt nightly by
+// recomputePlatformCategoryRates (refresh-scores).
+model PlatformCategoryRate {
+  id         String   @id @default(cuid())
+  league     String // Sport.name
+  betType    String
+  key        String // the pick's category, or its PropMarketKey for a prop with one
+  wins       Int
+  losses     Int
+  impliedSum Float // sum of break-evens over the picks with a real price (priceOf)
+  priced     Int // how many picks that sum covers
+  computedAt DateTime @default(now())
+
+  @@unique([league, betType, key])
+  @@map("platform_category_rates")
+}

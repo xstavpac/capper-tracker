@@ -500,6 +500,13 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     source: "prisma migrate deploy (scripts/deploy-migrate.mjs, package.json build; production builds only)",
     matches: (s) => s.tables.includes("_prisma_migrations"),
   },
+  // ---- Platform rates (platform-category-rates.ts; the Parlay Generator's scoring) ----
+  {
+    // One statement inside Postgres over every decided pick, nightly. It returns two counts.
+    label: "Platform rates recompute",
+    source: "recomputePlatformCategoryRates (platform-category-rates.ts, refresh-scores cron)",
+    matches: (s) => /^WITH market_keys\(/.test(s.text),
+  },
   // ---- Heavy Consensus (heavy-consensus.ts; the Live tab's hit rate and its nightly history) ----
   {
     // One viewer's settled markets at the 8-capper minimum, behind a per-user Data

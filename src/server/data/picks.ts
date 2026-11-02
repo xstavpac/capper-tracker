@@ -12,6 +12,7 @@ import {
   type LeagueRecordCard,
   type LeagueRecordColumn,
   type PickCategoryKey,
+  type PricedColumn,
 } from "@/server/data/stats";
 import {
   queryCapperRecordBundle,
@@ -651,13 +652,16 @@ export type CapperRecordBundleRequest = {
   propMarketEntries?: PropMarketEntry[];
   // Per-market prop records count only games before this (default: now).
   asOf?: Date;
+  // Also return each card's and prop record's priced picks (LeagueRecordCard.priced), for the Parlay Generator's
+  // scoring. Off by default: every other caller's statement and result stay exactly as they were.
+  includePricing?: boolean;
 };
 
 export type PropMarketEntry = { capperId: string; leagueSport: string; propMarketKey: PropMarketKey };
 
 // A capper's record on one prop market: in `leagueSport` alone, and all-time
 // across every league of the market's sport family (prop-market-key.ts).
-export type PropMarketRecord = { key: PropMarketKey; league: LeagueRecordColumn; allTime: LeagueRecordColumn };
+export type PropMarketRecord = { key: PropMarketKey; league: LeagueRecordColumn; allTime: LeagueRecordColumn; priced?: { league: PricedColumn; allTime: PricedColumn } };
 
 export type CapperRecordBundle = {
   leagueRecords: CapperLeagueRecords;
@@ -668,6 +672,12 @@ export type CapperRecordBundle = {
 };
 
 const EMPTY_BUNDLE: CapperRecordBundle = { leagueRecords: { records: {}, streaks: {}, last20: {} }, categoryRecords: {}, propMarketRecords: {} };
+
+function addPriced(to: PricedColumn, r: PropMarketTotalsRow): void {
+  to.wins += r.pW ?? 0;
+  to.losses += r.pL ?? 0;
+  to.impliedSum += r.imp ?? 0;
+}
 
 // The per-market records for `entries` from propRec's raw (capper, sport,
 // propMarket) totals: in-league is the entry's own sport's row, all-time the sum
@@ -680,20 +690,26 @@ export function propMarketRecordsFromTotals(entries: PropMarketEntry[], rows: Pr
     const market = propMarketOf(e.propMarketKey);
     const all = [0, 0, 0];
     const lg = [0, 0, 0];
+    const allPriced: PricedColumn = { wins: 0, losses: 0, impliedSum: 0 };
+    const lgPriced: PricedColumn = { wins: 0, losses: 0, impliedSum: 0 };
+    let hasPricing = false;
     for (const r of rows) {
       if (r.cid !== e.capperId || r.mkt !== market || propSportFamily(r.sport) !== family) continue;
       all[0] += r.wins;
       all[1] += r.losses;
       all[2] += r.pushes;
+      if (r.imp !== undefined) hasPricing = true;
+      addPriced(allPriced, r);
       if (r.sport.toUpperCase() === e.leagueSport.toUpperCase()) {
         lg[0] += r.wins;
         lg[1] += r.losses;
         lg[2] += r.pushes;
+        addPriced(lgPriced, r);
       }
     }
     const allTime = toLeagueRecordColumn(all[0], all[1], all[2]);
     out[propMarketRecordKey(e.capperId, e.leagueSport, e.propMarketKey)] =
-      allTime.count > 0 ? { key: e.propMarketKey, league: toLeagueRecordColumn(lg[0], lg[1], lg[2]), allTime } : null;
+      allTime.count > 0 ? { key: e.propMarketKey, league: toLeagueRecordColumn(lg[0], lg[1], lg[2]), allTime, ...(hasPricing ? { priced: { league: lgPriced, allTime: allPriced } } : {}) } : null;
   }
   return out;
 }
@@ -776,6 +792,7 @@ export async function getCapperRecordBundle(userId: string, req: CapperRecordBun
     propReq: Array.from(propReqByKey.values()),
     asOf: req.asOf ?? new Date(),
     last20Window: LEAGUE_RECORD_LAST_N,
+    ...(req.includePricing ? { includePricing: true } : {}),
   });
 
   // Cards -> LeagueRecordCard | null, keyed leagueRecordKey (matches the
@@ -790,7 +807,20 @@ export async function getCapperRecordBundle(userId: string, req: CapperRecordBun
     const overall = toLeagueRecordColumn(row?.oWins ?? 0, row?.oLosses ?? 0, row?.oPushes ?? 0);
     records[key] =
       overall.count > 0
-        ? { category, label: PICK_CATEGORY_LABELS[category], overall, league: toLeagueRecordColumn(row?.lWins ?? 0, row?.lLosses ?? 0, row?.lPushes ?? 0) }
+        ? {
+            category,
+            label: PICK_CATEGORY_LABELS[category],
+            overall,
+            league: toLeagueRecordColumn(row?.lWins ?? 0, row?.lLosses ?? 0, row?.lPushes ?? 0),
+            ...(req.includePricing
+              ? {
+                  priced: {
+                    overall: { wins: row?.oPW ?? 0, losses: row?.oPL ?? 0, impliedSum: row?.oImp ?? 0 },
+                    league: { wins: row?.lPW ?? 0, losses: row?.lPL ?? 0, impliedSum: row?.lImp ?? 0 },
+                  },
+                }
+              : {}),
+          }
         : null;
   }
 

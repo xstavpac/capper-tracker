@@ -1,6 +1,7 @@
 // The Parlay Generator's scoring module (scoring.ts): the hierarchical record and
-// its sanity targets, the price rules, the price-aware score, the gate, and the
-// platform-rate fallback. Pure - no DB. Run with:
+// its sanity targets, the price rules, the win-rate model, the gate and the
+// platform-rate fallback. These picks have no priced history, so they are on the
+// win-rate model; the edge model is in scoring-edge-model-acceptance-test.ts. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/scoring-acceptance-test.ts
 import {
   breakEvenOf,
@@ -18,7 +19,6 @@ import {
   PRIOR_STRENGTH,
   SCORING_VERSION,
   scorePick,
-  scoreRecordKey,
   shrink,
   type PickScore,
   type PlatformRateRow,
@@ -108,7 +108,6 @@ check("550-450 is ~55", shrunk([550, 450]), 54.9);
   check("no per-market record is no record, whatever the category says", scorePick(prop, ctx([100, 0], [0, 0], FLAT_52, "TD_PROP")), { status: "NO_RECORD", pickId: "p", reason: "NO_PROP_MARKET_RECORD" });
   const noKey = scored(scorePick({ ...prop, propMarket: null }, ctx([9, 3], [0, 0], FLAT_52, "TD_PROP")));
   check("a prop with no key keeps the category path", noKey.levels.league, { wins: 9, losses: 3 });
-  check("a record key per path", [scoreRecordKey(prop), scoreRecordKey(pick()), scoreRecordKey(pick({ category: null }))], ["c|NBA|BASKETBALL:POINTS", "c|NBA|FAV_ML", null]);
 
   check("no category", scorePick(pick({ category: null }), ctx([9, 3])), { status: "NO_RECORD", pickId: "p", reason: "NO_CATEGORY" });
   check("no card and no all-leagues record", scorePick(pick({ category: "DOG_ML" }), ctx([9, 3])), { status: "NO_RECORD", pickId: "p", reason: "NO_RECORD" });
@@ -153,7 +152,7 @@ check("550-450 is ~55", shrunk([550, 450]), 54.9);
   check("18-4 at -110: margin 15.2", pct(at(-110).margin!), 15.2);
   check("18-4 at -300: margin -7.4", pct(at(-300).margin!), -7.4);
   check("18-4 at +130: margin 24.1", pct(at(130).margin!), 24.1);
-  check("a priced pick ranks on its margin", at(-110).rankScore, at(-110).margin);
+  check("at -110 on the default break-even a thin capper ranks on its margin", at(-110).rankScore, at(-110).margin);
   check("price never moves the win probability", at(-300).shrunkWinProb, at(130).shrunkWinProb);
   const heavy = scorePick(pick({ pickId: "heavy", odds: -500 }), ctx([18, 4]));
   const thin = scorePick(pick({ pickId: "thin", odds: -110 }), ctx([550, 450]));
@@ -178,18 +177,6 @@ check("550-450 is ~55", shrunk([550, 450]), 54.9);
   check("a platform yardstick with enough priced picks is used", s.rankYardstick, 0.6);
   check("its rank score is the shrunk rate minus the yardstick", s.rankScore, s.shrunkWinProb - 0.6);
   check("still no margin: the yardstick isn't its price", [s.breakEven, s.margin], [null, null]);
-  check("a priced pick has no yardstick", scored(scorePick(pick(), ctx([18, 4]))).rankYardstick, null);
-}
-
-// ---- Historical break-even: in the breakdown, never in the score ------------------------
-{
-  const base = ctx([18, 4]);
-  const withHistory: ScoringContext = { ...base, historicalBreakEven: { "c|NBA|FAV_ML": { rate: 0.71, n: 22 } } };
-  const a = scored(scorePick(pick(), base));
-  const b = scored(scorePick(pick(), withHistory));
-  check("carried in the breakdown", b.historicalBreakEven, { rate: 0.71, n: 22 });
-  check("absent is null", a.historicalBreakEven, null);
-  check("never changes the score", [b.shrunkWinProb, b.margin, b.rankScore], [a.shrunkWinProb, a.margin, a.rankScore]);
 }
 
 // ---- The gate: L is the edge a capper at L% has at -110 ----------------------------------
@@ -198,13 +185,13 @@ check("550-450 is ~55", shrunk([550, 450]), 54.9);
   check("clears 55 and 65, not 70", [55, 65, 70].map((g) => passesGate(s, g)), [true, true, false]);
   check("the shrunk rate decides, not the raw 75%: 3-1 is 55.8", [pct(scored(scorePick(pick(), ctx([3, 1]))).shrunkWinProb), passesGate(scorePick(pick(), ctx([3, 1])), 55)], [55.8, true]);
   check("1-0 at 54.3 stays below a 55 gate", passesGate(scorePick(pick(), ctx([1, 0])), 55), false);
-  check("the price now decides: 18-4 at -500 and -300 fail, -110 and +300 pass", [-500, -300, -110, 300].map((odds) => passesGate(scorePick(pick({ odds }), ctx([18, 4])), 55)), [false, false, true, true]);
+  check("the worse edge decides: 18-4 at -500 and -300 fail, -110 and +300 pass", [-500, -300, -110, 300].map((odds) => passesGate(scorePick(pick({ odds }), ctx([18, 4])), 55)), [false, false, true, true]);
   check("L = 0 is no gate: a losing record at a bad price passes", passesGate(scorePick(pick({ odds: -500 }), ctx([0, 9])), 0), true);
   check("no record never passes, even at 0", passesGate(scorePick(pick({ category: null }), ctx([9, 3])), 0), false);
 
   // In the breakdown.
   const g = scored(scorePick(pick({ odds: 150 }), { ...ctx([12, 8]), minWinPct: 60 })).gate;
-  check("the breakdown shows the required edge and the pick's", [g.minWinPct, pct(g.requiredEdge!), pct(g.edge), pct(g.breakEven)], [60, 7.6, 16, 40]);
+  check("the breakdown shows the required edge and the pick's", [g.minWinPct, pct(g.requiredEdge!), pct(g.edge), pct(g.breakEven)], [60, 7.6, 3.6, 52.4]);
   check("absent L in the context is 55", scored(scorePick(pick(), ctx([18, 4]))).gate.minWinPct, 55);
   check("L = 0 has no required edge", scored(scorePick(pick(), { ...ctx([18, 4]), minWinPct: 0 })).gate.requiredEdge, null);
   check("the breakdown agrees with passesGate", [scored(scorePick(pick({ odds: -500 }), ctx([18, 4]))).gate.passes, passesGate(scorePick(pick({ odds: -500 }), ctx([18, 4])), 55)], [false, false]);
@@ -212,7 +199,7 @@ check("550-450 is ~55", shrunk([550, 450]), 54.9);
   const noPrice = scored(scorePick(pick({ oddsSource: "DEFAULTED" }), ctx([12, 8])));
   check("the gate's edge is the score ranking reads, priced and not", [priced.gate.edge === priced.rankScore, noPrice.gate.edge === noPrice.rankScore], [true, true]);
 
-  // At -110 it must be the old raw gate exactly, boundaries included.
+  // At -110 on the default break-even it must be the old raw gate exactly, boundaries included.
   const oldRawGate = (shrunkProb: number, L: number) => shrunkProb * 100 >= L;
   check("the -110 break-even is exactly the reference", breakEvenOf(-110) === DEFAULT_BREAK_EVEN, true);
   let compared = 0;
@@ -319,25 +306,9 @@ check("550-450 is ~55", shrunk([550, 450]), 54.9);
   const rate = (league: string, key: string) => pct(platformRateFor(prod, { league, betType: "MONEYLINE", key }).rate);
   check("fixture rates match the query", [rate("NBA", "FAV_ML"), rate("NBA", "DOG_ML"), rate("NCAAF", "FAV_ML"), rate("NCAAF", "DOG_ML"), rate("NFL", "FAV_ML"), rate("NFL", "DOG_ML")], [61.1, 38, 59.4, 47.2, 57.2, 58.2]);
 
-  const nba = (category: PickCategoryKey, league: [number, number], odds: number) => scored(scorePick(pick({ category, odds }), ctx(league, [0, 0], prod, category)));
-  const line = (x: ScoredPick) => [pct(x.shrunkWinProb), pct(x.gate.edge), x.gate.passes];
-  check("default gate's required edge is 2.6 points", pct(nba("FAV_ML", [18, 4], -110).gate.requiredEdge!), 2.6);
-  check("NBA dog 12-8 at +150 passes at 55: 49.0 shrunk, +9.0 edge", line(nba("DOG_ML", [12, 8], 150)), [49, 9, true]);
-  check("NBA favorite 0-1 at -200 fails: 58.2 shrunk, -8.4 edge", line(nba("FAV_ML", [0, 1], -200)), [58.2, -8.4, false]);
-  check("mediocre NBA favorite 12-8 at -250 fails: 60.6 shrunk, -10.9 edge", line(nba("FAV_ML", [12, 8], -250)), [60.6, -10.9, false]);
-  check("NBA dog 18-4 at +150 passes", line(nba("DOG_ML", [18, 4], 150)), [61, 21, true]);
-  check("NBA favorite 18-4 at -110 passes", line(nba("FAV_ML", [18, 4], -110)), [72, 19.6, true]);
-  check("NBA favorite 18-4 at -300 fails: even a strong capper, at a dear price", line(nba("FAV_ML", [18, 4], -300)), [72, -3, false]);
-  // Pinned as how the rule behaves, flagged in the PR: the category's 38% prior holds across every
-  // dog price, so at long prices it alone clears the break-even and a losing record passes.
-  check("NBA dog 0-1 at +200 passes: the prior alone beats the price", line(nba("DOG_ML", [0, 1], 200)), [36.2, 2.9, true]);
-  check("NBA dog 0-3 at +300 passes", line(nba("DOG_ML", [0, 3], 300)), [33, 8, true]);
-  check("NBA dog 0-5 at +400 passes", line(nba("DOG_ML", [0, 5], 400)), [30.4, 10.4, true]);
-  check("NBA dog 0-3 at +150 fails", line(nba("DOG_ML", [0, 3], 150)), [33, -7, false]);
-  // Ranking within the pool: the same capper record, the favorite's price costs it the top spot.
-  const fav = scorePick(pick({ pickId: "fav", category: "FAV_ML", odds: -250 }), ctx([18, 4], [0, 0], prod, "FAV_ML"));
-  const dog = scorePick(pick({ pickId: "dog", category: "DOG_ML", odds: 150 }), ctx([18, 4], [0, 0], prod, "DOG_ML"));
-  check("18-4 dog at +150 ranks above 18-4 favorite at -250", [fav, dog].sort(compareScores).map((s) => s.pickId), ["dog", "fav"]);
+  const nba = (category: PickCategoryKey, league: [number, number]) => pct(scored(scorePick(pick({ category, odds: category === "FAV_ML" ? -150 : 150 }), ctx(league, [0, 0], prod, category))).shrunkWinProb);
+  check("NBA favorite ML: 0-1 shrinks to 58.2, 0-3 to 53.2", [nba("FAV_ML", [0, 1]), nba("FAV_ML", [0, 3])], [58.2, 53.2]);
+  check("NBA underdog ML: 12-8 shrinks to 49.0, 18-4 to 61.0", [nba("DOG_ML", [12, 8]), nba("DOG_ML", [18, 4])], [49, 61]);
 }
 
 // ---- The ordering ---------------------------------------------------------------------
@@ -355,7 +326,7 @@ check("550-450 is ~55", shrunk([550, 450]), 54.9);
   check("two with no record: pick id", order([none2, none]), ["0-none", "1-none"]);
 }
 
-check("the version names the rules and fits the run log's 80 characters", [SCORING_VERSION, SCORING_VERSION.length <= 80], ["hier-k20-edge-gate-v1", true]);
+check("the version names the rules and fits the run log's 80 characters", [SCORING_VERSION, SCORING_VERSION.length <= 80], ["hier-k20-logit-edge-min5-v1", true]);
 check("the same input scores the same", JSON.stringify(scorePick(pick(), ctx([18, 4]))) === JSON.stringify(scorePick(pick(), ctx([18, 4]))), true);
 
 if (failures > 0) {
