@@ -341,7 +341,7 @@ async function main() {
 
   // ---- 10. the import itself uses the same switch as the preview ----
   const source = readFileSync(join(__dirname, "..", "actions", "bulk-picks.ts"), "utf8");
-  expect("wiring: the import resolves with altLines on", /resolveGameAndOdds\(item, loader, \{ retryOnMiss: false, altLines: true \}\)/.test(source), true);
+  expect("wiring: the import resolves with altLines on", /resolveGameAndOdds\(item, loader, \{ retryOnMiss: false, altLines: true, pricing \}\)/.test(source), true);
   expect("wiring: only the import and the preview turn it on", (source.match(/altLines: true/g) ?? []).length, 2);
 
   console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} CHECK(S) FAILED`}`);

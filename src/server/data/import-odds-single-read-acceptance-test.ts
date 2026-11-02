@@ -120,10 +120,18 @@ const FIXTURE: Record<string, OddsGame[]> = {
 
 // ---- spies ----
 const reads: Record<string, number> = {};
+// The posted-odds capture reads the snapshot row's createdAt alone (select: { createdAt: true }) - one column, no
+// blob - to know how old the prices are. Counted apart: this test is about the blob being read once.
+const timeReads: Record<string, number> = {};
 const delegate = prisma.oddsSnapshot as unknown as { findUnique: (args: unknown) => Promise<unknown> };
 delegate.findUnique = async (args: unknown) => {
   const { sportKey, fetchDate } = (args as { where: { sportKey_fetchDate: { sportKey: string; fetchDate: string } } }).where
     .sportKey_fetchDate;
+  const select = (args as { select?: Record<string, boolean> }).select;
+  if (select && Object.keys(select).length === 1 && select.createdAt === true) {
+    timeReads[sportKey] = (timeReads[sportKey] ?? 0) + 1;
+    return FIXTURE[sportKey] ? { createdAt: new Date(base) } : null;
+  }
   reads[sportKey] = (reads[sportKey] ?? 0) + 1;
   // A real read takes time; without this the calls would not overlap.
   await new Promise((resolve) => setTimeout(resolve, 25));
@@ -194,6 +202,7 @@ const SPORTS_IN_PASTE = Object.keys(FIXTURE).length;
 const total = () => Object.values(reads).reduce((a, b) => a + b, 0);
 const reset = () => {
   for (const k of Object.keys(reads)) delete reads[k];
+  for (const k of Object.keys(timeReads)) delete timeReads[k];
 };
 
 async function main() {
@@ -210,6 +219,7 @@ async function main() {
   reset();
   const preview = await previewBulkImportMatches(items as never);
   const previewReads = { ...reads };
+  const previewTimeReads = { ...timeReads };
   const previewTotal = total();
   console.log(`preview: ${items.length} lines, ${SPORTS_IN_PASTE} sports -> ${previewTotal} snapshot reads`, JSON.stringify(previewReads));
 
@@ -228,6 +238,7 @@ async function main() {
   if (!BASELINE) {
     for (const sportKey of Object.keys(FIXTURE)) {
       check(`preview reads ${sportKey} at most once`, (previewReads[sportKey] ?? 0) <= 1, `(${previewReads[sportKey] ?? 0})`);
+    check(`preview reads ${sportKey}'s snapshot time at most once`, (previewTimeReads[sportKey] ?? 0) <= 1, `(${previewTimeReads[sportKey] ?? 0})`);
       check(`missing-total preview reads ${sportKey} at most once`, (missingReads[sportKey] ?? 0) <= 1, `(${missingReads[sportKey] ?? 0})`);
     }
     check("preview reads <= distinct sports in the paste", previewTotal <= SPORTS_IN_PASTE, `(${previewTotal} <= ${SPORTS_IN_PASTE})`);

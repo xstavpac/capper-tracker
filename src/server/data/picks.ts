@@ -117,7 +117,7 @@ export async function createPick(
   // transaction as the gate and the insert (see insertPicksDeduped): a pick
   // already logged for this capper and game is refused unless allowDuplicate.
   const result = await insertPicksDeduped(userId, [
-    { ...data, oddsSource: "STATED", capperName: capper.name, sportName: sport.name, overrideDuplicate: allowDuplicate },
+    { ...data, oddsSource: "STATED", postedLine: data.line ?? null, oddsCapturedAt: new Date(), capperName: capper.name, sportName: sport.name, overrideDuplicate: allowDuplicate },
   ]);
   if (!result.allowed) {
     throw new Error(result.message);

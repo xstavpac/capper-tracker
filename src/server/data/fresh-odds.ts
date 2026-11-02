@@ -1,0 +1,255 @@
+// Prices for the catalog import that are no staler than FRESH_WINDOW_MS.
+//
+// The daily snapshot (odds.ts) is written once at ~05:05 UTC and only ever APPENDS games afterwards, so by an evening
+// import the price it holds can be ~12 hours old. The posted-odds capture (lib/odds-source.ts) would then log a
+// morning price as the price the pick was posted at. This is the one place that fixes that: when the sport's snapshot
+// is older than the window, the import prices from ONE fresh bulk h2h/spreads/totals listing instead.
+//
+//   - Shared: at most one purchase per sport per window. The claim is a row created BEFORE the request
+//     (odds_fresh_fetches, unique on sport + window bucket), so two imports racing for it cannot both buy; the loser
+//     prices from the snapshot. A later import inside the window reads the stored row - no API call.
+//   - Never touches the daily snapshot: the result goes to its own append-only table with its own timestamp; the
+//     snapshot row and every game in it stay byte-for-byte what they were, so nothing else that reads it changes.
+//   - Bounded: skipped at >= 95% credit usage (the existing ladder), and capped at FRESH_DAILY_CREDIT_CAP credits
+//     a day (FRESH_DAILY_CREDIT_CAP / FRESH_CALL_CREDITS calls). Any shortfall - gate, cap, lost claim, API
+//     failure - falls back to the snapshot, exactly what the import did before; it is never an error.
+//   - A started game is never in a fresh result (the feed would hand back an in-play price for it, as the seed's
+//     own filter notes), so it keeps pricing from the snapshot and is stamped with the snapshot's time.
+//
+// Pure decisions (shouldFetchFresh, mergeFreshOverSnapshot) are separate from the I/O so they are provable without a
+// database; the loader takes its I/O as `deps`.
+import { Prisma } from "@prisma/client";
+import { revalidateTag } from "next/cache";
+import { cacheKeys } from "@/lib/cache-keys";
+import { cachedByTag } from "@/server/data/cached";
+import { prisma } from "@/lib/prisma";
+import { easternDateKey, easternDayStart } from "@/lib/dates";
+import { isSportInSeason, oddsApiRequestKeys } from "@/lib/sport-seasons";
+import { fetchMergedOddsListing, type OddsGame, type OddsLoader } from "@/server/data/odds";
+import { classifyCreditUsage, getLatestCreditUsageLevel, persistOddsApiUsage } from "@/server/data/odds-api-usage";
+
+export const FRESH_WINDOW_MS = 2 * 3600_000;
+// One bulk listing = h2h + spreads + totals x 1 region.
+export const FRESH_CALL_CREDITS = 3;
+export const FRESH_DAILY_CREDIT_CAP = 60;
+export const FRESH_RETAIN_MS = 24 * 3600_000;
+const CLEANUP_BATCH = 20;
+// A stored listing is read from the database once per this long, fleet-wide (Next Data Cache); the purchase revalidates it.
+const FRESH_READ_TTL_SECONDS = 600;
+
+export type FreshListing = { games: OddsGame[]; fetchedAt: Date };
+
+// Whether this sport's snapshot is too old to price from, and a purchase is worth trying. A snapshot with no
+// cached game, or whose every game has already started, gains nothing from a pre-game listing.
+export function shouldFetchFresh(args: { snapshotAt: Date | null; snapshotGames: OddsGame[]; now: Date; windowMs?: number }): boolean {
+  const { snapshotAt, snapshotGames, now } = args;
+  const windowMs = args.windowMs ?? FRESH_WINDOW_MS;
+  if (!snapshotAt) return false;
+  if (now.getTime() - snapshotAt.getTime() < windowMs) return false;
+  return snapshotGames.some((g) => new Date(g.commenceTime).getTime() > now.getTime());
+}
+
+export type PricingOdds = { games: OddsGame[]; capturedAt: Map<string, Date> };
+
+// The fresh listing over the snapshot, by event id. A game in the fresh listing is priced from it (stamped with its
+// fetchedAt); a game only the snapshot has (a started game, or one the listing dropped) keeps the snapshot price and
+// the snapshot's time. Neither input is changed.
+export function mergeFreshOverSnapshot(snapshotGames: OddsGame[], snapshotAt: Date | null, fresh: FreshListing | null): PricingOdds {
+  const capturedAt = new Map<string, Date>();
+  if (!fresh) {
+    if (snapshotAt) for (const g of snapshotGames) capturedAt.set(g.id, snapshotAt);
+    return { games: snapshotGames, capturedAt };
+  }
+  const freshIds = new Set(fresh.games.map((g) => g.id));
+  const games: OddsGame[] = [];
+  for (const g of snapshotGames) {
+    if (freshIds.has(g.id)) continue;
+    games.push(g);
+    if (snapshotAt) capturedAt.set(g.id, snapshotAt);
+  }
+  for (const g of fresh.games) {
+    games.push(g);
+    capturedAt.set(g.id, fresh.fetchedAt);
+  }
+  return { games, capturedAt };
+}
+
+export type FreshOddsDeps = {
+  now: () => Date;
+  // The day's snapshot row's createdAt - one 8-byte column, no blob.
+  readSnapshotAt: (sportKey: string) => Promise<Date | null>;
+  // The newest stored listing fetched at or after `since`.
+  readFresh: (sportKey: string, since: Date) => Promise<FreshListing | null>;
+  // Buys a listing if the gate, the cap and the claim allow; null otherwise.
+  buyFresh: (sportKey: string, now: Date) => Promise<FreshListing | null>;
+};
+
+export type PricingOddsLoader = {
+  // Same shape as every other resolver's loader: the games to price a pick against.
+  load: OddsLoader;
+  // When the data that priced this event was read; null if unknown.
+  capturedAt: (sportKey: string, eventId: string) => Date | null;
+  // The snapshot's own time, for prices read from caches this loader does not see (alt lines, props): the data is at
+  // least that new. One column, no blob, and never buys anything.
+  snapshotAt: (sportKey: string) => Promise<Date | null>;
+};
+
+// One pricing read per sport for the life of the loader (a paste resolves every line at once). `snapshotLoader` is
+// the request's own odds loader, so the snapshot is still read once.
+export function createPricingOddsLoader(snapshotLoader: OddsLoader, deps: FreshOddsDeps = defaultFreshOddsDeps): PricingOddsLoader {
+  const held = new Map<string, Promise<PricingOdds>>();
+  const byEvent = new Map<string, Map<string, Date>>();
+  const snapAts = new Map<string, Promise<Date | null>>();
+  const snapAt = (sportKey: string): Promise<Date | null> => {
+    let p = snapAts.get(sportKey);
+    if (!p) {
+      p = deps.readSnapshotAt(sportKey).catch(() => null);
+      snapAts.set(sportKey, p);
+    }
+    return p;
+  };
+
+  const build = async (sportKey: string): Promise<PricingOdds> => {
+    const snapshotGames = await snapshotLoader(sportKey);
+    const snapshotAt = await snapAt(sportKey);
+    let fresh: FreshListing | null = null;
+    try {
+      const now = deps.now();
+      if (shouldFetchFresh({ snapshotAt, snapshotGames, now })) {
+        fresh = (await deps.readFresh(sportKey, new Date(now.getTime() - FRESH_WINDOW_MS))) ?? (await deps.buyFresh(sportKey, now));
+      }
+    } catch (err) {
+      // Pricing must never fail the import: the snapshot alone is what it used before.
+      console.error("[fresh-odds] fell back to the snapshot", JSON.stringify({ sportKey, error: err instanceof Error ? err.message : String(err) }));
+      fresh = null;
+    }
+    const merged = mergeFreshOverSnapshot(snapshotGames, snapshotAt, fresh);
+    byEvent.set(sportKey, merged.capturedAt);
+    return merged;
+  };
+
+  return {
+    load: async (sportKey) => {
+      let p = held.get(sportKey);
+      if (!p) {
+        p = build(sportKey);
+        held.set(sportKey, p);
+        p.catch(() => {
+          if (held.get(sportKey) === p) held.delete(sportKey);
+        });
+      }
+      return (await p).games;
+    },
+    capturedAt: (sportKey, eventId) => byEvent.get(sportKey)?.get(eventId) ?? null,
+    snapshotAt: snapAt,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// I/O
+// ---------------------------------------------------------------------------
+export const freshBucket = (now: Date, windowMs = FRESH_WINDOW_MS): number => Math.floor(now.getTime() / windowMs);
+
+// May another purchase be made: the account is below the 95% line and today's import-fresh spend is under the cap.
+export function freshPurchaseAllowed(args: { level: ReturnType<typeof classifyCreditUsage>; callsToday: number }): boolean {
+  if (args.level === "stop_lower_priority") return false;
+  return (args.callsToday + 1) * FRESH_CALL_CREDITS <= FRESH_DAILY_CREDIT_CAP;
+}
+
+async function readSnapshotAt(sportKey: string): Promise<Date | null> {
+  const row = await prisma.oddsSnapshot.findUnique({
+    where: { sportKey_fetchDate: { sportKey, fetchDate: easternDateKey(new Date()) } },
+    select: { createdAt: true },
+  });
+  return row?.createdAt ?? null;
+}
+
+// Thrown inside the cached read when there is nothing to cache, so "no listing yet" is never stored (the purchase that
+// creates one would otherwise sit behind a cached miss).
+class NoFreshListing extends Error {}
+
+async function readFresh(sportKey: string, since: Date): Promise<FreshListing | null> {
+  let stored: { games: OddsGame[]; fetchedAt: string };
+  try {
+    stored = await cachedByTag(cacheKeys.oddsFresh(sportKey), FRESH_READ_TTL_SECONDS, async () => {
+      const row = await prisma.oddsFreshFetch.findFirst({
+        where: { sportKey, fetchedAt: { not: null } },
+        orderBy: { fetchedAt: "desc" },
+        select: { data: true, fetchedAt: true },
+      });
+      if (!row?.fetchedAt || !Array.isArray(row.data)) throw new NoFreshListing();
+      return { games: row.data as unknown as OddsGame[], fetchedAt: row.fetchedAt.toISOString() };
+    });
+  } catch (err) {
+    if (err instanceof NoFreshListing) return null;
+    throw err;
+  }
+  const fetchedAt = new Date(stored.fetchedAt);
+  // The cached row is the newest listing, which may be older than the window: then it is no listing at all.
+  return fetchedAt.getTime() >= since.getTime() ? { games: stored.games, fetchedAt } : null;
+}
+
+async function buyFresh(sportKey: string, now: Date): Promise<FreshListing | null> {
+  const apiKey = process.env.ODDS_API_KEY;
+  if (!apiKey || !isSportInSeason(sportKey)) return null;
+
+  const [level, callsToday] = await Promise.all([
+    getLatestCreditUsageLevel(),
+    prisma.oddsApiUsageLog.count({
+      where: { caller: "import-fresh", pollTimestamp: { gte: easternDayStart(easternDateKey(now)) }, httpStatus: { gte: 200, lt: 300 } },
+    }),
+  ]);
+  if (!freshPurchaseAllowed({ level, callsToday })) return null;
+
+  // The claim, BEFORE the request: the unique key lets exactly one buyer through.
+  let claimId: string;
+  try {
+    claimId = (await prisma.oddsFreshFetch.create({ data: { sportKey, bucket: freshBucket(now) }, select: { id: true } })).id;
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return null;
+    throw err;
+  }
+
+  const releaseClaim = () => prisma.oddsFreshFetch.deleteMany({ where: { id: claimId } }).catch(() => undefined);
+  try {
+    const fetchDate = easternDateKey(now);
+    const { games: raw, primaryFailed, credits, httpStatus } = await fetchMergedOddsListing(sportKey, oddsApiRequestKeys(sportKey), apiKey, { fetchDate });
+    if (credits) {
+      await persistOddsApiUsage({ sportKey, marketsRequested: ["h2h", "spreads", "totals"], eventsRequested: raw.length, credits, httpStatus, caller: "import-fresh" }).catch(
+        (err) => console.error("[fresh-odds] failed to persist usage log", JSON.stringify({ sportKey, error: err instanceof Error ? err.message : String(err) }))
+      );
+    }
+    if (primaryFailed) {
+      await releaseClaim();
+      return null;
+    }
+    const fetchedAt = new Date();
+    // Same rule as the seed: an in-play price is not a pregame price.
+    const games = raw.filter((g) => new Date(g.commenceTime) > fetchedAt);
+    await prisma.oddsFreshFetch.update({ where: { id: claimId }, data: { data: games as unknown as Prisma.InputJsonValue, fetchedAt } });
+    await pruneFresh(now);
+    try {
+      revalidateTag(cacheKeys.oddsFresh(sportKey));
+    } catch (err) {
+      // The write succeeded; the read cache catches up within FRESH_READ_TTL_SECONDS.
+      console.error("[fresh-odds] revalidateTag failed - listing stored, cache catches up on its TTL", JSON.stringify({ sportKey, error: err instanceof Error ? err.message : String(err) }));
+    }
+    return { games, fetchedAt };
+  } catch (err) {
+    await releaseClaim();
+    throw err;
+  }
+}
+
+// Rows past FRESH_RETAIN_MS, read as ids then deleted by id.
+async function pruneFresh(now: Date): Promise<void> {
+  const due = await prisma.oddsFreshFetch.findMany({
+    where: { createdAt: { lt: new Date(now.getTime() - FRESH_RETAIN_MS) } },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+    take: CLEANUP_BATCH,
+  });
+  if (due.length > 0) await prisma.oddsFreshFetch.deleteMany({ where: { id: { in: due.map((r) => r.id) } } });
+}
+
+export const defaultFreshOddsDeps: FreshOddsDeps = { now: () => new Date(), readSnapshotAt, readFresh, buyFresh };

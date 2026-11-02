@@ -29,7 +29,8 @@ import type { OddsApiCredits } from "@/server/data/odds";
 //   nfl-prop-odds / nhl-goal-scorer-odds - event-level prop markets
 //   alt-lines - the import's alternate totals/spreads; fanduel-link - the slip's betslip link
 //   hybrid-ladders - FanDuel alternate ladders for Consensus Hybrid (alt-ladders.ts)
-export type OddsApiCaller = "odds-seed" | "odds-backfill" | "nfl-prop-odds" | "nhl-goal-scorer-odds" | "alt-lines" | "fanduel-link" | "hybrid-ladders";
+//   import-fresh - a bulk h2h/spreads/totals listing bought at import time because the snapshot was stale (fresh-odds.ts)
+export type OddsApiCaller = "odds-seed" | "odds-backfill" | "nfl-prop-odds" | "nhl-goal-scorer-odds" | "alt-lines" | "fanduel-link" | "hybrid-ladders" | "import-fresh";
 
 export const CREDIT_WARN_THRESHOLD = 0.7;
 export const CREDIT_ALERT_THRESHOLD = 0.85;
