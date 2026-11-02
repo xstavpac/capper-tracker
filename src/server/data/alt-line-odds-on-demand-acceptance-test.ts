@@ -342,7 +342,11 @@ async function main() {
   // ---- 10. the import itself uses the same switch as the preview ----
   const source = readFileSync(join(__dirname, "bulk-import-core.ts"), "utf8");
   expect("wiring: the import resolves with altLines on", /resolveGameAndOdds\(item, loader, \{ retryOnMiss: false, altLines: true, pricing \}\)/.test(source), true);
-  expect("wiring: only the import and the preview turn it on", (source.match(/altLines: true/g) ?? []).length, 2);
+  // The import, the preview, and the ingest review resolver (createPickRowResolver: the same resolution the import would have
+  // done, run ahead of time for a held pick). Nothing else may turn it on.
+  expect("wiring: only the import, the preview and the ingest review resolver turn it on", (source.match(/altLines: true/g) ?? []).length, 3);
+  const resolverBody = source.slice(source.indexOf("export function createPickRowResolver"));
+  expect("wiring: the third one is inside createPickRowResolver", /altLines: true/.test(resolverBody), true);
 
   console.log(`\n${failures === 0 ? "ALL PASS" : `${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

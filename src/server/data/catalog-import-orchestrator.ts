@@ -38,15 +38,19 @@ import { recordImportSkippedLines, parseSkippedLineEntries, type SkippedLineEntr
 
 export type CatalogQuestion =
   // "Cardinals - which league?" The form shows `options` (label / sport / nickname) as buttons.
-  | { type: "AMBIGUOUS_TEAM"; key: string; options: AmbiguousOption[]; pick: ParsedPick }
+  // `capperSuggestion` is set when the pick's capper name is a near-miss of a saved capper: whoever answers must
+  // also settle the capper, because nothing here creates a capper from a near-miss.
+  | { type: "AMBIGUOUS_TEAM"; key: string; options: AmbiguousOption[]; pick: ParsedPick; capperSuggestion?: string }
   // "Which player?" - same shape, key built by playerAmbiguityKey.
-  | { type: "PLAYER_AMBIGUITY"; key: string; options: AmbiguousOption[]; pick: ParsedPick }
+  | { type: "PLAYER_AMBIGUITY"; key: string; options: AmbiguousOption[]; pick: ParsedPick; capperSuggestion?: string }
   // "No number in this total - use the market line?" The form shows the proposed line.
   | { type: "MISSING_TOTAL_LINE"; pick: ParsedPick; inferredLine: number; reason: "missing" | "garbled" }
   // "Did you mean <existing capper>?" Answers: use the suggestion, or "no, genuinely new".
   | { type: "CAPPER_FUZZY"; rawName: string; suggestion: string; pick: ParsedPick };
 
 export type CatalogImportHooks = {
+  // Applied to the parsed picks BEFORE ambiguous teams are auto-resolved (ingest uses it to prefer an allowed league).
+  prepareAmbiguous?: (picks: ParsedPick[]) => { keep: ParsedPick[]; skipped: SkippedLineEntry[] };
   // Applied to the raw text before parsing (ingest uses it to drop combined-bet lines).
   preFilterText?: (text: string) => { text: string; skipped: SkippedLineEntry[] };
   // Applied to the picks after ambiguous teams are auto-resolved (ingest uses it for the league allowlist).
@@ -70,7 +74,7 @@ export type CatalogImportResult = {
   hookSkipped: number;
 };
 
-function toItem(p: ParsedPick, capperName: string, inferredLine?: number): BulkImportItem {
+export function toItem(p: ParsedPick, capperName: string, inferredLine?: number): BulkImportItem {
   return {
     capperName,
     sportName: p.sportName,
@@ -159,7 +163,18 @@ export async function runCatalogImportForUser(
 
   const parlaySplit = splitByCapper(parlays);
   const pickSplit = splitByCapper(effective);
-  const resolved = await autoResolveAmbiguousPicksForServer(pickSplit.withCapper);
+  let toResolve = pickSplit.withCapper;
+  if (hooks.prepareAmbiguous) {
+    const prep = hooks.prepareAmbiguous(toResolve);
+    toResolve = prep.keep;
+    hookSkippedLog.push(...prep.skipped);
+  }
+  const resolved = await autoResolveAmbiguousPicksForServer(toResolve);
+  const existingLower = new Set(existingCapperNames.map((n) => n.toLowerCase()));
+  const fuzzySuggestion = (name: string): string | undefined => {
+    if (existingLower.has(name.toLowerCase())) return undefined;
+    return findClosestFuzzyMatch(name, existingCapperNames, (n) => n)?.item;
+  };
 
   const questions: CatalogQuestion[] = [];
   let candidates: ParsedPick[] = [];
@@ -170,6 +185,7 @@ export async function runCatalogImportForUser(
         key: p.ambiguousKey,
         options: p.ambiguous,
         pick: p,
+        capperSuggestion: fuzzySuggestion(p.capperName),
       });
     } else candidates.push(p);
   }
@@ -182,15 +198,12 @@ export async function runCatalogImportForUser(
 
   // Capper near-miss: the form asks "did you mean X?" for any name that is not an exact (case-insensitive)
   // match of a saved capper but is close to one. Held here, never auto-resolved either way.
-  const existingLower = new Set(existingCapperNames.map((n) => n.toLowerCase()));
   const afterFuzzy: ParsedPick[] = [];
   for (const p of candidates) {
-    if (!existingLower.has(p.capperName.toLowerCase())) {
-      const match = findClosestFuzzyMatch(p.capperName, existingCapperNames, (n) => n);
-      if (match) {
-        questions.push({ type: "CAPPER_FUZZY", rawName: p.capperName, suggestion: match.item, pick: p });
-        continue;
-      }
+    const suggestion = fuzzySuggestion(p.capperName);
+    if (suggestion) {
+      questions.push({ type: "CAPPER_FUZZY", rawName: p.capperName, suggestion, pick: p });
+      continue;
     }
     afterFuzzy.push(p);
   }
