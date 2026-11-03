@@ -37,7 +37,7 @@ import {
   isQbOnlyPropMarket,
   type PlayerPropMarket,
 } from "@/lib/bet-line";
-import { NCAAF_CANONICAL_SUFFIX, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
+import { NCAAB_CANONICAL_SUFFIX, NCAAF_CANONICAL_SUFFIX, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
 import { NCAAB_SPORT_KEY, PICK_GATED_SPORT_KEYS, finalsWithPicks, type PickTeamPair } from "@/lib/final-pick-gate";
 import {
   recordGradeFailures,
@@ -530,10 +530,13 @@ function teamNickname(fullName: string): string {
   return parts[parts.length - 1].toLowerCase();
 }
 
-// Reverse of NCAAF_CANONICAL_SUFFIX (parse-catalog.ts): real full team name
-// ("alabama crimson tide") -> EVERY school key a capper might have typed for
-// it (["alabama", "bama"], ["east carolina", "ecu"]) - empty for any team
-// outside the FBS list. teamNickname() above (the mascot / last word) is
+// Reverse of NCAAF_CANONICAL_SUFFIX and NCAAB_CANONICAL_SUFFIX (parse-catalog.ts):
+// real full team name ("alabama crimson tide") -> EVERY school key a capper might
+// have typed for it (["alabama", "bama"], ["east carolina", "ecu"]) - empty for any
+// team outside those lists. One table for both sports: ESPN spells a school the
+// same in each, and a game only ever asks about its own two teams, so a
+// basketball-only key can never reach a football game. teamNickname() above (the
+// mascot / last word) is
 // what a capper types for every other sport, but NCAAF bettors just as often
 // name the SCHOOL ("Alabama ML", "Bama ML", "Ohio State -7") - a real gap
 // found during the pre-launch grading investigation: identical bet,
@@ -542,16 +545,23 @@ function teamNickname(fullName: string): string {
 // the mascot. A canonical with several keys (a school with an abbreviation
 // or slang form) must return ALL of them - a single reverse entry would
 // silently only grade whichever spelling happened to be listed last.
-const NCAAF_SCHOOL_KEYS_BY_CANONICAL: Record<string, string[]> = (() => {
-  const map: Record<string, string[]> = {};
-  for (const [school, canonical] of Object.entries(NCAAF_CANONICAL_SUFFIX)) {
-    (map[canonical] ??= []).push(school);
+const COLLEGE_SCHOOL_KEYS_BY_CANONICAL: Record<string, string[]> = (() => {
+  const map: Record<string, Set<string>> = {};
+  for (const [school, canonical] of [...Object.entries(NCAAF_CANONICAL_SUFFIX), ...Object.entries(NCAAB_CANONICAL_SUFFIX)]) {
+    const keys = (map[canonical] ??= new Set());
+    keys.add(school);
+    // The import reads "St" for "State" and an optional period or apostrophe
+    // (feed-teams.ts). The text match below is a plain word match, so it gets
+    // those spellings written out.
+    const plain = school.replace(/['.]/g, "");
+    keys.add(plain);
+    if (/ state\b/.test(plain)) keys.add(plain.replace(/ state\b/, " st"));
   }
-  return map;
+  return Object.fromEntries(Object.entries(map).map(([canonical, keys]) => [canonical, [...keys]]));
 })();
 
-function ncaafSchoolKeys(fullName: string): string[] {
-  return NCAAF_SCHOOL_KEYS_BY_CANONICAL[fullName.trim().toLowerCase()] ?? [];
+function collegeSchoolKeys(fullName: string): string[] {
+  return COLLEGE_SCHOOL_KEYS_BY_CANONICAL[fullName.trim().toLowerCase()] ?? [];
 }
 
 // Whether `detail` names any of `schools` (this team's keys), guarding
@@ -621,10 +631,10 @@ export function textPickedSide(
   // Duke Blue Devils and Arizona State Sun Devils share a mascot ("Devils"),
   // but their SCHOOL names ("duke"/"arizona state") don't collide at all, so
   // "Duke ML" can - and should - still grade correctly even though "Devils
-  // ML" correctly can't. Empty for every non-NCAAF team, so this is a no-op
+  // ML" correctly can't. Empty for every non-college team, so this is a no-op
   // everywhere else.
-  const homeSchools = ncaafSchoolKeys(homeTeam);
-  const awaySchools = ncaafSchoolKeys(awayTeam);
+  const homeSchools = collegeSchoolKeys(homeTeam);
+  const awaySchools = collegeSchoolKeys(awayTeam);
   const home = homeMascot || (homeSchools.length > 0 && matchesSchoolName(detail, homeSchools, awaySchools));
   const away = awayMascot || (awaySchools.length > 0 && matchesSchoolName(detail, awaySchools, homeSchools));
   return { home, away, ambiguous: home && away };

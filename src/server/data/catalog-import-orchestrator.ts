@@ -11,6 +11,7 @@
 import {
   parseCatalog,
   isPlayerAmbiguityKey,
+  withCollegeCandidates,
   type AmbiguousOption,
   type ParsedParlay,
   type ParsedPick,
@@ -165,7 +166,9 @@ export async function runCatalogImportForUser(
   const pickSplit = splitByCapper(effective);
   let toResolve = pickSplit.withCapper;
   if (hooks.prepareAmbiguous) {
-    const prep = hooks.prepareAmbiguous(toResolve);
+    // Before the hook, so a shared school is a question the hook can answer: with
+    // NCAAB off the ingest allowlist it narrows straight back to NCAAF, as today.
+    const prep = hooks.prepareAmbiguous(withCollegeCandidates(toResolve));
     toResolve = prep.keep;
     hookSkippedLog.push(...prep.skipped);
   }

@@ -3,8 +3,11 @@ import {
   type AmbiguousOption,
   ambiguousOptionsFor,
   isPlayerAmbiguityKey,
+  isQuarterScope,
   matchingSportsForPickContext,
   resolveAmbiguousPick,
+  withCollegeBasketballOptions,
+  withCollegeCandidates,
 } from "@/lib/parse-catalog";
 import { isSportLabelInSeason } from "@/lib/sport-seasons";
 import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
@@ -26,6 +29,14 @@ import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
 // two seasons that motivated this - WNBA and NCAAF both list a "Liberty" -
 // overlap for ~5 months every year, so the calendar can't tell them apart at
 // all during that window. The hierarchy is now:
+//   0. college candidates - not a decision. A school NCAAF and NCAAB share
+//                    becomes a two-candidate question, and NCAAB joins any key
+//                    whose NCAAF candidate plays basketball; the steps below
+//                    then treat them like every other shared name. After step 2,
+//                    NCAAB comes back off when it is out of season and the feeds
+//                    show it no game, so a September or late-April line reads
+//                    exactly as it did before NCAAB was a candidate. The schedule
+//                    still speaks first.
 //   1. memory      - already answered earlier in this same import
 //   1b. league activity - a candidate whose league has no game on the feeds
 //                    within LEAGUE_ACTIVITY_WINDOW_DAYS of the import is
@@ -38,7 +49,7 @@ import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
 //   2. schedule   - exactly one candidate has a game today (primary signal)
 //   3. season      - calendar fallback: exactly one candidate is in season
 //                    (used only when the schedule check was inconclusive or
-//                    the feed errored out)
+//                    the feed errored out).
 //   4. pick_context- pick text matched one candidate's terminology. Scoped
 //                    to the CAPPER whose own pick produced the match: the
 //                    first pick from that capper to conclusively match
@@ -66,6 +77,8 @@ import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
 //                    posted schedule, and season / pick context don't
 //                    disagree. Otherwise it's surfaced with the implausible
 //                    option(s) already dropped.
+//   5b. per-pick college signals - see COLLEGE_PICK_SIGNALS. Only ever choose
+//                    between NCAAF and NCAAB, for what plausibility left standing.
 //   6. still ambiguous - surface for a manual choice, with any league
 //                    outside its calendar season left off the list (unless
 //                    the feeds showed it playing)
@@ -111,7 +124,8 @@ export type ResolutionMethod =
   | "remembered"
   | "user"
   | "plausibility"
-  | "league_activity";
+  | "league_activity"
+  | "capper_block";
 
 // How far either side of the import a league's nearest game may be for the
 // league to still count as a candidate.
@@ -189,7 +203,54 @@ export type AutoResolveResult = {
   decisions: Record<string, AmbiguousOption>;
 };
 
-type Decision = { choice: AmbiguousOption; method: ResolutionMethod; reason: string };
+// `undoesStepZero`: the question only existed because step 0 asked it, so answering
+// it is neither logged nor remembered.
+type Decision = { choice: AmbiguousOption; method: ResolutionMethod; reason: string; undoesStepZero?: boolean };
+
+// A per-pick signal for a shared school's still-open NCAAF / NCAAB question, run
+// in order after plausibility, each seeing what the one before it settled. So
+// none can override plausibility: a line that fits one league never reaches them
+// with the other still on the list. A signal comparing the pick's line to each
+// sport's posted line goes first in this list when NCAAB odds exist; being
+// stronger, its answers then feed the capper's block below.
+type CollegePickSignal = {
+  method: ResolutionMethod;
+  reason: (sport: string) => string;
+  // Which league this pick means, or null for no signal.
+  league: (pick: ParsedPick, allPicks: ParsedPick[]) => string | null;
+};
+
+// The one league a capper's already-settled college picks in this paste all sit
+// in, or null when they are mixed or there are none. Settled means by any step
+// before this one: a basketball-only school, a code on the line, a total only one
+// league could post, the schedule, an earlier answer. A player prop says nothing
+// about a capper's slate. The same capper in two blocks of one paste reads as one,
+// which can only make it mixed, never wrongly unanimous about a block.
+function unanimousCollegeLeague(capperName: string, allPicks: ParsedPick[]): string | null {
+  const leagues = new Set(
+    allPicks
+      .filter((p) => p.capperName === capperName && !p.ambiguous && p.betType !== "PLAYER_PROP" && (p.sportName === "NCAAF" || p.sportName === "NCAAB"))
+      .map((p) => p.sportName)
+  );
+  return leagues.size === 1 ? [...leagues][0] : null;
+}
+
+const COLLEGE_PICK_SIGNALS: CollegePickSignal[] = [
+  {
+    method: "capper_block",
+    reason: (sport) => "every other settled college pick from this capper in this paste is " + sport,
+    league: (pick, allPicks) => unanimousCollegeLeague(pick.capperName, allPicks),
+  },
+];
+
+// Whether a list is only the two college leagues, one school on each: what a signal
+// may choose between. A pro candidate left on it ("Tennessee -8", "Houston -11") is a
+// question a college-only signal can't answer, and so is an alias naming two schools.
+function collegeOptionFor(options: AmbiguousOption[], league: string): AmbiguousOption | undefined {
+  if (!options.every((o) => o.sport === "NCAAF" || o.sport === "NCAAB")) return undefined;
+  const inLeague = options.filter((o) => o.sport === league);
+  return inLeague.length === 1 ? inLeague[0] : undefined;
+}
 
 // The three cross-check states step 5 classifies another hierarchy step's
 // (individually inconclusive) partial evidence into, relative to the one
@@ -249,6 +310,11 @@ export async function runAmbiguousHierarchy(
 ): Promise<AutoResolveResult> {
   const now = deps.now ?? new Date();
 
+  // Step 0: college candidates. Rewrites in place, same as every later step.
+  withCollegeCandidates(picks).forEach((p, idx) => {
+    picks[idx] = p;
+  });
+
   const ambiguousEntries = picks
     .map((p, idx) => ({ p, idx }))
     .filter((e): e is { p: ParsedPick; idx: number } => Boolean(e.p.ambiguous && e.p.ambiguousKey));
@@ -268,7 +334,7 @@ export async function runAmbiguousHierarchy(
     const key = p.ambiguousKey!;
     if (baseOptionsByKey.has(key)) continue;
     const listed = ambiguousOptionsFor(key);
-    baseOptionsByKey.set(key, listed.length > 0 ? listed : p.ambiguous!);
+    baseOptionsByKey.set(key, listed.length > 0 ? withCollegeBasketballOptions(key, listed) : p.ambiguous!);
   }
   const optionsByKey = new Map(baseOptionsByKey);
   const optionsFor = (key: string): AmbiguousOption[] => optionsByKey.get(key) ?? [];
@@ -423,6 +489,30 @@ export async function runAmbiguousHierarchy(
           reason: "only " + winner.sport + " has a game scheduled today",
         });
       }
+    }
+  }
+
+  // ---- Back off step 0: NCAAB out of season with no game on the feeds is not a
+  // candidate. Removing it here, rather than before step 2, keeps the schedule
+  // ahead of the calendar, and leaves every later step the list it always had.
+  if (!isSportLabelInSeason("NCAAB", now)) {
+    const stillCandidate = (o: AmbiguousOption) => o.sport !== "NCAAB" || activity[o.sport] === true || scheduleResults[o.nickname + "|" + o.sport];
+    for (const key of teamKeys) {
+      const base = baseOptionsByKey.get(key) ?? [];
+      if (decided.get(key)?.method === "remembered" || base.every(stillCandidate)) continue;
+      const kept = optionsFor(key).filter(stillCandidate);
+      if (kept.length === 0) continue;
+      optionsByKey.set(key, kept);
+      baseOptionsByKey.set(key, base.filter(stillCandidate));
+      const entries = ambiguousEntries.filter((e) => e.p.ambiguousKey === key);
+      // The school's only question was the one step 0 asked, so whatever step 1b or
+      // 2 made of it goes too: this is the pick that was parsed, unlogged.
+      if (kept.length === 1 && entries.some((e) => e.p.sharedCollegeBase)) {
+        decided.set(key, { choice: kept[0], method: "season", reason: "NCAAB is out of season with no game", undoesStepZero: true });
+        continue;
+      }
+      if (decided.has(key)) continue;
+      for (const { idx } of entries) picks[idx] = { ...picks[idx], ambiguous: kept };
     }
   }
 
@@ -664,6 +754,31 @@ export async function runAmbiguousHierarchy(
     else plausibilityLog.set(logKey, { key, sport: winner.sport, count: 1, relationship, viaSchedule: false });
   }
 
+  // ---- Step 5b: per-pick college signals, on what plausibility left open. Not
+  // memoized, like step 4 and step 5: it answers for one pick, not for the key.
+  const collegeSignalLogs: ResolutionLog[] = [];
+  for (const signal of COLLEGE_PICK_SIGNALS) {
+    // Judged against the picks as they stood, so a pick this signal settles
+    // doesn't count as evidence for the next one.
+    const before = [...picks];
+    const counts = new Map<string, { key: string; sport: string; count: number }>();
+    for (const { p, idx } of ambiguousEntries) {
+      const shown = before[idx].ambiguous;
+      if (!shown || fitsNoCandidate.has(idx) || isPlayerAmbiguityKey(p.ambiguousKey!)) continue;
+      const league = signal.league(before[idx], before);
+      const choice = league ? collegeOptionFor(shown, league) : undefined;
+      if (!choice) continue;
+      picks[idx] = resolveAmbiguousPick(before[idx], choice);
+      const logKey = p.ambiguousKey! + "::" + choice.sport;
+      const existing = counts.get(logKey);
+      if (existing) existing.count += 1;
+      else counts.set(logKey, { key: p.ambiguousKey!, sport: choice.sport, count: 1 });
+    }
+    for (const { key, sport, count } of counts.values()) {
+      collegeSignalLogs.push({ ambiguousName: key, resolvedSport: sport, method: signal.method, reason: signal.reason(sport), pickCount: count });
+    }
+  }
+
   // One log line per key (not per pick - a Cardinals decision that applied
   // to 12 picks is one log entry with pickCount: 12, not 12 near-identical
   // lines) for steps 1-3's key-level decisions, plus one per (key, sport)
@@ -675,6 +790,7 @@ export async function runAmbiguousHierarchy(
   for (const key of uniqueKeys) {
     const decision = decided.get(key);
     if (!decision) continue;
+    if (decision.undoesStepZero) continue;
     const applied = appliedCountByKey.get(key) ?? 0;
     if (applied === 0) continue; // every pick was gated out (schedule vs. line plausibility)
     logs.push({
@@ -709,6 +825,7 @@ export async function runAmbiguousHierarchy(
       pickCount: count,
     });
   }
+  logs.push(...collegeSignalLogs);
   // eslint-disable-next-line no-console -- deliberate, user-requested audit trail for auto-resolutions
   console.log("[catalog-disambiguation] auto-resolved:", logs);
 
@@ -735,6 +852,14 @@ export async function runAmbiguousHierarchy(
   // group's representative options, same as sampleRaw already does; picks
   // sharing a key with genuinely different narrowed lists (different lines)
   // are a known display limitation, not attempted here.
+  // Nothing above weighs a quarter, so a key's list may still have sent one to
+  // basketball. It goes back to a question, without that option.
+  for (const { p, idx } of ambiguousEntries) {
+    if (picks[idx].sportName !== "NCAAB" || !isQuarterScope(p.description)) continue;
+    const withoutBasketball = (baseOptionsByKey.get(p.ambiguousKey!) ?? []).filter((o) => o.sport !== "NCAAB");
+    if (withoutBasketball.length > 0) picks[idx] = { ...p, ambiguous: withoutBasketball };
+  }
+
   const stillAmbiguous: StillAmbiguousGroup[] = uniqueKeys
     .map((key) => {
       const entries = ambiguousEntries.filter((e) => e.p.ambiguousKey === key && Boolean(picks[e.idx].ambiguous));
@@ -754,6 +879,7 @@ export async function runAmbiguousHierarchy(
   // remembering it would let a rejected schedule guess become a "user answer"
   // on the next re-parse.
   for (const [key, decision] of decided.entries()) {
+    if (decision.undoesStepZero) continue;
     if (decision.method !== "remembered" && (appliedCountByKey.get(key) ?? 0) === 0) continue;
     decisions[key] = decision.choice;
   }

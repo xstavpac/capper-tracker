@@ -19,6 +19,9 @@
 import { resolveOutcome, withSportKey } from "./grading";
 import { finalsWithPicks, PICK_GATED_SPORT_KEYS, NCAAB_SPORT_KEY } from "@/lib/final-pick-gate";
 import { tendencyPhaseEnabled } from "@/lib/tendency-pipeline";
+import { parseCatalog } from "@/lib/parse-catalog";
+import { runAmbiguousHierarchy } from "@/lib/ambiguous-hierarchy";
+import { NCAAB_LISTED_TEAMS } from "@/lib/college-teams";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -114,8 +117,59 @@ check(
   "LOSS"
 );
 check(
-  "text fallback: an NCAAB-only school by school name ('Grambling') resolves to neither side -> PENDING",
+  "text fallback: a school by name ('Grambling') resolves its side now that the list carries it (Grambling won 89-87)",
   resolveOutcome(pick("FULL_GAME", "MONEYLINE", "Grambling ML", null), ncaab),
+  "WIN"
+);
+check(
+  "text fallback: the real final, by the loser's school (Northern Illinois lost 87-89)",
+  resolveOutcome(pick("FULL_GAME", "MONEYLINE", "NIU ML", null), ncaab),
+  "LOSS"
+);
+check(
+  "text fallback: Grambling -1.5 covers a 2-point win",
+  resolveOutcome(pick("FULL_GAME", "SPREAD", "Grambling -1.5", -1.5), ncaab),
+  "WIN"
+);
+check(
+  "text fallback: Grambling -3.5 doesn't",
+  resolveOutcome(pick("FULL_GAME", "SPREAD", "Grambling -3.5", -3.5), ncaab),
+  "LOSS"
+);
+check(
+  "text fallback: the longer alias reads the same ('Grambling State ML')",
+  resolveOutcome(pick("FULL_GAME", "MONEYLINE", "Grambling State ML", null), ncaab),
+  "WIN"
+);
+
+// ---- the whole road: pasted text to a graded pick ----
+async function wholeRoad() {
+  // The parser, then the hierarchy with the real game on the score feed. No football
+  // game is on the board for either school.
+  const near = async (queries: { nickname: string; sport: string }[]) =>
+    Object.fromEntries(queries.map((q) => [q.nickname + "|" + q.sport, q.sport === "NCAAB" && q.nickname === "grambling tigers"]));
+  const log = console.log;
+  console.log = () => {};
+  const { picks } = await runAmbiguousHierarchy(
+    parseCatalog("Sharp\nGrambling ML\n", ["Sharp"], undefined, NCAAB_LISTED_TEAMS).picks,
+    {},
+    { runScheduleCheck: near, runWideScheduleCheck: near, now: new Date("2026-11-02T18:00:00Z") }
+  );
+  console.log = log;
+  const imported = picks[0];
+  check("'Grambling ML' imports as NCAAB on a basketball-only night", [imported.sportName, imported.ambiguous, imported.teamNicknames], ["NCAAB", undefined, ["grambling tigers"]]);
+  check(
+    "and grades WIN against the real Grambling 89 - Northern Illinois 87 final",
+    resolveOutcome(pick(imported.period, imported.betType, imported.description, null), ncaab),
+    "WIN"
+  );
+}
+
+// A team outside both college lists has no school keys, so this stays a no-op for
+// every other sport.
+check(
+  "text fallback: a pro game gets no school reading",
+  resolveOutcome(pick("FULL_GAME", "MONEYLINE", "Memphis ML", null), { ...GAME, homeTeam: "Memphis Grizzlies", awayTeam: "Utah Jazz", sportKey: "basketball_nba" }),
   null
 );
 
@@ -181,5 +235,7 @@ check("tendency phase: NCAAB is out even when the pipeline is on", tendencyPhase
 check("tendency phase: other sports follow the pipeline flag (on)", tendencyPhaseEnabled(true, "basketball_nba"), true);
 check("tendency phase: other sports follow the pipeline flag (off)", tendencyPhaseEnabled(false, "basketball_nba"), false);
 
-console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
-if (failures > 0) process.exit(1);
+wholeRoad().then(() => {
+  console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
+  if (failures > 0) process.exit(1);
+});
