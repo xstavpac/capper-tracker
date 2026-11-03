@@ -11,7 +11,7 @@ stubbed out, and seeded picks are deleted by id + userId at the end.
 
 - `capture-ops.mts` - the ops-console labels (PR #282): session user, capper
   roster/include/counts, /picks reads, grading cron lookups, refresh-scores
-  tendency / decay-delta / team-record / situational reads, zone model.
+  tendency / decay-delta / team-record / situational reads.
   Every write the app code issues runs inside a transaction that is rolled
   back, so nothing persists.
 - `capture-statements.mts` - the original #279 set (board window, category

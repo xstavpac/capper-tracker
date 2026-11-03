@@ -8,7 +8,7 @@ import { isFeatureEnabledForUser, ADMIN_OPS_CONSOLE_FLAG_KEY } from "@/server/da
 // flag check directly - so a new tab or action can't pick a different gate.
 //
 // Uncached across requests (the direct isFeatureEnabledForUser read, same as
-// /zone-model), so revoking the override closes the console on the next
+// every other gated route), so revoking the override closes the console on the next
 // request. cache() only shares the answer within ONE request, where the layout
 // and the page both ask.
 //

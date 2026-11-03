@@ -328,14 +328,6 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     source: "getDayConsensus (picks-glance.ts, /picks at a glance)",
     matches: (s) => has(s, /HAVING count\(DISTINCT b\."capperId"\) >= /) && !has(s, /\bbool_or\(/),
   },
-  {
-    label: "Zone model",
-    source: "computeZoneModel / computePendingZoneGames (zone-model.ts, /zone-model)",
-    matches: (s) =>
-      (reads(s, "game_results") && whereIs(s, GR_SPORT_ONLY) && has(s, /"game_results"\."favTeam"/) && !has(s, /ORDER BY/)) ||
-      ((reads(s, "team_tendency_snapshots") || reads(s, "team_stat_snapshots")) && whereIs(s, /^"team_(?:tendency|stat)_snapshots"\."sportKey" = \$\d+$/)),
-  },
-
   // ---- grade-picks cron (every 15 min; the page-load grading paths share these) ----
   {
     // findUnique by name: 4 per sport per run (picks, fuzzy regrade, legs, leg regrade).
@@ -403,7 +395,7 @@ export const STATEMENT_LABELS: StatementLabel[] = [
   },
   {
     label: "Tendencies by sport",
-    source: "snapshotTeamTendencies (team-tendencies.ts); zone-model.ts sends the same read",
+    source: "snapshotTeamTendencies (team-tendencies.ts)",
     matches: (s) => reads(s, "team_tendencies") && whereIs(s, /^"team_tendencies"\."sportKey" = \$\d+$/),
   },
   {

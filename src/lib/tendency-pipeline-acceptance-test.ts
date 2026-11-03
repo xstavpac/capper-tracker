@@ -7,7 +7,6 @@ import { join } from "node:path";
 import {
   isTendencyPipelineEnabled,
   runTendencyPhase,
-  tendencyPausedNote,
   tendencyPipelineSkippedLog,
   TENDENCY_PIPELINE_SKIPPED_STEPS,
 } from "@/lib/tendency-pipeline";
@@ -44,7 +43,7 @@ async function main() {
   expect("paused: neither step is called", calls, []);
   expect("paused: empty result, zero timings", off, { tendencies: null, tendencySnapshots: 0, tendencyMs: 0, snapshotMs: 0 });
 
-  // ---- 3. Log line and Zone Model note ----
+  // ---- 3. Log line ----
   const log = JSON.parse(tendencyPipelineSkippedLog());
   expect("skip log: tagged, names the flag and all three skipped steps", [log.tag, /TENDENCY_PIPELINE_ENABLED/.test(log.reason), log.skipped], [
     "refresh-scores-tendency-pipeline-skipped",
@@ -52,8 +51,6 @@ async function main() {
     ["recomputeTeamTendencies", "snapshotTeamTendencies", "syncDecayDeltaPredictions"],
   ]);
   expect("skipped steps list is exactly those three", [...TENDENCY_PIPELINE_SKIPPED_STEPS].length, 3);
-  expect("note with a date", tendencyPausedNote("2026-10-26"), "Data paused (last updated 2026-10-26)");
-  expect("note with no snapshots", tendencyPausedNote(null), "Data paused");
 
   // ---- 4. Wiring in the cron route: only the three steps are gated ----
   const route = src("src/app/api/cron/refresh-scores/route.ts");
@@ -71,11 +68,6 @@ async function main() {
   ];
   expect("route: final scores and every other step stay unconditional", ungated.map((s) => route.includes(s) && !new RegExp(`pipelineEnabled[^\n]*${s.replace(/[()]/g, "\$&")}`).test(route)), ungated.map(() => true));
   expect("route: response reports pipeline state", /tendencyPipeline: pipelineEnabled \? "enabled" : "paused"/.test(route), true);
-
-  // ---- 5. Zone Model page / view ----
-  const page = src("src/app/(app)/zone-model/page.tsx");
-  expect("zone page: note only while paused, from the latest snapshot date", [/const paused = !isTendencyPipelineEnabled\(\);/.test(page), /paused \? getLatestTendencySnapshotDate\(MLB_SPORT_KEY\)/.test(page), /pausedNote=\{paused \? tendencyPausedNote\(lastSnapshotDate\) : null\}/.test(page)], [true, true, true]);
-  expect("zone view: muted note rendered when set", /\{pausedNote && <p className="mt-1 text-xs text-muted-foreground">\{pausedNote\}<\/p>\}/.test(src("src/components/zone-model/zone-model-view.tsx")), true);
 
   if (failures > 0) {
     console.log(`\n${failures} FAILED`);

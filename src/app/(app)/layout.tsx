@@ -5,7 +5,7 @@ import { ParlayPoolProvider } from "@/components/parlay/parlay-pool-context";
 import { getLiveTickerGames } from "@/server/data/live-ticker";
 import { requireUser } from "@/server/auth";
 import { getPendingReviewCount } from "@/server/data/ingest-review-queue";
-import { getNavFeatureFlags, ZONE_MODEL_FLAG_KEY, ADMIN_OPS_CONSOLE_FLAG_KEY } from "@/server/data/feature-flags";
+import { getNavFeatureFlags, ADMIN_OPS_CONSOLE_FLAG_KEY } from "@/server/data/feature-flags";
 
 // Every route under here needs a live, per-request session - never
 // statically prerender them. Without this, Next's build-time trial-render
@@ -19,8 +19,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Sidebar visibility only, from the shared flag snapshot (no per-request
   // query). The gated pages do their own uncached check - see feature-flags.ts.
   // Pending Telegram-ingest review items for the Catalog Import badge: a cached per-user count, never a per-render query.
-  const [[showZoneModel, showAdminOps], reviewCount] = await Promise.all([
-    getNavFeatureFlags([ZONE_MODEL_FLAG_KEY, ADMIN_OPS_CONSOLE_FLAG_KEY], user.id),
+  const [[showAdminOps], reviewCount] = await Promise.all([
+    getNavFeatureFlags([ADMIN_OPS_CONSOLE_FLAG_KEY], user.id),
     getPendingReviewCount(user.id),
   ]);
 
@@ -32,7 +32,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="flex flex-1 flex-col md:flex-row md:gap-3 md:p-3">
             <AppSidebar
               user={{ name: user.name, email: user.email, profilePictureUrl: user.profilePictureUrl }}
-              showZoneModel={showZoneModel}
               showAdminOps={showAdminOps}
               reviewCount={reviewCount}
             />

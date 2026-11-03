@@ -5,8 +5,8 @@
 //
 //   1. POINT-IN-TIME: a game's starting-pitcher line is only ever computed
 //      over a window that ENDS the day BEFORE the game - never on or after
-//      the game's own date. Same regression shape as the Zone Model
-//      look-ahead bug fix: a snapshot dated the game's own day must not be
+//      the game's own date. Same regression shape as an earlier look-ahead
+//      bug in a since-removed page: a snapshot dated the game's own day must not be
 //      selected, and the byDateRange request must carry endDate = day - 1.
 //   2. STARTER IDENTIFICATION: the probable starter is read from the
 //      schedule response and the CONFIRMED starter from the boxscore
@@ -185,7 +185,7 @@ async function main() {
 
   // =====================================================================
   // 4. getHistoricalStartingMatchup: reader end to end, point-in-time
-  //    regression (Zone Model look-ahead shape)
+  //    regression (look-ahead shape)
   // =====================================================================
   const GAME_DATE = new Date("2025-06-15T17:10:00.000Z"); // 1:10pm ET
   const DAY_OF_KEY = "2025-06-15";

@@ -118,16 +118,6 @@ function PricingIcon({ className }: { className?: string }) {
   );
 }
 
-function ZoneModelIcon({ className }: { className?: string }) {
-  return (
-    <svg {...iconProps(className)}>
-      <rect x="3.5" y="10.5" width="4" height="10" rx="1" />
-      <rect x="10" y="6" width="4" height="14" rx="1" />
-      <rect x="16.5" y="3" width="4" height="17" rx="1" />
-    </svg>
-  );
-}
-
 type NavItem = {
   href: string;
   label: string;
@@ -138,7 +128,7 @@ type NavItem = {
   // "account" items render below the divider, after the main list.
   section: "main" | "account";
   // Admin-gated items: shown only when AppSidebar's matching flag prop is on.
-  gate?: "zoneModel" | "adminOps";
+  gate?: "adminOps";
   accent?: "red";
   // Live count of pooled Parlay Generator picks (Parlay's nav item only) -
   // set at render time in AppSidebar, not baked into the static list below,
@@ -155,7 +145,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/charts", label: "Charts", icon: ChartsIcon, section: "main", tile: "bg-[#F0E9FF] text-[#6A3FD0] dark:bg-[#6A3FD0]/25 dark:text-[#B49BF0]" },
   { href: "/parlay", label: "Parlay Generator", icon: ParlayIcon, section: "main", tile: "bg-[#E7EFFF] text-[#1E5BD8] dark:bg-[#1E5BD8]/20 dark:text-[#7FA6F5]" },
   { href: "/live", label: "Live", icon: LiveIcon, section: "main", accent: "red", tile: "bg-[#FDECEC] text-[#DC2626] dark:bg-[#DC2626]/20 dark:text-[#F87171]" },
-  { href: "/zone-model", label: "Zone Model", icon: ZoneModelIcon, section: "main", gate: "zoneModel", tile: "bg-[#DFF5F5] text-[#0E7272] dark:bg-[#0E7272]/30 dark:text-[#5CC9C9]" },
   { href: "/admin", label: "Admin", icon: AdminIcon, section: "main", gate: "adminOps", tile: "bg-[#FFEDE3] text-[#B4470F] dark:bg-[#B4470F]/25 dark:text-[#F29A6B]" },
   { href: "/pricing", label: "Plans & Billing", icon: PricingIcon, section: "account", tile: "bg-[#E4F4EA] text-[#18794E] dark:bg-[#18794E]/25 dark:text-[#62C998]" },
   { href: "/settings", label: "Settings", icon: SettingsIcon, section: "account", tile: "bg-[#EEF0F4] text-[#4A5468] dark:bg-white/10 dark:text-[#A6AFC0]" },
@@ -352,23 +341,20 @@ function AccountRow({ user }: { user: SidebarUser }) {
 // rather than another floating card, since there's no room to spare there.
 export function AppSidebar({
   user,
-  showZoneModel = false,
   showAdminOps = false,
   reviewCount = 0,
 }: {
   user: SidebarUser;
-  showZoneModel?: boolean;
   showAdminOps?: boolean;
   // Pending Telegram-ingest review items; shown as a badge on Drop Catalog (the link to the Catalog Import page).
   reviewCount?: number;
 }) {
   const [open, setOpen] = useState(false);
   const { slipSize } = useParlayPool();
-  // Zone Model is admin-only and server-gated (the page itself 404s
-  // regardless of this) - this only decides whether the link appears, so a
-  // non-admin never sees a nav entry for a route that would just 404 them.
-  // Same for the /admin ops console.
-  const gates = { zoneModel: showZoneModel, adminOps: showAdminOps };
+  // The /admin ops console is server-gated (its pages 404 regardless of this) -
+  // this only decides whether the link appears, so a non-admin never sees a nav
+  // entry for a route that would just 404 them.
+  const gates = { adminOps: showAdminOps };
   const navItems = NAV_ITEMS.filter((item) => !item.gate || gates[item.gate]).map((item) =>
     item.href === "/parlay" ? { ...item, badgeCount: slipSize } : item
   );

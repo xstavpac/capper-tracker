@@ -223,27 +223,6 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "expectFlags": []
   },
   {
-    "name": "zone model: game results",
-    "run": "52f483d",
-    "sql": "SELECT \"public\".\"game_results\".\"id\", \"public\".\"game_results\".\"homeTeam\", \"public\".\"game_results\".\"awayTeam\", \"public\".\"game_results\".\"homeScore\", \"public\".\"game_results\".\"awayScore\", \"public\".\"game_results\".\"favTeam\", \"public\".\"game_results\".\"totalLine\", \"public\".\"game_results\".\"gameDate\" FROM \"public\".\"game_results\" WHERE \"public\".\"game_results\".\"sportKey\" = $1 OFFSET $2",
-    "expectLabel": "Zone model",
-    "expectFlags": []
-  },
-  {
-    "name": "zone model: tendency snapshots",
-    "run": "52f483d",
-    "sql": "SELECT \"public\".\"team_tendency_snapshots\".\"id\", \"public\".\"team_tendency_snapshots\".\"sportKey\", \"public\".\"team_tendency_snapshots\".\"teamName\", \"public\".\"team_tendency_snapshots\".\"snapshotDate\", \"public\".\"team_tendency_snapshots\".\"favWins\", \"public\".\"team_tendency_snapshots\".\"favLosses\", \"public\".\"team_tendency_snapshots\".\"favPushes\", \"public\".\"team_tendency_snapshots\".\"dogWins\", \"public\".\"team_tendency_snapshots\".\"dogLosses\", \"public\".\"team_tendency_snapshots\".\"dogPushes\", \"public\".\"team_tendency_snapshots\".\"overCount\", \"public\".\"team_tendency_snapshots\".\"underCount\", \"public\".\"team_tendency_snapshots\".\"totalPushCount\", \"public\".\"team_tendency_snapshots\".\"sourceId\", \"public\".\"team_tendency_snapshots\".\"scope\"::text, \"public\".\"team_tendency_snapshots\".\"createdAt\" FROM \"public\".\"team_tendency_snapshots\" WHERE \"public\".\"team_tendency_snapshots\".\"sportKey\" = $1 ORDER BY \"public\".\"team_tendency_snapshots\".\"snapshotDate\" ASC OFFSET $2",
-    "expectLabel": "Zone model",
-    "expectFlags": []
-  },
-  {
-    "name": "zone model: team stat snapshots",
-    "run": "52f483d",
-    "sql": "SELECT \"public\".\"team_stat_snapshots\".\"id\", \"public\".\"team_stat_snapshots\".\"sportKey\", \"public\".\"team_stat_snapshots\".\"teamName\", \"public\".\"team_stat_snapshots\".\"snapshotDate\", \"public\".\"team_stat_snapshots\".\"wins\", \"public\".\"team_stat_snapshots\".\"losses\", \"public\".\"team_stat_snapshots\".\"winPct\", \"public\".\"team_stat_snapshots\".\"runDifferential\", \"public\".\"team_stat_snapshots\".\"battingAvg\", \"public\".\"team_stat_snapshots\".\"obp\", \"public\".\"team_stat_snapshots\".\"slg\", \"public\".\"team_stat_snapshots\".\"ops\", \"public\".\"team_stat_snapshots\".\"era\", \"public\".\"team_stat_snapshots\".\"whip\", \"public\".\"team_stat_snapshots\".\"homeWins\", \"public\".\"team_stat_snapshots\".\"homeLosses\", \"public\".\"team_stat_snapshots\".\"awayWins\", \"public\".\"team_stat_snapshots\".\"awayLosses\", \"public\".\"team_stat_snapshots\".\"last10Wins\", \"public\".\"team_stat_snapshots\".\"last10Losses\", \"public\".\"team_stat_snapshots\".\"streakType\", \"public\".\"team_stat_snapshots\".\"streakCount\", \"public\".\"team_stat_snapshots\".\"sourceId\", \"public\".\"team_stat_snapshots\".\"scope\"::text, \"public\".\"team_stat_snapshots\".\"createdAt\" FROM \"public\".\"team_stat_snapshots\" WHERE \"public\".\"team_stat_snapshots\".\"sportKey\" = $1 ORDER BY \"public\".\"team_stat_snapshots\".\"snapshotDate\" ASC OFFSET $2",
-    "expectLabel": "Zone model",
-    "expectFlags": []
-  },
-  {
     "name": "game results window (grading candidates)",
     "run": "52f483d",
     "sql": "SELECT \"public\".\"game_results\".\"id\", \"public\".\"game_results\".\"gameDate\", \"public\".\"game_results\".\"homeTeam\", \"public\".\"game_results\".\"awayTeam\", \"public\".\"game_results\".\"externalId\", \"public\".\"game_results\".\"homeScore\", \"public\".\"game_results\".\"awayScore\", \"public\".\"game_results\".\"firstFiveHomeScore\", \"public\".\"game_results\".\"firstFiveAwayScore\", \"public\".\"game_results\".\"firstInningHomeScore\", \"public\".\"game_results\".\"firstInningAwayScore\", \"public\".\"game_results\".\"linescoreJson\", \"public\".\"game_results\".\"gameNumber\" FROM \"public\".\"game_results\" WHERE (\"public\".\"game_results\".\"sportKey\" = $1 AND \"public\".\"game_results\".\"gameDate\" >= $2 AND \"public\".\"game_results\".\"gameDate\" < $3) OFFSET $4",
