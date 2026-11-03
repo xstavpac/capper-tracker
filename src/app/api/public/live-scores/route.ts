@@ -1,4 +1,5 @@
 import { getClientScoresForSport, RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
+import { isTickerSportKey } from "@/lib/global-surface-sports";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const sportKey = searchParams.get("sport");
-  if (!sportKey || !RESOLVABLE_SPORT_KEYS.includes(sportKey)) {
+  // NCAAB is a resolvable sport but not a ticker one (global-surface-sports.ts): this public route
+  // answers it like any unknown sport.
+  if (!sportKey || !RESOLVABLE_SPORT_KEYS.includes(sportKey) || !isTickerSportKey(sportKey)) {
     return Response.json({ error: "unknown sport" }, { status: 400 });
   }
 

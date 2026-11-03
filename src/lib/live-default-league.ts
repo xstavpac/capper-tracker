@@ -1,6 +1,7 @@
 // Which league the /live tab opens on when the URL names none (no ?sport=). Pure: the page hands
 // it each league's game list from the score feed it already reads (start time and status only).
 import { easternDateKey } from "./dates";
+import { DEFAULT_TAB_EXCLUDED_SPORT_KEYS } from "./global-surface-sports";
 
 export const LIVE_DEFAULT_FALLBACK = "baseball_mlb";
 
@@ -29,7 +30,9 @@ function earliest(slates: LeagueSlate[], pick: (g: LeagueGameStub) => boolean): 
 //    starts soonest - only as far ahead as the score feed reaches (tomorrow).
 // 4. Else MLB.
 // Postponed and cancelled games never count.
-export function pickDefaultLeague(slates: LeagueSlate[], now: Date = new Date()): string {
+export function pickDefaultLeague(allSlates: LeagueSlate[], now: Date = new Date()): string {
+  // A league kept off the auto-opened tab (NCAAB) is never chosen, whatever its games are doing.
+  const slates = allSlates.filter((s) => !DEFAULT_TAB_EXCLUDED_SPORT_KEYS.has(s.sportKey));
   const today = easternDateKey(now);
   const dayOf = (g: LeagueGameStub) => easternDateKey(new Date(g.commenceTime));
   return (
