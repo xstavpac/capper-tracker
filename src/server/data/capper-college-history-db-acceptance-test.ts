@@ -6,6 +6,9 @@
 // Every row it creates is recorded and deleted BY ID, with before/after counts printed. Skips (exit 0) when
 // DATABASE_URL is missing or is not a local database.
 
+// A module (not a global script), so its helper names cannot collide with the other test files.
+export {};
+
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {
   const pass = JSON.stringify(actual) === JSON.stringify(expected);
