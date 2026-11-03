@@ -9,7 +9,6 @@ import {
   buildPlatformRates,
   compareScores,
   DEFAULT_BREAK_EVEN,
-  gateCheck,
   MIN_PRICED_PICKS,
   passesGate,
   scorePick,
@@ -97,13 +96,10 @@ check("the version names the rules", SCORING_VERSION, "hier-k20-logit-edge-min5-
   check("estimated win prob is the transferred p", base.estimatedWinProb, base.gate.probability);
 
   // Pinned so nobody is surprised: the transfer shrinks the edge at a dear price, it doesn't remove it.
-  // The long-shot rule (ls1) reads the raw record against the pick's own price: 18-4 is 81.8%,
-  // which clears -300 (75%) but not -500 (83.3%) or -1000 (90.9%). The edge alone still passes those two.
   const line = (o: number) => [pct(at([18, 4], -110, o).rankScore), at([18, 4], -110, o).gate.passes];
-  const edgeOnly = (o: number) => gateCheck(at([18, 4], -110, o).gate.probability, at([18, 4], -110, o).gate.breakEven, 55).passes;
   check("18-4 history at -110 on a -300 pick still passes", line(-300), [10.2, true]);
-  check("18-4 history at -110 on a -500 pick: edge +7.2 passes, 81.8% raw under 83.3% fails it (ls1)", [line(-500), edgeOnly(-500), at([18, 4], -110, -500).gate.raw?.clears], [[7.2, false], true, false]);
-  check("18-4 history at -110 on a -1000 pick: edge +4.1 passes, 81.8% raw under 90.9% fails it (ls1)", [line(-1000), edgeOnly(-1000), at([18, 4], -110, -1000).gate.raw?.clears], [[4.1, false], true, false]);
+  check("18-4 history at -110 on a -500 pick still passes", line(-500), [7.2, true]);
+  check("18-4 history at -110 on a -1000 pick still passes", line(-1000), [4.1, true]);
   check("18-4 history at -110 on a +400 pick passes", line(400), [12.4, true]);
 
   const pinned = at([12, 8], 150, 150);

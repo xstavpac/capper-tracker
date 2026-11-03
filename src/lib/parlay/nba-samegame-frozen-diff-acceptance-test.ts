@@ -11,7 +11,6 @@ import { join } from "node:path";
 import { buildGeneratedParlay, GENERATOR_RULES } from "@/lib/parlay/generator";
 import { betKeyOf } from "@/lib/parlay/selection";
 import { NBA_SAMEGAME_CASES, nowOf, snapshotOf } from "@/lib/parlay/nba-samegame-frozen-cases";
-import { LONGSHOT_MOVED_AT_OWN_GATE } from "@/lib/parlay/longshot-gate-moved";
 
 type Row = [string, string | null];
 type Captured = { legs: string[]; dropped: [string, string][]; hedge: Row[]; contrarian: Row[]; historyBetKeys: string[] | null; coreSha: string };
@@ -81,12 +80,6 @@ const keyOnly: string[] = [];
 for (const c of NBA_SAMEGAME_CASES) {
   const a = frozen.step1.cases[c.label];
   const b = now.cases[c.label];
-  // Moved later by the long-shot gate (ls1), not by betKeyOf: longshot-gate-diff.txt has them in full. Their
-  // NBA prop keys are still compared below through historyBetKeys.
-  if (LONGSHOT_MOVED_AT_OWN_GATE.includes(c.label)) {
-    if (JSON.stringify(a.historyBetKeys) !== JSON.stringify(b.historyBetKeys)) keyOnly.push(c.label);
-    continue;
-  }
   const d = caseDiff(c.label, a, b);
   if (d.length) {
     moved2++;
@@ -94,7 +87,6 @@ for (const c of NBA_SAMEGAME_CASES) {
   } else if (JSON.stringify(a.historyBetKeys) !== JSON.stringify(b.historyBetKeys)) keyOnly.push(c.label);
 }
 lines.push(`Parlays whose legs, Hedge or Contrarian moved because of the key: ${moved2}.`);
-lines.push(`Not compared here, moved by the long-shot gate instead (longshot-gate-diff.txt): ${list([...LONGSHOT_MOVED_AT_OWN_GATE])}`);
 lines.push(`Parlays whose only change is the NBA prop's key in historyBetKeys (what the next Regenerate weighs down): ${keyOnly.length}`);
 for (const l of keyOnly) lines.push(`  ${l}`);
 lines.push("");

@@ -38,12 +38,6 @@ for (const c of SELECTION_CASES) {
     const s = pick ? scorePick(pick, ctx) : null;
     return s?.status === "SCORED" ? s.rankScore * 100 : null;
   };
-  // The long-shot rule (ls1) is what fails it: the edge alone still clears the gate.
-  const rawFails = (id: string) => {
-    const pick = snap.games.flatMap((g) => g.picks).find((p) => p.pickId === id) ?? snap.slipPicks.find((p) => p.pickId === id);
-    const s = pick ? scorePick(pick, ctx) : null;
-    return s?.status === "SCORED" && s.gate.raw !== null && !s.gate.raw.clears;
-  };
   const oldIds = was.legs.map((l) => l.id);
   const newIds = now.legs.map((l) => l.pick.pickId);
   lines.push(`=== ${c.label} ===`);
@@ -72,12 +66,7 @@ for (const c of SELECTION_CASES) {
     const nowAlt = l.swap?.pick.pickId ?? null;
     if (old === undefined) hedgeLines.push(`  new leg ${l.original.pick.pickId}: alternate ${nowAlt ?? `none (${l.unchangedReason})`}`);
     else if (old !== nowAlt) {
-      const why =
-        nowAlt && oldIds.includes(nowAlt) && !newIds.includes(nowAlt)
-          ? `${nowAlt} was a leg before and no longer is, so it is free to be the alternate`
-          : old && rawFails(old)
-            ? `${old} no longer clears the gate: the long-shot rule (ls1), its raw record is under its own price's break-even`
-            : "selection.ts order (score, betKey, id)";
+      const why = nowAlt && oldIds.includes(nowAlt) && !newIds.includes(nowAlt) ? `${nowAlt} was a leg before and no longer is, so it is free to be the alternate` : "selection.ts order (score, betKey, id)";
       hedgeLines.push(`  leg ${l.original.pick.pickId}: ${old ?? "none"} (${f1(old ? pts(old) : null)}) -> ${nowAlt ?? "none"} (${f1(nowAlt ? pts(nowAlt) : null)}) - ${why}`);
     }
     void i;

@@ -50,12 +50,14 @@
 //
 // Long-shot rule (ls1): with L > 0 a pick with a real price also needs its capper's
 // RAW record in the scored category (in-league plus other leagues, pushes out) to
-// clear the break-even of the pick's own price: wins / decided >= break-even. A
+// reach a bar: wins / decided >= min(break-even of the pick's own price, L / 100). A
 // category prior (DOG_ML's ~38%) is above a long dog's break-even, so without this a
 // 0-3 capper at +300 passed on the prior alone. Evidence must clear the price, not the
-// prior. 1-0 and 8-0 pass at any price; 0-for-N never does. A pick with no real price
-// has no price of its own to clear, so the rule doesn't apply to it. At L = 0 nothing
-// changes.
+// prior. The bar never asks more than the lever does, so lowering L still widens the
+// pool below break-even (10-10 at -110 passes at 45) and the -110 gate has no cliff
+// between 0 and 1. 1-0 and 8-0 pass at any price; 0-for-N never does at any L > 0. A pick
+// with no real price has no price of its own, so the rule doesn't apply to it. At L = 0
+// nothing changes.
 //
 // A capper's historical break-even is shown in the breakdown and drives the
 // price transfer; it is never compared against to make a score.
@@ -155,7 +157,8 @@ export type GateCheck = {
   passes: boolean;
 };
 
-export type RawCheck = { wins: number; decided: number; breakEven: number; clears: boolean };
+// `bar` = min(breakEven, L / 100): what the raw record must reach.
+export type RawCheck = { wins: number; decided: number; breakEven: number; bar: number; clears: boolean };
 
 // What the long-shot rule reads: the raw record and the pick's own break-even (null: no real price).
 export type RawInput = { wins: number; decided: number; breakEven: number | null };
@@ -457,7 +460,8 @@ export function scorePick(pick: ScoringPick, ctx: ScoringContext): PickScore {
 export function gateCheck(probability: number, breakEven: number, minWinPct: number, raw?: RawInput | null): GateCheck {
   const edge = probability - breakEven;
   if (minWinPct === 0) return { minWinPct, requiredEdge: null, edge, probability, breakEven, raw: null, passes: true };
-  const rawCheck = raw && raw.breakEven !== null ? { wins: raw.wins, decided: raw.decided, breakEven: raw.breakEven, clears: rawRecordClears(raw.wins, raw.decided, raw.breakEven) } : null;
+  const bar = raw && raw.breakEven !== null ? Math.min(raw.breakEven, minWinPct / 100) : null;
+  const rawCheck = raw && raw.breakEven !== null && bar !== null ? { wins: raw.wins, decided: raw.decided, breakEven: raw.breakEven, bar, clears: rawRecordClears(raw.wins, raw.decided, bar) } : null;
   return {
     minWinPct,
     requiredEdge: minWinPct / 100 - DEFAULT_BREAK_EVEN,
@@ -469,11 +473,11 @@ export function gateCheck(probability: number, breakEven: number, minWinPct: num
   };
 }
 
-// The raw record clears a break-even: wins / decided >= break-even. Both sides are one
-// correctly rounded division, so a record exactly at the break-even (11-10 at -110) clears.
-// No decided pick never clears.
-export function rawRecordClears(wins: number, decided: number, breakEven: number): boolean {
-  return decided > 0 && wins / decided >= breakEven;
+// The raw record reaches a bar: wins / decided >= bar. Both sides are one correctly rounded
+// division of whole numbers (the bar is a break-even, or L / 100), so a record exactly on the
+// bar (10-10 at L = 50, 1-3 at +300) clears. No decided pick never clears.
+export function rawRecordClears(wins: number, decided: number, bar: number): boolean {
+  return decided > 0 && wins / decided >= bar;
 }
 
 // The gate at any setting, from a score already built. A pick with no record never

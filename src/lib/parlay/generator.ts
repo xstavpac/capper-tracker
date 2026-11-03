@@ -721,7 +721,7 @@ export function buildGeneratedParlay(
             pickScore?.status === "SCORED"
               ? pickScore.gate.raw && !pickScore.gate.raw.clears && pickScore.rankScore >= (pickScore.gate.requiredEdge ?? 0)
                 ? // The long-shot rule (scoring.ts ls1): the edge clears, the raw record doesn't clear the price.
-                  `raw ${pickScore.gate.raw.wins}-${pickScore.gate.raw.decided - pickScore.gate.raw.wins} ${((pickScore.gate.raw.wins / pickScore.gate.raw.decided) * 100).toFixed(1)}% < break-even ${(pickScore.gate.raw.breakEven * 100).toFixed(1)}% (${gate}%)`
+                  `raw ${pickScore.gate.raw.wins}-${pickScore.gate.raw.decided - pickScore.gate.raw.wins} ${((pickScore.gate.raw.wins / pickScore.gate.raw.decided) * 100).toFixed(1)}% < bar ${(pickScore.gate.raw.bar * 100).toFixed(1)}% (${gate}%)`
                 : `edge ${(pickScore.rankScore * 100).toFixed(1)} < ${((pickScore.gate.requiredEdge ?? 0) * 100).toFixed(1)} (${gate}%)`
               : `${Math.round(gated.record.winPct)}% (${gated.record.wins}-${gated.record.losses}) < ${gate}%`
           )

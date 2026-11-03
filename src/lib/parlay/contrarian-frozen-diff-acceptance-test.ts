@@ -14,7 +14,6 @@ import { CONTRARIAN_MARKETS, contrarianMarketOf, isSoccer, YES_NO_PROP_MARKETS, 
 import { describeProp } from "@/lib/parlay/relationship-classifier";
 import { CONTRARIAN_CASES, nowOf, snapshotOf } from "@/lib/parlay/contrarian-frozen-cases";
 import type { GeneratorPick } from "@/lib/parlay/auto-generate";
-import { LONGSHOT_MOVED_AT_OWN_GATE } from "@/lib/parlay/longshot-gate-moved";
 
 type Row = [string, string | null, string | null];
 type Before = { legs: string[]; restSha: string; contrarian: Record<SwapScope, Row[]> };
@@ -66,9 +65,7 @@ for (const c of CONTRARIAN_CASES) {
   const now = buildGeneratedParlay(snap, c.settings, null, nowOf(c), GENERATOR_RULES, trace);
   const { contrarian, ...rest } = now;
   check(`${c.label} · Primary unchanged`, now.legs.map((l) => l.pick.pickId), was.legs);
-  // A case the long-shot gate (ls1) moved is listed in longshot-gate-diff.txt, which checks it in full.
-  if (LONGSHOT_MOVED_AT_OWN_GATE.includes(c.label)) check(`${c.label} · Hedge moved by the long-shot gate only (longshot-gate-diff.txt)`, sha(rest) !== was.restSha, true);
-  else check(`${c.label} · Primary, Hedge and notes byte-identical`, sha(rest), was.restSha);
+  check(`${c.label} · Primary, Hedge and notes byte-identical`, sha(rest), was.restSha);
   // The Swap setting decides which legs are searched exactly as before.
   for (const scope of SWAP_SCOPES) {
     const outNow = contrarian[scope].legs.map((l) => l.unchangedReason === "OUT_OF_SCOPE");

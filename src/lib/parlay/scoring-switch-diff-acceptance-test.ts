@@ -24,7 +24,7 @@ function explain(pick: GeneratorPick, snap: GeneratorSnapshot, gate: number): st
   const s = scorePick(pick, { leagueRecords: snap.leagueRecords, categoryRecords: snap.categoryRecords, propMarketRecords: snap.propMarketRecords, platformRates: snap.platformRates ?? EMPTY_PLATFORM_RATES, minWinPct: gate });
   if (s.status !== "SCORED") return `${pick.pickId} (${pick.betDetail} ${pick.odds}): ${old}; new no record`;
   const why = s.model === "edge model" ? "edge model" : `win-rate model, ${s.fallback}${s.thin ? `, ${s.thin.binding} edge binds` : ""}`;
-  return `${pick.pickId} (${pick.betDetail} ${pick.odds}): ${old}; new ${why}, price ${s.price.status}, edge ${signed(s.rankScore)} vs ${s.gate.requiredEdge === null ? "no gate" : signed(s.gate.requiredEdge)} ${s.gate.passes ? "passes" : "fails"}${s.gate.raw && !s.gate.raw.clears ? ` (raw ${pct(s.gate.raw.wins / s.gate.raw.decided)}% under the ${pct(s.gate.raw.breakEven)}% break-even, ls1)` : ""}, -110 equivalent ${pct(selectionScore(s))}`;
+  return `${pick.pickId} (${pick.betDetail} ${pick.odds}): ${old}; new ${why}, price ${s.price.status}, edge ${signed(s.rankScore)} vs ${s.gate.requiredEdge === null ? "no gate" : signed(s.gate.requiredEdge)} ${s.gate.passes ? "passes" : "fails"}, -110 equivalent ${pct(selectionScore(s))}`;
 }
 
 function diffPrimary(oldP: GeneratedParlay, newP: GeneratedParlay, snap: GeneratorSnapshot, gate: number): string[] {
