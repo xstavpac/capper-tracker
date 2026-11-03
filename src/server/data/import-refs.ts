@@ -23,6 +23,12 @@ type Db = PrismaClient | Prisma.TransactionClient;
 
 export type CapperRef = { id: string; name: string };
 
+// Out-param of the capper resolvers: how many cappers this import ADDED to the roster list it started from. That is
+// the only way an import changes the cached capper roster (capper-roster.ts), so callers revalidate it only when
+// this is > 0. Counted on list growth, not on "this call created a row": a capper a concurrent request created first
+// and this import merely found is just as new to the roster the caller read (and to the cached copy).
+export type ResolveStats = { cappersAdded: number };
+
 // Find this user's capper by normalized name, else create it. `existingCappers`
 // is the caller's snapshot of the user's cappers and `cache` its per-import
 // name -> id memo; both are updated, so a capper created for one line is found
@@ -33,7 +39,8 @@ export async function resolveOrCreateCapperId(
   capperName: string,
   existingCappers: CapperRef[],
   cache: Map<string, string>,
-  db: Db = prisma
+  db: Db = prisma,
+  stats?: ResolveStats
 ): Promise<string> {
   const normalizedName = normalizeName(capperName);
   // An empty normalized name (emoji-only / punctuation-only) matches nothing by
@@ -53,7 +60,10 @@ export async function resolveOrCreateCapperId(
       // a roster read of its own for every new capper.
       const { capper } = await findOrCreateCapper(userId, capperName, { source: "OTHER", customSource: "Catalog import" }, db, existingCappers);
       capperId = capper.id;
-      if (!existingCappers.some((c) => c.id === capper.id)) existingCappers.push(capper);
+      if (!existingCappers.some((c) => c.id === capper.id)) {
+        existingCappers.push(capper);
+        if (stats) stats.cappersAdded += 1;
+      }
     }
     cache.set(cacheKey, capperId);
   }
@@ -112,7 +122,8 @@ export async function resolveImportRefs(
   db: Db,
   userId: string,
   rows: PendingPickInsert[],
-  knownCappers?: readonly CapperRef[]
+  knownCappers?: readonly CapperRef[],
+  stats?: ResolveStats
 ): Promise<PickInsertData[]> {
   if (rows.length === 0) return [];
   const existingCappers: CapperRef[] = knownCappers
@@ -123,7 +134,7 @@ export async function resolveImportRefs(
 
   const out: PickInsertData[] = [];
   for (const { capperName, sportName, ...rest } of rows) {
-    const capperId = await resolveOrCreateCapperId(userId, capperName, existingCappers, capperCache, db);
+    const capperId = await resolveOrCreateCapperId(userId, capperName, existingCappers, capperCache, db, stats);
     const sportId = await resolveOrCreateSportId(sportName, sportCache, db);
     out.push({ ...rest, capperId, sportId });
   }

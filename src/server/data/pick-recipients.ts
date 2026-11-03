@@ -52,7 +52,8 @@ export async function fanOutImportedPicks(sourceUserId: string, copies: Recipien
           result.delivered += out.created.length;
           result.skippedDuplicates += out.skippedDuplicates.length;
           revalidateTag(cacheKeys.dashboard(recipientId));
-          revalidateCapperRoster(recipientId);
+          // Only a delivery that added a capper to this recipient's roster (the first one from a given source capper).
+          if (out.cappersAdded > 0) revalidateCapperRoster(recipientId);
         } else {
           result.failed += copies.length;
           console.error("[pick-recipients] delivery refused", { recipientId, copies: copies.length });

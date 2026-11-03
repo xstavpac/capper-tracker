@@ -227,6 +227,45 @@ async function main() {
       check("7 sport: concurrent creates on the shared client agree", c1 === c2 && (await prisma.sport.count({ where: { name: sportName("SHARED2") } })) === 1);
     }
 
+    // ---- 7b. cappersAdded: the roster-revalidation signal ----
+    {
+      const user = await makeUser("stats");
+      userIds.push(user.id);
+      await prisma.capper.create({ data: { userId: user.id, name: "Known Kim", source: "OTHER" } });
+      const known = await prisma.capper.findMany({ where: { userId: user.id }, select: { id: true, name: true } });
+
+      // Existing names only: nothing added.
+      const none = { cappersAdded: 0 };
+      await resolveImportRefs(prisma, user.id, [pending("known-kim", sportName("STATS"), 0)], known, none);
+      check("7b existing capper only -> cappersAdded 0", none.cappersAdded === 0, String(none.cappersAdded));
+
+      // Two distinct new names, one repeated: counted once each.
+      const added = { cappersAdded: 0 };
+      await resolveImportRefs(
+        prisma,
+        user.id,
+        [pending("Fresh One", sportName("STATS"), 1), pending("fresh-one", sportName("STATS"), 2), pending("Fresh Two", sportName("STATS"), 3), pending("Known Kim", sportName("STATS"), 4)],
+        known,
+        added
+      );
+      check("7b two new cappers (one repeated, one existing) -> cappersAdded 2", added.cappersAdded === 2, String(added.cappersAdded));
+      check("7b the caller's list is not mutated by resolveImportRefs", known.length === 1);
+
+      // No stats argument still works (optional).
+      await resolveImportRefs(prisma, user.id, [pending("Fresh One", sportName("STATS"), 5)]);
+
+      // Race-found: the row exists, but not in the list this import read. It is new to that roster, so it counts.
+      const stale: { id: string; name: string }[] = [];
+      const raced = { cappersAdded: 0 };
+      const id = await resolveOrCreateCapperId(user.id, "Known Kim", stale, new Map(), prisma, raced);
+      check("7b capper found in the table but absent from the list -> cappersAdded 1", raced.cappersAdded === 1 && stale.length === 1, String(raced.cappersAdded));
+      check("7b ...and it is the existing row, not a duplicate", id === known[0].id && (await cappersOf(user.id)).length === 3);
+
+      // Same call again with the grown list: nothing more.
+      await resolveOrCreateCapperId(user.id, "Known Kim", stale, new Map(), prisma, raced);
+      check("7b a second resolve with the grown list adds nothing", raced.cappersAdded === 1);
+    }
+
     // ---- 8. Source inspection ----
     {
       const src = readFileSync("src/server/data/bulk-import-core.ts", "utf8");

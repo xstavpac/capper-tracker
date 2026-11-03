@@ -41,7 +41,7 @@ import {
   type DbDupCandidate,
   type ExistingPickRow,
 } from "@/server/data/duplicate-db-match";
-import { resolveImportRefs, type PendingPickInsert } from "@/server/data/import-refs";
+import { resolveImportRefs, type PendingPickInsert, type ResolveStats } from "@/server/data/import-refs";
 import {
   ENTITLEMENT_TX_OPTIONS,
   insertPicksInTransaction,
@@ -79,6 +79,9 @@ export type DedupInsertResult =
       insertedIndexes: number[]; // created[k] is rows[insertedIndexes[k]]
       skippedDuplicates: DuplicateHit[]; // refused - not inserted
       overridden: DuplicateHit[]; // duplicates inserted on an explicit override
+      // Cappers this insert added to the user's roster (0 when every row named an existing capper or carried a
+      // capperId). The caller revalidates the cached roster only when this is > 0.
+      cappersAdded: number;
     }
   | (Extract<AtomicCreateResult, { allowed: false }> & { skippedDuplicates: DuplicateHit[] });
 
@@ -146,7 +149,7 @@ export async function insertPicksDeduped(
   rows: DedupPickRow[],
   { readExistingPicks = defaultReadExistingPicks, recipientCopy = false }: DedupInsertOptions = {}
 ): Promise<DedupInsertResult> {
-  if (rows.length === 0) return { allowed: true, created: [], insertedIndexes: [], skippedDuplicates: [], overridden: [] };
+  if (rows.length === 0) return { allowed: true, created: [], insertedIndexes: [], skippedDuplicates: [], overridden: [], cappersAdded: 0 };
 
   const result = await prisma.$transaction(async (tx): Promise<DedupInsertResult> => {
     await lockUserPickInserts(tx, userId);
@@ -248,14 +251,16 @@ export async function insertPicksDeduped(
       survivors.push(p);
     }
 
+    const resolveStats: ResolveStats = { cappersAdded: 0 };
     const inserted = await insertPicksInTransaction(tx, userId, survivors.length, async (db) => {
+      resolveStats.cappersAdded = 0;
       // Rows that already carry ids (the manual form) are used as they are;
       // the rest have their capper and sport found or created here, inside the
       // transaction, exactly as before.
       const strip = ({ overrideDuplicate: _o, raw: _r, capperId: _c, sportId: _s, ...rest }: DedupPickRow) => rest;
       const needRefs = survivors.filter((p) => !(p.row.capperId && p.row.sportId));
       // The roster read at the top of this transaction (same lock) is passed on, not read again.
-      const resolved = await resolveImportRefs(db, userId, needRefs.map((p) => strip(p.row)), existingCappers);
+      const resolved = await resolveImportRefs(db, userId, needRefs.map((p) => strip(p.row)), existingCappers, resolveStats);
       const resolvedByIndex = new Map(needRefs.map((p, k) => [p.index, resolved[k]]));
       return survivors.map((p): PickInsertData => {
         const fromRefs = resolvedByIndex.get(p.index);
@@ -272,6 +277,7 @@ export async function insertPicksDeduped(
       insertedIndexes: survivors.map((p) => p.index),
       skippedDuplicates,
       overridden,
+      cappersAdded: resolveStats.cappersAdded,
     };
   }, ENTITLEMENT_TX_OPTIONS);
 

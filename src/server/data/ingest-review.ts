@@ -146,7 +146,7 @@ export async function resolveReviewItem(userId: string, itemId: string, choiceId
   await fanOutImportedPicks(userId, [{ row: storedToPickRow(choice.pick, choice.capperName), sourcePickId: pickId }]);
   await prisma.ingestReviewItem.updateMany({ where: { id: itemId, userId }, data: { resolvedPickId: pickId } });
   revalidateTag(cacheKeys.dashboard(userId));
-  revalidateCapperRoster(userId);
+  if (result.cappersAdded > 0) revalidateCapperRoster(userId);
   revalidateReviewQueue(userId);
   return { ok: true, pickId };
 }

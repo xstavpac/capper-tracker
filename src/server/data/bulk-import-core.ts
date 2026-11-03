@@ -968,8 +968,8 @@ export async function importPicksForUser(
   // getDashboardSummary) - revalidatePath does not reliably evict
   // unstable_cache entries.
   revalidateTag(cacheKeys.dashboard(user.id));
-  // The transaction above can have created cappers.
-  revalidateCapperRoster(user.id);
+  // The roster cache holds only capper id / name / colour / favourite, which an import changes only by adding a capper.
+  if (result.allowed && result.cappersAdded > 0) revalidateCapperRoster(user.id);
   revalidatePath("/picks");
   revalidatePath("/dashboard");
   revalidatePath("/cappers");

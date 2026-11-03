@@ -102,10 +102,21 @@ Every runtime path that changes a capper must call `revalidateCapperRoster(userI
 | `renameCapperAction` → `renameCapper` (`capper.updateMany`) | name | ✅ `revalidatePickStats` |
 | `deleteCapperAction` → `deleteCapper` (`capper.deleteMany`) | 1 capper deleted | ✅ `revalidatePickStats` |
 | `toggleFavoriteCapperAction` → `toggleFavoriteCapper` (`capper.update`) | `isFavorite` | ✅ `revalidatePickStats` |
-| `bulkImportPicksAction` → `insertPicksDeduped` → `resolveImportRefs` → `findOrCreateCapper` | N cappers | ✅ inline, after the transaction |
-| `bulkImportParlaysAction` → `resolveOrCreateCapperId` → `findOrCreateCapper` | N cappers | ✅ inline, after the loop |
+| `bulkImportPicksAction` / catalog / Telegram import → `importPicksForUser` → `insertPicksDeduped` → `resolveImportRefs` → `findOrCreateCapper` | N cappers | ✅ inline, after the transaction, **only if `cappersAdded > 0`** |
+| `bulkImportParlaysAction` → `resolveOrCreateCapperId` → `findOrCreateCapper` | N cappers | ✅ inline, after the loop, **only if the roster list grew** |
+| `resolveReviewItem` (approve an ingest-review item) → `insertPicksDeduped` | N cappers | ✅ inline, **only if `cappersAdded > 0`** |
+| `fanOutImportedPicks` (recipient copies) → `insertPicksDeduped` | N cappers, per recipient | ✅ per recipient, **only if that delivery's `cappersAdded > 0`** |
 | `createPickAction` → `createPick` → `insertPicksDeduped` | none (the manual form names an existing capper) | N/A |
 | `prisma/seed-dev.ts`, `scripts/` | — | N/A — local dev / one-off operator scripts |
+
+**Imports revalidate only when they add a capper.** The roster holds `id`, `name`, `colorTag`, `isFavorite`, and an
+import changes none of those on an existing capper, so busting after every import only forced a refill. The signal is
+`cappersAdded`: how many cappers `resolveOrCreateCapperId` pushed onto the roster list the import started from
+(`insertPicksDeduped` returns it on a successful insert; the parlay import compares the list's length). It counts list
+growth, not rows created: a capper a concurrent request created first and this import merely found is just as
+missing from the cached roster. A refused or rolled-back import creates no capper and reports none. The explicit
+capper actions (create, rename, merge, delete, favourite) always change the roster and stay unconditional. Dashboard
+tag busts after imports are unchanged (picks changed).
 
 `capper-roster-guard-acceptance-test.ts` enforces this table: a source file that calls a capper writer
 without being registered there, or a registered action that writes without busting the roster, fails.
