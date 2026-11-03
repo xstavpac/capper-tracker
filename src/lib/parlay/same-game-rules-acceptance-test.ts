@@ -3,7 +3,10 @@
 // DB. Every pair is checked in BOTH orders. Run with:
 //   npx tsx src/lib/parlay/same-game-rules-acceptance-test.ts
 import { classifyPair, describePick, describeProp, samePropPlayer, type ParlayCandidate, type PropDescription } from "@/lib/parlay/relationship-classifier";
+import { NON_OFFENSIVE_PROP_MARKETS } from "@/lib/parlay/relationship-classifier";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
+import { NHL_PROP_MARKETS } from "@/lib/nhl-prop";
+import { MLB_PROP_MARKETS } from "@/lib/mlb-prop";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -154,6 +157,53 @@ allowed("Over 47.5 + a player's over 40 rushing yards", c(NFL, "TOTAL", "Over 47
 allowed("props on opposite teams (Cubs hitter Over + Rays hitter Over)", suzukiOver, prop(MLB, "Yandy Diaz over 0.5 hits"));
 allowed("side + game total", cubsMl, over85);
 allowed("side + prop Under", cubsMl, suzukiUnder);
+
+// ---------------------------------------------------------------------------
+// NBA: the same table as NFL, with the props read by the basketball parser (the
+// same-game rules pass the pick's sport). Before the fix every NBA prop was
+// UNVERIFIED here and never shared a game with another leg.
+// ---------------------------------------------------------------------------
+const NBA = { homeTeam: "Boston Celtics", awayTeam: "New York Knicks", gameTime: TIME, sportName: "NBA", gameId: "nba-1" };
+const tatumPts = prop(NBA, "Jayson Tatum Over 27.5 Points");
+allowed("NBA prop + spread", tatumPts, c(NBA, "SPREAD", "Celtics -6", -6));
+allowed("NBA prop + ML", tatumPts, c(NBA, "MONEYLINE", "Knicks ML"));
+allowed("NBA prop Over + game Over", tatumPts, c(NBA, "TOTAL", "Over 221.5", 221.5));
+blocked("NBA prop Over + game Under (story clash)", tatumPts, c(NBA, "TOTAL", "Under 221.5", 221.5), "R-E");
+allowed("NBA two players", tatumPts, prop(NBA, "Jalen Brunson Over 26.5 Points"));
+allowed("NBA same player, another stat (Points + PRA)", tatumPts, prop(NBA, "Jayson Tatum Over 40.5 PRA"));
+blocked("NBA same player and stat, Over vs Under", tatumPts, prop(NBA, "Jayson Tatum Under 29.5 Points"), "R-D");
+blocked("NBA same player and stat, two lines", tatumPts, prop(NBA, "Jayson Tatum Over 28.5 Points"), "R-D");
+// The story check: rebounds, steals and blocks don't tell the scoring story; PRA does.
+allowed("NBA game Under + Rebounds Over", c(NBA, "TOTAL", "Under 221.5", 221.5), prop(NBA, "Jayson Tatum Over 8.5 Rebounds"));
+blocked("NBA game Under + PRA Over", c(NBA, "TOTAL", "Under 221.5", 221.5), prop(NBA, "Jayson Tatum Over 40.5 PRA"), "R-E");
+allowed("NBA game Under + Steals Over", c(NBA, "TOTAL", "Under 221.5", 221.5), prop(NBA, "Jaylen Brown Over 1.5 Steals"));
+allowed("NBA game Under + Blocks Over", c(NBA, "TOTAL", "Under 221.5", 221.5), prop(NBA, "Kristaps Porzingis Over 1.5 Blocks"));
+blocked("NBA game Under + Assists Over", c(NBA, "TOTAL", "Under 221.5", 221.5), prop(NBA, "Jalen Brunson Over 7.5 Assists"), "R-E");
+blocked("NBA game Under + Threes Over", c(NBA, "TOTAL", "Under 221.5", 221.5), prop(NBA, "Jayson Tatum Over 3.5 Threes"), "R-E");
+blocked("NBA game Under + Reb+Ast Over", c(NBA, "TOTAL", "Under 221.5", 221.5), prop(NBA, "Jayson Tatum Over 13.5 Reb+Ast"), "R-E");
+
+const nba = (text: string) => ok(describeProp(prop(NBA, text).pick, "NBA"));
+check("NBA prop with its sport: points", nba("Jayson Tatum Over 27.5 Points"), { market: "POINTS", direction: "OVER", line: 27.5, offensive: true });
+check("NBA prop with its sport: rebounds are not offensive", nba("Jayson Tatum Over 8.5 Rebounds"), { market: "REBOUNDS", direction: "OVER", line: 8.5, offensive: false });
+check("NBA prop with its sport: steals / blocks are not offensive", [nba("Jaylen Brown Over 1.5 Steals"), nba("Kristaps Porzingis Over 1.5 Blocks")].map((d) => typeof d === "string" ? d : d.offensive), [false, false]);
+check("NBA prop with its sport: PRA / P+R / P+A / R+A / assists / threes are offensive",
+  ["Jayson Tatum Over 40.5 PRA", "Jayson Tatum Over 35.5 Pts+Reb", "Jayson Tatum Over 32.5 Pts+Ast", "Jayson Tatum Over 13.5 Reb+Ast", "Jalen Brunson Over 7.5 Assists", "Jayson Tatum Over 3.5 Threes"].map((t) => { const d = nba(t); return typeof d === "string" ? d : d.offensive; }),
+  [true, true, true, true, true, true]);
+check("an NBA prop without its sport still reads nothing (callers must pass it)", describeProp(prop(NBA, "Jayson Tatum Over 8.5 Rebounds").pick).status, "UNDERIVABLE");
+
+// NHL "Points" is still hockey: the NHL sport routes to the NFL -> NHL -> MLB chain, never the basketball parser.
+check("NHL Points with its sport: hockey points", ok(describeProp(prop(NHL, "Connor McDavid over 1.5 points").pick, "NHL")), { market: "POINTS", direction: "OVER", line: 1.5, offensive: true });
+check("NHL Points: the same with or without the sport", ok(describeProp(prop(NHL, "Connor McDavid over 1.5 points").pick, "NHL")), ok(describeProp(prop(NHL, "Connor McDavid over 1.5 points").pick)));
+blocked("NHL: game Under + McDavid Points Over (hockey points stay offensive)", c(NHL, "TOTAL", "Under 6.5", 6.5), prop(NHL, "Connor McDavid over 1.5 points"), "R-E");
+
+// No NFL / NHL / MLB market changed its offensive flag: the three new non-offensive values are NBA-only.
+{
+  const OLD_NON_OFFENSIVE = new Set(["STRIKEOUTS", "OUTS_RECORDED", "SAVES"]);
+  const NFL_MARKETS = ["PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "TD", "RUSH_REC_YDS", "PASS_RUSH_YDS", "PASS_TDS", "PASS_ATTEMPTS", "RUSH_ATTEMPTS", "PASS_INTERCEPTIONS", "PASS_COMPLETIONS"];
+  const others = [...NFL_MARKETS, ...NHL_PROP_MARKETS, ...MLB_PROP_MARKETS];
+  check("NFL / NHL / MLB markets: offensive flag unchanged", others.filter((m) => NON_OFFENSIVE_PROP_MARKETS.has(m as never) !== OLD_NON_OFFENSIVE.has(m)), []);
+  check("the new non-offensive values belong to no NFL / NHL / MLB market", ["REBOUNDS", "STEALS", "BLOCKS"].filter((m) => others.includes(m)), []);
+}
 
 if (failures > 0) {
   console.log(`\n${failures} check(s) FAILED`);

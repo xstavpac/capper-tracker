@@ -24,25 +24,31 @@ Contrarian (Swap = All): the same-bet rule since PR 7 (contrarian-diff.txt) on t
   new leg g3-defaulted: alternate none (NO_QUALIFYING_CONTRARIAN)
 
 === 8 legs, 2 per game, default gate ===
-old legs: g0-small-over, g0-elite-spread, g1-55-45, g2-heavy-fav, g2-mid-under, g3-no-price, g4-other-leagues, g5-home
-new legs: g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g2-heavy-fav, g3-defaulted, g4-other-leagues, g5-home
+old legs: g0-small-over, g0-elite-spread, g1-55-45, g2-heavy-fav, g3-no-price, g4-other-leagues, g4-prop, g5-home
+new legs: g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g3-defaulted, g4-other-leagues, g4-prop, g5-home
 Primary:
   out: g1-55-45 (Bills -6 -110): old 55-45 raw 55.0% passes wilson 0.475; new edge model, price REAL, edge +2.2 vs +2.6 fails, -110 equivalent 54.6
+  out: g2-heavy-fav (Eagles ML -1000): old 18-4 raw 81.8% passes wilson 0.668; new edge model, price REAL, edge +4.1 vs +2.6 passes, -110 equivalent 56.5
   out: g3-no-price (Lions ML -110): old 30-10 raw 75.0% passes wilson 0.636; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +6.7 vs +2.6 passes, -110 equivalent 59.0
   in:  g1-longshot (Dolphins ML 200): old 10-10 raw 50.0% fails wilson 0.341; new edge model, price REAL, edge +8.3 vs +2.6 passes, -110 equivalent 60.7
+  in:  g2-mid-under (Under 47.5 -110): old 30-20 raw 60.0% passes wilson 0.494; new edge model, price REAL_SOURCE_UNKNOWN, edge +5.4 vs +2.6 passes, -110 equivalent 57.8
   in:  g3-defaulted (Lions -7 -110): old 40-25 raw 61.5% passes wilson 0.522; new win-rate model, NO_REAL_PRICE, price UNKNOWN, edge +6.9 vs +2.6 passes, -110 equivalent 59.3
 Hedge (Swap = All):
   leg gone g1-55-45: alternate none (NO_ALTERNATE)
+  leg gone g2-heavy-fav: alternate g2-mid-under (Under 47.5 -110): old 30-20 raw 60.0% passes wilson 0.494; new edge model, price REAL_SOURCE_UNKNOWN, edge +5.4 vs +2.6 passes, -110 equivalent 57.8
   leg gone g3-no-price: alternate g3-thin (Under 50.5 -110): old 3-1 raw 75.0% passes wilson 0.385; new win-rate model, FEW_PRICED_PICKS, capper edge binds, price REAL, edge +3.0 vs +2.6 passes, -110 equivalent 55.4
   new leg g1-longshot: alternate none (NO_ALTERNATE)
+  new leg g2-mid-under: alternate g2-heavy-fav (Eagles ML -1000): old 18-4 raw 81.8% passes wilson 0.668; new edge model, price REAL, edge +4.1 vs +2.6 passes, -110 equivalent 56.5
   new leg g3-defaulted: alternate g3-thin (Under 50.5 -110): old 3-1 raw 75.0% passes wilson 0.385; new win-rate model, FEW_PRICED_PICKS, capper edge binds, price REAL, edge +3.0 vs +2.6 passes, -110 equivalent 55.4
 Contrarian (Swap = All): the same-bet rule since PR 7 (contrarian-diff.txt) on the new side, Wilson on the old:
   leg g0-elite-spread:
     old: g0-dog-ml (Chargers ML 150): old 11-9 raw 55.0% passes wilson 0.387; new edge model, price REAL, edge +7.5 vs +2.6 passes, -110 equivalent 59.9
     new: none (NO_QUALIFYING_CONTRARIAN)
   leg gone g1-55-45: alternate none (NO_ALTERNATE)
+  leg gone g2-heavy-fav: alternate none (NO_ALTERNATE)
   leg gone g3-no-price: alternate none (NO_ALTERNATE)
   new leg g1-longshot: alternate none (NO_QUALIFYING_CONTRARIAN)
+  new leg g2-mid-under: alternate none (NO_QUALIFYING_CONTRARIAN)
   new leg g3-defaulted: alternate none (NO_QUALIFYING_CONTRARIAN)
 
 === 6 legs, 60% gate ===

@@ -1,0 +1,3912 @@
+{
+ "capturedFrom": {
+  "before": "53ad4f5",
+  "step1": "1aabb39"
+ },
+ "before": {
+  "cases": {
+   "SWITCH · 6 legs, best available, default gate": {
+    "legs": [
+     "g0-small-over",
+     "g1-longshot",
+     "g2-mid-under",
+     "g3-defaulted",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "g0-elite-spread"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "g2-heavy-fav"
+     ],
+     [
+      "g3-defaulted",
+      "g3-thin"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-defaulted",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5"
+    ],
+    "coreSha": "5aaa677dfd584e7d"
+   },
+   "SWITCH · 8 legs, 2 per game, default gate": {
+    "legs": [
+     "g0-small-over",
+     "g0-elite-spread",
+     "g1-longshot",
+     "g2-mid-under",
+     "g2-heavy-fav",
+     "g3-defaulted",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g0-elite-spread",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-heavy-fav",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      "g3-thin"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g0-elite-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-heavy-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-defaulted",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5",
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
+     "g2|MONEYLINE|FULL_GAME||Philadelphia Eagles||"
+    ],
+    "coreSha": "61645155e705cce2"
+   },
+   "SWITCH · 6 legs, 60% gate": {
+    "legs": [
+     "g0-small-over",
+     "g1-longshot",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "g0-elite-spread"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||"
+    ],
+    "coreSha": "7aa673efbffcbf6c"
+   },
+   "SWITCH · 6 legs, no gate": {
+    "legs": [
+     "g0-small-over",
+     "g1-longshot",
+     "g2-mid-under",
+     "g3-defaulted",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "g0-elite-spread"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "g2-heavy-fav"
+     ],
+     [
+      "g3-defaulted",
+      "g3-thin"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-defaulted",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5"
+    ],
+    "coreSha": "5aaa677dfd584e7d"
+   },
+   "SWITCH · 12 legs, 5 per game, no gate": {
+    "legs": [
+     "g0-small-over",
+     "g0-elite-spread",
+     "g1-longshot",
+     "g2-mid-under",
+     "g2-heavy-fav",
+     "g3-defaulted",
+     "g3-thin",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g0-elite-spread",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-heavy-fav",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-thin",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g0-elite-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-heavy-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-defaulted",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-thin",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5",
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
+     "g2|MONEYLINE|FULL_GAME||Philadelphia Eagles||",
+     "g3|TOTAL|FULL_GAME|GAME|UNDER||50.5"
+    ],
+    "coreSha": "b0f465436212c822"
+   },
+   "SWITCH · slip competing on one game, 4 legs": {
+    "legs": [
+     "g0-small-over",
+     "g2-mid-under",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [
+     [
+      "g2-heavy-fav",
+      "left_out"
+     ]
+    ],
+    "hedge": [
+     [
+      "g0-small-over",
+      "g0-elite-spread"
+     ],
+     [
+      "g2-mid-under",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5"
+    ],
+    "coreSha": "03a16e95589c1bb1"
+   },
+   "SWITCH · slip on two games, 6 legs, 2 per game": {
+    "legs": [
+     "g0-elite-spread",
+     "g1-longshot",
+     "g2-mid-under",
+     "g3-defaulted",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-elite-spread",
+      "g0-small-over"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "g2-heavy-fav"
+     ],
+     [
+      "g3-defaulted",
+      "g3-thin"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-elite-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-defaulted",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5"
+    ],
+    "coreSha": "6b171e6805bcabb9"
+   },
+   "SWITCH · Totals + Props only, 6 legs, 3 per game": {
+    "legs": [
+     "g0-small-over",
+     "g2-mid-under",
+     "g3-thin",
+     "g4-other-leagues"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-thin",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-thin",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5",
+     "g3|TOTAL|FULL_GAME|GAME|UNDER||50.5"
+    ],
+    "coreSha": "3d626579b159d13e"
+   },
+   "SWITCH · Pick Mix 50/50 Spread / Totals, 6 legs, 2 per game": {
+    "legs": [
+     "g0-small-over",
+     "g0-elite-spread",
+     "g2-mid-under",
+     "g3-defaulted",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g0-elite-spread",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      "g3-thin"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g0-elite-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-defaulted",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5",
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3"
+    ],
+    "coreSha": "f398bc31cfae4378"
+   },
+   "SWITCH · Your picks only, 2 of 5": {
+    "legs": [
+     "g2-heavy-fav",
+     "g5-away"
+    ],
+    "dropped": [
+     [
+      "g0-small-spread",
+      "not_selected"
+     ],
+     [
+      "g1-55-45",
+      "not_selected"
+     ],
+     [
+      "g3-thin",
+      "not_selected"
+     ]
+    ],
+    "hedge": [
+     [
+      "g2-heavy-fav",
+      "g2-mid-under"
+     ],
+     [
+      "g5-away",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g2-heavy-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-away",
+      "g5-home"
+     ]
+    ],
+    "historyBetKeys": [
+     "g5|SPREAD|FULL_GAME||Phoenix Suns||5",
+     "g2|MONEYLINE|FULL_GAME||Philadelphia Eagles||"
+    ],
+    "coreSha": "76b7b8da6c3df88a"
+   },
+   "SWITCH · Your picks only, 4 of 8, 2 per game": {
+    "legs": [
+     "g0-elite-spread",
+     "g1-longshot",
+     "g3-no-price",
+     "g5-home"
+    ],
+    "dropped": [
+     [
+      "g0-over",
+      "not_selected"
+     ],
+     [
+      "g2-heavy-fav",
+      "not_selected"
+     ],
+     [
+      "g2-mid-under",
+      "not_selected"
+     ],
+     [
+      "g5-away",
+      "not_selected"
+     ]
+    ],
+    "hedge": [
+     [
+      "g0-elite-spread",
+      "g0-small-over"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-no-price",
+      "g3-thin"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-elite-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-no-price",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
+     "g3|MONEYLINE|FULL_GAME||Detroit Lions||"
+    ],
+    "coreSha": "ba2f8b6fcc5a110b"
+   },
+   "NFL · 3 legs, best available": {
+    "legs": [
+     "p-0-spread",
+     "p-1-spread",
+     "p-2-spread"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "p-0-spread",
+      "p-0-over"
+     ],
+     [
+      "p-1-spread",
+      "p-1-over"
+     ],
+     [
+      "p-2-spread",
+      "p-2-over"
+     ]
+    ],
+    "contrarian": [
+     [
+      "p-0-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-1-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-2-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
+     "g1|SPREAD|FULL_GAME||Buffalo Bills||-3",
+     "g2|SPREAD|FULL_GAME||Philadelphia Eagles||-3"
+    ],
+    "coreSha": "2ba2b2a98dc3186f"
+   },
+   "NFL · 4 legs, 2 per game, game lines": {
+    "legs": [
+     "p-0-spread",
+     "p-1-spread",
+     "p-2-spread",
+     "p-3-spread"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "p-0-spread",
+      "p-0-over"
+     ],
+     [
+      "p-1-spread",
+      "p-1-over"
+     ],
+     [
+      "p-2-spread",
+      "p-2-over"
+     ],
+     [
+      "p-3-spread",
+      "p-3-over"
+     ]
+    ],
+    "contrarian": [
+     [
+      "p-0-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-1-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-2-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-3-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
+     "g1|SPREAD|FULL_GAME||Buffalo Bills||-3",
+     "g2|SPREAD|FULL_GAME||Philadelphia Eagles||-3",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-3"
+    ],
+    "coreSha": "8918fafc5a211e4e"
+   },
+   "NFL · 2 legs, totals only, 60% gate": {
+    "legs": [],
+    "dropped": [],
+    "hedge": [],
+    "contrarian": [],
+    "historyBetKeys": [],
+    "coreSha": "81644d8034f15c0b"
+   },
+   "NFL · 6 legs, no gate": {
+    "legs": [
+     "p-0-spread",
+     "p-1-spread",
+     "p-2-spread",
+     "p-3-spread",
+     "p-4-spread",
+     "p-5-spread"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "p-0-spread",
+      "p-0-over"
+     ],
+     [
+      "p-1-spread",
+      "p-1-over"
+     ],
+     [
+      "p-2-spread",
+      "p-2-over"
+     ],
+     [
+      "p-3-spread",
+      "p-3-over"
+     ],
+     [
+      "p-4-spread",
+      "p-4-over"
+     ],
+     [
+      "p-5-spread",
+      "p-5-over"
+     ]
+    ],
+    "contrarian": [
+     [
+      "p-0-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-1-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-2-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-3-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-4-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-5-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
+     "g1|SPREAD|FULL_GAME||Buffalo Bills||-3",
+     "g2|SPREAD|FULL_GAME||Philadelphia Eagles||-3",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-3",
+     "g4|SPREAD|FULL_GAME||Baltimore Ravens||-3",
+     "g5|SPREAD|FULL_GAME||San Francisco 49ers||-3"
+    ],
+    "coreSha": "60eb845a2f7d5466"
+   },
+   "NFL · Your picks: every favorite ML": {
+    "legs": [
+     "p-0-fav",
+     "p-1-fav",
+     "p-2-fav",
+     "p-3-fav",
+     "p-4-fav",
+     "p-5-fav"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "p-0-fav",
+      "p-0-over"
+     ],
+     [
+      "p-1-fav",
+      "p-1-over"
+     ],
+     [
+      "p-2-fav",
+      "p-2-over"
+     ],
+     [
+      "p-3-fav",
+      "p-3-over"
+     ],
+     [
+      "p-4-fav",
+      "p-4-over"
+     ],
+     [
+      "p-5-fav",
+      "p-5-over"
+     ]
+    ],
+    "contrarian": [
+     [
+      "p-0-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-1-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-2-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-3-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-4-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-5-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "0b14f21afdd4f995"
+   },
+   "MIXED · m0-yrfi alone": {
+    "legs": [
+     "m0-yrfi"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-yrfi",
+      "m0-rl-home"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-yrfi",
+      "m0-nrfi"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "9374ba175cbcdbb7"
+   },
+   "MIXED · m0-nrfi alone": {
+    "legs": [
+     "m0-nrfi"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-nrfi",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-nrfi",
+      "m0-yrfi"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "b3e8c83a33970f06"
+   },
+   "MIXED · m0-tt-over alone": {
+    "legs": [
+     "m0-tt-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-tt-over",
+      "m0-rl-home"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-tt-over",
+      "m0-tt-under"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "784d1e6de459e7ed"
+   },
+   "MIXED · m0-tt-under alone": {
+    "legs": [
+     "m0-tt-under"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-tt-under",
+      "m0-rl-home"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-tt-under",
+      "m0-tt-over"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "8bc24c253bc18096"
+   },
+   "MIXED · m0-tt-under-far alone": {
+    "legs": [
+     "m0-tt-under-far"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-tt-under-far",
+      "m0-rl-home"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-tt-under-far",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "7280d094e6975d97"
+   },
+   "MIXED · m0-over alone": {
+    "legs": [
+     "m0-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-over",
+      "m0-rl-home"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-over",
+      "m0-under"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "114fa8140b626f78"
+   },
+   "MIXED · m0-under alone": {
+    "legs": [
+     "m0-under"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-under",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-under",
+      "m0-over"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "f47de4e5a7d8c395"
+   },
+   "MIXED · m0-f5-under alone": {
+    "legs": [
+     "m0-f5-under"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-f5-under",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-f5-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "e818b7c060680a11"
+   },
+   "MIXED · m0-rl-home alone": {
+    "legs": [
+     "m0-rl-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-rl-home",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-rl-home",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "3f3327d182202e56"
+   },
+   "MIXED · m0-rl-away-alt alone": {
+    "legs": [
+     "m0-rl-away-alt"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-rl-away-alt",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-rl-away-alt",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "c986999571d88883"
+   },
+   "MIXED · m0-ml-home alone": {
+    "legs": [
+     "m0-ml-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-ml-home",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-ml-home",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "184418975131a710"
+   },
+   "MIXED · m0-ml-away alone": {
+    "legs": [
+     "m0-ml-away"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-ml-away",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-ml-away",
+      "m0-ml-home"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "4eaba6f17e5ee8dc"
+   },
+   "MIXED · n1-tatum-over alone": {
+    "legs": [
+     "n1-tatum-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-tatum-over",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-tatum-over",
+      "n1-tatum-under"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "2ae3e42c21be7814"
+   },
+   "MIXED · n1-tatum-under alone": {
+    "legs": [
+     "n1-tatum-under"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-tatum-under",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-tatum-under",
+      "n1-tatum-over"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "ad267d3310598cdd"
+   },
+   "MIXED · n1-brown-reb-over alone": {
+    "legs": [
+     "n1-brown-reb-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-brown-reb-over",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-brown-reb-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "0f3171e7d424a256"
+   },
+   "MIXED · n1-brown-reb-under alone": {
+    "legs": [
+     "n1-brown-reb-under"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-brown-reb-under",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-brown-reb-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "efa5ba58f2bafdc9"
+   },
+   "MIXED · n1-spread-home alone": {
+    "legs": [
+     "n1-spread-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-spread-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-spread-home",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "47ec4be0b1d75066"
+   },
+   "MIXED · n1-spread-away-far alone": {
+    "legs": [
+     "n1-spread-away-far"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-spread-away-far",
+      "n1-1h-spread-away"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-spread-away-far",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "678330780c557e0e"
+   },
+   "MIXED · n1-1h-spread-away alone": {
+    "legs": [
+     "n1-1h-spread-away"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-1h-spread-away",
+      "n1-spread-away-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-1h-spread-away",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "9074763db6b7301d"
+   },
+   "MIXED · e2-ml-home alone": {
+    "legs": [
+     "e2-ml-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "e2-ml-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "e2-ml-home",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "8283169a5f4bdb8d"
+   },
+   "MIXED · e2-ml-away alone": {
+    "legs": [
+     "e2-ml-away"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "e2-ml-away",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "e2-ml-away",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "7dcf6f49db31f76a"
+   },
+   "MIXED · e2-over alone": {
+    "legs": [
+     "e2-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "e2-over",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "e2-over",
+      "e2-under"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "70fd0cc3c3b813d3"
+   },
+   "MIXED · e2-under alone": {
+    "legs": [
+     "e2-under"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "e2-under",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "e2-under",
+      "e2-over"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "8892ad577678b274"
+   },
+   "MIXED · f3-td alone": {
+    "legs": [
+     "f3-td"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "f3-td",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "f3-td",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "58f197cd345781b2"
+   },
+   "MIXED · f3-ml-home alone": {
+    "legs": [
+     "f3-ml-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "f3-ml-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "f3-ml-home",
+      "f3-ml-away"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "1a83477e7b2e6e80"
+   },
+   "MIXED · f3-ml-away alone": {
+    "legs": [
+     "f3-ml-away"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "f3-ml-away",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "f3-ml-away",
+      "f3-ml-home"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "9ade7e943c673551"
+   },
+   "MIXED · f3-spread-home alone": {
+    "legs": [
+     "f3-spread-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "f3-spread-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "f3-spread-home",
+      "f3-spread-away"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "060ca79c8c667556"
+   },
+   "MIXED · f3-spread-away alone": {
+    "legs": [
+     "f3-spread-away"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "f3-spread-away",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "f3-spread-away",
+      "f3-spread-home"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "84aef37e7ce57d04"
+   },
+   "NBA · 2 legs, 1 per game": {
+    "legs": [
+     "c-tatum-pts-285",
+     "l-lebron-ast"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "c-tatum-pts-285",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-pts-285",
+      "c-tatum-pts-under"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 28.5 points|28.5",
+     "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5"
+    ],
+    "coreSha": "16b0850c6f2fed42"
+   },
+   "NBA · 6 legs, 3 per game": {
+    "legs": [
+     "c-tatum-pts-285",
+     "l-ml",
+     "l-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "c-tatum-pts-285",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-ml",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-over",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-pts-285",
+      "c-tatum-pts-under"
+     ],
+     [
+      "l-ml",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 28.5 points|28.5",
+     "g1|MONEYLINE|FULL_GAME||Los Angeles Lakers||",
+     "g1|TOTAL|FULL_GAME|GAME|OVER||230.5"
+    ],
+    "coreSha": "d7e859bdeecfd358"
+   },
+   "NBA · 10 legs, 6 per game, no gate": {
+    "legs": [
+     "c-tatum-pts-285",
+     "l-ml",
+     "l-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "c-tatum-pts-285",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-ml",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-over",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-pts-285",
+      "c-tatum-pts-under"
+     ],
+     [
+      "l-ml",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 28.5 points|28.5",
+     "g1|MONEYLINE|FULL_GAME||Los Angeles Lakers||",
+     "g1|TOTAL|FULL_GAME|GAME|OVER||230.5"
+    ],
+    "coreSha": "b5c08ad50b71c1d4"
+   },
+   "NBA · Props only, 6 legs, 4 per game": {
+    "legs": [
+     "c-tatum-pts-285",
+     "l-lebron-ast"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "c-tatum-pts-285",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-pts-285",
+      "c-tatum-pts-under"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 28.5 points|28.5",
+     "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5"
+    ],
+    "coreSha": "06be817be59aa0d8"
+   },
+   "NBA · slip: Tatum Over 27.5 and Over 28.5 (one bet, two lines)": {
+    "legs": [
+     "c-tatum-pts-285",
+     "c-tatum-pts",
+     "l-lebron-ast"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "c-tatum-pts-285",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-tatum-pts",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-pts-285",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "c-tatum-pts",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5"
+    ],
+    "coreSha": "6dfea9d144d0707e"
+   },
+   "NBA · slip: game Under + Tatum Rebounds Over, 4 legs, 3 per game": {
+    "legs": [
+     "c-tatum-reb",
+     "c-under",
+     "l-ml",
+     "l-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "c-tatum-reb",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-under",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-ml",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-over",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-reb",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "c-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-ml",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g1|MONEYLINE|FULL_GAME||Los Angeles Lakers||",
+     "g1|TOTAL|FULL_GAME|GAME|OVER||230.5"
+    ],
+    "coreSha": "8c29886cabd6ef30"
+   },
+   "NBA · Your picks: 3 of 6": {
+    "legs": [
+     "c-tatum-pts",
+     "c-brunson-pts",
+     "l-ml"
+    ],
+    "dropped": [
+     [
+      "c-spread",
+      "not_selected"
+     ],
+     [
+      "l-curry-3s",
+      "not_selected"
+     ],
+     [
+      "l-davis-blk",
+      "not_selected"
+     ]
+    ],
+    "hedge": [
+     [
+      "c-tatum-pts",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-brunson-pts",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-ml",
+      "l-over"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-pts",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "c-brunson-pts",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-ml",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5",
+     "g1|MONEYLINE|FULL_GAME||Los Angeles Lakers||",
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jalen brunson over 26.5 points|26.5"
+    ],
+    "coreSha": "edfdab000ea35538"
+   }
+  },
+  "betKeys": {
+   "SWITCH:g4-prop": "g4|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5",
+   "MIXED:n1-tatum-over": "g1|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5",
+   "MIXED:n1-tatum-under": "g1|RAW|PLAYER_PROP|FULL_GAME|jayson tatum under 28 points|28",
+   "MIXED:n1-brown-reb-over": "g1|RAW|PLAYER_PROP|FULL_GAME|jaylen brown over 5.5 rebounds|5.5",
+   "MIXED:n1-brown-reb-under": "g1|RAW|PLAYER_PROP|FULL_GAME|jaylen brown under 6.5 rebounds|6.5",
+   "MIXED:f3-td": "g3|PROP|FULL_GAME|traviskelce|TD|OVER|",
+   "NBA:c-tatum-pts": "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5",
+   "NBA:c-tatum-pts-285": "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 28.5 points|28.5",
+   "NBA:c-tatum-pts-under": "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum under 29.5 points|29.5",
+   "NBA:c-tatum-reb": "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 8.5 rebounds|8.5",
+   "NBA:c-tatum-pra": "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 40.5 pra|40.5",
+   "NBA:c-brunson-pts": "g0|RAW|PLAYER_PROP|FULL_GAME|jalen brunson over 26.5 points|26.5",
+   "NBA:c-brown-stl": "g0|RAW|PLAYER_PROP|FULL_GAME|jaylen brown over 1.5 steals|1.5",
+   "NBA:l-lebron-ast": "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5",
+   "NBA:l-curry-3s": "g1|RAW|PLAYER_PROP|FULL_GAME|stephen curry over 4.5 threes|4.5",
+   "NBA:l-curry-3s-under": "g1|RAW|PLAYER_PROP|FULL_GAME|stephen curry under 4.5 threes|4.5",
+   "NBA:l-davis-blk": "g1|RAW|PLAYER_PROP|FULL_GAME|anthony davis over 1.5 blocks|1.5",
+   "NBA:l-davis-reb": "g1|RAW|PLAYER_PROP|FULL_GAME|anthony davis under 11.5 rebounds|11.5"
+  }
+ },
+ "step1": {
+  "cases": {
+   "SWITCH · 6 legs, best available, default gate": {
+    "legs": [
+     "g0-small-over",
+     "g1-longshot",
+     "g2-mid-under",
+     "g3-defaulted",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "g0-elite-spread"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "g2-heavy-fav"
+     ],
+     [
+      "g3-defaulted",
+      "g3-thin"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-defaulted",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5"
+    ],
+    "coreSha": "5aaa677dfd584e7d"
+   },
+   "SWITCH · 8 legs, 2 per game, default gate": {
+    "legs": [
+     "g0-small-over",
+     "g0-elite-spread",
+     "g1-longshot",
+     "g2-mid-under",
+     "g3-defaulted",
+     "g4-other-leagues",
+     "g4-prop",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g0-elite-spread",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "g2-heavy-fav"
+     ],
+     [
+      "g3-defaulted",
+      "g3-thin"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-prop",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g0-elite-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-defaulted",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-prop",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5",
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
+     "g4|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5"
+    ],
+    "coreSha": "3be9dcb650fb5ec1"
+   },
+   "SWITCH · 6 legs, 60% gate": {
+    "legs": [
+     "g0-small-over",
+     "g1-longshot",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "g0-elite-spread"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||"
+    ],
+    "coreSha": "7aa673efbffcbf6c"
+   },
+   "SWITCH · 6 legs, no gate": {
+    "legs": [
+     "g0-small-over",
+     "g1-longshot",
+     "g2-mid-under",
+     "g3-defaulted",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "g0-elite-spread"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "g2-heavy-fav"
+     ],
+     [
+      "g3-defaulted",
+      "g3-thin"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-defaulted",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5"
+    ],
+    "coreSha": "5aaa677dfd584e7d"
+   },
+   "SWITCH · 12 legs, 5 per game, no gate": {
+    "legs": [
+     "g0-small-over",
+     "g0-elite-spread",
+     "g1-longshot",
+     "g2-mid-under",
+     "g2-heavy-fav",
+     "g3-defaulted",
+     "g3-thin",
+     "g4-other-leagues",
+     "g4-prop",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g0-elite-spread",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-heavy-fav",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-thin",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-prop",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g0-elite-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-heavy-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-defaulted",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-thin",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-prop",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5",
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
+     "g4|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5",
+     "g2|MONEYLINE|FULL_GAME||Philadelphia Eagles||",
+     "g3|TOTAL|FULL_GAME|GAME|UNDER||50.5"
+    ],
+    "coreSha": "dc919ac0213c04c9"
+   },
+   "SWITCH · slip competing on one game, 4 legs": {
+    "legs": [
+     "g0-small-over",
+     "g2-mid-under",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [
+     [
+      "g2-heavy-fav",
+      "left_out"
+     ]
+    ],
+    "hedge": [
+     [
+      "g0-small-over",
+      "g0-elite-spread"
+     ],
+     [
+      "g2-mid-under",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5"
+    ],
+    "coreSha": "03a16e95589c1bb1"
+   },
+   "SWITCH · slip on two games, 6 legs, 2 per game": {
+    "legs": [
+     "g0-elite-spread",
+     "g1-longshot",
+     "g2-mid-under",
+     "g3-defaulted",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-elite-spread",
+      "g0-small-over"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "g2-heavy-fav"
+     ],
+     [
+      "g3-defaulted",
+      "g3-thin"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-elite-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-defaulted",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5"
+    ],
+    "coreSha": "6b171e6805bcabb9"
+   },
+   "SWITCH · Totals + Props only, 6 legs, 3 per game": {
+    "legs": [
+     "g0-small-over",
+     "g2-mid-under",
+     "g3-thin",
+     "g4-other-leagues",
+     "g4-prop"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-thin",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-prop",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-thin",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-prop",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5",
+     "g3|TOTAL|FULL_GAME|GAME|UNDER||50.5",
+     "g4|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5"
+    ],
+    "coreSha": "5a7c4f4efdacf738"
+   },
+   "SWITCH · Pick Mix 50/50 Spread / Totals, 6 legs, 2 per game": {
+    "legs": [
+     "g0-small-over",
+     "g0-elite-spread",
+     "g2-mid-under",
+     "g3-defaulted",
+     "g4-other-leagues",
+     "g5-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "g0-small-over",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g0-elite-spread",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      "g3-thin"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-small-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g0-elite-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g2-mid-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-defaulted",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g4-other-leagues",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "g5-away"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
+     "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
+     "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5",
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3"
+    ],
+    "coreSha": "f398bc31cfae4378"
+   },
+   "SWITCH · Your picks only, 2 of 5": {
+    "legs": [
+     "g2-heavy-fav",
+     "g5-away"
+    ],
+    "dropped": [
+     [
+      "g0-small-spread",
+      "not_selected"
+     ],
+     [
+      "g1-55-45",
+      "not_selected"
+     ],
+     [
+      "g3-thin",
+      "not_selected"
+     ]
+    ],
+    "hedge": [
+     [
+      "g2-heavy-fav",
+      "g2-mid-under"
+     ],
+     [
+      "g5-away",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g2-heavy-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-away",
+      "g5-home"
+     ]
+    ],
+    "historyBetKeys": [
+     "g5|SPREAD|FULL_GAME||Phoenix Suns||5",
+     "g2|MONEYLINE|FULL_GAME||Philadelphia Eagles||"
+    ],
+    "coreSha": "76b7b8da6c3df88a"
+   },
+   "SWITCH · Your picks only, 4 of 8, 2 per game": {
+    "legs": [
+     "g0-elite-spread",
+     "g1-longshot",
+     "g3-no-price",
+     "g5-home"
+    ],
+    "dropped": [
+     [
+      "g0-over",
+      "not_selected"
+     ],
+     [
+      "g2-heavy-fav",
+      "not_selected"
+     ],
+     [
+      "g2-mid-under",
+      "not_selected"
+     ],
+     [
+      "g5-away",
+      "not_selected"
+     ]
+    ],
+    "hedge": [
+     [
+      "g0-elite-spread",
+      "g0-small-over"
+     ],
+     [
+      "g1-longshot",
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-no-price",
+      "g3-thin"
+     ],
+     [
+      "g5-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "g0-elite-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g1-longshot",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g3-no-price",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "g5-home",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
+     "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
+     "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
+     "g3|MONEYLINE|FULL_GAME||Detroit Lions||"
+    ],
+    "coreSha": "ba2f8b6fcc5a110b"
+   },
+   "NFL · 3 legs, best available": {
+    "legs": [
+     "p-0-spread",
+     "p-1-spread",
+     "p-2-spread"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "p-0-spread",
+      "p-0-over"
+     ],
+     [
+      "p-1-spread",
+      "p-1-over"
+     ],
+     [
+      "p-2-spread",
+      "p-2-over"
+     ]
+    ],
+    "contrarian": [
+     [
+      "p-0-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-1-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-2-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
+     "g1|SPREAD|FULL_GAME||Buffalo Bills||-3",
+     "g2|SPREAD|FULL_GAME||Philadelphia Eagles||-3"
+    ],
+    "coreSha": "2ba2b2a98dc3186f"
+   },
+   "NFL · 4 legs, 2 per game, game lines": {
+    "legs": [
+     "p-0-spread",
+     "p-1-spread",
+     "p-2-spread",
+     "p-3-spread"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "p-0-spread",
+      "p-0-over"
+     ],
+     [
+      "p-1-spread",
+      "p-1-over"
+     ],
+     [
+      "p-2-spread",
+      "p-2-over"
+     ],
+     [
+      "p-3-spread",
+      "p-3-over"
+     ]
+    ],
+    "contrarian": [
+     [
+      "p-0-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-1-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-2-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-3-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
+     "g1|SPREAD|FULL_GAME||Buffalo Bills||-3",
+     "g2|SPREAD|FULL_GAME||Philadelphia Eagles||-3",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-3"
+    ],
+    "coreSha": "8918fafc5a211e4e"
+   },
+   "NFL · 2 legs, totals only, 60% gate": {
+    "legs": [],
+    "dropped": [],
+    "hedge": [],
+    "contrarian": [],
+    "historyBetKeys": [],
+    "coreSha": "81644d8034f15c0b"
+   },
+   "NFL · 6 legs, no gate": {
+    "legs": [
+     "p-0-spread",
+     "p-1-spread",
+     "p-2-spread",
+     "p-3-spread",
+     "p-4-spread",
+     "p-5-spread"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "p-0-spread",
+      "p-0-over"
+     ],
+     [
+      "p-1-spread",
+      "p-1-over"
+     ],
+     [
+      "p-2-spread",
+      "p-2-over"
+     ],
+     [
+      "p-3-spread",
+      "p-3-over"
+     ],
+     [
+      "p-4-spread",
+      "p-4-over"
+     ],
+     [
+      "p-5-spread",
+      "p-5-over"
+     ]
+    ],
+    "contrarian": [
+     [
+      "p-0-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-1-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-2-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-3-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-4-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-5-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
+     "g1|SPREAD|FULL_GAME||Buffalo Bills||-3",
+     "g2|SPREAD|FULL_GAME||Philadelphia Eagles||-3",
+     "g3|SPREAD|FULL_GAME||Detroit Lions||-3",
+     "g4|SPREAD|FULL_GAME||Baltimore Ravens||-3",
+     "g5|SPREAD|FULL_GAME||San Francisco 49ers||-3"
+    ],
+    "coreSha": "60eb845a2f7d5466"
+   },
+   "NFL · Your picks: every favorite ML": {
+    "legs": [
+     "p-0-fav",
+     "p-1-fav",
+     "p-2-fav",
+     "p-3-fav",
+     "p-4-fav",
+     "p-5-fav"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "p-0-fav",
+      "p-0-over"
+     ],
+     [
+      "p-1-fav",
+      "p-1-over"
+     ],
+     [
+      "p-2-fav",
+      "p-2-over"
+     ],
+     [
+      "p-3-fav",
+      "p-3-over"
+     ],
+     [
+      "p-4-fav",
+      "p-4-over"
+     ],
+     [
+      "p-5-fav",
+      "p-5-over"
+     ]
+    ],
+    "contrarian": [
+     [
+      "p-0-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-1-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-2-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-3-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-4-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "p-5-fav",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "0b14f21afdd4f995"
+   },
+   "MIXED · m0-yrfi alone": {
+    "legs": [
+     "m0-yrfi"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-yrfi",
+      "m0-rl-home"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-yrfi",
+      "m0-nrfi"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "9374ba175cbcdbb7"
+   },
+   "MIXED · m0-nrfi alone": {
+    "legs": [
+     "m0-nrfi"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-nrfi",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-nrfi",
+      "m0-yrfi"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "b3e8c83a33970f06"
+   },
+   "MIXED · m0-tt-over alone": {
+    "legs": [
+     "m0-tt-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-tt-over",
+      "m0-rl-home"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-tt-over",
+      "m0-tt-under"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "784d1e6de459e7ed"
+   },
+   "MIXED · m0-tt-under alone": {
+    "legs": [
+     "m0-tt-under"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-tt-under",
+      "m0-rl-home"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-tt-under",
+      "m0-tt-over"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "8bc24c253bc18096"
+   },
+   "MIXED · m0-tt-under-far alone": {
+    "legs": [
+     "m0-tt-under-far"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-tt-under-far",
+      "m0-rl-home"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-tt-under-far",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "7280d094e6975d97"
+   },
+   "MIXED · m0-over alone": {
+    "legs": [
+     "m0-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-over",
+      "m0-rl-home"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-over",
+      "m0-under"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "114fa8140b626f78"
+   },
+   "MIXED · m0-under alone": {
+    "legs": [
+     "m0-under"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-under",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-under",
+      "m0-over"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "f47de4e5a7d8c395"
+   },
+   "MIXED · m0-f5-under alone": {
+    "legs": [
+     "m0-f5-under"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-f5-under",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-f5-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "e818b7c060680a11"
+   },
+   "MIXED · m0-rl-home alone": {
+    "legs": [
+     "m0-rl-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-rl-home",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-rl-home",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "3f3327d182202e56"
+   },
+   "MIXED · m0-rl-away-alt alone": {
+    "legs": [
+     "m0-rl-away-alt"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-rl-away-alt",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-rl-away-alt",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "c986999571d88883"
+   },
+   "MIXED · m0-ml-home alone": {
+    "legs": [
+     "m0-ml-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-ml-home",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-ml-home",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "184418975131a710"
+   },
+   "MIXED · m0-ml-away alone": {
+    "legs": [
+     "m0-ml-away"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "m0-ml-away",
+      "m0-tt-under-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "m0-ml-away",
+      "m0-ml-home"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "4eaba6f17e5ee8dc"
+   },
+   "MIXED · n1-tatum-over alone": {
+    "legs": [
+     "n1-tatum-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-tatum-over",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-tatum-over",
+      "n1-tatum-under"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "2ae3e42c21be7814"
+   },
+   "MIXED · n1-tatum-under alone": {
+    "legs": [
+     "n1-tatum-under"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-tatum-under",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-tatum-under",
+      "n1-tatum-over"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "ad267d3310598cdd"
+   },
+   "MIXED · n1-brown-reb-over alone": {
+    "legs": [
+     "n1-brown-reb-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-brown-reb-over",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-brown-reb-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "0f3171e7d424a256"
+   },
+   "MIXED · n1-brown-reb-under alone": {
+    "legs": [
+     "n1-brown-reb-under"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-brown-reb-under",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-brown-reb-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "efa5ba58f2bafdc9"
+   },
+   "MIXED · n1-spread-home alone": {
+    "legs": [
+     "n1-spread-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-spread-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-spread-home",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "47ec4be0b1d75066"
+   },
+   "MIXED · n1-spread-away-far alone": {
+    "legs": [
+     "n1-spread-away-far"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-spread-away-far",
+      "n1-1h-spread-away"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-spread-away-far",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "678330780c557e0e"
+   },
+   "MIXED · n1-1h-spread-away alone": {
+    "legs": [
+     "n1-1h-spread-away"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "n1-1h-spread-away",
+      "n1-spread-away-far"
+     ]
+    ],
+    "contrarian": [
+     [
+      "n1-1h-spread-away",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "9074763db6b7301d"
+   },
+   "MIXED · e2-ml-home alone": {
+    "legs": [
+     "e2-ml-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "e2-ml-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "e2-ml-home",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "8283169a5f4bdb8d"
+   },
+   "MIXED · e2-ml-away alone": {
+    "legs": [
+     "e2-ml-away"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "e2-ml-away",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "e2-ml-away",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "7dcf6f49db31f76a"
+   },
+   "MIXED · e2-over alone": {
+    "legs": [
+     "e2-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "e2-over",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "e2-over",
+      "e2-under"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "70fd0cc3c3b813d3"
+   },
+   "MIXED · e2-under alone": {
+    "legs": [
+     "e2-under"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "e2-under",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "e2-under",
+      "e2-over"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "8892ad577678b274"
+   },
+   "MIXED · f3-td alone": {
+    "legs": [
+     "f3-td"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "f3-td",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "f3-td",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "58f197cd345781b2"
+   },
+   "MIXED · f3-ml-home alone": {
+    "legs": [
+     "f3-ml-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "f3-ml-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "f3-ml-home",
+      "f3-ml-away"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "1a83477e7b2e6e80"
+   },
+   "MIXED · f3-ml-away alone": {
+    "legs": [
+     "f3-ml-away"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "f3-ml-away",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "f3-ml-away",
+      "f3-ml-home"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "9ade7e943c673551"
+   },
+   "MIXED · f3-spread-home alone": {
+    "legs": [
+     "f3-spread-home"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "f3-spread-home",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "f3-spread-home",
+      "f3-spread-away"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "060ca79c8c667556"
+   },
+   "MIXED · f3-spread-away alone": {
+    "legs": [
+     "f3-spread-away"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "f3-spread-away",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "f3-spread-away",
+      "f3-spread-home"
+     ]
+    ],
+    "historyBetKeys": [],
+    "coreSha": "84aef37e7ce57d04"
+   },
+   "NBA · 2 legs, 1 per game": {
+    "legs": [
+     "c-tatum-pts-285",
+     "l-lebron-ast"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "c-tatum-pts-285",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-pts-285",
+      "c-tatum-pts-under"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 28.5 points|28.5",
+     "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5"
+    ],
+    "coreSha": "16b0850c6f2fed42"
+   },
+   "NBA · 6 legs, 3 per game": {
+    "legs": [
+     "c-tatum-pts-285",
+     "c-tatum-reb",
+     "c-tatum-pra",
+     "l-lebron-ast",
+     "l-ml",
+     "l-over"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "c-tatum-pts-285",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-tatum-reb",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-tatum-pra",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-ml",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-over",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-pts-285",
+      "c-tatum-pts-under"
+     ],
+     [
+      "c-tatum-reb",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "c-tatum-pra",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-ml",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 28.5 points|28.5",
+     "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5",
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 8.5 rebounds|8.5",
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 40.5 pra|40.5",
+     "g1|MONEYLINE|FULL_GAME||Los Angeles Lakers||",
+     "g1|TOTAL|FULL_GAME|GAME|OVER||230.5"
+    ],
+    "coreSha": "2c69e5d20c8cfa9f"
+   },
+   "NBA · 10 legs, 6 per game, no gate": {
+    "legs": [
+     "c-tatum-pts-285",
+     "c-tatum-reb",
+     "c-tatum-pra",
+     "c-brunson-pts",
+     "c-spread",
+     "l-lebron-ast",
+     "l-ml",
+     "l-over",
+     "l-curry-3s",
+     "l-davis-blk"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "c-tatum-pts-285",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-tatum-reb",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-tatum-pra",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-brunson-pts",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-spread",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-ml",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-over",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-curry-3s",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-davis-blk",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-pts-285",
+      "c-tatum-pts-under"
+     ],
+     [
+      "c-tatum-reb",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "c-tatum-pra",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "c-brunson-pts",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "c-spread",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-ml",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-over",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-curry-3s",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-davis-blk",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 28.5 points|28.5",
+     "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5",
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 8.5 rebounds|8.5",
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 40.5 pra|40.5",
+     "g1|MONEYLINE|FULL_GAME||Los Angeles Lakers||",
+     "g1|TOTAL|FULL_GAME|GAME|OVER||230.5",
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jalen brunson over 26.5 points|26.5",
+     "g0|SPREAD|FULL_GAME||Boston Celtics||-6",
+     "g1|RAW|PLAYER_PROP|FULL_GAME|stephen curry over 4.5 threes|4.5",
+     "g1|RAW|PLAYER_PROP|FULL_GAME|anthony davis over 1.5 blocks|1.5"
+    ],
+    "coreSha": "a54b3ef061952e6e"
+   },
+   "NBA · Props only, 6 legs, 4 per game": {
+    "legs": [
+     "c-tatum-pts-285",
+     "c-tatum-reb",
+     "c-tatum-pra",
+     "c-brunson-pts",
+     "l-lebron-ast",
+     "l-curry-3s"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "c-tatum-pts-285",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-tatum-reb",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-tatum-pra",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-brunson-pts",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-curry-3s",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-pts-285",
+      "c-tatum-pts-under"
+     ],
+     [
+      "c-tatum-reb",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "c-tatum-pra",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "c-brunson-pts",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-curry-3s",
+      "l-curry-3s-under"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 28.5 points|28.5",
+     "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5",
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 8.5 rebounds|8.5",
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 40.5 pra|40.5",
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jalen brunson over 26.5 points|26.5",
+     "g1|RAW|PLAYER_PROP|FULL_GAME|stephen curry over 4.5 threes|4.5"
+    ],
+    "coreSha": "222c740730252ca6"
+   },
+   "NBA · slip: Tatum Over 27.5 and Over 28.5 (one bet, two lines)": {
+    "legs": [
+     "c-tatum-pts-285",
+     "c-tatum-reb",
+     "l-lebron-ast"
+    ],
+    "dropped": [
+     [
+      "c-tatum-pts",
+      "duplicate"
+     ]
+    ],
+    "hedge": [
+     [
+      "c-tatum-pts-285",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-tatum-reb",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_ALTERNATE"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-pts-285",
+      "c-tatum-pts-under"
+     ],
+     [
+      "c-tatum-reb",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5",
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 8.5 rebounds|8.5"
+    ],
+    "coreSha": "e70e7add1c83faa7"
+   },
+   "NBA · slip: game Under + Tatum Rebounds Over, 4 legs, 3 per game": {
+    "legs": [
+     "c-tatum-reb",
+     "c-under",
+     "l-lebron-ast",
+     "l-ml"
+    ],
+    "dropped": [],
+    "hedge": [
+     [
+      "c-tatum-reb",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-under",
+      "c-spread"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-ml",
+      "l-over"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-reb",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "c-under",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-lebron-ast",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-ml",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5",
+     "g1|MONEYLINE|FULL_GAME||Los Angeles Lakers||"
+    ],
+    "coreSha": "837f0881de9a8cb7"
+   },
+   "NBA · Your picks: 3 of 6": {
+    "legs": [
+     "c-tatum-pts",
+     "c-brunson-pts",
+     "l-ml"
+    ],
+    "dropped": [
+     [
+      "c-spread",
+      "not_selected"
+     ],
+     [
+      "l-curry-3s",
+      "not_selected"
+     ],
+     [
+      "l-davis-blk",
+      "not_selected"
+     ]
+    ],
+    "hedge": [
+     [
+      "c-tatum-pts",
+      "NO_ALTERNATE"
+     ],
+     [
+      "c-brunson-pts",
+      "NO_ALTERNATE"
+     ],
+     [
+      "l-ml",
+      "l-over"
+     ]
+    ],
+    "contrarian": [
+     [
+      "c-tatum-pts",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "c-brunson-pts",
+      "NO_QUALIFYING_CONTRARIAN"
+     ],
+     [
+      "l-ml",
+      "NO_QUALIFYING_CONTRARIAN"
+     ]
+    ],
+    "historyBetKeys": [
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5",
+     "g1|MONEYLINE|FULL_GAME||Los Angeles Lakers||",
+     "g0|RAW|PLAYER_PROP|FULL_GAME|jalen brunson over 26.5 points|26.5"
+    ],
+    "coreSha": "edfdab000ea35538"
+   }
+  },
+  "betKeys": {
+   "SWITCH:g4-prop": "g4|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5",
+   "MIXED:n1-tatum-over": "g1|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5",
+   "MIXED:n1-tatum-under": "g1|RAW|PLAYER_PROP|FULL_GAME|jayson tatum under 28 points|28",
+   "MIXED:n1-brown-reb-over": "g1|RAW|PLAYER_PROP|FULL_GAME|jaylen brown over 5.5 rebounds|5.5",
+   "MIXED:n1-brown-reb-under": "g1|RAW|PLAYER_PROP|FULL_GAME|jaylen brown under 6.5 rebounds|6.5",
+   "MIXED:f3-td": "g3|PROP|FULL_GAME|traviskelce|TD|OVER|",
+   "NBA:c-tatum-pts": "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5",
+   "NBA:c-tatum-pts-285": "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 28.5 points|28.5",
+   "NBA:c-tatum-pts-under": "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum under 29.5 points|29.5",
+   "NBA:c-tatum-reb": "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 8.5 rebounds|8.5",
+   "NBA:c-tatum-pra": "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 40.5 pra|40.5",
+   "NBA:c-brunson-pts": "g0|RAW|PLAYER_PROP|FULL_GAME|jalen brunson over 26.5 points|26.5",
+   "NBA:c-brown-stl": "g0|RAW|PLAYER_PROP|FULL_GAME|jaylen brown over 1.5 steals|1.5",
+   "NBA:l-lebron-ast": "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5",
+   "NBA:l-curry-3s": "g1|RAW|PLAYER_PROP|FULL_GAME|stephen curry over 4.5 threes|4.5",
+   "NBA:l-curry-3s-under": "g1|RAW|PLAYER_PROP|FULL_GAME|stephen curry under 4.5 threes|4.5",
+   "NBA:l-davis-blk": "g1|RAW|PLAYER_PROP|FULL_GAME|anthony davis over 1.5 blocks|1.5",
+   "NBA:l-davis-reb": "g1|RAW|PLAYER_PROP|FULL_GAME|anthony davis under 11.5 rebounds|11.5"
+  }
+ }
+}

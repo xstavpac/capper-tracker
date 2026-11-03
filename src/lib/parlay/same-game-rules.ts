@@ -67,8 +67,8 @@ function sameGamePlayer(a: ParlayCandidate, descA: OkProp, b: ParlayCandidate, d
 }
 
 function propVsProp(a: ParlayCandidate, b: ParlayCandidate): SameGameConflict | null {
-  const descA = describeProp(a.pick);
-  const descB = describeProp(b.pick);
+  const descA = describeProp(a.pick, a.game.sportName);
+  const descB = describeProp(b.pick, b.game.sportName);
   if (descA.status !== "OK" || descB.status !== "OK") {
     const reasons = [descA, descB].flatMap((d) => (d.status === "OK" ? [] : [d.reason]));
     return conflict("UNVERIFIED", Array.from(new Set(reasons)).sort().join("; "));
@@ -119,8 +119,8 @@ export function duplicateLine(a: ParlayCandidate, b: ParlayCandidate): Duplicate
 
   if (aIsProp) {
     if (!sameGame(a.game, b.game)) return null;
-    const descA = describeProp(a.pick);
-    const descB = describeProp(b.pick);
+    const descA = describeProp(a.pick, a.game.sportName);
+    const descB = describeProp(b.pick, b.game.sportName);
     if (descA.status !== "OK" || descB.status !== "OK") return null;
     if (descA.market !== descB.market || descA.direction !== descB.direction || !sameGamePlayer(a, descA, b, descB)) return null;
     if (descA.line === null || descB.line === null) return descA.line === descB.line ? { better: "EQUAL" } : null;
@@ -144,8 +144,8 @@ export function sameGameConflict(a: ParlayCandidate, b: ParlayCandidate): SameGa
   const bIsProp = b.pick.betType === "PLAYER_PROP";
 
   if (aIsProp && bIsProp) return propVsProp(a, b);
-  if (aIsProp) return propVsOther(describeProp(a.pick), describePick(b.pick, b.game));
-  if (bIsProp) return propVsOther(describeProp(b.pick), describePick(a.pick, a.game));
+  if (aIsProp) return propVsOther(describeProp(a.pick, a.game.sportName), describePick(b.pick, b.game));
+  if (bIsProp) return propVsOther(describeProp(b.pick, b.game.sportName), describePick(a.pick, a.game));
 
   const descA = describePick(a.pick, a.game);
   const descB = describePick(b.pick, b.game);

@@ -14,9 +14,9 @@ SWITCH · 8 legs, 2 per game, default gate
   * g0-elite-spread -> old g0-dog-ml (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
   * g1-longshot -> old g1-55-45 (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
     g2-mid-under -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
-    g2-heavy-fav -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
     g3-defaulted -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
     g4-other-leagues -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g4-prop -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
     g5-home -> old g5-away (R2) | new g5-away (SPREAD, gap 0)
 
 SWITCH · 6 legs, 60% gate
@@ -42,6 +42,7 @@ SWITCH · 12 legs, 5 per game, no gate
     g3-defaulted -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
     g3-thin -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
     g4-other-leagues -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g4-prop -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
     g5-home -> old g5-away (R2) | new g5-away (SPREAD, gap 0)
 
 SWITCH · slip competing on one game, 4 legs
@@ -63,6 +64,7 @@ SWITCH · Totals + Props only, 6 legs, 3 per game
     g2-mid-under -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
     g3-thin -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
     g4-other-leagues -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g4-prop -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
 
 SWITCH · Pick Mix 50/50 Spread / Totals, 6 legs, 2 per game
     g0-small-over -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
@@ -197,12 +199,12 @@ MIXED · f3-spread-away alone
 
 Availability (Swap = All, every case's legs): legs with a Contrarian, old vs new.
 market      legs   old         old same-type   new         new misses: outside tolerance / below gate / no opposite pick / excluded market
-ML            23    10  43%      2   9%          3  13%    0 / 7 / 11 / 2   << new under half of old
+ML            22    10  45%      2   9%          3  14%    0 / 7 / 10 / 2   << new under half of old
 SPREAD        41    25  61%     13  32%         11  27%    4 / 0 / 26 / 0   << new under half of old
 TOTAL         32     4  13%      4  13%          4  13%    0 / 0 / 28 / 0
 TEAM_TOTAL     3     3 100%      3 100%          2  67%    1 / 0 / 0 / 0
 NRFI           2     2 100%      2 100%          2 100%    0 / 0 / 0 / 0
-PROP           5     0   0%      0   0%          2  40%    2 / 0 / 0 / 1
-ALL          106    44  42%     24  23%         24  23%    7 / 7 / 65 / 3
+PROP           8     0   0%      0   0%          2  25%    2 / 0 / 3 / 1
+ALL          108    44  41%     24  22%         24  22%    7 / 7 / 67 / 3
 old same-type = old Contrarians whose alternate was the same betType (the ML <-> spread cross pairs taken out).
 FLAG: new availability is under half of old for ML, SPREAD.

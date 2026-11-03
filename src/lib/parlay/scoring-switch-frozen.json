@@ -1098,18 +1098,18 @@
       "g0-elite-spread",
       "g1-longshot",
       "g2-mid-under",
-      "g2-heavy-fav",
       "g3-defaulted",
       "g4-other-leagues",
+      "g4-prop",
       "g5-home"
     ],
     "hedge": [
       null,
       null,
       null,
-      null,
-      null,
+      "g2-heavy-fav",
       "g3-thin",
+      null,
       null,
       null
     ],
@@ -1303,52 +1303,7 @@
           "basis": "LEAGUE",
           "wilsonLowerBound": 0.4939417688127429,
           "score": 5.442176870748295,
-          "sameGame": true
-        },
-        {
-          "pick": {
-            "pickId": "g2-heavy-fav",
-            "capperId": "c-g2-heavy-fav",
-            "capperName": "Capper g2-heavy-fav",
-            "capperColorTag": null,
-            "capperIsFavorite": false,
-            "category": "FAV_ML",
-            "leagueName": "NFL",
-            "gameId": "g2",
-            "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
-            "betDetail": "Eagles ML",
-            "odds": -1000,
-            "oddsSource": "MARKET",
-            "units": 1,
-            "status": "PENDING",
-            "betType": "MONEYLINE",
-            "period": "FULL_GAME",
-            "rawBetDetail": "Eagles ML",
-            "propMarket": null,
-            "line": null,
-            "homeTeam": "Philadelphia Eagles",
-            "awayTeam": "Dallas Cowboys",
-            "gameTime": "2026-11-08T19:00:00.000Z",
-            "teamGroup": "HOME",
-            "teamLabel": "",
-            "teamColor": null,
-            "datePosted": "2026-11-08T12:00:00.000Z",
-            "gameNumber": null
-          },
-          "gameId": "g2",
-          "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
-          "gameTime": "2026-11-08T19:00:00.000Z",
-          "source": "GENERATED",
-          "record": {
-            "wins": 18,
-            "losses": 4,
-            "n": 22,
-            "winPct": 81.81818181818183
-          },
-          "basis": "LEAGUE",
-          "wilsonLowerBound": 0.6675232806493855,
-          "score": 4.12618974693858,
-          "sameGame": true
+          "sameGame": false
         },
         {
           "pick": {
@@ -1438,7 +1393,53 @@
           "basis": "OVERALL",
           "wilsonLowerBound": 0.6388955185981743,
           "score": 13.809523809523805,
-          "sameGame": false
+          "sameGame": true
+        },
+        {
+          "pick": {
+            "pickId": "g4-prop",
+            "capperId": "c-g4-prop",
+            "capperName": "Capper g4-prop",
+            "capperColorTag": null,
+            "capperIsFavorite": false,
+            "category": "TD_PROP",
+            "leagueName": "NBA",
+            "gameId": "g4",
+            "gameLabel": "New York Knicks @ Boston Celtics",
+            "betDetail": "Jayson Tatum Over 27.5 Points",
+            "odds": -115,
+            "oddsSource": "MARKET",
+            "units": 1,
+            "status": "PENDING",
+            "betType": "PLAYER_PROP",
+            "period": "FULL_GAME",
+            "rawBetDetail": "Jayson Tatum Over 27.5 Points",
+            "propMarket": "POINTS",
+            "line": 27.5,
+            "homeTeam": "Boston Celtics",
+            "awayTeam": "New York Knicks",
+            "gameTime": "2026-11-08T21:00:00.000Z",
+            "teamGroup": "HOME",
+            "teamLabel": "",
+            "teamColor": null,
+            "datePosted": "2026-11-08T12:00:00.000Z",
+            "gameNumber": null
+          },
+          "gameId": "g4",
+          "gameLabel": "New York Knicks @ Boston Celtics",
+          "gameTime": "2026-11-08T21:00:00.000Z",
+          "source": "GENERATED",
+          "record": {
+            "wins": 20,
+            "losses": 10,
+            "n": 30,
+            "winPct": 66.66666666666666
+          },
+          "basis": "LEAGUE",
+          "wilsonLowerBound": 0.5299824356209172,
+          "score": 7.906976744186045,
+          "sameGame": true,
+          "propMarket": "BASKETBALL:POINTS"
         },
         {
           "pick": {
@@ -1694,13 +1695,9 @@
               "basis": "LEAGUE",
               "wilsonLowerBound": 0.4939417688127429,
               "score": 5.442176870748295,
-              "sameGame": true
+              "sameGame": false
             },
-            "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
-          },
-          {
-            "original": {
+            "swap": {
               "pick": {
                 "pickId": "g2-heavy-fav",
                 "capperId": "c-g2-heavy-fav",
@@ -1730,23 +1727,17 @@
                 "datePosted": "2026-11-08T12:00:00.000Z",
                 "gameNumber": null
               },
-              "gameId": "g2",
-              "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
-              "gameTime": "2026-11-08T19:00:00.000Z",
-              "source": "GENERATED",
+              "rule": "R4",
               "record": {
                 "wins": 18,
                 "losses": 4,
                 "n": 22,
                 "winPct": 81.81818181818183
               },
-              "basis": "LEAGUE",
               "wilsonLowerBound": 0.6675232806493855,
-              "score": 4.12618974693858,
-              "sameGame": true
+              "basis": "LEAGUE"
             },
-            "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": null
           },
           {
             "original": {
@@ -1880,7 +1871,57 @@
               "basis": "OVERALL",
               "wilsonLowerBound": 0.6388955185981743,
               "score": 13.809523809523805,
-              "sameGame": false
+              "sameGame": true
+            },
+            "swap": null,
+            "unchangedReason": "NO_ALTERNATE"
+          },
+          {
+            "original": {
+              "pick": {
+                "pickId": "g4-prop",
+                "capperId": "c-g4-prop",
+                "capperName": "Capper g4-prop",
+                "capperColorTag": null,
+                "capperIsFavorite": false,
+                "category": "TD_PROP",
+                "leagueName": "NBA",
+                "gameId": "g4",
+                "gameLabel": "New York Knicks @ Boston Celtics",
+                "betDetail": "Jayson Tatum Over 27.5 Points",
+                "odds": -115,
+                "oddsSource": "MARKET",
+                "units": 1,
+                "status": "PENDING",
+                "betType": "PLAYER_PROP",
+                "period": "FULL_GAME",
+                "rawBetDetail": "Jayson Tatum Over 27.5 Points",
+                "propMarket": "POINTS",
+                "line": 27.5,
+                "homeTeam": "Boston Celtics",
+                "awayTeam": "New York Knicks",
+                "gameTime": "2026-11-08T21:00:00.000Z",
+                "teamGroup": "HOME",
+                "teamLabel": "",
+                "teamColor": null,
+                "datePosted": "2026-11-08T12:00:00.000Z",
+                "gameNumber": null
+              },
+              "gameId": "g4",
+              "gameLabel": "New York Knicks @ Boston Celtics",
+              "gameTime": "2026-11-08T21:00:00.000Z",
+              "source": "GENERATED",
+              "record": {
+                "wins": 20,
+                "losses": 10,
+                "n": 30,
+                "winPct": 66.66666666666666
+              },
+              "basis": "LEAGUE",
+              "wilsonLowerBound": 0.5299824356209172,
+              "score": 7.906976744186045,
+              "sameGame": true,
+              "propMarket": "BASKETBALL:POINTS"
             },
             "swap": null,
             "unchangedReason": "NO_ALTERNATE"
@@ -1935,7 +1976,7 @@
             "unchangedReason": "NO_ALTERNATE"
           }
         ],
-        "swapCount": 1
+        "swapCount": 2
       },
       "contrarian": {
         "mode": "CONTRARIAN",
@@ -2131,56 +2172,7 @@
               "basis": "LEAGUE",
               "wilsonLowerBound": 0.4939417688127429,
               "score": 5.442176870748295,
-              "sameGame": true
-            },
-            "swap": null,
-            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
-          },
-          {
-            "original": {
-              "pick": {
-                "pickId": "g2-heavy-fav",
-                "capperId": "c-g2-heavy-fav",
-                "capperName": "Capper g2-heavy-fav",
-                "capperColorTag": null,
-                "capperIsFavorite": false,
-                "category": "FAV_ML",
-                "leagueName": "NFL",
-                "gameId": "g2",
-                "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
-                "betDetail": "Eagles ML",
-                "odds": -1000,
-                "oddsSource": "MARKET",
-                "units": 1,
-                "status": "PENDING",
-                "betType": "MONEYLINE",
-                "period": "FULL_GAME",
-                "rawBetDetail": "Eagles ML",
-                "propMarket": null,
-                "line": null,
-                "homeTeam": "Philadelphia Eagles",
-                "awayTeam": "Dallas Cowboys",
-                "gameTime": "2026-11-08T19:00:00.000Z",
-                "teamGroup": "HOME",
-                "teamLabel": "",
-                "teamColor": null,
-                "datePosted": "2026-11-08T12:00:00.000Z",
-                "gameNumber": null
-              },
-              "gameId": "g2",
-              "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
-              "gameTime": "2026-11-08T19:00:00.000Z",
-              "source": "GENERATED",
-              "record": {
-                "wins": 18,
-                "losses": 4,
-                "n": 22,
-                "winPct": 81.81818181818183
-              },
-              "basis": "LEAGUE",
-              "wilsonLowerBound": 0.6675232806493855,
-              "score": 4.12618974693858,
-              "sameGame": true
+              "sameGame": false
             },
             "swap": null,
             "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
@@ -2278,7 +2270,57 @@
               "basis": "OVERALL",
               "wilsonLowerBound": 0.6388955185981743,
               "score": 13.809523809523805,
-              "sameGame": false
+              "sameGame": true
+            },
+            "swap": null,
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
+          },
+          {
+            "original": {
+              "pick": {
+                "pickId": "g4-prop",
+                "capperId": "c-g4-prop",
+                "capperName": "Capper g4-prop",
+                "capperColorTag": null,
+                "capperIsFavorite": false,
+                "category": "TD_PROP",
+                "leagueName": "NBA",
+                "gameId": "g4",
+                "gameLabel": "New York Knicks @ Boston Celtics",
+                "betDetail": "Jayson Tatum Over 27.5 Points",
+                "odds": -115,
+                "oddsSource": "MARKET",
+                "units": 1,
+                "status": "PENDING",
+                "betType": "PLAYER_PROP",
+                "period": "FULL_GAME",
+                "rawBetDetail": "Jayson Tatum Over 27.5 Points",
+                "propMarket": "POINTS",
+                "line": 27.5,
+                "homeTeam": "Boston Celtics",
+                "awayTeam": "New York Knicks",
+                "gameTime": "2026-11-08T21:00:00.000Z",
+                "teamGroup": "HOME",
+                "teamLabel": "",
+                "teamColor": null,
+                "datePosted": "2026-11-08T12:00:00.000Z",
+                "gameNumber": null
+              },
+              "gameId": "g4",
+              "gameLabel": "New York Knicks @ Boston Celtics",
+              "gameTime": "2026-11-08T21:00:00.000Z",
+              "source": "GENERATED",
+              "record": {
+                "wins": 20,
+                "losses": 10,
+                "n": 30,
+                "winPct": 66.66666666666666
+              },
+              "basis": "LEAGUE",
+              "wilsonLowerBound": 0.5299824356209172,
+              "score": 7.906976744186045,
+              "sameGame": true,
+              "propMarket": "BASKETBALL:POINTS"
             },
             "swap": null,
             "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
@@ -2388,9 +2430,9 @@
         "g3-defaulted",
         "g2-mid-under",
         "g0-elite-spread",
-        "g2-heavy-fav"
+        "g4-prop"
       ],
-      "generatedKey": "g0-elite-spread,g0-small-over,g1-longshot,g2-heavy-fav,g2-mid-under,g3-defaulted,g4-other-leagues,g5-home",
+      "generatedKey": "g0-elite-spread,g0-small-over,g1-longshot,g2-mid-under,g3-defaulted,g4-other-leagues,g4-prop,g5-home",
       "historyBetKeys": [
         "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
         "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
@@ -2399,7 +2441,7 @@
         "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
         "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5",
         "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
-        "g2|MONEYLINE|FULL_GAME||Philadelphia Eagles||"
+        "g4|PROP|FULL_GAME|jaysontatum|POINTS|OVER|27.5"
       ]
     }
   },

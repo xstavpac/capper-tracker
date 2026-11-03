@@ -77,9 +77,10 @@ for (const c of CONTRARIAN_CASES) {
   );
 
   lines.push(c.label);
-  contrarian.ALL.legs.forEach((l, i) => {
+  contrarian.ALL.legs.forEach((l) => {
     const id = l.original.pick.pickId;
-    const [, oldTo, oldWhy] = was.contrarian.ALL[i];
+    // By leg id: a Primary that changed (another PR's same-game rules) must report, not crash.
+    const [, oldTo, oldWhy] = was.contrarian.ALL.find((r) => r[0] === id) ?? [id, null, "NOT_A_LEG_BEFORE"];
     const newTo = l.swap?.pick.pickId ?? null;
     const t = tallyOf(contrarianMarketOf(l.original.pick.betType) ?? "OTHER");
     t.legs++;

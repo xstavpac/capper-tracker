@@ -1,0 +1,100 @@
+=== 1. Same-game rules with the sport (+ NBA rebounds/steals/blocks non-offensive): 53ad4f5 -> 1aabb39 ===
+SWITCH · 8 legs, 2 per game, default gate
+  legs: g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g2-heavy-fav, g3-defaulted, g4-other-leagues, g5-home
+     -> g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g3-defaulted, g4-other-leagues, g4-prop, g5-home
+     out: g2-heavy-fav; in: g4-prop
+  hedge: g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g2-heavy-fav->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+      -> g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  contrarian: g0-small-over->NO_QUALIFYING_CONTRARIAN, g0-elite-spread->NO_QUALIFYING_CONTRARIAN, g1-longshot->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g2-heavy-fav->NO_QUALIFYING_CONTRARIAN, g3-defaulted->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g5-home->g5-away
+           -> g0-small-over->NO_QUALIFYING_CONTRARIAN, g0-elite-spread->NO_QUALIFYING_CONTRARIAN, g1-longshot->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g3-defaulted->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g4-prop->NO_QUALIFYING_CONTRARIAN, g5-home->g5-away
+SWITCH · 12 legs, 5 per game, no gate
+  legs: g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g2-heavy-fav, g3-defaulted, g3-thin, g4-other-leagues, g5-home
+     -> g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g2-heavy-fav, g3-defaulted, g3-thin, g4-other-leagues, g4-prop, g5-home
+     out: (none); in: g4-prop
+  hedge: g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g2-heavy-fav->NO_ALTERNATE, g3-defaulted->NO_ALTERNATE, g3-thin->NO_ALTERNATE, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+      -> g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g2-heavy-fav->NO_ALTERNATE, g3-defaulted->NO_ALTERNATE, g3-thin->NO_ALTERNATE, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  contrarian: g0-small-over->NO_QUALIFYING_CONTRARIAN, g0-elite-spread->NO_QUALIFYING_CONTRARIAN, g1-longshot->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g2-heavy-fav->NO_QUALIFYING_CONTRARIAN, g3-defaulted->NO_QUALIFYING_CONTRARIAN, g3-thin->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g5-home->g5-away
+           -> g0-small-over->NO_QUALIFYING_CONTRARIAN, g0-elite-spread->NO_QUALIFYING_CONTRARIAN, g1-longshot->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g2-heavy-fav->NO_QUALIFYING_CONTRARIAN, g3-defaulted->NO_QUALIFYING_CONTRARIAN, g3-thin->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g4-prop->NO_QUALIFYING_CONTRARIAN, g5-home->g5-away
+SWITCH · Totals + Props only, 6 legs, 3 per game
+  legs: g0-small-over, g2-mid-under, g3-thin, g4-other-leagues
+     -> g0-small-over, g2-mid-under, g3-thin, g4-other-leagues, g4-prop
+     out: (none); in: g4-prop
+  hedge: g0-small-over->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-thin->NO_ALTERNATE, g4-other-leagues->NO_ALTERNATE
+      -> g0-small-over->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-thin->NO_ALTERNATE, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE
+  contrarian: g0-small-over->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g3-thin->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN
+           -> g0-small-over->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g3-thin->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g4-prop->NO_QUALIFYING_CONTRARIAN
+NBA · 6 legs, 3 per game
+  legs: c-tatum-pts-285, l-ml, l-over
+     -> c-tatum-pts-285, c-tatum-reb, c-tatum-pra, l-lebron-ast, l-ml, l-over
+     out: (none); in: c-tatum-reb, c-tatum-pra, l-lebron-ast
+  hedge: c-tatum-pts-285->NO_ALTERNATE, l-ml->NO_ALTERNATE, l-over->NO_ALTERNATE
+      -> c-tatum-pts-285->NO_ALTERNATE, c-tatum-reb->NO_ALTERNATE, c-tatum-pra->NO_ALTERNATE, l-lebron-ast->NO_ALTERNATE, l-ml->NO_ALTERNATE, l-over->NO_ALTERNATE
+  contrarian: c-tatum-pts-285->c-tatum-pts-under, l-ml->NO_QUALIFYING_CONTRARIAN, l-over->NO_QUALIFYING_CONTRARIAN
+           -> c-tatum-pts-285->c-tatum-pts-under, c-tatum-reb->NO_QUALIFYING_CONTRARIAN, c-tatum-pra->NO_QUALIFYING_CONTRARIAN, l-lebron-ast->NO_QUALIFYING_CONTRARIAN, l-ml->NO_QUALIFYING_CONTRARIAN, l-over->NO_QUALIFYING_CONTRARIAN
+NBA · 10 legs, 6 per game, no gate
+  legs: c-tatum-pts-285, l-ml, l-over
+     -> c-tatum-pts-285, c-tatum-reb, c-tatum-pra, c-brunson-pts, c-spread, l-lebron-ast, l-ml, l-over, l-curry-3s, l-davis-blk
+     out: (none); in: c-tatum-reb, c-tatum-pra, c-brunson-pts, c-spread, l-lebron-ast, l-curry-3s, l-davis-blk
+  hedge: c-tatum-pts-285->NO_ALTERNATE, l-ml->NO_ALTERNATE, l-over->NO_ALTERNATE
+      -> c-tatum-pts-285->NO_ALTERNATE, c-tatum-reb->NO_ALTERNATE, c-tatum-pra->NO_ALTERNATE, c-brunson-pts->NO_ALTERNATE, c-spread->NO_ALTERNATE, l-lebron-ast->NO_ALTERNATE, l-ml->NO_ALTERNATE, l-over->NO_ALTERNATE, l-curry-3s->NO_ALTERNATE, l-davis-blk->NO_ALTERNATE
+  contrarian: c-tatum-pts-285->c-tatum-pts-under, l-ml->NO_QUALIFYING_CONTRARIAN, l-over->NO_QUALIFYING_CONTRARIAN
+           -> c-tatum-pts-285->c-tatum-pts-under, c-tatum-reb->NO_QUALIFYING_CONTRARIAN, c-tatum-pra->NO_QUALIFYING_CONTRARIAN, c-brunson-pts->NO_QUALIFYING_CONTRARIAN, c-spread->NO_QUALIFYING_CONTRARIAN, l-lebron-ast->NO_QUALIFYING_CONTRARIAN, l-ml->NO_QUALIFYING_CONTRARIAN, l-over->NO_QUALIFYING_CONTRARIAN, l-curry-3s->NO_QUALIFYING_CONTRARIAN, l-davis-blk->NO_QUALIFYING_CONTRARIAN
+NBA · Props only, 6 legs, 4 per game
+  legs: c-tatum-pts-285, l-lebron-ast
+     -> c-tatum-pts-285, c-tatum-reb, c-tatum-pra, c-brunson-pts, l-lebron-ast, l-curry-3s
+     out: (none); in: c-tatum-reb, c-tatum-pra, c-brunson-pts, l-curry-3s
+  hedge: c-tatum-pts-285->NO_ALTERNATE, l-lebron-ast->NO_ALTERNATE
+      -> c-tatum-pts-285->NO_ALTERNATE, c-tatum-reb->NO_ALTERNATE, c-tatum-pra->NO_ALTERNATE, c-brunson-pts->NO_ALTERNATE, l-lebron-ast->NO_ALTERNATE, l-curry-3s->NO_ALTERNATE
+  contrarian: c-tatum-pts-285->c-tatum-pts-under, l-lebron-ast->NO_QUALIFYING_CONTRARIAN
+           -> c-tatum-pts-285->c-tatum-pts-under, c-tatum-reb->NO_QUALIFYING_CONTRARIAN, c-tatum-pra->NO_QUALIFYING_CONTRARIAN, c-brunson-pts->NO_QUALIFYING_CONTRARIAN, l-lebron-ast->NO_QUALIFYING_CONTRARIAN, l-curry-3s->l-curry-3s-under
+NBA · slip: Tatum Over 27.5 and Over 28.5 (one bet, two lines)
+  legs: c-tatum-pts-285, c-tatum-pts, l-lebron-ast
+     -> c-tatum-pts-285, c-tatum-reb, l-lebron-ast
+     out: c-tatum-pts; in: c-tatum-reb
+  dropped: [] -> [["c-tatum-pts","duplicate"]]
+  hedge: c-tatum-pts-285->NO_ALTERNATE, c-tatum-pts->NO_ALTERNATE, l-lebron-ast->NO_ALTERNATE
+      -> c-tatum-pts-285->NO_ALTERNATE, c-tatum-reb->NO_ALTERNATE, l-lebron-ast->NO_ALTERNATE
+  contrarian: c-tatum-pts-285->NO_QUALIFYING_CONTRARIAN, c-tatum-pts->NO_QUALIFYING_CONTRARIAN, l-lebron-ast->NO_QUALIFYING_CONTRARIAN
+           -> c-tatum-pts-285->c-tatum-pts-under, c-tatum-reb->NO_QUALIFYING_CONTRARIAN, l-lebron-ast->NO_QUALIFYING_CONTRARIAN
+NBA · slip: game Under + Tatum Rebounds Over, 4 legs, 3 per game
+  legs: c-tatum-reb, c-under, l-ml, l-over
+     -> c-tatum-reb, c-under, l-lebron-ast, l-ml
+     out: l-over; in: l-lebron-ast
+  hedge: c-tatum-reb->NO_ALTERNATE, c-under->NO_ALTERNATE, l-ml->NO_ALTERNATE, l-over->NO_ALTERNATE
+      -> c-tatum-reb->NO_ALTERNATE, c-under->c-spread, l-lebron-ast->NO_ALTERNATE, l-ml->l-over
+  contrarian: c-tatum-reb->NO_QUALIFYING_CONTRARIAN, c-under->NO_QUALIFYING_CONTRARIAN, l-ml->NO_QUALIFYING_CONTRARIAN, l-over->NO_QUALIFYING_CONTRARIAN
+           -> c-tatum-reb->NO_QUALIFYING_CONTRARIAN, c-under->NO_QUALIFYING_CONTRARIAN, l-lebron-ast->NO_QUALIFYING_CONTRARIAN, l-ml->NO_QUALIFYING_CONTRARIAN
+8 of 51 cases changed; every other case is identical.
+
+=== 2. betKeyOf reads NBA props with their league: 1aabb39 -> now ===
+NBA prop keys (old -> new):
+  SWITCH:g4-prop: g4|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5 -> g4|PROP|FULL_GAME|jaysontatum|POINTS|OVER|27.5
+  MIXED:n1-tatum-over: g1|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5 -> g1|PROP|FULL_GAME|jaysontatum|POINTS|OVER|27.5
+  MIXED:n1-tatum-under: g1|RAW|PLAYER_PROP|FULL_GAME|jayson tatum under 28 points|28 -> g1|PROP|FULL_GAME|jaysontatum|POINTS|UNDER|28
+  MIXED:n1-brown-reb-over: g1|RAW|PLAYER_PROP|FULL_GAME|jaylen brown over 5.5 rebounds|5.5 -> g1|PROP|FULL_GAME|jaylenbrown|REBOUNDS|OVER|5.5
+  MIXED:n1-brown-reb-under: g1|RAW|PLAYER_PROP|FULL_GAME|jaylen brown under 6.5 rebounds|6.5 -> g1|PROP|FULL_GAME|jaylenbrown|REBOUNDS|UNDER|6.5
+  NBA:c-tatum-pts: g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5 -> g0|PROP|FULL_GAME|jaysontatum|POINTS|OVER|27.5
+  NBA:c-tatum-pts-285: g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 28.5 points|28.5 -> g0|PROP|FULL_GAME|jaysontatum|POINTS|OVER|28.5
+  NBA:c-tatum-pts-under: g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum under 29.5 points|29.5 -> g0|PROP|FULL_GAME|jaysontatum|POINTS|UNDER|29.5
+  NBA:c-tatum-reb: g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 8.5 rebounds|8.5 -> g0|PROP|FULL_GAME|jaysontatum|REBOUNDS|OVER|8.5
+  NBA:c-tatum-pra: g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 40.5 pra|40.5 -> g0|PROP|FULL_GAME|jaysontatum|POINTS_REBOUNDS_ASSISTS|OVER|40.5
+  NBA:c-brunson-pts: g0|RAW|PLAYER_PROP|FULL_GAME|jalen brunson over 26.5 points|26.5 -> g0|PROP|FULL_GAME|jalenbrunson|POINTS|OVER|26.5
+  NBA:c-brown-stl: g0|RAW|PLAYER_PROP|FULL_GAME|jaylen brown over 1.5 steals|1.5 -> g0|PROP|FULL_GAME|jaylenbrown|STEALS|OVER|1.5
+  NBA:l-lebron-ast: g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5 -> g1|PROP|FULL_GAME|lebronjames|ASSISTS|OVER|7.5
+  NBA:l-curry-3s: g1|RAW|PLAYER_PROP|FULL_GAME|stephen curry over 4.5 threes|4.5 -> g1|PROP|FULL_GAME|stephencurry|THREES_MADE|OVER|4.5
+  NBA:l-curry-3s-under: g1|RAW|PLAYER_PROP|FULL_GAME|stephen curry under 4.5 threes|4.5 -> g1|PROP|FULL_GAME|stephencurry|THREES_MADE|UNDER|4.5
+  NBA:l-davis-blk: g1|RAW|PLAYER_PROP|FULL_GAME|anthony davis over 1.5 blocks|1.5 -> g1|PROP|FULL_GAME|anthonydavis|BLOCKS|OVER|1.5
+  NBA:l-davis-reb: g1|RAW|PLAYER_PROP|FULL_GAME|anthony davis under 11.5 rebounds|11.5 -> g1|PROP|FULL_GAME|anthonydavis|REBOUNDS|UNDER|11.5
+  unchanged (props the no-sport chain already read): MIXED:f3-td
+Parlays whose legs, Hedge or Contrarian moved because of the key: 0.
+Parlays whose only change is the NBA prop's key in historyBetKeys (what the next Regenerate weighs down): 10
+  SWITCH · 8 legs, 2 per game, default gate
+  SWITCH · 12 legs, 5 per game, no gate
+  SWITCH · Totals + Props only, 6 legs, 3 per game
+  NBA · 2 legs, 1 per game
+  NBA · 6 legs, 3 per game
+  NBA · 10 legs, 6 per game, no gate
+  NBA · Props only, 6 legs, 4 per game
+  NBA · slip: Tatum Over 27.5 and Over 28.5 (one bet, two lines)
+  NBA · slip: game Under + Tatum Rebounds Over, 4 legs, 3 per game
+  NBA · Your picks: 3 of 6
