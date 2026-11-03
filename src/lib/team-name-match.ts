@@ -27,6 +27,8 @@
 // ("Montréal" -> "montral") rather than folding it to its base letter, so it
 // still wouldn't match "Montreal". Diacritics must fold here, not vanish.
 
+import { NCAAB_ODDS_ALIAS_ROWS } from "@/lib/generated/ncaab-odds-aliases.generated";
+
 export function normalizeTeamName(name: string): string {
   return name
     .normalize("NFD")
@@ -77,6 +79,9 @@ export const CROSS_SOURCE_TEAM_ALIASES: Record<string, readonly (readonly [score
     ["McNeese Cowboys", "McNeese State Cowboys"],
   ],
   basketball_nba: [["LA Clippers", "Los Angeles Clippers"]],
+  // ESPN -> Odds API, generated from both feeds' team lists by scripts/generate-ncaab-odds-aliases.mjs. Only
+  // the names the "state" -> "st" fold in teamNamesMatch cannot reconcile; the fold covers the other ~55.
+  basketball_ncaab: NCAAB_ODDS_ALIAS_ROWS,
 };
 
 // sportKey -> normalized spelling -> the normalized Odds API spelling it stands for.
@@ -95,18 +100,38 @@ const ROW_LOOKUP: Record<string, Map<string, readonly string[]>> = Object.fromEn
   ])
 );
 
+// The Odds API abbreviates "State" to "St" in college basketball ("Cleveland St
+// Vikings") where ESPN spells it out ("Cleveland State Vikings"): about 55 D1
+// programs. Folded for matching only, and only for this league: every other
+// league compares exactly as before. Only the WHOLE WORD "state" folds, and
+// only inside a full-name comparison, so "Michigan" never meets "Michigan
+// State" ("michigan" vs "michigan st"), and "St." / "St" elsewhere ("St.
+// John's", "St Bonaventure") and "Saint" are left alone (normalizeTeamName has
+// already dropped the period). Defined here, not imported from final-pick-gate,
+// which imports this file.
+const NCAAB_KEY = "basketball_ncaab";
+
+function foldNcaabState(normalized: string): string {
+  return normalized.replace(/\bstate\b/g, "st");
+}
+
 // Whether two team names refer to the same team, tolerating the cross-source
 // spelling differences documented above. For names that already agree
 // exactly (the overwhelming majority) this is identical to `a === b`.
 //
 // sportKey (The Odds API key, e.g. "americanfootball_ncaaf") turns on that
 // league's alias rows. Without it only the folding applies - the behaviour
-// every caller had before the alias table existed.
+// every caller had before the alias table existed. basketball_ncaab also folds
+// "state" to "st" (foldNcaabState); no other league does.
 export function teamNamesMatch(a: string, b: string, sportKey?: string): boolean {
   const na = normalizeTeamName(a);
   const nb = normalizeTeamName(b);
   if (na === nb) return true;
   const aliases = sportKey ? ALIAS_LOOKUP[sportKey] : undefined;
+  if (sportKey === NCAAB_KEY) {
+    const canon = (n: string) => foldNcaabState(aliases?.get(n) ?? n);
+    return canon(na) === canon(nb);
+  }
   if (!aliases) return false;
   return (aliases.get(na) ?? na) === (aliases.get(nb) ?? nb);
 }
@@ -138,10 +163,13 @@ function foldTeamText(text: string): string {
 // ends with the letters "nets" and is not the Nets, so a Nets pick could
 // attach to a Hornets game.
 export function teamNameEndsWith(teamName: string, nickname: string, sportKey?: string): boolean {
-  const nick = foldTeamText(nickname);
+  // basketball_ncaab: "state" folds to "st" on both sides (foldNcaabState), so the nickname
+  // "cleveland state vikings" answers to the Odds API's "Cleveland St Vikings".
+  const fold = sportKey === NCAAB_KEY ? (t: string) => foldNcaabState(foldTeamText(t)) : foldTeamText;
+  const nick = fold(nickname);
   if (!nick) return false;
   const row = sportKey ? ROW_LOOKUP[sportKey]?.get(normalizeTeamName(teamName)) : undefined;
-  return [teamName, ...(row ?? [])].some((spelling) => endsWithWholeWords(foldTeamText(spelling), nick));
+  return [teamName, ...(row ?? [])].some((spelling) => endsWithWholeWords(fold(spelling), nick));
 }
 
 // Whether `text` ends with `phrase` starting at a word boundary: the phrase
