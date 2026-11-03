@@ -125,6 +125,9 @@ export type PickInsertData = {
   oddsCapturedAt?: Date | null;
   oddsBook?: string | null;
   oddsNullReason?: string | null;
+  // Only ever set by pick-recipients.ts, on a copy delivered to a recipient (never on a user's own pick).
+  isRecipientCopy?: boolean;
+  sourcePickId?: string | null;
 };
 
 // Explicit interactive-transaction bounds for the entitlement + insert transaction
@@ -194,14 +197,19 @@ export async function insertPicksInTransaction(
   tx: Prisma.TransactionClient,
   userId: string,
   rowCount: number,
-  buildRows: (tx: Prisma.TransactionClient) => Promise<PickInsertData[]>
+  buildRows: (tx: Prisma.TransactionClient) => Promise<PickInsertData[]>,
+  // bypassPickLimit: admin-granted recipient copies are neither counted against nor refused by the Free-plan limit.
+  // Only pick-recipients.ts passes it; every other insert keeps the gate.
+  { bypassPickLimit = false }: { bypassPickLimit?: boolean } = {}
 ): Promise<AtomicCreateResult> {
   if (rowCount === 0) return { allowed: true, created: [] };
 
-  const locked = await tx.$queryRaw<{ plan: string; status: string; currentPeriodEnd: Date | null; cancelAtPeriodEnd: boolean }[]>`
+  const locked = bypassPickLimit
+    ? []
+    : await tx.$queryRaw<{ plan: string; status: string; currentPeriodEnd: Date | null; cancelAtPeriodEnd: boolean }[]>`
     SELECT "plan", "status", "currentPeriodEnd", "cancelAtPeriodEnd" FROM "subscriptions" WHERE "userId" = ${userId} FOR UPDATE
   `;
-  const tier = resolveEffectiveTier(toSubscriptionState(locked[0] ?? null));
+  const tier: Tier = bypassPickLimit ? "PRO" : resolveEffectiveTier(toSubscriptionState(locked[0] ?? null));
 
   if (tier === "FREE") {
     const pickCount = await tx.pick.count({ where: { userId } });

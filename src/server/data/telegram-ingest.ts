@@ -72,6 +72,9 @@ export async function ingestTelegramBatch(input: IngestBatchInput, config: Inges
       status = "FAILED";
       error = "No pick could be imported from this batch";
     }
+    // The source import succeeded; only the copies to recipients did not all arrive. Visible on the batch row.
+    const recipientsFailed = result.importResult?.success ? (result.importResult.recipientsFailed ?? 0) : 0;
+    if (recipientsFailed > 0 && error === null) error = `Recipient delivery failed for ${recipientsFailed} copies; the source import succeeded`;
 
     await prisma.$transaction([
       prisma.ingestReviewItem.createMany({ data: reviewDraftsToRows(batchId, config.userId, day, drafts) }),

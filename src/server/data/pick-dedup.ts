@@ -86,6 +86,10 @@ export type DedupInsertOptions = {
   // The read of this user's logged picks. Replaceable so a test can make the
   // check fail (or stall) - the default is the transaction's own findMany.
   readExistingPicks?: (tx: Prisma.TransactionClient, where: Prisma.PickWhereInput) => Promise<ExistingPickRow[]>;
+  // Delivery of a recipient copy (pick-recipients.ts): skips the Free-plan limit and does not write the recipient's
+  // refused duplicates to import_skipped_lines (they are not the recipient's imports, and would read as noise in the ops
+  // console). The duplicate check itself still runs, against the recipient's own picks.
+  recipientCopy?: boolean;
 };
 
 // The Odds API sport key for a sport label - what turns on a league's
@@ -140,7 +144,7 @@ function hitText(hit: DuplicateHit): string {
 export async function insertPicksDeduped(
   userId: string,
   rows: DedupPickRow[],
-  { readExistingPicks = defaultReadExistingPicks }: DedupInsertOptions = {}
+  { readExistingPicks = defaultReadExistingPicks, recipientCopy = false }: DedupInsertOptions = {}
 ): Promise<DedupInsertResult> {
   if (rows.length === 0) return { allowed: true, created: [], insertedIndexes: [], skippedDuplicates: [], overridden: [] };
 
@@ -259,7 +263,7 @@ export async function insertPicksDeduped(
         const { capperName: _n, sportName: _sn, ...rest } = strip(p.row);
         return { ...rest, capperId: p.row.capperId as string, sportId: p.row.sportId as string };
       });
-    });
+    }, { bypassPickLimit: recipientCopy });
 
     if (!inserted.allowed) return { ...inserted, skippedDuplicates };
     return {
@@ -284,6 +288,7 @@ export async function insertPicksDeduped(
       reason: prefix + hitText(hit),
     };
   };
+  if (recipientCopy) return result;
   await recordImportSkippedLines(userId, [
     ...result.skippedDuplicates.map((hit) => entry(hit, "DUPLICATE_SKIPPED", "Refused by the server-side duplicate check: ")),
     ...(result.allowed ? result.overridden.map((hit) => entry(hit, "DUPLICATE_OVERRIDDEN", "Imported anyway on an explicit override: ")) : []),

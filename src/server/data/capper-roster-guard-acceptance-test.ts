@@ -60,6 +60,7 @@ const ACTION_CALLERS: Record<string, { via?: string }> = {
   "src/server/actions/bulk-picks.ts": {},
   "src/server/data/bulk-import-core.ts": {},
   "src/server/data/ingest-review.ts": {},
+  "src/server/data/pick-recipients.ts": {},
 };
 
 const WRITE_PATTERNS: RegExp[] = [

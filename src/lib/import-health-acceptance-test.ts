@@ -142,7 +142,7 @@ const now = T("2026-10-19T20:00:00Z");
   const status = src("src/server/data/admin-status.ts");
   expect("red dot: imports check inside the combined statement", [/tab: "imports"/.test(status), /\$\{importsStatusSql\(now\)\} AS imports/.test(status)], [true, true]);
 
-  expect("tab row: Imports last, Skipped Lines no longer a tab", [ADMIN_TABS.map((t) => t.key).at(-1), ADMIN_TABS.find((t) => t.key === "imports")?.href, ADMIN_TABS.some((t) => t.href.includes("skipped"))], ["imports", "/admin/imports", false]);
+  expect("tab row: Imports then Recipients last, Skipped Lines no longer a tab", [ADMIN_TABS.map((t) => t.key).at(-1), ADMIN_TABS.find((t) => t.key === "imports")?.href, ADMIN_TABS.some((t) => t.href.includes("skipped"))], ["recipients", "/admin/imports", false]);
 
   const page = src("src/app/(app)/admin/imports/page.tsx");
   expect("page: gated, uncached, Copy for Claude, links to Skipped Lines", [/await requireAdminOpsPage\(\)/.test(page), /cachedByTag|unstable_cache/.test(page), /<CopyReportButton report=\{report\} \/>/.test(page), /href="\/admin\/imports\/skipped-lines"/.test(page)], [true, false, true, true]);

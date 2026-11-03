@@ -52,6 +52,7 @@ const ALLOWLIST: Record<string, string[]> = {
   "src/server/data/backfill-ml-side.ts": ["keyset batches, take: batchSize (one-off CLI backfill, full-game moneylines with no mlFavoredSide)"],
   "src/server/data/capper-comparison.ts": ["ONE capper's history (userId + capperId), 15 columns - grows with that capper's history; an explicit comparison click"],
   "src/server/data/cappers.ts": ["mergeCappers: the primary capper's picks, select-only", "mergeCappers: the duplicate capper's picks, select-only"],
+  "src/server/data/pick-recipients.ts": ["listRecipientCopyIds: ONE recipient's isRecipientCopy rows, id only, take COPY_ID_PAGE; admin cleanup helper, not on any page"],
   "src/server/data/heavy-consensus.ts": [
     "loadHeavyConsensusInstances: full-game ML/spread/total, not CANCELLED, 13 columns; nightly = the last HEAVY_CONSENSUS_WINDOW_DAYS + 1 days of gameTime, every user; ALL history only from the hand-run backfill script",
   ],

@@ -43,7 +43,7 @@ d AS (
   JOIN sports s ON s.id = p."sportId"
   LEFT JOIN market_keys m ON p."betType" = 'PLAYER_PROP' AND m.market = p."propMarket"::text
     AND m.family = CASE upper(s.name) WHEN 'NFL' THEN 'FOOTBALL' WHEN 'NCAAF' THEN 'FOOTBALL' WHEN 'NBA' THEN 'BASKETBALL' WHEN 'WNBA' THEN 'BASKETBALL' WHEN 'NHL' THEN 'HOCKEY' WHEN 'MLB' THEN 'BASEBALL' END
-  WHERE p.status IN ('WIN', 'LOSS') AND COALESCE(m.family || ':' || m.market, p.category) IS NOT NULL
+  WHERE p.status IN ('WIN', 'LOSS') AND NOT p."isRecipientCopy" AND COALESCE(m.family || ':' || m.market, p.category) IS NOT NULL
 ),
 -- One stream per pick: its result arriving (ord 0), and the moment it is scored (ord 1).
 ev AS (
