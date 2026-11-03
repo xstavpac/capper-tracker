@@ -5,7 +5,7 @@ import { easternDateKey, startOfEasternDay } from "@/lib/dates";
 // earlier than the game's own Eastern day can ever be selected - the game's
 // own result, and anything else from that same day, can never leak into a
 // point-in-time lookup used to score that game. Originally a private helper
-// in zone-model.ts (added with the fix for its look-ahead bug); lifted here
+// of a since-removed page (added with the fix for its look-ahead bug); lifted here
 // so the starting-pitcher point-in-time reader uses the identical cutoff
 // rather than a second copy.
 export function dayBefore(gameDate: Date): Date {

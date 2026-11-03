@@ -271,7 +271,7 @@ The nightly tendency steps in the `refresh-scores` cron - `recomputeTeamTendenci
 which reads the tendency snapshots) - run only when `TENDENCY_PIPELINE_ENABLED=true`
 (`src/lib/tendency-pipeline.ts`). Unset means paused, and a paused run logs one
 `refresh-scores-tendency-pipeline-skipped` line. Nothing was deleted: tables, data, code
-and tests stay. The Zone Model page shows "Data paused (last updated <date>)" while off.
+and tests stay. (The Zone Model page, which used to show "Data paused" while off, was removed.)
 
 To resume (before the next MLB season): set `TENDENCY_PIPELINE_ENABLED=true` in the Vercel
 production env and redeploy. The first run recomputes tendencies from all history, so the

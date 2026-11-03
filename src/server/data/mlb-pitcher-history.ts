@@ -312,8 +312,8 @@ async function pointInTimeLine(
 ): Promise<{ line: PointInTimePitcherLine | null; source: "snapshot" | "api" | null }> {
   // Prefer a persisted row. The daily cron and the historical backfill both
   // write PitcherStatSnapshot, and findLatestAtOrBefore(..., dayBefore) is
-  // the identical point-in-time selector the model resolver and Zone Model
-  // use - not a second one. dayBefore keeps a row dated the game's own day
+  // the identical point-in-time selector the model resolver uses -
+  // not a second one. dayBefore keeps a row dated the game's own day
   // (a same-day cron capture) from ever being chosen.
   const rows = await prisma.pitcherStatSnapshot.findMany({
     where: { sportKey, pitcherId },

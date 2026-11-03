@@ -133,7 +133,6 @@ expect(
     "Tendency history (model)",
     "Tendency snapshot upsert",
     "Tendency upsert",
-    "Zone model",
   ]
 );
 expect("label names are unique", new Set(STATEMENT_LABELS.map((l) => l.label)).size, STATEMENT_LABELS.length);

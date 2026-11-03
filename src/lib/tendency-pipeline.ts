@@ -56,8 +56,3 @@ export async function runTendencyPhase<T, S extends number>(
   const [tendencySnapshots, snapshotMs] = await timed(snapshot);
   return { tendencies, tendencySnapshots, tendencyMs, snapshotMs };
 }
-
-// The Zone Model page's muted banner while paused.
-export function tendencyPausedNote(lastSnapshotDate: string | null): string {
-  return lastSnapshotDate ? `Data paused (last updated ${lastSnapshotDate})` : "Data paused";
-}

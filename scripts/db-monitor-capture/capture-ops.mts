@@ -123,7 +123,6 @@ async function main() {
     const record = await import(WT + "/server/data/team-record.ts");
     const situ = await import(WT + "/server/data/situational-snapshots.ts");
     const resolver = await import(WT + "/server/data/model-engine/resolver.ts");
-    const zone = await import(WT + "/server/data/zone-model.ts");
     const today = easternDateKey(new Date());
 
     await run("session user: getCurrentUser", () => auth.getCurrentUser());
@@ -153,7 +152,6 @@ async function main() {
     await run("tendency history: resolveVariable", () =>
       resolver.resolveVariable("tendency_fav_win_pct", { type: "team", teamName: "New York Yankees" }, new Date(), { sportKey: "baseball_mlb" })
     );
-    await run("control: zone model", () => zone.computeZoneModel("baseball_mlb"));
 
     // Egress plan reads (2026-10-20): the roster tables, the narrowed capper and
     // /picks reads, and the batched tendency history.

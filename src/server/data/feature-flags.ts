@@ -2,14 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { cacheKeys } from "@/lib/cache-keys";
 import { cachedByTag } from "@/server/data/cached";
 
-// Key for Zone Model's admin gate (see zone-model.ts). Not an env var and
-// not a hardcoded email/id check - a row in the `feature_flags` table
-// (migration 20260909120000_add_feature_flags), seeded OFF globally with one
-// FeatureFlagUserOverride granting the admin building it standing access.
-// Flipping `feature_flags.enabled` to true later ships this to everyone,
-// with zero new code.
-export const ZONE_MODEL_FLAG_KEY = "zone_model";
-
 // The /admin ops console: its layout, every page under it and every admin
 // server action (see src/server/admin-gate.ts). Seeded OFF with overrides for
 // the admins in migration 20261019120000_add_admin_ops_console_flag.
@@ -49,7 +41,7 @@ export async function isFeatureEnabledForUser(key: string, userId: string): Prom
 // in memory. A flag flip therefore reaches the sidebar within that TTL.
 //
 // This is for deciding what to DRAW only. The gated routes themselves
-// (/zone-model, everything under /admin via admin-gate.ts) keep calling
+// (everything under /admin, via admin-gate.ts) keep calling
 // isFeatureEnabledForUser, uncached, so granting or revoking access takes
 // effect on the route immediately - a stale snapshot can show or hide a link
 // for up to a minute, never open or close the page behind it.

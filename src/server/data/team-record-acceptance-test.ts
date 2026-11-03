@@ -6,7 +6,7 @@
 //  - POINT-IN-TIME: a game dated the target day (or later) is NEVER in a
 //    record computed as-of that day; the reader's snapshot lookup cuts at
 //    dayBefore, so a snapshot dated the game's own day is likewise ignored
-//    (the Zone Model look-ahead regression shape).
+//    (the look-ahead regression shape).
 //  - Ties (NFL): counted only in `ties`, never a home/away W or L, excluded
 //    from winPct, and they STOP a streak scan rather than extending it.
 //  - Last-10 is exactly the 10 most recent games.
