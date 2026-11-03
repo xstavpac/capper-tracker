@@ -36,6 +36,8 @@ import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import { readStoredSwapScope, SWAP_SCOPE_DEFAULT, writeStoredSwapScope, type SwapScope } from "@/lib/parlay/swap-scope";
 import { slipLegFloor } from "@/lib/parlay/leg-cap";
 import { legRange, legsNote, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
+import { readStoredMode, writeStoredMode } from "@/lib/parlay/reuse-history";
+import { DEFAULT_SELECTION_MODE, type SelectionMode } from "@/lib/parlay/selection";
 import { createGeneratorSession, poolKey, type PoolInputs } from "@/lib/parlay/generator-session";
 import { removedHeading, removedPickText } from "@/lib/parlay/slip-state";
 import type { FillFrom, GeneratedParlay, GeneratorSettings } from "@/lib/parlay/generator";
@@ -116,8 +118,11 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
   const [noAlternative, setNoAlternative] = useState<NoAlternativeReason | null>(null);
   // The run log (run-trace.ts): the trace of a build made here is sent to the server, fire and forget. It is
   // diagnostics - a failure is ignored and never touches the parlay.
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
   const session = useRef(
     createGeneratorSession({
+      reuse: { userId: () => userIdRef.current },
       generate: (req) => generateParlayAction(req),
       onTrace: (trace) => void recordGeneratorRunAction(trace).catch(() => undefined),
     })
@@ -135,6 +140,15 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
 
   // The records Your Picks shows beside each pick - the same call the old
   // slip list made, once per change of picks.
+  // Best / Diversified / Explore: how Regenerate draws (not Generate). Remembered per user, best-effort.
+  const [selectionMode, setSelectionModeState] = useState<SelectionMode>(DEFAULT_SELECTION_MODE);
+  useEffect(() => {
+    setSelectionModeState(readStoredMode(userId));
+  }, [userId]);
+  function setSelectionMode(m: SelectionMode) {
+    setSelectionModeState(m);
+    writeStoredMode(userId, m);
+  }
   const [records, setRecords] = useState<CapperLeagueRecords | null>(null);
   const picksKey = pool.map((p) => p.pickId).join(",");
   useEffect(() => {
@@ -167,7 +181,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           ? await session.current.refresh(inputs, settings)
           : kind === "generate"
             ? await session.current.generate(inputs, settings)
-            : await session.current.regenerate(inputs, settings);
+            : await session.current.regenerate(inputs, settings, selectionMode);
       if ("error" in res) {
         setError(res.error);
         return;
@@ -407,8 +421,12 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
             </FilterRow>
             {/* relative: the Pick Mix popover opens under this row, at its width. */}
             <FilterRow label="Bet types" className="relative">
-              <IncludePicksChips value={include} onToggle={onToggleInclude} />
-              {categories.length > 1 && <PickMixControl categories={categories} mix={mix} legCount={legCount} onChange={setMix} />}
+              {/* Your picks only ignores Bet Types and Pick Mix (slip picks are never filtered): shown, not usable. */}
+              <div aria-disabled={yourPicksOnly || undefined} className={"flex flex-wrap items-center gap-2" + (yourPicksOnly ? " pointer-events-none opacity-45" : "")} inert={yourPicksOnly || undefined}>
+                <IncludePicksChips value={include} onToggle={onToggleInclude} />
+                {categories.length > 1 && <PickMixControl categories={categories} mix={mix} legCount={legCount} onChange={setMix} />}
+              </div>
+              {yourPicksOnly && <span className="text-xs font-medium text-muted-foreground">Applies to Best available</span>}
             </FilterRow>
             <SettingsBlock>
               <SettingRow
@@ -429,7 +447,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
                 icon={<TrophyIcon className="h-5 w-5" />}
                 label="Minimum capper win rate"
                 note={
-                  "Only cappers at or above this win rate on that bet type are used. Lower lets more in; higher is stricter." +
+                  "A pick passes when its edge against its price clears this bar. A 10-10 capper betting +200 underdogs can qualify; 10-10 at −150 won't." +
                   gateRiskNote(minWinPct)
                 }
               >
@@ -480,6 +498,8 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           swapScope={swapScope}
           onSwapScope={setSwapScope}
           onRegenerate={() => void run("regenerate")}
+          selectionMode={selectionMode}
+          onSelectionMode={setSelectionMode}
           onSent={() => {
             // Your picks stay; only Live's slip mode ends.
             slip.exitSlipMode();

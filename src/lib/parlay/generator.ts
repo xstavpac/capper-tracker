@@ -332,6 +332,9 @@ export type GeneratedParlay = {
   // Why the parlay is short of `requested` - empty when it isn't - and, with
   // targets, every targeted game that had nothing to give.
   shortfall: string[];
+  // Best available came up short of Total legs because too few legs clear the bar (gate, Bet Types, Max legs per game); null otherwise.
+  // Display only: the gate is never lowered to fill the parlay.
+  limited: { have: number; need: number } | null;
   // Each Pick Mix category that couldn't fill its share (the other selected
   // categories made up the rest).
   mixNotes: string[];
@@ -972,14 +975,16 @@ export function buildGeneratedParlay(
     } else if (fillFrom === "YOUR_PICKS_ONLY") {
       shortfall.push(`Your picks only: ${plural(slipLegs.length, "pick")} in your slip. Switch Fill from to Best available to add legs.`);
     } else if (targeted) {
-      shortfall.push(`${legs.length} of ${target} legs: the targeted games have no more picks that clear 55% and fit.`);
+      shortfall.push(`${legs.length} of ${target} legs: the targeted games have no more picks that clear your bar and fit.`);
     } else {
       shortfall.push(
-        `${legs.length} of ${target} legs: only ${plural(gamesWithCandidates.length, "game")} ${gamesWithCandidates.length === 1 ? "has" : "have"} picks that clear 55%` +
+        `${legs.length} of ${target} legs: only ${plural(gamesWithCandidates.length, "game")} ${gamesWithCandidates.length === 1 ? "has" : "have"} picks that clear your bar` +
           (maxPerGame === 1 && gamesWithCandidates.length < need ? ". Raise Max legs per game to add same-game legs." : ".")
       );
     }
   }
+  const limited = legs.length < target && !subset && fillFrom === "BEST_AVAILABLE" ? { have: legs.length, need: target } : null;
+  if (limited) traced((t) => t.extras({ limited }));
   const mixNotes: string[] = [];
   if (mixTarget && fillFrom === "BEST_AVAILABLE") {
     for (const c of categories) {
@@ -1020,6 +1025,7 @@ export function buildGeneratedParlay(
     capacity,
     capacityText,
     shortfall,
+    limited,
     mixNotes,
     unavailableTargets,
     dropped,

@@ -177,6 +177,8 @@ export type RunExtras = {
   selection?: SelectionTrace;
   ladders?: LadderStatus[];
   unavailableTargets?: number;
+  // Best available fell short of Total legs because too few legs clear the bar: legs built vs legs asked for.
+  limited?: { have: number; need: number };
   notes?: string[];
 };
 

@@ -8,7 +8,7 @@
 //     new snapshot and its Primary. Either way the Regenerate history restarts.
 //   - Regenerate: the engine here with the next seed (the first one fresh per
 //     session, so a page load never replays the last one's draws), the
-//     selection mode (Diversified until PR 6 adds the control), the last few
+//     selection mode (the card's control, Diversified by default), the last few
 //     parlays' legs to weigh down, and every combination this result card has
 //     shown (Your picks only never repeats one) and the history of
 //     parlays shown - never a request, unless the pool changed or the snapshot
@@ -30,6 +30,7 @@ import type { ParlayRejection } from "@/lib/parlay/leg-cap";
 import { traceModeOf, traceSettings } from "@/lib/parlay/generator-trace";
 import { standardScoringVersion, TraceCollector, type RunTrace } from "@/lib/parlay/run-trace";
 import { DEFAULT_SELECTION_MODE, freshSeed, type RecentLeg, type SelectionMode } from "@/lib/parlay/selection";
+import { mergeRecentLegs, readReuseHistory, recordReuseHistory, type KeyValueStore } from "@/lib/parlay/reuse-history";
 
 export type PoolInputs = {
   leagues: string[];
@@ -56,14 +57,16 @@ export type SessionResult = { parlay: GeneratedParlay; fetched: boolean } | Parl
 // `onTrace` (diagnostics only, run-trace.ts) receives the trace of every build the engine runs here, in the
 // browser; a build that came back from the server was traced there. It never affects a build: the trace is
 // written to, never read from, and a throwing handler is ignored.
-export function createGeneratorSession(deps: { generate: GenerateCall; now?: () => Date; firstSeed?: number; mode?: SelectionMode; onTrace?: (trace: RunTrace) => void }) {
+// `reuse` (reuse-history.ts): the user whose browser-kept history of recent parlays joins the session's own in
+// recentLegs. `store` is for tests; absent, localStorage (best-effort, never throws).
+export function createGeneratorSession(deps: { generate: GenerateCall; now?: () => Date; firstSeed?: number; mode?: SelectionMode; onTrace?: (trace: RunTrace) => void; reuse?: { userId: () => string; store?: KeyValueStore | null } }) {
   const now = deps.now ?? (() => new Date());
   let snapshot: GeneratorSnapshot | null = null;
   let key: string | null = null;
   let history: string[][] = [];
   // Fresh per session (crypto): two page loads draw different Regenerates. Tests pass firstSeed.
   let seed = deps.firstSeed ?? freshSeed();
-  const mode = deps.mode ?? DEFAULT_SELECTION_MODE;
+  const defaultMode = deps.mode ?? DEFAULT_SELECTION_MODE;
   // This result card: every combination shown (Your picks only never repeats one), and the
   // last few parlays' legs with when they were shown. In memory only; reset by Generate / Refresh.
   let shown = new Set<string>();
@@ -77,7 +80,11 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
     shown.add(p.generatedKey);
     const at = now().getTime();
     recent = [(p.historyBetKeys ?? []).map((betKey) => ({ betKey, at })), ...recent].slice(0, RECENT_PARLAYS_PENALIZED);
+    if (deps.reuse && (p.historyBetKeys ?? []).length > 0) recordReuseHistory(deps.reuse.userId(), p.historyBetKeys!, at, deps.reuse.store);
   };
+  // The session's last few parlays plus the browser-kept ones (24h, 10), one entry per leg.
+  const recentLegs = (): RecentLeg[] =>
+    mergeRecentLegs(recent.flat(), deps.reuse ? readReuseHistory(deps.reuse.userId(), now().getTime(), deps.reuse.store) : []);
   const resetCard = () => {
     history = [];
     shown = new Set();
@@ -152,7 +159,8 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
     },
 
     // Another parlay of comparable strength.
-    async regenerate(inputs: PoolInputs, settings: GeneratorSettings): Promise<SessionResult> {
+    // `mode` (Best / Diversified / Explore) applies to this Regenerate only; absent, the session's default.
+    async regenerate(inputs: PoolInputs, settings: GeneratorSettings, mode: SelectionMode = defaultMode): Promise<SessionResult> {
       let fetched = false;
       if (!usable(inputs)) {
         const res = await load(inputs, settings);
@@ -160,7 +168,7 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
         fetched = true;
       }
       seed = (seed + 1) >>> 0;
-      const parlay = build(inputs, settings, { seed, history, mode, recentLegs: recent.flat(), shown: Array.from(shown) });
+      const parlay = build(inputs, settings, { seed, history, mode, recentLegs: recentLegs(), shown: Array.from(shown) });
       if (parlay.variety !== "NO_ALTERNATIVE") remember(parlay);
       return { parlay, fetched };
     },

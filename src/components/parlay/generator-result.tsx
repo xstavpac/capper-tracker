@@ -21,13 +21,14 @@ import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
 import { CONTROL, PanelShell, TINTS } from "@/components/dashboard/panel-shell";
 import { WIN_PCT_TRACK, WinPctBar } from "@/components/dashboard/category-card";
 import { ClipboardIcon, ListChecksIcon, RefreshIcon } from "@/components/dashboard/cappers-icons";
-import { LABEL, Tabs, TextSegments } from "@/components/parlay/parlay-controls";
+import { LABEL, SEGMENT_OFF, SEGMENT_ON, Tabs, TextSegments } from "@/components/parlay/parlay-controls";
 import { SendToFanDuel } from "@/components/parlay/send-to-fanduel";
 import { combineOdds, formatAmericanOdds, formatDecimalOdds, formatPayout, hasUsablePrice, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
 import { isGameLive, LIVE_NOTE, type GameClock } from "@/lib/parlay/game-over";
 import type { EngineLeg, EngineSwap, EngineSwapLeg, GeneratedParlay, LegRecord } from "@/lib/parlay/generator";
 import type { RankRecordSource } from "@/lib/parlay/pick-record";
 import { PROP_MARKET_LABELS, type PropMarketKey } from "@/lib/prop-market-key";
+import { SELECTION_MODES, type SelectionMode } from "@/lib/parlay/selection";
 import { SWAP_SCOPE_OPTIONS, type SwapScope } from "@/lib/parlay/swap-scope";
 import { noAlternativeText, pickSummary, regenerateState, unusedLine, unusedPicks, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
 
@@ -104,8 +105,8 @@ function LegRow({ n, pick, record, mine, sgp, swappedBy, children }: { n: number
 
 const NOTE = "mt-1.5 text-[11.5px] font-medium text-muted-foreground";
 const SWAP_COPY = {
-  AUTO_HEDGE: { title: "Hedge", verb: "hedged", noAlternate: "no other bet on this game clears 55% in its market and fits" },
-  CONTRARIAN: { title: "Contrarian", verb: "flipped", noAlternate: "no capper on the other side clears 55% in this market" },
+  AUTO_HEDGE: { title: "Hedge", verb: "hedged", noAlternate: "no other bet on this game clears your bar in its market and fits" },
+  CONTRARIAN: { title: "Contrarian", verb: "flipped", noAlternate: "no capper on the other side clears your bar in this market" },
 } as const;
 
 function SwapLegRow({ n, leg, mode }: { n: number; leg: EngineSwapLeg; mode: EngineSwap["mode"] }) {
@@ -243,6 +244,37 @@ export function UnusedPicks({ picks }: { picks: { pickId: string; label: string 
 const REGENERATE =
   "relative inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-brand-600 bg-white px-2.5 py-1 text-xs font-semibold text-brand-600 transition hover:bg-brand-600/[0.06] disabled:opacity-50 dark:border-brand-400 dark:bg-card dark:text-brand-400 dark:hover:bg-brand-400/10 after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-['']";
 
+export const MODE_LABELS: Record<SelectionMode, string> = { BEST: "Best", DIVERSIFIED: "Diversified", EXPLORE: "Explore" };
+// One line under the header per mode; Regenerate only (Generate stays the same parlay).
+export const MODE_HELP: Record<SelectionMode, string> = {
+  BEST: "Strongest legs first. Regenerates stay close to your top parlay. Applies on your next Regenerate.",
+  DIVERSIFIED: "Mostly strong legs, with variety. Recently used legs are less likely to repeat. Applies on your next Regenerate.",
+  EXPLORE: "Wider mix. Gives more legs a chance, including lower-ranked ones. Applies on your next Regenerate.",
+};
+export const LIMITED_TITLE = (have: number, need: number) => `Only ${have} of ${need} legs clear your bar right now.`;
+export const LIMITED_BODY = "Lower Minimum Capper Win Rate, widen Bet Types, or switch on more leagues to add legs. Your bar stays where you set it.";
+
+// The header's mode picker: the same pill as the Regenerate button's height (26px) with a 44px tap target.
+function ModePicker({ value, onChange, disabled }: { value: SelectionMode; onChange: (m: SelectionMode) => void; disabled: boolean }) {
+  return (
+    <div role="radiogroup" aria-label="Regenerate mode" className="flex shrink-0 items-center gap-0.5 rounded-full border border-[#DADDE5] bg-white p-0.5 dark:border-border dark:bg-card">
+      {SELECTION_MODES.map((m) => (
+        <button
+          key={m}
+          type="button"
+          role="radio"
+          aria-checked={m === value}
+          disabled={disabled}
+          onClick={() => onChange(m)}
+          className={"relative flex h-[22px] items-center justify-center whitespace-nowrap rounded-full px-2 text-xs font-semibold transition disabled:opacity-50 after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-[''] " + (m === value ? SEGMENT_ON : SEGMENT_OFF)}
+        >
+          {MODE_LABELS[m]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 type Tab = "PRIMARY" | "AUTO_HEDGE" | "CONTRARIAN";
 const sendLegs = (picks: ExpanderPick[]) => picks.map((p) => ({ pickId: p.pickId, betDetail: p.betDetail, gameId: p.gameId, gameLabel: p.gameLabel }));
 
@@ -254,6 +286,8 @@ export function GeneratorResult({
   swapScope,
   onSwapScope,
   onRegenerate,
+  selectionMode,
+  onSelectionMode,
   onSent,
 }: {
   parlay: GeneratedParlay;
@@ -266,6 +300,9 @@ export function GeneratorResult({
   // Targeted games that are over or have left the board, by name.
   unavailableTargetLabels: string[];
   onRegenerate: () => void;
+  // Best / Diversified / Explore: how the next Regenerate draws (the card remembers it).
+  selectionMode: SelectionMode;
+  onSelectionMode: (m: SelectionMode) => void;
   // The user opened FanDuel's betslip with this parlay.
   onSent: () => void;
 }) {
@@ -279,7 +316,8 @@ export function GeneratorResult({
   const regenerate = regenerateState(parlay, noAlternative);
   const notes = [
     ...parlay.dropped.filter((d) => d.reason === "left_out").map((d) => `${d.label}: ${d.note}`),
-    ...parlay.shortfall,
+    // LIMITED has its own banner for the "N of M legs" line; the targeted-game lines after it stay notes.
+    ...(parlay.limited ? parlay.shortfall.slice(1) : parlay.shortfall),
     ...parlay.mixNotes,
     ...(unavailableTargetLabels.length > 0
       ? [`${unavailableTargetLabels.join(", ")}: over or no longer on the board — not used.`]
@@ -298,7 +336,8 @@ export function GeneratorResult({
         icon: <ListChecksIcon className="h-[17px] w-[17px] stroke-[2.2]" />,
       }}
       control={
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1.5">
+          <ModePicker value={selectionMode} onChange={onSelectionMode} disabled={busy} />
           <button
             type="button"
             onClick={onRegenerate}
@@ -318,6 +357,13 @@ export function GeneratorResult({
       wrapSubtitle
       wrapControl
     >
+      <p className="mb-2 text-xs font-medium text-muted-foreground">{MODE_HELP[selectionMode]}</p>
+      {parlay.limited && (
+        <div role="status" data-limited className="mb-3 rounded-[12px] border border-amber-300 bg-amber-50/60 px-3.5 py-2.5 dark:border-amber-800 dark:bg-amber-500/10">
+          <p className="text-xs font-semibold text-foreground">{LIMITED_TITLE(parlay.limited.have, parlay.limited.need)}</p>
+          <p className="mt-0.5 text-xs font-medium text-muted-foreground">{LIMITED_BODY}</p>
+        </div>
+      )}
       {noAlternative && (
         <p role="status" className="mb-2 text-xs font-medium text-muted-foreground">
           {noAlternativeText(noAlternative)}

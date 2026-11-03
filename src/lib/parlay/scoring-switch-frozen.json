@@ -307,6 +307,7 @@
       "capacity": 6,
       "capacityText": "6 max from 6 games with qualified picks",
       "shortfall": [],
+      "limited": null,
       "mixNotes": [],
       "unavailableTargets": [],
       "dropped": [],
@@ -1530,6 +1531,7 @@
       "capacity": 11,
       "capacityText": "11 max from 6 games with qualified picks",
       "shortfall": [],
+      "limited": null,
       "mixNotes": [],
       "unavailableTargets": [],
       "dropped": [],
@@ -2722,8 +2724,12 @@
       "capacity": 4,
       "capacityText": "4 max from 4 games with qualified picks",
       "shortfall": [
-        "4 of 6 legs: only 4 games have picks that clear 55%. Raise Max legs per game to add same-game legs."
+        "4 of 6 legs: only 4 games have picks that clear your bar. Raise Max legs per game to add same-game legs."
       ],
+      "limited": {
+        "have": 4,
+        "need": 6
+      },
       "mixNotes": [],
       "unavailableTargets": [],
       "dropped": [],
@@ -3534,6 +3540,7 @@
       "capacity": 6,
       "capacityText": "6 max from 6 games with qualified picks",
       "shortfall": [],
+      "limited": null,
       "mixNotes": [],
       "unavailableTargets": [],
       "dropped": [],
@@ -4564,6 +4571,7 @@
       "capacity": 6,
       "capacityText": "6 max from 5 games with qualified picks",
       "shortfall": [],
+      "limited": null,
       "mixNotes": [],
       "unavailableTargets": [],
       "dropped": [
@@ -5187,6 +5195,7 @@
       "capacity": 5,
       "capacityText": "5 max from your picks only",
       "shortfall": [],
+      "limited": null,
       "mixNotes": [],
       "unavailableTargets": [],
       "dropped": [
