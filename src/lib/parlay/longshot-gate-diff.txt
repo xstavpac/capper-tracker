@@ -1,0 +1,8 @@
+Long-shot gate frozen diff: origin/main 24cbb47 (before the long-shot gate) -> now, gates 0 / 45 / 55 / 60 / 75.
+
+=== Gate verdicts that changed (slate @ gate: pick, before -> now, why) ===
+Changed verdicts per gate: 0%: 0, 45%: 0, 55%: 0, 60%: 0, 75%: 0
+
+=== Cases whose output changed ===
+Cases changed per gate (of 51 each): 0%: 0, 45%: 0, 55%: 0, 60%: 0, 75%: 0
+Every other case is byte-identical to before (Primary, dropped, Hedge and Contrarian under every Swap setting, shortfall, the whole output).
