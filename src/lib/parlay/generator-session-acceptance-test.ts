@@ -63,7 +63,7 @@ const S: GeneratorSettings = { legCount: 2, maxLegsPerGame: 1, include: "ALL", m
 const pool = { leagues: ["MLB"], slipPickIds: ["g4ml"], targets: [] as { gameId: string; leagueName: string }[] };
 
 (async () => {
-  const session = createGeneratorSession({ generate, now: () => new Date(clock) });
+  const session = createGeneratorSession({ generate, now: () => new Date(clock), firstSeed: 1 });
   const g1 = await session.generate(pool, S);
   check("first Generate: one request", [calls.length, "error" in g1 ? null : g1.fetched], [1, true]);
   const keys: string[] = [];
@@ -78,9 +78,9 @@ const pool = { leagues: ["MLB"], slipPickIds: ["g4ml"], targets: [] as { gameId:
   await session.generate({ leagues: ["MLB"], slipPickIds: ["g4ml"], targets: [] }, S);
   check("the same pool rebuilt from new arrays: no request", calls.length, 1);
   const before = calls.length;
-  const rf = await createGeneratorSession({ generate, now: () => new Date(clock) }).refresh(pool, S);
+  const rf = await createGeneratorSession({ generate, now: () => new Date(clock), firstSeed: 1 }).refresh(pool, S);
   check("Refresh: one request, even on a fresh session", [calls.length - before, "error" in rf ? null : rf.fetched], [1, true]);
-  const held = createGeneratorSession({ generate, now: () => new Date(clock) });
+  const held = createGeneratorSession({ generate, now: () => new Date(clock), firstSeed: 1 });
   await held.generate(pool, S);
   const afterGenerate = calls.length;
   await held.refresh(pool, S);
@@ -102,7 +102,7 @@ const pool = { leagues: ["MLB"], slipPickIds: ["g4ml"], targets: [] as { gameId:
   check("snapshot older than 2 minutes: reload", calls.length, 5);
   clock = Date.parse(START) + 1;
   calls = [];
-  const s2 = createGeneratorSession({ generate, now: () => new Date(clock) });
+  const s2 = createGeneratorSession({ generate, now: () => new Date(clock), firstSeed: 1 });
   clock = Date.parse(START) - 60_000;
   await s2.generate(pool, S);
   clock = Date.parse(START) + 1;
