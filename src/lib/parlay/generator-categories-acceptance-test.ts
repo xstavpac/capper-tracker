@@ -112,7 +112,12 @@ const full = snapOf(FULL);
   check("Totals only: full parlay", totals.legs.length, 6);
   const totalsAll = run(full, { include: ["TOTALS"], legCount: 20, maxLegsPerGame: 5 });
   const kinds = new Set(totalsAll.legs.map((l) => `${l.pick.betType}/${l.pick.period}`));
+  // At 20 legs selection swaps g1's NRFI out (it blocks g1's other two totals: one swap, one more leg -
+  // selection.ts), so NRFI is checked where it is its game's best leg, one leg per game.
+  const onePerGame = run(full, { include: ["TOTALS"], legCount: 6, maxLegsPerGame: 1 });
+  for (const l of onePerGame.legs) kinds.add(`${l.pick.betType}/${l.pick.period}`);
   check("Totals only: F5 totals, team totals and NRFI all come through", ["TOTAL/FIRST_HALF", "TEAM_TOTAL/FULL_GAME", "NRFI/FULL_GAME", "TOTAL/FULL_GAME"].every((k) => kinds.has(k)), true);
+  check("Totals only, 20 legs: the swap makes 12 legs (11 before selection.ts)", totalsAll.legs.length, 12);
 
   const ml = run(full, { include: ["MONEYLINE"], legCount: 12, maxLegsPerGame: 5 });
   check("Moneyline only: no spreads, totals or props", cats(ml), ["MONEYLINE"]);

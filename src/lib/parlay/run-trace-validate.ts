@@ -21,6 +21,7 @@ import {
   type RunTrace,
   type ScoringLegTrace,
   type ScoringTrace,
+  type SelectionTraceShape,
   type StageKey,
   type SwapLegTrace,
   type SwapModeTrace,
@@ -173,6 +174,49 @@ function cleanScoring(v: unknown): ScoringTrace | null {
   return { platformRows, legs: v.legs.slice(0, MAX_SCORING_LEGS).map(cleanScoringLeg).filter((l): l is ScoringLegTrace => l !== null) };
 }
 
+// extras.selection (selection.ts): known modes and triggers, bounded numbers, capped leg lists.
+const MAX_SELECTION_LEGS = 50;
+const SELECTION_MODE_NAMES = ["BEST", "DIVERSIFIED", "EXPLORE"] as const;
+const finite = (v: unknown, lo: number, hi: number): number | null => (typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi ? v : null);
+function cleanSelectionLegs(v: unknown): SelectionTraceShape["legs"] {
+  if (!Array.isArray(v)) return [];
+  const out: SelectionTraceShape["legs"] = [];
+  for (const l of v.slice(0, MAX_SELECTION_LEGS)) {
+    if (!isObj(l)) continue;
+    const id = str(l.id, 64);
+    const rank = count(l.rank, 100_000);
+    const weight = finite(l.weight, 0, 1);
+    if (!id || rank === null || weight === null) continue;
+    out.push({ id, rank, weight, ...(l.reused === true ? { reused: true } : {}) });
+  }
+  return out;
+}
+function cleanSelection(v: unknown): SelectionTraceShape | null {
+  if (!isObj(v)) return null;
+  if (v.trigger !== "GENERATE" && v.trigger !== "REGENERATE") return null;
+  const mode = SELECTION_MODE_NAMES.find((m) => m === v.mode) ?? null;
+  const reuseHits = count(v.reuseHits, 1000);
+  if (reuseHits === null) return null;
+  const hedge = cleanSelectionLegs(v.hedge);
+  const rejectedCombos = count(v.rejectedCombos, 1_000_000);
+  const combos = count(v.combos, 10_000_000);
+  const repaired = count(v.repaired, 1000);
+  return {
+    trigger: v.trigger,
+    mode,
+    beta: finite(v.beta, 0, 100),
+    seed: count(v.seed, 4294967295),
+    legs: cleanSelectionLegs(v.legs),
+    ...(hedge.length > 0 ? { hedge } : {}),
+    reuseHits,
+    ...(rejectedCombos !== null ? { rejectedCombos } : {}),
+    ...(combos !== null ? { combos } : {}),
+    ...(v.budgetExhausted === true ? { budgetExhausted: true } : {}),
+    ...(v.exhausted === true ? { exhausted: true } : {}),
+    ...(repaired !== null ? { repaired } : {}),
+  };
+}
+
 // A browser's trace as it may be stored, or null when it isn't one. Only a Standard
 // or Your-picks run from the browser is accepted (Hybrid runs on the server).
 export function sanitizeClientTrace(raw: unknown): RunTrace | null {
@@ -214,6 +258,8 @@ export function sanitizeClientTrace(raw: unknown): RunTrace | null {
   if (swaps.length > 0) extras.swaps = swaps;
   const scoring = cleanScoring(x.scoring);
   if (scoring) extras.scoring = scoring;
+  const selection = cleanSelection(x.selection);
+  if (selection) extras.selection = selection;
 
   let detail: RunTrace["detail"] = null;
   let detailTruncated = raw.detailTruncated === true;
