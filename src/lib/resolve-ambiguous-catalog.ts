@@ -4,6 +4,8 @@ import {
   checkAmbiguousTeamSchedules,
   checkAmbiguousTeamWideSchedules,
   checkAmbiguousLeagueActivity,
+  checkCollegePostedLines,
+  getCapperCollegeHistory,
 } from "@/server/actions/disambiguate-catalog";
 
 // Thin server-facing wrapper around the pure decision core in
@@ -28,5 +30,7 @@ export async function autoResolveAmbiguousPicks(
     runScheduleCheck: checkAmbiguousTeamSchedules,
     runWideScheduleCheck: checkAmbiguousTeamWideSchedules,
     runLeagueActivityCheck: (sports, referenceDate) => checkAmbiguousLeagueActivity(sports, referenceDate.toISOString()),
+    runCollegeLineCheck: checkCollegePostedLines,
+    getCapperLeagueHistory: getCapperCollegeHistory,
   });
 }

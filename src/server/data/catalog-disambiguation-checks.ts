@@ -4,11 +4,21 @@ import {
   resolveGameForNickname,
   getLiveScoresForSport,
   getOddsForSport,
+  getBoardOddsForSport,
   getNcaafUpcomingFcsGames,
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
 import { SPORT_LABEL_TO_KEY } from "@/lib/sport-seasons";
 import { hasGameWithinActivityWindow, type ScheduleCheckQuery } from "@/lib/ambiguous-hierarchy";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import {
+  HISTORY_WINDOW_DAYS,
+  postedLinesForSchool,
+  type CapperLeagueHistory,
+  type CollegeLineQuery,
+  type PostedLinesByTeam,
+} from "@/lib/college-line-signal";
 
 export type { ScheduleCheckQuery };
 
@@ -119,4 +129,58 @@ export async function runLeagueActivityCheck(
   );
   console.log("[catalog-disambiguation] league activity:", result);
   return result;
+}
+
+// Option D, line signal: each queried school's posted spread / total in its next game, per
+// league. One board read per league (getBoardOddsForSport: the projection /live already
+// warms, first book carrying each market, so a cache hit costs no DB bytes). A school
+// with no upcoming game on a board, or a league out of season, is left out - the
+// hierarchy reads that as "no posted line".
+export async function runCollegeLineCheck(queries: CollegeLineQuery[]): Promise<PostedLinesByTeam> {
+  const result: PostedLinesByTeam = {};
+  const now = new Date();
+  const sports = Array.from(new Set(queries.map((q) => q.sport)));
+  await Promise.all(
+    sports.map(async (sport) => {
+      const sportKey = SPORT_LABEL_TO_KEY[sport];
+      if (!sportKey) return;
+      const games = await getBoardOddsForSport(sportKey);
+      for (const q of queries) {
+        if (q.sport !== sport) continue;
+        const lines = postedLinesForSchool(games, q.nickname, sportKey, now);
+        if (lines) result[q.nickname + "|" + sport] = lines;
+      }
+    })
+  );
+  return result;
+}
+
+// Option D, history signal: the importing user's own graded NCAAF / NCAAB picks per
+// capper over HISTORY_WINDOW_DAYS. One grouped read (<= 2 rows per capper): sports.name
+// is exactly 'NCAAF' / 'NCAAB' (prisma/seed.ts; resolveOrCreateSportId); copies delivered
+// to this user by someone else are not their history; only graded rows count, so a pick
+// once filed under the wrong league (which fails to grade) can't feed the next answer.
+// Uses @@index([userId, capperId]); cappers are matched on lower(name), the unique key.
+export async function runCapperLeagueHistory(userId: string, capperNames: string[]): Promise<CapperLeagueHistory> {
+  const names = Array.from(new Set(capperNames.map((n) => n.toLowerCase())));
+  if (names.length === 0) return {};
+  const since = new Date(Date.now() - HISTORY_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const rows = await prisma.$queryRaw<{ capper: string; league: string; n: number }[]>(Prisma.sql`
+    SELECT lower(c.name) AS capper, s.name AS league, count(*)::int AS n
+    FROM picks p
+    JOIN cappers c ON c.id = p."capperId" AND c."userId" = ${userId}
+    JOIN sports s ON s.id = p."sportId"
+    WHERE p."userId" = ${userId}
+      AND lower(c.name) = ANY(${names}::text[])
+      AND p."isRecipientCopy" = false
+      AND s.name IN ('NCAAF', 'NCAAB')
+      AND p."gameTime" >= ${since}
+      AND p.status IN ('WIN', 'LOSS', 'PUSH')
+    GROUP BY 1, 2`);
+  const out: CapperLeagueHistory = {};
+  for (const r of rows) {
+    const entry = (out[r.capper] ??= { NCAAF: 0, NCAAB: 0 });
+    if (r.league === "NCAAF" || r.league === "NCAAB") entry[r.league] += r.n;
+  }
+  return out;
 }

@@ -30,6 +30,8 @@ import {
   runTeamScheduleCheck,
   runTeamWideScheduleCheck,
   runLeagueActivityCheck,
+  runCollegeLineCheck,
+  runCapperLeagueHistory,
 } from "@/server/data/catalog-disambiguation-checks";
 import { recoverUnresolvedPicks } from "@/server/data/recover-unresolved-core";
 import { getImportFeedTeams } from "@/server/data/import-feed-teams";
@@ -98,12 +100,16 @@ export function toItem(p: ParsedPick, capperName: string, inferredLine?: number)
 // the same hierarchy to the session-checked actions.
 export function autoResolveAmbiguousPicksForServer(
   picks: ParsedPick[],
-  priorChoices: Record<string, AmbiguousOption> = {}
+  priorChoices: Record<string, AmbiguousOption> = {},
+  userId?: string
 ): Promise<AutoResolveResult> {
   return runAmbiguousHierarchy(picks, priorChoices, {
     runScheduleCheck: runTeamScheduleCheck,
     runWideScheduleCheck: runTeamWideScheduleCheck,
     runLeagueActivityCheck: (sports, referenceDate) => runLeagueActivityCheck(sports, referenceDate.toISOString()),
+    runCollegeLineCheck,
+    // Without a user there is no history to read.
+    ...(userId ? { getCapperLeagueHistory: (names: string[]) => runCapperLeagueHistory(userId, names) } : {}),
   });
 }
 
@@ -172,7 +178,7 @@ export async function runCatalogImportForUser(
     toResolve = prep.keep;
     hookSkippedLog.push(...prep.skipped);
   }
-  const resolved = await autoResolveAmbiguousPicksForServer(toResolve);
+  const resolved = await autoResolveAmbiguousPicksForServer(toResolve, {}, userId);
   const existingLower = new Set(existingCapperNames.map((n) => n.toLowerCase()));
   const fuzzySuggestion = (name: string): string | undefined => {
     if (existingLower.has(name.toLowerCase())) return undefined;

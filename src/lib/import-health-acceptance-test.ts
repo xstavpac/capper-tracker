@@ -32,7 +32,7 @@ const now = T("2026-10-19T20:00:00Z");
   expect("listed-only stages", [...IMPORT_LISTED_STAGES], ["PARSE_SILENT", "PROP_UNSUPPORTED"]);
   // Compile-time: every hierarchy method is an accepted method and back.
   const all: ResolutionMethod[] = [...AMBIGUITY_METHODS];
-  const back: (typeof AMBIGUITY_METHODS)[number][] = ["schedule", "season", "pick_context", "remembered", "user", "plausibility", "league_activity", "capper_block"] satisfies ResolutionMethod[];
+  const back: (typeof AMBIGUITY_METHODS)[number][] = ["schedule", "season", "pick_context", "remembered", "user", "plausibility", "league_activity", "capper_block", "line_vs_posted", "capper_history"] satisfies ResolutionMethod[];
   expect("ambiguity methods = ResolutionMethod", all.slice().sort(), back.slice().sort());
 }
 
