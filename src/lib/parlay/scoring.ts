@@ -1,8 +1,8 @@
 // The Parlay Generator's one scoring module: a pick goes in, a score and its
-// breakdown come out. Nothing calls it yet - the generator paths (Standard, Your
-// picks only, Hedge, Contrarian, Consensus Hybrid) switch to it in later PRs, and
+// breakdown come out. Standard, Your picks only, Hedge and slip ranking read it
+// (generator.ts); Contrarian and Consensus Hybrid switch to it in later PRs, and
 // until then best-of-two and Wilson (pick-record.ts, qualification-core.ts) still
-// decide every parlay. Pure and client-safe: the engine runs in the browser, so
+// decide those. Pure and client-safe: the engine runs in the browser, so
 // everything here reads what the snapshot already holds and nothing reads the
 // database.
 //
@@ -239,6 +239,25 @@ export function buildPlatformRates(rows: PlatformRateRow[]): PlatformRates {
   return rates;
 }
 
+export const EMPTY_PLATFORM_RATES: PlatformRates = { byKey: {}, byLeagueBetType: {}, byBetType: {} };
+
+// Only the totals these picks can ask for, every tier: what travels in a snapshot.
+// A pick scores the same on the trimmed rates as on the whole table.
+export function trimPlatformRates(rates: PlatformRates, picks: Pick<ScoringPick, "leagueName" | "betType" | "propMarket" | "category">[]): PlatformRates {
+  const out: PlatformRates = { byKey: {}, byLeagueBetType: {}, byBetType: {} };
+  const copy = (from: Record<string, PlatformTotals>, to: Record<string, PlatformTotals>, key: string) => {
+    if (from[key]) to[key] = from[key];
+  };
+  for (const p of picks) {
+    const key = propKeyOf(p) ?? p.category;
+    if (!key) continue;
+    copy(rates.byKey, out.byKey, keyTier(p.leagueName, key));
+    copy(rates.byLeagueBetType, out.byLeagueBetType, leagueTier(p.leagueName, p.betType));
+    copy(rates.byBetType, out.byBetType, p.betType);
+  }
+  return out;
+}
+
 type RateQuery = { league: string; betType: string; key: string };
 
 const tiersOf = (rates: PlatformRates, q: RateQuery): [PlatformTier, PlatformTotals | undefined][] => [
@@ -273,7 +292,7 @@ export function shrink(wins: number, losses: number, prior: number, strength: nu
   return (wins + strength * prior) / (wins + losses + strength);
 }
 
-const propKeyOf = (pick: ScoringPick) => propMarketKey({ betType: pick.betType, sportName: pick.leagueName, propMarket: pick.propMarket });
+const propKeyOf = (pick: Pick<ScoringPick, "betType" | "leagueName" | "propMarket">) => propMarketKey({ betType: pick.betType, sportName: pick.leagueName, propMarket: pick.propMarket });
 
 type Column = { wins: number; losses: number } | null | undefined;
 
@@ -432,6 +451,13 @@ export function gateCheck(probability: number, breakEven: number, minWinPct: num
 // passes, at any setting (gate.ts: at 0% cappers with no record are still out).
 export function passesGate(score: PickScore, minWinPct: number): boolean {
   return score.status === "SCORED" && gateCheck(score.gate.probability, score.gate.breakEven, minWinPct).passes;
+}
+
+// The -110 equivalent: the win rate with this edge at -110, the number the gate
+// compares L to. Positive and on Wilson's scale, so the selection layer's bands and
+// draw weights read it where they read Wilson. A pick's order is compareScores'.
+export function selectionScore(score: ScoredPick): number {
+  return Math.max(0, score.rankScore + DEFAULT_BREAK_EVEN);
 }
 
 // The one ordering: rankScore descending, then more decided picks, then pick id,

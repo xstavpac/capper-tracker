@@ -102,6 +102,9 @@ export function suspectIntake(run: Pick<RunRow, "extras">): string[] {
   return out;
 }
 
+// Scored with platform_category_rates empty: every pick on the 52% and -110 defaults.
+export const noPlatformRates = (run: Pick<RunRow, "extras">): boolean => run.extras?.scoring?.platformRows === 0;
+
 // Does anything in the run deserve a look?
 export function runFlags(run: RunRow): { collapses: number; suspect: number; errors: number } {
   const funnels = funnelsOf(run);
@@ -156,11 +159,15 @@ export function runsReport(runs: RunRow[], title = "Parlay Generator runs"): Adm
           if (f.suspect > 0) flags.push(`${f.suspect} count${f.suspect === 1 ? "" : "s"} of exactly 50 / 100 / 1000`);
           for (const e of run.errors ?? []) flags.push(`${e.code}${e.where ? ` (${e.where})` : ""}: ${e.message}`);
           if (run.traceFailed) flags.push("TRACE_ERROR: the funnel may be incomplete");
+          if (noPlatformRates(run)) flags.push("platform_category_rates was empty: every pick scored on the defaults");
           const lines: string[] = [`scoring ${run.scoringVersion} · ${run.origin.toLowerCase()} · ${run.durationMs ?? "?"}ms · ${settingsLine(run.settings)}`];
           for (const funnel of funnelsOf(run)) {
             lines.push(`${chainTitle(funnel.chain)}: ` + funnel.rows.map((r) => `${r.stage} ${r.count}`).join(" > "));
             for (const row of funnel.rows) for (const r of row.reasons) lines.push(`  dropped at ${row.stage}: ${r.reason}${r.sub ? ` [${r.sub}]` : ""} x${r.count}`);
           }
+          if (run.extras?.scoring) lines.push(`platform rates: ${run.extras.scoring.platformRows} rows`);
+          for (const l of run.extras?.scoring?.legs ?? [])
+            lines.push(`scored ${l.role} ${l.id}: ${l.model}${l.fallback ? `/${l.fallback}` : ""} level ${l.level ?? "-"} tier ${l.tier ?? "-"} win ${l.shrunkWin ?? "-"} edge ${l.edge ?? "-"} shrunkEdge ${l.shrunkEdge ?? "-"} price ${l.price ?? "-"} gate ${l.gatePass ?? "-"}`);
           for (const note of run.extras?.notes ?? []) lines.push(`note: ${note}`);
           for (const l of run.extras?.ladders ?? []) lines.push(`ladder ${l.gameLabel}: ${l.status}${l.cause ? ` (${l.cause})` : ""}`);
           for (const l of run.extras?.snapshot?.leagues ?? [])

@@ -10,8 +10,9 @@ import { classifyPair } from "@/lib/parlay/relationship-classifier";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
 import { toParlayCandidate, toParlayLeg } from "@/lib/parlay/qualification-core";
 import { propMarketKey } from "@/lib/prop-market-key";
-import type { DroppedSlipPick, GeneratorSettings } from "@/lib/parlay/generator";
-import type { PickRef, ReasonCode, SwapLegTrace, TraceCollector } from "@/lib/parlay/run-trace";
+import type { DroppedSlipPick, EngineLeg, EngineSwap, GeneratorSettings } from "@/lib/parlay/generator";
+import type { PickRef, ReasonCode, ScoringLegTrace, ScoringTrace, SwapLegTrace, TraceCollector } from "@/lib/parlay/run-trace";
+import type { PickScore } from "@/lib/parlay/scoring";
 
 export const pickRef = (p: Pick<GeneratorPick, "pickId" | "capperName" | "betDetail">): PickRef => ({ id: p.pickId, label: `${p.capperName} — ${p.betDetail}` });
 
@@ -149,6 +150,38 @@ export function traceSwapLeg(input: {
     }
   }
   return out;
+}
+
+const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
+
+function scoringLeg(id: string, role: ScoringLegTrace["role"], s: PickScore): ScoringLegTrace {
+  if (s.status !== "SCORED") return { id, role, model: "NO_RECORD" };
+  return {
+    id,
+    role,
+    model: s.model === "edge model" ? "EDGE" : "WIN_RATE",
+    ...(s.fallback ? { fallback: s.fallback } : {}),
+    level: s.levels.league.wins + s.levels.league.losses > 0 ? "LEAGUE" : "OTHER_LEAGUES",
+    tier: s.levels.platform.tier,
+    shrunkWin: r4(s.shrunkWinProb),
+    ...(s.edgeModel ? { shrunkEdge: r4(s.edgeModel.shrunkEdge) } : {}),
+    edge: r4(s.rankScore),
+    price: s.price.status,
+    priceRule: s.price.rule,
+    requiredEdge: s.gate.requiredEdge === null ? null : r4(s.gate.requiredEdge),
+    gatePass: s.gate.passes,
+  };
+}
+
+// Each leg of the parlay and each Hedge alternate (Swap = All), as scoring.ts read them.
+export function traceScoring(input: { platformRows: number; legs: EngineLeg[]; hedge: EngineSwap; scoreOf: (p: GeneratorPick) => PickScore }): ScoringTrace {
+  return {
+    platformRows: input.platformRows,
+    legs: [
+      ...input.legs.map((l) => scoringLeg(l.pick.pickId, l.source === "SLIP" ? "SLIP" : "GENERATED", input.scoreOf(l.pick))),
+      ...input.hedge.legs.flatMap((l) => (l.swap ? [scoringLeg(l.swap.pick.pickId, "HEDGE", input.scoreOf(l.swap.pick))] : [])),
+    ],
+  };
 }
 
 // The settings a Standard run's trace records (small, primitives only).

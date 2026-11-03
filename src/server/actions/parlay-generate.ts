@@ -14,15 +14,16 @@
 // snapshot goes stale (generator-session.ts decides).
 //
 // Reads, per call: the slip's own rows (getOwnedSlipPickRows), one board per
-// league needed (getLiveBoardData - sequential, as everywhere), and ONE record
+// league needed (getLiveBoardData - sequential, as everywhere), ONE record
 // bundle (getCapperRecordBundle: every slip pick's and candidate's card - its
-// in-league and all-time market record - in a single query). Nothing about a pick or a game
+// in-league and all-time market record, with pricing - in a single query) and the
+// platform rates (shared Data Cache, a read at most about daily). Nothing about a pick or a game
 // is taken from the client: the request names picks and games by id.
 import { requireUser } from "@/server/auth";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { loadGeneratorSnapshot } from "@/server/data/generator-snapshot";
 import { recordGeneratorRun } from "@/server/data/generator-runs";
-import { TraceCollector, scoringVersionOf } from "@/lib/parlay/run-trace";
+import { TraceCollector, standardScoringVersion } from "@/lib/parlay/run-trace";
 import { traceModeOf, traceSettings } from "@/lib/parlay/generator-trace";
 import { normalizeMinWinPct } from "@/lib/parlay/gate";
 import { legCapRejection, MAX_POOL_REQUEST_PICKS, type ParlayRejection } from "@/lib/parlay/leg-cap";
@@ -103,12 +104,12 @@ export async function generateParlayAction(request: GenerateRequest): Promise<Ge
   // The run log (run-trace.ts): diagnostics only, written after the parlay is built. A failure is recorded
   // on the trace and rethrown - never swallowed - and nothing the trace does reaches the parlay.
   const trace = new TraceCollector(
-    { mode: traceModeOf(req, req.settings), trigger: "FETCH", origin: "SERVER", scoringVersion: scoringVersionOf(GENERATOR_RULES), settings: traceSettings(req, req.settings) },
+    { mode: traceModeOf(req, req.settings), trigger: "FETCH", origin: "SERVER", scoringVersion: standardScoringVersion(GENERATOR_RULES), settings: traceSettings(req, req.settings) },
     true
   );
   let loaded: Awaited<ReturnType<typeof loadGeneratorSnapshot>>;
   try {
-    loaded = await loadGeneratorSnapshot(user.id, req, now, trace);
+    loaded = await loadGeneratorSnapshot(user.id, req, now, trace, { scoring: true });
   } catch (err) {
     trace.error("SNAPSHOT_ERROR", err);
     await recordGeneratorRun(user.id, trace.finish());

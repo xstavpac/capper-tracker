@@ -2,16 +2,19 @@
 // built beside it: buildGeneratedParlay on a frozen, deterministic snapshot must
 // produce exactly the output frozen in standard-generator-frozen.json (captured
 // from origin/main at 06978b2, the commit before the hybrid action PR). Covers
-// the Primary, Hedge and Contrarian for three setting shapes. Pure - no DB.
+// the Primary, Hedge and Contrarian for three setting shapes. The engine as it was:
+// WILSON_RULES (scoring-switch-diff-acceptance-test.ts has the scored output). Pure - no DB.
 //   npx tsx src/lib/parlay/standard-generator-frozen-acceptance-test.ts
 //   (re-freeze, only for an intended Standard change: add --write)
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildGeneratedParlay, GENERATOR_RULES, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay as engine, WILSON_RULES, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { reconcileTrace, TraceCollector } from "@/lib/parlay/run-trace";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
+// Pins the engine before scoring.ts (WILSON_RULES), unless a call names its rules.
+const buildGeneratedParlay: typeof engine = (s, settings, variation, now, rules = WILSON_RULES, trace) => engine(s, settings, variation, now, rules, trace);
 
 const NOW = new Date("2026-10-15T14:00:00.000Z");
 const col = (wins: number, losses: number) => ({ wins, losses, pushes: 0, winPct: (wins / (wins + losses)) * 100, count: wins + losses });
@@ -88,7 +91,7 @@ for (const [label, p] of built) {
 // The run log (run-trace.ts) is diagnostics only: the same frozen output with a collector writing to it.
 for (const [label, settings] of SETTINGS) {
   const trace = new TraceCollector({ mode: "STANDARD", trigger: "GENERATE", origin: "CLIENT", scoringVersion: "frozen", settings: {} }, true);
-  const p = buildGeneratedParlay(snapshot(), settings, null, NOW, GENERATOR_RULES, trace);
+  const p = buildGeneratedParlay(snapshot(), settings, null, NOW, WILSON_RULES, trace);
   const got = JSON.stringify({ ...p, hedge: p.hedge.SUGGESTED, contrarian: p.contrarian.SUGGESTED });
   const want = JSON.stringify(JSON.parse(frozen)[label]);
   const t = trace.finish();

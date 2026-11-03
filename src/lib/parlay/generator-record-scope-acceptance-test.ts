@@ -7,12 +7,14 @@
 // whatever the headcount. LEGACY_RULES is the engine as it was (all-leagues
 // market record, headcount). Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/generator-record-scope-acceptance-test.ts
-import { buildGeneratedParlay, LEGACY_RULES, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay as engine, WILSON_RULES, LEGACY_RULES, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { recordForGate } from "@/lib/parlay/pick-record";
 import { recordText } from "@/components/parlay/generator-result";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
+// Pins the engine before scoring.ts (WILSON_RULES), unless a call names its rules.
+const buildGeneratedParlay: typeof engine = (s, settings, variation, now, rules = WILSON_RULES, trace) => engine(s, settings, variation, now, rules, trace);
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {

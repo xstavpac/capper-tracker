@@ -10,7 +10,14 @@
 // and candidate's card - its in-league and all-time market record - and every
 // candidate prop's per-market record, in a single query). Nothing about a pick or a game is taken from the client: the request
 // names picks and games by id.
+//
+// With `scoring` (Standard only - lib/parlay/scoring.ts): the bundle also carries pricing and drops the all-leagues
+// category pairs (a card already holds that record), slip picks get per-market prop records too, and the snapshot
+// carries the platform rates (getPlatformCategoryRates: one small shared table behind the Data Cache). Without it
+// (Consensus Hybrid) the bundle's statement is exactly what it was and the rates are never read.
 import { getCapperRecordBundle, type PropMarketEntry } from "@/server/data/picks";
+import { getPlatformCategoryRates } from "@/server/data/platform-category-rates";
+import { buildPlatformRates, trimPlatformRates } from "@/lib/parlay/scoring";
 import { propMarketKey } from "@/lib/prop-market-key";
 import { propMarketRecordKey } from "@/lib/record-keys";
 import { gameStatusFor } from "@/server/data/expander-pick";
@@ -61,7 +68,7 @@ export function propMarketEntriesOf(picks: GeneratorPick[]): PropMarketEntry[] {
 
 // `trace` (diagnostics only, run-trace.ts) is told what the loader read and where the picks went; nothing it
 // does reaches the snapshot.
-export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope, now: Date, trace?: TraceCollector): Promise<LoadedSnapshot | ParlayRejection> {
+export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope, now: Date, trace?: TraceCollector, opts: { scoring?: boolean } = {}): Promise<LoadedSnapshot | ParlayRejection> {
   const rows = await getOwnedSlipPickRows(userId, scope.slipPickIds);
   if (rows.length !== scope.slipPickIds.length || rows.some((r) => r.status !== "PENDING")) return { error: SLIP_CHANGED };
 
@@ -142,12 +149,16 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
   }
   const { leagueRecords, categoryRecords, propMarketRecords } = await getCapperRecordBundle(userId, {
     leagueEntries: [...slipPicks, ...candidates].map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category })),
-    categoryPairs: candidates
-      .filter((p): p is GeneratorPick & { category: PickCategoryKey } => p.category !== null)
-      .map((p) => ({ capperId: p.capperId, category: p.category })),
-    propMarketEntries: propMarketEntriesOf(candidates),
+    categoryPairs: opts.scoring
+      ? []
+      : candidates
+          .filter((p): p is GeneratorPick & { category: PickCategoryKey } => p.category !== null)
+          .map((p) => ({ capperId: p.capperId, category: p.category })),
+    propMarketEntries: propMarketEntriesOf(opts.scoring ? [...slipPicks, ...candidates] : candidates),
     asOf: now,
+    ...(opts.scoring ? { includePricing: true } : {}),
   });
+  const rateRows = opts.scoring ? await getPlatformCategoryRates() : null;
 
   return {
     snapshot: {
@@ -158,6 +169,7 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
       leagueRecords,
       categoryRecords,
       propMarketRecords,
+      ...(rateRows ? { platformRates: trimPlatformRates(buildPlatformRates(rateRows), [...slipPicks, ...candidates]), platformRateRows: rateRows.length } : {}),
     },
     eventSportKeys,
     skippedGames,

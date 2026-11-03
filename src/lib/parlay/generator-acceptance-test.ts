@@ -8,7 +8,7 @@
 // snapshot it already has. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/generator-acceptance-test.ts
 import {
-  buildGeneratedParlay,
+  buildGeneratedParlay as engine, WILSON_RULES,
   snapshotIsStale,
   GAME_BAND,
   SNAPSHOT_MAX_AGE_MS,
@@ -19,6 +19,8 @@ import {
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords, PropMarketRecord } from "@/server/data/picks";
+// Pins the engine before scoring.ts (WILSON_RULES), unless a call names its rules.
+const buildGeneratedParlay: typeof engine = (s, settings, variation, now, rules = WILSON_RULES, trace) => engine(s, settings, variation, now, rules, trace);
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {

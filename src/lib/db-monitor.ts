@@ -507,6 +507,12 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     source: "recomputePlatformCategoryRates (platform-category-rates.ts, refresh-scores cron)",
     matches: (s) => /^WITH market_keys\(/.test(s.text),
   },
+  {
+    // The whole small table, behind a shared Data Cache entry the cron clears: about one read a day.
+    label: "Platform rates read",
+    source: "getPlatformCategoryRates (platform-category-rates.ts, the Standard generator's snapshot)",
+    matches: (s) => reads(s, "platform_category_rates") && whereIs(s, ALWAYS_TRUE),
+  },
   // ---- Heavy Consensus (heavy-consensus.ts; the Live tab's hit rate and its nightly history) ----
   {
     // One viewer's settled markets at the 8-capper minimum, behind a per-user Data

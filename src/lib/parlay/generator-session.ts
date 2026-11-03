@@ -24,7 +24,7 @@
 import { buildGeneratedParlay, GENERATOR_RULES, snapshotIsStale, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
 import type { ParlayRejection } from "@/lib/parlay/leg-cap";
 import { traceModeOf, traceSettings } from "@/lib/parlay/generator-trace";
-import { scoringVersionOf, TraceCollector, type RunTrace } from "@/lib/parlay/run-trace";
+import { standardScoringVersion, TraceCollector, type RunTrace } from "@/lib/parlay/run-trace";
 
 export type PoolInputs = {
   leagues: string[];
@@ -80,7 +80,7 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
         mode: traceModeOf(inputs, settings),
         trigger: variation ? "REGENERATE" : "GENERATE",
         origin: "CLIENT",
-        scoringVersion: scoringVersionOf(GENERATOR_RULES),
+        scoringVersion: standardScoringVersion(GENERATOR_RULES),
         settings: traceSettings(inputs, settings),
       },
       !variation

@@ -5,11 +5,13 @@
 // result is deterministic. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/generator-gate-acceptance-test.ts
 import { readFileSync } from "node:fs";
-import { buildGeneratedParlay, GENERATOR_RULES, LEGACY_RULES, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay as engine, WILSON_RULES, LEGACY_RULES, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, gateRiskNote, normalizeMinWinPct } from "@/lib/parlay/gate";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
+// Pins the engine before scoring.ts (WILSON_RULES), unless a call names its rules.
+const buildGeneratedParlay: typeof engine = (s, settings, variation, now, rules = WILSON_RULES, trace) => engine(s, settings, variation, now, rules, trace);
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -79,7 +81,7 @@ function makeSnapshot(specs: Spec[]): GeneratorSnapshot {
 }
 
 const BASE: GeneratorSettings = { legCount: 5, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
-const run = (snap: GeneratorSnapshot, over: Partial<GeneratorSettings> = {}, rules = GENERATOR_RULES) => buildGeneratedParlay(snap, { ...BASE, ...over }, null, NOW, rules);
+const run = (snap: GeneratorSnapshot, over: Partial<GeneratorSettings> = {}, rules = WILSON_RULES) => buildGeneratedParlay(snap, { ...BASE, ...over }, null, NOW, rules);
 const ids = (p: GeneratedParlay) => p.legs.map((l) => l.pick.pickId).sort();
 
 // One capper per game: 52%, 55% exactly, 58%, 65%, 70% in the league.
