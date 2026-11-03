@@ -60,6 +60,7 @@ export const REASON_LABELS = {
   NO_OPPOSITE_SIDE: "No pick the classifier pairs with this leg",
   NO_ALTERNATE: "No alternate qualified",
   NOT_MAJORITY: "Leg's side is not the majority (legacy rules)",
+  NO_QUALIFYING_CONTRARIAN: "No pick on the other side of this bet qualified",
   // Consensus Hybrid
   NO_ELIGIBLE_PICKS: "No full-game side or total picks",
   NO_SIDE_PICKS: "No side picks",
@@ -112,6 +113,11 @@ export type SwapLegTrace = {
   noRecord: number;
   belowGate: number;
   qualified: number;
+  // Contrarian under SCORING (contrarian-match.ts): the other side of this bet within
+  // the line tolerance (`opposite`), past it, or in another period; how the opposite
+  // ones fared at the gate; and the one chosen with its line gap. `paired` above then
+  // counts same-bet matches, not the classifier's R2/R3.
+  contrarian?: { opposite: number; lineTooFar: number; periodMismatch: number; noRecord: number; belowGate: number; qualifying: number; chosen?: string; lineGap?: number };
 };
 
 // One build of Hedge or Contrarian for one Swap setting. `legs` is filled for Swap = All only (the
@@ -328,9 +334,11 @@ export function reconcileTrace(trace: Pick<RunTrace, "stages" | "reasons">): { s
   return bad;
 }
 
-// A Standard or Your-picks run under SCORING, with its selection layer. Short: the intake keeps 80 characters.
-export function standardScoringVersion(parts: { z: number }): string {
-  return `standard/${SCORING_VERSION}/${SELECTION_VERSION}/contrarian-wilson-z${parts.z}`;
+// A Standard or Your-picks run under SCORING, with its selection layer and Contrarian's model
+// (the other side of the same bet, scored like Hedge). Short: the intake keeps 80 characters.
+export const CONTRARIAN_VERSION = "contra-samebet-v1";
+export function standardScoringVersion(_parts: { z: number }): string {
+  return `standard/${SCORING_VERSION}/${SELECTION_VERSION}/${CONTRARIAN_VERSION}`;
 }
 
 // Names the rules a run was scored under, for comparing runs across changes.

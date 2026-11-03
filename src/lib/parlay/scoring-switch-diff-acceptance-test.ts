@@ -79,7 +79,7 @@ for (const [label, settings, slip] of CASES) {
   lines.push(`new legs: ${newP.legs.map((l) => l.pick.pickId).join(", ") || "(none)"}`);
   lines.push("Primary:", ...diffPrimary(oldP, newP, snap, gate));
   lines.push(...diffSwap("Hedge (Swap = All)", oldP.hedge.ALL, newP.hedge.ALL, snap, gate));
-  lines.push(...diffSwap("Contrarian (Swap = All), its rules unchanged: differences follow from the legs above", oldP.contrarian.ALL, newP.contrarian.ALL, snap, gate));
+  lines.push(...diffSwap("Contrarian (Swap = All): the same-bet rule since PR 7 (contrarian-diff.txt) on the new side, Wilson on the old", oldP.contrarian.ALL, newP.contrarian.ALL, snap, gate));
   lines.push("");
   frozen[label] = { legs: newP.legs.map((l) => l.pick.pickId), hedge: newP.hedge.ALL.legs.map((l) => l.swap?.pick.pickId ?? null), contrarian: newP.contrarian.ALL.legs.map((l) => l.swap?.pick.pickId ?? null), parlay: { ...newP, hedge: newP.hedge.ALL, contrarian: newP.contrarian.ALL } };
 }

@@ -1,0 +1,2269 @@
+{
+ "capturedFrom": "de0719e",
+ "cases": {
+  "SWITCH · 6 legs, best available, default gate": {
+   "legs": [
+    "g0-small-over",
+    "g1-longshot",
+    "g2-mid-under",
+    "g3-defaulted",
+    "g4-other-leagues",
+    "g5-home"
+   ],
+   "restSha": "4e31a181492b8d23",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g1-longshot",
+      "g1-55-45",
+      "R2"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "g0-small-over",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g1-longshot",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g5-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "ALL": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g1-longshot",
+      "g1-55-45",
+      "R2"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "SWITCH · 8 legs, 2 per game, default gate": {
+   "legs": [
+    "g0-small-over",
+    "g0-elite-spread",
+    "g1-longshot",
+    "g2-mid-under",
+    "g2-heavy-fav",
+    "g3-defaulted",
+    "g4-other-leagues",
+    "g5-home"
+   ],
+   "restSha": "e7f5ebfffbdce4b9",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g0-elite-spread",
+      "g0-dog-ml",
+      "R2"
+     ],
+     [
+      "g1-longshot",
+      "g1-55-45",
+      "R2"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-heavy-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "g0-small-over",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g0-elite-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g1-longshot",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g2-heavy-fav",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g5-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "ALL": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g0-elite-spread",
+      "g0-dog-ml",
+      "R2"
+     ],
+     [
+      "g1-longshot",
+      "g1-55-45",
+      "R2"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-heavy-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "SWITCH · 6 legs, 60% gate": {
+   "legs": [
+    "g0-small-over",
+    "g1-longshot",
+    "g4-other-leagues",
+    "g5-home"
+   ],
+   "restSha": "edd28ff595d4a70b",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g1-longshot",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "g0-small-over",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g1-longshot",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g5-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "ALL": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g1-longshot",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "SWITCH · 6 legs, no gate": {
+   "legs": [
+    "g0-small-over",
+    "g1-longshot",
+    "g2-mid-under",
+    "g3-defaulted",
+    "g4-other-leagues",
+    "g5-home"
+   ],
+   "restSha": "4e31a181492b8d23",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g1-longshot",
+      "g1-55-45",
+      "R2"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "g0-small-over",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g1-longshot",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g5-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "ALL": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g1-longshot",
+      "g1-55-45",
+      "R2"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "SWITCH · 12 legs, 5 per game, no gate": {
+   "legs": [
+    "g0-small-over",
+    "g0-elite-spread",
+    "g1-longshot",
+    "g2-mid-under",
+    "g2-heavy-fav",
+    "g3-defaulted",
+    "g3-thin",
+    "g4-other-leagues",
+    "g5-home"
+   ],
+   "restSha": "1cf97d8ff7dfad7e",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g0-elite-spread",
+      "g0-dog-ml",
+      "R2"
+     ],
+     [
+      "g1-longshot",
+      "g1-55-45",
+      "R2"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-heavy-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-thin",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "g0-small-over",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g0-elite-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g1-longshot",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g2-heavy-fav",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g3-thin",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g5-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "ALL": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g0-elite-spread",
+      "g0-dog-ml",
+      "R2"
+     ],
+     [
+      "g1-longshot",
+      "g1-55-45",
+      "R2"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-heavy-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-thin",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "SWITCH · slip competing on one game, 4 legs": {
+   "legs": [
+    "g0-small-over",
+    "g2-mid-under",
+    "g4-other-leagues",
+    "g5-home"
+   ],
+   "restSha": "4104c2137b353012",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "g0-small-over",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g5-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "ALL": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "SWITCH · slip on two games, 6 legs, 2 per game": {
+   "legs": [
+    "g0-elite-spread",
+    "g1-longshot",
+    "g2-mid-under",
+    "g3-defaulted",
+    "g4-other-leagues",
+    "g5-home"
+   ],
+   "restSha": "4e3a8915b34f768a",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "g0-elite-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g1-longshot",
+      "g1-55-45",
+      "R2"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "g0-elite-spread",
+      "g0-dog-ml",
+      "R2"
+     ],
+     [
+      "g1-longshot",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ],
+    "ALL": [
+     [
+      "g0-elite-spread",
+      "g0-dog-ml",
+      "R2"
+     ],
+     [
+      "g1-longshot",
+      "g1-55-45",
+      "R2"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "SWITCH · Totals + Props only, 6 legs, 3 per game": {
+   "legs": [
+    "g0-small-over",
+    "g2-mid-under",
+    "g3-thin",
+    "g4-other-leagues"
+   ],
+   "restSha": "4306499c1312b054",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-thin",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "g0-small-over",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g3-thin",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "ALL": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-thin",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "SWITCH · Pick Mix 50/50 Spread / Totals, 6 legs, 2 per game": {
+   "legs": [
+    "g0-small-over",
+    "g0-elite-spread",
+    "g2-mid-under",
+    "g3-defaulted",
+    "g4-other-leagues",
+    "g5-home"
+   ],
+   "restSha": "6dc59672a5002241",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g0-elite-spread",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "g0-small-over",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g0-elite-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g5-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "ALL": [
+     [
+      "g0-small-over",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g0-elite-spread",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g2-mid-under",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g3-defaulted",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      "g5-away",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "SWITCH · Your picks only, 2 of 5": {
+   "legs": [
+    "g2-heavy-fav",
+    "g5-away"
+   ],
+   "restSha": "85b98d13774df350",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "g2-heavy-fav",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g5-away",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "g2-heavy-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-away",
+      "g5-home",
+      "R2"
+     ]
+    ],
+    "ALL": [
+     [
+      "g2-heavy-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-away",
+      "g5-home",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "SWITCH · Your picks only, 4 of 8, 2 per game": {
+   "legs": [
+    "g0-elite-spread",
+    "g1-longshot",
+    "g3-no-price",
+    "g5-home"
+   ],
+   "restSha": "27c78935e5c48010",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "g0-elite-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g1-longshot",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g3-no-price",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g5-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "g0-elite-spread",
+      "g0-dog-ml",
+      "R2"
+     ],
+     [
+      "g1-longshot",
+      "g1-55-45",
+      "R2"
+     ],
+     [
+      "g3-no-price",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "ALL": [
+     [
+      "g0-elite-spread",
+      "g0-dog-ml",
+      "R2"
+     ],
+     [
+      "g1-longshot",
+      "g1-55-45",
+      "R2"
+     ],
+     [
+      "g3-no-price",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g5-home",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "NFL · 3 legs, best available": {
+   "legs": [
+    "p-0-spread",
+    "p-1-spread",
+    "p-2-spread"
+   ],
+   "restSha": "eda37e21e65e5e38",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "p-0-spread",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-1-spread",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-2-spread",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "p-0-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-1-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-2-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "ALL": [
+     [
+      "p-0-spread",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-1-spread",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-2-spread",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "NFL · 4 legs, 2 per game, game lines": {
+   "legs": [
+    "p-0-spread",
+    "p-1-spread",
+    "p-2-spread",
+    "p-3-spread"
+   ],
+   "restSha": "90220e0059c764db",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "p-0-spread",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-1-spread",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-2-spread",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-3-spread",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "p-0-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-1-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-2-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-3-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "ALL": [
+     [
+      "p-0-spread",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-1-spread",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-2-spread",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-3-spread",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "NFL · 2 legs, totals only, 60% gate": {
+   "legs": [],
+   "restSha": "b66f634ad2f4b96f",
+   "contrarian": {
+    "SUGGESTED": [],
+    "YOUR_PICKS": [],
+    "ALL": []
+   }
+  },
+  "NFL · 6 legs, no gate": {
+   "legs": [
+    "p-0-spread",
+    "p-1-spread",
+    "p-2-spread",
+    "p-3-spread",
+    "p-4-spread",
+    "p-5-spread"
+   ],
+   "restSha": "e30980cd8359df3e",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "p-0-spread",
+      "p-0-dog",
+      "R2"
+     ],
+     [
+      "p-1-spread",
+      "p-1-dog",
+      "R2"
+     ],
+     [
+      "p-2-spread",
+      "p-2-dog",
+      "R2"
+     ],
+     [
+      "p-3-spread",
+      "p-3-dog",
+      "R2"
+     ],
+     [
+      "p-4-spread",
+      "p-4-dog",
+      "R2"
+     ],
+     [
+      "p-5-spread",
+      "p-5-dog",
+      "R2"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "p-0-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-1-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-2-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-3-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-4-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-5-spread",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "ALL": [
+     [
+      "p-0-spread",
+      "p-0-dog",
+      "R2"
+     ],
+     [
+      "p-1-spread",
+      "p-1-dog",
+      "R2"
+     ],
+     [
+      "p-2-spread",
+      "p-2-dog",
+      "R2"
+     ],
+     [
+      "p-3-spread",
+      "p-3-dog",
+      "R2"
+     ],
+     [
+      "p-4-spread",
+      "p-4-dog",
+      "R2"
+     ],
+     [
+      "p-5-spread",
+      "p-5-dog",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "NFL · Your picks: every favorite ML": {
+   "legs": [
+    "p-0-fav",
+    "p-1-fav",
+    "p-2-fav",
+    "p-3-fav",
+    "p-4-fav",
+    "p-5-fav"
+   ],
+   "restSha": "39de37231e12fa7a",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "p-0-fav",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-1-fav",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-2-fav",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-3-fav",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-4-fav",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "p-5-fav",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "p-0-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-1-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-2-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-3-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-4-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-5-fav",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "ALL": [
+     [
+      "p-0-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-1-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-2-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-3-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-4-fav",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "p-5-fav",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "MIXED · m0-yrfi alone": {
+   "legs": [
+    "m0-yrfi"
+   ],
+   "restSha": "f526f9c654729386",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "m0-yrfi",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "m0-yrfi",
+      "m0-nrfi",
+      "R3"
+     ]
+    ],
+    "ALL": [
+     [
+      "m0-yrfi",
+      "m0-nrfi",
+      "R3"
+     ]
+    ]
+   }
+  },
+  "MIXED · m0-nrfi alone": {
+   "legs": [
+    "m0-nrfi"
+   ],
+   "restSha": "70e07537cd548c22",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "m0-nrfi",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "m0-nrfi",
+      "m0-yrfi",
+      "R3"
+     ]
+    ],
+    "ALL": [
+     [
+      "m0-nrfi",
+      "m0-yrfi",
+      "R3"
+     ]
+    ]
+   }
+  },
+  "MIXED · m0-tt-over alone": {
+   "legs": [
+    "m0-tt-over"
+   ],
+   "restSha": "68e613d94831a18a",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "m0-tt-over",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "m0-tt-over",
+      "m0-tt-under-far",
+      "R3"
+     ]
+    ],
+    "ALL": [
+     [
+      "m0-tt-over",
+      "m0-tt-under-far",
+      "R3"
+     ]
+    ]
+   }
+  },
+  "MIXED · m0-tt-under alone": {
+   "legs": [
+    "m0-tt-under"
+   ],
+   "restSha": "69291f2af06255a2",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "m0-tt-under",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "m0-tt-under",
+      "m0-tt-over",
+      "R3"
+     ]
+    ],
+    "ALL": [
+     [
+      "m0-tt-under",
+      "m0-tt-over",
+      "R3"
+     ]
+    ]
+   }
+  },
+  "MIXED · m0-tt-under-far alone": {
+   "legs": [
+    "m0-tt-under-far"
+   ],
+   "restSha": "eb708510a2ab3c53",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "m0-tt-under-far",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "m0-tt-under-far",
+      "m0-tt-over",
+      "R3"
+     ]
+    ],
+    "ALL": [
+     [
+      "m0-tt-under-far",
+      "m0-tt-over",
+      "R3"
+     ]
+    ]
+   }
+  },
+  "MIXED · m0-over alone": {
+   "legs": [
+    "m0-over"
+   ],
+   "restSha": "b5ea16ca946553ac",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "m0-over",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "m0-over",
+      "m0-under",
+      "R3"
+     ]
+    ],
+    "ALL": [
+     [
+      "m0-over",
+      "m0-under",
+      "R3"
+     ]
+    ]
+   }
+  },
+  "MIXED · m0-under alone": {
+   "legs": [
+    "m0-under"
+   ],
+   "restSha": "071438a6c314df06",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "m0-under",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "m0-under",
+      "m0-over",
+      "R3"
+     ]
+    ],
+    "ALL": [
+     [
+      "m0-under",
+      "m0-over",
+      "R3"
+     ]
+    ]
+   }
+  },
+  "MIXED · m0-f5-under alone": {
+   "legs": [
+    "m0-f5-under"
+   ],
+   "restSha": "197666b5ddcb52b2",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "m0-f5-under",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "m0-f5-under",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "ALL": [
+     [
+      "m0-f5-under",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "MIXED · m0-rl-home alone": {
+   "legs": [
+    "m0-rl-home"
+   ],
+   "restSha": "f48c8f0ad8a4a05f",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "m0-rl-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "m0-rl-home",
+      "m0-rl-away-alt",
+      "R2"
+     ]
+    ],
+    "ALL": [
+     [
+      "m0-rl-home",
+      "m0-rl-away-alt",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "MIXED · m0-rl-away-alt alone": {
+   "legs": [
+    "m0-rl-away-alt"
+   ],
+   "restSha": "3da552ec8480ee8d",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "m0-rl-away-alt",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "m0-rl-away-alt",
+      "m0-ml-home",
+      "R2"
+     ]
+    ],
+    "ALL": [
+     [
+      "m0-rl-away-alt",
+      "m0-ml-home",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "MIXED · m0-ml-home alone": {
+   "legs": [
+    "m0-ml-home"
+   ],
+   "restSha": "787184185f74121c",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "m0-ml-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "m0-ml-home",
+      "m0-rl-away-alt",
+      "R2"
+     ]
+    ],
+    "ALL": [
+     [
+      "m0-ml-home",
+      "m0-rl-away-alt",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "MIXED · m0-ml-away alone": {
+   "legs": [
+    "m0-ml-away"
+   ],
+   "restSha": "6c6279beb3919f8b",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "m0-ml-away",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "m0-ml-away",
+      "m0-ml-home",
+      "R2"
+     ]
+    ],
+    "ALL": [
+     [
+      "m0-ml-away",
+      "m0-ml-home",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "MIXED · n1-tatum-over alone": {
+   "legs": [
+    "n1-tatum-over"
+   ],
+   "restSha": "21017526319c17b9",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "n1-tatum-over",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "n1-tatum-over",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "ALL": [
+     [
+      "n1-tatum-over",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "MIXED · n1-tatum-under alone": {
+   "legs": [
+    "n1-tatum-under"
+   ],
+   "restSha": "2725a10a89114491",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "n1-tatum-under",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "n1-tatum-under",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "ALL": [
+     [
+      "n1-tatum-under",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "MIXED · n1-brown-reb-over alone": {
+   "legs": [
+    "n1-brown-reb-over"
+   ],
+   "restSha": "c8acc437be41e445",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "n1-brown-reb-over",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "n1-brown-reb-over",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "ALL": [
+     [
+      "n1-brown-reb-over",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "MIXED · n1-brown-reb-under alone": {
+   "legs": [
+    "n1-brown-reb-under"
+   ],
+   "restSha": "97fed3d185240095",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "n1-brown-reb-under",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "n1-brown-reb-under",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "ALL": [
+     [
+      "n1-brown-reb-under",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "MIXED · n1-spread-home alone": {
+   "legs": [
+    "n1-spread-home"
+   ],
+   "restSha": "f5bfdd411e14815d",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "n1-spread-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "n1-spread-home",
+      "n1-spread-away-far",
+      "R2"
+     ]
+    ],
+    "ALL": [
+     [
+      "n1-spread-home",
+      "n1-spread-away-far",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "MIXED · n1-spread-away-far alone": {
+   "legs": [
+    "n1-spread-away-far"
+   ],
+   "restSha": "2c9ac6694f6f8150",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "n1-spread-away-far",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "n1-spread-away-far",
+      "n1-spread-home",
+      "R2"
+     ]
+    ],
+    "ALL": [
+     [
+      "n1-spread-away-far",
+      "n1-spread-home",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "MIXED · n1-1h-spread-away alone": {
+   "legs": [
+    "n1-1h-spread-away"
+   ],
+   "restSha": "c12f9d4fca0b230b",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "n1-1h-spread-away",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "n1-1h-spread-away",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "ALL": [
+     [
+      "n1-1h-spread-away",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "MIXED · e2-ml-home alone": {
+   "legs": [
+    "e2-ml-home"
+   ],
+   "restSha": "3acd5e8823f205d4",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "e2-ml-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "e2-ml-home",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "ALL": [
+     [
+      "e2-ml-home",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "MIXED · e2-ml-away alone": {
+   "legs": [
+    "e2-ml-away"
+   ],
+   "restSha": "4c042db59e2b8349",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "e2-ml-away",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "e2-ml-away",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "ALL": [
+     [
+      "e2-ml-away",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "MIXED · e2-over alone": {
+   "legs": [
+    "e2-over"
+   ],
+   "restSha": "1d1497634f9b0bd9",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "e2-over",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "e2-over",
+      "e2-under",
+      "R3"
+     ]
+    ],
+    "ALL": [
+     [
+      "e2-over",
+      "e2-under",
+      "R3"
+     ]
+    ]
+   }
+  },
+  "MIXED · e2-under alone": {
+   "legs": [
+    "e2-under"
+   ],
+   "restSha": "ef6a075320e5e2b9",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "e2-under",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "e2-under",
+      "e2-over",
+      "R3"
+     ]
+    ],
+    "ALL": [
+     [
+      "e2-under",
+      "e2-over",
+      "R3"
+     ]
+    ]
+   }
+  },
+  "MIXED · f3-td alone": {
+   "legs": [
+    "f3-td"
+   ],
+   "restSha": "a0a091c16c46ae67",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "f3-td",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "f3-td",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ],
+    "ALL": [
+     [
+      "f3-td",
+      null,
+      "NO_ALTERNATE"
+     ]
+    ]
+   }
+  },
+  "MIXED · f3-ml-home alone": {
+   "legs": [
+    "f3-ml-home"
+   ],
+   "restSha": "71b9cd4ffdb6c6cc",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "f3-ml-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "f3-ml-home",
+      "f3-spread-away",
+      "R2"
+     ]
+    ],
+    "ALL": [
+     [
+      "f3-ml-home",
+      "f3-spread-away",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "MIXED · f3-ml-away alone": {
+   "legs": [
+    "f3-ml-away"
+   ],
+   "restSha": "58af0e0ff004a74c",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "f3-ml-away",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "f3-ml-away",
+      "f3-ml-home",
+      "R2"
+     ]
+    ],
+    "ALL": [
+     [
+      "f3-ml-away",
+      "f3-ml-home",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "MIXED · f3-spread-home alone": {
+   "legs": [
+    "f3-spread-home"
+   ],
+   "restSha": "2a82094e627c4fbd",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "f3-spread-home",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "f3-spread-home",
+      "f3-spread-away",
+      "R2"
+     ]
+    ],
+    "ALL": [
+     [
+      "f3-spread-home",
+      "f3-spread-away",
+      "R2"
+     ]
+    ]
+   }
+  },
+  "MIXED · f3-spread-away alone": {
+   "legs": [
+    "f3-spread-away"
+   ],
+   "restSha": "5ad8408edb754182",
+   "contrarian": {
+    "SUGGESTED": [
+     [
+      "f3-spread-away",
+      null,
+      "OUT_OF_SCOPE"
+     ]
+    ],
+    "YOUR_PICKS": [
+     [
+      "f3-spread-away",
+      "f3-ml-home",
+      "R2"
+     ]
+    ],
+    "ALL": [
+     [
+      "f3-spread-away",
+      "f3-ml-home",
+      "R2"
+     ]
+    ]
+   }
+  }
+ }
+}

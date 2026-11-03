@@ -1,11 +1,11 @@
-// How the engine reads scoring.ts: the gate's -110 threshold, Hedge on scores with Contrarian untouched, slip
+// How the engine reads scoring.ts: the gate's -110 threshold, Hedge and Contrarian on scores (PR 7), slip
 // ranking, the selection scale, the trimmed rates, the run log and its intake, and Hybrid's snapshot call.
 // Pure - no DB.
 //   npx tsx src/lib/parlay/scoring-wiring-acceptance-test.ts
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { GeneratorPick } from "@/lib/parlay/auto-generate";
-import { buildGeneratedParlay, GENERATOR_RULES, WILSON_RULES, type EngineSwap, type GeneratorSettings } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, GENERATOR_RULES, WILSON_RULES, type GeneratorSettings } from "@/lib/parlay/generator";
 import { reconcileTrace, scoringVersionOf, standardScoringVersion, TraceCollector } from "@/lib/parlay/run-trace";
 import { sanitizeClientTrace } from "@/lib/parlay/run-trace-validate";
 import { noPlatformRates } from "@/lib/parlay/run-view";
@@ -56,7 +56,7 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
 // ---- A record for the display <=> a score ----------------------------------
 {
   const snap = buildSnapshot();
-  const mismatched = SPECS.map(pickOf).filter((p) => (recordForGate(p, snap.leagueRecords, snap.categoryRecords, undefined, snap.propMarketRecords) !== null) !== (scorePick(p, ctxOf(snap)).status === "SCORED"));
+  const mismatched = SPECS.map((s) => pickOf(s)).filter((p) => (recordForGate(p, snap.leagueRecords, snap.categoryRecords, undefined, snap.propMarketRecords) !== null) !== (scorePick(p, ctxOf(snap)).status === "SCORED"));
   check("a pick has a shown record exactly when it has a score", mismatched.map((p) => p.pickId), []);
   const noPairs = { ...snap, categoryRecords: {} };
   const parlayA = buildGeneratedParlay(snap, BASE, null, NOW);
@@ -121,7 +121,7 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   check("slip picks are never gated", ids(gated.legs), ["s-fair"]);
 }
 
-// ---- Hedge scores; Contrarian doesn't --------------------------------------------
+// ---- Hedge and Contrarian score (Contrarian since PR 7; WILSON_RULES keeps the old path) ----
 {
   const snap = buildSnapshot();
   const settings = { ...BASE, legCount: 1 };
@@ -144,18 +144,22 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   const cScored = buildGeneratedParlay(cSnap, { ...BASE, legCount: 1 }, null, NOW);
   const cOld = buildGeneratedParlay(cSnap, { ...BASE, legCount: 1 }, null, NOW, WILSON_RULES);
   check("Contrarian slate: the same primary on both engines", [ids(cScored.legs), ids(cOld.legs)], [["g5-home"], ["g5-home"]]);
-  // The whole Contrarian, every Swap setting, byte for byte. The one key allowed to differ is the score on the leg it
-  // started from (`original`, a copy of the Primary's leg).
-  const noLegScore = (s: Record<string, EngineSwap>) => JSON.stringify(s, (k, v) => (k === "score" ? undefined : v));
-  check("Contrarian: same primary legs, same alternates, byte for byte", noLegScore(cScored.contrarian), noLegScore(cOld.contrarian));
-  check("Contrarian: found an alternate, and it is the best Wilson", cScored.contrarian.ALL.legs[0].swap?.pick.pickId, "c-best-wilson");
+  // Every opposite pick is Suns at +4.5..+6 against Nuggets -5: within the NBA spread tolerance (1 point), so all four
+  // are the other side of the same bet and only the score decides.
+  check("Contrarian (SCORING): the best score on the other side of the bet", cScored.contrarian.ALL.legs[0].swap?.pick.pickId, "c-best-score");
+  check("...as a SAME_BET swap with its market and line gap", [cScored.contrarian.ALL.legs[0].swap?.rule, cScored.contrarian.ALL.legs[0].swap?.contrarian], ["SAME_BET", { market: "SPREAD", lineGap: 0 }]);
+  check("Contrarian (WILSON_RULES rollback): still the best Wilson", cOld.contrarian.ALL.legs[0].swap?.pick.pickId, "c-best-wilson");
   const scoreRanked = opposing.map((s) => pickOf(s)).map((p) => scorePick(p, ctxOf(cSnap))).filter((s) => passesGate(s, 55)).sort(compareScores).map((s) => s.pickId);
   check("...which is not what the scores would pick: the slate tells the engines apart", scoreRanked[0], "c-best-score");
   check("...and the scored gate would have refused the raw-only pick and admitted the score-only one", [scoreRanked.includes("c-raw-only"), scoreRanked.includes("c-score-only")], [false, true]);
-  const cRawGate = buildGeneratedParlay(buildSnapshot([home, opposing[2]]), { ...BASE, legCount: 1 }, null, NOW);
-  check("Contrarian still takes a raw 55.0 the scored gate refuses", cRawGate.contrarian.ALL.legs[0].swap?.pick.pickId, "c-raw-only");
-  const cNoRaw = buildGeneratedParlay(buildSnapshot([home, opposing[3]]), { ...BASE, legCount: 1 }, null, NOW);
-  check("Contrarian still refuses a raw 50% the scored gate admits", cNoRaw.contrarian.ALL.legs[0].swap, null);
+  const rawSnap = buildSnapshot([home, opposing[2]]);
+  const cRawGate = buildGeneratedParlay(rawSnap, { ...BASE, legCount: 1 }, null, NOW);
+  check("Contrarian refuses a raw 55.0 the scored gate refuses", [cRawGate.contrarian.ALL.legs[0].swap, cRawGate.contrarian.ALL.legs[0].unchangedReason], [null, "NO_QUALIFYING_CONTRARIAN"]);
+  check("...which WILSON_RULES still takes", buildGeneratedParlay(rawSnap, { ...BASE, legCount: 1 }, null, NOW, WILSON_RULES).contrarian.ALL.legs[0].swap?.pick.pickId, "c-raw-only");
+  const noRawSnap = buildSnapshot([home, opposing[3]]);
+  const cNoRaw = buildGeneratedParlay(noRawSnap, { ...BASE, legCount: 1 }, null, NOW);
+  check("Contrarian takes a raw 50% at +150 the scored gate admits", cNoRaw.contrarian.ALL.legs[0].swap?.pick.pickId, "c-score-only");
+  check("...which WILSON_RULES still refuses", buildGeneratedParlay(noRawSnap, { ...BASE, legCount: 1 }, null, NOW, WILSON_RULES).contrarian.ALL.legs[0].swap, null);
   // Game 0 hedges to a total: 14-2 no-source -110 and 60-40 stated -110.
   const hedgeOf = (p: typeof scored) => p.hedge.ALL.legs[0].swap?.pick.pickId ?? null;
   check("Hedge reads scores: the alternate passes the gate", (() => {
@@ -166,14 +170,13 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   const raised = buildSnapshot();
   const strict = buildGeneratedParlay(raised, { ...BASE, legCount: 6, minWinPct: 65 }, null, NOW);
   check("Hedge honours the lever on the score", strict.hedge.ALL.legs.every((l) => !l.swap || passesGate(scorePick(l.swap.pick, ctxOf(raised, 65)), 65)), true);
-  const wilsonFromScored = scored.contrarian.ALL.legs.every((l) => !l.swap || l.swap.record.winPct >= 55);
-  check("Contrarian alternates still clear the raw gate", wilsonFromScored, true);
+  check("Contrarian honours the lever on the score", strict.contrarian.ALL.legs.every((l) => !l.swap || passesGate(scorePick(l.swap.pick, ctxOf(raised, 65)), 65)), true);
 }
 
 // ---- Trimmed rates ----------------------------------------------------------------
 {
   const whole = buildPlatformRates(RATE_ROWS);
-  const picks = SPECS.map(pickOf);
+  const picks = SPECS.map((s) => pickOf(s));
   const trimmed = trimPlatformRates(whole, picks);
   const snap = buildSnapshot();
   const same = picks.filter((p) => JSON.stringify(scorePick(p, { ...ctxOf(snap), platformRates: whole })) !== JSON.stringify(scorePick(p, { ...ctxOf(snap), platformRates: trimmed })));
@@ -194,7 +197,7 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   check("the same parlay with or without a collector", JSON.stringify(traced), JSON.stringify(plain));
   check("the funnel reconciles", [reconcileTrace(t), t.failed], [[], false]);
   const version = standardScoringVersion(GENERATOR_RULES);
-  check("the new version string (selection layer sel-v1)", version, "standard/hier-k20-logit-edge-min5-v1/sel-v1/contrarian-wilson-z1.5");
+  check("the new version string (selection layer sel-v1, Contrarian same-bet model)", version, "standard/hier-k20-logit-edge-min5-v1/sel-v1/contra-samebet-v1");
   check("it fits the intake's 80 characters", version.length <= 80, true);
   check("Hybrid's version string is unchanged", scoringVersionOf(GENERATOR_RULES, true), "hybrid/LEAGUE_FIRST/z1.5/no-headcount/prop-market-records");
   const s = t.extras.scoring!;

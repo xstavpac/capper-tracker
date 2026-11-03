@@ -106,7 +106,7 @@ function LegRow({ n, pick, record, mine, sgp, swappedBy, children }: { n: number
 const NOTE = "mt-1.5 text-[11.5px] font-medium text-muted-foreground";
 const SWAP_COPY = {
   AUTO_HEDGE: { title: "Hedge", verb: "hedged", noAlternate: "no other bet on this game clears your bar in its market and fits" },
-  CONTRARIAN: { title: "Contrarian", verb: "flipped", noAlternate: "no capper on the other side clears your bar in this market" },
+  CONTRARIAN: { title: "Contrarian", verb: "flipped", noAlternate: "no pick on the other side of this bet clears your bar" },
 } as const;
 
 function SwapLegRow({ n, leg, mode }: { n: number; leg: EngineSwapLeg; mode: EngineSwap["mode"] }) {

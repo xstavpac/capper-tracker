@@ -1,0 +1,208 @@
+Contrarian before (de0719e: classifier R2/R3, raw win-% gate, Wilson) vs now (same bet, other side; scoring.ts gate; selection.ts).
+Per leg, Swap = All: leg -> old alternate (rule or reason) | new alternate (market, line gap) or reason.
+
+SWITCH · 6 legs, best available, default gate
+    g0-small-over -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * g1-longshot -> old g1-55-45 (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g2-mid-under -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g3-defaulted -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g4-other-leagues -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g5-home -> old g5-away (R2) | new g5-away (SPREAD, gap 0)
+
+SWITCH · 8 legs, 2 per game, default gate
+    g0-small-over -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * g0-elite-spread -> old g0-dog-ml (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * g1-longshot -> old g1-55-45 (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g2-mid-under -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g2-heavy-fav -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g3-defaulted -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g4-other-leagues -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g5-home -> old g5-away (R2) | new g5-away (SPREAD, gap 0)
+
+SWITCH · 6 legs, 60% gate
+    g0-small-over -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g1-longshot -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g4-other-leagues -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g5-home -> old g5-away (R2) | new g5-away (SPREAD, gap 0)
+
+SWITCH · 6 legs, no gate
+    g0-small-over -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * g1-longshot -> old g1-55-45 (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g2-mid-under -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g3-defaulted -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g4-other-leagues -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g5-home -> old g5-away (R2) | new g5-away (SPREAD, gap 0)
+
+SWITCH · 12 legs, 5 per game, no gate
+    g0-small-over -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * g0-elite-spread -> old g0-dog-ml (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * g1-longshot -> old g1-55-45 (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g2-mid-under -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g2-heavy-fav -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g3-defaulted -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g3-thin -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g4-other-leagues -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g5-home -> old g5-away (R2) | new g5-away (SPREAD, gap 0)
+
+SWITCH · slip competing on one game, 4 legs
+    g0-small-over -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g2-mid-under -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g4-other-leagues -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g5-home -> old g5-away (R2) | new g5-away (SPREAD, gap 0)
+
+SWITCH · slip on two games, 6 legs, 2 per game
+  * g0-elite-spread -> old g0-dog-ml (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * g1-longshot -> old g1-55-45 (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g2-mid-under -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g3-defaulted -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g4-other-leagues -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g5-home -> old g5-away (R2) | new g5-away (SPREAD, gap 0)
+
+SWITCH · Totals + Props only, 6 legs, 3 per game
+    g0-small-over -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g2-mid-under -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g3-thin -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g4-other-leagues -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+
+SWITCH · Pick Mix 50/50 Spread / Totals, 6 legs, 2 per game
+    g0-small-over -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g0-elite-spread -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g2-mid-under -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g3-defaulted -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g4-other-leagues -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g5-home -> old g5-away (R2) | new g5-away (SPREAD, gap 0)
+
+SWITCH · Your picks only, 2 of 5
+    g2-heavy-fav -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g5-away -> old g5-home (R2) | new g5-home (SPREAD, gap 0)
+
+SWITCH · Your picks only, 4 of 8, 2 per game
+  * g0-elite-spread -> old g0-dog-ml (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * g1-longshot -> old g1-55-45 (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g3-no-price -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    g5-home -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+
+NFL · 3 legs, best available
+    p-0-spread -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    p-1-spread -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    p-2-spread -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+
+NFL · 4 legs, 2 per game, game lines
+    p-0-spread -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    p-1-spread -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    p-2-spread -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+    p-3-spread -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+
+NFL · 2 legs, totals only, 60% gate
+
+NFL · 6 legs, no gate
+  * p-0-spread -> old p-0-dog (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * p-1-spread -> old p-1-dog (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * p-2-spread -> old p-2-dog (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * p-3-spread -> old p-3-dog (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * p-4-spread -> old p-4-dog (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+  * p-5-spread -> old p-5-dog (R2) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+
+NFL · Your picks: every favorite ML
+    p-0-fav -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: BELOW_GATE)
+    p-1-fav -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: BELOW_GATE)
+    p-2-fav -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: BELOW_GATE)
+    p-3-fav -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: BELOW_GATE)
+    p-4-fav -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: BELOW_GATE)
+    p-5-fav -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: BELOW_GATE)
+
+MIXED · m0-yrfi alone
+    m0-yrfi -> old m0-nrfi (R3) | new m0-nrfi (NRFI)
+
+MIXED · m0-nrfi alone
+    m0-nrfi -> old m0-yrfi (R3) | new m0-yrfi (NRFI)
+
+MIXED · m0-tt-over alone
+  * m0-tt-over -> old m0-tt-under-far (R3) | new m0-tt-under (TEAM_TOTAL, gap 0)
+
+MIXED · m0-tt-under alone
+    m0-tt-under -> old m0-tt-over (R3) | new m0-tt-over (TEAM_TOTAL, gap 0)
+
+MIXED · m0-tt-under-far alone
+  * m0-tt-under-far -> old m0-tt-over (R3) | new none (NO_QUALIFYING_CONTRARIAN: OUTSIDE_TOLERANCE)
+
+MIXED · m0-over alone
+    m0-over -> old m0-under (R3) | new m0-under (TOTAL, gap 0.5)
+
+MIXED · m0-under alone
+    m0-under -> old m0-over (R3) | new m0-over (TOTAL, gap 0.5)
+
+MIXED · m0-f5-under alone
+    m0-f5-under -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+
+MIXED · m0-rl-home alone
+  * m0-rl-home -> old m0-rl-away-alt (R2) | new none (NO_QUALIFYING_CONTRARIAN: OUTSIDE_TOLERANCE)
+
+MIXED · m0-rl-away-alt alone
+  * m0-rl-away-alt -> old m0-ml-home (R2) | new none (NO_QUALIFYING_CONTRARIAN: OUTSIDE_TOLERANCE)
+
+MIXED · m0-ml-home alone
+  * m0-ml-home -> old m0-rl-away-alt (R2) | new none (NO_QUALIFYING_CONTRARIAN: BELOW_GATE)
+
+MIXED · m0-ml-away alone
+    m0-ml-away -> old m0-ml-home (R2) | new m0-ml-home (ML)
+
+MIXED · n1-tatum-over alone
+  * n1-tatum-over -> old none (NO_ALTERNATE) | new n1-tatum-under (PROP, gap 0.5)
+
+MIXED · n1-tatum-under alone
+  * n1-tatum-under -> old none (NO_ALTERNATE) | new n1-tatum-over (PROP, gap 0.5)
+
+MIXED · n1-brown-reb-over alone
+    n1-brown-reb-over -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: OUTSIDE_TOLERANCE)
+
+MIXED · n1-brown-reb-under alone
+    n1-brown-reb-under -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: OUTSIDE_TOLERANCE)
+
+MIXED · n1-spread-home alone
+  * n1-spread-home -> old n1-spread-away-far (R2) | new none (NO_QUALIFYING_CONTRARIAN: OUTSIDE_TOLERANCE)
+
+MIXED · n1-spread-away-far alone
+  * n1-spread-away-far -> old n1-spread-home (R2) | new none (NO_QUALIFYING_CONTRARIAN: OUTSIDE_TOLERANCE)
+
+MIXED · n1-1h-spread-away alone
+    n1-1h-spread-away -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: NO_OPPOSITE)
+
+MIXED · e2-ml-home alone
+    e2-ml-home -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: EXCLUDED_MARKET)
+
+MIXED · e2-ml-away alone
+    e2-ml-away -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: EXCLUDED_MARKET)
+
+MIXED · e2-over alone
+    e2-over -> old e2-under (R3) | new e2-under (TOTAL, gap 0)
+
+MIXED · e2-under alone
+    e2-under -> old e2-over (R3) | new e2-over (TOTAL, gap 0)
+
+MIXED · f3-td alone
+    f3-td -> old none (NO_ALTERNATE) | new none (NO_QUALIFYING_CONTRARIAN: EXCLUDED_MARKET)
+
+MIXED · f3-ml-home alone
+  * f3-ml-home -> old f3-spread-away (R2) | new f3-ml-away (ML)
+
+MIXED · f3-ml-away alone
+    f3-ml-away -> old f3-ml-home (R2) | new f3-ml-home (ML)
+
+MIXED · f3-spread-home alone
+    f3-spread-home -> old f3-spread-away (R2) | new f3-spread-away (SPREAD, gap 0.5)
+
+MIXED · f3-spread-away alone
+  * f3-spread-away -> old f3-ml-home (R2) | new f3-spread-home (SPREAD, gap 0.5)
+
+Availability (Swap = All, every case's legs): legs with a Contrarian, old vs new.
+market      legs   old         old same-type   new         new misses: outside tolerance / below gate / no opposite pick / excluded market
+ML            23    10  43%      2   9%          3  13%    0 / 7 / 11 / 2   << new under half of old
+SPREAD        41    25  61%     13  32%         11  27%    4 / 0 / 26 / 0   << new under half of old
+TOTAL         32     4  13%      4  13%          4  13%    0 / 0 / 28 / 0
+TEAM_TOTAL     3     3 100%      3 100%          2  67%    1 / 0 / 0 / 0
+NRFI           2     2 100%      2 100%          2 100%    0 / 0 / 0 / 0
+PROP           5     0   0%      0   0%          2  40%    2 / 0 / 0 / 1
+ALL          106    44  42%     24  23%         24  23%    7 / 7 / 65 / 3
+old same-type = old Contrarians whose alternate was the same betType (the ML <-> spread cross pairs taken out).
+FLAG: new availability is under half of old for ML, SPREAD.

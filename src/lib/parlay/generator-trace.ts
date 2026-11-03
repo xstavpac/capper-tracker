@@ -121,6 +121,8 @@ export function traceSwapLeg(input: {
   inParlay: Set<string>;
   siblings: GeneratorPick[];
   recordOk: (p: GeneratorPick) => "NO_RECORD" | "BELOW_GATE" | "OK";
+  // Contrarian under SCORING: the same-bet match (contrarian-match.ts) instead of the classifier's mode.
+  pairs?: (p: GeneratorPick) => boolean;
 }): Omit<SwapLegTrace, "pick" | "result" | "rule"> {
   const out = {
     gamePicks: input.allGamePicks,
@@ -141,7 +143,7 @@ export function traceSwapLeg(input: {
       const o = classifyPair(primary, asCandidate(p));
       const key = o.outcome === "RULE" ? o.rule : o.outcome;
       out.classifier[key] = (out.classifier[key] ?? 0) + 1;
-      if (o.outcome !== "RULE" || o.mode !== input.mode) continue;
+      if (input.pairs ? !input.pairs(p) : o.outcome !== "RULE" || o.mode !== input.mode) continue;
       out.paired++;
       const r = input.recordOk(p);
       if (r === "NO_RECORD") out.noRecord++;

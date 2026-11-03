@@ -24,8 +24,10 @@
 //      gated and ranked by lib/parlay/scoring.ts, and slip picks are ranked by
 //      it. Which gated legs are taken is lib/parlay/selection.ts, reading the
 //      edge (rankScore, in points) directly. The record a leg shows is still
-//      recordForGate's. Contrarian keeps Wilson and the raw gate. The rest of
-//      this rule is WILSON_RULES, and Contrarian under either:
+//      recordForGate's. Contrarian (PR 7) is the other side of the same bet
+//      (contrarian-match.ts), gated by scoring.ts at its own price and chosen
+//      by selection.ts like Hedge. The rest of this rule is WILSON_RULES (and
+//      Contrarian under it, the classifier path, kept for rollback):
 //      a generated leg must clear the 55% gate (qualifies, qualification-
 //      core.ts) on its capper's record for this bet: the better of their
 //      record in its market in its league and their all-time record in the
@@ -123,6 +125,7 @@ import { GATE_DEFAULT, normalizeMinWinPct } from "@/lib/parlay/gate";
 import { GENERATOR_Z } from "@/lib/parlay/generator-z";
 import { inSwapScope, SWAP_SCOPES, type SwapScope } from "@/lib/parlay/swap-scope";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
+import { contrarianMatch, type ContrarianMarket, type ContrarianMiss } from "@/lib/parlay/contrarian-match";
 import { blocks, selectConflictFreeLegs } from "@/lib/parlay/build-my-picks";
 import { toBuildCandidate } from "@/lib/parlay/pool-swap";
 import { betCategory, type BetCategoryResult } from "@/lib/parlay/bet-category";
@@ -186,7 +189,7 @@ export type GeneratorSnapshot = {
 export type GeneratorRules = {
   // SCORING: lib/parlay/scoring.ts gates and ranks generated legs and Hedge, and
   // ranks slip picks. WILSON: recordScope's record, the raw gate, Wilson.
-  // Contrarian is WILSON under both.
+  // Contrarian under SCORING is the same-bet search (searchContrarian); under WILSON, the classifier path.
   scorer: "SCORING" | "WILSON";
   // LEAGUE_FIRST: recordForGate. ALL_TIME: the all-leagues market record.
   recordScope: "LEAGUE_FIRST" | "ALL_TIME";
@@ -293,7 +296,9 @@ export type EngineSwapLeg = {
   original: EngineLeg;
   swap: {
     pick: GeneratorPick;
-    rule: Rule;
+    // The classifier's rule, or SAME_BET: Contrarian under SCORING (the other side
+    // of the same bet, contrarian-match.ts).
+    rule: Rule | "SAME_BET";
     record: LegRecord;
     wilsonLowerBound: number;
     // Which record it was gated on (recordForGate). Absent under LEGACY_RULES:
@@ -301,10 +306,16 @@ export type EngineSwapLeg = {
     basis?: "LEAGUE" | "OVERALL";
     // As EngineLeg.propMarket.
     propMarket?: PropMarketKey;
+    // SAME_BET only: the market, and how far its line is from the exact other side
+    // of the leg (null for a market with no line).
+    contrarian?: { market: ContrarianMarket; lineGap: number | null };
   } | null;
   // OUT_OF_SCOPE: the Swap setting leaves this leg alone (a slip pick under
   // Suggested, a generated leg under Your picks). NOT_MAJORITY: LEGACY_RULES only.
-  unchangedReason: "OUT_OF_SCOPE" | "NO_ALTERNATE" | "NOT_MAJORITY" | null;
+  // NO_QUALIFYING_CONTRARIAN: Contrarian under SCORING found no pick on the other
+  // side of this bet that passes the gate. NO_ALTERNATE is Hedge's, and
+  // Contrarian's under WILSON_RULES / LEGACY_RULES.
+  unchangedReason: "OUT_OF_SCOPE" | "NO_ALTERNATE" | "NOT_MAJORITY" | "NO_QUALIFYING_CONTRARIAN" | null;
 };
 
 export type EngineSwap = { mode: SwapMode; legs: EngineSwapLeg[]; swapCount: number };
@@ -1006,10 +1017,18 @@ export function buildGeneratedParlay(
     ? { draw: variation ? { seed: deriveSeed(variation.seed, "hedge"), beta } : null, picked: [] }
     : null;
   const hedge = bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE", scope, rules, gate, scoreOf, trace, hedgeSelect));
-  const contrarian = bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "CONTRARIAN", scope, rules, gate, scoreOf, trace));
+  // Contrarian's the same way, on its own sub-seed.
+  const contrarianSelect: HedgeSelect | null = scoreOf
+    ? { draw: variation ? { seed: deriveSeed(variation.seed, "contrarian"), beta } : null, picked: [] }
+    : null;
+  const contrarian = bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "CONTRARIAN", scope, rules, gate, scoreOf, trace, contrarianSelect));
   if (scoreOf) traced((t) => t.extras({ scoring: traceScoring({ platformRows: snapshot.platformRateRows ?? 0, legs, hedge: hedge.ALL, scoreOf }) }));
   if (selectionTrace) {
-    const tr: SelectionTrace = { ...selectionTrace, ...(hedgeSelect && hedgeSelect.picked.length > 0 ? { hedge: hedgeSelect.picked } : {}) };
+    const tr: SelectionTrace = {
+      ...selectionTrace,
+      ...(hedgeSelect && hedgeSelect.picked.length > 0 ? { hedge: hedgeSelect.picked } : {}),
+      ...(contrarianSelect && contrarianSelect.picked.length > 0 ? { contrarian: contrarianSelect.picked } : {}),
+    };
     traced((t) => t.extras({ selection: tr }));
   }
 
@@ -1133,11 +1152,13 @@ type HedgeSelect = { draw: { seed: number; beta: number } | null; picked: Select
 // ---------------------------------------------------------------------------
 // Hedge / Contrarian: each generated leg searched for an alternate on its own
 // game. Under SCORING, Hedge uses rankCandidatesByScore (the classifier, then
-// scoring.ts's gate and order). Otherwise rankCandidatesByRecord (qualification-
-// core.ts - classifier, 55% gate, Wilson order) on the same record as the
-// generated legs (gateRecord): Contrarian always, until it moves to scoring.
-// Contrarian takes any capper on the other side who clears the gate - no
-// headcount, except under LEGACY_RULES. Only the legs the Swap setting covers
+// scoring.ts's gate and order), and Contrarian searchContrarian (the other side
+// of the same bet, contrarian-match.ts, then scoring.ts's gate - the leg's own
+// score is never compared); both choose through selection.ts. Otherwise
+// rankCandidatesByRecord (qualification-core.ts - classifier, 55% gate, Wilson
+// order) on the same record as the generated legs (gateRecord), Contrarian taking
+// any capper on the other side who clears the gate - no headcount, except under
+// LEGACY_RULES. Only the legs the Swap setting covers
 // (`scope`, swap-scope.ts) are searched; the others stay as they are. An
 // alternate is never one of the parlay's own picks or a slip pick, and never
 // breaks a same-game rule against the other legs on its game (as they stand
@@ -1145,6 +1166,54 @@ type HedgeSelect = { draw: { seed: number; beta: number } | null; picked: Select
 // ---------------------------------------------------------------------------
 const bySwapScope = (build: (scope: SwapScope) => EngineSwap): Record<SwapScope, EngineSwap> =>
   Object.fromEntries(SWAP_SCOPES.map((scope) => [scope, build(scope)])) as Record<SwapScope, EngineSwap>;
+
+// Contrarian under SCORING, for one leg: every candidate that is the other side of
+// the leg's bet (contrarianMatch), scored by scoring.ts at its own price and kept when
+// it passes the gate. The leg's own score is never read: a contrarian is a hedge, not
+// an upgrade. `counts` is what the run log shows for the leg.
+export type ContrarianCounts = {
+  // The other side of this bet within the line tolerance.
+  opposite: number;
+  // The other side of this bet, but its line is past the tolerance.
+  lineTooFar: number;
+  // The same bet in another period (1H vs full game).
+  periodMismatch: number;
+  noRecord: number;
+  belowGate: number;
+  qualifying: number;
+};
+type ContrarianCandidate = { pick: GeneratorPick; points: number; market: ContrarianMarket; lineGap: number | null };
+
+export function searchContrarian(
+  leg: GeneratorPick,
+  candidates: readonly GeneratorPick[],
+  scoreOf: (pick: GeneratorPick) => PickScore,
+  gate: number
+): { qualified: ContrarianCandidate[]; counts: ContrarianCounts; misses: Partial<Record<ContrarianMiss, number>> } {
+  const counts: ContrarianCounts = { opposite: 0, lineTooFar: 0, periodMismatch: 0, noRecord: 0, belowGate: 0, qualifying: 0 };
+  const misses: Partial<Record<ContrarianMiss, number>> = {};
+  const qualified: ContrarianCandidate[] = [];
+  const a = asCandidate(leg);
+  for (const p of candidates) {
+    if (p.pickId === leg.pickId) continue;
+    const m = contrarianMatch(a, asCandidate(p));
+    if (!m.match) {
+      misses[m.why] = (misses[m.why] ?? 0) + 1;
+      if (m.why === "LINE_TOO_FAR") counts.lineTooFar++;
+      else if (m.why === "PERIOD_MISMATCH") counts.periodMismatch++;
+      continue;
+    }
+    counts.opposite++;
+    const s = scoreOf(p);
+    if (s.status !== "SCORED") counts.noRecord++;
+    else if (!passesGate(s, gate)) counts.belowGate++;
+    else {
+      counts.qualifying++;
+      qualified.push({ pick: p, points: s.rankScore * 100, market: m.market, lineGap: m.lineGap });
+    }
+  }
+  return { qualified, counts, misses };
+}
 
 function buildSwap(
   legs: EngineLeg[],
@@ -1160,6 +1229,9 @@ function buildSwap(
   hedgeSelect: HedgeSelect | null = null
 ): EngineSwap {
   const hedgeScore = mode === "AUTO_HEDGE" ? scoreOf : null;
+  // Contrarian under SCORING: the other side of the same bet (contrarian-match.ts),
+  // gated by scoring.ts at its own price. The leg's own score is never compared.
+  const contrarianScore = mode === "CONTRARIAN" ? scoreOf : null;
   // Swap = All sees every leg; the other settings search a subset of them, so only All is traced leg by leg.
   const legTraces: SwapLegTrace[] = [];
   const traceLeg = trace && scope === "ALL" ? (fn: () => SwapLegTrace) => { try { legTraces.push(fn()); } catch (err) { trace.error("TRACE_ERROR", err, "swap"); } } : null;
@@ -1173,6 +1245,7 @@ function buildSwap(
     const primary = toParlayLeg(leg.pick);
     const pickById = new Map(gamePicks.map((p) => [p.pickId, p]));
     const sameGame = gamePicks.map(toParlayLeg);
+    const search = contrarianScore ? searchContrarian(leg.pick, others, contrarianScore, gate) : null;
     // Read before this leg changes inParlay / current, so it is the state the search ran on.
     const analysis = traceLeg
       ? (() => {
@@ -1186,10 +1259,15 @@ function buildSwap(
               inParlay,
               siblings,
               recordOk: (p) => {
+                if (contrarianScore) {
+                  const s = contrarianScore(p);
+                  return s.status !== "SCORED" ? "NO_RECORD" : passesGate(s, gate) ? "OK" : "BELOW_GATE";
+                }
                 const g = gateRecord(p, snapshot, rules);
                 if (!g) return "NO_RECORD";
                 return (hedgeScore ? passesGate(hedgeScore(p), gate) : qualifies(g.record, gate)) ? "OK" : "BELOW_GATE";
               },
+              ...(contrarianScore ? { pairs: (p: GeneratorPick) => contrarianMatch(asCandidate(leg.pick), asCandidate(p)).match } : {}),
             });
           } catch (err) {
             trace!.error("TRACE_ERROR", err, "swap");
@@ -1197,11 +1275,38 @@ function buildSwap(
           }
         })()
       : null;
-    const note = (result: SwapLegTrace["result"], rule?: string) => {
-      if (analysis) traceLeg!(() => ({ pick: pickRef(leg.pick), result, ...(rule ? { rule } : {}), ...analysis }));
+    const note = (result: SwapLegTrace["result"], rule?: string, chosen?: { id: string; lineGap: number | null }) => {
+      if (!analysis) return;
+      const contrarian = search ? { ...search.counts, ...(chosen ? { chosen: chosen.id, ...(chosen.lineGap !== null ? { lineGap: chosen.lineGap } : {}) } : {}) } : null;
+      traceLeg!(() => ({ pick: pickRef(leg.pick), result, ...(rule ? { rule } : {}), ...analysis, ...(contrarian ? { contrarian } : {}) }));
     };
-    let best: { leg: { pickId: string }; rule: Rule; record: LegRecord; wilsonLowerBound: number; basis?: "LEAGUE" | "OVERALL"; propMarket?: PropMarketKey } | undefined;
-    if (hedgeScore) {
+    let best:
+      | { leg: { pickId: string }; rule: Rule | "SAME_BET"; record: LegRecord; wilsonLowerBound: number; basis?: "LEAGUE" | "OVERALL"; propMarket?: PropMarketKey; contrarian?: { market: ContrarianMarket; lineGap: number | null } }
+      | undefined;
+    if (search) {
+      // Every qualifying pick on the other side of this bet is a candidate, whatever
+      // the leg's own score. selection.ts picks among them as it does for Hedge.
+      if (search.qualified.length > 0) {
+        const order = orderCandidates(
+          search.qualified.map((c) => ({ item: c, id: c.pick.pickId, betKey: betKeyOf(c.pick), gameId: leg.gameId, score: c.points })),
+          hedgeSelect?.draw ? { rng: selectionRng(deriveSeed(hedgeSelect.draw.seed, leg.pick.pickId)), beta: hedgeSelect.draw.beta } : null
+        );
+        const top = order[0].item;
+        if (hedgeSelect && scope === "ALL") hedgeSelect.picked.push(legTrace(order[0]));
+        const shown = recordForGate(top.pick, snapshot.leagueRecords, snapshot.categoryRecords, rules.z, snapshot.propMarketRecords);
+        best = shown
+          ? {
+              leg: { pickId: top.pick.pickId },
+              rule: "SAME_BET",
+              record: toLegRecord(shown),
+              wilsonLowerBound: wilsonLowerBound(shown.wins, shown.losses, rules.z),
+              basis: shown.source,
+              ...(shown.propMarket ? { propMarket: shown.propMarket } : {}),
+              contrarian: { market: top.market, lineGap: top.lineGap },
+            }
+          : undefined;
+      }
+    } else if (hedgeScore) {
       const gated = rankCandidatesByScore(
         primary,
         others.map(toParlayLeg),
@@ -1255,17 +1360,21 @@ function buildSwap(
     }
     const bestPick = best ? others.find((p) => p.pickId === best!.leg.pickId) : undefined;
     if (!best || !bestPick) {
+      if (search) {
+        note("NO_QUALIFYING_CONTRARIAN");
+        return { original: leg, swap: null, unchangedReason: "NO_QUALIFYING_CONTRARIAN" };
+      }
       const notMajority = mode === "CONTRARIAN" && rules.contrarianHeadcount && !contrarianHeadcountPasses(primary, sameGame);
       note(notMajority ? "NOT_MAJORITY" : "NO_ALTERNATE");
       return { original: leg, swap: null, unchangedReason: notMajority ? "NOT_MAJORITY" : "NO_ALTERNATE" };
     }
-    note("SWAPPED", best.rule);
+    note("SWAPPED", best.rule, best.contrarian ? { id: bestPick.pickId, lineGap: best.contrarian.lineGap } : undefined);
     inParlay.add(bestPick.pickId);
     current.set(leg.pick.pickId, bestPick);
-    const { basis, rule, record, propMarket } = best;
+    const { basis, rule, record, propMarket, contrarian } = best;
     return {
       original: leg,
-      swap: { pick: bestPick, rule, record, wilsonLowerBound: best.wilsonLowerBound, ...(basis ? { basis } : {}), ...(propMarket ? { propMarket } : {}) },
+      swap: { pick: bestPick, rule, record, wilsonLowerBound: best.wilsonLowerBound, ...(basis ? { basis } : {}), ...(propMarket ? { propMarket } : {}), ...(contrarian ? { contrarian } : {}) },
       unchangedReason: null,
     };
   });

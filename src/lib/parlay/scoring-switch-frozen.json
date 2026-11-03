@@ -18,7 +18,7 @@
     ],
     "contrarian": [
       null,
-      "g1-55-45",
+      null,
       null,
       null,
       null,
@@ -778,7 +778,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -826,47 +826,8 @@
               "score": 8.333333333333332,
               "sameGame": false
             },
-            "swap": {
-              "pick": {
-                "pickId": "g1-55-45",
-                "capperId": "c-g1-55-45",
-                "capperName": "Capper g1-55-45",
-                "capperColorTag": null,
-                "capperIsFavorite": false,
-                "category": "SPREAD_MINUS",
-                "leagueName": "NFL",
-                "gameId": "g1",
-                "gameLabel": "Miami Dolphins @ Buffalo Bills",
-                "betDetail": "Bills -6",
-                "odds": -110,
-                "oddsSource": "STATED",
-                "units": 1,
-                "status": "PENDING",
-                "betType": "SPREAD",
-                "period": "FULL_GAME",
-                "rawBetDetail": "Bills -6",
-                "propMarket": null,
-                "line": -6,
-                "homeTeam": "Buffalo Bills",
-                "awayTeam": "Miami Dolphins",
-                "gameTime": "2026-11-08T18:00:00.000Z",
-                "teamGroup": "HOME",
-                "teamLabel": "",
-                "teamColor": null,
-                "datePosted": "2026-11-08T12:00:00.000Z",
-                "gameNumber": null
-              },
-              "rule": "R2",
-              "record": {
-                "wins": 55,
-                "losses": 45,
-                "n": 100,
-                "winPct": 55.00000000000001
-              },
-              "wilsonLowerBound": 0.47509311076712185,
-              "basis": "LEAGUE"
-            },
-            "unchangedReason": null
+            "swap": null,
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -915,7 +876,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -964,7 +925,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -1013,7 +974,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -1091,7 +1052,7 @@
                 "datePosted": "2026-11-08T12:00:00.000Z",
                 "gameNumber": null
               },
-              "rule": "R2",
+              "rule": "SAME_BET",
               "record": {
                 "wins": 22,
                 "losses": 12,
@@ -1099,12 +1060,16 @@
                 "winPct": 64.70588235294117
               },
               "wilsonLowerBound": 0.5185231788217299,
-              "basis": "LEAGUE"
+              "basis": "LEAGUE",
+              "contrarian": {
+                "market": "SPREAD",
+                "lineGap": 0
+              }
             },
             "unchangedReason": null
           }
         ],
-        "swapCount": 2
+        "swapCount": 1
       },
       "variety": "BEST",
       "noAlternativeReason": null,
@@ -1150,8 +1115,8 @@
     ],
     "contrarian": [
       null,
-      "g0-dog-ml",
-      "g1-55-45",
+      null,
+      null,
       null,
       null,
       null,
@@ -2022,7 +1987,7 @@
               "sameGame": true
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -2070,47 +2035,8 @@
               "score": 15.41950113378685,
               "sameGame": true
             },
-            "swap": {
-              "pick": {
-                "pickId": "g0-dog-ml",
-                "capperId": "c-g0-dog-ml",
-                "capperName": "Capper g0-dog-ml",
-                "capperColorTag": null,
-                "capperIsFavorite": false,
-                "category": "DOG_ML",
-                "leagueName": "NFL",
-                "gameId": "g0",
-                "gameLabel": "Los Angeles Chargers @ Kansas City Chiefs",
-                "betDetail": "Chargers ML",
-                "odds": 150,
-                "oddsSource": "MARKET",
-                "units": 1,
-                "status": "PENDING",
-                "betType": "MONEYLINE",
-                "period": "FULL_GAME",
-                "rawBetDetail": "Chargers ML",
-                "propMarket": null,
-                "line": null,
-                "homeTeam": "Kansas City Chiefs",
-                "awayTeam": "Los Angeles Chargers",
-                "gameTime": "2026-11-08T17:00:00.000Z",
-                "teamGroup": "HOME",
-                "teamLabel": "",
-                "teamColor": null,
-                "datePosted": "2026-11-08T12:00:00.000Z",
-                "gameNumber": null
-              },
-              "rule": "R2",
-              "record": {
-                "wins": 11,
-                "losses": 9,
-                "n": 20,
-                "winPct": 55.00000000000001
-              },
-              "wilsonLowerBound": 0.38666035664889137,
-              "basis": "LEAGUE"
-            },
-            "unchangedReason": null
+            "swap": null,
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -2158,47 +2084,8 @@
               "score": 8.333333333333332,
               "sameGame": false
             },
-            "swap": {
-              "pick": {
-                "pickId": "g1-55-45",
-                "capperId": "c-g1-55-45",
-                "capperName": "Capper g1-55-45",
-                "capperColorTag": null,
-                "capperIsFavorite": false,
-                "category": "SPREAD_MINUS",
-                "leagueName": "NFL",
-                "gameId": "g1",
-                "gameLabel": "Miami Dolphins @ Buffalo Bills",
-                "betDetail": "Bills -6",
-                "odds": -110,
-                "oddsSource": "STATED",
-                "units": 1,
-                "status": "PENDING",
-                "betType": "SPREAD",
-                "period": "FULL_GAME",
-                "rawBetDetail": "Bills -6",
-                "propMarket": null,
-                "line": -6,
-                "homeTeam": "Buffalo Bills",
-                "awayTeam": "Miami Dolphins",
-                "gameTime": "2026-11-08T18:00:00.000Z",
-                "teamGroup": "HOME",
-                "teamLabel": "",
-                "teamColor": null,
-                "datePosted": "2026-11-08T12:00:00.000Z",
-                "gameNumber": null
-              },
-              "rule": "R2",
-              "record": {
-                "wins": 55,
-                "losses": 45,
-                "n": 100,
-                "winPct": 55.00000000000001
-              },
-              "wilsonLowerBound": 0.47509311076712185,
-              "basis": "LEAGUE"
-            },
-            "unchangedReason": null
+            "swap": null,
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -2247,7 +2134,7 @@
               "sameGame": true
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -2296,7 +2183,7 @@
               "sameGame": true
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -2345,7 +2232,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -2394,7 +2281,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -2472,7 +2359,7 @@
                 "datePosted": "2026-11-08T12:00:00.000Z",
                 "gameNumber": null
               },
-              "rule": "R2",
+              "rule": "SAME_BET",
               "record": {
                 "wins": 22,
                 "losses": 12,
@@ -2480,12 +2367,16 @@
                 "winPct": 64.70588235294117
               },
               "wilsonLowerBound": 0.5185231788217299,
-              "basis": "LEAGUE"
+              "basis": "LEAGUE",
+              "contrarian": {
+                "market": "SPREAD",
+                "lineGap": 0
+              }
             },
             "unchangedReason": null
           }
         ],
-        "swapCount": 3
+        "swapCount": 1
       },
       "variety": "BEST",
       "noAlternativeReason": null,
@@ -3024,7 +2915,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -3073,7 +2964,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -3122,7 +3013,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -3200,7 +3091,7 @@
                 "datePosted": "2026-11-08T12:00:00.000Z",
                 "gameNumber": null
               },
-              "rule": "R2",
+              "rule": "SAME_BET",
               "record": {
                 "wins": 22,
                 "losses": 12,
@@ -3208,7 +3099,11 @@
                 "winPct": 64.70588235294117
               },
               "wilsonLowerBound": 0.5185231788217299,
-              "basis": "LEAGUE"
+              "basis": "LEAGUE",
+              "contrarian": {
+                "market": "SPREAD",
+                "lineGap": 0
+              }
             },
             "unchangedReason": null
           }
@@ -3251,7 +3146,7 @@
     ],
     "contrarian": [
       null,
-      "g1-55-45",
+      null,
       null,
       null,
       null,
@@ -4011,7 +3906,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -4059,47 +3954,8 @@
               "score": 8.333333333333332,
               "sameGame": false
             },
-            "swap": {
-              "pick": {
-                "pickId": "g1-55-45",
-                "capperId": "c-g1-55-45",
-                "capperName": "Capper g1-55-45",
-                "capperColorTag": null,
-                "capperIsFavorite": false,
-                "category": "SPREAD_MINUS",
-                "leagueName": "NFL",
-                "gameId": "g1",
-                "gameLabel": "Miami Dolphins @ Buffalo Bills",
-                "betDetail": "Bills -6",
-                "odds": -110,
-                "oddsSource": "STATED",
-                "units": 1,
-                "status": "PENDING",
-                "betType": "SPREAD",
-                "period": "FULL_GAME",
-                "rawBetDetail": "Bills -6",
-                "propMarket": null,
-                "line": -6,
-                "homeTeam": "Buffalo Bills",
-                "awayTeam": "Miami Dolphins",
-                "gameTime": "2026-11-08T18:00:00.000Z",
-                "teamGroup": "HOME",
-                "teamLabel": "",
-                "teamColor": null,
-                "datePosted": "2026-11-08T12:00:00.000Z",
-                "gameNumber": null
-              },
-              "rule": "R2",
-              "record": {
-                "wins": 55,
-                "losses": 45,
-                "n": 100,
-                "winPct": 55.00000000000001
-              },
-              "wilsonLowerBound": 0.47509311076712185,
-              "basis": "LEAGUE"
-            },
-            "unchangedReason": null
+            "swap": null,
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -4148,7 +4004,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -4197,7 +4053,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -4246,7 +4102,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -4324,7 +4180,7 @@
                 "datePosted": "2026-11-08T12:00:00.000Z",
                 "gameNumber": null
               },
-              "rule": "R2",
+              "rule": "SAME_BET",
               "record": {
                 "wins": 22,
                 "losses": 12,
@@ -4332,12 +4188,16 @@
                 "winPct": 64.70588235294117
               },
               "wilsonLowerBound": 0.5185231788217299,
-              "basis": "LEAGUE"
+              "basis": "LEAGUE",
+              "contrarian": {
+                "market": "SPREAD",
+                "lineGap": 0
+              }
             },
             "unchangedReason": null
           }
         ],
-        "swapCount": 2
+        "swapCount": 1
       },
       "variety": "BEST",
       "noAlternativeReason": null,
@@ -4876,7 +4736,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -4924,7 +4784,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -4973,7 +4833,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -5051,7 +4911,7 @@
                 "datePosted": "2026-11-08T12:00:00.000Z",
                 "gameNumber": null
               },
-              "rule": "R2",
+              "rule": "SAME_BET",
               "record": {
                 "wins": 22,
                 "losses": 12,
@@ -5059,7 +4919,11 @@
                 "winPct": 64.70588235294117
               },
               "wilsonLowerBound": 0.5185231788217299,
-              "basis": "LEAGUE"
+              "basis": "LEAGUE",
+              "contrarian": {
+                "market": "SPREAD",
+                "lineGap": 0
+              }
             },
             "unchangedReason": null
           }
@@ -5411,7 +5275,7 @@
               "sameGame": false
             },
             "swap": null,
-            "unchangedReason": "NO_ALTERNATE"
+            "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
           },
           {
             "original": {
@@ -5488,7 +5352,7 @@
                 "datePosted": "2026-11-08T12:00:00.000Z",
                 "gameNumber": null
               },
-              "rule": "R2",
+              "rule": "SAME_BET",
               "record": {
                 "wins": 25,
                 "losses": 12,
@@ -5496,7 +5360,11 @@
                 "winPct": 67.56756756756756
               },
               "wilsonLowerBound": 0.5530730076473745,
-              "basis": "LEAGUE"
+              "basis": "LEAGUE",
+              "contrarian": {
+                "market": "SPREAD",
+                "lineGap": 0
+              }
             },
             "unchangedReason": null
           }
