@@ -175,19 +175,25 @@ export type PropDescription =
       // bet is that the player does it.
       direction: "OVER" | "UNDER";
       line: number | null;
-      // False only for the markets where more is the defense winning: a
-      // pitcher's strikeouts and outs, a goalie's saves.
+      // False only for the markets that don't tell the scoring story: where
+      // more is the defense winning (a pitcher's strikeouts and outs, a
+      // goalie's saves), and basketball's rebounds, steals and blocks. Read by
+      // the same-game rules' game-total check (R-E).
       offensive: boolean;
     }
   | { status: "UNDERIVABLE"; reason: string };
 
 const YES_NO_PROP_MARKETS: ReadonlySet<AnyPlayerPropMarket> = new Set<AnyPlayerPropMarket>(["TD", "ANYTIME_GOAL", "FIRST_GOAL", "DOUBLE_DOUBLE"]);
-const NON_OFFENSIVE_PROP_MARKETS: ReadonlySet<AnyPlayerPropMarket> = new Set<AnyPlayerPropMarket>(["STRIKEOUTS", "OUTS_RECORDED", "SAVES"]);
+// REBOUNDS / STEALS / BLOCKS are NBA-only market values, so adding them changes no
+// NFL / NHL / MLB prop. Basketball combos with points (PRA, P+R, P+A), R+A,
+// assists and threes stay offensive.
+export const NON_OFFENSIVE_PROP_MARKETS: ReadonlySet<AnyPlayerPropMarket> = new Set<AnyPlayerPropMarket>(["STRIKEOUTS", "OUTS_RECORDED", "SAVES", "REBOUNDS", "STEALS", "BLOCKS"]);
 
 // Never guesses: no readable player and market, or a line market with no
-// readable Over/Under, is UNDERIVABLE with the reason. `sportName` is passed
-// only by Contrarian (contrarian-match.ts), so an NBA prop reads its own
-// markets; the same-game rules call it without, as before.
+// readable Over/Under, is UNDERIVABLE with the reason. `sportName` decides
+// which parser reads the text: with "NBA" the basketball one (its own markets),
+// otherwise the NFL -> NHL -> MLB chain. The same-game rules and Contrarian pass
+// the pick's sport; betKeyOf (selection.ts) passes its league.
 export function describeProp(pick: PickInput, sportName?: string | null): PropDescription {
   if (pick.betType !== "PLAYER_PROP") return { status: "UNDERIVABLE", reason: `not a player prop (betType "${pick.betType}")` };
   const text = pick.betDetail ?? "";
