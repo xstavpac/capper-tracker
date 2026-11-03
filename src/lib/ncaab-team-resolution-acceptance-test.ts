@@ -279,12 +279,12 @@ async function main() {
   check("the settled pick the block read is untouched", propCard.picks[0].teamNicknames, ["gonzaga bulldogs"]);
 
   // ---- Ingest: the allowlist answers before the hierarchy asks ----
-  // NCAAB isn't on the default allowlist yet (ingest-filters.ts is untouched here).
+  // NCAAB is on the default allowlist now; an INGEST_ALLOWED_LEAGUES that still leaves it out behaves as it did before.
   const shared = parse(["Duke -4.5"]).picks;
-  const todayAllowed = parseAllowedLeagues(undefined);
+  const todayAllowed = parseAllowedLeagues("NBA,NFL,NCAAF,NHL,WNBA,MLB");
   const narrowedToday = narrowAmbiguousByLeague(todayAllowed, withCollegeCandidates(shared)).keep[0];
   check("ingest, NCAAB off the allowlist: a shared school is NCAAF exactly as parsed, no question", narrowedToday, shared[0]);
-  const afterFlip = narrowAmbiguousByLeague(parseAllowedLeagues(DEFAULT_INGEST_ALLOWED_LEAGUES + ",NCAAB"), withCollegeCandidates(shared)).keep[0];
+  const afterFlip = narrowAmbiguousByLeague(parseAllowedLeagues(DEFAULT_INGEST_ALLOWED_LEAGUES), withCollegeCandidates(shared)).keep[0];
   check("ingest, NCAAB on the allowlist: it stays a question for the hierarchy", afterFlip.ambiguous?.map((o) => o.sport), ["NCAAF", "NCAAB"]);
   const onlyHoops = filterPicksByLeague(todayAllowed, parse(["Gonzaga -11"]).picks);
   check("ingest, NCAAB off the allowlist: a basketball-only school is skipped, not imported", [onlyHoops.keep.length, onlyHoops.skipped[0]?.stage], [0, "LEAGUE_NOT_ALLOWED"]);

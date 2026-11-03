@@ -8,8 +8,10 @@
 import { isTeamPhrase, resolveAmbiguousPick, type ParsedPick } from "@/lib/parse-catalog";
 import type { SkippedLineEntry } from "@/server/data/import-skipped-lines";
 
-// NCAAB is out by default: it has no game feed, so its picks would import with placeholder data.
-export const DEFAULT_INGEST_ALLOWED_LEAGUES = "NBA,NFL,NCAAF,NHL,WNBA,MLB";
+// NCAAB is in by default: it has had a game feed (ESPN men's college basketball scores, school list, grading keys)
+// since #388/#390. A school that plays both NCAAF and NCAAB stays a question here (both are allowed), settled by the
+// ambiguity hierarchy or parked in the review queue; it is only narrowed when the allowlist leaves one of them out.
+export const DEFAULT_INGEST_ALLOWED_LEAGUES = "NBA,NFL,NCAAF,NCAAB,NHL,WNBA,MLB";
 
 // Sport NAMES (the Sport table's name column / ParsedPick.sportName), upper-cased.
 export function parseAllowedLeagues(raw: string | undefined): Set<string> {
