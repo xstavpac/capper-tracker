@@ -144,9 +144,11 @@ async function run(label: string, sportKey: string, atMs: number, apiBulk: unkno
   return { ...out, wholeBlobReads: wholeBlobReads.n };
 }
 
-// Decision table captured from the pre-change code.
+// Decision table captured from the pre-change code. The one deliberate change:
+// fetch_failed now makes 3 fetch calls (1 + ODDS_FETCH_MAX_RETRIES transient retries on the
+// stubbed 500) - same status, same added=0; see odds-fetch-retry-acceptance-test.ts.
 const EXPECTED_DECISIONS: unknown = JSON.parse(
-  '[{"label":"off_season","status":"off_season","added":0,"fetchCalls":0},{"label":"no_base_row","status":"no_base_row","added":0,"fetchCalls":0},{"label":"all_started","status":"all_started","added":0,"fetchCalls":0},{"label":"nothing_missing","status":"nothing_missing","added":0,"fetchCalls":1},{"label":"added","status":"added","added":1,"fetchCalls":1},{"label":"empty_row_fetches","status":"added","added":1,"fetchCalls":1},{"label":"fetch_failed","status":"fetch_failed","added":0,"fetchCalls":1},{"label":"no_api_key","status":"no_api_key","added":0,"fetchCalls":0}]'
+  '[{"label":"off_season","status":"off_season","added":0,"fetchCalls":0},{"label":"no_base_row","status":"no_base_row","added":0,"fetchCalls":0},{"label":"all_started","status":"all_started","added":0,"fetchCalls":0},{"label":"nothing_missing","status":"nothing_missing","added":0,"fetchCalls":1},{"label":"added","status":"added","added":1,"fetchCalls":1},{"label":"empty_row_fetches","status":"added","added":1,"fetchCalls":1},{"label":"fetch_failed","status":"fetch_failed","added":0,"fetchCalls":3},{"label":"no_api_key","status":"no_api_key","added":0,"fetchCalls":0}]'
 );
 const EXPECTED_GATE: unknown = JSON.parse(
   '[["in-window game today",true],["only out-of-window today",false],["starting within +1h",true],["yesterday row counts",true],["empty snapshot",false],["dormant: no rows",false]]'

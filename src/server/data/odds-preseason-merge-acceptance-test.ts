@@ -173,7 +173,8 @@ async function main() {
     globalThis.fetch = stubFetchByKey({
       americanfootball_nfl: { ok: true, throwErr: true },
     });
-    out = await fetchMergedOddsListing("americanfootball_nfl", ["americanfootball_nfl"], "k", CTX);
+    // (backoff 0: a thrown error is now retried; see odds-fetch-retry-acceptance-test.ts)
+    out = await fetchMergedOddsListing("americanfootball_nfl", ["americanfootball_nfl"], "k", CTX, { retryBackoffMs: 0 });
     check("primary key throws: primaryFailed=true, no games", { failed: out.primaryFailed, n: out.games.length }, { failed: true, n: 0 });
 
     // 7. THE BUG SCENARIO: early September - regular key has Week 1 games,
