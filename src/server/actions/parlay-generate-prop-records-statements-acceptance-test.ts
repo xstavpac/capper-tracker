@@ -176,6 +176,7 @@ async function main() {
       return res;
     },
     now: () => new Date(NOW),
+    firstSeed: 1,
   });
   const inputs = { leagues: ["NFL"], slipPickIds: [] as string[], targets: [] as { gameId: string; leagueName: string }[] };
   // Two legs a game, so each game's second leg is a prop: TD (7-3 / 10-4) over passing yards (6-4).

@@ -119,7 +119,7 @@ const avgPct = (legs: { pickId: string }[]) => legs.reduce((s, l) => s + winPctO
 // ============================================================================
 async function taps(cap: number) {
   const settings = settingsOf(7, cap);
-  const session = createGeneratorSession({ generate: async (req) => ({ snapshot: SNAPSHOT, parlay: buildGeneratedParlay(SNAPSHOT, req.settings, null, NOW) }), now: () => NOW });
+  const session = createGeneratorSession({ generate: async (req) => ({ snapshot: SNAPSHOT, parlay: buildGeneratedParlay(SNAPSHOT, req.settings, null, NOW) }), now: () => NOW, firstSeed: 1 });
   const pool = { leagues: ["MLB"], slipPickIds: PICKS.map((p) => p.pickId), targets: [] };
   const first = await session.generate(pool, settings);
   if ("error" in first) throw new Error(first.error);
@@ -198,7 +198,7 @@ async function allIn() {
   check("N <= L with an opposing pair: the better record stays, the other is dropped as opposes", w.dropped.map((d) => [d.pickId, d.reason]), [["p5", "opposes"]]);
 
   // Session: a NO_ALTERNATIVE is not remembered, so the next tap still says it.
-  const session = createGeneratorSession({ generate: async (req) => ({ snapshot: snap, parlay: buildGeneratedParlay(snap, req.settings, null, NOW) }), now: () => NOW });
+  const session = createGeneratorSession({ generate: async (req) => ({ snapshot: snap, parlay: buildGeneratedParlay(snap, req.settings, null, NOW) }), now: () => NOW, firstSeed: 1 });
   const pool = { leagues: ["MLB"], slipPickIds: six.map((p) => p.pickId), targets: [] };
   await session.generate(pool, settingsOf(5, 2));
   const reasons: unknown[] = [];

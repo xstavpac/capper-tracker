@@ -162,7 +162,7 @@ async function main() {
   const { generateParlayAction } = await import("./parlay-generate");
   const { createGeneratorSession } = await import("@/lib/parlay/generator-session");
   let clock = NOW;
-  const session = createGeneratorSession({ generate: (r) => generateParlayAction(r), now: () => new Date(clock) });
+  const session = createGeneratorSession({ generate: (r) => generateParlayAction(r), now: () => new Date(clock), firstSeed: 1 });
   const inputs = { leagues: ["NFL"], slipPickIds: [slipId], targets: [] as { gameId: string; leagueName: string }[] };
   const settings: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
   const bundleCalls = () => queries.filter((q) => q.includes('"cardReq"')).length;
