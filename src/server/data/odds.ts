@@ -531,12 +531,21 @@ export function readOddsApiCredits(res: Response, ctx: { sportKey: string; reque
 // skipped (best-effort supplement, not a reason to blow away a good primary
 // result). For the ~11 months requestKeys is a single element this is a plain
 // one-key fetch, byte-for-byte the same request as before.
+// Transient-failure retry for the primary Odds API key (see the loop in
+// fetchMergedOddsListing). Worst case adds 2 x 1.5s of sleep per sport; the
+// crons fetch sports in parallel, so a run is bounded by one sport's worst case.
+export const ODDS_FETCH_MAX_RETRIES = 2;
+export const ODDS_FETCH_RETRY_BACKOFF_MS = 1500;
+
 export async function fetchMergedOddsListing(
   sportKey: string,
   requestKeys: string[],
   apiKey: string,
-  context: { fetchDate: string }
+  context: { fetchDate: string },
+  // Test seam only: production callers omit it and get the default backoff.
+  options: { retryBackoffMs?: number } = {}
 ): Promise<{ games: OddsGame[]; primaryFailed: boolean; credits: OddsApiCredits | null; httpStatus: number | null }> {
+  const retryBackoffMs = options.retryBackoffMs ?? ODDS_FETCH_RETRY_BACKOFF_MS;
   const byId = new Map<string, OddsGame>();
   let primaryFailed = false;
   // Freshest usage headers seen this call - the keys are fetched sequentially
@@ -552,21 +561,50 @@ export async function fetchMergedOddsListing(
     const isPrimary = i === 0;
     const url = BASE_URL + "/sports/" + requestSportKey + "/odds/?apiKey=" + apiKey + ODDS_MARKET_PARAMS;
 
-    let res: Response;
-    try {
-      res = await fetch(url, { cache: "no-store" });
-    } catch (err) {
-      console.error(
-        "[getOddsForSport] upstream fetch threw",
-        // URL is never logged as-is - it carries apiKey as a query param.
+    // The primary key retries transient failures (a thrown network error or a
+    // 5xx) up to ODDS_FETCH_MAX_RETRIES times. A 4xx (401 plan exhausted, 429
+    // rate limit, 422) is a real answer and is never retried, and the
+    // best-effort preseason key never retries. Exhausted retries fall through
+    // to the same failure handling as before, so a genuine outage still ends
+    // as primaryFailed -> fetch_failed -> HTTP 500.
+    const maxRetries = isPrimary ? ODDS_FETCH_MAX_RETRIES : 0;
+    let res: Response | null = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      let threw = false;
+      try {
+        res = await fetch(url, { cache: "no-store" });
+      } catch (err) {
+        threw = true;
+        res = null;
+        console.error(
+          "[getOddsForSport] upstream fetch threw",
+          // URL is never logged as-is - it carries apiKey as a query param.
+          JSON.stringify({
+            sportKey,
+            requestSportKey,
+            primary: isPrimary,
+            fetchDate: context.fetchDate,
+            attempt: attempt + 1,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        );
+      }
+      const transient = threw || (res !== null && res.status >= 500);
+      if (!transient || attempt === maxRetries) break;
+      console.warn(
+        "[getOddsForSport] upstream fetch retry",
         JSON.stringify({
           sportKey,
           requestSportKey,
-          primary: isPrimary,
           fetchDate: context.fetchDate,
-          error: err instanceof Error ? err.message : String(err),
+          attempt: attempt + 1,
+          status: threw ? "threw" : res!.status,
+          backoffMs: retryBackoffMs,
         })
       );
+      if (retryBackoffMs > 0) await new Promise((resolve) => setTimeout(resolve, retryBackoffMs));
+    }
+    if (res === null) {
       if (isPrimary) primaryFailed = true;
       continue;
     }
