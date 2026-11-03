@@ -172,8 +172,9 @@ export async function runCatalogImportForUser(
   const pickSplit = splitByCapper(effective);
   let toResolve = pickSplit.withCapper;
   if (hooks.prepareAmbiguous) {
-    // Before the hook, so a shared school is a question the hook can answer: with
-    // NCAAB off the ingest allowlist it narrows straight back to NCAAF, as today.
+    // Before the hook, so a shared school is a question the hook can answer: with both
+    // NCAAF and NCAAB allowed it stays a question (the hierarchy below settles it, or the
+    // review queue holds it); an allowlist that leaves one out narrows it to the other.
     const prep = hooks.prepareAmbiguous(withCollegeCandidates(toResolve));
     toResolve = prep.keep;
     hookSkippedLog.push(...prep.skipped);

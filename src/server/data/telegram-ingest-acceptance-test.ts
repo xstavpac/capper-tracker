@@ -8,6 +8,7 @@
 // users and deletes them by id. Run with:
 //   npx tsx src/server/data/telegram-ingest-acceptance-test.ts   (DATABASE_URL must be localhost)
 import { parseCatalog } from "@/lib/parse-catalog";
+import { NCAAB_LISTED_TEAMS } from "@/lib/college-teams";
 
 let failures = 0;
 function expect(label: string, actual: unknown, expected: unknown) {
@@ -36,9 +37,11 @@ const BOARD: Fake[] = [
   { sportKey: "americanfootball_nfl", homeTeam: "New York Jets", awayTeam: "Buffalo Bills", commenceTime: at(4) },
   { sportKey: "icehockey_nhl", homeTeam: "Winnipeg Jets", awayTeam: "Dallas Stars", commenceTime: at(5) },
   { sportKey: "baseball_mlb", homeTeam: "Chicago Cubs", awayTeam: "St. Louis Cardinals", commenceTime: at(6) },
+  { sportKey: "basketball_ncaab", homeTeam: "Gonzaga Bulldogs", awayTeam: "Saint Mary's Gaels", commenceTime: at(7) },
 ];
 const MARKET_TOTAL = 8.5;
-const endsWith = (team: string, nick: string) => team.toLowerCase().endsWith(nick.toLowerCase());
+// College names are school-first ("Gonzaga Bulldogs"), so the NCAAB board matches on a contained school name.
+const endsWith = (team: string, nick: string) => team.toLowerCase().endsWith(nick.toLowerCase()) || (team === "Gonzaga Bulldogs" && team.toLowerCase().includes(nick.toLowerCase()));
 const gameFor = (sportKey: string, ...nicks: string[]) => {
   const g = BOARD.find((b) => b.sportKey === sportKey && nicks.every((n) => endsWith(b.homeTeam, n) || endsWith(b.awayTeam, n)));
   return g ? { id: `${PREFIX}${g.homeTeam}`, ...g, status: "scheduled", doubleHeaderStatus: "N" } : null;
@@ -61,11 +64,14 @@ stub("./catalog-disambiguation-checks", {
   runTeamScheduleCheck: async () => ({}),
   runTeamWideScheduleCheck: async () => ({}),
   runLeagueActivityCheck: async () => ({}),
+  runCollegeLineCheck: async () => ({}),
+  runCapperLeagueHistory: async () => ({}),
 });
 stub("./recover-unresolved-core", {
   recoverUnresolvedPicks: async (text: string, names: string[]) => ({ recovered: [], stillUnresolved: parseCatalog(text, names).unresolved, reasons: {} }),
 });
-stub("./import-feed-teams", { getImportFeedTeams: async () => [] });
+// The NCAAB school list is static in production too (no fetch); the NCAAF feed teams are left out.
+stub("./import-feed-teams", { getImportFeedTeams: async () => NCAAB_LISTED_TEAMS });
 stub("./nfl-roster-cache", { ...(require("./nfl-roster-cache") as Record<string, unknown>), getCachedNflRosterFullNames: async () => [] });
 stub("next/cache", { revalidatePath: () => {}, revalidateTag: () => {}, unstable_cache: <T>(fn: T) => fn });
 
@@ -132,7 +138,7 @@ async function main() {
       await prisma.user.create({ data: { id, supabaseId: id + "-sb", email: id + "@example.invalid" } });
     }
     process.env.INGEST_USER_ID = users.main;
-    delete process.env.INGEST_ALLOWED_LEAGUES; // the default allowlist (no NCAAB)
+    delete process.env.INGEST_ALLOWED_LEAGUES; // the default allowlist (NCAAB included)
 
     // ---------- route: configuration, auth, validation ----------
     delete process.env.PICKS_INGEST_TOKEN;
@@ -297,8 +303,27 @@ async function main() {
     process.env.INGEST_ALLOWED_LEAGUES = "NFL";
     const nflOnly = await (await post(route, { channelId: channelIds[0], messageId: 700, day: "2026-11-02", text: "Delta Capper\nCelticsX\nLakers -4 -110\nChiefs -2 -110" })).json();
     expect("INGEST_ALLOWED_LEAGUES=NFL: NBA line skipped, NFL line imported", [nflOnly.imported], [1]);
-    process.env.INGEST_ALLOWED_LEAGUES = "NBA,NFL,NCAAB";
     delete process.env.INGEST_ALLOWED_LEAGUES;
+
+    // ---------- NCAAB on the default allowlist ----------
+    // A basketball-only school imports as NCAAB on its matched game; a school that plays both NCAAF and NCAAB, with
+    // nothing to tell them apart, is held for review as an NCAAF / NCAAB question - never guessed, never skipped.
+    {
+      const { isSportInSeason } = await import("@/lib/sport-seasons");
+      const before = (await picksOf(users.main)).length;
+      const gz = await (await post(route, { channelId: channelIds[0], messageId: 800, day: "2026-11-02", text: "Epsilon Capper\nGonzaga -5 -110" })).json();
+      const gzPick = (await picksOf(users.main)).find((p) => p.capper.name === "Epsilon Capper");
+      expect("NCAAB: Gonzaga imports", [gz.imported, gz.pendingReview], [1, 0]);
+      expect("NCAAB: filed as NCAAB on the matched game", [gzPick?.sport.name, gzPick?.homeTeam, gzPick?.awayTeam], ["NCAAB", "Gonzaga Bulldogs", "Saint Mary's Gaels"]);
+      expect("NCAAB: nothing skipped as LEAGUE_NOT_ALLOWED", await prisma.importSkippedLine.count({ where: { userId: users.main, stage: "LEAGUE_NOT_ALLOWED", rawText: { contains: "Gonzaga" } } }), 0);
+      if (isSportInSeason("basketball_ncaab")) {
+        const al = await (await post(route, { channelId: channelIds[0], messageId: 801, day: "2026-11-02", text: "Epsilon Capper\nAlabama ML -150" })).json();
+        expect("NCAAB: shared school held for review, not imported", [al.imported, al.pendingReview], [0, 1]);
+        const alItem = await prisma.ingestReviewItem.findFirst({ where: { ingestBatchId: al.batchId }, select: { questionType: true, status: true, options: true } });
+        expect("NCAAB: review item is an AMBIGUOUS_TEAM question offering NCAAF and NCAAB", [alItem?.questionType, alItem?.status, (alItem?.options as { choices: { sport?: string }[] }).choices.map((c) => c.sport).sort()], ["AMBIGUOUS_TEAM", "PENDING", ["NCAAB", "NCAAF"]]);
+        expect("NCAAB: the shared-school line created no pick", (await picksOf(users.main)).length, before + 1);
+      } else console.log("SKIP: NCAAB is out of season, so the shared-school question is settled by the season gate");
+    }
 
     // ---------- error classification ----------
     expect("isInfraError: connection failure", isInfraError(new Prisma.PrismaClientKnownRequestError("x", { code: "P1001", clientVersion: "5" })), true);

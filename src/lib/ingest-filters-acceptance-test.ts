@@ -71,9 +71,9 @@ for (const header of ["Sharp & Co", "Fade and Win", "Big Dave / Dave's Picks", "
 }
 
 // ---- allowlist parsing ----
-expect("default allowlist excludes NCAAB", DEFAULT_INGEST_ALLOWED_LEAGUES.split(",").includes("NCAAB"), false);
-expect("unset -> default set", [...parseAllowedLeagues(undefined)].sort(), ["MLB", "NBA", "NCAAF", "NFL", "NHL", "WNBA"]);
-expect("blank -> default set", parseAllowedLeagues("  ").size, 6);
+expect("default allowlist includes NCAAB", DEFAULT_INGEST_ALLOWED_LEAGUES.split(",").includes("NCAAB"), true);
+expect("unset -> default set", [...parseAllowedLeagues(undefined)].sort(), ["MLB", "NBA", "NCAAB", "NCAAF", "NFL", "NHL", "WNBA"]);
+expect("blank -> default set", parseAllowedLeagues("  ").size, 7);
 expect("custom list, trimmed and upper-cased", [...parseAllowedLeagues(" nba , nfl ")].sort(), ["NBA", "NFL"]);
 
 // ---- league filter on real parsed picks ----
