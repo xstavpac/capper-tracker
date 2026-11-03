@@ -29,9 +29,13 @@ export type Spec = {
   // The price the capper's history was priced at; null: no priced picks.
   hist?: number | null;
   propMarket?: string;
+  // FULL_GAME when absent.
+  period?: string;
 };
 
-const GAMES: { league: string; home: string; away: string; nick: string }[] = [
+export type FixtureGame = { league: string; home: string; away: string; nick: string };
+
+const GAMES: FixtureGame[] = [
   { league: "NFL", home: "Kansas City Chiefs", away: "Los Angeles Chargers", nick: "Chiefs" },
   { league: "NFL", home: "Buffalo Bills", away: "Miami Dolphins", nick: "Bills" },
   { league: "NFL", home: "Philadelphia Eagles", away: "Dallas Cowboys", nick: "Eagles" },
@@ -81,22 +85,23 @@ export const RATE_ROWS: PlatformRateRow[] = [
 const pricedColumn = ([w, l]: WL, hist: number | null | undefined): PricedColumn =>
   hist == null ? { wins: 0, losses: 0, impliedSum: 0 } : { wins: w, losses: l, impliedSum: (w + l) * breakEvenOf(hist)! };
 
-export function pickOf(s: Spec): GeneratorPick {
-  const g = GAMES[s.game];
+export function pickOf(s: Spec, games: FixtureGame[] = GAMES): GeneratorPick {
+  const g = games[s.game];
   return {
     pickId: s.id, capperId: "c-" + s.id, capperName: "Capper " + s.id, capperColorTag: null, capperIsFavorite: false, category: s.category,
     leagueName: g.league, gameId: "g" + s.game, gameLabel: g.away + " @ " + g.home, betDetail: s.detail, odds: s.odds, oddsSource: s.source, units: 1, status: "PENDING",
-    betType: s.betType, period: "FULL_GAME", rawBetDetail: s.detail, propMarket: s.propMarket ?? null, line: s.line ?? null, homeTeam: g.home, awayTeam: g.away,
+    betType: s.betType, period: s.period ?? "FULL_GAME", rawBetDetail: s.detail, propMarket: s.propMarket ?? null, line: s.line ?? null, homeTeam: g.home, awayTeam: g.away,
     gameTime: new Date(NOW.getTime() + (3 + s.game) * 3600_000).toISOString(), teamGroup: "HOME", teamLabel: "", teamColor: null,
     datePosted: new Date(NOW.getTime() - 2 * 3600_000).toISOString(), gameNumber: null,
   } as unknown as GeneratorPick;
 }
 
-export function buildSnapshot(specs: Spec[] = SPECS, slipIds: string[] = [], rows: PlatformRateRow[] = RATE_ROWS): GeneratorSnapshot {
+// `games`: another slate's games (contrarian-frozen-cases.ts); the scoring switch's own by default.
+export function buildSnapshot(specs: Spec[] = SPECS, slipIds: string[] = [], rows: PlatformRateRow[] = RATE_ROWS, slate: FixtureGame[] = GAMES): GeneratorSnapshot {
   const leagueRecords: CapperLeagueRecords = { records: {}, streaks: {}, last20: {} };
   const categoryRecords: Record<string, CategoryBreakdownItem | null> = {};
   const propMarketRecords: Record<string, PropMarketRecord | null> = {};
-  const picks = specs.map(pickOf);
+  const picks = specs.map((s) => pickOf(s, slate));
   specs.forEach((s, i) => {
     const pick = picks[i];
     const all = s.all ?? s.lg;
@@ -124,7 +129,7 @@ export function buildSnapshot(specs: Spec[] = SPECS, slipIds: string[] = [], row
       priced: { overall: pricedColumn(all, s.hist), league: pricedColumn(s.lg, s.hist) },
     };
   });
-  const games: GeneratorGame[] = GAMES.map((g, i) => {
+  const games: GeneratorGame[] = slate.map((g, i) => {
     const onGame = picks.filter((p) => p.gameId === "g" + i);
     return { gameId: "g" + i, gameLabel: g.away + " @ " + g.home, gameTime: new Date(NOW.getTime() + (3 + i) * 3600_000).toISOString(), leagueName: g.league, picks: onGame };
   }).filter((g) => g.picks.length > 0);

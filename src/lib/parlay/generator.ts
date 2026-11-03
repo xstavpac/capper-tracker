@@ -24,8 +24,10 @@
 //      gated and ranked by lib/parlay/scoring.ts, and slip picks are ranked by
 //      it. Which gated legs are taken is lib/parlay/selection.ts, reading the
 //      edge (rankScore, in points) directly. The record a leg shows is still
-//      recordForGate's. Contrarian keeps Wilson and the raw gate. The rest of
-//      this rule is WILSON_RULES, and Contrarian under either:
+//      recordForGate's. Contrarian (PR 7) is the other side of the same bet
+//      (contrarian-match.ts), gated by scoring.ts at its own price and chosen
+//      by selection.ts like Hedge. The rest of this rule is WILSON_RULES (and
+//      Contrarian under it, the classifier path, kept for rollback):
 //      a generated leg must clear the 55% gate (qualifies, qualification-
 //      core.ts) on its capper's record for this bet: the better of their
 //      record in its market in its league and their all-time record in the
@@ -187,7 +189,7 @@ export type GeneratorSnapshot = {
 export type GeneratorRules = {
   // SCORING: lib/parlay/scoring.ts gates and ranks generated legs and Hedge, and
   // ranks slip picks. WILSON: recordScope's record, the raw gate, Wilson.
-  // Contrarian is WILSON under both.
+  // Contrarian under SCORING is the same-bet search (searchContrarian); under WILSON, the classifier path.
   scorer: "SCORING" | "WILSON";
   // LEAGUE_FIRST: recordForGate. ALL_TIME: the all-leagues market record.
   recordScope: "LEAGUE_FIRST" | "ALL_TIME";
@@ -1150,11 +1152,13 @@ type HedgeSelect = { draw: { seed: number; beta: number } | null; picked: Select
 // ---------------------------------------------------------------------------
 // Hedge / Contrarian: each generated leg searched for an alternate on its own
 // game. Under SCORING, Hedge uses rankCandidatesByScore (the classifier, then
-// scoring.ts's gate and order). Otherwise rankCandidatesByRecord (qualification-
-// core.ts - classifier, 55% gate, Wilson order) on the same record as the
-// generated legs (gateRecord): Contrarian always, until it moves to scoring.
-// Contrarian takes any capper on the other side who clears the gate - no
-// headcount, except under LEGACY_RULES. Only the legs the Swap setting covers
+// scoring.ts's gate and order), and Contrarian searchContrarian (the other side
+// of the same bet, contrarian-match.ts, then scoring.ts's gate - the leg's own
+// score is never compared); both choose through selection.ts. Otherwise
+// rankCandidatesByRecord (qualification-core.ts - classifier, 55% gate, Wilson
+// order) on the same record as the generated legs (gateRecord), Contrarian taking
+// any capper on the other side who clears the gate - no headcount, except under
+// LEGACY_RULES. Only the legs the Swap setting covers
 // (`scope`, swap-scope.ts) are searched; the others stay as they are. An
 // alternate is never one of the parlay's own picks or a slip pick, and never
 // breaks a same-game rule against the other legs on its game (as they stand

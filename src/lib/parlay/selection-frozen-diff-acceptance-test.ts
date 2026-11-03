@@ -2,14 +2,14 @@
 // (selection-before-frozen.json, captured from a2a012f) and through it now, on SELECTION_CASES. Every leg is
 // listed with its old score (the -110 equivalent the bands read, %) and its new one (the edge in points);
 // every leg that came or went, and every Hedge alternate that changed, says why. The table is frozen in
-// selection-diff.txt. Contrarian must be byte-identical wherever its input (the Primary) is: the only field
-// allowed to differ is the echoed original leg's `score`, whose unit changed (-110 equivalent -> edge points).
+// selection-diff.txt. Contrarian was byte-identical here through PR 6; PR 7 redefined it (contrarian-diff.txt), so
+// only its Swap-setting scope is still checked here.
 // Pure - no DB.
 //   npx tsx src/lib/parlay/selection-frozen-diff-acceptance-test.ts
 //   (re-freeze the table, only for an intended change: add --write)
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildGeneratedParlay, GENERATOR_RULES, type EngineLeg, type EngineSwap } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, GENERATOR_RULES, type EngineSwap } from "@/lib/parlay/generator";
 import { buildSnapshot, NOW } from "@/lib/parlay/scoring-switch-fixture";
 import { SELECTION_CASES } from "@/lib/parlay/selection-frozen-cases";
 import { EMPTY_PLATFORM_RATES, scorePick } from "@/lib/parlay/scoring";
@@ -26,8 +26,6 @@ function check(label: string, actual: unknown, expected: unknown) {
 }
 
 const f1 = (x: number | null | undefined) => (x === null || x === undefined ? "-" : x.toFixed(2));
-// Contrarian with the echoed original leg's score taken out (its unit changed; nothing Contrarian computes reads it).
-const stripScore = (s: EngineSwap) => JSON.stringify({ ...s, legs: s.legs.map((l) => ({ ...l, original: { ...l.original, score: undefined } as EngineLeg })) });
 
 const lines: string[] = [`Before: ${before.capturedFrom}. Old score = the -110 equivalent (%), new = edge in points (rankScore x 100).`, ""];
 for (const c of SELECTION_CASES) {
@@ -69,18 +67,17 @@ for (const c of SELECTION_CASES) {
     void i;
   });
   lines.push("Hedge (Swap = All):", ...(hedgeLines.length ? hedgeLines : [`  (no change) ${hedgeNow.map((h) => h ?? "-").join(", ")}`]));
-  // Contrarian.
+  // Contrarian: PR 5 left it byte-identical; PR 7 redefined it (the other side of the same bet, scored). Its
+  // before/after is contrarian-frozen-diff-acceptance-test.ts (contrarian-diff.txt), on these same cases.
+  // What still holds here: the Swap setting leaves exactly the same legs out of scope.
   const samePrimary = JSON.stringify(was.legs.map((l) => [l.id, l.source])) === JSON.stringify(now.legs.map((l) => [l.pick.pickId, l.source]));
   if (samePrimary) {
-    for (const scope of SWAP_SCOPES) check(`${c.label} · Contrarian ${scope} byte-identical (Primary unchanged)`, stripScore(now.contrarian[scope]), stripScore(was.contrarian[scope]));
-    lines.push("Contrarian: byte-identical (same Primary).");
-  } else {
-    // Its input changed: every leg kept keeps its alternate exactly; new legs are listed.
-    const oldBy = new Map(was.contrarian.ALL.legs.map((l) => [l.original.pick.pickId, JSON.stringify({ swap: l.swap, why: l.unchangedReason })]));
-    const keptSame = now.contrarian.ALL.legs.filter((l) => oldBy.has(l.original.pick.pickId)).every((l) => oldBy.get(l.original.pick.pickId) === JSON.stringify({ swap: l.swap, why: l.unchangedReason }));
-    check(`${c.label} · Contrarian: every leg in both Primaries keeps exactly its alternate`, keptSame, true);
-    lines.push(`Contrarian: Primary changed; legs in both keep their alternates; new legs: ${now.contrarian.ALL.legs.filter((l) => !oldBy.has(l.original.pick.pickId)).map((l) => `${l.original.pick.pickId} -> ${l.swap?.pick.pickId ?? `none (${l.unchangedReason})`}`).join(", ") || "(none)"}`);
+    for (const scope of SWAP_SCOPES) {
+      const outOf = (s: EngineSwap) => s.legs.map((l) => l.unchangedReason === "OUT_OF_SCOPE");
+      check(`${c.label} · Contrarian ${scope}: the same legs out of scope`, outOf(now.contrarian[scope]), outOf(was.contrarian[scope]));
+    }
   }
+  lines.push("Contrarian: redefined in PR 7 - see contrarian-diff.txt.");
   lines.push("");
 }
 
