@@ -116,7 +116,8 @@ const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "
 export function betKeyOf(p: BetKeyPick): string {
   const input = { betType: p.betType, period: p.period, betDetail: p.rawBetDetail, line: p.line };
   if (p.betType === "PLAYER_PROP") {
-    const d = describeProp(input);
+    // With its league, so an NBA prop is read by the basketball parser (no-sport text reads none of its markets).
+    const d = describeProp(input, p.leagueName);
     if (d.status === "OK") return [p.gameId, "PROP", p.period, d.player, d.market, d.direction, fmt(d.line)].join("|");
   } else {
     const d = describePick(input, { homeTeam: p.homeTeam, awayTeam: p.awayTeam, gameTime: new Date(p.gameTime), sportName: p.leagueName, gameId: p.gameId });

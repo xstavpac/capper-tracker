@@ -53,7 +53,9 @@ for (const c of SELECTION_CASES) {
     const why =
       c.settings.fillFrom === "YOUR_PICKS_ONLY"
         ? "Generate's tie-break is now score, betKey, pick id (was score, decided, pick id)"
-        : "single-swap repair: the greedy fill came up short and dropping one leg let two fit (selection.ts selectLegs)";
+        : l.pick.betType === "PLAYER_PROP" && l.pick.leagueName === "NBA"
+          ? "an NBA prop now stacks on its game: the same-game rules read it with its sport (the NBA same-game fix, after PR 7)"
+          : "single-swap repair: the greedy fill came up short and dropping one leg let two fit (selection.ts selectLegs)";
     lines.push(`  IN   ${l.pick.pickId} [${l.source}] new ${f1(l.score ?? pts(l.pick.pickId))} pts - ${why}`);
   }
   // Hedge.
@@ -63,7 +65,10 @@ for (const c of SELECTION_CASES) {
     const old = oldIds.indexOf(l.original.pick.pickId) >= 0 ? was.hedge[oldIds.indexOf(l.original.pick.pickId)] : undefined;
     const nowAlt = l.swap?.pick.pickId ?? null;
     if (old === undefined) hedgeLines.push(`  new leg ${l.original.pick.pickId}: alternate ${nowAlt ?? `none (${l.unchangedReason})`}`);
-    else if (old !== nowAlt) hedgeLines.push(`  leg ${l.original.pick.pickId}: ${old ?? "none"} (${f1(old ? pts(old) : null)}) -> ${nowAlt ?? "none"} (${f1(nowAlt ? pts(nowAlt) : null)}) - selection.ts order (score, betKey, id)`);
+    else if (old !== nowAlt) {
+      const why = nowAlt && oldIds.includes(nowAlt) && !newIds.includes(nowAlt) ? `${nowAlt} was a leg before and no longer is, so it is free to be the alternate` : "selection.ts order (score, betKey, id)";
+      hedgeLines.push(`  leg ${l.original.pick.pickId}: ${old ?? "none"} (${f1(old ? pts(old) : null)}) -> ${nowAlt ?? "none"} (${f1(nowAlt ? pts(nowAlt) : null)}) - ${why}`);
+    }
     void i;
   });
   lines.push("Hedge (Swap = All):", ...(hedgeLines.length ? hedgeLines : [`  (no change) ${hedgeNow.map((h) => h ?? "-").join(", ")}`]));

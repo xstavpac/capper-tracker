@@ -1,5 +1,13 @@
 {
  "capturedFrom": "de0719e",
+ "recaptured": {
+  "from": "de0719e + the NBA same-game fix (same-game rules and betKeyOf read NBA props with their sport)",
+  "cases": [
+   "SWITCH · 8 legs, 2 per game, default gate",
+   "SWITCH · 12 legs, 5 per game, no gate",
+   "SWITCH · Totals + Props only, 6 legs, 3 per game"
+  ]
+ },
  "cases": {
   "SWITCH · 6 legs, best available, default gate": {
    "legs": [
@@ -116,12 +124,12 @@
     "g0-elite-spread",
     "g1-longshot",
     "g2-mid-under",
-    "g2-heavy-fav",
     "g3-defaulted",
     "g4-other-leagues",
+    "g4-prop",
     "g5-home"
    ],
-   "restSha": "e7f5ebfffbdce4b9",
+   "restSha": "c1624e6b73e7e63d",
    "contrarian": {
     "SUGGESTED": [
      [
@@ -145,17 +153,17 @@
       "NO_ALTERNATE"
      ],
      [
-      "g2-heavy-fav",
-      null,
-      "NO_ALTERNATE"
-     ],
-     [
       "g3-defaulted",
       null,
       "NO_ALTERNATE"
      ],
      [
       "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-prop",
       null,
       "NO_ALTERNATE"
      ],
@@ -187,17 +195,17 @@
       "OUT_OF_SCOPE"
      ],
      [
-      "g2-heavy-fav",
-      null,
-      "OUT_OF_SCOPE"
-     ],
-     [
       "g3-defaulted",
       null,
       "OUT_OF_SCOPE"
      ],
      [
       "g4-other-leagues",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
+      "g4-prop",
       null,
       "OUT_OF_SCOPE"
      ],
@@ -229,17 +237,17 @@
       "NO_ALTERNATE"
      ],
      [
-      "g2-heavy-fav",
-      null,
-      "NO_ALTERNATE"
-     ],
-     [
       "g3-defaulted",
       null,
       "NO_ALTERNATE"
      ],
      [
       "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-prop",
       null,
       "NO_ALTERNATE"
      ],
@@ -447,9 +455,10 @@
     "g3-defaulted",
     "g3-thin",
     "g4-other-leagues",
+    "g4-prop",
     "g5-home"
    ],
-   "restSha": "1cf97d8ff7dfad7e",
+   "restSha": "cf090b29a71747c4",
    "contrarian": {
     "SUGGESTED": [
      [
@@ -489,6 +498,11 @@
      ],
      [
       "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-prop",
       null,
       "NO_ALTERNATE"
      ],
@@ -540,6 +554,11 @@
       "OUT_OF_SCOPE"
      ],
      [
+      "g4-prop",
+      null,
+      "OUT_OF_SCOPE"
+     ],
+     [
       "g5-home",
       null,
       "OUT_OF_SCOPE"
@@ -583,6 +602,11 @@
      ],
      [
       "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-prop",
       null,
       "NO_ALTERNATE"
      ],
@@ -785,9 +809,10 @@
     "g0-small-over",
     "g2-mid-under",
     "g3-thin",
-    "g4-other-leagues"
+    "g4-other-leagues",
+    "g4-prop"
    ],
-   "restSha": "4306499c1312b054",
+   "restSha": "0681912e629fe4fc",
    "contrarian": {
     "SUGGESTED": [
      [
@@ -807,6 +832,11 @@
      ],
      [
       "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-prop",
       null,
       "NO_ALTERNATE"
      ]
@@ -831,6 +861,11 @@
       "g4-other-leagues",
       null,
       "OUT_OF_SCOPE"
+     ],
+     [
+      "g4-prop",
+      null,
+      "OUT_OF_SCOPE"
      ]
     ],
     "ALL": [
@@ -851,6 +886,11 @@
      ],
      [
       "g4-other-leagues",
+      null,
+      "NO_ALTERNATE"
+     ],
+     [
+      "g4-prop",
       null,
       "NO_ALTERNATE"
      ]

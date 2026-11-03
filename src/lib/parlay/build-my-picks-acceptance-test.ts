@@ -160,5 +160,24 @@ function mk(overrides: Partial<BuildCandidate>): BuildCandidate {
   check("doubleheader, different game ids: both allowed", selectConflictFreeLegs([game1, game2], 5).legs.map((l) => l.pickId), ["a", "b"]);
 }
 
+// ============================================================================
+// NBA: one prop at two lines (Tatum Over 27.5 / Over 28.5 Points) is one bet - the
+// better line (the lower Over) is kept, in either order. Before the same-game rules
+// read NBA props with their sport, both stayed as legs.
+// ============================================================================
+{
+  const nba = (o: Partial<BuildCandidate>) => mk({ betType: "PLAYER_PROP", homeTeam: "Boston Celtics", awayTeam: "New York Knicks", sportName: "NBA", ...o });
+  const over275 = nba({ pickId: "a", label: "Tatum Over 27.5", betDetail: "Jayson Tatum Over 27.5 Points", line: 27.5 });
+  const over285 = nba({ pickId: "b", label: "Tatum Over 28.5", betDetail: "Jayson Tatum Over 28.5 Points", line: 28.5 });
+  const first = selectConflictFreeLegs([over275, over285], 5);
+  check("NBA two lines, better line ranked first: Over 27.5 kept", first.legs.map((l) => l.pickId), ["a"]);
+  check("...Over 28.5 skipped as a duplicate", first.skipped.map((s) => [s.pickId, s.reason]), [["b", "duplicate"]]);
+  const second = selectConflictFreeLegs([over285, over275], 5);
+  check("NBA two lines, worse line ranked first: Over 27.5 still kept (better line)", second.legs.map((l) => l.pickId), ["a"]);
+  check("...Over 28.5 skipped, the winner's reason is the better line", second.skipped.map((s) => [s.pickId, s.reason, s.won]), [["b", "duplicate", "BETTER_LINE"]]);
+  const twoPlayers = selectConflictFreeLegs([over275, nba({ pickId: "c", label: "Brunson Over 26.5", betDetail: "Jalen Brunson Over 26.5 Points", line: 26.5 })], 5);
+  check("NBA two players' points: both kept", twoPlayers.legs.map((l) => l.pickId), ["a", "c"]);
+}
+
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
