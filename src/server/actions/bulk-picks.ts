@@ -156,6 +156,7 @@ export async function bulkImportParlaysAction(items: BulkImportParlayItem[]): Pr
 
   // Only id and name: resolveOrCreateCapperId matches on the name (CapperRef).
   const existingCappers = await prisma.capper.findMany({ where: { userId: user.id }, select: { id: true, name: true } });
+  const rosterSizeBefore = existingCappers.length;
   const capperCache = new Map<string, string>();
   const sportCache = new Map<string, string>();
   const errors: string[] = [];
@@ -218,8 +219,10 @@ export async function bulkImportParlaysAction(items: BulkImportParlayItem[]): Pr
 
   // Parlays themselves are in no cached read, but this import can create
   // cappers, and the cached roster / cappers bundle carry the capper list.
+  // A capper is created before its parlay is validated, so the roster can have grown even when every parlay was
+  // rejected: compare the list's size, not the parlays imported.
   revalidateTag(cacheKeys.dashboard(user.id));
-  revalidateCapperRoster(user.id);
+  if (existingCappers.length > rosterSizeBefore) revalidateCapperRoster(user.id);
   revalidatePath("/picks");
   revalidatePath("/dashboard");
 

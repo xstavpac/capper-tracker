@@ -29,6 +29,7 @@ import { EXISTING_PICK_SELECT, findDbDuplicate, type DbDupCandidate, type Existi
 import { insertPicksDeduped, rowBetIdentity, sportKeyForName, type DedupInsertOptions, type DedupPickRow } from "@/server/data/pick-dedup";
 import { createPick, DuplicatePickError } from "@/server/data/picks";
 import { mergeCappers } from "@/server/data/cappers";
+import { FREE_PICK_LIMIT } from "@/lib/entitlements";
 
 let failures = 0;
 function check(label: string, pass: boolean, detail = "") {
@@ -444,6 +445,40 @@ async function main() {
         res.duplicatePicks.length === 1 && res.duplicatePicks[0].keptPickId === kept?.id && res.duplicatePicks[0].movedPickId === moved?.id,
         JSON.stringify(res.duplicatePicks)
       );
+    }
+
+    // ---- 12. cappersAdded: the signal the callers use to revalidate the cached capper roster ----
+    {
+      const N = await mkUser("roster-signal");
+      const r1 = await insertPicksDeduped(N, [
+        row({ capperName: "Signal One", betDetail: "Wyoming +10.5", line: 10.5 }),
+        row({ capperName: "signal-one", betDetail: "Over 44.5", betType: "TOTAL", line: 44.5 }),
+        row({ capperName: "Signal Two", betDetail: "Under 44.5", betType: "TOTAL", line: 44.5 }),
+      ]);
+      check("roster signal: two new cappers (one repeated) -> cappersAdded 2", r1.allowed && r1.cappersAdded === 2, JSON.stringify(r1.allowed && r1.cappersAdded));
+      const r2 = await insertPicksDeduped(N, [row({ capperName: "SIGNAL ONE", betDetail: "Air Force -3", line: -3 })]);
+      check("roster signal: existing capper only -> cappersAdded 0", r2.allowed && r2.created.length === 1 && r2.cappersAdded === 0);
+      const r3 = await insertPicksDeduped(N, [row({ capperName: "Signal One", betDetail: "Wyoming +10.5", line: 10.5 })]);
+      check("roster signal: every row a duplicate -> cappersAdded 0", r3.allowed && r3.created.length === 0 && r3.cappersAdded === 0);
+      const r4 = await insertPicksDeduped(N, [row({ capperName: "Signal Three", betDetail: "Wyoming +10.5", line: 10.5 })]);
+      check("roster signal: a new capper on a duplicate-free row -> cappersAdded 1", r4.allowed && r4.cappersAdded === 1);
+      const empty = await insertPicksDeduped(N, []);
+      check("roster signal: empty import -> cappersAdded 0", empty.allowed && empty.cappersAdded === 0);
+
+      const capper = await prisma.capper.findFirstOrThrow({ where: { userId: N, name: "Signal One" } });
+      const sport = await prisma.sport.findFirstOrThrow({ where: { name: "NCAAF" } });
+      const viaId = await insertPicksDeduped(N, [
+        { ...row({ capperName: "Signal One", betDetail: "Over 51", betType: "TOTAL", line: 51, homeTeam: "Duke Blue Devils", awayTeam: "North Carolina Tar Heels" }), capperId: capper.id, sportId: sport.id },
+      ]);
+      check("roster signal: rows carrying capperId (manual form) -> cappersAdded 0", viaId.allowed && viaId.created.length === 1 && viaId.cappersAdded === 0, JSON.stringify(viaId));
+
+      // Free plan at its limit: refused, no capper created, and no cappersAdded key to act on.
+      const F = await prisma.user.create({ data: { supabaseId: `${TAG}-roster-free`, email: `${TAG}-roster-free@example.test` } });
+      userIds.push(F.id);
+      await prisma.subscription.create({ data: { userId: F.id, plan: "FREE", status: "active" } });
+      const manyRows = Array.from({ length: FREE_PICK_LIMIT + 1 }, (_, i) => row({ capperName: "Free Capper " + i, betDetail: "Spread " + i, line: i + 0.5 }));
+      const refused = await insertPicksDeduped(F.id, manyRows);
+      check("roster signal: a refused import carries no cappersAdded and created no capper", !refused.allowed && !("cappersAdded" in refused) && (await prisma.capper.count({ where: { userId: F.id } })) === 0);
     }
   } finally {
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });

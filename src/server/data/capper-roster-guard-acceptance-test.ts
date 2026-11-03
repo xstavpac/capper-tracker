@@ -14,6 +14,11 @@
 // capper-find-or-create.ts may contain one (capper-create-guard-acceptance-test.ts covers
 // creation on its own).
 //
+// Conditionality: the explicit capper actions (actions/cappers.ts) always change the roster, so they bust it
+// unconditionally. The import paths change it only by ADDING a capper, so each must bust only inside an `if` on
+// the signal (CONDITIONAL_CALLERS below) - an unconditional bust there is the refill-after-every-import this
+// replaced, and the scan above alone cannot tell the two apart.
+//
 // Limits: a text scan, a tripwire for the ordinary ways of writing the code (it does not see
 // a write assembled from string pieces, or prisma["capper"]). Pure (no database). Run with:
 //   npx tsx src/server/data/capper-roster-guard-acceptance-test.ts
@@ -85,6 +90,14 @@ function functionBodies(src: string): { name: string; body: string }[] {
   return starts.map((s, i) => ({ name: s.name, body: src.slice(s.index, starts[i + 1]?.index ?? src.length) }));
 }
 
+// Import paths: the bust must be guarded by the signal that a capper was added to the roster.
+const CONDITIONAL_CALLERS: { file: string; fn: string; guard: RegExp }[] = [
+  { file: "src/server/data/bulk-import-core.ts", fn: "importPicksForUser", guard: /if \(result\.allowed && result\.cappersAdded > 0\) revalidateCapperRoster\(/ },
+  { file: "src/server/data/ingest-review.ts", fn: "resolveReviewItem", guard: /if \(result\.cappersAdded > 0\) revalidateCapperRoster\(/ },
+  { file: "src/server/data/pick-recipients.ts", fn: "fanOutImportedPicks", guard: /if \(out\.cappersAdded > 0\) revalidateCapperRoster\(/ },
+  { file: "src/server/actions/bulk-picks.ts", fn: "bulkImportParlaysAction", guard: /if \(existingCappers\.length > rosterSizeBefore\) revalidateCapperRoster\(/ },
+];
+
 // ---- 1. The scanners must detect what they claim to ----
 check("writer scan: direct call", writersCalled("await renameCapper(user.id, id, name);").includes("renameCapper"));
 check("writer scan: member call", writersCalled("await data.deleteCapper(u, id)").includes("deleteCapper"));
@@ -143,6 +156,25 @@ for (const [file, { via }] of Object.entries(ACTION_CALLERS)) {
     const helper = bodies.find((b) => b.name === via);
     check(`${file}: ${via} calls revalidateCapperRoster`, !!helper && helper.body.includes("revalidateCapperRoster("));
   }
+}
+
+// Import paths bust only when a capper was added; explicit capper actions bust unconditionally.
+for (const { file, fn, guard } of CONDITIONAL_CALLERS) {
+  const body = functionBodies(stripComments(readFileSync(join(repoRoot, file), "utf8"))).find((b) => b.name === fn)?.body ?? "";
+  check(`${file}: ${fn} exists`, body.length > 0);
+  const calls = body.match(/revalidateCapperRoster\(/g)?.length ?? 0;
+  check(`${file}: ${fn} busts the roster once, guarded by the cappers-added signal`, calls === 1 && guard.test(body));
+}
+{
+  const src = stripComments(readFileSync(join(repoRoot, "src/server/actions/cappers.ts"), "utf8"));
+  const helper = functionBodies(src).find((b) => b.name === "revalidatePickStats")?.body ?? "";
+  check("actions/cappers.ts: revalidatePickStats busts the roster unconditionally", /^\s*revalidateCapperRoster\(/m.test(helper) && !/\bif\b/.test(helper));
+}
+{
+  const dedup = stripComments(readFileSync(join(repoRoot, "src/server/data/pick-dedup.ts"), "utf8"));
+  const refs = stripComments(readFileSync(join(repoRoot, "src/server/data/import-refs.ts"), "utf8"));
+  check("insertPicksDeduped reports cappersAdded on a successful insert", /cappersAdded: resolveStats\.cappersAdded/.test(dedup) && /cappersAdded: number;/.test(dedup));
+  check("resolveImportRefs / resolveOrCreateCapperId count list growth", /existingCappers\.push\(capper\);\s*if \(stats\) stats\.cappersAdded \+= 1;/.test(refs));
 }
 
 // createPick: the manual form always names an existing capper (capperId is a required input and is
