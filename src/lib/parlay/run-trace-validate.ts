@@ -101,7 +101,8 @@ function cleanSwapLeg(v: unknown): SwapLegTrace | null {
     const cc = n(c);
     if (/^[A-Z0-9_]{1,24}$/.test(k) && cc !== null) classifier[k] = cc;
   }
-  const rule = str(v.rule, 4);
+  const rule = str(v.rule, 8);
+  const contrarian = cleanContrarianCounts(v.contrarian);
   return {
     pick: { id, label },
     result: result as SwapLegTrace["result"],
@@ -113,7 +114,23 @@ function cleanSwapLeg(v: unknown): SwapLegTrace | null {
     noRecord: noRecord!,
     belowGate: belowGate!,
     qualified: qualified!,
+    ...(contrarian ? { contrarian } : {}),
   };
+}
+
+function cleanContrarianCounts(v: unknown): NonNullable<SwapLegTrace["contrarian"]> | null {
+  if (!isObj(v)) return null;
+  const n = (x: unknown) => count(x, 100_000);
+  const opposite = n(v.opposite);
+  const lineTooFar = n(v.lineTooFar);
+  const periodMismatch = n(v.periodMismatch);
+  const noRecord = n(v.noRecord);
+  const belowGate = n(v.belowGate);
+  const qualifying = n(v.qualifying);
+  if (opposite === null || lineTooFar === null || periodMismatch === null || noRecord === null || belowGate === null || qualifying === null) return null;
+  const chosen = str(v.chosen, 64);
+  const lineGap = finite(v.lineGap, 0, 1000);
+  return { opposite, lineTooFar, periodMismatch, noRecord, belowGate, qualifying, ...(chosen ? { chosen } : {}), ...(lineGap !== null ? { lineGap } : {}) };
 }
 
 function cleanSwaps(v: unknown): SwapModeTrace[] {
@@ -198,6 +215,7 @@ function cleanSelection(v: unknown): SelectionTraceShape | null {
   const reuseHits = count(v.reuseHits, 1000);
   if (reuseHits === null) return null;
   const hedge = cleanSelectionLegs(v.hedge);
+  const contrarian = cleanSelectionLegs(v.contrarian);
   const rejectedCombos = count(v.rejectedCombos, 1_000_000);
   const combos = count(v.combos, 10_000_000);
   const repaired = count(v.repaired, 1000);
@@ -208,6 +226,7 @@ function cleanSelection(v: unknown): SelectionTraceShape | null {
     seed: count(v.seed, 4294967295),
     legs: cleanSelectionLegs(v.legs),
     ...(hedge.length > 0 ? { hedge } : {}),
+    ...(contrarian.length > 0 ? { contrarian } : {}),
     reuseHits,
     ...(rejectedCombos !== null ? { rejectedCombos } : {}),
     ...(combos !== null ? { combos } : {}),

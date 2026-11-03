@@ -185,11 +185,13 @@ const YES_NO_PROP_MARKETS: ReadonlySet<AnyPlayerPropMarket> = new Set<AnyPlayerP
 const NON_OFFENSIVE_PROP_MARKETS: ReadonlySet<AnyPlayerPropMarket> = new Set<AnyPlayerPropMarket>(["STRIKEOUTS", "OUTS_RECORDED", "SAVES"]);
 
 // Never guesses: no readable player and market, or a line market with no
-// readable Over/Under, is UNDERIVABLE with the reason.
-export function describeProp(pick: PickInput): PropDescription {
+// readable Over/Under, is UNDERIVABLE with the reason. `sportName` is passed
+// only by Contrarian (contrarian-match.ts), so an NBA prop reads its own
+// markets; the same-game rules call it without, as before.
+export function describeProp(pick: PickInput, sportName?: string | null): PropDescription {
   if (pick.betType !== "PLAYER_PROP") return { status: "UNDERIVABLE", reason: `not a player prop (betType "${pick.betType}")` };
   const text = pick.betDetail ?? "";
-  const parsed = parseAnyPlayerProp(text);
+  const parsed = parseAnyPlayerProp(text, sportName);
   if (!parsed) return { status: "UNDERIVABLE", reason: "player prop text names no recognized player and market" };
 
   const playerWords = parsed.playerName

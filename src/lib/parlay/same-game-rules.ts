@@ -51,7 +51,7 @@ type OkProp = Extract<PropDescription, { status: "OK" }>;
 // over 250 passing yards"), or null when it names neither - the usual case. A
 // prop has no stored side, and nothing here looks a player up on a roster. The
 // text is read the way a moneyline's is, so the same team aliases apply.
-function propTeam(c: ParlayCandidate): "HOME" | "AWAY" | null {
+export function propTeam(c: ParlayCandidate): "HOME" | "AWAY" | null {
   return derivePickSide({ betType: "MONEYLINE", betDetail: c.pick.betDetail }, c.game, c.game.sportName);
 }
 

@@ -377,6 +377,8 @@ export type SelectionTrace = {
   seed: number | null;
   legs: SelectionLegTrace[];
   hedge?: SelectionLegTrace[];
+  // Contrarian's picks under SCORING (Swap = All), as hedge.
+  contrarian?: SelectionLegTrace[];
   // Chosen legs that carried a reuse penalty.
   reuseHits: number;
   // Your picks only: draws rejected as already shown, valid combinations the
