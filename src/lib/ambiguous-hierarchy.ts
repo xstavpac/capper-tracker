@@ -11,6 +11,17 @@ import {
 } from "@/lib/parse-catalog";
 import { isSportLabelInSeason } from "@/lib/sport-seasons";
 import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
+import {
+  collegePair,
+  historyLeague,
+  lineVerdict,
+  type CapperLeagueHistory,
+  type CollegeLineQuery,
+  COLLEGE_LINE_TOLERANCE,
+  HISTORY_WINDOW_DAYS,
+  lineSignalApplies,
+  type PostedLinesByTeam,
+} from "@/lib/college-line-signal";
 
 // Pure decision core for the catalog-import ambiguous-nickname hierarchy.
 //
@@ -85,6 +96,13 @@ import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
 //                    option(s) already dropped.
 //   5b. per-pick college signals - see COLLEGE_PICK_SIGNALS. Only ever choose
 //                    between NCAAF and NCAAB, for what plausibility left standing.
+//        Option D adds two signals around the capper's block, for the picks a card
+//        cannot help (a single-line batch): line_vs_posted (a spread / total against
+//        each league's posted line for the school; both leagues need one and exactly
+//        one may be within 1.5) and capper_history (the capper's own graded NCAAF vs
+//        NCAAB picks, 30 days, >= 10 picks and >= 90% one league: a moneyline's only
+//        signal, and a spread / total's fallback when the line was inconclusive -
+//        never when it resolved, and never to settle a line-vs-block disagreement).
 //   6. still ambiguous - surface for a manual choice, with any league
 //                    outside its calendar season left off the list (unless
 //                    the feeds showed it playing)
@@ -131,7 +149,9 @@ export type ResolutionMethod =
   | "user"
   | "plausibility"
   | "league_activity"
-  | "capper_block";
+  | "capper_block"
+  | "line_vs_posted"
+  | "capper_history";
 
 // How far either side of the import a league's nearest game may be for the
 // league to still count as a candidate.
@@ -175,6 +195,12 @@ export type HierarchyDeps = {
   // Step 1b's feed lookup. Optional: without it no candidate is ever dropped
   // for league inactivity, exactly as before the step existed.
   runLeagueActivityCheck?: LeagueActivityChecker;
+  // Option D's two lookups. Optional: without them neither signal ever fires, exactly
+  // as before they existed. Either may reject - that signal then has nothing to say.
+  // Posted spread / total per (school, league), for the schools of the picks still open.
+  runCollegeLineCheck?: (queries: CollegeLineQuery[]) => Promise<PostedLinesByTeam>;
+  // The importing user's graded NCAAF / NCAAB counts for these cappers (lowercased names).
+  getCapperLeagueHistory?: (capperNames: string[]) => Promise<CapperLeagueHistory>;
   // Overridable reference date for the season (calendar) fallback - defaults
   // to now. Tests pin it so the calendar-fallback path is deterministic.
   now?: Date;
@@ -221,14 +247,17 @@ type Decision = { choice: AmbiguousOption; method: ResolutionMethod; reason: str
 // A per-pick signal for a shared school's still-open NCAAF / NCAAB question, run
 // in order after plausibility, each seeing what the one before it settled. So
 // none can override plausibility: a line that fits one league never reaches them
-// with the other still on the list. A signal comparing the pick's line to each
-// sport's posted line goes first in this list when NCAAB odds exist; being
-// stronger, its answers then feed the capper's block below.
+// with the other still on the list. The posted-line signal goes first: being
+// stronger, its answers then feed the capper's block below, and the capper's own
+// history goes last, for what neither could settle.
+type OpenCollegePick = { pick: ParsedPick; idx: number };
 type CollegePickSignal = {
   method: ResolutionMethod;
   reason: (sport: string) => string;
+  // Fetches whatever this signal needs, once, for the picks still open when it runs.
+  prepare?: (open: OpenCollegePick[]) => Promise<void>;
   // Which league this pick means, or null for no signal.
-  league: (pick: ParsedPick, allPicks: ParsedPick[]) => string | null;
+  league: (pick: ParsedPick, allPicks: ParsedPick[], idx: number) => string | null;
 };
 
 // The one league a capper's already-settled college picks in this paste all sit
@@ -246,13 +275,72 @@ function unanimousCollegeLeague(capperName: string, allPicks: ParsedPick[]): str
   return leagues.size === 1 ? [...leagues][0] : null;
 }
 
-const COLLEGE_PICK_SIGNALS: CollegePickSignal[] = [
-  {
-    method: "capper_block",
-    reason: (sport) => "every other settled college pick from this capper in this paste is " + sport,
-    league: (pick, allPicks) => unanimousCollegeLeague(pick.capperName, allPicks),
-  },
-];
+function collegePickSignals(deps: HierarchyDeps): CollegePickSignal[] {
+  let posted: PostedLinesByTeam = {};
+  let history: CapperLeagueHistory = {};
+  // What the line said about a pick it could not settle: "inconclusive" is the only
+  // state history may fill in; "conflict" (the line named one league, the capper's
+  // block the other) stays a prompt.
+  const lineState = new Map<number, "inconclusive" | "conflict">();
+  const historyApplies = (pick: ParsedPick, idx: number) =>
+    collegePair(pick.ambiguous ?? []) !== null && (pick.ambiguousBetType === "MONEYLINE" || lineState.get(idx) === "inconclusive");
+  const guarded = async <T,>(label: string, run: () => Promise<T>, fallback: T): Promise<T> => {
+    try {
+      return await run();
+    } catch (err) {
+      // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+      console.log("[catalog-disambiguation] " + label + " failed, no signal:", err instanceof Error ? err.message : err);
+      return fallback;
+    }
+  };
+  return [
+    {
+      method: "line_vs_posted",
+      reason: (sport) => "its line is within " + COLLEGE_LINE_TOLERANCE + " of " + sport + "'s posted line and not of the other league's",
+      prepare: async (open) => {
+        if (!deps.runCollegeLineCheck) return;
+        const queries = new Map<string, CollegeLineQuery>();
+        for (const { pick } of open) {
+          const pair = collegePair(pick.ambiguous ?? []);
+          if (!pair || !lineSignalApplies(pick)) continue;
+          for (const o of [pair.ncaaf, pair.ncaab]) queries.set(o.nickname + "|" + o.sport, { nickname: o.nickname, sport: o.sport });
+        }
+        if (queries.size > 0) posted = await guarded("posted line lookup", () => deps.runCollegeLineCheck!([...queries.values()]), {});
+      },
+      league: (pick, allPicks, idx) => {
+        const verdict = lineVerdict(pick, pick.ambiguous ?? [], posted);
+        if (verdict.kind === "not_applicable") return null;
+        if (verdict.kind === "inconclusive") {
+          lineState.set(idx, "inconclusive");
+          return null;
+        }
+        const block = unanimousCollegeLeague(pick.capperName, allPicks);
+        if (block !== null && block !== verdict.sport) {
+          lineState.set(idx, "conflict");
+          return null;
+        }
+        return verdict.sport;
+      },
+    },
+    {
+      method: "capper_block",
+      reason: (sport) => "every other settled college pick from this capper in this paste is " + sport,
+      // A pick the line and the block disagree on stays a question: the block does not
+      // get to settle it just because the line stepped aside.
+      league: (pick, allPicks, idx) => (lineState.get(idx) === "conflict" ? null : unanimousCollegeLeague(pick.capperName, allPicks)),
+    },
+    {
+      method: "capper_history",
+      reason: (sport) => "this capper's graded college picks in the last " + HISTORY_WINDOW_DAYS + " days are lopsidedly " + sport,
+      prepare: async (open) => {
+        if (!deps.getCapperLeagueHistory) return;
+        const names = [...new Set(open.filter(({ pick, idx }) => historyApplies(pick, idx)).map(({ pick }) => pick.capperName.toLowerCase()))];
+        if (names.length > 0) history = await guarded("capper history lookup", () => deps.getCapperLeagueHistory!(names), {});
+      },
+      league: (pick, _all, idx) => (historyApplies(pick, idx) ? historyLeague(history[pick.capperName.toLowerCase()]) : null),
+    },
+  ];
+}
 
 // A question only the two college leagues are on (a shared school, or an alias
 // naming several schools). Step 2 counts only games still to be played for these.
@@ -802,15 +890,20 @@ export async function runAmbiguousHierarchy(
   // ---- Step 5b: per-pick college signals, on what plausibility left open. Not
   // memoized, like step 4 and step 5: it answers for one pick, not for the key.
   const collegeSignalLogs: ResolutionLog[] = [];
-  for (const signal of COLLEGE_PICK_SIGNALS) {
+  for (const signal of collegePickSignals(deps)) {
     // Judged against the picks as they stood, so a pick this signal settles
     // doesn't count as evidence for the next one.
     const before = [...picks];
     const counts = new Map<string, { key: string; sport: string; count: number }>();
+    const isOpen = (p: ParsedPick, idx: number) =>
+      Boolean(before[idx].ambiguous) && !fitsNoCandidate.has(idx) && !isPlayerAmbiguityKey(p.ambiguousKey!);
+    if (signal.prepare) {
+      await signal.prepare(ambiguousEntries.filter(({ p, idx }) => isOpen(p, idx)).map(({ idx }) => ({ pick: before[idx], idx })));
+    }
     for (const { p, idx } of ambiguousEntries) {
       const shown = before[idx].ambiguous;
-      if (!shown || fitsNoCandidate.has(idx) || isPlayerAmbiguityKey(p.ambiguousKey!)) continue;
-      const league = signal.league(before[idx], before);
+      if (!shown || !isOpen(p, idx)) continue;
+      const league = signal.league(before[idx], before, idx);
       const choice = league ? collegeOptionFor(shown, league) : undefined;
       if (!choice) continue;
       picks[idx] = resolveAmbiguousPick(before[idx], choice);
