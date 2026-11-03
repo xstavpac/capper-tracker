@@ -107,11 +107,16 @@ check("normalizeTeamName leaves an already-clean name alone", normalizeTeamName(
     const otherLeague = sportKey === NCAAF ? NBA : NCAAF;
     check(`"${scoreFeed}" vs "${oddsApi}" under ${otherLeague}: no match (aliases are per league)`, teamNamesMatch(scoreFeed, oddsApi, otherLeague), false);
   }
+  // basketball_ncaab is the one generated block (scripts/generate-ncaab-odds-aliases.mjs, 38 rows); every
+  // row of it is pinned against both feeds' team lists in server/data/ncaab-name-matching-acceptance-test.ts.
   check(
-    "the list above is the whole alias table",
-    Object.entries(CROSS_SOURCE_TEAM_ALIASES).flatMap(([sportKey, rows]) => rows.map(([a, b]) => [sportKey, a, b])),
+    "the list above is the whole hand-kept alias table",
+    Object.entries(CROSS_SOURCE_TEAM_ALIASES)
+      .filter(([sportKey]) => sportKey !== "basketball_ncaab")
+      .flatMap(([sportKey, rows]) => rows.map(([a, b]) => [sportKey, a, b])),
     pairs
   );
+  check("the generated NCAAB block is present", CROSS_SOURCE_TEAM_ALIASES.basketball_ncaab.length, 38);
 
   // The folding still works when a league is passed, including for the NHL
   // pair that needs no alias row.
