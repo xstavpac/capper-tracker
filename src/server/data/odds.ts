@@ -2170,7 +2170,15 @@ export type ResolveGameOpts = {
   // Where the odds feed comes from - see createRequestOddsLoader. Defaults to
   // getOddsForSport.
   getOdds?: OddsLoader;
+  // Only a game that hasn't started by referenceTime counts: no live or final
+  // score-feed game, nothing whose start time has passed. The disambiguation
+  // check asks this for a shared college school (ambiguous-hierarchy.ts step 2).
+  upcomingOnly?: boolean;
 };
+
+function notStartedBy(g: { commenceTime: string; status?: string }, referenceTime: Date): boolean {
+  return (g.status === undefined || g.status === "preview") && Date.parse(g.commenceTime) > referenceTime.getTime();
+}
 
 // Async wrapper around resolveScheduleGameFromFeeds. The score feed is fetched
 // first; the odds feed (a memoized OddsSnapshot read - already warm for most
@@ -2202,9 +2210,11 @@ async function fetchFeedOrEmpty<T>(label: string, fetch: () => Promise<T[]>): Pr
 
 async function resolveScheduleGame(
   sportKey: string,
-  teamMatches: (g: { homeTeam: string; awayTeam: string }) => boolean,
-  { referenceTime = new Date(), nearTermOnly = false, gameNumber = null, getOdds = getOddsForSport }: ResolveGameOpts
+  matchesTeam: (g: { homeTeam: string; awayTeam: string }) => boolean,
+  { referenceTime = new Date(), nearTermOnly = false, gameNumber = null, getOdds = getOddsForSport, upcomingOnly = false }: ResolveGameOpts
 ): Promise<ScheduleCandidateResult> {
+  const teamMatches = (g: { homeTeam: string; awayTeam: string }) =>
+    matchesTeam(g) && (!upcomingOnly || notStartedBy(g as { homeTeam: string; awayTeam: string; commenceTime: string; status?: string }, referenceTime));
   const scoreGames = await fetchFeedOrEmpty("score", () => getLiveScoresForSport(sportKey));
 
   if (nearTermOnly) return resolveScheduleGameFromFeeds(scoreGames, [], teamMatches, referenceTime, gameNumber);

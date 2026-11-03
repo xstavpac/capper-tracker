@@ -24,7 +24,7 @@ export type { ScheduleCheckQuery };
 export async function runTeamScheduleCheck(queries: ScheduleCheckQuery[]): Promise<Record<string, boolean>> {
   const result: Record<string, boolean> = {};
   await Promise.all(
-    queries.map(async ({ nickname, sport }) => {
+    queries.map(async ({ nickname, sport, upcomingOnly }) => {
       const sportKey = SPORT_LABEL_TO_KEY[sport];
       const mapKey = nickname + "|" + sport;
       // No live score source wired up for this sport at all (see
@@ -35,12 +35,13 @@ export async function runTeamScheduleCheck(queries: ScheduleCheckQuery[]): Promi
         result[mapKey] = false;
         return;
       }
-      const { game } = await resolveGameForNickname(sportKey, nickname, { nearTermOnly: true });
+      const { game } = await resolveGameForNickname(sportKey, nickname, { nearTermOnly: true, upcomingOnly });
       result[mapKey] = game !== null;
       console.log(
         "[catalog-disambiguation] schedule check:",
         nickname,
         sport,
+        upcomingOnly ? "(not started)" : "",
         "->",
         game !== null ? "has a game today" : "no game today"
       );
@@ -59,14 +60,14 @@ export async function runTeamScheduleCheck(queries: ScheduleCheckQuery[]): Promi
 export async function runTeamWideScheduleCheck(queries: ScheduleCheckQuery[]): Promise<Record<string, boolean>> {
   const result: Record<string, boolean> = {};
   await Promise.all(
-    queries.map(async ({ nickname, sport }) => {
+    queries.map(async ({ nickname, sport, upcomingOnly }) => {
       const sportKey = SPORT_LABEL_TO_KEY[sport];
       const mapKey = nickname + "|" + sport;
       if (!sportKey || !RESOLVABLE_SPORT_KEYS.includes(sportKey)) {
         result[mapKey] = false;
         return;
       }
-      const { game } = await resolveGameForNickname(sportKey, nickname);
+      const { game } = await resolveGameForNickname(sportKey, nickname, { upcomingOnly });
       result[mapKey] = game !== null;
       console.log(
         "[catalog-disambiguation] wide schedule tiebreaker check:",

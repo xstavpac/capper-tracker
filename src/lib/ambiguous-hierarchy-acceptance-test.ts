@@ -137,17 +137,18 @@ async function main() {
     }, { sport: "", stillAmbiguous: ["liberty"] });
   }
   {
-    // Calendar fallback for Liberty: mid-November, schedule inconclusive
-    // (nobody "playing" in the fake) - only NCAAF is still in its season
-    // window (WNBA ended Oct 20), so the calendar resolves it to NCAAF.
+    // Mid-November, schedule inconclusive (nobody "playing" in the fake). WNBA
+    // ended Oct 20, but the Flames play basketball too, and that season has started:
+    // the calendar can't choose between NCAAF and NCAAB, so it asks. Before NCAAB
+    // was a candidate this date resolved to NCAAF via the calendar.
     const res = await runAmbiguousHierarchy([ambiguousPick("Liberty -3")], {}, {
       ...deps([]),
       now: new Date("2026-11-15T16:00:00Z"),
     });
-    check("Liberty: schedule blank in November -> NCAAF via calendar fallback", {
+    check("Liberty: schedule blank in November, inside the NCAAB overlap -> prompt without WNBA", {
       sport: res.picks[0].sportName,
-      method: res.logs[0]?.method,
-    }, { sport: "NCAAF", method: "season" });
+      options: res.picks[0].ambiguous?.map((o) => o.sport),
+    }, { sport: "", options: ["NCAAF", "NCAAB"] });
   }
 
   console.log("\n########## PART B: Cardinals (MLB St. Louis vs NFL Arizona) - a second ambiguous key under schedule-first ##########");

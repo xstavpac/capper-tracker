@@ -1,8 +1,9 @@
-// Team recognition derived from a live game feed's own team data, for teams
-// the hand-kept lists in parse-catalog.ts don't carry - today every FCS school
-// on the NCAAF score feed. Pure and sync (no network, no DB): the server builds
-// the FeedTeam list from the same feed import matching and /live scores read,
-// and parseCatalog consults it (see feedTeamNicknames there).
+// Team recognition for teams the hand-kept lists in parse-catalog.ts don't
+// carry: every FCS school on the NCAAF score feed, read from the feed, and every
+// Division I basketball school, read from a generated static list
+// (college-teams.ts, which sets `listed`). Pure and sync (no network, no DB): the
+// server builds the FeedTeam list and parseCatalog consults it, one sport at a
+// time (see feedTeamNicknames there).
 //
 // A team is matched by its full feed name ("Montana State Bobcats"), its
 // school ("Montana State"), the feed's short form ("Montana St"), or its
@@ -25,6 +26,12 @@ export type FeedTeam = {
   shortName?: string;
   // Set only when no other team in the same feed has this mascot.
   mascot?: string;
+  // Other spellings a capper types for this school ("zags"). Static lists only.
+  aliases?: string[];
+  // From a static list, not a feed: every school of the sport is here whether
+  // or not it plays, so a mascot two of them share says nothing. Never asked
+  // about a bare mascot (findSharedMascotTeams).
+  listed?: boolean;
 };
 
 export type FeedTeamHit = {
@@ -107,12 +114,24 @@ function keyRegex(key: string): RegExp {
   return new RegExp("(?<![\\w&])" + parts.join("\\s+") + "(?![\\w&])");
 }
 
+// A static list runs every key of every school on every line, so the compiled
+// patterns are kept.
+const KEY_REGEX_CACHE = new Map<string, RegExp>();
+function cachedKeyRegex(key: string): RegExp {
+  let re = KEY_REGEX_CACHE.get(key);
+  if (!re) {
+    re = keyRegex(key);
+    KEY_REGEX_CACHE.set(key, re);
+  }
+  return re;
+}
+
 // Words allowed directly before / after a school, short form or mascot.
 // Anything else alphabetic there means a longer name we only part-matched
 // ("Idaho State", "Charleston Southern", "Montana Tech").
-const BEFORE_OK = /^(vs|v|at|and|of|the|on|take|taking|play|lean|bet|pod|lock|max|ncaaf|cfb|fcs|college|football|university)$/;
+const BEFORE_OK = /^(vs|v|at|and|of|the|on|take|taking|play|lean|bet|pod|lock|max|ncaaf|ncaab|cfb|cbb|fcs|college|football|basketball|university|u|units?)$/;
 const AFTER_OK =
-  /^(ml|moneyline|money|line|pk|pick|pickem|tt|ats|vs|v|at|and|over|under|o|u|spread|spreads|total|totals|first|second|half|reg|alt|team|to|win|wins|university|college|univ|plus|minus|game|fg|full)$/;
+  /^(ml|moneyline|money|line|pk|pick|pickem|tt|ats|vs|v|at|and|over|under|o|u|[ou]\d[\d.]*|spread|spreads|total|totals|first|second|half|reg|alt|team|to|win|wins|university|college|univ|plus|minus|game|fg|full|q[1-4]|[1-4]q|h[12]|[12]h|fh|sh|quarter|pts|points)$/;
 
 function standsAlone(folded: string, start: number, end: number): boolean {
   const before = folded.slice(0, start).match(/([a-z][\w&'.-]*)\s+$/)?.[1];
@@ -131,7 +150,7 @@ export function findSharedMascotTeams(text: string, teams: FeedTeam[]): { mascot
   const folded = fold(text);
   const groups = new Map<string, FeedTeam[]>();
   for (const t of teams) {
-    if (t.mascot) continue;
+    if (t.mascot || t.listed) continue;
     const mascot = mascotOf(t);
     if (mascot.length < MIN_MASCOT_LENGTH) continue;
     const key = t.sport + "|" + fold(mascot);
@@ -158,11 +177,12 @@ export function findFeedTeamHits(text: string, teams: FeedTeam[]): FeedTeamHit[]
       ["name", team.name],
       ["location", team.location],
       ["short", team.shortName],
+      ...(team.aliases ?? []).map((alias): [FeedTeamHit["via"], string] => ["short", alias]),
       ["mascot", team.mascot],
     ];
     for (const [via, key] of keys) {
       if (!key) continue;
-      const m = keyRegex(key).exec(folded);
+      const m = cachedKeyRegex(key).exec(folded);
       if (!m) continue;
       const start = m.index;
       const end = start + m[0].length;
@@ -180,8 +200,10 @@ export function findFeedTeamHits(text: string, teams: FeedTeam[]): FeedTeamHit[]
             o !== h &&
             o.start <= h.start &&
             o.end >= h.end &&
-            // strictly longer wins; an exact tie drops both
-            (o.end - o.start > h.end - h.start || (o.start === h.start && o.end === h.end))
+            // strictly longer wins; an exact tie within one sport drops both.
+            // The same school on two sports' lists is not a tie: it is one
+            // school, and which sport it means is decided elsewhere.
+            (o.end - o.start > h.end - h.start || (o.start === h.start && o.end === h.end && o.team.sport === h.team.sport))
         )
     )
     .sort((a, b) => a.start - b.start);

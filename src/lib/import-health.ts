@@ -8,7 +8,7 @@ import { shortId, type AdminReport } from "@/lib/admin-report";
 
 // How the browser settled one ambiguous team name in a paste (the
 // ambiguous-hierarchy's method, or "user" when the import asked).
-export const AMBIGUITY_METHODS = ["schedule", "season", "pick_context", "remembered", "user", "plausibility", "league_activity"] as const;
+export const AMBIGUITY_METHODS = ["schedule", "season", "pick_context", "remembered", "user", "plausibility", "league_activity", "capper_block"] as const;
 export type AmbiguityMethod = (typeof AMBIGUITY_METHODS)[number];
 export type ImportAmbiguityEntry = { key: string; sport: string; method: AmbiguityMethod; count: number };
 

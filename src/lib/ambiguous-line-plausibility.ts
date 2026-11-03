@@ -57,6 +57,9 @@ const SPREAD_MAGNITUDE_BOUND: Partial<Record<string, number>> = {
   // unranked); past this is already an extreme outlier. Bounded so the
   // WNBA-vs-NCAAF "Indiana" collision can narrow in either direction.
   NCAAF: 65,
+  // Division I mismatches reach the high 30s; past 40 is a football number, so a
+  // "-44" on a shared school reads as football. DOMAIN ESTIMATE, same caveat.
+  NCAAB: 40,
 };
 
 // MLB/KBO full-game totals conventionally cluster roughly 6.5-11 runs; the
@@ -75,6 +78,15 @@ const TOTAL_LINE_BOUND: Partial<Record<string, { min: number; max: number }>> = 
   // NBA full-game totals cluster roughly 200-245.
   NBA: { min: 180, max: 280 },
   NCAAF: { min: 20, max: 100 },
+  // Full-game college basketball totals cluster roughly 125-165. Meets NCAAF's
+  // maximum at 100, so a full-game total tells the two apart at any number but 100
+  // itself: "Duke over 145.5" is basketball, "Duke over 52.5" football.
+  //
+  // It overlaps NBA from 180 to 210 and WNBA from 120 to 200. A total there keeps
+  // both candidates, and the survivors go back through the schedule (see step 5
+  // in ambiguous-hierarchy.ts); it is never resolved on the number alone. It only
+  // comes up on a key with both leagues in it, such as "Memphis over 195".
+  NCAAB: { min: 100, max: 210 },
   // NFL full-game totals run roughly 33-56; the lowest closing totals on
   // record sit around 28-30 and the highest in the low 60s. Set well outside
   // that: the point is that an "over 6.5" / "over 8.5" is never an NFL game.
@@ -89,6 +101,15 @@ const TOTAL_LINE_BOUND: Partial<Record<string, { min: number; max: number }>> = 
 // DOMAIN ESTIMATE, same caveat as the tables above.
 const TEAM_TOTAL_MIN: Partial<Record<string, number>> = {
   NFL: 10,
+  // A college basketball team total is roughly 55-90; "Duke TT o24.5" is football.
+  NCAAB: 45,
+};
+
+// Full-game TEAM total ceiling, for the leagues where a team total sits far
+// below the whole-game maximum above. Where only NCAAF and NCAAB are left, the
+// cutoff below decides the 45-65 overlap. DOMAIN ESTIMATE, same caveat.
+const TEAM_TOTAL_MAX: Partial<Record<string, number>> = {
+  NCAAF: 65,
 };
 
 // `line` is the pick's own already-parsed numeric spread/total (ParsedPick's
@@ -116,11 +137,33 @@ const TEAM_TOTAL_MIN: Partial<Record<string, number>> = {
 // `betType` must be the pick's own parsed bet type (ambiguousBetType), never
 // the stored ParsedPick.betType: an unresolved ambiguous pick stores a SPREAD
 // placeholder there, and a 6.5 "over" checked as a spread would pass for NFL.
+// NCAAF vs NCAAB only, where the ranges above overlap: a full-game team total, and
+// a total on part of the game (a first-half total). Approved cutoffs, applied only
+// when those two leagues are all that is left.
+const COLLEGE_TEAM_TOTAL_CUTOFF = 50;
+const COLLEGE_PARTIAL_TOTAL_CUTOFF = 45;
+
 export function filterPlausibleCandidates(
   candidates: AmbiguousOption[],
   betType: ParsedPick["betType"] | undefined,
   line: number | null | undefined,
   partialGame = false
+): AmbiguousOption[] {
+  const left = filterByRange(candidates, betType, line, partialGame);
+  if (line === null || line === undefined || !left.every((c) => c.sport === "NCAAF" || c.sport === "NCAAB")) return left;
+  if (!left.some((c) => c.sport === "NCAAF") || !left.some((c) => c.sport === "NCAAB")) return left;
+  const cutoff =
+    betType === "TEAM_TOTAL" && !partialGame ? COLLEGE_TEAM_TOTAL_CUTOFF : betType === "TOTAL" && partialGame ? COLLEGE_PARTIAL_TOTAL_CUTOFF : undefined;
+  if (cutoff === undefined) return left;
+  const sport = line >= cutoff ? "NCAAB" : "NCAAF";
+  return left.filter((c) => c.sport === sport);
+}
+
+function filterByRange(
+  candidates: AmbiguousOption[],
+  betType: ParsedPick["betType"] | undefined,
+  line: number | null | undefined,
+  partialGame: boolean
 ): AmbiguousOption[] {
   if (line === null || line === undefined || betType === undefined) return candidates;
 
@@ -136,6 +179,8 @@ export function filterPlausibleCandidates(
       const range = TOTAL_LINE_BOUND[c.sport];
       if (range !== undefined && line > range.max) return false;
       if (partialGame) return true;
+      const teamMax = betType === "TEAM_TOTAL" ? TEAM_TOTAL_MAX[c.sport] : undefined;
+      if (teamMax !== undefined && line > teamMax) return false;
       const min = betType === "TOTAL" ? range?.min : TEAM_TOTAL_MIN[c.sport];
       return min === undefined || line >= min;
     });

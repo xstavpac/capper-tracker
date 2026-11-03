@@ -25,6 +25,13 @@ import { parseMlbPlayerProp, normalizeMlbNPlus } from "@/lib/mlb-prop";
 import { parseNbaProp, normalizeNbaNPlus, type ParsedNbaProp } from "@/lib/nba-prop";
 import { nbaPlayerAliasName } from "@/lib/nba-player-aliases";
 import {
+  NCAAB_SCHOOLS,
+  collegeAliasSchools,
+  findCollegeAliasConflict,
+  ncaabDisplayName,
+  ncaabFootballLevel,
+} from "@/lib/college-teams";
+import {
   detectUnsupportedProp,
   detectUnsupportedNflStat,
   UNSUPPORTED_PROP_REASONS,
@@ -68,6 +75,10 @@ export type ParsedPick = {
   // "1st half"). The plausibility filter needs it: a full-game total's
   // minimum doesn't apply to a slice of the game.
   ambiguousPartialGame?: boolean;
+  // Set by promoteSharedCollegePick: the pick exactly as it parsed before a
+  // shared college school became a question. Choosing a league restores it with
+  // that league's sport, so NCAAF comes back byte-for-byte what it always was.
+  sharedCollegeBase?: ParsedPick;
   // Team nicknames found in the raw text, e.g. from "Over 9.5 (Angels/Orioles)"
   // or "Cardinals vs Panthers". Captured before parens/odds get stripped out of
   // `description`, so game resolution still has both teams even for bets (like
@@ -1430,6 +1441,10 @@ const CITY_NICKNAME_PHRASES = new Set(
 
 export const NCAAF_CANONICAL_SUFFIX: Record<string, string> = Object.fromEntries(NCAAF_SCHOOLS);
 
+// school key -> the full name, for an NCAAB school. A key NCAAF_SCHOOLS also has
+// names the same school there, except where listed in NCAAB_ALIAS_CONFLICTS.
+export const NCAAB_CANONICAL_SUFFIX: Record<string, string> = Object.fromEntries(NCAAB_SCHOOLS);
+
 // alias / school-key -> the canonical mascot phrase that IS a suffix of the
 // real live-schedule team name. bulk-picks.ts maps every teamNickname
 // through this before its `endsWith` game-resolution (see the comment
@@ -1438,6 +1453,7 @@ export const NCAAF_CANONICAL_SUFFIX: Record<string, string> = Object.fromEntries
 // passes straight through unchanged.
 export const TEAM_NICKNAME_CANONICAL: Record<string, string> = {
   ...Object.fromEntries(CITY_NICKNAME_TEAMS.map(([phrase, , canonical]) => [phrase, canonical])),
+  ...NCAAB_CANONICAL_SUFFIX,
   ...NCAAF_CANONICAL_SUFFIX,
   ...Object.fromEntries(PRO_TEAM_ALIASES.map(([alias, , canonical]) => [alias, canonical])),
 };
@@ -2314,6 +2330,13 @@ function lineForPlausibility(text: string): { betType: ParsedPick["betType"]; li
 // rather than re-deriving it via regex, since the user just told us exactly
 // which team they meant.
 export function resolveAmbiguousPick(pick: ParsedPick, choice: AmbiguousOption): ParsedPick {
+  if (pick.sharedCollegeBase) {
+    const base = pick.sharedCollegeBase;
+    // A conflicting alias ("USF") can resolve to a different school than the one
+    // it parsed as; every other choice keeps the nicknames it parsed with.
+    const sameSchool = base.teamNicknames.some((n) => (TEAM_NICKNAME_CANONICAL[n] ?? n) === choice.nickname);
+    return { ...base, sportName: choice.sport, teamNicknames: sameSchool ? base.teamNicknames : [choice.nickname] };
+  }
   // pick.description may already carry a "(G1)"/"(G2)" suffix from the
   // original ambiguous push (see withGameNumberSuffix) - parsePickText
   // strips every parenthetical unconditionally, so it's removed here along
@@ -2402,6 +2425,109 @@ function findAmbiguousNickname(
   return undefined;
 }
 
+// ---- College basketball candidates ----
+//
+// parseCatalog reads a school both sports share as NCAAF, as it always has. These
+// two functions, run by the disambiguation hierarchy before its first step, add
+// NCAAB as a candidate. The hierarchy then settles it the way it settles every
+// other shared name, and a choice of NCAAF restores the original pick untouched.
+
+const QUARTER_SCOPES: ReadonlySet<string> = new Set(["FIRST_QUARTER", "SECOND_QUARTER", "THIRD_QUARTER", "FOURTH_QUARTER"]);
+// A quarter scope betScope reads ("Q1", "1Q", "1st quarter"), or the bare word,
+// which it doesn't and which would otherwise pass for the full game.
+export function isQuarterScope(text: string): boolean {
+  return QUARTER_SCOPES.has(betScope(text)) || /\b(?:quarters?|qtrs?)\b/i.test(text);
+}
+
+function collegeOption(canonical: string, sport: "NCAAF" | "NCAAB"): AmbiguousOption {
+  return { label: (ncaabDisplayName(canonical) ?? canonical) + " (" + sport + ")", sport, nickname: canonical };
+}
+
+// A shared school's two candidates. Football first, as every list here reads.
+function sharedSchoolOptions(canonical: string): AmbiguousOption[] {
+  return [collegeOption(canonical, "NCAAF"), collegeOption(canonical, "NCAAB")];
+}
+
+// Every candidate a conflicting alias could mean: each school in each league it plays.
+function collegeAliasOptions(alias: string): AmbiguousOption[] {
+  return (collegeAliasSchools(alias) ?? []).flatMap(({ canonical, football }) =>
+    football ? sharedSchoolOptions(canonical) : [collegeOption(canonical, "NCAAB")]
+  );
+}
+
+// NCAAB schools a key the static table already holds can also name, because the
+// key IS how a capper writes that school ("Portland", "Green Bay", "St. Louis").
+// Exported for the acceptance test, which pins the set the lists produce.
+export const NCAAB_SCHOOLS_ON_AMBIGUOUS_KEYS: Record<string, string[]> = (() => {
+  const out: Record<string, string[]> = {};
+  for (const [key, canonical] of NCAAB_SCHOOLS) {
+    const options = AMBIGUOUS_NICKNAMES[key];
+    if (!options || options.some((o) => o.nickname === canonical)) continue;
+    (out[key] ??= []).push(canonical);
+  }
+  return out;
+})();
+
+// A static-table key's candidates with NCAAB added: the same school for every
+// NCAAF candidate that plays basketball, plus any school the key itself names.
+export function withCollegeBasketballOptions(key: string, options: AmbiguousOption[]): AmbiguousOption[] {
+  if (isPlayerAmbiguityKey(key)) return options;
+  const added = [
+    ...options.filter((o) => o.sport === "NCAAF" && ncaabFootballLevel(o.nickname)).map((o) => o.nickname),
+    ...(NCAAB_SCHOOLS_ON_AMBIGUOUS_KEYS[key] ?? []),
+  ];
+  const fresh = [...new Set(added)]
+    .filter((canonical) => !options.some((o) => o.sport === "NCAAB" && o.nickname === canonical))
+    .map((canonical) => collegeOption(canonical, "NCAAB"));
+  return fresh.length > 0 ? [...options, ...fresh] : options;
+}
+
+// A line naming its league outright was settled by the code, not by a school.
+const EXPLICIT_COLLEGE_LEAGUE = /\bNCAA[FB]\b/i;
+
+// A parsed pick on a school both sports share becomes that pair's question. A pick
+// with a code on the line, a basketball-only school on it, or no team stays as it
+// is, and so does a player prop: those stay out of NCAAB. A quarter settles it for
+// football, since basketball plays halves.
+export function promoteSharedCollegePick(pick: ParsedPick): ParsedPick {
+  if (pick.ambiguous || (pick.sportName !== "NCAAF" && pick.sportName !== "NCAAB")) return pick;
+  if (pick.teamNicknames.length === 0 || pick.betType === "PLAYER_PROP" || EXPLICIT_COLLEGE_LEAGUE.test(pick.raw)) return pick;
+
+  const canonicals = pick.teamNicknames.map((n) => TEAM_NICKNAME_CANONICAL[n] ?? n);
+  if (!canonicals.every((c) => ncaabFootballLevel(c))) return pick;
+  if (QUARTER_SCOPES.has(pick.period)) return pick.sportName === "NCAAF" ? pick : { ...pick, sportName: "NCAAF" };
+
+  // Shorthand NCAAF_SCHOOLS already claims and a basketball-only school also
+  // answers to ("USF"): that school is one more candidate. See NCAAB_ALIAS_CONFLICTS.
+  const alias = pick.teamNicknames.length === 1 ? collegeAliasSchools(pick.teamNicknames[0]) : undefined;
+  const extra = (alias ?? []).filter((s) => s.football === null).map((s) => collegeOption(s.canonical, "NCAAB"));
+
+  const line = extractLine(pick.betType, pick.description);
+  return {
+    ...pick,
+    sportName: "",
+    ambiguous: [...sharedSchoolOptions(canonicals[0]), ...extra],
+    ambiguousKey: alias ? pick.teamNicknames[0] : canonicals.join(" / "),
+    ambiguousBetType: pick.betType,
+    ambiguousLine: line,
+    ambiguousPartialGame: pick.period !== "FULL_GAME",
+    sharedCollegeBase: pick,
+  };
+}
+
+// Step 0 of the disambiguation hierarchy, over a whole parse: every shared school
+// becomes its question, and NCAAB joins every key whose NCAAF candidate plays
+// basketball. Safe to run twice. The ingest path runs it before narrowing to its
+// league allowlist, so a league the allowlist leaves out never gets a question.
+export function withCollegeCandidates(picks: ParsedPick[]): ParsedPick[] {
+  return picks.map((p) => {
+    if (!p.ambiguous || !p.ambiguousKey) return promoteSharedCollegePick(p);
+    // Basketball plays halves: a quarter never offers it.
+    if (isQuarterScope(p.description)) return p;
+    return { ...p, ambiguous: withCollegeBasketballOptions(p.ambiguousKey, p.ambiguous) };
+  });
+}
+
 // Every candidate sport for a given AMBIGUOUS_NICKNAMES key - exported so the
 // auto-resolution pipeline (ambiguous-hierarchy.ts) can enumerate
 // candidates without duplicating this table.
@@ -2477,6 +2603,10 @@ const SPORT_CONTEXT_SIGNALS: Record<string, RegExp[]> = {
     /\bdouble[\s-]doubles?\b/i,
     /\bDD\b/,
   ],
+  // Only what names the league outright: a shared school's bet reads the same in
+  // both sports otherwise.
+  NCAAF: [/\bcfb\b/i, /\bcollege\s+football\b/i],
+  NCAAB: [/\bcbb\b/i, /\bcollege\s+(?:basketball|hoops)\b/i],
 };
 
 // "points" / "pts" separate the NBA from the leagues that score in runs or
@@ -2997,7 +3127,7 @@ export function isTeamPhrase(text: string, feedTeams: FeedTeam[] = []): boolean 
   if (TEAM_LOCALITY_KEYS.some((loc) => key.length > loc.length && key.startsWith(loc) && TEAM_NICKNAME_KEYS.has(key.slice(loc.length)))) {
     return true;
   }
-  return feedTeams.some((t) => [t.name, t.location, t.shortName, t.mascot].some((k) => k !== undefined && teamPhraseKey(k) === key));
+  return feedTeams.some((t) => [t.name, t.location, t.shortName, t.mascot, ...(t.aliases ?? [])].some((k) => k !== undefined && teamPhraseKey(k) === key));
 }
 
 // Whether the team phrase a line opens with (its first `prefixLength`
@@ -3363,22 +3493,82 @@ export function parseCatalog(
   // A team read from the feed (see feedTeamNicknames) settles the sport for a line the
   // lists left sport-less or read as another sport by nickname alone. A line
   // carrying an explicit league code is left as written.
+  //
+  // Football is read first, exactly as it was. A Division I basketball school then
+  // settles a line only if it says something football couldn't: a basketball-only
+  // school is on it, or football read the sport but found no team. A shared school
+  // football already reads stays NCAAF here; promoteSharedCollegePick turns that
+  // into a question for the disambiguation hierarchy.
+  const footballTeams = feedTeams?.filter((t) => t.sport !== "NCAAB") ?? [];
+  const basketballTeams = feedTeams?.filter((t) => t.sport === "NCAAB") ?? [];
   const withFeedSport = (text: string, detected: ReturnType<typeof detectSport>): ReturnType<typeof detectSport> => {
-    if (!feedTeams || detected.sportName === "NCAAF" || detected.rest !== text) return detected;
-    return feedTeamNicknames(text, feedTeams) ? { sportName: "NCAAF", rest: text, leadingText: "" } : detected;
+    if (!feedTeams || detected.rest !== text) return detected;
+    const football: ReturnType<typeof detectSport> =
+      detected.sportName !== "NCAAF" && feedTeamNicknames(text, footballTeams) ? { sportName: "NCAAF", rest: text, leadingText: "" } : detected;
+    if (basketballTeams.length === 0 || parseSupportedNbaProp(text)) return football;
+    const names = feedTeamNicknames(text, basketballTeams);
+    if (!names) return football;
+    const basketballOnly = names.some((n) => ncaabFootballLevel(TEAM_NICKNAME_CANONICAL[n] ?? n) === null);
+    if (!basketballOnly && football.sportName === "NCAAF" && nicknamesFor(text, "NCAAF").length > 0) return football;
+    return { sportName: "NCAAB", rest: text, leadingText: "" };
   };
   const nicknamesFor = (rest: string, sportName: string): string[] => {
+    if (sportName === "NCAAB" && basketballTeams.length > 0) {
+      const viaList = feedTeamNicknames(rest, basketballTeams);
+      if (viaList) return viaList;
+      const listed = findTeamNicknames(rest, "NCAAF");
+      if (listed.length > 0) return listed;
+      // An explicit "NCAAB Portland -3": the code settled the sport, so a school
+      // a pro team also answers to is that school here.
+      return findFeedTeamHits(rest, basketballTeams).map((h) => h.team.name.toLowerCase());
+    }
     if (sportName !== "NCAAF" || !feedTeams) return findTeamNicknames(rest, sportName);
-    const viaFeed = feedTeamNicknames(rest, feedTeams);
+    const viaFeed = feedTeamNicknames(rest, footballTeams);
     if (viaFeed) return viaFeed;
     const listed = findTeamNicknames(rest, sportName);
     if (listed.length > 0) return listed;
     // The lists settled the sport but named no team (a full name whose accent
     // the school keys miss: "Hawai'i Rainbow Warriors"). A full feed name is
     // unambiguous on its own.
-    return findFeedTeamHits(rest, feedTeams)
+    return findFeedTeamHits(rest, footballTeams)
       .filter((h) => h.via === "name")
       .map((h) => h.team.name.toLowerCase());
+  };
+
+  // College basketball has two halves. A quarter on an NCAAB pick is never read
+  // as a half or as the game: it goes to manual review.
+  const isNcaabQuarterLine = (sportName: string, text: string): boolean => sportName === "NCAAB" && isQuarterScope(text);
+
+  // Shorthand several schools answer to ("Loyola ML"), with no school of its own
+  // on the line. The same question a shared mascot asks, built from the list.
+  const collegeAliasPick = (
+    pickText: string,
+    capperName: string,
+    raw: string,
+    gameNumber: ParsedPick["gameNumber"]
+  ): ParsedPick | undefined => {
+    if (basketballTeams.length === 0 || parseNflNhlPlayerProp(pickText) || parseSupportedMlbProp(pickText)) return undefined;
+    const alias = findCollegeAliasConflict(pickText);
+    if (!alias) return undefined;
+    const forPlausibility = lineForPlausibility(pickText);
+    return {
+      capperName,
+      sportName: "",
+      description: withGameNumberSuffix(pickText, gameNumber),
+      betType: "SPREAD",
+      odds: -110,
+      hasExplicitOdds: false,
+      units: 1,
+      period: "FULL_GAME",
+      raw,
+      ambiguous: collegeAliasOptions(alias),
+      ambiguousKey: alias,
+      ambiguousBetType: forPlausibility.betType,
+      ambiguousLine: forPlausibility.line,
+      ambiguousPartialGame: forPlausibility.partialGame,
+      teamNicknames: [],
+      gameNumber,
+    };
   };
 
   // A line nothing else could place whose only team word is a mascot two or
@@ -3591,6 +3781,11 @@ export function parseCatalog(
         continue;
       }
       const detected = withFeedSport(remainder, detectSport(remainder));
+      if (isNcaabQuarterLine(detected.sportName, remainder)) {
+        unresolved.push(line);
+        unresolvedCapperNames.push(inlineOwner);
+        continue;
+      }
       if (!detected.sportName) {
         const pairResolved = resolveAmbiguousPair(remainder);
         if (pairResolved) {
@@ -3633,6 +3828,12 @@ export function parseCatalog(
             teamNicknames: [],
             gameNumber: inlineGameNumber,
           });
+          continue;
+        }
+
+        const inlineAliasPick = collegeAliasPick(remainder, inlineMatch, line, inlineGameNumber);
+        if (inlineAliasPick) {
+          results.push(inlineAliasPick);
           continue;
         }
 
@@ -3760,6 +3961,11 @@ export function parseCatalog(
     // Every line here has bet content or a league code - a header never gets
     // this far - so team nicknames are read whatever line precedes it.
     const detected = withFeedSport(pickText, detectSport(pickText));
+    if (isNcaabQuarterLine(detected.sportName, pickText)) {
+      unresolved.push(strippedText);
+      unresolvedCapperNames.push(currentCapper);
+      continue;
+    }
 
     // A brand-new capper's first-ever line, written as "Name - pick" with an
     // explicit trailing/inline league code ("BAMBINO - Juwan Johnson
@@ -3913,6 +4119,12 @@ export function parseCatalog(
         teamNicknames: [],
         gameNumber: headerGameNumber,
       });
+      continue;
+    }
+
+    const headerAliasPick = collegeAliasPick(pickText, currentCapper, strippedText, headerGameNumber);
+    if (headerAliasPick) {
+      results.push(headerAliasPick);
       continue;
     }
 
