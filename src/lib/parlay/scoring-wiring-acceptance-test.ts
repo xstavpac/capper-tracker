@@ -71,9 +71,9 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   check("Generate is deterministic", JSON.stringify(buildGeneratedParlay(snap, BASE, null, NOW)), JSON.stringify(p));
   const scoresOk = p.legs.every((l) => {
     const s = scorePick(l.pick, ctxOf(snap));
-    return passesGate(s, 55) && s.status === "SCORED" && l.score === selectionScore(s);
+    return passesGate(s, 55) && s.status === "SCORED" && l.score === s.rankScore * 100;
   });
-  check("every generated leg passes the gate and carries its selection score", scoresOk, true);
+  check("every generated leg passes the gate and carries its edge in points (selection.ts reads it, no -110 shim)", scoresOk, true);
   check("a leg still shows the record recordForGate reads", p.legs.every((l) => l.record !== null && l.basis !== null), true);
   check("no gate still leaves out a pick with no record", buildGeneratedParlay(snap, { ...BASE, minWinPct: 0, legCount: 25, maxLegsPerGame: 5 }, null, NOW).legs.some((l) => l.pick.pickId === "g4-no-record"), false);
   const empty = buildSnapshot(undefined, [], []);
@@ -82,7 +82,7 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   check("an engine with an absent rates field still builds", buildGeneratedParlay({ ...snap, platformRates: undefined, platformRateRows: undefined }, BASE, null, NOW).legs.length > 0, true);
 }
 
-// ---- Selection reads the -110 equivalent ----------------------------------------
+// ---- selectionScore (the -110 equivalent): nothing in selection reads it any more (PR 5); kept until PR 9 ----
 {
   const snap = buildSnapshot();
   const scale = selectionScore({ rankScore: -2 } as never);
@@ -194,7 +194,7 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   check("the same parlay with or without a collector", JSON.stringify(traced), JSON.stringify(plain));
   check("the funnel reconciles", [reconcileTrace(t), t.failed], [[], false]);
   const version = standardScoringVersion(GENERATOR_RULES);
-  check("the new version string", version, "standard/hier-k20-logit-edge-min5-v1/contrarian-wilson-z1.5");
+  check("the new version string (selection layer sel-v1)", version, "standard/hier-k20-logit-edge-min5-v1/sel-v1/contrarian-wilson-z1.5");
   check("it fits the intake's 80 characters", version.length <= 80, true);
   check("Hybrid's version string is unchanged", scoringVersionOf(GENERATOR_RULES, true), "hybrid/LEAGUE_FIRST/z1.5/no-headcount/prop-market-records");
   const s = t.extras.scoring!;
@@ -254,6 +254,7 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   check("Consensus doesn't import scoring.ts", consensus.includes("parlay/scoring"), false);
   const list = read("src/server/data/generator-runs-view.ts");
   check("the admin list query leaves the per-leg rows out", (list.match(/#- '\{scoring,legs\}'/g) ?? []).length, 2);
+  check("...and selection's per-leg rows (PR 5)", [(list.match(/#- '\{selection,legs\}'/g) ?? []).length, (list.match(/#- '\{selection,hedge\}'/g) ?? []).length], [2, 2]);
 }
 
 console.log(failures > 0 ? `\n${failures} check(s) FAILED.` : "\nAll checks passed.");

@@ -1,8 +1,8 @@
 // Fill from = Your picks only with more slip picks than Total legs (generator.ts
 // rule 6): the parlay is Total legs of them, Generate takes the strongest,
-// Regenerate draws another mix each tap - weighted toward the stronger, never
-// opposing, never over max legs per game, both sides of an opposing pair in
-// turn - and with no more picks than legs every pick is in and Regenerate says
+// Regenerate draws another mix each tap (selection.ts) - weighted toward the
+// stronger, never opposing, never over max legs per game, both sides of an
+// opposing pair in turn, never a mix already shown on the card - and with no more picks than legs every pick is in and Regenerate says
 // so. Runs Regenerate through the session (generator-session.ts) so the
 // history is the one the card keeps. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/generator-subset-acceptance-test.ts
@@ -146,7 +146,7 @@ async function taps(cap: number) {
     const p = r.parlay;
     if (p.variety !== "VARIED" || p.legs.length !== 7) allVaried = false;
     if (invalid(p.legs.map((l) => l.pick), cap)) anyInvalid = true;
-    if (keys.slice(-20).includes(p.generatedKey)) repeatInWindow = true;
+    if (keys.includes(p.generatedKey)) repeatInWindow = true;
     if (p.historyIds.length !== 7 || legSetKey(p.historyIds) !== legSetKey(ids(p))) historyCarriesSlip = false;
     changed.push(ids(p).filter((x) => !prev.includes(x)).length);
     chosen.push(ids(p));
@@ -172,7 +172,7 @@ async function taps(cap: number) {
   check(`${label} · 20 taps: Generate + 20 are 21 different parlays`, first20.size, 21);
   check(`${label} · 40 taps: every one VARIED with 7 legs`, allVaried, true);
   check(`${label} · 40 taps: no opposing legs, never over the per-game cap`, anyInvalid, false);
-  check(`${label} · 40 taps: none repeats any of the 20 before it (history window)`, repeatInWindow, false);
+  check(`${label} · 40 taps: none repeats any parlay shown on this card`, repeatInWindow, false);
   check(`${label} · history: each entry is the 7 slip picks used`, historyCarriesSlip, true);
   check(`${label} · strength: the draws average above a uniform pick of valid parlays`, drawnAvg > uniformAvg, true);
   check(`${label} · strength: the 5 strongest picks are in more parlays than uniform, the 5 weakest in fewer`, [topDrawn > topUniform, bottomDrawn < bottomUniform], [true, true]);
@@ -227,8 +227,12 @@ function edges() {
   }
   console.log(`  N = L + 1: Generate + 7 taps show ${new Set(history.map((h) => legSetKey(h))).size} of the 8 possible parlays`);
   check("N = L + 1: 7 taps, each VARIED and never the parlay just shown", neverTwiceInARow, true);
+  // All 8 shown: the 9th tap is "No other parlays" - the enumeration completed with nothing unseen - and keeps the parlay.
+  const shownAll = new Set(history.map((h) => legSetKey(h))).size;
   const ninth = buildGeneratedParlay(snap, settingsOf(7, 1), { seed: 99, history }, NOW);
-  check("N = L + 1: the next tap still differs from the last", [ninth.variety, ninth.generatedKey !== legSetKey(history[0])], ["VARIED", true]);
+  if (shownAll === 8) check("N = L + 1: all 8 shown, the next tap is NO_ALTERNATIVE (exhausted)", [ninth.variety, ninth.noAlternativeReason], ["NO_ALTERNATIVE", "NO_COMPARABLE"]);
+  else check("N = L + 1: fewer than 8 shown, the next tap is a parlay not shown yet", [ninth.variety, history.some((h) => legSetKey(h) === ninth.generatedKey)], ["VARIED", false]);
+  check("N = L + 1: Generate + 7 taps show 8 different parlays (never a repeat)", shownAll, 8);
 
   // 20 picks, max 1 per game: they can make 12 legs. Total legs 14 is past
   // that - not a subset; the 12 go in, the rest are dropped as today, and the

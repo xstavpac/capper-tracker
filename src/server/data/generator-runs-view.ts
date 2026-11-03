@@ -14,9 +14,10 @@ export const RUN_LIST_LIMIT = 30;
 
 type Mode = RunRow["mode"];
 
+// The list leaves out the per-leg arrays (swaps, scoring.legs, selection.legs / .hedge): the run page reads them.
 const LIST_EXTRAS = Prisma.sql`CASE WHEN extras ? 'snapshot'
-  THEN jsonb_set((extras - 'swaps') #- '{scoring,legs}', '{snapshot}', (extras -> 'snapshot') - 'games')
-  ELSE (extras - 'swaps') #- '{scoring,legs}' END`;
+  THEN jsonb_set((extras - 'swaps') #- '{scoring,legs}' #- '{selection,legs}' #- '{selection,hedge}', '{snapshot}', (extras -> 'snapshot') - 'games')
+  ELSE (extras - 'swaps') #- '{scoring,legs}' #- '{selection,legs}' #- '{selection,hedge}' END`;
 
 export async function loadRecentRuns(opts: { mode?: Mode; limit?: number } = {}): Promise<RunRow[]> {
   const limit = Math.min(Math.max(opts.limit ?? RUN_LIST_LIMIT, 1), 100);

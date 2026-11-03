@@ -1,0 +1,137 @@
+Before: a2a012f (PR 4 #386, before selection.ts). Old score = the -110 equivalent (%), new = edge in points (rankScore x 100).
+
+=== 6 legs, best available, default gate ===
+old legs: g0-small-over, g1-longshot, g2-mid-under, g3-defaulted, g4-other-leagues, g5-home
+new legs: g0-small-over, g1-longshot, g2-mid-under, g3-defaulted, g4-other-leagues, g5-home
+  same g0-small-over [GENERATED] old 67.99% -> new 15.61 pts
+  same g1-longshot [GENERATED] old 60.71% -> new 8.33 pts
+  same g2-mid-under [GENERATED] old 57.82% -> new 5.44 pts
+  same g3-defaulted [GENERATED] old 59.30% -> new 6.91 pts
+  same g4-other-leagues [GENERATED] old 66.19% -> new 13.81 pts
+  same g5-home [GENERATED] old 62.24% -> new 9.86 pts
+Hedge (Swap = All):
+  (no change) g0-elite-spread, -, g2-heavy-fav, g3-thin, -, -
+Contrarian: byte-identical (same Primary).
+
+=== 8 legs, 2 per game, default gate ===
+old legs: g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g2-heavy-fav, g3-defaulted, g4-other-leagues, g5-home
+new legs: g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g2-heavy-fav, g3-defaulted, g4-other-leagues, g5-home
+  same g0-small-over [GENERATED] old 67.99% -> new 15.61 pts
+  same g0-elite-spread [GENERATED] old 67.80% -> new 15.42 pts
+  same g1-longshot [GENERATED] old 60.71% -> new 8.33 pts
+  same g2-mid-under [GENERATED] old 57.82% -> new 5.44 pts
+  same g2-heavy-fav [GENERATED] old 56.51% -> new 4.13 pts
+  same g3-defaulted [GENERATED] old 59.30% -> new 6.91 pts
+  same g4-other-leagues [GENERATED] old 66.19% -> new 13.81 pts
+  same g5-home [GENERATED] old 62.24% -> new 9.86 pts
+Hedge (Swap = All):
+  (no change) -, -, -, -, -, g3-thin, -, -
+Contrarian: byte-identical (same Primary).
+
+=== 6 legs, 60% gate ===
+old legs: g0-small-over, g1-longshot, g4-other-leagues, g5-home
+new legs: g0-small-over, g1-longshot, g4-other-leagues, g5-home
+  same g0-small-over [GENERATED] old 67.99% -> new 15.61 pts
+  same g1-longshot [GENERATED] old 60.71% -> new 8.33 pts
+  same g4-other-leagues [GENERATED] old 66.19% -> new 13.81 pts
+  same g5-home [GENERATED] old 62.24% -> new 9.86 pts
+Hedge (Swap = All):
+  (no change) g0-elite-spread, -, -, -
+Contrarian: byte-identical (same Primary).
+
+=== 6 legs, no gate ===
+old legs: g0-small-over, g1-longshot, g2-mid-under, g3-defaulted, g4-other-leagues, g5-home
+new legs: g0-small-over, g1-longshot, g2-mid-under, g3-defaulted, g4-other-leagues, g5-home
+  same g0-small-over [GENERATED] old 67.99% -> new 15.61 pts
+  same g1-longshot [GENERATED] old 60.71% -> new 8.33 pts
+  same g2-mid-under [GENERATED] old 57.82% -> new 5.44 pts
+  same g3-defaulted [GENERATED] old 59.30% -> new 6.91 pts
+  same g4-other-leagues [GENERATED] old 66.19% -> new 13.81 pts
+  same g5-home [GENERATED] old 62.24% -> new 9.86 pts
+Hedge (Swap = All):
+  (no change) g0-elite-spread, -, g2-heavy-fav, g3-thin, -, -
+Contrarian: byte-identical (same Primary).
+
+=== 12 legs, 5 per game, no gate ===
+old legs: g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g2-heavy-fav, g3-defaulted, g3-thin, g4-other-leagues, g5-home
+new legs: g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g2-heavy-fav, g3-defaulted, g3-thin, g4-other-leagues, g5-home
+  same g0-small-over [GENERATED] old 67.99% -> new 15.61 pts
+  same g0-elite-spread [GENERATED] old 67.80% -> new 15.42 pts
+  same g1-longshot [GENERATED] old 60.71% -> new 8.33 pts
+  same g2-mid-under [GENERATED] old 57.82% -> new 5.44 pts
+  same g2-heavy-fav [GENERATED] old 56.51% -> new 4.13 pts
+  same g3-defaulted [GENERATED] old 59.30% -> new 6.91 pts
+  same g3-thin [GENERATED] old 55.42% -> new 3.04 pts
+  same g4-other-leagues [GENERATED] old 66.19% -> new 13.81 pts
+  same g5-home [GENERATED] old 62.24% -> new 9.86 pts
+Hedge (Swap = All):
+  (no change) -, -, -, -, -, -, -, -, -
+Contrarian: byte-identical (same Primary).
+
+=== slip competing on one game, 4 legs ===
+old legs: g0-small-over, g2-mid-under, g4-other-leagues, g5-home
+new legs: g0-small-over, g2-mid-under, g4-other-leagues, g5-home
+  same g0-small-over [GENERATED] old 67.99% -> new 15.61 pts
+  same g2-mid-under [SLIP] old slip -> new 5.44 pts
+  same g4-other-leagues [GENERATED] old 66.19% -> new 13.81 pts
+  same g5-home [GENERATED] old 62.24% -> new 9.86 pts
+Hedge (Swap = All):
+  (no change) g0-elite-spread, -, -, -
+Contrarian: byte-identical (same Primary).
+
+=== slip on two games, 6 legs, 2 per game ===
+old legs: g0-elite-spread, g1-longshot, g2-mid-under, g3-defaulted, g4-other-leagues, g5-home
+new legs: g0-elite-spread, g1-longshot, g2-mid-under, g3-defaulted, g4-other-leagues, g5-home
+  same g0-elite-spread [SLIP] old slip -> new 15.42 pts
+  same g1-longshot [GENERATED] old 60.71% -> new 8.33 pts
+  same g2-mid-under [GENERATED] old 57.82% -> new 5.44 pts
+  same g3-defaulted [GENERATED] old 59.30% -> new 6.91 pts
+  same g4-other-leagues [GENERATED] old 66.19% -> new 13.81 pts
+  same g5-home [SLIP] old slip -> new 9.86 pts
+Hedge (Swap = All):
+  (no change) g0-small-over, -, g2-heavy-fav, g3-thin, -, -
+Contrarian: byte-identical (same Primary).
+
+=== Totals + Props only, 6 legs, 3 per game ===
+old legs: g0-small-over, g2-mid-under, g3-thin, g4-other-leagues
+new legs: g0-small-over, g2-mid-under, g3-thin, g4-other-leagues
+  same g0-small-over [GENERATED] old 67.99% -> new 15.61 pts
+  same g2-mid-under [GENERATED] old 57.82% -> new 5.44 pts
+  same g3-thin [GENERATED] old 55.42% -> new 3.04 pts
+  same g4-other-leagues [GENERATED] old 66.19% -> new 13.81 pts
+Hedge (Swap = All):
+  (no change) -, -, -, -
+Contrarian: byte-identical (same Primary).
+
+=== Pick Mix 50/50 Spread / Totals, 6 legs, 2 per game ===
+old legs: g0-small-over, g0-elite-spread, g2-mid-under, g3-defaulted, g4-other-leagues, g5-home
+new legs: g0-small-over, g0-elite-spread, g2-mid-under, g3-defaulted, g4-other-leagues, g5-home
+  same g0-small-over [GENERATED] old 67.99% -> new 15.61 pts
+  same g0-elite-spread [GENERATED] old 67.80% -> new 15.42 pts
+  same g2-mid-under [GENERATED] old 57.82% -> new 5.44 pts
+  same g3-defaulted [GENERATED] old 59.30% -> new 6.91 pts
+  same g4-other-leagues [GENERATED] old 66.19% -> new 13.81 pts
+  same g5-home [GENERATED] old 62.24% -> new 9.86 pts
+Hedge (Swap = All):
+  (no change) -, -, -, g3-thin, -, -
+Contrarian: byte-identical (same Primary).
+
+=== Your picks only, 2 of 5 ===
+old legs: g2-heavy-fav, g5-away
+new legs: g2-heavy-fav, g5-away
+  same g2-heavy-fav [SLIP] old slip -> new 4.13 pts
+  same g5-away [SLIP] old slip -> new 8.49 pts
+Hedge (Swap = All):
+  (no change) g2-mid-under, -
+Contrarian: byte-identical (same Primary).
+
+=== Your picks only, 4 of 8, 2 per game ===
+old legs: g0-elite-spread, g1-longshot, g3-no-price, g5-home
+new legs: g0-elite-spread, g1-longshot, g3-no-price, g5-home
+  same g0-elite-spread [SLIP] old slip -> new 15.42 pts
+  same g1-longshot [SLIP] old slip -> new 8.33 pts
+  same g3-no-price [SLIP] old slip -> new 6.67 pts
+  same g5-home [SLIP] old slip -> new 9.86 pts
+Hedge (Swap = All):
+  (no change) g0-small-over, -, g3-thin, -
+Contrarian: byte-identical (same Primary).

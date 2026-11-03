@@ -17,6 +17,8 @@
 // trace `failed` and stops recording. Pure and client-safe (the engine runs in
 // the browser; the browser sends its trace to recordGeneratorRunAction).
 import { SCORING_VERSION } from "@/lib/parlay/scoring";
+import { SELECTION_VERSION, type SelectionTrace } from "@/lib/parlay/selection";
+export type SelectionTraceShape = SelectionTrace;
 
 export type RunMode = "STANDARD" | "YOUR_PICKS" | "HYBRID";
 // FETCH: a server-built run (the snapshot was just loaded). GENERATE / REGENERATE:
@@ -171,6 +173,8 @@ export type RunExtras = {
   snapshot?: SnapshotStats;
   swaps?: SwapModeTrace[];
   scoring?: ScoringTrace;
+  // Standard / Your picks under GENERATOR_RULES: what selection.ts did.
+  selection?: SelectionTrace;
   ladders?: LadderStatus[];
   unavailableTargets?: number;
   notes?: string[];
@@ -322,9 +326,9 @@ export function reconcileTrace(trace: Pick<RunTrace, "stages" | "reasons">): { s
   return bad;
 }
 
-// A Standard or Your-picks run under SCORING. Short: the intake keeps 80 characters.
+// A Standard or Your-picks run under SCORING, with its selection layer. Short: the intake keeps 80 characters.
 export function standardScoringVersion(parts: { z: number }): string {
-  return `standard/${SCORING_VERSION}/contrarian-wilson-z${parts.z}`;
+  return `standard/${SCORING_VERSION}/${SELECTION_VERSION}/contrarian-wilson-z${parts.z}`;
 }
 
 // Names the rules a run was scored under, for comparing runs across changes.

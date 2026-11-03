@@ -22,8 +22,8 @@
 //      plus the games of your picks. Without, from every game in the snapshot.
 //   3. SCORING (GENERATOR_RULES): a generated leg and a Hedge alternate are
 //      gated and ranked by lib/parlay/scoring.ts, and slip picks are ranked by
-//      it. Selection's rules below are unchanged and read selectionScore (the
-//      -110 equivalent) where they read Wilson. The record a leg shows is still
+//      it. Which gated legs are taken is lib/parlay/selection.ts, reading the
+//      edge (rankScore, in points) directly. The record a leg shows is still
 //      recordForGate's. Contrarian keeps Wilson and the raw gate. The rest of
 //      this rule is WILSON_RULES, and Contrarian under either:
 //      a generated leg must clear the 55% gate (qualifies, qualification-
@@ -64,28 +64,50 @@
 //      them, not all of them. Every slip pick whose game isn't over is a
 //      candidate - two that can't both be legs (blocks(), as in rule 1) are
 //      either/or, so both sides of an opposing pair can appear across builds -
-//      and max legs per game holds. Generate takes the strongest by Wilson
-//      lower bound; Regenerate draws them one at a time, weighted toward the
-//      stronger (Wilson ^ SUBSET_SHARPEN) and away from the last few parlays'
-//      legs. The picks not used are listed in `dropped` as not_selected. Pick
-//      Mix and Include Picks never shape this mode: slip picks are never
-//      filtered. With no more usable picks than the leg count, rule 1 holds
-//      unchanged: every one is in.
+//      and max legs per game holds. Generate takes the strongest; Regenerate
+//      draws (selection.ts) and never repeats a combination already shown on
+//      the result card - "No other parlays" only when every valid combination
+//      has been shown. The picks not used are listed in `dropped` as
+//      not_selected. Pick Mix and Include Picks never shape this mode: slip
+//      picks are never filtered. With no more usable picks than the leg count,
+//      rule 1 holds unchanged: every one is in.
 //
 // Generate (no `variation`) is deterministic: the same snapshot and settings
-// always give the same parlay. Regenerate (`variation`) gives another parlay of
-// comparable strength: games are drawn from those whose best leg is close to
-// the cut, each game's leg from the picks in a near-tie band of its best, all
-// weighted toward the stronger, and legs used in the last few parlays weigh
-// less. Nothing outside the gate is ever drawn. Slip picks and targets are the
-// same in every build.
+// always give the same parlay. Regenerate (`variation`) gives another parlay:
+// under GENERATOR_RULES a weighted draw without replacement, weight
+// exp(beta x edge) x a reuse penalty for recently shown legs, beta from the
+// selection mode (selection.ts); the same constraints hold in every draw. Nothing
+// outside the gate is ever drawn. Slip picks and targets are the same in every
+// build. WILSON_RULES / LEGACY_RULES keep the old Wilson bands and draws
+// (rollback only).
 import type { CapperLeagueRecords, PropMarketRecord } from "@/server/data/picks";
 import type { PropMarketKey } from "@/lib/prop-market-key";
 import { categoryRecordKey } from "@/lib/record-keys";
 import type { CategoryBreakdownItem } from "@/server/data/stats";
 import type { GeneratorGame, GeneratorPick, SwapMode } from "@/lib/parlay/auto-generate";
 import { bestAvailableRecord, rankPoolPicks, recordForGate, type RankRecordSource } from "@/lib/parlay/pick-record";
-import { compareScores, EMPTY_PLATFORM_RATES, passesGate, scorePick, selectionScore, type PickScore, type PlatformRates } from "@/lib/parlay/scoring";
+import { compareScores, EMPTY_PLATFORM_RATES, passesGate, scorePick, type PickScore, type PlatformRates } from "@/lib/parlay/scoring";
+import {
+  betKeyOf,
+  DEFAULT_SELECTION_MODE,
+  deriveSeed,
+  enumerateCombos,
+  fillLegs,
+  legTrace,
+  orderCandidates,
+  SELECTION_BETA,
+  seededRng as selectionRng,
+  selectLegs,
+  STANDARD_DRAW_TRIES,
+  SUBSET_DRAW_TRIES,
+  type FillRules,
+  type Ranked,
+  type RecentLeg,
+  type SelectionCandidate,
+  type SelectionLegTrace,
+  type SelectionMode,
+  type SelectionTrace,
+} from "@/lib/parlay/selection";
 import {
   compareByWilson,
   contrarianHeadcountPasses,
@@ -172,6 +194,7 @@ export type GeneratorRules = {
   // Wilson lower bound's z for the ranking (never the gate).
   z: number;
   // Regenerate's bands, in Wilson points at this z (PICK_TIE_BAND, GAME_BAND).
+  // Read only under WILSON: SCORING selects through selection.ts.
   pickTieBand: number;
   gameBand: number;
 };
@@ -211,8 +234,20 @@ export type GeneratorSettings = {
 };
 
 // A Regenerate: the seed to draw with, and the generated legs (pick ids) of
-// the parlays already shown, newest first.
-export type Variation = { seed: number; history: string[][] };
+// the parlays already shown, newest first. Under GENERATOR_RULES also:
+//   mode       - Best / Diversified / Explore (selection.ts), Diversified when absent;
+//   recentLegs - legs to weigh down (betKey + when shown), none when absent;
+//   shown      - every combination (legSetKey) shown on this result card, which
+//                Your picks only never repeats; `history`'s when absent.
+//   enumerationBudget - tests only: a smaller node / time budget for Your picks only's enumeration.
+export type Variation = {
+  seed: number;
+  history: string[][];
+  mode?: SelectionMode;
+  recentLegs?: RecentLeg[];
+  shown?: string[];
+  enumerationBudget?: { nodes?: number; ms?: number };
+};
 
 // ---------------------------------------------------------------------------
 // Output
@@ -232,7 +267,8 @@ export type EngineLeg = {
   basis: RankRecordSource | "MARKET" | null;
   // Generated legs only.
   wilsonLowerBound: number | null;
-  // A generated leg under SCORING: selectionScore, what orders it within its game.
+  // A generated leg under SCORING: its edge in percentage points (rankScore x 100),
+  // what selection orders and weighs it by.
   score?: number;
   // True when its game has another leg in this parlay (an SGP).
   sameGame: boolean;
@@ -320,13 +356,18 @@ export type GeneratedParlay = {
   // under rule 6 - which the client adds to its history, and their legSetKey.
   historyIds: string[];
   generatedKey: string;
+  // The same legs' betKeys (selection.ts): what the next Regenerate weighs down.
+  // GENERATOR_RULES only (absent under WILSON_RULES, whose output stays as it was).
+  historyBetKeys?: string[];
 };
 
-// How many recent parlays' legs weigh less, and by how much.
+// How many recent parlays' legs weigh less, and by how much (WILSON_RULES; under
+// GENERATOR_RULES the session passes those legs as Variation.recentLegs).
 export const RECENT_PARLAYS = 3;
 export const RECENT_WEIGHT = 0.35;
 // Draws a Regenerate tries before settling for one that only differs from the last parlay.
 const VARIATION_TRIES = 12;
+// WILSON_RULES only (rollback; PR 9 removes it, with the bands and varyDraw).
 // Rule 6's draw weight is Wilson lower bound to this power: Wilson alone barely
 // separates a 70% record from a 55% one (0.627 vs 0.475 at 100 picks), so a
 // subset would be close to uniform. At 8 the 70% pick weighs ~9x the 55% one,
@@ -381,7 +422,7 @@ type Candidate = {
   basis: "LEAGUE" | "OVERALL" | "MARKET";
   propMarket?: PropMarketKey;
   wilsonLowerBound: number;
-  // What selection's bands and draw weights read: selectionScore under SCORING, else Wilson.
+  // What selection reads: the edge in points (rankScore x 100) under SCORING, else Wilson.
   score: number;
   // SCORING only.
   pickScore: PickScore | null;
@@ -544,23 +585,48 @@ export function buildGeneratedParlay(
   const subset = settings.fillFrom === "YOUR_PICKS_ONLY" && allInLegs.length > legCount;
   let slipLegs = allInLegs;
   let subsetVariety: GeneratedParlay["variety"] = "BEST";
+  // Under SCORING: what selection did, for the run log (filled in below).
+  let selectionTrace: SelectionTrace | null = null;
+  const mode: SelectionMode = variation?.mode ?? DEFAULT_SELECTION_MODE;
+  const beta = SELECTION_BETA[mode];
+  const recentLegs = variation?.recentLegs ?? [];
+  const shownKeys = new Set(variation ? (variation.shown ?? variation.history.map((ids) => legSetKey(ids))) : []);
+  const onScreen = variation && variation.history.length > 0 ? legSetKey(variation.history[0]) : null;
+  const drawAt = (i: number) => ({ rng: selectionRng(deriveSeed(variation!.seed, i)), beta, recentLegs, now: now.getTime() });
+  const baseTrace = (): SelectionTrace => ({
+    trigger: variation ? "REGENERATE" : "GENERATE",
+    mode: variation ? mode : null,
+    beta: variation ? beta : null,
+    seed: variation ? variation.seed : null,
+    legs: [],
+    reuseHits: 0,
+  });
+  const finishTrace = (tr: SelectionTrace, picked: Ranked<unknown>[]) => {
+    tr.legs = picked.map(legTrace);
+    tr.reuseHits = picked.filter((r) => r.reuse < 1).length;
+    return tr;
+  };
   if (subset) {
+    // Two slip picks that can't both be legs, worked out once (only picks on
+    // one game ever block each other).
+    const buildOf = new Map(liveSlip.map((p) => [p.pickId, toBuildCandidate(p, snapshot.leagueRecords)]));
+    const blocked = new Set<string>();
+    for (const a of liveSlip)
+      for (const b of liveSlip)
+        if (a !== b && a.gameId === b.gameId && blocks(buildOf.get(a.pickId)!, buildOf.get(b.pickId)!).blocked) blocked.add(a.pickId + "|" + b.pickId);
+    if (scoreOf) {
+      const v = subsetSelection(liveSlip, scoreOf, blocked, legCount, maxPerGame, variation, shownKeys, onScreen, drawAt);
+      slipLegs = v.chosen.map((r) => r.item);
+      subsetVariety = v.variety;
+      selectionTrace = finishTrace({ ...baseTrace(), ...v.trace }, v.chosen);
+    } else {
     const options = liveSlip
       .map((pick) => {
         const r = bestAvailableRecord(pick, snapshot.leagueRecords);
         const wilson = r ? wilsonLowerBound(r.wins, r.losses, rules.z) : 0;
-        const s = scoreOf?.(pick) ?? null;
-        return { pick, build: toBuildCandidate(pick, snapshot.leagueRecords), wilsonLowerBound: wilson, score: s?.status === "SCORED" ? selectionScore(s) : wilson, record: { n: r?.n ?? 0 } };
+        return { pick, build: buildOf.get(pick.pickId)!, wilsonLowerBound: wilson, score: wilson, record: { n: r?.n ?? 0 } };
       });
-    const slipOrder = rankSlip(options.map((o) => o.pick), snapshot.leagueRecords, scoreOf).map((p) => p.pickId);
-    if (scoreOf) options.sort((a, b) => slipOrder.indexOf(a.pick.pickId) - slipOrder.indexOf(b.pick.pickId));
-    else options.sort((a, b) => compareByWilson({ pickId: a.pick.pickId, ...a }, { pickId: b.pick.pickId, ...b }));
-    // Two slip picks that can't both be legs, worked out once (only picks on
-    // one game ever block each other).
-    const blocked = new Set<string>();
-    for (const a of options)
-      for (const b of options)
-        if (a !== b && a.pick.gameId === b.pick.gameId && blocks(a.build, b.build).blocked) blocked.add(a.pick.pickId + "|" + b.pick.pickId);
+    options.sort((a, b) => compareByWilson({ pickId: a.pick.pickId, ...a }, { pickId: b.pick.pickId, ...b }));
     const draw = (rng: Rng | null, recent: ReadonlySet<string>): GeneratorPick[] => {
       const order = rng
         ? weightedOrder(options, (o) => Math.pow(o.score, SUBSET_SHARPEN) * (recent.has(o.pick.pickId) ? RECENT_WEIGHT : 1), rng)
@@ -580,6 +646,7 @@ export function buildGeneratedParlay(
       const v = varyDraw(variation, draw, pickIdsKey, () => draw(null, new Set()));
       slipLegs = v.chosen;
       subsetVariety = v.varied ? "VARIED" : "NO_ALTERNATIVE";
+    }
     }
     const used = new Set(slipLegs.map((p) => p.pickId));
     dropped.splice(0, dropped.length, ...dropped.filter((d) => d.reason === "over"));
@@ -660,7 +727,7 @@ export function buildGeneratedParlay(
         basis,
         ...(propMarket ? { propMarket } : {}),
         wilsonLowerBound: wilson,
-        score: pickScore?.status === "SCORED" ? selectionScore(pickScore) : wilson,
+        score: pickScore?.status === "SCORED" ? pickScore.rankScore * 100 : wilson,
         pickScore,
         category: betCategory(pick),
       });
@@ -766,6 +833,49 @@ export function buildGeneratedParlay(
   if (subset) {
     // The slip picks were drawn above (1b); nothing is generated.
     variety = subsetVariety;
+  } else if (scoreOf) {
+    // GENERATOR_RULES: selection.ts, on the edge, under the same constraints as above.
+    const cands: SelectionCandidate<Candidate>[] = eligible
+      .flatMap((g) => candidatesOf.get(g.gameId)!)
+      .map((c) => ({ item: c, id: c.pick.pickId, betKey: betKeyOf(c.pick), gameId: c.game.gameId, score: c.score, category: c.category }));
+    const fill: FillRules<Candidate, GeneratorPick> = {
+      need,
+      maxPerGame,
+      preLegs: slipLegs.map((p) => ({ gameId: p.gameId, leg: p, betKey: betKeyOf(p) })),
+      legOf: (c) => c.pick,
+      conflict: (a, b, gameId) => {
+        const game = gameById.get(gameId);
+        return !(sureOfGame(game, a) && sureOfGame(game, b)) || sameGameConflict(asCandidate(a), asCandidate(b)) !== null;
+      },
+      quota,
+      oneLegPerGameFirst: true,
+    };
+    const tr = baseTrace();
+    const primary = selectLegs(orderCandidates(cands, null), fill);
+    let picked = primary.chosen;
+    tr.repaired = primary.repaired;
+    if (variation) {
+      let found: Ranked<Candidate>[] | null = null;
+      let fallback: Ranked<Candidate>[] | null = null;
+      let rejected = 0;
+      for (let i = 0; i < STANDARD_DRAW_TRIES && !found; i++) {
+        const d = selectLegs(orderCandidates(cands, drawAt(i)), fill).chosen;
+        const key = legSetKey(d.map((r) => r.id));
+        if (!shownKeys.has(key)) found = d;
+        else {
+          rejected++;
+          if (!fallback && key !== onScreen) fallback = d;
+        }
+      }
+      tr.rejectedCombos = rejected;
+      const v = found ?? fallback;
+      if (v) {
+        picked = v;
+        variety = "VARIED";
+      } else variety = "NO_ALTERNATIVE";
+    }
+    chosen = picked.map((r) => r.item);
+    selectionTrace = finishTrace(tr, picked);
   } else if (!variation) {
     chosen = select(null, new Set());
   } else {
@@ -797,7 +907,14 @@ export function buildGeneratedParlay(
     traceSlip(t, snapshot.slipPicks.length, dropped, slipLegs.length);
     t.extras({
       ...(unavailableTargets.length > 0 ? { unavailableTargets: unavailableTargets.length } : {}),
-      notes: [`variety:${variety}`, ...(noAlternativeReason ? [`noAlternative:${noAlternativeReason}`] : []), `need:${need}`, `slipLegs:${slipLegs.length}`],
+      notes: [
+        `variety:${variety}`,
+        ...(noAlternativeReason ? [`noAlternative:${noAlternativeReason}`] : []),
+        `need:${need}`,
+        `slipLegs:${slipLegs.length}`,
+        ...(selectionTrace?.budgetExhausted ? ["selection:BUDGET_EXHAUSTED"] : []),
+        ...(selectionTrace?.exhausted ? [`selection:EXHAUSTED combos=${selectionTrace.combos ?? 0}`] : []),
+      ],
     });
   });
 
@@ -878,9 +995,18 @@ export function buildGeneratedParlay(
     }
   }
 
-  const hedge = bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE", scope, rules, gate, scoreOf, trace));
+  // Hedge's alternates under SCORING go through selection.ts: the top one on
+  // Generate, a mode-weighted draw (one seed per leg) on Regenerate.
+  const hedgeSelect: HedgeSelect | null = scoreOf
+    ? { draw: variation ? { seed: deriveSeed(variation.seed, "hedge"), beta } : null, picked: [] }
+    : null;
+  const hedge = bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE", scope, rules, gate, scoreOf, trace, hedgeSelect));
   const contrarian = bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "CONTRARIAN", scope, rules, gate, scoreOf, trace));
   if (scoreOf) traced((t) => t.extras({ scoring: traceScoring({ platformRows: snapshot.platformRateRows ?? 0, legs, hedge: hedge.ALL, scoreOf }) }));
+  if (selectionTrace) {
+    const tr: SelectionTrace = { ...selectionTrace, ...(hedgeSelect && hedgeSelect.picked.length > 0 ? { hedge: hedgeSelect.picked } : {}) };
+    traced((t) => t.extras({ selection: tr }));
+  }
 
   return {
     legs,
@@ -903,6 +1029,7 @@ export function buildGeneratedParlay(
     noAlternativeReason,
     historyIds,
     generatedKey: legSetKey(historyIds),
+    ...(scoreOf ? { historyBetKeys: subset ? slipLegs.map(betKeyOf) : chosen.map((c) => betKeyOf(c.pick)) } : {}),
   };
 }
 
@@ -928,6 +1055,74 @@ function varyDraw<T>(
   const chosen = found ?? fallback;
   return chosen ? { chosen, varied: true } : { chosen: primary(), varied: false };
 }
+
+// A slip pick with no record, in selection's points: below any scored pick, so it
+// is drawn only when nothing else fits (Wilson^8 gave it ~0 weight the same way).
+export const UNSCORED_POINTS = -100;
+
+// Rule 6 under GENERATOR_RULES: the leg count of the slip's picks. Generate takes
+// the strongest; Regenerate draws, rejects any combination already shown on the
+// card, then enumerates for the first unseen one. NO_ALTERNATIVE only when the
+// enumeration completes with nothing unseen; a budget running out first returns a
+// valid draw that differs from the parlay on screen (BUDGET_EXHAUSTED).
+function subsetSelection(
+  liveSlip: GeneratorPick[],
+  scoreOf: (p: GeneratorPick) => PickScore,
+  blocked: ReadonlySet<string>,
+  legCount: number,
+  maxPerGame: number,
+  variation: Variation | null,
+  shown: ReadonlySet<string>,
+  onScreen: string | null,
+  drawAt: (i: number) => Parameters<typeof orderCandidates>[1]
+): { chosen: Ranked<GeneratorPick>[]; variety: GeneratedParlay["variety"]; trace: Partial<SelectionTrace> } {
+  const cands: SelectionCandidate<GeneratorPick>[] = liveSlip.map((pick) => {
+    const s = scoreOf(pick);
+    return { item: pick, id: pick.pickId, betKey: betKeyOf(pick), gameId: pick.gameId, score: s.status === "SCORED" ? s.rankScore * 100 : UNSCORED_POINTS };
+  });
+  const fill: FillRules<GeneratorPick, GeneratorPick> = {
+    need: legCount,
+    maxPerGame,
+    preLegs: [],
+    legOf: (p) => p,
+    conflict: (a, b) => blocked.has(a.pickId + "|" + b.pickId) || blocked.has(b.pickId + "|" + a.pickId),
+    oneLegPerGameFirst: false,
+  };
+  const base = orderCandidates(cands, null);
+  const primary = selectLegs(base, fill);
+  if (!variation) return { chosen: primary.chosen, variety: "BEST", trace: { repaired: primary.repaired } };
+
+  const size = primary.chosen.length;
+  let rejected = 0;
+  let differs: Ranked<GeneratorPick>[] | null = null;
+  for (let i = 0; i < SUBSET_DRAW_TRIES; i++) {
+    const d = selectLegs(orderCandidates(cands, drawAt(i)), fill).chosen;
+    const key = legSetKey(d.map((r) => r.id));
+    if (d.length === size && !shown.has(key)) return { chosen: d, variety: "VARIED", trace: { rejectedCombos: rejected } };
+    rejected++;
+    if (!differs && d.length === size && key !== onScreen) differs = d;
+  }
+  const e = enumerateCombos(base, fill, size, shown, onScreen, variation.enumerationBudget);
+  const trace: Partial<SelectionTrace> = { rejectedCombos: rejected, combos: e.combos };
+  if (e.found) return { chosen: e.found, variety: "VARIED", trace };
+  if (e.budgetExhausted) {
+    // Never "No other parlays" on a budget: a draw that differs from the parlay on screen, else the enumeration's
+    // first such combination, else one leg swapped out of Generate's (drop one, refill without it).
+    let swapped: Ranked<GeneratorPick>[] | null = null;
+    for (let i = primary.chosen.length - 1; i >= 0 && !differs && !e.differsFromScreen && !swapped; i--) {
+      const d = fillLegs(base, fill, new Set([primary.chosen[i].id]));
+      if (d.length === size && legSetKey(d.map((r) => r.id)) !== onScreen) swapped = d;
+    }
+    const fallback = differs ?? e.differsFromScreen ?? swapped;
+    return fallback
+      ? { chosen: fallback, variety: "VARIED", trace: { ...trace, budgetExhausted: true } }
+      : { chosen: primary.chosen, variety: "NO_ALTERNATIVE", trace: { ...trace, budgetExhausted: true } };
+  }
+  return { chosen: primary.chosen, variety: "NO_ALTERNATIVE", trace: { ...trace, exhausted: true } };
+}
+
+// Hedge's selection: the draw (null on Generate) and, for the run log, what Swap = All picked.
+type HedgeSelect = { draw: { seed: number; beta: number } | null; picked: SelectionLegTrace[] };
 
 // ---------------------------------------------------------------------------
 // Hedge / Contrarian: each generated leg searched for an alternate on its own
@@ -955,7 +1150,8 @@ function buildSwap(
   rules: GeneratorRules,
   gate: number,
   scoreOf: ((pick: GeneratorPick) => PickScore) | null,
-  trace?: TraceCollector
+  trace?: TraceCollector,
+  hedgeSelect: HedgeSelect | null = null
 ): EngineSwap {
   const hedgeScore = mode === "AUTO_HEDGE" ? scoreOf : null;
   // Swap = All sees every leg; the other settings search a subset of them, so only All is traced leg by leg.
@@ -1000,7 +1196,7 @@ function buildSwap(
     };
     let best: { leg: { pickId: string }; rule: Rule; record: LegRecord; wilsonLowerBound: number; basis?: "LEAGUE" | "OVERALL"; propMarket?: PropMarketKey } | undefined;
     if (hedgeScore) {
-      const top = rankCandidatesByScore(
+      const gated = rankCandidatesByScore(
         primary,
         others.map(toParlayLeg),
         mode,
@@ -1009,7 +1205,17 @@ function buildSwap(
           return passesGate(s, gate) ? s : null;
         },
         compareScores
-      )[0];
+      );
+      let top = gated[0];
+      if (hedgeSelect && gated.length > 0) {
+        // selection.ts: score, then betKey, then pick id on Generate; a mode-weighted draw on Regenerate.
+        const order = orderCandidates(
+          gated.map((g) => ({ item: g, id: g.leg.pickId, betKey: betKeyOf(pickById.get(g.leg.pickId)!), gameId: leg.gameId, score: g.score.status === "SCORED" ? g.score.rankScore * 100 : UNSCORED_POINTS })),
+          hedgeSelect.draw ? { rng: selectionRng(deriveSeed(hedgeSelect.draw.seed, leg.pick.pickId)), beta: hedgeSelect.draw.beta } : null
+        );
+        top = order[0].item;
+        if (scope === "ALL") hedgeSelect.picked.push(legTrace(order[0]));
+      }
       // Scored means it has a record: the one its row shows.
       const shown = top && recordForGate(pickById.get(top.leg.pickId)!, snapshot.leagueRecords, snapshot.categoryRecords, rules.z, snapshot.propMarketRecords);
       best = top && shown
