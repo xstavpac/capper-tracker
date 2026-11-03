@@ -103,6 +103,8 @@ Auto-Generate is a separate entry point, not a fourth construction mode — ther
 
 ## 3. Qualification Rules
 
+**The win-rate lever is now an edge gate (scoring series, #378/#386).** The "minimum win rate" setting (L, default 55%, range 45–75%) keeps its label but no longer means a flat win-rate cutoff. It means *the edge a capper at L% would have at -110*: the required edge is L minus the -110 break-even (110/210), and a pick passes when its shrunk win probability minus the break-even of its own price is at least that. At -110 this is identical to the old flat gate; at shorter prices a pick needs a higher win rate, and at longer prices a lower one. L = 0 is no gate, and a pick with no record never passes. Every "55%" below should be read this way. The Wilson-bound ordering described in Sections 7 and 10 has been replaced by ranking on edge (`rankScore`) in `selection.ts`.
+
 **The 55% gate applies to engine-generated candidates, not to the user's original selections.** The bettor's tagged picks remain eligible for the Primary parlay because they are the user's explicit selections — BettingView never removes a user-tagged pick from Primary for falling short of 55%. Any capper record BettingView uses to introduce, replace, or justify an alternate leg in Auto Hedge or Contrarian must clear the same 55%+ market-specific threshold already used on the Sharp Money tab. There is no separate, looser threshold for secondary picks: if nothing clears 55%+ for a given leg, that leg simply has no hedge or contrarian option.
 
 **Market-specific qualification:** a capper's win rate qualifies them only for the specific market it was earned in. A 60% moneyline capper is not automatically treated as a qualifying Overs or NRFI capper — each market (ML, spread, total, F5, 1Q, NRFI, props) is scored and qualified independently. This keeps the hierarchy honest: strength in one market never silently justifies a swap into a different one.
@@ -162,14 +164,28 @@ This also resolves a naming ambiguity from the original brainstorm: only the **O
 
 ## 5. Contrarian Qualification Logic
 
-Contrarian is not "find any minority pick" — it's specifically "find a qualifying capper on the opposite side of a qualifying primary pick." A leg qualifies as a contrarian candidate when both are true:
+*Updated to match what shipped in #396 (`contra-samebet-v1`). The earlier design, which paired legs through the R2/R3 classifier and required a capper-headcount majority, no longer applies.*
 
-1. **Opposite-side qualification** — a tracked capper on the opposing side of that game/market clears the same 55%+ market-specific threshold used everywhere else in the generator.
-2. **Minority by capper count** — the primary's side has more tracked cappers on it than the opposing side (majority/minority is determined by *number of cappers*, not combined win rate).
+Contrarian is the other side of the same bet. For each primary leg, the generator looks for the opposite side of that same bet and swaps it in if it passes the scoring gate at its own price.
 
-If no capper on the opposing side clears 55%+, that leg has no contrarian option — same fallback behavior as Auto Hedge. This keeps Contrarian from becoming "pick something different for the sake of being different"; it only fires when there's a genuinely qualifying signal on the other side.
+**Same bet type only.** A moneyline leg is only ever flipped to the other side of that game's moneyline, a spread to the other side of the spread, a total to the other side of the total. Moneyline-to-spread cross pairs are dropped.
 
-**Headcount scope.** Condition 2 counts cappers on the primary's own market and scope, split by direction: team vs team for a moneyline or spread, Over vs Under for a total (R3), NRFI vs YRFI. Exact duplicates of the primary count toward its side. A tie fails. In the coverage run, Over/Under flips passed this test 40% of the time, against 22% for team-side flips.
+**Qualification is the scoring gate at the alternate's own price.** The opposite side qualifies if it passes the `scoring.ts` gate (Section 3) using its own price and its own capper's record. It does not have to score below the original, and it does not need a capper-count majority: the opposite side swaps in even when the original leg scores higher. Among qualifying alternates, `selection.ts` chooses, the same way it does for Hedge.
+
+**What counts as "the same bet".** The line on the opposite side must match within a per-market tolerance:
+
+| Market | Tolerance |
+|---|---|
+| Spreads and totals: NBA, WNBA, NCAAB, NFL, NCAAF | ±1 |
+| Totals: MLB, NHL, soccer | ±0.5 |
+| Run line (MLB), puck line (NHL) | exact |
+| Player props: yards | ±2.5 |
+| Player props: basketball points and combos | ±1 |
+| Player props: everything else | ±0.5 |
+
+**Excluded.** Yes/no props never get a Contrarian, and soccer moneyline is excluded (a three-way market has no single "other side"). Soccer spreads and totals are kept.
+
+**No qualifying alternate.** If nothing on the other side passes the gate, the leg stays as it was and the run log records `NO_QUALIFYING_CONTRARIAN`. Contrarian never fires just to be different; it needs a genuinely qualifying signal on the other side.
 
 ## 6. Data Coverage Check
 
