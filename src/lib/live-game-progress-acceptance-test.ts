@@ -91,6 +91,40 @@ function main() {
     check("NBA Q2 6:00 label", r?.label, "Q2 6:00");
   }
 
+  // ==== NCAAB: 2x20min halves, overtime from period 3 ====
+  {
+    const r = getLiveGameProgress("basketball_ncaab", { ...base, period: 1, clock: "20:00" });
+    check("NCAAB H1 20:00 label", r?.label, "H1 20:00");
+    approx("NCAAB H1 20:00 pct (start of game)", r!.pct, 0);
+  }
+  {
+    const r = getLiveGameProgress("basketball_ncaab", { ...base, period: 2, clock: "10:00" });
+    check("NCAAB H2 10:00 label", r?.label, "H2 10:00");
+    // 1 full half (20) + 10 elapsed = 30 / 40
+    approx("NCAAB H2 10:00 pct", r!.pct, 75);
+  }
+  {
+    const r = getLiveGameProgress("basketball_ncaab", { ...base, period: 1, clock: null });
+    check("NCAAB missing clock label falls back to the half", r?.label, "H1");
+    approx("NCAAB missing clock pct uses the half boundary (0/2)", r!.pct, 0);
+  }
+  {
+    // ESPN reports halftime as period 1 (state "in"), clock 0:00 or absent.
+    const r = getLiveGameProgress("basketball_ncaab", { ...base, period: 1, clock: "0:00" });
+    approx("NCAAB end of H1 pct", r!.pct, 50);
+  }
+  {
+    const r = getLiveGameProgress("basketball_ncaab", { ...base, period: 3, clock: "4:12" });
+    check("NCAAB first overtime renders OT, not H3", r?.label, "OT 4:12");
+    approx("NCAAB OT pct clamps to full bar", r!.pct, 100);
+  }
+  {
+    // Same convention as every sport here: later overtimes are OT2, OT3...
+    const r = getLiveGameProgress("basketball_ncaab", { ...base, period: 4, clock: "1:05" });
+    check("NCAAB second overtime label", r?.label, "OT2 1:05");
+    approx("NCAAB 2OT pct stays at full bar", r!.pct, 100);
+  }
+
   // ==== NHL: 3x20min periods ====
   {
     const r = getLiveGameProgress("icehockey_nhl", { ...base, period: 2, clock: "12:05" });

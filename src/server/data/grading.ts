@@ -38,6 +38,7 @@ import {
   type PlayerPropMarket,
 } from "@/lib/bet-line";
 import { NCAAF_CANONICAL_SUFFIX, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
+import { NCAAB_SPORT_KEY, PICK_GATED_SPORT_KEYS, finalsWithPicks, type PickTeamPair } from "@/lib/final-pick-gate";
 import {
   recordGradeFailures,
   clearGradeFailures,
@@ -244,9 +245,46 @@ export function finalScoreWriteNeeded(args: {
   return false;
 }
 
+// The team pairs of every PENDING pick in `sportKey` whose game time falls in
+// [fromMs, toMs): the one read behind PICK_GATED_SPORT_KEYS' "persist only
+// games with a pick". DISTINCT in Postgres, two short strings per row, served
+// by the (sportId, status, gameTime) index. Cross-user on purpose - a
+// GameResult row is shared by every user's picks on the game.
+export async function fetchPendingPickTeamPairs(sportKey: string, fromMs: number, toMs: number): Promise<PickTeamPair[]> {
+  const sportName = LIVE_SPORTS.find((s) => s.key === sportKey)?.label;
+  if (!sportName) return [];
+  return prisma.$queryRaw<PickTeamPair[]>(Prisma.sql`
+    SELECT DISTINCT p."homeTeam", p."awayTeam"
+    FROM picks p
+    JOIN sports s ON s.id = p."sportId"
+    WHERE s.name = ${sportName}
+      AND p.status = 'PENDING'
+      AND p."gameTime" >= ${new Date(fromMs)}
+      AND p."gameTime" < ${new Date(toMs)}
+  `);
+}
+
+// Drops the finals nobody has a pending pick on, for a pick-gated sport. No
+// finals means no query at all, and this runs BEFORE the existing-row read
+// below, so an unpicked final costs no DB read there either. A final persisted
+// earlier (its pick since graded) is not refreshed - a score correction after
+// grading changes nothing a user sees.
+async function keepFinalsWithPicks<T extends PickTeamPair & { commenceTime: string }>(
+  sportKey: string,
+  finals: T[]
+): Promise<T[]> {
+  if (finals.length === 0) return [];
+  const times = finals.map((g) => new Date(g.commenceTime).getTime()).filter(Number.isFinite);
+  if (times.length === 0) return [];
+  const DAY_MS = 86400000;
+  const pairs = await fetchPendingPickTeamPairs(sportKey, Math.min(...times) - DAY_MS, Math.max(...times) + DAY_MS);
+  return finalsWithPicks(finals, pairs, sportKey);
+}
+
 export async function persistFinalScores(sportKey: string, changes?: GameResultChange[]): Promise<number> {
   const games = await getLiveScoresForSport(sportKey);
-  const finals = games.filter((g) => g.status === "final" && g.scores);
+  const allFinals = games.filter((g) => g.status === "final" && g.scores);
+  const finals = PICK_GATED_SPORT_KEYS.has(sportKey) ? await keepFinalsWithPicks(sportKey, allFinals) : allFinals;
   const supportsFirstFive = sportKey === "baseball_mlb";
   const supportsFirstHalf =
     sportKey === "americanfootball_nfl" ||
@@ -926,7 +964,17 @@ type GradableGameResult = {
   firstInningHomeScore: number | null;
   firstInningAwayScore: number | null;
   linescoreJson: GameResult["linescoreJson"];
+  // The game's sport. A full GameResult has it; the candidate pools attach it
+  // (withSportKey). Only resolveOutcome's NCAAB guard reads it.
+  sportKey?: string;
 };
+
+// Candidate pools are selected for ONE sport, so the key is known without a
+// column: attached here (no DB cost) so resolveOutcome can see which sport a
+// row belongs to.
+export function withSportKey<T extends object>(rows: T[], sportKey: string): (T & { sportKey: string })[] {
+  return rows.map((r) => ({ ...r, sportKey }));
+}
 
 function segmentScore(period: string, game: GradableGameResult): SegmentScore | null {
   const firstHalf =
@@ -989,6 +1037,16 @@ export function resolveOutcome(
 ): GradeOutcome {
   const runGrade = (home: number, away: number): GradeOutcome =>
     gradePick(pick.betType, pick.betDetail ?? pick.homeTeam, pick.line, game.homeTeam, game.awayTeam, home, away, pick.pickedSide);
+
+  // NCAAB-PR-C: remove when halves grading lands.
+  // NCAAB plays two halves, but getEspnGameSegments computes the first half as
+  // linescore[0] + linescore[1] - which for a two-entry NCAAB linescore is ALL
+  // of regulation. Until that is fixed, only FULL_GAME is graded for NCAAB;
+  // every other period (halves, and the quarters it does not have) stays
+  // PENDING. The persisted row carries no linescore either (persistFinalScores
+  // does not fetch segments for NCAAB), so this is the second lock, not the
+  // only one.
+  if (game.sportKey === NCAAB_SPORT_KEY && pick.period !== "FULL_GAME") return null;
 
   // NRFI has its own dedicated first-inning score source and ignores period.
   if (pick.betType === "NRFI") {
@@ -1591,10 +1649,13 @@ async function fetchCandidatePool(
   const times = picks.map((p) => p.gameTime.getTime());
   const min = Math.min(...times) - 2 * 86400000;
   const max = Math.max(...times) + 2 * 86400000;
-  return prisma.gameResult.findMany({
-    where: { sportKey, gameDate: { gte: new Date(min), lt: new Date(max) } },
-    select: CANDIDATE_GAME_RESULT_SELECT,
-  });
+  return withSportKey(
+    await prisma.gameResult.findMany({
+      where: { sportKey, gameDate: { gte: new Date(min), lt: new Date(max) } },
+      select: CANDIDATE_GAME_RESULT_SELECT,
+    }),
+    sportKey
+  );
 }
 
 async function inChunks<T>(items: T[], fn: (item: T) => Promise<void>): Promise<void> {

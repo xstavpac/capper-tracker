@@ -10,7 +10,7 @@ import {
 import { captureTeamRecordSnapshots } from "@/server/data/team-record";
 import { captureSituationalRateSnapshots } from "@/server/data/situational-snapshots";
 import { syncDecayDeltaPredictions } from "@/server/data/model-engine/decay-delta-predictions";
-import { isTendencyPipelineEnabled, runTendencyPhase, tendencyPipelineSkippedLog } from "@/lib/tendency-pipeline";
+import { isTendencyPipelineEnabled, runTendencyPhase, tendencyPhaseEnabled, tendencyPipelineSkippedLog } from "@/lib/tendency-pipeline";
 import { runCronLogged } from "@/server/data/cron-runs";
 import { recomputeHeavyConsensusMarkets } from "@/server/data/heavy-consensus";
 import { pruneGeneratorRuns } from "@/server/data/generator-runs";
@@ -83,7 +83,7 @@ async function run(): Promise<Response> {
       // tomorrow's recompute overwrites it in place. Both are skipped, along
       // with the Decay Delta sync below, while TENDENCY_PIPELINE_ENABLED is off.
       const { tendencies, tendencySnapshots, tendencyMs, snapshotMs } = await runTendencyPhase(
-        pipelineEnabled,
+        tendencyPhaseEnabled(pipelineEnabled, sportKey),
         () => recomputeTeamTendencies(sportKey),
         () => snapshotTeamTendencies(sportKey),
         timed

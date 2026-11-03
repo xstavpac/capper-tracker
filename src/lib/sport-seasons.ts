@@ -106,6 +106,12 @@ export const SPORT_SEASON_CONFIG: Record<string, SportSeasonWindow> = {
   // own preseason buffer above. seasonEnd covers through the 12-team CFP
   // National Championship, confirmed for 2027-01-25, plus a buffer past it.
   americanfootball_ncaaf: { seasonStart: "2026-08-25", seasonEnd: "2027-02-01" },
+  // First regular-season games are 2026-11-01 (confirmed live against ESPN's
+  // mens-college-basketball scoreboard: nothing on 10-24/10-30/10-31, two
+  // events on 11-01, every event season.slug "regular-season"; its calendar
+  // starts the same day). ESPN's league season runs to 2027-04-07 and the
+  // national championship is ~04-05/06; seasonEnd 2027-04-10 leaves a buffer.
+  basketball_ncaab: { seasonStart: "2026-11-01", seasonEnd: "2027-04-10" },
 };
 
 // Fails closed, not open: a sportKey with no entry here is treated as
@@ -191,6 +197,7 @@ export const SPORT_LABEL_TO_KEY: Record<string, string> = {
   NHL: "icehockey_nhl",
   WNBA: "basketball_wnba",
   NCAAF: "americanfootball_ncaaf",
+  NCAAB: "basketball_ncaab",
 };
 // KBO / CFL / ATP are deliberately absent: they have no SPORT_SEASON_CONFIG
 // entry, and mapping them here would flip isSportLabelInSeason from its

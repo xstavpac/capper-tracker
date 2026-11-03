@@ -6,7 +6,8 @@
 // Exits non-zero if any assertion fails.
 
 import { getAllLiveScores } from "./live-ticker";
-import { RESOLVABLE_SPORT_KEYS, type ScoreGame } from "./odds";
+import { RESOLVABLE_SPORT_KEYS as ALL_RESOLVABLE_SPORT_KEYS, type ScoreGame } from "./odds";
+import { isTickerSportKey } from "../../lib/global-surface-sports";
 import { buildTickerScoresResponse, TICKER_SCORES_CACHE_CONTROL } from "../../lib/ticker-scores-response";
 
 let failures = 0;
@@ -31,6 +32,10 @@ function game(sportKey: string, i: number): ScoreGame {
     innings: null,
   };
 }
+
+// The ticker carries every resolvable sport except the ones kept off all-league surfaces (NCAAB);
+// ncaab-global-surfaces-acceptance-test.ts pins that exclusion itself.
+const RESOLVABLE_SPORT_KEYS = ALL_RESOLVABLE_SPORT_KEYS.filter(isTickerSportKey);
 
 const perSport = new Map<string, ScoreGame[]>(
   RESOLVABLE_SPORT_KEYS.map((k, idx) => [k, Array.from({ length: idx + 1 }, (_, i) => game(k, i))])

@@ -11,6 +11,7 @@ import { sameEasternDay } from "@/lib/dates";
 import { shortTeamName } from "@/lib/pick-team-group";
 import { getTeamColor } from "@/lib/team-colors";
 import { teamNamesMatch } from "@/lib/team-name-match";
+import { isTickerSportKey } from "@/lib/global-surface-sports";
 
 export type TickerGame = {
   id: string;
@@ -96,10 +97,15 @@ export function interleaveByCommenceTime(perSport: TickerGame[][]): TickerGame[]
 // a real score or LIVE state here; a ticker with no live/score data for a
 // sport isn't "genuinely live," so it's left out rather than shown as a
 // permanently-blank segment.
+// The sports the ticker (and its public score feeds) carry: every resolvable
+// sport except the ones kept off all-league surfaces (NCAAB - see
+// global-surface-sports.ts).
+export const TICKER_SPORT_KEYS = RESOLVABLE_SPORT_KEYS.filter(isTickerSportKey);
+
 export async function getLiveTickerGames(): Promise<TickerGame[]> {
   const now = new Date();
   const perSport = await Promise.all(
-    RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
+    TICKER_SPORT_KEYS.map(async (sportKey) => {
       const sportLabel = LIVE_SPORTS.find((s) => s.key === sportKey)?.label ?? sportKey;
       const [allOdds, scores] = await Promise.all([getTickerOddsForSport(sportKey), getClientScoresForSport(sportKey)]);
       return buildTickerGamesForSport(sportKey, sportLabel, allOdds, scores, now);
@@ -125,11 +131,11 @@ export type LiveScoresBySport = Record<string, ScoreGame[]>;
 export async function getAllLiveScores(
   fetchScores: (sportKey: string) => Promise<ScoreGame[]> = getClientScoresForSport
 ): Promise<{ scoresBySport: LiveScoresBySport; failed: string[] }> {
-  const settled = await Promise.allSettled(RESOLVABLE_SPORT_KEYS.map((sportKey) => fetchScores(sportKey)));
+  const settled = await Promise.allSettled(TICKER_SPORT_KEYS.map((sportKey) => fetchScores(sportKey)));
   const scoresBySport: LiveScoresBySport = {};
   const failed: string[] = [];
   settled.forEach((result, i) => {
-    const sportKey = RESOLVABLE_SPORT_KEYS[i];
+    const sportKey = TICKER_SPORT_KEYS[i];
     if (result.status === "fulfilled") scoresBySport[sportKey] = result.value;
     else failed.push(sportKey);
   });

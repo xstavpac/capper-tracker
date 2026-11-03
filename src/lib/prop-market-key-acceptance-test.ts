@@ -26,6 +26,8 @@ check("families of the live sports", LIVE_SPORTS.map((s) => [s.label, propSportF
   ["NHL", "HOCKEY"],
   ["WNBA", "BASKETBALL"],
   ["NCAAF", "FOOTBALL"],
+  // NCAAB is a live sport now but player props stay out of scope: no family.
+  ["NCAAB", null],
 ]);
 check("sport name is case-insensitive", propSportFamily("nba"), "BASKETBALL");
 check("a sport with no family", propSportFamily("NCAAB"), null);
