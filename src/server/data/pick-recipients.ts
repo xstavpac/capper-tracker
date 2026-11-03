@@ -145,8 +145,9 @@ export async function removeRecipient(id: string): Promise<RecipientMutation> {
 
 // Cleanup of a recipient's delivered copies, if it is ever needed: ids first (copies only, that user only), then a
 // delete by id AND userId. Never a filter-only delete. Not wired to any UI.
+const COPY_ID_PAGE = 5000;
 export async function listRecipientCopyIds(recipientUserId: string): Promise<string[]> {
-  const rows = await prisma.pick.findMany({ where: { userId: recipientUserId, isRecipientCopy: true }, select: { id: true } });
+  const rows = await prisma.pick.findMany({ where: { userId: recipientUserId, isRecipientCopy: true }, select: { id: true }, take: COPY_ID_PAGE });
   return rows.map((r) => r.id);
 }
 

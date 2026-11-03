@@ -99,7 +99,6 @@ async function main() {
   const { ingestTelegramBatch } = await import("@/server/data/telegram-ingest");
   const { resolveReviewItem } = await import("@/server/data/ingest-review");
   const { createPick } = await import("@/server/data/picks");
-  const { insertPicksDeduped } = await import("@/server/data/pick-dedup");
   const { FREE_PICK_LIMIT } = await import("@/lib/entitlements");
   const { buildPlatformRatesRecompute } = await import("@/server/data/platform-category-rates");
   const R = await import("@/server/data/pick-recipients");
@@ -193,6 +192,8 @@ async function main() {
     created.picks.push(...copiesOnFree.map((p) => p.id));
     expect("free-plan recipient at the limit still received the copies", copiesOnFree.length, 2);
     expect("free-plan recipient is now over the limit (admin-granted)", freeNow.length, FREE_PICK_LIMIT + 2);
+    // The REAL insert (not the failure-injecting stub); taken from the module as it was before the stub replaced it.
+    const insertPicksDeduped = realDedup.insertPicksDeduped as typeof import("@/server/data/pick-dedup").insertPicksDeduped;
     const normal = await insertPicksDeduped(ids.free, [
       { capperName: "Filler", sportName: "NBA", homeTeam: "X", awayTeam: "Y", betType: "MONEYLINE", odds: -110, units: 1, gameTime: new Date(NOW + 9 * H) },
     ]);

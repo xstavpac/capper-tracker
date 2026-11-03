@@ -151,7 +151,7 @@ check("an empty report says so", formatAdminReport(runsReport([])).includes("No 
 
 // ---- the tab ----
 const keys = ADMIN_TABS.map((t) => t.key);
-check("the Generator tab is registered, with its page's href, before Imports", [ADMIN_TABS.find((t) => t.key === "generator")?.href, keys.indexOf("generator") < keys.indexOf("imports"), keys.at(-1)], ["/admin/generator", true, "imports"]);
+check("the Generator tab is registered, with its page's href, before Imports", [ADMIN_TABS.find((t) => t.key === "generator")?.href, keys.indexOf("generator") < keys.indexOf("imports"), keys.at(-1)], ["/admin/generator", true, "recipients"]);
 
 console.log(failures > 0 ? `\n${failures} check(s) FAILED.` : "\nAll checks passed.");
 process.exit(failures > 0 ? 1 : 0);
