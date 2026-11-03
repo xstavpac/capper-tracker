@@ -1,8 +1,96 @@
 Long-shot gate frozen diff: origin/main 24cbb47 (before the long-shot gate) -> now, gates 0 / 45 / 55 / 60 / 75.
 
 === Gate verdicts that changed (slate @ gate: pick, before -> now, why) ===
-Changed verdicts per gate: 0%: 0, 45%: 0, 55%: 0, 60%: 0, 75%: 0
+  SWITCH @ 45%: g2-heavy-fav (Eagles ML -1000) passes -> fails · raw 18-4 (81.8%) vs break-even 90.9% at -1000; edge 4.1 vs required -7.4
+  SWITCH @ 55%: g2-heavy-fav (Eagles ML -1000) passes -> fails · raw 18-4 (81.8%) vs break-even 90.9% at -1000; edge 4.1 vs required 2.6
+Changed verdicts per gate: 0%: 0, 45%: 1, 55%: 1, 60%: 0, 75%: 0
 
 === Cases whose output changed ===
-Cases changed per gate (of 51 each): 0%: 0, 45%: 0, 55%: 0, 60%: 0, 75%: 0
+SWITCH · 6 legs, best available, default gate @ 45%
+  hedge (SUGGESTED): g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  hedge (ALL): g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+SWITCH · 6 legs, best available, default gate @ 55%
+  hedge (SUGGESTED): g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  hedge (ALL): g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+SWITCH · 8 legs, 2 per game, default gate @ 45%
+  hedge (SUGGESTED): g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  hedge (ALL): g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+SWITCH · 8 legs, 2 per game, default gate @ 55%
+  hedge (SUGGESTED): g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  hedge (ALL): g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+SWITCH · 6 legs, 60% gate @ 45%
+  hedge (SUGGESTED): g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  hedge (ALL): g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+SWITCH · 6 legs, 60% gate @ 55%
+  hedge (SUGGESTED): g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  hedge (ALL): g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+SWITCH · 6 legs, no gate @ 45%
+  hedge (SUGGESTED): g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  hedge (ALL): g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+SWITCH · 6 legs, no gate @ 55%
+  hedge (SUGGESTED): g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  hedge (ALL): g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->g0-elite-spread, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+SWITCH · 12 legs, 5 per game, no gate @ 45%
+  legs: g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g2-heavy-fav, g3-defaulted, g3-thin, g4-other-leagues, g4-prop, g5-home
+     -> g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g3-defaulted, g3-thin, g4-other-leagues, g4-prop, g5-home
+     out: g2-heavy-fav; in: (none)
+  hedge (SUGGESTED): g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g2-heavy-fav->NO_ALTERNATE, g3-defaulted->NO_ALTERNATE, g3-thin->NO_ALTERNATE, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->NO_ALTERNATE, g3-thin->NO_ALTERNATE, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  contrarian (SUGGESTED): g0-small-over->NO_QUALIFYING_CONTRARIAN, g0-elite-spread->NO_QUALIFYING_CONTRARIAN, g1-longshot->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g2-heavy-fav->NO_QUALIFYING_CONTRARIAN, g3-defaulted->NO_QUALIFYING_CONTRARIAN, g3-thin->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g4-prop->NO_QUALIFYING_CONTRARIAN, g5-home->g5-away
+                 -> g0-small-over->NO_QUALIFYING_CONTRARIAN, g0-elite-spread->NO_QUALIFYING_CONTRARIAN, g1-longshot->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g3-defaulted->NO_QUALIFYING_CONTRARIAN, g3-thin->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g4-prop->NO_QUALIFYING_CONTRARIAN, g5-home->g5-away
+  hedge (YOUR_PICKS): g0-small-over->OUT_OF_SCOPE, g0-elite-spread->OUT_OF_SCOPE, g1-longshot->OUT_OF_SCOPE, g2-mid-under->OUT_OF_SCOPE, g2-heavy-fav->OUT_OF_SCOPE, g3-defaulted->OUT_OF_SCOPE, g3-thin->OUT_OF_SCOPE, g4-other-leagues->OUT_OF_SCOPE, g4-prop->OUT_OF_SCOPE, g5-home->OUT_OF_SCOPE
+            -> g0-small-over->OUT_OF_SCOPE, g0-elite-spread->OUT_OF_SCOPE, g1-longshot->OUT_OF_SCOPE, g2-mid-under->OUT_OF_SCOPE, g3-defaulted->OUT_OF_SCOPE, g3-thin->OUT_OF_SCOPE, g4-other-leagues->OUT_OF_SCOPE, g4-prop->OUT_OF_SCOPE, g5-home->OUT_OF_SCOPE
+  contrarian (YOUR_PICKS): g0-small-over->OUT_OF_SCOPE, g0-elite-spread->OUT_OF_SCOPE, g1-longshot->OUT_OF_SCOPE, g2-mid-under->OUT_OF_SCOPE, g2-heavy-fav->OUT_OF_SCOPE, g3-defaulted->OUT_OF_SCOPE, g3-thin->OUT_OF_SCOPE, g4-other-leagues->OUT_OF_SCOPE, g4-prop->OUT_OF_SCOPE, g5-home->OUT_OF_SCOPE
+                 -> g0-small-over->OUT_OF_SCOPE, g0-elite-spread->OUT_OF_SCOPE, g1-longshot->OUT_OF_SCOPE, g2-mid-under->OUT_OF_SCOPE, g3-defaulted->OUT_OF_SCOPE, g3-thin->OUT_OF_SCOPE, g4-other-leagues->OUT_OF_SCOPE, g4-prop->OUT_OF_SCOPE, g5-home->OUT_OF_SCOPE
+  hedge (ALL): g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g2-heavy-fav->NO_ALTERNATE, g3-defaulted->NO_ALTERNATE, g3-thin->NO_ALTERNATE, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->NO_ALTERNATE, g3-thin->NO_ALTERNATE, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  contrarian (ALL): g0-small-over->NO_QUALIFYING_CONTRARIAN, g0-elite-spread->NO_QUALIFYING_CONTRARIAN, g1-longshot->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g2-heavy-fav->NO_QUALIFYING_CONTRARIAN, g3-defaulted->NO_QUALIFYING_CONTRARIAN, g3-thin->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g4-prop->NO_QUALIFYING_CONTRARIAN, g5-home->g5-away
+                 -> g0-small-over->NO_QUALIFYING_CONTRARIAN, g0-elite-spread->NO_QUALIFYING_CONTRARIAN, g1-longshot->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g3-defaulted->NO_QUALIFYING_CONTRARIAN, g3-thin->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g4-prop->NO_QUALIFYING_CONTRARIAN, g5-home->g5-away
+  shortfall: ["10 of 12 legs: only 6 games have picks that clear your bar."] -> ["9 of 12 legs: only 6 games have picks that clear your bar."]
+  limited: {"have":10,"need":12} -> {"have":9,"need":12}
+SWITCH · 12 legs, 5 per game, no gate @ 55%
+  legs: g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g2-heavy-fav, g3-defaulted, g3-thin, g4-other-leagues, g4-prop, g5-home
+     -> g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g3-defaulted, g3-thin, g4-other-leagues, g4-prop, g5-home
+     out: g2-heavy-fav; in: (none)
+  hedge (SUGGESTED): g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g2-heavy-fav->NO_ALTERNATE, g3-defaulted->NO_ALTERNATE, g3-thin->NO_ALTERNATE, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->NO_ALTERNATE, g3-thin->NO_ALTERNATE, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  contrarian (SUGGESTED): g0-small-over->NO_QUALIFYING_CONTRARIAN, g0-elite-spread->NO_QUALIFYING_CONTRARIAN, g1-longshot->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g2-heavy-fav->NO_QUALIFYING_CONTRARIAN, g3-defaulted->NO_QUALIFYING_CONTRARIAN, g3-thin->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g4-prop->NO_QUALIFYING_CONTRARIAN, g5-home->g5-away
+                 -> g0-small-over->NO_QUALIFYING_CONTRARIAN, g0-elite-spread->NO_QUALIFYING_CONTRARIAN, g1-longshot->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g3-defaulted->NO_QUALIFYING_CONTRARIAN, g3-thin->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g4-prop->NO_QUALIFYING_CONTRARIAN, g5-home->g5-away
+  hedge (YOUR_PICKS): g0-small-over->OUT_OF_SCOPE, g0-elite-spread->OUT_OF_SCOPE, g1-longshot->OUT_OF_SCOPE, g2-mid-under->OUT_OF_SCOPE, g2-heavy-fav->OUT_OF_SCOPE, g3-defaulted->OUT_OF_SCOPE, g3-thin->OUT_OF_SCOPE, g4-other-leagues->OUT_OF_SCOPE, g4-prop->OUT_OF_SCOPE, g5-home->OUT_OF_SCOPE
+            -> g0-small-over->OUT_OF_SCOPE, g0-elite-spread->OUT_OF_SCOPE, g1-longshot->OUT_OF_SCOPE, g2-mid-under->OUT_OF_SCOPE, g3-defaulted->OUT_OF_SCOPE, g3-thin->OUT_OF_SCOPE, g4-other-leagues->OUT_OF_SCOPE, g4-prop->OUT_OF_SCOPE, g5-home->OUT_OF_SCOPE
+  contrarian (YOUR_PICKS): g0-small-over->OUT_OF_SCOPE, g0-elite-spread->OUT_OF_SCOPE, g1-longshot->OUT_OF_SCOPE, g2-mid-under->OUT_OF_SCOPE, g2-heavy-fav->OUT_OF_SCOPE, g3-defaulted->OUT_OF_SCOPE, g3-thin->OUT_OF_SCOPE, g4-other-leagues->OUT_OF_SCOPE, g4-prop->OUT_OF_SCOPE, g5-home->OUT_OF_SCOPE
+                 -> g0-small-over->OUT_OF_SCOPE, g0-elite-spread->OUT_OF_SCOPE, g1-longshot->OUT_OF_SCOPE, g2-mid-under->OUT_OF_SCOPE, g3-defaulted->OUT_OF_SCOPE, g3-thin->OUT_OF_SCOPE, g4-other-leagues->OUT_OF_SCOPE, g4-prop->OUT_OF_SCOPE, g5-home->OUT_OF_SCOPE
+  hedge (ALL): g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g2-heavy-fav->NO_ALTERNATE, g3-defaulted->NO_ALTERNATE, g3-thin->NO_ALTERNATE, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-small-over->NO_ALTERNATE, g0-elite-spread->NO_ALTERNATE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->NO_ALTERNATE, g3-thin->NO_ALTERNATE, g4-other-leagues->NO_ALTERNATE, g4-prop->NO_ALTERNATE, g5-home->NO_ALTERNATE
+  contrarian (ALL): g0-small-over->NO_QUALIFYING_CONTRARIAN, g0-elite-spread->NO_QUALIFYING_CONTRARIAN, g1-longshot->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g2-heavy-fav->NO_QUALIFYING_CONTRARIAN, g3-defaulted->NO_QUALIFYING_CONTRARIAN, g3-thin->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g4-prop->NO_QUALIFYING_CONTRARIAN, g5-home->g5-away
+                 -> g0-small-over->NO_QUALIFYING_CONTRARIAN, g0-elite-spread->NO_QUALIFYING_CONTRARIAN, g1-longshot->NO_QUALIFYING_CONTRARIAN, g2-mid-under->NO_QUALIFYING_CONTRARIAN, g3-defaulted->NO_QUALIFYING_CONTRARIAN, g3-thin->NO_QUALIFYING_CONTRARIAN, g4-other-leagues->NO_QUALIFYING_CONTRARIAN, g4-prop->NO_QUALIFYING_CONTRARIAN, g5-home->g5-away
+  shortfall: ["10 of 12 legs: only 6 games have picks that clear your bar."] -> ["9 of 12 legs: only 6 games have picks that clear your bar."]
+  limited: {"have":10,"need":12} -> {"have":9,"need":12}
+SWITCH · slip on two games, 6 legs, 2 per game @ 45%
+  hedge (SUGGESTED): g0-elite-spread->OUT_OF_SCOPE, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->OUT_OF_SCOPE
+            -> g0-elite-spread->OUT_OF_SCOPE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->OUT_OF_SCOPE
+  hedge (ALL): g0-elite-spread->g0-small-over, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-elite-spread->g0-small-over, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+SWITCH · slip on two games, 6 legs, 2 per game @ 55%
+  hedge (SUGGESTED): g0-elite-spread->OUT_OF_SCOPE, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->OUT_OF_SCOPE
+            -> g0-elite-spread->OUT_OF_SCOPE, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->OUT_OF_SCOPE
+  hedge (ALL): g0-elite-spread->g0-small-over, g1-longshot->NO_ALTERNATE, g2-mid-under->g2-heavy-fav, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+            -> g0-elite-spread->g0-small-over, g1-longshot->NO_ALTERNATE, g2-mid-under->NO_ALTERNATE, g3-defaulted->g3-thin, g4-other-leagues->NO_ALTERNATE, g5-home->NO_ALTERNATE
+Cases changed per gate (of 51 each): 0%: 0, 45%: 6, 55%: 6, 60%: 0, 75%: 0
 Every other case is byte-identical to before (Primary, dropped, Hedge and Contrarian under every Swap setting, shortfall, the whole output).

@@ -10,7 +10,7 @@ new legs: g0-small-over, g1-longshot, g2-mid-under, g3-defaulted, g4-other-leagu
   same g4-other-leagues [GENERATED] old 66.19% -> new 13.81 pts
   same g5-home [GENERATED] old 62.24% -> new 9.86 pts
 Hedge (Swap = All):
-  (no change) g0-elite-spread, -, g2-heavy-fav, g3-thin, -, -
+  leg g2-mid-under: g2-heavy-fav (4.13) -> none (-) - g2-heavy-fav no longer clears the gate: the long-shot rule (ls1), its raw record is under its own price's break-even
 Contrarian: redefined in PR 7 - see contrarian-diff.txt.
 
 === 8 legs, 2 per game, default gate ===
@@ -26,7 +26,6 @@ new legs: g0-small-over, g0-elite-spread, g1-longshot, g2-mid-under, g3-defaulte
   same g5-home [GENERATED] old 62.24% -> new 9.86 pts
   IN   g4-prop [GENERATED] new 7.91 pts - an NBA prop now stacks on its game: the same-game rules read it with its sport (the NBA same-game fix, after PR 7)
 Hedge (Swap = All):
-  leg g2-mid-under: none (-) -> g2-heavy-fav (4.13) - g2-heavy-fav was a leg before and no longer is, so it is free to be the alternate
   new leg g4-prop: alternate none (NO_ALTERNATE)
 Contrarian: redefined in PR 7 - see contrarian-diff.txt.
 
@@ -92,7 +91,7 @@ new legs: g0-elite-spread, g1-longshot, g2-mid-under, g3-defaulted, g4-other-lea
   same g4-other-leagues [GENERATED] old 66.19% -> new 13.81 pts
   same g5-home [SLIP] old slip -> new 9.86 pts
 Hedge (Swap = All):
-  (no change) g0-small-over, -, g2-heavy-fav, g3-thin, -, -
+  leg g2-mid-under: g2-heavy-fav (4.13) -> none (-) - g2-heavy-fav no longer clears the gate: the long-shot rule (ls1), its raw record is under its own price's break-even
 Contrarian: redefined in PR 7 - see contrarian-diff.txt.
 
 === Totals + Props only, 6 legs, 3 per game ===

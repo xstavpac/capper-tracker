@@ -48,6 +48,15 @@
 // "shrunk probability >= L". L = 0 is no gate; a pick with no record never passes.
 // Ranking reads the same edge (rankScore).
 //
+// Long-shot rule (ls1): with L > 0 a pick with a real price also needs its capper's
+// RAW record in the scored category (in-league plus other leagues, pushes out) to
+// clear the break-even of the pick's own price: wins / decided >= break-even. A
+// category prior (DOG_ML's ~38%) is above a long dog's break-even, so without this a
+// 0-3 capper at +300 passed on the prior alone. Evidence must clear the price, not the
+// prior. 1-0 and 8-0 pass at any price; 0-for-N never does. A pick with no real price
+// has no price of its own to clear, so the rule doesn't apply to it. At L = 0 nothing
+// changes.
+//
 // A capper's historical break-even is shown in the breakdown and drives the
 // price transfer; it is never compared against to make a score.
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
@@ -77,7 +86,7 @@ export const MIN_PRICED_PICKS = 5;
 export const MIN_PROB = 0.01;
 export const MAX_PROB = 0.99;
 // Names these rules in the run log. Any change to a constant above changes it.
-export const SCORING_VERSION = "hier-k20-logit-edge-min5-v1";
+export const SCORING_VERSION = "hier-k20-logit-edge-min5-ls1-v2";
 
 const PLACEHOLDER_ODDS = -110;
 
@@ -139,8 +148,17 @@ export type GateCheck = {
   // break-even, or the platform's where that was the one used.
   probability: number;
   breakEven: number;
+  // The long-shot rule: the raw record against the pick's own break-even. Null when it
+  // doesn't apply (L = 0, or no real price).
+  raw: RawCheck | null;
+  // The edge reaches the required edge AND the raw record clears (when it applies).
   passes: boolean;
 };
+
+export type RawCheck = { wins: number; decided: number; breakEven: number; clears: boolean };
+
+// What the long-shot rule reads: the raw record and the pick's own break-even (null: no real price).
+export type RawInput = { wins: number; decided: number; breakEven: number | null };
 
 export type ScoreModel = "edge model" | "win-rate model";
 
@@ -370,6 +388,7 @@ export function scorePick(pick: ScoringPick, ctx: ScoringContext): PickScore {
   const pricedPicks = priced ? priced.overall.wins + priced.overall.losses : 0;
   const historicalBreakEven = priced && pricedPicks > 0 ? priced.overall.impliedSum / pricedPicks : null;
   const minWinPct = ctx.minWinPct ?? GATE_DEFAULT;
+  const raw: RawInput = { wins: levels.league.wins + levels.otherLeagues.wins, decided, breakEven };
   const shared = {
     status: "SCORED" as const,
     pickId: pick.pickId,
@@ -396,7 +415,7 @@ export function scorePick(pick: ScoringPick, ctx: ScoringContext): PickScore {
       edgeModel: { shrunkEdge, historicalBreakEven, skill },
       thin: null,
       rankYardstick: null,
-      gate: gateCheck(probability, breakEven, minWinPct),
+      gate: gateCheck(probability, breakEven, minWinPct, raw),
     };
   }
 
@@ -412,7 +431,7 @@ export function scorePick(pick: ScoringPick, ctx: ScoringContext): PickScore {
       edgeModel: null,
       thin: null,
       rankYardstick: yardstick,
-      gate: gateCheck(shrunkWinProb, yardstick, minWinPct),
+      gate: gateCheck(shrunkWinProb, yardstick, minWinPct, raw),
     };
   }
   const capperEdge = margin!;
@@ -427,30 +446,42 @@ export function scorePick(pick: ScoringPick, ctx: ScoringContext): PickScore {
     edgeModel: null,
     thin: { capperEdge, platformEdge, binding },
     rankYardstick: yardstick,
-    gate: gateCheck(shrunkWinProb, binding === "platform" ? yardstick : breakEven, minWinPct),
+    gate: gateCheck(shrunkWinProb, binding === "platform" ? yardstick : breakEven, minWinPct, raw),
   };
 }
 
 // passes = edge >= requiredEdge, written so the -110 break-even cancels exactly: at
 // -110 the extra term is 0 and this is the plain "shrunk >= L" to the last bit, where
 // subtracting the break-even from both sides could round a boundary pick the other way.
-export function gateCheck(probability: number, breakEven: number, minWinPct: number): GateCheck {
+// `raw` adds the long-shot rule (see the header); without it only the edge decides.
+export function gateCheck(probability: number, breakEven: number, minWinPct: number, raw?: RawInput | null): GateCheck {
   const edge = probability - breakEven;
-  if (minWinPct === 0) return { minWinPct, requiredEdge: null, edge, probability, breakEven, passes: true };
+  if (minWinPct === 0) return { minWinPct, requiredEdge: null, edge, probability, breakEven, raw: null, passes: true };
+  const rawCheck = raw && raw.breakEven !== null ? { wins: raw.wins, decided: raw.decided, breakEven: raw.breakEven, clears: rawRecordClears(raw.wins, raw.decided, raw.breakEven) } : null;
   return {
     minWinPct,
     requiredEdge: minWinPct / 100 - DEFAULT_BREAK_EVEN,
     edge,
     probability,
     breakEven,
-    passes: probability * 100 >= minWinPct + (breakEven - DEFAULT_BREAK_EVEN) * 100,
+    raw: rawCheck,
+    passes: probability * 100 >= minWinPct + (breakEven - DEFAULT_BREAK_EVEN) * 100 && (rawCheck?.clears ?? true),
   };
+}
+
+// The raw record clears a break-even: wins / decided >= break-even. Both sides are one
+// correctly rounded division, so a record exactly at the break-even (11-10 at -110) clears.
+// No decided pick never clears.
+export function rawRecordClears(wins: number, decided: number, breakEven: number): boolean {
+  return decided > 0 && wins / decided >= breakEven;
 }
 
 // The gate at any setting, from a score already built. A pick with no record never
 // passes, at any setting (gate.ts: at 0% cappers with no record are still out).
 export function passesGate(score: PickScore, minWinPct: number): boolean {
-  return score.status === "SCORED" && gateCheck(score.gate.probability, score.gate.breakEven, minWinPct).passes;
+  if (score.status !== "SCORED") return false;
+  const raw: RawInput = { wins: score.levels.league.wins + score.levels.otherLeagues.wins, decided: score.decided, breakEven: score.breakEven };
+  return gateCheck(score.gate.probability, score.gate.breakEven, minWinPct, raw).passes;
 }
 
 // The -110 equivalent: the win rate with this edge at -110, the number the gate

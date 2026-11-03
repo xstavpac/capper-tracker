@@ -17,6 +17,7 @@ import { NBA_SAMEGAME_CASES, nowOf, snapshotOf, type NbaCase } from "@/lib/parla
 import { EMPTY_PLATFORM_RATES, passesGate, scorePick, type PickScore } from "@/lib/parlay/scoring";
 import { SWAP_SCOPES } from "@/lib/parlay/swap-scope";
 import type { GeneratorPick } from "@/lib/parlay/auto-generate";
+import { LONGSHOT_MOVED_AT_OWN_GATE } from "@/lib/parlay/longshot-gate-moved";
 
 export const LONGSHOT_GATES = [0, 45, 55, 60, 75] as const;
 
@@ -153,6 +154,12 @@ lines.push(`Cases changed per gate (of ${NBA_SAMEGAME_CASES.length} each): ${LON
 lines.push("Every other case is byte-identical to before (Primary, dropped, Hedge and Contrarian under every Swap setting, shortfall, the whole output).");
 
 check("the before capture covers every case at every gate", Object.keys(before.cases).length, NBA_SAMEGAME_CASES.length * LONGSHOT_GATES.length);
+// The cases that moved at their own setting (absent minWinPct is the default 55) are exactly the list the
+// older frozen diffs exempt.
+const ownGate = (c: NbaCase) => c.settings.minWinPct ?? 55;
+const movedOwn = NBA_SAMEGAME_CASES.filter((c) => (LONGSHOT_GATES as readonly number[]).includes(ownGate(c)) && caseDiff(before.cases[caseKey(c, ownGate(c))], now.cases[caseKey(c, ownGate(c))]).length > 0).map((c) => c.label);
+check("the cases moved at their own gate are LONGSHOT_MOVED_AT_OWN_GATE", movedOwn, LONGSHOT_MOVED_AT_OWN_GATE);
+check("every case's own gate is one of the five compared", NBA_SAMEGAME_CASES.filter((c) => !(LONGSHOT_GATES as readonly number[]).includes(ownGate(c))).map((c) => c.label), []);
 check("gate 0 is untouched: no verdict and no case moved", [flipsAt.get(0) ?? 0, movedAt.get(0) ?? 0], [0, 0]);
 check("the rule only ever removes a pick from the gate, never adds one", wrongWay, []);
 

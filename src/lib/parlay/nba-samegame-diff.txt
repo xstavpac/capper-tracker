@@ -87,6 +87,7 @@ NBA prop keys (old -> new):
   NBA:l-davis-reb: g1|RAW|PLAYER_PROP|FULL_GAME|anthony davis under 11.5 rebounds|11.5 -> g1|PROP|FULL_GAME|anthonydavis|REBOUNDS|UNDER|11.5
   unchanged (props the no-sport chain already read): MIXED:f3-td
 Parlays whose legs, Hedge or Contrarian moved because of the key: 0.
+Not compared here, moved by the long-shot gate instead (longshot-gate-diff.txt): SWITCH · 6 legs, best available, default gate, SWITCH · 8 legs, 2 per game, default gate, SWITCH · slip on two games, 6 legs, 2 per game
 Parlays whose only change is the NBA prop's key in historyBetKeys (what the next Regenerate weighs down): 10
   SWITCH · 8 legs, 2 per game, default gate
   SWITCH · 12 legs, 5 per game, no gate

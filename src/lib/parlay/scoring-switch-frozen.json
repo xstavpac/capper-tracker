@@ -11,7 +11,7 @@
     "hedge": [
       "g0-elite-spread",
       null,
-      "g2-heavy-fav",
+      null,
       "g3-thin",
       null,
       null
@@ -497,47 +497,8 @@
               "score": 5.442176870748295,
               "sameGame": false
             },
-            "swap": {
-              "pick": {
-                "pickId": "g2-heavy-fav",
-                "capperId": "c-g2-heavy-fav",
-                "capperName": "Capper g2-heavy-fav",
-                "capperColorTag": null,
-                "capperIsFavorite": false,
-                "category": "FAV_ML",
-                "leagueName": "NFL",
-                "gameId": "g2",
-                "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
-                "betDetail": "Eagles ML",
-                "odds": -1000,
-                "oddsSource": "MARKET",
-                "units": 1,
-                "status": "PENDING",
-                "betType": "MONEYLINE",
-                "period": "FULL_GAME",
-                "rawBetDetail": "Eagles ML",
-                "propMarket": null,
-                "line": null,
-                "homeTeam": "Philadelphia Eagles",
-                "awayTeam": "Dallas Cowboys",
-                "gameTime": "2026-11-08T19:00:00.000Z",
-                "teamGroup": "HOME",
-                "teamLabel": "",
-                "teamColor": null,
-                "datePosted": "2026-11-08T12:00:00.000Z",
-                "gameNumber": null
-              },
-              "rule": "R4",
-              "record": {
-                "wins": 18,
-                "losses": 4,
-                "n": 22,
-                "winPct": 81.81818181818183
-              },
-              "wilsonLowerBound": 0.6675232806493855,
-              "basis": "LEAGUE"
-            },
-            "unchangedReason": null
+            "swap": null,
+            "unchangedReason": "NO_ALTERNATE"
           },
           {
             "original": {
@@ -726,7 +687,7 @@
             "unchangedReason": "NO_ALTERNATE"
           }
         ],
-        "swapCount": 3
+        "swapCount": 2
       },
       "contrarian": {
         "mode": "CONTRARIAN",
@@ -1107,7 +1068,7 @@
       null,
       null,
       null,
-      "g2-heavy-fav",
+      null,
       "g3-thin",
       null,
       null,
@@ -1494,8 +1455,8 @@
       "generated": 8,
       "gamesUsed": 6,
       "sameGameGames": 2,
-      "capacity": 11,
-      "capacityText": "11 max from 6 games with qualified picks",
+      "capacity": 10,
+      "capacityText": "10 max from 6 games with qualified picks",
       "shortfall": [],
       "limited": null,
       "mixNotes": [],
@@ -1697,47 +1658,8 @@
               "score": 5.442176870748295,
               "sameGame": false
             },
-            "swap": {
-              "pick": {
-                "pickId": "g2-heavy-fav",
-                "capperId": "c-g2-heavy-fav",
-                "capperName": "Capper g2-heavy-fav",
-                "capperColorTag": null,
-                "capperIsFavorite": false,
-                "category": "FAV_ML",
-                "leagueName": "NFL",
-                "gameId": "g2",
-                "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
-                "betDetail": "Eagles ML",
-                "odds": -1000,
-                "oddsSource": "MARKET",
-                "units": 1,
-                "status": "PENDING",
-                "betType": "MONEYLINE",
-                "period": "FULL_GAME",
-                "rawBetDetail": "Eagles ML",
-                "propMarket": null,
-                "line": null,
-                "homeTeam": "Philadelphia Eagles",
-                "awayTeam": "Dallas Cowboys",
-                "gameTime": "2026-11-08T19:00:00.000Z",
-                "teamGroup": "HOME",
-                "teamLabel": "",
-                "teamColor": null,
-                "datePosted": "2026-11-08T12:00:00.000Z",
-                "gameNumber": null
-              },
-              "rule": "R4",
-              "record": {
-                "wins": 18,
-                "losses": 4,
-                "n": 22,
-                "winPct": 81.81818181818183
-              },
-              "wilsonLowerBound": 0.6675232806493855,
-              "basis": "LEAGUE"
-            },
-            "unchangedReason": null
+            "swap": null,
+            "unchangedReason": "NO_ALTERNATE"
           },
           {
             "original": {
@@ -1976,7 +1898,7 @@
             "unchangedReason": "NO_ALTERNATE"
           }
         ],
-        "swapCount": 2
+        "swapCount": 1
       },
       "contrarian": {
         "mode": "CONTRARIAN",

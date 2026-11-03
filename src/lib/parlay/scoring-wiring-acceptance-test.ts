@@ -197,9 +197,10 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   check("the same parlay with or without a collector", JSON.stringify(traced), JSON.stringify(plain));
   check("the funnel reconciles", [reconcileTrace(t), t.failed], [[], false]);
   const version = standardScoringVersion(GENERATOR_RULES);
-  check("the new version string (selection layer sel-v1, Contrarian same-bet model)", version, "standard/hier-k20-logit-edge-min5-v1/sel-v1/contra-samebet-v1");
+  check("the new version string (selection layer sel-v1, Contrarian same-bet model)", version, "standard/hier-k20-logit-edge-min5-ls1-v2/sel-v1/contra-samebet-v1");
   check("it fits the intake's 80 characters", version.length <= 80, true);
   check("Hybrid's version string is unchanged", scoringVersionOf(GENERATOR_RULES, true), "hybrid/LEAGUE_FIRST/z1.5/no-headcount/prop-market-records");
+  check("every full version string fits 80: Standard 65, Hybrid 57", [version.length, scoringVersionOf(GENERATOR_RULES, true).length], [65, 57]);
   const s = t.extras.scoring!;
   check("extras.scoring holds the rate row count", s.platformRows, RATE_ROWS.length);
   const legRoles = s.legs.filter((l) => l.role !== "HEDGE").map((l) => l.id);
