@@ -60,7 +60,7 @@ const scored = (s: PickScore): ScoredPick => {
 const at = (league: [number, number], histOdds: number, pickOdds: number) => scored(scorePick(pick({ odds: pickOdds }), ctx(league, histOdds)));
 
 check("the threshold is 5 real-priced picks", MIN_PRICED_PICKS, 5);
-check("the version names the rules", SCORING_VERSION, "hier-k20-logit-edge-min5-v1");
+check("the version names the rules", SCORING_VERSION, "hier-k20-logit-edge-min5-ls1-v2");
 
 // ---- Shrunk edge --------------------------------------------------------------------------
 {

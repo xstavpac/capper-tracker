@@ -199,24 +199,36 @@ check("550-450 is ~55", shrunk([550, 450]), 54.9);
   const noPrice = scored(scorePick(pick({ oddsSource: "DEFAULTED" }), ctx([12, 8])));
   check("the gate's edge is the score ranking reads, priced and not", [priced.gate.edge === priced.rankScore, noPrice.gate.edge === noPrice.rankScore], [true, true]);
 
-  // At -110 on the default break-even it must be the old raw gate exactly, boundaries included.
+  // At -110 on the default break-even the edge part is the old raw gate exactly, boundaries
+  // included. The long-shot rule (ls1) bar is min(break-even, L / 100): at and above the 52% prior
+  // it never differs (a shrunk rate at L needs a raw rate at L). Below the prior it only removes a
+  // record whose raw rate is under L itself (0-1 shrinks to 49.5 but is 0% raw), never one at or
+  // above L - the lever still widens the pool below break-even, with no cliff between 0 and 1.
   const oldRawGate = (shrunkProb: number, L: number) => shrunkProb * 100 >= L;
   check("the -110 break-even is exactly the reference", breakEvenOf(-110) === DEFAULT_BREAK_EVEN, true);
   let compared = 0;
-  let differs = 0;
-  for (const L of [55, 52, 60, 0]) {
+  let edgeDiffers = 0;
+  const removedAt: Record<number, number> = {};
+  let unexplained = 0;
+  for (const L of [55, 52, 60, 45, 5, 0]) {
     for (let w = 0; w <= 40; w++) {
       for (let l = 0; l <= 40; l++) {
         if (w + l === 0) continue;
         for (const source of ["MARKET", null] as const) {
           const sc = scored(scorePick(pick({ betType: "SPREAD", category: "SPREAD_MINUS", odds: -110, oddsSource: source }), ctx([w, l], [0, 0], FLAT_52, "SPREAD_MINUS")));
           compared++;
-          if (passesGate(sc, L) !== oldRawGate(sc.shrunkWinProb, L)) differs++;
+          const old = oldRawGate(sc.shrunkWinProb, L);
+          if (gateCheck(sc.gate.probability, sc.gate.breakEven, L).passes !== old) edgeDiffers++;
+          const now = passesGate(sc, L);
+          if (now === old) continue;
+          removedAt[L] = (removedAt[L] ?? 0) + 1;
+          if (!(old && !now && (w / (w + l)) * 100 < L)) unexplained++;
         }
       }
     }
   }
-  check("-110 spreads: same pass/fail as the raw gate at 55, 52, 60, 0 over every record to 40-40", [compared, differs], [13440, 0]);
+  check("-110 spreads: the edge part is the raw gate at 55, 52, 60, 45, 5, 0 over every record to 40-40", [compared, edgeDiffers], [20160, 0]);
+  check("-110 spreads: ls1 changes nothing at 52, 55, 60 or 0; below the prior it removes only records under L raw", [removedAt[52] ?? 0, removedAt[55] ?? 0, removedAt[60] ?? 0, removedAt[0] ?? 0, unexplained], [0, 0, 0, 0, 0]);
   // Probabilities sitting on a boundary, where rounding would show.
   const edges = [0.55, 0.52, 0.6, 0.5238095238095238, 0.55 + 1e-16, 0.55 - 1e-16, 0.6000000000000001, 0.5999999999999999];
   check("-110 boundaries: identical to the last bit", edges.flatMap((p) => [55, 52, 60].map((L) => gateCheck(p, DEFAULT_BREAK_EVEN, L).passes === oldRawGate(p, L))).every(Boolean), true);
@@ -230,6 +242,78 @@ check("550-450 is ~55", shrunk([550, 450]), 54.9);
   check("no price: under 30 priced picks falls back the same way", pct(scored(scorePick(pick({ oddsSource: "DEFAULTED" }), ctx([18, 4], [0, 0], thinPriced))).gate.breakEven), pct(25.2 / 50));
   const none = scored(scorePick(pick({ oddsSource: "DEFAULTED" }), ctx([18, 4])));
   check("no price, no priced picks anywhere: -110, so the plain rate decides", [none.gate.breakEven === DEFAULT_BREAK_EVEN, passesGate(none, 65), passesGate(none, 70)], [true, true, false]);
+}
+
+// ---- The long-shot rule (ls1): with L > 0 the raw record must reach min(break-even, L / 100) ----
+// The #378 open question: DOG_ML's 38% prior sits above a long dog's break-even, so on a
+// platform whose priced dogs average a long price (break-even 30%, the yardstick the thin
+// rule reads) a capper with no wins cleared the edge on the prior alone. Here the edge part
+// passes every winning record below, so the raw rule is what decides. (With no priced platform
+// picks the yardstick is -110 and the thin rule from #386 already fails these long dogs at 55.)
+// The bar never asks more than the lever: min(the pick's own break-even, L / 100).
+{
+  const dogRates = buildPlatformRates([row("NBA", "MONEYLINE", "DOG_ML", 19, 31, 15, 50), row("NBA", "MONEYLINE", "FAV_ML", 118, 75)]);
+  const dog = (rec: [number, number], odds: number, L = 55) => scorePick(pick({ category: "DOG_ML", odds }), { ...ctx(rec, [0, 0], dogRates, "DOG_ML"), minWinPct: L });
+  const verdict = (s: PickScore, L = 55) => passesGate(s, L);
+  // The edge part alone: the gate as it was before ls1.
+  const edgeOnly = (s: PickScore, L = 55) => gateCheck(scored(s).gate.probability, scored(s).gate.breakEven, L).passes;
+  // [wins, decided, bar %, clears]
+  const rawOf = (s: PickScore) => {
+    const g = scored(s).gate.raw;
+    return g && [g.wins, g.decided, pct(g.bar), g.clears];
+  };
+  check("the dog yardstick is 30% and the prior 38%", [pct(platformBreakEvenFor(dogRates, { league: "NBA", betType: "MONEYLINE", key: "DOG_ML" })), pct(platformRateFor(dogRates, { league: "NBA", betType: "MONEYLINE", key: "DOG_ML" }).rate)], [30, 38]);
+
+  // 0-0: no record at all, never passes, at any setting.
+  const empty = dog([0, 0], 300);
+  check("0-0 is no record and never passes, at 55 or 0", [empty.status, verdict(empty), verdict(empty, 0)], ["NO_RECORD", false, false]);
+
+  // 0-for-N: the prior alone used to clear a long price. Not any more, at any L > 0.
+  const oneLoss = dog([0, 1], 200);
+  check("0-1 at +200 at 55: the edge alone passes (the #378 bug), 0% raw vs the 33.3% bar fails it", [edgeOnly(oneLoss), pct(scored(oneLoss).rankScore), rawOf(oneLoss), verdict(oneLoss)], [true, 2.9, [0, 1, 33.3, false], false]);
+  const oneLoss45 = dog([0, 1], 200, 45);
+  check("0-1 at +200 at 45: the edge alone passes, the raw record fails it", [edgeOnly(oneLoss45, 45), rawOf(oneLoss45), verdict(oneLoss45, 45)], [true, [0, 1, 33.3, false], false]);
+  const zeroWinGrid = [1, 20, 45, 55].flatMap((L) => [200, 300].flatMap((odds) => [[0, 1], [0, 5]].map((rec) => verdict(dog(rec as [number, number], odds, L), L))));
+  check("0-1 and 0-5 at +200 and +300 fail at gates 1, 20, 45 and 55 (16 of 16)", zeroWinGrid.filter((v) => !v).length, 16);
+  check("...and the raw rule is what fails them where the edge alone would pass", [1, 20, 45, 55].flatMap((L) => [200, 300].flatMap((odds) => [[0, 1], [0, 5]].map((rec) => dog(rec as [number, number], odds, L)).filter((s) => edgeOnly(s, L)).map((s) => scored(s).gate.raw!.clears))).every((c) => c === false), true);
+  const threeLosses = dog([0, 3], 300);
+  check("0-3 at +300: the edge alone passes, the raw record fails it", [edgeOnly(threeLosses), rawOf(threeLosses), verdict(threeLosses)], [true, [0, 3, 25, false], false]);
+  const fiveLosses = dog([0, 5], 400, 45);
+  check("0-5 at +400 at 45: the edge alone passes, the raw record fails it", [edgeOnly(fiveLosses, 45), rawOf(fiveLosses), verdict(fiveLosses, 45)], [true, [0, 5, 20, false], false]);
+  check("0-3 at +300 fails at every L > 0", [1, 5, 45, 55, 60, 75].map((L) => verdict(dog([0, 3], 300, L), L)), [false, false, false, false, false, false]);
+
+  // Small winning records still pass at long prices.
+  const oneWin = dog([1, 0], 300);
+  check("1-0 at +300 passes: 100% raw clears the 25% bar", [rawOf(oneWin), verdict(oneWin)], [[1, 1, 25, true], true]);
+  const eightWins = dog([8, 0], 400);
+  check("8-0 at +400 passes", [rawOf(eightWins), verdict(eightWins)], [[8, 8, 20, true], true]);
+  const threeFour = dog([3, 4], 300);
+  check("3-4 at +300 passes: 42.9% raw clears the 25% bar", [rawOf(threeFour), verdict(threeFour)], [[3, 7, 25, true], true]);
+  check("1-3 at +300 sits exactly on the 25% bar and clears", [rawOf(dog([1, 3], 300)), verdict(dog([1, 3], 300))], [[1, 4, 25, true], true]);
+  check("the winning records pass exactly as they did before ls1", [oneWin, eightWins, threeFour].map((s) => edgeOnly(s) === verdict(s)), [true, true, true]);
+
+  // The lever: at -110 the bar is min(52.4, L). 10-10 (50% raw) passes at 45 and fails at 55 (on the edge).
+  const fav = (rec: [number, number], L: number, odds = -110) => scorePick(pick({ odds }), { ...ctx(rec), minWinPct: L });
+  const even45 = fav([10, 10], 45);
+  const even55 = fav([10, 10], 55);
+  check("-110: 10-10 passes at 45 (bar 45, 50% raw clears)", [rawOf(even45), verdict(even45, 45)], [[10, 20, 45, true], true]);
+  check("-110: 10-10 fails at 55 (shrunk 51.0 under the edge; bar 52.4 not met either)", [pct(scored(even55).shrunkWinProb), edgeOnly(even55), rawOf(even55), verdict(even55, 55)], [51, false, [10, 20, 52.4, false], false]);
+  check("-110: 10-10 at 50 sits exactly on the L bar and clears", [rawOf(fav([10, 10], 50)), verdict(fav([10, 10], 50), 50)], [[10, 20, 50, true], true]);
+  check("-110: 11-9 passes at 45, fails at 55 on the edge (shrunk 53.5)", [verdict(fav([11, 9], 45), 45), pct(scored(fav([11, 9], 55)).shrunkWinProb), verdict(fav([11, 9], 55), 55)], [true, 53.5, false]);
+  check("the -110 lever has no cliff: 10-10 passes at every L from 1 to 50", [1, 5, 20, 45, 50].map((L) => verdict(fav([10, 10], L), L)), [true, true, true, true, true]);
+  // A heavy favorite: the bar is L, not its 90.9% break-even, so the edge decides (18-4 at -1000 passes at 55).
+  const heavy = fav([18, 4], 55, -1000);
+  check("18-4 at -1000 at 55: bar 55 (not 90.9), 81.8% raw clears", [rawOf(heavy), pct(scored(heavy).gate.raw!.breakEven)], [[18, 22, 55, true], 90.9]);
+
+  // L = 0 changes nothing.
+  check("L = 0: 0-1 at +200, 0-5 at +400 and 10-10 at -110 all still pass", [verdict(dog([0, 1], 200, 0), 0), verdict(dog([0, 5], 400, 0), 0), verdict(fav([10, 10], 0), 0)], [true, true, true]);
+  check("L = 0: the breakdown has no raw check", scored(dog([0, 1], 200, 0)).gate.raw, null);
+
+  // No real price: there is no price of its own to clear, so the rule doesn't apply.
+  const noPrice = scorePick(pick({ oddsSource: "DEFAULTED" }), { ...ctx([10, 10]), minWinPct: 45 });
+  check("no real price: no raw check, the edge decides as before", [scored(noPrice).gate.raw, verdict(noPrice, 45)], [null, true]);
+
+  check("the breakdown and passesGate agree at the context's L", [scored(oneLoss).gate.passes, scored(threeFour).gate.passes, scored(even45).gate.passes, scored(even55).gate.passes], [verdict(oneLoss), verdict(threeFour), verdict(even45, 45), verdict(even55, 55)]);
 }
 
 // ---- Platform-rate fallback -------------------------------------------------------------
@@ -326,7 +410,7 @@ check("550-450 is ~55", shrunk([550, 450]), 54.9);
   check("two with no record: pick id", order([none2, none]), ["0-none", "1-none"]);
 }
 
-check("the version names the rules and fits the run log's 80 characters", [SCORING_VERSION, SCORING_VERSION.length <= 80], ["hier-k20-logit-edge-min5-v1", true]);
+check("the version names the rules and fits the run log's 80 characters", [SCORING_VERSION, SCORING_VERSION.length <= 80], ["hier-k20-logit-edge-min5-ls1-v2", true]);
 check("the same input scores the same", JSON.stringify(scorePick(pick(), ctx([18, 4]))) === JSON.stringify(scorePick(pick(), ctx([18, 4]))), true);
 
 if (failures > 0) {

@@ -272,7 +272,7 @@ async function sessionChecks() {
   check("the session's parlays are the same with a listener", [JSON.stringify(b1), JSON.stringify(b2), JSON.stringify(b3)], [JSON.stringify(a1), JSON.stringify(a2), JSON.stringify(a3)]);
   ok("session traces reconcile", got.every((t) => reconcileTrace(t).length === 0));
   check("session traces carry the settings and the snapshot's age", [got[0].settings.legCount, got[0].extras.snapshotBuiltAt], [3, snapshot.builtAt]);
-  check("scoring version names the rules", got[0].scoringVersion, "standard/hier-k20-logit-edge-min5-v1/sel-v1/contra-samebet-v1");
+  check("scoring version names the rules", got[0].scoringVersion, "standard/hier-k20-logit-edge-min5-ls1-v2/sel-v1/contra-samebet-v1");
 
   const thrower = make(() => {
     throw new Error("listener exploded");
