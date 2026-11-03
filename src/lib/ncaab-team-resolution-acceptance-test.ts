@@ -27,7 +27,7 @@ import { DEFAULT_INGEST_ALLOWED_LEAGUES, filterPicksByLeague, narrowAmbiguousByL
 import { runAmbiguousHierarchy, type ScheduleChecker } from "@/lib/ambiguous-hierarchy";
 import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
 import type { FeedTeam } from "@/lib/feed-teams";
-import { PROMPT_RATE_GAMES } from "@/lib/ncaab-prompt-rate-fixture";
+import { PROMPT_RATE_GAMES, PROMPT_RATE_SAMPLES, type PromptRateCard } from "@/lib/ncaab-prompt-rate-fixture";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -128,6 +128,40 @@ async function main() {
   check("only basketball that day -> NCAAB, no prompt", await one("Duke -4.5", [DUKE_NCAAB]), "NCAAB");
   check("only football that day -> NCAAF, no prompt", await one("Duke -4.5", [DUKE_NCAAF]), "NCAAF");
   check("basketball tonight, football posted later: the tiebreaker keeps asking", await one("Duke -4.5", [DUKE_NCAAB], [DUKE_NCAAB, DUKE_NCAAF]), "PROMPT NCAAF/NCAAB");
+
+  // ---- A game already started or final doesn't count, for a shared school ----
+  // `games`: [sport, start]. The fake answers the plain question with every game and
+  // the not-started one with games after `now`, like the real checker.
+  const timed = (games: [string, string][], now: Date): ScheduleChecker => async (queries) =>
+    Object.fromEntries(
+      queries.map((q) => [
+        q.nickname + "|" + q.sport,
+        q.nickname === "duke blue devils" && games.some(([sport, start]) => sport === q.sport && (!q.upcomingOnly || Date.parse(start) > now.getTime())),
+      ])
+    );
+  const SAT_MORNING = new Date("2026-11-14T15:00:00Z");
+  const timedOne = async (line: string, games: [string, string][], now = SAT_MORNING) => {
+    const log = console.log;
+    console.log = () => {};
+    const res = await runAmbiguousHierarchy(parse([line]).picks, {}, { runScheduleCheck: timed(games, now), runWideScheduleCheck: timed(games, now), now });
+    console.log = log;
+    return outcome(res.picks[0]);
+  };
+  check("Sat morning, basketball final Friday, football upcoming -> NCAAF", await timedOne("Duke -4.5", [["NCAAB", "2026-11-14T00:30:00Z"], ["NCAAF", "2026-11-14T19:30:00Z"]]), "NCAAF");
+  check("football Sat, basketball Sun, both upcoming -> still a prompt", await timedOne("Duke -4.5", [["NCAAF", "2026-11-14T19:30:00Z"], ["NCAAB", "2026-11-15T21:00:00Z"]]), "PROMPT NCAAF/NCAAB");
+  check("both upcoming the same day -> still a prompt", await timedOne("Duke -4.5", [["NCAAF", "2026-11-14T17:00:00Z"], ["NCAAB", "2026-11-15T01:00:00Z"]]), "PROMPT NCAAF/NCAAB");
+  check("both final -> falls back to every game, as before: still a prompt, not dropped", await timedOne("Duke -4.5", [["NCAAF", "2026-11-14T01:00:00Z"], ["NCAAB", "2026-11-14T00:30:00Z"]]), "PROMPT NCAAF/NCAAB");
+  check("a game already under way counts as started -> the other league", await timedOne("Duke -4.5", [["NCAAB", "2026-11-14T14:30:00Z"], ["NCAAF", "2026-11-14T19:30:00Z"]]), "NCAAF");
+  const asked: boolean[] = [];
+  const recording: ScheduleChecker = async (qs) => {
+    qs.forEach((q) => asked.push(Boolean(q.upcomingOnly)));
+    return Object.fromEntries(qs.map((q) => [q.nickname + "|" + q.sport, false]));
+  };
+  const log0 = console.log;
+  console.log = () => {};
+  await runAmbiguousHierarchy(parse(["Portland +6", "Arizona ML", "Milwaukee -6"]).picks, {}, { runScheduleCheck: recording, runWideScheduleCheck: recording, now: SAT_MORNING });
+  console.log = log0;
+  check("pro leagues untouched: a key with a pro candidate never asks the not-started question", [asked.length > 0, asked.includes(true)], [true, false]);
   check("both play + moneyline -> prompt", await one("Duke ML", [DUKE_NCAAF, DUKE_NCAAB]), "PROMPT NCAAF/NCAAB");
   check("total of 145.5 -> NCAAB via plausibility, both playing", await one("Duke over 145.5", [DUKE_NCAAF, DUKE_NCAAB]), "NCAAB");
   check("total of 52.5 -> NCAAF via plausibility, both playing", await one("Duke over 52.5", [DUKE_NCAAF, DUKE_NCAAB]), "NCAAF");
@@ -159,8 +193,14 @@ async function main() {
   check("spread 41: NCAAF only", sports(filterPlausibleCandidates(pair, "SPREAD", 41)), ["NCAAF"]);
   check("team total 24.5: NCAAF only", sports(filterPlausibleCandidates(pair, "TEAM_TOTAL", 24.5)), ["NCAAF"]);
   check("team total 71.5: NCAAB only", sports(filterPlausibleCandidates(pair, "TEAM_TOTAL", 71.5)), ["NCAAB"]);
-  check("team total 52.5: both", sports(filterPlausibleCandidates(pair, "TEAM_TOTAL", 52.5)), ["NCAAF", "NCAAB"]);
-  check("first-half total 70: the full-game floor doesn't apply", sports(filterPlausibleCandidates(pair, "TOTAL", 70, true)), ["NCAAF", "NCAAB"]);
+  check("team total cutoff: 49.5 is NCAAF", sports(filterPlausibleCandidates(pair, "TEAM_TOTAL", 49.5)), ["NCAAF"]);
+  check("team total cutoff: 50 is NCAAB", sports(filterPlausibleCandidates(pair, "TEAM_TOTAL", 50)), ["NCAAB"]);
+  check("first-half total cutoff: 44.5 is NCAAF", sports(filterPlausibleCandidates(pair, "TOTAL", 44.5, true)), ["NCAAF"]);
+  check("first-half total cutoff: 45 is NCAAB", sports(filterPlausibleCandidates(pair, "TOTAL", 45, true)), ["NCAAB"]);
+  check("cutoffs only between the two college leagues: NBA left on keeps both", sports(filterPlausibleCandidates([...pair, { label: "c", sport: "NBA", nickname: "x" }], "TOTAL", 45, true)), ["NCAAF", "NCAAB", "NBA"]);
+  check("cutoffs don't touch a full-game spread", sports(filterPlausibleCandidates(pair, "SPREAD", 4.5)), ["NCAAF", "NCAAB"]);
+  const firstHalf = await resolveLines(["Duke 1H over 44.5", "Duke 1H over 45", "Duke TT over 49.5", "Duke TT over 50"], IN_OVERLAP, [DUKE_NCAAF, DUKE_NCAAB]);
+  check("end to end, both playing: 1H 44.5 / 1H 45 / TT 49.5 / TT 50", firstHalf.picks.map(outcome), ["NCAAF", "NCAAB", "NCAAF", "NCAAB"]);
   check("NBA overlap: 195 keeps both", sports(filterPlausibleCandidates(nbaPair, "TOTAL", 195)), ["NBA", "NCAAB"]);
   check("NBA overlap: 225 is NBA", sports(filterPlausibleCandidates(nbaPair, "TOTAL", 225)), ["NBA"]);
   check("NBA overlap: 145.5 is NCAAB", sports(filterPlausibleCandidates(nbaPair, "TOTAL", 145.5)), ["NCAAB"]);
@@ -249,31 +289,29 @@ async function main() {
   const onlyHoops = filterPicksByLeague(todayAllowed, parse(["Gonzaga -11"]).picks);
   check("ingest, NCAAB off the allowlist: a basketball-only school is skipped, not imported", [onlyHoops.keep.length, onlyHoops.skipped[0]?.stage], [0, "LEAGUE_NOT_ALLOWED"]);
 
-  // ---- Prompt rate: real schedules, the sample paste ----
-  const PASTE: Record<string, string[]> = {
-    "Sharp Daily": ["Alabama -6.5", "Ohio State -14.5", "Georgia -3", "Oregon over 52.5", "Michigan +7", "Penn State -10", "Notre Dame -21", "USC +3.5", "LSU ML", "Clemson under 48.5", "N. Texas +7", "Boise State -3"],
-    "Hoops Heads": ["Duke -4.5", "Kansas -9.5", "Kentucky over 150.5", "UConn -7", "Purdue ML", "North Carolina ML", "Arkansas +2.5", "Tennessee -8", "Iowa State under 141.5", "Baylor -3.5", "Illinois ML", "Texas Tech -5"],
-    "Mid Major Max": ["Gonzaga -11", "Creighton +3", "Marquette -2", "Xavier ML", "St. John's -6", "VCU -4", "Saint Mary's +1.5", "Dayton -3.5", "Butler +6", "Villanova -1", "Grambling ML", "Georgetown +4"],
-    "Pro Card": ["Miami Heat -3", "Bulls +4", "Kings ML", "Hawks -2", "Memphis Grizzlies +1.5", "Charlotte ML", "Milwaukee -6", "Indiana -2.5", "Washington +3", "Utah +5", "Cincinnati -3", "Arizona ML", "Houston -11", "Portland +6"],
-  };
-  const TRUTH: Record<string, (sport: string) => boolean> = {
-    "Sharp Daily": (s) => s === "NCAAF",
-    "Hoops Heads": (s) => s === "NCAAB",
-    "Mid Major Max": (s) => s === "NCAAB",
-    "Pro Card": (s) => s !== "NCAAF" && s !== "NCAAB",
-  };
-  const rate = async (nowIso: string, cards: Record<string, string[]>[]) => {
+  // ---- Prompt rate: real schedules, cards built from what really plays ----
+  // Each college card is schools whose game in that sport is still to be played that
+  // Eastern day at post time (see the fixture). A line counts as silently wrong when
+  // it resolves to a league other than its card's.
+  const etDay = (iso: string) => new Date(Date.parse(iso) - 5 * 3600e3).toISOString().slice(0, 10);
+  const rate = async (nowIso: string, cards: Record<string, PromptRateCard>[]) => {
     const now = new Date(nowIso);
-    const shift = (d: number) => new Date(Date.parse(nowIso.slice(0, 10) + "T12:00:00Z") + d * 864e5).toISOString().slice(0, 10);
-    // The score feed spans yesterday..tomorrow. How far ahead the books post is an
-    // assumption: football and NFL a week, the daily leagues two days.
+    const today = etDay(nowIso);
+    const shift = (d: number) => new Date(Date.parse(today + "T12:00:00Z") + d * 864e5).toISOString().slice(0, 10);
+    // The score feed spans yesterday..tomorrow (Eastern). How far ahead the books
+    // post is an assumption: football and NFL a week, the daily leagues two days.
     const windowed = (ahead: (league: string) => number) =>
-      PROMPT_RATE_GAMES.filter(([league, date]) => date >= shift(-1) && date <= shift(ahead(league)));
-    const check_ = (games: typeof PROMPT_RATE_GAMES): ScheduleChecker => async (queries) =>
+      PROMPT_RATE_GAMES.filter(([league, start]) => etDay(start) >= shift(-1) && etDay(start) <= shift(ahead(league)));
+    const checker = (games: typeof PROMPT_RATE_GAMES): ScheduleChecker => async (queries) =>
       Object.fromEntries(
         queries.map((q) => [
           q.nickname + "|" + q.sport,
-          games.some(([league, , home, away]) => league === q.sport && (home.toLowerCase().endsWith(q.nickname) || away.toLowerCase().endsWith(q.nickname))),
+          games.some(
+            ([league, start, home, away]) =>
+              league === q.sport &&
+              (!q.upcomingOnly || Date.parse(start) > now.getTime()) &&
+              (home.toLowerCase().endsWith(q.nickname) || away.toLowerCase().endsWith(q.nickname))
+          ),
         ])
       );
     const near = windowed(() => 1);
@@ -283,33 +321,36 @@ async function main() {
     console.log = () => {};
     for (const card of cards) {
       const names = Object.keys(card);
-      const text = names.map((name) => name + "\n" + card[name].join("\n")).join("\n\n") + "\n";
+      const text = names.map((name) => name + "\n" + card[name].lines.join("\n")).join("\n\n") + "\n";
       const parsed = parseCatalog(text, names, undefined, NCAAB_LISTED_TEAMS);
-      const res = await runAmbiguousHierarchy(parsed.picks, {}, { runScheduleCheck: check_(near), runWideScheduleCheck: check_(wide), now });
+      const res = await runAmbiguousHierarchy(parsed.picks, {}, { runScheduleCheck: checker(near), runWideScheduleCheck: checker(wide), now });
       for (const p of res.picks) {
         out.lines++;
+        const truth = card[p.capperName].truth;
         if (p.ambiguous) {
           out.prompts++;
           out.promptLines.push(p.raw);
-        } else if (!TRUTH[p.capperName](p.sportName)) out.wrong.push(p.raw + " => " + p.sportName);
+        } else if (truth === "PRO" ? p.sportName === "NCAAF" || p.sportName === "NCAAB" : p.sportName !== truth) {
+          out.wrong.push(p.raw + " => " + p.sportName);
+        }
       }
       out.lines += parsed.unresolved.length;
     }
     console.log = log;
     return out;
   };
-  const wholePaste = [PASTE];
-  const oneAtATime = Object.entries(PASTE).flatMap(([name, lines]) => lines.map((line) => ({ [name]: [line] })));
-  const report: Record<string, unknown> = {};
-  for (const [day, iso] of [["Tue", "2026-11-10T17:00:00Z"], ["Sat", "2026-11-14T15:00:00Z"]] as const) {
-    for (const [mode, cards] of [["paste", wholePaste], ["single-line", oneAtATime]] as const) {
-      const r = await rate(iso, cards);
+  const report: Record<string, { lines: number; prompts: number; wrong: string[] }> = {};
+  for (const day of ["Tue", "Sat"] as const) {
+    const { now, cards } = PROMPT_RATE_SAMPLES[day];
+    const oneAtATime = Object.entries(cards).flatMap(([name, card]) => card.lines.map((line) => ({ [name]: { truth: card.truth, lines: [line] } })));
+    for (const [mode, sets] of [["paste", [cards]], ["single-line", oneAtATime]] as [string, Record<string, PromptRateCard>[]][]) {
+      const r = await rate(now, sets);
       report[`${day} ${mode}`] = { lines: r.lines, prompts: r.prompts, wrong: r.wrong };
       console.log(`RATE ${day} ${mode}: ${r.prompts}/${r.lines} prompts; silently wrong: ${r.wrong.join(", ") || "none"}`);
       console.log(`     prompts: ${r.promptLines.join(" | ")}`);
     }
   }
-  check("prompt-rate fixture: the sample paste is at least 40 lines", (report["Sat paste"] as { lines: number }).lines >= 40, true);
+  check("prompt-rate samples: each day's paste is at least 40 lines", [report["Tue paste"].lines >= 40, report["Sat paste"].lines >= 40], [true, true]);
 
   if (failures > 0) {
     console.log(`${failures} CHECK(S) FAILED`);

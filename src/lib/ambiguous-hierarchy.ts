@@ -46,7 +46,13 @@ import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
 //                    gets), and every later step works from what is left.
 //                    One candidate left resolves the key. Skipped entirely
 //                    when the lookup fails or finds no active league.
-//   2. schedule   - exactly one candidate has a game today (primary signal)
+//   2. schedule   - exactly one candidate has a game today (primary signal).
+//                    For a shared college school (a question between NCAAF and
+//                    NCAAB only), a game already started or final at import
+//                    time doesn't count, for this check and its tiebreaker: a
+//                    Saturday-morning "Duke -4.5" after Friday's basketball final
+//                    is the football game. If neither league has a game still to
+//                    play, the check reads every game as before.
 //   3. season      - calendar fallback: exactly one candidate is in season
 //                    (used only when the schedule check was inconclusive or
 //                    the feed errored out).
@@ -138,7 +144,12 @@ export const LEAGUE_ACTIVITY_WINDOW_DAYS = 7;
 // reject - the whole step is then skipped.
 export type LeagueActivityChecker = (sports: string[], referenceDate: Date) => Promise<Record<string, boolean>>;
 
-export type ScheduleCheckQuery = { nickname: string; sport: string };
+export type ScheduleCheckQuery = {
+  nickname: string;
+  sport: string;
+  // Only a game not yet started counts (see step 2, for a shared college school).
+  upcomingOnly?: boolean;
+};
 
 // Injected live-schedule lookup. Returns a map keyed `${nickname}|${sport}`
 // -> whether that team has a game on the live schedule right now. May reject
@@ -242,6 +253,12 @@ const COLLEGE_PICK_SIGNALS: CollegePickSignal[] = [
     league: (pick, allPicks) => unanimousCollegeLeague(pick.capperName, allPicks),
   },
 ];
+
+// A question only the two college leagues are on (a shared school, or an alias
+// naming several schools). Step 2 counts only games still to be played for these.
+function isCollegeQuestion(options: AmbiguousOption[]): boolean {
+  return options.length > 0 && options.every((o) => o.sport === "NCAAF" || o.sport === "NCAAB");
+}
 
 // Whether a list is only the two college leagues, one school on each: what a signal
 // may choose between. A pro candidate left on it ("Tennessee -8", "Houston -11") is a
@@ -418,6 +435,24 @@ export async function runAmbiguousHierarchy(
   const teamKeys = uniqueKeys.filter((key) => !isPlayerAmbiguityKey(key));
   const keysNeedingResolution = teamKeys.filter((key) => !decided.has(key));
   let scheduleResults: Record<string, boolean> = {};
+  // The same question asked of games not yet started, for a shared college
+  // school's key (see step 2 in the header). `upcomingKeys` is the keys it decides.
+  let upcomingResults: Record<string, boolean> = {};
+  const upcomingKeys = new Set<string>();
+  // Whether a candidate counts as playing for this key.
+  const sched = (key: string, o: AmbiguousOption): boolean =>
+    Boolean((upcomingKeys.has(key) ? upcomingResults : scheduleResults)[o.nickname + "|" + o.sport]);
+  // The wide tiebreaker, asked the same way: separate calls, so a checker that
+  // ignores `upcomingOnly` answers exactly as before.
+  const runWide = async (queries: ScheduleCheckQuery[]) => {
+    const plain = queries.filter((q) => !q.upcomingOnly);
+    const upcoming = queries.filter((q) => q.upcomingOnly);
+    const [p, u] = await Promise.all([
+      plain.length > 0 ? deps.runWideScheduleCheck(plain) : ({} as Record<string, boolean>),
+      upcoming.length > 0 ? deps.runWideScheduleCheck(upcoming) : ({} as Record<string, boolean>),
+    ]);
+    return (key: string, o: AmbiguousOption) => Boolean((upcomingKeys.has(key) ? u : p)[o.nickname + "|" + o.sport]);
+  };
   let scheduleCheckFailed = false;
   // Every key's own withGameToday subset, captured even when inconclusive
   // (0 or 2+ matches) - step 5's cross-check needs this partial evidence,
@@ -427,8 +462,18 @@ export async function runAmbiguousHierarchy(
     const queries = keysNeedingResolution.flatMap((key) =>
       optionsFor(key).map((o) => ({ nickname: o.nickname, sport: o.sport }))
     );
+    const collegeKeys = keysNeedingResolution.filter((key) => isCollegeQuestion(optionsFor(key)));
+    const upcomingQueries = collegeKeys.flatMap((key) =>
+      optionsFor(key).map((o) => ({ nickname: o.nickname, sport: o.sport, upcomingOnly: true }))
+    );
     try {
-      scheduleResults = await deps.runScheduleCheck(queries);
+      [scheduleResults, upcomingResults] = await Promise.all([
+        deps.runScheduleCheck(queries),
+        upcomingQueries.length > 0 ? deps.runScheduleCheck(upcomingQueries) : Promise.resolve({} as Record<string, boolean>),
+      ]);
+      for (const key of collegeKeys) {
+        if (optionsFor(key).some((o) => upcomingResults[o.nickname + "|" + o.sport])) upcomingKeys.add(key);
+      }
     } catch (err) {
       scheduleCheckFailed = true;
       // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
@@ -445,7 +490,7 @@ export async function runAmbiguousHierarchy(
     const tentativeWinners = new Map<string, AmbiguousOption>();
     for (const key of keysNeedingResolution) {
       const options = optionsFor(key);
-      const withGameToday = options.filter((o) => scheduleResults[o.nickname + "|" + o.sport]);
+      const withGameToday = options.filter((o) => sched(key, o));
       if (!scheduleCheckFailed) scheduleSignalByKey.set(key, withGameToday);
       if (withGameToday.length === 1) tentativeWinners.set(key, withGameToday[0]);
       // 0 or 2+ matches - schedule inconclusive, falls through to the
@@ -457,12 +502,12 @@ export async function runAmbiguousHierarchy(
       for (const [key, winner] of tentativeWinners) {
         for (const o of optionsFor(key)) {
           if (o.sport === winner.sport && o.nickname === winner.nickname) continue;
-          runnerUpQueries.push({ nickname: o.nickname, sport: o.sport });
+          runnerUpQueries.push({ nickname: o.nickname, sport: o.sport, ...(upcomingKeys.has(key) ? { upcomingOnly: true } : {}) });
         }
       }
-      let wideResults: Record<string, boolean> = {};
+      let wideHas: (key: string, o: AmbiguousOption) => boolean = () => false;
       try {
-        wideResults = runnerUpQueries.length > 0 ? await deps.runWideScheduleCheck(runnerUpQueries) : {};
+        if (runnerUpQueries.length > 0) wideHas = await runWide(runnerUpQueries);
       } catch (err) {
         // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
         console.log(
@@ -473,7 +518,7 @@ export async function runAmbiguousHierarchy(
 
       for (const [key, winner] of tentativeWinners) {
         const runnerUpHasRealGame = optionsFor(key).some(
-          (o) => !(o.sport === winner.sport && o.nickname === winner.nickname) && wideResults[o.nickname + "|" + o.sport]
+          (o) => !(o.sport === winner.sport && o.nickname === winner.nickname) && wideHas(key, o)
         );
         if (runnerUpHasRealGame) {
           // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
@@ -496,8 +541,8 @@ export async function runAmbiguousHierarchy(
   // candidate. Removing it here, rather than before step 2, keeps the schedule
   // ahead of the calendar, and leaves every later step the list it always had.
   if (!isSportLabelInSeason("NCAAB", now)) {
-    const stillCandidate = (o: AmbiguousOption) => o.sport !== "NCAAB" || activity[o.sport] === true || scheduleResults[o.nickname + "|" + o.sport];
     for (const key of teamKeys) {
+      const stillCandidate = (o: AmbiguousOption) => o.sport !== "NCAAB" || activity[o.sport] === true || sched(key, o);
       const base = baseOptionsByKey.get(key) ?? [];
       if (decided.get(key)?.method === "remembered" || base.every(stillCandidate)) continue;
       const kept = optionsFor(key).filter(stillCandidate);
@@ -643,17 +688,17 @@ export async function runAmbiguousHierarchy(
     const options = optionsFor(key);
     const plausible = filterPlausibleCandidates(options, p.ambiguousBetType, p.ambiguousLine, p.ambiguousPartialGame);
     if (plausible.length < 2 || plausible.length === options.length) continue;
-    const playing = plausible.filter((o) => scheduleResults[o.nickname + "|" + o.sport]);
+    const playing = plausible.filter((o) => sched(key, o));
     if (playing.length !== 1) continue;
     playingSurvivorByPickIdx.set(idx, playing[0]);
     for (const o of plausible) {
-      if (o !== playing[0]) survivorRunnerUpQueries.push({ nickname: o.nickname, sport: o.sport });
+      if (o !== playing[0]) survivorRunnerUpQueries.push({ nickname: o.nickname, sport: o.sport, ...(upcomingKeys.has(key) ? { upcomingOnly: true } : {}) });
     }
   }
-  let survivorWideResults: Record<string, boolean> = {};
+  let survivorWideHas: (key: string, o: AmbiguousOption) => boolean = () => false;
   if (survivorRunnerUpQueries.length > 0) {
     try {
-      survivorWideResults = await deps.runWideScheduleCheck(survivorRunnerUpQueries);
+      survivorWideHas = await runWide(survivorRunnerUpQueries);
     } catch (err) {
       // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
       console.log(
@@ -708,7 +753,7 @@ export async function runAmbiguousHierarchy(
       // just outside the window, and season / pick context don't disagree.
       // Otherwise just drop the implausible option(s) from what gets shown.
       const playing = playingSurvivorByPickIdx.get(idx);
-      const runnerUpHasRealGame = plausible.some((o) => o !== playing && survivorWideResults[o.nickname + "|" + o.sport]);
+      const runnerUpHasRealGame = plausible.some((o) => o !== playing && survivorWideHas(key, o));
       if (playing && !runnerUpHasRealGame && !seasonAndContext(playing).includes("CONFLICTS")) {
         picks[idx] = resolveAmbiguousPick(p, playing);
         const logKey = key + "::" + playing.sport + "::schedule";
@@ -840,7 +885,7 @@ export async function runAmbiguousHierarchy(
     const shown = picks[idx].ambiguous;
     if (!shown || isPlayerAmbiguityKey(p.ambiguousKey!) || fitsNoCandidate.has(idx)) continue;
     const offerable = shown.filter(
-      (o) => isSportLabelInSeason(o.sport, now) || activity[o.sport] === true || scheduleResults[o.nickname + "|" + o.sport]
+      (o) => isSportLabelInSeason(o.sport, now) || activity[o.sport] === true || sched(p.ambiguousKey!, o)
     );
     if (offerable.length > 0 && offerable.length < shown.length) picks[idx] = { ...picks[idx], ambiguous: offerable };
   }

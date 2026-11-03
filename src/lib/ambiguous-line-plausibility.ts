@@ -106,9 +106,8 @@ const TEAM_TOTAL_MIN: Partial<Record<string, number>> = {
 };
 
 // Full-game TEAM total ceiling, for the leagues where a team total sits far
-// below the whole-game maximum above. With NCAAB's floor it leaves 45-65 as the
-// overlap: "Duke TT o71.5" is basketball, "Duke TT o24.5" football, "Duke TT
-// o52.5" stays a question. DOMAIN ESTIMATE, same caveat.
+// below the whole-game maximum above. Where only NCAAF and NCAAB are left, the
+// cutoff below decides the 45-65 overlap. DOMAIN ESTIMATE, same caveat.
 const TEAM_TOTAL_MAX: Partial<Record<string, number>> = {
   NCAAF: 65,
 };
@@ -138,11 +137,33 @@ const TEAM_TOTAL_MAX: Partial<Record<string, number>> = {
 // `betType` must be the pick's own parsed bet type (ambiguousBetType), never
 // the stored ParsedPick.betType: an unresolved ambiguous pick stores a SPREAD
 // placeholder there, and a 6.5 "over" checked as a spread would pass for NFL.
+// NCAAF vs NCAAB only, where the ranges above overlap: a full-game team total, and
+// a total on part of the game (a first-half total). Approved cutoffs, applied only
+// when those two leagues are all that is left.
+const COLLEGE_TEAM_TOTAL_CUTOFF = 50;
+const COLLEGE_PARTIAL_TOTAL_CUTOFF = 45;
+
 export function filterPlausibleCandidates(
   candidates: AmbiguousOption[],
   betType: ParsedPick["betType"] | undefined,
   line: number | null | undefined,
   partialGame = false
+): AmbiguousOption[] {
+  const left = filterByRange(candidates, betType, line, partialGame);
+  if (line === null || line === undefined || !left.every((c) => c.sport === "NCAAF" || c.sport === "NCAAB")) return left;
+  if (!left.some((c) => c.sport === "NCAAF") || !left.some((c) => c.sport === "NCAAB")) return left;
+  const cutoff =
+    betType === "TEAM_TOTAL" && !partialGame ? COLLEGE_TEAM_TOTAL_CUTOFF : betType === "TOTAL" && partialGame ? COLLEGE_PARTIAL_TOTAL_CUTOFF : undefined;
+  if (cutoff === undefined) return left;
+  const sport = line >= cutoff ? "NCAAB" : "NCAAF";
+  return left.filter((c) => c.sport === sport);
+}
+
+function filterByRange(
+  candidates: AmbiguousOption[],
+  betType: ParsedPick["betType"] | undefined,
+  line: number | null | undefined,
+  partialGame: boolean
 ): AmbiguousOption[] {
   if (line === null || line === undefined || betType === undefined) return candidates;
 
