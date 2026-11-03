@@ -181,7 +181,7 @@ const slate = makeSlate(BASE);
   const s = makeSlate(BASE.filter((p) => p.game < 3));
   const r = run(snap(s), { legCount: 5 });
   check("3 qualifying games, 5 asked, max 1: 3 legs", r.legs.length, 3);
-  check("...and says why, with what to change", r.shortfall, ["3 of 5 legs: only 3 games have picks that clear 55%. Raise Max legs per game to add same-game legs."]);
+  check("...and says why, with what to change", r.shortfall, ["3 of 5 legs: only 3 games have picks that clear your bar. Raise Max legs per game to add same-game legs."]);
   const r2 = run(snap(s), { legCount: 5, maxLegsPerGame: 2 });
   check("max 2: same-game legs fill it (5 legs)", r2.legs.length, 5);
   check("...two games now SGPs, tagged", [r2.sameGameGames, r2.legs.filter((l) => l.sameGame).length], [2, 4]);

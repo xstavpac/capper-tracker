@@ -254,6 +254,9 @@ export function sanitizeClientTrace(raw: unknown): RunTrace | null {
   if (builtAt && !Number.isNaN(Date.parse(builtAt))) extras.snapshotBuiltAt = builtAt;
   const ut = count(x.unavailableTargets, 1000);
   if (ut !== null) extras.unavailableTargets = ut;
+  const limHave = isObj(x.limited) ? count(x.limited.have, 100) : null;
+  const limNeed = isObj(x.limited) ? count(x.limited.need, 100) : null;
+  if (limHave !== null && limNeed !== null) extras.limited = { have: limHave, need: limNeed };
   const swaps = cleanSwaps(x.swaps);
   if (swaps.length > 0) extras.swaps = swaps;
   const scoring = cleanScoring(x.scoring);
