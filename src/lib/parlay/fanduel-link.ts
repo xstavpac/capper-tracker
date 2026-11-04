@@ -31,11 +31,12 @@ import {
   marketNotSupported,
   playerNotMatched,
   playersAmbiguous,
+  sideNeedsClarification,
   propMarketLabel,
   twoGamesFound,
 } from "@/lib/parlay/fanduel-reasons";
 
-export type FanDuelLegStatus = "matched" | "adjusted" | "over" | "not_found" | "ambiguous" | "unsupported" | "error";
+export type FanDuelLegStatus = "matched" | "adjusted" | "over" | "not_found" | "ambiguous" | "needs_clarification" | "unsupported" | "error";
 
 // The pick's line and the FanDuel line sent in its place. `side` is null for a
 // spread, whose lines are signed for the pick's own team. `worse`: the sent
@@ -60,6 +61,7 @@ const NOT_SENT_LABEL: Record<Exclude<FanDuelLegStatus, "matched" | "adjusted">, 
   over: "Game over",
   not_found: "Not found",
   ambiguous: "Ambiguous",
+  needs_clarification: "Needs clarification",
   unsupported: "Not supported",
   error: "Unavailable",
 };
@@ -85,6 +87,8 @@ export type FanDuelLegInput = {
   betType: string;
   period: string;
   betDetail: string | null;
+  // Which side import recorded for a moneyline / spread (Pick.pickedSide). Read before the text.
+  pickedSide?: "HOME" | "AWAY" | "DRAW" | null;
   line: number | null;
   // A player prop's subject and stat as the import stored them (Pick.playerName /
   // Pick.propMarket), when it did. Preferred over reading betDetail's text.
@@ -254,8 +258,10 @@ const OTHER_LEAGUE_MARKETS: Record<string, PeriodMarkets> = {
   FULL_GAME: { suffix: "", alternates: ["spreads", "totals"], teamTotals: false },
 };
 
-type TargetResult = { ok: true; target: FanDuelLegTarget } | { ok: false; reason: string };
+type TargetResult = { ok: true; target: FanDuelLegTarget } | { ok: false; reason: string; status?: "needs_clarification" };
 const unsupported = (reason: string): TargetResult => ({ ok: false, reason });
+// A supported bet whose team the pick does not settle: a question for the user, never "not supported".
+const needsClarification = (reason: string): TargetResult => ({ ok: false, reason, status: "needs_clarification" });
 
 function playerPropTarget(leg: FanDuelLegInput): TargetResult {
   const text = leg.betDetail ?? "";
@@ -334,13 +340,13 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
 
   // Team totals have no side of their own (derivePickSide answers only for a
   // moneyline or spread), so the team is read the way a moneyline's is.
-  const teamOf = (betType: string) => derivePickSide({ betType, betDetail: leg.betDetail }, leg, leg.leagueName);
+  const teamOf = (betType: string) => derivePickSide({ betType, betDetail: leg.betDetail, pickedSide: leg.betType === betType ? leg.pickedSide : null }, leg, leg.leagueName);
 
   if (leg.period === "REGULATION") {
     if (leg.sportKey !== NHL_SPORT_KEY || leg.betType !== "MONEYLINE") return unsupported(marketNotSupported(leg.leagueName, "only the moneyline in regulation"));
     if (threeWayWording(leg.betDetail) === "DRAW") return { ok: true, target: { marketKey: HOCKEY_THREE_WAY_KEY, outcome: { name: "Draw" } } };
     const side = teamOf("MONEYLINE");
-    if (!side) return unsupported("Couldn't tell which team this pick is on.");
+    if (!side) return needsClarification(sideNeedsClarification(leg.awayTeam, leg.homeTeam));
     return { ok: true, target: { marketKey: HOCKEY_THREE_WAY_KEY, outcome: { side } } };
   }
 
@@ -349,7 +355,7 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
 
   if (leg.betType === "MONEYLINE" || leg.betType === "SPREAD") {
     const side = teamOf(leg.betType);
-    if (!side) return unsupported("Couldn't tell which team this pick is on.");
+    if (!side) return needsClarification(sideNeedsClarification(leg.awayTeam, leg.homeTeam));
     if (leg.betType === "MONEYLINE") return { ok: true, target: { marketKey: "h2h" + period.suffix, outcome: { side } } };
     const point = leg.line ?? extractLine("SPREAD", leg.betDetail ?? "");
     if (point === null) return unsupported("This spread has no line to match.");
@@ -360,7 +366,7 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
     const teamTotal = leg.betType === "TEAM_TOTAL";
     if (teamTotal && !period.teamTotals) return unsupported(marketNotOffered("no team totals for " + leg.leagueName + " " + leg.period.toLowerCase().replace(/_/g, " ")));
     const team = teamTotal ? teamOf("MONEYLINE") : null;
-    if (teamTotal && !team) return unsupported("Couldn't tell which team this total is for.");
+    if (teamTotal && !team) return needsClarification(sideNeedsClarification(leg.awayTeam, leg.homeTeam));
     const side = totalSideFromText(leg.betDetail);
     if (!side) return unsupported("Couldn't tell if this total is Over or Under.");
     const point = leg.line ?? extractLine(leg.betType, leg.betDetail ?? "");
@@ -630,7 +636,7 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
     }
     const target = fanDuelLegTarget(leg);
     if (!target.ok) {
-      settle(leg, "unsupported", target.reason);
+      settle(leg, target.status ?? "unsupported", target.reason);
       continue;
     }
     pending.push({ leg, target: target.target });

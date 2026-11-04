@@ -7,6 +7,7 @@
 //   Two games found             a doubleheader: which one is the pick's?
 //   Market not offered          FanDuel has the game, not this bet on it
 //   Player not matched          no one, or more than one, on FanDuel is that player
+//   Needs clarification         a supported bet, but which team it is on isn't settled
 //   Market not supported        this app doesn't send that bet for the league yet
 // A leg's line (closest line is X, more than N away) and a selection with no
 // betslip link keep their own sentences; they are already specific.
@@ -87,5 +88,9 @@ export const playerNotMatched = (typed: string, market: string) => "Player not m
 
 export const playersAmbiguous = (typed: string, names: string[]) =>
   "Player not matched — more than one player on FanDuel fits \"" + typed + "\": " + names.slice(0, 3).join(", ") + ".";
+
+// The pick is a supported bet, but nothing settles which of the two teams it is on.
+export const sideNeedsClarification = (awayTeam: string, homeTeam: string) =>
+  "Needs clarification — which team is this pick on, " + awayTeam + " or " + homeTeam + "? Fix the pick's team and send again.";
 
 export const marketNotSupported = (league: string, what: string) => "Market not supported for " + league + " yet — " + what + ".";

@@ -1,5 +1,6 @@
 import { findGroupingNickname, teamGroupAliases, teamPhraseRegex, normalizeForGrouping } from "@/lib/parse-catalog";
 import { totalSideFromText, type TotalSide } from "@/lib/bet-line";
+import { ncaabSideFromText } from "@/lib/ncaab-pick-side";
 import type { PickedSide } from "@prisma/client";
 
 export type PickTeamGroup = "AWAY" | "HOME" | "TOTALS" | "OTHER";
@@ -65,6 +66,10 @@ export function classifyPickTeamGroup(
   if (pick.pickedSide === "AWAY") return "AWAY";
 
   const text = normalizeForGrouping(pick.betDetail ?? "");
+  // NCAAB has no nickname table to read: the game's teams are looked up as schools
+  // (ncaab-pick-side.ts). A side it can't settle stays OTHER - never a guess.
+  if (sportName === "NCAAB") return ncaabSideFromText(text, game) ?? "OTHER";
+
   const mentions = (aliases: string[]) => aliases.some((a) => teamPhraseRegex(a).test(text));
 
   if (mentions(teamGroupAliases(game.awayTeam, sportName))) return "AWAY";

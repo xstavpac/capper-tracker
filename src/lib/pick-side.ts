@@ -1,4 +1,5 @@
 import { classifyPickTeamGroup } from "@/lib/pick-team-group";
+import type { PickedSide } from "@prisma/client";
 
 export type PickSide = "HOME" | "AWAY";
 
@@ -34,7 +35,7 @@ export type PickSide = "HOME" | "AWAY";
 // "side" no matter what team name its betDetail happens to mention
 // (classifyPickTeamGroup returns TOTALS or OTHER for every other betType by design).
 export function derivePickSide(
-  pick: { betType: string; betDetail: string | null },
+  pick: { betType: string; betDetail: string | null; pickedSide?: PickedSide | null },
   game: { homeTeam: string; awayTeam: string },
   sportName: string
 ): PickSide | null {
