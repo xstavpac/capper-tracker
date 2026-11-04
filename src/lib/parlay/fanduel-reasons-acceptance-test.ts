@@ -31,7 +31,7 @@ check("game not on FanDuel names the teams", gameNotOnFanDuel("Los Angeles Kings
 check("game time mismatch names both times", gameTimeMismatch("7:11 PM ET", "7:00 PM ET"), "Game time mismatch — FanDuel has this game at 7:11 PM ET; your pick is at 7:00 PM ET.");
 check("two games found lists both starts", twoGamesFound(["1:05 PM ET", "4:35 PM ET"]), "Two games found — couldn't tell which (1:05 PM ET and 4:35 PM ET).");
 check("two games found with no times still reads", twoGamesFound([]), "Two games found — couldn't tell which.");
-check("market not offered", marketNotOffered("no blocks market for this game right now"), "Market not offered by FanDuel — no blocks market for this game right now.");
+check("market not offered", marketNotOffered("no blocks market for this game right now"), "Market unavailable — no blocks market for this game right now.");
 check("player not matched names the player and the market", playerNotMatched("Nobody Special", "points"), 'Player not matched — no "Nobody Special" with points on FanDuel for this game.');
 check(
   "players ambiguous lists up to three",
@@ -102,13 +102,13 @@ async function main() {
   ]);
 
   const noBlocks = FIXTURE_MARKETS.filter((m) => m.key !== "player_blocks");
-  check("FanDuel has the game but not the market: Market not offered", await one([leg({ pickId: "d", betDetail: "Donovan Clingan over 1.5 blocks" })], undefined, noBlocks), [
-    ["d", "not_found", "Market not offered by FanDuel — no blocks market for this game right now."],
+  check("FanDuel has the game but not the market: Market unavailable", await one([leg({ pickId: "d", betDetail: "Donovan Clingan over 1.5 blocks" })], undefined, noBlocks), [
+    ["d", "market_unavailable", "Market unavailable — no blocks market for this game right now."],
   ]);
-  check("a player with no line in a market another leg asked for: Market not offered, with the player", await one(
+  check("a player with no line in a market another leg asked for: Market unavailable, with the player", await one(
     [leg({ pickId: "e", betDetail: "Austin Reaves over 0.5 blocks" }), leg({ pickId: "e2", betDetail: "Austin Reaves over 23.5 points" })]
   ), [
-    ["e", "not_found", "Market not offered by FanDuel — FanDuel has no blocks line for Austin Reaves."],
+    ["e", "market_unavailable", "Market unavailable — FanDuel has no blocks line for Austin Reaves."],
     ["e2", "matched", null],
   ]);
   check("nobody by that name: Player not matched", await one([leg({ pickId: "f", betDetail: "Nobody Special over 10.5 points" })]), [
@@ -134,10 +134,10 @@ async function main() {
   ]);
 
   const periodNotSold = await one([leg({ pickId: "l", sportKey: "icehockey_nhl", leagueName: "NHL", betType: "MONEYLINE", betDetail: "Kings ML", period: "FIRST_HALF" })]);
-  check("a period FanDuel doesn't sell: Market not offered", periodNotSold.map((r) => r[2]), ["Market not offered by FanDuel — no first half bets for NHL."]);
+  check("a period FanDuel doesn't sell: Market unavailable", periodNotSold.map((r) => r[2]), ["Market unavailable — no first half bets for NHL."]);
 
   // ---- 4. Nothing generic is left, and every reason opens with its kind ----
-  const KINDS = ["Game not on FanDuel", "Game time mismatch", "Two games found", "Market not offered by FanDuel", "Player not matched", "Market not supported for", "Couldn't read this player prop"];
+  const KINDS = ["Game not on FanDuel", "Game time mismatch", "Two games found", "Market unavailable", "Player not matched", "Market not supported for", "Couldn't read this player prop"];
   check("every reason above opens with one of the kinds", ALL.filter((r) => !KINDS.some((k) => r.startsWith(k))), []);
   const GENERIC = ["Couldn't find this game on FanDuel.", "FanDuel isn't offering this market right now.", "FanDuel isn't offering this selection right now.", "This player prop market can't be sent yet.", "This bet type can't be sent yet.", "More than one game fits this pick."];
   check("none of the old generic sentences is produced", ALL.filter((r) => GENERIC.includes(r)), []);

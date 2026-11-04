@@ -32,11 +32,14 @@ import {
   playerNotMatched,
   playersAmbiguous,
   sideNeedsClarification,
+  lineUnavailable,
+  priceMismatch,
+  priceMovedWarning,
   propMarketLabel,
   twoGamesFound,
 } from "@/lib/parlay/fanduel-reasons";
 
-export type FanDuelLegStatus = "matched" | "adjusted" | "over" | "not_found" | "ambiguous" | "needs_clarification" | "unsupported" | "error";
+export type FanDuelLegStatus = "matched" | "adjusted" | "over" | "not_found" | "ambiguous" | "needs_clarification" | "market_unavailable" | "line_unavailable" | "price_mismatch" | "unsupported" | "error";
 
 // The pick's line and the FanDuel line sent in its place. `side` is null for a
 // spread, whose lines are signed for the pick's own team. `worse`: the sent
@@ -53,6 +56,8 @@ export type FanDuelLegResult = {
   // "adjusted" only) - an alternate line's own price, never the main line's.
   fanDuelOdds: number | null;
   sentLine: FanDuelSentLine | null; // "adjusted" only
+  // A leg that IS sent but whose price sits far from the pick's (PRICE_MOVED_WARN_GAP). null otherwise.
+  warning?: string | null;
 };
 
 export type FanDuelLinkResponse = { url: string | null; legs: FanDuelLegResult[] };
@@ -62,6 +67,9 @@ const NOT_SENT_LABEL: Record<Exclude<FanDuelLegStatus, "matched" | "adjusted">, 
   not_found: "Not found",
   ambiguous: "Ambiguous",
   needs_clarification: "Needs clarification",
+  market_unavailable: "Market unavailable",
+  line_unavailable: "Line unavailable",
+  price_mismatch: "Potentially incorrect market match",
   unsupported: "Not supported",
   error: "Unavailable",
 };
@@ -100,6 +108,9 @@ export type FanDuelLegInput = {
   // The score feed's status for the game, when the board knew it (game-over.ts).
   gameStatus?: GameFeedStatus | null;
   odds: number;
+  // Where `odds` came from (Pick.oddsSource). DEFAULTED is the -110 placeholder, not a price anyone posted:
+  // it is never compared with FanDuel's price. Absent = the odds are the pick's own.
+  oddsSource?: "STATED" | "MARKET" | "DEFAULTED" | null;
   // False when the board has no game for the pick: its teams and time are the
   // row's own, and that time is the import time when the import matched no game.
   onBoard: boolean;
@@ -153,11 +164,32 @@ export type FanDuelLegTarget = {
   easier?: "lower" | "higher";
 };
 
-// A spread, total or team total goes at FanDuel's line when it is within this
-// many points of the pick's; a yardage or receptions prop when within this
-// share of the pick's line.
+// How far FanDuel's line may sit from the pick's and still be sent in its place, by sport and market.
+// Beyond it the leg is "Line unavailable" and is not sent.
+//   - basketball / football / other leagues' spreads and totals: 1.5 points
+//   - NHL and MLB full-game totals, and EVERY period / half / F5 total or team total: 0.5 (a one-goal
+//     move on a hockey period total is a different bet, not a slightly worse line)
+//   - NHL puck line and MLB run line: 0 - the pick's exact line or nothing
+// A yardage or receptions prop may move by this share of the pick's line.
 export const MAX_LINE_MOVE_POINTS = 1.5;
+export const MAX_LINE_MOVE_LOW_SCORING = 0.5;
+export const MAX_LINE_MOVE_PUCK_RUN_LINE = 0;
 export const MAX_PROP_LINE_MOVE_RATIO = 0.1;
+
+// The pick's price against FanDuel's, as implied probabilities (no vig removed):
+//   gap >= MAX_IMPLIED_PROB_GAP        -> "Potentially incorrect market match": not sent. -110 (52%) against -400
+//                                         (80%) is 0.28, against -6000 (98%) 0.46. A real line move or a stale price
+//                                         is a few points; a gap this wide is a different bet.
+//   PRICE_MOVED_WARN_GAP <= gap < MAX  -> sent, with a "price moved a lot" warning on the leg.
+export const MAX_IMPLIED_PROB_GAP = 0.25;
+export const PRICE_MOVED_WARN_GAP = 0.15;
+// A pick with no real price of its own (oddsSource DEFAULTED) has nothing to compare, so instead a spread / total /
+// team total that FanDuel prices at this or shorter (-1000 or worse) is blocked: no ordinary line market is that lopsided.
+export const NO_ODDS_MIN_FANDUEL_PRICE = -1000;
+
+export function impliedProbability(american: number): number {
+  return american < 0 ? -american / (-american + 100) : 100 / (american + 100);
+}
 
 const FOOTBALL_SPORT_KEYS = new Set(["americanfootball_nfl", "americanfootball_ncaaf"]);
 const NHL_SPORT_KEY = "icehockey_nhl";
@@ -258,9 +290,11 @@ const OTHER_LEAGUE_MARKETS: Record<string, PeriodMarkets> = {
   FULL_GAME: { suffix: "", alternates: ["spreads", "totals"], teamTotals: false },
 };
 
-type TargetResult = { ok: true; target: FanDuelLegTarget } | { ok: false; reason: string; status?: "needs_clarification" };
+type TargetResult = { ok: true; target: FanDuelLegTarget } | { ok: false; reason: string; status?: "needs_clarification" | "market_unavailable" };
 const unsupported = (reason: string): TargetResult => ({ ok: false, reason });
 // A supported bet whose team the pick does not settle: a question for the user, never "not supported".
+// FanDuel does not sell this bet for the league (a period it has no market for): "Market unavailable", never another market.
+const marketUnavailable = (reason: string): TargetResult => ({ ok: false, reason, status: "market_unavailable" });
 const needsClarification = (reason: string): TargetResult => ({ ok: false, reason, status: "needs_clarification" });
 
 function playerPropTarget(leg: FanDuelLegInput): TargetResult {
@@ -311,7 +345,15 @@ function playerPropTarget(leg: FanDuelLegInput): TargetResult {
 
 // A spread / total / team total: its main market for the period, the
 // alternate-lines market when FanDuel has one there, and the line rules.
+// The most FanDuel's line may move from the pick's, for this league's market in this period (see the constants).
+export function lineMoveCap(sportKey: string, market: LineMarket, periodSuffix: string): number {
+  const lowScoring = sportKey === NHL_SPORT_KEY || sportKey === "baseball_mlb";
+  if (market === "spreads") return lowScoring ? MAX_LINE_MOVE_PUCK_RUN_LINE : MAX_LINE_MOVE_POINTS;
+  return lowScoring || periodSuffix !== "" ? MAX_LINE_MOVE_LOW_SCORING : MAX_LINE_MOVE_POINTS;
+}
+
 function lineTarget(
+  sportKey: string,
   market: LineMarket,
   period: PeriodMarkets,
   rest: Pick<FanDuelLegTarget, "outcome" | "team"> & { point: number; easier: "lower" | "higher" }
@@ -322,7 +364,7 @@ function lineTarget(
       marketKey: market + period.suffix,
       ...(period.alternates.includes(market) ? { altMarketKey: "alternate_" + market + period.suffix } : {}),
       ...rest,
-      maxLineMove: MAX_LINE_MOVE_POINTS,
+      maxLineMove: lineMoveCap(sportKey, market, period.suffix),
     },
   };
 }
@@ -351,7 +393,7 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
   }
 
   const period = (PERIOD_MARKETS[leg.sportKey] ?? OTHER_LEAGUE_MARKETS)[leg.period];
-  if (!period) return unsupported(marketNotOffered("no " + leg.period.toLowerCase().replace(/_/g, " ") + " bets for " + leg.leagueName));
+  if (!period) return marketUnavailable(marketNotOffered("no " + leg.period.toLowerCase().replace(/_/g, " ") + " bets for " + leg.leagueName));
 
   if (leg.betType === "MONEYLINE" || leg.betType === "SPREAD") {
     const side = teamOf(leg.betType);
@@ -359,12 +401,12 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
     if (leg.betType === "MONEYLINE") return { ok: true, target: { marketKey: "h2h" + period.suffix, outcome: { side } } };
     const point = leg.line ?? extractLine("SPREAD", leg.betDetail ?? "");
     if (point === null) return unsupported("This spread has no line to match.");
-    return lineTarget("spreads", period, { outcome: { side }, point, easier: "higher" });
+    return lineTarget(leg.sportKey, "spreads", period, { outcome: { side }, point, easier: "higher" });
   }
 
   if (leg.betType === "TOTAL" || leg.betType === "TEAM_TOTAL") {
     const teamTotal = leg.betType === "TEAM_TOTAL";
-    if (teamTotal && !period.teamTotals) return unsupported(marketNotOffered("no team totals for " + leg.leagueName + " " + leg.period.toLowerCase().replace(/_/g, " ")));
+    if (teamTotal && !period.teamTotals) return marketUnavailable(marketNotOffered("no team totals for " + leg.leagueName + " " + leg.period.toLowerCase().replace(/_/g, " ")));
     const team = teamTotal ? teamOf("MONEYLINE") : null;
     if (teamTotal && !team) return needsClarification(sideNeedsClarification(leg.awayTeam, leg.homeTeam));
     const side = totalSideFromText(leg.betDetail);
@@ -372,7 +414,7 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
     const point = leg.line ?? extractLine(leg.betType, leg.betDetail ?? "");
     if (point === null) return unsupported("This total has no line to match.");
     const over = side === "OVER";
-    return lineTarget(teamTotal ? "team_totals" : "totals", period, {
+    return lineTarget(leg.sportKey, teamTotal ? "team_totals" : "totals", period, {
       outcome: { name: over ? "Over" : "Under" },
       ...(team ? { team } : {}),
       point,
@@ -449,7 +491,7 @@ export type FanDuelMatchQuery = {
 export type FanDuelMatch =
   | { status: "matched"; selection: FanDuelSelection; price: number }
   | { status: "adjusted"; selection: FanDuelSelection; price: number; fanDuelLine: number; worse: boolean }
-  | { status: "not_found" | "ambiguous"; reason: string };
+  | { status: "not_found" | "ambiguous" | "market_unavailable" | "line_unavailable"; reason: string };
 
 const AMBIGUOUS = "More than one FanDuel selection fits this pick.";
 
@@ -466,7 +508,7 @@ const AMBIGUOUS = "More than one FanDuel selection fits this pick.";
 // the first of marketKeys that has it.
 export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMarket[]): FanDuelMatch {
   if (!markets.some((m) => query.marketKeys.includes(m.key))) {
-    return { status: "not_found", reason: marketNotOffered("no " + marketLabel(query.marketKeys[0]) + " market for this game right now") };
+    return { status: "market_unavailable", reason: marketNotOffered("no " + marketLabel(query.marketKeys[0]) + " market for this game right now") };
   }
 
   let description = query.description === undefined ? null : normalizeName(query.description);
@@ -482,7 +524,7 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
     if (!hasLine) {
       const what = marketLabel(query.marketKeys[0]);
       return {
-        status: "not_found",
+        status: player.status === "found" ? "market_unavailable" : "not_found",
         reason: player.status === "found" ? marketNotOffered("FanDuel has no " + what + " line for " + player.name) : playerNotMatched(query.player.name, what),
       };
     }
@@ -516,9 +558,14 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
   if (exact.length > 1) return { status: "ambiguous", reason: AMBIGUOUS };
   if (exact.length === 1) return { status: "matched", ...exact[0] };
   if (withoutIds > 0) return { status: "not_found", reason: "FanDuel has this bet, but no betslip link for it." };
-  if (query.point === undefined) return { status: "not_found", reason: marketNotOffered("this " + marketLabel(query.marketKeys[0]) + " selection isn't posted right now") };
-  if (query.maxLineMove === undefined || byLine.size === 0) {
-    return { status: "not_found", reason: "FanDuel isn't offering this exact line right now." };
+  if (query.point === undefined) return { status: "market_unavailable", reason: marketNotOffered("this " + marketLabel(query.marketKeys[0]) + " selection isn't posted right now") };
+  // Nothing at any line for this selection: the market is there, this side of it is not.
+  // (A player or team that has no line at all is a name that matched nothing, not a missing market.)
+  if (byLine.size === 0 && description !== null) return { status: "not_found", reason: "FanDuel isn't offering this exact line right now." };
+  if (byLine.size === 0) return { status: "market_unavailable", reason: marketNotOffered("this " + marketLabel(query.marketKeys[0]) + " selection isn't posted right now") };
+  // No move allowed (a puck / run line) or not asked yet: the pick's own line or nothing.
+  if (query.maxLineMove === undefined || query.maxLineMove === 0) {
+    return { status: "line_unavailable", reason: lineUnavailable("FanDuel isn't offering this exact line right now") };
   }
 
   const pickLine = query.point;
@@ -531,7 +578,7 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
     const overUnder = query.outcomeName === "Over" || query.outcomeName === "Under";
     const shown = overUnder ? query.outcomeName + " " + nearest : (query.marketKeys[0].startsWith("spreads") && nearest > 0 ? "+" : "") + nearest;
     const cap = Math.round(query.maxLineMove * 100) / 100;
-    return { status: "not_found", reason: "FanDuel's closest line is " + shown + ", more than " + cap + " away from your pick." };
+    return { status: "line_unavailable", reason: lineUnavailable("FanDuel's closest line is " + shown + ", more than " + cap + " away from your pick") };
   }
   const atNearest = Array.from(byLine.get(nearest)!.found.values());
   const tied = lines.length > 1 && move(lines[1]) === move(nearest);
@@ -615,6 +662,34 @@ async function leagueEvents(sportKey: string, deps: FanDuelDeps): Promise<{ even
   return { events: Array.from(byId.values()), incomplete: preseason.some((events) => events === null) };
 }
 
+const PRICE_GATED_BETS = new Set(["SPREAD", "TOTAL", "TEAM_TOTAL"]);
+
+// Whether FanDuel's price for the selection is believable for this pick: the sentence to block with, or a warning to
+// send with, or neither.
+export function checkPrice(
+  leg: FanDuelLegInput,
+  target: FanDuelLegTarget,
+  fanDuelPrice: number,
+  fanDuelLine: number | undefined,
+  live = false
+): { blocked: string | null; warning: string | null } {
+  const outcome = "name" in target.outcome ? target.outcome.name + " " : "";
+  const what = marketLabel(target.marketKey) + (fanDuelLine === undefined ? "" : " " + outcome + fanDuelLine);
+  const pickHasPrice = leg.oddsSource !== "DEFAULTED" && Number.isFinite(leg.odds) && leg.odds !== 0;
+  if (!pickHasPrice) {
+    // Nothing to compare: only a price no ordinary line market carries is stopped.
+    if (PRICE_GATED_BETS.has(leg.betType) && fanDuelPrice <= NO_ODDS_MIN_FANDUEL_PRICE) {
+      // A game under way legitimately reprices, so a live leg is warned, never blocked, on price.
+      return live ? { blocked: null, warning: priceMovedWarning(null, fanDuelPrice) } : { blocked: priceMismatch(what, null, fanDuelPrice), warning: null };
+    }
+    return { blocked: null, warning: null };
+  }
+  const gap = Math.abs(impliedProbability(leg.odds) - impliedProbability(fanDuelPrice));
+  if (gap >= MAX_IMPLIED_PROB_GAP && !live) return { blocked: priceMismatch(what, leg.odds, fanDuelPrice), warning: null };
+  if (gap >= PRICE_MOVED_WARN_GAP) return { blocked: null, warning: priceMovedWarning(leg.odds, fanDuelPrice) };
+  return { blocked: null, warning: null };
+}
+
 export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDeps): Promise<FanDuelLinkResponse> {
   const results = new Map<string, FanDuelLegResult>();
   const settle = (
@@ -622,8 +697,9 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
     status: FanDuelLegStatus,
     reason: string | null,
     fanDuelOdds: number | null = null,
-    sentLine: FanDuelSentLine | null = null
-  ) => results.set(leg.pickId, { pickId: leg.pickId, status, reason, pickOdds: leg.odds, fanDuelOdds, sentLine });
+    sentLine: FanDuelSentLine | null = null,
+    warning: string | null = null
+  ) => results.set(leg.pickId, { pickId: leg.pickId, status, reason, pickOdds: leg.odds, fanDuelOdds, sentLine, warning });
 
   // 1. Games that are over and unsupported markets never reach the feed. A live
   // game's leg goes on like any other: its ids and line are read from FanDuel
@@ -671,13 +747,24 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
   // markets of only the legs whose line the main market didn't have.
   const selections = new Map<string, FanDuelSelection>();
   const finish = ({ leg, target }: Wanted, match: FanDuelMatch) => {
+    let warning: string | null = null;
+    if (match.status === "matched" || match.status === "adjusted") {
+      // A price nowhere near the pick's is a different bet, whatever the market and line say: not sent, and never
+      // shown as an adjusted line.
+      const priced = checkPrice(leg, target, match.price, match.status === "adjusted" ? match.fanDuelLine : target.point, hasKickedOff(leg.gameTime, deps.now));
+      if (priced.blocked) {
+        settle(leg, "price_mismatch", priced.blocked);
+        return;
+      }
+      warning = priced.warning;
+    }
     if (match.status === "matched") {
       selections.set(leg.pickId, match.selection);
-      settle(leg, "matched", null, match.price);
+      settle(leg, "matched", null, match.price, null, warning);
     } else if (match.status === "adjusted") {
       selections.set(leg.pickId, match.selection);
       const side = "name" in target.outcome && (target.outcome.name === "Over" || target.outcome.name === "Under") ? target.outcome.name : null;
-      settle(leg, "adjusted", null, match.price, { pick: target.point!, fanDuel: match.fanDuelLine, side, worse: match.worse });
+      settle(leg, "adjusted", null, match.price, { pick: target.point!, fanDuel: match.fanDuelLine, side, worse: match.worse }, warning);
     } else {
       settle(leg, match.status, match.reason);
     }
@@ -707,7 +794,7 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
         // counts here: the nearest line is chosen once every line is in hand.
         const alt = w.target.altMarketKey !== undefined && w.target.point !== undefined;
         const match = matchFanDuelOutcome(query(w, [w.target.marketKey], !alt), main);
-        if (alt && match.status === "not_found") missed.push(w);
+        if (alt && (match.status === "not_found" || match.status === "market_unavailable" || match.status === "line_unavailable")) missed.push(w);
         else finish(w, match);
       }
       if (!main || missed.length === 0) return;
