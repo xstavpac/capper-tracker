@@ -17,13 +17,15 @@
 //
 // Supporters are DISTINCT cappers. Two scorers, picked by `scorer` (HYBRID_SCORER):
 //
-//   SCORING (the default): scoring.ts's best of two (scorePickBestOfTwo). The post is
-//   scored at the capper's OWN posted price (the pick's odds and odds source; a FanDuel
-//   ladder rung never reaches this file), on the in-league-first hierarchy and on the
-//   all-leagues record. It counts when either score passes the win-% gate (passesGate:
-//   the same price-aware gate as Standard, Hedge and Contrarian, long-shot rule
-//   included), and its score is the better rankScore - an edge, so it can be negative.
-//   Ties: the larger decided sample, then id.
+//   SCORING (the default): scoring.ts's best of two (scorePickBestOfTwo). The GATE is the
+//   capper's actual record: the post counts when the raw win % of EITHER record - this
+//   league alone, or every league - reaches the win-% lever (so an 8-0 in-league capper
+//   with a bad overall record counts, and so does 30-20 overall with 2-8 in-league). No
+//   shrinkage, no price and no long-shot rule: a 0-for-N capper fails at every lever
+//   above 0, and lowering the lever never removes anyone. The SCORE only orders: the
+//   better rankScore (an edge at the capper's OWN posted price, which can be negative; a
+//   FanDuel ladder rung never reaches this file) among only the records that cleared the
+//   gate. Ties: the larger decided sample, then id.
 //   WILSON (rollback, deleted in PR 9): pick-record.ts recordForGate - the league and the
 //   all-time category record, each by its Wilson lower bound at z, the higher kept, a tie
 //   to the league one; the raw win-% gate on that record only; the score is that Wilson
@@ -64,7 +66,7 @@ import { hasKickedOff, isGameOver, OFF_BOARD_GAME_PREFIX } from "@/lib/parlay/ga
 import { recordForGate } from "@/lib/parlay/pick-record";
 import { qualifies, wilsonLowerBound } from "@/lib/parlay/qualification-core";
 import { describePick } from "@/lib/parlay/relationship-classifier";
-import { EMPTY_PLATFORM_RATES, passesGateBestOfTwo, scorePickBestOfTwo, type BestOfTwoScore, type ScoreModel, type ScoringContext } from "@/lib/parlay/scoring";
+import { EMPTY_PLATFORM_RATES, scorePickBestOfTwo, type BestOfTwoScore, type ScoreModel, type ScoringContext } from "@/lib/parlay/scoring";
 
 // Supporters a position needs: one strong capper is enough.
 export const HYBRID_MIN_SUPPORTERS = 1;
@@ -97,7 +99,7 @@ export type PositionCapper = {
   score: number;
   // SCORING only: what scored the post - decided picks behind the score (the tie-break),
   // which record won the best of two, and the model.
-  scoring?: { decided: number; from: BestOfTwoScore["chosenFrom"]; model: ScoreModel };
+  scoring?: { decided: number; from: NonNullable<BestOfTwoScore["chosenFrom"]>; model: ScoreModel };
   // The hardest gated post on the position, as posted: its market and number
   // (null for a moneyline).
   postedMarket: HybridMarket;
@@ -177,12 +179,12 @@ function scoringOf(snapshot: ConsensusRecords, opts: Pick<ConsensusOptions, "min
 function postPasses(read: ReadPost, s: Scoring): boolean {
   if (!read.record) return false;
   if (s.scorer === "WILSON") return qualifies(read.record, s.gate);
-  return !!read.scored && passesGateBestOfTwo(read.scored, s.gate);
+  return !!read.scored && read.scored.passes;
 }
 
 // The tie-break sample: SCORING's decided picks, WILSON's record n.
 const sampleOf = (decided: number | undefined, record: HybridRecord) => decided ?? record.n;
-const decidedOf = (p: { scored?: BestOfTwoScore }) => (p.scored?.chosen.status === "SCORED" ? p.scored.chosen.decided : undefined);
+const decidedOf = (p: { scored?: BestOfTwoScore }) => (p.scored?.chosen?.status === "SCORED" ? p.scored.chosen.decided : undefined);
 
 const MARKET_BY_BET_TYPE: Record<string, HybridMarket> = { SPREAD: "SPREAD", MONEYLINE: "MONEYLINE", TOTAL: "TOTAL" };
 
@@ -240,8 +242,8 @@ function readPost(pick: GeneratorPick, game: GeneratorGame, snapshot: ConsensusR
   if (s.scorer === "WILSON") return { ...base, score: record ? wilsonLowerBound(record.wins, record.losses, s.z) : 0 };
   // At the capper's posted price: the pick as posted is all scoring.ts is handed.
   const scored = scorePickBestOfTwo(pick, s.ctx);
-  // No record has no score; such a post never passes the gate, so this number is never ranked.
-  return { ...base, score: scored.chosen.status === "SCORED" ? scored.chosen.rankScore : Number.NEGATIVE_INFINITY, scored };
+  // A post that cleared neither record has no chosen score; it never passes the gate, so this number is never ranked.
+  return { ...base, score: scored.chosen?.status === "SCORED" ? scored.chosen.rankScore : Number.NEGATIVE_INFINITY, scored };
 }
 
 // The pick as a Post, or null when it is not one a hybrid position can use (readPost)
@@ -284,7 +286,7 @@ function toCapper(posts: Post[]): PositionCapper {
     record: best.record,
     recordMarket: best.market,
     score: best.score,
-    ...(best.scored && best.scored.chosen.status === "SCORED" ? { scoring: { decided: best.scored.chosen.decided, from: best.scored.chosenFrom, model: best.scored.chosen.model } } : {}),
+    ...(best.scored?.chosen?.status === "SCORED" && best.scored.chosenFrom ? { scoring: { decided: best.scored.chosen.decided, from: best.scored.chosenFrom, model: best.scored.chosen.model } } : {}),
     postedMarket: hardest.market,
     postedLine: hardest.postedLine,
     endorsedLine: hardest.endorsedLine,

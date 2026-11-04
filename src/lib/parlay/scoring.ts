@@ -62,12 +62,14 @@
 // A capper's historical break-even is shown in the breakdown and drives the
 // price transfer; it is never compared against to make a score.
 //
-// Best of two (opt-in, Consensus Hybrid only: scorePickBestOfTwo): the pick is scored twice, on the
-// hierarchy above (in-league first) and on its capper's ALL-LEAGUES record as one level shrunk straight
-// toward the platform (the in-league and other-leagues levels pooled; priced picks pooled the same way).
-// It passes the gate when either score does and ranks by the better one, a tie to in-league first. The
-// raw record the long-shot rule reads is the same for both, so rule C applies unchanged. scorePick, and so
-// Standard / Hedge / Contrarian, never read it.
+// Best of two (opt-in, Consensus Hybrid only: scorePickBestOfTwo). Unlike everything above, its GATE
+// is the capper's actual record: the pick passes when the raw win % of EITHER half reaches L - this
+// league alone, or every league - and at L = 0 when a half has any decided pick. No shrinkage, no
+// price, no long-shot rule C (the record that gates is the record rule C would read). The pick is
+// also scored twice (in-league-first, and the all-leagues record pooled and shrunk straight to the
+// platform) and ordered by the better rankScore among only the halves that cleared the gate, in-league
+// first on a tie; a half that failed is never ranked. scorePick, and so Standard / Hedge / Contrarian,
+// never read any of this.
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { hasUsablePrice } from "@/lib/parlay/combine-odds";
 import { GATE_DEFAULT } from "@/lib/parlay/gate";
@@ -520,25 +522,49 @@ export function passesGate(score: PickScore, minWinPct: number): boolean {
   return gateCheck(score.gate.probability, score.gate.breakEven, minWinPct, raw).passes;
 }
 
-// Best of two (see the header): both scores, and the one that ranks.
+// Best of two (see the header). The GATE reads the capper's actual record; the SCORE only orders.
+export type RawHalf = { wins: number; losses: number; winPct: number; clears: boolean };
+
 export type BestOfTwoScore = {
+  // The in-league-first score and the all-leagues score (ranking only).
   inLeague: PickScore;
   allLeagues: PickScore;
-  // The better by rankScore, in-league on a tie; NO_RECORD only when both are.
-  chosen: PickScore;
-  chosenFrom: "IN_LEAGUE" | "ALL_LEAGUES";
+  // Each half's own raw record against the lever; null when that half has no decided pick.
+  // inLeague: this league alone. allLeagues: every league, this league included.
+  raw: { inLeague: RawHalf | null; allLeagues: RawHalf | null };
+  // Either half's raw win % reaches L (L = 0: any decided record). Price plays no part.
+  passes: boolean;
+  // The better rankScore among ONLY the halves that cleared; in-league on a tie. Null when none cleared:
+  // a half that failed the gate is never ranked.
+  chosen: PickScore | null;
+  chosenFrom: "IN_LEAGUE" | "ALL_LEAGUES" | null;
+};
+
+const rawHalf = (w: WinLoss, minWinPct: number): RawHalf | null => {
+  const decided = w.wins + w.losses;
+  if (decided === 0) return null;
+  // The same expression as winPctOf (stats.ts), so a record on the lever is on it to the last bit.
+  const winPct = (w.wins / decided) * 100;
+  return { wins: w.wins, losses: w.losses, winPct, clears: winPct >= minWinPct };
 };
 
 export function scorePickBestOfTwo(pick: ScoringPick, ctx: ScoringContext): BestOfTwoScore {
   const inLeague = scoreIn(pick, ctx, "IN_LEAGUE_FIRST");
   const allLeagues = scoreIn(pick, ctx, "ALL_LEAGUES");
-  const takeAll = allLeagues.status === "SCORED" && (inLeague.status !== "SCORED" || allLeagues.rankScore > inLeague.rankScore);
-  return { inLeague, allLeagues, chosen: takeAll ? allLeagues : inLeague, chosenFrom: takeAll ? "ALL_LEAGUES" : "IN_LEAGUE" };
-}
-
-// Passes when either score passes, at any setting.
-export function passesGateBestOfTwo(score: BestOfTwoScore, minWinPct: number): boolean {
-  return passesGate(score.inLeague, minWinPct) || passesGate(score.allLeagues, minWinPct);
+  const minWinPct = ctx.minWinPct ?? GATE_DEFAULT;
+  // The records come from the score's own levels: league, and league + other leagues.
+  const raw =
+    inLeague.status === "SCORED"
+      ? {
+          inLeague: rawHalf(inLeague.levels.league, minWinPct),
+          allLeagues: rawHalf({ wins: inLeague.levels.league.wins + inLeague.levels.otherLeagues.wins, losses: inLeague.levels.league.losses + inLeague.levels.otherLeagues.losses }, minWinPct),
+        }
+      : { inLeague: null, allLeagues: null };
+  const inOk = raw.inLeague?.clears === true && inLeague.status === "SCORED";
+  const allOk = raw.allLeagues?.clears === true && allLeagues.status === "SCORED";
+  const takeAll = allOk && (!inOk || (allLeagues.status === "SCORED" && inLeague.status === "SCORED" && allLeagues.rankScore > inLeague.rankScore));
+  const chosenFrom = takeAll ? "ALL_LEAGUES" : inOk ? "IN_LEAGUE" : null;
+  return { inLeague, allLeagues, raw, passes: inOk || allOk, chosen: chosenFrom === "ALL_LEAGUES" ? allLeagues : chosenFrom === "IN_LEAGUE" ? inLeague : null, chosenFrom };
 }
 
 // The -110 equivalent: the win rate with this edge at -110, the number the gate

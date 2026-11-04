@@ -353,9 +353,10 @@ export function standardScoringVersion(_parts: { z: number }): string {
   return `standard/${SCORING_VERSION}/${SELECTION_VERSION}/${CONTRARIAN_VERSION}`;
 }
 
-// A Consensus Hybrid run. SCORING: scoring.ts's best of two at the capper's posted price
-// (consensus.ts); WILSON: the rollback, named as before scoring.ts.
-export const HYBRID_VERSION = "hyb-posted-v1";
+// A Consensus Hybrid run. SCORING: the raw-record gate over scoring.ts's best of two, ordered by
+// rankScore at the capper's posted price (consensus.ts); WILSON: the rollback, named as before scoring.ts.
+// hyb-rawgate-bo2-v2: v1 (hyb-posted-v1) gated on the shrunk, price-aware score and rule C.
+export const HYBRID_VERSION = "hyb-rawgate-bo2-v2";
 export function hybridScoringVersion(scorer: "SCORING" | "WILSON", wilsonParts: { recordScope: string; z: number; contrarianHeadcount: boolean }): string {
   return scorer === "SCORING" ? `hybrid/${SCORING_VERSION}/${HYBRID_VERSION}` : scoringVersionOf(wilsonParts, true);
 }
