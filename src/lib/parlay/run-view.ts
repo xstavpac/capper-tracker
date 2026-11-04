@@ -41,7 +41,10 @@ export const STAGE_LABELS: Record<StageKey, string> = {
   SLIP_FITS_GAME: "Within max legs per game",
   SLIP_USED: "Used in the parlay",
   HYB_GAMES_WITH_PICKS: "Games with pending picks",
+  HYB_BOX_ELIGIBLE: "Past the consensus gates (a side and a total)",
+  HYB_PRICED: "Within the pricing limit",
   HYB_GAMES_KEPT: "Games in the parlay or its alternates",
+  HYB_POSITIONS: "Consensus positions (sides + totals)",
 };
 
 export type RunFlag = "COLLAPSE" | "SUSPECT_COUNT";
@@ -58,7 +61,7 @@ export type FunnelRow = {
 
 export type Funnel = { chain: keyof typeof STAGE_CHAINS; rows: FunnelRow[] };
 
-const CHAIN_TITLES: Record<keyof typeof STAGE_CHAINS, string> = { pool: "Generated legs", slip: "Your slip", hybrid: "Games" };
+const CHAIN_TITLES: Record<keyof typeof STAGE_CHAINS, string> = { pool: "Generated legs", slip: "Your slip", hybrid: "Games", hybridPositions: "Positions" };
 
 export const chainTitle = (chain: keyof typeof STAGE_CHAINS) => CHAIN_TITLES[chain];
 
@@ -73,7 +76,9 @@ export function funnelsOf(run: Pick<RunRow, "stages" | "reasons">): Funnel[] {
     keys.forEach((stage, i) => {
       const n = count.get(stage);
       if (n === undefined) return;
-      const previous = i === 0 ? null : (count.get(keys[i - 1]) ?? null);
+      // The nearest earlier stage the run recorded (a Hybrid run from before HYB_BOX_ELIGIBLE / HYB_PRICED has neither).
+      const earlier = keys.slice(0, i).filter((k) => count.has(k));
+      const previous = earlier.length === 0 ? null : count.get(earlier[earlier.length - 1])!;
       const flags: RunFlag[] = [];
       if (n === 0 && (previous ?? 0) > 0) flags.push("COLLAPSE");
       if ((SUSPECT_COUNTS as readonly number[]).includes(n)) flags.push("SUSPECT_COUNT");

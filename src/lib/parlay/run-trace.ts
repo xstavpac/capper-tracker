@@ -84,7 +84,12 @@ export type ErrorCode = (typeof ERROR_CODES)[number];
 export const STAGE_CHAINS = {
   pool: ["POOL", "IN_SCOPE_GAMES", "NOT_SLIP", "INCLUDED", "HAS_RECORD", "PASSES_GATE", "NO_SLIP_CONFLICT", "SELECTED"],
   slip: ["SLIP_TOTAL", "SLIP_LIVE", "SLIP_NO_CONFLICT", "SLIP_FITS_GAME", "SLIP_USED"],
-  hybrid: ["HYB_GAMES_WITH_PICKS", "HYB_GAMES_KEPT"],
+  // Games. Each game "Why only N games?" lists is dropped once, at the stage of the first gate it failed:
+  // the consensus gates (window, markets, win rate, hedges) before HYB_BOX_ELIGIBLE, the pricing limit
+  // before HYB_PRICED, ladders / the -600 floor / the cap / ranking before HYB_GAMES_KEPT.
+  hybrid: ["HYB_GAMES_WITH_PICKS", "HYB_BOX_ELIGIBLE", "HYB_PRICED", "HYB_GAMES_KEPT"],
+  // Positions (a game's side and its total are one each): its own chain, never compared with games.
+  hybridPositions: ["HYB_POSITIONS"],
 } as const;
 
 export type StageKey = (typeof STAGE_CHAINS)[keyof typeof STAGE_CHAINS][number];
@@ -322,13 +327,18 @@ export function reconcileTrace(trace: Pick<RunTrace, "stages" | "reasons">): { s
   for (const r of trace.reasons) dropsAt.set(r.stage, (dropsAt.get(r.stage) ?? 0) + r.count);
   const count = new Map(trace.stages.map((s) => [s.key, s.count]));
   const bad: { stage: StageKey; expected: number; actual: number }[] = [];
-  for (const chain of Object.values(STAGE_CHAINS)) {
-    for (let i = 1; i < chain.length; i++) {
-      const prev = count.get(chain[i - 1]);
-      const here = count.get(chain[i]);
-      if (prev === undefined || here === undefined) continue;
-      const expected = prev - (dropsAt.get(chain[i]) ?? 0);
-      if (expected !== here) bad.push({ stage: chain[i], expected, actual: here });
+  // A stage the run didn't record (a Hybrid run from before HYB_BOX_ELIGIBLE / HYB_PRICED) is skipped:
+  // the next recorded stage is checked against the last recorded one, less every drop in between.
+  for (const chain of Object.values(STAGE_CHAINS) as readonly (readonly StageKey[])[]) {
+    let prev: number | undefined;
+    let between = 0;
+    for (const stage of chain) {
+      const here = count.get(stage);
+      between += dropsAt.get(stage) ?? 0;
+      if (here === undefined) continue;
+      if (prev !== undefined && prev - between !== here) bad.push({ stage, expected: prev - between, actual: here });
+      prev = here;
+      between = 0;
     }
   }
   return bad;
@@ -339,6 +349,14 @@ export function reconcileTrace(trace: Pick<RunTrace, "stages" | "reasons">): { s
 export const CONTRARIAN_VERSION = "contra-samebet-v1";
 export function standardScoringVersion(_parts: { z: number }): string {
   return `standard/${SCORING_VERSION}/${SELECTION_VERSION}/${CONTRARIAN_VERSION}`;
+}
+
+// A Consensus Hybrid run. SCORING: the raw-record gate over scoring.ts's best of two, ordered by
+// rankScore at the capper's posted price (consensus.ts); WILSON: the rollback, named as before scoring.ts.
+// hyb-rawgate-bo2-v2: v1 (hyb-posted-v1) gated on the shrunk, price-aware score and rule C.
+export const HYBRID_VERSION = "hyb-rawgate-bo2-v2";
+export function hybridScoringVersion(scorer: "SCORING" | "WILSON", wilsonParts: { recordScope: string; z: number; contrarianHeadcount: boolean }): string {
+  return scorer === "SCORING" ? `hybrid/${SCORING_VERSION}/${HYBRID_VERSION}` : scoringVersionOf(wilsonParts, true);
 }
 
 // Names the rules a run was scored under, for comparing runs across changes.

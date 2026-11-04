@@ -177,7 +177,7 @@ export type GeneratorSnapshot = {
   propMarketRecords?: Record<string, PropMarketRecord | null>;
   // The platform totals scoring falls back on, trimmed to this snapshot's picks,
   // and how many rows the whole table had (0: empty, every pick scored on the
-  // defaults). Absent from a snapshot built for Consensus Hybrid.
+  // defaults). Absent from a snapshot built without scoring (Consensus Hybrid's WILSON rollback).
   platformRates?: PlatformRates;
   platformRateRows?: number;
 };

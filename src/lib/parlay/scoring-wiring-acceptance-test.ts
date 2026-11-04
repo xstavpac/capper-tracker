@@ -253,9 +253,10 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
   check("Standard's action asks the loader for scoring", read("src/server/actions/parlay-generate.ts").includes("{ scoring: true }"), true);
   const hybrid = read("src/server/actions/parlay-hybrid.ts");
-  check("Hybrid's action doesn't", [hybrid.includes("scoring: true"), hybrid.includes("loadGeneratorSnapshot(user.id, scope, now, trace)")], [false, true]);
+  // PR 8: Hybrid asks for scoring exactly when HYBRID_SCORER is SCORING (its WILSON rollback reads the bundle as before).
+  check("Hybrid's action asks for scoring under HYBRID_SCORER = SCORING", hybrid.includes('loadGeneratorSnapshot(user.id, scope, now, trace, { scoring: HYBRID_SCORER === "SCORING" })'), true);
   const consensus = read("src/lib/parlay/consensus.ts");
-  check("Consensus doesn't import scoring.ts", consensus.includes("parlay/scoring"), false);
+  check("Consensus scores through scoring.ts's best of two", [consensus.includes("parlay/scoring"), consensus.includes("scorePickBestOfTwo(pick, s.ctx)")], [true, true]);
   const list = read("src/server/data/generator-runs-view.ts");
   check("the admin list query leaves the per-leg rows out", (list.match(/#- '\{scoring,legs\}'/g) ?? []).length, 2);
   check("...and selection's per-leg rows (PR 5)", [(list.match(/#- '\{selection,legs\}'/g) ?? []).length, (list.match(/#- '\{selection,hedge\}'/g) ?? []).length], [2, 2]);

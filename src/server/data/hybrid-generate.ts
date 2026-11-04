@@ -124,7 +124,7 @@ export async function runHybridGenerate(req: HybridGenerateRequest, deps: Hybrid
   const games = req.include === "ALL" ? snapshot.games : snapshot.games.map((g) => ({ ...g, picks: g.picks.filter((p) => keepsPick(req.include, p)) }));
   const targetIds = new Set(req.targets.map((t) => t.gameId));
   const all = buildConsensusPositions(
-    { games, leagueRecords: snapshot.leagueRecords, categoryRecords: snapshot.categoryRecords, propMarketRecords: snapshot.propMarketRecords },
+    { games, leagueRecords: snapshot.leagueRecords, categoryRecords: snapshot.categoryRecords, propMarketRecords: snapshot.propMarketRecords, platformRates: snapshot.platformRates },
     { now: deps.now, minWinPct: req.settings.minWinPct }
   );
   const ranked = targetIds.size > 0 ? all.filter((p) => targetIds.has(p.eventId)) : all;
@@ -223,6 +223,21 @@ const HYBRID_REASON: Record<Exclude<HybridSkipReason, "not-used">, ReasonCode> =
   "no-usable-line": "NO_ODDS",
 };
 
+// The funnel stage each "Why only N games?" reason drops a game at.
+const HYBRID_STAGE: Record<HybridSkipReason, "HYB_BOX_ELIGIBLE" | "HYB_PRICED" | "HYB_GAMES_KEPT"> = {
+  started: "HYB_BOX_ELIGIBLE",
+  "outside-window": "HYB_BOX_ELIGIBLE",
+  "no-eligible-picks": "HYB_BOX_ELIGIBLE",
+  "no-side-picks": "HYB_BOX_ELIGIBLE",
+  "no-total-picks": "HYB_BOX_ELIGIBLE",
+  "below-gate": "HYB_BOX_ELIGIBLE",
+  "not-enough-supporters": "HYB_BOX_ELIGIBLE",
+  "beyond-ladder-limit": "HYB_PRICED",
+  "ladder-unavailable": "HYB_GAMES_KEPT",
+  "no-usable-line": "HYB_GAMES_KEPT",
+  "not-used": "HYB_GAMES_KEPT",
+};
+
 export function traceHybridRun(
   trace: TraceCollector,
   input: {
@@ -238,16 +253,28 @@ export function traceHybridRun(
 ): void {
   const { diagnostics, report, result, notes, requests, lookup, ranked, candidateEvents } = input;
   const kept = new Set([...(result.primary?.legs ?? []), ...result.alternates.flatMap((h) => h.legs)].map((l) => l.eventId));
-  trace.stage("HYB_GAMES_WITH_PICKS", diagnostics.gamesWithPicks);
-  trace.stage("HYB_GAMES_KEPT", kept.size);
   const noteOf = new Map(notes.map((n) => [n.eventId, n]));
   const leftOut = new Map(report.leftOut.map((x) => [x.eventId, x.why]));
+  // Each skipped game drops once, at the stage of its first failed gate (STAGE_CHAINS.hybrid), so the
+  // stages count down from games with picks to games kept and always reconcile.
+  const dropsAt: Record<"HYB_BOX_ELIGIBLE" | "HYB_PRICED" | "HYB_GAMES_KEPT", number> = { HYB_BOX_ELIGIBLE: 0, HYB_PRICED: 0, HYB_GAMES_KEPT: 0 };
+  const drops: Parameters<TraceCollector["drop"]>[] = [];
   for (const row of diagnostics.skipped) {
     const note = noteOf.get(row.eventId);
     const reason: ReasonCode = row.reason === "not-used" ? (leftOut.get(row.eventId) === "cap" ? "LEG_CAP" : "RANKED_LOWER") : HYBRID_REASON[row.reason];
     const sub = row.reason === "ladder-unavailable" && note ? (note.cause ?? note.kind) : undefined;
-    trace.drop("HYB_GAMES_KEPT", reason, { id: row.eventId, label: `${row.gameLabel} — ${row.text}` }, sub);
+    const stage = HYBRID_STAGE[row.reason];
+    dropsAt[stage]++;
+    drops.push([stage, reason, { id: row.eventId, label: `${row.gameLabel} — ${row.text}` }, sub]);
   }
+  const boxEligible = diagnostics.gamesWithPicks - dropsAt.HYB_BOX_ELIGIBLE;
+  const priced = boxEligible - dropsAt.HYB_PRICED;
+  trace.stage("HYB_GAMES_WITH_PICKS", diagnostics.gamesWithPicks);
+  trace.stage("HYB_BOX_ELIGIBLE", boxEligible);
+  trace.stage("HYB_PRICED", priced);
+  trace.stage("HYB_GAMES_KEPT", kept.size);
+  trace.stage("HYB_POSITIONS", ranked.length);
+  for (const d of drops) trace.drop(...d);
 
   // Per priced game: did FanDuel have its lines, and if not why.
   const inProgress = new Set(lookup.pricingInProgress.map((x) => x.eventId));
