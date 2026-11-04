@@ -5,7 +5,9 @@
 //   Game not on FanDuel         no event for these two teams
 //   Game time mismatch          the same teams, but not at that time
 //   Two games found             a doubleheader: which one is the pick's?
-//   Market not offered          FanDuel has the game, not this bet on it
+//   Market unavailable          FanDuel has the game, not this bet on it (or not this period)
+//   Line unavailable            FanDuel has the market, not this line (or only one past the allowed move)
+//   Potentially incorrect market match   FanDuel's price is far from the pick's: not sent
 //   Player not matched          no one, or more than one, on FanDuel is that player
 //   Needs clarification         a supported bet, but which team it is on isn't settled
 //   Market not supported        this app doesn't send that bet for the league yet
@@ -82,7 +84,24 @@ export const gameTimeMismatch = (fanDuelTime: string, pickTime: string) =>
 export const twoGamesFound = (times: string[]) => "Two games found — couldn't tell which" + (times.length > 0 ? " (" + times.join(" and ") + ")" : "") + ".";
 
 // `what`: the market in words, with the player when it is a prop's.
-export const marketNotOffered = (what: string) => "Market not offered by FanDuel — " + what + ".";
+export const marketNotOffered = (what: string) => "Market unavailable — " + what + ".";
+
+// The line is the bet's identity, so a move past the cap is not a smaller version of the same bet.
+export const lineUnavailable = (detail: string) => "Line unavailable — " + detail + ".";
+
+const fmt = (o: number) => (o > 0 ? "+" : "") + o;
+
+// FanDuel's price for the selection is nowhere near the pick's: most likely not the same bet. pickOdds null = the
+// pick had no real price of its own.
+export const priceMismatch = (what: string, pickOdds: number | null, fanDuelOdds: number) =>
+  "Potentially incorrect market match — FanDuel's " +
+  what +
+  " is " +
+  fmt(fanDuelOdds) +
+  (pickOdds === null ? ", a price no ordinary line carries." : " but your pick is " + fmt(pickOdds) + ".") +
+  " Not sent: check the bet on FanDuel.";
+
+export const priceMovedWarning = (pickOdds: number, fanDuelOdds: number) => "Price moved a lot — your pick was " + fmt(pickOdds) + ", FanDuel has " + fmt(fanDuelOdds) + ".";
 
 export const playerNotMatched = (typed: string, market: string) => "Player not matched — no \"" + typed + "\" with " + market + " on FanDuel for this game.";
 

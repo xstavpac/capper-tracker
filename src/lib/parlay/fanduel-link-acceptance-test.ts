@@ -105,9 +105,9 @@ check(
   { status: "matched", selection: { marketId: "42.612291278", selectionId: "10782388" }, price: -105 }
 );
 check(
-  "spread with the sign flipped is a different bet: not found",
+  "spread with the sign flipped is a different bet: line unavailable",
   matchFanDuelOutcome({ marketKeys: ["spreads"], outcomeName: "Buffalo Bills", point: -3.5 }, GAME_MARKETS).status,
-  "not_found"
+  "line_unavailable"
 );
 check(
   "total Over 54.5",
@@ -122,7 +122,7 @@ check(
 check(
   "total at another line is never matched to the posted one",
   matchFanDuelOutcome({ marketKeys: ["totals"], outcomeName: "Over", point: 53.5 }, GAME_MARKETS),
-  { status: "not_found", reason: "FanDuel isn't offering this exact line right now." }
+  { status: "line_unavailable", reason: "Line unavailable — FanDuel isn't offering this exact line right now." }
 );
 check(
   "player prop Over: that player's own market",
@@ -135,9 +135,9 @@ check(
   { status: "matched", selection: { marketId: "42.613952801", selectionId: "11889882" }, price: -113 }
 );
 check(
-  "player prop at the other player's line: not found",
+  "player prop at the other player's line: line unavailable",
   matchFanDuelOutcome({ marketKeys: ["player_pass_yds"], outcomeName: "Over", description: "Josh Allen", point: 278.5 }, PROP_MARKETS).status,
-  "not_found"
+  "line_unavailable"
 );
 check(
   "a near-miss player name is not a match",
@@ -147,7 +147,7 @@ check(
 check(
   "a market FanDuel didn't return: not found",
   matchFanDuelOutcome({ marketKeys: ["player_rush_yds"], outcomeName: "Over", description: "Josh Allen", point: 30.5 }, PROP_MARKETS),
-  { status: "not_found", reason: "Market not offered by FanDuel — no rushing yards market for this game right now." }
+  { status: "market_unavailable", reason: "Market unavailable — no rushing yards market for this game right now." }
 );
 
 const twoCandidates: FanDuelMarket[] = [
@@ -290,7 +290,7 @@ check("passing touchdowns: exact line only", target({ betType: "PLAYER_PROP", be
 check("a first-half bet goes to the first-half market, never the full-game one", target({ period: "FIRST_HALF" }), { marketKey: "h2h_h1", outcome: { side: "AWAY" } });
 check("NFL first-half spread has its own alternate market; a quarter has none", [target({ betType: "SPREAD", betDetail: "Bills +0.5", line: 0.5, period: "FIRST_HALF" }), target({ betType: "TOTAL", betDetail: "Over 9.5", line: 9.5, period: "FIRST_QUARTER" })], [
   { marketKey: "spreads_h1", altMarketKey: "alternate_spreads_h1", outcome: { side: "AWAY" }, point: 0.5, easier: "higher", maxLineMove: 1.5 },
-  { marketKey: "totals_q1", outcome: { name: "Over" }, point: 9.5, easier: "lower", maxLineMove: 1.5 },
+  { marketKey: "totals_q1", outcome: { name: "Over" }, point: 9.5, easier: "lower", maxLineMove: 0.5 },
 ]);
 check("team total: the team's own market, the team where a prop has its player", target({ betType: "TEAM_TOTAL", betDetail: "Bills Over 24.5", line: 24.5 }), {
   marketKey: "team_totals",
@@ -310,7 +310,7 @@ const ncaaf = { sportKey: "americanfootball_ncaaf", leagueName: "NCAAF" };
 const mlb = { sportKey: "baseball_mlb", leagueName: "MLB", homeTeam: "Tampa Bay Rays", awayTeam: "Cleveland Guardians" };
 const nhl = { sportKey: "icehockey_nhl", leagueName: "NHL", homeTeam: "Detroit Red Wings", awayTeam: "New Jersey Devils" };
 check(
-  "a period FanDuel doesn't sell for the league stays unsupported",
+  "a period FanDuel doesn't sell for the league is Market unavailable (the reason text)",
   [
     reason({ ...ncaaf, period: "SECOND_HALF" }),
     reason({ period: "SECOND_HALF" }),
@@ -320,11 +320,11 @@ check(
     reason({ betType: "PLAYER_PROP", betDetail: "Josh Allen Over 120.5 Passing Yards", period: "FIRST_HALF" }),
   ],
   [
-    "Market not offered by FanDuel — no second half bets for NCAAF.",
+    "Market unavailable — no second half bets for NCAAF.",
     "sendable",
-    "Market not offered by FanDuel — no first quarter bets for MLB.",
-    "Market not offered by FanDuel — no team totals for MLB first half.",
-    "Market not offered by FanDuel — no first half bets for WNBA.",
+    "Market unavailable — no first quarter bets for MLB.",
+    "Market unavailable — no team totals for MLB first half.",
+    "Market unavailable — no first half bets for WNBA.",
     "Market not supported for NFL yet — only full-game player props.",
   ]
 );
@@ -340,11 +340,11 @@ check(
   ],
   [
     { marketKey: "h2h_1st_5_innings", outcome: { side: "AWAY" } },
-    { marketKey: "totals_p1", altMarketKey: "alternate_totals_p1", outcome: { name: "Over" }, point: 1.5, easier: "lower", maxLineMove: 1.5 },
+    { marketKey: "totals_p1", altMarketKey: "alternate_totals_p1", outcome: { name: "Over" }, point: 1.5, easier: "lower", maxLineMove: 0.5 },
     { marketKey: "h2h_p3", outcome: { side: "HOME" } },
     { marketKey: "h2h_3_way", outcome: { side: "HOME" } },
     { marketKey: "h2h_3_way", outcome: { name: "Draw" } },
-    { marketKey: "team_totals", outcome: { name: "Under" }, team: "AWAY", point: 4.5, easier: "higher", maxLineMove: 1.5 },
+    { marketKey: "team_totals", outcome: { name: "Under" }, team: "AWAY", point: 4.5, easier: "higher", maxLineMove: 0.5 },
   ]
 );
 check("a moneyline naming neither team", target({ betDetail: "ML" }), "unsupported");
@@ -477,7 +477,7 @@ async function realResponses() {
   check("FIU +7.5 with the main spread at +2.5: the exact line on the alternate market, at the alternate's own price (-230, not the main +102)", fiu.legs["FIU +7.5"], ["matched", -230, null, null]);
   check("team total Under 23.5: Jacksonville State's own team-total market", fiu.legs["Jacksonville State Team Total Under 23.5"], ["matched", -120, null, null]);
   check("first-half moneyline: the h2h_h1 market", fiu.legs["Jacksonville State First Half Moneyline"], ["matched", -138, null, null]);
-  check("NCAAF second half, which FanDuel doesn't sell, never reaches the feed", fiu.legs["FIU 2H ML"], ["unsupported", null, null, "Market not offered by FanDuel — no second half bets for NCAAF."]);
+  check("NCAAF second half, which FanDuel doesn't sell, never reaches the feed", fiu.legs["FIU 2H ML"], ["market_unavailable", null, null, "Market unavailable — no second half bets for NCAAF."]);
   check("the link: alternate-spread, team-total and first-half selections, in leg order", [fiu.ids[0], fiu.ids[1], fiu.ids[2], fiu.ids[3], fiu.ids[5]], ["42.615585290", "61300718", "42.615585266", "7017917", "4943282"]);
   check("credits: one main call for the three markets, one alternate call for the one leg that missed", fiu.calls, {
     NCAAF: [["h2h_h1", "spreads", "team_totals"], ["alternate_spreads"]],
@@ -508,29 +508,26 @@ async function realResponses() {
     { pick: 6, fanDuel: 6.5, side: "Under", worse: false },
     null,
   ]);
-  check("cap boundary: exactly 1.5 away (13 -> 11.5) is sent", wings.legs["Over 13"], ["adjusted", 4300, { pick: 13, fanDuel: 11.5, side: "Over", worse: false }, null]);
-  check("cap boundary: 2.0 away (13.5 -> 11.5) is a truly absent line - Not found", wings.legs["Over 13.5"], [
-    "not_found",
+  check("hockey total cap is 0.5: 1.5 away (13 -> 11.5) is Line unavailable, not sent", wings.legs["Over 13"], ["line_unavailable", null, null, "Line unavailable — FanDuel's closest line is Over 11.5, more than 0.5 away from your pick."]);
+  check("hockey total cap is 0.5: 2.0 away (13.5 -> 11.5) is Line unavailable", wings.legs["Over 13.5"], [
+    "line_unavailable",
     null,
     null,
-    "FanDuel's closest line is Over 11.5, more than 1.5 away from your pick.",
+    "Line unavailable — FanDuel's closest line is Over 11.5, more than 0.5 away from your pick.",
   ]);
-  check("worse-line flag: Over 1 can only go at Over 2.5, which is harder to win", wings.legs["Over 1"], ["adjusted", -6000, { pick: 1, fanDuel: 2.5, side: "Over", worse: true }, null]);
+  check("Over 1 can only go at Over 2.5 (-6000): 1.5 away, past the hockey cap - Line unavailable, never sent as a worse line", wings.legs["Over 1"], ["line_unavailable", null, null, "Line unavailable — FanDuel's closest line is Over 2.5, more than 0.5 away from your pick."]);
   check("first-period total: the totals_p1 market", wings.legs["Devils Red Wings Over 1.5 First Period"], ["matched", -122, null, null]);
   check(
-    "no opposite side: FanDuel has Red Wings 2.5 only as an Over - the Under goes to the nearest UNDER (3.5 over 1.5, the higher), never to Over 2.5",
+    "no opposite side: FanDuel has Red Wings 2.5 only as an Over - the Under looks only at UNDER lines (nearest 3.5, 1.0 away, past the hockey cap), never at Over 2.5",
     wings.legs["Red Wings Team Total Under 2.5"],
-    ["adjusted", -180, { pick: 2.5, fanDuel: 3.5, side: "Under", worse: false }, null]
+    ["line_unavailable", null, null, "Line unavailable — FanDuel's closest line is Under 3.5, more than 0.5 away from your pick."]
   );
   check("hockey 3-way moneyline: the h2h_3_way market", wings.legs["Red Wings 3-way ML"], ["matched", 140, null, null]);
-  check("the selections sent, in leg order (the cap-busting leg has none)", wings.ids.slice(0, 14), [
+  check("the selections sent, in leg order (the three cap-busting legs and the team total have none)", wings.ids.slice(0, 8), [
     "42.615952772", "8359772", // Over 5.5 (alternate)
     "42.615952772", "8359772", // Over 6 -> Over 5.5
     "42.615070889", "7017912", // Under 6 -> Under 6.5 (main)
-    "42.615952772", "8060349", // Over 13 -> Over 11.5
-    "42.615952772", "8359788", // Over 1 -> Over 2.5
     "42.615952730", "7017911", // 1P Over 1.5
-    "42.615952616", "8359773", // Red Wings TT Under 3.5
   ]);
   check("credits: the first-period total and the 3-way hit on the main call, so only the two alternate keys the missed legs need are bought", wings.calls, {
     NHL: [["h2h_3_way", "team_totals", "totals", "totals_p1"], ["alternate_team_totals", "alternate_totals"]],
@@ -541,22 +538,22 @@ async function realResponses() {
     .filter((m) => m.key === "totals" || m.key === "alternate_totals")
     .map((m) => ({ ...m, outcomes: m.outcomes.filter((o) => o.name === "Over") }));
   check(
-    "no opposite side: with only Overs on the board an Under is Not found, even at a line the Over has",
-    matchFanDuelOutcome({ marketKeys: ["totals", "alternate_totals"], outcomeName: "Under", point: 6.5, maxLineMove: 1.5, easier: "higher" }, overOnly),
-    { status: "not_found", reason: "FanDuel isn't offering this exact line right now." }
+    "no opposite side: with only Overs on the board an Under is Market unavailable, even at a line the Over has",
+    matchFanDuelOutcome({ marketKeys: ["totals", "alternate_totals"], outcomeName: "Under", point: 6.5, maxLineMove: 0.5, easier: "higher" }, overOnly),
+    { status: "market_unavailable", reason: "Market unavailable — this total selection isn't posted right now." }
   );
   check(
     "no opposite side: New Jersey's spread is never a match for Detroit's at the same number",
     matchFanDuelOutcome({ marketKeys: ["spreads"], outcomeName: "Detroit Red Wings", point: 1.5 }, marketsOf("NHL")).status,
-    "not_found"
+    "line_unavailable"
   );
   check(
     "no other market: a team total is never filled from the game total",
     matchFanDuelOutcome(
-      { marketKeys: ["team_totals", "alternate_team_totals"], outcomeName: "Over", description: "Detroit Red Wings", point: 6.5, maxLineMove: 1.5, easier: "lower" },
+      { marketKeys: ["team_totals", "alternate_team_totals"], outcomeName: "Over", description: "Detroit Red Wings", point: 6.5, maxLineMove: 0.5, easier: "lower" },
       marketsOf("NHL").filter((m) => m.key.includes("totals") && !m.key.includes("team"))
     ),
-    { status: "not_found", reason: "Market not offered by FanDuel — no team total market for this game right now." }
+    { status: "market_unavailable", reason: "Market unavailable — no team total market for this game right now." }
   );
   check(
     "a tie with nothing to say which way is easier is ambiguous, not a coin flip",
@@ -576,20 +573,20 @@ async function realResponses() {
     realLeg("MLB", "Guardians F5 ML", { betType: "MONEYLINE", period: "FIRST_HALF" }),
     realLeg("MLB", "F5 Under 4", { line: 4, period: "FIRST_HALF" }),
   ]);
-  check("worse-line flag: Guardians Team Total Under 4.5 goes at Under 3.5 - inside the cap, harder to win, flagged", guardians.legs["Guardians Team Total Under 4.5"], [
-    "adjusted",
-    -150,
-    { pick: 4.5, fanDuel: 3.5, side: "Under", worse: true },
+  check("Guardians Team Total Under 4.5 would go at Under 3.5 (1.0 away, harder to win): past the MLB cap - Line unavailable", guardians.legs["Guardians Team Total Under 4.5"], [
+    "line_unavailable",
     null,
+    null,
+    "Line unavailable — FanDuel's closest line is Under 3.5, more than 0.5 away from your pick.",
   ]);
-  check("the same team total 2.0 away is Not found", guardians.legs["Guardians Team Total Under 5.5"], ["not_found", null, null, "FanDuel's closest line is Under 3.5, more than 1.5 away from your pick."]);
+  check("the same team total 2.0 away is Line unavailable", guardians.legs["Guardians Team Total Under 5.5"], ["line_unavailable", null, null, "Line unavailable — FanDuel's closest line is Under 3.5, more than 0.5 away from your pick."]);
   check(
     "a game FanDuel has no team totals for says so",
     matchFanDuelOutcome(
-      { marketKeys: ["team_totals"], outcomeName: "Under", description: "Cleveland Guardians", point: 4.5, maxLineMove: 1.5, easier: "higher" },
+      { marketKeys: ["team_totals"], outcomeName: "Under", description: "Cleveland Guardians", point: 4.5, maxLineMove: 0.5, easier: "higher" },
       marketsOf("MLB").filter((m) => m.key !== "team_totals")
     ),
-    { status: "not_found", reason: "Market not offered by FanDuel — no team total market for this game right now." }
+    { status: "market_unavailable", reason: "Market unavailable — no team total market for this game right now." }
   );
   check("first-five moneyline: the h2h_1st_5_innings market", guardians.legs["Guardians F5 ML"], ["matched", 104, null, null]);
   check("first-five Under 4 between 3.5 and 4.5: the higher line, from the first-five alternates", guardians.legs["F5 Under 4"]?.[2], { pick: 4, fanDuel: 4.5, side: "Under", worse: false });
@@ -698,7 +695,7 @@ async function liveGames() {
     ...over,
   });
   const legs = [
-    nhlLeg("Senators o6.5", events[0], {}),
+    nhlLeg("Senators o7", events[0], { betDetail: "Over 7", line: 7 }),
     nhlLeg("Golden Knights ML", events[0], { betType: "MONEYLINE", betDetail: "Golden Knights ML", line: null, odds: -180 }),
     nhlLeg("Ducks o6.5", events[1], {}),
     nhlLeg("Sharks o6.5", events[2], {}),
@@ -707,34 +704,34 @@ async function liveGames() {
   const built = await build(legs, deps);
   const byPick = Object.fromEntries(built.legs.map((l) => [l.pickId, [l.status, l.fanDuelOdds, l.sentLine, l.reason]]));
 
-  check("live, line moved o6.5 -> 7.5: sent as adjusted, both lines shown, flagged as the harder line", byPick["Senators o6.5"], [
+  check("live, line moved o7 -> 7.5 (inside the hockey cap): sent as adjusted, both lines shown, flagged as the harder line", byPick["Senators o7"], [
     "adjusted",
     -110,
-    { pick: 6.5, fanDuel: 7.5, side: "Over", worse: true },
+    { pick: 7, fanDuel: 7.5, side: "Over", worse: true },
     null,
   ]);
   check("live moneyline: matched at FanDuel's in-play price", byPick["Golden Knights ML"], ["matched", -210, null, null]);
   check("live, past the movement limit: the real reason, not 'add on FanDuel'", byPick["Ducks o6.5"], [
-    "not_found",
+    "line_unavailable",
     null,
     null,
-    "FanDuel's closest line is Over 8.5, more than 1.5 away from your pick.",
+    "Line unavailable — FanDuel's closest line is Over 8.5, more than 0.5 away from your pick.",
   ]);
-  check("live, FanDuel posts no line (market suspended): isn't offering this exact line right now", byPick["Sharks o6.5"], [
-    "not_found",
+  check("live, FanDuel posts no line (market suspended): the selection isn't posted", byPick["Sharks o6.5"], [
+    "market_unavailable",
     null,
     null,
-    "FanDuel isn't offering this exact line right now.",
+    "Market unavailable — this total selection isn't posted right now.",
   ]);
   check("live, no totals market in play at all: says the market isn't offered", byPick["Blue Jackets o6.5"], [
-    "not_found",
+    "market_unavailable",
     null,
     null,
-    "Market not offered by FanDuel — no total market for this game right now.",
+    "Market unavailable — no total market for this game right now.",
   ]);
   check("no live leg is told to add itself on FanDuel", built.legs.filter((l) => /add (it )?on FanDuel/i.test(l.reason ?? "")), []);
   check("the link: the same-game pair, in leg order, at the in-play ids (Over 7.5 from the main market, which has that line)", Array.from(new URL(built.url!).searchParams.values()), [
-    "42.700000202", "20275", // Senators o6.5 -> Over 7.5
+    "42.700000202", "20275", // Senators o7 -> Over 7.5
     "42.700000201", "70201", // Golden Knights ML
   ]);
   check("every live event is asked for its markets at send time; the alternate ladder only for legs the main market missed", calls.sort((x, y) => x.eventId.localeCompare(y.eventId) || x.marketKeys.join().localeCompare(y.marketKeys.join())), [
@@ -896,7 +893,7 @@ function noEmptyReasons() {
     notSent.filter((l) => !filled(l.reason) || !filled(notSentDisplay(l).label) || notSentDisplay(l).reason !== l.reason),
     []
   );
-  check("every not-sent status is among them (ambiguous: the doubleheader leg)", Array.from(new Set(notSent.map((l) => l.status))).sort(), ["ambiguous", "error", "not_found", "over", "unsupported"]);
+  check("every not-sent status is among them (ambiguous: the doubleheader leg)", Array.from(new Set(notSent.map((l) => l.status))).sort(), ["ambiguous", "error", "line_unavailable", "market_unavailable", "not_found", "over", "unsupported"]);
   check("no leg in any scenario is told to add itself on FanDuel", ALL_RESULTS.filter((l) => /add (it )?on FanDuel/i.test(l.reason ?? "")), []);
 
   // What the page shows, whatever comes back: each status this build knows, and
@@ -970,7 +967,7 @@ async function main() {
   const allenProp = leg({ pickId: "allen", betType: "PLAYER_PROP", betDetail: "Josh Allen Over 244.5 Passing Yards", odds: -110 });
   const broncosMl = leg({ pickId: "broncos-ml", betDetail: "Broncos ML", homeTeam: "Denver Broncos", awayTeam: "Seattle Seahawks", gameTime: "2026-10-16T00:15:00Z", odds: 132 });
   const over = leg({ pickId: "over", gameStatus: "final", homeTeam: "Dallas Cowboys", awayTeam: "New York Giants", betDetail: "Cowboys ML", gameTime: "2026-10-12T14:00:00Z" });
-  const started = leg({ pickId: "started", homeTeam: "Dallas Cowboys", awayTeam: "New York Giants", betDetail: "Cowboys ML", gameTime: "2026-10-12T17:00:00Z" });
+  const started = leg({ pickId: "started", homeTeam: "Dallas Cowboys", awayTeam: "New York Giants", betDetail: "Cowboys ML", gameTime: "2026-10-12T17:00:00Z", odds: -380 });
 
   const a = fakeDeps(NOW);
   const built = await build([billsMl, started, broncosMl, allenProp, over], a.deps);
@@ -979,7 +976,7 @@ async function main() {
     built.legs.map((l) => [l.pickId, l.status, l.pickOdds, l.fanDuelOdds]),
     [
       ["bills-ml", "matched", 150, 154],
-      ["started", "matched", 150, -400],
+      ["started", "matched", -380, -400],
       ["broncos-ml", "matched", 132, 132],
       ["allen", "matched", -110, -113],
       ["over", "over", 150, null],
@@ -1046,7 +1043,7 @@ async function main() {
   const farLine = await build([leg({ pickId: "far-line", betType: "SPREAD", betDetail: "Bills +6.5", line: 6.5 }), billsMl], d2.deps);
   check("a line too far from anything FanDuel has is left out; the rest still go", [farLine.legs.map((l) => [l.status, l.reason]), Array.from(new URL(farLine.url!).searchParams.keys())], [
     [
-      ["not_found", "FanDuel's closest line is +3.5, more than 1.5 away from your pick."],
+      ["line_unavailable", "Line unavailable — FanDuel's closest line is +3.5, more than 1.5 away from your pick."],
       ["matched", null],
     ],
     ["marketId[0]", "selectionId[0]"],

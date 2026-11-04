@@ -180,6 +180,7 @@ async function loadLegs(userId: string, pickIds: string[]): Promise<Map<string, 
       propMarket: row.propMarket,
       gameStatus: pick.gameStatus ?? null,
       odds: pick.odds,
+      oddsSource: row.oddsSource,
       onBoard: boardPick !== undefined,
     });
   }
@@ -200,6 +201,7 @@ export async function getFanDuelLink(userId: string, pickIds: string[], now: Dat
     pickOdds: null,
     fanDuelOdds: null,
     sentLine: null,
+    warning: null,
   });
   return { url: built.url, legs: pickIds.map((id) => byId.get(id) ?? missing(id)) };
 }
