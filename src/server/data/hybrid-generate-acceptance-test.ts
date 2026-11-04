@@ -574,9 +574,23 @@ async function main() {
 
     const t = tr.finish();
     check("the Hybrid funnel reconciles", reconcileTrace(t), []);
-    check("games with picks -> games kept (primary + alternates)", t.stages.map((s) => [s.key, s.count]), [["HYB_GAMES_WITH_PICKS", 11], ["HYB_GAMES_KEPT", 3]]);
+    // 11 with picks (10 on the board + 1 started) -> 8 box-eligible (the started game and the side-only / total-only
+    // games drop) -> 6 priced (ladderGameCount) -> 3 kept; 18 positions (8 boxes x 2 + the two single-family games).
+    check(
+      "games with picks -> box-eligible -> priced -> kept (primary + alternates), and the positions",
+      t.stages.map((s) => [s.key, s.count]),
+      [["HYB_GAMES_WITH_PICKS", 11], ["HYB_BOX_ELIGIBLE", 8], ["HYB_PRICED", 6], ["HYB_GAMES_KEPT", 3], ["HYB_POSITIONS", 18]]
+    );
     const codes = t.reasons.map((r) => [r.reason, r.count]).sort();
     check("one reason per dropped game, in the shared vocabulary", codes, [["BEYOND_LADDER_LIMIT", 2], ["GAME_STARTED", 1], ["NO_SIDE_PICKS", 1], ["NO_TOTAL_PICKS", 1], ["RANKED_LOWER", 3]]);
+    check(
+      "each game drops at the stage of its first failed gate",
+      t.reasons.map((r) => [r.stage, r.reason]).sort(),
+      [["HYB_BOX_ELIGIBLE", "GAME_STARTED"], ["HYB_BOX_ELIGIBLE", "NO_SIDE_PICKS"], ["HYB_BOX_ELIGIBLE", "NO_TOTAL_PICKS"], ["HYB_GAMES_KEPT", "RANKED_LOWER"], ["HYB_PRICED", "BEYOND_LADDER_LIMIT"]]
+    );
+    check("the box-eligible and priced stages match the run's own counts", [t.stages.find((s) => s.key === "HYB_PRICED")!.count, t.extras.notes!.includes(`priced:${traced.candidateEvents.length}`)], [traced.candidateEvents.length, true]);
+    // A run logged before PR 8 has only the first and last stage, every drop at the last: it still reconciles.
+    check("a run from before the new stages still reconciles", reconcileTrace({ stages: [{ key: "HYB_GAMES_WITH_PICKS", count: 11 }, { key: "HYB_GAMES_KEPT", count: 3 }], reasons: [{ stage: "HYB_GAMES_KEPT", reason: "RANKED_LOWER", count: 8 }] }), []);
     check("each dropped game is listed", t.detail!.drops.length, 8);
     check("every priced game has a ladder status", t.extras.ladders!.map((l) => [l.eventId, l.status]), ["G1", "G2", "G3", "G4", "G5", "G6"].map((id) => [id, "ok"]));
     check("no errors on a clean run", t.errors, []);

@@ -5,9 +5,13 @@
 // ML + spread merged into one team side, the easiest endorsed line as the anchor,
 // gated opposers only, hedged cappers on neither side, the markets left out,
 // and the record hierarchy / win-% lever / soft sample-size adjustment it reuses
-// from the generator. Pure - no DB. Run with:
+// from the generator. Those checks run under WILSON (the rollback, unchanged); the last
+// section pins SCORING, the default since PR 8. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/consensus-acceptance-test.ts
-import { buildConsensusPositions, HYBRID_MIN_SUPPORTERS, type ConsensusPosition } from "@/lib/parlay/consensus";
+import { buildConsensusPositions, HYBRID_MIN_SUPPORTERS, HYBRID_SCORER, type ConsensusPosition } from "@/lib/parlay/consensus";
+import { optimizeHybrid } from "@/lib/parlay/hybrid";
+import { EVENTS, laddersOf, SLATE_10_27, SLATE_NOW, snapshotOfGames } from "@/lib/parlay/hybrid-scoring-frozen-cases";
+import { buildPlatformRates, EMPTY_PLATFORM_RATES, passesGate, scorePick, scorePickBestOfTwo } from "@/lib/parlay/scoring";
 import { GENERATOR_Z, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { wilsonLowerBound } from "@/lib/wilson-lower-bound";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
@@ -113,8 +117,8 @@ function snapshotOf(specs: Spec[], game: Partial<GeneratorGame> = {}): Generator
   return { builtAt: NOW.toISOString(), games: [g], slipPicks: [], targets: [], leagueRecords, categoryRecords };
 }
 
-const build = (specs: Spec[], opts: { minWinPct?: number; minSupporters?: number } = {}, game: Partial<GeneratorGame> = {}): ConsensusPosition[] =>
-  buildConsensusPositions(snapshotOf(specs, game), { now: NOW, ...opts });
+const build = (specs: Spec[], opts: { minWinPct?: number; minSupporters?: number; scorer?: "SCORING" | "WILSON" } = {}, game: Partial<GeneratorGame> = {}): ConsensusPosition[] =>
+  buildConsensusPositions(snapshotOf(specs, game), { now: NOW, scorer: "WILSON", ...opts });
 const find = (ps: ConsensusPosition[], direction: string) => ps.find((p) => p.direction === direction);
 const lb = (w: number, l: number) => wilsonLowerBound(w, l, GENERATOR_Z);
 const GOOD: [number, number] = [8, 2];
@@ -273,7 +277,7 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
     { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: GOOD },
   ];
   const snap = snapshotOf(two);
-  check("a game that has kicked off has no positions", buildConsensusPositions(snap, { now: new Date("2099-09-01T23:30:00.000Z") }).length, 0);
+  check("a game that has kicked off has no positions", buildConsensusPositions(snap, { now: new Date("2099-09-01T23:30:00.000Z"), scorer: "WILSON" }).length, 0);
   check("an off-board slip game has no positions", build(two, {}, { gameId: "pick:abc" }).length, 0);
 }
 
@@ -387,7 +391,7 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
   const totalPos = buildConsensusPositions(snapshotOf([
     { id: "t1", capper: "A", bet: { kind: "TOTAL", side: "Over", line: 44.5 }, lg: [8, 2] },
     { id: "t2", capper: "B", bet: { kind: "TOTAL", side: "Over", line: 44.5 }, lg: [8, 2] },
-  ]), { now: NOW }).find((p) => p.family === "TOTAL")!;
+  ]), { now: NOW, scorer: "WILSON" }).find((p) => p.family === "TOTAL")!;
   check("a total's record market is TOTAL", totalPos.supporters.map((s) => s.recordMarket), ["TOTAL", "TOTAL"]);
   // No league wins or losses: the all-time category record.
   const specs: Spec[] = [
@@ -397,7 +401,7 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
   const snap = snapshotOf(specs);
   // A league card with only pushes counts as no league record.
   snap.leagueRecords.records["A|" + LEAGUE + "|SPREAD_MINUS"] = { category: "SPREAD_MINUS", label: "x", overall: col(9, 3), league: { wins: 0, losses: 0, pushes: 2, winPct: 0, count: 2 } } as never;
-  const overall = buildConsensusPositions(snap, { now: NOW })[0];
+  const overall = buildConsensusPositions(snap, { now: NOW, scorer: "WILSON" })[0];
   check("no league win or loss falls back to the all-time record", overall.supporters.map((s) => [s.capperId, s.record.source]), [["A", "OVERALL"], ["B", "OVERALL"]]);
 }
 {
@@ -467,11 +471,131 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
   check("0%: supporters are ordered by strength, the 0-5 capper last", order.supporters.map((c) => c.capperId), ["G", "M", "W"]);
   check("0%: the position scores its strongest supporter, not the weak one", order.score, lb(8, 2));
   const onlyWeak = find(at0([over("w", "W", WEAK)]), "OVER")!;
-  check("0%: a 0-5 capper alone is a position (any graded record), scoring about 0", [onlyWeak.supporters.map((c) => c.capperId), onlyWeak.score < 1e-9], [["W"], true]);
+  check("0%: a 0-5 capper alone is a position (any graded record), scoring about 0", [onlyWeak.supporters.map((c) => c.capperId), onlyWeak.score! < 1e-9], [["W"], true]);
 
   // No graded record, no post: a 0-0 capper stays out at 0%.
   check("0%: a 0-0 capper (also a pushes-only one: no decided picks) is excluded", at0([over("z", "Z", [0, 0])]).length, 0);
   check("55%: the same 0-5 capper is out", build([over("w", "W", WEAK)]).length, 0);
+}
+
+// ============================================================================
+// SCORING (HYBRID_SCORER's default, PR 8): scoring.ts's best of two at the posted price.
+// Everything above runs under WILSON, the rollback, unchanged from before PR 8.
+// ============================================================================
+check("the default scorer is SCORING", HYBRID_SCORER, "SCORING");
+{
+  const ctxOf = (snap: GeneratorSnapshot, gate: number) => ({ leagueRecords: snap.leagueRecords, categoryRecords: snap.categoryRecords, platformRates: EMPTY_PLATFORM_RATES, minWinPct: gate });
+  // Every lever setting (gate.ts: 0 to 75 in steps of 5).
+  const GATES = Array.from({ length: 16 }, (_, i) => i * 5);
+
+  // Parity with Standard: with every pick in its own league (in-league = all leagues) both halves of the best
+  // of two are Standard's own score, so a post counts exactly when scorePick passes the gate.
+  const records: [number, number][] = [[0, 1], [0, 5], [1, 0], [2, 0], [3, 2], [6, 4], [7, 3], [10, 10], [13, 12], [18, 4], [30, 10], [50, 40], [5, 9]];
+  const bets: Bet[] = [{ kind: "SPREAD", team: "HOME", line: -3 }, { kind: "TOTAL", side: "Over", line: 44 }, { kind: "ML", team: "AWAY" }];
+  const mismatches: string[] = [];
+  for (const bet of bets) {
+    for (const rec of records) {
+      const spec: Spec = { id: "p", capper: "P", bet, lg: rec, all: rec };
+      const snap = snapshotOf([spec]);
+      for (const gate of GATES) {
+        const standard = passesGate(scorePick(snap.games[0].picks[0], ctxOf(snap, gate)), gate);
+        const hybrid = buildConsensusPositions(snap, { now: NOW, minWinPct: gate }).length === 1;
+        if (standard !== hybrid) mismatches.push(`${bet.kind} ${rec.join("-")} @ ${gate}: standard ${standard}, hybrid ${hybrid}`);
+      }
+    }
+  }
+  check("posted-price gate parity: a post counts exactly when Standard's scorePick passes (3 bets x 13 records x 16 gates)", mismatches, []);
+
+  // The score is the better rankScore of the two, the record shown stays recordForGate's.
+  const one = buildConsensusPositions(snapshotOf([{ id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [12, 5], all: [40, 20] }]), { now: NOW })[0];
+  const snapOne = snapshotOf([{ id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [12, 5], all: [40, 20] }]);
+  const bo2 = scorePickBestOfTwo(snapOne.games[0].picks[0], ctxOf(snapOne, 55));
+  const rs = (s: typeof bo2.inLeague) => (s.status === "SCORED" ? s.rankScore : null);
+  check("the position's score is the best-of-two rankScore", [one.score, one.supporters[0].score], [Math.max(rs(bo2.inLeague)!, rs(bo2.allLeagues)!), Math.max(rs(bo2.inLeague)!, rs(bo2.allLeagues)!)]);
+  check("the supporter carries what scored it (decided picks, which record, the model)", one.supporters[0].scoring, { decided: 60, from: bo2.chosenFrom, model: "win-rate model" });
+  check("the record shown is still recordForGate's (40-20 all-time beats 12-5 by Wilson)", [one.supporters[0].record.source, one.supporters[0].record.wins, one.supporters[0].record.losses], ["OVERALL", 40, 20]);
+
+  // All leagues: 30-20 everywhere but 2-8 in this league. In-league first shrinks to ~49% and fails 55; the
+  // all-leagues score (~58%) passes, so the capper qualifies (the all-leagues decision), and ranks by it.
+  const wide: Spec = { id: "w", capper: "W", bet: { kind: "SPREAD", team: "AWAY", line: 3 }, lg: [2, 8], all: [30, 20] };
+  const wideSnap = snapshotOf([wide]);
+  const wideScore = scorePickBestOfTwo(wideSnap.games[0].picks[0], ctxOf(wideSnap, 55));
+  check("all-leagues: Standard's in-league-first score fails 55", passesGate(scorePick(wideSnap.games[0].picks[0], ctxOf(wideSnap, 55)), 55), false);
+  check("all-leagues: Hybrid's best of two passes on the all-leagues score and ranks by it", [buildConsensusPositions(wideSnap, { now: NOW }).length, wideScore.chosenFrom, buildConsensusPositions(wideSnap, { now: NOW })[0]?.supporters[0].scoring?.from], [1, "ALL_LEAGUES", "ALL_LEAGUES"]);
+  // The reverse: 8-0 in the league, 30-20 everywhere: in-league first is the better score.
+  const local = scorePickBestOfTwo(snapshotOf([{ id: "l", capper: "L", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [8, 0], all: [30, 20] }]).games[0].picks[0], ctxOf(snapshotOf([{ id: "l", capper: "L", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [8, 0], all: [30, 20] }]), 55));
+  check("in-league 8-0 (30-20 all): in-league first is the better score", local.chosenFrom, "IN_LEAGUE");
+  check("the all-leagues half pools every league as one level", wideScore.allLeagues.status === "SCORED" ? [wideScore.allLeagues.levels.league, wideScore.allLeagues.levels.otherLeagues, wideScore.allLeagues.scope] : null, [{ wins: 30, losses: 20 }, { wins: 0, losses: 0 }, "ALL_LEAGUES"]);
+  check("the in-league half is exactly Standard's scorePick", JSON.stringify(wideScore.inLeague), JSON.stringify(scorePick(wideSnap.games[0].picks[0], ctxOf(wideSnap, 55))));
+
+  // Ranking by rankScore: Wilson put SHARP-style 5-0 above 7-1; shrunk, the larger record leads.
+  const ranked = buildConsensusPositions(snapshotOf([
+    { id: "a", capper: "A", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [5, 0] },
+    { id: "b", capper: "B", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [14, 2] },
+  ]), { now: NOW })[0];
+  check("ranking: 14-2 shrunk outranks 5-0 (Wilson had them the other way only at small n)", ranked.supporters.map((s) => s.capperId), ["B", "A"]);
+  // Equal scores: more decided picks first, then id.
+  const tie = buildConsensusPositions(snapshotOf([
+    { id: "o", capper: "B", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [8, 2] },
+    { id: "u", capper: "A", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: [8, 2] },
+  ]), { now: NOW });
+  check("equal scores: capper id decides (A's Under)", tie.map((p) => p.direction), ["UNDER"]);
+
+  // L = 0: any graded record passes, no record never does; a 0-5 capper is a position.
+  check("L = 0: a 0-5 capper is a position, a 0-0 one is not", [build([{ id: "w", capper: "W", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [0, 5] }], { minWinPct: 0, scorer: "SCORING" }).length, build([{ id: "z", capper: "Z", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [0, 0] }], { minWinPct: 0, scorer: "SCORING" }).length], [1, 0]);
+  check("L = 0: a negative edge is a negative score, never 0", (build([{ id: "w", capper: "W", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [0, 5] }], { minWinPct: 0, scorer: "SCORING" })[0].score ?? 0) < 0, true);
+
+  // Rule C (scoring.ts's long-shot rule, inherited): a dog ML at its posted price on a ~38% dog prior.
+  const DOG_RATES = buildPlatformRates([{ league: LEAGUE, betType: "MONEYLINE", key: "DOG_ML", wins: 380, losses: 620, impliedSum: 300, priced: 1000 }]);
+  const dog = (lg: [number, number], odds: number) => {
+    const snap = snapshotOf([{ id: "d", capper: "D", bet: { kind: "ML", team: "AWAY" }, lg, all: lg }]);
+    const pick = snap.games[0].picks[0] as GeneratorPick & { oddsSource?: string };
+    pick.odds = odds;
+    pick.oddsSource = "STATED";
+    return { ...snap, platformRates: DOG_RATES };
+  };
+  const passAt = (lg: [number, number], odds: number) => GATES.filter((g) => buildConsensusPositions(dog(lg, odds), { now: NOW, minWinPct: g }).length === 1);
+  const zeroWin = dog([0, 3], 300);
+  const zs = scorePickBestOfTwo(zeroWin.games[0].picks[0], { ...ctxOf(zeroWin, 55), platformRates: DOG_RATES });
+  check("rule C: 0-3 at +300 clears the edge on the prior alone (what the rule is for)", zs.inLeague.status === "SCORED" && zs.inLeague.rankScore > 0.0262, true);
+  check("rule C: 0-3 at +300 fails at every gate above 0 and passes only at 0", passAt([0, 3], 300), [0]);
+  check("rule C: 0-for-N never passes above 0, at any price", [[0, 1], [0, 8], [0, 20]].flatMap(([w, l]) => [150, 300, 600].map((o) => passAt([w, l], o).join(","))), Array(9).fill("0"));
+  // Below break-even the lever still works smoothly: lowering L only ever adds cappers, and a dog capper under
+  // the dog's break-even prior passes once L drops to their price (bar = min(break-even, L / 100)).
+  const POOL: [[number, number], number][] = [[[1, 0], 300], [[3, 7], 300], [[6, 14], 250], [[14, 16], 400], [[1, 4], 200], [[10, 10], 150], [[2, 6], 250]];
+  const monotone = POOL.every(([lg, o]) => {
+    const at = passAt(lg, o);
+    return at.length === 0 || at.every((g, i) => g === GATES[i]);
+  });
+  check("the lever is monotone below break-even: each dog capper passes at every gate up to a cutoff, none after", monotone, true);
+  check("1-0 passes at any price (rule C's bar is cleared by one win)", passAt([1, 0], 300).length > 1, true);
+  check("3-7 at +300 (30% raw vs 25% break-even): rule C clears; the edge decides", passAt([3, 7], 300).includes(45), true);
+  check("1-4 at +200 (20% raw vs 33% break-even): fails from L = 25 up, where the bar reaches 20%+ only below", passAt([1, 4], 200).every((g) => g <= 20), true);
+  // A -110 spread at 10-10: passes at 45 and 50 (the lever below break-even), not at 55.
+  check("10-10 at -110: passes at 45 and 50, not 55", [45, 50, 55].map((g) => build([{ id: "e", capper: "E", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [10, 10] }], { minWinPct: g, scorer: "SCORING" }).length), [1, 1, 0]);
+
+  // The FanDuel ladder price never reaches scoring: consensus reads only the pick as posted. The same slate under
+  // two different FanDuel boards gives the same positions and the same leg scores; moving the POSTED price does move it.
+  const slate = snapshotOfGames(SLATE_10_27);
+  const positions = buildConsensusPositions(slate, { now: SLATE_NOW });
+  const ladders = (scale: number) => Object.fromEntries(SLATE_10_27.map((g) => [g.id, laddersOf(EVENTS[g.league], scale)]));
+  const legScores = (scale: number) => optimizeHybrid({ positions, ladders: ladders(scale), swings: {}, settings: { maxLegs: 15, boxLegs: "3" } }).primary!.legs.map((l) => [l.positionKey, l.consensus.score]);
+  const a = legScores(1);
+  const b = legScores(1.3);
+  const priceA = optimizeHybrid({ positions, ladders: ladders(1), swings: {}, settings: { maxLegs: 15, boxLegs: "3" } }).primary!.legs.map((l) => l.price);
+  const priceB = optimizeHybrid({ positions, ladders: ladders(1.3), swings: {}, settings: { maxLegs: 15, boxLegs: "3" } }).primary!.legs.map((l) => l.price);
+  check("ladder invariance: a different FanDuel board moves the leg prices...", JSON.stringify(priceA) !== JSON.stringify(priceB), true);
+  check("...but no consensus score: every leg's score comes from the posted pick", [a.filter(([k]) => b.some(([k2]) => k2 === k)).every(([k, s]) => b.find(([k2]) => k2 === k)![1] === s), a.length > 0], [true, true]);
+  check("ladder invariance: the third leg's score is null (no consensus), never 0", a.filter(([k]) => String(k).endsWith("|OPPOSITE")).every(([, s]) => s === null) && a.some(([k]) => String(k).endsWith("|OPPOSITE")), true);
+  // A 7-3 spread capper posted at -110, then at -200: the capper's own break-even binds at -200, so the score moves.
+  const postedAt = (odds: number) => {
+    const snap = snapshotOf([{ id: "p", capper: "P", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [7, 3] }]);
+    const pick = snap.games[0].picks[0] as GeneratorPick & { oddsSource?: string };
+    pick.odds = odds;
+    pick.oddsSource = "STATED";
+    return buildConsensusPositions(snap, { now: NOW, minWinPct: 0 })[0].score!;
+  };
+  check("the capper's POSTED price does move the score (-110 vs -200)", postedAt(-200) < postedAt(-110), true);
 }
 
 if (failures > 0) {

@@ -1,8 +1,8 @@
 // The Parlay Generator's one scoring module: a pick goes in, a score and its
 // breakdown come out. Standard, Your picks only, Hedge and slip ranking read it
-// (generator.ts); Contrarian and Consensus Hybrid switch to it in later PRs, and
-// until then best-of-two and Wilson (pick-record.ts, qualification-core.ts) still
-// decide those. Pure and client-safe: the engine runs in the browser, so
+// (generator.ts), and so do Contrarian and Consensus Hybrid (consensus.ts, through
+// the opt-in best of two below); their WILSON rollbacks still read best-of-two and
+// Wilson (pick-record.ts, qualification-core.ts). Pure and client-safe: the engine runs in the browser, so
 // everything here reads what the snapshot already holds and nothing reads the
 // database.
 //
@@ -61,6 +61,13 @@
 //
 // A capper's historical break-even is shown in the breakdown and drives the
 // price transfer; it is never compared against to make a score.
+//
+// Best of two (opt-in, Consensus Hybrid only: scorePickBestOfTwo): the pick is scored twice, on the
+// hierarchy above (in-league first) and on its capper's ALL-LEAGUES record as one level shrunk straight
+// toward the platform (the in-league and other-leagues levels pooled; priced picks pooled the same way).
+// It passes the gate when either score does and ranks by the better one, a tie to in-league first. The
+// raw record the long-shot rule reads is the same for both, so rule C applies unchanged. scorePick, and so
+// Standard / Hedge / Contrarian, never read it.
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { hasUsablePrice } from "@/lib/parlay/combine-odds";
 import { GATE_DEFAULT } from "@/lib/parlay/gate";
@@ -204,6 +211,9 @@ export type ScoredPick = {
   gate: GateCheck;
   historicalBreakEven: { rate: number; n: number } | null;
   propMarket?: PropMarketKey;
+  // Present only on the all-leagues half of scorePickBestOfTwo: `levels.league` then holds the
+  // all-leagues record and `levels.otherLeagues` is empty.
+  scope?: "ALL_LEAGUES";
 };
 
 export type UnscoredPick = { status: "NO_RECORD"; pickId: string; reason: "NO_CATEGORY" | "NO_RECORD" | "NO_PROP_MARKET_RECORD" };
@@ -326,24 +336,41 @@ function splitLevels(league: Column, overall: Column): { league: WinLoss; otherL
   };
 }
 
-function recordLevels(pick: ScoringPick, ctx: ScoringContext, propKey: PropMarketKey | null): { league: WinLoss; otherLeagues: WinLoss } | null {
+// IN_LEAGUE_FIRST: the hierarchy. ALL_LEAGUES: the all-leagues record as the one level (best of two only).
+type RecordScope = "IN_LEAGUE_FIRST" | "ALL_LEAGUES";
+
+// The all-leagues record as the only level: every decided pick in `league`, nothing in `otherLeagues`.
+function pooled(levels: { league: WinLoss; otherLeagues: WinLoss }): { league: WinLoss; otherLeagues: WinLoss } {
+  return { league: { wins: levels.league.wins + levels.otherLeagues.wins, losses: levels.league.losses + levels.otherLeagues.losses }, otherLeagues: { wins: 0, losses: 0 } };
+}
+
+function recordLevels(pick: ScoringPick, ctx: ScoringContext, propKey: PropMarketKey | null, scope: RecordScope = "IN_LEAGUE_FIRST"): { league: WinLoss; otherLeagues: WinLoss } | null {
+  let levels: { league: WinLoss; otherLeagues: WinLoss } | null;
   if (propKey) {
     const r = ctx.propMarketRecords?.[propMarketRecordKey(pick.capperId, pick.leagueName, propKey)];
-    return r ? splitLevels(r.league, r.allTime) : null;
+    levels = r ? splitLevels(r.league, r.allTime) : null;
+  } else if (!pick.category) {
+    levels = null;
+  } else {
+    const card = ctx.leagueRecords.records[leagueRecordKey(pick.capperId, pick.leagueName, pick.category)];
+    levels = splitLevels(card?.league, card?.overall ?? ctx.categoryRecords?.[categoryRecordKey(pick.capperId, pick.category)]);
   }
-  if (!pick.category) return null;
-  const card = ctx.leagueRecords.records[leagueRecordKey(pick.capperId, pick.leagueName, pick.category)];
-  return splitLevels(card?.league, card?.overall ?? ctx.categoryRecords?.[categoryRecordKey(pick.capperId, pick.category)]);
+  return levels && scope === "ALL_LEAGUES" ? pooled(levels) : levels;
 }
 
 // The capper's real-priced picks in the record the pick reads. Null when the bundle wasn't asked for pricing.
-function pricedHistory(pick: ScoringPick, ctx: ScoringContext, propKey: PropMarketKey | null): { league: PricedColumn; overall: PricedColumn } | null {
+// ALL_LEAGUES: the all-leagues column as the in-league one too, so shrunkEdgeOf shrinks it straight toward zero.
+function pricedHistory(pick: ScoringPick, ctx: ScoringContext, propKey: PropMarketKey | null, scope: RecordScope = "IN_LEAGUE_FIRST"): { league: PricedColumn; overall: PricedColumn } | null {
+  let priced: { league: PricedColumn; overall: PricedColumn } | null;
   if (propKey) {
     const p = ctx.propMarketRecords?.[propMarketRecordKey(pick.capperId, pick.leagueName, propKey)]?.priced;
-    return p ? { league: p.league, overall: p.allTime } : null;
+    priced = p ? { league: p.league, overall: p.allTime } : null;
+  } else if (!pick.category) {
+    priced = null;
+  } else {
+    priced = ctx.leagueRecords.records[leagueRecordKey(pick.capperId, pick.leagueName, pick.category)]?.priced ?? null;
   }
-  if (!pick.category) return null;
-  return ctx.leagueRecords.records[leagueRecordKey(pick.capperId, pick.leagueName, pick.category)]?.priced ?? null;
+  return priced && scope === "ALL_LEAGUES" ? { league: priced.overall, overall: priced.overall } : priced;
 }
 
 // Sum of edges / (n + k) at each level: in-league toward other-leagues, other-leagues toward zero.
@@ -370,8 +397,12 @@ export function transferEdge(shrunkEdge: number, historicalBreakEven: number, pi
 // The score
 // ---------------------------------------------------------------------------
 export function scorePick(pick: ScoringPick, ctx: ScoringContext): PickScore {
+  return scoreIn(pick, ctx, "IN_LEAGUE_FIRST");
+}
+
+function scoreIn(pick: ScoringPick, ctx: ScoringContext, scope: RecordScope): PickScore {
   const propKey = propKeyOf(pick);
-  const levels = recordLevels(pick, ctx, propKey);
+  const levels = recordLevels(pick, ctx, propKey, scope);
   const decided = levels ? levels.league.wins + levels.league.losses + levels.otherLeagues.wins + levels.otherLeagues.losses : 0;
   // No graded pick at either level is no record: the platform rate never
   // qualifies a pick on its own.
@@ -387,7 +418,7 @@ export function scorePick(pick: ScoringPick, ctx: ScoringContext): PickScore {
   const price = priceOf(pick);
   const breakEven = price.status === "UNKNOWN" ? null : breakEvenOf(pick.odds);
   const margin = breakEven === null ? null : shrunkWinProb - breakEven;
-  const priced = pricedHistory(pick, ctx, propKey);
+  const priced = pricedHistory(pick, ctx, propKey, scope);
   const pricedPicks = priced ? priced.overall.wins + priced.overall.losses : 0;
   const historicalBreakEven = priced && pricedPicks > 0 ? priced.overall.impliedSum / pricedPicks : null;
   const minWinPct = ctx.minWinPct ?? GATE_DEFAULT;
@@ -404,6 +435,7 @@ export function scorePick(pick: ScoringPick, ctx: ScoringContext): PickScore {
     levels: { ...levels, midPrior, platform },
     historicalBreakEven: historicalBreakEven === null ? null : { rate: historicalBreakEven, n: pricedPicks },
     ...(propKey ? { propMarket: propKey } : {}),
+    ...(scope === "ALL_LEAGUES" ? { scope: "ALL_LEAGUES" as const } : {}),
   };
 
   if (breakEven !== null && priced && historicalBreakEven !== null && pricedPicks >= MIN_PRICED_PICKS) {
@@ -486,6 +518,27 @@ export function passesGate(score: PickScore, minWinPct: number): boolean {
   if (score.status !== "SCORED") return false;
   const raw: RawInput = { wins: score.levels.league.wins + score.levels.otherLeagues.wins, decided: score.decided, breakEven: score.breakEven };
   return gateCheck(score.gate.probability, score.gate.breakEven, minWinPct, raw).passes;
+}
+
+// Best of two (see the header): both scores, and the one that ranks.
+export type BestOfTwoScore = {
+  inLeague: PickScore;
+  allLeagues: PickScore;
+  // The better by rankScore, in-league on a tie; NO_RECORD only when both are.
+  chosen: PickScore;
+  chosenFrom: "IN_LEAGUE" | "ALL_LEAGUES";
+};
+
+export function scorePickBestOfTwo(pick: ScoringPick, ctx: ScoringContext): BestOfTwoScore {
+  const inLeague = scoreIn(pick, ctx, "IN_LEAGUE_FIRST");
+  const allLeagues = scoreIn(pick, ctx, "ALL_LEAGUES");
+  const takeAll = allLeagues.status === "SCORED" && (inLeague.status !== "SCORED" || allLeagues.rankScore > inLeague.rankScore);
+  return { inLeague, allLeagues, chosen: takeAll ? allLeagues : inLeague, chosenFrom: takeAll ? "ALL_LEAGUES" : "IN_LEAGUE" };
+}
+
+// Passes when either score passes, at any setting.
+export function passesGateBestOfTwo(score: BestOfTwoScore, minWinPct: number): boolean {
+  return passesGate(score.inLeague, minWinPct) || passesGate(score.allLeagues, minWinPct);
 }
 
 // The -110 equivalent: the win rate with this edge at -110, the number the gate

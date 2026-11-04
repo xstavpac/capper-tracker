@@ -24,6 +24,7 @@ import {
   placeEdge,
   pushKeyNumber,
   snapIndex,
+  sumScores,
   targetBand,
   tonightLine,
   type HybridLadder,
@@ -456,7 +457,9 @@ function nflBox(overMisses: number[], sideCover: number[] | null, settings: Hybr
   check("NBA 3-leg: side, Over, then the opposite Under", three.legs.map((l) => [l.family, l.direction, l.opposite]), [["SIDE", GSW, false], ["TOTAL", "OVER", false], ["TOTAL", "UNDER", true]]);
   const under = three.legs[2];
   check("NBA 3-leg: the Under's edge is tonight + the balanced over-miss (236.5 + 7)", [under.tonightLine, under.edge, under.snappedPoint, under.edgeSource], [236.5, 243.5, 243.5, "stored"]);
-  check("NBA 3-leg: the Under has no consensus of its own", [under.consensus.supporters, under.consensus.score, three.consensusScore], [0, 0, r2(0.95 * 2)]);
+  check("NBA 3-leg: the Under has no consensus of its own: score null (never 0), skipped in the sum", [under.consensus.supporters, under.consensus.score, three.consensusScore], [0, null, r2(0.95 * 2)]);
+  check("NBA 3-leg: the sum is exactly the two consensus legs'", three.consensusScore, sumScores(three.legs.filter((l) => !l.opposite).map((l) => l.consensus.score)));
+  check("sumScores skips null and keeps a negative edge negative", [sumScores([0.02, null, -0.05]), sumScores([null]), sumScores([])], [0.02 + -0.05, 0, 0]);
   check("NBA 3-leg: every leg at or above the -600 floor", three.legs.every((l) => l.price >= HYBRID_MIN_LEG_PRICE), true);
   check("NBA 3-leg: Over below Under", three.legs[1].point! < under.point!, true);
   check("NBA 3-leg: still an estimate", [three.structure, three.isEstimate], ["same-game-box", true]);

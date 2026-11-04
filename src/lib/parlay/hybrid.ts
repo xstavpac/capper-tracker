@@ -62,7 +62,7 @@
 // (Over 204.5 -> + Under 254.5), so the total is boxed from both sides. Hybrid
 // alone allows Over + Under on one game (same-game-rules.ts R-B is never
 // consulted here). That leg is not a consensus position: it is the box's total
-// turned around (no supporters, score 0), anchored at tonight's line (or the
+// turned around (no supporters, score null - skipped in sums), anchored at tonight's line (or the
 // total's own anchor when that is further out), and placed by the same
 // placeEdge / snap / tune as any leg - an Under from the recent over-misses or
 // highest totals, an Over from the under-misses or lowest totals. The -600
@@ -160,7 +160,7 @@ export type HybridLeg = {
   // The team name, or "OVER" / "UNDER".
   direction: string;
   // True for a 3-leg box's third leg: the other side of the box's total, with
-  // no consensus of its own (supporters 0, score 0).
+  // no consensus of its own (supporters 0, score null).
   opposite: boolean;
   marketKey: HybridMarketKey;
   // The outcome as FanDuel names it (a team, "Over" or "Under"): what the exact-line
@@ -191,7 +191,8 @@ export type HybridLeg = {
   consensus: {
     supporters: number;
     opposers: number;
-    score: number;
+    // Null on a 3-leg box's third leg: no consensus.
+    score: number | null;
     anchorLine: number;
     anchorIsMoneyline: boolean;
     topSupporters: { capperName: string; record: "LEAGUE" | "OVERALL"; recordMarket: HybridMarket; wins: number; losses: number; n: number; winPct: number }[];
@@ -212,7 +213,7 @@ export type Hybrid = {
   // The oldest marketLastUpdate across the legs (ISO), null when none had one.
   oddsAsOf: string | null;
   anyStale: boolean;
-  // The legs' consensus scores summed.
+  // The legs' consensus scores summed (a third leg's null skipped).
   consensusScore: number;
   // Rungs moved from the edges, summed.
   rungsMoved: number;
@@ -610,8 +611,14 @@ export function oppositeTotal(total: ConsensusPosition, ladders: HybridLadders):
     lineSpread: 0,
     supporters: [],
     opposers: [],
-    score: 0,
+    // No consensus: no score (never 0 - scores are edges and can be negative).
+    score: null,
   };
+}
+
+// Scores summed, a null (no consensus) skipped.
+export function sumScores(scores: (number | null)[]): number {
+  return scores.reduce<number>((s, x) => (x === null ? s : s + x), 0);
 }
 
 function place(p: ConsensusPosition, input: HybridInput, settings: HybridSettings, opposite = false): Placed | null {
@@ -883,7 +890,7 @@ function buildHybrid(structure: HybridStructure, legs: Placed[], tuned: Tuned): 
     boxDescription: describe(chosen.map(({ l, r }) => ({ p: l.position, r })), boxEvent),
     oddsAsOf: updates[0] ?? null,
     anyStale: chosen.some(({ r }) => r.isStale),
-    consensusScore: chosen.reduce((s, { l }) => s + l.position.score, 0),
+    consensusScore: sumScores(chosen.map(({ l }) => l.position.score)),
     rungsMoved: tuned.rungsMoved,
   };
 }
@@ -985,7 +992,7 @@ export function boxEligibleGames(ranked: ConsensusPosition[]): BoxGame[] {
   }
   return Array.from(games.entries())
     .filter(([, g]) => g.side && g.total)
-    .map(([eventId, g]) => ({ eventId, side: g.side!, total: g.total!, score: g.side!.score + g.total!.score }))
+    .map(([eventId, g]) => ({ eventId, side: g.side!, total: g.total!, score: sumScores([g.side!.score, g.total!.score]) }))
     .sort((a, b) => (Math.abs(a.score - b.score) > EPS ? b.score - a.score : a.eventId < b.eventId ? -1 : a.eventId > b.eventId ? 1 : 0));
 }
 
@@ -1119,6 +1126,6 @@ export function optimizeHybridReport(input: HybridInput): { result: HybridResult
     };
   }
   const core = [first, second];
-  const cross: Candidate = { structure: "cross-game", core, tuned: tune(core, 0, band)!, coreScore: first.position.score + second.position.score, fallback: null };
+  const cross: Candidate = { structure: "cross-game", core, tuned: tune(core, 0, band)!, coreScore: sumScores([first.position.score, second.position.score]), fallback: null };
   return { result: { primary: toHybrid(cross), alternates: [], note: null, delivery: deliveryOf(cap, 2, 0, 0, minBox) }, report };
 }
