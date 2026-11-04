@@ -9,8 +9,9 @@
 //   a. started / outside the slate window          (generator-snapshot.ts)
 //   b. no full-game side or total picks            (consensus.ts readPost)
 //   c. no side picks / no total picks
-//   d. no capper on the side / total passes the win-rate gate (consensus.ts's own
-//      verdict, so under SCORING the price-aware gate; the text shows the best raw record)
+//   d. the best capper on the side / total is below the win-rate gate (the raw record;
+//      consensus.ts's own verdict, which under SCORING is either the in-league or the
+//      all-leagues record reaching the lever)
 //   e. no capper left on one side only: every gated capper took both sides (hedged) -
 //      or, with a minimum above HYBRID_MIN_SUPPORTERS (1), too few agree
 //   f. past the per-generation pricing limit       (ladderGameCount, hybrid.ts)
@@ -149,9 +150,6 @@ function consensusGate(
     const gated = Object.values(f.gatedByDirection).reduce((a, b) => a + b, 0) + f.hedged;
     if (gated > 0) continue;
     if (!f.best) return { reason: "below-gate", text: gate === 0 ? `No ${noun} capper has a graded record in this bet yet` : `No ${noun} capper has a record in this bet yet (needs ${gate}%)` };
-    // A raw record at or above the lever that still fails: the scored gate (a small sample shrinks
-    // toward the platform; a long price needs more). Never reached under WILSON, whose gate is the raw record.
-    if (gate > 0 && f.best.winPct >= gate) return { reason: "below-gate", text: `Best ${directionLabel(f.best.direction)} capper ${pct(f.best.winPct)} (${f.best.wins}-${f.best.losses}) doesn't clear ${gate}% once sample size, other leagues and price count` };
     return { reason: "below-gate", text: `Best ${directionLabel(f.best.direction)} capper ${pct(f.best.winPct)} (${f.best.wins}-${f.best.losses}), needs ${gate}%` };
   }
   for (const [noun, f] of families) {
