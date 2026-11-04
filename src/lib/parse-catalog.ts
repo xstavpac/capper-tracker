@@ -79,6 +79,11 @@ export type ParsedPick = {
   // shared college school became a question. Choosing a league restores it with
   // that league's sport, so NCAAF comes back byte-for-byte what it always was.
   sharedCollegeBase?: ParsedPick;
+  // True when the pick's sport came from the capper's section header ("CBB",
+  // "College Football") above it rather than from the line. The capper named the
+  // league, so promoteSharedCollegePick treats it like a code on the line: a shared
+  // school stays in that league and never becomes a question. Absent otherwise.
+  sportExplicit?: boolean;
   // Team nicknames found in the raw text, e.g. from "Over 9.5 (Angels/Orioles)"
   // or "Cardinals vs Panthers". Captured before parens/odds get stripped out of
   // `description`, so game resolution still has both teams even for bets (like
@@ -230,6 +235,29 @@ function isBoilerplateLabel(text: string): boolean {
   const trimmed = text.toLowerCase().trim();
   return BOILERPLATE_LABELS.has(trimmed) || LABEL_LINE_PATTERN.test(trimmed);
 }
+
+// A capper's section header: a line that is only a college league's name ("CBB",
+// "College Basketball", "🏀 CFB Picks 🏀"), written above that league's picks
+// because the schools' names are shared between football and basketball. Matched
+// as a whole line once the emoji / punctuation around it is stripped, so a capper
+// name that merely contains one of these words ("Five Star CBB") is not a header.
+const SECTION_HEADER =
+  /^(?:(cbb|ncaab|ncaa basketball|college basketball|college hoops|men'?s college basketball)|(cfb|ncaaf|college football))(?: (?:picks|plays|bets|card))?$/i;
+
+export function sectionHeaderSport(line: string): "NCAAB" | "NCAAF" | null {
+  const core = line.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "").replace(/\s+/g, " ");
+  const m = SECTION_HEADER.exec(core);
+  if (!m) return null;
+  return m[1] ? "NCAAB" : "NCAAF";
+}
+
+// Shorthand cappers write on the line itself for the two college leagues. Read
+// like the league's own code, after KNOWN_SPORTS, so "NCAAB" is still preferred
+// when both appear.
+const LEAGUE_CODE_ALIASES: [RegExp, string][] = [
+  [/\bcbb\b/i, "NCAAB"],
+  [/\bcfb\b/i, "NCAAF"],
+];
 
 // "cardinals" is deliberately excluded here - it's ambiguous with NFL (see
 // AMBIGUOUS_NICKNAMES) and must fall through to that check instead of always
@@ -1934,14 +1962,24 @@ export function isPlayerPropSurnameCollision(text: string, phrase: string): bool
 // caller that acts on `leadingText` can never misfire off a fuzzy nickname
 // match (see the afterBlank/new-capper-name handling in parseCatalog's main
 // loop, the reason this field exists).
-function detectSport(text: string, allowNicknameFallback = true): { sportName: string; rest: string; leadingText: string } {
+// `allowAliases` (default on) also reads CBB / CFB as their league's code (see
+// LEAGUE_CODE_ALIASES). Off only where a line without bet content is being told
+// apart from a capper's name, so "Five Star CBB" stays that capper's header.
+function detectSport(text: string, allowNicknameFallback = true, allowAliases = true): { sportName: string; rest: string; leadingText: string } {
+  const sliceAt = (sportName: string, match: RegExpMatchArray) => {
+    const index = match.index ?? 0;
+    const rest = text.slice(index + match[0].length).replace(/^[:\s]+/, "");
+    return { sportName, rest, leadingText: text.slice(0, index) };
+  };
   for (const code of KNOWN_SPORTS) {
     const re = new RegExp("\\b" + code.replace(/ /g, "\\s+") + "\\b", "i");
     const match = text.match(re);
-    if (match && match.index !== undefined) {
-      const rest = text.slice(match.index + match[0].length).replace(/^[:\s]+/, "");
-      const leadingText = text.slice(0, match.index);
-      return { sportName: code, rest, leadingText };
+    if (match && match.index !== undefined) return sliceAt(code, match);
+  }
+  if (allowAliases) {
+    for (const [re, code] of LEAGUE_CODE_ALIASES) {
+      const match = text.match(re);
+      if (match && match.index !== undefined) return sliceAt(code, match);
     }
   }
 
@@ -2483,14 +2521,16 @@ export function withCollegeBasketballOptions(key: string, options: AmbiguousOpti
 }
 
 // A line naming its league outright was settled by the code, not by a school.
-const EXPLICIT_COLLEGE_LEAGUE = /\bNCAA[FB]\b/i;
+const EXPLICIT_COLLEGE_LEAGUE = /\b(?:NCAA[FB]|CBB|CFB)\b/i;
 
 // A parsed pick on a school both sports share becomes that pair's question. A pick
-// with a code on the line, a basketball-only school on it, or no team stays as it
-// is, and so does a player prop: those stay out of NCAAB. A quarter settles it for
-// football, since basketball plays halves.
+// with a code on the line or a section header above it (sportExplicit), a
+// basketball-only school on it, or no team stays as it is, and so does a player
+// prop: those stay out of NCAAB. A quarter settles it for football, since
+// basketball plays halves.
 export function promoteSharedCollegePick(pick: ParsedPick): ParsedPick {
   if (pick.ambiguous || (pick.sportName !== "NCAAF" && pick.sportName !== "NCAAB")) return pick;
+  if (pick.sportExplicit) return pick;
   if (pick.teamNicknames.length === 0 || pick.betType === "PLAYER_PROP" || EXPLICIT_COLLEGE_LEAGUE.test(pick.raw)) return pick;
 
   const canonicals = pick.teamNicknames.map((n) => TEAM_NICKNAME_CANONICAL[n] ?? n);
@@ -3489,6 +3529,11 @@ export function parseCatalog(
   // block: only then is a "Name - pick" line with a league code read as a
   // brand-new capper's first pick (see effectiveRest below).
   let precededByBlank = true;
+  // The college league a capper's section header ("CBB", "College Football")
+  // named, for that capper's picks below it. A blank line keeps it; a capper
+  // header (a new one, or the same name again), a different bare league code or
+  // the end of the paste ends it. See applySection.
+  let section: { sport: "NCAAB" | "NCAAF"; capper: string } | null = null;
 
   // A team read from the feed (see feedTeamNicknames) settles the sport for a line the
   // lists left sport-less or read as another sport by nickname alone. A line
@@ -3538,6 +3583,35 @@ export function parseCatalog(
   // College basketball has two halves. A quarter on an NCAAB pick is never read
   // as a half or as the game: it goes to manual review.
   const isNcaabQuarterLine = (sportName: string, text: string): boolean => sportName === "NCAAB" && isQuarterScope(text);
+
+  // Under a section header, a pick by that header's capper on a college school
+  // takes the header's league. Only a school the lists read as college (NCAAF /
+  // NCAAB) is moved, and only to a league that school plays in: a code on the
+  // line itself wins, a pro team ("Lakers") keeps its league, a player prop is
+  // left alone, and a basketball-only school stays NCAAB under a CFB header.
+  const applySection = (
+    text: string,
+    detected: ReturnType<typeof detectSport>,
+    owner: string
+  ): { detected: ReturnType<typeof detectSport>; fromHeader: boolean } => {
+    const unchanged = { detected, fromHeader: false };
+    if (!section || section.capper !== owner) return unchanged;
+    if (detected.sportName !== "NCAAF" && detected.sportName !== "NCAAB") return unchanged;
+    if (detectSport(text, false).sportName) return unchanged;
+    if (parseNflNhlPlayerProp(text) || parseSupportedMlbProp(text)) return unchanged;
+    if (detected.sportName !== section.sport && nicknamesFor(text, section.sport).length === 0) return unchanged;
+    return { detected: { sportName: section.sport, rest: text, leadingText: "" }, fromHeader: true };
+  };
+
+  // "Duke -4.5 NCAAB": the college code trails the bet, so detectSport leaves the
+  // bet in leadingText and nothing in rest. The bet is the leading text - it used
+  // to fall into the bare-sub-header skip below and vanish.
+  const trailingCollegeBet = (detected: ReturnType<typeof detectSport>): string | null => {
+    if (detected.sportName !== "NCAAB" && detected.sportName !== "NCAAF") return null;
+    if (detected.rest.trim()) return null;
+    const lead = detected.leadingText.trim();
+    return lead && hasBetContent(lead) ? lead : null;
+  };
 
   // Shorthand several schools answer to ("Loyola ML"), with no school of its own
   // on the line. The same question a shared mascot asks, built from the list.
@@ -3651,6 +3725,7 @@ export function parseCatalog(
     const normalized = normalizeName(name);
     const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
     currentCapper = existingMatch ?? name;
+    section = null;
     if (!existingMatch && looksPickLikeHeader(line)) {
       droppedAsHeaders.push({ text: line, capperName: trustedCapper });
       droppedHeaderValue = currentCapper;
@@ -3660,6 +3735,8 @@ export function parseCatalog(
   for (let i = 0; i < rawLines.length; i++) {
     const line = rawLines[i];
     if (currentCapper !== droppedHeaderValue) trustedCapper = currentCapper;
+    // Any line that changed the active capper (a "Name - pick" line, a tagline) ended its section.
+    if (section && section.capper !== currentCapper) section = null;
     if (!line) {
       precededByBlank = true;
       continue;
@@ -3676,7 +3753,19 @@ export function parseCatalog(
         const normalized = normalizeName(forcedName);
         const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
         currentCapper = existingMatch ?? forcedName;
+        section = null;
       }
+      continue;
+    }
+
+    // A section header ("CBB", "College Football Picks") opens that league's
+    // section for the active capper. Read before the capper-header rule below,
+    // which would otherwise take it for a capper's name; the active capper is
+    // left as it was. Ends a bare "NBA" / "NHL" sub-header like any other code.
+    const headerSport = sectionHeaderSport(line);
+    if (headerSport) {
+      section = { sport: headerSport, capper: currentCapper };
+      blockLeague = null;
       continue;
     }
 
@@ -3686,7 +3775,8 @@ export function parseCatalog(
     // written with ML. Two kinds of line without bet content are not names and
     // keep their own handling below: a boilerplate label ("Full Card") and a
     // league code ("NBA" as a sub-header, "BAMBINO - NFL").
-    if (!hasBetContent(line) && !isBoilerplateLabel(line.replace(/^-\s*/, "").trim()) && !detectSport(line, false).sportName) {
+    // (A CBB / CFB alias doesn't count as a league code here: "Five Star CBB" is still that capper's header.)
+    if (!hasBetContent(line) && !isBoilerplateLabel(line.replace(/^-\s*/, "").trim()) && !detectSport(line, false, false).sportName) {
       // The one exception: a bare name directly above a line that is only a
       // market ("James Cook" / "Touchdown", "Anytime TD") is that prop's
       // subject, and the two are read as one line. A next line with a number
@@ -3706,8 +3796,10 @@ export function parseCatalog(
       const labelled = sortedNames.find(
         (name) => line.toLowerCase().startsWith(name.toLowerCase()) && isBoilerplateLabel(line.slice(name.length).replace(/^[\s:.-]+/, ""))
       );
-      if (labelled) currentCapper = labelled;
-      else readAsCapperHeader(line);
+      if (labelled) {
+        currentCapper = labelled;
+        section = null;
+      } else readAsCapperHeader(line);
       continue;
     }
 
@@ -3717,6 +3809,7 @@ export function parseCatalog(
     const savedNameMatch = knownCapperNames.find((n) => normalizeName(n) === normalizedLine);
     if (savedNameMatch) {
       currentCapper = savedNameMatch;
+      section = null;
       continue;
     }
 
@@ -3745,6 +3838,7 @@ export function parseCatalog(
         afterBlank = false;
       } else if (following && isBoilerplateLabel(following)) {
         currentCapper = savedPrefix;
+        section = null;
         continue;
       } else if (following && !hasBetSignal(following)) {
         readAsCapperHeader(line);
@@ -3760,6 +3854,7 @@ export function parseCatalog(
       const { gameNumber: inlineGameNumber, rest: remainder } = extractGameNumber(rawRemainder);
       if (!remainder) {
         currentCapper = inlineMatch;
+        section = null;
         continue;
       }
       // An MLB/NHL player-prop line can't be imported yet - surface it instead
@@ -3780,7 +3875,10 @@ export function parseCatalog(
         if (blockLeague && blockLeague.capper === currentCapper) unresolvedLeagues[unresolved.length - 1] = blockLeague.league;
         continue;
       }
-      const detected = withFeedSport(remainder, detectSport(remainder));
+      const inlineDetected = withFeedSport(remainder, detectSport(remainder));
+      const inlineTrailing = trailingCollegeBet(inlineDetected);
+      const inlineSectioned = applySection(remainder, inlineTrailing ? { ...inlineDetected, rest: inlineTrailing } : inlineDetected, inlineMatch);
+      const detected = inlineSectioned.detected;
       if (isNcaabQuarterLine(detected.sportName, remainder)) {
         unresolved.push(line);
         unresolvedCapperNames.push(inlineOwner);
@@ -3919,6 +4017,7 @@ export function parseCatalog(
         raw: line,
         teamNicknames: nicknamesFor(detected.rest, detected.sportName),
         gameNumber: inlineGameNumber,
+        ...(inlineSectioned.fromHeader ? { sportExplicit: true } : {}),
       });
       continue;
     }
@@ -3960,7 +4059,8 @@ export function parseCatalog(
     }
     // Every line here has bet content or a league code - a header never gets
     // this far - so team nicknames are read whatever line precedes it.
-    const detected = withFeedSport(pickText, detectSport(pickText));
+    const sectioned = applySection(pickText, withFeedSport(pickText, detectSport(pickText)), currentCapper);
+    const detected = sectioned.detected;
     if (isNcaabQuarterLine(detected.sportName, pickText)) {
       unresolved.push(strippedText);
       unresolvedCapperNames.push(currentCapper);
@@ -3996,6 +4096,7 @@ export function parseCatalog(
     // unresolved line in this same block correctly carry "Bambino" (not the
     // prior capper, not "Unknown") in `unresolvedCapperNames`.
     let effectiveRest = detected.rest;
+    let namedCapper = false;
     if (afterBlank && detected.sportName && detected.leadingText) {
       const sep = detected.leadingText.match(/\s-\s|:\s*/);
       if (sep && sep.index !== undefined) {
@@ -4005,6 +4106,7 @@ export function parseCatalog(
           const normalized = normalizeName(namePart);
           const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
           currentCapper = existingMatch ?? namePart;
+          namedCapper = true;
           const restClean = detected.rest.replace(/^[\s:.-]+/, "").trim();
           effectiveRest = [pickPart, restClean].filter(Boolean).join(" ").trim();
         }
@@ -4030,6 +4132,9 @@ export function parseCatalog(
     if (detected.sportName === "MLB" && !effectiveRest.trim() && detected.leadingText?.trim() && parseSupportedMlbProp(pickText)) {
       effectiveRest = detected.leadingText.trim();
     }
+    // The same for a trailing college code ("Duke -4.5 NCAAB", "Duke -4.5 CBB").
+    const trailingBet = namedCapper ? null : trailingCollegeBet(detected);
+    if (trailingBet) effectiveRest = trailingBet;
 
     if (detected.sportName && !effectiveRest.trim()) {
       // A bare "NBA" / "NHL" sub-header under a capper: remembered for that
@@ -4038,6 +4143,11 @@ export function parseCatalog(
       blockLeague =
         (detected.sportName === "NBA" || detected.sportName === "NHL") && !detected.leadingText?.trim()
           ? { league: detected.sportName, capper: currentCapper }
+          : null;
+      // A different bare code ends a college section; a new capper's "BAMBINO - NCAAB" opens one.
+      section =
+        namedCapper && (detected.sportName === "NCAAB" || detected.sportName === "NCAAF")
+          ? { sport: detected.sportName, capper: currentCapper }
           : null;
       continue;
     }
@@ -4072,6 +4182,7 @@ export function parseCatalog(
         raw: strippedText,
         teamNicknames: nicknamesFor(effectiveRest, detected.sportName),
         gameNumber: headerGameNumber,
+        ...(sectioned.fromHeader ? { sportExplicit: true } : {}),
       });
       continue;
     }
